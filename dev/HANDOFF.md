@@ -1,9 +1,9 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and owned stdin writer —2026-10-10 23:31 PDT
+## Optional integrations and owned stdin writer —2026-10-10 23:37 PDT
 
 Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`,
-`codex/skipped-platform-tests`, currently316a5e6; primary main remains718e81e with
+`codex/skipped-platform-tests`, currently5fd86c0; primary main remains718e81e with
 maintainer/old prepared edits intact. Preserve the shared Ollama model. At23:30 PDT,
 load63.32/62.65/105.60, CPU12.54%idle, RAM102GiB used/25GiB unused,
 swap11,686.06MiB and disk222GiB keep local R/install/browser/model/build jobs held.
@@ -16,12 +16,13 @@ Linux4 cross-plan checks passed39 unchanged hashes/25 plans/770 selected R block
 0 parse-style problems/0 lints. Eight Linux security guards are not Windows coverage.
 Windows native security is RED:192 passes/12 failed assertions+1 raw error/0 warnings/skips.
 Native settings/trust freshness now pass14 assertions each; alias-read sizing, write-through
-link preservation and checkpoint link labels are being corrected in a disjoint source lane
-with independent review. Do not certify dangling Windows links from existing-path resolution.
+link preservation and checkpoint link labels have SOURCE-CLEAR fixes54ad94b with five new pure policy tests.
+All eight native test bodies remain unchanged; actual Windows rerun required. Do not certify dangling Windows links from existing-path resolution.
 
-Reviewed production writer316a5e6 is pushed, not executed. Actual two-host eight-file
-transport run38118221551 is ONGOING.20 strict writer cases/31 lint paths/native3/prototype/
-sampler are selected. Verify full bootstrap expression, protected ACL, startup/typed timeouts,
+Reviewed production writer316a5e6 is pushed, not executed. Actual38118221551 stopped before bodies on6 scoped formatting lints;
+reviewed formatting-only correction4b75650 preserves logic/oracles/limits. Next ten-file
+transport/security run is WAITING dispatch with20 writer cases/37 lint paths/native3/prototype/
+sampler and five pure link-policy cases. Verify full bootstrap expression, protected ACL, startup/typed timeouts,
 byte order/EOF/cancellation/actor death/orphans, exact cleanup and Unix regressions before
 closing D-019. Distinct stderr/stdout logs must diagnose the prior Linux sampler error.
 Updated plan gates require the next exact candidate. Native security and production transport

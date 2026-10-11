@@ -43,12 +43,12 @@ requires actual production execution before integration.
 | --- | --- | --- |
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
-| Actual Windows security | RED native links63a2454; settings/trust GREEN |192 passes/12 failed assertions+1 raw error/0 warnings/skips; cache28 and native exact-stamp28 pass. EOF fixture reads, runtime alias reading/writing/checkpoint labels ONGOING with independent review |
+| Actual Windows security | RED native links63a2454; settings/trust GREEN |192 passes/12 failed assertions+1 raw error/0 warnings/skips; cache28 and native exact-stamp28 pass. EOF fixture reads and runtime alias reading/writing/checkpoint labels SOURCE-CLEAR54ad94b; native validation waiting |
 | Actual Windows/Unix child baseline | Windows production RED; Unix control retained | Original Windows3 watchdog failures/24passes/0skips; earlier Linux60passes; latest Linux sampler diagnostic must be recovered from distinct logs |
-| Strict optional workflow | Core DONE63a2454; transport316a5e6 ONGOING | Both hosts Python12/Rgate619/all12 scoped lints0; seven exact marked-family cleanup witnesses passed per host |
+| Strict optional workflow | Core DONE63a2454; transport316a5e6 stopped before bodies | Both hosts Python12/Rgate619/all12 scoped lints0; seven exact marked-family cleanup witnesses passed per host |
 | Index/extract/R-parse/lintr plan checks | DONE through63a2454; latest plan edits awaiting next candidate gates | Six actual Linux runs; unchanged39-file manifests,25 plans/770 selected R blocks/0 parse-style problems/0 lints |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
-| Production owned-writer correction | SOURCE-CLEAR316a5e6; actual38118221551 ONGOING |20 runtime/guard cases and native3/prototype/sampler unchanged; full eight-file transport run on both hosts. ACL/startup/byte limits/Unix lifecycle/ownership/performance remain unverified |
+| Production owned-writer correction | SOURCE-CLEAR; formatting-only correction4b75650 after actual38118221551 lint stop |20 runtime/guard cases and native3/prototype/sampler unchanged; full eight-file transport run on both hosts. ACL/startup/byte limits/Unix lifecycle/ownership/performance remain unverified |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
 | App browser/search integrations | DONE actual63a2454 | Linux506 and Windows502 assertions across search/app/cleanup,0 failures/warnings; one named Windows app OS guard. Mandatory actual-browser cases executed, no unhandled close promise |
 | Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
@@ -275,3 +275,21 @@ actual private-mailbox ACL/size, native backpressure, cancellation, orphan clean
 regressions and performance still require evidence. The updated plan must pass4 cross-plan
 stages on the next exact candidate. No local heavy job, model inference, shared-model stop,
 unload or reconfiguration was performed.
+
+
+## Source-reviewed corrections after the lint gate —23:37 PDT
+
+Actual38118221551 stopped on both hosts before package bodies:6 scoped formatting findings
+in proc-spawn and3 process helpers. Other scoped paths were clean. Four-file correction4b75650
+adds braces/newlines only; independent review reverse-recovered all four frozen baseline hashes.
+Native3, prototype, sampler and runtime test files are unchanged; helper generated-code whitespace
+changed without altering failure classes, cases, resource limits or ownership checks.
+
+Observed valid-target Windows link fixes54ad94b are independently SOURCE-CLEAR. Five runtime
+files use canonical-target reads/writes and direct-entry canonical-alias classification for
+walker/checkpoint safety. The bounded EOF fixture reader no longer relies on zero-sized link
+metadata. All eight native security test bodies remain byte-identical. Five new pure policy cases
+are mandatory on both hosts under5fd86c0; all37 scoped lint paths are checked. Short final-component
+spellings can be conservatively excluded from capture; missing Windows targets remain unproved.
+Next ten-file actual transport/security rerun is WAITING dispatch on a fresh exact candidate,
+including4 serial Linux plan stages for this update. Nothing is production GREEN yet.
