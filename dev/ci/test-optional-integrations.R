@@ -697,8 +697,20 @@ testthat::test_that("controller warnings include main cleanup and cannot leave a
     })
     invisible(NULL)
   }
-  testthat::expect_warning(testthat::expect_error(optional_controller_run(main, output),
-    "Controller warnings captured"), "controlled")
+  seen = new.env(parent = emptyenv())
+  seen$messages = character()
+  expected = c("controlled body warning", "controlled cleanup warning")
+  # Capture at the test boundary after the controller's inner observer sees every warning.
+  withCallingHandlers(
+    testthat::expect_error(optional_controller_run(main, output), "Controller warnings captured"),
+    warning = function(w) {
+      message = conditionMessage(w)
+      if (!identical(class(w), c("simpleWarning", "warning", "condition")) ||
+          !(message %in% expected)) return(invisible(NULL))
+      seen$messages = c(seen$messages, message)
+      invokeRestart("muffleWarning")
+    })
+  testthat::expect_identical(seen$messages, expected)
   witness = jsonlite::read_json(file.path(output, "controller-warnings.json"))
   summary = jsonlite::read_json(file.path(output, "integration-summary.json"))
   testthat::expect_false(witness$passed)
@@ -734,8 +746,19 @@ testthat::test_that("controller warnings keep a complete count with at most 25 d
   main = function(controller) {
     for (i in seq_len(27L)) warning("controlled repeated warning", call. = FALSE)
   }
-  testthat::expect_warning(testthat::expect_error(optional_controller_run(main, output),
-    "Controller warnings captured"), "controlled")
+  seen = new.env(parent = emptyenv())
+  seen$messages = character()
+  expected = rep("controlled repeated warning", 27L)
+  withCallingHandlers(
+    testthat::expect_error(optional_controller_run(main, output), "Controller warnings captured"),
+    warning = function(w) {
+      message = conditionMessage(w)
+      if (!identical(class(w), c("simpleWarning", "warning", "condition")) ||
+          !(message %in% expected)) return(invisible(NULL))
+      seen$messages = c(seen$messages, message)
+      invokeRestart("muffleWarning")
+    })
+  testthat::expect_identical(seen$messages, expected)
   witness = jsonlite::read_json(file.path(output, "controller-warnings.json"))
   testthat::expect_identical(witness$warnings_total, 27L)
   testthat::expect_length(witness$diagnostics, 25L)
