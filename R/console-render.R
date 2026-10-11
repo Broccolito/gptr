@@ -310,8 +310,9 @@ console_print_text = function(text) {
 
 #' The waiting indicator (report 18 A.6 wait_indicator()), ticked by its caller
 #'
-#' Uses only "\r" redraws (safe in RStudio and Windows consoles); `tick()` is a no-op when stdout
-#' is not a dynamic terminal, so tests, pipes and knitr never see it.
+#' Uses "\r" redraws; native R GUIs start each shown cycle on a flushed stdout line so deleting
+#' a redraw cannot inherit stderr color. `tick()` is a no-op when stdout is not a dynamic
+#' terminal, so tests, pipes and knitr never see it.
 #' @noRd
 console_spinner = function(label = "thinking") {
   frames = console_symbols()$frames
@@ -330,6 +331,10 @@ console_spinner = function(label = "thinking") {
     now = as.numeric(Sys.time())
     if (now - sp$last < 0.08) return(invisible())
     sp$last = now
+    if (!sp$shown && identical(front_end(), "rgui")) {
+      cat("\n", file = stdout())
+      utils::flush.console()
+    }
     sp$i = sp$i %% length(frames) + 1L
     width = max(0L, as.integer(cli::console_width()) - 1L)
     text = sprintf("%s %s (%.0fs, %s to %s)", frames[[sp$i]], label, now - sp$t0, key, action)

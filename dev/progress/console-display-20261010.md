@@ -74,3 +74,52 @@ and its visual witness are still pending.
 No R, UI, model, credential or process-control action was performed by this review lane.
 Only this new report and the ignored prepared JSONL files were edited; no runtime,
 generated documentation, testing plan or Git state was changed.
+
+## Coordinator installed/native follow-through at `03963e0`
+
+The coordinator built and installed a fresh normal archive into a separate immutable
+library. All119 R sources match the committed tree; all14 built Rmd/HTML guides are present.
+The archive is2,243,072 bytes, SHA256
+`b716aa6f090ea6b85ed997952ff2e2ed5de91e51e89767381a7f3a808af0d3e4`.
+Normal installation took14.017s, with no install errors/warnings. The guarded export/build/
+install controller took37.425s, sampled585.3MiB peak family RSS across36 samples, and had
+zero sampling errors and successful exact-owned cleanup. This is installation, not a full
+package check. The installed895 library remains unchanged.
+
+Two earlier candidate attempts are retained. The first failed in the wrapper's transient
+directory scan; the second built but failed before package evaluation because forced BSD
+tar included a binary macOS provenance extended attribute. The wrapper now uses R's normal
+tar choice, `COPYFILE_DISABLE=1`, and refuses xattr/AppleDouble archive records before
+install. Neither failed attempt produced an approved installation certificate.
+
+Actual R.app PID77953 completed the combined native fixture: one delayed fake request,
+zero external requests,24 retained messages, bounded latest8/default/show previews,
+unknown unreported assistant totals, full-table escape hatches and unchanged installed
+hashes. All three computational/after-return restoration proofs pass with zero warnings.
+**Visual ordinary-output color still failed:** the first ordinary marker is black and the
+intentional error is red, but clearing the active CR spinner makes the subsequent notice,
+response and history inherit red. The computational pass is not a visual pass.
+
+The coordinator independently reproduced that boundary in base R.app without gptr:
+stderr line, flushed stdout CR progress, CR clear, then ordinary stdout becomes red.
+Controls without CR (including caught errors, flush and capture.output) remain black;
+CR with no prior stderr remains black. A stdout LF before the first CR makes subsequent
+ordinary output black while retaining redraws. A small GUI-specific safeguard is under
+test-first implementation. Source analysis of the Mac-GUI color cache supports this cause;
+the live control is the direct evidence. Native window size was550x539, reported width79.
+
+The actual finite-stdin JSONL probe against the certified039 library passed: four fake/
+zero external requests,55 parseable JSON stdout lines, one provider error then recovery,
+notice only on stderr, no local slash/inline R execution, sum7/mean3.5 and unchanged input
+identity. All11 restoration flags passed; zero warnings. Controller wall1.336s, sampled
+154.4MiB family peak/two samples/zero sampling errors. Raw evidence is in ignored
+`live-20261010/runs/jsonl-stdin-03963e0afc08698bf51c2f01e37b2c2ee8414fe9-reviewed/`.
+This closes this literal-prompt protocol packet, not native interactive command coverage.
+
+The GUI safeguard now has reviewed source evidence: RED8fail/40pass, focused GREEN48pass,
+affected spinner/notice/render/wait/IC-33 packet286pass, zero test failures/errors/warnings/
+skips, and two-file lint0. The affected run took34.592s, sampled552.0MiB family peak across
+35 samples, with zero sampling errors. The runtime change adds a flushed stdout LF only
+before a newly shown native-GUI spinner cycle, after dynamic/throttle guards; recurring
+ticks, other frontends and nondynamic output retain their existing bytes. Independent
+review is clear. Rebuilt installed/native color acceptance still remains required.
