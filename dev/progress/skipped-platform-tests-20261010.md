@@ -9,9 +9,9 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At01:35 PDT October11, load was224.32/150.35/115.84, CPU0%idle, physical memory85GiB
-used/42GiB unused, swap14,941.81MiB, free disk74GiB, with no thermal/performance warning.
-The memory-pressure free metric is76%; it does not clear CPU/swap/disk gates. Disk decline
+At01:51 PDT October11, load was22.76/44.15/67.67, CPU27.14%idle, physical memory91GiB
+used/36GiB unused, swap14,357.19MiB, free disk60GiB, with no thermal/performance warning.
+The memory-pressure free metric is77%; it does not clear CPU/swap/disk gates. Disk decline
 has no established cause and is not permission to stop unrelated work or delete files.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
@@ -45,12 +45,12 @@ requires actual production execution before integration.
 | --- | --- | --- |
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
-| Actual Windows security | Native207/pure21 DONE; e3 checkpoint restore RED | Checkpoint115 passes/2 raw restore errors/0 warnings/5 guards; effective create denial/store refusal pass. Exact Access SDDL restore verification fails; native Codex link/read-denial replacements are source-ready, unrun |
+| Actual Windows security | Native207/pure21 DONE; e3 checkpoint restore RED | Checkpoint115 passes/2 raw restore errors/0 warnings/5 guards; effective create denial/store refusal pass. Failure follows restore-applied; native ACL readback versus exact Access SDDL mismatch remains unconfirmed. Reviewed63e9ace adds fixed-phase diagnostics without changing the oracle. Native Codex link/read-denial replacements are source-ready, unrun |
 | Actual Windows/Unix child baseline | Linux native60 DONE; Windows startup RED | e3 native46 passes/1 failure; fixed phases reach acl_wait then time out before READY. Idle stops before first ACK; normal60s spawn4MB/EOF passes; startup timeout is not delivery proof |
-| Strict optional workflow | e3 completed RED; corrective source ready | Linux1596 passes/1 fixture error/0 test warnings/8 OS guards; Windows nine completed files1172 passes/13 conditions/0 warnings/10 skips, two300s deadlines without final results. Both units1559 clean/scoped46 clean. Controller24 warnings each; new strict33/130/47 source requires actual rerun |
+| Strict optional workflow | e3 completed RED; corrective source applied, actual rerun pending | Linux1596 passes/1 fixture error/0 test warnings/8 OS guards; Windows nine completed files1172 passes/13 conditions/0 warnings/10 skips, two300s deadlines without final results. Both units1559 clean/scoped46 clean. Controller24 warnings each remain fatal. Reviewed b0130c7 registry34 full files/132 titles/49 lint paths requires actual12-file Windows/Linux execution and fresh plan gates |
 | Index/extract/R-parse/lintr plan checks | DONE throughe3; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
-| Production owned-writer correction | Actuale3 startup RED; bounded diagnosis DONE | Five Windows lifecycle cases startup1.84-1.85s/zero accepted bytes, expression4965-4977B, acl_wait0.20-0.25s with no acl_done. Native .NET setup proposal requires review/actual security and speed proof; no raised limits |
+| Production owned-writer correction | Actuale3 startup RED; reviewed source applied, actual proof pending | Five Windows lifecycle cases startup1.84-1.85s/zero accepted bytes, expression4965-4977B, acl_wait0.20-0.25s with no acl_done. Reviewed fafd181 uses native .NET permission APIs; reviewed58184c5/b0130c7 require physical mailbox/file permissions and same-path refusal. All startup, byte, ACK, EOF, cleanup and resource limits remain unchanged |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
 | App browser/search integrations | DONE actual63a2454 | Linux506 and Windows502 assertions across search/app/cleanup,0 failures/warnings; one named Windows app OS guard. Mandatory actual-browser cases executed, no unhandled close promise |
 | Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
@@ -539,7 +539,7 @@ startup latency attribution and security-equivalent native execution still requi
 No timeout, resource limit or assertion is increased.
 
 Checkpoint effective create denial and store refusal now pass. Both raw errors occur after
-restore-applied when exact Access SDDL verification fails; full restoration remains RED. Codex
+restore-applied before native readback versus exact Access SDDL comparison is distinguished; full restoration remains RED. Codex
 reports two capability skips (unreadable-file permission enforcement and dangling target lookup)
 and one33.4s concurrency failure against13s. Reviewed09f9ea1/df16cde replaces those capability
 skips with owned native link/ReadData-denial witnesses and registers all three relevant titles.
@@ -562,3 +562,31 @@ problems/0 lints;90 historical index warnings remain. The updated plan requires 
 on the next exact candidate. Both hosted leases are free; at most2 jobs may run. Local private
 dependencies, native frontends, model inference and full CRAN/release remain WAITING resources.
 Shared Ollama remains untouched.
+
+## Reviewed security and child-process additions — 2026-10-11 02:01 PDT
+
+Applied, independently source-reviewed commits remain awaiting actual execution:
+
+- fafd181 replaces three PowerShell cmdlet/object operations with native .NET ACL APIs.
+  Test-Path refusal, protected owner-only DACL creation before payload, explicit rights,
+  owner/reparse readback, marker timing and all deadlines/resource limits remain intact.
+- 63e9ace adds fixed checkpoint restore-acl-read/restore-sddl-read/mismatch phases. It does
+  not change exact restoration or classify the e3 restore-applied failures as SDDL churn.
+- 76b6cfa adds a both-host owned-parent/descendant and unrelated-sentinel test: actual
+  nonvacuous family enumeration, PID/create-time refusal, private marker/state restoration,
+  kill-all settlement and unrelated-process survival. Shipping marker format stays unchanged.
+- 58184c5 adds the actual Windows protected mailbox DACL and inherited-file-rights witness.
+  The existing production writer must first ACK; independent native readback, same-path
+  refusal, unchanged sentinel bytes, target/writer survival and EOF/cleanup are then checked.
+  The file owner must match the valid default token owner; its sole inherited rights rule
+  still belongs to the current user. b0130c7 makes this30th title mandatory on Windows,
+  with one exact Linux platform guard. No Windows capability skip is accepted.
+
+Strict source registry:34 full files/132 required titles/49 lint paths. The next filter selects
+12 complete files: lint-rules, proc-writer-idle-slots, proc-marker-family, mcp-client,
+subagent-worker, cli-common, cli-claude, cli-codex, ckpt-files, proc-writer-runtime,
+proc-windows-backpressure and proc-spawn. Both hosted jobs require the exact full commit;
+Linux also runs all4 cross-plan stages after any optional failure. No partial-file success,
+relaxed timeout, unobserved capability skip or source review counts as an actual-platform pass.
+Root plan updates require these fresh gates. All local installs/GUI/kernel/model/CRAN work
+remain held under the01:51 resource snapshot; shared Ollama stays untouched.
