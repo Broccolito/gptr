@@ -196,13 +196,14 @@ writer_runtime_titles = c(
   "writer startup diagnostics accept only fixed monotonic stages and split lines",
   "writer startup diagnostics fail closed without retaining arbitrary stderr",
   "writer trusted bootstrap sends startup diagnostics only to its own stderr",
-  "Windows no-reader timeout proves writer readiness and delivery-stage backpressure")
+  "Windows no-reader timeout proves writer readiness and delivery-stage backpressure",
+  "Windows production mailbox has a protected owner DACL and inherited file rights")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
   testthat::expect_identical(optional_titles[[file]], writer_runtime_titles)
   rows = lapply(writer_runtime_titles, record)
-  native = c(seq_len(5L), 29L)
+  native = c(seq_len(5L), 29L, 30L)
   for (i in native) {
     rows[[i]]$passed = 0L
     rows[[i]]$skipped = 1L
@@ -223,7 +224,7 @@ testthat::test_that("production writer platform guards are explicit and never co
 testthat::test_that("production writer mandatory rows reject omissions, duplicates and errors", {
   file = "test-proc-writer-runtime.R"
   rows = lapply(writer_runtime_titles, record)
-  native = c(seq_len(5L), 29L)
+  native = c(seq_len(5L), 29L, 30L)
   for (windows in c(FALSE, TRUE)) {
     testthat::expect_true(optional_gate(rows, file, windows)$passed)
     for (i in seq_along(rows)) {
@@ -847,12 +848,13 @@ testthat::test_that(
     "writer trusted bootstrap sends startup diagnostics only to its own stderr",
     "Windows no-reader timeout proves writer readiness and delivery-stage backpressure")
   expected = c(writer_runtime_titles[1:25], added)
-  testthat::expect_identical(optional_titles[[file]], expected)
-  native = c(seq_len(5L), 29L)
-  rows = lapply(expected, record)
+  testthat::expect_identical(optional_titles[[file]][seq_along(expected)], expected)
+  native = c(seq_len(5L), 29L, 30L)
+  rows = lapply(writer_runtime_titles, record)
   for (windows in c(FALSE, TRUE)) {
     result = optional_gate(rows, file, windows)
-    testthat::expect_identical(result$mandatory_cases, if (windows) expected else expected[-native])
+    testthat::expect_identical(result$mandatory_cases,
+      if (windows) writer_runtime_titles else writer_runtime_titles[-native])
     for (i in 26:29) {
       testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
       testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
@@ -879,8 +881,8 @@ testthat::test_that(
     rows[[i]]$skipped = 1L
   }
   result = optional_gate(rows, file, FALSE)
-  testthat::expect_identical(result$platform_guard_cases, expected[native])
-  testthat::expect_identical(result$mandatory_cases, expected[-native])
+  testthat::expect_identical(result$platform_guard_cases, writer_runtime_titles[native])
+  testthat::expect_identical(result$mandatory_cases, writer_runtime_titles[-native])
   testthat::expect_false(result$platform_guard_only)
   testthat::expect_error(optional_gate(rows, file, TRUE), "Skipped")
   testthat::expect_true(optional_allowed_skip(file, added[[4L]], FALSE))
@@ -993,4 +995,49 @@ testthat::test_that("owned marker-family integration cannot omit or skip its nat
                                                title, windows))
     testthat::expect_false(optional_allowed_skip(file, "unrelated capability case", windows))
   }
+})
+
+
+testthat::test_that("native mailbox ACL proof is mandatory on Windows with one exact Unix guard", {
+  file = "test-proc-writer-runtime.R"
+  title = "Windows production mailbox has a protected owner DACL and inherited file rights"
+  testthat::expect_identical(tail(optional_titles[[file]], 1L), title)
+  rows = lapply(optional_titles[[file]], record)
+  i = match(title, vapply(rows, function(row) row$test, ""))
+  testthat::expect_false(is.na(i))
+  if (is.na(i)) return(invisible(NULL))
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_true(optional_gate(rows, file, windows)$passed)
+    testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+    testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+    for (field in c("failed", "warnings")) {
+      changed = rows
+      changed[[i]][[field]] = 1L
+      testthat::expect_error(optional_gate(changed, file, windows))
+    }
+    raw = rows
+    raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+      structure(list(), class = "expectation_success"),
+      structure(list(message = "controlled native ACL verifier error"),
+        class = c("expectation_error", "condition"))))))[[1L]]
+    testthat::expect_error(optional_gate(raw, file, windows), "Failed")
+    testthat::expect_false(optional_allowed_skip("test-proc-marker-family.R", title, windows))
+    testthat::expect_false(optional_allowed_skip(file, "unrelated native ACL capability", windows))
+  }
+  testthat::expect_false(optional_allowed_skip(file, title, TRUE))
+  testthat::expect_true(optional_allowed_skip(file, title, FALSE))
+  empty = rows
+  empty[[i]]$passed = 0L
+  testthat::expect_error(optional_gate(empty, file, TRUE), "assertions")
+  late_skip = rows
+  late_skip[[i]]$skipped = 1L
+  testthat::expect_error(optional_gate(late_skip, file, TRUE), "Skipped")
+  guard = rows
+  guard[[i]]$passed = 0L
+  guard[[i]]$skipped = 1L
+  result = optional_gate(guard, file, FALSE)
+  testthat::expect_true(result$passed)
+  testthat::expect_identical(result$platform_guard_cases, title)
+  testthat::expect_false(title %in% result$mandatory_cases)
+  testthat::expect_false(result$platform_guard_only)
 })

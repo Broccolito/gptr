@@ -89,7 +89,8 @@ optional_titles = list(
     "writer startup diagnostics accept only fixed monotonic stages and split lines",
     "writer startup diagnostics fail closed without retaining arbitrary stderr",
     "writer trusted bootstrap sends startup diagnostics only to its own stderr",
-    "Windows no-reader timeout proves writer readiness and delivery-stage backpressure"),
+    "Windows no-reader timeout proves writer readiness and delivery-stage backpressure",
+    "Windows production mailbox has a protected owner DACL and inherited file rights"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",
@@ -214,7 +215,8 @@ optional_platform_guard = function(file, name, windows) {
     "Windows reactor shutdown settles an idle production writer",
     "Windows orphan sweep settles the exact production writer and mailbox",
     "Windows production writer preserves split binary NUL and UTF-8 bytes",
-    "Windows no-reader timeout proves writer readiness and delivery-stage backpressure")
+    "Windows no-reader timeout proves writer readiness and delivery-stage backpressure",
+    "Windows production mailbox has a protected owner DACL and inherited file rights")
 }
 
 optional_allowed_skip = function(file, name, windows) {
