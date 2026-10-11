@@ -4,7 +4,9 @@ warm_idle_child_case = function(case, root, failure) {
   stopifnot(identical(.Platform$OS.type, "windows"))
   ns = asNamespace("gptr")
   fun = function(name) get(name, ns, inherits = FALSE)
-  phase = function(text) cat(text, "\n", file = file.path(root, "phases.txt"), append = TRUE)
+  phase = function(text) {
+    cat(text, "\n", sep = "", file = file.path(root, "phases.txt"), append = TRUE)
+  }
   withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr")
   withr::local_options(gptr.stdin_timeout = 60, gptr.supervise = FALSE, gptr.quiet = TRUE)
   stopifnot(identical(fun("gptr_opt")("stdin_timeout"), 60))

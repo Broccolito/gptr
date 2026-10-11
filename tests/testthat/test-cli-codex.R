@@ -948,7 +948,7 @@ test_that("Windows control entry listing refuses unreadable or uncertain parents
 })
 
 test_that("Windows control entry membership retains fixed names without following targets", {
-  root = file.path(tempdir(), "codex-public-root")
+  root = path_norm(file.path(tempdir(), "codex-public-root"))
   g = file.path(root, ".gptr")
   probe = codex_control_scope(pcli_control_paths, is_windows = function() TRUE,
     pcli_control_entries = function(dir) {
