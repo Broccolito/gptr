@@ -468,84 +468,86 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Follow-up | Status and next evidence |
 |---|---|
 | Quarto discovery | DONE hosted d768: 71 assertions per host, actual renders/replay/source hashes and zero replay requests. Child-only PATH discovers bundled RStudio Quarto; caller PATH unchanged. Local renders and installed frontends WAITING. |
-| Python/R dependencies | DONE hosted d768 bridges 128 Linux/118 Windows; actual1bdf preflights GREEN. Fresh local metadata confirms private pandas/NumPy absent. Binary-wheel install and private ABI/reticulate witnesses WAITING load/disk gates; shared Ollama preserved. |
+| Python/R dependencies | DONE hosted preflights/bridges; private pandas/NumPy metadata absent. Isolated binary-wheel installer uses -I -B and requires private ABI/prefix proof then actual reticulate proof. Local install and local applicable reruns WAITING disk11GiB below200GiB/resource gate; shared Ollama untouched. |
 | Browser/search prerequisites | DONE core 63a2454 actual Chrome/search/app cleanup on both hosts, no failures/warnings; d53 preflight actual Chrome expression/close pass. No local browser launch during hold. |
-| Windows filesystem safety | DONE d768 Codex448/checkpoint119/MCP167. Actual1bdf proves exact parent restore and FILE AI-only+1024 drift/DACL bytes unchanged. Reviewed c20df78 fresh-owned FILE baseline applied; native restoration/timing proof ONGOING. PROBE2 effective denial and two fatal metadata warnings OPEN. Arbitrary caller ACL/junction/unknown-reparse gaps OPEN. |
-| Windows child stdin | DONE d768 native3 60/cold19/warm42/retirement180/marker81/Claude243. Actual1bdf self-marker regression RED both hosts; reviewed892ac9e runtime applied, full39spawn/28supervision/36worker GREEN and native marker19/20/ten-second death ONGOING. d53 callr profiles: Linux56 GREEN, Windows48P/8F empty parent/child state loss OPEN; full API/lifecycle parity required. |
-| Validation/merge | Actual1bdf complete2: Linux565P/5F/0W/8 guards, Windows720P/6F/2W/1 guard RED;84rows/3cleanups each/zero survivors/controller warnings.13 Python/2945 gate assertions/55 lint GREEN. All4 plans39equal hashes/770R/0style0lint/90 historic index warnings. Registry37/172/55; corrected complete4 rerun plus fresh all4 plans ONGOING. Latest actual outcomes live in companion progress/ledger. Merge WAITING strict relevant GREEN. |
+| Windows filesystem safety | DONE actual3a27 owned parent/file ACL restore exact on main/recovery, without changed45 test bytes or limits. Native absence remains RED: PROBE2 effective-denial gap and two fatal metadata warnings. Independent controls/observer SOURCE CLEAR but INACTIVE; arbitrary caller ACL/junction/unknown-reparse proof OPEN. |
+| Windows child stdin | DONE actual3a27 new64 self assertions per host, complete39spawn/29supervision/36worker GREEN. Windows native parent-only death28P, all20prechecksTRUE, worker0.06s beforecleanup/31samples/zeroerrors/684MB peak. Prior Windows callr parent/child empty-state8 failures remain OPEN; no speculative launcher/hook adopted. |
+| Validation/merge | Actual3a27 full4/149rows: Linux859P0F0W9exact guards GREEN; Windows1040P1F2W2exact guards RED nativeabsence only. Five cleanups perhost/zero survivors or controller warnings;13Python/2945gates/55lint GREEN. Broad all4plans39equal/770R0style0lint/90historic index warnings. Registry37/172/55. Final status-only all4 plan check ONGOING; latest outcome in companion progress/ledger. Merge WAITING strict Windows and callr GREEN. |
 
-## Optional integrations and Windows transport — 2026-10-11 07:35 PDT
+## Optional integrations and Windows transport — 2026-10-11 07:48 PDT
 
 Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, with source fixes pushed through `c20df78`. Primary main
-stays `718e81e`; shared edits, historical tests, secrets and Ollama remain preserved.
-At 07:31:05 PDT load 16.20/29.84/42.13, CPU 55.84% idle, RAM 120 GiB used/7798 MiB
-unused, swap 22,460.25 MiB used and disk 11 GiB hold all local heavy jobs. Swap occupancy
-alone does not prove active paging. No thermal warning clears the load/disk gates.
-Hosted offline validation permits at most two jobs; prior 1bdf jobs completed with zero leases.
+`codex/skipped-platform-tests`. Reviewed fixes `892ac9e` and `c20df78` are pushed and
+actually exercised by `3a27c4eb2a179162054ff48c8eac6d5dd064d952`. Primary main stays
+`718e81e`; shared edits, historical tests, secrets and Ollama remain preserved.
+At 07:44:59 PDT load 13.76/28.63/38.13, CPU 50.43% idle, RAM 80 GiB used/47 GiB
+unused and swap 22,436.25 MiB used show improving availability. Disk remains 11 GiB,
+below the 200 GiB gate, so local heavy jobs remain HELD. No thermal warning is recorded.
+Swap occupancy alone does not prove active paging. Do not stop unrelated work or delete
+user files. Both hosted jobs completed; zero active leases, at most two allowed.
 
-Actual tests-first `1bdf29a6502b0461225f61599d5c5f88367d16fe`, run 38146574787,
-executed both complete files: 39 spawn/45 writer cases, 84 raw rows per host. Linux
-565P/5F/0 R warnings/8 exact OS guards and Windows 720P/6F/2 R warnings/1 exact guard
-are RED. Both pass 13 Python units, 2945 strict result-gate assertions and 55 scoped lint
-paths. Three cleanup records per host pass, with zero marked survivors/errors and zero
-controller warnings. Canonical source archive SHA256 is
-`9f407347f32fc2dbb9d57d40dd8e5b0798b73eed002e83ea5fbda1cdcedee6bb`.
-All four fresh Linux plan stages pass: 25 plans/1523 blocks/770 R blocks, zero parse/style
-problems or lints, 39 equal before/after hashes; retain 90 historical index warnings.
-Raw ZIPs, source manifests and summaries stay in ignored `dev/.validation/windows-security-20261010`.
+Actual corrected run 38147664296 executes FOUR COMPLETE files on both hosts:
+39 spawn/29 supervision/45 writer/36 worker cases, 149 raw rows each. Linux
+859P/0F/0 R warnings/9 exact OS guards is GREEN. Windows 1040P/1F/2 R warnings/
+2 exact guards stays RED only in the native absence case. Both pass 13 Python units,
+2945 strict result-gate assertions and 55 scoped lint paths. Five cleanup records per
+host prove settlement, stopped roots and zero marked survivors/errors; controller warnings
+are zero. Actual preflight is GREEN, live tests FALSE and model requests zero.
+Canonical source archive SHA256 is
+`977f984eea86853a1b4804722012e11daedf9b7c176883e97b2df6be0a4c537d`.
+Bounded raw ZIPs, source manifests, compact summaries and exact witnesses are retained in
+ignored `dev/.validation/windows-security-20261010`.
 
-The exact-self, unknown-self-identity and direct-self-cleanup regressions fail on BOTH hosts
-against unchanged production supervision. Malformed/foreign-record controls pass 32
-assertions, self cases have zero warnings and cleanup is clean. This establishes actual RED
-before `892ac9e` adopts the reviewed minimal runtime correction: retain an exact carried
-self marker, retain uncertain self creation-time recovery without cleanup authority, and
-refuse current-PID cleanup before process operations. Ordinary self-record validation stays
-FALSE. All four new cases and all original behavior need actual GREEN; source review alone
-is not completion. The Windows worker's prior pre-kill checks 1–18 TRUE/19 FALSE/20
-unobserved remain the native baseline. Preserved marker checks 19/20 and parent-only death
-within 10 seconds are required after the correction.
+The self-marker correction is ACTUALLY GREEN after 1bdf tests-first RED on both hosts.
+All four new cases pass 64 assertions per host, including strict ordinary self rejection,
+uncertain-identity recovery retention, malformed/foreign policy and no self cleanup signals.
+Complete spawn/supervision/worker files pass on both hosts. Windows native parent death
+passes 28 assertions: all 20 original prechecks TRUE, only the exact parent signalled,
+worker death 0.06 seconds later BEFORE cleanup, exact identities/markers settled and caller
+environment/options/cwd/globals/RNG unchanged. The owned witness takes 9.29 seconds,
+peak family RSS 684,052,480 bytes, 31 samples/zero errors; all old limits remain unchanged.
+Windows guards are the two original Unix SIGTERM/worker cases, with the Windows native
+replacement actually executed; Linux guards are eight Windows writer cases plus the native
+Windows worker case. No dependency/zero-assertion/unknown guard is accepted.
 
-Actual fixed FILE diagnostics prove flags 36868→37892, XOR 1024, ordered DACL byte
-difference zero and Access SDDL inequality on main stage 14/recovery 106. Parent restoration
-is exact: 37892 on both sides, XOR/DACL differences zero, SDDL equality one. Reviewed
-`c20df78` establishes twice-verified stable Access and owner baselines for only fresh owned
-parent/file fixtures before backup and denial. It allows solely AI+1024 with unchanged
-ordered DACL/owner, then requires a second exact round-trip. All 45 test bytes, later exact
-restoration/recovery, PROBE1-only acceptance, fatal warnings and 5/2/30/60-second/resource
-limits are unchanged. Native restoration/timing proof is pending. Existing PROBE2 still
-fails effective UnauthorizedAccess denial; two dangling metadata warnings remain fatal.
-Arbitrary caller ACL, junction and unknown-reparse proof remain OPEN.
+Owned parent AND file ACL restoration is ACTUALLY exact on main and recovery: flags
+37892→37892, XOR zero, ordered DACL byte difference zero and Access SDDL equality one.
+Main reaches restored/stages 15–16, recovery reaches 107–108 and status zero/settled one.
+The fresh-owned baseline permits only AI+1024 stabilization before backup and requires a
+second exact Access/owner round-trip; caller paths and all 45 test bytes remain unchanged.
+Native absence still produces PROBE2, proving safe existing-entry refusal without proving
+effective UnauthorizedAccess denial. Two dangling metadata warnings remain fatal. Its
+owned family settles: 4.36 seconds/369,078,272-byte peak/14 samples/zero sampling errors.
+Exact restoration does not close denial or warning coverage. The source-cleared independent
+lookup-controls and nofollow observer proposals remain INACTIVE/unexecuted. Arbitrary
+caller ACL, junction and unknown-reparse native proof remain OPEN.
 
-The prior mandatory callr worker/artifact profiles execute on d53: Linux 56P GREEN;
-Windows 48P/8F, no warnings/skips. Parent environment differs after construction, result
-and cleanup, and the intended kept empty child variable is absent. Key filtering, streams,
-startup isolation, result class, options/cwd/RNG and bounded owned settlement pass.
-Production callr empty-state preservation remains OPEN. Broader launcher proposals stay
-INACTIVE with lifecycle/private-ACL/API-parity gaps; no shared global hook is adopted.
+Production callr empty-state preservation remains OPEN from actual d53 worker/artifact
+profiles: Linux 56P GREEN; Windows 48P/8F with no warnings/skips, parent environment
+changed and intended kept empty child variable lost. Streams/key filtering/startup isolation,
+result class/caller options/cwd/RNG and bounded owned settlement pass. Broader launcher
+proposals remain INACTIVE with lifecycle/private-ACL/API-parity gaps. No shared global hook
+or empty-state normalization is adopted.
 
-Completed d768 full17 remains Linux 2406P/0F/0W/13 exact guards and Windows
-2626P/2F/1W/10 guards, with 18 clean cleanup records each. Publication regressions,
-Windows duplex/no-reader/cancel, cold/warm/retirement/marker, Claude/Codex, checkpoint
-and MCP pass. Quarto passes 71 assertions per host; bridges pass 128 Linux/118 Windows
-plus two exact Windows guards. Hosted dependency preflight is actual, live tests FALSE and
-model requests zero. Child-only discovery finds bundled RStudio Quarto without changing
-caller PATH. Fresh local filesystem metadata still shows private pandas/NumPy absent.
-Their binary-wheel install, ABI/reticulate prefix witnesses, local renders, installed
-frontends/GUI/kernels/models and full current CRAN stay WAITING resources.
+Quarto child-only discovery is fixed without changing caller PATH; actual d768 record/replay/
+source hashes pass 71 assertions per host, bridges 128 Linux/118 Windows with two exact
+Windows guards. Actual current hosted dependency preflight also passes. Local metadata
+confirms private pandas/NumPy absent and bundled RStudio Quarto present. Local binary-wheel
+install uses the private Python with `-I -B`; prefix/base-prefix/CPython 3.12/arm64/64-bit
+proof is required first, separately followed by an actual reticulate witness per R context.
+Local install/renders, installed frontends/GUI/kernels/models and current full CRAN remain
+WAITING the disk/resource gate. No local inference/import/install/build/test was started.
 
-Current registry is 37 files/172 mandatory titles/55 lint paths, with no new OS allowances.
-Next exact-source selection is FOUR COMPLETE files:
-`^test-(proc-spawn|proc-supervise|proc-writer-runtime|subagent-worker)\.R$`.
-Execute 39 spawn/28 supervision/45 writer/36 worker cases on BOTH hosts, plus all four
-fresh Linux plan stages after this plan edit. Broadening is required by the production
-supervision change. Missing/partial/duplicate rows, zero assertions, unexpected skips,
-test/runtime warnings, weakened identity/cleanup or deadline/RSS limits remain fatal.
-Track actual ongoing/completed outcomes in the companion progress document and ignored
-`current-execution.json`; do not infer native GREEN from the source-cleared proposal.
-Optional nofollow observer remains INACTIVE, with actual native/combined RSS proof pending.
-Merge, D-019, current full CRAN and release gates remain OPEN. No local inference/import/
-install/render/build/test or unrelated cleanup while resource gates are unsafe.
+All four fresh broad-profile Linux plan stages pass on exact 3a27: 25 plans, 1523 blocks,
+770 R blocks, zero parse/style problems/lints and 39 equal before/after source hashes.
+Retain 90 historical index warnings, distinct from test/runtime warnings. Registry remains
+37 files/172 mandatory titles/55 lint paths with no new OS allowances. The new plan-only
+Linux workflow validates this final status edit on its exact pushed source with jsonlite+
+lintr, six controller units and the same four serial bounded tools. Record its actual reduced
+installed-package profile; this status-only check does not replace broad external-API,
+package/integration or CRAN coverage. Its result is ONGOING until retained evidence is read;
+latest result belongs in the companion progress/ignored execution ledger without another
+plan edit. Current Windows denial/warning/callr gates, merge, D-019 and release remain OPEN.
 
 
 Historical a03068e run38127051182 stopped before package installation, preflight or

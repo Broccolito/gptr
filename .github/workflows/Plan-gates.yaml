@@ -1,0 +1,225 @@
+name: Serial plan gates
+on:
+  push:
+    branches: [codex/skipped-platform-tests]
+    paths:
+      - dev/TESTING_PLAN.md
+      - .github/workflows/Plan-gates.yaml
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full lowercase commit SHA containing the reviewed plan changes
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: plan-gates-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  plans:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      SOURCE_SHA: ${{ github.event_name == 'push' && github.sha || inputs.source_sha }}
+      GPTR_LIVE_TESTS: 'false'
+      GPTR_REPLAY: replay
+      GITHUB_PAT: ''
+      GITHUB_TOKEN: ''
+      R_ENVIRON_USER: /dev/null
+      R_PROFILE_USER: /dev/null
+      OMP_NUM_THREADS: '1'
+      OMP_THREAD_LIMIT: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+      BLIS_NUM_THREADS: '1'
+      MAKEFLAGS: '-j1'
+      TESTTHAT_CPUS: '1'
+    steps:
+      - name: Validate event and full source nomination
+        shell: bash
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              [[ "$GITHUB_REF" == refs/heads/codex/skipped-platform-tests ]]
+              [[ "$SOURCE_SHA" == "$GITHUB_SHA" ]]
+              ;;
+            workflow_dispatch) ;;
+            *) exit 1 ;;
+          esac
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Verify exact checkout and retain source checksum
+        id: identity
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          python3 -I -B - <<'PY'
+          import hashlib, json, os, pathlib, re, subprocess
+          expected = os.environ['SOURCE_SHA']
+          if not re.fullmatch('[0-9a-f]{40}', expected):
+              raise SystemExit('Require a full lowercase source SHA')
+          actual = subprocess.check_output(
+              ['git', 'rev-parse', 'HEAD'], text=True, timeout=30).strip()
+          if actual != expected:
+              raise SystemExit('Checkout differs from the source nomination')
+          output = pathlib.Path('plan-evidence')
+          output.mkdir(mode=0o700)
+          archive = subprocess.check_output(
+              ['git', 'archive', '--format=tar', 'HEAD'], timeout=30)
+          (output / 'source-identity.json').write_text(json.dumps({
+              'source_sha': actual,
+              'source_archive_sha256': hashlib.sha256(archive).hexdigest(),
+              'event': os.environ['GITHUB_EVENT_NAME'],
+              'profile': 'jsonlite-lintr-required-dependencies-only'
+          }, indent=2) + '\n', encoding='utf-8')
+          PY
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12.10'
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        id: r_setup
+        with:
+          r-version: release
+          Ncpus: 1
+          use-public-rspm: true
+      - name: Install and record the reduced plan-check dependency profile
+        id: dependencies
+        shell: bash
+        timeout-minutes: 7
+        env:
+          R_LIBS_USER: ${{ runner.temp }}/gptr-plan-library
+        run: |
+          Rscript --vanilla - > plan-evidence/dependencies.log 2>&1 <<'RSCRIPT'
+          lib = Sys.getenv("R_LIBS_USER")
+          stopifnot(nzchar(lib))
+          if (dir.exists(lib)) {
+            stopifnot(!length(list.files(lib, all.files = TRUE, no.. = TRUE)))
+          } else {
+            dir.create(lib, recursive = TRUE, mode = "0700")
+          }
+          .libPaths(c(lib, .libPaths()))
+          options(Ncpus = 1L)
+          utils::install.packages(c("jsonlite", "lintr"), lib = lib,
+            dependencies = NA, repos = "https://cloud.r-project.org", Ncpus = 1L)
+          stopifnot(requireNamespace("jsonlite", quietly = TRUE),
+            requireNamespace("lintr", quietly = TRUE))
+          packages = utils::installed.packages()[, c("Package", "Version"), drop = FALSE]
+          packages = packages[order(packages[, "Package"], packages[, "Version"]), , drop = FALSE]
+          jsonlite::write_json(list(
+            profile = "jsonlite-lintr-required-dependencies-only",
+            external_api_coverage = "depends on the recorded installed namespace set",
+            r_version = as.character(getRversion()),
+            r_platform = R.version$platform,
+            jsonlite_version = as.character(utils::packageVersion("jsonlite")),
+            lintr_version = as.character(utils::packageVersion("lintr")),
+            packages = as.data.frame(packages, stringsAsFactors = FALSE)
+          ), "plan-evidence/dependency-profile.json", auto_unbox = TRUE, pretty = TRUE)
+          RSCRIPT
+      - name: Check the plan controller diagnostic gates
+        id: units
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          python -I -B dev/ci/test-check-plans.py > plan-evidence/unit.log 2>&1
+      - name: Run all four existing plan checks serially
+        id: checks
+        if: ${{ !cancelled() && steps.identity.outcome == 'success' && steps.r_setup.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        shell: bash
+        timeout-minutes: 42
+        env:
+          R_LIBS_USER: ${{ runner.temp }}/gptr-plan-library
+        run: |
+          python -I -B dev/ci/check-plans.py --out plan-evidence/checks \
+            > plan-evidence/controller.log 2>&1
+      - name: Collect bounded diagnostics and source manifests
+        if: always()
+        shell: bash
+        timeout-minutes: 2
+        env:
+          PLAN_IDENTITY_OUTCOME: ${{ steps.identity.outcome }}
+          PLAN_DEPENDENCIES_OUTCOME: ${{ steps.dependencies.outcome }}
+          PLAN_UNITS_OUTCOME: ${{ steps.units.outcome }}
+          PLAN_CHECKS_OUTCOME: ${{ steps.checks.outcome }}
+        run: |
+          python3 -I -B - <<'PY'
+          import collections, hashlib, json, os, pathlib
+          source = pathlib.Path('plan-evidence')
+          target = pathlib.Path('plan-artifact')
+          target.mkdir(mode=0o700)
+          cap = 1024 * 1024
+          names = [
+              'source-identity.json', 'dependency-profile.json',
+              'dependencies.log', 'unit.log', 'controller.log',
+              'checks/index.log', 'checks/extract.log', 'checks/parse.log', 'checks/lint.log',
+              'checks/source-before.json', 'checks/source-after.json',
+              'checks/meta.json', 'checks/lint_results.csv'
+          ]
+          records, failures = {}, []
+          for name in names:
+              path = source / name
+              if not path.exists():
+                  records[name] = {'present': False}
+                  continue
+              if path.is_symlink() or not path.is_file():
+                  failures.append('Nonordinary diagnostic file: ' + name)
+                  continue
+              size, digest = path.stat().st_size, hashlib.sha256()
+              with path.open('rb') as stream:
+                  for chunk in iter(lambda: stream.read(65536), b''):
+                      digest.update(chunk)
+              records[name] = {'present': True, 'bytes': size,
+                               'sha256': digest.hexdigest(), 'truncated': size > cap}
+              destination = target / name
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              if size > cap and not name.endswith('.log'):
+                  failures.append('Metadata exceeds the artifact bound: ' + name)
+                  continue
+              with path.open('rb') as stream:
+                  if size <= cap:
+                      data = stream.read(cap)
+                  else:
+                      marker = b'\n[bounded log: middle omitted]\n'
+                      data = stream.read(cap // 2 - len(marker))
+                      stream.seek(-cap // 2, os.SEEK_END)
+                      data += marker + stream.read(cap // 2)
+              destination.write_bytes(data)
+          outcomes = {name: os.environ.get('PLAN_' + name.upper() + '_OUTCOME', '')
+                      for name in ('identity', 'dependencies', 'units', 'checks')}
+          before, after = source / 'checks/source-before.json', source / 'checks/source-after.json'
+          unchanged = None
+          if before.is_file() and after.is_file():
+              unchanged = json.loads(before.read_text()) == json.loads(after.read_text())
+          if outcomes['checks'] == 'success':
+              if not all(record.get('present') for record in records.values()) or unchanged is not True:
+                  failures.append('Completed plan checks require every diagnostic and unchanged manifests')
+          index = source / 'checks/index/index.json'
+          if index.is_file():
+              value = json.loads(index.read_text())
+              summary = {'plans': len(value['plans']), 'blocks': len(value['blocks']),
+                         'findings_by_severity': dict(collections.Counter(
+                             finding['severity'] for finding in value['findings']))}
+              (target / 'index-summary.json').write_text(
+                  json.dumps(summary, indent=2) + '\n', encoding='utf-8')
+          metadata = {'source_sha': os.environ['SOURCE_SHA'], 'outcomes': outcomes,
+                      'profile': 'jsonlite-lintr-required-dependencies-only',
+                      'source_manifest_unchanged': unchanged, 'files': records,
+                      'collection_failures': failures,
+                      'excludes': ['source archive', 'index source', 'extracted blocks', 'lint R copies']}
+          (target / 'collection.json').write_text(
+              json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
+          if failures:
+              raise SystemExit('Bounded plan evidence collection failed')
+          PY
+      - name: Preserve only bounded plan-check evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: plan-gates-${{ env.SOURCE_SHA }}
+          path: plan-artifact/
+          if-no-files-found: error
+          retention-days: 14
