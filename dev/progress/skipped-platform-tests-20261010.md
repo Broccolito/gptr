@@ -1518,3 +1518,12 @@ A fork will not replace globally installed packages or GPTR dependency namespace
 Local heavy execution stays HELD: fresh disk7.4GiB is below200GiB. Ollama is untouched.
 This plan edit requires fresh all-four exact-source hosted plan checks before the two-host
 stock-versus-patched dependency validation. Track outcomes here without another plan edit.
+
+
+Tests-first checkpoint: six strict worker/artifact/value/startup-error/cancel cases and four
+separate startup/PATH admission cases are source-cleared. Original helper/test prefixes are
+unchanged; patch round trips recover exact original hashes. No new skip allowance is added.
+Parser/lint/native execution remains pending. Independent upstream partial patch and bounded
+private-install controller are source-cleared; no GPTR runtime or shared dependency changed.
+Fresh15:13PDT snapshot: disk265GiB, load39.69/88.90/160.80,43.51%CPUidle,125GiB used/2018MiB
+unused,20539.50MiB swap, no thermal warning. Local heavy jobs remain HELD; Ollama untouched.

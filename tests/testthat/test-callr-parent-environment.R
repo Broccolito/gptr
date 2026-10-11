@@ -48,3 +48,54 @@ for (profile in c("worker", "artifact")) {
     expect_true(r$exact_owned_settlement)
   })
 }
+
+for (profile in c("worker", "artifact")) {
+  test_that(paste("a native callr", profile,
+    "value matrix preserves empty absent Unicode and mixed-case environment states"), {
+    skip_on_cran()
+    r = ce_extended_expect(paste0("values-", profile))
+    if (is.null(r)) return(invisible(NULL))
+    expect_false(r$inherited_seven)
+    expect_false(r$error_expected)
+    expect_false(r$error_observed)
+    expect_true(r$function_entered)
+    expect_false(r$hook_started)
+    expect_identical(names(r$result), c("controls", "value", "unicode"))
+    expect_identical(names(r$result$controls), c("values_exact", "seven_exact", "marker_exact",
+      "case_unique", "stdin_exact", "eof_exact", "startup_canary_absent", "running_under_callr",
+      "libpath_exact"))
+    expect_true(is.list(r$result$controls) && length(r$result$controls) == 9L &&
+      all(vapply(r$result$controls, identical, logical(1), y = TRUE)))
+    expect_identical(r$result$value, c(sum = 7, mean = 3.5))
+    expect_identical(r$result$unicode, "\u03bb-\u96ea-caf\u00e9")
+    expect_true(r$output_exact)
+    expect_true(r$error_output_exact)
+  })
+}
+
+test_that("a native callr startup failure preserves parent state and error transport", {
+  skip_on_cran()
+  r = ce_extended_expect("startup-error")
+  if (is.null(r)) return(invisible(NULL))
+  expect_true(r$error_expected)
+  expect_true(r$error_observed)
+  expect_true(r$nonzero_exit)
+  expect_true(r$hook_started)
+  expect_false(r$function_entered)
+  expect_null(r$result)
+})
+
+test_that("cancelling a native callr child preserves parent state and settles its exact owner", {
+  skip_on_cran()
+  r = ce_extended_expect("cancel")
+  if (is.null(r)) return(invisible(NULL))
+  expect_true(r$error_expected)
+  expect_true(r$error_observed)
+  expect_true(r$nonzero_exit)
+  expect_true(r$function_entered)
+  expect_false(r$hook_started)
+  expect_true(r$cancelled)
+  expect_null(r$result)
+  expect_true(r$output_exact)
+  expect_true(r$error_output_exact)
+})
