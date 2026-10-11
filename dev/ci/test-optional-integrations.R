@@ -316,7 +316,10 @@ writer_affected_titles = list(
   "test-cli-codex.R" = c(
     "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
     "the next turn resumes the Codex thread with -c sandbox_mode=",
-    "a fake codex returns a function's numeric result through the HTTP MCP bridge"))
+    "a fake codex returns a function's numeric result through the HTTP MCP bridge",
+    "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
+    "retargeting a dangling control link warns after the Codex exec completes",
+    "a control file gptr cannot read is marked by its size and time instead"))
 
 testthat::test_that("affected transport integrations require their actual representative cases", {
   for (file in names(writer_affected_titles)) {
@@ -882,4 +885,37 @@ testthat::test_that(
   testthat::expect_error(optional_gate(rows, file, TRUE), "Skipped")
   testthat::expect_true(optional_allowed_skip(file, added[[4L]], FALSE))
   testthat::expect_false(optional_allowed_skip("test-proc-writer-idle-slots.R", added[[4L]], FALSE))
+})
+
+testthat::test_that("native Codex control variants never excuse capability skips or raw errors", {
+  file = "test-cli-codex.R"
+  titles = c(
+    "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
+    "retargeting a dangling control link warns after the Codex exec completes",
+    "a control file gptr cannot read is marked by its size and time instead")
+  rows = lapply(optional_titles[[file]], record)
+  testthat::expect_identical(tail(optional_titles[[file]], 3L), titles)
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_true(optional_gate(rows, file, windows)$passed)
+    for (title in titles) {
+      i = match(title, vapply(rows, function(row) row$test, ""))
+      testthat::expect_false(optional_allowed_skip(file, title, windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      for (field in c("failed", "warnings", "skipped", "passed")) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows))
+      }
+      changed = rows
+      changed[[i]] = optional_result_rows(list(list(test = title, results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled native fixture error"),
+          class = c("expectation_error", "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(changed, file, windows), "Failed")
+      changed[[i]]$failed = 0L
+      changed[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(changed, file, windows), "Skipped")
+    }
+  }
 })

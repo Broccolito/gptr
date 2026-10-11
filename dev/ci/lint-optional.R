@@ -22,7 +22,7 @@ paths = c(
   "tests/testthat/test-proc-writer-idle-slots.R",
   "tests/testthat/test-mcp-client.R", "tests/testthat/test-subagent-worker.R",
   "tests/testthat/test-cli-common.R", "tests/testthat/test-cli-claude.R",
-  "tests/testthat/test-cli-codex.R",
+  "tests/testthat/test-cli-codex.R", "tests/testthat/helper-cli-codex-capabilities.R",
   "dev/ci/optional-integrations.R", "dev/ci/test-optional-integrations.R",
   "dev/ci/lint-optional.R")
 stopifnot(all(file.exists(paths)))

@@ -124,7 +124,10 @@ optional_titles = list(
   "test-cli-codex.R" = c(
     "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
     "the next turn resumes the Codex thread with -c sandbox_mode=",
-    "a fake codex returns a function's numeric result through the HTTP MCP bridge"),
+    "a fake codex returns a function's numeric result through the HTTP MCP bridge",
+    "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
+    "retargeting a dangling control link warns after the Codex exec completes",
+    "a control file gptr cannot read is marked by its size and time instead"),
   "test-utils-encoding.R" = c(
     "as_utf8() keeps valid UTF-8 bytes under LC_ALL=C where enc2utf8() does not (IC-62)",
     "read_utf8() and write_utf8() round-trip CRLF, BOM and missing final newlines"),
