@@ -1,32 +1,31 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and owned stdin writer —2026-10-10 23:37 PDT
+## Optional integrations and owned stdin writer —2026-10-10 23:52 PDT
 
 Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`,
-`codex/skipped-platform-tests`, currently5fd86c0; primary main remains718e81e with
-maintainer/old prepared edits intact. Preserve the shared Ollama model. At23:30 PDT,
-load63.32/62.65/105.60, CPU12.54%idle, RAM102GiB used/25GiB unused,
-swap11,686.06MiB and disk222GiB keep local R/install/browser/model/build jobs held.
+`codex/skipped-platform-tests`, source668ae5b validated; reviewed original-suite CI3f0b79a
+pushed. Primary main remains718e81e with maintainer/old prepared edits intact. Preserve shared
+Ollama. At23:44 PDT, load18.76/28.35/55.58, CPU41.34%idle, RAM100GiB used/28GiB unused,
+swap11,654.06MiB and disk198GiB keep local R/install/browser/model/build jobs held.
 At most two hosted jobs run concurrently.
 
-Core38117605612 at63a2454 completed: Linux five files1026 assertions/0 failures/warnings/
-skips; Windows five files1018 assertions/0 failures/warnings plus3 named OS guards.
-Both Python12/R gate619/all12 scoped lints and7 owned-family cleanup witnesses passed.
-Linux4 cross-plan checks passed39 unchanged hashes/25 plans/770 selected R blocks/
-0 parse-style problems/0 lints. Eight Linux security guards are not Windows coverage.
-Windows native security is RED:192 passes/12 failed assertions+1 raw error/0 warnings/skips.
-Native settings/trust freshness now pass14 assertions each; alias-read sizing, write-through
-link preservation and checkpoint link labels have SOURCE-CLEAR fixes54ad94b with five new pure policy tests.
-All eight native test bodies remain unchanged; actual Windows rerun required. Do not certify dangling Windows links from existing-path resolution.
+Core63a2454 passed5 complete files Linux1026/Windows1018 assertions,0 failures/warnings with
+3 named Windows guards. Actual668ae5b native Windows security8 cases207 assertions and pure
+policy5 cases21 each pass,0 failures/warnings/skips. Canonical reads/writes/checkpoint labels
+work for observed existing targets; missing Windows targets and concurrent reparse races remain
+unproved, short canonical spellings conservatively excluded. Original7 full filesystem suites
+are registered SOURCE-CLEAR3f0b79a with18 mandatory representatives/21 explicit Windows guards/
+44 lint paths. Capability/trait skips remain fatal; actual run WAITING dispatch.
 
-Reviewed production writer316a5e6 is pushed, not executed. Actual38118221551 stopped before bodies on6 scoped formatting lints;
-reviewed formatting-only correction4b75650 preserves logic/oracles/limits. Next ten-file
-transport/security run is WAITING dispatch with20 writer cases/37 lint paths/native3/prototype/
-sampler and five pure link-policy cases. Verify full bootstrap expression, protected ACL, startup/typed timeouts,
-byte order/EOF/cancellation/actor death/orphans, exact cleanup and Unix regressions before
-closing D-019. Distinct stderr/stdout logs must diagnose the prior Linux sampler error.
-Updated plan gates require the next exact candidate. Native security and production transport
-must pass before merge. Local pandas/NumPy and actual GUI/kernel/frontends remain waiting.
+Actual668ae5b Linux native3 pass60 assertions,0 sampler errors,4.108-4.456s, RSS<=341,291,008;
+Windows native3 RED43 passes/4 failures, cancellation passes. Writer-runtime Windows71/10failed
+conditions and Linux60/2 mock-binding errors+5 native guards. Both37 lints/Python12/R gate746/
+all11 owned-family cleanup witnesses pass. Linux4 plan stages pass39 equal source hashes/
+770 selected R blocks/0 parse-style problems/0 lints. No D-019 closure: source lane repairs
+safe fresh-entry/canonical mailbox validation, trusted bootstrap compression under unchanged
+byte limits, pure mocks and bounded startup diagnostics. Never relax native3 or resource bounds.
+Next exact candidate must rerun updated plan gates and production/affected transport. No merge
+until relevant strict GREEN. Local pandas/NumPy and actual GUI/kernel/frontends remain waiting.
 See `dev/progress/skipped-platform-tests-20261010.md` and `dev/TESTING_PLAN.md`.
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated

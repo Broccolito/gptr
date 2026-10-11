@@ -9,8 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At23:30 PDT, load was63.32/62.65/105.60, CPU12.54%idle, physical memory102GiB used/25GiB
-unused, swap11,686.06MiB, free disk222GiB, with no recorded thermal/performance warning.
+At23:44 PDT, load was18.76/28.35/55.58, CPU41.34%idle, physical memory100GiB used/28GiB
+unused, swap11,654.06MiB, free disk198GiB, with no recorded thermal/performance warning.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -43,12 +43,12 @@ requires actual production execution before integration.
 | --- | --- | --- |
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
-| Actual Windows security | RED native links63a2454; settings/trust GREEN |192 passes/12 failed assertions+1 raw error/0 warnings/skips; cache28 and native exact-stamp28 pass. EOF fixture reads and runtime alias reading/writing/checkpoint labels SOURCE-CLEAR54ad94b; native validation waiting |
-| Actual Windows/Unix child baseline | Windows production RED; Unix control retained | Original Windows3 watchdog failures/24passes/0skips; earlier Linux60passes; latest Linux sampler diagnostic must be recovered from distinct logs |
-| Strict optional workflow | Core DONE63a2454; transport316a5e6 stopped before bodies | Both hosts Python12/Rgate619/all12 scoped lints0; seven exact marked-family cleanup witnesses passed per host |
-| Index/extract/R-parse/lintr plan checks | DONE through63a2454; latest plan edits awaiting next candidate gates | Six actual Linux runs; unchanged39-file manifests,25 plans/770 selected R blocks/0 parse-style problems/0 lints |
+| Actual Windows security | DONE valid-target8 cases668ae5b; full original regression suites WAITING | Native207 assertions/0 failures/warnings/skips; pure policy21 on both hosts. Missing targets remain unproved; short canonical aliases conservatively refused |
+| Actual Windows/Unix child baseline | Linux DONE60 assertions; Windows RED43/4 | Actual668ae5b: Linux0 sampler errors/4.108-4.456s/RSS<=341,291,008 bytes; Windows cancellation passes, duplex/typed timeout fail |
+| Strict optional workflow | Native execution DONE668ae5b; production RED | Both hosts Python12/R gate746/all37 scoped lints0; all11 marked-family cleanup witnesses pass. Original7-suite registry SOURCE-CLEAR3f0b79a |
+| Index/extract/R-parse/lintr plan checks | DONE through668ae5b; latest update requires next exact gates | Unchanged39-file manifests,25 plans/770 selected R blocks/0 parse-style problems/0 lints; historical index warnings retained |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
-| Production owned-writer correction | SOURCE-CLEAR; formatting-only correction4b75650 after actual38118221551 lint stop |20 runtime/guard cases and native3/prototype/sampler unchanged; full eight-file transport run on both hosts. ACL/startup/byte limits/Unix lifecycle/ownership/performance remain unverified |
+| Production owned-writer correction | RED668ae5b; mailbox/bootstrap/fixture repair ONGOING | Windows71 passes/10 failed conditions; Linux60 passes/2 fixture errors+5 native guards. No budget/oracle relaxation |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
 | App browser/search integrations | DONE actual63a2454 | Linux506 and Windows502 assertions across search/app/cleanup,0 failures/warnings; one named Windows app OS guard. Mandatory actual-browser cases executed, no unhandled close promise |
 | Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
@@ -293,3 +293,41 @@ are mandatory on both hosts under5fd86c0; all37 scoped lint paths are checked. S
 spellings can be conservatively excluded from capture; missing Windows targets remain unproved.
 Next ten-file actual transport/security rerun is WAITING dispatch on a fresh exact candidate,
 including4 serial Linux plan stages for this update. Nothing is production GREEN yet.
+
+
+## Native results and original-suite gate checkpoint —2026-10-10 23:52 PDT
+
+Actual [run38118685201](https://github.com/Broccolito/gptr/actions/runs/38118685201) at668ae5b:
+all8 native Windows security cases pass207 assertions/0 failures/warnings/skips. Five pure
+policy cases pass21 assertions per host. These certify observed valid-target alias handling,
+not missing native targets or protection against concurrent same-user reparse replacement.
+
+Linux native3 pass60 assertions, all case families settle and no resource-observation error
+recurs. Case elapsed4.108/4.446/4.456s, peak family RSS341,291,008 bytes, original1GiB/64MiB/
+30s/60s caps unchanged. Windows cancellation passes; duplex and typed timeout remain RED:
+43 passes/4 failed assertions. Windows writer-runtime71 passes/10 failed conditions, including
+5 unsuccessful native cases, mailbox accounting/canonical checks and2 wrong base-function mocks.
+Linux writer-runtime60 passes/2 raw mock-binding errors+5 native OS guards. Both hosts pass
+prototype92/sampler21/supervise146/arch13; reactors pass208 Linux and196 Windows+2 named guards.
+Linux full spawn155 passes; Windows143 passes/3 failures+1 named guard. All11 controller cleanup
+witnesses pass per host; no hangs exceed case limits, no recorded family exceeds resource caps.
+
+Both Python12/R gate746/all37 scoped lints pass. All4 Linux plan stages pass with39 equal
+before/after hashes/25 plans/770 selected R blocks/0 parse-style problems/0 lints. Verified
+Linux artifact SHA256:c1cf8c5ad5cf4e7aa594e4b779fc86e7e48a9653d8ff645e8dfea52c1a27531d;
+Windows88915f57c3557518251288bd7591c65f0c589894f045fbc35ec20e7637fbfdfc.
+
+Production repair remains ONGOING. Its trusted full bootstrap measured9841 bytes on Windows,
+leaving little space for stricter validation. Preserve9998-expression/12000-argv limits while
+compressing trusted source only using existing dependencies; actual source/byte round-trip,
+canonical/fresh-entry/dangling guards and bounded startup-condition diagnostics require tests.
+No user payload or credential may enter argv. Correct2 pure base-function mocks without weakening
+ownership assertions. The previous Linux sampling failure is not reproduced; no new sampler
+runtime change is justified or claimed.
+
+The original7 filesystem suites have a SOURCE-CLEAR registry3f0b79a:31 files/110 titles,
+18 new mandatory representatives/21 literal Windows OS guards,44 lint paths. No original
+fixtures were copied or altered. Missing locale/Git/stringi/link/permission prerequisites and
+case-sensitive filesystem trait skips remain fatal for diagnosis; OS guards remain separate
+from coverage. Actual seven-suite run is WAITING dispatch; this plan needs fresh4-stage gates.
+The23:44 resource snapshot still holds local jobs; no shared model operation was performed.
