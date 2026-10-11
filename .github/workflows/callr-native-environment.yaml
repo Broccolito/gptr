@@ -63,7 +63,7 @@ jobs:
       - name: Lint GPTR regression fixtures and dedicated R controller
         shell: bash
         run: |
-          Rscript --vanilla -e 'f=c("dev/ci/callr-native.R", "tests/testthat/helper-callr-parent-environment.R", "tests/testthat/test-callr-parent-environment.R", "tests/testthat/test-callr-startup-admission.R");x=lapply(f,lintr::lint);print(x);stopifnot(all(lengths(x)==0L))'
+          Rscript --vanilla dev/ci/lint-callr-native.R
       - name: Run pinned stock then repaired dependency in isolated libraries
         shell: bash
         env:

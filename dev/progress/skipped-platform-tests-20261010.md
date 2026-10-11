@@ -1534,3 +1534,15 @@ next task checkpoint. Provenance freezes all167 upstream files; delta is six R l
 files plus one nine-case upstream test. Registry is6strict/4admission/9upstream. No callr
 namespace/shared library or GPTR runtime/Imports changed. Native execution remains WAITING
 until the one active all-four plan job settles; then launch at most two hosted jobs.
+
+
+Actual3682/run38179769396 is lint-only RED on both hosts: package install succeeded,
+but dedicated lint omitted the existing package/helper loading context. Linux reports
+three unresolved optional helper functions plus bp_run/testthat expectations in the fixture.
+No pinned callr install or native test ran; secondary upload found no native artifacts.
+Reviewed correction uses the same pkgload::load_all context as the existing passing scoped
+lint program, sources pure optional definitions, and checks all five files without suppressing
+linters or changing runtime/tests/oracles. Fresh exact-source native repeat is ONGOING.
+Actual b984/run38179265286 plan artifact is independently verified: all4 stages,39 equal
+hashes,770R zero parse/style/lint,6units,90 historical indexWARN/0ERROR; current Plan bytes
+are unchanged. Failed3682 logs remain retained in ignored callr-native-env-20261011.
