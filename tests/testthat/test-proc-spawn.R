@@ -414,15 +414,6 @@ test_that("proc_run echo fails closed when streaming redaction exceeds its bound
   expect_identical(paste(emitted, collapse = ""), "")
 })
 
-# D-019: processx writes a child's stdin with a blocking WriteFile() on Windows (its pipe has no
-# FILE_FLAG_OVERLAPPED and is in PIPE_WAIT mode), so write_all() cannot be non-blocking there. A
-# child that stops reading stdin while its stdout pipe is full deadlocks the R process, which no
-# timeout can bound (hosted Windows: "checking tests" hung for over an hour after this file's
-# last pre-stdin test). The stdin tests that need a non-blocking write skip on Windows.
-skip_if_blocking_stdin = function() {
-  skip_if(is_windows(), "D-019: processx writes child stdin with a blocking call on Windows")
-}
-
 count_stdin_code = paste0("con = file('stdin', 'rb'); n = 0; repeat { b = readBin(con, 'raw', ",
                           "65536L); if (!length(b)) break; n = n + length(b) }; ",
                           "cat(sprintf('%.0f\\n', n))")
@@ -445,7 +436,6 @@ test_that("write_all() delivers 2 MB through a pipe and write_close() sends EOF"
 
 test_that("a 4 MB payload to a child that echoes each line completes without deadlock", {
   skip_on_cran()
-  skip_if_blocking_stdin()
   withr::defer(reactor_shutdown())
   echo = paste0("con = file('stdin', 'rb'); repeat { x = readLines(con, n = 500L, ",
                 "warn = FALSE); if (!length(x)) break; writeLines(x); flush(stdout()) }")
@@ -495,7 +485,6 @@ test_that("write_all() times out on a child that reads nothing and refuses one w
   q = proc_spawn(rscript_path(), c("--vanilla", "-e", "1"), stdout = NULL, stderr = NULL)
   withr::defer(kill_all(q, grace = 0))
   expect_error(write_all(q, "x"), class = "gptr_error_invalid_argument")
-  skip_if_blocking_stdin()
   p = proc_spawn(rscript_path(), c("--vanilla", "-e", "Sys.sleep(30)"), stdin = "|",
                  stdout = NULL, stderr = NULL)
   withr::defer(try(p$kill_tree(), silent = TRUE))

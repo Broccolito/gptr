@@ -453,12 +453,15 @@ reactor_shutdown = function() {
   }
   children = lapply(ls(r$procs, sorted = FALSE), function(id) r$procs[[id]]$p)
   pending = lapply(ls(r$stdin, sorted = FALSE), function(key) r$stdin[[key]]$p)
+  writers = jobs_env()$writers
+  idle = if (is.null(writers)) list() else
+    lapply(ls(writers, sorted = FALSE), function(key) writers[[key]]$target)
   # In-flight callbacks still hold r. Clear its tables before stopping children so
   # they cannot deliver more lines or schedule old work after shutdown.
   for (table in list(r$procs, r$timers, r$tasks)) rm(list = ls(table), envir = table)
   r$fifo = list()
   rm(list = "reactor", envir = the)
-  for (p in unique(c(children, pending))) {
+  for (p in unique(c(children, pending, idle))) {
     reactor_stdin_drop(r, p, "The reactor stopped before stdin was delivered.")
     try(kill_all(p, grace = 0), silent = TRUE)
   }
@@ -567,6 +570,11 @@ reactor_read_proc = function(r, id, w) {
   done = (is.null(w$main) || w$main$eof()) && (is.null(w$other) || w$other$eof())
   alive = tryCatch(w$p$is_alive(), error = function(e) NA)
   if (done && live() && isFALSE(alive)) {
+    # The companion can be publishing its final acceptance ACK after target exit.
+    # Let the normal stdin drain settle that ACK or its typed failure first.
+    b = r$stdin[[as.character(w$p$get_pid())]]
+    if (!is.null(b) && identical(b$p, w$p) && b$pos < length(b$bytes) &&
+        !is.null(proc_writer_get(w$p))) return(invisible(NULL))
     rm(list = id, envir = r$procs)
     status = tryCatch(w$p$get_exit_status(), error = function(e) NA_integer_)
     reactor_stdin_drop(r, w$p, "The child exited before stdin was delivered.")
@@ -601,6 +609,7 @@ reactor_stdin_fail = function(r, key, b, message, class = "io") {
   b$failed = TRUE
   b$error = gptr_condition(message, class, fields = fields)
   if (identical(r$stdin[[key]], b)) rm(list = key, envir = r$stdin)
+  proc_writer_stop(b$p)
   try(close(b$p$get_input_connection()), silent = TRUE)
   if (!isTRUE(b$waited)) registry_diagnostic("reactor", "stdin", class, message)
   invisible(NULL)
@@ -612,9 +621,18 @@ reactor_stdin_drop = function(r, p, message) {
   key = as.character(p$get_pid())
   b = r$stdin[[key]]
   if (!is.null(b) && identical(b$p, p)) {
+    writer = proc_writer_get(p)
+    if (!is.null(writer)) {
+      failed = inherits(tryCatch(proc_writer_ack(writer, b), error = identity), "error")
+      if (failed) {
+        reactor_stdin_fail(r, key, b, "Invalid child stdin acknowledgement at exit.")
+        return(invisible(NULL))
+      }
+    }
     # Reading output after a successful write can observe immediate child exit.
     # Bytes already accepted by the pipe are complete, even before the drain settles.
     if (b$pos >= length(b$bytes)) {
+      proc_writer_stop(p)
       if (isTRUE(b$close)) try(close(p$get_input_connection()), silent = TRUE)
       rm(list = key, envir = r$stdin)
     } else {
@@ -633,6 +651,21 @@ reactor_drain_child = function(r, key, b) {
   }, add = TRUE)
   p = b$p
   alive = tryCatch(p$is_alive(), error = function(e) NA)
+  if (is_windows() && inherits(p, "process")) {
+    done = tryCatch(proc_writer_drain(r, key, b), error = function(e) {
+      reactor_stdin_fail(r, key, b, "Could not deliver queued bytes through the stdin writer.")
+      FALSE
+    })
+    if (!identical(r$stdin[[key]], b)) return(invisible(NULL))
+    if (isTRUE(done)) {
+      rm(list = key, envir = r$stdin)
+    } else if (reactor_now() - b$last >= b$limit) {
+      reactor_stdin_fail(r, key, b,
+        paste0("Timed out writing to child stdin: nothing was accepted for ", b$limit, " s."),
+        class = "timeout")
+    }
+    return(invisible(NULL))
+  }
   if (isFALSE(alive)) {
     reactor_stdin_fail(r, key, b, "The child exited before stdin was delivered.")
     return(invisible(NULL))

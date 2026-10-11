@@ -189,6 +189,7 @@ proc_record = function(pid, process = NULL) {
 #' @noRd
 proc_unmark = function(marker) {
   if (!proc_marker_valid(marker)) return(invisible(FALSE))
+  if (is_windows() && !isTRUE(proc_writer_remove(marker))) return(invisible(FALSE))
   je = jobs_env()
   if (exists(marker, envir = je$procs, inherits = FALSE)) rm(list = marker, envir = je$procs)
   if (exists(marker, envir = je$handles, inherits = FALSE)) rm(list = marker, envir = je$handles)
@@ -208,6 +209,7 @@ proc_tree = function(marker) {
 #' Release the marker of a child that exited, once no descendant carries it
 #' @noRd
 proc_release = function(p) {
+  if (!isTRUE(proc_writer_stop(p))) return(invisible(FALSE))
   pid = tryCatch(p$get_pid(), error = function(e) NA_integer_)
   rec = proc_record(pid, process = p)
   if (is.null(rec)) return(invisible(FALSE))
@@ -224,7 +226,8 @@ proc_prune = function() {
     tree = proc_tree(m)
     process = je$handles[[m]]
     dead = !is.null(process) && isFALSE(tryCatch(process$is_alive(), error = function(e) NA))
-    if (dead && !length(tree) && !isTRUE(attr(tree, "unavailable"))) proc_unmark(m)
+    settled = !dead || isTRUE(proc_writer_stop(process))
+    if (dead && settled && !length(tree) && !isTRUE(attr(tree, "unavailable"))) proc_unmark(m)
   }
   invisible(NULL)
 }
@@ -323,7 +326,7 @@ proc_cleanup_record = function(rec) {
   clear = !isTRUE(attr(survivors, "unavailable")) &&
     !any(vapply(survivors, function(h) !isFALSE(proc_handle_alive(h)), logical(1)))
   complete = clear && (!known || isFALSE(child$alive))
-  if (complete) proc_unmark(rec$marker)
+  if (complete) complete = isTRUE(proc_unmark(rec$marker))
   list(killed = as.integer(killed), complete = complete)
 }
 
@@ -340,6 +343,7 @@ proc_cleanup_record = function(rec) {
 #' @noRd
 kill_all = function(p, grace = 2) {
   if (is.null(p)) return(invisible(TRUE))
+  writer_settled = isTRUE(proc_writer_stop(p))
   pid = tryCatch(p$get_pid(), error = function(e) NA_integer_)
   if (isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))) {
     try(p$interrupt(), silent = TRUE)
@@ -368,7 +372,8 @@ kill_all = function(p, grace = 2) {
     cleanup = proc_cleanup_record(rec)
     dead = isFALSE(tryCatch(p$is_alive(), error = function(e) NA)) && cleanup$complete
   }
-  invisible(dead)
+  if (!writer_settled) writer_settled = isTRUE(proc_writer_stop(p))
+  invisible(dead && writer_settled)
 }
 
 #' The size of a child-process pool: capped at 2 whenever R CMD check runs (IC-60)
