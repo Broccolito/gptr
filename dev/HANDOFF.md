@@ -1,51 +1,45 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport -2026-10-11 01:05 PDT
+## Optional integrations and Windows transport -2026-10-11 01:35 PDT
 
 Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`. Primary main718e81e/maintainer/old preparations remain intact;
-shared Ollama preserved. Latest01:05:load111.72/101.63/99.13/CPU12.11%idle/RAM126GiBused/
-1701MiBunused/swap11,364MiB/disk89GiB. Hold local R/install/browser/model/build jobs; at most
-2 independent hosted jobs. No shared-model operation.
+`codex/skipped-platform-tests`, pushed throughc751889. Primary main718e81e/maintainer/old
+prepared chunks/secrets remain intact; shared Ollama preserved. Latest01:35 load224.32/150.35/
+115.84/CPU0%idle/RAM85GiB used/42GiB unused/swap14,941.81MiB/disk74GiB. Hold all local
+R/install/browser/model/build jobs; at most2 independent hosted jobs. No unrelated-process action.
 
-Actual combined15 run38120994420 exactf419fd6: Linux strict PASS1481 assertions/0failed
-conditions/warnings/5 named Windows lifecycle guards. Windows strict RED1587 passes/8failed
-conditions/0 test warnings/23 named OS guards.11 complete Windows files pass1166 assertions
-with17 guards. All16 owned-family cleanup witnesses pass per host/0 remaining marked processes.
-Main Windows controller reports32 uncaptured warnings; diagnosis pending. Artifact ZIPs verified:
-Windows174631522bfb0cca5ed7875d11402e1ebde1092492f27b45bbdbfff47aae2dfb;
-Linux9296360753fd5ac3d7a525e0e2be665a7479b937ee6efe4e52ceda287ab55081.
-Python12/R gate1326/all44 scoped paths pass each;4 Linux plan stages pass39 equal source hashes/
-770 R blocks/0 parse-style problems/0 lints.
+Actuale3f4b47 run38123918333 completed RED both hosts: Linux1596 passes/1 fixture error/
+0 test warnings/8 named OS guards; Windows nine completed raw files1172 passes/13 conditions/
+0 test warnings/10 skips. MCP307.55s/Claude308.67s exceed300s and lack final raw results;
+partial logs are not passes. Both Python12/R gate1559 clean/all46 scoped paths clean. Whole
+package convention cases6 pass each. All4 Linux plan stages pass39 unchanged hashes/25 plans/
+770 blocks/0 parse-style problems/0 lints, with90 historical index warnings.
+Verified Windows ZIP5836d6e0dc74cd1e2708ec55a23b3f1b953946c8438d1a89779c88d9cacaeb82;
+Linux887940c93793268d6c009a9330719d3cf84812607fe3787cc4c07a4fd4ee91f0.
 
-Native valid-target207/pure-policy21 earlier pass. Actual original7: Linux693 assertions/0
-failed conditions/warnings/skips; Windows809 passes/1 PowerShell timeout/0 warnings/20 OS guards.
-Native link teardown, duplicate-link edit and measured casefold pass. Owned-bucket permission
-case stops after8 setup assertions at5s PowerShell bound; effective denial/restoration unproved.
-Primary prepared ckpt67-line suffix/utils-paths75-line block remain untouched. Apply reviewed
-fixture patches only by hunks after actual GREEN; no whole-file primary overwrite.
+Windows five writer lifecycle cases reach acl_wait0.20-0.25s then startup timeout1.84-1.85s/
+zero accepted bytes. No-reader remains startup; idle stops before first ACK, not a starvation
+result. Native duplex RED; normal60s spawn4MB echo/EOF now pass. The source-reviewed3.NET
+ACL setup proposal is relevant but needs exact application review and actual protected-DACL/
+owner/reparse/raw-byte/ACK/EOF/deadline proof. Preserve2s enqueue budget,9998-expression/
+12000-argv/native3/resource limits. Conditional idle retirement remains design-only.
 
-All5 Windows production lifecycle cases and native duplex fail before READY, startup1.83-1.97s,
-4706-4722B expressions/zero accepted bytes. Typed2s no-reader result is startup, not delivery proof.
-4MB spawn echoes raise IO;2MB/EOF passes under normal60s setting. Preserve2s enqueue budget,
-9998-expression/12000-argv caps/native3 and resource bounds; bounded stage diagnosis pending.
-UTF8 helper correction714aad4/source gate3074e01 reviewed. Idle contention witness332324d and
-strict CI6f92d3c reviewed:33 files/123 titles/46 lint paths; Windows19 assertions mandatory,
-Linux one exact OS guard. An early startup failure makes this probe inconclusive. Native ACL fixture75dc9e9 source reviewed with unchanged5s/denial/restore assertions.
-Warning observer44cff6c and bounded actor stages6e096c3 reviewed; no startup-speed fix.
-Strict CI3ffecab reviewed:33 full files/127 titles/46 lint paths; all29 writer titles mandatory
-on Windows,23 pure on Linux plus6 exact native guards. Actual READY/delivery proof mandatory.
-Latesta135 run38122876440: both hosts stopped before bodies on one idle capture lint;
-45 scoped paths clean. Both actualunit gates1559 passes/0 failures/skips but27 synthetic
-control warnings, not the earlier1456 clean prefix. Callbackb4ca857 source-clear; explicit
-expected-warning capture5b3f5bb/fatal unexpected-unit-warning gate10dc59a source-clear,
-committed; actual clean unit/lint and platform bodies pending. Four Linux plan
-stages pass39 unchanged hashes/770 blocks/0 parse-style issues/0 lints. Verified artifacts:
-Windows45f0057f7c802557191ba6137ab0c4c5276f4c895293467e8a55bf2281a138e0;
-Linux28895a547e50e3a008177a63c57c374dc8063bef2fecfcbececb5b5aeffa79bc.
-Next actual11 files: lint-rules, proc-writer-idle-slots, mcp-client, subagent-worker, cli-common, cli-claude,
-cli-codex, ckpt-files, proc-writer-runtime, proc-windows-backpressure, proc-spawn plus fresh4 Linux plan stages. D-019/merge stay open until relevant strict GREEN.
-Local pandas/NumPy, actual GUI/kernel replay, broad check/release remain waiting. See plan/ledger.
+Checkpoint115 passes/2 raw restore verification errors/0 warnings/5 guards: create denial
+and store refusal pass, exact Access SDDL comparison fails after restore-applied. Restoration
+remains RED; no package create-denial defect claimed. Primary ckpt67-line suffix/utils-paths
+75-line block must be preserved; reviewed fixture variants remain candidate-only until GREEN.
+Codex253 passes/1 concurrency failure/two unaccepted capability skips. Executable native
+fixtures09f9ea1/strictdf16cde source reviewed;33 files/130 titles/47 lint paths, unrun.
+
+Controller24 ps_find_tree warnings each are fatal;12 cleanup records report settled roots/
+zero survivors but need a valid-marker query before absence proof is accepted. Corrected
+controllerc751889 makes the second field an epoch timestamp without suppressing warnings.
+An unchanged-runtime owned-family/foreign-sentinel probe must distinguish raw format warnings
+from missed descendants; production GPTR_PROC compatibility migration is not established.
+Bootstrap capture44b24db fixes one pure fixture assignment; both actual unit/lint warning
+corrections5b3f5bb/10dc59a and callbackb4ca857 are now clean. Next same11 files plus reviewed
+owned-family probe and fresh4 plan stages. Both hosted leases free; D-019/merge stay open
+until relevant strict GREEN. Local pandas/NumPy/GUI/kernel/model/full CRAN remain WAITING.
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
 candidate branch `codex/skipped-platform-tests` is pushed throughb6fff3d in the attached

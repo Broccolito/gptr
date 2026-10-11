@@ -9,8 +9,10 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At01:05 PDT October11, load was111.72/101.63/99.13, CPU12.11%idle, physical memory126GiB
-used/1701MiB unused, swap11,364MiB, free disk89GiB, with no thermal/performance warning.
+At01:35 PDT October11, load was224.32/150.35/115.84, CPU0%idle, physical memory85GiB
+used/42GiB unused, swap14,941.81MiB, free disk74GiB, with no thermal/performance warning.
+The memory-pressure free metric is76%; it does not clear CPU/swap/disk gates. Disk decline
+has no established cause and is not permission to stop unrelated work or delete files.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -43,12 +45,12 @@ requires actual production execution before integration.
 | --- | --- | --- |
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
-| Actual Windows security | Native207/pure21 DONE; original7 f419 RED1 timeout | Windows809 passes/0 warnings/20 guards; Linux693/0 failures/warnings/skips. Link/casefold variants pass; denial/restoration stops after8 setup assertions at PowerShell5s bound |
-| Actual Windows/Unix child baseline | Linux native60 DONE; Windows startup RED | f419 native46 passes/1 failure, all5 production lifecycle cases time out before READY; no-reader2s startup timeout is not delivery proof |
-| Strict optional workflow | f419 Linux15 DONE; Windows RED8 conditions | 1481/1587 passes;0 test warnings;5/23 named OS guards. Controller32 Windows warnings under diagnosis. New strict33/127/46 source reviewed; a135 stopped before bodies on one scoped lint |
-| Index/extract/R-parse/lintr plan checks | DONE througha135; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
+| Actual Windows security | Native207/pure21 DONE; e3 checkpoint restore RED | Checkpoint115 passes/2 raw restore errors/0 warnings/5 guards; effective create denial/store refusal pass. Exact Access SDDL restore verification fails; native Codex link/read-denial replacements are source-ready, unrun |
+| Actual Windows/Unix child baseline | Linux native60 DONE; Windows startup RED | e3 native46 passes/1 failure; fixed phases reach acl_wait then time out before READY. Idle stops before first ACK; normal60s spawn4MB/EOF passes; startup timeout is not delivery proof |
+| Strict optional workflow | e3 completed RED; corrective source ready | Linux1596 passes/1 fixture error/0 test warnings/8 OS guards; Windows nine completed files1172 passes/13 conditions/0 warnings/10 skips, two300s deadlines without final results. Both units1559 clean/scoped46 clean. Controller24 warnings each; new strict33/130/47 source requires actual rerun |
+| Index/extract/R-parse/lintr plan checks | DONE throughe3; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
-| Production owned-writer correction | Actualf419 RED118 passes/5 failures | Five Windows lifecycle cases startup1.83-1.97s/zero accepted bytes, expression4706-4722B. Bounded stage diagnosis pending; no raised limits |
+| Production owned-writer correction | Actuale3 startup RED; bounded diagnosis DONE | Five Windows lifecycle cases startup1.84-1.85s/zero accepted bytes, expression4965-4977B, acl_wait0.20-0.25s with no acl_done. Native .NET setup proposal requires review/actual security and speed proof; no raised limits |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
 | App browser/search integrations | DONE actual63a2454 | Linux506 and Windows502 assertions across search/app/cleanup,0 failures/warnings; one named Windows app OS guard. Mandatory actual-browser cases executed, no unhandled close promise |
 | Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
@@ -509,3 +511,54 @@ problems/0 lints and90 retained historical index warnings. The next exact candid
 repeat the same11 files plus all4 plan gates. Both hosted leases are now free; at most2
 jobs remain allowed. Local installation/compute stays held by the01:05 snapshot above.
 No shared Ollama action occurred.
+
+
+## Actual platform diagnosis and reviewed follow-up -2026-10-11 01:35 PDT
+
+Actual [run38123918333](https://github.com/Broccolito/gptr/actions/runs/38123918333)
+uses exacte3f4b47f8a47fdde53058ea2fe87d461dace230e. Both jobs completed RED. Both hosts
+pass12 Python tests,1559 R gate assertions with0 failures/warnings/skips, and all46 scoped
+lint paths. Each actual package-convention file passes6 assertions, including negative controls.
+
+Linux eleven selected files report1596 passes/1 raw error/0 row or outside warnings/8 exact
+OS guards. Only the trusted-bootstrap fixture fails: capture.output named its argument rather
+than assigning local value. Reviewed44b24db adds the local assignment inside braces, preserving
+all assertions and runtime. MCP166/worker129/Claude243/Codex259/checkpoint149 all pass.
+
+Windows nine files have completed raw results:1172 passes/13 failed conditions/0 row or outside
+warnings/10 skips. MCP307.55s and Claude308.67s exceed their300s child bounds without final
+raw result files; retained partial logs cannot certify either. The ordinary spawn149 assertions
+and one named Unix guard pass, including4MB echo and EOF under the normal60s timeout.
+Workers127/CLI-common267/package-conventions6 pass with two additional named OS guards.
+
+Five native writer lifecycle cases reach decode/identity/acl_start/acl_wait, then time out
+before READY at1.84-1.85s/zero accepted bytes. No-reader reaches only acl_wait and remains
+startup rather than delivery proof; idle stops before first ACK, so contention is inconclusive.
+The smaller three-call native .NET ACL setup is now relevant to this observed phase, but
+startup latency attribution and security-equivalent native execution still require proof.
+No timeout, resource limit or assertion is increased.
+
+Checkpoint effective create denial and store refusal now pass. Both raw errors occur after
+restore-applied when exact Access SDDL verification fails; full restoration remains RED. Codex
+reports two capability skips (unreadable-file permission enforcement and dangling target lookup)
+and one33.4s concurrency failure against13s. Reviewed09f9ea1/df16cde replaces those capability
+skips with owned native link/ReadData-denial witnesses and registers all three relevant titles.
+Current registry33 files/130 titles/47 lint paths is source-ready, not executed.
+
+Both controllers report24 fatal ps_find_tree warnings, one marker-kill and one marked-query
+per12 launches. The old controller marker has a nonnumeric second underscore field; the
+verified ps parser converts that field to a time. Reviewedc751889 adds a unique first field
+and valid whole-second epoch second field, with3 focused unit controls; it does not silence
+warnings. All12 cleanup JSONs report settled roots/zero marked survivors, but a corrected
+valid-marker query must rerun before accepting absence proof. This is not evidence of missed
+descendants: source shows the Windows NA time filter can bypass its cutoff. An unchanged-runtime
+owned-family/foreign-sentinel probe is being prepared to test enumeration and warnings separately.
+
+Both artifact ZIP digests were verified:
+Windows5836d6e0dc74cd1e2708ec55a23b3f1b953946c8438d1a89779c88d9cacaeb82;
+Linux887940c93793268d6c009a9330719d3cf84812607fe3787cc4c07a4fd4ee91f0.
+All4 Linux plan stages pass39 unchanged source hashes/25 plans/770 R blocks/0 parse-style
+problems/0 lints;90 historical index warnings remain. The updated plan requires fresh gates
+on the next exact candidate. Both hosted leases are free; at most2 jobs may run. Local private
+dependencies, native frontends, model inference and full CRAN/release remain WAITING resources.
+Shared Ollama remains untouched.
