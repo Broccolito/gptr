@@ -30,7 +30,9 @@ with_interrupt_policy = function(expr_fun, runs, mode = c("call", "repl")) {
   .gptr_interrupt_policy = pol
   force(.gptr_interrupt_policy)
   tryCatch(
-    withCallingHandlers(expr_fun(), interrupt = function(cnd) policy_menu(cnd, pol)),
+    withCallingHandlers(expr_fun(),
+      gptr_message = function(cnd) console_before_message(pol$runs),
+      interrupt = function(cnd) policy_menu(cnd, pol)),
     interrupt = function(cnd) policy_abort(cnd, pol)
   )
 }

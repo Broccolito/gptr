@@ -437,6 +437,19 @@ console_spinner_stop = function(rec) {
   invisible(NULL)
 }
 
+#' Clear a foreground redraw before an ordinary message; keep the pending request's clock/task
+#'
+#' Called by the outer blocking policy without handling or changing the condition. Tool frames
+#' are excluded by console_foreground(), so clear bytes never enter their captured output.
+#' @noRd
+console_before_message = function(runs) {
+  for (run in runs) {
+    rec = console_record(list(run = run$id))
+    if (!is.null(rec) && console_foreground(rec) && !is.null(rec$spinner)) rec$spinner$clear()
+  }
+  invisible(NULL)
+}
+
 #' Normal progress: stdout in an IRkernel cell, else the usual stderr message. Callers keep
 #' their verbosity/foreground gates and escape untrusted parts; failures do not use this path.
 #' @noRd
