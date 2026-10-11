@@ -1,38 +1,33 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and owned stdin writer —2026-10-11 00:04 PDT
+## Optional integrations and owned stdin writer —2026-10-11 00:19 PDT
 
-Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`,
-`codex/skipped-platform-tests`. Primary main remains718e81e with maintainer/old prepared edits
-intact. Preserve shared Ollama. The00:01 PDT snapshot has load127.40/79.81/74.56,
-CPU0.79%idle, RAM111GiB used/16GiB unused, swap11,524MiB and disk201GiB: local R/install/
-browser/model/build jobs remain held. At most two independent hosted jobs run concurrently.
+Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
+`codex/skipped-platform-tests`. Primary main718e81e/maintainer/old prepared files stay intact;
+shared Ollama preserved. Latest00:13 resources: load114.22/114.07/97.04, CPU0.64%idle,
+RAM111GiB used/16GiB unused, swap11,516MiB, disk160GiB. Hold local installs/R/browser/model/
+build jobs; at most two independent hosted jobs. No shared-model operation.
 
-Core63a2454 passed5 complete files Linux1026/Windows1018 assertions,0 failures/warnings with
-3 named Windows guards. Native668ae5b Windows security8 cases207 assertions and pure policy5
-cases21 each pass. Observed existing-target alias reads/writes/checkpoint labels are certified;
-missing Windows targets and concurrent reparse races remain unproved, short canonical spellings
-conservatively excluded. Actual original7 run38119480288 at85d387d has0 failed assertions on
-both hosts, Windows567 passes/16 storage fixture-cleanup warnings/21 known OS guards plus1
-permission capability skip, Linux661 passes/2 case-sensitivity trait skips. Strict whole-packet
-status remains RED. Five complete files per host pass without unexpected skips/warnings;
-root-owned cleanup passes8 witnesses per host. A source lane prepares narrow fixture/platform
-variants, retaining assertions/canaries; no blanket capability-skip allowance.
+Earlier core63a2454: Linux1026/Windows1018 assertions across5 files,0 failures/warnings with
+3 named Windows guards. Native668ae5b Windows valid-target security8 cases207 assertions/pure
+policy21 each pass; missing targets/concurrent reparse races remain unproved. Original7 run85d
+has0 failed assertions, but strict RED for Windows16 link-teardown warnings/1 permission skip
+and Linux2 casefold trait skips. Reviewed fixturea49b75a preserves bytes/foreign canaries and
+adds real owned-bucket create denial/restoration, precise link teardown and both filesystem-trait
+oracles. Original primary prepared ckpt/utils-paths remain untouched. CIf6c3f65 adds5 mandatory
+both-host variants,31 suites/120 titles/44 lint paths,20 remaining literal Windows OS guards.
+No blanket capability/trait allowance or warning suppression; actual native variants WAITING.
 
-Actual668ae5b Linux native3 pass60 assertions,0 sampler errors,4.108-4.456s, RSS<=341,291,008;
-Windows native3 RED43 passes/4 failures, cancellation passes. Writer-runtime Windows71/10failed
-conditions and Linux60/2 mock-binding errors+5 native guards. The corrective six-file packet is
-independently SOURCE-CLEAR and committed4b2f0ce: canonical/listed-entry checks, compressed trusted
-source under unchanged9998-expression/12000-argv caps, scoped mocks and bounded diagnostics.
-Five new pure cases preserve20 earlier titles;25-case strict registry SOURCE-CLEARf0242c9
-is committed. Production rerun still requires actual validation. Expected196 Windows/93 Linux assertions are source counts, not passes.
-Original native3/prototype/sampler bytes, resource limits and deadlines remain unchanged.
-
-Original7 run85d387d passed Python12/R gate1187/all44 scoped lints and all4 Linux plan stages:
-39 equal source hashes/770 selected R blocks/0 parse-style problems/0 lints;90 historical index
-warnings retained. New plan/source changes need fresh4-stage gates. D-019 stays open; no merge
-until relevant strict GREEN. Local pandas/NumPy and actual GUI/kernel/frontends remain waiting.
-See `dev/progress/skipped-platform-tests-20261010.md` and `dev/TESTING_PLAN.md`.
+Production writer4b2f0ce independently source reviewed,25-case CIf0242c9. Actualfa20be5 stopped
+before test bodies on one diagnostic callback lint (other43 paths clean), now corrected and
+source reviewed98e4f63. Python12/R gate1247 pass each;4 Linux plan stages pass39 equal hashes/
+770 R blocks/0 parse-style problems/0 lints. Expected196 Windows/93 Linux writer assertions
+remain unexecuted. Last actual668 Linux native3 pass60/0 sampler errors/4.108-4.456s/
+RSS<=341,291,008; Windows RED43/4 (cancellation passes). Preserve original native3/prototype/
+sampler bytes, resource bounds,9998-expression/12000-argv caps and no payload/keys in argv.
+Next exact candidate: combined15 transport/original7 suites and fresh4-stage plan checks on
+Windows/Linux. D-019 stays open; no merge until relevant strict GREEN. Local pandas/NumPy,
+actual GUI/kernel/frontend replay, broad check/release remain waiting. See testing plan/ledger.
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
 candidate branch `codex/skipped-platform-tests` is pushed throughb6fff3d in the attached

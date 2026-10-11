@@ -9,8 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At00:01 PDT October11, load was127.40/79.81/74.56, CPU0.79%idle, physical memory111GiB
-used/16GiB unused, swap11,524MiB, free disk201GiB, with no thermal/performance warning.
+At00:13 PDT October11, load was114.22/114.07/97.04, CPU0.64%idle, physical memory111GiB
+used/16GiB unused, swap11,516MiB, free disk160GiB, with no thermal/performance warning.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -43,12 +43,12 @@ requires actual production execution before integration.
 | --- | --- | --- |
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
-| Actual Windows security | DONE valid-target8 cases668ae5b; original7 strict RED85d387d | Native207/pure21 pass; original suites have0 assertion failures but16 Windows cleanup warnings/1 permission skip and2 Linux casefold skips. Narrow fixture/platform fixes ONGOING |
+| Actual Windows security | Native valid-target DONE668ae5b; original7 variant rerun WAITING | Native207/pure21 pass. Fixturea49b75a/CIf6c3f65 source reviewed, native permission/restoration +measured casefold +precise link teardown require actual evidence |
 | Actual Windows/Unix child baseline | Linux DONE60 assertions; Windows RED43/4 | Actual668ae5b: Linux0 sampler errors/4.108-4.456s/RSS<=341,291,008 bytes; Windows cancellation passes, duplex/typed timeout fail |
-| Strict optional workflow | Original7 execution DONE85d387d; strict packet RED | Both Python12/R gate1187/all44 lints0/all8 cleanup witnesses pass; original native Windows production still RED |
-| Index/extract/R-parse/lintr plan checks | DONE through85d387d; updated plan needs fresh exact gates | Unchanged39 manifests/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
+| Strict optional workflow | Registry31/120/44 lints SOURCE-CLEARf6c3f65; combined15 WAITING | Actualfa20be5 Python12/R gate1247 pass; one scoped callback lint blocked bodies, fixed98e4f63. Fatal warnings/skips remain |
+| Index/extract/R-parse/lintr plan checks | DONE throughfa20be5; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
-| Production owned-writer correction | Corrective source CLEAR4b2f0ce; hosted rerun WAITING | Five new pure tests/25 total, original20 preserved; canonical entries/compact trusted bootstrap/scoped mocks/structural diagnostics. No runtime pass or bound relaxation |
+| Production owned-writer correction | Corrective source CLEAR4b2f0ce +scope98e4f63; actual rerun WAITING |25 cases preserved/registered; fa20 lint stopped bodies. No production pass or oracle/budget relaxation |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
 | App browser/search integrations | DONE actual63a2454 | Linux506 and Windows502 assertions across search/app/cleanup,0 failures/warnings; one named Windows app OS guard. Mandatory actual-browser cases executed, no unhandled close promise |
 | Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
@@ -369,3 +369,39 @@ swap11,524MiB and disk201GiB. Local compute remains held; shared Ollama untouche
 candidate needs all4 plan gates for this update. No candidate merge or D-019 closure.
 
 Strict25-case registry packet independently SOURCE-CLEAR and committedf0242c9;31 suites/115 exact mandatory titles,44 lint paths unchanged. Actual production rerun WAITING dispatch.
+
+
+## Reviewed native variants and fresh combined validation —2026-10-11 00:19 PDT
+
+Actual [run38120193658](https://github.com/Broccolito/gptr/actions/runs/38120193658) atfa20be5
+stopped before package test bodies on both hosts. Python12/R gate1247 pass each;43 scoped paths
+are lint-clean, one helper object-usage lint references a diagnostic callback outside visible
+scope. One-file98e4f63 explicitly passes that callback through real/generated formals; independent
+review confirms no test-body/oracle/deadline change or lint exclusion. All4 Linux plan stages
+pass39 equal before/after hashes/25 plans/770 selected R blocks/0 parse-style problems/0 lints.
+Verified Linux artifact SHA256af44529f9cbbbaee321305e9a8fd5d06c5a0ee08a4c7fecbc864c03aae10e403.
+No production startup/bootstrap/lifecycle/size coverage was added by this lint-only run.
+
+Independently reviewed filesystem fixturea49b75a is derived from exact85d originals, not primary
+old prepared files. Storage uses verified true Windows links and precise nonrecursive defers
+before temp-tree teardown, preserving all108 earlier assertion paths and foreign canaries.
+Compressed-file positive checks stand alone. A new both-host denied-create fixture proves actual
+denial, the original workspace-error oracle, exact Access-SDDL/mode restoration, post-restore
+create and blob-store success. Windows only mutates one fresh direct owned bucket, privately
+backs up Access before denial, registers restoration before attempting denial, uses5s bounded
+owned PowerShell and emits no SID/descriptor. No user account or foreign permissions change.
+Case-only rename retains undo/redo byte checks with measured alias-visibility witnesses;
+directory-link duplicate edits run both hosts; folded additions reject aliases or verify two
+distinct files according to the actual owned filesystem. No capability or trait skips added.
+
+Matching strict CIf6c3f65 has31 suites/120 mandatory titles/44 scoped lint paths:5 strengthened
+ckpt/edit rows required on BOTH hosts. The obsolete combined-case Windows allowance is removed,
+leaving20 actual original literal OS guards. Raw errors/warnings, missing/duplicate/zero-assert
+rows and unexpected skips remain fatal; prior writer25/native3/security8/prototype/sampler
+registry and budgets preserved. Proposed combined15-file transport +original7 rerun WAITING
+actual execution on a fresh exact source; all4 plan stages must rerun for this update.
+
+Latest00:13 PDT resources: load114.22/114.07/97.04, CPU0.64%idle,111GiB physical RAM used,
+11,516MiB swap and160GiB free disk. Local installs/R/browser/model/build jobs remain held;
+shared Ollama preserved. Source review does not establish Windows ACL/runtime behavior; merge
+and D-019 closure still WAITING actual strict GREEN.
