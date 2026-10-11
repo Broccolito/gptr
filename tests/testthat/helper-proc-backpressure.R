@@ -222,12 +222,15 @@ bp_run = function(case) {
   out = file.path(root, "stdout.txt")
   err = file.path(root, "stderr.txt")
   started = proc.time()[["elapsed"]]
-  p = callr::r_bg(function(script) {
-    sys.source(script, envir = new.env(parent = baseenv()))
-    invisible(TRUE)
-  }, args = list(script), libpath = .libPaths(), env = child_env_callr(env),
-    cmdargs = "--vanilla", stdout = out, stderr = err, wd = root,
-    supervise = FALSE, encoding = "UTF-8")
+  driver = file.path(root, "driver.R")
+  writeLines(c(paste0(".libPaths(", paste(deparse(.libPaths()), collapse = "\n"), ")"),
+    "(function(args) {",
+    "  stopifnot(is.character(args), length(args) == 1L, file.exists(args[[1L]]))",
+    "  sys.source(args[[1L]], envir = new.env(parent = baseenv()))",
+    "  invisible(TRUE)",
+    "})(commandArgs(trailingOnly = TRUE))"), driver)
+  p = processx::process$new(rscript_path(), c("--vanilla", driver, script), env = env,
+    stdout = out, stderr = err, wd = root, supervise = FALSE, encoding = "UTF-8")
   withr::defer(kill_all(p, grace = 0))
   proc_mark(p, marker, rscript_path())
   outer_record = proc_record(p$get_pid())

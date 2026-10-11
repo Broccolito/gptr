@@ -288,15 +288,15 @@ pmf_run = function() {
       list(phase = phase, diagnostic = pmf_env_diagnostic(state$before, Sys.getenv(), state$marker))
     invisible(NULL)
   }
-  original_env = child_env_callr
-  scope$child_env_callr = function(env) {
-    observe("before-callr")
-    original_env(env)
+  original_env = child_env
+  scope$child_env = function(profile, ...) {
+    observe("before-launch")
+    original_env(profile, ...)
   }
   original_mark = proc_mark
   scope$proc_mark = function(p, marker, command) {
     state$marker = marker
-    observe("after-callr")
+    observe("after-launch")
     value = original_mark(p, marker, command)
     observe("after-mark")
     value
