@@ -9,9 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At23:04 PDT, load was157.27/149.57/168.73, CPU0.7%idle, physical memory104GiB used/23GiB
-unused, swap12,679.62MiB, free disk246GiB, with no recorded thermal/performance warning.
-A23:15 partial probe still showed load185.09 and CPU3.99%idle.
+At23:30 PDT, load was63.32/62.65/105.60, CPU12.54%idle, physical memory102GiB used/25GiB
+unused, swap11,686.06MiB, free disk222GiB, with no recorded thermal/performance warning.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -27,7 +26,7 @@ Linux runners have separate resources and can exercise the offline cases without
   samples family RSS/output and terminates only processes whose owned identities were recorded.
   They run on both Windows and Unix; only the usual CRAN opt-in gate applies.
 - The optional-tool helper discovers executable paths without launching tools or importing
-  Python modules. Its eleven stdlib unit tests now pass, including mocked Windows argv/env/
+  Python modules. Its twelve stdlib unit tests now pass, including mocked Windows argv/env/
   exact-exit propagation. The local bundled
   Quarto exists; the private Python environment still needs pandas/NumPy before local integration.
 
@@ -44,14 +43,14 @@ requires actual production execution before integration.
 | --- | --- | --- |
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
-| Actual Windows security | REDb6fff3d; reviewed fixes pushed; rerun63a2454 ONGOING |92passes/6errors/4failures/0warnings/skips establish tag-fixture and exact-stamp cache/trust defects; unchanged eight native oracles |
+| Actual Windows security | RED native links63a2454; settings/trust GREEN |192 passes/12 failed assertions+1 raw error/0 warnings/skips; cache28 and native exact-stamp28 pass. EOF fixture reads, runtime alias reading/writing/checkpoint labels ONGOING with independent review |
 | Actual Windows/Unix child baseline | Windows production RED; Unix control retained | Original Windows3 watchdog failures/24passes/0skips; earlier Linux60passes; latest Linux sampler diagnostic must be recovered from distinct logs |
-| Strict optional workflow | Owned controller cleanup DONEb6fff3d; core63a2454 ONGOING | All11 exact marked families stopped per host.38cc8dc stopped before package tests on lint launch/fixture syntax; saved runner/braces corrected |
-| Index/extract/R-parse/lintr plan checks | DONE through38cc8dc; next plan edits require fresh gates | Five actual Linux runs, unchanged39-file manifests,25plans/770selectedRblocks/0parse-style/0lints |
+| Strict optional workflow | Core DONE63a2454; transport316a5e6 ONGOING | Both hosts Python12/Rgate619/all12 scoped lints0; seven exact marked-family cleanup witnesses passed per host |
+| Index/extract/R-parse/lintr plan checks | DONE through63a2454; latest plan edits awaiting next candidate gates | Six actual Linux runs; unchanged39-file manifests,25 plans/770 selected R blocks/0 parse-style problems/0 lints |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
-| Production owned-writer correction | SOURCE-CLEAR; actual validation WAITING hosted lease |20prepared runtime/guard cases; native3/prototype/sampler byte-identical; ACL/startup/byte limits/Unix lifecycle/ownership/performance need execution |
+| Production owned-writer correction | SOURCE-CLEAR316a5e6; actual38118221551 ONGOING |20 runtime/guard cases and native3/prototype/sampler unchanged; full eight-file transport run on both hosts. ACL/startup/byte limits/Unix lifecycle/ownership/performance remain unverified |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
-| App browser/search integrations | Corrected source pushed63a2454; actual core rerun ONGOING | Short private Linux socket path, owned synchronous browser shutdown, native Windows search spelling and four pure cleanup cases |
+| App browser/search integrations | DONE actual63a2454 | Linux506 and Windows502 assertions across search/app/cleanup,0 failures/warnings; one named Windows app OS guard. Mandatory actual-browser cases executed, no unhandled close promise |
 | Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
 
 Initial hosted baseline: [Windows run 38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473).
@@ -246,3 +245,33 @@ Strict final registry/gate and31-path lint packet also passed independent source
 unexpected capability skips (including existing Codex permission/link cases) remain fatal.
 Start production hosted tests only after the two current hosted jobs finish. Local resource
 hold and shared-model preservation remain unchanged.
+
+
+## Actual core completion and next native transport run —23:31 PDT
+
+[Run38117605612](https://github.com/Broccolito/gptr/actions/runs/38117605612), exact63a2454,
+completed. Linux five complete core files passed1026 assertions/0 failures/warnings/skips;
+its eight Windows-only security cases are explicit OS guards. Windows five complete core
+files passed1018 assertions/0 failures/warnings plus3 named OS guards. Both hosts passed
+Python12/R gate619/all12 scoped file lints, dependency preflight and all7 recorded owned-family
+cleanup witnesses. Linux's4 plan stages passed:39-file before/after manifests equal,25 plans,
+770 selected R blocks/0 parse-style problems/0 lints;90 historical index warnings remain.
+Verified Linux artifact SHA256:f234d980b77667da4ba35ca06088e291e047e4dd3665543781a68115ee8e0bb4.
+Verified Windows artifact SHA256:1a022c2918cf7dad380829c52549a4e58ba29b65a891067fbf81ee579826c2e8.
+
+Actual Windows security remains RED with192 passes/12 failed assertions and1 raw error,
+0 warnings/skips. The native-link byte helper incorrectly sizes reads using zero-sized alias
+metadata; runtime read_utf8 does the same. Writing through a file alias replaces the link and
+leaves its real target unchanged; walker/checkpoint listings omit directory-link labels.
+The settings and trust exact-stamp cases now pass14 assertions each. A disjoint source lane
+is preparing minimal alias-read/write/listing fixes with focused policy tests and independent
+review; none is claimed as executed. Canonical existing-path checks do not establish dangling
+Windows-link detection or protection against concurrent same-user reparse replacement.
+
+The independently reviewed Windows writer is pushed at316a5e6. Hosted
+[run38118221551](https://github.com/Broccolito/gptr/actions/runs/38118221551) is ONGOING with
+8 full transport files,20 new lifecycle/guard cases and31 scoped lint paths. Production startup,
+actual private-mailbox ACL/size, native backpressure, cancellation, orphan cleanup, Unix
+regressions and performance still require evidence. The updated plan must pass4 cross-plan
+stages on the next exact candidate. No local heavy job, model inference, shared-model stop,
+unload or reconfiguration was performed.

@@ -1,26 +1,32 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and owned stdin writer — 2026-10-10 23:28 PDT
+## Optional integrations and owned stdin writer —2026-10-10 23:31 PDT
 
-Core fixture/lint corrections are pushed through63a2454. Actual six-file Windows/Linux
-run38117605612 is ongoing; await raw results. Earlier38cc8dc stopped before package tests
-on Windows inline-lint parsing and Linux cleanup-fixture syntax; other10Linux scoped files
-were lint-clean and all four plan checks passed with unchanged sources.
+Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`,
+`codex/skipped-platform-tests`, currently316a5e6; primary main remains718e81e with
+maintainer/old prepared edits intact. Preserve the shared Ollama model. At23:30 PDT,
+load63.32/62.65/105.60, CPU12.54%idle, RAM102GiB used/25GiB unused,
+swap11,686.06MiB and disk222GiB keep local R/install/browser/model/build jobs held.
+At most two hosted jobs run concurrently.
 
-The six-file production Windows writer and20-case strict registry/31-path lint packet are
-independently SOURCE-CLEAR and copied into the isolated candidate. Production execution
-is still pending: verified DACL/startup, full-bootstrap size, lifecycle, original native3,
-Unix and affected transport tests. Original native/prototype/sampler oracles and limits are
-unchanged; obsolete blocking-stdin skips are removed. Unexpected capability/Codex skips
-remain fatal. Do not close D-019 or merge until actual production gates pass.
+Core38117605612 at63a2454 completed: Linux five files1026 assertions/0 failures/warnings/
+skips; Windows five files1018 assertions/0 failures/warnings plus3 named OS guards.
+Both Python12/R gate619/all12 scoped lints and7 owned-family cleanup witnesses passed.
+Linux4 cross-plan checks passed39 unchanged hashes/25 plans/770 selected R blocks/
+0 parse-style problems/0 lints. Eight Linux security guards are not Windows coverage.
+Windows native security is RED:192 passes/12 failed assertions+1 raw error/0 warnings/skips.
+Native settings/trust freshness now pass14 assertions each; alias-read sizing, write-through
+link preservation and checkpoint link labels are being corrected in a disjoint source lane
+with independent review. Do not certify dangling Windows links from existing-path resolution.
 
-Use the attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr` worktree and
-`codex/skipped-platform-tests` branch. Preserve main718e81e, maintainer edits, old unrun
-regressions and stash. Local jobs remain held:23:04 load157.27/0.7%idle/swap12,679.62MiB;
-23:15 partial load185.09/3.99%idle. Keep the shared Ollama model untouched. At most two hosted
-jobs run; release the next production packet only after current jobs finish. Local pandas/
-NumPy installation, rendered frontend/native UI and live model work remain waiting.
-
+Reviewed production writer316a5e6 is pushed, not executed. Actual two-host eight-file
+transport run38118221551 is ONGOING.20 strict writer cases/31 lint paths/native3/prototype/
+sampler are selected. Verify full bootstrap expression, protected ACL, startup/typed timeouts,
+byte order/EOF/cancellation/actor death/orphans, exact cleanup and Unix regressions before
+closing D-019. Distinct stderr/stdout logs must diagnose the prior Linux sampler error.
+Updated plan gates require the next exact candidate. Native security and production transport
+must pass before merge. Local pandas/NumPy and actual GUI/kernel/frontends remain waiting.
+See `dev/progress/skipped-platform-tests-20261010.md` and `dev/TESTING_PLAN.md`.
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
 candidate branch `codex/skipped-platform-tests` is pushed throughb6fff3d in the attached
