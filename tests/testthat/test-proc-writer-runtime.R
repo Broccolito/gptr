@@ -653,3 +653,67 @@ test_that("writer early failures retain only fixed numeric nested ACL phases", {
     expect_false(any(grepl("foreign-SID-canary", unlist(x), fixed = TRUE)))
   }
 })
+
+test_that("writer absence script accepts only two native missing-path exception types", {
+  script = proc_writer_acl("C:/owned/fresh", "GPTR_PROC_0123456789abcdef", .diagnostics = TRUE)
+  prefix = strsplit(script, "GPTR_STDIN_ACL absent", fixed = TRUE)[[1L]][[1L]]
+  catches = regmatches(prefix, gregexpr("catch \\[[^]]+\\]", prefix))[[1L]]
+  expect_identical(catches, c("catch [System.IO.FileNotFoundException]",
+    "catch [System.IO.DirectoryNotFoundException]"))
+  expect_false(grepl("catch[[:space:]]*\\{", prefix))
+  expect_false(grepl("Test-Path|\\[System\\.IO\\.(File|Directory)\\]::Exists", prefix))
+  expect_false(grepl("UnauthorizedAccessException|IOException|RuntimeException", prefix))
+  expect_identical(sum(grepl("\\$exists = \\$false", strsplit(prefix, "\n")[[1L]])), 2L)
+})
+
+test_that("writer absence script isolates quoted paths from control and privacy rules", {
+  marker = "GPTR_PROC_0123456789abcdef"
+  path = "C:/owned/'; [Console]::WriteLine('UNTRUSTED-CANARY'); 'fresh"
+  script = proc_writer_acl(path, marker, .diagnostics = TRUE)
+  lines = strsplit(script, "\n", fixed = TRUE)[[1L]]
+  expected = paste0("$p = '", gsub("'", "''", path, fixed = TRUE), "'")
+  expect_identical(lines[startsWith(lines, "$p = ")], expected)
+  expect_identical(sum(grepl("UNTRUSTED-CANARY", lines, fixed = TRUE)), 1L)
+  expect_false(any(startsWith(lines, "[Console]::WriteLine('UNTRUSTED-CANARY")))
+  plain = proc_writer_acl("C:/owned/fresh", marker, .diagnostics = TRUE)
+  plain = strsplit(plain, "\n", fixed = TRUE)[[1L]]
+  expect_identical(lines[!startsWith(lines, "$p = ")], plain[!startsWith(plain, "$p = ")])
+  stages = lines[startsWith(lines, "[Console]::WriteLine('GPTR_STDIN_ACL ")]
+  expect_identical(stages, paste0("[Console]::WriteLine('GPTR_STDIN_ACL ",
+    c("enter", "absent", "created", "readback", "verified", "owner"), "')"))
+  create = which(lines == "$null = [System.IO.Directory]::CreateDirectory($p, $acl)")
+  rule = which(lines == "$acl.AddAccessRule($rule)")
+  owner = which(startsWith(lines, "[System.IO.File]::WriteAllText("))
+  expect_length(create, 1L)
+  expect_length(rule, 1L)
+  expect_length(owner, 1L)
+  expect_lt(rule, create)
+  expect_lt(create, owner)
+})
+
+test_that("Windows native absence probe refuses existing aliases and denied attributes", {
+  skip_on_cran()
+  skip_if(.Platform$OS.type != "windows", "requires actual Windows native absence probe")
+  x = rw_absence_run()
+  expect_true(x$owned_family_stopped)
+  expect_identical(x$sampling_errors, 0L)
+  expect_gte(x$samples, 1L)
+  expect_lte(x$peak_rss, x$rss_cap)
+  expect_lte(x$peak_disk, x$output_cap)
+  expect_lte(x$elapsed, 60)
+  expect_true(is.list(x$inner_identity) && is.finite(x$inner_identity$create_time))
+  expect_true(x$complete, label = paste(x$guard, paste(x$phases, collapse = "/")))
+  if (!x$complete) return(invisible(NULL))
+  expect_identical(x$result$proof, c(paste0("GPTR_STDIN_ACL ", c("enter", "absent", "created",
+    "readback", "verified", "owner")), "GPTR-ABSENCE-FRESH-OK",
+    "GPTR-ABSENCE-DIRECTORY-REFUSED", "GPTR-ABSENCE-FILE-REFUSED",
+    "GPTR-ABSENCE-DANGLING-REFUSED", "GPTR-ABSENCE-DENIED-REFUSED", "GPTR-ABSENCE-RESTORED"))
+  expect_identical(x$result$status, 0L)
+  expect_lte(x$result$elapsed, 5)
+  expect_true(x$result$utility_settled)
+  expect_true(x$result$utility_dead)
+  expect_true(x$result$marker_removed)
+  expect_true(x$result$sentinels_unchanged)
+  expect_true(x$result$entries_removed)
+  expect_true(x$result$restored)
+})
