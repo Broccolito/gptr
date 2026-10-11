@@ -889,3 +889,50 @@ unsafe; local dependency installation/imports/renders/models/GUI stay held. Shar
 and unrelated processes/files remain untouched. A dedicated Windows worker parent-death
 witness and fixed private protocol-readiness diagnostics are prepared only, undergoing
 source review; neither changes the active runtime or current CI selection.
+
+
+## Actual 679f5d6 integration review — 2026-10-11 04:59 PDT
+
+Hosted [run38135856469](https://github.com/Broccolito/gptr/actions/runs/38135856469)
+tested exact679f5d650a9dad643cc5e035ab1e76944721fb14. Both jobs completed; both leases are free.
+All16 final raw files exist on each host. Linux:2188 passes/0 failed conditions/0 R warnings/
+11 exact OS guards. Windows:2341 passes/13 failed conditions (9 failures+4 errors)/1 R warning/
+10 exact OS guards. A failed condition includes its error; it is not counted twice.
+Both hosts pass2242 result-gate assertions,12 Python tests, executed dependency preflight and
+all51 scoped lint paths. All17 cleanup records per host confirm settlement, stopped roots,
+no marked survivors and no cleanup error; controller warnings are0. This is scoped source
+integration evidence, not current full CRAN, installed/native GUI or universal platform proof.
+
+Actual Quarto71, language bridges128 Linux/118 Windows, architecture13, MCP166 Linux/167
+Windows and Claude243 per host pass. Windows' original native streaming/no-reader/cancellation
+three cases pass60 assertions; two private idle ACKs now prove third-writer starvation at
+the unchanged two-second admission deadline. Cold16P/3F and warm38P/4F remain retained.
+Checkpoint and Codex owned denial fixtures expose AutoInherited0-to1 while ordered DACL
+binary/count/length and other tested flags match; their exact SDDL restoration still fails.
+Four missing parent environment entries are all empty, with no nonempty/pseudo loss or other
+changes. New native absence case7P/1F/1W lacks sufficient utility phase/status evidence; the
+outer Windows file.info follows its deliberate dangling link and emits the retained warning.
+Do not suppress unknown metadata errors or relax ACL, state, cleanup or time/resource oracles.
+
+All four fresh Linux plan stages pass on679:25 plans/770 R blocks,0 parse/style problems,
+0 lints and39 equal source hashes. The90 historical index warnings remain recorded.
+Compact actual summaries are ignored: Linux SHAfe9c1600ba8477aec11ba9e073991fd1cdb323760f0d126ab10154b34951e329;
+Windows SHA980b67975298410414a1c0fbd61830b71c28c027dffa96b516c2b5066d9e88c5.
+Both canonical source archives have SHAbfe40bfcaa410a925d0a67d4bccac893cdbab88a3541ec2e8533315a7b70f3fc.
+
+Reviewed fixes are now applied/pushed: f3b2570 replaces harness-created empty startup entries
+with fresh owned empty files (new pure test reproduced RED; all13 mock-only Python tests pass
+in0.056s); 0e666a6 retires only exact acknowledged idle actors while retaining target input;
+2e71d17 appends native Windows parent-only death coverage without changing old worker cases
+or runtime. Original cold/warm/native3 and primary old checkpoint/utils files remain exact.
+Native retirement restart/FIFO/EOF/timing and parent-death execution are pending; Job Object
+contribution to the latter is explicitly qualified. Source clearance does not close those gates.
+Next registry proposal is36 files/159 titles/53 lint paths; next actual scope retains16 full
+files plus retirement, with four fresh plan stages after the forthcoming plan update.
+
+At04:53:14 PDT load77.37/74.99/60.25, CPU15.13%idle, RAM96GiB used/31GiB unused,
+swap24,871.75MiB used and free disk13GiB keep local R/install/render/build/browser/kernel/
+model jobs held. No thermal/performance warning is recorded. Swap occupancy is not a paging
+claim; sampled system pressure and owned child RSS are distinct. Shared Ollama, unrelated
+processes and user files are untouched. Private pandas/NumPy wheel installation, local
+Quarto/bridges, installed display/frontends and current full CRAN/release remain waiting.
