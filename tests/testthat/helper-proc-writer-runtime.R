@@ -268,6 +268,29 @@ rw_local_state = function(.env = parent.frame()) {
   list(st = st, b = b)
 }
 
+# Fixed numeric observations do not grant utility success, privacy or recovery.
+rw_absence_stage = function(line, recovery = FALSE, last = NULL) {
+  if (!is.character(line) || length(line) != 1L || is.na(line) ||
+      nchar(line, type = "bytes") > 64L) stop("Invalid absence stage diagnostic.")
+  if (!startsWith(line, "GPTR_ABSENCE_STAGE ")) return(NULL)
+  if (!grepl("^GPTR_ABSENCE_STAGE [1-9][0-9]{0,2}$", line))
+    stop("Invalid absence stage diagnostic.")
+  code = as.integer(sub("GPTR_ABSENCE_STAGE ", "", line, fixed = TRUE))
+  allowed = if (recovery) c(101:108, 199L) else c(1:18, 99L)
+  if (is.null(last)) last = if (recovery) 100L else 0L
+  if (!is.numeric(last) || length(last) != 1L || !is.finite(last) ||
+      !code %in% allowed || code <= last) stop("Invalid absence stage diagnostic.")
+  code
+}
+
+rw_absence_status = function(status, recovery = FALSE) {
+  valid = is.numeric(status) && length(status) == 1L && !is.na(status) &&
+    is.finite(status) && status >= 0 && status <= .Machine$integer.max &&
+    status == floor(status)
+  value = if (valid) sprintf("%.0f", status) else "-1"
+  paste0("absence-", if (recovery) "recovery" else "main", "-status-", value)
+}
+
 # Run one native utility under the unchanged D-019 family/resource watchdog.
 rw_absence_case = function(case, root) {
   ns = asNamespace("gptr")
@@ -349,6 +372,8 @@ rw_absence_case = function(case, root) {
   }
   script = paste(c(
     "$ErrorActionPreference = 'Stop'",
+    "trap { [Console]::WriteLine('GPTR_ABSENCE_STAGE 99'); exit 1 }",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 1')",
     paste0("$link = ", literal(paths[["link"]])),
     paste0("$denied = ", literal(paths[["denied"]])),
     paste0("$parentBackup = ", literal(paths[["parent_backup"]])),
@@ -396,7 +421,9 @@ rw_absence_case = function(case, root) {
     "    $stream.Write($bytes, 0, $bytes.Length)",
     "  } finally { $stream.Close() }",
     "}",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 2')",
     "WritePrivate $denied 'PUBLIC-ABSENCE-SENTINEL'",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 3')",
     "$fileOriginal = [System.IO.File]::GetAccessControl($denied, $sections)",
     "$rules = @($fileOriginal.GetAccessRules($true, $true,",
     "  [System.Security.Principal.SecurityIdentifier]))",
@@ -409,49 +436,66 @@ rw_absence_case = function(case, root) {
     "    $r.FileSystemRights -ne [System.Security.AccessControl.FileSystemRights]::FullControl -or",
     "    [int]$r.InheritanceFlags -ne 0 -or [int]$r.PropagationFlags -ne 0) {",
     "  throw 'Protected file rule' }",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 4')",
     "$parentOriginal = [System.IO.Directory]::GetAccessControl($fresh, $access)",
     "WritePrivate $parentBackup ($parentOriginal.GetSecurityDescriptorSddlForm($access))",
     "WritePrivate $fileBackup ($fileOriginal.GetSecurityDescriptorSddlForm($access))",
     "WritePrivate $armed 'ARMED'",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 5')",
     "$deny = [System.IO.File]::GetAccessControl($denied)",
     "$rule = [System.Security.AccessControl.FileSystemAccessRule]::new(",
     "  $sid, [System.Security.AccessControl.FileSystemRights]::ReadAttributes,",
     "  [System.Security.AccessControl.AccessControlType]::Deny)",
     "$deny.AddAccessRule($rule)",
     "[System.IO.File]::SetAccessControl($denied, $deny)",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 6')",
     "$denyParent = [System.IO.Directory]::GetAccessControl($fresh)",
     "$rule = [System.Security.AccessControl.FileSystemAccessRule]::new(",
     "  $sid, [System.Security.AccessControl.FileSystemRights]::ListDirectory,",
     "  [System.Security.AccessControl.AccessControlType]::Deny)",
     "$denyParent.AddAccessRule($rule)",
     "[System.IO.Directory]::SetAccessControl($fresh, $denyParent)",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 7')",
     "$refused = $false",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 8')",
     "try { & {", fun("proc_writer_acl")(paths[["denied"]], marker),
     "} } catch [System.UnauthorizedAccessException] { $refused = $true }",
     "if (-not $refused) { throw 'Attribute denial not effective' }",
     "[Console]::WriteLine('GPTR-ABSENCE-DENIED-REFUSED')",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 9')",
     "} finally {",
     "  try {",
     "    if ($null -ne $parentOriginal) {",
+    "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 10')",
     "      $restore = [System.Security.AccessControl.DirectorySecurity]::new()",
     "      $descriptor = $parentOriginal.GetSecurityDescriptorSddlForm($access)",
     "      $restore.SetSecurityDescriptorSddlForm($descriptor, $access)",
     "      [System.IO.Directory]::SetAccessControl($fresh, $restore)",
+    "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 11')",
     "      $got = [System.IO.Directory]::GetAccessControl($fresh, $access)",
     "      if ($got.GetSecurityDescriptorSddlForm($access) -cne $descriptor) {",
     "        throw 'Parent access not restored' }",
+    "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 12')",
     "    }",
     "    if ($null -ne $fileOriginal) {",
+    "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 13')",
     "      $restore = [System.Security.AccessControl.FileSecurity]::new()",
     "      $descriptor = $fileOriginal.GetSecurityDescriptorSddlForm($access)",
     "      $restore.SetSecurityDescriptorSddlForm($descriptor, $access)",
     "      [System.IO.File]::SetAccessControl($denied, $restore)",
+    "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 14')",
     "      $got = [System.IO.File]::GetAccessControl($denied, $access)",
     "      if ($got.GetSecurityDescriptorSddlForm($access) -cne $descriptor) {",
     "        throw 'File access not restored' }",
+    "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 15')",
     "    }",
     "    [Console]::WriteLine('GPTR-ABSENCE-RESTORED')",
-    "  } finally { [System.IO.File]::Delete($link) }",
+    "    [Console]::WriteLine('GPTR_ABSENCE_STAGE 16')",
+    "  } finally {",
+    "    [Console]::WriteLine('GPTR_ABSENCE_STAGE 17')",
+    "    [System.IO.File]::Delete($link)",
+    "    [Console]::WriteLine('GPTR_ABSENCE_STAGE 18')",
+    "  }",
     "}"
   ), collapse = "\n")
   writeLines(script, paths[["script"]], useBytes = TRUE)
@@ -461,6 +505,7 @@ rw_absence_case = function(case, root) {
     seen = new.env(parent = emptyenv())
     seen$out = character()
     seen$status = NULL
+    seen$last_stage = if (identity) 0L else 100L
     utility = NULL
     record = NULL
     settle = function() {
@@ -476,6 +521,7 @@ rw_absence_case = function(case, root) {
         is.null(fun("proc_record")(record$pid, utility)), !previous_failure)
       state$settlement_failed = FALSE
       state$utility_unsettled = FALSE
+      phase(paste0("absence-", if (identity) "main" else "recovery", "-settled-1"))
       invisible(TRUE)
     }
     on.exit({
@@ -483,6 +529,7 @@ rw_absence_case = function(case, root) {
     }, add = TRUE)
     started = fun("reactor_now")()
     state$utility_unsettled = TRUE
+    phase(paste0("absence-", if (identity) "main" else "recovery", "-start"))
     utility = fun("proc_spawn")(shell,
       c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path),
       env = fun("child_env")("helper"), stdin = NULL, stdout = "|", stderr = NULL,
@@ -491,12 +538,19 @@ rw_absence_case = function(case, root) {
     stopifnot(is.list(record), is.finite(record$create_time))
     if (identity) saveRDS(record, file.path(root, "inner-identity.rds"))
     fun("reactor_proc")(utility, on_line = function(line) {
+      stage = rw_absence_stage(line, recovery = !identity, last = seen$last_stage)
+      if (!is.null(stage)) {
+        seen$last_stage = stage
+        phase(paste0("absence-stage-", stage))
+        return(invisible(NULL))
+      }
       stopifnot(line %in% proof, length(seen$out) < length(proof))
       seen$out = c(seen$out, line)
       phase(line)
     }, on_exit = function(status) {
       seen$status = status
       phase("absence-utility-exit")
+      phase(rw_absence_status(status, recovery = !identity))
     })
     complete = fun("reactor_pump")(until = function() !is.null(seen$status),
       timeout = max(0, 5 - (fun("reactor_now")() - started)))
@@ -509,26 +563,35 @@ rw_absence_case = function(case, root) {
   }
   recovery = paste(c(
     "$ErrorActionPreference = 'Stop'",
+    "trap { [Console]::WriteLine('GPTR_ABSENCE_STAGE 199'); exit 1 }",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 101')",
     paste0("$parent = ", literal(paths[["fresh"]])),
     paste0("$file = ", literal(paths[["denied"]])),
     paste0("$parentBackup = ", literal(paths[["parent_backup"]])),
     paste0("$fileBackup = ", literal(paths[["file_backup"]])),
     "$access = [System.Security.AccessControl.AccessControlSections]::Access",
     "$descriptor = [System.IO.File]::ReadAllText($parentBackup)",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 102')",
     "$restore = [System.Security.AccessControl.DirectorySecurity]::new()",
     "$restore.SetSecurityDescriptorSddlForm($descriptor, $access)",
     "[System.IO.Directory]::SetAccessControl($parent, $restore)",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 103')",
     "$got = [System.IO.Directory]::GetAccessControl($parent, $access)",
     "if ($got.GetSecurityDescriptorSddlForm($access) -cne $descriptor) {",
     "  throw 'Parent recovery mismatch' }",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 104')",
     "$descriptor = [System.IO.File]::ReadAllText($fileBackup)",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 105')",
     "$restore = [System.Security.AccessControl.FileSecurity]::new()",
     "$restore.SetSecurityDescriptorSddlForm($descriptor, $access)",
     "[System.IO.File]::SetAccessControl($file, $restore)",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 106')",
     "$got = [System.IO.File]::GetAccessControl($file, $access)",
     "if ($got.GetSecurityDescriptorSddlForm($access) -cne $descriptor) {",
     "  throw 'File recovery mismatch' }",
-    "[Console]::WriteLine('GPTR-ABSENCE-RECOVERY-OK')"
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 107')",
+    "[Console]::WriteLine('GPTR-ABSENCE-RECOVERY-OK')",
+    "[Console]::WriteLine('GPTR_ABSENCE_STAGE 108')"
   ), collapse = "\n")
   writeLines(recovery, paths[["recovery"]], useBytes = TRUE)
   recover = function() {
@@ -573,5 +636,10 @@ rw_absence_run = function() {
   runner = bp_run
   environment(runner) = scope
   scope$bp_child_case = rw_absence_case
+  loader = bp_loader()
+  decoder = c(paste0("rw_absence_stage = ", paste(deparse(rw_absence_stage),
+    collapse = "\n")), paste0("rw_absence_status = ", paste(deparse(rw_absence_status),
+    collapse = "\n")))
+  scope$bp_loader = function() c(loader, decoder)
   runner("native-absence")
 }

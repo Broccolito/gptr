@@ -717,3 +717,34 @@ test_that("Windows native absence probe refuses existing aliases and denied attr
   expect_true(x$result$entries_removed)
   expect_true(x$result$restored)
 })
+
+
+test_that("absence diagnostics accept only ordered fixed numeric stage tokens", {
+  expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 1"), 1L)
+  expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 18", last = 17L), 18L)
+  expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 99", last = 18L), 99L)
+  expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 101", recovery = TRUE), 101L)
+  expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 199", recovery = TRUE,
+    last = 108L), 199L)
+  expect_null(rw_absence_stage("GPTR-ABSENCE-RESTORED"))
+  for (line in c("GPTR_ABSENCE_STAGE 0", "GPTR_ABSENCE_STAGE 19",
+    "GPTR_ABSENCE_STAGE 101", "GPTR_ABSENCE_STAGE 01", "GPTR_ABSENCE_STAGE 1 ",
+    "GPTR_ABSENCE_STAGE 1\r", "GPTR_ABSENCE_STAGE private-SID-canary",
+    paste0("GPTR_ABSENCE_STAGE ", strrep("1", 100)))) {
+    expect_error(rw_absence_stage(line), "Invalid absence stage diagnostic", fixed = TRUE)
+  }
+  expect_error(rw_absence_stage("GPTR_ABSENCE_STAGE 2", last = 2L),
+    "Invalid absence stage diagnostic", fixed = TRUE)
+  expect_error(rw_absence_stage("GPTR_ABSENCE_STAGE 1", last = 2L),
+    "Invalid absence stage diagnostic", fixed = TRUE)
+})
+
+test_that("absence exit diagnostics retain numeric status without arbitrary content", {
+  expect_identical(rw_absence_status(0L), "absence-main-status-0")
+  expect_identical(rw_absence_status(1L), "absence-main-status-1")
+  expect_identical(rw_absence_status(1L, recovery = TRUE), "absence-recovery-status-1")
+  for (status in list(NULL, NA_integer_, NaN, Inf, -1L, 0.5, c(0L, 1L),
+    "private-path-or-condition-canary")) {
+    expect_identical(rw_absence_status(status), "absence-main-status--1")
+  }
+})
