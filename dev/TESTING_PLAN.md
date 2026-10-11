@@ -474,6 +474,15 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Windows child stdin | Actuale3 fixed diagnostics reach acl_wait at0.18-0.25s, then five lifecycle cases time out before READY at1.84-1.85s/zero accepted bytes. Native duplex remains RED; no-reader typed2s is startup, not delivery proof. Idle probe stops before its first ACK, so starvation is unproved. Normal60s spawn4MB/EOF cases now pass. Source-reviewed fafd181 applies the smaller native .NET permission setup; actual execution remains pending. Reviewed58184c5/b0130c7 require an independent physical protected-DACL, owner and inherited-file-rights witness on Windows. Rerun native security/bytes/ACK/EOF/deadline cases with the unchanged2s queue budget,9998-expression/12000-argv caps/native3/resource limits. D-019 remains open. |
 | Validation/merge | Actuale3f4b47 run38123918333: Linux1596 passes/1 raw fixture error/0 test warnings/8 named OS guards. Windows nine completed raw files1172 passes/13 failed conditions/0 test warnings/10 skips; MCP and Claude exceed300s without final raw results, so partial logs are not passes. Both hosts1559 warning-clean unit assertions/all46 scoped paths clean; whole-package convention cases6 passes each. Four Linux plan stages pass39 unchanged hashes/770 R blocks/0 parse-style problems/0 lints. Controller24 ps marker warnings each remain fatal; valid-marker cleanup proof must rerun. Reviewed44b24db fixes bootstrap capture;09f9ea1/df16cde replace two Codex capability skips with native witnesses; c751889 corrects controller timestamps without suppressing warnings. Reviewed76b6cfa requires a both-host owned-family/foreign-sentinel witness;58184c5/b0130c7 require the native mailbox DACL/file-inheritance witness. Current source registry34 full files/132 required titles/49 lint paths is unexecuted. Diagnostic63e9ace distinguishes checkpoint ACL readback from exact SDDL mismatch without changing the restoration oracle. Next:12 full files on Windows/Linux plus fresh4-stage plan gates at the exact candidate; merge WAITING strict GREEN. |
 
+Latest actual a03068e run38127051182 stopped before package installation, preflight or
+any of the12 selected test bodies: both hosts passed12 Python tests and1727 R result-gate
+assertions with0 failures/warnings/skips, then failed the unchanged strict lint gate.
+Five formatting findings affect3 test files;46 of49 paths are clean. The source correction
+only expands braces/newlines, preserving assertions, utility strings, titles, gates and
+limits; the same12-file Windows/Linux scope must rerun. All4 Linux cross-plan stages pass
+39 equal hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index
+warnings remain. Fresh plan gates are required after this update.
+
 The optional dependency helper's11 stdlib tests and plan diagnostic guard's6 stdlib tests
 are GREEN. They launch no R/browser/model process and do not replace actual integration.
 The two-host39f3248 run actually passed the prior9 Python tests and21 R result-gate assertions
@@ -490,9 +499,9 @@ Recheck the updated plan
 on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
-Latest01:51 PDT load22.76/44.15/67.67, CPU27.14%idle, physical RAM91GiB used/36GiB
-unused, swap14,357.19MiB used and disk60GiB still prevent local compute. The separate
-memory-pressure free metric is77%; no thermal/performance warning was recorded. More unused
+Latest02:06 PDT load66.91/60.38/59.80, CPU38.47%idle, physical RAM93GiB used/35GiB
+unused, swap14,325.19MiB used and disk45GiB still prevent local compute. The separate
+memory-pressure free metric is78%; no thermal/performance warning was recorded. More unused
 RAM does not clear the CPU, swap or minimum200GiB disk gates; the disk decline has no established cause.
 Keep local R/build/install/browser/model jobs held. Hosted validation uses independent
 resources with at most two active jobs; recheck before granting a local compute lease.
@@ -508,9 +517,14 @@ generation and installed visual checks remain pending.
 The maintainer explicitly chose to preserve the separate Ollama model and continue review.
 Source review of the frozen eight-file history frontend packet is clear; Python AST/notebook
 JSON checks are preparation only. Four Rmd modes, Quarto and actual IRkernel remain WAITING.
-Also rerun the skipped Quarto record/replay test in `test-doc-knitr.R` with the bundled
-RStudio Quarto directory in the child PATH. Preserve its two initial fake requests, zero
-replay requests and source-hash checks. The separate history-render case does not replace it.
+The local rerun of the previously skipped Quarto record/replay test in `test-doc-knitr.R`
+remains WAITING. Its hosted Windows/Linux71-assertion cases are already DONE. For local
+execution, use bundled RStudio Quarto in the owned child PATH and the explicitly nominated
+private Python environment after installing only its missing pandas/NumPy wheels. Verify
+the actual Python private prefix, two initial fake requests, zero replay requests and
+source hashes; preserve the caller environment. The separate history-render case does not
+replace it. Existing required R dependency metadata is present; actual import/ABI checks
+remain pending, so no speculative R reinstall is required.
 Recorded exact039 Windows skips need separate acceptance:65 platform/locale/capability
 exclusions,9 live-opt-in cases,14 source-only checks,7 optional integration gaps and1
 missing-keyring branch skipped because keyring is installed. These are skipped cases, not

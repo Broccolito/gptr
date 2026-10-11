@@ -1,15 +1,24 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 02:01 PDT
+## Optional integrations and Windows transport — 2026-10-11 02:14 PDT
 
 Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, source pushed through b0130c7. Primary main718e81e,
+`codex/skipped-platform-tests`, source extends a03068e with reviewed6a2fb2a. Primary main718e81e,
 maintainer edits, old prepared chunks and secrets remain intact; shared Ollama preserved.
-Latest 01:51 load22.76/44.15/67.67, CPU27.14%idle, RAM91GiB used/36GiB unused,
-swap14,357.19MiB and disk60GiB keep all local R/install/browser/model/build jobs held.
+Latest 02:06 load66.91/60.38/59.80, CPU38.47%idle, RAM93GiB used/35GiB unused,
+swap14,325.19MiB and disk45GiB keep all local R/install/browser/model/build jobs held.
 At most2 independent hosted jobs; no unrelated-process action or disk cleanup authorized.
 
-Actual e3f4b47 run38123918333 completed RED both hosts: Linux1596 passes/1 fixture error/
+Actual a03068e run38127051182 is completed RED before package install/preflight or any
+selected native body: both Python12/R gates1727 pass with0 failures/warnings/skips. Five
+formatting lints in3 fixture files stop the strict gate;46 of49 paths are clean. The exact
+three-file correction6a2fb2a is source-reviewed and applied: braces/newlines only, with
+strings, assertions, titles, strict warnings/skips and budgets preserved. The same12-file
+two-host rerun is next. All4 Linux plan stages pass39 equal hashes/25 plans/770 R blocks/
+0 parse-style problems/0 lints;90 historical index warnings remain. New plan edits need
+fresh4 gates on the next exact candidate. Both hosted leases are free.
+
+Prior actual e3f4b47 run38123918333 completed RED both hosts: Linux1596 passes/1 fixture error/
 0 test warnings/8 named OS guards; Windows nine completed raw files1172 passes/13 conditions/
 0 test warnings/10 skips. MCP307.55s/Claude308.67s exceed300s without final raw results;
 partial logs are not passes. Both Python12/R gate1559 clean/all46 scoped paths clean.
@@ -44,9 +53,9 @@ identity refusal, cleanup and unrelated-process survival test. Shipping GPTR_PRO
 and its documented narrow diagnostic handling remain unchanged; no migration is proposed.
 
 Reviewed44b24db fixes pure bootstrap capture; actual unit/lint corrections5b3f5bb/10dc59a
-and callbackb4ca857 already pass e3 gates. Current b0130c7 source registry is34 full files/
+and callbackb4ca857 already pass e3 gates. Current source registry is34 full files/
 132 required titles/49 lint paths. Next: exact-candidate12-file Windows/Linux run and all4
-fresh Linux plan stages. Both hosted leases free before dispatch. D-019/merge remain open
+fresh Linux plan stages. D-019/merge remain open
 until relevant strict GREEN. Local child PATH discovery is fixed; pandas/NumPy installation,
 native frontends, actual kernels, model inference and full CRAN/release remain WAITING.
 

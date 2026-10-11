@@ -9,9 +9,9 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At01:51 PDT October11, load was22.76/44.15/67.67, CPU27.14%idle, physical memory91GiB
-used/36GiB unused, swap14,357.19MiB, free disk60GiB, with no thermal/performance warning.
-The memory-pressure free metric is77%; it does not clear CPU/swap/disk gates. Disk decline
+At02:06 PDT October11, load was66.91/60.38/59.80, CPU38.47%idle, physical memory93GiB
+used/35GiB unused, swap14,325.19MiB, free disk45GiB, with no thermal/performance warning.
+The memory-pressure free metric is78%; it does not clear CPU/swap/disk gates. Disk decline
 has no established cause and is not permission to stop unrelated work or delete files.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
@@ -47,8 +47,8 @@ requires actual production execution before integration.
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
 | Actual Windows security | Native207/pure21 DONE; e3 checkpoint restore RED | Checkpoint115 passes/2 raw restore errors/0 warnings/5 guards; effective create denial/store refusal pass. Failure follows restore-applied; native ACL readback versus exact Access SDDL mismatch remains unconfirmed. Reviewed63e9ace adds fixed-phase diagnostics without changing the oracle. Native Codex link/read-denial replacements are source-ready, unrun |
 | Actual Windows/Unix child baseline | Linux native60 DONE; Windows startup RED | e3 native46 passes/1 failure; fixed phases reach acl_wait then time out before READY. Idle stops before first ACK; normal60s spawn4MB/EOF passes; startup timeout is not delivery proof |
-| Strict optional workflow | e3 completed RED; corrective source applied, actual rerun pending | Linux1596 passes/1 fixture error/0 test warnings/8 OS guards; Windows nine completed files1172 passes/13 conditions/0 warnings/10 skips, two300s deadlines without final results. Both units1559 clean/scoped46 clean. Controller24 warnings each remain fatal. Reviewed b0130c7 registry34 full files/132 titles/49 lint paths requires actual12-file Windows/Linux execution and fresh plan gates |
-| Index/extract/R-parse/lintr plan checks | DONE throughe3; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
+| Strict optional workflow | a030 completed lint RED before12 bodies | Both Python12/R gates1727 clean;46 of49 lint paths clean,5 formatting findings in3 fixture files. Prior e3 actual native failures remain open. Registry34 full files/132 titles/49 paths, warning/skip/deadline gates unchanged; same12-file actual rerun required |
+| Index/extract/R-parse/lintr plan checks | DONE througha030; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
 | Production owned-writer correction | Actuale3 startup RED; reviewed source applied, actual proof pending | Five Windows lifecycle cases startup1.84-1.85s/zero accepted bytes, expression4965-4977B, acl_wait0.20-0.25s with no acl_done. Reviewed fafd181 uses native .NET permission APIs; reviewed58184c5/b0130c7 require physical mailbox/file permissions and same-path refusal. All startup, byte, ACK, EOF, cleanup and resource limits remain unchanged |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
@@ -590,3 +590,34 @@ Linux also runs all4 cross-plan stages after any optional failure. No partial-fi
 relaxed timeout, unobserved capability skip or source review counts as an actual-platform pass.
 Root plan updates require these fresh gates. All local installs/GUI/kernel/model/CRAN work
 remain held under the01:51 resource snapshot; shared Ollama stays untouched.
+
+## Actual lint gate and minimal correction — 2026-10-11 02:14 PDT
+
+[Run38127051182](https://github.com/Broccolito/gptr/actions/runs/38127051182) checked exact
+source a03068ee3f4516f8d2e9c49bf51a5375cb70aaa0. Both jobs completed RED before package
+installation, preflight and all12 selected full-file bodies. Both actually passed12 Python
+unit tests and1727 R result-gate assertions with0 failures/warnings/skips. The lint gate
+found5 issues across3 fixture paths: bootstrap brace layout, one compound semicolon/brace
+and two multiline function bodies;46 of49 paths are clean. No runtime failure is established
+by this run; the e3 native failures remain open.
+
+The minimal three-file corrective packet preserves all ordered strings, titles, assertions,
+tryCatch return/error behavior, gates and limits. Patch SHA256
+bd49100207ac8c5cdcbd7463ed0aa69eb4f189e9abd1f1a3d4a8ff8afdf455ec.
+Independent source review is clear and correction6a2fb2a is applied. This does not replace
+the next actual lint/test run.
+All4 Linux plan stages pass39 unchanged source hashes/25 plans/770 R blocks/0 parse-style
+problems/0 lints, with90 historical index warnings and0 errors. Both artifact digests verified:
+Windowsb9feb370f02018772dcc0a9a7554c42eb33140e091e427414e7714be2033a657;
+Linuxada1e6824efb32560ea24cc90c4002434200dd17e2bb11db66d54306a9982f07.
+Actual summary SHA256825fc1b7e54bd8d7f741373e1a826c520807370f4e62856c62d7c9affe7dc08e.
+
+Local read-only metadata confirms bundled Quarto is already executable but absent from the
+parent PATH; owned-child discovery fixes that boundary without a shell-profile change.
+The explicitly nominated primary private Python3.12.14 still needs pandas2.3.3/NumPy2.3.4
+binary wheels; notebook modules and required R dependency metadata are present. Presence is
+not import/ABI proof. A frozen resource-gated checklist requires actual private Python prefix,
+local Quarto/bridge execution and the distinct installed six-frontend history packet.
+The02:06 resource snapshot keeps all local work held; no installs, imports, R, browser,
+kernel or model runs were started. Shared Ollama remains untouched. Next12 hosted files and
+fresh4 plan stages use unchanged native security, byte/ACK/EOF and cleanup oracles.
