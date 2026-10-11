@@ -164,8 +164,9 @@ optional_titles = list(
     "each lint rule catches its violation (negative controls)"),
   "test-proc-writer-idle-slots.R" =
     "two acknowledged idle Windows writers do not starve a third reading target",
-  "test-proc-marker-family.R" =
-    "canonical markers enumerate an owned family and preserve unrelated processes"
+  "test-proc-marker-family.R" = c(
+    "canonical markers enumerate an owned family and preserve unrelated processes",
+    "marker environment diagnostics distinguish casing from private value changes")
 )
 
 optional_select = function(pattern, root) {

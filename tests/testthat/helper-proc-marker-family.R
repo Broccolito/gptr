@@ -1,3 +1,46 @@
+# Only structural counts leave this classifier; snapshot names and values remain private.
+pmf_env_diagnostic = function(before, after, marker = NULL,
+                               windows = .Platform$OS.type == "windows") {
+  valid = function(x) {
+    is.character(x) && !is.null(names(x)) && length(names(x)) == length(x) &&
+      !anyNA(x) && !anyNA(names(x)) && all(nzchar(names(x)))
+  }
+  out = list(raw_equal = identical(before, after), valid = FALSE,
+    keys_equal = FALSE, values_equal = FALSE, added = NULL, missing = NULL, changed = NULL,
+    casing = NULL, order_equal = FALSE, attributes_equal = identical(attributes(before),
+      attributes(after)), owned_marker_added = FALSE, other_marker_added = NULL)
+  if (!valid(before) || !valid(after)) return(out)
+  key = if (windows) toupper else identity
+  b = key(names(before))
+  a = key(names(after))
+  if (anyDuplicated(b) || anyDuplicated(a)) return(out)
+  added = setdiff(a, b)
+  missing = setdiff(b, a)
+  common = intersect(b, a)
+  bi = match(common, b)
+  ai = match(common, a)
+  changed = sum(!vapply(seq_along(common), function(i) {
+    identical(unname(as.character(before[bi[[i]]])), unname(as.character(after[ai[[i]]])))
+  }, logical(1)))
+  known = is.character(marker) && length(marker) == 1L && !is.na(marker) &&
+    grepl("^GPTR_PROC_[0-9a-f]{16}$", marker)
+  owned = known && key(marker) %in% added &&
+    identical(unname(as.character(after[match(key(marker), a)])), "YES")
+  other = grepl("^(GPTR_PROC_|PROCESSX_)", added)
+  if (owned) other[added == key(marker)] = FALSE
+  out$valid = TRUE
+  out$keys_equal = !length(added) && !length(missing)
+  out$values_equal = out$keys_equal && changed == 0L
+  out$added = as.integer(length(added))
+  out$missing = as.integer(length(missing))
+  out$changed = as.integer(changed)
+  out$casing = as.integer(sum(names(before)[bi] != names(after)[ai]))
+  out$order_equal = identical(b, a)
+  out$owned_marker_added = isTRUE(owned)
+  out$other_marker_added = as.integer(sum(other))
+  out
+}
+
 # Source-only native fixture. Reuse the existing independently bounded child watchdog.
 pmf_child_case = function(case, root, failure) {
   ns = asNamespace("gptr")
@@ -230,5 +273,37 @@ pmf_run = function() {
   runner = bp_run
   environment(runner) = scope
   scope$bp_child_case = pmf_child_case
-  runner("marker-family")
+  state = new.env(parent = emptyenv())
+  state$before = Sys.getenv()
+  state$marker = NULL
+  state$diagnostics = list()
+  observe = function(phase) {
+    if (length(state$diagnostics) >= 8L) stop("Too many parent environment observations.")
+    state$diagnostics[[length(state$diagnostics) + 1L]] =
+      list(phase = phase, diagnostic = pmf_env_diagnostic(state$before, Sys.getenv(), state$marker))
+    invisible(NULL)
+  }
+  original_env = child_env_callr
+  scope$child_env_callr = function(env) {
+    observe("before-callr")
+    original_env(env)
+  }
+  original_mark = proc_mark
+  scope$proc_mark = function(p, marker, command) {
+    state$marker = marker
+    observe("after-callr")
+    value = original_mark(p, marker, command)
+    observe("after-mark")
+    value
+  }
+  original_kill = kill_all
+  scope$kill_all = function(p, grace) {
+    value = original_kill(p, grace)
+    observe("after-cleanup")
+    value
+  }
+  value = runner("marker-family")
+  observe("after-return")
+  value$parent_env_diagnostics = state$diagnostics
+  value
 }

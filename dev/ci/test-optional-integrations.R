@@ -969,28 +969,29 @@ testthat::test_that("controller markers pass the actual ps parser without coerci
 testthat::test_that("owned marker-family integration cannot omit or skip its native witness", {
   file = "test-proc-marker-family.R"
   title = "canonical markers enumerate an owned family and preserve unrelated processes"
-  testthat::expect_identical(optional_titles[[file]], title)
+  testthat::expect_identical(optional_titles[[file]][[1L]], title)
   for (windows in c(FALSE, TRUE)) {
-    row = record(title)
-    testthat::expect_true(optional_gate(list(row), file, windows)$passed)
+    rows = lapply(optional_titles[[file]], record)
+    row = rows[[1L]]
+    testthat::expect_true(optional_gate(rows, file, windows)$passed)
     testthat::expect_false(optional_allowed_skip(file, title, windows))
     testthat::expect_error(optional_gate(list(), file, windows), "No test cases")
     testthat::expect_error(optional_gate(list(record("unrelated case")), file, windows),
                           "Missing mandatory")
-    testthat::expect_error(optional_gate(list(row, row), file, windows), "Duplicate")
+    testthat::expect_error(optional_gate(c(rows, rows[1L]), file, windows), "Duplicate")
     for (field in c("failed", "warnings", "skipped", "passed")) {
       changed = row
       changed[[field]] = if (field == "passed") 0L else 1L
-      testthat::expect_error(optional_gate(list(changed), file, windows))
+      testthat::expect_error(optional_gate(c(list(changed), rows[-1L]), file, windows))
     }
     raw = optional_result_rows(list(list(test = title, results = list(
       structure(list(), class = "expectation_success"),
       structure(list(message = "controlled marker family error"),
         class = c("expectation_error", "condition"))))))[[1L]]
-    testthat::expect_error(optional_gate(list(raw), file, windows), "Failed")
+    testthat::expect_error(optional_gate(c(list(raw), rows[-1L]), file, windows), "Failed")
     raw$failed = 0L
     raw$skipped = 1L
-    testthat::expect_error(optional_gate(list(raw), file, windows), "Skipped")
+    testthat::expect_error(optional_gate(c(list(raw), rows[-1L]), file, windows), "Skipped")
     testthat::expect_false(optional_allowed_skip("test-proc-marker-family-other.R",
                                                title, windows))
     testthat::expect_false(optional_allowed_skip(file, "unrelated capability case", windows))
@@ -1040,4 +1041,37 @@ testthat::test_that("native mailbox ACL proof is mandatory on Windows with one e
   testthat::expect_identical(result$platform_guard_cases, title)
   testthat::expect_false(title %in% result$mandatory_cases)
   testthat::expect_false(result$platform_guard_only)
+})
+
+
+testthat::test_that("marker restoration diagnostics remain mandatory without skip allowances", {
+  file = "test-proc-marker-family.R"
+  expected = c("canonical markers enumerate an owned family and preserve unrelated processes",
+    "marker environment diagnostics distinguish casing from private value changes")
+  testthat::expect_identical(optional_titles[[file]], expected)
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_identical(result$mandatory_cases, expected)
+    testthat::expect_length(result$platform_guard_cases, 0L)
+    for (i in seq_along(expected)) {
+      testthat::expect_false(optional_allowed_skip(file, expected[[i]], windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      for (field in c("passed", "failed", "warnings", "skipped")) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows))
+      }
+      raw = rows
+      raw[[i]] = optional_result_rows(list(list(test = expected[[i]], results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled environment witness error"),
+          class = c("expectation_error", "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(raw, file, windows), "Failed")
+    }
+    testthat::expect_false(optional_allowed_skip("test-proc-marker-family-other.R",
+      expected[[2L]], windows))
+  }
 })

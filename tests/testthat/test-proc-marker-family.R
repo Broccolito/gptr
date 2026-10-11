@@ -8,12 +8,16 @@ test_that("canonical markers enumerate an owned family and preserve unrelated pr
   before_seed = if (seed_present) get(".Random.seed", envir = globalenv()) else NULL
   x = pmf_run()
   # Evaluate restoration before a failing assertion can initialize a formatter dependency.
-  parent_env_restored = identical(Sys.getenv(), before_env)
+  after_env = Sys.getenv()
+  parent_env_restored = identical(after_env, before_env)
   parent_options_restored = identical(options(), before_options)
   parent_wd_restored = identical(getwd(), before_wd)
   after_seed_present = exists(".Random.seed", envir = globalenv(), inherits = FALSE)
   parent_seed_restored = identical(seed_present, after_seed_present) &&
     (!seed_present || identical(before_seed, get(".Random.seed", envir = globalenv())))
+  cat("GPTR-MARKER-ENV-DIAGNOSTIC ", json_encode(list(
+    phase = "test-after-return", diagnostic = pmf_env_diagnostic(before_env, after_env,
+      x$outer_identity$marker), observations = x$parent_env_diagnostics)), "\n", sep = "")
   expect_true(parent_env_restored)
   expect_true(parent_options_restored)
   expect_true(parent_wd_restored)
@@ -67,5 +71,60 @@ test_that("canonical markers enumerate an owned family and preserve unrelated pr
     is.list(warning) && identical(names(warning), c("class", "call_head")) &&
       identical(warning$class, c("simpleWarning", "warning", "condition")) &&
       identical(warning$call_head, "ps_find_tree")
+  }, logical(1))))
+})
+
+
+test_that("marker environment diagnostics distinguish casing from private value changes", {
+  canary = paste0("PRIVATE-ENV-", "VALUE-UNPUBLISHED")
+  before = c(Path = canary, CONTROL = "fixed", EMPTY = "")
+  after = before
+  names(after)[1L] = "PATH"
+  x = pmf_env_diagnostic(before, after, windows = TRUE)
+  expect_false(x$raw_equal)
+  expect_true(x$valid)
+  expect_true(x$keys_equal)
+  expect_true(x$values_equal)
+  expect_identical(x$casing, 1L)
+  expect_identical(x$added, 0L)
+  expect_identical(x$missing, 0L)
+  expect_identical(x$changed, 0L)
+  expect_false(pmf_env_diagnostic(before, after, windows = FALSE)$keys_equal)
+  reordered = pmf_env_diagnostic(before, before[3:1], windows = TRUE)
+  expect_false(reordered$raw_equal)
+  expect_true(reordered$values_equal)
+  expect_false(reordered$order_equal)
+  changed = before
+  changed[[1L]] = paste0(canary, "-changed")
+  changed = pmf_env_diagnostic(before, changed, windows = TRUE)
+  expect_false(changed$values_equal)
+  expect_identical(changed$changed, 1L)
+  missing = pmf_env_diagnostic(before, before[-3L], windows = TRUE)
+  expect_false(missing$values_equal)
+  expect_identical(missing$missing, 1L)
+  added = pmf_env_diagnostic(before, c(before, ADDED = canary), windows = TRUE)
+  expect_false(added$values_equal)
+  expect_identical(added$added, 1L)
+  marker = "GPTR_PROC_0123456789abcdef"
+  own = pmf_env_diagnostic(before, c(before, stats::setNames("YES", marker)), marker,
+                           windows = TRUE)
+  expect_false(own$values_equal)
+  expect_true(own$owned_marker_added)
+  expect_identical(own$other_marker_added, 0L)
+  foreign = pmf_env_diagnostic(before, c(before, PROCESSX_PRIVATE_123 = "YES"), marker,
+                               windows = TRUE)
+  expect_false(foreign$values_equal)
+  expect_false(foreign$owned_marker_added)
+  expect_identical(foreign$other_marker_added, 1L)
+  duplicated = c(before, PATH = "different")
+  expect_false(pmf_env_diagnostic(before, duplicated, windows = TRUE)$valid)
+  expect_false(pmf_env_diagnostic(before, c(before, UNKNOWN = NA_character_))$valid)
+  objects = list(x, reordered, changed, missing, added, own, foreign)
+  encoded = json_encode(objects)
+  expect_false(grepl(canary, encoded, fixed = TRUE), label = "private values stay unprinted")
+  expect_false(grepl("PATH", encoded, fixed = TRUE), label = "variable names stay unprinted")
+  expect_true(all(vapply(objects, function(value) {
+    all(vapply(value, function(field) is.null(field) ||
+      (length(field) == 1L && (is.logical(field) || is.integer(field))), logical(1)))
   }, logical(1))))
 })
