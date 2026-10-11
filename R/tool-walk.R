@@ -440,8 +440,7 @@ walk_tree = function(root, hidden = TRUE, gitignore = TRUE, prune = walk_default
         rules = c(rules, ignore_compile(ignore_read_lines(full[f]), bs, ignore_case))
       }
     }
-    lnk = Sys.readlink(fs_path(full))
-    is_link = !is.na(lnk) & nzchar(lnk)
+    is_link = path_is_link(fs_path(full))
     is_dir = dir.exists(fs_path(full))
     pruned = ignore_eval(prune_rules, rel, is_dir, ignore_case) %in% TRUE
     ign = ignore_eval(rules, anchor_rel(rel), is_dir, ignore_case)

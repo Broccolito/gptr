@@ -222,6 +222,25 @@ path_key = function(path) {
   if (is_windows() || is_macos()) tolower(key) else key
 }
 
+#' Is each existing path itself a link or canonical alias? Windows readlink has no target.
+#' Compare the canonical path with its canonical parent plus the requested final component.
+#' Resolving only the parent avoids labelling ordinary descendants of a directory link as links.
+#' A final-component short spelling can be conservatively flagged too; missing Windows targets
+#' cannot be classified by canonicalisation alone.
+#' @noRd
+path_is_link = function(path) {
+  link = Sys.readlink(path)
+  out = !is.na(link) & nzchar(link)
+  if (!is_windows()) return(out)
+  existing = which(!out & file.exists(path))
+  if (!length(existing)) return(out)
+  requested = path[existing]
+  parent = path_norm(dirname(requested))
+  lexical = vapply(file.path(parent, basename(requested)), path_lexical, "")
+  out[existing] = tolower(path_norm(requested)) != tolower(lexical)
+  out
+}
+
 #' Is each path equal to or inside `root`? (compares path keys)
 #' @noRd
 path_inside = function(path, root) {

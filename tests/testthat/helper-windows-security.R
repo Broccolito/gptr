@@ -45,7 +45,17 @@ wsec_local = function(.env = parent.frame()) {
   local_project(.env = .env)
 }
 
-wsec_bytes = function(path) readBin(path, "raw", n = file.size(path))
+# Read to EOF, independently of link metadata. Every synthetic sentinel is below 1 MiB;
+# fail rather than silently truncating if a fixture violates that bound.
+wsec_bytes = function(path) {
+  con = file(path, "rb")
+  on.exit(close(con), add = TRUE)
+  bytes = readBin(con, "raw", n = 1024L^2)
+  if (length(readBin(con, "raw", n = 1L))) {
+    stop("Windows security fixture exceeds its 1 MiB byte-oracle bound", call. = FALSE)
+  }
+  bytes
+}
 
 # Register before creating links, so the sentinel is checked after link detachment.
 wsec_preserve = function(path, .env = parent.frame()) {
@@ -63,6 +73,7 @@ wsec_link_info = function(target, link) {
        link = normalizePath(link, winslash = "/", mustWork = FALSE),
        target_exists = file.exists(target), exists = file.exists(link),
        target_directory = dir.exists(target), directory = dir.exists(link),
+       size = unname(file.size(link)), target_size = unname(file.size(target)),
        readlink = Sys.readlink(link))
 }
 

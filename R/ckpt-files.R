@@ -164,11 +164,10 @@ ckpt_prune = function(root) {
 #' @noRd
 ckpt_source_re = "[.](R|r|Rmd|qmd|Rnw|md|ya?ml|json|txt|csv|tsv|ipynb|py|sql|sh|toml|Rprofile)$"
 
-#' Is each path a symbolic link?
+#' Is each path a detected link (or a conservative Windows canonical alias)?
 #' @noRd
 ckpt_is_link = function(path) {
-  l = Sys.readlink(path)
-  !is.na(l) & nzchar(l)
+  path_is_link(path)
 }
 
 #' The files of a project through P10's walker (contract 7.10): hidden and git-ignored files
@@ -449,11 +448,12 @@ ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
 #' @noRd
 ckpt_temp_root = function() tempdir()
 
-#' May a restore write to `full`? Never through a symbolic link (the file itself, even a dangling
-#' one, or a directory above it: the resolved path differs from the lexical one), into .git or into
+#' May a restore write to `full`? Never through a detected symbolic link (the file itself or a
+#' directory above it: the resolved path differs from the lexical one), into .git or into
 #' gptr's user directories; for control and critical paths (IC-54) and outside the project root and
 #' tempdir() (IC-52) only after a human confirms (`ask`). `root` is the current project root, never
 #' one read from a session file, so a planted record cannot widen it.
+#' Missing Windows link targets cannot be detected by canonicalisation alone.
 #' @return `list(ok, ask, reason)`.
 #' @noRd
 ckpt_restore_guard = function(full, root = project_root()) {
