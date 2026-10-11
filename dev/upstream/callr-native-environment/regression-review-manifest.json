@@ -1,5 +1,5 @@
 {
-  "status": "prepared-source-only",
+  "status": "prepared-source-only-followup-e733",
   "local_execution": false,
   "runtime_changes": false,
   "upstream_source": {
@@ -22,9 +22,10 @@
     "retained_windows_fail": 8
   },
   "amended": {
-    "tests/testthat/helper-callr-parent-environment.R": "97bebc7d92d4339e7aa3b03a0b137aaa6acf4bf7c14d07266117581b33527e37",
+    "tests/testthat/helper-callr-parent-environment.R": "0240ec316f716baa534ddd65a6a74c4b94c90c9755a9f2fcd5be37c6378d658c",
     "tests/testthat/test-callr-parent-environment.R": "d1ca48d88c0378f7a4b628202301d9c52ff9bbdf0c707e61cf6e61bd90aeb459",
-    "tests/testthat/test-callr-startup-admission.R": "82d9ed1d825a54d53fd286ecbc4285dae72c57700d1d8aede20071b0d4921654"
+    "tests/testthat/test-callr-startup-admission.R": "82d9ed1d825a54d53fd286ecbc4285dae72c57700d1d8aede20071b0d4921654",
+    "tests/testthat/helper-proc-backpressure.R": "e6f579c08acd9ebfe66b238da803f532dbf9adafa8bef572051a8235ddd75bba"
   },
   "patches": {
     "strict-regressions.patch": "f405437808e43f1f709add915646e5b3902f55fb53c12161023b79707da0c542",
@@ -52,7 +53,11 @@
       "a native callr child restores inherited nonempty states for all seven startup and library variables",
       "a native callr PATH removal preserves its owned parent and requests child absence"
     ],
-    "possible_known_red": ["R startup removes native-empty library seeds", "common_hook cannot restore native-empty entries", "processx reinserts missing essential PATH"]
+    "possible_known_red": [
+      "R startup removes native-empty library seeds",
+      "common_hook cannot restore native-empty entries",
+      "processx reinserts missing essential PATH"
+    ]
   },
   "limits": {
     "case_seconds": 30,
@@ -70,5 +75,15 @@
     "selected_unix_alias_requires_old_and_new_exact_values": true,
     "selected_windows_alias_requires_one_folded_entry": true,
     "startup_admission_can_be_red_on_both_hosts": true
+  },
+  "followup": {
+    "source_sha": "e733a7bc2f9719007885f17a37641a0526fa3d38",
+    "actual_run_id": 38180103676,
+    "fixture_io_patch_sha256": "88935e494a4f323869d472e6bcf0fb7b3e242885a7383e21249b3107b0a9d261",
+    "observer_metadata_patch_sha256": "cad97030b2aaba6138f780ac1fef397b2d08f2f52668863e4f7911b12d96ece9",
+    "original_helper_prefix_5896_bytes_preserved": true,
+    "original_strict_cases_unchanged": true,
+    "assertion_count_or_limits_changed": false,
+    "new_execution": "PENDING"
   }
 }

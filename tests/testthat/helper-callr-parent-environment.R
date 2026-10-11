@@ -263,43 +263,57 @@ ce_extended_child_case = function(case, root, failure) {
   st$record = fun("proc_record")(st$p$get_pid())
   stopifnot(is.list(st$record), is.finite(st$record$create_time))
   saveRDS(st$record, file.path(root, "inner-identity.rds"))
+  phase("registered")
   output = character()
+  error_output = character()
   if (identical(case, "cancel")) {
     phase("waiting-ready")
     until = proc.time()[["elapsed"]] + 10
     repeat {
+      st$p$poll_io(0L)
       output = c(output, st$p$read_output_lines())
-      if ("CALLR-EXTENDED-READY" %in% output) break
+      error_output = c(error_output, st$p$read_error_lines())
+      if ("CALLR-EXTENDED-READY" %in% output &&
+          "CALLR-EXTENDED-ERROR-STREAM" %in% error_output) break
       if (!st$p$is_alive() || proc.time()[["elapsed"]] >= until) {
         stop("Cancellation did not reach its owned blocking input.")
       }
       st$p$wait(25L)
     }
     stopifnot(st$p$is_alive(), file.exists(entered))
+    phase("ready-streams")
     phase("cancel")
     cancelled = settle()
     stopifnot(cancelled)
   } else {
     cancelled = FALSE
+    phase("stdin-write")
     if (identical(case, "startup-error")) {
-      st$p$write_input("FAIL\n")
-      st$p$close_input()
+      left = st$p$write_input("FAIL\n")
     } else {
-      st$p$write_input("CONTINUE\n")
-      st$p$close_input()
+      left = st$p$write_input("CONTINUE\n")
     }
+    stopifnot(is.raw(left), length(left) == 0L)
+    processx::processx_conn_close(st$p$get_input_connection())
+    phase("stdin-eof")
     st$p$wait(10000L)
     stopifnot(!st$p$is_alive())
   }
+  phase("get-result")
   condition = tryCatch(st$p$get_result(), error = identity)
   error_case = case %in% c("startup-error", "cancel")
   is_error = inherits(condition, "callr_error")
   result = if (inherits(condition, "condition")) NULL else condition
-  output = c(output, st$p$read_output_lines())
-  error_output = st$p$read_error_lines()
+  if (!identical(case, "cancel")) {
+    phase("read-streams")
+    st$p$poll_io(0L)
+    output = st$p$read_all_output_lines()
+    error_output = st$p$read_all_error_lines()
+  }
   after_result = Sys.getenv()
   status = st$p$get_exit_status()
   if (!error_case) stopifnot(identical(status, 0L), !inherits(condition, "condition"))
+  phase("settlement")
   settled = settle()
   stopifnot(settled)
   st$p$cleanup()

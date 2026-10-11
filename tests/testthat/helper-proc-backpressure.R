@@ -280,7 +280,7 @@ bp_run = function(case) {
       if (any(!is.finite(rss))) stop("Could not measure owned process memory.")
       sample_stage = "files"
       files = list.files(root, recursive = TRUE, full.names = TRUE, all.files = TRUE)
-      sizes = file.info(files)$size
+      sizes = file.info(files, extra_cols = FALSE)$size
       unknown = is.na(sizes) & file.exists(files)
       if (any(unknown)) stop("Could not measure owned case files.")
       c(rss = sum(rss), disk = sum(sizes, na.rm = TRUE))

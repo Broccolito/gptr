@@ -235,7 +235,7 @@
  enumerate <- function(x) {
 --- /dev/null
 +++ b/tests/testthat/test-native-child-env.R
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,199 @@
 +test_that("native child environment preserves empty values and explicit removals", {
 +  parent = c(KEEP = "", REMOVE = "old", CHANGE = "old", UNTOUCHED = "value")
 +  env = c(REMOVE = NA_character_, CHANGE = "", ADD = "new")
@@ -385,6 +385,7 @@
 +  p$wait(10000L)
 +  expect_false(p$is_alive())
 +  expect_identical(p$get_exit_status(), 0L)
++  p$poll_io(0L)
 +  expect_match(p$read_output_lines(), ".")
 +  p$cleanup()
 +  expect_true(identical(Sys.getenv(), before))

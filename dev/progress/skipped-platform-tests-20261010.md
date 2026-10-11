@@ -1546,3 +1546,31 @@ linters or changing runtime/tests/oracles. Fresh exact-source native repeat is O
 Actual b984/run38179265286 plan artifact is independently verified: all4 stages,39 equal
 hashes,770R zero parse/style/lint,6units,90 historical indexWARN/0ERROR; current Plan bytes
 are unchanged. Failed3682 logs remain retained in ignored callr-native-env-20261011.
+
+
+## Native fixture corrections after e733 — 2026-10-11
+
+Actual e733/run38180103676 passed scoped lint and isolated stock/patched installation.
+Linux strict stock/patched each92P/4F/0W/0S: original two controls56P/0F; four extended
+cases stopped in fixture I/O before assertions. Admissions each36P/4F likewise never
+completed; do not infer their expected seed/restoration results. Upstream35P/1F/0W/0S
+has only the R CMD output-read failure. Windows stock84P/12F/1W/0S retains the original
+48P/8F, plus four incomplete fixture cases and one owner-lookup warning. Structural
+warning gate stopped Windows before patched/admission execution. All actual RED
+artifacts are retained under ignored callr-native-env-20261011/native-e733-evidence.
+
+Reviewed fixture correction uses the exported processx connection EOF function, drains
+both exact readiness streams before cancellation closes pipes, and retains error/class,
+stdin/EOF, streams, parent options/cwd/RNG and exact owner-settlement assertions. The
+upstream test adds required poll_io before its unchanged nonempty R CMD output oracle.
+The resource observer requests only file metadata needed for size (extra_cols=FALSE),
+avoiding unused Windows owner/domain lookup on disappearing owned temporary files;
+unknown existing-file size and all bounds/warnings remain fatal. Observer lint is added.
+No GPTR or upstream runtime handoff, public class, hook or dependency binding changed.
+Fresh exact-source Windows/Linux repeat is ONGOING, with at most two hosted jobs.
+
+At15:32PDT load9.09/21.10/61.81,55.96%CPUidle,115GiB RAM used/12GiB unused,20539.50MiB
+swap and260GiB free disk; no thermal warning. Local-heavy jobs remain HELD for resource
+pressure; shared Ollama is untouched. All four plan checks remain the verified b984
+artifact because plan content is unchanged. Separate security/CRT/PATH/locale admission
+boundaries, upstream compatible release, adoption and merge remain OPEN.

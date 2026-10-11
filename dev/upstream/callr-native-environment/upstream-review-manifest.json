@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "SOURCE_PREPARED_PARTIAL_NOT_EXECUTED",
+  "status": "SOURCE_PREPARED_PARTIAL_FOLLOWUP_NOT_EXECUTED",
   "adoption_authorized": false,
   "created_date": "2026-10-11",
   "upstream": {
@@ -56,13 +56,16 @@
       "path": "R/utils.R",
       "baseline_sha256": "9d206d5001bf5ccdfb83fdd5bdec22ecb7e7a1217fcaf12f7cd5073ef8545c6a",
       "amended_sha256": "354626bd21decc0261ebba770c2dbc15a223f7ef331dbf1d1463d889e3ce434e",
-      "new_private_helpers": ["native_child_env", "native_child_args"]
+      "new_private_helpers": [
+        "native_child_env",
+        "native_child_args"
+      ]
     },
     {
       "path": "tests/testthat/test-native-child-env.R",
       "baseline": "NEW_SOURCE_FIRST_FILE",
       "test_first_sha256": "6e139a9d1bfe36910cef449614e75058e727c3ae7d0871d8721ac6a121343df2",
-      "amended_sha256": "6e139a9d1bfe36910cef449614e75058e727c3ae7d0871d8721ac6a121343df2"
+      "amended_sha256": "95f789a5f1217590529d468b95d8217f86af487e51aeaf20b1750b698f117e38"
     }
   ],
   "unchanged_protected_files": {
@@ -71,7 +74,7 @@
     "R/load-client.R": "2a3ce9d6943b2fc6d55f7f7237c17aba51f088dd1e5acd3f05e890ebf6b7bac1"
   },
   "packet_hashes": {
-    "native-child-env.patch": "0a2348f2edd1397bf5040d4deb43dce39fcbbfd7a3352804c2a7b56f8dfead28",
+    "native-child-env.patch": "bd085cc765ad69effe113e2d224ca9f825c2bf1b256acbcf605e7c7cc6443e1e",
     "README.md": "f8dfaaecbe45c333713906a0e47ae11962f23407bf4f50aaf7eaf4830ee09c96"
   },
   "scope": {
@@ -103,7 +106,10 @@
   "retained_observation": {
     "path": "dev/.validation/windows-security-20261010/diagnostic-windows-d53b313-evidence/test-callr-parent-environment.R-results.json",
     "stock_callr_version": "3.8.0",
-    "profiles": ["worker", "artifact"],
+    "profiles": [
+      "worker",
+      "artifact"
+    ],
     "assertions_passed": 48,
     "conditions_failed": 8,
     "warnings": 0,
@@ -113,13 +119,33 @@
   "open_admission_boundaries": [
     {
       "kind": "WINDOWS_CHILD_CRT_TRUE_EMPTY_STARTUP_RESTORATION",
-      "variables": ["R_ENVIRON", "R_ENVIRON_USER", "R_PROFILE", "R_PROFILE_USER", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE"],
+      "variables": [
+        "R_ENVIRON",
+        "R_ENVIRON_USER",
+        "R_PROFILE",
+        "R_PROFILE_USER",
+        "R_LIBS",
+        "R_LIBS_USER",
+        "R_LIBS_SITE"
+      ],
       "reason": "Unchanged common_hook restores through Sys.setenv; a Win32-only setter does not establish the R CRT view",
       "status": "OPEN_NOT_IMPLEMENTED"
     },
     {
       "kind": "WINDOWS_PROCESSX_REQUIRED_VARIABLE_NA_REMOVAL_PARITY",
-      "variables": ["HOMEDRIVE", "HOMEPATH", "LOGONSERVER", "PATH", "SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "USERDOMAIN", "USERNAME", "USERPROFILE", "WINDIR"],
+      "variables": [
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "LOGONSERVER",
+        "PATH",
+        "SYSTEMDRIVE",
+        "SYSTEMROOT",
+        "TEMP",
+        "USERDOMAIN",
+        "USERNAME",
+        "USERPROFILE",
+        "WINDIR"
+      ],
       "reason": "processx 3.9.0 replenishes absent required variables from the unchanged parent Win32 environment",
       "status": "OPEN_UPSTREAM_PROTOCOL_OR_CONTRACT_REQUIRED"
     },
@@ -131,7 +157,7 @@
   ],
   "validation": {
     "source_file_checksums_recorded": true,
-    "test_first_equals_amended_test": true,
+    "test_first_equals_amended_test": false,
     "new_r_lines_over_100_found": false,
     "r_parse_or_lint_run": false,
     "tests_run": false,
@@ -145,5 +171,19 @@
       "required-variable explicit NA removal and non-ASCII comparison admission",
       "affected upstream lifecycle, error, tracing and cleanup suites"
     ]
+  },
+  "followup": {
+    "source_sha": "e733a7bc2f9719007885f17a37641a0526fa3d38",
+    "actual_run_id": 38180103676,
+    "previous_patch_sha256": "0a2348f2edd1397bf5040d4deb43dce39fcbbfd7a3352804c2a7b56f8dfead28",
+    "test_only": "poll_io(0L) before unchanged nonempty R CMD output assertion",
+    "production_r_files_changed": false,
+    "actual_linux_upstream": {
+      "passed": 35,
+      "failed": 1,
+      "warnings": 0,
+      "skipped": 0
+    },
+    "new_native_execution": "PENDING"
   }
 }
