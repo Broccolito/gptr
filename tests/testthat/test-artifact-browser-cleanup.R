@@ -2,7 +2,9 @@
 
 test_that("artifact browser cleanup closes its owned local process before the websocket", {
   original = artifact_state$browser
-  withr::defer(artifact_state$browser = original)
+  withr::defer({
+    artifact_state$browser = original
+  })
   state = new.env(parent = emptyenv())
   state$alive = TRUE
   state$events = character()
@@ -26,7 +28,9 @@ test_that("artifact browser cleanup closes its owned local process before the we
 
 test_that("artifact browser cleanup still closes its websocket after a process-close error", {
   original = artifact_state$browser
-  withr::defer(artifact_state$browser = original)
+  withr::defer({
+    artifact_state$browser = original
+  })
   state = new.env(parent = emptyenv())
   state$events = character()
   browser = list(is_local = function() TRUE, close = function(wait) {
@@ -43,7 +47,9 @@ test_that("artifact browser cleanup still closes its websocket after a process-c
 
 test_that("artifact browser cleanup leaves a remote browser process alone", {
   original = artifact_state$browser
-  withr::defer(artifact_state$browser = original)
+  withr::defer({
+    artifact_state$browser = original
+  })
   state = new.env(parent = emptyenv())
   state$process_calls = 0L
   state$websocket_calls = 0L
