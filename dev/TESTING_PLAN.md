@@ -468,20 +468,28 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Follow-up | Status and next evidence |
 |---|---|
 | Quarto discovery | Actual26dc518 record/replay/source-hash integration DONE:71 assertions per host/0 failures or R warnings, including two actual renders and zero replay requests. Bundled RStudio Quarto is discoverable through child-only PATH without changing caller PATH. Local rendering and installed compact-history frontends remain WAITING. |
-| Python/R dependencies | Actual26dc518 hosted preflights execute Python/pandas/NumPy sum6 and other required tools. Bridges128 Linux/118 Windows pass, with two named Windows OS guards. Private localPython pandas/NumPy wheels remain WAITING.13 mock-only Python units pass. Actual marker-family evidence locates loss of four empty caller variables at callr launch; e7daa08 uses a fresh owned processx Rscript watchdog without temporary parent environment mutation. Raw state checks remain unchanged; native rerun pending. Production callr empty-variable preservation remains OPEN. |
+| Python/R dependencies | Actual26dc518 hosted preflights execute Python/pandas/NumPy sum6 and other required tools. Bridges128 Linux/118 Windows pass, with two named Windows OS guards. Private localPython pandas/NumPy wheels remain WAITING, with mandatory private-prefix/CPython3.12/arm64 witnesses before installation and actual reticulate use.13 mock-only Python units pass. Actual marker-family evidence locates loss of four empty caller variables at callr launch; e7daa08 uses a fresh owned processx Rscript watchdog without temporary parent environment mutation. Raw state checks remain unchanged; native rerun pending. Production callr empty-variable preservation remains OPEN. |
 | Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
-| Windows filesystem safety | Actual26dc518 owned checkpoint ACL baseline and119 assertions pass; Codex effective denial/full descriptor restoration pass, but its independent appended LF oracle catches text-mode CRLF. ff3a587 appends binary LF while preserving byte/hash/ACL checks; native rerun pending. Actual MCP167 passes. Native absence remains7P/1F/1W; fixed numeric stages locate an ambiguous parent restoration failure before denied-probe proof. Additional bounded numeric diagnostics are source-cleared but inactive. Effective denial/exact restoration and metadata warnings remain fatal. Arbitrary caller AI0 restoration and junction/unknown-reparse native evidence remain OPEN. |
-| Windows child stdin | Actual26dc518 cold19, warm42 and native retirement180 assertions pass at unchanged2s deadlines. Original native3 now46P/1F: duplex delivery fails after1703936 accepted bytes. A source-confirmed concurrent mailbox publication race has three new mandatory pure regressions; baseline runtime is intentionally retained for actual RED before applying its minimal fix. Windows parent-death135P/1F fails before provider request/readiness proof, and Claude240P/3F starts only two turns. Bounded original-error diagnostics are prepared.10s parent-only proof, native limits, cleanup and all positive oracles remain unchanged; blocking-parent-death coverage and D-019 remain OPEN. |
-| Validation/merge | Actual26dc518/run38139096870 completed all17 full files: Linux2353P/0F/0R warnings/13 exact OS guards GREEN; Windows2550P/13 failed conditions (11 failures+2 errors)/1R warning/10 guards RED. Both pass53 scoped lint paths,13 Python units,2571 result-gate assertions and18 cleanup records with no marked survivors. All4 fresh Linux plan stages pass/39 equal hashes/90 historical index warnings.18c883b registers the three publication regressions:36 files/164 titles/53 lint paths. Next run selects the complete43-case writer-runtime file with unchanged baseline runtime for RED evidence, plus all4 fresh Linux plan stages. Merge WAITING strict relevant GREEN. |
+| Windows filesystem safety | Actual26dc518 owned checkpoint ACL baseline and119 assertions pass; Codex effective denial/full descriptor restoration pass, but its independent appended LF oracle catches text-mode CRLF. ff3a587 appends binary LF while preserving byte/hash/ACL checks; native rerun pending. Actual MCP167 passes. Native absence remains7P/1F/1W; fixed numeric stages locate an ambiguous parent restoration failure before denied-probe proof. 7c69690 adds numeric probe/parent-DACL observations and one mandatory decoder test, preserving exact restoration and denial; native evidence pending. Effective denial/exact restoration and metadata warnings remain fatal. Arbitrary caller AI0 restoration and junction/unknown-reparse native evidence remain OPEN. |
+| Windows child stdin | Actual26dc518 cold19, warm42 and native retirement180 assertions pass at unchanged2s deadlines. Original native3 now46P/1F: duplex delivery fails after1703936 accepted bytes. Exactbea8c67 reproduces the publication race on both hosts: ordinary input4P/1F, alias5P and directory5P. Minimal8bfa6da now accepts only freshly validated ordinary input; native/full integration rerun pending. Windows parent-death135P/1F fails before provider request/readiness proof, and Claude240P/3F starts only two turns. Reviewed57bebf1 captures bounded worker/Claude startup conditions while preserving original errors and warnings.10s parent-only proof, native limits, cleanup and all positive oracles remain unchanged; blocking-parent-death coverage and D-019 remain OPEN. |
+| Validation/merge | Actual26dc518/run38139096870 completed all17 full files: Linux2353P/0F/0R warnings/13 exact OS guards GREEN; Windows2550P/13 failed conditions (11 failures+2 errors)/1R warning/10 guards RED. Both pass53 scoped lint paths,13 Python units,2571 result-gate assertions and18 cleanup records with no marked survivors. All4 fresh Linux plan stages pass/39 equal hashes/90 historical index warnings.Exactbea8c67 baseline43-case run completes expected ordinary-publication RED on both hosts; all4 fresh Linux plan stages pass/39 equal hashes. Applied8bfa6da/7c69690/57bebf1 require the next full17-file rerun, registry36 files/165 titles/53 lint paths, plus all4 fresh Linux plan stages. Merge WAITING strict relevant GREEN. |
 
-Current follow-up checkpoint (2026-10-11 05:52 PDT): candidate source fixes ff3a587,
-e7daa08 and test-first1dfaf31 are pushed;18c883b adds strict publication registrations.
-The next exact-source run selects one complete43-case writer-runtime file on Windows/Linux.
-Runtime SHA256565150331c3b9ee09d527b293d06c55133777271d0dd6b6df7faf81f88892f4c
-is retained: ordinary concurrent publication must fail before the proposed fix is applied.
-No case filters or capability skips substitute for positive coverage. All4 cross-plan checks
-run on this exact updated plan. A later strict17-file rerun must test both fixture fixes,
-publication repair, native bootstrap limits, caller state, cancellation and parent death.
+Current follow-up checkpoint (2026-10-11 06:06 PDT): actualbea8c67/run38141027264 completes
+all43 writer cases. Linux308P/1F/0R warnings/8 exact OS guards; Windows469P/2F/1R warning/
+0 skips. Both reproduce the single ordinary-publication regression; alias/directory controls
+pass5 each. The separate Windows absence7P/1F/1W remains open. Two cleanup records per host
+pass with no marked survivors, and controller warnings0. Both pass2678 strict result-gate
+assertions and53 lint paths. All4 fresh Linux plan stages pass39 equal hashes/770 R blocks/
+0 parse-style problems/0 lints, retaining90 historical index warnings.
+
+8bfa6da applies the source-reviewed minimal publication fix after actual RED.7c69690 appends
+one numeric absence decoder after the exact43-case prefix and adds bounded native probe/ACL
+observations.57bebf1 preserves worker startup and Claude cancellation conditions with guarded
+diagnostic publication and original-error rethrow. No denial/restore, timing, memory, cleanup,
+caller-state or skip oracle is relaxed. Next exact-source run selects all17 complete integration
+files on both hosts, with44 writer cases/36 files/165 titles/53 lint paths and all4 fresh Linux
+plan stages. Native bootstrap size, duplex/no-reader/cancel, cold/warm/retirement, Codex binary
+bytes, raw environment, worker parent-death and Claude starts must all pass independently.
 
 Local R, install/import, Quarto/render, GUI/kernel, build/check and model jobs remain WAITING:
 at05:52:06 PDT load134.37/104.57/81.61, CPU16.73%idle, RAM83GiB used/45GiB unused,
@@ -526,7 +534,7 @@ Recheck the updated plan
 on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
-Latest resource check at 04:14 PDT: load 138.30/79.23/62.26, CPU 45.82% idle,
+Historical resource check at 04:14 PDT: load 138.30/79.23/62.26, CPU 45.82% idle,
 physical RAM 123 GiB used and 4339 MiB unused, swap 17,352.25 MiB used, and 22 GiB free disk.
 The separate memory-pressure free metric is 42%; no thermal or performance warning was
 recorded. Swap occupancy does not prove active paging. Load and the minimum 200 GiB disk
@@ -534,7 +542,7 @@ gate remain unsafe; the disk decline has no established cause. Keep all local R,
 import, build, browser, kernel, model and CRAN jobs held. Preserve shared Ollama and unrelated
 processes/files. Hosted jobs use separate resources, with at most two active jobs.
 
-Prepared follow-up at 03:16 PDT: family identity correction and private environment diagnostics,
+Historical prepared follow-up at 03:16 PDT: family identity correction and private environment diagnostics,
 exact ACL-restoration diagnostics, fixed Windows control-file discovery, and bounded nested
 ACL phases are committed and pushed. The strict registry in d1fafc8 has 35 full files,
 145 required titles and 51 lint paths. Run 13 complete files: lint-rules, original cold idle,

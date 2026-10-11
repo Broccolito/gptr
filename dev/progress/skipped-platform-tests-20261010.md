@@ -1009,3 +1009,31 @@ and blocking-parent-death native coverage remain explicit gaps.
 swap24,391.75MiB used and disk13GiB keep all local heavy work held. No thermal warning.
 Preserve shared Ollama and unrelated files/processes. Local wheels, local/installed frontend
 checks, full CRAN and merge remain pending. Current plan edit requires fresh all4 checks.
+
+## Actual publication RED and full integration nomination — 2026-10-11 06:06 PDT
+
+Exactbea8c67d0cc25f84a47b47d42d8f71c618c9aeb4/run38141027264 completes one full43-case
+writer file on both hosts: Linux308P/1F/0R warnings/8 exact OS guards; Windows469P/2F/1R
+warning/0 skips. Ordinary input is4P/1F on both; alias and directory controls pass5 each.
+Thus expected regression RED is actual, separate from known native absence7P/1F/1W. Both
+pass13 Python units,2678 result-gate assertions,53 lint paths, actual dependency preflight
+and2 cleanup records/no marked survivors; controller warnings0. All4 fresh Linux plan
+stages pass25 plans/770 R blocks/0 parse-style problems/0 lints/39 equal source hashes,
+retaining90 historical index warnings. Both canonical archive hashes are461d47960d1cd88c79dc88f72541e09e6bef782a67d29ee71e3cb8f8662b02bd.
+Raw ZIP hashes: Linuxaf48ae24bd2b55a7dff1eaf6089997ac23ba289f9e9df862d9e983a43700b1f9;
+Windows068da21c0c164709774ffef41fb3b156bcac1d190fd3331b8943564599e41fdf.
+
+8bfa6da applies the minimal race fix only after this actual RED.7c69690 composes the new
+numeric absence decoder after43 exact cases and registers44/165/36/53; runtime ACL and
+all denial/restoration requirements unchanged.57bebf1 records bounded worker startup and
+Claude pre-cancel conditions, with diagnostic write failures guarded before rethrowing the
+original error. Independent source reviews preserve assertions, raw state, markers, PIDctime,
+5-minute file leases, native2s/10s/30s/60s limits and1GiB/64MiB caps. Actual GREEN is pending.
+The next source run selects all17 complete files on both hosts and fresh all4 Linux plan
+checks. Local work stays held by the05:52 load/disk snapshot; shared Ollama remains preserved.
+
+The local ignored checklist now makes private prefix/CPython3.12/arm64/64-bit proof mandatory
+before wheel install and separately requires actual reticulate prefix evidence in each
+nominated R context. Earlier inventory/plan paragraphs are explicitly historical. No actual
+local Python execution/import/install or R/render/model/browser job occurred. Full CRAN,
+installed frontends, production callr empty-state/native gaps and merge remain OPEN.

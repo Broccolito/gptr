@@ -1,9 +1,9 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 05:52 PDT
+## Optional integrations and Windows transport — 2026-10-11 06:06 PDT
 
 Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, source fixes pushed through18c883b. Primary main stays718e81e;
+`codex/skipped-platform-tests`, source fixes pushed through57bebf1. Primary main stays718e81e;
 maintainer dirt/staged chunks, historical tests, secrets and shared Ollama are preserved.
 At05:52:06 PDT load134.37/104.57/81.61, CPU16.73%idle, RAM83GiB used/45GiB unused,
 swap24,391.75MiB used and disk13GiB hold all local heavy jobs. No thermal warning clears
@@ -32,21 +32,29 @@ fresh owned processx Rscript watchdog; raw environment checks remain exact. Both
 actual rerun. Broader production callr empty-variable preservation remains OPEN. Arbitrary
 caller AI0 restoration, junction/unknown-reparse and blocking-parent-death native gaps remain.
 
-Original native3 now46P/1F: duplex delivery fails after1703936 accepted bytes, despite READY
-and all six ACL phases. Source identifies a mailbox publication race;1dfaf31 appends three
-mandatory pure regressions, preserving the old40 prefix. Runtime56515033 is intentionally
-unchanged for hosted RED.18c883b registers43 writer cases/36 files/164 titles/53 lint paths.
-Next exact-source run selects the complete writer-runtime file, plus all4 fresh Linux plan
-stages after this plan edit. Apply proposedc00e5f5b only after actual ordinary-publication RED.
-Then repeat strict17-file native integration; do not count source review as runtime proof.
+Actualbea8c67/run38141027264 completes the43-case regression phase: Linux308P/1F/0 R
+warnings/8 OS guards, Windows469P/2F/1 R warning/0 skips. Both reproduce ordinary-publication
+4P/1F; alias and directory controls pass5 each.53 lint paths,13 Python units and2678 gate
+assertions pass per host. Two cleanup records per host pass/no marked survivors; controller
+warnings0. All4 fresh Linux plan stages pass39 equal hashes/770 R blocks/0 parse-style
+problems/0 lints, retaining90 historical index warnings. Native absence7P/1F/1W stays open.
+Both leases are free before next dispatch; exact raw evidence and proof are retained.
 
-Windows parent-death135P/1F fails before provider request/readiness proof. Claude240P/3F
-starts only two turns. Bounded fixed original-error diagnostics are prepared, not applied.
-Native absence7P/1F/1W reaches ambiguous parent restoration before denied-probe proof; its
-next numeric-only diagnostics retain exact denial/restoration/settlement. Compose their new
-pure title after publication43 and register44/165 separately. The dangling-link file.info
-warning stays fatal; nofollow observer remains inactive. Preserve all5-minute file leases,
-2s/10s/30s/60s deadlines,1GiB/64MiB caps, positive assertions and raw error/warning gates.
+8bfa6da applies minimal publication runtimec00e5f5b after actual RED.7c69690 composes one
+numeric absence decoder after the exact43-case prefix, preserving full denial/restoration
+and adding fixed probe/ACL fields only. Registry36 files/165 titles/53 lint paths.57bebf1
+adds bounded worker/Claude diagnostics; diagnostic publication failure cannot replace the
+original error. Actual parent-death and cancellation outcomes remain pending. The next exact-
+source run selects all17 complete files and all4 fresh Linux plan stages after this plan edit.
+Require native bootstrap9998-byte limits, original duplex/no-reader/cancel, cold/warm/retire,
+raw environment, binary Codex append, provider/readiness/parent-only10s proof and all oracles.
+
+Broader production callr actual-empty Windows state preservation remains OPEN; two isolated
+native regressions are prepared, unexecuted. Current private local dependency checklist now
+requires prefix/base-prefix/CPython3.12/arm64 witnesses before wheels and actual reticulate.
+Older inventory and plan snapshots are explicitly historical. The nofollow observer remains
+inactive pending POSIX restoration correction and native state/resource proofs; the dangling-
+link warning remains fatal. Do not infer a native fix from the new diagnostic observations.
 
 Missing/partial/duplicate raw results, zero assertions and unexpected skips remain fatal.
 Merge/D-019/current full CRAN/release stay open. No live inference, local install/import/
