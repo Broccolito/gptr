@@ -103,8 +103,9 @@ codex_capability_link = function(link, root, .env = parent.frame()) {
     "[System.IO.File]::Delete($Link)"), script)
   state = new.env(parent = emptyenv())
   state$missing = character()
-  present = function() basename(link) %in% list.files(dirname(link), all.files = TRUE,
-    no.. = TRUE)
+  present = function() {
+    basename(link) %in% list.files(dirname(link), all.files = TRUE, no.. = TRUE)
+  }
   detach = function() {
     if (present()) {
       if (windows) {

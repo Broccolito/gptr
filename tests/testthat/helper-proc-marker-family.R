@@ -30,7 +30,10 @@ pmf_child_case = function(case, root, failure) {
     for (handle in rev(c(st$owned, st$foreign))) {
       alive = fun("proc_handle_alive")(handle)
       if (isTRUE(alive)) {
-        error = tryCatch({ ps::ps_kill(handle); NULL }, error = identity)
+        error = tryCatch({
+          ps::ps_kill(handle)
+          NULL
+        }, error = identity)
         if (!is.null(error)) st$cleanup_errors = c(st$cleanup_errors, class(error)[[1L]])
       } else if (is.na(alive)) {
         st$cleanup_errors = c(st$cleanup_errors, "unknown_original_identity")
@@ -73,8 +76,9 @@ pmf_child_case = function(case, root, failure) {
     stopifnot(file.exists(path))
     readRDS(path)
   }
-  handle_record = function(handle) list(pid = ps::ps_pid(handle),
-    create_time = as.numeric(ps::ps_create_time(handle)))
+  handle_record = function(handle) {
+    list(pid = ps::ps_pid(handle), create_time = as.numeric(ps::ps_create_time(handle)))
+  }
   capture = function(callback) {
     seen = new.env(parent = emptyenv())
     seen$warnings = list()
