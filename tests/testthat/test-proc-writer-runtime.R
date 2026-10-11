@@ -453,7 +453,7 @@ test_that("writer trusted bootstrap sends startup diagnostics only to its own st
   old = .libPaths()
   withr::defer(.libPaths(old))
   error_output = capture.output({
-    output = capture.output(value = eval(parse(text = code), new.env(parent = baseenv())))
+    output = capture.output({ value = eval(parse(text = code), new.env(parent = baseenv())) })
   }, type = "message")
   expect_identical(value, "public-result")
   expect_length(output, 0L)
