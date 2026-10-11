@@ -169,9 +169,27 @@ bp_case_failure = function(error) {
   } else {
     phases = as.list(phases)
   }
+  acl_phases = error$writer_acl_phases
+  acl_tokens = c("enter", "absent", "created", "readback", "verified", "owner",
+                 "exit_ok", "exit_failed")
+  acl_positions = match(names(acl_phases), acl_tokens)
+  acl_valid = (is.list(acl_phases) || is.numeric(acl_phases)) &&
+    all(vapply(acl_phases, function(x) {
+      is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0
+    }, logical(1)))
+  acl_values = if (acl_valid) unlist(acl_phases, use.names = FALSE) else numeric()
+  if (!acl_valid || !length(acl_phases) || length(acl_phases) > length(acl_tokens) ||
+      length(acl_positions) != length(acl_phases) || anyNA(acl_positions) ||
+      anyDuplicated(acl_positions) || any(diff(acl_values) < 0) ||
+      any(diff(acl_positions) <= 0) ||
+      all(c("exit_ok", "exit_failed") %in% names(acl_phases))) {
+    acl_phases = NULL
+  } else {
+    acl_phases = as.list(acl_phases)
+  }
   list(class = classes, stage = stage, expression_bytes = number(error$expression_bytes),
     startup_elapsed = number(error$startup_elapsed), accepted_bytes = number(error$accepted_bytes),
-    writer_phases = phases)
+    writer_phases = phases, writer_acl_phases = acl_phases)
 }
 
 bp_run = function(case) {

@@ -240,10 +240,11 @@ test_that("full production writer bootstrap fits the unchanged Rscript limits", 
   dir = file.path(tempdir(), "gptr-runtime-size", paste0(marker, ".stdin"))
   shell = "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
   meta = list(dir = dir, canonical = dir, marker = marker, valid = proc_writer_valid,
+    acl_parse = proc_writer_acl_parse, acl_read = proc_writer_acl_read,
     parent_pid = 1234L, parent_create = 1728000000.125,
     target_pid = 5678L, target_create = 1728000001.25, shell = shell,
     args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-             "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker))),
+             "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker, .diagnostics = TRUE))),
     supervise = TRUE, timeout = 2)
   code = proc_writer_code(meta)
   bytes = nchar(enc2utf8(code), type = "bytes")
@@ -337,10 +338,11 @@ test_that("writer full compressed bootstrap fits a long Windows mailbox path", {
                marker, ".stdin")
   shell = "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
   meta = list(dir = dir, canonical = dir, marker = marker, valid = proc_writer_valid,
+    acl_parse = proc_writer_acl_parse, acl_read = proc_writer_acl_read,
     parent_pid = 1234L, parent_create = 1728000000.125,
     target_pid = 5678L, target_create = 1728000001.25, shell = shell,
     args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-             "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker))),
+             "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker, .diagnostics = TRUE))),
     supervise = TRUE, timeout = 2)
   code = proc_writer_code(meta)
   bytes = nchar(enc2utf8(code), type = "bytes")
@@ -494,4 +496,160 @@ test_that("Windows production mailbox has a protected owner DACL and inherited f
   expect_identical(x$result$output, c("READY", "first"))
   expect_identical(x$result$status, 0L)
   expect_identical(x$result$exit_callbacks, 1L)
+})
+
+test_that("nested ACL diagnostics preserve exact LF and split CRLF progress", {
+  tokens = c("enter", "absent", "created", "readback", "verified", "owner")
+  text = paste0(paste0("GPTR_STDIN_ACL ", tokens, "\n"), collapse = "")
+  initial = list(bytes = 0L, tail = "", phases = numeric())
+  x = proc_writer_acl_parse(initial, text)
+  expect_identical(names(x$phases), tokens)
+  expect_identical(x$new, tokens)
+  expect_identical(x$tail, "")
+  expect_identical(initial, list(bytes = 0L, tail = "", phases = numeric()))
+  x = proc_writer_acl_parse(initial, "GPTR_STDIN_ACL enter\r")
+  expect_length(x$phases, 0L)
+  expect_identical(x$tail, "GPTR_STDIN_ACL enter\r")
+  x = proc_writer_acl_parse(x, "\nGPTR_STDIN_ACL absent\r\n")
+  expect_identical(names(x$phases), tokens[1:2])
+  expect_identical(x$new, tokens[1:2])
+  expect_identical(x$tail, "")
+  expect_lte(x$bytes, 256L)
+  timed = paste0(paste0("GPTR_STDIN_ACL ", c(tokens, "exit_ok"), " ",
+    sprintf("%.6f", seq_len(7L) / 10), "\r\n"), collapse = "")
+  x = proc_writer_acl_parse(initial, timed, .timed = TRUE)
+  expect_identical(names(x$phases), c(tokens, "exit_ok"))
+  expect_identical(unname(x$phases), seq_len(7L) / 10)
+  expect_lte(x$bytes, 512L)
+  expect_error(proc_writer_acl_parse(x, "GPTR_STDIN_ACL exit_failed 0.800000\n",
+    .timed = TRUE), "Invalid trusted ACL startup diagnostics")
+})
+
+test_that("nested ACL diagnostics reject arbitrary and unordered native output", {
+  initial = list(bytes = 0L, tail = "", phases = numeric())
+  for (text in c("FAKE-ACL-message-canary\n", strrep("x", 257L),
+    "GPTR_STDIN_ACL created\n", "GPTR_STDIN_ACL exit_ok\n",
+    "GPTR_STDIN_ACL enter\nGPTR_STDIN_ACL enter\n",
+    "GPTR_STDIN_ACL en\rter\n", "GPTR_STDIN_ACL enter\r\r\n",
+    "GPTR_STDIN_ACL unknown\n", "GPTR_STDIN_ACL enter private-SID\n",
+    "GPTR_STDIN_ACL enter\n\u00e9", NA_character_)) {
+    error = tryCatch(proc_writer_acl_parse(initial, text), error = identity)
+    expect_s3_class(error, "error")
+    expect_false(grepl("FAKE-ACL-message-canary", conditionMessage(error), fixed = TRUE))
+    expect_identical(initial, list(bytes = 0L, tail = "", phases = numeric()))
+  }
+  x = proc_writer_acl_parse(initial, "GPTR_STDIN_ACL enter\n")
+  x$bytes = 256L
+  expect_error(proc_writer_acl_parse(x, "G"), "Invalid trusted ACL startup diagnostics")
+})
+
+test_that("nested ACL diagnostics read only after zero-time polling", {
+  observed = new.env(parent = emptyenv())
+  observed$order = character()
+  observed$stages = character()
+  p = list(poll_io = function(timeout) {
+    observed$order = c(observed$order, paste0("poll:", timeout))
+  }, read_output = function(n) {
+    observed$order = c(observed$order, paste0("read:", n))
+    "GPTR_STDIN_ACL enter\r\nGPTR_STDIN_ACL absent\r\n"
+  })
+  stage = function(name) observed$stages = c(observed$stages, name)
+  initial = list(bytes = 0L, tail = "", phases = numeric())
+  x = proc_writer_acl_read(p, initial, proc_writer_acl_parse, stage)
+  expect_identical(observed$order, c("poll:0", "read:257"))
+  expect_identical(observed$stages, c("enter", "absent"))
+  expect_identical(names(x$phases), observed$stages)
+  p$poll_io = function(timeout) stop("FAKE-ACL-message-canary")
+  p$read_output = function(n) stop("read must not run")
+  error = tryCatch(proc_writer_acl_read(p, initial, proc_writer_acl_parse, stage), error = identity)
+  expect_s3_class(error, "error")
+  expect_false(grepl("FAKE-ACL-message-canary", conditionMessage(error), fixed = TRUE))
+  expect_identical(observed$stages, c("enter", "absent"))
+  observed$order = character()
+  observed$stages = character()
+  observed$reads = 0L
+  observed$settled = 0L
+  chunks = c("GPTR_STDIN_ACL enter\r", "\nGPTR_STDIN_ACL absent\r\n")
+  p$poll_io = function(timeout) {
+    observed$order = c(observed$order, paste0("poll:", timeout))
+  }
+  p$read_output = function(n) {
+    observed$reads = observed$reads + 1L
+    observed$order = c(observed$order, paste0("read:", n))
+    chunks[[observed$reads]]
+  }
+  p$is_incomplete_output = function() observed$reads < length(chunks)
+  guard = function() observed$settled = observed$settled + 1L
+  x = proc_writer_acl_read(p, initial, proc_writer_acl_parse, stage, settle = guard)
+  expect_identical(observed$order, rep(c("poll:0", "read:257"), 2L))
+  expect_identical(observed$stages, c("enter", "absent"))
+  expect_identical(observed$settled, 1L)
+  expect_identical(names(x$phases), observed$stages)
+  expect_identical(x$tail, "")
+  observed$reads = 0L
+  p$is_incomplete_output = function() TRUE
+  expect_error(proc_writer_acl_read(p, initial, proc_writer_acl_parse, stage,
+    settle = function() stop("existing deadline reached")), "existing deadline reached")
+})
+
+test_that("writer nested ACL phases preserve exit failure without granting readiness", {
+  x = rw_local_state()
+  x$st$private = FALSE
+  text = paste0("GPTR_STDIN_STAGE decode 0.100000\n",
+    "GPTR_STDIN_STAGE identity 0.110000\nGPTR_STDIN_STAGE acl_start 0.120000\n",
+    "GPTR_STDIN_STAGE acl_wait 0.130000\nGPTR_STDIN_ACL enter 0.140000\r\n",
+    "GPTR_STDIN_ACL exit_failed 0.150000\r")
+  x$st$p$read_error = function(n) text
+  proc_writer_diagnostics(x$st)
+  expect_identical(x$st$acl_phases, c(enter = 0.14))
+  expect_identical(x$st$diagnostic_tail, "GPTR_STDIN_ACL exit_failed 0.150000\r")
+  x$st$p$read_error = function(n) "\n"
+  proc_writer_diagnostics(x$st)
+  expect_identical(x$st$acl_phases, c(enter = 0.14, exit_failed = 0.15))
+  expect_false(x$st$private)
+  expect_identical(x$b$pos, 0L)
+  x$st$p$read_error = function(n) "GPTR_STDIN_STAGE acl_done 0.160000\n"
+  expect_error(proc_writer_diagnostics(x$st), class = "gptr_error_io")
+  expect_identical(names(x$st$phases), c("decode", "identity", "acl_start", "acl_wait"))
+  expect_false(x$st$private)
+  expect_identical(x$b$last, 0)
+  y = rw_local_state()
+  y$st$private = FALSE
+  text = paste0("GPTR_STDIN_STAGE decode 0.100000\n",
+    "GPTR_STDIN_STAGE identity 0.110000\nGPTR_STDIN_STAGE acl_start 0.120000\n",
+    "GPTR_STDIN_STAGE acl_wait 0.130000\n",
+    paste0("GPTR_STDIN_ACL ", c("enter", "absent", "created", "readback", "verified", "owner",
+      "exit_ok"), " ", sprintf("%.6f", seq_len(7L) / 100 + 0.13), "\n", collapse = ""),
+    "GPTR_STDIN_STAGE acl_done 0.210000\nGPTR_STDIN_STAGE validated 0.220000\n",
+    "GPTR_STDIN_STAGE ready 0.230000\n")
+  y$st$p$read_error = function(n) text
+  proc_writer_diagnostics(y$st)
+  expect_identical(names(y$st$acl_phases),
+    c("enter", "absent", "created", "readback", "verified", "owner", "exit_ok"))
+  expect_identical(names(y$st$phases),
+    c("decode", "identity", "acl_start", "acl_wait", "acl_done", "validated", "ready"))
+  expect_false(y$st$private)
+  expect_identical(y$b$pos, 0L)
+  expect_lte(y$st$diagnostic_bytes, 1024L)
+  z = rw_local_state()
+  z$st$p$read_error = function(n) "GPTR_STDIN_ACL enter 0.100000\n"
+  expect_error(proc_writer_diagnostics(z$st), class = "gptr_error_io")
+  expect_length(z$st$phases, 0L)
+  expect_length(z$st$acl_phases, 0L)
+})
+
+test_that("writer early failures retain only fixed numeric nested ACL phases", {
+  error = gptr_condition("FAKE-ACL-message-canary", "io", fields = list(
+    writer_stage = "startup", writer_acl_phases = c(enter = 0.1, absent = 0.2,
+                                                  exit_failed = 0.3)))
+  x = bp_case_failure(error)
+  expect_identical(x$writer_acl_phases, list(enter = 0.1, absent = 0.2, exit_failed = 0.3))
+  expect_false(any(grepl("FAKE-ACL-message-canary", unlist(x), fixed = TRUE)))
+  for (phases in list(c(`foreign-SID-canary` = 0.1), c(enter = 0.2, absent = 0.1),
+    c(owner = 0.1, enter = 0.2), c(enter = NA_real_), list(enter = c(0.1, 0.2)))) {
+    error$writer_acl_phases = phases
+    x = bp_case_failure(error)
+    expect_null(x$writer_acl_phases)
+    expect_false(any(grepl("foreign-SID-canary", unlist(x), fixed = TRUE)))
+  }
 })

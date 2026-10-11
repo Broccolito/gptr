@@ -539,14 +539,101 @@ proc_writer_stop = function(p) {
   invisible(settled)
 }
 
+#' Parse only fixed ACL progress tokens, with a bounded incomplete-line buffer
+#' @noRd
+proc_writer_acl_parse = function(state, chunk, .timed = FALSE) {
+  refuse = function() stop("Invalid trusted ACL startup diagnostics.", call. = FALSE)
+  if (!is.character(chunk) || length(chunk) != 1L || is.na(chunk)) refuse()
+  size = nchar(chunk, type = "bytes")
+  limit = if (.timed) 512L else 256L
+  if (size + state$bytes > limit) refuse()
+  if (!size) return(list(bytes = state$bytes, tail = state$tail,
+                         phases = state$phases, new = character()))
+  tokens = c("enter", "absent", "created", "readback", "verified", "owner")
+  if (.timed) tokens = c(tokens, "exit_ok")
+  next_tokens = function(phases) {
+    if (length(phases) && names(phases)[[length(phases)]] %in% c("exit_ok", "exit_failed"))
+      return(character())
+    out = if (length(phases) < length(tokens)) tokens[[length(phases) + 1L]] else character()
+    if (.timed) out = c(out, "exit_failed")
+    out
+  }
+  line_value = function(line, phases) {
+    if (endsWith(line, "\r")) line = substr(line, 1L, nchar(line) - 1L)
+    names = next_tokens(phases)
+    suffix = if (.timed) " ([0-9]{1,6}\\.[0-9]{6})" else ""
+    pattern = paste0("^GPTR_STDIN_ACL (", paste(names, collapse = "|"), ")", suffix, "$")
+    got = regmatches(line, regexec(pattern, line))[[1L]]
+    expected = if (.timed) 3L else 2L
+    if (!length(names) || length(got) != expected) refuse()
+    value = if (.timed) as.numeric(got[[3L]]) else 0
+    if (.timed && length(phases) && value < phases[[length(phases)]]) refuse()
+    names(value) = got[[2L]]
+    value
+  }
+  text = paste0(state$tail, chunk)
+  lines = strsplit(text, "\n", fixed = TRUE)[[1L]]
+  tail = if (endsWith(text, "\n")) "" else lines[[length(lines)]]
+  if (nzchar(tail)) lines = lines[-length(lines)]
+  phases = state$phases
+  new = character()
+  for (line in lines) {
+    value = line_value(line, phases)
+    phases = c(phases, value)
+    new = c(new, names(value))
+  }
+  if (nzchar(tail)) {
+    next_names = next_tokens(phases)
+    prefixes = if (length(next_names)) {
+      paste0("GPTR_STDIN_ACL ", next_names, if (.timed) " " else "")
+    } else {
+      character()
+    }
+    if (endsWith(tail, "\r")) {
+      line_value(tail, phases)
+    } else if (!length(prefixes) || !any(startsWith(prefixes, tail))) {
+      if (!.timed || !any(vapply(prefixes, function(prefix) {
+        startsWith(tail, prefix) &&
+          grepl("^[0-9]{1,6}(\\.[0-9]{0,6})?$", substring(tail, nchar(prefix) + 1L))
+      }, logical(1)))) refuse()
+    }
+  }
+  list(bytes = state$bytes + size, tail = tail, phases = phases, new = new)
+}
+
+#' Poll the owned ACL child before a bounded character read; never forward raw output
+#' @noRd
+proc_writer_acl_read = function(p, state, parser, stage, settle = NULL) {
+  repeat {
+    chunk = tryCatch({
+      p$poll_io(0L)
+      p$read_output(257L)
+    }, error = function(error) stop("Invalid trusted ACL startup diagnostics.", call. = FALSE))
+    out = parser(state, chunk)
+    for (name in out$new) stage(name)
+    if (is.null(settle)) return(out)
+    incomplete = p$is_incomplete_output()
+    stopifnot(identical(incomplete, TRUE) || identical(incomplete, FALSE))
+    if (!incomplete) return(out)
+    settle()
+    state = out
+  }
+}
+
 #' Trusted, prompt-free script: create with a private DACL, then inspect the actual DACL
 #' @noRd
-proc_writer_acl = function(dir, marker) {
+proc_writer_acl = function(dir, marker, .diagnostics = FALSE) {
+  check_flag(.diagnostics, ".diagnostics")
   literal = function(x) paste0("'", gsub("'", "''", x, fixed = TRUE), "'")
+  stage = function(name) {
+    if (.diagnostics) paste0("[Console]::WriteLine('GPTR_STDIN_ACL ", name, "')") else character()
+  }
   paste(c(
     "$ErrorActionPreference = 'Stop'",
+    stage("enter"),
     paste0("$p = ", literal(dir)),
     "if (Test-Path -LiteralPath $p) { throw 'Existing writer directory' }",
+    stage("absent"),
     "$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User",
     "$acl = [System.Security.AccessControl.DirectorySecurity]::new()",
     "$acl.SetOwner($sid); $acl.SetAccessRuleProtection($true, $false)",
@@ -557,11 +644,13 @@ proc_writer_acl = function(dir, marker) {
     "  [System.Security.AccessControl.AccessControlType]::Allow)",
     "$acl.AddAccessRule($rule)",
     "$null = [System.IO.Directory]::CreateDirectory($p, $acl)",
+    stage("created"),
     "$attributes = [System.IO.File]::GetAttributes($p)",
     "if ($attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'Alias' }",
     "$sections = [System.Security.AccessControl.AccessControlSections]::Access",
     "$sections = $sections -bor [System.Security.AccessControl.AccessControlSections]::Owner",
     "$got = [System.IO.Directory]::GetAccessControl($p, $sections)",
+    stage("readback"),
     "$rules = @($got.GetAccessRules($true, $true,",
     "  [System.Security.Principal.SecurityIdentifier]))",
     "if (-not $got.AreAccessRulesProtected -or $rules.Count -ne 1 -or",
@@ -573,8 +662,10 @@ proc_writer_acl = function(dir, marker) {
     "    $r.FileSystemRights -ne [System.Security.AccessControl.FileSystemRights]::FullControl -or",
     "    [int]$r.InheritanceFlags -ne 3 -or [int]$r.PropagationFlags -ne 0) {",
     "  throw 'Writer access rule' }",
+    stage("verified"),
     paste0("[System.IO.File]::WriteAllText([System.IO.Path]::Combine($p, 'owner'), ",
-           literal(marker), ", [System.Text.Encoding]::ASCII)")
+           literal(marker), ", [System.Text.Encoding]::ASCII)"),
+    stage("owner")
   ), collapse = "\n")
 }
 
@@ -608,17 +699,30 @@ proc_writer_main = function(meta) {
   alive = function() isTRUE(ps::ps_is_running(parent)) && isTRUE(ps::ps_is_running(target))
   stopifnot(alive())
   stage("acl_start")
-  acl = processx::process$new(meta$shell, meta$args, stdin = NULL, stdout = NULL,
+  acl = processx::process$new(meta$shell, meta$args, stdin = NULL, stdout = "|",
     stderr = NULL, env = Sys.getenv(), cleanup_tree = TRUE, supervise = meta$supervise,
     windows_hide_window = TRUE)
   on.exit(if (acl$is_alive()) acl$kill_tree(), add = TRUE)
   stage("acl_wait")
+  acl_state = list(bytes = 0L, tail = "", phases = numeric())
+  acl_stage = function(name) {
+    cat("GPTR_STDIN_ACL ", name, " ", sprintf("%.6f", proc.time()[["elapsed"]]), "\n",
+        sep = "", file = stderr())
+    flush(stderr())
+  }
   until = as.numeric(proc.time()[["elapsed"]]) + meta$timeout
   while (acl$is_alive()) {
+    acl_state = meta$acl_read(acl, acl_state, meta$acl_parse, acl_stage)
     stopifnot(alive(), as.numeric(proc.time()[["elapsed"]]) < until)
     acl$wait(50L)
   }
-  stopifnot(identical(acl$get_exit_status(), 0L), alive())
+  acl_state = meta$acl_read(acl, acl_state, meta$acl_parse, acl_stage, settle = function() {
+    stopifnot(alive(), as.numeric(proc.time()[["elapsed"]]) < until)
+    Sys.sleep(0.005)
+  })
+  status_ok = identical(acl$get_exit_status(), 0L)
+  acl_stage(if (status_ok) "exit_ok" else "exit_failed")
+  stopifnot(status_ok, alive(), !nzchar(acl_state$tail), length(acl_state$phases) == 6L)
   stage("acl_done")
   safe()
   stage("validated")
@@ -745,11 +849,12 @@ proc_writer_start = function(p, limit) {
   parent_dir = normalizePath(proc_dir(create = TRUE), winslash = "/", mustWork = TRUE)
   canonical = paste0(parent_dir, "/", basename(dir))
   meta = list(dir = dir, canonical = canonical, marker = marker, valid = proc_writer_valid,
+    acl_parse = proc_writer_acl_parse, acl_read = proc_writer_acl_read,
     parent_pid = parent$pid,
     parent_create = parent$create_time, target_pid = p$get_pid(),
     target_create = as.numeric(ps::ps_create_time(target$handle)), shell = shell,
     args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-             "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker))),
+             "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker, .diagnostics = TRUE))),
     supervise = supervise_default(), timeout = limit)
   code = proc_writer_code(meta)
   command = rscript_path()
@@ -773,6 +878,7 @@ proc_writer_start = function(p, limit) {
   st$diagnostic_tail = ""
   st$diagnostic_bytes = 0L
   st$phases = numeric()
+  st$acl_phases = numeric()
   st$limit = limit
   st$closed = FALSE
   st$closing = FALSE
@@ -808,7 +914,8 @@ proc_writer_failure = function(p, error = NULL) {
   elapsed = if (is.null(st)) NULL else number(if (isTRUE(st$private)) st$startup_elapsed else
     reactor_now() - st$startup_t0)
   list(writer_stage = stage, expression_bytes = bytes, startup_elapsed = elapsed,
-       writer_phases = if (is.null(st)) NULL else as.list(st$phases))
+       writer_phases = if (is.null(st)) NULL else as.list(st$phases),
+       writer_acl_phases = if (is.null(st)) NULL else as.list(st$acl_phases))
 }
 
 #' Read only a bounded structural protocol from the prompt-free actor's own stderr
@@ -833,30 +940,57 @@ proc_writer_diagnostics = function(st) {
   pattern = paste0("^GPTR_STDIN_STAGE (", paste(tokens, collapse = "|"),
                    ") ([0-9]{1,6}\\.[0-9]{6})$")
   phases = st$phases
+  acl_phases = if (is.null(st$acl_phases)) numeric() else st$acl_phases
+  acl_state = list(bytes = 0L, tail = "", phases = acl_phases)
+  last_time = function() {
+    values = c(phases, acl_phases)
+    if (length(values)) max(values) else 0
+  }
+  acl_line = function(line) {
+    if (length(phases) != 4L) refuse()
+    out = tryCatch(proc_writer_acl_parse(acl_state, paste0(line, "\n"), .timed = TRUE),
+                   error = function(error) refuse())
+    if (length(out$new) != 1L || utils::tail(out$phases, 1L) < last_time()) refuse()
+    out
+  }
   for (line in lines) {
     if (endsWith(line, "\r")) line = substr(line, 1L, nchar(line) - 1L)
+    if (startsWith(line, "GPTR_STDIN_ACL ")) {
+      acl_state = acl_line(line)
+      acl_phases = acl_state$phases
+      next
+    }
     captures = regmatches(line, regexec(pattern, line))[[1L]]
     if (length(captures) != 3L) refuse()
     name = captures[[2L]]
     elapsed = as.numeric(captures[[3L]])
-    if (match(name, tokens) != length(phases) + 1L ||
-        (length(phases) && elapsed < utils::tail(phases, 1L))) refuse()
+    if (match(name, tokens) != length(phases) + 1L || elapsed < last_time()) refuse()
+    if (name == "acl_done" && length(acl_phases) &&
+        !identical(utils::tail(names(acl_phases), 1L), "exit_ok")) refuse()
     phases[name] = elapsed
   }
   if (nzchar(tail)) {
-    if (length(phases) >= length(tokens)) refuse()
-    prefix = paste0("GPTR_STDIN_STAGE ", tokens[[length(phases) + 1L]], " ")
-    if (endsWith(tail, "\r")) {
-      line = substr(tail, 1L, nchar(tail) - 1L)
-      captures = regmatches(line, regexec(pattern, line))[[1L]]
-      if (length(captures) != 3L || captures[[2L]] != tokens[[length(phases) + 1L]] ||
-          (length(phases) && as.numeric(captures[[3L]]) < utils::tail(phases, 1L))) refuse()
-    } else if (!startsWith(prefix, tail)) {
-      if (!startsWith(tail, prefix) ||
-          !grepl("^[0-9]{1,6}(\\.[0-9]{0,6})?$", substring(tail, nchar(prefix) + 1L))) refuse()
+    acl_prefix = "GPTR_STDIN_ACL "
+    if (length(phases) == 4L && (startsWith(tail, acl_prefix) ||
+        startsWith(acl_prefix, tail))) {
+      tryCatch(proc_writer_acl_parse(acl_state, tail, .timed = TRUE),
+               error = function(error) refuse())
+    } else {
+      if (length(phases) >= length(tokens)) refuse()
+      prefix = paste0("GPTR_STDIN_STAGE ", tokens[[length(phases) + 1L]], " ")
+      if (endsWith(tail, "\r")) {
+        line = substr(tail, 1L, nchar(tail) - 1L)
+        captures = regmatches(line, regexec(pattern, line))[[1L]]
+        if (length(captures) != 3L || captures[[2L]] != tokens[[length(phases) + 1L]] ||
+            as.numeric(captures[[3L]]) < last_time()) refuse()
+      } else if (!startsWith(prefix, tail)) {
+        if (!startsWith(tail, prefix) ||
+            !grepl("^[0-9]{1,6}(\\.[0-9]{0,6})?$", substring(tail, nchar(prefix) + 1L))) refuse()
+      }
     }
   }
   st$phases = phases
+  st$acl_phases = acl_phases
   st$diagnostic_tail = tail
   st$diagnostic_bytes = st$diagnostic_bytes + size
   invisible(NULL)
