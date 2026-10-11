@@ -371,3 +371,173 @@ The five macOS directory names are `com.apple.intelligenceflow.intelligenceconte
 reported by these completed checks. At **00:24 UTC**, the run had six successful jobs and
 seven still running, including both Windows versions. The previously witnessed IC-33
 failure was absent on the three completed package checks above; pending jobs are not passed.
+### Additional `3d92b05` results at 00:33 UTC (2026-10-11)
+
+The normal push matrix now has ten successful jobs, one failed job and two Windows jobs
+still checking. These are source-checkout results, separate from the same-byte archive jobs.
+
+| Completed job | Actual R / test summary | Check result |
+|---|---|---|
+| Linux release `114344315974` | 4.6.1; PASS 24445 / FAIL 0 / WARN 0 / SKIP 36 | Status OK; installed-size INFO 8.8 Mb / R 7.4 Mb |
+| Linux oldrel-1 `114344316071` | 4.5.3; PASS 24445 / FAIL 0 / WARN 0 / SKIP 36 | Status OK; installed-size INFO 8.8 Mb / R 7.4 Mb |
+| Linux devel `114344316149` | 2026-10-09 r90655; PASS 24445 / FAIL 0 / WARN 0 / SKIP 36 | Status OK; installed-size INFO 8.8 Mb / R 7.4 Mb |
+| Connections `114344316066` | 4.6.1; PASS 24529 / FAIL 0 / WARN 0 / SKIP 21 | Successful connection-check workflow job; not an R CMD check Status claim |
+| Linux release C locale `114344315988` | 4.6.1; PASS 24413 / FAIL 2 / WARN 0 / SKIP 42 | Status 1 ERROR, both failures in `test-console-spinner-width.R:60/61` |
+
+All four newly completed package-check jobs report both temporary-detritus and check-directory
+checks OK. The C-locale failure is concrete: a forced Unicode styled spinner expected 19
+display columns but the captured native display has 57; the Unicode-label assertion also
+fails. `console_spinner()` sizes before `cat()` expands unrepresentable text to `<U+...>`.
+Nomination: use the existing listing display-copy rule (native conversion before sizing) and
+retain a locale-aware content assertion; do not skip the whole test or weaken width bounds.
+Root and the console owner were notified. [Run and job evidence](https://github.com/Broccolito/gptr/actions/runs/38096135973/job/114344315988).
+
+Both corrected exact-archive runs retain successful verified producers; each has actual
+Windows release/devel archive checks running and three later OS checks queued at this
+snapshot. Neither consumer matrix is counted passed. Downloaded immutable archive digests
+remain those recorded above; the uncommitted storage repair is outside both source commits.
+
+### Completed `3d92b05` Windows oldrel-4 at 00:40 UTC
+
+[Job 114344316219](https://github.com/Broccolito/gptr/actions/runs/38096135973/job/114344316219)
+completed successfully on actual R 4.2.3 UCRT. Tests: **PASS 24184 / FAIL 0 / WARN 0 / SKIP 91**.
+The check reports **Status: 1 NOTE**, solely installed size 8.7 Mb (R 7.4 Mb) in this
+`R_KEEP_PKG_SOURCE=yes` environment. Both non-standard check-directory and temporary-detritus
+checks are **OK**; no Rscript or Chrome detritus NOTE remains in this completed job. Native
+Unix completion positives are intentionally skipped on Windows; the unsupported-mode guard
+is still exercised. Windows release and all exact-archive consumers remain pending at this
+snapshot, so this source-checkout result is not same-byte archive proof or full-matrix closure.
+
+### Completed Windows and exact-archive update at 00:56 UTC
+
+Normal source-checkout run [38096135973](https://github.com/Broccolito/gptr/actions/runs/38096135973)
+is now final: 12 jobs succeeded and the already diagnosed C-locale spinner job failed. Windows
+release [114344316125](https://github.com/Broccolito/gptr/actions/runs/38096135973/job/114344316125)
+completed on actual R 4.6.1 UCRT with **PASS 24184 / FAIL 0 / WARN 0 / SKIP 91**, **Status: OK**.
+Installed size is informational in its retained-source environment; both check-directory and
+temporary-detritus checks are OK. This closes the corrected Windows fixture observation for
+that source checkpoint, without rewriting the historical Linux C failure.
+
+Exact `3d92b05` producer archive: Windows release
+[114348035685](https://github.com/Broccolito/gptr/actions/runs/38097885912/job/114348035685)
+completed successfully on R 4.6.1 UCRT, **Status: OK**, manual/incoming checks retained, both
+detritus checks OK. Its installed size is **INFO 5.9 Mb / R 4.6 Mb**. The original downloaded
+archive digest above binds this result; this is same-byte archive evidence, unlike a checkout
+rebuild. Exact Windows devel
+[114348035695](https://github.com/Broccolito/gptr/actions/runs/38097885912/job/114348035695)
+completed with **Status: 1 ERROR**, solely reactor timing test 648: **PASS 24177 / FAIL 1 /
+WARN 0 / SKIP 92**, actual R-devel 2026-10-09 r90655 UCRT. The diagnostic reports wall 2.498 s,
+head spread 0.234 s, ends at 1.149/1.150/1.151/2.295/2.516/2.516 s; mock lateness
+0.134/0.031/0.036/0.024/0.018/0.024 s and delivery delays
+0.016/0.013/0.008/0.016/0.015/0.008 s. Both detritus checks, manual and vignette rebuilding
+passed; installed size **INFO 5.9 Mb / R 4.6 Mb**. The timing gate remains unsuppressed; root
+and the architecture lane received the full diagnostic. No local retry or cause claim was made.
+
+Exact `3d92b05` Mac/Linux checks are now active or queued; exact `8952567` Windows checks
+remain active and its Mac/Linux checks queued. These incomplete matrices are not passed.
+Both producer artifacts remain intact; no GitHub mutation/cancellation was made in this update.
+All these archives precede the current storage, locale and compaction edits.
+
+### Exact `8952567` Windows results at 01:04 UTC (2026-10-11)
+
+Both Windows consumers of the already downloaded, digest-verified `8952567` producer
+archive completed successfully. Release
+[114348782998](https://github.com/Broccolito/gptr/actions/runs/38098141085/job/114348782998)
+ran actual R 4.6.1 UCRT; devel
+[114348783032](https://github.com/Broccolito/gptr/actions/runs/38098141085/job/114348783032)
+ran actual R-devel 2026-10-09 r90655 UCRT. Each reports **Status: OK** with manual PDF/HTML,
+incoming and vignette checks retained, and both temporary-detritus/check-directory checks
+**OK**. Both installed-size results are **INFO 5.9 Mb / R 4.6 Mb**. A passing assertion count
+is not printed in these successful consumer job logs; the normal source-checkout counts
+above are not substituted for archive test counts.
+
+The consumed archive remains 2,223,937 bytes, SHA-256
+`9907684a205ee21b48f667524151cec97a39c07dc1c78082a7798509ff4efe41`, built by the verified
+R 4.6.1 producer. These are same-byte Windows results in the workflow's `NOT_CRAN=true`
+coverage environment, not local-install claims. Mac/Linux were active or queued at this
+snapshot. The historical exact `3d92b05` Windows devel timing failure remains failed;
+the later `8952567` success does not erase it or establish a cause. No CI or Git mutation
+was made, and no pending matrix member is counted passed.
+
+### Exact `3d92b05` Mac/Linux release results at 01:20 UTC
+
+Mac release [114348035668](https://github.com/Broccolito/gptr/actions/runs/38097885912/job/114348035668)
+and Linux release [114348035696](https://github.com/Broccolito/gptr/actions/runs/38097885912/job/114348035696)
+both completed successfully on actual R 4.6.1. Mac reports macOS Tahoe 26.6.2; Linux reports
+Ubuntu 24.04.5 LTS. Each check has **zero errors/warnings and Status: 1 NOTE**, solely HTML
+manual validation being skipped because of the runner's Tidy availability. Mac says its
+`tidy` is insufficiently recent; Linux says no `tidy` command is found. This does not prove
+HTML validation passed and is not a package HTML defect claim. Manual PDF and vignette
+checks are retained. Both non-standard check-directory and temporary-detritus checks are
+**OK**. Installed-size facts are **INFO 6.4 Mb / R 5.1 Mb** on Mac and **INFO 6.0 Mb / R 4.6 Mb**
+on Linux, bound to the previously recorded `3d92b05` producer digest.
+
+Nomination: establish a recent HTML Tidy in the hosted exact-consumer setup, preserve the
+actual validation and NOTE reporting, then validate a later archive. The client source
+audit lane received the exact messages and job IDs for a narrow primary-source setup review.
+No workflow edit or rerun was made here. Exact `3d92b05` Linux devel was active; the earlier
+Windows devel timing failure remains the run's observed failure. Exact `8952567` Mac/Linux
+were still active/queued. These archives continue to precede current storage/console changes.
+
+At **01:28 UTC**, the read-only GitHub API inventory reports **zero open PRs** and remote main
+at `e28890208f81051ba2c3885860234e1cee80abef` (the reviewed compaction checkpoint). No remote
+mutation or local Git synchronization was performed by this lane. The working storage and
+console changes awaiting root's review are not claimed to be in that remote commit.
+
+### Exact `8952567` consumer snapshot and Tidy setup repair at 01:33 UTC
+
+Read-only GitHub job API plus completed-job logs establish this five-consumer snapshot
+for [run 38098141085](https://github.com/Broccolito/gptr/actions/runs/38098141085):
+
+| Consumer | Job | Observed result |
+|---|---|---|
+| Windows release | [114348782998](https://github.com/Broccolito/gptr/actions/runs/38098141085/job/114348782998) | Completed successfully; previously recorded **Status: OK** |
+| Windows devel | [114348783032](https://github.com/Broccolito/gptr/actions/runs/38098141085/job/114348783032) | Completed successfully; previously recorded **Status: OK** |
+| Mac release | [114348782941](https://github.com/Broccolito/gptr/actions/runs/38098141085/job/114348782941) | R 4.6.1; **Status: 1 NOTE / errors 0 / warnings 0**, solely skipped HTML validation because Tidy was rejected as insufficiently recent |
+| Linux release | [114348782961](https://github.com/Broccolito/gptr/actions/runs/38098141085/job/114348782961) | R 4.6.1; **Status: 1 NOTE / errors 0 / warnings 0**, solely skipped HTML validation because Tidy was absent |
+| Linux devel | [114348782987](https://github.com/Broccolito/gptr/actions/runs/38098141085/job/114348782987) | **In progress**; no final check result |
+
+The archive remains the previously verified 2,223,937-byte producer artifact with SHA-256
+`9907684a205ee21b48f667524151cec97a39c07dc1c78082a7798509ff4efe41`.
+Skipped HTML validation is not a passed HTML check. The fifth consumer and entire matrix
+remain incomplete; these results precede the current storage/console repairs.
+
+The uncommitted **Tidy-only** change in `.github/workflows/Exact-tarball.yaml` installs
+Ubuntu's `tidy` and macOS's `tidy-html5`, adds the Brew binary directory to `GITHUB_PATH`,
+then requires `tools:::.find_tidy_cmd()` to accept the command before `rcmdcheck`.
+It records R version, command, resolved path, version and failure reason in
+`evidence/html-tidy.txt`. R's current implementation requires Tidy at least 5.0.0 plus
+recognizable version output; the actual runner's acceptance is the gate.
+[R implementation](https://svn.r-project.org/R/trunk/src/library/tools/R/utils.R)
+[R macOS setup guidance](https://cran.r-project.org/doc/manuals/r-release/R-admin.html#Other-libraries)
+
+`GITHUB_PATH` prepends the directory for the next step, so the separate preflight sees the
+modern Mac executable. [GitHub PATH behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#adding-a-system-path)
+No HTML/manual/incoming checks, error/warning gates, archive digest logic, matrix entries,
+worker limits or producer steps were changed. Static validation passed with installed
+Ruby Psych 3.1.0, both added shell scripts passed `bash -n`, and removing the three added
+steps reproduces the entire original workflow byte for byte. Available Python/Node lacked
+YAML modules; no dependency was installed. Workflow SHA-256:
+`489a97f4e94865367af9991cfa94fbdc221c77633fa02abd73cb9c56b9bec41e`.
+No R job, local install, Git mutation or hosted rerun was performed. A future dispatched
+archive must demonstrate actual HTML validation; this edit cannot change historical NOTES.
+
+### Proposed six-stream timing fixture follow-up (preparation only)
+
+The original `3d92b05` archive's `test-http-reactor.R:648` tests INFRA-01 concurrency,
+not provider timeout. Both mock children were ready before requests started. Its 2.498 s
+measurement exceeds 2.475 s by 23 ms; mock final-write lateness is removed, but the 0.234 s
+cross-stream response-head spread remains. All streams completed, and reported end-delivery
+latencies were 8-16 ms. The logs do not establish whether the head spread arose in the client,
+socket handling or mock scheduling; no timeout/liveness defect or fix is established.
+
+Do not relax the bound or independently normalize every head: either can hide serialized
+requests. A proposed companion test would use a controlled clock to verify that six eligible
+transfers are admitted before any completes. The bounded HTTP fixture could use one mock
+with a six-request barrier, exact request identities, a common scheduled release and stream
+lengths 4/4/4/9/9/9 at 0.25 s. All requests must arrive before release; preserve the 0.35 s
+delivery/gap and 2.475 s completion bounds after release, with the existing 30 s outer bound.
+A serialized client cannot pass the barrier. Include failing oracle cases for serialized
+admission, delayed/batched delivery and mismatched identities, and record setup separately.
+Changing this measurement requires an explicit D-016/D-063/spec clarification. No test,
+fixture, source or plan was changed here; the historical Windows-devel failure remains failed.

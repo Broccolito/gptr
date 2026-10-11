@@ -220,6 +220,34 @@ jobs:
       - uses: r-lib/actions/setup-tinytex@v2
         env:
           TINYTEX_INSTALLER: TinyTeX
+      - name: Install HTML Tidy on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes tidy
+      - name: Install HTML Tidy on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: |
+          set -euo pipefail
+          brew install tidy-html5
+          printf '%s\n' "$(brew --prefix tidy-html5)/bin" >> "$GITHUB_PATH"
+      - name: Verify HTML Tidy is accepted by this R version
+        shell: Rscript --vanilla {0}
+        run: |
+          tidy = tools:::.find_tidy_cmd()
+          diagnostic = c(R.version.string, paste("Tidy command:", tidy), attr(tidy, "msg"))
+          if (nzchar(tidy)) {
+            diagnostic = c(diagnostic, paste("Resolved path:", Sys.which(tidy)),
+                           system2(tidy, "--version", stdout = TRUE))
+          }
+          writeLines(diagnostic, "evidence/html-tidy.txt")
+          cat(diagnostic, sep = "\n")
+          stopifnot(nzchar(tidy))
       - name: Check these original bytes with manual and incoming checks
         shell: Rscript --vanilla {0}
         run: |
