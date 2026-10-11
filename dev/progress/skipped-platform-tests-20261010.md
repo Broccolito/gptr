@@ -974,3 +974,38 @@ swap24,719.75MiB used and disk13GiB continue holding all local heavy jobs. No th
 is recorded. Shared Ollama, unrelated processes/files and primary historical checkpoint/
 utils hashes remain intact. Current full CRAN, local dependencies/frontends and merge gates
 remain pending. No model inference, local imports/render/install/test or arbitrary cleanup.
+
+## Actual26dc518 outcomes and publication RED nomination — 2026-10-11 05:52 PDT
+
+Run38139096870 on exact26dc5185a8989157e48bfdbb7debc4c1d9d2c223 completed17 full files
+on both hosts: Linux2353P/0F/0R warnings/13 guards GREEN; Windows2550P/13 failed conditions
+(11 failures+2 errors)/1R warning/10 guards RED.53 lint paths,13 Python units and2571 result-
+gate assertions pass per host.18 cleanup records per host have no marked survivors/errors;
+controller warnings0. All4 fresh Linux plan stages pass25 plans/1523 blocks/770 R blocks/
+0 parse-style problems/0 lints/39 equal hashes;90 historical index warnings remain.
+Artifacts are diagnostic-linux-26dc518.zip (SHA256113b305e535c39195f1cac988444e78e089c24c46d4533cd7b172c8789cc19cb)
+and diagnostic-windows-26dc518.zip (SHA25666bb07d55d3bb3daa5582ea259a981ddbb1bee08131cb407e0af275e61a04b5c).
+
+Actual gains: owned checkpoint ACL119, MCP167, cold19, warm42 and retirement180 Windows
+assertions pass. Remaining Windows failures: Codex raw LF oracle detects text-mode CRLF;
+marker-family loses four empty parent variables at callr launch; duplex delivery fails after
+1703936 accepted bytes; parent-death fails before request/readiness proof; Claude two-turn
+start fails; native absence restoration is ambiguous before denial proof and metadata warns.
+All remain fatal; no native completion or universal closure is inferred.
+
+ff3a587 appends Codex LF in binary mode; e7daa08 launches only test-owned watchdogs via
+processx/Rscript with full child environment. Independent source review preserves oracles,
+markers, identities, cleanup, limits and caller state checks. Actual reruns remain pending.
+1dfaf31 adds three pure mailbox publication regressions, retaining original40 prefix.18c883b
+registers complete43 writer cases/36 files/164 titles/53 lint paths. Proposed runtimec00e5f5b
+is INACTIVE; baseline56515033 remains for actual RED first. Next exact-source Windows/Linux
+scope is ^test-proc-writer-runtime\.R$ with all4 fresh Linux plan checks on this updated plan.
+A subsequent strict17-file rerun must prove repaired transport and both fixture corrections.
+Numeric absence and parent/Claude diagnostic packets stay source-only until coordinated.
+Production callr empty-variable preservation, junction/unknown-reparse, arbitrary caller ACL
+and blocking-parent-death native coverage remain explicit gaps.
+
+05:52:06 PDT load134.37/104.57/81.61, CPU16.73%idle, RAM83GiB used/45GiB unused,
+swap24,391.75MiB used and disk13GiB keep all local heavy work held. No thermal warning.
+Preserve shared Ollama and unrelated files/processes. Local wheels, local/installed frontend
+checks, full CRAN and merge remain pending. Current plan edit requires fresh all4 checks.

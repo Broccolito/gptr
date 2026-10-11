@@ -467,30 +467,30 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 
 | Follow-up | Status and next evidence |
 |---|---|
-| Quarto discovery | Actual679f5d6 record/replay/source-hash integration DONE:71 assertions per host/0 failures or R warnings, including two actual renders and zero replay requests. Bundled RStudio Quarto is discoverable through child-only PATH without changing caller PATH. Local rendering and installed compact-history frontends remain WAITING. |
-| Python/R dependencies | Both679f5d6 hosted preflights execute Python/pandas/NumPy sum6 and other required tools. Actual bridges128 Linux/118 Windows pass, with two named Windows OS guards. Private localPython pandas/NumPy wheels remain WAITING. Reviewed f3b2570 replaces four harness-created empty R startup entries with fresh owned empty files; expected RED and13 mock-only Python tests pass, native full environment restoration pending. Real caller empty variables are not normalized. |
+| Quarto discovery | Actual26dc518 record/replay/source-hash integration DONE:71 assertions per host/0 failures or R warnings, including two actual renders and zero replay requests. Bundled RStudio Quarto is discoverable through child-only PATH without changing caller PATH. Local rendering and installed compact-history frontends remain WAITING. |
+| Python/R dependencies | Actual26dc518 hosted preflights execute Python/pandas/NumPy sum6 and other required tools. Bridges128 Linux/118 Windows pass, with two named Windows OS guards. Private localPython pandas/NumPy wheels remain WAITING.13 mock-only Python units pass. Actual marker-family evidence locates loss of four empty caller variables at callr launch; e7daa08 uses a fresh owned processx Rscript watchdog without temporary parent environment mutation. Raw state checks remain unchanged; native rerun pending. Production callr empty-variable preservation remains OPEN. |
 | Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
-| Windows filesystem safety | Actual679f5d6 Codex retarget and SYSTEM/MCP controls pass. Checkpoint two raw restoration errors and Codex two typed errors expose only AutoInherited0-to1; ordered DACL and other tested flags match. Reviewed4429c9f establishes a stable actual descriptor on fresh owned targets before denial, preserving owner/DACL and requiring a second exact roundtrip. All effective-denial/data/hash and exact full restoration oracles remain mandatory; native rerun pending. Arbitrary caller AI0 restoration is unproved. |
-| Windows child stdin | Actual679f5d6 original native3 pass60 assertions/0 failures or R warnings. Two cold/warm private ACKs prove third-writer starvation at the unchanged2s deadline. Reviewed0e666a6 retires only an exact acknowledged idle actor while preserving target input; new native restart/FIFO/EOF/callback/identity/cleanup and timing proofs pending. New parent-only Windows worker death witness2e71d17 requires exit within10s before cleanup; Job Object contribution is qualified. Native absence remains7P/1F/1W; f3f3aaa adds fixed numeric stages/status, keeping exact denial/restore/settlement and the metadata warning fatal. D-019 remains open. |
-| Validation/merge | Actual679f5d6 native outcomes remain the last complete integration evidence. Exact2a6da1a/run38138272422 completed:13 Python units and2571 result-gate assertions pass per host; two retirement brace lint findings stop both jobs before all17 integration bodies, with52 other paths clean. All4 fresh Linux plan stages pass/39 equal hashes/90 historical index warnings. Formatting-only74bb226 is source-reviewed; unchanged17 full files and all4 fresh stages must rerun. Registry36 files/161 titles/53 lint paths. Merge WAITING strict relevant GREEN. |
+| Windows filesystem safety | Actual26dc518 owned checkpoint ACL baseline and119 assertions pass; Codex effective denial/full descriptor restoration pass, but its independent appended LF oracle catches text-mode CRLF. ff3a587 appends binary LF while preserving byte/hash/ACL checks; native rerun pending. Actual MCP167 passes. Native absence remains7P/1F/1W; fixed numeric stages locate an ambiguous parent restoration failure before denied-probe proof. Additional bounded numeric diagnostics are source-cleared but inactive. Effective denial/exact restoration and metadata warnings remain fatal. Arbitrary caller AI0 restoration and junction/unknown-reparse native evidence remain OPEN. |
+| Windows child stdin | Actual26dc518 cold19, warm42 and native retirement180 assertions pass at unchanged2s deadlines. Original native3 now46P/1F: duplex delivery fails after1703936 accepted bytes. A source-confirmed concurrent mailbox publication race has three new mandatory pure regressions; baseline runtime is intentionally retained for actual RED before applying its minimal fix. Windows parent-death135P/1F fails before provider request/readiness proof, and Claude240P/3F starts only two turns. Bounded original-error diagnostics are prepared.10s parent-only proof, native limits, cleanup and all positive oracles remain unchanged; blocking-parent-death coverage and D-019 remain OPEN. |
+| Validation/merge | Actual26dc518/run38139096870 completed all17 full files: Linux2353P/0F/0R warnings/13 exact OS guards GREEN; Windows2550P/13 failed conditions (11 failures+2 errors)/1R warning/10 guards RED. Both pass53 scoped lint paths,13 Python units,2571 result-gate assertions and18 cleanup records with no marked survivors. All4 fresh Linux plan stages pass/39 equal hashes/90 historical index warnings.18c883b registers the three publication regressions:36 files/164 titles/53 lint paths. Next run selects the complete43-case writer-runtime file with unchanged baseline runtime for RED evidence, plus all4 fresh Linux plan stages. Merge WAITING strict relevant GREEN. |
 
-Current follow-up checkpoint (2026-10-11 05:26 PDT): candidate source repairs through74bb226 are pushed;
-only the primary historical checkpoint fixture remains deliberately unmirrored. Original
-cold/warm/native3 tests and primary old checkpoint/utils files are preserved. The next17-file
-source run uses fake providers, unchanged5-minute file leases, native2s/30s/60s limits and
-1GiB/64MiB caps, with at most two hosted jobs. Missing/partial/duplicate raw records, raw
-errors/warnings, zero assertions and unexpected skips remain fatal. Source-only counts do
-not substitute for actual native acceptance.
+Current follow-up checkpoint (2026-10-11 05:52 PDT): candidate source fixes ff3a587,
+e7daa08 and test-first1dfaf31 are pushed;18c883b adds strict publication registrations.
+The next exact-source run selects one complete43-case writer-runtime file on Windows/Linux.
+Runtime SHA256565150331c3b9ee09d527b293d06c55133777271d0dd6b6df7faf81f88892f4c
+is retained: ordinary concurrent publication must fail before the proposed fix is applied.
+No case filters or capability skips substitute for positive coverage. All4 cross-plan checks
+run on this exact updated plan. A later strict17-file rerun must test both fixture fixes,
+publication repair, native bootstrap limits, caller state, cancellation and parent death.
 
 Local R, install/import, Quarto/render, GUI/kernel, build/check and model jobs remain WAITING:
-at05:21:17 PDT load52.19/98.49/110.80, CPU18.1%idle, RAM124GiB used/3197MiB unused,
-swap24,719.75MiB used and disk13GiB. No thermal/performance warning is reported. Preserve
-the shared Ollama and unrelated work; do not free resources by stopping models or deleting
-user files. Owned process-family samples do not describe whole-job or model RAM. The current
-Windows dangling-link sampler warning remains an explicit open fixture gap; investigate an
-existing declared test capability for bounded nofollow metadata without launching per-poll
-utilities, silently ignoring uncertainty, introducing package Imports or changing limits.
-All local dependency and installed frontend/full CRAN rows remain pending.
+at05:52:06 PDT load134.37/104.57/81.61, CPU16.73%idle, RAM83GiB used/45GiB unused,
+swap24,391.75MiB used and disk13GiB. No thermal/performance warning is reported; load and
+disk gates remain unsafe. Preserve shared Ollama and unrelated work. Do not delete user files
+or stop models. Swap occupancy alone does not establish active paging. Owned process-family
+samples do not describe whole-job or model RAM. The nofollow observer remains inactive;
+current Windows dangling-link metadata warning stays fatal. Local dependency installation,
+installed frontend testing and current full CRAN/release checks remain pending.
 
 Historical a03068e run38127051182 stopped before package installation, preflight or
 any of the12 selected test bodies: both hosts passed12 Python tests and1727 R result-gate
