@@ -607,3 +607,52 @@ testthat::test_that("package-wide lint rules and their negative controls cannot 
       passed = 3L, skipped = 1L))), file, windows), "Skipped")
   }
 })
+
+testthat::test_that("idle Windows writer coverage has only its exact non-Windows guard", {
+  file = "test-proc-writer-idle-slots.R"
+  name = "two acknowledged idle Windows writers do not starve a third reading target"
+  testthat::expect_identical(optional_titles[[file]], name)
+  testthat::expect_true(optional_platform_guard(file, name, FALSE))
+  testthat::expect_false(optional_platform_guard(file, name, TRUE))
+  testthat::expect_false(optional_platform_guard("test-proc-writer-runtime.R", name, FALSE))
+  testthat::expect_false(optional_allowed_skip(file, "unrelated idle writer skip", FALSE))
+  testthat::expect_false(optional_allowed_skip(file, "unrelated idle writer skip", TRUE))
+  guarded = list(record(name, passed = 0L, skipped = 1L))
+  result = optional_gate(guarded, file, FALSE)
+  testthat::expect_true(result$passed)
+  testthat::expect_true(result$platform_guard_only)
+  testthat::expect_identical(result$mandatory_cases, character())
+  testthat::expect_identical(result$platform_guard_cases, name)
+  testthat::expect_error(optional_gate(guarded, file, TRUE), "Skipped")
+  result = optional_gate(list(record(name, passed = 19L)), file, TRUE)
+  testthat::expect_true(result$passed)
+  testthat::expect_false(result$platform_guard_only)
+  testthat::expect_identical(result$mandatory_cases, name)
+  testthat::expect_identical(result$platform_guard_cases, character())
+})
+
+testthat::test_that("idle writer omissions, raw errors and late skips cannot pass on Windows", {
+  file = "test-proc-writer-idle-slots.R"
+  name = "two acknowledged idle Windows writers do not starve a third reading target"
+  rows = list(record(name, passed = 19L))
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_error(optional_gate(list(), file, windows), "No test cases")
+    testthat::expect_error(optional_gate(list(record("unrelated")), file, windows),
+      "Missing mandatory")
+    testthat::expect_error(optional_gate(c(rows, rows), file, windows), "Duplicate")
+    testthat::expect_error(optional_gate(list(record(name, failed = 1L)), file, windows),
+      "Failed")
+    testthat::expect_error(optional_gate(list(record(name, warnings = 1L)), file, windows),
+      "Warnings")
+    raw = optional_result_rows(list(list(test = name, results = list(
+      structure(list(message = "controlled idle error"),
+        class = c("expectation_error", "condition"))))))
+    testthat::expect_error(optional_gate(raw, file, windows), "Failed")
+    testthat::expect_error(optional_gate(c(rows, list(record("unrelated idle capability",
+      passed = 3L, skipped = 1L))), file, windows), "Skipped")
+  }
+  testthat::expect_error(optional_gate(list(record(name, passed = 0L)), file, TRUE),
+    "assertions")
+  testthat::expect_error(optional_gate(list(record(name, passed = 3L, skipped = 1L)),
+    file, TRUE), "Skipped")
+})

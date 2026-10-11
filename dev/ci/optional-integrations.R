@@ -153,7 +153,9 @@ optional_titles = list(
     "discovered project instructions cannot read escaped or guarded link targets"),
   "test-lint-rules.R" = c(
     "R/ follows the package lint rules (contract section 12.3, IC-72)",
-    "each lint rule catches its violation (negative controls)")
+    "each lint rule catches its violation (negative controls)"),
+  "test-proc-writer-idle-slots.R" =
+    "two acknowledged idle Windows writers do not starve a third reading target"
 )
 
 optional_select = function(pattern, root) {
@@ -195,6 +197,8 @@ optional_platform_guard = function(file, name, windows) {
   if (windows) return(FALSE)
   if (identical(file, "test-windows-security.R"))
     return(name %in% optional_titles[[file]])
+  if (identical(file, "test-proc-writer-idle-slots.R")) return(identical(name,
+    "two acknowledged idle Windows writers do not starve a third reading target"))
   identical(file, "test-proc-writer-runtime.R") && name %in% c(
     "Windows production writer preserves ordered writes and idle EOF",
     "Windows production writer death is a typed IO failure",
