@@ -1,0 +1,256 @@
+name: Exact source tarball
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full lowercase commit SHA to build once and check
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exact-tarball-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+env:
+  GPTR_LIVE_TESTS: 'false'
+  NOT_CRAN: 'true'
+  _R_CHECK_CRAN_INCOMING_: 'true'
+  _R_CHECK_TIMINGS_: '0'
+  _R_CHECK_ALWAYS_LOG_VIGNETTE_OUTPUT_: 'true'
+  _R_CHECK_LIMIT_CORES_: 'true'
+  TESTTHAT_CPUS: '2'
+  OMP_NUM_THREADS: '1'
+  OPENBLAS_NUM_THREADS: '1'
+  MKL_NUM_THREADS: '1'
+  VECLIB_MAXIMUM_THREADS: '1'
+  BLIS_NUM_THREADS: '1'
+  MAKEFLAGS: '-j2'
+
+jobs:
+  producer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    outputs:
+      source_sha: ${{ steps.identity.outputs.source_sha }}
+      basename: ${{ steps.manifest.outputs.basename }}
+      sha256: ${{ steps.manifest.outputs.sha256 }}
+      bytes: ${{ steps.manifest.outputs.bytes }}
+    steps:
+      - name: Validate the requested commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p producer-evidence
+          printf '%s\n' "$GITHUB_RUN_ID" > producer-evidence/workflow-run-id.txt
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: source
+          persist-credentials: false
+      - name: Verify checkout identity
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git -C source rev-parse HEAD)
+          test "$actual" = "$SOURCE_SHA"
+          printf 'source_sha=%s\n' "$actual" >> "$GITHUB_OUTPUT"
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          Ncpus: 2
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          working-directory: source
+          extra-packages: any::rcmdcheck
+          needs: check
+      - uses: r-lib/actions/setup-tinytex@v2
+        env:
+          TINYTEX_INSTALLER: TinyTeX
+      - name: Build the normal source archive once
+        shell: Rscript --vanilla {0}
+        run: |
+          options(Ncpus = 2L)
+          source = normalizePath("source", mustWork = TRUE)
+          dir.create("artifact", showWarnings = FALSE)
+          setwd("artifact")
+          writeLines(R.version.string, "producer-r-version.txt")
+          status = system2(file.path(R.home("bin"), "R"),
+                           c("CMD", "build", shQuote(source)),
+                           stdout = "build.log", stderr = "build.log")
+          cat(readLines("build.log", warn = FALSE), sep = "\n")
+          stopifnot(status == 0L)
+      - name: Record the tarball digest and rendered guide counts
+        id: manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib, tarfile
+          folder = pathlib.Path('artifact')
+          archives = list(folder.glob('gptr_*.tar.gz'))
+          assert len(archives) == 1, 'Expected exactly one normal gptr tarball'
+          archive = archives[0]
+          with tarfile.open(archive) as tar:
+              members = tar.getmembers()
+          for item in members:
+              parts = pathlib.PurePosixPath(item.name).parts
+              assert parts and parts[0] == 'gptr' and '..' not in parts, item.name
+              assert not ({'dev', 'docs', '.secrets', '.git', 'node_modules'} & set(parts)), item.name
+          names = [item.name for item in members if item.isfile()]
+          assert {'gptr/DESCRIPTION', 'gptr/NAMESPACE', 'gptr/LICENSE'} <= set(names)
+          docs = [name for name in names if name.startswith('gptr/inst/doc/')]
+          counts = {ext: sum(name.endswith(ext) for name in docs)
+                    for ext in ('.Rmd', '.html')}
+          assert counts == {'.Rmd': 14, '.html': 14}, counts
+          manifest = {'source_sha': os.environ['SOURCE_SHA'],
+                      'basename': archive.name, 'bytes': archive.stat().st_size,
+                      'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
+                      'producer_r': (folder / 'producer-r-version.txt').read_text().strip(),
+                      'guide_counts': counts}
+          (folder / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              for key in ('basename', 'bytes', 'sha256'):
+                  output.write(f'{key}={manifest[key]}\n')
+          print(json.dumps(manifest, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-source-tarball
+          path: artifact/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Preserve producer diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: producer-diagnostics
+          path: |
+            producer-evidence/
+            artifact/build.log
+            artifact/producer-r-version.txt
+            artifact/manifest.json
+          if-no-files-found: error
+          retention-days: 14
+
+  check:
+    needs: producer
+    runs-on: ${{ matrix.config.os }}
+    name: Exact tarball (${{ matrix.config.os }}, ${{ matrix.config.r }})
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        config:
+          - {os: windows-latest, r: release}
+          - {os: windows-latest, r: devel}
+          - {os: macos-latest, r: release}
+          - {os: ubuntu-latest, r: release}
+          - {os: ubuntu-latest, r: devel}
+    env:
+      EXPECTED_SOURCE: ${{ needs.producer.outputs.source_sha }}
+      EXPECTED_BASENAME: ${{ needs.producer.outputs.basename }}
+      EXPECTED_SHA256: ${{ needs.producer.outputs.sha256 }}
+      EXPECTED_BYTES: ${{ needs.producer.outputs.bytes }}
+    steps:
+      - name: Prepare diagnostics
+        shell: bash
+        run: |
+          mkdir -p evidence
+          printf '%s\n' "$GITHUB_RUN_ID" > evidence/workflow-run-id.txt
+      - uses: actions/download-artifact@v5
+        with:
+          name: exact-source-tarball
+          path: artifact
+      - name: Verify the original archive and copy only dependency metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib, re, tarfile
+          source, name, digest, size = [os.environ[key] for key in
+              ('EXPECTED_SOURCE', 'EXPECTED_BASENAME', 'EXPECTED_SHA256', 'EXPECTED_BYTES')]
+          assert re.fullmatch(r'[0-9a-f]{40}', source)
+          assert re.fullmatch(r'gptr_[A-Za-z0-9_.-]+\.tar\.gz', name)
+          assert re.fullmatch(r'[0-9a-f]{64}', digest)
+          assert re.fullmatch(r'[1-9][0-9]*', size)
+          archive = pathlib.Path('artifact') / name
+          manifest = json.loads(pathlib.Path('artifact/manifest.json').read_text())
+          assert manifest['source_sha'] == source
+          assert manifest['basename'] == name
+          assert manifest['sha256'] == digest
+          assert manifest['bytes'] == int(size)
+          assert archive.stat().st_size == int(size), 'Tarball byte count changed'
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == digest, 'Tarball digest changed'
+          assert manifest['guide_counts'] == {'.Rmd': 14, '.html': 14}
+          folder = pathlib.Path('metadata/gptr')
+          folder.mkdir(parents=True)
+          with tarfile.open(archive) as tar:
+              description = tar.extractfile('gptr/DESCRIPTION').read()
+          (folder / 'DESCRIPTION').write_bytes(description)
+          pathlib.Path('evidence/verified-tarball.json').write_text(
+              json.dumps(manifest, indent=2) + '\n')
+          print(json.dumps(manifest, indent=2))
+          PY
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          http-user-agent: release
+          Ncpus: 2
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          working-directory: metadata/gptr
+          packages: deps::., any::sessioninfo
+          extra-packages: any::rcmdcheck
+          needs: check
+      - uses: r-lib/actions/setup-tinytex@v2
+        env:
+          TINYTEX_INSTALLER: TinyTeX
+      - name: Check these original bytes with manual and incoming checks
+        shell: Rscript --vanilla {0}
+        run: |
+          options(Ncpus = 2L)
+          archive = normalizePath(file.path("artifact", Sys.getenv("EXPECTED_BASENAME")),
+                                  mustWork = TRUE)
+          writeLines(R.version.string, "evidence/consumer-r-version.txt")
+          writeLines("R CMD check has not returned a final Status line.",
+                     "evidence/check-summary.txt")
+          result = rcmdcheck::rcmdcheck(path = archive, args = "--as-cran",
+                                      check_dir = "check", error_on = "never")
+          log = list.files("check", pattern = "^00check[.]log$", recursive = TRUE,
+                           full.names = TRUE)
+          status = if (length(log) == 1L) {
+            grep("^Status:", readLines(log, warn = FALSE), value = TRUE)
+          } else character()
+          summary = c(if (length(status)) status else "Missing final Status line.",
+                      paste("errors", length(result$errors)),
+                      paste("warnings", length(result$warnings)),
+                      paste("notes", length(result$notes)))
+          writeLines(summary, "evidence/check-summary.txt")
+          cat(summary, sep = "\n")
+          stopifnot(length(log) == 1L, length(status) == 1L,
+                    !any(grepl("ERROR|WARNING", status)), length(result$errors) == 0L,
+                    length(result$warnings) == 0L)
+      - name: Preserve check logs and provenance even after failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-check-${{ matrix.config.os }}-${{ matrix.config.r }}
+          path: |
+            evidence/
+            check/
+          if-no-files-found: error
+          retention-days: 14
