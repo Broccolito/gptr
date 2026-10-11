@@ -142,8 +142,9 @@ wp_child_case = function(case, root) {
     st$exits = st$exits + 1L
     st$status = status
   })
-  stopifnot(fun("reactor_pump")(until = function() st$ready &&
-    file.exists(file.path(mailbox, "writer-ready")), timeout = 10))
+  stopifnot(fun("reactor_pump")(until = function() {
+    st$ready && file.exists(file.path(mailbox, "writer-ready"))
+  }, timeout = 10))
   phase("ready")
   started = fun("reactor_now")()
   st$last = started
@@ -219,8 +220,9 @@ wp_child_case = function(case, root) {
   } else {
     queue()
     poll_ack()
-    complete = fun("reactor_pump")(until = function() !is.null(st$status) ||
-      !is.null(st$error), timeout = 20)
+    complete = fun("reactor_pump")(until = function() {
+      !is.null(st$status) || !is.null(st$error)
+    }, timeout = 20)
   }
   fun("reactor_cancel")(st$timer)
   close_input()

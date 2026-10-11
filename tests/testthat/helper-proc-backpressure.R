@@ -85,7 +85,10 @@ bp_child_case = function(case, root) {
       exit_callbacks = st$exits)
   } else if (case == "timeout") {
     phase("writing")
-    error = tryCatch({ fun("write_all")(p, payload); NULL }, error = identity)
+    error = tryCatch({
+      fun("write_all")(p, payload)
+      NULL
+    }, error = identity)
     result = list(timeout_class = inherits(error, "gptr_error_timeout"),
       what = if (is.null(error)) NULL else error$what,
       seconds = if (is.null(error)) NULL else error$seconds)

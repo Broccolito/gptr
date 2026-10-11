@@ -466,35 +466,37 @@ proc_writer_valid = function(dir, canonical, marker, paths = character()) {
 
 #' Delete an owned mailbox without following a resolved alias
 #' @noRd
-proc_writer_remove = function(marker) tryCatch({
-  dir = proc_writer_dir(marker)
-  link = Sys.readlink(dir)
-  if (!file.exists(dir)) return(!is.na(link) && !nzchar(link))
-  parent = normalizePath(dirname(dir), winslash = "/", mustWork = TRUE)
-  actual = tryCatch(normalizePath(dir, winslash = "/", mustWork = TRUE),
-                    error = function(e) "")
-  expected = paste0(parent, "/", basename(dir))
-  if (!dir.exists(dir) || is.na(link) || nzchar(link) ||
-      !identical(tolower(actual), tolower(expected))) return(FALSE)
-  owner = file.path(dir, "owner")
-  entries = list.files(dir, full.names = TRUE, all.files = TRUE, no.. = TRUE)
-  for (path in entries) {
-    child = tryCatch(normalizePath(path, winslash = "/", mustWork = TRUE),
+proc_writer_remove = function(marker) {
+  tryCatch({
+    dir = proc_writer_dir(marker)
+    link = Sys.readlink(dir)
+    if (!file.exists(dir)) return(!is.na(link) && !nzchar(link))
+    parent = normalizePath(dirname(dir), winslash = "/", mustWork = TRUE)
+    actual = tryCatch(normalizePath(dir, winslash = "/", mustWork = TRUE),
                       error = function(e) "")
-    link = Sys.readlink(path)
-    if (dir.exists(path) || is.na(link) || nzchar(link) ||
-        !identical(tolower(child), tolower(paste0(actual, "/", basename(path))))) return(FALSE)
-  }
-  if (file.exists(owner)) {
-    size = file.size(owner)
-    if (is.na(size) || size != nchar(marker, type = "bytes") ||
-        !identical(readBin(owner, "raw", n = size + 1L), charToRaw(marker))) return(FALSE)
-  } else if (length(list.files(dir, all.files = TRUE, no.. = TRUE))) {
-    return(FALSE)
-  }
-  unlink(dir, recursive = TRUE)
-  !file.exists(dir)
-}, error = function(e) FALSE)
+    expected = paste0(parent, "/", basename(dir))
+    if (!dir.exists(dir) || is.na(link) || nzchar(link) ||
+        !identical(tolower(actual), tolower(expected))) return(FALSE)
+    owner = file.path(dir, "owner")
+    entries = list.files(dir, full.names = TRUE, all.files = TRUE, no.. = TRUE)
+    for (path in entries) {
+      child = tryCatch(normalizePath(path, winslash = "/", mustWork = TRUE),
+                        error = function(e) "")
+      link = Sys.readlink(path)
+      if (dir.exists(path) || is.na(link) || nzchar(link) ||
+          !identical(tolower(child), tolower(paste0(actual, "/", basename(path))))) return(FALSE)
+    }
+    if (file.exists(owner)) {
+      size = file.size(owner)
+      if (is.na(size) || size != nchar(marker, type = "bytes") ||
+          !identical(readBin(owner, "raw", n = size + 1L), charToRaw(marker))) return(FALSE)
+    } else if (length(list.files(dir, all.files = TRUE, no.. = TRUE))) {
+      return(FALSE)
+    }
+    unlink(dir, recursive = TRUE)
+    !file.exists(dir)
+  }, error = function(e) FALSE)
+}
 
 #' Stop the companion before closing the parent's copy of the target's stdin handle
 #' @noRd

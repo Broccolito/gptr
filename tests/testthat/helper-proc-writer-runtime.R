@@ -68,7 +68,9 @@ rw_child_case = function(case, root) {
     fun("write_atomic")(file.path(fun("proc_dir")(), paste0(saved$marker, ".json")),
       fun("json_encode")(saved))
     orphan_swept = fun("proc_sweep")() > 0L
-  } else stop("Unknown owned writer runtime case.")
+  } else {
+    stop("Unknown owned writer runtime case.")
+  }
   fun("kill_all")(p, grace = 0)
   fun("reactor_cancel")(watcher)
   reactor = fun("reactor_get")()
