@@ -692,3 +692,135 @@ test_that("stdin boundary: exit immediately after the last accepted byte is succ
   expect_identical(status, 0L)
   expect_length(ls(r$stdin), 0L)
 })
+
+# Pure sweep controls: only owned temporary files, no child or OS signalling.
+local_self_marker = function(.env = parent.frame()) {
+  cache = withr::local_tempdir(.local_envir = .env)
+  marker = paste0("GPTR_PROC_", strrep("e", 16L))
+  withr::local_envvar(c(R_USER_CACHE_DIR = cache, stats::setNames("YES", marker)),
+                    .local_envir = .env)
+  pid = Sys.getpid()
+  rec = list(marker = marker, pid = pid, create_time = 10,
+             parent_pid = if (pid == 42L) 43L else 42L, parent_create = 11,
+             command = "Rscript", started = "2026-10-11T00:00:00.000Z")
+  path = file.path(proc_dir(create = TRUE), paste0(marker, ".json"))
+  list(rec = rec, path = path, marker = marker)
+}
+
+test_that("an exact self marker survives the orphan sweep without process operations", {
+  fixture = local_self_marker()
+  rec = fixture$rec
+  path = fixture$path
+  local_mocked_bindings(
+    proc_create_time = function(pid) {
+      stopifnot(identical(pid, Sys.getpid()))
+      10
+    },
+    proc_parent_alive = function(...) stop("Unexpected parent inspection."),
+    proc_tree = function(...) stop("Unexpected process enumeration."),
+    proc_cleanup_record = function(...) stop("Unexpected process cleanup.")
+  )
+  write_atomic(path, json_encode(rec))
+  bytes = read_utf8(path)$text
+  # The self record remains ineligible for any ordinary orphan signal path.
+  expect_false(proc_record_valid(rec, path))
+  expect_no_warning({
+    result = proc_sweep()
+  })
+  expect_identical(result, 0L)
+  expect_true(file.exists(path))
+  if (file.exists(path)) expect_identical(read_utf8(path)$text, bytes)
+})
+
+test_that("unverifiable self creation time retains recovery without authorizing cleanup", {
+  fixture = local_self_marker()
+  rec = fixture$rec
+  path = fixture$path
+  current = 10
+  local_mocked_bindings(
+    proc_create_time = function(pid) current,
+    proc_parent_alive = function(...) stop("Unexpected parent inspection."),
+    proc_tree = function(...) stop("Unexpected process enumeration."),
+    proc_cleanup_record = function(...) stop("Unexpected process cleanup.")
+  )
+  for (time in list(NA_real_, "NA", 10)) {
+    rec$create_time = time
+    current = if (identical(time, 10)) NA_real_ else 10
+    write_atomic(path, json_encode(rec))
+    bytes = read_utf8(path)$text
+    expect_false(proc_record_valid(rec, path))
+    expect_no_warning({
+      result = proc_sweep()
+    })
+    expect_identical(result, 0L)
+    expect_true(file.exists(path))
+    if (file.exists(path)) expect_identical(read_utf8(path)$text, bytes)
+  }
+})
+
+test_that("self marker rejection preserves corrupt-record and foreign-parent policy", {
+  fixture = local_self_marker()
+  path = fixture$path
+  state = new.env(parent = emptyenv())
+  state$parents = 0L
+  local_mocked_bindings(
+    proc_create_time = function(pid) 10,
+    proc_parent_alive = function(...) {
+      state$parents = state$parents + 1L
+      TRUE
+    },
+    proc_tree = function(...) stop("Unexpected process enumeration."),
+    proc_cleanup_record = function(...) stop("Unexpected process cleanup.")
+  )
+  changes = list(list(create_time = 1010), list(create_time = Inf),
+    list(create_time = "corrupt"), list(create_time = c(10, 11)),
+    list(parent_pid = Sys.getpid()), list(parent_pid = 0L), list(parent_create = Inf),
+    list(marker = paste0("GPTR_PROC_", strrep("f", 16L))))
+  for (change in changes) {
+    rec = fixture$rec
+    for (name in names(change)) rec[name] = change[name]
+    write_atomic(path, json_encode(rec))
+    expect_no_warning({
+      result = proc_sweep()
+    })
+    expect_identical(result, 0L)
+    expect_false(file.exists(path))
+  }
+  rec = fixture$rec
+  write_atomic(path, json_encode(rec))
+  withr::local_envvar(stats::setNames("NO", fixture$marker))
+  expect_identical(proc_sweep(), 0L)
+  expect_false(file.exists(path))
+  expect_identical(state$parents, 0L)
+
+  rec$pid = if (Sys.getpid() == 44L) 45L else 44L
+  rec$parent_pid = if (rec$pid == 42L) 43L else 42L
+  write_atomic(path, json_encode(rec))
+  bytes = read_utf8(path)$text
+  expect_true(proc_record_valid(rec, path))
+  expect_identical(proc_sweep(), 0L)
+  expect_identical(state$parents, 1L)
+  expect_true(file.exists(path))
+  if (file.exists(path)) expect_identical(read_utf8(path)$text, bytes)
+})
+
+test_that("orphan cleanup refuses current-PID records before any process operation", {
+  fixture = local_self_marker()
+  path = fixture$path
+  local_mocked_bindings(
+    proc_tree = function(...) stop("Unexpected process enumeration."),
+    proc_identity = function(...) stop("Unexpected process identity operation."),
+    proc_kill_signalled = function(...) stop("Unexpected process signal."),
+    proc_unmark = function(...) stop("Unexpected recovery-record deletion.")
+  )
+  for (time in list(10, NA_real_, "NA")) {
+    rec = fixture$rec
+    rec$create_time = time
+    write_atomic(path, json_encode(rec))
+    bytes = read_utf8(path)$text
+    expect_false(proc_record_valid(rec, path))
+    expect_identical(proc_cleanup_record(rec), list(killed = 0L, complete = FALSE))
+    expect_true(file.exists(path))
+    if (file.exists(path)) expect_identical(read_utf8(path)$text, bytes)
+  }
+})
