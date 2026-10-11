@@ -17,6 +17,20 @@ optional_titles = list(
   "test-artifact-app.R" = c(
     "the session check passes a working app and returns a 1000x700 screenshot",
     "the session check catches render errors and crashed servers but not validate()"),
+  "test-artifact-browser-cleanup.R" = c(
+    "artifact browser cleanup closes its owned local process before the websocket",
+    "artifact browser cleanup still closes its websocket after a process-close error",
+    "artifact browser cleanup leaves a remote browser process alone",
+    "the private Linux test temp root fits Chromium's Unix socket limit"),
+  "test-config-content-cache.R" = c(
+    "file SHA256 preserves byte identity for binary and empty inputs",
+    "content-sensitive settings reuse a parsed value and invalidate unchanged metadata",
+    "a settings rewrite during decoding cannot publish a mismatched cache entry",
+    "an unavailable content digest never serves or retains stale settings",
+    "content-sensitive trust verifies each hit and reuses its current file hashes"),
+  "test-gptr-config.R" = c(
+    "a trust decision taken in this process lapses when a gated file changes (IC-52)",
+    "gptr's own write keeps an in-process decision without recording it (IC-52)"),
   "test-windows-security.R" = c(
     "Windows true symbolic links are readable and detached without deleting targets",
     "Windows safe instruction links remain while escaped and guarded inputs stay private",
@@ -57,7 +71,10 @@ optional_allowed_skip = function(file, name, windows) {
     "the access token is 128 random bits from openssl or /dev/urandom")) ||
     (identical(file, "test-bridge-lang.R") && name %in% c(
       "shell engines run through peter$sh() without registered keys and with a timeout",
-      "the cmd engine is refused outside Windows")))
+      "the cmd engine is refused outside Windows")) ||
+    (identical(file, "test-gptr-config.R") && name %in% c(
+      "a settings file is parsed once per change, a same-size rewrite included",
+      "a gated file rewritten at the same size with its old mtime still voids trust")))
 }
 
 optional_gate = function(rows, file, windows) {
@@ -121,6 +138,15 @@ optional_wait_family = function(root_stopped, remaining, seconds = 5,
     }
     pause(min(0.05, seconds - elapsed))
   }
+}
+
+optional_check_logs = function(paths) {
+  for (path in paths) {
+    lines = readLines(path, warn = FALSE)
+    if (any(grepl("Unhandled promise error", lines, fixed = TRUE)))
+      stop("Unhandled browser promise error; see the owned log: ", basename(path))
+  }
+  invisible(NULL)
 }
 
 optional_preflight = function() {
@@ -235,6 +261,7 @@ optional_integrations_main = function() {
   }
   invoke = function(action, label, file = NULL, timeout = 300) {
     log = file.path(output, paste0(label, ".log"))
+    stdout_log = file.path(output, paste0(label, "-stdout.log"))
     marker = basename(tempfile("GPTR_OPTIONAL_OWNER_"))
     stopifnot(!nzchar(Sys.getenv(marker)))
     process = NULL
@@ -254,7 +281,7 @@ optional_integrations_main = function() {
         auto_unbox = TRUE, null = "null")
       if (!settled) stop("Owned child family did not settle: ", label)
     }, add = TRUE)
-    process = callr::r_bg(child, list(action, file), stdout = log, stderr = log,
+    process = callr::r_bg(child, list(action, file), stdout = stdout_log, stderr = log,
       cmdargs = c("--vanilla", "--slave"), user_profile = FALSE, system_profile = FALSE,
       cleanup_tree = TRUE, supervise = FALSE,
       env = c(callr::rcmd_safe_env(), stats::setNames("YES", marker)))
@@ -264,9 +291,7 @@ optional_integrations_main = function() {
     jsonlite::write_json(result, file.path(output, paste0(label, "-results.json")),
       pretty = TRUE, auto_unbox = TRUE, null = "null")
     stopifnot(!length(result$outside_test_warning_classes))
-    lines = readLines(log, warn = FALSE)
-    if (any(grepl("Unhandled promise error", lines, fixed = TRUE)))
-      stop("Unhandled browser promise error; see the owned log")
+    optional_check_logs(c(stdout_log, log))
     result
   }
   summary$preflight = tryCatch({

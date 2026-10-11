@@ -134,6 +134,39 @@ testthat::test_that("the pure sampler regressions remain mandatory on both hosts
   }
 })
 
+testthat::test_that("existing Windows ctime guards never excuse skipped content-cache coverage", {
+  guards = c("a settings file is parsed once per change, a same-size rewrite included",
+    "a gated file rewritten at the same size with its old mtime still voids trust")
+  titles = c("file SHA256 preserves byte identity for binary and empty inputs",
+    "content-sensitive settings reuse a parsed value and invalidate unchanged metadata",
+    "a settings rewrite during decoding cannot publish a mismatched cache entry",
+    "an unavailable content digest never serves or retains stale settings",
+    "content-sensitive trust verifies each hit and reuses its current file hashes")
+  file = "test-config-content-cache.R"
+  testthat::expect_identical(optional_titles[[file]], titles)
+  for (guard in guards) {
+    testthat::expect_true(optional_allowed_skip("test-gptr-config.R", guard, TRUE))
+    testthat::expect_false(optional_allowed_skip("test-gptr-config.R", guard, FALSE))
+    testthat::expect_false(optional_allowed_skip(file, guard, TRUE))
+  }
+  rows = lapply(titles, record)
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_true(optional_gate(rows, file, windows)$passed)
+    for (i in seq_along(rows)) {
+      skipped = rows
+      skipped[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(skipped, file, windows), "Skipped")
+    }
+  }
+  original = lapply(c(
+    "a trust decision taken in this process lapses when a gated file changes (IC-52)",
+    "gptr's own write keeps an in-process decision without recording it (IC-52)"), record)
+  guarded = c(original, lapply(guards, record, passed = 0L, skipped = 1L))
+  testthat::expect_true(optional_gate(guarded, "test-gptr-config.R", TRUE)$passed)
+  testthat::expect_error(optional_gate(c(original, list(record("unrelated config skip",
+    passed = 0L, skipped = 1L))), "test-gptr-config.R", TRUE), "Skipped")
+})
+
 testthat::test_that("family settlement waits for descendants after the root has stopped", {
   clock = new.env(parent = emptyenv())
   clock$seconds = 0
@@ -170,4 +203,16 @@ testthat::test_that("family settlement bounds live roots and propagates query er
   }
   testthat::expect_error(optional_wait_family(function() TRUE,
     function() stop("controlled marker query failed")), "controlled marker query failed")
+})
+
+testthat::test_that("an unhandled promise in either owned log remains a hard failure", {
+  folder = withr::local_tempdir()
+  paths = file.path(folder, c("fixture-stdout.log", "fixture.log"))
+  for (path in paths) writeLines("controlled ordinary fixture output", path)
+  testthat::expect_no_error(optional_check_logs(paths))
+  for (path in paths) {
+    writeLines("Unhandled promise error: controlled fixture", path)
+    testthat::expect_error(optional_check_logs(paths), "Unhandled browser promise error")
+    writeLines("controlled ordinary fixture output", path)
+  }
 })

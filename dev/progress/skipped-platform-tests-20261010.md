@@ -9,8 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At 22:29 PDT, load was 86.56/58.56/58.04, physical memory 95 GiB used/33 GiB unused,
-swap 12,911.69 MiB, free disk 243 GiB, with no recorded thermal/performance warning.
+At 22:45 PDT, load was345.73/290.05/184.73, CPU0%idle, physical memory100GiB used/27GiB
+unused, swap12,767.69MiB, free disk213GiB, with no recorded thermal/performance warning.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -126,6 +126,49 @@ The sampler separately handles an identified enumeration race only when the same
 parent handle is definitively dead; alive/unknown failures remain fatal. Four pure tests and
 structured stage/class/errno/pid diagnostics preserve all resource limits and ownership checks.
 This source-confirmed race is not a confirmed attribution of the prior cancellation failure.
+
+Reviewed corrections are pushed at `b6fff3d001d0fab6bde14c3d87f4296d937839c7`.
+The actual ten-file Windows/Linux rerun is complete; both strict gates failed:
+[38115064744](https://github.com/Broccolito/gptr/actions/runs/38115064744).
+It includes all prior nine suites plus four mandatory pure sampler regressions, with unchanged
+security/native-process/browser/prototype oracles. The strict runner and sampler packet both
+passed independent source review. Current-source hosted unit/lint/plan/integration results
+are retained separately from any production-repair claim.
+
+Atb6fff3d both hosts passed11 Python tests,74 R gate assertions, both scoped R lints,
+installation and real dependency preflight. All11 exact child-family cleanup witnesses passed
+on each host. Windows actual Quarto71, notebook protocol44, history58, bridge118 (2 named OS
+guards), prototype92 and sampler21 passed404 assertions/0 failures/warnings. Linux same
+files plus search passed539 assertions/0 failures/warnings/skips. The four original process
+prototype cases passed on BOTH actual operating systems; production transport is unchanged.
+All four plan gates passedb6fff3d,770 selected R blocks/0 parse/style problems/0 lints,
+with unchanged39-file source manifests. Verified Windows artifact SHA256
+c99b8734dad4119a5256efc81ff6c73e05d9b3f63bed45d2664b672a6125426a;
+Linux6da9cf308a1ff38949f96eda1f44110f9d4403a26452d7f021f07b6bfd24378e.
+
+Open witnessed failures are now specific:
+
+- Windows security:92 passed expectations,6 native-tag inspection timeout errors,4 failed
+  assertions,0 warnings/skips. Link creation succeeded and deferred nonrecursive deletion
+  preserved foreign targets. The two exact-stamp rewrite cases reproduce stale settings and
+  retained trust/fingerprint; a Windows-only content-sensitive cache stamp is being prepared.
+  The extra options-restoration failure names only diffobj reporter defaults initialized by
+  its failure rendering; package options mutations must still fail the oracle.
+- Windows search:122 passes/3 failures/0 warnings/skips; ripgrep returns native relative
+  spelling `.\\a.R` while gptr returns`a.R`. Normalize spelling in the independent fixture;
+  retain exact file and line comparisons.
+- Windows app:357 passes/0 failures/warnings/1 named OS guard, but an unhandled asynchronous
+  `Browser.close` timeout printed during a later test. Strict gate correctly fails; owned
+  browser shutdown is being corrected without changing startup/close bounds.
+- Linux app:346 passes/0 failures/warnings/2 mandatory skips. Retained Chrome FATAL diagnostics
+  identify an overlong SingletonSocket path inside the deeply nested fixture TMPDIR. Use an
+  exact owned private short Linux test root; preflight had already passed in its shorter root.
+- Original native Windows child cases:24 passes/3 bounded watchdog failures,0 warnings/skips.
+  D-019 remains open pending a secure minimal runtime correction and actual production proof.
+- Linux native timeout:48 passes/2 failed assertions,0 warnings/skips;1 resource-observation
+  error, all owned processes stopped. Its structured error was physically overwritten by
+  independent stdout/stderr handles sharing one log. Separate logs and scan both for unhandled
+  promises before diagnosing that condition; no sampler guard is weakened.
 
 The test-only owned writer keeps the actual target's ordinary processx stdin pipe and moves
 its potentially blocking write into a separately tracked child. Private atomic mailbox files

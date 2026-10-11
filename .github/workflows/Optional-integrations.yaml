@@ -8,7 +8,7 @@ on:
         type: string
       filter:
         description: Approved test file name regex, passed as data through the environment
-        default: 'doc-knitr|doc-jupyter|doc-history-display|bridge-lang|tool-search|artifact-app|windows-security|proc-windows-backpressure|proc-backpressure-sampling'
+        default: 'doc-knitr|doc-jupyter|doc-history-display|bridge-lang|tool-search|artifact-app|artifact-browser-cleanup|config-content-cache|gptr-config|windows-security|proc-windows-backpressure|proc-backpressure-sampling'
         type: string
 permissions:
   contents: read
@@ -80,7 +80,7 @@ jobs:
         run: |
           python dev/ci/test-optional-dependencies.py
           Rscript --vanilla -e 'testthat::test_file("dev/ci/test-optional-integrations.R", stop_on_failure = TRUE)'
-      - name: Lint the optional runner and its pure result tests
+      - name: Lint the reviewed integration runtime, fixtures and result gates
         shell: bash
         env:
           GITHUB_PAT: ''
@@ -88,7 +88,14 @@ jobs:
           GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-lint
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
-            --run Rscript --vanilla -e 'results = lapply(c("dev/ci/optional-integrations.R", "dev/ci/test-optional-integrations.R"), lintr::lint); print(results); stopifnot(all(lengths(results) == 0L))'
+            --run Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); paths = c(
+              "R/artifact-app.R", "R/gptr-config.R", "tests/testthat/setup.R",
+              "tests/testthat/test-tool-search.R", "tests/testthat/test-artifact-browser-cleanup.R",
+              "tests/testthat/test-config-content-cache.R", "tests/testthat/test-gptr-config.R",
+              "tests/testthat/helper-windows-security.R", "tests/testthat/test-windows-security.R",
+              "dev/ci/optional-integrations.R", "dev/ci/test-optional-integrations.R");
+              results = lapply(paths, lintr::lint); print(results);
+              stopifnot(all(lengths(results) == 0L))'
       - name: Install this source for the real child fixtures
         shell: bash
         env:

@@ -1,5 +1,33 @@
 # GPTR 1.0 implementation - handoff
 
+**2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
+candidate branch `codex/skipped-platform-tests` is pushed throughb6fff3d in the attached
+`/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`. Do not reset the primary checkout
+or stage its old unrun regressions/maintainer edits. Shared Ollama is preserved; latest22:45PDT
+load345.73/CPU0%idle, swap12,767.69MiB and disk213GiB keep local R/install/model/browser jobs held.
+
+Hosted89f804d dependency preflights passed on Windows/Linux, including real Quarto, configured
+Python/pandas/NumPy, Chrome expression/close, rg and Perl with0 model events. Six complete Linux
+files passed486 assertions/0 failures/warnings/skips: Quarto record/replay71, notebook protocol44,
+compact history58, bridge128, search125 and Unix child60. Actual IRkernel/native visuals remain
+separate. All four plan checks passed exact245de54,39f3248 and89f804d with unchanged source hashes.
+Windows production large stdin remains RED:3 bounded failures/24 passes, owned cleanup intact.
+The corrected security/prototype suites did not execute on Windows89f804d because shared
+supervisor-marker cleanup broke subsequent launches. Linux app constructor skipped2 mandatory
+cases; prototype cancellation failed resource observation. These failures remain open.
+
+Reviewedb6fff3d disables the shared supervisor for explicitly owned bounded test children,
+checks actual5s family settlement, retains bounded raw failure messages before gates, and adds
+four pure sampler tests with narrow dead-original-parent recovery. Production transport is
+unchanged. Ten-file hosted rerun[38115064744](https://github.com/Broccolito/gptr/actions/runs/38115064744)
+is complete: Quarto/bridge/history/prototype/sampler passed on both hosts; all11 child-family
+cleanup witnesses passed per host. Four plan checks passedb6fff3d,770 R blocks/0 problems/0 lints.
+Windows native stdin remains RED; security exposed stale exact-stamp settings/trust and6 tag
+inspection timeouts. Linux app skips identify an overlong fixture socket path; Windows app
+assertions passed but an unhandled close promise failed the gate. Reviewed cache/browser/temp/
+search/diagnostic fixes await the next actual hosted run. No production stdin repair is claimed. Resume from
+[the living plan](TESTING_PLAN.md) and[exact follow-up evidence](progress/skipped-platform-tests-20261010.md).
+
 **2026-10-10 current checkpoint (supersedes older snapshots below):** PR #5 is merged and
 the live-hardening changes through `8d13b58` are pushed. Claude CLI, Codex CLI and exact
 Ollama `qwen3.8:27b` passed nine Rscript/R Markdown/Quarto live cells plus nine fresh-process
