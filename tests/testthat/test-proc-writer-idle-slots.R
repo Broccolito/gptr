@@ -31,6 +31,7 @@ idle_child_case = function(case, root, failure) {
     boxes[[i]] = box
     local({
       own = box
+      force(own)
       fun("reactor_proc")(targets[[i]], on_line = function(line) own$out = c(own$out, line),
         on_exit = function(status) NULL)
     })
