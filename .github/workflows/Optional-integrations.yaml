@@ -8,7 +8,7 @@ on:
         type: string
       filter:
         description: Approved test file name regex, passed as data through the environment
-        default: 'doc-knitr|doc-jupyter|doc-history-display|bridge-lang|tool-search|artifact-app|windows-security|proc-windows-backpressure'
+        default: 'doc-knitr|doc-jupyter|doc-history-display|bridge-lang|tool-search|artifact-app|windows-security|proc-windows-backpressure|proc-backpressure-sampling'
         type: string
 permissions:
   contents: read

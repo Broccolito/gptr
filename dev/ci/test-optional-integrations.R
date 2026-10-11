@@ -34,15 +34,40 @@ testthat::test_that("warnings, missing assertions and failed mandatory cases fai
 testthat::test_that("raw testthat errors and warnings cannot disappear from result counts", {
   result = list(list(test = "raw condition fixture", results = list(
     structure(list(), class = "expectation_success"),
-    structure(list(), class = "expectation_error"),
-    structure(list(), class = "expectation_failure"),
-    structure(list(), class = "expectation_warning"),
-    structure(list(), class = c("simpleWarning", "warning", "condition")))))
+    structure(list(message = "controlled error"), class = c("expectation_error", "condition")),
+    structure(list(message = "controlled failure"), class = c("expectation_failure", "condition")),
+    structure(list(message = "controlled warning"), class = c("expectation_warning", "condition")),
+    simpleWarning("controlled outside warning"))))
   row = optional_result_rows(result)[[1L]]
   testthat::expect_identical(row$passed, 1L)
   testthat::expect_identical(row$failed, 2L)
   testthat::expect_identical(row$warnings, 2L)
   testthat::expect_identical(row$skipped, 0L)
+})
+
+testthat::test_that("raw diagnostic messages survive a failed gate within explicit bounds", {
+  names = c("expectation_skip", "expectation_failure", "expectation_error", "expectation_warning")
+  conditions = lapply(names, function(name) {
+    structure(list(message = paste("controlled", name)), class = c(name, "condition"))
+  })
+  conditions[[5L]] = simpleWarning(paste(rep("x", 2001L), collapse = ""))
+  row = optional_result_rows(list(list(test = "controlled diagnostics",
+    results = conditions)))[[1L]]
+  testthat::expect_identical(row$diagnostic_conditions_total, 5L)
+  testthat::expect_false(row$diagnostic_conditions_truncated)
+  testthat::expect_identical(vapply(row$diagnostics[1:4], function(x) x$message, ""),
+                            paste("controlled", names))
+  testthat::expect_identical(row$diagnostics[[1L]]$classes, c("expectation_skip", "condition"))
+  testthat::expect_identical(nchar(row$diagnostics[[5L]]$message), 2000L)
+  testthat::expect_true(row$diagnostics[[5L]]$message_truncated)
+  testthat::expect_error(optional_gate(list(row), "test-artifact-app.R", FALSE), "Failed")
+  testthat::expect_identical(length(row$diagnostics), 5L)
+  many = optional_result_rows(list(list(test = "controlled many", results =
+    rep(list(simpleWarning("controlled repeated warning")), 26L))))[[1L]]
+  testthat::expect_identical(many$warnings, 26L)
+  testthat::expect_identical(many$diagnostic_conditions_total, 26L)
+  testthat::expect_identical(length(many$diagnostics), 25L)
+  testthat::expect_true(many$diagnostic_conditions_truncated)
 })
 
 testthat::test_that("only named platform guards are allowed to skip", {
@@ -86,4 +111,63 @@ testthat::test_that("every approved writer prototype case must execute assertion
     }
     testthat::expect_true(optional_gate(rows, file, windows)$passed)
   }
+})
+
+testthat::test_that("the pure sampler regressions remain mandatory on both hosts", {
+  file = "test-proc-backpressure-sampling.R"
+  titles = c(
+    "backpressure enumeration tolerates only a dead original parent exit race",
+    "backpressure enumeration preserves the returned original child handles",
+    "backpressure enumeration fails closed for live and unknown parent identities",
+    "backpressure sample diagnostics are bounded and omit arbitrary messages")
+  testthat::expect_identical(optional_titles[[file]], titles)
+  rows = lapply(titles, record)
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_error(optional_gate(rows[-1L], file, windows), "Missing mandatory")
+    skipped = rows
+    skipped[[1L]]$skipped = 1L
+    testthat::expect_error(optional_gate(skipped, file, windows), "Skipped")
+    no_assertions = rows
+    no_assertions[[1L]]$passed = 0L
+    testthat::expect_error(optional_gate(no_assertions, file, windows), "assertions")
+    testthat::expect_true(optional_gate(rows, file, windows)$passed)
+  }
+})
+
+testthat::test_that("family settlement waits for descendants after the root has stopped", {
+  clock = new.env(parent = emptyenv())
+  clock$seconds = 0
+  clock$polls = 0L
+  remaining = function() {
+    clock$polls = clock$polls + 1L
+    if (clock$polls < 3L) list("owned fixture") else list()
+  }
+  value = optional_wait_family(function() TRUE, remaining,
+    now = function() clock$seconds,
+    pause = function(seconds) {
+      clock$seconds = clock$seconds + seconds
+    })
+  testthat::expect_true(value$settled)
+  testthat::expect_identical(value$remaining_marked_processes, 0L)
+  testthat::expect_identical(value$settlement_polls, 3L)
+  testthat::expect_gt(value$settlement_elapsed_s, 0)
+  testthat::expect_lte(value$settlement_elapsed_s, 5)
+})
+
+testthat::test_that("family settlement bounds live roots and propagates query errors", {
+  for (root_stopped in c(FALSE, TRUE)) {
+    clock = new.env(parent = emptyenv())
+    clock$seconds = 0
+    value = optional_wait_family(function() root_stopped,
+      function() if (root_stopped) list("owned fixture") else list(),
+      now = function() clock$seconds,
+      pause = function(seconds) {
+        clock$seconds = clock$seconds + seconds
+      })
+    testthat::expect_false(value$settled)
+    testthat::expect_identical(value$root_stopped, root_stopped)
+    testthat::expect_equal(value$settlement_elapsed_s, 5)
+  }
+  testthat::expect_error(optional_wait_family(function() TRUE,
+    function() stop("controlled marker query failed")), "controlled marker query failed")
 })

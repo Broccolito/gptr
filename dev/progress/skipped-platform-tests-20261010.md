@@ -9,8 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At 22:06 PDT, load was 30.46/32.84/38.27, physical memory 76 GiB used/51 GiB unused,
-swap 14,021.94 MiB, free disk 114 GiB, with no recorded thermal/performance warning.
+At 22:29 PDT, load was 86.56/58.56/58.04, physical memory 95 GiB used/33 GiB unused,
+swap 12,911.69 MiB, free disk 243 GiB, with no recorded thermal/performance warning.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -39,13 +39,15 @@ cross-plan checks passed on candidate `245de54`. Runtime implementation remains 
 
 | Item | State | Evidence |
 | --- | --- | --- |
-| Quarto/tool-path discovery helper | Provisioning and prior9 Python tests passed on both hosts | New11-test source mock suite passed; actual Windows subprocess launch still pending |
+| Quarto/tool-path discovery helper | Actual hosted Windows launch/preflight passed89f804d | Python11/Rgate41 and0 scoped lints; realQuarto/Python/Chrome/rg/Perl oracles passed, no model events |
 | Local pandas/NumPy install | Waiting for resources | Existing private Python 3.12 lacks both modules |
 | Actual Windows security baseline | Failed fixtures; corrected source ready | Run `38112622473`: raw 6 errors, 3 failed assertions, 6 warnings, 53 passes, 0 skips |
-| Actual Windows/Unix child-process baseline | Windows runtime RED; Unix pending | Same run: 3 watchdog failures, 24 passes, 0 skips, no observed process-test warnings |
-| Strict optional integration workflow | Launcher/lint RED; minimal correction ongoing | `38113687980` at39f3248: provisioning/Python9/Rgate21 passed both hosts, Windows launcher exit139, Linux two brace lints; integration did not run |
-| Index/extract/R-parse/lintr plan checks | Passed exact `245de54` and39f3248; rerun with plan updates | All four Linux stages succeeded twice and source hashes matched before/after |
-| Owned-writer transport prototype | Source prepared; independent peer review clear | Four bounded cases retain original native-runtime RED tests;92 expected assertions, no actual execution yet; not a production fix |
+| Actual Windows/Unix child-process baseline | Windows runtime RED; actual Unix control passed89f804d | Windows baseline:3 watchdog failures/24 passes/0 skips; Linux:60 passes/0 failures/warnings/skips |
+| Strict optional integration workflow | Controller lifecycle RED; correction ongoing | `38114220610` at89f804d: Windows setup/unit/lint/preflight passed, nine subsequent per-file children failed before test bodies with supervisor-pipe error |
+| Index/extract/R-parse/lintr plan checks | Passed exact245de54,39f3248 and89f804d; rerun with plan updates | All four Linux stages succeeded three times and source hashes matched before/after |
+| Owned-writer transport prototype | Linux3 cases passed; cancellation resource guard RED; Windows waiting | Actual Linux duplex25/timeout23/binary22 assertions passed; cancellation2 failures/4 passes and1 sampling error; owned families stopped. Not a production fix |
+| Quarto/Python/search/history integrations | Six complete Linux files passed89f804d |486 assertions/0 failures/warnings/skips; Quarto71, notebook protocol44, compact history58, bridge128, search125, Unix child60 |
+| App browser integrations | Linux2 mandatory cases skipped | HTTP200 controls and separate Chrome preflight passed; constructor error text was not retained. Diagnostics and actual rerun ongoing |
 | Shared Ollama model | Preserved | No model stop, unload or inference request |
 
 Initial hosted baseline: [Windows run 38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473).
@@ -89,6 +91,41 @@ Its two mock launcher tests were RED before the correction and GREEN afterwards;
 not prove actual Windows R launch. All four Linux plan stages again passed39f3248 (index164s,
 extraction0.5s, parse1.8s, lint101s), within their original bounds and with unchanged source
 manifests. The prototype packet is committed at3a17f9e and awaits the corrected nine-file run.
+
+The next [nine-file run38114220610](https://github.com/Broccolito/gptr/actions/runs/38114220610)
+uses exact89f804d. Windows actually passed11 Python tests,41 R gate assertions, both scoped
+R lint files, source installation and real dependency preflight: Quarto1.10.19, configured
+Python3.12.10 with pandas/NumPy and sum6, ripgrep15.1.0, Perl42, Chrome expression2 and owned
+close under the unchanged10s startup bound. Preflight observed0 request events/usage events/
+native usage rows. Artifact SHA2565ecf57addd82a70d599fcaec72f6157dab0e6f9bbca7a3450a8264fef93f353f
+is retained and verified. Each of the nine subsequent per-file launches failed in0.06–0.10s
+before any test body, with empty test logs and a closed processx supervisor pipe (system232).
+One cleanup witness had root stopped but1 marked process remaining. The controller's
+per-child supervisor/marker interaction and actual five-second family settlement are being
+corrected; these are infrastructure failures, not executed package/prototype regressions.
+The Linux job also completed. Six files passed486 assertions with0 failures/warnings/skips:
+Quarto71 (actual initial fake requests2/replay0/source hash checks), notebook protocol44,
+compact history58, Python/SQL/shell bridge128, ripgrep comparison125 and Unix child control60.
+Notebook protocol cases do not replace actual IRkernel execution. Eight security cases used
+expected Linux platform guards and do not establish Windows coverage. The app gate rejected
+two mandatory browser-constructor skips despite passing HTTP200 controls and Chrome preflight;
+the old location reporter omitted the reasons. The prototype passed duplex25, timeout23 and
+binary22 assertions; cancellation had2 failures/4 passes with1 resource-observation error.
+Its phases reached completion and owned families stopped, but the discarded condition prevents
+exact attribution. All four plan stages passed exact89f804d with unchanged source hashes.
+Linux artifact SHA256f4f48a597f93cf829e9725c0b78177e259fd3aa5b11cd02004e8f76f116d7b93 is verified.
+
+The next correction disables callr's shared singleton supervisor for these already-owned,
+bounded children: first-child marker cleanup otherwise kills the marker-inheriting shared
+server and later launches write its closed Windows pipe. No broad supervisor reset is used.
+The controller retains cleanup_tree and checks both root exit and an empty exact-marker family
+for up to5 seconds; --vanilla/--slave preserves startup isolation without bootstrap echo.
+It writes bounded raw condition rows before failing warning/mandatory gates, so browser reasons
+survive. Fake-clock settlement and diagnostic tests are source-prepared; actual rerun is pending.
+The sampler separately handles an identified enumeration race only when the same original
+parent handle is definitively dead; alive/unknown failures remain fatal. Four pure tests and
+structured stage/class/errno/pid diagnostics preserve all resource limits and ownership checks.
+This source-confirmed race is not a confirmed attribution of the prior cancellation failure.
 
 The test-only owned writer keeps the actual target's ordinary processx stdin pipe and moves
 its potentially blocking write into a separately tracked child. Private atomic mailbox files

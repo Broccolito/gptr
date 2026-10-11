@@ -467,20 +467,22 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 
 | Follow-up | Status and next evidence |
 |---|---|
-| Quarto discovery | ONGOING child-only PATH/direct bundled executable; require actual initial fake requests2/replay0/source hashes and compact-history render. |
-| Python/R dependencies | Framework reticulate exists; private Python lacks pandas/numpy. ONGOING explicit hosted Python+pandas provisioning; local wheel installation WAITING resource lease. Verify actual bridge values, not only package directories. |
-| Browser/search prerequisites | Local Chrome/chromote/rg exist. ONGOING explicit hosted discovery/preflight; retain Chrome startup bound, actual render/screenshot proof and search comparison. |
+| Quarto discovery | Hosted Windows89f804d preflight DONE: actualQuarto1.10.19. Linux actual record/replay/source-hash integration DONE,71 assertions/0 failures/warnings/skips. Child-only local PATH/bundled executable prepared. Separate compact-history rendered frontend packet WAITING. |
+| Python/R dependencies | Hosted Windows89f804d preflight DONE: configuredPython3.12.10, pandas/NumPy import and actualsum6. Linux actual Python/SQL/shell bridge DONE,128 assertions/0 failures/warnings/skips. Private localPython lacks pandas/numpy; local wheel installation WAITING resource lease. |
+| Browser/search prerequisites | Both hosted89f804d preflights DONE: actualChrome expression2 and owned close, unchanged10s startup bound, rg15.1.0 and Perl42. Linux actual search comparison DONE,125 assertions/0 failures/warnings/skips. App browser construction skipped2 required cases despite passing HTTP200 controls; ONGOING bounded diagnostic retention and rerun. |
 | Windows filesystem safety | Initial hosted38112622473 failed fixtures: raw6errors/3failures/6warnings/53passes/0skips. ONGOING corrected named temporary script/integer initial timestamps; eight strict actual-platform tests preserved, option-name diagnostic added. Link/cache runtime failures not yet established. |
-| Windows child stdin | Actual Windows RED:3 watchdog failures/24passes/0skips; owned families stopped, RSS348-374MB, no sampling errors. ONGOING owned-writer prototype review; four source-only probes retain fixed deadlines/RSS/output, byte/line oracles and identity-checked cleanup. Unix control pending. D-019 remains open. |
-| Validation/merge | Candidate `3a17f9e` pushed with source-only writer probes. Two-host38113687980 at39f3248 passed provisioning/Python9/Rgate21, then failed before integration: Windows launcher exit139 and Linux two brace lints. ONGOING minimal launcher/braces correction. WAITING strict integration GREEN/scoped lint/required-case counts, then integration. No skipped-case or zero-selection pass. |
+| Windows child stdin | Actual Windows RED:3 watchdog failures/24passes/0skips; owned families stopped, RSS348-374MB, no sampling errors. Linux actual Unix control DONE,60 assertions/0 failures/warnings/skips. Owned-writer prototype Linux duplex/timeout/binary passed; cancellation guard failed resource observation. ONGOING narrow parent-exit sampler race correction with4 pure tests and unchanged limits/native oracles. Actual Windows prototype WAITING corrected controller. D-019 remains open. |
+| Validation/merge | Candidate `89f804d` pushed;38114220610 both hosts passed provisioning/Python11/Rgate41/both lints/preflight. Windows9 per-file launches failed before tests; one cleanup had1 remaining process. Linux6 complete files passed486 assertions/0 failures/warnings/skips; app/prototype gates failed. ONGOING unsupervised owned-child launch, actual5s family settlement and bounded raw failure diagnostics; next two-host rerun includes sampler tests. WAITING strict integration GREEN/required-case counts, then integration. |
 
 The optional dependency helper's11 stdlib tests and plan diagnostic guard's6 stdlib tests
 are GREEN. They launch no R/browser/model process and do not replace actual integration.
 The two-host39f3248 run actually passed the prior9 Python tests and21 R result-gate assertions
-with0 failures/warnings/skips. The new2 launcher regressions use mocks; hosted Windows launch
-remains pending. Linux found2 brace lints in the runner; its pure R gate file had0 lints.
+with0 failures/warnings/skips. The new2 launcher regressions use mocks; actual Windows launch
+passed at89f804d, along with11 Python tests,41 R gate assertions and0 runner/gate-file lints.
+The older Linux39f3248 run found2 brace lints in the runner; its pure R gate file had0 lints.
 All four mandatory index/extract/R-parse/lintr plan checks actually passed on Linux at
-exact245de54 in38113192422 and again at39f3248 in38113687980. Verified245de54 artifact:
+exact245de54 in38113192422,39f3248 in38113687980 and89f804d in38114220610.
+The89f804d source hashes also matched before/after. Verified245de54 artifact:
 25 plans,770 R blocks,0 parse/style problems and0 lints;
 the index retained90 historical warning-level findings and0 error-level findings. Its
 39-file source manifests matched before/after; artifact SHA25675c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466.
@@ -488,8 +490,8 @@ Recheck the updated plan
 on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
-Latest22:06 PDT load30.46/32.84/38.27, CPU41.91%idle, physical RAM76GiB used/51GiB
-unused, swap14,021.94MiB used and disk114GiB still prevent expanding local compute.
+Latest22:29 PDT load86.56/58.56/58.04, CPU17.29%idle, physical RAM95GiB used/33GiB
+unused, swap12,911.69MiB used and disk243GiB still prevent expanding local compute.
 Memory-pressure free84% is a distinct metric; no thermal/performance warning was recorded.
 Keep local R/build/install/browser/model jobs held; bounded read/source work and hosted
 validation use independent resources. Recheck before granting any local compute lease.

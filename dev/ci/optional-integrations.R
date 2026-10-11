@@ -34,7 +34,12 @@ optional_titles = list(
     "owned writer prototype preserves every 4 MB duplex stdout and stderr line",
     "owned writer prototype returns a typed no-reader stdin timeout",
     "owned writer prototype cancels a queued 4 MB write without a late exit",
-    "owned writer prototype preserves queued binary NUL and UTF-8 bytes")
+    "owned writer prototype preserves queued binary NUL and UTF-8 bytes"),
+  "test-proc-backpressure-sampling.R" = c(
+    "backpressure enumeration tolerates only a dead original parent exit race",
+    "backpressure enumeration preserves the returned original child handles",
+    "backpressure enumeration fails closed for live and unknown parent identities",
+    "backpressure sample diagnostics are bounded and omit arbitrary messages")
 )
 
 optional_select = function(pattern, root) {
@@ -77,14 +82,45 @@ optional_gate = function(rows, file, windows) {
        rows = rows)
 }
 
+optional_condition_diagnostic = function(condition) {
+  message = conditionMessage(condition)
+  list(classes = class(condition), message = substr(message, 1L, 2000L),
+       message_truncated = nchar(message) > 2000L)
+}
+
 optional_result_rows = function(result) {
   lapply(result, function(test) {
     entries = test$results
     count = function(classes) sum(vapply(entries, inherits, logical(1), what = classes))
+    diagnostics = Filter(function(entry) {
+      inherits(entry, c("expectation_failure", "expectation_error", "expectation_skip",
+        "expectation_warning", "warning"))
+    }, entries)
     list(test = test$test, passed = count("expectation_success"),
       failed = count(c("expectation_failure", "expectation_error")),
-      warnings = count(c("expectation_warning", "warning")), skipped = count("expectation_skip"))
+      warnings = count(c("expectation_warning", "warning")), skipped = count("expectation_skip"),
+      diagnostics = lapply(head(diagnostics, 25L), optional_condition_diagnostic),
+      diagnostic_conditions_total = length(diagnostics),
+      diagnostic_conditions_truncated = length(diagnostics) > 25L)
   })
+}
+
+optional_wait_family = function(root_stopped, remaining, seconds = 5,
+                                now = function() proc.time()[["elapsed"]], pause = Sys.sleep) {
+  started = now()
+  polls = 0L
+  repeat {
+    polls = polls + 1L
+    stopped = root_stopped()
+    count = length(remaining())
+    elapsed = now() - started
+    if ((stopped && count == 0L) || elapsed >= seconds) {
+      return(list(settled = stopped && count == 0L, root_stopped = stopped,
+        remaining_marked_processes = count, settlement_elapsed_s = elapsed,
+        settlement_polls = polls))
+    }
+    pause(min(0.05, seconds - elapsed))
+  }
 }
 
 optional_preflight = function() {
@@ -169,11 +205,17 @@ optional_integrations_main = function() {
     source("dev/ci/optional-integrations.R", local = TRUE)
     conditions = new.env(parent = emptyenv())
     conditions$warnings = character()
+    conditions$warning_details = list()
     conditions$advisory = 0L
     observe = function(w) {
       if (grepl("^package .+ was built under R version", conditionMessage(w))) {
         conditions$advisory = conditions$advisory + 1L
-      } else conditions$warnings = c(conditions$warnings, paste(class(w), collapse = "/"))
+      } else {
+        conditions$warnings = c(conditions$warnings, paste(class(w), collapse = "/"))
+        if (length(conditions$warning_details) < 25L)
+          conditions$warning_details[[length(conditions$warning_details) + 1L]] =
+            optional_condition_diagnostic(w)
+      }
     }
     result = withCallingHandlers({
       if (action == "preflight") {
@@ -186,6 +228,9 @@ optional_integrations_main = function() {
       }
     }, warning = observe)
     list(result = result, outside_test_warning_classes = conditions$warnings,
+         outside_test_warnings = conditions$warning_details,
+         outside_test_warning_total = length(conditions$warnings),
+         outside_test_warnings_truncated = length(conditions$warnings) > 25L,
          known_build_advisories = conditions$advisory)
   }
   invoke = function(action, label, file = NULL, timeout = 300) {
@@ -197,26 +242,27 @@ optional_integrations_main = function() {
       cleanup_error = tryCatch({
         if (!is.null(process)) process$kill_tree()
         ps::ps_kill_tree(marker)
-        if (!is.null(process)) process$wait(5000)
         NULL
       }, error = function(e) substr(conditionMessage(e), 1L, 2000L))
-      remaining = ps::ps_find_tree(marker)
-      root_stopped = is.null(process) || !process$is_alive()
-      settled = root_stopped && !length(remaining) && is.null(cleanup_error)
-      jsonlite::write_json(list(passed = settled, root_stopped = root_stopped,
-        remaining_marked_processes = length(remaining), settlement_bound_s = 5L,
+      family = optional_wait_family(function() is.null(process) || !process$is_alive(),
+        function() ps::ps_find_tree(marker))
+      settled = family$settled && is.null(cleanup_error)
+      jsonlite::write_json(c(list(passed = settled, settlement_bound_s = 5L,
         cleanup_error = cleanup_error, scope = "owned child and marker-inheriting descendants"),
+        family),
         file.path(output, paste0(label, "-cleanup.json")), pretty = TRUE,
         auto_unbox = TRUE, null = "null")
       if (!settled) stop("Owned child family did not settle: ", label)
     }, add = TRUE)
     process = callr::r_bg(child, list(action, file), stdout = log, stderr = log,
-      cmdargs = "--vanilla", user_profile = FALSE, system_profile = FALSE,
-      cleanup_tree = TRUE, supervise = TRUE,
+      cmdargs = c("--vanilla", "--slave"), user_profile = FALSE, system_profile = FALSE,
+      cleanup_tree = TRUE, supervise = FALSE,
       env = c(callr::rcmd_safe_env(), stats::setNames("YES", marker)))
     process$wait(timeout * 1000)
     if (process$is_alive()) stop("Owned child deadline exceeded: ", label)
     result = process$get_result()
+    jsonlite::write_json(result, file.path(output, paste0(label, "-results.json")),
+      pretty = TRUE, auto_unbox = TRUE, null = "null")
     stopifnot(!length(result$outside_test_warning_classes))
     lines = readLines(log, warn = FALSE)
     if (any(grepl("Unhandled promise error", lines, fixed = TRUE)))

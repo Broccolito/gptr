@@ -122,6 +122,25 @@ bp_child_case = function(case, root) {
   result
 }
 
+# ps_children() can throw at its final parent-identity check if the original parent exits
+# during enumeration. Previously tracked descendants still belong to this owned family.
+bp_child_handles = function(handle, children = ps::ps_children, alive = proc_handle_alive) {
+  tryCatch(children(handle, recursive = TRUE), error = function(error) {
+    if (isFALSE(alive(handle))) list() else stop(error)
+  })
+}
+
+# Retain a bounded diagnostic without copying arbitrary condition messages or file content.
+bp_sample_error = function(stage, error) {
+  number = function(x) {
+    if (is.numeric(x) && length(x) == 1L && is.finite(x)) unname(x) else NULL
+  }
+  classes = class(error)
+  classes = classes[grepl("^[A-Za-z][A-Za-z0-9_.]{0,63}$", classes)]
+  list(stage = stage, class = utils::head(classes, 8L),
+    errno = number(error$errno), pid = number(error$pid))
+}
+
 bp_run = function(case) {
   root = withr::local_tempdir(paste0("gptr-backpressure-", case, "-"))
   dirs = stats::setNames(file.path(root, c("home", "config", "cache", "data", "project", "tmp")),
@@ -181,14 +200,17 @@ bp_run = function(case) {
   peak_disk = 0
   samples = 0L
   sampling_errors = 0L
+  sample_error = NULL
   inner_started = NULL
   repeat {
     samples = samples + 1L
+    sample_stage = "children"
     sample = tryCatch({
       root_handle = tracked$handles[[1L]]
       if (isTRUE(proc_handle_alive(root_handle))) {
-        for (child in ps::ps_children(root_handle, recursive = TRUE)) remember(child)
+        for (child in bp_child_handles(root_handle)) remember(child)
       }
+      sample_stage = "memory"
       rss = vapply(tracked$handles, function(handle) {
         if (isFALSE(proc_handle_alive(handle))) return(0)
         tryCatch(unname(ps::ps_memory_info(handle)[["rss"]]), error = function(error) {
@@ -196,14 +218,16 @@ bp_run = function(case) {
         })
       }, numeric(1))
       if (any(!is.finite(rss))) stop("Could not measure owned process memory.")
+      sample_stage = "files"
       files = list.files(root, recursive = TRUE, full.names = TRUE, all.files = TRUE)
       sizes = file.info(files)$size
       unknown = is.na(sizes) & file.exists(files)
       if (any(unknown)) stop("Could not measure owned case files.")
       c(rss = sum(rss), disk = sum(sizes, na.rm = TRUE))
-    }, error = function(error) NULL)
-    if (is.null(sample)) {
+    }, error = identity)
+    if (inherits(sample, "condition")) {
       sampling_errors = sampling_errors + 1L
+      sample_error = bp_sample_error(sample_stage, sample)
       guard = "resource_observation"
       break
     }
@@ -239,7 +263,8 @@ bp_run = function(case) {
     guard = guard, elapsed = proc.time()[["elapsed"]] - started,
     case_deadline = 30, outer_deadline = 60, input_cap = 4 * 1024^2,
     rss_cap = 1024^3, output_cap = 64 * 1024^2, peak_rss = peak_rss, peak_disk = peak_disk,
-    samples = samples, sampling_errors = sampling_errors, owned_family_stopped = stopped,
+    samples = samples, sampling_errors = sampling_errors, sample_error = sample_error,
+    owned_family_stopped = stopped,
     outer_identity = outer_record, inner_identity = inner_record, phases = phases,
     result = result)
   cat("GPTR-BACKPRESSURE-WITNESS ", json_encode(witness), "\n", sep = "")
