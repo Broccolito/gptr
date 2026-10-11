@@ -330,7 +330,7 @@ test_that("an Rscript run with a bound document leaves no key in documents or si
     sprintf("gptr_doc(%s)", deparse(doc)),
     "gptr_permissions(allow = 'r(secret:TYPESAFE_API_KEY)')",
     "s = peter('print the key', model = fake, mode = 'auto', envir = globalenv())",
-    sprintf("invisible(file.copy(Sys.glob('.gptr/cache/tmp/pending-*.rds'), %s))",
+    sprintf("invisible(file.copy(Sys.glob('.gptr/cache/tmp/pending-*.json'), %s))",
             deparse(side))), doc)
   res = processx::run(rscript_path(), c("--vanilla", doc), error_on_status = FALSE,
                       env = c("current", TYPESAFE_API_KEY = e2e_keys[["TYPESAFE_API_KEY"]],

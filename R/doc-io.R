@@ -336,14 +336,42 @@ doc_ide_backend = function() {
 # ---- deferred Rscript writes, Jupyter pending blocks and their sidecars (IC-50, IC-51) ----------
 
 #' The sidecar of a document's deferred or pending upserts (contract 11.9):
-#' `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.rds`. `<root>` is the `.gptr/` of the
+#' `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`. `<root>` is the `.gptr/` of the
 #' document's own project, so every process finds the sidecar whatever its working directory (a
 #' job that leaves its project, or one cron starts elsewhere); doc_root() for a document outside
 #' a project with `.gptr/`.
 #' @noRd
 doc_sidecar_path = function(path) {
   root = workspace_dir(dirname(path_norm(path))) %||% doc_root()
-  file.path(root, "cache", "tmp", paste0("pending-", cli::hash_sha1(path_key(path)), ".rds"))
+  file.path(root, "cache", "tmp", paste0("pending-", cli::hash_sha1(path_key(path)), ".json"))
+}
+
+#' The retained legacy RDS sidecar at the same document-owned location
+#' @noRd
+doc_sidecar_legacy_path = function(path) sub("[.]json$", ".rds", doc_sidecar_path(path))
+
+#' Fixed private bound for one modern recovery file, before decoding or replacement
+#' @noRd
+doc_sidecar_limit = function() 16L * 1024L * 1024L
+
+#' A sidecar pathname is present even when its symlink target is missing: invalid modern
+#' records still prevent legacy fallback and must not clear an in-memory pending queue.
+#' @noRd
+doc_sidecar_exists = function(f) {
+  vapply(f, function(path) {
+    if (file.exists(path)) return(TRUE)
+    if (!is_windows()) {
+      link = Sys.readlink(path)
+      if (!is.na(link) && nzchar(link)) return(TRUE)
+    }
+    entries = list.files(dirname(path), all.files = TRUE)
+    name = basename(path)
+    if (is_windows()) {
+      entries = tolower(entries)
+      name = tolower(name)
+    }
+    name %in% entries
+  }, NA, USE.NAMES = FALSE)
 }
 
 #' The effective user id of this R process, or NA (mockable)
@@ -352,18 +380,19 @@ doc_euid = function() {
   tryCatch(as.numeric(ps::ps_uids()[["effective"]]), error = function(e) NA_real_)
 }
 
-#' May a sidecar file be deserialised? On Unix it must be this user's private file (mode 0600, as
+#' May a sidecar file be trusted? On Unix it must be this user's private file (mode 0600, as
 #' write_atomic() creates it). A file checked out or copied into the project tree keeps the
 #' umask's group and other bits and is never read: the project cannot plant a record (IC-52), and
 #' readRDS() of planted bytes can run code before R 4.4 (CVE-2024-27322). Windows has no such
-#' modes.
+#' modes: it reads only the new plain-data JSON, never a legacy RDS sidecar.
 #' @noRd
 doc_sidecar_trusted = function(f) {
-  if (is_windows()) return(TRUE)
+  if (is_windows()) return(FALSE)
   info = file.info(f, extra_cols = TRUE)
   if (is.na(info$size) || isTRUE(info$isdir)) return(FALSE)
   me = doc_euid()
-  mine = is.na(me) || identical(as.numeric(info$uid), me)
+  mine = is.numeric(me) && length(me) == 1L && is.finite(me) && me >= 0 &&
+    identical(as.numeric(info$uid), as.numeric(me))
   mine && bitwAnd(as.integer(info$mode), strtoi("077", 8L)) == 0L
 }
 
@@ -396,33 +425,264 @@ doc_sidecar_valid = function(rec, path) {
     all(vapply(rec$upserts, doc_sidecar_upsert_ok, NA, key = key, fmt = fmt))
 }
 
-#' Read a document's sidecar record, or NULL (none, not this user's private file, unreadable, or
-#' not a record for that document)
+#' The finite JSON number token of a double, including nb_parse()'s validated lexical token.
+#' Never accept an arbitrary verbatim attribute from a sidecar or notebook metadata.
+#' @noRd
+doc_sidecar_number = function(x) {
+  if (!is.double(x) || length(x) != 1L || is.na(x) || !is.finite(x)) return(NULL)
+  if (is.null(attributes(x))) return(sprintf("%.17g", x))
+  if (!identical(names(attributes(x)), "nb_json")) return(NULL)
+  tok = attr(x, "nb_json", exact = TRUE)
+  if (!rlang::is_string(tok) ||
+      !grepl("^-?(0|[1-9][0-9]*)([.][0-9]+)?([eE][+-]?[0-9]+)?$", tok)) return(NULL)
+  val = tryCatch(json_decode(tok), error = function(e) NULL)
+  if (is.numeric(val) && length(val) == 1L &&
+      identical(as.numeric(val), as.numeric(x))) tok else NULL
+}
+
+#' One plain JSON value: scalar primitives and named objects or unnamed arrays, with finite
+#' numbers (validated notebook number tokens allowed), no callbacks or excessive nesting
+#' @noRd
+doc_sidecar_plain = function(x) {
+  nodes = 0L
+  visit = function(x, depth) {
+    nodes <<- nodes + 1L
+    if (nodes > 10000L || depth > 32L) return(FALSE)
+    if (is.null(x)) return(TRUE)
+    if (is.list(x)) {
+      if (length(setdiff(names(attributes(x)), "names"))) return(FALSE)
+      nms = names(x)
+      if (!is.null(nms) && (anyNA(nms) || any(!nzchar(nms)) || anyDuplicated(nms))) {
+        return(FALSE)
+      }
+      return(all(vapply(x, visit, NA, depth = depth + 1L)))
+    }
+    if (is.double(x)) return(!is.null(doc_sidecar_number(x)))
+    is.null(attributes(x)) && length(x) == 1L && !anyNA(x) &&
+      (is.character(x) || is.logical(x) || (is.numeric(x) && is.finite(x)))
+  }
+  visit(x, 0L)
+}
+
+#' Plain notebook metadata, with scalar types for the fields the ownership/replay readers use.
+#' Extra keys may hold nested plain JSON; they do not become recovery instructions.
+#' @noRd
+doc_sidecar_meta_ok = function(meta) {
+  if (!is.list(meta) || (length(meta) && is.null(names(meta))) ||
+      !doc_sidecar_plain(meta)) return(FALSE)
+  keys = intersect(setdiff(doc_header_keys, c("call", "turn")), names(meta))
+  if (!all(vapply(meta[keys], function(x) is.null(x) || rlang::is_string(x), NA))) return(FALSE)
+  ordinal = function(x) {
+    if (is.null(x)) return(TRUE)
+    if (rlang::is_string(x)) x = suppressWarnings(as.numeric(x))
+    is.numeric(x) && length(x) == 1L && !is.na(x) && is.finite(x) &&
+      x > 0 && x <= .Machine$integer.max && x == floor(x)
+  }
+  all(vapply(meta[intersect(c("call", "turn"), names(meta))], ordinal, NA))
+}
+
+#' Decode one call identity, never evaluate it: one peter() call, bare or gptr-qualified.
+#' Nested calls and computed arguments are kept for notebook identity matching.
+#' @noRd
+doc_sidecar_call = function(text) {
+  if (!rlang::is_string(text)) return(NULL)
+  expr = tryCatch(doc_parse_text(text, keep_source = FALSE), error = function(e) NULL)
+  if (length(expr) != 1L || !is.call(expr[[1L]])) return(NULL)
+  call = doc_call_norm(expr[[1L]])
+  head = call[[1L]]
+  qualified = is.call(head) && length(head) == 3L &&
+    (identical(head[[1L]], as.name("::")) || identical(head[[1L]], as.name(":::"))) &&
+    identical(head[[2L]], as.name("gptr")) && identical(head[[3L]], as.name("peter"))
+  if (identical(head, as.name("peter")) || isTRUE(qualified)) call else NULL
+}
+
+#' The versioned JSON data of an in-memory record. Runtime sites are narrowed to recovery
+#' fields; notebook metadata remains plain JSON and the call identity must round-trip.
+#' @noRd
+doc_sidecar_data = function(rec) {
+  nullable = function(x) {
+    if (is.null(x) || (is.atomic(x) && length(x) == 1L && is.na(x))) NULL else unname(x)
+  }
+  upserts = lapply(rec$upserts, function(u) {
+    s = u$site
+    a = s$anchor
+    if (!is.null(a)) {
+      call0 = a$call0
+      text = if (!is.null(call0)) paste(deparse(doc_call_norm(call0)), collapse = "\n")
+      if (!is.null(call0) && !identical(doc_sidecar_call(text), doc_call_norm(call0))) {
+        stop("Unsupported call identity")
+      }
+      a = list(ph = nullable(a$ph), th = nullable(a$th), j = a$j, block = nullable(a$block),
+               label = nullable(a$label), call0 = text)
+    }
+    meta = attr(u$lines, "meta", exact = TRUE)
+    if (!is.null(meta) && !doc_sidecar_meta_ok(meta)) {
+      stop("Unsupported notebook metadata")
+    }
+    list(block_id = u$block_id, lines = as.list(unname(u$lines)), meta = meta,
+         site = list(path = s$path, format = s$format, anchor = a,
+                     prompt_hash = nullable(s$prompt_hash), args_hash = nullable(s$args_hash)),
+         mark = u$mark, adopted = u$adopted)
+  })
+  list(version = 1L, doc = rec$doc, base_md5 = nullable(rec$base_md5), upserts = upserts,
+       session = rec$session, pid = rec$pid, create_time = nullable(rec$create_time),
+       time = nullable(as.numeric(rec$time)), kind = rec$kind)
+}
+
+#' Validate and normalize a closed JSON recovery record before any recovery operation
+#' @noRd
+doc_sidecar_decode = function(x, path) {
+  object = function(x, keys) {
+    is.list(x) && !is.null(names(x)) && !anyDuplicated(names(x)) &&
+      setequal(names(x), keys)
+  }
+  string = function(x) is.null(x) || rlang::is_string(x)
+  number = function(x) {
+    is.numeric(x) && length(x) == 1L && !is.na(x) && is.finite(x)
+  }
+  positive = function(x) number(x) && x > 0 && x <= .Machine$integer.max && x == floor(x)
+  flag = function(x) is.null(x) || (is.logical(x) && length(x) == 1L && !is.na(x))
+  fields = c("version", "doc", "base_md5", "upserts", "session", "pid", "create_time",
+             "time", "kind")
+  if (!object(x, fields) || !identical(x$version, 1L) || !rlang::is_string(x$doc) ||
+      !identical(path_key(x$doc), path_key(path)) || !string(x$base_md5) ||
+      (!is.null(x$base_md5) && !grepl("^[0-9a-f]{32}$", x$base_md5)) ||
+      !string(x$session) || !positive(x$pid) ||
+      (!is.null(x$create_time) && (!number(x$create_time) || x$create_time <= 0)) ||
+      (!is.null(x$time) && !number(x$time)) || !rlang::is_string(x$kind) ||
+      !x$kind %in% c("deferred", "pending") || !is.list(x$upserts) ||
+      !is.null(names(x$upserts))) return(NULL)
+  fmt = doc_format_of(path)
+  if (!fmt %in% c("r", "ipynb")) return(NULL)
+  ups = lapply(x$upserts, function(u) {
+    if (!object(u, c("block_id", "lines", "meta", "site", "mark", "adopted")) ||
+        !rlang::is_string(u$block_id) || !grepl("^[0-9a-z]{6,16}$", u$block_id) ||
+        !is.list(u$lines) || !is.null(names(u$lines)) ||
+        !all(vapply(u$lines, rlang::is_string, NA)) || !flag(u$mark) || !flag(u$adopted)) {
+      return(NULL)
+    }
+    s = u$site
+    if (!object(s, c("path", "format", "anchor", "prompt_hash", "args_hash")) ||
+        !identical(s$format, fmt) || !string(s$path) ||
+        (!is.null(s$path) && !identical(path_key(s$path), path_key(path))) ||
+        !string(s$prompt_hash) || !string(s$args_hash)) return(NULL)
+    a = s$anchor
+    if (!is.null(a)) {
+      if (!object(a, c("ph", "th", "j", "block", "label", "call0")) ||
+          !all(vapply(a[c("ph", "th", "block", "label", "call0")], string, NA)) ||
+          !positive(a$j)) return(NULL)
+      call0 = if (!is.null(a$call0)) doc_sidecar_call(a$call0)
+      if (!is.null(a$call0) && is.null(call0)) return(NULL)
+      s$anchor = list(ph = a$ph %||% NA_character_, th = a$th %||% NA_character_,
+                      j = as.integer(a$j), block = a$block %||% NA_character_,
+                      label = a$label %||% NA_character_, call0 = call0)
+    }
+    meta = u$meta
+    if (!is.null(meta) && (!identical(fmt, "ipynb") || !doc_sidecar_meta_ok(meta) ||
+                          (!is.null(meta$id) && !identical(meta$id, u$block_id)))) return(NULL)
+    lines = vapply(u$lines, identity, "", USE.NAMES = FALSE)
+    restore = function(x) {
+      if (is.list(x)) x[] = lapply(x, restore)
+      if (is.double(x)) attr(x, "nb_json") = doc_sidecar_number(x)
+      x
+    }
+    if (!is.null(meta)) attr(lines, "meta") = restore(meta)
+    list(block_id = u$block_id, lines = lines, site = s, mark = u$mark, adopted = u$adopted)
+  })
+  if (any(vapply(ups, is.null, NA))) return(NULL)
+  list(doc = path_norm(x$doc), base_md5 = x$base_md5 %||% NA_character_, upserts = ups,
+       session = x$session, pid = as.integer(x$pid),
+       create_time = as.numeric(x$create_time %||% NA_real_),
+       time = as.POSIXct(as.numeric(x$time %||% NA_real_), origin = "1970-01-01", tz = "UTC"),
+       kind = x$kind)
+}
+
+#' Read a trusted legacy sidecar only on POSIX; Windows retains it with a notice and never
+#' deserialises its bytes. Valid legacy records also pass through the closed recovery codec.
+#' @noRd
+doc_sidecar_legacy_read = function(path) {
+  f = doc_sidecar_legacy_path(path)
+  if (!doc_sidecar_exists(f)) return(NULL)
+  if (is_windows()) {
+    gptr_inform(paste0("The legacy recovery record for ", doc_rel(path),
+                       " stays pending; Windows does not read RDS sidecars."), "notice",
+                .once = paste0("doc_legacy:", path_key(path)))
+    return(NULL)
+  }
+  if (!doc_sidecar_trusted(f)) return(NULL)
+  tryCatch({
+    rec = readRDS(f)
+    if (!doc_sidecar_valid(rec, path)) return(NULL)
+    doc_sidecar_decode(doc_sidecar_data(rec), path)
+  }, error = function(e) NULL)
+}
+
+#' Read a modern record exclusively when present, including a settlement record or invalid
+#' bytes; never fall back to a legacy record after a modern record has been written.
 #' @noRd
 doc_sidecar_read = function(path) {
   f = doc_sidecar_path(path)
-  if (!file.exists(f) || !doc_sidecar_trusted(f)) return(NULL)
-  rec = tryCatch(readRDS(f), error = function(e) NULL)
-  if (isTRUE(tryCatch(doc_sidecar_valid(rec, path), error = function(e) FALSE))) rec else NULL
+  if (!doc_sidecar_exists(f)) return(doc_sidecar_legacy_read(path))
+  if (!is_windows() && !doc_sidecar_trusted(f)) return(NULL)
+  tryCatch({
+    limit = doc_sidecar_limit()
+    info = file.info(f)
+    if (is.na(info$size) || isTRUE(info$isdir) || info$size > limit) return(NULL)
+    bytes = readBin(f, "raw", n = limit + 1L)
+    if (length(bytes) > limit || any(bytes == as.raw(0L)) ||
+        !validUTF8(rawToChar(bytes))) return(NULL)
+    text = raw_to_utf8(bytes)
+    doc_sidecar_decode(nb_keep_numbers(json_decode(text), text), path)
+  }, error = function(e) NULL)
 }
 
 #' Write a sidecar record `list(doc, base_md5, upserts = list(list(block_id, lines, site)),
 #' session, pid, create_time, time, kind)` (IC-51), or remove the file when no upsert is left.
-#' The file is replaced whole by P01's write_atomic() with the bytes save_rds() would write
-#' (serialize_leaf(): uncompressed, `ascii = FALSE`, read by readRDS()), so a write cut short by
+#' The closed JSON data is validated before replacing the file whole by write_atomic(), so a
+#' write cut short by
 #' SIGTERM or a full disk leaves the previous record readable (IC-51: at most one call is lost).
-#' A file there that doc_sidecar_trusted() rejects is removed first: write_atomic() would keep
+#' A modern POSIX file that doc_sidecar_trusted() rejects is removed first: write_atomic() keeps
 #' its mode, and this process's own record would then be rejected in turn.
 #' @noRd
 doc_sidecar_write = function(rec) {
   f = doc_sidecar_path(rec$doc)
-  if (!length(rec$upserts)) {
-    if (file.exists(f)) unlink(f)
+  if (!length(rec$upserts) && !doc_sidecar_exists(doc_sidecar_legacy_path(rec$doc))) {
+    if (doc_sidecar_exists(f)) unlink(f)
     return(invisible(NULL))
   }
+  data = tryCatch({
+    if (!doc_sidecar_valid(rec, rec$doc)) stop("Invalid recovery record")
+    data = doc_sidecar_data(rec)
+    if (is.null(doc_sidecar_decode(data, rec$doc))) stop("Unsupported recovery record")
+    data
+  }, error = function(e) {
+    gptr_abort("The pending document record cannot be stored as plain JSON data.", "doc_write",
+               path = rec$doc, reason = "invalid sidecar")
+  })
+  limit = doc_sidecar_limit()
+  too_large = function() {
+    gptr_abort("The pending document record exceeds the 16 MiB storage limit.", "doc_write",
+               path = rec$doc, reason = "sidecar size")
+  }
+  # Reject excessive existing strings before JSON allocation, then check the encoded bytes.
+  size = 0
+  # Preserve doubles at full precision and existing notebook number spelling. Each token has
+  # already been validated as one number, so no metadata can inject verbatim JSON structure.
+  numbers = function(x) {
+    strings = c(if (is.character(x)) x, names(x))
+    size <<- size + sum(nchar(strings, type = "bytes"))
+    if (size > limit) too_large()
+    if (is.list(x)) x[] = lapply(x, numbers)
+    if (is.double(x)) x = json_verbatim(doc_sidecar_number(x))
+    x
+  }
+  data = numbers(data)
+  text = json_encode(data)
+  if (nchar(text, type = "bytes") > limit) too_large()
+  bytes = charToRaw(text)
   dir.create(dirname(f), recursive = TRUE, showWarnings = FALSE)
-  if (file.exists(f) && !doc_sidecar_trusted(f)) unlink(f)
-  write_atomic(f, serialize_leaf(rec))
+  if (!is_windows() && doc_sidecar_exists(f) && !doc_sidecar_trusted(f)) unlink(f)
+  write_atomic(f, bytes)
   invisible(f)
 }
 
@@ -507,7 +767,8 @@ doc_finalizer_ensure = function() {
 #' @noRd
 doc_pending_reconcile = function(rec) {
   disk = doc_sidecar_read(rec$doc)
-  if (is.null(disk) && file.exists(doc_sidecar_path(rec$doc))) return(rec)
+  if (is.null(disk) && any(doc_sidecar_exists(c(doc_sidecar_path(rec$doc),
+                                               doc_sidecar_legacy_path(rec$doc))))) return(rec)
   mine = identical(suppressWarnings(as.integer(disk$pid)), Sys.getpid()) &&
     pid_alive(disk$pid, disk$create_time)
   if (!is.null(disk) && !mine) return(rec)
@@ -755,7 +1016,8 @@ doc_script_running = function(path) {
 doc_recover = function(path, defer = FALSE) {
   path = path_norm(path)
   rec = doc_sidecar_read(path)
-  if (is.null(rec) || !identical(rec$kind, "deferred") || pid_alive(rec$pid, rec$create_time)) {
+  if (is.null(rec) || !length(rec$upserts) || !identical(rec$kind, "deferred") ||
+      pid_alive(rec$pid, rec$create_time)) {
     return(invisible(FALSE))
   }
   if (defer || doc_script_running(path)) {

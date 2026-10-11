@@ -382,8 +382,8 @@ test_that("deferred blocks wait in a sidecar and are written when the process ex
   expect_identical(res$backend, "deferred")
   expect_identical(readLines(f), c("library(gptr)", "peter(\"count rows\")", "z = 1"))
   side = doc_sidecar_path(f)
-  expect_match(side, "[.]gptr/cache/tmp/pending-[0-9a-f]{40}[.]rds$")
-  rec = readRDS(side)
+  expect_match(side, "[.]gptr/cache/tmp/pending-[0-9a-f]{40}[.]json$")
+  rec = doc_sidecar_read(f)
   expect_identical(rec$pid, Sys.getpid())
   expect_identical(rec$kind, "deferred")
   expect_identical(rec$doc, path_norm(f))
@@ -469,7 +469,7 @@ test_that("an open notebook is never written; its blocks wait for gptr_doc(sync 
     model = "fake/fake-1", prompt = prompt_hash("summarise the mpg column")),
     body = c("mean(x$mpg)", "## Decision: mean")), site)
   res = NULL
-  out = cli::cli_fmt({
+  out = utils::capture.output({
     res = doc_upsert(site, structure(as.character(lines), header = list(
       model = "fake/fake-1", prompt = prompt_hash("summarise the mpg column"))))
   })
@@ -767,7 +767,7 @@ test_that("a sidecar is replaced whole, so a write cut short keeps the earlier u
 doc_io_plant = function(f, rec) {
   side = doc_sidecar_path(f)
   dir.create(dirname(side), recursive = TRUE, showWarnings = FALSE)
-  write_atomic(side, serialize_leaf(rec))
+  write_atomic(side, charToRaw(json_encode(doc_sidecar_data(rec))))
   invisible(side)
 }
 
@@ -796,7 +796,7 @@ test_that("a sidecar is used only for the document it is named for (IC-51, IC-52
   bad_id = up
   bad_id$block_id = "../../x"
   bad_lines = up
-  bad_lines$lines = list("x = 1")
+  bad_lines$lines = list(1L)
   planted = list(
     another_doc = set(good, doc = path_norm(victim), upserts = list(evil)),
     another_doc_r = set(good, doc = path_norm(victim)),
@@ -1482,4 +1482,447 @@ test_that("gptr_return() and peter$out() calls re-source cleanly under Rscript a
   src = doc_child_run(root, driver, replay = "replay")
   expect_identical(src$status, 0L)
   expect_match(src$stdout, "REQUESTS 0", fixed = TRUE)
+})
+# ---- Plain-data recovery sidecars (storage audit) --------------------------------------------
+
+doc_io_legacy_path = function(path) {
+  sub("[.](rds|json)$", ".rds", doc_sidecar_path(path))
+}
+
+test_that("new sidecars are closed JSON data with explicit line arrays", {
+  local_project()
+  local_doc_pending()
+  f = file.path(getwd(), "json.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  rec$upserts[[1]]$site$expr = quote(peter("first"))
+  rec$upserts[[1]]$site$driver = function() stop("must not serialize callbacks")
+  for (lines in list(character(), "x = 1", c("x = 1", "y = 2"))) {
+    rec$upserts[[1]]$lines = lines
+    doc_sidecar_write(rec)
+    side = doc_sidecar_path(f)
+    expect_match(side, "[.]json$")
+    wire = json_decode(read_utf8(side)$text)
+    expect_identical(wire$version, 1L)
+    expect_named(wire$upserts[[1]]$site,
+                 c("path", "format", "anchor", "prompt_hash", "args_hash"))
+    expect_identical(wire$upserts[[1]]$lines, as.list(lines))
+    restored = doc_sidecar_read(f)
+    expect_identical(restored$upserts[[1]]$lines, lines)
+    expect_identical(restored$pid, rec$pid)
+    expect_identical(restored$create_time, rec$create_time)
+    expect_s3_class(restored$time, "POSIXct")
+  }
+})
+
+test_that("Windows leaves legacy sidecars pending without any RDS read", {
+  local_project()
+  local_gptr_options(quiet = FALSE)
+  f = file.path(getwd(), "legacy.R")
+  writeLines('peter("first")', f)
+  rec = doc_pending_new(path_norm(f), "deferred")
+  rec$pid = 999999999L
+  rec$upserts = list(list(block_id = "aaaaaa", lines = "x = 1", site = doc_io_site(f, "first")))
+  side = doc_io_legacy_path(f)
+  dir.create(dirname(side), recursive = TRUE, showWarnings = FALSE)
+  write_atomic(side, serialize_leaf(rec))
+  before = unname(tools::md5sum(side))
+  reads = 0L
+  original = base::readRDS
+  testthat::local_mocked_bindings(is_windows = function() TRUE)
+  testthat::local_mocked_bindings(readRDS = function(file, ...) {
+    if (!identical(file, side)) return(original(file, ...))
+    reads <<- reads + 1L
+    rec
+  }, .package = "base")
+  expect_message(expect_null(doc_sidecar_read(f)), "legacy.*pending", ignore.case = TRUE)
+  expect_identical(reads, 0L)
+  expect_identical(unname(tools::md5sum(side)), before)
+  expect_identical(doc_cache_files("sidecar"), side)
+  expect_length(doc_cache_files("tmp"), 0L)
+})
+
+test_that("legacy recovery settles once without deleting its preserved bytes", {
+  skip_on_os("windows")
+  local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(getwd(), "legacy.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  unlink(doc_sidecar_path(f))
+  legacy = doc_io_legacy_path(f)
+  write_atomic(legacy, serialize_leaf(rec))
+  before = unname(tools::md5sum(legacy))
+  expect_identical(doc_sidecar_read(f)$upserts[[1]]$block_id, "aaaaaa")
+  expect_true(doc_recover(f))
+  expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
+  expect_identical(unname(tools::md5sum(legacy)), before)
+  settled = doc_sidecar_read(f)
+  expect_length(settled$upserts, 0L)
+  reads = 0L
+  original = base::readRDS
+  testthat::local_mocked_bindings(readRDS = function(file, ...) {
+    if (!identical(file, legacy)) return(original(file, ...))
+    reads <<- reads + 1L
+    stop("a settled legacy record must not be read again")
+  }, .package = "base")
+  expect_identical(doc_sync(f), 0L)
+  expect_false(doc_recover(f))
+  expect_identical(reads, 0L)
+  writeLines("{invalid json", doc_sidecar_path(f))
+  expect_null(doc_sidecar_read(f))
+  expect_identical(reads, 0L)
+  expect_identical(unname(tools::md5sum(legacy)), before)
+  expect_setequal(doc_cache_files("sidecar"), c(legacy, doc_sidecar_path(f)))
+  expect_length(doc_cache_files("tmp"), 0L)
+})
+
+test_that("JSON recovery validates the closed schema before using any record", {
+  local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(getwd(), "json.R")
+  before = 'peter("first")'
+  writeLines(before, f)
+  doc_io_dead_sidecar(f, "first")
+  side = doc_sidecar_path(f)
+  good = json_decode(read_utf8(side)$text)
+  bad = list()
+  put = function(field, value) {
+    x = good
+    x[field] = list(value)
+    x
+  }
+  bad$version = put("version", 2L)
+  bad$extra = put("callback", "ignored()")
+  bad$pid_array = put("pid", list(1L, 2L))
+  bad$pid_fraction = put("pid", 1.5)
+  bad$time_string = put("time", "yesterday")
+  bad$create_time = put("create_time", list(1))
+  bad$session = put("session", list("s1"))
+  x = good
+  x$upserts[[1]]$lines = list(1L)
+  bad$line = x
+  x = good
+  x$upserts[[1]]$site$anchor$j = 0L
+  bad$ordinal = x
+  x = good
+  x$upserts[[1]]$site$anchor$callback = "unexpected()"
+  bad$anchor_extra = x
+  x = good
+  x$upserts[[1]]$site$anchor$call0 = '{peter("first"); 1}'
+  bad$call_expression = x
+  for (x in bad) {
+    write_atomic(side, charToRaw(json_encode(x)))
+    expect_null(doc_sidecar_read(f))
+    expect_false(doc_recover(f))
+    expect_identical(readLines(f), before)
+  }
+})
+
+test_that("JSON notebook recovery keeps computed call anchors and owned metadata", {
+  local_project()
+  local_gptr_options(record = "auto")
+  st = local_doc_pending()
+  nb = file.path(getwd(), "computed.ipynb")
+  doc_io_nb_write(nb, c('peter("same")', 'q = "same"; gptr::peter(q)'))
+  ph = prompt_hash("same")
+  call0 = quote(gptr::peter(q))
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  site = doc_locate(call_new("same", "same", sys_call = call0, nframe = 0L))
+  expect_identical(site$kind, "jupyter")
+  expect_true(is.na(site$anchor$ph))
+  expect_identical(site$anchor$call0, call0)
+  meta = nb_meta("aaaaaa", list(model = "m", prompt = ph, sha = doc_body_sha("x = 1"),
+                               call = 1L, turn = 2L, status = "undone"))
+  meta$extra = list(author = "fixture", flags = list(TRUE, NULL), metric = 0.30000000000000004)
+  meta = meta[order(names(meta), method = "radix")]
+  rec = doc_pending_new(path_norm(nb), "pending")
+  rec$upserts = list(list(block_id = "aaaaaa", lines = structure("#~ x = 1", meta = meta),
+                          site = site, adopted = TRUE))
+  doc_sidecar_write(rec)
+  restored = doc_sidecar_read(nb)
+  expect_identical(restored$upserts[[1]]$site$anchor$call0, call0)
+  restored_meta = attr(restored$upserts[[1]]$lines, "meta")
+  expect_identical(restored_meta[names(meta) != "extra"], meta[names(meta) != "extra"])
+  expect_identical(as.numeric(restored_meta$extra$metric), meta$extra$metric)
+  expect_true(restored$upserts[[1]]$adopted)
+  st$docs = list()
+  withr::local_options(jupyter.in_kernel = NULL)
+  expect_identical(doc_sync(nb), 1L)
+  out = nb_parse(doc_read(nb)$lines)
+  expect_identical(nb_cell_ids(out), c("c1", "c2", "gptr-aaaaaa"))
+  expect_identical(out$cells[[3]]$metadata$gptr, restored_meta)
+  expect_identical(nb_cell_lines(out$cells[[3]]), "#~ x = 1")
+})
+
+test_that("JSON notebook recovery keeps each repeated-prompt pipeline step", {
+  local_project()
+  local_gptr_options(record = "auto")
+  st = local_doc_pending()
+  nb = file.path(getwd(), "pipeline.ipynb")
+  doc_io_nb_write(nb, 'peter("draft") |> peter("again") |> peter("again")')
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  calls = list(quote(peter("draft")), quote(peter(peter("draft"), "again")),
+                quote(peter(peter(peter("draft"), "again"), "again")))
+  prompts = c("draft", "again", "again")
+  ids = c("aaa111", "bbb222", "ccc333")
+  rec = doc_pending_new(path_norm(nb), "pending")
+  rec$upserts = lapply(seq_along(calls), function(i) {
+    site = doc_locate(call_new(prompts[i], prompts[i], sys_call = calls[[i]], nframe = 0L))
+    expect_identical(site$kind, "jupyter")
+    expect_identical(site$ordinal, as.integer(i))
+    code = paste0("x = ", i)
+    meta = nb_meta(ids[i], list(prompt = prompt_hash(prompts[i]), call = as.integer(i),
+                               sha = doc_body_sha(code)))
+    list(block_id = ids[i], lines = structure(code, meta = meta), site = site)
+  })
+  doc_sidecar_write(rec)
+  st$docs = list()
+  withr::local_options(jupyter.in_kernel = NULL)
+  expect_identical(doc_sync(nb), 3L)
+  out = nb_parse(doc_read(nb)$lines)
+  expect_identical(nb_cell_ids(out), c("c1", paste0("gptr-", ids)))
+  expect_identical(vapply(out$cells[-1L], nb_cell_lines, ""), paste0("x = ", 1:3))
+  expect_false(file.exists(doc_sidecar_path(nb)))
+})
+
+test_that("unsupported notebook metadata cannot replace a durable JSON sidecar", {
+  local_project()
+  nb = file.path(getwd(), "meta.ipynb")
+  doc_io_nb_write(nb, 'peter("one")')
+  rec = doc_pending_new(path_norm(nb), "pending")
+  rec$upserts = list(list(block_id = "aaaaaa", lines = structure("x = 1", meta = list(
+    id = "aaaaaa")), site = doc_io_site(nb, "one")))
+  doc_sidecar_write(rec)
+  before = unname(tools::md5sum(doc_sidecar_path(nb)))
+  unsupported = list(function() NULL, quote(peter(q)), new.env(parent = emptyenv()),
+                      as.Date("2026-10-10"), c("a", "b"), 1 + 1i,
+                      structure(1.5, nb_json = '1.5,"unexpected":true'))
+  for (value in unsupported) {
+    attr(rec$upserts[[1]]$lines, "meta")$unknown = value
+    expect_error(doc_sidecar_write(rec), class = "gptr_error_doc_write")
+    expect_identical(unname(tools::md5sum(doc_sidecar_path(nb))), before)
+  }
+})
+
+test_that("JSON recovery rejects nonscalar consumed notebook metadata", {
+  local_project()
+  nb = file.path(getwd(), "bad-meta.ipynb")
+  doc_io_nb_write(nb, 'peter("one"); peter("two")')
+  rec = doc_pending_new(path_norm(nb), "pending")
+  rec$upserts = list(list(block_id = "aaaaaa", lines = structure("x = 1", meta = list(
+    id = "aaaaaa")), site = doc_io_site(nb, "one")))
+  doc_sidecar_write(rec)
+  side = doc_sidecar_path(nb)
+  good = json_decode(read_utf8(side)$text)
+  for (key in c("prompt", "call", "turn", "status", "sha", "args", "model", "session")) {
+    x = good
+    x$upserts[[1]]$meta[[key]] = list("one", "two")
+    write_atomic(side, charToRaw(json_encode(x)))
+    expect_null(doc_sidecar_read(nb), info = key)
+  }
+})
+
+test_that("JSON inert notebook sidecars preserve existing fractional number tokens", {
+  local_project()
+  local_gptr_options(record = "auto")
+  st = local_doc_pending()
+  nb = file.path(getwd(), "inert-meta.ipynb")
+  doc_io_nb_write(nb, 'peter("one")')
+  site = doc_io_site(nb, "one")
+  meta = nb_meta("aaaaaa", list(prompt = prompt_hash("one"), sha = doc_body_sha("x = 1")))
+  meta$extra = list(metric = structure(1e-7, nb_json = "1e-07"))
+  writeLines(doc_ipynb_upsert(doc_read(nb)$lines, site, structure("x = 1", meta = meta),
+                             "aaaaaa"), nb)
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  expect_true(doc_pending_inert(path_norm(nb), "ipynb", "aaaaaa", TRUE, "pending"))
+  st$docs = list()
+  withr::local_options(jupyter.in_kernel = NULL)
+  expect_identical(doc_sync(nb), 1L)
+  text = paste(doc_read(nb)$lines, collapse = "\n")
+  expect_match(text, '"metric": 1e-07', fixed = TRUE)
+  out = nb_parse(doc_read(nb)$lines)
+  expect_identical(out$cells[[2]]$metadata$gptr$status, "undone")
+  expect_identical(nb_cell_lines(out$cells[[2]]), "#~ x = 1")
+})
+
+
+test_that("a broken modern sidecar link still prevents legacy deserialization", {
+  skip_on_os("windows")
+  local_project()
+  f = file.path(getwd(), "legacy.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  modern = doc_sidecar_path(f)
+  unlink(modern)
+  legacy = doc_io_legacy_path(f)
+  write_atomic(legacy, serialize_leaf(rec))
+  expect_true(file.symlink(file.path(getwd(), "absent.json"), modern))
+  reads = 0L
+  original = base::readRDS
+  testthat::local_mocked_bindings(readRDS = function(file, ...) {
+    if (!identical(file, legacy)) return(original(file, ...))
+    reads <<- reads + 1L
+    rec
+  }, .package = "base")
+  expect_null(doc_sidecar_read(f))
+  expect_identical(reads, 0L)
+  st = local_doc_pending()
+  st$docs[[path_key(f)]] = rec
+  expect_identical(doc_pending_reconcile(rec)$upserts, rec$upserts)
+})
+
+test_that("modern sidecar reads are bounded before decode and remain authoritative", {
+  local_project()
+  f = file.path(getwd(), "bounded.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  modern = doc_sidecar_path(f)
+  legacy = doc_io_legacy_path(f)
+  write_atomic(legacy, serialize_leaf(rec))
+  bytes = readBin(modern, "raw", n = file.size(modern))
+  limit = length(bytes)
+  expect_equal(doc_sidecar_limit(), 16 * 1024^2)
+  local_mocked_bindings(doc_sidecar_limit = function() limit)
+  expect_identical(doc_sidecar_read(f)$upserts[[1]]$block_id, "aaaaaa")
+  write_atomic(modern, c(bytes, as.raw(32L)))
+  expect_null(doc_sidecar_read(f))
+  write_atomic(modern, bytes)
+  original = base::readBin
+  reads = numeric()
+  local_mocked_bindings(readBin = function(con, what, n, ...) {
+    if (!identical(con, modern)) return(original(con, what, n, ...))
+    reads <<- c(reads, n)
+    c(bytes, as.raw(32L))
+  }, .package = "base")
+  expect_null(doc_sidecar_read(f))
+  expect_identical(reads, as.numeric(limit + 1L))
+  unlink(modern)
+  dir.create(modern)
+  expect_null(doc_sidecar_read(f))
+  expect_length(reads, 1L)
+})
+
+test_that("over-limit JSON writes preserve the existing durable record", {
+  local_project()
+  f = file.path(getwd(), "bounded.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  side = doc_sidecar_path(f)
+  before = unname(tools::md5sum(side))
+  limit = file.size(side)
+  local_mocked_bindings(doc_sidecar_limit = function() limit)
+  expect_silent(doc_sidecar_write(rec))
+  rec$upserts[[1]]$lines = paste(rep("large code", 100L), collapse = "\n")
+  err = expect_error(doc_sidecar_write(rec), class = "gptr_error_doc_write")
+  expect_identical(err$reason, "sidecar size")
+  expect_identical(unname(tools::md5sum(side)), before)
+  nb = file.path(getwd(), "meta.ipynb")
+  doc_io_nb_write(nb, 'peter("one")')
+  rec = doc_pending_new(path_norm(nb), "pending")
+  rec$upserts = list(list(block_id = "aaaaaa", lines = structure("x = 1", meta = list(
+    id = "aaaaaa")), site = doc_io_site(nb, "one")))
+  limit = 4096L
+  doc_sidecar_write(rec)
+  side = doc_sidecar_path(nb)
+  before = unname(tools::md5sum(side))
+  limit = file.size(side)
+  attr(rec$upserts[[1]]$lines, "meta")$extra = paste(rep("metadata", 100L), collapse = "")
+  expect_error(doc_sidecar_write(rec), class = "gptr_error_doc_write")
+  expect_identical(unname(tools::md5sum(side)), before)
+})
+
+test_that("sidecar presence uses directory entries when link targets cannot be probed", {
+  local_project()
+  f = file.path(getwd(), "dangling.R")
+  modern = doc_sidecar_path(f)
+  dir.create(dirname(modern), recursive = TRUE, showWarnings = FALSE)
+  write_atomic(modern, charToRaw("{}"))
+  original = base::file.exists
+  local_mocked_bindings(file.exists = function(...) {
+    paths = unlist(list(...), use.names = FALSE)
+    out = original(...)
+    out[paths == modern] = FALSE
+    out
+  }, Sys.readlink = function(paths) rep("", length(paths)), .package = "base")
+  expect_true(doc_sidecar_exists(modern))
+  local_mocked_bindings(is_windows = function() TRUE)
+  expect_true(doc_sidecar_exists(modern))
+  expect_false(doc_sidecar_exists(doc_io_legacy_path(f)))
+})
+
+test_that("unknown or malformed POSIX owner identity never deserializes legacy sidecars", {
+  skip_on_os("windows")
+  local_project()
+  f = file.path(getwd(), "owner.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  modern = doc_sidecar_path(f)
+  bytes = readBin(modern, "raw", n = file.size(modern))
+  unlink(modern)
+  legacy = doc_io_legacy_path(f)
+  write_atomic(legacy, serialize_leaf(rec))
+  before = unname(tools::md5sum(legacy))
+  owner = as.numeric(file.info(legacy, extra_cols = TRUE)$uid)
+  uid = owner
+  reads = 0L
+  original = base::readRDS
+  local_mocked_bindings(doc_euid = function() uid)
+  local_mocked_bindings(readRDS = function(file, ...) {
+    if (!identical(file, legacy)) return(original(file, ...))
+    reads <<- reads + 1L
+    rec
+  }, .package = "base")
+  invalid = list(NA_real_, NaN, Inf, -1, numeric(), c(owner, owner), as.character(owner))
+  for (value in invalid) {
+    uid = value
+    reads = 0L
+    expect_null(doc_sidecar_read(f))
+    expect_identical(reads, 0L)
+    expect_identical(unname(tools::md5sum(legacy)), before)
+  }
+  uid = owner
+  expect_identical(doc_sidecar_read(f)$upserts[[1]]$block_id, "aaaaaa")
+  expect_identical(reads, 1L)
+  write_atomic(modern, bytes)
+  uid = NA_real_
+  expect_null(doc_sidecar_read(f))
+  local_mocked_bindings(is_windows = function() TRUE)
+  expect_identical(doc_sidecar_read(f)$upserts[[1]]$block_id, "aaaaaa")
+  expect_identical(reads, 1L)
+  expect_identical(unname(tools::md5sum(legacy)), before)
+})
+
+test_that("a differently cased dangling modern entry masks legacy on a POSIX filesystem", {
+  skip_on_os("windows")
+  local_project()
+  f = file.path(getwd(), "case.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  modern = doc_sidecar_path(f)
+  unlink(modern)
+  legacy = doc_io_legacy_path(f)
+  write_atomic(legacy, serialize_leaf(rec))
+  before = unname(tools::md5sum(legacy))
+  case = sub("[.]json$", ".JSON", modern)
+  expect_true(file.symlink(file.path(getwd(), "absent.json"), case))
+  link = Sys.readlink(modern)
+  skip_if(is.na(link) || !nzchar(link), "the filesystem is case-sensitive")
+  expect_true(doc_sidecar_exists(modern))
+  reads = 0L
+  original = base::readRDS
+  local_mocked_bindings(readRDS = function(file, ...) {
+    if (!identical(file, legacy)) return(original(file, ...))
+    reads <<- reads + 1L
+    rec
+  }, .package = "base")
+  expect_null(doc_sidecar_read(f))
+  expect_identical(reads, 0L)
+  expect_identical(doc_pending_reconcile(rec)$upserts, rec$upserts)
+  expect_identical(unname(tools::md5sum(legacy)), before)
 })

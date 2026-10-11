@@ -1091,7 +1091,7 @@ doc_cache_files = function(kind) {
   f = list.files(dir, pattern = if (answers) "[.]json$" else NULL, recursive = answers,
                  full.names = TRUE)
   f = f[path_inside(f, dir)]
-  sidecars = grepl("^pending-.*[.]rds$", basename(f))
+  sidecars = grepl("^pending-.*[.](json|rds)$", basename(f))
   if (identical(kind, "tmp")) f = f[!sidecars]
   if (identical(kind, "sidecar")) f = f[sidecars]
   f[file.exists(f) & !dir.exists(f)]
