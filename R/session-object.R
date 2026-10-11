@@ -482,8 +482,9 @@ as.character.gptr_session = function(x, ...) session_text(x)
 #' workflow summary or export an executable script. To request prose, continue the session
 #' with [peter()] and verify the model-generated answer against the recorded work.
 #' Both `summary(s)` and `s$history` retain every recorded message. Printing shows the latest
-#' eight messages and a snapshot of session metadata. Use `print(x, n = Inf)` to display every
-#' row, or `as.data.frame(x)` for an ordinary data frame without the display metadata.
+#' eight messages and a snapshot of session metadata. Notebook, R Markdown and Quarto displays
+#' use the same compact preview by default. Use `print(x, n = Inf)` to display every row, or
+#' `as.data.frame(x)` for an ordinary data frame without the display metadata.
 #'
 #' @param object A `gptr_session`.
 #' @param ... Unused.
@@ -506,6 +507,13 @@ summary.gptr_session = function(object, ...) {
 #' @return `x`, invisibly.
 #' @export
 print.gptr_session_summary = function(x, n = 8L, ...) {
+  msg_verbatim(session_history_display_lines(x, n))
+  invisible(x)
+}
+
+#' Pure bounded text shared by console, document and notebook history displays
+#' @noRd
+session_history_display_lines = function(x, n = 8L) {
   if (!identical(n, Inf)) n = check_number(n, "n", min = 0, int = TRUE)
   total = nrow(x)
   shown = min(total, n)
@@ -546,9 +554,37 @@ print.gptr_session_summary = function(x, n = 8L, ...) {
     lines = c(lines, strwrap(session_history_display_text(footer), width = width))
   }
   if (!isTRUE(l10n_info()[["UTF-8"]])) lines = enc2native(lines)
-  msg_verbatim(cli::ansi_strtrim(lines, width, ellipsis = if (width >= 3L) "..." else ""))
-  invisible(x)
+  cli::ansi_strtrim(lines, width, ellipsis = if (width >= 3L) "..." else "")
 }
+
+#' Notebook history text uses the same pure bounded display as the console
+#' @noRd
+doc_history_repr_text = function(x, ...) {
+  paste(cli::ansi_strip(session_history_display_lines(x)), collapse = "\n")
+}
+
+#' Keep history text inert in the notebook's HTML representation
+#' @noRd
+doc_history_repr_html = function(x, ...) {
+  text = doc_history_repr_text(x)
+  text = gsub("&", "&amp;", text, fixed = TRUE)
+  text = gsub("<", "&lt;", text, fixed = TRUE)
+  text = gsub(">", "&gt;", text, fixed = TRUE)
+  paste0("<pre>", text, "</pre>")
+}
+
+#' A literal fence preserves the compact preview without interpreting its markup
+#' @noRd
+doc_history_repr_markdown = function(x, ...) {
+  text = doc_history_repr_text(x)
+  runs = regmatches(text, gregexpr("`+", text))[[1L]]
+  fence = strrep("`", max(3L, nchar(runs) + 1L))
+  paste(c(fence, text, fence), collapse = "\n")
+}
+
+#' Suppress the inherited data-frame LaTeX representation of the complete history
+#' @noRd
+doc_history_repr_latex = function(x, ...) NULL
 
 #' Strip display metadata while retaining every history row and column
 #'

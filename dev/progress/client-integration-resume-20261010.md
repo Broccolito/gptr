@@ -556,3 +556,55 @@ conversion; both changed guides precomputed offline in 1.2s against a temporary 
 installation with zero problems, and their committed-code audit passed. The maintainer's
 pre-existing DESCRIPTION preference is preserved. Fresh candidate installation and actual
 native visual proof remain required; installed895 is still immutable.
+
+## Installed history witness and alternate-renderer audit
+
+The coordinator's fresh normal03963e0 archive/install passed and is kept in a distinct
+immutable library. Actual R.app default print and methods::show display the latest eight
+of24 retained messages with16 omitted, unknown unreported assistant totals and a detached
+session footer. Full-table conversion/all-row printing and input snapshot invariance pass.
+All three restoration proofs pass with zero warnings and matching approved five-file
+installation hashes. This is one fake-provider request plus eleven explicitly synthetic
+message pairs, not external inference. Ordinary text remains visually red after a native
+CR redraw following the intentional error; that separately reproduced GUI color defect is
+under correction. No visual color pass is claimed for this first run.
+
+Read-only source dispatch review found that optional notebook repr methods inherit
+data.frame text/HTML/Markdown/LaTeX representations, bypassing the compact printer. Rmd's
+default renderer uses the printer; kable/paged/tibble paths and Quarto's default HTML kable
+renderer instead dispatch the inherited data.frame knit_print method. Summary-specific lazy
+hooks are planned using existing optional dependencies: the same bounded/sanitized text,
+escaped HTML, literal fenced Markdown, no inherited raw LaTeX table, and a knit_print method
+that delegates to the regular compact printer. The complete data frame stays intact.
+
+A narrow offline RED packet is prepared but unexecuted pending the coordinator's serial
+R lease. Notebook/document rendering is not closed by console print tests or this audit.
+
+## Alternate-renderer source implementation and validation
+
+Summary-specific lazy repr text/HTML/Markdown/LaTeX and knitr hooks are now implemented.
+One pure L3 formatter supplies the same bounded/sanitized text as the console printer;
+HTML is escaped, Markdown uses a longer literal backtick fence, and inherited full-table
+LaTeX output is suppressed. L5 only registers optional methods and delegates knitting to
+public print. No new dependency, model request, eager optional load or full-data mutation.
+Function help describes the same default preview in notebooks, R Markdown and Quarto.
+
+Expected production RED had39fail/19pass; focused GREEN58pass, zero failures/test warnings/
+skips,1.703s and318.3MiB child maxRSS. Final combined affected packet passed726 assertions
+with zero failures/test warnings and one Quarto skip because the isolated PATH excluded
+RStudio's installed Quarto binary. It took57.643s with350.0MiB child maxRSS. The focused
+C-locale packet passed58 assertions with no failures/warnings/skips; four files lint clean.
+Known testthat-built-under-R4.5.2 startup advisory is retained separately. Counts overlap.
+
+Earlier failures remain retained: an invalid synthetic mixed-escape string failed fixture
+parsing; the first implementation crossed IC-33 layers and was relocated before final
+GREEN; a waldo namespace-load assertion artifact was fixed; two pre-existing Jupyter fallback
+display assertions were corrected to require the exact ordinary stdout fenced lines.
+Independent final source/test review is clear. Raw evidence is ignored
+`resume-68017d0/client/doc-history-display-20261011/`.
+
+Installed/native notebook, Rmd and Quarto rendering remains required. All local-heavy jobs
+are held after the19:06PDT snapshot: load103.03, CPU1.36%idle,127GiB RAM used/112GiB wired,
+memory-pressure free5%,31,266.94MiB swap,40GiB disk, no thermal warning. Test children had
+exited; read-only process/model inventory identifies a separate active Ollama server at
+about103.4GiB RSS with a131,072-token context. No server/model was stopped or unloaded.

@@ -143,13 +143,13 @@ test_that("pending notebook code publishes one MIME bundle while source and side
     stop("display unavailable")
   })
   code2 = c(code, "n = 2")
-  fallback = testthat::capture_messages({
+  fallback = utils::capture.output({
     doc_upsert(site, structure(code2, header = list(model = "m", prompt = prompt_hash("one"))))
   })
   expect_identical(state$attempts, 1L)
   expect_length(state$bundles, 1L)
-  expect_length(fallback, 1L)
-  expect_match(fallback, paste(c("````r", code2, "````"), collapse = "\n"), fixed = TRUE)
+  expect_length(fallback, length(code2) + 2L)
+  expect_identical(fallback, c("````r", code2, "````"))
   expect_identical(readBin(nb, "raw", n = file.info(nb)$size), before)
   expect_false(any(setdiff(c("repr", "IRdisplay"), loaded) %in% loadedNamespaces()))
 })

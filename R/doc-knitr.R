@@ -29,6 +29,13 @@ knit_print.gptr_s1 = function(x, ...) {
   knitr::asis_output(paste0("`", redact(doc_s1_summary(x), "persist"), "`\n"))
 }
 
+#' Use the compact history printer before knitr delegates to a data-frame renderer
+#' @noRd
+doc_history_knit_print = function(x, ...) {
+  print(x)
+  invisible(NULL)
+}
+
 #' Recorded code of a session's last turn when it ran live (replayed sessions, teams and
 #' fan-outs show none: their code is in the agent chunk)
 #' @noRd
@@ -109,5 +116,11 @@ doc_knitr_unhook = function(old, mine) {
 
 on_load(s3_register("knitr::knit_print", "gptr_session"))
 on_load(s3_register("knitr::knit_print", "gptr_s1"))
+on_load(s3_register("knitr::knit_print", "gptr_session_summary", method = doc_history_knit_print))
 on_load(s3_register("repr::repr_text", "gptr_session", method = doc_session_repr_text))
 on_load(s3_register("repr::repr_markdown", "gptr_session", method = doc_session_repr_markdown))
+on_load(s3_register("repr::repr_text", "gptr_session_summary", method = doc_history_repr_text))
+on_load(s3_register("repr::repr_html", "gptr_session_summary", method = doc_history_repr_html))
+on_load(s3_register("repr::repr_markdown", "gptr_session_summary",
+                   method = doc_history_repr_markdown))
+on_load(s3_register("repr::repr_latex", "gptr_session_summary", method = doc_history_repr_latex))
