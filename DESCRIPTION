@@ -32,7 +32,6 @@ BugReports: https://github.com/Broccolito/gptr/issues
 Depends:
     R (>= 4.2.0)
 Imports:
-    callr (>= 3.7.0),
     cli (>= 3.6.0),
     curl (>= 6.0.0),
     graphics,

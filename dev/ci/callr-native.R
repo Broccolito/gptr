@@ -166,7 +166,7 @@ callr_native_main = function(args) {
   test_file = if (packet == "upstream" || compat) {
     file.path(dirname(library), "source", "tests", "testthat", file)
   } else {
-    file.path("tests", "testthat", file)
+    file.path("dev", "upstream", "callr-native-environment", "gptr-fixtures", file)
   }
   stdout = file.path(output, "stdout.log")
   stderr = file.path(output, "stderr.log")

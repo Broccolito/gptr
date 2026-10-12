@@ -218,7 +218,7 @@ wait_fake_log = function(fake, kind, n, runs, timeout = 20) {
   length(fake_log(fake, kind))
 }
 
-# Worker children load the installed gptr (callr): skip unless the installed version is the one
+# Worker children load the installed gptr: skip unless the installed version is the one
 # under test (R CMD check installs it; devtools::test() does not)
 skip_without_installed_gptr = function() {
   inst = tryCatch(utils::packageVersion("gptr", lib.loc = .libPaths()), error = function(e) NULL)

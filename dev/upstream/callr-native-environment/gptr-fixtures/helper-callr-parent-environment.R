@@ -62,7 +62,18 @@ ce_parent_child_case = function(case, root, failure) {
   prepared = list(kept_empty = identical(native_env[["GPTR_CALLR_EMPTY_KEEP"]], ""),
     removed_empty = !"ANTHROPIC_API_KEY" %in% names(native_env),
     removed_nonempty = !"OPENAI_API_KEY" %in% names(native_env))
-  bridge = fun("child_env_callr")(native_env)
+  # The historical adapter stays fixture-local after its production retirement.
+  bridge = (function(env) {
+    fun("check_strings")(env, "env")
+    fun("child_env_names")(names(env), "env")
+    current = names(Sys.getenv())
+    # callr merges into the parent environment. POSIX names are case-sensitive, so an
+    # omitted variant must be explicitly unset even when an upper-case replacement exists.
+    key = if (.Platform$OS.type == "windows") toupper else identity
+    current = current[!duplicated(key(current))]
+    drop = current[!(key(current) %in% key(names(env)))]
+    c(env, stats::setNames(rep(NA_character_, length(drop)), drop))
+  })(native_env)
   phase("construct")
   withCallingHandlers({
     st$p = callr::r_bg(utils::removeSource(probe), args = list(marker),
@@ -159,7 +170,18 @@ ce_extended_child_case = function(case, root, failure) {
   path_only = identical(case, "path-absent")
   windows = identical(.Platform$OS.type, "windows")
   if (inherited) desired = desired[!toupper(names(desired)) %in% seven]
-  bridge = fun("child_env_callr")(desired)
+  # The historical adapter stays fixture-local after its production retirement.
+  bridge = (function(env) {
+    fun("check_strings")(env, "env")
+    fun("child_env_names")(names(env), "env")
+    current = names(Sys.getenv())
+    # callr merges into the parent environment. POSIX names are case-sensitive, so an
+    # omitted variant must be explicitly unset even when an upper-case replacement exists.
+    key = if (.Platform$OS.type == "windows") toupper else identity
+    current = current[!duplicated(key(current))]
+    drop = current[!(key(current) %in% key(names(env)))]
+    c(env, stats::setNames(rep(NA_character_, length(drop)), drop))
+  })(desired)
   # Omitting these from options lets callr capture inherited backups and run its hook.
   if (inherited) bridge = bridge[!toupper(names(bridge)) %in% seven]
   if (path_only) bridge = c(PATH = NA_character_, stats::setNames("YES", marker))

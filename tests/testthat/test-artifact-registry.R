@@ -15,7 +15,7 @@ seed_artifact = function(id, n = 1L, kind = "shiny") {
 
 # A sleeping R child with a handle shaped like the launcher's (closures over the process only).
 # R_TESTS is blanked: R CMD check sets it to a relative startup file that R's base profile
-# sources in every R child, which would end the child at once (as callr::rcmd_safe_env() does)
+# sources in every R child, which would end the child at once.
 sleeper_handle = function(.env = parent.frame()) {
   p = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(60)"),
                             env = c("current", R_TESTS = ""), cleanup = TRUE,

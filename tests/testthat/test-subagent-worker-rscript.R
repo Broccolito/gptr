@@ -27,7 +27,6 @@ test_that("worker launch passes a complete child environment and keeps one owned
       seen$provider = provider
       env
     },
-    child_env_callr = function(...) stop("callr environment conversion was used"),
     proc_mark = function(...) stop("the worker marked its process twice"),
     proc_rscript = function(entry, args, dir, env, stdin, .marker, .on_spawn) {
       seen$launch = list(entry = entry, args = args, dir = dir, env = env, stdin = stdin,

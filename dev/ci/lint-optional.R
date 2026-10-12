@@ -28,8 +28,6 @@ paths = c(
   "tests/testthat/helper-worker-parent-death.R",
   "tests/testthat/test-cli-common.R", "tests/testthat/test-cli-claude.R",
   "tests/testthat/test-cli-codex.R", "tests/testthat/helper-cli-codex-capabilities.R",
-  "tests/testthat/helper-callr-parent-environment.R",
-  "tests/testthat/test-callr-parent-environment.R",
   "dev/ci/optional-integrations.R", "dev/ci/test-optional-integrations.R",
   "dev/ci/lint-optional.R")
 stopifnot(all(file.exists(paths)))

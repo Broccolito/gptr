@@ -217,10 +217,7 @@ optional_titles = list(
     "retiring writer retry refuses replacement until owned cleanup settles",
     "writer admission retires only one verified other idle actor at the unchanged cap",
     "writer admission does not retire a queued actor to obtain a cap slot",
-    "idle Windows writer retirement preserves target stdin and later FIFO EOF"),
-  "test-callr-parent-environment.R" = c(
-  "a native callr worker launch preserves actual-empty parent entries and its r_process contract",
-  "a native callr artifact launch preserves actual-empty parent entries and its r_process contract")
+    "idle Windows writer retirement preserves target stdin and later FIFO EOF")
 )
 
 optional_select = function(pattern, root) {

@@ -89,7 +89,7 @@ test_that("mcp and worker are allowlists; the worker gets only its provider's ke
                class = "gptr_error_invalid_argument")
 })
 
-test_that("the worker keeps R_ARCH, which processx reads while callr sets its variables (WIN-1)", {
+test_that("the worker keeps R_ARCH for architecture-specific executable lookup (WIN-1)", {
   withr::local_envvar(R_ARCH = "/x64")
   expect_identical(child_env("worker")[["R_ARCH"]], "/x64")
 })
@@ -143,17 +143,6 @@ test_that("helper and artifact inherit minus secrets and registered values", {
   expect_false(any(c(secret_vars, "PLAIN_BUT_REGISTERED") %in% names(art)))
 })
 
-test_that("child_env_callr() unsets every other inherited variable with NA", {
-  local_vault()
-  local_fake_env()
-  env = child_env("mcp")
-  ce = child_env_callr(env)
-  expect_identical(ce[names(env)], env)
-  expect_true(all(is.na(ce[secret_vars])))
-  expect_setequal(names(ce), union(names(env), names(Sys.getenv())))
-  expect_error(child_env_callr(c(A = NA_character_)), class = "gptr_error_invalid_argument")
-})
-
 # A .Renviron that defines a FAKE token, pointed to by the parent's R_ENVIRON_USER.
 local_fake_renviron = function(.env = parent.frame()) {
   dir = withr::local_tempdir(.local_envir = .env)
@@ -197,27 +186,26 @@ test_that("Rscript children of the mcp and helper profiles never see a .Renviron
   expect_identical(run_rscript(child_env("helper"), probe), "")
 })
 
-test_that("a callr worker sees neither the .Renviron key nor the file", {
+test_that("an Rscript worker sees neither the .Renviron key nor the source file", {
   skip_on_cran()
   local_vault()
   renviron = local_fake_renviron()
-  res = callr::r(function() c(Sys.getenv("RENVIRON_ONLY_TOKEN"), Sys.getenv("R_ENVIRON_USER")),
-                 env = child_env_callr(child_env("worker")), user_profile = FALSE)
+  probe = paste0("cat(Sys.getenv('RENVIRON_ONLY_TOKEN'), '\n', ",
+                 "Sys.getenv('R_ENVIRON_USER'), sep = '')")
+  res = strsplit(run_rscript(child_env("worker"), probe), "\n", fixed = TRUE)[[1L]]
   expect_identical(res[1], "")
   expect_false(identical(normalizePath(res[2], winslash = "/", mustWork = FALSE), renviron))
-  expect_false(grepl("callr-uev", res[2], fixed = TRUE))
+  expect_identical(file.size(res[2]), 0)
 })
 test_that("environment inputs reject malformed names and values without exposing secrets", {
   for (nm in c(NA_character_, "", "A=B", "A\nB")) {
     bad = stats::setNames("FAKEinvalidSecretValue123", nm)
     expect_error(child_env("helper", set = bad), class = "gptr_error_invalid_argument")
-    expect_error(child_env_callr(bad), class = "gptr_error_invalid_argument")
   }
   for (bad in list(c(A = "x", a = "y"), c(A = NA_character_), list(A = 1),
                    list(A = c("x", "y")), list(A = NULL), new.env())) {
     expect_error(child_env("helper", set = bad), class = "gptr_error_invalid_argument")
   }
-  expect_error(child_env_callr(c(A = "x", a = "y")), class = "gptr_error_invalid_argument")
   expect_error(child_env("helper", pass = "A=B"), class = "gptr_error_invalid_argument")
 })
 
@@ -323,16 +311,4 @@ test_that("inherited settings containing registered values or derived forms are 
     expect_false(any(c("CONFIG", "URL_CONFIG", "ENCODED_CONFIG") %in% names(out)))
   }
   expect_identical(child("helper", pass = "CONFIG")[["CONFIG"]], parent[["CONFIG"]])
-})
-
-test_that("callr unsets every omitted POSIX case variant when merging environments", {
-  parent = c(Config = "FAKEparentOnlyValue", CONFIG = "FAKEsecondParentValue")
-  convert = child_env_callr
-  environment(convert) = list2env(list(Sys.getenv = function(...) parent),
-                                 parent = environment(convert))
-  out = convert(c(CONFIG = "clean"))
-  expect_identical(out[["CONFIG"]], "clean")
-  if (.Platform$OS.type != "windows") expect_true(is.na(out[["Config"]]))
-  removed = convert(c(OTHER = "clean"))
-  if (.Platform$OS.type != "windows") expect_true(all(is.na(removed[names(parent)])))
 })

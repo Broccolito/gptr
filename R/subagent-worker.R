@@ -1,4 +1,4 @@
-# subagent-worker.R -- worker sub-agents: the callr child, worker_main(), and the parent's proxy
+# subagent-worker.R -- worker sub-agents: the Rscript child, worker_main(), and the parent's proxy
 # (plan P19, layer L4, area `subagent`; architecture 6.13; contract 7.19, 8.1, 11.11, IC-53,
 # IC-60, IC-69).
 #

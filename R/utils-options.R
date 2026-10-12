@@ -120,7 +120,7 @@ platform_gui = function() {
 #' `.Platform$GUI` identifies the IDE's own R process. The IDE environment variables (`RSTUDIO`,
 #' `POSITRON`, `TERM_PROGRAM`) are inherited by every child process started from the IDE, so they
 #' count only in an interactive session; a non-interactive child (an Rscript started from the
-#' IDE's terminal, a callr worker) is "rscript".
+#' IDE's terminal, an Rscript worker) is "rscript".
 #' @noRd
 front_end = function() {
   env = function(name) Sys.getenv(name, unset = "")

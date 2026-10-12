@@ -56,7 +56,7 @@ test_that("Authors@R credits the maintainer and the author of pi (IC-72)", {
 
 test_that("Imports and Suggests are the final lists of conventions section 8", {
   expect_setequal(desc_packages("Imports"), c(
-    "callr", "cli", "curl", "graphics", "grDevices", "jsonlite", "methods", "processx", "ps",
+    "cli", "curl", "graphics", "grDevices", "jsonlite", "methods", "processx", "ps",
     "rlang", "stats", "tools", "utils", "yaml"
   ))
   expect_setequal(desc_packages("Suggests"), c(
@@ -171,7 +171,7 @@ test_that("the package loaded without load-time errors", {
 test_that("imports_used() references every Imports package", {
   used = vapply(imports_used(), function(f) is.function(f), logical(1))
   expect_true(all(used))
-  expect_length(used, 14L)
+  expect_length(used, 13L)
 })
 
 test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-72, IC-73)", {

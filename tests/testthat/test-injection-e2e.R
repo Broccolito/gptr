@@ -352,7 +352,6 @@ test_that("model code cannot steer its own session tree (IC-55)", {
 
 test_that("a worker's forwarded permission request is re-classified by the parent", {
   skip_on_cran()
-  skip_if_not_installed("callr")
   local_worker_lib()
   root = local_project()
   wfake = local_fake_provider(list(fake_tool("r",
