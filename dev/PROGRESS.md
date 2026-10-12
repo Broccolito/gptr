@@ -17,6 +17,12 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
 
 ## Resume log
 
+- 2026-10-12: committed Rscript/processx dependency retirement after three-OS native acceptance;
+  current921affected assertions and55lint paths pass. Help/docs/files/58examples clean.
+  Plan38227464940 passes all four checks; Linux observer38228279525 passes144assertions.
+  Windows38227809133 fails CI bootstrap before cases, with successful cleanup; repair ongoing.
+  Native malloc/fence fixes are committed; current GUI/provider/artifact acceptance pending.
+  Added required CP07 durable child attribution/root charge restoration. See current handoff.
 - 2026-10-10: expanded usage documentation to 13 guides, refreshed reference comments and grouped
   pkgdown navigation; 71 documentation assertions and all 58 reference example pages passed;
   built and inspected the local site (89 HTML pages, no broken local links/fragments). Remote/PR

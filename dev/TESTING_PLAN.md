@@ -135,6 +135,7 @@ external destination is authorized. Never expose the test MCP server publicly.
 | CP04 persistence | Snapshot `.gptr` context/workflow/session/checkpoint deltas before/after compaction; restart/resume/rewind from each supported boundary; corruption is rejected and no secret/context content leaks | ONGOING durable per-attempt JSONL usage/rebuild with schema/session-ID validation; full resume/rewind deltas WAITING, connects ST01/ST02 and IM06. |
 | CP05 teams/replay | Child-only versus parent compaction, fan-out shared-budget attribution, cancellation and recorded summary/Peter/R documents; fresh strict replay has zero new provider requests/usage with stable fingerprints | ONGOING offline child/root shared accounting; real team compaction/replay WAITING. |
 | CP06 frontends/resources | Representative PTY and native GUI progress/interrupt, Rscript/Rmd/Quarto/IRkernel execution; Claude/Codex native compaction scope distinguished from harness compaction, Qwen/Azure route capability stated; RSS/output growth bounded | WAITING; no universal model/client pass from one probe |
+| CP07 durable child usage | Reopen ordinary, aborted and compacted child sessions with their original agent/session attribution; reopen the root with every descendant charge included in shared usage and budgets. Preserve legacy records, reject conflicting duplicates, and restore totals without traversing child files. Fresh strict replay adds no request or charge. | ONGOING. Review reproduced source defects: ordinary recovery hardcodes main and root recovery omits live-only child rollups. A minimal journal/row fix and regressions are being prepared; this is required API behavior, not a coverage exception. |
 | UX04 ordinary console output | Regular replies/progress/setup/cancellation/handled UI guidance use normal stdout; actual errors use stderr. Preserve calling handlers, suppression, quiet/once/redaction, one teed message event and no menu bytes in tool results; JSONL remains parseable, user sinks restored. Confirm actual color and spinner row cleanup in R.app/RStudio/PTY/VSCode/IRkernel and document hosts. | DONE reviewed source6e7e859:3355 broad/290 C assertions, zero failures/test warnings;11-file lint0 and reference/guides clean. Installed039 color FAIL after post-error CR independently reproduced in base R.app. Minimal6501a64 boundary fix DONE source48 focused/286 affected,0 failures/test warnings/lints. Fresh installed native color and other clients WAITING resource recovery. |
 | UX05 compact history display | Public s$history/summary/show retain full data but print eight recent messages plus metadata, omission count and full-table escape hatches. Check empty/subset/unknown counts, redaction/control text, narrow/current widths, UTF8/C locale, no requests or session/home mutation. Include notebook text/HTML/Markdown/LaTeX MIME and Rmd/Quarto default/kable/paged renderers so inherited data.frame methods cannot bypass the bounded display. | DONE reviewed sourcea6f8d12:81 focused normal/C assertions, included in3355 broad/290 C packets, lint0 and earlier reference/guide checks. Installed039 native computation/latest8 of24/full-data/restoration/0warnings DONE; color FAIL remains separate. Alternate-renderer ad4e6a9 DONE source58 focused/726 affected/58 C assertions,0 failures/test warnings/lints,1 isolated-PATH Quarto skip. Actual installed IRkernel/Rmd four-renderer/Quarto previews, new help and other clients WAITING resource recovery. |
 | UX06 JSONL literal prompts | Finite scripted stdin reserves stdout for JSON events; slash/help and !code are literal prompts except documented exit, one provider error recovers, ordinary notices stay on protocol stderr, complete caller/input/connection state restores. | DONE scoped installed039:55 valid JSON lines,4fake/0external,1error then recovery,11 restoration flags,0warnings;1.336s and sampled154.4MiB/two samples. This is protocol coverage; native REPL slash/inline behavior remains in its separate rows. |
@@ -802,6 +803,32 @@ Use offline fake data/keys only, exact-owned cleanup and bounded fresh child pro
 Native or cleanup unknowns remain failures, never passes or new capability skips.
 
 
+## Current verification checkpoint — 2026-10-12
+
+Candidate8fe5844: callr retirement is committed after all-three-OS native acceptance.
+Post-retirement affected source packet921P/0F/0W with one named CI-only guard;55-path lint0.
+Help regeneration, docs, files and58example pages pass with0problems. These are source
+checks; changed-source native and final original-archive acceptance remain required.
+
+Plan run38227464940 is GREEN for all four checks:25plans/770Rblocks/0parse-style-lints,
+39unchanged source hashes and90triaged historical index warnings. Linux observer run
+38228279525 is GREEN: eight mandatory cases144P/0F/0W/0S,5.924s,0outer warnings and
+no new model usage. Windows run38227809133 failed before any case: the CI callr bootstrap
+could not find tools:callr;0warnings and successful owned cleanup. Its helper is being
+replaced with fixed Rscript/processx transport before repeating the strict native gate.
+No observer or Windows security pass is inferred from that preflight failure.
+
+UX07 display boundary67afba1 and UX08 fence closure4cddcaa are committed with focused
+40P and163P respectively,0F/0W/0S. GUI attach guard12pure controls pass; actual fresh
+owned GUI enrollment, allocator origin and installed visual checks remain pending.
+CP07 durable attribution/root rollup is a newly required fix. The native Python fixture's
+embedded-prefix oracle is being corrected before execution; no native acceptance is claimed.
+
+Current disk183GiB is below200GiB local-heavy admission. Continue small serial source work
+and bounded hosted gates; preserve foreign processes, user R sessions and the shared model.
+Only actual Windows desktop live verification may remain at completion. Every other waiting
+row above and below still requires execution. This plan edit requires four fresh checks.
+
 ## Current readiness execution queue — 2026-10-11 23:50 PDT
 
 The maintainer requested completing every applicable non-Windows-desktop item. The
@@ -821,7 +848,7 @@ account logout, user workspace reset or shared-model stop is authorized.
 | R06 compact history | UX05: certified actual IRkernel MIME and Rmd default/kable/paged/tibble plus Quarto, full24-row invariance/latest8 display,0requests/usage, exact cleanup | WAITING final immutable candidate certificate; six serial prepared cases. Native GUI history remains its own observation. |
 | R07 live providers and decisions | All five requested routes: Claude CLI, Codex CLI, Jev typed decisions, exact Ollama Qwen and Versa Azure; S1 logical/choice/score, emulated/native/local boundaries and configuration | ONGOING historical live/replay cells retained by revision; current remaining cells and capability-specific errors pending. No inference claim from inventory. Preserve shared Ollama. |
 | R08 live workflows | Functional Peter/file/scripts, interactive steering, queued/background work, named subagents and fan-out, bounded simulation/ML/single-cell examples; independent numerical/input and replay oracles | ONGOING historical scoped passes retained. Certified closure/storage/HTTP and five live file/resource/download/agent/web cases prepared; remaining team/cancel/summary-quality cases pending. |
-| R09 compaction | CP01–06: manual/automatic continuity, budget/abort/malformed/timeout, durable per-attempt usage, fresh resume/rewind, teams/shared attribution and strict replay across PTY/GUI/Rscript/Rmd/Quarto/IRkernel | ONGOING source regressions. Four certified manual/auto/budget/abort live cases and fresh resume prepared; real team/frontend cases still required. |
+| R09 compaction | CP01–07: manual/automatic continuity, budget/abort/malformed/timeout, durable per-attempt usage, fresh resume/rewind, teams/shared attribution and strict replay across PTY/GUI/Rscript/Rmd/Quarto/IRkernel | ONGOING source regressions. Four certified manual/auto/budget/abort live cases and fresh resume prepared; real team/frontend cases still required. |
 | R10 extensions and MCP | EX01–03/FT02: trusted skills/local import/template/agents; directory/package plugin lazy load/unload/reload/trust refusal; stdio and HTTP auth/expiry/progress/error/cancel/reconnect/remove; bounded public download failures | ONGOING. Existing actual scoped MCP/web/download passes retained. Source-only remaining installed negative packet being prepared; external skill upload has no named destination/API and is documented as caller-controlled. |
 | R11 native UX and resources | UX04–08/X12–14: ordinary stdout/error stderr, current R.app post-error color, spinner/layout/newlines/tool-text-tool/interrupt, malloc diagnostics and streamed fence boundaries; active width at narrow/wide windows, inline! completion/client limits; RSS/time/first feedback/owned cleanup | WAITING certified native RStudio/R.app/VSCode/terminal/notebook observation. Earlier native passes remain historical. No library claim to reflow emitted scrollback or alter third-party editor completion. |
 | R12 documentation and site | G01–14/Q01–02: README/help/14 guides use accurate in-memory/worker wording and Peter namesakes; all settings/slash/tool/extension/workflow tables; canonical light/dark logos, white background; fresh links/render and320–1920px/zoom checks | ONGOING. README/getting-started and2Rd regenerated,0problems; generated whitespace normalized. Theme storage guard/source asset audit clear. Fresh all-guide/reference/site/browser checks pending. |

@@ -1,31 +1,38 @@
-## Current readiness handoff — 2026-10-12 02:05 PDT
+## Current readiness handoff — 2026-10-12
 
 Continue in /Users/wgu/.codex/worktrees/skipped-platform-tests/gptr,
-codex/skipped-platform-tests. Preserve primary main718e81e/dirty files, secrets, existing
-user R sessions and shared Ollama. Only actual Windows desktop live verification may remain
-at completion. No release/submission or full-readiness claim is made.
+codex/skipped-platform-tests, pushed8fe5844. Preserve primary main718e81e/dirty files,
+secrets, all existing user R sessions and shared Ollama. Only actual Windows desktop live
+verification may remain at completion; no CRAN submission, tag or full-readiness claim.
 
-Current source: Python3fec74748P; streamed fences4cddcaa163P; observer8eea5eb144P;
-all focused0F/0W/0S and scoped lint0. Native-launch display40P is applied and reviewed but
-not yet committed or observed in a certified GUI. Actual RED evidence is retained.
-Pre-retirement native all3OS source/installed207cases are GREEN; reviewed callr retirement
-is applied, pending current-source repeated native/archive gates. Observer hosted38214805977
-is LinuxGREEN113P / WindowsRED81P11F; first-init correction requires fresh native rerun
-before optional sampler. Final native Python and Windows case/empty startup proofs pending.
+Committed source fixes: Python3fec74748P; fences4cddcaa163P; observer8eea5eb144P;
+native launch display67afba1 40P; focused0F/0W/0S. Callr retirementea18992 applied after
+pre-retirement all-three-OS207-case source/installed acceptance. Changed-source affected
+921P/0F/0W/one CI-only guard,55-path lint0. Fresh help/docs/files/58examples0problems.
+Plan38227464940 GREEN: four stages,770Rblocks,0parse/style/lint,39unchanged hashes.
 
-Source-cleared ignored packets include original hosted-archive adopter6a6d2f28,
-compaction-extra cb9cd4c8 and corrected capturefixture7e7bb460. They are preparations, not
-execution. Source/installed current native gates, help/all14/site, exact normal hosted
-producer/five original-byte consumers, immutable archive adoption, certified frontend/model/
-extension/compaction/storage/security and final CRAN/revdep checks remain. Hardcoded older
-controller dependency paths are being replaced by explicit certificate/library inputs.
+Observer Linux38228279525 GREEN at8fe5844: eight cases144P/0F/0W/0S,5.924s and0outer
+warnings/new usage. Windows38227809133 failed BEFORE CASES in the CI callr bootstrap:
+tools:callr search entry absent.0warnings/owned cleanup settled. Architecture lane prepares
+fixed Rscript/processx CI transport; repeat both hosts before no-follow sampler/security.
 
-Computer-use service timed out during window selection. No commands were sent to the user's
-existing RStudio session. Two separate app processes may have been opened by the fresh
-project picker; inspect exact project/PID creation ownership before any intervention.
-At01:55PDT disk190GiB is below the200GiB local-heavy admission threshold;123GiBused,
-4399MiBunused,swap21405.94MiB/0sampled paging,load9.38/12.68/15.76,no thermal warning.
-Keep local work small/serial; at most2hosted jobs. Fresh four plan checks are now required.
+Client lane owns newly required CP07 durable child-agent attribution and root descendant
+charge restoration. Repo-evolution lane corrects false embedded base-prefix assertions and
+whole-case warning accounting in the prepared native Python packet; pr5 reviews both.
+GUI attach manifest6b3124cf source-clear with actual12pure controls GREEN. No native GUI
+probe yet: the control service selected the original user session, then timed out selecting
+Dock. Existing user R is untouched. A fresh prelaunch census is required for owned GUI tests.
+
+Prepared certified frontend, extension, functional, compaction and hosted-original-archive
+controllers remain unexecuted. Need current native three-OS matrix, strict Windows security,
+help/all14/site/URLs, normal-release original producer/five consumers/manual/CRAN/dependency/
+revdep gates, sealed Mac adoption and certified live frontend/model/workflow/resource checks.
+Concrete reviewed integration PR/authorized merge/final installed verification still remain.
+
+At02:19 disk183GiB is below200GiB admission,20GiBunused,load13.63/10.76/11.81,
+48.32%idle,swap21397.94MiB/0sampled paging,no thermal warning. Keep local work small/serial
+and bounded hosted work; no shared-model stop or foreign cleanup. This plan edit triggers
+four fresh hosted checks. Preserve every failed raw artifact and source identity.
 
 ## Current readiness handoff — 2026-10-11 23:50 PDT
 
