@@ -135,8 +135,11 @@ plot_begin = function(mode, human, width = gptr_opt("plot_width"),
   if (offscreen) {
     ps$our_dev = plot_open_offscreen(ps)
   } else if (ps$dev_start > 1L && ps$record) {
-    try(grDevices::dev.control(displaylist = "enable"), silent = TRUE)
     base = tryCatch(grDevices::recordPlot(), error = function(e) NULL)
+    if (is.null(base) || !length(base[[1L]])) {
+      try(grDevices::dev.control(displaylist = "enable"), silent = TRUE)
+      base = tryCatch(grDevices::recordPlot(), error = function(e) NULL)
+    }
     if (!is.null(base)) ps$last_dl[[as.character(ps$dev_start)]] = base[[1L]]
   }
   # Set last, so a failure above never leaves the option changed without a state to restore it
