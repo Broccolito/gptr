@@ -4,16 +4,34 @@ py_native_child = function(case, root, failure) {
   seen = new.env(parent = emptyenv())
   seen$total = 0L
   seen$classes = list()
+  seen$stage = "entered"
+  phase = function(text) {
+    cat(text, "\n", file = file.path(root, "phases.txt"), append = TRUE, sep = "")
+  }
+  diagnostic_stages = c("entered", "identity-save", "startup-read", "snapshot-before",
+    "usage-before", "direct-reticulate-init", "independent-cli-run", "independent-cli-decode",
+    "python-first-eval", "python-second-eval", "python-knitr-eval", "python-third-eval",
+    "python-import-eval", "python-config", "library-stat", "checks", "finished",
+    "reticulate-required", "knitr-required", "json-required", "fresh-python", "offline",
+    "managed-disabled", "explicit-python", "private-prefix", "explicit-version-pins",
+    "explicit-native-library", "explicit-native-library-sha", "native-absent-seed",
+    "native-unrelated-empty", "native-known-empty", "native-case-empty",
+    "native-initialized-empty-seed", "already-initialized", "native-empty-survives-direct-init",
+    "independent-cli-status", "bounded-cli-identity", "closed-cli-identity",
+    "independent-private-venv", "independent-library-hash", "independent-version",
+    "first-python-result", "compiled-import-result", "bounded-import-identity",
+    "closed-import-identity")
   run = function() {
-    phase = function(text) {
-      cat(text, "\n", file = file.path(root, "phases.txt"), append = TRUE, sep = "")
-    }
     assert_native = function(value, stage) {
+      seen$stage = stage
       if (!isTRUE(value)) stop(paste("Native Python fixture failed:", stage), call. = FALSE)
       invisible(TRUE)
     }
     phase("entered")
+    phase(if (any(toupper(names(Sys.getenv())) == "LD_LIBRARY_PATH"))
+      "after-loader-ld-present" else "after-loader-ld-absent")
     file.create(file.path(root, "case-started"))
+    seen$stage = "identity-save"
     handle = ps::ps_handle()
     saveRDS(list(pid = Sys.getpid(), create_time = as.numeric(ps::ps_create_time(handle))),
             file.path(root, "inner-identity.rds"))
@@ -23,6 +41,7 @@ py_native_child = function(case, root, failure) {
     assert_native(!reticulate::py_available(initialize = FALSE), "fresh-python")
     assert_native(identical(Sys.getenv("GPTR_LIVE_TESTS"), "false"), "offline")
     assert_native(identical(Sys.getenv("RETICULATE_USE_MANAGED_VENV"), "false"), "managed-disabled")
+    seen$stage = "startup-read"
     configured = Sys.getenv("RETICULATE_PYTHON")
     prefix = Sys.getenv("GPTR_PY_NATIVE_PREFIX")
     pins = Sys.getenv(c("GPTR_PY_NATIVE_VERSION", "GPTR_NP_NATIVE_VERSION",
@@ -58,6 +77,16 @@ py_native_child = function(case, root, failure) {
     keys = c("PATH", "VIRTUAL_ENV", "R_SESSION_INITIALIZED", "LD_LIBRARY_PATH",
              "PYTHONPATH", "PYTHONIOENCODING")
     absent = setdiff(keys, "PATH")
+    phase(if (any(toupper(names(Sys.getenv())) == "LD_LIBRARY_PATH"))
+      "preseed-ld-present" else "preseed-ld-absent")
+    phase(if (any(toupper(names(Sys.getenv())) == "VIRTUAL_ENV"))
+      "preseed-virtual-present" else "preseed-virtual-absent")
+    phase(if (any(toupper(names(Sys.getenv())) == "R_SESSION_INITIALIZED"))
+      "preseed-session-present" else "preseed-session-absent")
+    phase(if (any(toupper(names(Sys.getenv())) == "PYTHONPATH"))
+      "preseed-pythonpath-present" else "preseed-pythonpath-absent")
+    phase(if (any(toupper(names(Sys.getenv())) == "PYTHONIOENCODING"))
+      "preseed-encoding-present" else "preseed-encoding-absent")
     if (case == "absent") {
       assert_native(!any(toupper(names(Sys.getenv())) %in% absent), "native-absent-seed")
     }
@@ -71,6 +100,7 @@ py_native_child = function(case, root, failure) {
       # This separate admission case deliberately initializes reticulate before GPTR.
       # It cannot certify GPTR-first setup. The empty key must survive this real setup.
       phase("direct-reticulate-init")
+      seen$stage = "direct-reticulate-init"
       invisible(reticulate::import_main(convert = FALSE))
       assert_native(reticulate::py_available(initialize = FALSE), "already-initialized")
       assert_native(seed("PYTHONIOENCODING", ""), "native-empty-survives-direct-init")
@@ -84,12 +114,15 @@ py_native_child = function(case, root, failure) {
         globals = sort(ls(envir = globalenv(), all.names = TRUE)),
         bytes = serialize(sentinel, NULL))
     }
+    seen$stage = "snapshot-before"
     before = snapshot()
+    seen$stage = "usage-before"
     native_usage = nrow(gptr:::usage_log())
     versions = NULL
     phase("gptr-first-call")
     if (case %in% c("empty", "alias")) {
       condition = tryCatch(gptr::peter$py("41 + 1"), error = identity)
+      seen$stage = "checks"
       checks = list(native_seed_observed = TRUE,
         typed_refusal = inherits(condition, "gptr_error_not_available"),
         still_uninitialized = !reticulate::py_available(initialize = FALSE),
@@ -112,12 +145,17 @@ py_native_child = function(case, root, failure) {
         "print(json.dumps(dict(executable=os.path.abspath(sys.executable), prefix=sys.prefix,",
         " base_prefix=sys.base_prefix, version='.'.join(map(str, sys.version_info[:3])),",
         " library=library, sha256=hash.hexdigest(), library_bytes=read)))", sep = "\n")
+      seen$stage = "independent-cli-run"
       cli = gptr:::proc_run(configured, c("-I", "-c", cli_code, library), timeout = 10,
         env = Sys.getenv(), echo = FALSE)
+      phase(if (identical(cli$status, 0L)) "cli-exit-zero" else "cli-exit-not-zero")
+      phase(if (isTRUE(cli$timed_out)) "cli-timeout" else "cli-no-timeout")
+      phase(if (identical(cli$stderr, "")) "cli-stderr-empty" else "cli-stderr-not-empty")
       assert_native(identical(cli$status, 0L) && !cli$timed_out && cli$elapsed <= 11 &&
         identical(cli$stderr, ""), "independent-cli-status")
       assert_native(is.character(cli$stdout) && length(cli$stdout) == 1L && !is.na(cli$stdout) &&
         nchar(cli$stdout, type = "bytes") <= 4096L, "bounded-cli-identity")
+      seen$stage = "independent-cli-decode"
       cli_identity = jsonlite::fromJSON(cli$stdout)
       cli_names = c("executable", "prefix", "base_prefix", "version", "library", "sha256",
                     "library_bytes")
@@ -131,17 +169,22 @@ py_native_child = function(case, root, failure) {
         cli_identity$library_bytes <= 64 * 1024^2, "independent-library-hash")
       assert_native(identical(cli_identity$version, unname(pins[[1L]])), "independent-version")
       cli_state = identical(snapshot(), before)
+      seen$stage = "python-first-eval"
       first = gptr::peter$py(paste("copied = sentinel.copy()", "copied.iloc[0, 0] = 99",
         "counter = 41", "counter + 1", sep = "\n"), name = list(sentinel = sentinel))
       after_init = snapshot()
       assert_native(is.null(first$error), "first-python-result")
       first_value = first$value
+      seen$stage = "python-second-eval"
       second = gptr::peter$py("counter += 1\ncounter")
       opts = knitr::opts_chunk$merge(list(engine = "python", code = "print(counter)",
         label = "native-gptr-python", echo = FALSE, results = "markup"))
+      seen$stage = "python-knitr-eval"
       knitted = knitr::knit_engines$get("python")(opts)
+      seen$stage = "python-third-eval"
       third = gptr::peter$py("counter")
       phase("native-numerical-imports")
+      seen$stage = "python-import-eval"
       imports = gptr::peter$py(paste(
         "import json, os, sys, struct, math", "import numpy as np, pandas as pd",
         "import numpy._core._multiarray_umath as np_native",
@@ -162,10 +205,12 @@ py_native_child = function(case, root, failure) {
                     "pandas", "numpy_origin", "pandas_origin", "total", "rows", "subsequent")
       assert_native(is.list(identity) && identical(names(identity), expected),
                     "closed-import-identity")
+      seen$stage = "python-config"
       config = reticulate::py_config()
       versions = list(python = identity$version, numpy = identity$numpy, pandas = identity$pandas,
                       bits = identity$bits)
       # Embedded base_prefix is diagnostic only; reticulate may set PythonHome to the venv.
+      seen$stage = "library-stat"
       library_size = file.info(library, extra_cols = FALSE)$size
       library_identity = length(library_size) == 1L && is.finite(library_size) &&
         library_size > 0 && library_size == cli_identity$library_bytes &&
@@ -174,6 +219,7 @@ py_native_child = function(case, root, failure) {
         !is.na(config$libpython) && file.exists(config$libpython) &&
         same_path(config$libpython, library) && inside(library, cli_identity$base_prefix) &&
         identical(cli::hash_file_sha256(library), library_sha)
+      seen$stage = "checks"
       checks = list(native_seed_observed = TRUE,
         first_value = identical(first_value, 42L),
         full_state_after_initialization = identical(after_init, before),
@@ -202,13 +248,21 @@ py_native_child = function(case, root, failure) {
       }
       if (case == "initialized") checks$initialized_empty_preserved = seed("PYTHONIOENCODING", "")
     }
+    seen$stage = "finished"
     phase("finished")
     list(schema = "gptr_native_python_startup_v1", case = case, checks = checks,
          observed_check_count = length(checks), versions = versions)
   }
-  # The handler surrounds the inner function's on.exit cleanup too. Never muffle warnings
-  # or publish diagnostics during an error unwind: the original condition must propagate.
-  result = withCallingHandlers(run(), warning = function(warning) {
+  # Observe fixed phases only; even failed diagnostic publication preserves the original error.
+  # The warning handler surrounds the inner function's on.exit cleanup and never muffles.
+  result = withCallingHandlers(run(), error = function(error) {
+    tryCatch({
+      stage = seen$stage
+      valid = is.character(stage) && length(stage) == 1L && !is.na(stage) &&
+        stage %in% diagnostic_stages
+      phase(if (valid) paste0("failure-", stage) else "failure-unknown")
+    }, error = function(error) NULL, interrupt = function(interrupt) NULL)
+  }, warning = function(warning) {
     seen$total = seen$total + 1L
     if (length(seen$classes) < 16L) {
       seen$classes[[length(seen$classes) + 1L]] =
@@ -233,6 +287,16 @@ py_native_run = function(case) {
   runner = bp_run
   environment(runner) = scope
   scope$bp_child_case = py_native_child
+  original_loader = bp_loader
+  scope$bp_loader = function() {
+    # bp_run starts this script in its exact private root, before the GPTR loader.
+    observation = c("(function() {",
+      "  present = any(toupper(names(Sys.getenv())) == 'LD_LIBRARY_PATH')",
+      "  cat(if (present) 'before-loader-ld-present' else 'before-loader-ld-absent',",
+      "    '\\n', file = 'phases.txt', append = TRUE, sep = '')",
+      "})()")
+    paste(c(observation, original_loader()), collapse = "\n")
+  }
   original_env = child_env
   scope$child_env = function(profile, set, ...) {
     # Preserve the watchdog's private dirs/marker/thread caps but never inherit credentials.
