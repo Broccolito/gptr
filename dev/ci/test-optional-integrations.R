@@ -214,7 +214,8 @@ writer_runtime_titles = c(
   "absence observations retain only fixed probe and bounded parent ACL numbers",
   "absence observations retain only fixed bounded file ACL differences",
   "absence denial controls require fixed ordered native lookup tokens",
-  "absence denial controls reject unknown order outcomes and private content")
+  "absence denial controls reject unknown order outcomes and private content",
+  "absence privilege diagnostics reject unknown and unordered private output")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
@@ -2079,5 +2080,46 @@ testthat::test_that("the sampler accounts for RSS released during observer initi
     testthat::expect_identical(supervisor, 300)
     testthat::expect_identical(combined, 300)
     testthat::expect_gte(combined, supervisor)
+  }
+})
+
+
+testthat::test_that("private privilege diagnostics are mandatory pure coverage on both hosts", {
+  file = "test-proc-writer-runtime.R"
+  title = "absence privilege diagnostics reject unknown and unordered private output"
+  expected = c(writer_runtime_titles[seq_len(47L)], title)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(length(expected), 48L)
+  testthat::expect_identical(anyDuplicated(expected), 0L)
+  rows = lapply(expected, record)
+  i = 48L
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_false(result$platform_guard_only)
+    testthat::expect_true(title %in% result$mandatory_cases)
+    testthat::expect_false(optional_allowed_skip(file, title, windows))
+    testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+    testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+    messages = c(passed = "assertions", failed = "Failed", warnings = "Warnings")
+    for (field in names(messages)) {
+      changed = rows
+      changed[[i]][[field]] = if (field == "passed") 0L else 1L
+      testthat::expect_error(optional_gate(changed, file, windows), messages[[field]])
+    }
+    late = rows
+    late[[i]]$passed = 3L
+    late[[i]]$skipped = 1L
+    testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+    for (kind in c("expectation_error", "expectation_warning")) {
+      raw = rows
+      raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled privilege diagnostic condition"),
+          class = c(kind, "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(raw, file, windows))
+    }
+    unknown = record("unrelated privilege capability guard", passed = 3L, skipped = 1L)
+    testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
   }
 })

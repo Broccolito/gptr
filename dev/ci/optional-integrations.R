@@ -117,7 +117,8 @@ optional_titles = list(
     "absence observations retain only fixed probe and bounded parent ACL numbers",
     "absence observations retain only fixed bounded file ACL differences",
     "absence denial controls require fixed ordered native lookup tokens",
-    "absence denial controls reject unknown order outcomes and private content"),
+    "absence denial controls reject unknown order outcomes and private content",
+    "absence privilege diagnostics reject unknown and unordered private output"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",

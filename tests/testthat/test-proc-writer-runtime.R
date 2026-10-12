@@ -923,3 +923,38 @@ test_that("absence denial controls reject unknown order outcomes and private con
     expect_error(rw_absence_control(line), "Invalid absence denial control", fixed = TRUE)
   }
 })
+
+test_that("absence privilege diagnostics reject unknown and unordered private output", {
+  keys = c("PRE_BACKUP", "PRE_RESTORE", "PRE_CHANGE_NOTIFY", "LOOKUP_BACKUP",
+    "LOOKUP_RESTORE", "LOOKUP_CHANGE_NOTIFY")
+  phases = rep(c("PRE", "LOOKUP"), each = 3L)
+  names = rep(c("BACKUP", "RESTORE", "CHANGE_NOTIFY"), 2L)
+  values = rep(0:2, 2L)
+  seen = character()
+  for (i in seq_along(keys)) {
+    line = paste("GPTR_ABSENCE_PRIVILEGE", phases[[i]], names[[i]], values[[i]])
+    value = rw_absence_privilege(line, seen)
+    expect_identical(value$key, keys[[i]])
+    expect_identical(value$value, values[[i]])
+    expect_identical(value$label, paste0("absence-privilege-",
+      tolower(gsub("_", "-", keys[[i]])), "-", values[[i]]))
+    seen = c(seen, value$key)
+  }
+  expect_null(rw_absence_privilege("GPTR_ABSENCE_STAGE 4"))
+  for (line in c("GPTR_ABSENCE_PRIVILEGE PRE BACKUP 3",
+      "GPTR_ABSENCE_PRIVILEGE PRE BACKUP 01", "GPTR_ABSENCE_PRIVILEGE PRE BACKUP -1",
+      "GPTR_ABSENCE_PRIVILEGE PRE BACKUP 1 trailing",
+      "GPTR_ABSENCE_PRIVILEGE PRE UNKNOWN 1", "GPTR_ABSENCE_PRIVILEGE LOOKUP BACKUP 1",
+      "GPTR_ABSENCE_PRIVILEGE PRE RESTORE 1", "GPTR_ABSENCE_PRIVILEGE pre BACKUP 1",
+      paste0("GPTR_ABSENCE_PRIVILEGE ", strrep("x", 97L)))) {
+    expect_error(rw_absence_privilege(line), "Invalid absence privilege diagnostic", fixed = TRUE)
+  }
+  expect_error(rw_absence_privilege("GPTR_ABSENCE_PRIVILEGE PRE BACKUP 1", seen),
+    "Invalid absence privilege diagnostic", fixed = TRUE)
+  expect_error(rw_absence_privilege("GPTR_ABSENCE_PRIVILEGE PRE BACKUP 1", "PRE_RESTORE"),
+    "Invalid absence privilege diagnostic", fixed = TRUE)
+  expect_error(rw_absence_privilege("GPTR_ABSENCE_PRIVILEGE PRE BACKUP 1", NA_character_),
+    "Invalid absence privilege diagnostic", fixed = TRUE)
+  expect_error(rw_absence_privilege(NA_character_), "Invalid absence privilege diagnostic",
+    fixed = TRUE)
+})

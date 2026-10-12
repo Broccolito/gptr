@@ -341,6 +341,24 @@ rw_absence_control = function(line, seen = character()) {
     label = paste0("absence-control-", tolower(gsub("_", "-", key)), "-", value))
 }
 
+rw_absence_privilege = function(line, seen = character()) {
+  bad = function() stop("Invalid absence privilege diagnostic.")
+  if (!is.character(line) || length(line) != 1L || is.na(line) ||
+      nchar(line, type = "bytes") > 96L) bad()
+  if (!startsWith(line, "GPTR_ABSENCE_PRIVILEGE")) return(NULL)
+  keys = c("PRE_BACKUP", "PRE_RESTORE", "PRE_CHANGE_NOTIFY", "LOOKUP_BACKUP",
+    "LOOKUP_RESTORE", "LOOKUP_CHANGE_NOTIFY")
+  if (!is.character(seen) || anyNA(seen) || length(seen) >= length(keys) ||
+      !identical(seen, keys[seq_along(seen)])) bad()
+  pattern = "^GPTR_ABSENCE_PRIVILEGE (PRE|LOOKUP) (BACKUP|RESTORE|CHANGE_NOTIFY) ([0-2])$"
+  if (!grepl(pattern, line)) bad()
+  parts = strsplit(line, " ", fixed = TRUE)[[1L]]
+  key = paste(parts[[2L]], parts[[3L]], sep = "_")
+  if (!identical(key, keys[[length(seen) + 1L]])) bad()
+  list(key = key, value = as.integer(parts[[4L]]),
+    label = paste0("absence-privilege-", tolower(gsub("_", "-", key)), "-", parts[[4L]]))
+}
+
 # Run one native utility under the unchanged D-019 family/resource watchdog.
 rw_absence_case = function(case, root) {
   ns = asNamespace("gptr")
@@ -573,6 +591,45 @@ rw_absence_case = function(case, root) {
     "    throw 'Stable Access exact roundtrip differs' }",
     "  return $verified",
     "}",
+    "function ObservePrivileges([string]$phase) {",
+    "  if ($phase -cne 'PRE' -and $phase -cne 'LOOKUP') { throw 'Privilege phase' }",
+    "  $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()",
+    "  if ($identity.ImpersonationLevel -ne",
+    "      [System.Security.Principal.TokenImpersonationLevel]::None) {",
+    "    throw 'Privilege token is not primary' }",
+    "  $whoami = [System.IO.Path]::Combine($env:SystemRoot, 'System32', 'whoami.exe')",
+    "  if (-not [System.IO.File]::Exists($whoami)) { throw 'Privilege utility missing' }",
+    "  $raw = @(& $whoami /priv /fo csv /nh 2>&1)",
+    "  if ($LASTEXITCODE -ne 0 -or $raw.Count -gt 64) { throw 'Privilege utility result' }",
+    "  $bytes = 0",
+    "  $encoding = [System.Text.UTF8Encoding]::new()",
+    "  $names = @{SeBackupPrivilege = 'BACKUP'; SeRestorePrivilege = 'RESTORE'",
+    "    SeChangeNotifyPrivilege = 'CHANGE_NOTIFY'}",
+    "  $states = @{BACKUP = 0; RESTORE = 0; CHANGE_NOTIFY = 0}",
+    "  $seen = @{}",
+    "  foreach ($line in $raw) {",
+    "    if ($line -isnot [string]) { throw 'Privilege utility unexpected stream' }",
+    "    $size = $encoding.GetByteCount([string]$line)",
+    "    $bytes += $size",
+    "    if ($size -gt 2048 -or $bytes -gt 32768) { throw 'Privilege utility size' }",
+    "    if ($line -cnotmatch '^\"(Se[A-Za-z]+Privilege)\",\"(?:[^\"]|\"\")*\",\"([^\"]+)\"$') {",
+    "      throw 'Privilege utility grammar' }",
+    "    $name = $Matches[1]; $state = $Matches[2]",
+    "    if ($names.ContainsKey($name)) {",
+    "      $key = $names[$name]",
+    "      if ($seen.ContainsKey($key)) { throw 'Privilege utility duplicate' }",
+    "      $seen[$key] = $true",
+    "      if ($state -ceq 'Disabled') { $states[$key] = 1 }",
+    "      elseif ($state -ceq 'Enabled') { $states[$key] = 2 }",
+    "      else { throw 'Privilege utility state unknown' }",
+    "    }",
+    "  }",
+    "  foreach ($key in @('BACKUP', 'RESTORE', 'CHANGE_NOTIFY')) {",
+    "    $value = 'GPTR_ABSENCE_PRIVILEGE ' + $phase + ' ' + $key + ' ' + $states[$key]",
+    "    [Console]::WriteLine($value)",
+    "  }",
+    "}",
+    "ObservePrivileges 'PRE'",
     "$parentOriginal = StableOwnedAccess $false",
     "$fileOriginal = StableOwnedAccess $true",
     "$attributes = [System.IO.File]::GetAttributes($denied)",
@@ -634,6 +691,7 @@ rw_absence_case = function(case, root) {
     "$actual = [System.IO.Directory]::GetAccessControl($fresh, $sections)",
     "AssertDenied $actual 1 3",
     "[Console]::WriteLine('GPTR_ABSENCE_CONTROL PARENT_ACL 1')",
+    "ObservePrivileges 'LOOKUP'",
     "$fileLookup = 3",
     "try { $null = [System.IO.File]::GetAttributes($denied); $fileLookup = 2 }",
     "catch [System.UnauthorizedAccessException] { $fileLookup = 1 }",
@@ -715,6 +773,7 @@ rw_absence_case = function(case, root) {
     seen$controls = character()
     seen$control_values = integer()
     seen$probe = NULL
+    seen$privileges = character()
     utility = NULL
     record = NULL
     settle = function() {
@@ -754,6 +813,14 @@ rw_absence_case = function(case, root) {
         seen$controls = c(seen$controls, control$key)
         seen$control_values = c(seen$control_values, control$value)
         phase(control$label)
+        return(invisible(NULL))
+      }
+      privilege = rw_absence_privilege(line, seen$privileges)
+      if (!is.null(privilege)) {
+        stopifnot(identity, identical(seen$last_stage,
+          if (startsWith(privilege$key, "PRE_")) 4L else 7L))
+        seen$privileges = c(seen$privileges, privilege$key)
+        phase(privilege$label)
         return(invisible(NULL))
       }
       observation = rw_absence_observation(line)
@@ -805,6 +872,8 @@ rw_absence_case = function(case, root) {
     elapsed = fun("reactor_now")() - started
     stopifnot(complete, identical(seen$status, 0L), elapsed <= 5, identical(seen$out, proof))
     if (identity) {
+      stopifnot(identical(seen$privileges, c("PRE_BACKUP", "PRE_RESTORE",
+        "PRE_CHANGE_NOTIFY", "LOOKUP_BACKUP", "LOOKUP_RESTORE", "LOOKUP_CHANGE_NOTIFY")))
       stopifnot(identical(seen$control_values, rep(1L, 6L)),
         identical(seen$probe, "absence-probe-1"))
     }
@@ -901,6 +970,8 @@ rw_absence_run = function() {
     collapse = "\n")), paste0("rw_absence_stage = ", paste(deparse(rw_absence_stage),
     collapse = "\n")), paste0("rw_absence_status = ", paste(deparse(rw_absence_status),
     collapse = "\n")), paste0("rw_absence_observation = ", paste(deparse(rw_absence_observation),
+    collapse = "\n")))
+  decoder = c(decoder, paste0("rw_absence_privilege = ", paste(deparse(rw_absence_privilege),
     collapse = "\n")))
   scope$bp_loader = function() c(loader, decoder)
   runner("native-absence",
