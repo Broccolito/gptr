@@ -1105,3 +1105,46 @@ test_that("an entry or header time that is not ISO 8601 never blocks a resume", 
   listed = gptr_sessions()
   expect_true(is.finite(as.numeric(listed$created[listed$id == id])))
 })
+
+
+test_that("new JSONL bytes are private before writing and existing modes are preserved", {
+  skip_on_os("windows")
+  dir = withr::local_tempdir()
+  path = file.path(dir, "private.jsonl")
+  umask = Sys.umask("0022")
+  withr::defer(Sys.umask(umask))
+  modes = character()
+  original = base::file
+  local_mocked_bindings(file = function(description = "", open = "", ...) {
+    if (identical(description, path) && open %in% c("wb", "ab")) {
+      modes <<- c(modes, format(file.info(path)$mode))
+    }
+    original(description, open, ...)
+  }, .package = "base")
+  store_write_lines(path, '{"private":"first"}', append = FALSE)
+  expect_identical(modes, "600")
+  expect_identical(format(file.info(path)$mode), "600")
+  Sys.chmod(path, "0640", use_umask = FALSE)
+  store_write_lines(path, '{"private":"second"}', append = TRUE)
+  expect_identical(format(file.info(path)$mode), "640")
+  expect_identical(readLines(path), c('{"private":"first"}', '{"private":"second"}'))
+  store_write_lines(path, '{"private":"replacement"}', append = FALSE)
+  expect_identical(format(file.info(path)$mode), "640")
+  expect_identical(readLines(path), '{"private":"replacement"}')
+  expect_identical(modes, c("600", "640", "640"))
+})
+
+test_that("a JSONL permission failure writes no private bytes or target file", {
+  skip_on_os("windows")
+  dir = withr::local_tempdir()
+  path = file.path(dir, "private.jsonl")
+  original = base::Sys.chmod
+  local_mocked_bindings(Sys.chmod = function(paths, mode = "0777", use_umask = TRUE) {
+    if (any(startsWith(basename(paths), ".gptr-write-"))) return(rep(FALSE, length(paths)))
+    original(paths, mode, use_umask)
+  }, .package = "base")
+  expect_error(store_write_lines(path, "synthetic private text", append = FALSE),
+               class = "gptr_error_doc_write")
+  expect_false(file.exists(path))
+  expect_length(list.files(dir, all.files = TRUE, no.. = TRUE), 0L)
+})

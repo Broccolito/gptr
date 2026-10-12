@@ -792,3 +792,71 @@ test_that("a forced turn scan records what a CLI child changed (IC-65)", {
   expect_true(u$ok)
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
 })
+
+
+test_that("checkpoint payloads are private before gzip or raw-copy writes", {
+  skip_on_os("windows")
+  proj = local_project()
+  files = file.path(proj, c("private.txt", "public.rds"))
+  bytes = list(charToRaw("synthetic private text"), charToRaw("synthetic raw payload"))
+  for (i in seq_along(files)) writeBin(bytes[[i]], files[i])
+  Sys.chmod(files, c("0600", "0644"), use_umask = FALSE)
+  umask = Sys.umask("0022")
+  withr::defer(Sys.umask(umask))
+  modes = character()
+  original_gzip = base::gzfile
+  original_copy = base::file.copy
+  local_mocked_bindings(gzfile = function(description, ...) {
+    if (grepl("[.]tmp-", basename(description))) {
+      modes <<- c(modes, format(file.info(description)$mode))
+    }
+    original_gzip(description, ...)
+  }, file.copy = function(from, to, ...) {
+    if (identical(from, files[2])) modes <<- c(modes, format(file.info(to)$mode))
+    original_copy(from, to, ...)
+  }, .package = "base")
+  hashes = ckpt_store_put(files)
+  blobs = vapply(hashes, ckpt_blob_find, "")
+  expect_identical(modes, c("600", "600"))
+  expect_identical(format(file.info(blobs)$mode), c("600", "600"))
+  expect_true(endsWith(blobs[1], ".gz"))
+  expect_false(endsWith(blobs[2], ".gz"))
+  for (i in seq_along(files)) {
+    out = file.path(proj, paste0("restored-", i))
+    expect_true(ckpt_store_get(hashes[i], out))
+    expect_identical(readBin(out, "raw", file.size(out)), bytes[[i]])
+  }
+  expect_identical(ckpt_store_put(files), hashes)
+  expect_length(list.files(ckpt_store_root(), recursive = TRUE, pattern = "[.]tmp-"), 0L)
+})
+
+test_that("a failed raw checkpoint copy cannot publish an empty precreated blob", {
+  proj = local_project()
+  f = file.path(proj, "payload.rds")
+  writeBin(charToRaw("synthetic raw payload"), f)
+  hash = hash_file(f)
+  original = base::file.copy
+  local_mocked_bindings(file.copy = function(from, to, ...) {
+    if (identical(from, f)) return(FALSE)
+    original(from, to, ...)
+  }, .package = "base")
+  expect_error(suppressWarnings(ckpt_store_put(f)), class = "gptr_error_workspace")
+  expect_null(ckpt_blob_find(hash))
+  expect_length(list.files(ckpt_store_root(), recursive = TRUE, pattern = "[.]tmp-"), 0L)
+})
+
+test_that("a checkpoint permission failure publishes no blob or private payload", {
+  skip_on_os("windows")
+  proj = local_project()
+  f = file.path(proj, "private.txt")
+  writeBin(charToRaw("synthetic private text"), f)
+  hash = hash_file(f)
+  original = base::Sys.chmod
+  local_mocked_bindings(Sys.chmod = function(paths, mode = "0777", use_umask = TRUE) {
+    if (any(startsWith(basename(paths), ".gptr-write-"))) return(rep(FALSE, length(paths)))
+    original(paths, mode, use_umask)
+  }, .package = "base")
+  expect_error(ckpt_store_put(f), class = "gptr_error_workspace")
+  expect_null(ckpt_blob_find(hash))
+  expect_length(list.files(ckpt_store_root(), recursive = TRUE, pattern = "[.]tmp-"), 0L)
+})

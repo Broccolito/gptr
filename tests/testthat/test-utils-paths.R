@@ -291,3 +291,79 @@ test_that("path_rel handles filesystem roots without dropping a character", {
   expect_identical(path_rel(path, root), substring(path, nchar(root) + 1L))
   expect_identical(path_rel(root, root), ".")
 })
+
+
+test_that("an absent rename-fallback target is private before payload writing", {
+  skip_on_os("windows")
+  dir = withr::local_tempdir()
+  umask = Sys.umask("0022")
+  withr::defer(Sys.umask(umask))
+  paths = file.path(dir, c("private.txt", "shared.txt", "existing.txt"))
+  writer = write_bytes
+  modes = character()
+  local_mocked_bindings(file_rename = function(from, to) FALSE,
+                        write_bytes = function(path, bytes) {
+                          if (path %in% paths && length(bytes)) {
+                            modes <<- c(modes, format(file.info(path)$mode))
+                          }
+                          writer(path, bytes)
+                        })
+  local_mocked_bindings(Sys.sleep = function(time) NULL, .package = "base")
+  write_atomic(paths[1], "synthetic private content", expected_md5 = NA_character_)
+  expect_identical(modes, "600")
+  expect_identical(format(file.info(paths[1])$mode), "600")
+  write_atomic(paths[2], "shared intentionally", mode = "0640")
+  expect_identical(format(file.info(paths[2])$mode), "640")
+  writeLines("old", paths[3])
+  Sys.chmod(paths[3], "0640", use_umask = FALSE)
+  write_atomic(paths[3], "replacement")
+  expect_identical(format(file.info(paths[3])$mode), "640")
+  expect_identical(readLines(paths[3]), "replacement")
+  expect_identical(modes, c("600", "600", "640"))
+})
+
+test_that("a fallback permission failure removes only its newly created empty target", {
+  skip_on_os("windows")
+  dir = withr::local_tempdir()
+  path = file.path(dir, "private.txt")
+  writer = write_bytes
+  writes = 0L
+  changed = FALSE
+  original = base::Sys.chmod
+  local_mocked_bindings(file_rename = function(from, to) FALSE,
+                        write_bytes = function(file, bytes) {
+                          if (identical(file, path) && length(bytes)) writes <<- writes + 1L
+                          writer(file, bytes)
+                        })
+  local_mocked_bindings(Sys.sleep = function(time) NULL,
+                        Sys.chmod = function(paths, mode = "0777", use_umask = TRUE) {
+                          if (identical(paths, path)) {
+                            if (changed) writeLines("foreign edit", path)
+                            return(FALSE)
+                          }
+                          original(paths, mode, use_umask)
+                        }, .package = "base")
+  expect_error(write_atomic(path, "private content", expected_md5 = NA_character_),
+               class = "gptr_error_doc_write")
+  expect_false(file.exists(path))
+  expect_identical(writes, 0L)
+  changed = TRUE
+  expect_error(write_atomic(path, "private content", expected_md5 = NA_character_),
+               class = "gptr_error_doc_write")
+  expect_identical(readLines(path), "foreign edit")
+  expect_identical(writes, 0L)
+})
+
+test_that("an absent-target expectation rejects existing files even with an unknown MD5", {
+  dir = withr::local_tempdir()
+  path = file.path(dir, "occupied.txt")
+  writeLines("foreign content", path)
+  original = tools::md5sum
+  local_mocked_bindings(md5sum = function(files) {
+    if (identical(files, path)) return(stats::setNames(NA_character_, path))
+    original(files)
+  }, .package = "tools")
+  expect_error(write_atomic(path, "private replacement", expected_md5 = NA_character_),
+               class = "gptr_error_doc_write")
+  expect_identical(readLines(path), "foreign content")
+})
