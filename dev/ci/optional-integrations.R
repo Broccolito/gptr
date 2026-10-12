@@ -388,6 +388,93 @@ optional_check_logs = function(paths) {
   invisible(NULL)
 }
 
+optional_child = function(action, file = NULL) {
+  conditions = new.env(parent = emptyenv())
+  conditions$warnings = character()
+  conditions$warning_details = list()
+  conditions$advisory = 0L
+  observe = function(w) {
+    if (grepl("^package .+ was built under R version", conditionMessage(w))) {
+      conditions$advisory = conditions$advisory + 1L
+    } else {
+      conditions$warnings = c(conditions$warnings, paste(class(w), collapse = "/"))
+      if (length(conditions$warning_details) < 25L)
+        conditions$warning_details[[length(conditions$warning_details) + 1L]] =
+          optional_condition_diagnostic(w)
+    }
+  }
+  result = withCallingHandlers({
+    if (action == "preflight") {
+      optional_preflight()
+    } else {
+      pkgload::load_all(".", helpers = FALSE, quiet = TRUE)
+      optional_result_rows(testthat::test_file(file,
+        reporter = testthat::LocationReporter$new(file = stderr()),
+        package = "gptr", load_package = "none"))
+    }
+  }, warning = observe)
+  list(result = result, outside_test_warning_classes = conditions$warnings,
+       outside_test_warnings = conditions$warning_details,
+       outside_test_warning_total = length(conditions$warnings),
+       outside_test_warnings_truncated = length(conditions$warnings) > 25L,
+       known_build_advisories = conditions$advisory)
+}
+
+optional_child_start = function(action, file, root, dir, stdout, stderr, env,
+                                 spawn = processx::process$new) {
+  if (!action %in% c("preflight", "test")) stop("Unapproved child action")
+  script = file.path(dir, "child.R")
+  data = file.path(dir, "request.rds")
+  result = file.path(dir, "result.rds")
+  stopifnot(dir.exists(dir), !any(file.exists(c(script, data, result))))
+  request = list(action = action, file = file, libpaths = .libPaths(),
+    source = normalizePath(file.path(root, "dev", "ci", "optional-integrations.R"),
+      winslash = "/", mustWork = TRUE))
+  stopifnot(all(file.create(c(script, data))))
+  stopifnot(all(Sys.chmod(c(script, data), "0600")))
+  saveRDS(request, data)
+  writeLines(c(
+    "local({",
+    "  args = commandArgs(TRUE)",
+    "  stopifnot(length(args) == 2L)",
+    "  request = readRDS(args[[1L]])",
+    "  .libPaths(request$libpaths, include.site = FALSE)",
+    "  scope = new.env(parent = globalenv())",
+    "  source(request$source, local = scope)",
+    "  outcome = tryCatch(list(value = scope$optional_child(request$action, request$file),",
+    "    error = NULL), error = function(e) list(value = NULL, error = e),",
+    "    interrupt = function(e) list(value = NULL, error = e))",
+    "  publication = tryCatch({",
+    "    part = paste0(args[[2L]], '.part')",
+    "    stopifnot(file.create(part), Sys.chmod(part, '0600'))",
+    "    saveRDS(outcome, part)",
+    "    stopifnot(file.rename(part, args[[2L]]))",
+    "    NULL",
+    "  }, error = identity, interrupt = identity)",
+    "  if (!is.null(outcome$error)) stop(outcome$error)",
+    "  if (!is.null(publication)) stop(publication)",
+    "})"), script)
+  executable = file.path(R.home("bin"),
+    if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript")
+  spawn(command = executable, args = c("--vanilla", script, data, result), wd = root,
+    stdin = NULL, stdout = stdout, stderr = stderr, env = env,
+    cleanup_tree = TRUE, supervise = FALSE)
+}
+
+optional_child_result = function(process, path) {
+  status = process$get_exit_status()
+  if (length(status) != 1L || is.na(status)) stop("Unknown child exit status")
+  if (!file.exists(path)) stop("Owned child result missing (exit status ", status, ")")
+  outcome = readRDS(path)
+  if (!is.list(outcome) || !identical(names(outcome), c("value", "error")) ||
+      (!is.null(outcome$error) && !inherits(outcome$error, "condition"))) {
+    stop("Malformed child result")
+  }
+  if (!is.null(outcome$error)) stop(outcome$error)
+  if (status != 0L) stop("Owned child has a nonzero exit status: ", status)
+  outcome$value
+}
+
 optional_controller_phases = c("controller", "child-launch", "child-wait", "child-result",
   "raw-result-json", "child-warning-gate", "promise-log-gate", "test-result-gate",
   "kill-tree", "marker-kill", "family-root-query", "family-marked-query", "cleanup-json",
@@ -568,86 +655,68 @@ optional_integrations_main = function(controller) {
     controller$summary = summary
     optional_controller_write(summary, file.path(output, "integration-summary.json"))
   }, add = TRUE)
-  child = function(action, file = NULL) {
-    source("dev/ci/optional-integrations.R", local = TRUE)
-    conditions = new.env(parent = emptyenv())
-    conditions$warnings = character()
-    conditions$warning_details = list()
-    conditions$advisory = 0L
-    observe = function(w) {
-      if (grepl("^package .+ was built under R version", conditionMessage(w))) {
-        conditions$advisory = conditions$advisory + 1L
-      } else {
-        conditions$warnings = c(conditions$warnings, paste(class(w), collapse = "/"))
-        if (length(conditions$warning_details) < 25L)
-          conditions$warning_details[[length(conditions$warning_details) + 1L]] =
-            optional_condition_diagnostic(w)
-      }
-    }
-    result = withCallingHandlers({
-      if (action == "preflight") {
-        optional_preflight()
-      } else {
-        pkgload::load_all(".", helpers = FALSE, quiet = TRUE)
-        optional_result_rows(testthat::test_file(file,
-          reporter = testthat::LocationReporter$new(file = stderr()),
-          package = "gptr", load_package = "none"))
-      }
-    }, warning = observe)
-    list(result = result, outside_test_warning_classes = conditions$warnings,
-         outside_test_warnings = conditions$warning_details,
-         outside_test_warning_total = length(conditions$warnings),
-         outside_test_warnings_truncated = length(conditions$warnings) > 25L,
-         known_build_advisories = conditions$advisory)
-  }
   invoke = function(action, label, file = NULL, timeout = 300) {
     log = file.path(output, paste0(label, ".log"))
     stdout_log = file.path(output, paste0(label, "-stdout.log"))
     marker = optional_marker()
     stopifnot(!nzchar(Sys.getenv(marker)))
+    dir = tempfile(paste0(label, "-transport-"), tmpdir = output)
+    stopifnot(dir.create(dir, mode = "0700"))
     process = NULL
+    attempted = FALSE
+    outcome = NULL
     on.exit({
-      cleanup_error = tryCatch({
-        optional_controller_phase(controller, "kill-tree", label)
-        if (!is.null(process)) process$kill_tree()
-        optional_controller_phase(controller, "marker-kill", label)
-        ps::ps_kill_tree(marker)
+      cleanup = tryCatch({
+        cleanup_error = tryCatch({
+          optional_controller_phase(controller, "kill-tree", label)
+          if (!is.null(process)) process$kill_tree()
+          optional_controller_phase(controller, "marker-kill", label)
+          ps::ps_kill_tree(marker)
+          NULL
+        }, error = function(e) substr(conditionMessage(e), 1L, 2000L))
+        family = optional_wait_family(function() {
+          optional_controller_phase(controller, "family-root-query", label)
+          is.null(process) || !process$is_alive()
+        }, function() {
+          optional_controller_phase(controller, "family-marked-query", label)
+          ps::ps_find_tree(marker)
+        })
+        launch_unknown = attempted && is.null(process)
+        settled = family$settled && is.null(cleanup_error) && !launch_unknown
+        optional_controller_phase(controller, "cleanup-json", label)
+        jsonlite::write_json(c(list(passed = settled, settlement_bound_s = 5L,
+          cleanup_error = cleanup_error, launch_unknown = launch_unknown,
+          scope = "owned child and marker-inheriting descendants"), family),
+          file.path(output, paste0(label, "-cleanup.json")), pretty = TRUE,
+          auto_unbox = TRUE, null = "null")
+        if (settled) unlink(dir, recursive = TRUE)
+        if (!settled) stop("Owned child family did not settle: ", label)
         NULL
-      }, error = function(e) substr(conditionMessage(e), 1L, 2000L))
-      family = optional_wait_family(function() {
-        optional_controller_phase(controller, "family-root-query", label)
-        is.null(process) || !process$is_alive()
-      }, function() {
-        optional_controller_phase(controller, "family-marked-query", label)
-        ps::ps_find_tree(marker)
-      })
-      settled = family$settled && is.null(cleanup_error)
-      optional_controller_phase(controller, "cleanup-json", label)
-      jsonlite::write_json(c(list(passed = settled, settlement_bound_s = 5L,
-        cleanup_error = cleanup_error, scope = "owned child and marker-inheriting descendants"),
-        family),
-        file.path(output, paste0(label, "-cleanup.json")), pretty = TRUE,
-        auto_unbox = TRUE, null = "null")
-      if (!settled) stop("Owned child family did not settle: ", label)
+      }, error = identity, interrupt = identity)
+      if (!is.null(cleanup) && (is.null(outcome) || is.null(outcome$error))) stop(cleanup)
     }, add = TRUE)
-    optional_controller_phase(controller, "child-launch", label)
-    process = callr::r_bg(child, list(action, file), stdout = stdout_log, stderr = log,
-      cmdargs = c("--vanilla", "--slave"), user_profile = FALSE, system_profile = FALSE,
-      cleanup_tree = TRUE, supervise = FALSE,
-      env = c(callr::rcmd_safe_env(), stats::setNames("YES", marker)))
-    optional_controller_phase(controller, "child-wait", label)
-    process$wait(timeout * 1000)
-    if (process$is_alive()) stop("Owned child deadline exceeded: ", label)
-    optional_controller_phase(controller, "child-result", label)
-    result = process$get_result()
-    optional_controller_phase(controller, "raw-result-json", label)
-    jsonlite::write_json(result, file.path(output, paste0(label, "-results.json")),
-      pretty = TRUE, auto_unbox = TRUE, null = "null")
-    optional_controller_phase(controller, "child-warning-gate", label)
-    stopifnot(!length(result$outside_test_warning_classes))
-    optional_controller_phase(controller, "promise-log-gate", label)
-    optional_check_logs(c(stdout_log, log))
-    result
+    outcome = tryCatch({
+      optional_controller_phase(controller, "child-launch", label)
+      env = c(Sys.getenv(), stats::setNames("YES", marker))
+      attempted = TRUE
+      process = optional_child_start(action, file, root, dir, stdout_log, log, env)
+      optional_controller_phase(controller, "child-wait", label)
+      process$wait(timeout * 1000)
+      if (process$is_alive()) stop("Owned child deadline exceeded: ", label)
+      optional_controller_phase(controller, "child-result", label)
+      result = optional_child_result(process, file.path(dir, "result.rds"))
+      optional_controller_phase(controller, "raw-result-json", label)
+      jsonlite::write_json(result, file.path(output, paste0(label, "-results.json")),
+        pretty = TRUE, auto_unbox = TRUE, null = "null")
+      optional_controller_phase(controller, "child-warning-gate", label)
+      stopifnot(!length(result$outside_test_warning_classes))
+      optional_controller_phase(controller, "promise-log-gate", label)
+      optional_check_logs(c(stdout_log, log))
+      list(value = result, error = NULL)
+    }, error = function(e) list(value = NULL, error = e),
+       interrupt = function(e) list(value = NULL, error = e))
+    if (!is.null(outcome$error)) stop(outcome$error)
+    outcome$value
   }
   summary$preflight = tryCatch({
     observed = invoke("preflight", "dependency-preflight", timeout = 90)
