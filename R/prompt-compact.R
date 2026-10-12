@@ -431,11 +431,9 @@ compact_charge = function(s, target, context, msg, started, run, aborted = FALSE
     parent_id = d$parent_id %||% NA_character_, started = started,
     seconds = as.numeric(difftime(Sys.time(), started, units = "secs")),
     multiplier = d$estimator$m %||% 1))
-  usage_add(s, row)
+  row = usage_add_durable(s, row)
   ledger_mark_cached(s, context$request_id, row$cache_read)
-  stored = as.list(row)
-  stored$started = as.numeric(row$started)
-  stored = lapply(stored, function(value) if (is.na(value)) NULL else value)
+  stored = usage_row_store(row)
   session_append(s, list(type = "custom", custom_type = "gptr.compaction_usage",
                          data = list(row = stored)))
   event = prompt_event(s, "usage", row = row)

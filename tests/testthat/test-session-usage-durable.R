@@ -56,8 +56,9 @@ test_that("ordinary child charges recover their exact row and originating agent"
   expect_identical(gptr_usage(list(root, got)), gptr_usage(root))
   expect_identical(gptr_resume(file, envir = new.env()), got)
   entries = store_read(file)$entries
-  charged = Filter(function(e) identical(e$type, "message") &&
-                      identical(e$message$role, "assistant"), entries)
+  charged = Filter(function(e) {
+    identical(e$type, "message") && identical(e$message$role, "assistant")
+  }, entries)
   expect_named(charged[[1L]]$gptr$usage, usage_columns)
   expect_identical(entry_messages(charged[[1L]]), list(charged[[1L]]$message))
   expect_null(charged[[1L]]$message$gptr)
@@ -389,4 +390,88 @@ test_that("durable charging refuses live ancestry cycles and excessive depth bef
   expect_error(usage_add_durable(cur, du_row(cur)), class = "gptr_error_invalid_argument")
   expect_identical(nrow(session_data(cur)$usage), 0L)
   expect_null(root$file)
+})
+
+
+test_that("durable fractional charges preserve exact numeric bits after a fresh disk resume", {
+  local_store()
+  s = test_session()
+  row = du_row(s)
+  row$cost = 0.1
+  row$seconds = 0.096337795257568359
+  row$multiplier = 1 + .Machine$double.eps
+  row$started = .POSIXct(1791799091.5259881, tz = "UTC")
+  session_append(s, du_entry(s, row))
+  got = du_restore(s)
+  expect_identical(du_rows(got), row)
+  expect_identical(got$cost, row$cost)
+  entry = store_read(got$file)$entries[[1L]]
+  expect_identical(usage_row_restore(entry$gptr$usage), row)
+  expect_true(is.na(got$usage$cache_read))
+  expect_null(entry$gptr$usage$cache_read)
+})
+
+test_that("durable numeric recovery preserves finite boundaries and legacy numeric records", {
+  local_store()
+  s = test_session()
+  values = c(0, -0.0, .Machine$double.xmin * .Machine$double.eps,
+             .Machine$double.xmin, .Machine$double.xmax, 1 + .Machine$double.eps, 0.1)
+  for (value in values) {
+    row = du_row(s)
+    for (key in usage_num_columns) row[[key]] = value
+    row$started = .POSIXct(-value, tz = "UTC")
+    got = usage_row_restore(json_decode(json_encode(usage_row_store(row))))
+    expect_identical(got, row)
+    expect_identical(writeBin(got$cost, raw(), size = 8L, endian = "big"),
+                     writeBin(row$cost, raw(), size = 8L, endian = "big"))
+    expect_identical(writeBin(as.numeric(got$started), raw(), size = 8L, endian = "big"),
+                     writeBin(as.numeric(row$started), raw(), size = 8L, endian = "big"))
+  }
+  row = du_row(s)
+  legacy = as.list(row)
+  legacy$started = as.numeric(row$started)
+  legacy = lapply(legacy, function(value) if (is.na(value)) NULL else value)
+  legacy = usage_row_restore(json_decode(json_encode(legacy)))
+  expect_identical(legacy, row)
+  expect_identical(usage_canonical_unique(list(row, legacy)), row)
+  stored = json_decode(json_encode(usage_row_store(row)))
+  expect_identical(stored$cost, list(ieee754 = "3ff4000000000000"))
+  expect_identical(stored$started, list(ieee754 = "4105180200000000"))
+})
+
+test_that("durable numeric tags reject nonfinite malformed and wrong-field values", {
+  local_store()
+  s = test_session()
+  row = du_row(s)
+  stored = usage_row_store(row)
+  bad_values = list(
+    "1", list(ieee754 = "1"), list(ieee754 = "00000000000000000"),
+    list(ieee754 = "000000000000000g"), list(ieee754 = "3FF4000000000000"),
+    list(ieee754 = NA_character_), list(ieee754 = 1),
+    list(ieee754 = c("3ff4000000000000", "3ff4000000000000")),
+    list(ieee754 = "3ff4000000000000", extra = TRUE),
+    list(ieee754 = "3ff4000000000000", ieee754 = "3ff4000000000000"),
+    list("3ff4000000000000"), list(unknown = "3ff4000000000000"),
+    list(ieee754 = "7ff0000000000000"), list(ieee754 = "fff0000000000000"),
+    list(ieee754 = "7ff8000000000000"), list(ieee754 = "bff0000000000000"))
+  for (value in bad_values) {
+    bad = stored
+    bad$cost = value
+    expect_error(usage_row_restore(bad), class = "gptr_error_invalid_argument")
+  }
+  for (key in c("started", "estimated", "agent")) {
+    bad = stored
+    bad[key] = list(NULL)
+    expect_error(usage_row_restore(bad), class = "gptr_error_invalid_argument")
+  }
+  for (key in c("estimated", "agent")) {
+    bad = stored
+    bad[[key]] = stored$cost
+    expect_error(usage_row_restore(bad), class = "gptr_error_invalid_argument")
+  }
+  for (bits in c("7ff0000000000000", "fff0000000000000", "7ff8000000000000")) {
+    bad = stored
+    bad$started = list(ieee754 = bits)
+    expect_error(usage_row_restore(bad), class = "gptr_error_invalid_argument")
+  }
 })

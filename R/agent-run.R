@@ -1196,11 +1196,11 @@ run_response = function(run, msg) {
                   multiplier = d$estimator$m %||% 1)
   row = usage_conform(row)
   row$request_id = run$request_id
-  usage_add(s, row)
+  row = usage_add_durable(s, row)
   ledger_mark_cached(s, run$request_id, usage_as(msg[["usage"]])[["cache_read"]])
   run_emit(run, "usage", row = row)
   run_estimator_update(run, msg)
-  session_append(s, entry_message(msg))
+  session_append(s, usage_message_entry(msg, row))
   run_emit(run, "message_end", role = "assistant", message = msg)
   run$message = msg
   if (identical(msg$stop_reason, "error")) return(run_response_error(run, msg))
@@ -1419,12 +1419,18 @@ run_settle = function(run, reason) {
   finish = run$compact_finish
   run$compact_finish = NULL
   if (is.function(finish)) {
-    tryCatch(finish(), error = function(e) {
-      registry_diagnostic("session", "compaction_usage", class(e)[[1L]],
-                          paste0("the checkpoint charge could not be completed: ",
-                                 conditionMessage(e)))
-    })
+    failed = function(e) {
+      run_accounting_error(run, e)
+      tryCatch(
+        registry_diagnostic("session", "compaction_usage", class(e)[[1L]],
+                            paste0("the checkpoint charge could not be completed: ",
+                                   conditionMessage(e))),
+        error = function(e) NULL, interrupt = function(e) NULL)
+    }
+    tryCatch(finish(), error = failed, interrupt = failed)
   }
+  # Cleanup still completes; failed durability reaches the existing gateway error path.
+  if (!is.null(run$accounting_error)) status = "error"
   if (identical(status, "max_turns") && is.null(run$condition)) {
     run$condition = gptr_condition(
       paste0("the run stopped after ", run$max_turns, " turns (max_turns)"), "max_turns", "error",
@@ -1506,6 +1512,22 @@ run_error_condition = function(e) {
                  list(detail = conditionMessage(e)))
 }
 
+#' Retain a durable accounting failure while permitting complete abort settlement
+#' @noRd
+run_accounting_error = function(run, e) {
+  if (is.null(run$accounting_error)) run$accounting_error = e
+  run$signal$accounting_error = run$accounting_error
+  d = session_data(run$shell)
+  d$accounting_error = run$accounting_error
+  if (is.null(run$condition)) {
+    failed = function(e) {
+      gptr_condition("Durable usage accounting failed.", "internal", "error")
+    }
+    run$condition = tryCatch(run_error_condition(e), error = failed, interrupt = failed)
+  }
+  invisible(NULL)
+}
+
 #' Settle a run after an unexpected R error (kept as the stored condition)
 #' @noRd
 run_fail = function(run, e) {
@@ -1536,14 +1558,30 @@ run_abort = function(run, reason = "user") {
     msg = run_partial_message(run)
     msg$stop_reason = "aborted"
     msg$error_message = paste0("aborted (", reason, ")")
-    msg = tryCatch(run_abort_usage(run, msg), error = function(e) {
-      registry_diagnostic("session", "abort_usage", class(e)[[1L]], conditionMessage(e))
+    failed_charge = function(e) {
+      run_accounting_error(run, e)
+      tryCatch(
+        registry_diagnostic("session", "abort_usage", class(e)[[1L]], conditionMessage(e)),
+        error = function(e) NULL, interrupt = function(e) NULL)
       msg
-    })
-    # a store failure must not stop the abort (the session would stay `running`)
-    tryCatch(session_append(s, entry_message(msg)), error = function(e) {
-      registry_diagnostic("session", "abort", class(e)[[1L]], conditionMessage(e))
-    })
+    }
+    msg = tryCatch(run_abort_usage(run, msg), error = failed_charge, interrupt = failed_charge)
+    # A failed durable append is retained without stopping abort settlement.
+    failed_append = function(e) {
+      run_accounting_error(run, e)
+      tryCatch(
+        registry_diagnostic("session", "abort", class(e)[[1L]], conditionMessage(e)),
+        error = function(e) NULL, interrupt = function(e) NULL)
+    }
+    tryCatch({
+      rows = d$usage[d$usage$request_id == run$request_id, , drop = FALSE]
+      entry = if (nrow(rows)) {
+        usage_message_entry(msg, rows[1L, , drop = FALSE])
+      } else {
+        entry_message(msg)
+      }
+      session_append(s, entry)
+    }, error = failed_append, interrupt = failed_append)
     run_emit(run, "message_end", role = "assistant", message = msg)
   }
   d$dropped = c(d$dropped, d$queue$steer, d$queue$follow_up)
@@ -1571,7 +1609,7 @@ run_abort_usage = function(run, msg) {
                   multiplier = d$estimator$m %||% 1)
   row$cost = cost
   row = usage_conform(row)
-  usage_add(s, row)
+  row = usage_add_durable(s, row)
   run_emit(run, "usage", row = row)
   msg
 }

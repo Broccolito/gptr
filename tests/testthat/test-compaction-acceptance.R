@@ -343,11 +343,14 @@ test_that("stored checkpoint charges validate counts and bind to their owning se
   entries = store_read(x$s$file)$entries
   at = which(vapply(entries, function(e) identical(e$custom_type, "gptr.compaction_usage"), NA))
   expect_length(at, 1L)
-  entries[[at]]$data$row$session = "s0000000000"
-  entries[[at]]$data$row$parent_id = "s1111111111"
   rebuilt = rebuild_usage(entries, session_data(x$s))
   expect_identical(rebuilt$session, x$s$id)
   expect_true(is.na(rebuilt$parent_id))
+  valid_entries = entries
+  entries[[at]]$data$row$session = "s0000000000"
+  entries[[at]]$data$row$parent_id = "s1111111111"
+  expect_error(rebuild_usage(entries, session_data(x$s)), class = "gptr_error_invalid_argument")
+  entries = valid_entries
   entries[[at]]$data$row$input = -1
   expect_error(rebuild_usage(entries, session_data(x$s)), class = "gptr_error_invalid_argument")
 })

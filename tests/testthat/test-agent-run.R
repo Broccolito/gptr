@@ -1667,7 +1667,12 @@ test_that("an abort whose partial answer cannot be stored still settles and re-s
   res = tryCatch(run_abort_only(interrupt, run), interrupt = function(cnd) "interrupted",
                  error = function(e) conditionMessage(e))
   expect_identical(res, "interrupted")
-  expect_identical(s$status, "aborted")
+  expect_identical(s$status, "error")
+  expect_true(isTRUE(run$signal$aborted))
+  expect_identical(run$signal$reason, "interrupt")
+  expect_s3_class(run$condition, "gptr_error_internal")
+  expect_identical(run$condition, run$accounting_error)
+  expect_identical(run$signal$accounting_error, run$condition)
   expect_true(isTRUE(run$settled))
   expect_null(session_live(s)$run)
   expect_false(exists(reactor_run_id(run), envir = reactor_get()$runs, inherits = FALSE))

@@ -824,16 +824,36 @@ test_that("a rebuilt fork gets a fresh overlay of envir (IC-46)", {
 
 test_that("a file from another project gets a fresh prompt and imported turns (IC-52)", {
   s = stored_run()
-  lines = readLines(s$file, encoding = "UTF-8")
+  id = s$id
+  file = s$file
+  expected = session_data(s)$usage
+  expect_identical(nrow(expected), 2L)
+  lines = readLines(file, encoding = "UTF-8")
   hdr = json_decode(lines[[1L]])
   hdr$cwd = "/nonexistent/elsewhere"
-  hdr$id = "s00000000aa"
   lines[[1L]] = json_encode(hdr)
-  foreign = file.path(dirname(s$file), "20260101T000000_s00000000aa.jsonl")
+  foreign = file.path(dirname(file), paste0("20260101T000000_", id, ".jsonl"))
   writeLines(lines, foreign, useBytes = TRUE)
+  lock_release(lock_path(file))
+  live_forget(s)
+  expect_null(session_by_id(id))
   r = gptr_resume(foreign, envir = new.env())
   expect_identical(length(session_data(r)$frozen), 0L)
   expect_identical(r$messages[[1L]]$source, "imported")
+  expect_identical(r$id, id)
+  expect_null(session_data(r)$parent_id)
+  expect_identical(session_data(r)$usage, expected)
+
+  hdr$id = if (identical(id, "s00000000aa")) "s00000000bb" else "s00000000aa"
+  expect_true(session_id_ok(hdr$id))
+  expect_false(identical(hdr$id, id))
+  expect_null(session_by_id(hdr$id))
+  lines[[1L]] = json_encode(hdr)
+  tampered = file.path(dirname(file), paste0("20260101T000001_", hdr$id, ".jsonl"))
+  writeLines(lines, tampered, useBytes = TRUE)
+  expect_error(gptr_resume(tampered, envir = new.env()), "Invalid durable usage identity",
+               class = "gptr_error_invalid_argument")
+  expect_null(session_by_id(hdr$id))
 })
 
 test_that("gptr_resume() validates x", {
