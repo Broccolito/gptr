@@ -1,17 +1,28 @@
 # Bounded Rscript/processx launcher replacement — 2026-10-11
 
-The maintainer authorized replacing GPTR's two callr launches: workers (P19) and Shiny
-serving (P23). This is a tests-first change in `codex/skipped-platform-tests`. All new
-native RPX01–07 acceptance and fresh plan gates are PENDING. Tests-first checkpoint `1cabcfc` is
-pushed. The initial Mac helper packet is expected RED: 5 test errors, 0 passes/test warnings/
-skips, caused by missing `proc_rscript`/library helper and `.on_spawn`. Its separate outer
-startup warning says testthat was built under R 4.5.2; dependency remedy remains pending.
-Evidence: ignored `dev/.validation/rscript-processx-20261011/red-launcher.log` in the candidate.
-The focused Mac working-tree helper now passes 33 assertions with 0 failures/test warnings/
-skips in `green-launcher.log`; the outer advisory remains. Its runtime commit has not yet been
-nominated. Core launcher/callback source preparation is ongoing; worker/Shiny native parity
-and the complete replacement remain unproved. No dependency removal has occurred. DESCRIPTION, installed
-runtime and every other Import stay unchanged by this documentation checkpoint.
+Current candidate is `codex/skipped-platform-tests`, pushed through `3cf34ef9b865aeba1bb163a8fde0f779ec36adb8`.
+Runtime checkpoint `963665c` replaces both launches; test/CI checkpoint `f0915fb` adds
+native source and installed execution, complete-parent-state, protocol and lifecycle controls.
+Independent source review is clear. callr remains imported until native acceptance passes.
+
+Actual Mac focused packet: 156 assertions, 0 failures/test warnings/skips (`focused-final.log`).
+This includes the final launcher failure/interrupt guard and worker settlement regressions.
+The external startup advisory remains: testthat was built under R4.5.2 but this host runs
+R4.5.0. It is not a warning-free full validation. Native Mac/Windows source+installed worker,
+Shiny, secrets, architecture, supervision and browser-cleanup checks are ONGOING in
+[run38208873408](https://github.com/Broccolito/gptr/actions/runs/38208873408), exact `3cf34ef`.
+No result is inferred from workflow dispatch or source review.
+
+Fresh four-stage plan checks on exact `a9d8a2242218aa244f6182bea7fd807aba6f6c3b` PASSED:
+25 plans, 1523 extracted blocks, 770 R blocks, 0 parse/style problems/lints, 39 equal
+before/after source hashes. The index retains90 historical warnings, distinct from runtime
+warnings. Raw artifacts were downloaded and inspected. Source/living-plan link review passed.
+
+Tests-first checkpoints `1cabcfc` and `c36b13e` retain baseline failures and the cleanup
+contracts. The initial helper RED is5errors/0passes from missing helpers and callback;
+33-assertion initial GREEN predates the final156-assertion packet. Historical logs are intact.
+The comprehensive readiness request is active: remaining storage, frontend/provider/compaction,
+security, documentation and exact-archive package checks follow alongside RPX01–07.
 
 ## Scope and phases
 
@@ -57,35 +68,9 @@ Those private upstream installs prove selected callr behavior; they do not prove
 entrypoints, a released dependency fix, production adoption or universal startup-variable
 restoration. CE05/06 admissions and CE07 publication/release integration remain OPEN.
 
-Root/worker/artifact lanes are preparing the remaining tests; the two-file tests-first
-checkpoint above precedes the launcher source work. Review/commit this plan checkpoint
-before proceeding with worker/Shiny migration. Keep meaningful errors, unexpected skips,
-warning classes, missing/duplicate/zero-assertion cases and unknown settlement fatal. Use existing bounded
-supervisors; record exact source/library/artifact identities, observed memory scope, elapsed
-and child cleanup. Do not infer a Mac pass from hosted Windows/Linux or a devtools pass from
-installed-package tests.
-
-At the retained coordinator 22:12 PDT snapshot, load was 15.04/19.74/18.26, CPU idle 26.72%,
-RAM 111 GiB used/16 GiB unused, swap 21717.94 MiB (sampled delta 0), disk 302 GiB and no
-recorded thermal warning. Local-heavy work stays HELD on load. The shared Ollama model,
-user workspace and libraries remain untouched. Native Mac execution waits for clearance.
-
-## Required plan checks after this edit
-
-Root should run the [four consolidation checks](../research/assets/consolidation-tools/README.md)
-serially on the exact reviewed/committed source in the hosted Linux lane. The existing bounded
-controller executes index, extract, R parse/style, then single-worker lint; it verifies the exact
-P01–P25 set and equal before/after source hashes. Use a fresh output path (replace REVIEWED_SHA):
-
-```sh
-python -I -B dev/ci/test-check-plans.py
-python -I -B dev/ci/check-plans.py \
-  --out dev/.validation/rscript-processx-20261011/plan-checks-REVIEWED_SHA
-```
-
-The controller caps each stage at 600 seconds, owns its process group, disables live tests,
-and caps BLAS/build/lint workers at one. It retains stage logs and source provenance; soft
-index errors, missing blocks, parse/style problems and any lint are fatal. Historical index
-warnings need the existing classification plus review of new findings. This fresh run is
-PENDING; old successful gates do not validate this edit. The controller indexes P01–P25,
-so independently review this living-plan/contract text and links as well. No local R job was run.
+The runtime source is committed; native acceptance and dependency retirement are pending.
+Require meaningful assertions, fatal unexpected skips/warnings, exact provenance and owned
+settlement. No local model/GPU workload was started; shared Ollama and main dirty tree remain
+preserved. At22:40PDT load15.20/14.18/14.73, CPU55.60%idle, RAM117GiBused/10GiBunused,
+swap21645.94MiB with sampled0swapout,301GiBdisk and no thermal warning keep local-heavy
+work held. Small serial offline regressions and hosted native checks continue.

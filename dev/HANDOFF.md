@@ -1,30 +1,28 @@
 # GPTR 1.0 implementation - handoff
 
-## Rscript/processx replacement authorized; tests first — 2026-10-11
+## Rscript replacement and full readiness active — 2026-10-11
 
-The maintainer authorized replacing the two worker/Shiny callr launches with fixed,
-trusted `Rscript --vanilla` entrypoints through processx. The plan and IC-60/architecture
-amendment are prepared in `codex/skipped-platform-tests`. Tests-first checkpoint `1cabcfc`
-is pushed. The initial Mac helper run is RED: 5 test errors, 0 passes/test warnings/skips
-(missing launcher/library helpers and spawn callback); its separate testthat build-version
-startup advisory is retained. The focused Mac working-tree helper now passes 33 assertions
-with 0 failures/test warnings/skips; its runtime commit is not yet nominated. Core launcher/
-callback source preparation is ongoing. Worker/Shiny native parity and four fresh plan checks
-remain PENDING; this helper pass closes neither the full replacement nor dependency gate.
-No replacement child behavior or callr removal is proved. DESCRIPTION and the current
-installed runtime remain unchanged by this documentation checkpoint.
+Continue in the attached candidate `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`,
+branch `codex/skipped-platform-tests`, pushed through `3cf34ef9b865aeba1bb163a8fde0f779ec36adb8`.
+Both production launches now use reviewed fixed Rscript/processx entries (`963665c`).
+Current Mac focused launcher/worker packet passes156assertions/0test failures/warnings/skips;
+external testthat/R4.5.2-versus4.5.0 startup advisory remains. Native source+installed Mac and
+Windows worker/Shiny/parent/protocol/lifecycle acceptance is ONGOING in
+[run38208873408](https://github.com/Broccolito/gptr/actions/runs/38208873408).
+Keep callr until those tests pass; source review or a focused helper pass is insufficient.
 
-Review/commit this plan checkpoint before proceeding with worker/Shiny migration. Require
-installed-package and devtools proof on native macOS/Windows, exact parent state, child startup/library
-filtering, worker protocols/exports/permission/EOF/cancel/parent death, Shiny loopback/
-ready/startup failure/watchdog and exact owned settlement before dependency removal.
-See [replacement progress](progress/rscript-processx-20261011.md) for RPX scope and checks.
-The callr results below remain historical evidence for the separate upstream repair.
+Four fresh plan stages on `a9d8a22` passed:25plans,770Rblocks,0parse/style/lints and39unchanged
+source hashes;90historical index warnings remain separately recorded. See
+[replacement progress](progress/rscript-processx-20261011.md) and [testing plan](TESTING_PLAN.md).
+The full readiness attachment is authorized, including remaining private-creation/sidecar,
+compaction, provider/frontend, security, documentation, exact-archive CRAN and PR/sync gates.
+Only actual Windows desktop live verification may remain at the requested completion boundary.
+Do not mark any other pending case complete by source preparation, earlier scoped results or skip.
 
-At the coordinator's 22:12 PDT resource snapshot: load 15.04/19.74/18.26, CPU idle
-26.72%, RAM 111 GiB used/16 GiB unused, swap 21717.94 MiB with sampled delta 0,
-disk 302 GiB and no recorded thermal warning. Local-heavy work remains HELD on load;
-the shared Ollama model is preserved. Fresh native execution needs coordinator clearance.
+Preserve primary main718e81e and its dirty files, installed long-lived user sessions, credentials
+and shared Ollama. At22:40PDT load15.20/14.18/14.73,55.60%idle,117GiBused/10GiBunused,
+swap21645.94MiB with sampled0swapout and301GiBdisk keeps local-heavy work held. Small serial
+offline and at most2hosted internally parallel jobs continue; resource state must be refreshed.
 
 ## Native callr required gates GREEN; admissions remain OPEN — 2026-10-11
 
