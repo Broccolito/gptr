@@ -34,7 +34,8 @@ the living records and dev-only validation controllers. Preserve the dirty prima
   The ordinary utility keeps enabled privileges; the A-B-A diagnostic restores A2 before
   its strict controls. Disabled B produces actual production PROBE1, enabled A1/A2 produce2.
   Token/ACL restoration is exact, but effective denial in the original controls is unproved.
-  A held-B successor is preparation only. Assertions, five-second limits and unknown-fatal
+  A held-B successor now has69 passing pure assertions and clean lint; native acceptance is
+  pending. Assertions, five-second limits and unknown-fatal
   rules remain strict; do not treat this fixture failure as unsafe production acceptance.
 - DONE/GitHub triage: legacy issues1 and2 are closed as completed with reviewed explanations.
   Issue2's supplied-model bug was fixed in2025; current documentation replaces issue1's link.
@@ -48,17 +49,31 @@ the living records and dev-only validation controllers. Preserve the dirty prima
   History passes all four Rmd modes, Quarto and actual IRkernel MIME publication; underlying
  24 rows/latest8 display,11 state flags and0 requests/usage remain intact. This is synthetic
   display/computation evidence; browser/native appearance and true short-case RAM peaks are separate.
+- DONE/current Azure functional cases: CSV/TSV/JSON/RDS/RData reopen, trusted skills and lazy
+  plugins, owned stdio MCP, fixed public-data download, configured public web and inline serial
+  specialist fan-out pass with23 real requests, zero warnings and exact caller restoration.
+  Eight functional cases total72.832s; maximum sampled family529.453MiB. Parallel workers,
+  remaining provider/steering/compaction coverage and native frontend appearance stay open.
+- ONGOING/strict Windows fixture: four new held-route controls69P and five configured lints0.
+  Tests exposed an AST missing-formal traversal error; one-line correction passes all original
+  ownership/selection assertions. Default-off CI routing is adopted; original strict75 and
+  additional held native gate require fresh hosted acceptance. Parent tokens stay untouched.
+- OPEN/local browser experiment: pure8/34P; all three native arms hit unchanged1GiB family
+  cap before page/shutdown proof, with zero sampling errors and exact owned settlement.
+  Outer sampled maximum1646.156MiB stays under approved2GiB. Full-Chrome155 provision/rerun
+  is pending; five diagnostic brace lints also need correction. Original failures are retained.
 - OPEN/current automatic CI: db1 run38292931362 connections has1 worker-spec size failure
   (6,052,915B exceeds unchanged4MB); LC_ALL=C has8 Unicode fixture/literal/path failures.
-  Zero R warnings in both. Source triage/tests-first corrections are required before closure.
+  Zero R warnings in both. Completed Windows release/oldrel4 also fail; exact raw triage
+  is pending. Source-reviewed Unicode correction is prepared; no acceptance claim yet.
 - WAITING: current site, live providers/extensions/team/fan-out/compaction/replay, native
   frontend/performance checks, independent full review and PR6 merge.
   RStudio control still exposes original27070; no original-session input/restart/cleanup.
 
 Evidence is retained under ignored primary `dev/.validation/readiness-20261011/`, including
 `normal-five-audit`, all three native audits and `github-legacy-closure-20261012`.
-Resource12:22: load15.44/15.13/14.25, CPU50.94% idle,123G used/4,313MiB unused,
-swap20,160MiB/zero sampled paging, disk266GiB, no thermal warning. User approved one serial
+Resource12:46: load9.82/11.02/11.83, CPU53.83% idle,125G used/1,946MiB unused,
+swap20,128MiB/zero sampled paging, disk459GiB, no thermal warning. User approved one serial
 private test family capped at2GiB sampled RAM/512MiB output; heavy/GPU work stays held.
 Sampled RSS does not establish instantaneous peaks or complete short/reparented-child coverage.
 Finish Mac, hosted and functional gates before final live Windows UI verification; Windows CI

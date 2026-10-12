@@ -221,6 +221,10 @@ token_invoke = function(action, root, output, controller) {
     token_support$optional_controller_phase(controller, "child-launch", "controller")
     env = c(Sys.getenv(), stats::setNames("YES", marker),
       GPTR_TOKEN_EXPERIMENT_PACKET = file.path(root, "dev", "ci", "windows-token", "packet"))
+    if (action %in% c("held-protocol", "held-native")) {
+      env = c(env, GPTR_HELD_TOKEN_PACKET =
+        file.path(root, "dev", "ci", "windows-token", "held-packet"))
+    }
     attempted = TRUE
     process = token_support$optional_child_start(action, NULL, root, dir, stdout_log, log, env)
     token_support$optional_controller_phase(controller, "child-wait", "controller")

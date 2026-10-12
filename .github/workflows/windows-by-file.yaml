@@ -30,6 +30,10 @@ on:
         description: Run the reviewed child-only token diagnostic after successful install
         type: boolean
         default: false
+      held_token:
+        description: Run strict75 with the reviewed held-disabled owned-utility fixture
+        type: boolean
+        default: false
       startup_diagnostic:
         description: Diagnose bounded PowerShell startup after verified install (Windows devel)
         type: boolean
@@ -61,7 +65,7 @@ jobs:
       GPTR_LEGACY_MINUTES: ${{ inputs.minutes }}
     steps:
       - name: Validate optional source nomination
-        if: inputs.optional || inputs.token_experiment || inputs.startup_diagnostic
+        if: inputs.optional || inputs.token_experiment || inputs.startup_diagnostic || inputs.held_token
         shell: bash
         env:
           EXPERIMENT: ${{ inputs.token_experiment && 'true' || 'false' }}
@@ -69,10 +73,15 @@ jobs:
           PLATFORM: ${{ inputs.platform }}
           NOFOLLOW: ${{ inputs.nofollow_observer && 'true' || 'false' }}
           STARTUP: ${{ inputs.startup_diagnostic && 'true' || 'false' }}
+          HELD: ${{ inputs.held_token && 'true' || 'false' }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           if [[ "$EXPERIMENT" == true ]]; then
             [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$NOFOLLOW" == true ]]
+          fi
+          if [[ "$HELD" == true ]]; then
+            [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$NOFOLLOW" == true ]]
+            [[ "$EXPERIMENT" == false && "$STARTUP" == false ]]
           fi
           if [[ "$STARTUP" == true ]]; then
             [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$EXPERIMENT" == false ]]
@@ -149,6 +158,16 @@ jobs:
         run: |
           Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-token/test-controller.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
           Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-token/controller.R")) == 0L, length(lintr::lint("dev/ci/windows-token/test-controller.R")) == 0L)'
+      - name: Test and lint the default-off held fixture route
+        if: inputs.optional && inputs.held_token
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-token/test-held-route.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+          Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-token/held-controller.R")) == 0L, length(lintr::lint("dev/ci/windows-token/held-faults.R")) == 0L, length(lintr::lint("dev/ci/windows-token/test-held-route.R")) == 0L)'
       - name: Test and lint the default-off startup controller
         if: inputs.optional && inputs.startup_diagnostic
         timeout-minutes: 2
@@ -210,12 +229,44 @@ jobs:
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
             --run Rscript --vanilla dev/ci/windows-startup/controller.R verify-install
+      - name: Verify installed runtime and held fixture packet
+        id: held_install
+        if: inputs.optional && inputs.held_token && runner.os == 'Windows' && steps.optional_install.outcome == 'success'
+        timeout-minutes: 1
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_HELD_B: 'true'
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-held-install
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/held-controller.R verify-install
+      - name: Run twelve PowerShell fault and two R protocol controls
+        id: held_pure
+        if: inputs.optional && inputs.held_token && steps.held_install.outcome == 'success'
+        timeout-minutes: 6
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_HELD_B: 'true'
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-held-pure
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/held-controller.R pure
       - name: Offline tests file by file
         if: '!inputs.optional'
         shell: bash
         run: Rscript --vanilla dev/ci/test-by-file.R "$GPTR_LEGACY_FILTER" "$GPTR_LEGACY_MINUTES"
       - name: Mandatory optional tests with five-minute owned-child bounds
-        if: inputs.optional
+        if: inputs.optional && !inputs.held_token
         shell: bash
         env:
           GITHUB_PAT: ''
@@ -225,6 +276,36 @@ jobs:
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
             --run Rscript --vanilla dev/ci/optional-integrations.R
+      - name: Original strict cases with the admitted held writer fixture
+        if: inputs.optional && inputs.held_token && steps.held_pure.outcome == 'success'
+        timeout-minutes: 30
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_HELD_B: 'true'
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-held-original
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/optional-integrations.R
+      - name: Run the separate strict held native case
+        if: always() && inputs.optional && inputs.held_token && steps.held_pure.outcome == 'success'
+        timeout-minutes: 6
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_HELD_B: 'true'
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-held-native
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/held-controller.R native
       - name: Run the strict child-only token diagnostic after verified install
         if: always() && inputs.optional && inputs.token_experiment && inputs.platform == 'windows' && inputs.nofollow_observer && runner.os == 'Windows' && steps.token_install.outcome == 'success'
         timeout-minutes: 12

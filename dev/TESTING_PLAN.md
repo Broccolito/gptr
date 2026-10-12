@@ -34,7 +34,8 @@ the living records and dev-only validation controllers. Preserve the dirty prima
   The ordinary utility keeps enabled privileges; the A-B-A diagnostic restores A2 before
   its strict controls. Disabled B produces actual production PROBE1, enabled A1/A2 produce2.
   Token/ACL restoration is exact, but effective denial in the original controls is unproved.
-  A held-B successor is preparation only. Assertions, five-second limits and unknown-fatal
+  A held-B successor now has69 passing pure assertions and clean lint; native acceptance is
+  pending. Assertions, five-second limits and unknown-fatal
   rules remain strict; do not treat this fixture failure as unsafe production acceptance.
 - DONE/GitHub triage: legacy issues1 and2 are closed as completed with reviewed explanations.
   Issue2's supplied-model bug was fixed in2025; current documentation replaces issue1's link.
@@ -48,17 +49,31 @@ the living records and dev-only validation controllers. Preserve the dirty prima
   History passes all four Rmd modes, Quarto and actual IRkernel MIME publication; underlying
  24 rows/latest8 display,11 state flags and0 requests/usage remain intact. This is synthetic
   display/computation evidence; browser/native appearance and true short-case RAM peaks are separate.
+- DONE/current Azure functional cases: CSV/TSV/JSON/RDS/RData reopen, trusted skills and lazy
+  plugins, owned stdio MCP, fixed public-data download, configured public web and inline serial
+  specialist fan-out pass with23 real requests, zero warnings and exact caller restoration.
+  Eight functional cases total72.832s; maximum sampled family529.453MiB. Parallel workers,
+  remaining provider/steering/compaction coverage and native frontend appearance stay open.
+- ONGOING/strict Windows fixture: four new held-route controls69P and five configured lints0.
+  Tests exposed an AST missing-formal traversal error; one-line correction passes all original
+  ownership/selection assertions. Default-off CI routing is adopted; original strict75 and
+  additional held native gate require fresh hosted acceptance. Parent tokens stay untouched.
+- OPEN/local browser experiment: pure8/34P; all three native arms hit unchanged1GiB family
+  cap before page/shutdown proof, with zero sampling errors and exact owned settlement.
+  Outer sampled maximum1646.156MiB stays under approved2GiB. Full-Chrome155 provision/rerun
+  is pending; five diagnostic brace lints also need correction. Original failures are retained.
 - OPEN/current automatic CI: db1 run38292931362 connections has1 worker-spec size failure
   (6,052,915B exceeds unchanged4MB); LC_ALL=C has8 Unicode fixture/literal/path failures.
-  Zero R warnings in both. Source triage/tests-first corrections are required before closure.
+  Zero R warnings in both. Completed Windows release/oldrel4 also fail; exact raw triage
+  is pending. Source-reviewed Unicode correction is prepared; no acceptance claim yet.
 - WAITING: current site, live providers/extensions/team/fan-out/compaction/replay, native
   frontend/performance checks, independent full review and PR6 merge.
   RStudio control still exposes original27070; no original-session input/restart/cleanup.
 
 Evidence is retained under ignored primary `dev/.validation/readiness-20261011/`, including
 `normal-five-audit`, all three native audits and `github-legacy-closure-20261012`.
-Resource12:22: load15.44/15.13/14.25, CPU50.94% idle,123G used/4,313MiB unused,
-swap20,160MiB/zero sampled paging, disk266GiB, no thermal warning. User approved one serial
+Resource12:46: load9.82/11.02/11.83, CPU53.83% idle,125G used/1,946MiB unused,
+swap20,128MiB/zero sampled paging, disk459GiB, no thermal warning. User approved one serial
 private test family capped at2GiB sampled RAM/512MiB output; heavy/GPU work stays held.
 Sampled RSS does not establish instantaneous peaks or complete short/reparented-child coverage.
 Finish Mac, hosted and functional gates before final live Windows UI verification; Windows CI
@@ -84,10 +99,10 @@ remain false. Fresh four-stage plan checks are recorded separately after this ed
 | PF02 transient disk entries | Preserve live-byte charges, captured root identity, nonfollowing ancestors and fatal unknowns; accept only twice-confirmed vanished owned descendants. Keep prior17 controls and all sampling/settlement caps. | DONE/controller controls: baseline25/2 expected errors; amended25 pass. Original-only admission33 pass and actual seven-job API admission verifies. Hosted original-byte dependency/Suggests/inventory rerun WAITING. |
 | CI03 broad runtime variants | Keep the4MB worker-spec/security assertion and UTF-8 byte/data/path oracles; triage current connections and LC_ALL=C failures with meaningful tests-first corrections and independent review. | OPEN: db1 connections1 size failure/28,313P; LC_ALL=C8 Unicode failures/28,157P, both0 R warnings. No relaxed assertion or forced parent locale. |
 | WK02 current workers and Shiny | Run exact213 source/installed titles on Mac, Windows and Linux; require native success/error/cancel state, child settlement, pinned Python identity, zero outer warnings and exact platform guards. | DONE/hosted assertions on all three:9,462P across six contexts,0F/E/RW, exact guards,18 lints0/19 controls TRUE. Browser output has30 native close errors; UX03 remains OPEN. Local GUI/live WAITING. |
-| WS03 strict denied attributes | Keep the same real six controls and installed production probe under an exact owned-child token with effective denial; test body error/interrupt, partial privilege adjustment and failed restoration without mutating parent tokens. Preserve five-second deadline/caps and unknown fatal. | FAILED/current02: ordinary75 and strict token retain one failure each. Held-B successor is source preparation only; reviewed controls and native rerun WAITING. |
+| WS03 strict denied attributes | Keep the same real six controls and installed production probe under an exact owned-child token with effective denial; test body error/interrupt, partial privilege adjustment and failed restoration without mutating parent tokens. Preserve five-second deadline/caps and unknown fatal. | FAILED/current02: ordinary75 and strict token retain one failure each. Held-B route adopted after RED missing-AST-formal/one-line GREEN4cases69P and five lints0; original strict75 and native held fixture rerun WAITING. |
 | CR02 oldrel size and teardown | Recheck current bytes on R4.2.3 with current settings; record lazy-load database and allocated disk bytes. Capture owned teardown entry/completion, unlink return, root existence and bounded residual/child-settlement witnesses. Only if size persists, run source-retention diagnostic A/B on the same archive/R/dependencies. | WAITING: older same-source4.2.3/4.6.1 generated databases differ; source/retention alone is not causal proof. No production cleanup or byte-compilation change. |
 | UX02 exact native RStudio target | Uniquely observe an owned fresh session before any commands, then run current installed native rendering/width/steering/completion/allocator checks. | BLOCKED/client routing: installed path still opens original27070; mounted path times out. Original session preserved. |
-| UX03 browser shutdown output | Reproduce all five deferred-close boundaries in source and installed contexts; use documented bounded graceful shutdown, preserve process/socket cleanup and remote-browser ownership, and require raw stderr without native error lines or unhandled async promises. | OPEN: all three hosts emit five EOF/reset lines per context. Source investigation/proposal only; no suppression or accepted harmlessness claim. |
+| UX03 browser shutdown output | Reproduce all five deferred-close boundaries in source and installed contexts; use documented bounded graceful shutdown, preserve process/socket cleanup and remote-browser ownership, and require raw stderr without native error lines or unhandled async promises. | OPEN: all three hosts emit five EOF/reset lines per context. Pure8/34P; local current/cdp/socket hit unchanged1GiB family cap before page/close proof, zero sampling errors/exact settlement. Full Chrome155 rerun and diagnostic lint correction WAITING; no suppression. |
 | GH01 legacy issue cleanup | Review each old report against its historical fix and current design, post a concrete resolution, close completed and re-query current GitHub state. | DONE: issues1/2 closed, zero open issues; model availability was not inferred or tested. PR6 remains the only open draft PR. |
 | FIN01 completion order | Finish current Mac/hosted checks, documentation/site, all live providers, tools/extensions/files/network, steering, teams/fan-outs, storage/compaction/replay, performance/security and independent PR review; merge applicable PRs, sync and test the merged artifact. Leave live Windows UI verification last. | ONGOING: normal archive and worker assertions pass; remaining current native/live/profile/security/oldrel gates are explicitly OPEN/WAITING. No early merge or only-Windows-remaining claim. |
 

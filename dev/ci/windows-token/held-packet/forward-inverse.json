@@ -1,0 +1,22 @@
+{
+  "forward_and_inverse": [
+    {
+      "before": "baseline/helper-proc-writer-runtime.R",
+      "after": "amended/helper-proc-writer-runtime.R",
+      "hunks": 10
+    },
+    {
+      "before": "baseline/test-token-native.R",
+      "after": "controls/test-held-native.R",
+      "hunks": 4
+    }
+  ],
+  "ordinary_helper_prefix_bytes": 51608,
+  "bridge_and_watchdog_copies_exact": true,
+  "controls_inside_window": 6,
+  "actual_generated_production_probe_inside_window": true,
+  "new_r_protocol_titles": 2,
+  "powershell_fault_cases": 12,
+  "native_fixture_titles": 1,
+  "execution": false
+}

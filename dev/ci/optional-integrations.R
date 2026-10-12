@@ -477,6 +477,15 @@ optional_child = function(action, file = NULL) {
       scope = new.env(parent = environment())
       sys.source(file.path("dev", "ci", "windows-token", "controller.R"), envir = scope)
       scope$token_child(action)
+    } else if (action %in% c("held-protocol", "held-native")) {
+      scope = new.env(parent = environment())
+      sys.source(file.path("dev", "ci", "windows-token", "held-controller.R"), envir = scope)
+      scope$held_child(action)
+    } else if (identical(Sys.getenv("GPTR_HELD_B"), "true") &&
+               identical(basename(file), "test-proc-writer-runtime.R")) {
+      scope = new.env(parent = environment())
+      sys.source(file.path("dev", "ci", "windows-token", "held-controller.R"), envir = scope)
+      scope$held_original_file(file)
     } else {
       pkgload::load_all(".", helpers = FALSE, quiet = TRUE)
       optional_result_rows(testthat::test_file(file,
@@ -493,7 +502,8 @@ optional_child = function(action, file = NULL) {
 
 optional_child_start = function(action, file, root, dir, stdout, stderr, env,
                                  spawn = processx::process$new) {
-  if (!action %in% c("preflight", "test", "token-protocol", "token-native"))
+  if (!action %in% c("preflight", "test", "token-protocol", "token-native",
+                    "held-protocol", "held-native"))
     stop("Unapproved child action")
   script = file.path(dir, "child.R")
   data = file.path(dir, "request.rds")
