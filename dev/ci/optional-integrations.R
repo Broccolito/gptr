@@ -69,7 +69,10 @@ optional_titles = list(
     "backpressure enumeration tolerates only a dead original parent exit race",
     "backpressure enumeration preserves the returned original child handles",
     "backpressure enumeration fails closed for live and unknown parent identities",
-    "backpressure sample diagnostics are bounded and omit arbitrary messages"),
+    "backpressure sample diagnostics are bounded and omit arbitrary messages",
+    "backpressure observer diagnostics retain only current fixed reason codes",
+    "backpressure observer diagnostics reject unknown or private message forms",
+    "backpressure observer diagnostics preserve the original typed failure"),
   "test-proc-writer-runtime.R" = c(
     "Windows production writer preserves ordered writes and idle EOF",
     "Windows production writer death is a typed IO failure",

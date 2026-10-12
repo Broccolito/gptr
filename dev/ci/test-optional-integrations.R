@@ -153,8 +153,8 @@ testthat::test_that("the pure sampler regressions remain mandatory on both hosts
     "backpressure enumeration preserves the returned original child handles",
     "backpressure enumeration fails closed for live and unknown parent identities",
     "backpressure sample diagnostics are bounded and omit arbitrary messages")
-  testthat::expect_identical(optional_titles[[file]], titles)
-  rows = lapply(titles, record)
+  testthat::expect_identical(optional_titles[[file]][seq_along(titles)], titles)
+  rows = lapply(optional_titles[[file]], record)
   for (windows in c(FALSE, TRUE)) {
     testthat::expect_error(optional_gate(rows[-1L], file, windows), "Missing mandatory")
     skipped = rows
@@ -2163,4 +2163,59 @@ testthat::test_that("raw result publication keeps diagnostics in a base-only sup
     lapply(utils::head(diagnostics, 25L), optional_condition_diagnostic))
   testthat::expect_identical(serialize(entries, NULL), frozen)
   testthat::expect_error(optional_gate(list(row), "test-proc-writer-runtime.R", TRUE), "Failed")
+})
+
+
+testthat::test_that("fixed observer diagnostics remain mandatory in the strict sampler registry", {
+  file = "test-proc-backpressure-sampling.R"
+  original = c(
+    "backpressure enumeration tolerates only a dead original parent exit race",
+    "backpressure enumeration preserves the returned original child handles",
+    "backpressure enumeration fails closed for live and unknown parent identities",
+    "backpressure sample diagnostics are bounded and omit arbitrary messages")
+  added = c(
+    "backpressure observer diagnostics retain only current fixed reason codes",
+    "backpressure observer diagnostics reject unknown or private message forms",
+    "backpressure observer diagnostics preserve the original typed failure")
+  expected = c(original, added)
+  testthat::expect_identical(optional_titles[[file]][seq_along(original)], original)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_identical(result$mandatory_cases, expected)
+    testthat::expect_false(result$platform_guard_only)
+    for (i in seq_along(added) + length(original)) {
+      title = expected[[i]]
+      testthat::expect_false(optional_allowed_skip(file, title, windows))
+      testthat::expect_false(optional_platform_guard(file, title, windows))
+      testthat::expect_false(optional_allowed_skip("test-windows-security.R", title, windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      messages = c(passed = "assertions", failed = "Failed", warnings = "Warnings")
+      for (field in names(messages)) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows), messages[[field]])
+      }
+      late = rows
+      late[[i]]$passed = 3L
+      late[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      for (kind in c("expectation_error", "expectation_warning")) {
+        raw = rows
+        raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+          structure(list(), class = "expectation_success"),
+          structure(list(message = "controlled observer diagnostic condition"),
+            class = c(kind, "condition"))))))[[1L]]
+        testthat::expect_error(optional_gate(raw, file, windows))
+      }
+      empty = rows
+      empty[[i]] = optional_result_rows(list(list(test = title, results = list())))[[1L]]
+      testthat::expect_error(optional_gate(empty, file, windows), "assertions")
+    }
+    unknown = record("unrelated observer capability guard", passed = 3L, skipped = 1L)
+    testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
+  }
 })
