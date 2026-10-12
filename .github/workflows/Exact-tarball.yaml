@@ -7,6 +7,11 @@ on:
         description: Full lowercase commit SHA to build once and check
         required: true
         type: string
+      dependency_profiles:
+        description: After five clean consumers, check restricted dependencies and CRAN inventory
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -334,5 +339,133 @@ jobs:
           path: |
             evidence/
             check/
+          if-no-files-found: error
+          retention-days: 14
+
+  dependency-profiles:
+    if: ${{ inputs.dependency_profiles }}
+    needs: [producer, check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      EXPECTED_SOURCE: ${{ needs.producer.outputs.source_sha }}
+      EXPECTED_BASENAME: ${{ needs.producer.outputs.basename }}
+      EXPECTED_SHA256: ${{ needs.producer.outputs.sha256 }}
+      TESTTHAT_CPUS: '1'
+      MAKEFLAGS: '-j1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: controller
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.10'
+      - name: Check pure profile ownership, deadline and sequence controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python controller/dev/ci/test-exact-profile.py \
+            controller/dev/ci/exact-profile.py
+      - uses: actions/download-artifact@v5
+        with:
+          name: exact-source-tarball
+          path: artifact
+      - name: Verify the original producer archive and dependency metadata
+        id: profile_identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p metadata profile-evidence
+          printf '%s\n' "$GITHUB_RUN_ID" > profile-evidence/workflow-run-id.txt
+          printf '%s\n' "$GITHUB_SHA" > profile-evidence/controller-source-sha.txt
+          python controller/dev/ci/exact-profile.py --mode verify \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --output metadata/gptr
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          Ncpus: 1
+          use-public-rspm: true
+      - name: Check pure R publication warnings and original conditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          Rscript --vanilla controller/dev/ci/test-profile-publication.R \
+            controller/dev/ci/exact-profile.R
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        id: profile_dependencies
+        with:
+          working-directory: metadata/gptr
+          packages: deps::., any::sessioninfo
+          extra-packages: any::rcmdcheck
+          needs: check
+      - uses: r-lib/actions/setup-tinytex@v2
+        env:
+          TINYTEX_INSTALLER: TinyTeX
+      - name: Install HTML Tidy for complete manual checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes tidy
+      - name: Original archive with Depends and Imports only
+        id: profile_depends
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=0
+          python controller/dev/ci/exact-profile.py --mode depends \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --rscript "$(command -v Rscript)" \
+            --output profile-evidence/depends || status=$?
+          if python controller/dev/ci/exact-profile.py --mode settled --prior-mode depends \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --output profile-evidence/depends; then
+            printf '%s\n' 'settled=true' >> "$GITHUB_OUTPUT"
+          fi
+          exit "$status"
+      - name: Original archive with declared Suggests also admitted
+        id: profile_suggests
+        if: ${{ always() && steps.profile_identity.outcome == 'success' && steps.profile_dependencies.outcome == 'success' && steps.profile_depends.outputs.settled == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=0
+          python controller/dev/ci/exact-profile.py --mode suggests \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --rscript "$(command -v Rscript)" \
+            --output profile-evidence/suggests || status=$?
+          if python controller/dev/ci/exact-profile.py --mode settled --prior-mode suggests \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --output profile-evidence/suggests; then
+            printf '%s\n' 'settled=true' >> "$GITHUB_OUTPUT"
+          fi
+          exit "$status"
+      - name: Current read-only public CRAN reverse-dependency inventory
+        if: ${{ always() && steps.profile_identity.outcome == 'success' && steps.profile_dependencies.outcome == 'success' && steps.profile_depends.outputs.settled == 'true' && steps.profile_suggests.outputs.settled == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python controller/dev/ci/exact-profile.py --mode revdeps \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --rscript "$(command -v Rscript)" \
+            --output profile-evidence/revdeps
+      - name: Preserve original-profile logs, public inventory and owned resources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-dependency-profiles
+          path: |
+            profile-evidence/
+            metadata/gptr/verified-producer.json
           if-no-files-found: error
           retention-days: 14
