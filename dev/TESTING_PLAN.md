@@ -1,59 +1,50 @@
 ## Current validation — 2026-10-12 (production `02ceac9`)
 
-Five reviewed tasks are committed/pushed: `e05bd26` strict POSIX guard registration,
-`b7d8850` neutral billing notices, `1731e06` cold-loader environment restoration,
-`ea5e07e` recoverable MCP shutdown, and `3fd14f9` owned-pump seed isolation.
-`02ceac9` makes optional test preflight metadata-only and corrects three Codex warning
-handlers to `muffleWarning`; real load failures remain failures.
+Work in `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
+`codex/skipped-platform-tests`. Production remains `02ceac9`; later commits update
+only the living records. Preserve the dirty primary, original R sessions and shared Ollama.
 
-- DONE/offline: complete cold OAuth18/114, Codex41/450, MCP16/128 and reactor44/208:
-  119 cases/900 passes, zero failures/errors/warnings/skips, all eight caller-state flags TRUE.
-  Preserve both earlier seed-leaking runs and their first-case witnesses.
-- DONE/offline/native Mac: MCP7/252 pure assertions and four actual owned-listener
-  error/interrupt × seeded/absent retry cases pass. Access is revoked, recovery ownership
-  retained, serving blocked and the real retry closes the socket. First fixture shadow failure stays.
-- DONE/offline/native callbacks: pump RED5/77P6F -> GREEN5/83P0F; two real ready-callback
-  cases keep writes/results and agent-stream advancement while restoring caller seed/absence.
-  Automatic idle callbacks and deliberate RNGkind changes are outside this seed guard.
-- DONE/docs/style: 14 configured R/test lints0; roxygen8.1.1 has0 warnings and unchanged
-  metadata/NAMESPACE. Both changed guide pairs precompute with0 problems. Older7.3.3 selection,
-  two brace findings and the new test-name finding are retained, then corrected.
-- DONE/targeted Windows at e05: raw run38284961046 has25 checkpoint rows/122P0F/W plus
-  seven exact POSIX guards; all six mandatory cases and native denial/restoration16P execute.
-  Controller68/3431P, startup14/145P and55+3 lints pass; four exact children settle, no unknowns
-  or survivors. Original five-second limits and security test bodies are unchanged.
-- DONE/archive consumers: run38288459266 Windows release and devel each report raw Status OK,
-  0 errors/warnings/notes,25,792P/495 named guards. Original tar9d900a3e (2,553,795B),
-  all120 committed R files/14 guide pairs match. Other three consumers/profiles stay ONGOING.
-- DONE/Mac workers: run38290850451 source and installed each have213 exact ordered cases,
-  1,541P/0F/E/W, four exact Windows guards and outer warnings0; all18 lints/19 memory-death
-  controls pass. All18 sampled owned families settle within unchanged caps; pinned Python
-  3.12.10/numpy2.3.4/pandas2.3.3 and six worker/artifact outcomes per context pass.
-  Source135.483s/installed89.926s; maximum sampled family RSS521,060,352B.
-  This is hosted offline acceptance; current local installed/live frontend proof stays WAITING.
+- DONE/offline: complete cold OAuth, Codex, MCP and reactor files pass119 cases/900
+  assertions with0 failures/errors/warnings/skips and all eight caller-state flags TRUE.
+  MCP shutdown controls252P and four real owned Mac listener retry cases pass; pump
+  controls83P and two real callback cases pass; cold-loader controls71P pass.
+  Fourteen scoped configured lints and roxygen8.1.1 are clean; two guide pairs precompute.
+  `02ceac9` also corrects three Codex warning restarts and uses metadata-only preflight.
+- DONE/normal archive: all five consumers in run38288459266 are independently raw-audited
+  Status OK,0 errors/warnings/notes:129,180 passes and2,308 retained named guards.
+  Original tar9d900a3e (2,553,795B),120 committed R files and14 rendered guide pairs match.
+  Restricted dependency profiles are ONGOING; the archive does not clear other gates.
+- DONE/worker assertions: run38290850451 source+installed have213 exact ordered cases
+  per OS. Mac1,541P, Windows1,646P and Linux1,544P per context;0 failures/errors/R warnings,
+  exact platform guards,18 clean lints and19 passing memory-death controls. All observed
+  owned families settle within unchanged caps. Pinned Python and six worker/artifact
+  success/error/cancel cases pass. This is hosted offline evidence, not local GUI acceptance.
+- OPEN/browser UX: each of those six contexts prints five native websocket EOF/reset
+  errors at deferred browser-close boundaries. All30 lines are retained. Passing R assertions
+  do not establish clean shutdown output; source review and a bounded native rerun are required.
 - FAILED/strict Windows: run38290862852 joint75 has1,407P/1F/0E/W/S; native token has30P/1F.
-  Enabled utility privileges give PROBE2; held-disabled B gives actual production PROBE1,
-  and restored A2 returns2. All26 token records and restoration/readback pass. No deadline,
-  assertion, output cap or unknown-result rule is relaxed. A held-B fixture successor is
-  source preparation only; strict denial acceptance remains open.
-- WAITING/oldrel4: older automatic1731e06 had installed-size/temp-root NOTEs. Same120 R files
-  and keep-source setting have different generated database sizes by R version; exact cause
-  and removal outcome are unproved. Require fresh current R4.2.3 and owned teardown witnesses.
-- ONGOING: normal single-archive five-platform run38288459266 at exact production02ceac9;
-  restricted dependency profiles requested after five clean consumers. Prior c3 failure remains.
-- WAITING: final certified installation/site, remaining live provider/extensions/team/fan-out/
-  compaction/replay and native frontend/resource checks, independent full review and PR6 merge.
-  RStudio control still cannot distinguish the separate instance; no original-session input.
+  The ordinary utility keeps enabled privileges; the A-B-A diagnostic restores A2 before
+  its strict controls. Disabled B produces actual production PROBE1, enabled A1/A2 produce2.
+  Token/ACL restoration is exact, but effective denial in the original controls is unproved.
+  A held-B successor is preparation only. Assertions, five-second limits and unknown-fatal
+  rules remain strict; do not treat this fixture failure as unsafe production acceptance.
+- DONE/GitHub triage: legacy issues1 and2 are closed as completed with reviewed explanations.
+  Issue2's supplied-model bug was fixed in2025; current documentation replaces issue1's link.
+  A fresh API read confirms zero open issues. PR6 is the only open PR and remains DRAFT.
+- WAITING/oldrel4: reproduce the older installed-size/temp-root NOTEs on current bytes/R4.2.3
+  with unchanged settings and owned teardown witnesses before choosing a fix or diagnostic A/B.
+- WAITING: current private local installation/site, live providers/extensions/team/fan-out/
+  compaction/replay, native frontend/performance checks, independent full review and PR6 merge.
+  RStudio control still exposes original27070; no original-session input/restart/cleanup.
 
-Evidence: ignored primary `dev/.validation/readiness-20261011/root-current-02ceac9/ACTUAL.json`.
-Process-group RSS sampling does not certify detached descendant or true family peaks.
-Resource11:36: load12.85/12.82/15.47, CPU46.58% idle,125G used/2,073MiB unused,
-pressure72% free, swap20,280MiB/zero sampled paging, disk110GiB/no thermal warning.
-No current02 local installation has run; the source-cleared diagnostic adopter remains held.
-RStudio installed-path selection still exposes original port27070; mounted path times out.
-Only its window menu was inspected and dismissed; no R input/restart/cleanup was sent.
-Heavy/GPU work stays held; preserve shared Ollama, original sessions and the dirty primary.
-Fresh plan checks are recorded separately; rerun after plan edits. Readiness and only-Windows-remaining stay false.
+Evidence is retained under ignored primary `dev/.validation/readiness-20261011/`, including
+`normal-five-audit`, all three native audits and `github-legacy-closure-20261012`.
+Resource11:59: load9.90/12.00/14.14, CPU39.46% idle,122G used/5,402MiB unused,
+swap20,176MiB/zero sampled paging, disk106GiB, no thermal warning. Heavy/GPU work stays held.
+No current02 local installation has run. Sampled RSS does not establish instantaneous peaks.
+Finish Mac, hosted and functional gates before final live Windows UI verification; Windows CI
+runs earlier. Merge only after reviewed applicable gates pass. Readiness/only-Windows-remaining
+remain false. Fresh four-stage plan checks are recorded separately after this edit.
 
 ## Current preservation and shutdown cases
 
@@ -70,11 +61,14 @@ Fresh plan checks are recorded separately; rerun after plan edits. Readiness and
 
 | Case | Required acceptance | State |
 |---|---|---|
-| AR02 current original archive | Require all five original-byte consumers plus restricted dependency profiles, raw logs, all120 sources/14 guides and zero check errors/warnings/notes. | DONE/Windows release+devel only; other three/profile gates ONGOING. |
-| WK02 current workers and Shiny | Run exact213 source/installed titles on Mac, Windows and Linux; require native success/error/cancel state, child settlement, pinned Python identity, zero outer warnings and exact platform guards. | DONE/hosted Mac02: both1,541P/0F/W,18 lints0,19 controls TRUE; Windows/Linux raw audit ONGOING. Local GUI/live remains WAITING. |
+| AR02 current original archive | Require all five original-byte consumers plus restricted dependency profiles, raw logs, all120 sources/14 guides and zero check errors/warnings/notes. | DONE/all five normal consumers at02:129,180P/0F/W and2,308 original guards; restricted profiles ONGOING. |
+| WK02 current workers and Shiny | Run exact213 source/installed titles on Mac, Windows and Linux; require native success/error/cancel state, child settlement, pinned Python identity, zero outer warnings and exact platform guards. | DONE/hosted assertions on all three:9,462P across six contexts,0F/E/RW, exact guards,18 lints0/19 controls TRUE. Browser output has30 native close errors; UX03 remains OPEN. Local GUI/live WAITING. |
 | WS03 strict denied attributes | Keep the same real six controls and installed production probe under an exact owned-child token with effective denial; test body error/interrupt, partial privilege adjustment and failed restoration without mutating parent tokens. Preserve five-second deadline/caps and unknown fatal. | FAILED/current02: ordinary75 and strict token retain one failure each. Held-B successor is source preparation only; reviewed controls and native rerun WAITING. |
 | CR02 oldrel size and teardown | Recheck current bytes on R4.2.3 with current settings; record lazy-load database and allocated disk bytes. Capture owned teardown entry/completion, unlink return, root existence and bounded residual/child-settlement witnesses. Only if size persists, run source-retention diagnostic A/B on the same archive/R/dependencies. | WAITING: older same-source4.2.3/4.6.1 generated databases differ; source/retention alone is not causal proof. No production cleanup or byte-compilation change. |
 | UX02 exact native RStudio target | Uniquely observe an owned fresh session before any commands, then run current installed native rendering/width/steering/completion/allocator checks. | BLOCKED/client routing: installed path still opens original27070; mounted path times out. Original session preserved. |
+| UX03 browser shutdown output | Reproduce all five deferred-close boundaries in source and installed contexts; use documented bounded graceful shutdown, preserve process/socket cleanup and remote-browser ownership, and require raw stderr without native error lines or unhandled async promises. | OPEN: all three hosts emit five EOF/reset lines per context. Source investigation/proposal only; no suppression or accepted harmlessness claim. |
+| GH01 legacy issue cleanup | Review each old report against its historical fix and current design, post a concrete resolution, close completed and re-query current GitHub state. | DONE: issues1/2 closed, zero open issues; model availability was not inferred or tested. PR6 remains the only open draft PR. |
+| FIN01 completion order | Finish current Mac/hosted checks, documentation/site, all live providers, tools/extensions/files/network, steering, teams/fan-outs, storage/compaction/replay, performance/security and independent PR review; merge applicable PRs, sync and test the merged artifact. Leave live Windows UI verification last. | ONGOING: normal archive and worker assertions pass; remaining current native/live/profile/security/oldrel gates are explicitly OPEN/WAITING. No early merge or only-Windows-remaining claim. |
 
 These plan edits require four fresh serial cross-plan checks; the automatic hosted plan-gate
 workflow will run on the pushed documentation commit while local R execution remains held.
