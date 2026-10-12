@@ -7,6 +7,54 @@ authorized live testing. Update a row after inspecting its evidence; retain fail
 older revision results. It does not replace the numbered implementation plans or authorize a
 release, model download, account change or CRAN submission.
 
+## Current readiness delta — 2026-10-12 09:01 PDT (through `0c82999`)
+
+Candidate `0c82999d8f2e1c390d2531d015e73d70ab721a0e` is committed and pushed.
+Preserve all earlier checkpoint/failure records, the dirty primary checkout, original R
+sessions and shared Ollama. These are scoped offline results, not native or release acceptance.
+
+- DONE/O: `1134e76` qualifies the private token decoder. Actual controller9 cases/175P
+  and protocol7/136P have0F/E/W/S, all eight caller-state witnesses TRUE and three
+  configured lints0. Strict native PROBE2 remains failed pending an exact-source rerun.
+- DONE/O: `596257b` retains safe observer failure reasons. Actual RED7/49P/130F/1E has
+  options restoration FALSE; GREEN7/194P/0F/E/W/S restores all eight state witnesses,
+  with two configured lints0. Initial setup failures remain; native stage=files cause
+  remains unidentified. Actual evidence manifest `3c39063f` is retained in the primary.
+- DONE/O: `7fb9df3` adds a default-off, isolated Windows startup diagnostic and preserves
+  original conditions through interrupt/cleanup/final publication. Proper warmed RED is
+  10 cases/75P/2F/1E with options restoration FALSE; GREEN10/81P/0F/E/W/S restores all
+  eight state witnesses. Existing shared-controller66/3,296P/0F/E/W/S restores all eight;
+  four configured lints0. Actual evidence manifest `9e6f8353`; native startup remains WAIT.
+  Retain the earlier raw-fixture `identity` shadow, seven brace findings, lazy TZDIR
+  initialization delta and first sandbox-ps monitor failure. Timezone conversion is
+  warmed before the new snapshot; no environment delta is ignored. The fresh bounded
+  replay is verified; initial raw child results alone do not certify their failed monitor.
+- DONE/O: `0c82999` requires all three new observer diagnostic titles in the strict CI
+  registry. Actual RED67/3,351P/27F retains options restoration FALSE; amended67/3,378P
+  has0F/E/W/S and all eight state witnesses TRUE, with two configured lints0. Main rows
+  become75; registry37 files/185 titles; lint55 paths unchanged. Unknown skips and raw
+  failures remain rejected. Actual evidence manifest `98b596a8`; native replay is pending.
+- FAILED/F plus ongoing consumers, frozen09:01 snapshot: archive38269972934 nominates
+  `c3dad3d`. Raw Windows release is Status OK/0E/W/N,25,160P/0F/495 guards. Raw devel is
+  25,152P/1F/495 guards,1ERROR/0W/N: the original five-second PowerShell deny launch times
+  out with only stage=launch, before its first observed script-entered marker. No ACL
+  failure or deeper startup cause is proved. Mac and Linux release run; Linux devel waits.
+  This failed consumer blocks dependency profiles/inventory and whole-archive acceptance.
+  Original tar/source values match both Windows manifests (CRLF differs). Producer
+  SUCCESS and one clean consumer do not certify all five or later candidate source.
+- WAIT: certified archive/installation, dependency profiles/reverse dependencies,
+  current examples/site/frontends, live providers/extensions/team/fan-out/compaction/
+  fresh replay, native security/startup/GUI/interrupt/resource acceptance and final
+  independent review/merge/sync. No readiness or only-Windows-remaining claim.
+  RStudio control still selects original port27070; the alternate application times out.
+  No R input was sent; original objects remain intact. Allocator origin is unproved.
+
+Resource snapshot08:48: load12.47/12.37/11.41, CPU66.26% idle,118G used/9GB free,
+swap20,392MiB with zero sampled paging, disk123GiB and no thermal warning. Active swap
+and disk below200GiB keep heavy/GPU work held; use only small isolated serial jobs.
+Source evidence is in the ignored primary `dev/.validation/readiness-20261011/` directory.
+Root must run four fresh serial plan checks after the final document delta.
+
 ## Current readiness checkpoint — 2026-10-12 08:26 PDT
 
 Candidate `c3dad3da9154165d3e71ef55965dfa2d77bcd543` is committed and pushed.
