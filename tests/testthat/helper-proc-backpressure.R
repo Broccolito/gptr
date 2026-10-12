@@ -393,6 +393,14 @@ bp_run = function(case, declared_links = list()) {
         c(rss = sum(rss), disk = disk$bytes, combined = parent_rss + sum(rss))
       } else {
         files = list.files(root, recursive = TRUE, full.names = TRUE, all.files = TRUE)
+        if (length(declared_links)) {
+          stopifnot(identical(declared_links,
+            list(list(entry = "dangling-file", target = "missing-target"))))
+          declared = file.path(root, c("dangling-file", "missing-target"))
+          present = file.exists(declared)
+          stopifnot(is.logical(present), length(present) == 2L, !anyNA(present))
+          if (!any(present)) files = setdiff(files, declared[[1L]])
+        }
         sizes = file.info(files, extra_cols = FALSE)$size
         unknown = is.na(sizes) & file.exists(files)
         if (any(unknown)) stop("Could not measure owned case files.")

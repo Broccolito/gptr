@@ -61,6 +61,87 @@ test_that("backpressure sample diagnostics are bounded and omit arbitrary messag
   expect_null(actual$errno)
   expect_null(actual$pid)
   expect_lte(max(nchar(actual$class, type = "bytes")), 64L)
+  # Evaluate the actual ordinary sampler branch without launching a child.
+  walk = function(expression) {
+    if (missing(expression)) return(list())
+    found = list()
+    if (is.call(expression) && length(expression) == 4L &&
+        identical(expression[[1L]], as.name("if")) &&
+        identical(expression[[2L]], as.name("observer_enabled"))) {
+      other = expression[[4L]]
+      if (is.call(other) && length(other) >= 2L &&
+          is.call(other[[2L]]) && identical(other[[2L]][[1L]], as.name("=")) &&
+          identical(other[[2L]][[2L]], as.name("files"))) found = list(other)
+    }
+    if (is.call(expression) || is.expression(expression) || is.pairlist(expression)) {
+      for (part in as.list(expression)) found = c(found, walk(part))
+    }
+    found
+  }
+  branches = walk(body(bp_run))
+  expect_length(branches, 1L)
+  selected = branches[[1L]]
+  sample = function(paths, present, sizes, declaration =
+      list(list(entry = "dangling-file", target = "missing-target"))) {
+    scope = new.env(parent = baseenv())
+    scope$root = "owned"
+    scope$rss = c(2, 3)
+    scope$declared_links = declaration
+    seen = new.env(parent = emptyenv())
+    seen$info = character()
+    scope$list.files = function(path, ...) {
+      expect_identical(path, "owned")
+      paths
+    }
+    scope$file.exists = function(path) {
+      unname(present[match(path, names(present))])
+    }
+    scope$file.info = function(path, extra_cols) {
+      expect_false(extra_cols)
+      seen$info = path
+      values = unname(sizes[match(path, names(sizes))])
+      if (any(is.na(values) & !scope$file.exists(path))) warning("PUBLIC-MISSING-ENTRY")
+      list(size = values)
+    }
+    value = eval(selected, envir = scope)
+    list(value = value, info = seen$info)
+  }
+  paths = c("owned/keep", "owned/dangling-file")
+  present = c("owned/keep" = TRUE, "owned/dangling-file" = FALSE,
+    "owned/missing-target" = FALSE)
+  sizes = c("owned/keep" = 7, "owned/dangling-file" = NA_real_)
+  observed = new.env(parent = emptyenv())
+  expect_warning({
+    observed$value = sample(paths, present, sizes)
+  }, NA)
+  expect_identical(observed$value$value, c(rss = 5, disk = 7))
+  expect_identical(observed$value$info, "owned/keep")
+  # A replaced/present entry is measured, even at the declared name.
+  present[["owned/dangling-file"]] = TRUE
+  sizes[["owned/dangling-file"]] = 11
+  observed$value = sample(paths, present, sizes)
+  expect_identical(observed$value$value, c(rss = 5, disk = 18))
+  expect_identical(observed$value$info, paths)
+  # Unknown metadata for an existing entry retains the original fatal gate.
+  sizes[["owned/dangling-file"]] = NA_real_
+  expect_error(sample(paths, present, sizes), "Could not measure owned case files.", fixed = TRUE)
+  present[["owned/dangling-file"]] = FALSE
+  # A target that exists does not qualify for the narrow missing-pair filter.
+  present[["owned/missing-target"]] = TRUE
+  expect_warning({
+    observed$value = sample(paths, present, sizes)
+  }, "PUBLIC-MISSING-ENTRY")
+  expect_identical(observed$value$info, paths)
+  present[["owned/missing-target"]] = FALSE
+  # Undeclared missing entries keep their visible warning and legacy measurement path.
+  expect_warning({
+    observed$value = sample(paths, present, sizes, declaration = list())
+  }, "PUBLIC-MISSING-ENTRY")
+  expect_identical(observed$value$info, paths)
+  expect_error(sample(paths, present, sizes,
+    declaration = list(list(entry = "other", target = "missing-target"))))
+  present[["owned/dangling-file"]] = NA
+  expect_error(sample(paths, present, sizes))
 })
 
 

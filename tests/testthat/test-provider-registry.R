@@ -1806,6 +1806,13 @@ test_that("a real child whose turn the glue ends leaves no watcher and no job ro
   signal = new.env()
   signal$aborted = FALSE
   signal$reason = "user"
+  added = new.env(parent = emptyenv())
+  actual_job_add = job_add
+  local_mocked_bindings(job_add = function(kind, id, name, ...) {
+    value = actual_job_add(kind, id, name, ...)
+    added[[id]] = job_row(id)
+    value
+  })
   # an abort: P04 must forget the killed child's watcher (it polled closed pipes forever when
   # the glue killed the child under it) and the job row goes with it
   log = local_stream_log()
@@ -1823,11 +1830,19 @@ test_that("a real child whose turn the glue ends leaves no watcher and no job ro
   # a normaliser failure: the next turn starts a new child, which the failure drops the same way
   signal$aborted = FALSE
   log2 = local_stream_log()
+  actual_write = write_all
+  local_mocked_bindings(write_all = function(p, data) {
+    value = actual_write(p, data)
+    stopifnot(reactor_pump(until = function() length(log2$done) > 0L, timeout = 30))
+    value
+  })
   provider_stream(model, stream_context("boom"), list(state = state, signal = signal),
                   emit = log2$emit, done = log2$finish)
   job2 = state$job
   expect_false(identical(job2, job))
-  expect_true(job_row(job2))
+  expect_true(isTRUE(added[[job2]]))
+  expect_identical(ls(added), sort(c(job, job2)))
+  expect_false(job_row(job2))
   expect_true(reactor_pump(until = function() length(log2$done) > 0L, timeout = 30))
   expect_equal(log2$done[[1]]$stop_reason, "error")
   expect_match(log2$done[[1]]$error_message, "normaliser broke", fixed = TRUE)
