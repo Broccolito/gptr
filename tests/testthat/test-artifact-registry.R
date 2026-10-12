@@ -393,3 +393,63 @@ test_that("a broken app returns the child's error to the model", {
   expect_match(seen, "no_such_object", fixed = TRUE)
   expect_identical(gptr_artifacts("broken")$status, "failed")
 })
+
+
+test_that("an unsettled artifact stop retains recovery state until a confirmed retry", {
+  local_project()
+  seed_artifact("retry")
+  state = new.env(parent = emptyenv())
+  state$settled = FALSE
+  withr::defer({
+    state$settled = TRUE
+    artifact_stop("retry", emit = FALSE)
+  })
+  raw = withr::local_tempfile(fileext = ".log")
+  writeLines("owned child output", raw)
+  log = file.path(artifact_dir("retry"), "run", "app-v001.log")
+  handle = list(pid = NA_integer_, raw = raw, log = log, alive = function() FALSE,
+                stop = function() state$settled)
+  type = list(stop = function(handle) handle$stop())
+  rec = artifact_record_new("retry", 1L, type, handle)
+  assign("retry", rec, envir = artifact_state$procs)
+  artifact_job_add("retry", "Retry", rec$pid)
+  run = file.path(artifact_dir("retry"), "run", "run.json")
+  write_utf8(run, "owned recovery record")
+  expect_false(artifact_stop("retry", emit = FALSE))
+  expect_identical(artifact_proc_get("retry"), rec)
+  expect_true(rec$stop_requested)
+  expect_true(file.exists(raw))
+  expect_true(file.exists(run))
+  expect_identical(job_list("artifact")$id, "artifact:retry")
+  state$settled = TRUE
+  expect_true(artifact_stop("retry", emit = FALSE))
+  expect_null(artifact_proc_get("retry"))
+  expect_false(file.exists(raw))
+  expect_false(file.exists(run))
+  expect_identical(readLines(log), "owned child output")
+  expect_identical(nrow(job_list("artifact")), 0L)
+})
+
+test_that("an artifact relaunch cannot replace an unsettled recovery record", {
+  local_project()
+  seed_artifact("blocked")
+  state = new.env(parent = emptyenv())
+  state$launches = 0L
+  handle = list(pid = NA_integer_, alive = function() FALSE, stop = function() FALSE)
+  type = list(stop = function(handle) handle$stop(), launch = function(...) {
+    state$launches = state$launches + 1L
+    list()
+  })
+  rec = artifact_record_new("blocked", 1L, type, handle)
+  assign("blocked", rec, envir = artifact_state$procs)
+  withr::defer({
+    if (!is.null(artifact_proc_get("blocked"))) {
+      rm(list = "blocked", envir = artifact_state$procs)
+    }
+    job_remove(artifact_job_id("blocked"))
+  })
+  expect_error(artifact_start("blocked", 1L, type), class = "gptr_error_artifact")
+  expect_identical(state$launches, 0L)
+  expect_identical(artifact_proc_get("blocked"), rec)
+  expect_true(rec$stop_requested)
+})

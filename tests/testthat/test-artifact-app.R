@@ -941,3 +941,70 @@ test_that("undo relaunches the version that was running, on the same port", {
   expect_identical(artifact_proc_get("rew")$port, port)
   expect_identical(artifact_status("rew"), "running")
 })
+
+
+test_that("artifact bootstrap files survive unsettled cleanup and disappear after retry", {
+  dir = withr::local_tempdir()
+  writeLines("owned bootstrap", file.path(dir, "bootstrap.R"))
+  state = new.env(parent = emptyenv())
+  state$alive = TRUE
+  state$settled = FALSE
+  proc = list(is_alive = function() state$alive)
+  local_mocked_bindings(kill_all = function(p, grace) {
+    expect_identical(p, proc)
+    expect_true(grace %in% c(0, artifact_stop_grace))
+    state$settled
+  })
+  fns = artifact_proc_fns(proc, dir)
+  expect_false(fns$stop())
+  expect_true(dir.exists(dir))
+  state$alive = FALSE
+  expect_false(fns$alive())
+  expect_true(dir.exists(dir))
+  state$settled = TRUE
+  expect_true(fns$stop())
+  expect_false(dir.exists(dir))
+  expect_true(fns$stop())
+})
+
+test_that("an artifact constructor failure retains its captured child for cleanup retry", {
+  local_project()
+  seed_artifact("recover")
+  state = new.env(parent = emptyenv())
+  state$settled = FALSE
+  state$dir = NULL
+  withr::defer({
+    state$settled = TRUE
+    artifact_stop("recover", emit = FALSE)
+    if (!is.null(state$dir)) unlink(state$dir, recursive = TRUE)
+  })
+  proc = list(is_alive = function() FALSE, get_pid = function() 123L)
+  local_mocked_bindings(
+    artifact_shiny_available = function() TRUE,
+    proc_create_time = function(pid) 1,
+    kill_all = function(p, grace) state$settled,
+    proc_rscript = function(entry, args, dir, env, ..., .on_spawn) {
+      expect_identical(entry, "artifact")
+      expect_false(anyNA(env))
+      expect_true(dir.exists(dir))
+      state$dir = dir
+      .on_spawn(proc)
+      stop("controlled constructor failure")
+    }
+  )
+  local_mocked_bindings(r_bg = function(...) stop("legacy artifact launch"), .package = "callr")
+  expect_error(artifact_launch_shiny(artifact_version_dir("recover", 1L), NULL),
+               "controlled constructor failure")
+  rec = artifact_proc_get("recover")
+  expect_false(is.null(rec))
+  expect_identical(rec$pid, 123L)
+  expect_true(dir.exists(state$dir))
+  expect_identical(job_list("artifact")$id, "artifact:recover")
+  expect_false(artifact_stop("recover", emit = FALSE))
+  expect_identical(artifact_proc_get("recover"), rec)
+  state$settled = TRUE
+  expect_true(artifact_stop("recover", emit = FALSE))
+  expect_null(artifact_proc_get("recover"))
+  expect_false(dir.exists(state$dir))
+  expect_identical(nrow(job_list("artifact")), 0L)
+})
