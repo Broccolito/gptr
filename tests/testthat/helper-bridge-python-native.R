@@ -52,7 +52,7 @@ py_native_child = function(case, root, failure) {
     seed = function(name, value, exact_name = FALSE) {
       raw = Sys.getenv()
       hits = which(toupper(names(raw)) == toupper(name))
-      length(hits) == 1L && identical(unname(raw[hits]), value) &&
+      length(hits) == 1L && identical(raw[[hits]], value) &&
         (!exact_name || identical(names(raw)[hits], name))
     }
     keys = c("PATH", "VIRTUAL_ENV", "R_SESSION_INITIALIZED", "LD_LIBRARY_PATH",
