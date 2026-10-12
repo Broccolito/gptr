@@ -451,7 +451,7 @@ test_that("a worker selects the installed Rscript entry without shipping its fun
   withr::defer(unlink(st$dir, recursive = TRUE))
   expect_error(worker_spawn(st), "not started")
   expect_identical(seen$entry, "worker")
-  expect_identical(seen$args, list(file.path(dirname(st$result_path), "spec.rds"),
+  expect_identical(seen$args, list(file.path(st$dir, "spec.rds"),
                                   st$result_path))
   raw = serialize(seen$args, NULL)
   expect_length(grepRaw("srcfile", raw, fixed = TRUE), 0L)
