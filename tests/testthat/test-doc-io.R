@@ -2088,6 +2088,7 @@ test_that("bounded JSON strings keep escaped punctuation and valid writer roundt
   writeLines('peter("first")', f)
   rec = doc_io_dead_sidecar(f, "first")
   rec$upserts[[1]]$lines = c('x = "{} [ ] \\"quotes\\""', "# caf\u00e9")
+  rec$upserts[[1]]$site$anchor["call0"] = list(NULL)
   bounds = doc_io_default_bounds()
   bounds$depth = 16L
   bounds$upserts = 1L
@@ -2149,7 +2150,7 @@ test_that("chunk-spanning escaped quotes do not become JSON containers or tokens
   dir.create(dirname(side), recursive = TRUE, showWarnings = FALSE)
   prefix = '{"k":"'
   text = c(paste0(prefix, strrep("a", 4089L), '\\" [ ]\\"', '"}'),
-           paste0(prefix, strrep("a", 4088L), '\\\\', '"}'),
+           paste0(prefix, strrep("a", 4088L), "\\\\", '"}'),
            paste0(prefix, strrep("a", 4089L), '"}'))
   bounds = doc_io_default_bounds()
   bounds$nodes = 3L
