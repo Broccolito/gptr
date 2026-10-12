@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [macos-latest, windows-latest, ubuntu-latest]
     env:
       GPTR_EXPECTED_SOURCE: ${{ github.event_name == 'push' && github.sha || inputs.source_sha }}
       GPTR_LIVE_TESTS: 'false'
