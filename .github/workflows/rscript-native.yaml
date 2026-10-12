@@ -138,9 +138,10 @@ jobs:
           chrome-version: '155.0.8059.39'
           install-dependencies: true
       - name: Install exact GPTR source for workers
+        id: install_source
         shell: bash
         run: R CMD INSTALL --no-docs --no-multiarch .
-      - name: Test source and installed execution serially
+      - name: Test source execution
         shell: bash
         env:
           GITHUB_PAT: ''
@@ -149,8 +150,18 @@ jobs:
         run: |
           mkdir -p rscript-evidence
           Rscript --vanilla dev/ci/rscript-native.R source rscript-evidence/source 2>&1 | tee rscript-evidence/source.log
+      - name: Test installed execution
+        if: ${{ always() && steps.install_source.outcome == 'success' }}
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          CHROMOTE_CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          mkdir -p rscript-evidence
           Rscript --vanilla dev/ci/rscript-native.R installed rscript-evidence/installed 2>&1 | tee rscript-evidence/installed.log
       - name: Lint the reviewed runtime and fixtures
+        if: ${{ always() && steps.install_source.outcome == 'success' }}
         shell: bash
         env:
           GITHUB_PAT: ''
