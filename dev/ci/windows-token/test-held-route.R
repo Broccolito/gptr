@@ -130,3 +130,66 @@ testthat::test_that(
     }
   }
 })
+
+testthat::test_that("held original helper loading uses a scoped testthat path context", {
+  setup = Filter(function(expression) {
+    is.call(expression) && (identical(expression[[1L]], quote(testthat::local_test_directory)) ||
+      identical(expression[[1L]], quote(testthat::source_test_helpers)))
+  }, as.list(body(held_original_file))[-1L])
+  testthat::expect_length(setup, 2L)
+  load = function(file, scope) NULL
+  body(load) = as.call(c(list(quote(`{`)), setup, list(quote(invisible(scope)))))
+
+  owned = tempfile("held-helper-context-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
+  stopifnot(dir.create(owned, mode = "0700"))
+  withr::defer(unlink(owned, recursive = TRUE))
+  helpers = file.path(owned, "helpers")
+  fixtures = file.path(helpers, "fixtures", "mcp")
+  stopifnot(dir.create(fixtures, recursive = TRUE, mode = "0700"))
+  writeLines(c(
+    "resolved = normalizePath(testthat::test_path('fixtures', 'mcp'), winslash = '/',",
+    "  mustWork = TRUE)",
+    "testing = testthat::is_testing()",
+    "package = testthat::testing_package()",
+    "if (identical(mode, 'error')) stop(original)",
+    "if (identical(mode, 'interrupt')) stop(original)",
+    "if (identical(mode, 'warning')) warning('PUBLIC-HELPER-WARNING')"),
+    file.path(helpers, "helper-context.R"))
+  file = file.path(helpers, "test-proc-writer-runtime.R")
+  keys = c("TESTTHAT", "TESTTHAT_PKG", "R_TESTS", "TESTTHAT_WD")
+  withr::local_envvar(stats::setNames(c("false", "PUBLIC-PARENT", "PUBLIC-TESTS", "PUBLIC-WD"),
+    keys))
+  withr::local_options(testthat_interactive = FALSE)
+  withr::local_dir(owned)
+  state = function() {
+    list(cwd = getwd(), env = Sys.getenv(keys, unset = NA_character_),
+      edition = getOption("testthat.edition"))
+  }
+  before = state()
+  scope = new.env(parent = baseenv())
+  scope$mode = "success"
+  testthat::expect_no_error(load(file, scope))
+  testthat::expect_identical(scope$resolved,
+    normalizePath(fixtures, winslash = "/", mustWork = TRUE))
+  testthat::expect_true(scope$testing)
+  testthat::expect_identical(scope$package, "gptr")
+  testthat::expect_identical(state(), before)
+
+  original = simpleError("PUBLIC-HELPER-ERROR")
+  scope$mode = "error"
+  scope$original = original
+  seen = tryCatch(load(file, scope), error = function(error) error)
+  testthat::expect_s3_class(seen, "rlang_error")
+  testthat::expect_identical(seen$parent, original)
+  testthat::expect_identical(state(), before)
+  original = structure(list(message = "PUBLIC-HELPER-INTERRUPT", call = NULL),
+    class = c("interrupt", "condition"))
+  scope$mode = "interrupt"
+  scope$original = original
+  seen = tryCatch(load(file, scope), interrupt = function(error) error)
+  testthat::expect_identical(seen, original)
+  testthat::expect_identical(state(), before)
+  scope$mode = "warning"
+  testthat::expect_warning(load(file, scope), "PUBLIC-HELPER-WARNING")
+  testthat::expect_identical(state(), before)
+})
