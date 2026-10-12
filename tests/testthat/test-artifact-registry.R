@@ -414,6 +414,7 @@ test_that("an unsettled artifact stop retains recovery state until a confirmed r
   assign("retry", rec, envir = artifact_state$procs)
   artifact_job_add("retry", "Retry", rec$pid)
   run = file.path(artifact_dir("retry"), "run", "run.json")
+  stopifnot(dir.create(dirname(run), recursive = TRUE, mode = "0700"))
   write_utf8(run, "owned recovery record")
   expect_false(artifact_stop("retry", emit = FALSE))
   expect_identical(artifact_proc_get("retry"), rec)
@@ -498,7 +499,7 @@ test_that("custom artifact stops accept a void return only after independent set
 test_that(
   "a void artifact stop fallback requires the recorded process identity and confirmed death", {
   local_project()
-  seed_artifact("void-pid")
+  seed_artifact("void_pid")
   state = new.env(parent = emptyenv())
   state$alive = TRUE
   state$wait = 0L
@@ -527,19 +528,19 @@ test_that(
       expect_identical(handle, "original-identity")
       if (state$confirm) FALSE else NA
     })
-  rec = artifact_record_new("void-pid", 1L, list(stop = function(handle) NULL),
+  rec = artifact_record_new("void_pid", 1L, list(stop = function(handle) NULL),
                             list(pid = 123L))
-  assign("void-pid", rec, envir = artifact_state$procs)
+  assign("void_pid", rec, envir = artifact_state$procs)
   withr::defer({
-    if (!is.null(artifact_proc_get("void-pid"))) {
-      rm(list = "void-pid", envir = artifact_state$procs)
+    if (!is.null(artifact_proc_get("void_pid"))) {
+      rm(list = "void_pid", envir = artifact_state$procs)
     }
   })
-  expect_false(artifact_stop("void-pid", emit = FALSE))
-  expect_identical(artifact_proc_get("void-pid"), rec)
+  expect_false(artifact_stop("void_pid", emit = FALSE))
+  expect_identical(artifact_proc_get("void_pid"), rec)
   expect_identical(state$kill, 1L)
   expect_identical(state$wait, 1L)
   state$confirm = TRUE
-  expect_true(artifact_stop("void-pid", emit = FALSE))
-  expect_null(artifact_proc_get("void-pid"))
+  expect_true(artifact_stop("void_pid", emit = FALSE))
+  expect_null(artifact_proc_get("void_pid"))
 })

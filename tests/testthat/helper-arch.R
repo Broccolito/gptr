@@ -2,7 +2,7 @@
 # proposal P-B section 2.4). The layer table is architecture section 3.2; the function map is
 # built by parsing the files under R/, never from srcrefs (installed packages carry none).
 
-# The layer of every file of architecture section 3.2 (119 files after IC-74).
+# The layer of every file of architecture section 3.2, including the Rscript launcher.
 # "L4 svc" files are declared services other built-ins may call (eval-*, env-*, tool-walk).
 arch_layer_table = function() {
   rows = c(
@@ -34,6 +34,7 @@ arch_layer_table = function() {
     "auth-store.R", "L0", "P03",
     "auth-childenv.R", "L0", "P03",
     "proc-spawn.R", "L0", "P04",
+    "proc-rscript.R", "L0", "P04",
     "proc-supervise.R", "L0", "P04",
     "http-reactor.R", "L0", "P04",
     "http-request.R", "L0", "P04",

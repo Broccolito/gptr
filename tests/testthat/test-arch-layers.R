@@ -6,15 +6,17 @@ local_arch_sources = function() {
   dir
 }
 
-test_that("the layer table lists the 119 files of architecture section 3.2", {
+test_that("the layer table lists the files of architecture section 3.2", {
   table = arch_layer_table()
-  expect_identical(nrow(table), 119L)
+  expect_identical(nrow(table), 120L)
   expect_false(anyDuplicated(table$file) > 0)
   expect_true(all(table$layer %in% c("L0", "L1", "L2", "L3", "L4", "L5", "L6", "-")))
   expect_identical(sum(table$plan == "P01"), 15L)
   expect_identical(sum(table$service), 9L)
   expect_identical(table$plan[table$file == "s1-ollama.R"], "P13")
   expect_identical(table$layer[table$file == "s1-ollama.R"], "L4")
+  expect_identical(table$layer[table$file == "proc-rscript.R"], "L0")
+  expect_identical(table$plan[table$file == "proc-rscript.R"], "P04")
 })
 
 test_that("every file under R/ has a layer and every function one home", {

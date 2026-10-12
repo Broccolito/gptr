@@ -8,8 +8,10 @@ rs_parent_case = function(case, root, failure) {
   file.create(file.path(root, "case-started"))
   phase = function(text) cat(text, "\n", file = file.path(root, "phases.txt"), append = TRUE)
   probe = function(path, marker, mode) {
-    cat("READY \u03bb\n"); flush(stdout())
-    cat("WITNESS STDERR\n", file = stderr()); flush(stderr())
+    cat("READY \u03bb\n")
+    flush(stdout())
+    cat("WITNESS STDERR\n", file = stderr())
+    flush(stderr())
     result = list(empty = identical(Sys.getenv("GPTR_RSCRIPT_EMPTY", unset = NA_character_), ""),
       absent = is.na(Sys.getenv("GPTR_RSCRIPT_ABSENT", unset = NA_character_)),
       secret_empty = is.na(Sys.getenv("ANTHROPIC_API_KEY", unset = NA_character_)),
@@ -19,19 +21,24 @@ rs_parent_case = function(case, root, failure) {
       startup = is.na(Sys.getenv("GPTR_RSCRIPT_STARTUP", unset = NA_character_)),
       no_gptr = !"gptr" %in% loadedNamespaces())
     saveRDS(result, path)
-    if (mode == "error") stop("Synthetic bootstrap error.")
     input = file("stdin", "r")
     on.exit(close(input), add = TRUE)
-    result$stdin = identical(readLines(input, n = 1L, warn = FALSE, encoding = "UTF-8"),
-                             "CONTINUE \u96ea")
+    line = readLines(input, n = 1L, warn = FALSE, encoding = "UTF-8")
+    if (mode == "error") {
+      stopifnot(identical(line, "FAIL"))
+      stop("Synthetic bootstrap error.")
+    }
+    result$stdin = identical(line, "CONTINUE \u96ea")
     result$eof = !length(readLines(input, n = 1L, warn = FALSE, encoding = "UTF-8"))
     saveRDS(result, path)
     invisible(NULL)
   }
   environment(probe) = baseenv()
   withr::local_seed(20261011)
-  snapshot = function() list(env = Sys.getenv(), options = options(), wd = getwd(),
-                             seed = get(".Random.seed", globalenv(), inherits = FALSE))
+  snapshot = function() {
+    list(env = Sys.getenv(), options = options(), wd = getwd(),
+         seed = get(".Random.seed", globalenv(), inherits = FALSE))
+  }
   before = snapshot()
   seeded = identical(before$env[["GPTR_RSCRIPT_EMPTY"]], "") &&
     identical(before$env[["ANTHROPIC_API_KEY"]], "") &&
@@ -62,6 +69,9 @@ rs_parent_case = function(case, root, failure) {
   drain()
   if (mode == "success") {
     p$write_input("CONTINUE \u96ea\n")
+    processx::processx_conn_close(p$get_input_connection())
+  } else if (mode == "error") {
+    p$write_input("FAIL\n")
     processx::processx_conn_close(p$get_input_connection())
   } else if (mode == "cancel") {
     stopifnot(fun("kill_all")(p, grace = 0))

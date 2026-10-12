@@ -21,7 +21,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     env:
-      GPTR_EXPECTED_SOURCE: ${{ inputs.source_sha || github.sha }}
+      GPTR_EXPECTED_SOURCE: ${{ github.event_name == 'push' && github.sha || inputs.source_sha }}
       GPTR_LIVE_TESTS: 'false'
       NOT_CRAN: 'true'
       OPENBLAS_NUM_THREADS: '1'
@@ -35,7 +35,7 @@ jobs:
         run: '[[ "$GPTR_EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]'
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
+          ref: ${{ github.event_name == 'push' && github.sha || inputs.source_sha }}
           persist-credentials: false
       - name: Verify exact checkout
         shell: bash
@@ -51,6 +51,11 @@ jobs:
         with:
           dependencies: 'c("Imports", "LinkingTo")'
           extra-packages: any::pkgload any::testthat any::withr any::shiny any::httpuv any::later any::chromote any::openssl any::lintr
+      - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2
+        id: chrome
+        with:
+          chrome-version: '155.0.8059.39'
+          install-dependencies: true
       - name: Install exact GPTR source for workers
         shell: bash
         run: R CMD INSTALL --no-docs --no-multiarch .
@@ -59,6 +64,7 @@ jobs:
         env:
           GITHUB_PAT: ''
           GITHUB_TOKEN: ''
+          CHROMOTE_CHROME: ${{ steps.chrome.outputs.chrome-path }}
         run: |
           mkdir -p rscript-evidence
           Rscript --vanilla dev/ci/rscript-native.R source rscript-evidence/source 2>&1 | tee rscript-evidence/source.log
@@ -73,7 +79,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: rscript-${{ matrix.os }}-${{ inputs.source_sha || github.sha }}
+          name: rscript-${{ matrix.os }}-${{ github.event_name == 'push' && github.sha || inputs.source_sha }}
           path: rscript-evidence
           if-no-files-found: error
           retention-days: 14

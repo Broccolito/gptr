@@ -85,7 +85,10 @@ test_that("a native process handle is captured before marker registration can fa
   seen = NULL
   settled = 0L
   local_mocked_bindings(proc_mark = function(...) stop("synthetic marker failure"),
-    kill_all = function(process, ...) { settled <<- settled + 1L; TRUE })
+    kill_all = function(process, ...) {
+      settled <<- settled + 1L
+      TRUE
+    })
   local_mocked_bindings(process = list(new = function(...) p), .package = "processx")
   expect_error(proc_spawn(rscript_path(), .on_spawn = function(process) seen <<- process),
                "synthetic marker failure", fixed = TRUE)
@@ -99,8 +102,10 @@ test_that("registration rollback preserves the original error even when cleanup 
                        class = c("owned_marker_error", "error", "condition"))
   p = new.env(parent = emptyenv())
   local_mocked_bindings(proc_mark = function(...) stop(original),
-    kill_all = function(...) signalCondition(structure(list(message = "cleanup interrupt"),
-                                                       class = c("interrupt", "condition"))))
+    kill_all = function(...) {
+      signalCondition(structure(list(message = "cleanup interrupt"),
+                                class = c("interrupt", "condition")))
+    })
   local_mocked_bindings(process = list(new = function(...) p), .package = "processx")
   error = tryCatch(proc_spawn(rscript_path()), error = identity,
                    interrupt = function(e) e)
