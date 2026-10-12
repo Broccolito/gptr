@@ -1,0 +1,76 @@
+name: Rscript native workers and artifacts
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact reviewed source commit
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os: [macos-latest, windows-latest]
+    env:
+      GPTR_EXPECTED_SOURCE: ${{ inputs.source_sha }}
+      GPTR_LIVE_TESTS: 'false'
+      NOT_CRAN: 'true'
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      OMP_THREAD_LIMIT: '1'
+      MKL_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+    steps:
+      - name: Validate source
+        shell: bash
+        run: '[[ "$GPTR_EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Verify exact checkout
+        shell: bash
+        run: 'test "$(git rev-parse HEAD)" = "$GPTR_EXPECTED_SOURCE"'
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05
+        with:
+          r-version: release
+          Ncpus: 1
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          dependencies: 'c("Imports", "LinkingTo")'
+          extra-packages: any::pkgload any::testthat any::withr any::shiny any::httpuv any::later any::chromote any::openssl any::lintr
+      - name: Install exact GPTR source for workers
+        shell: bash
+        run: R CMD INSTALL --no-docs --no-multiarch .
+      - name: Test source and installed execution serially
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          mkdir -p rscript-evidence
+          Rscript --vanilla dev/ci/rscript-native.R source rscript-evidence/source 2>&1 | tee rscript-evidence/source.log
+          Rscript --vanilla dev/ci/rscript-native.R installed rscript-evidence/installed 2>&1 | tee rscript-evidence/installed.log
+      - name: Lint the reviewed runtime and fixtures
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: Rscript --vanilla dev/ci/lint-rscript.R
+      - name: Retain exact native evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rscript-${{ matrix.os }}-${{ inputs.source_sha }}
+          path: rscript-evidence
+          if-no-files-found: error
+          retention-days: 14
