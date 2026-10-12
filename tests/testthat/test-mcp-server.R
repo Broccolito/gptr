@@ -136,9 +136,12 @@ test_that("inside a running plan-mode session served r calls run in the run's sc
 
 skip_without_server = function() {
   skip_on_cran()
-  skip_if_not_installed("httpuv")
-  skip_if_not_installed("later")
-  skip_if_not_installed("openssl")
+  skip_if(!length(find.package("httpuv", quiet = TRUE, verbose = FALSE)),
+    "httpuv is not installed")
+  skip_if(!length(find.package("later", quiet = TRUE, verbose = FALSE)),
+    "later is not installed")
+  skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
+    "openssl is not installed")
 }
 
 test_that("gptr_mcp_serve() binds 127.0.0.1, needs the token, checks Origin and keeps the seed", {

@@ -237,7 +237,7 @@ test_that("a workspace-write exec that changes control files is reported after i
                       gptr_warning_cli_sandbox = function(w) {
                         seen$events = length(opts$log$events)
                         seen$text = conditionMessage(w)
-                        invokeRestart("muffleMessage")
+                        invokeRestart("muffleWarning")
                       })
   expect_match(seen$text, ".gptr/settings.json", fixed = TRUE)
   expect_identical(event_types(opts)[[seen$events]], "done")
@@ -555,7 +555,7 @@ test_that("a control-file check that fails still completes the exec, then warns"
                       gptr_warning_cli_sandbox = function(w) {
                         seen$events = length(opts$log$events)
                         seen$text = conditionMessage(w)
-                        invokeRestart("muffleMessage")
+                        invokeRestart("muffleWarning")
                       })
   expect_identical(event_types(opts)[[seen$events]], "done")
   expect_length(opts$log$events, seen$events)
@@ -728,7 +728,7 @@ test_that("an exec that ends in an internal error has its control files checked,
     withCallingHandlers(code, gptr_warning_cli_sandbox = function(w) {
       seen$at = length(opts$log$events)
       seen$text = conditionMessage(w)
-      invokeRestart("muffleMessage")
+      invokeRestart("muffleWarning")
     })
   }
   item = list(id = "item_0", type = "agent_message", text = "x")
@@ -827,9 +827,12 @@ test_that("the next turn resumes the Codex thread with -c sandbox_mode=", {
 
 test_that("a fake codex evaluates R in the live session through gptr's MCP server", {
   skip_on_cran()
-  skip_if_not_installed("httpuv")
-  skip_if_not_installed("later")
-  skip_if_not_installed("openssl")
+  skip_if(!length(find.package("httpuv", quiet = TRUE, verbose = FALSE)),
+    "httpuv is not installed")
+  skip_if(!length(find.package("later", quiet = TRUE, verbose = FALSE)),
+    "later is not installed")
+  skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
+    "openssl is not installed")
   withr::defer(gptr_mcp_serve(stop = TRUE))
   f = local_fake_cli("codex", "mcp")
   e = new.env()
@@ -841,9 +844,12 @@ test_that("a fake codex evaluates R in the live session through gptr's MCP serve
 
 test_that("a fake codex returns a function's numeric result through the HTTP MCP bridge", {
   skip_on_cran()
-  skip_if_not_installed("httpuv")
-  skip_if_not_installed("later")
-  skip_if_not_installed("openssl")
+  skip_if(!length(find.package("httpuv", quiet = TRUE, verbose = FALSE)),
+    "httpuv is not installed")
+  skip_if(!length(find.package("later", quiet = TRUE, verbose = FALSE)),
+    "later is not installed")
+  skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
+    "openssl is not installed")
   withr::defer(gptr_mcp_serve(stop = TRUE))
   f = local_fake_cli("codex", "mcp-return")
   fit_in_session = function(data) {

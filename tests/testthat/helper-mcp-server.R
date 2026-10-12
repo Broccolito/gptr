@@ -54,9 +54,12 @@ mcp_fixture_http = function(script, args, .env) {
 # list(url (the resource, ".../mcp"), base (the issuer), port, log = function() df(path, what))
 local_oauth_mock = function(pkce = "yes", iss = "good", .env = parent.frame()) {
   testthat::skip_on_cran()
-  testthat::skip_if_not_installed("httpuv")
-  testthat::skip_if_not_installed("later")
-  testthat::skip_if_not_installed("openssl")
+  testthat::skip_if(!length(find.package("httpuv", quiet = TRUE, verbose = FALSE)),
+      "httpuv is not installed")
+  testthat::skip_if(!length(find.package("later", quiet = TRUE, verbose = FALSE)),
+      "later is not installed")
+  testthat::skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
+      "openssl is not installed")
   log = withr::local_tempfile(fileext = ".jsonl", .local_envir = .env)
   srv = mcp_fixture_http(file.path(mcp_fixture_dir, "oauth.R"),
                          c(paste0("--pkce=", pkce), paste0("--iss=", iss), paste0("--log=", log)),
@@ -138,7 +141,8 @@ local_mcp_fixture = function(era = c("modern", "legacy"), transport = c("stdio",
          args = c("--vanilla", script, args, "--transport=stdio"),
          env = c(R_LIBS = mcp_fixture_libs()), timeout = 30, protocol = "auto")
   } else {
-    testthat::skip_if_not_installed("httpuv")
+    testthat::skip_if(!length(find.package("httpuv", quiet = TRUE, verbose = FALSE)),
+      "httpuv is not installed")
     srv = mcp_fixture_http(script, c(args, "--transport=http"), .env)
     list(name = "fixture", transport = "http",
          url = paste0("http://127.0.0.1:", srv$port, "/mcp"), timeout = 30, protocol = "auto")
