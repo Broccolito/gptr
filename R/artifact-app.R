@@ -467,26 +467,26 @@ artifact_ports = function(id) {
   unique(c(if (ok) as.integer(prev), port_candidates(20L)))
 }
 
-#' The callr environment of the child: the secret-free `artifact` profile (IC-60) plus the
-#' candidate ports and library paths (its empty R profile sets none), and the three values of
-#' callr's default `rcmd_safe_env()` that `env =` replaces (R CMD check's relative
+#' The complete child environment: the secret-free `artifact` profile (IC-60) plus candidate
+#' ports, library paths and safe R settings (R CMD check's relative
 #' `R_TESTS=startup.Rs` would halt the child; no viewer opens from model code)
 #' @noRd
 artifact_child_env = function(ports) {
   set = c(GPTR_ARTIFACT_PORTS = paste(ports, collapse = ","),
           R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
           R_TESTS = "", R_BROWSER = "false", R_PDFVIEWER = "false")
-  child_env_callr(child_env("artifact", set = set))
+  child_env("artifact", set = set)
 }
 
-#' Serve one artifact version: the entry of the callr child (contract 7.23)
+#' Serve one artifact version: the standalone Rscript child entry (contract 7.23)
 #'
-#' Self-contained (base R and `pkg::` calls only; callr runs it with `package = FALSE`, so the
-#' child never loads gptr). shinyAppDir() sources the app now, so a broken app ends the child
+#' Self-contained (base R and `pkg::` calls only); its transported function has a base
+#' environment, so the child never loads gptr. shinyAppDir() sources the app now, so a broken
+#' app ends the child
 #' before a port exists. The page request and every session must carry `gptr_token` (IC-71);
 #' the first candidate of `GPTR_ARTIFACT_PORTS` that binds on 127.0.0.1 is published by atomic
-#' rename; a watchdog stops the app when the parent is gone. Errors are reported on stderr:
-#' with the empty R profile of IC-60 callr's own handler cannot print them.
+#' rename; a watchdog stops the app when the parent is gone. Errors are reported on stderr
+#' before the parent checks the port publication.
 #' @noRd
 artifact_serve = function(dir, port_file, parent_pid, token) {
   report = function(e) {
@@ -760,15 +760,44 @@ artifact_wait_port = function(proc, port_file, timeout = artifact_launch_timeout
 
 #' Closures over the child process only (a record never holds the launching frame)
 #' @noRd
-artifact_proc_fns = function(proc) {
-  list(alive = function() isTRUE(tryCatch(proc$is_alive(), error = function(e) FALSE)),
-       stop = function() kill_all(proc, grace = artifact_stop_grace))
+artifact_proc_fns = function(proc, dir = NULL) {
+  owner = new.env(parent = emptyenv())
+  owner$disposed = FALSE
+  dispose = function(grace) {
+    if (owner$disposed) return(invisible(TRUE))
+    if (!isTRUE(kill_all(proc, grace = grace))) return(invisible(FALSE))
+    if (!is.null(dir) && unlink(dir, recursive = TRUE) != 0L) return(invisible(FALSE))
+    owner$disposed = TRUE
+    invisible(TRUE)
+  }
+  list(alive = function() {
+    alive = tryCatch(proc$is_alive(), error = function(e) NA)
+    if (isFALSE(alive)) dispose(0)
+    isTRUE(alive)
+  }, stop = function() dispose(artifact_stop_grace), settled = function() owner$disposed)
 }
 
-#' The `launch` of the shiny and html artifact types (contract 10.2 row 19): a supervised callr
-#' child serving the version (architecture 6.15)
+#' Keep an unsettled launch reachable through its artifact record and recovery job
+#' @noRd
+artifact_launch_recover = function(id, version, handle, log_record = NULL, type = NULL) {
+  if (is.null(type)) type = list(stop = artifact_stop_handle)
+  rec = artifact_record_new(id, version, type, handle)
+  if (!is.null(log_record)) {
+    rec$offset = log_record$offset
+    rec$rs = log_record$rs
+    rec$raw = log_record$raw
+  }
+  rec$checks$launch = FALSE
+  assign(id, rec, envir = artifact_state$procs)
+  artifact_job_add(id, id, rec$pid)
+  artifact_run_write(rec)
+  invisible(rec)
+}
+
+#' The `launch` of the shiny and html artifact types (contract 10.2 row 19): a supervised
+#' Rscript child serving the version (architecture 6.15)
 #'
-#' The child runs the self-contained artifact_serve() with `package = FALSE`, the secret-free
+#' The child runs the self-contained artifact_serve() without loading gptr, with the secret-free
 #' environment, `encoding = "UTF-8"`, `supervise = supervise_default()` and the version
 #' directory as its working directory (IC-60); its stdout and stderr go to a raw file in
 #' tempdir() that the parent copies, redacted, into run/app-vNNN.log (IC-70). A child that ends
@@ -789,14 +818,55 @@ artifact_launch_shiny = function(version_dir, ctx) {
   log = file.path(run_dir, paste0("app-", basename(version_dir), ".log"))
   unlink(c(port_file, log))
   raw = tempfile(paste0("gptr-artifact-", id, "-"), fileext = ".log")
+  dir = tempfile("gptr-artifact-launch-")
+  if (!dir.create(dir, mode = "0700")) {
+    gptr_abort("Cannot create the private artifact launch directory.", "artifact",
+               id = id, stage = "launch", log = character())
+  }
+  owner = new.env(parent = emptyenv())
+  owner$p = NULL
+  owner$settled = NULL
+  returned = FALSE
+  log_record = artifact_log_new(raw, log)
+  on.exit({
+    if (!returned) {
+      if (is.null(owner$p)) {
+        tryCatch({
+          unlink(dir, recursive = TRUE)
+          unlink(raw)
+        }, error = function(e) NULL, interrupt = function(e) NULL)
+      } else {
+        if (is.null(owner$settled)) {
+          owner$settled = isTRUE(tryCatch(kill_all(owner$p, grace = 1),
+                                         error = function(e) FALSE, interrupt = function(e) FALSE))
+        }
+        if (isTRUE(owner$settled)) {
+          removed = tryCatch(unlink(dir, recursive = TRUE) == 0L,
+                              error = function(e) FALSE, interrupt = function(e) FALSE)
+          if (!isTRUE(removed)) owner$settled = FALSE
+        }
+        tryCatch(artifact_log_sync(log_record, final = isTRUE(owner$settled)),
+                 error = function(e) NULL, interrupt = function(e) NULL)
+        if (!isTRUE(owner$settled)) {
+          fns = artifact_proc_fns(owner$p, dir)
+          pid = tryCatch(owner$p$get_pid(), error = function(e) NA_integer_,
+                         interrupt = function(e) NA_integer_)
+          handle = c(list(url = NA_character_, pid = pid, port = NA_integer_,
+                          raw = raw, log = log), fns)
+          tryCatch(artifact_launch_recover(id, as.integer(sub("^v", "", basename(version_dir))),
+                   handle, log_record), error = function(e) NULL, interrupt = function(e) NULL)
+        }
+      }
+    }
+  }, add = TRUE)
   token = artifact_token()
-  proc = callr::r_bg(
-    utils::removeSource(artifact_serve), # callr keeps its body's source files (IC-70)
-    args = list(dir = path_norm(version_dir), port_file = path_norm(port_file),
-                parent_pid = Sys.getpid(), token = token),
-    stdout = raw, stderr = "2>&1", supervise = supervise_default(), package = FALSE,
-    user_profile = FALSE, system_profile = FALSE, env = artifact_child_env(artifact_ports(id)),
-    cleanup = TRUE, cleanup_tree = TRUE, encoding = "UTF-8", wd = path_norm(version_dir)
+  proc = proc_rscript(
+    "artifact", args = list(dir = path_norm(version_dir), port_file = path_norm(port_file),
+                             parent_pid = Sys.getpid(), token = token),
+    dir = dir, env = artifact_child_env(artifact_ports(id)), stdout = raw, stderr = "2>&1",
+    wd = path_norm(version_dir), .fun = artifact_serve, .on_spawn = function(p) {
+      owner$p = p
+    }
   )
   port = artifact_wait_port(proc, port_file)
   if (is.na(port)) {
@@ -805,8 +875,10 @@ artifact_launch_shiny = function(version_dir, ctx) {
     } else {
       "the app process exited"
     }
-    kill_all(proc, grace = 1)
-    artifact_log_sync(artifact_log_new(raw, log), final = TRUE)
+    owner$settled = isTRUE(tryCatch(kill_all(proc, grace = 1),
+                                   error = function(e) FALSE, interrupt = function(e) FALSE))
+    tryCatch(artifact_log_sync(log_record, final = isTRUE(owner$settled)),
+             error = function(e) NULL, interrupt = function(e) NULL)
     tail = artifact_log_tail(log)
     gptr_abort(paste0("Artifact ", id, " did not start (stage launch): ", reason, ".",
                       artifact_tail_text(tail, log)),
@@ -814,9 +886,11 @@ artifact_launch_shiny = function(version_dir, ctx) {
   }
   url = sprintf("http://127.0.0.1:%d/", port)
   if (nzchar(token)) url = paste0(url, "?gptr_token=", token)
-  fns = artifact_proc_fns(proc)
-  list(url = url, pid = proc$get_pid(), stop = fns$stop, alive = fns$alive, port = port,
-       token = token, raw = raw, log = log)
+  fns = artifact_proc_fns(proc, dir)
+  handle = list(url = url, pid = proc$get_pid(), stop = fns$stop, alive = fns$alive,
+                settled = fns$settled, port = port, token = token, raw = raw, log = log)
+  returned = TRUE
+  handle
 }
 
 #' The `stop` of the built-in artifact types
@@ -902,13 +976,43 @@ artifact_type_get = function(kind, ctx = NULL) {
 #' @noRd
 artifact_start = function(id, version, type, ctx = NULL, session_check = FALSE) {
   version = as.integer(version)
-  artifact_stop(id, reason = "relaunch")
+  previous = artifact_proc_get(id)
+  if (!is.null(previous) && !isTRUE(artifact_stop(id, reason = "relaunch"))) {
+    gptr_abort(paste0("Artifact ", id, " still needs cleanup before it can relaunch."),
+               "artifact", id = id, stage = "launch", log = character())
+  }
   vrec = artifact_version_record(artifact_meta_read(id), version)
   checks = artifact_checks(parse = vrec$checks$parse %||% NA)
   handle = tryCatch(type$launch(artifact_version_dir(id, version), ctx), error = function(e) e)
   launched = !inherits(handle, "error")
-  rec = artifact_record_new(id, version, type, if (launched) handle else list())
-  assign(id, rec, envir = artifact_state$procs)
+  rec = if (!launched) artifact_proc_get(id) else NULL
+  completed = FALSE
+  settled = FALSE
+  stop_attempted = FALSE
+  on.exit({
+    if (launched && !completed) {
+      if (!stop_attempted) {
+        settled = isTRUE(tryCatch(
+          artifact_stop_settled(type, handle, create_time = rec$create_time),
+          error = function(e) FALSE, interrupt = function(e) FALSE))
+      }
+      if (is.null(rec) && !settled) {
+        tryCatch(artifact_launch_recover(id, version, handle, type = type),
+                 error = function(e) NULL, interrupt = function(e) NULL)
+      } else if (!is.null(rec)) {
+        tryCatch(artifact_log_sync(rec, final = settled),
+                 error = function(e) NULL, interrupt = function(e) NULL)
+        if (!settled) {
+          tryCatch(artifact_job_add(id, id, rec$pid),
+                   error = function(e) NULL, interrupt = function(e) NULL)
+        }
+      }
+    }
+  }, add = TRUE)
+  if (is.null(rec)) {
+    rec = artifact_record_new(id, version, type, if (launched) handle else list())
+    assign(id, rec, envir = artifact_state$procs)
+  }
   if (!launched) {
     checks$launch = FALSE
     rec$checks = checks
@@ -923,8 +1027,10 @@ artifact_start = function(id, version, type, ctx = NULL, session_check = FALSE) 
   checks$http = isTRUE(http$ok)
   if (!checks$http) {
     stage = if (checks$launch) "http" else "launch"
-    try(type$stop(handle), silent = TRUE)
-    artifact_log_sync(rec, final = TRUE)
+    stop_attempted = TRUE
+    settled = artifact_stop_settled(type, handle, rec$pid, rec$create_time)
+    tryCatch(artifact_log_sync(rec, final = settled),
+             error = function(e) NULL, interrupt = function(e) NULL)
     rec$checks = checks
     artifact_version_checks_set(id, version, checks)
     tail = artifact_log_tail(rec$log)
@@ -951,7 +1057,9 @@ artifact_start = function(id, version, type, ctx = NULL, session_check = FALSE) 
   artifact_version_checks_set(id, version, checks)
   artifact_emit("artifact_start", id = id, url = rec$url, version = version)
   artifact_view(rec$url)
-  artifact_handle(id)
+  result = artifact_handle(id)
+  completed = TRUE
+  result
 }
 
 #' Relaunch a stored version with the type of the kind it was built with (its record's `kind`,

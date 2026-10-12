@@ -195,7 +195,6 @@ test_that("a redirect to a second origin receives no key and the wire log holds 
 
 test_that("worker spec and result files and worker output carry no key (IC-70)", {
   skip_on_cran()
-  skip_if_not_installed("callr")
   local_worker_lib()
   root = local_project()
   env_file = e2e_register()

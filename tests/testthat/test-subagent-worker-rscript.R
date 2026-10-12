@@ -56,7 +56,7 @@ test_that("worker launch passes a complete child environment and keeps one owned
   expect_false(anyNA(seen$launch$env))
   expect_identical(seen$launch$stdin, "|")
   expect_identical(seen$launch$dir, st$dir)
-  expect_identical(seen$set[[seen$launch$marker]], "YES")
+  expect_false(seen$launch$marker %in% names(seen$set))
   expect_identical(seen$job, list(kind = "worker", pid = 123L))
   spec = readRDS(seen$launch$args[[1L]], refhook = worker_refhook)
   expect_identical(spec$objects, list(d = c(1, 2, 3)))
@@ -130,7 +130,9 @@ test_that("watcher or job registration failure settles before deleting the worke
 
 test_that("unsettled worker cleanup retains ownership and permits a confirmed retry", {
   values = list(FALSE, NA, structure(list(message = "kill failed", call = NULL),
-                                     class = c("error", "condition")))
+                                     class = c("error", "condition")),
+                 structure(list(message = "kill interrupted", call = NULL),
+                           class = c("interrupt", "condition")))
   for (value in values) {
     st = worker_launch_state()
     st$p = list(get_pid = function() 126L)
@@ -216,4 +218,42 @@ test_that("natural worker exit keeps recovery files until the process tree settl
   expect_null(st$dir)
   expect_null(st$job)
   expect_identical(st$final, final)
+})
+
+test_that("failed watcher cancellation cannot complete worker cleanup before a retry", {
+  values = list(structure(list(message = "cancel failed", call = NULL),
+                           class = c("error", "condition")),
+                 structure(list(message = "cancel interrupted", call = NULL),
+                           class = c("interrupt", "condition")))
+  for (value in values) {
+    st = worker_launch_state()
+    st$p = list(get_pid = function() 129L)
+    st$dir = withr::local_tempdir()
+    dir = st$dir
+    st$job = "cancel-job"
+    st$watch = "cancel-watch"
+    seen = new.env(parent = emptyenv())
+    seen$kills = 0L
+    seen$removed = 0L
+    local_mocked_bindings(
+      reactor_cancel = function(...) stop(value),
+      kill_all = function(...) {
+        seen$kills = seen$kills + 1L
+        TRUE
+      },
+      job_remove = function(...) seen$removed = seen$removed + 1L)
+    expect_false(worker_kill(st))
+    expect_identical(seen$kills, 1L)
+    expect_identical(seen$removed, 0L)
+    expect_identical(st$watch, "cancel-watch")
+    expect_identical(st$job, "cancel-job")
+    expect_true(dir.exists(dir))
+    expect_false(isTRUE(st$cleaned))
+    local_mocked_bindings(reactor_cancel = function(...) 1L)
+    expect_true(worker_kill(st))
+    expect_null(st$watch)
+    expect_null(st$job)
+    expect_false(dir.exists(dir))
+    expect_identical(seen$removed, 1L)
+  }
 })

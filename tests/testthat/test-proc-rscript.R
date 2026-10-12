@@ -44,7 +44,7 @@ test_that("artifact bootstrap is detached from the caller and gptr namespace", {
     new.env(parent = emptyenv())
   })
   proc_rscript("artifact", list(dir = dir, token = "SYNTHETIC-ARTIFACT-TOKEN"),
-               dir = dir, env = c(PATH = "synthetic path"))
+               dir = dir, env = c(PATH = "synthetic path"), .fun = artifact_serve)
   payload = readRDS(got$args[[3L]])
   expect_named(payload, c("entry", "args", "libpaths", "fun"))
   expect_identical(environment(payload$fun), baseenv())
@@ -72,7 +72,8 @@ test_that("Rscript spawn errors retain owned launch files for confirmed cleanup"
   dir = withr::local_tempdir()
   local_mocked_bindings(proc_spawn = function(...) stop("synthetic launch failure"))
   before = Sys.getenv()
-  expect_error(proc_rscript("artifact", list(), dir, env = c(GPTR_TEST_EMPTY = "")),
+  expect_error(proc_rscript("artifact", list(), dir, env = c(GPTR_TEST_EMPTY = ""),
+                            .fun = artifact_serve),
                "synthetic launch failure", fixed = TRUE)
   expect_identical(Sys.getenv(), before)
   expect_true(file.exists(file.path(dir, "bootstrap.rds")))
@@ -90,4 +91,18 @@ test_that("a native process handle is captured before marker registration can fa
                "synthetic marker failure", fixed = TRUE)
   expect_identical(seen, p)
   expect_identical(settled, 1L)
+})
+
+
+test_that("registration rollback preserves the original error even when cleanup interrupts", {
+  original = structure(list(message = "owned marker failure", call = NULL),
+                       class = c("owned_marker_error", "error", "condition"))
+  p = new.env(parent = emptyenv())
+  local_mocked_bindings(proc_mark = function(...) stop(original),
+    kill_all = function(...) signalCondition(structure(list(message = "cleanup interrupt"),
+                                                       class = c("interrupt", "condition"))))
+  local_mocked_bindings(process = list(new = function(...) p), .package = "processx")
+  error = tryCatch(proc_spawn(rscript_path()), error = identity,
+                   interrupt = function(e) e)
+  expect_identical(error, original)
 })

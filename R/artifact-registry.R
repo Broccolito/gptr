@@ -172,19 +172,53 @@ artifact_job_add = function(id, name, pid) {
           status = function() artifact_status(id))
 }
 
+#' Stop an artifact handle, accepting a void extension callback only after confirmed death
+#' @noRd
+artifact_stop_settled = function(type, handle, pid = handle$pid, create_time = NULL) {
+  deadline = proc.time()[["elapsed"]] + artifact_stop_grace
+  stopped = tryCatch(type$stop(handle), error = function(e) FALSE, interrupt = function(e) FALSE)
+  if (!is.null(stopped) && !isTRUE(stopped)) return(FALSE)
+  probe = handle$alive
+  if (is.function(probe)) {
+    alive = tryCatch(probe(), error = function(e) NA, interrupt = function(e) NA)
+    if (isFALSE(alive)) return(TRUE)
+    if (!isTRUE(alive) || isTRUE(stopped)) return(FALSE)
+  } else if (isTRUE(stopped) || !length(handle)) {
+    return(TRUE)
+  }
+  ct = suppressWarnings(as.numeric(create_time))
+  if (!proc_pid_valid(pid) || length(ct) != 1L || !is.finite(ct)) return(FALSE)
+  child = tryCatch(proc_identity(pid, ct), error = function(e) NULL, interrupt = function(e) NULL)
+  if (is.null(child)) return(FALSE)
+  if (isFALSE(child$alive)) return(!is.function(probe))
+  if (!isTRUE(child$alive)) return(FALSE)
+  killed = tryCatch(artifact_kill(pid, ct), error = function(e) FALSE,
+                   interrupt = function(e) FALSE)
+  if (!isTRUE(killed)) return(FALSE)
+  seconds = min(2, max(0, deadline - proc.time()[["elapsed"]]))
+  tryCatch(proc_wait_exit(list(child$handle), seconds = seconds), error = function(e) NULL,
+           interrupt = function(e) NULL)
+  dead = tryCatch(proc_handle_alive(child$handle), error = function(e) NA,
+                  interrupt = function(e) NA)
+  if (!isFALSE(dead)) return(FALSE)
+  !is.function(probe) || isFALSE(tryCatch(probe(), error = function(e) NA,
+                                        interrupt = function(e) NA))
+}
+
 #' Stop an artifact's process: the type's stop (for the built-in types: interrupt, 3 s grace,
 #' kill_all()), then its run files, its log and its job row; emits `artifact_stop` when a
 #' process was running (IC-60: a requested stop reads `stopped`, never `failed`)
-#' @return invisible(TRUE) when there was a record, else invisible(FALSE)
+#' @return invisible(TRUE) after confirmed cleanup, else invisible(FALSE)
 #' @noRd
 artifact_stop = function(id, reason = "user", emit = TRUE) {
   rec = artifact_proc_get(id)
-  artifact_run_clear(id)
   if (is.null(rec)) return(invisible(FALSE))
   rec$stop_requested = TRUE
   was_running = artifact_rec_alive(rec)
-  if (was_running) try(rec$type$stop(rec$handle), silent = TRUE)
-  artifact_kill(rec$pid, rec$create_time)
+  if (!artifact_stop_settled(rec$type, rec$handle, rec$pid, rec$create_time)) {
+    return(invisible(FALSE))
+  }
+  artifact_run_clear(id)
   artifact_log_sync(rec, final = TRUE)
   job_remove(artifact_job_id(id))
   rm(list = id, envir = artifact_state$procs)
@@ -207,7 +241,12 @@ artifact_handle = function(id) {
   vrec = artifact_version_record(meta, current)
   kind = vrec$kind %||% meta$kind %||% "shiny"
   rec = artifact_proc_get(id)
-  if (!is.null(rec)) artifact_log_sync(rec, final = !artifact_rec_alive(rec))
+  if (!is.null(rec)) {
+    alive = artifact_rec_alive(rec)
+    settled = rec$handle$settled
+    final = !alive && is.function(settled) && isTRUE(settled())
+    artifact_log_sync(rec, final = final)
+  }
   status = artifact_status(id)
   live = !is.null(rec) && identical(rec$version, current)
   new_gptr_artifact(

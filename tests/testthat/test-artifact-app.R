@@ -261,19 +261,29 @@ build_version = function(id, lines, data = character(), envir = new.env()) {
   vdir
 }
 
-# Run artifact_serve() in a callr child as the launcher does; the child is killed when the
-# calling test ends
+# Run artifact_serve() in the native Rscript child as the launcher does; the child is killed
+# and its bootstrap removed when the calling test ends
 serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.frame()) {
   port_file = file.path(withr::local_tempdir(.local_envir = .env), "port")
   raw = withr::local_tempfile(fileext = ".log", .local_envir = .env)
-  p = callr::r_bg(artifact_serve,
-                  args = list(dir = vdir, port_file = port_file, parent_pid = parent_pid,
-                              token = token),
-                  stdout = raw, stderr = "2>&1", supervise = supervise_default(), package = FALSE,
-                  user_profile = FALSE, system_profile = FALSE,
-                  env = artifact_child_env(port_candidates(5L)), cleanup = TRUE,
-                  cleanup_tree = TRUE, encoding = "UTF-8", wd = vdir)
-  withr::defer(kill_all(p, grace = 0), envir = .env)
+  dir = tempfile("gptr-artifact-test-launch-")
+  stopifnot(dir.create(dir, mode = "0700"))
+  owner = new.env(parent = emptyenv())
+  owner$p = NULL
+  withr::defer({
+    if (is.null(owner$p) || isTRUE(kill_all(owner$p, grace = 0))) {
+      unlink(dir, recursive = TRUE)
+    } else {
+      stop("The artifact test child did not settle.")
+    }
+  }, envir = .env)
+  p = proc_rscript("artifact", args = list(dir = vdir, port_file = port_file,
+                                           parent_pid = parent_pid, token = token),
+                   dir = dir, env = artifact_child_env(port_candidates(5L)),
+                   stdout = raw, stderr = "2>&1", wd = vdir, .fun = artifact_serve,
+                   .on_spawn = function(p) {
+                     owner$p = p
+                   })
   deadline = Sys.time() + 30
   while (!file.exists(port_file) && p$is_alive() && Sys.time() < deadline) Sys.sleep(0.05)
   list(proc = p, port_file = port_file, raw = raw)
@@ -327,7 +337,8 @@ test_that("artifact_serve() publishes a loopback port and serves only requests w
   local_project()
   e = new.env()
   e$markers = data.frame(gene = c("CD14", "LYZ"))
-  vdir = build_version("served", ok_app, "markers", e)
+  vdir = build_version("served", c("stopifnot(!isNamespaceLoaded('gptr'))", ok_app),
+                        "markers", e)
   tok = artifact_token()
   ch = serve_child(vdir, tok)
   expect_true(file.exists(ch$port_file))
@@ -635,17 +646,22 @@ test_that("missing shiny is a missing_package error naming the feature", {
   expect_identical(cnd$feature, "artifacts")
 })
 
-test_that("artifact_serve() goes to callr without its source references (IC-70)", {
+test_that("the artifact launcher selects its standalone Rscript entry (IC-70)", {
   local_project()
-  fun = NULL
-  local_mocked_bindings(artifact_shiny_available = function() TRUE)
-  local_mocked_bindings(r_bg = function(func, ...) {
-    fun <<- func
+  seen = new.env(parent = emptyenv())
+  local_mocked_bindings(artifact_shiny_available = function() TRUE,
+                       proc_rscript = function(entry, args, dir, env, ..., .fun) {
+    seen$entry = entry
+    seen$fun = .fun
+    seen$dir = dir
+    seen$env = env
     stop("not started")
-  }, .package = "callr")
+  })
   expect_error(artifact_launch_shiny(artifact_version_dir("x", 1L), NULL), "not started")
-  # callr keeps the source files of nested functions, which can reach the package's state
-  expect_length(grepRaw("srcfile", serialize(fun, NULL), fixed = TRUE), 0L)
+  expect_identical(seen$entry, "artifact")
+  expect_identical(seen$fun, artifact_serve)
+  expect_false(anyNA(seen$env))
+  expect_false(dir.exists(seen$dir))
 })
 
 test_that("the viewer opens only when a human is present (13 C-42)", {
@@ -992,7 +1008,6 @@ test_that("an artifact constructor failure retains its captured child for cleanu
       stop("controlled constructor failure")
     }
   )
-  local_mocked_bindings(r_bg = function(...) stop("legacy artifact launch"), .package = "callr")
   expect_error(artifact_launch_shiny(artifact_version_dir("recover", 1L), NULL),
                "controlled constructor failure")
   rec = artifact_proc_get("recover")
@@ -1007,4 +1022,82 @@ test_that("an artifact constructor failure retains its captured child for cleanu
   expect_null(artifact_proc_get("recover"))
   expect_false(dir.exists(state$dir))
   expect_identical(nrow(job_list("artifact")), 0L)
+})
+
+
+test_that("artifact constructor cleanup cannot replace its original error or interrupt", {
+  local_project()
+  seed_artifact("original")
+  original_error = structure(list(message = "controlled constructor failure", call = NULL),
+                             class = c("artifact_launch_test", "error", "condition"))
+  original_interrupt = structure(list(message = "controlled launch interrupt", call = NULL),
+                                 class = c("interrupt", "condition"))
+  cleanup_interrupt = structure(list(message = "controlled cleanup interrupt", call = NULL),
+                                class = c("interrupt", "condition"))
+  state = new.env(parent = emptyenv())
+  state$dirs = character()
+  withr::defer({
+    unlink(state$dirs, recursive = TRUE)
+    if (!is.null(artifact_proc_get("original"))) {
+      rm(list = "original", envir = artifact_state$procs)
+    }
+    job_remove(artifact_job_id("original"))
+  })
+  proc = list(is_alive = function() FALSE, get_pid = function() 123L)
+  for (original in list(original_error, original_interrupt)) {
+    for (stage in c("kill", "log", "job")) {
+      local_mocked_bindings(
+        artifact_shiny_available = function() TRUE,
+        proc_create_time = function(pid) 1,
+        proc_rscript = function(..., dir, .on_spawn) {
+          state$dirs = c(state$dirs, dir)
+          .on_spawn(proc)
+          stop(original)
+        },
+        kill_all = function(...) {
+          if (stage == "kill") stop(cleanup_interrupt)
+          FALSE
+        },
+        artifact_log_sync = function(...) {
+          if (stage == "log") stop(cleanup_interrupt)
+          NULL
+        },
+        artifact_job_add = function(...) {
+          if (stage == "job") stop(cleanup_interrupt)
+          NULL
+        })
+      caught = tryCatch(artifact_launch_shiny(artifact_version_dir("original", 1L), NULL),
+                        error = identity, interrupt = identity)
+      expect_identical(caught, original)
+      expect_false(is.null(artifact_proc_get("original")))
+      expect_true(dir.exists(tail(state$dirs, 1L)))
+      rm(list = "original", envir = artifact_state$procs)
+    }
+  }
+})
+
+test_that("post-launch artifact cleanup cannot replace a registration condition", {
+  local_project()
+  seed_artifact("register")
+  original = structure(list(message = "controlled job registration failure", call = NULL),
+                       class = c("artifact_registration_test", "error", "condition"))
+  cleanup_interrupt = structure(list(message = "controlled cleanup interrupt", call = NULL),
+                                class = c("interrupt", "condition"))
+  handle = list(url = "http://127.0.0.1:50000/", pid = NA_integer_, port = 50000L,
+                alive = function() TRUE)
+  type = list(launch = function(...) handle, stop = function(handle) stop(cleanup_interrupt))
+  local_mocked_bindings(
+    artifact_wait_http = function(...) list(ok = TRUE),
+    artifact_job_add = function(...) stop(original),
+    artifact_log_sync = function(...) stop(cleanup_interrupt))
+  withr::defer({
+    if (!is.null(artifact_proc_get("register"))) {
+      rm(list = "register", envir = artifact_state$procs)
+    }
+  })
+  caught = tryCatch(artifact_start("register", 1L, type), error = identity, interrupt = identity)
+  expect_identical(caught, original)
+  rec = artifact_proc_get("register")
+  expect_false(is.null(rec))
+  expect_identical(rec$handle, handle)
 })

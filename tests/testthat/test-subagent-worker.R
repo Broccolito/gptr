@@ -437,19 +437,25 @@ test_that("a lazily loaded source file is a reference, a user's ships its lines 
   expect_match(gptr_describe(back$user), "x + 1", fixed = TRUE, all = FALSE)
 })
 
-test_that("worker_main() goes to callr without its source references (IC-70)", {
-  fun = NULL
-  local_mocked_bindings(r_bg = function(func, ...) {
-    fun <<- func
+test_that("a worker selects the installed Rscript entry without shipping its function (IC-70)", {
+  seen = new.env(parent = emptyenv())
+  local_mocked_bindings(proc_rscript = function(entry, args, ...) {
+    seen$entry = entry
+    seen$args = args
     stop("not started")
-  }, .package = "callr")
+  })
   st = new.env()
   st$spec = list(depth = 1L, settings = list(project_root = tempdir()))
   st$home = new.env()
+  st$home$unshipped = "p19-not-in-the-worker-bootstrap"
   withr::defer(unlink(st$dir, recursive = TRUE))
   expect_error(worker_spawn(st), "not started")
-  # callr drops a function's srcref but keeps the source files of its body, as above a promise
-  expect_length(grepRaw("srcfile", serialize(fun, NULL), fixed = TRUE), 0L)
+  expect_identical(seen$entry, "worker")
+  expect_identical(seen$args, list(file.path(dirname(st$result_path), "spec.rds"),
+                                  st$result_path))
+  raw = serialize(seen$args, NULL)
+  expect_length(grepRaw("srcfile", raw, fixed = TRUE), 0L)
+  expect_length(grepRaw("p19-not-in-the-worker-bootstrap", raw, fixed = TRUE), 0L)
 })
 
 test_that("objects are shipped by name from the caller's environment", {
@@ -484,7 +490,7 @@ test_that("an explicit worker for a remote model is refused in replay mode befor
                class = "gptr_error_not_recorded")
 })
 
-# ---- real worker processes (skipped on CRAN; gptr must be installed for callr children) ------
+# ---- real worker processes (skipped on CRAN; gptr must be installed for Rscript children) ------
 
 # Worker children load gptr with library(): under R CMD check the installed package is on the
 # library path; from a source tree (devtools::test()) the tree is installed once per R session

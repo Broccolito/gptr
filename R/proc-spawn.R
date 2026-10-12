@@ -114,10 +114,13 @@ shell_resolve = function(cmd) {
 #' @noRd
 proc_spawn = function(command, args = character(), env = NULL, wd = NULL, stdin = NULL,
                       stdout = "|", stderr = "|", cleanup_tree = TRUE,
-                      supervise = supervise_default(), .marker = NULL) {
+                      supervise = supervise_default(), .marker = NULL, .on_spawn = NULL) {
   check_flag(cleanup_tree, "cleanup_tree")
   check_flag(supervise, "supervise")
   check_string(wd, "wd", null = TRUE)
+  if (!is.null(.on_spawn) && !is.function(.on_spawn)) {
+    arg_abort(.on_spawn, ".on_spawn", "a function or NULL")
+  }
   verbatim = isTRUE(attr(args, "verbatim"))
   res = proc_resolve(command, args)
   marker = if (is.null(.marker)) proc_marker_new() else .marker
@@ -146,7 +149,10 @@ proc_spawn = function(command, args = character(), env = NULL, wd = NULL, stdin 
                "spawn", command = basename(res$command))
   }
   registered = FALSE
-  on.exit(if (!registered) kill_all(p, grace = 0), add = TRUE)
+  on.exit(if (!registered) {
+    tryCatch(kill_all(p, grace = 0), error = function(e) NULL, interrupt = function(e) NULL)
+  }, add = TRUE)
+  if (!is.null(.on_spawn)) .on_spawn(p)
   proc_mark(p, marker, res$command)
   registered = TRUE
   p

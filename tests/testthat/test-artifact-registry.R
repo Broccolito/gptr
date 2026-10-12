@@ -418,6 +418,7 @@ test_that("an unsettled artifact stop retains recovery state until a confirmed r
   expect_false(artifact_stop("retry", emit = FALSE))
   expect_identical(artifact_proc_get("retry"), rec)
   expect_true(rec$stop_requested)
+  expect_identical(artifact_status("retry"), "stopped")
   expect_true(file.exists(raw))
   expect_true(file.exists(run))
   expect_identical(job_list("artifact")$id, "artifact:retry")
@@ -452,4 +453,93 @@ test_that("an artifact relaunch cannot replace an unsettled recovery record", {
   expect_identical(state$launches, 0L)
   expect_identical(artifact_proc_get("blocked"), rec)
   expect_true(rec$stop_requested)
+})
+
+
+test_that("custom artifact stops accept a void return only after independent settlement", {
+  local_project()
+  seed_artifact("void")
+  state = new.env(parent = emptyenv())
+  state$alive = FALSE
+  state$result = NULL
+  state$uncertain = FALSE
+  handle = list(pid = NA_integer_, alive = function() {
+    if (state$uncertain) stop("controlled probe failure")
+    state$alive
+  })
+  type = list(stop = function(handle) state$result)
+  raw = withr::local_tempfile(fileext = ".log")
+  writeLines("owned output", raw)
+  rec = artifact_record_new("void", 1L, type, c(handle, list(raw = raw)))
+  assign("void", rec, envir = artifact_state$procs)
+  withr::defer({
+    if (!is.null(artifact_proc_get("void"))) rm(list = "void", envir = artifact_state$procs)
+  })
+  for (value in list(FALSE, NA)) {
+    state$result = value
+    expect_false(artifact_stop("void", emit = FALSE))
+    expect_identical(artifact_proc_get("void"), rec)
+    expect_true(file.exists(raw))
+  }
+  state$result = NULL
+  state$uncertain = TRUE
+  expect_false(artifact_stop("void", emit = FALSE))
+  expect_identical(artifact_proc_get("void"), rec)
+  state$uncertain = FALSE
+  state$alive = TRUE
+  expect_false(artifact_stop("void", emit = FALSE))
+  expect_identical(artifact_proc_get("void"), rec)
+  state$alive = FALSE
+  expect_true(artifact_stop("void", emit = FALSE))
+  expect_null(artifact_proc_get("void"))
+  expect_false(file.exists(raw))
+})
+
+test_that(
+  "a void artifact stop fallback requires the recorded process identity and confirmed death", {
+  local_project()
+  seed_artifact("void-pid")
+  state = new.env(parent = emptyenv())
+  state$alive = TRUE
+  state$wait = 0L
+  state$kill = 0L
+  state$confirm = FALSE
+  local_mocked_bindings(
+    proc_create_time = function(pid) 1,
+    proc_identity = function(pid, create_time) {
+      expect_identical(pid, 123L)
+      expect_identical(create_time, 1)
+      list(handle = "original-identity", alive = state$alive)
+    },
+    artifact_kill = function(pid, create_time) {
+      expect_identical(pid, 123L)
+      expect_identical(create_time, 1)
+      state$kill = state$kill + 1L
+      TRUE
+    },
+    proc_wait_exit = function(handles, seconds) {
+      expect_identical(handles, list("original-identity"))
+      expect_true(seconds >= 0 && seconds <= artifact_stop_grace)
+      state$wait = state$wait + 1L
+      TRUE
+    },
+    proc_handle_alive = function(handle) {
+      expect_identical(handle, "original-identity")
+      if (state$confirm) FALSE else NA
+    })
+  rec = artifact_record_new("void-pid", 1L, list(stop = function(handle) NULL),
+                            list(pid = 123L))
+  assign("void-pid", rec, envir = artifact_state$procs)
+  withr::defer({
+    if (!is.null(artifact_proc_get("void-pid"))) {
+      rm(list = "void-pid", envir = artifact_state$procs)
+    }
+  })
+  expect_false(artifact_stop("void-pid", emit = FALSE))
+  expect_identical(artifact_proc_get("void-pid"), rec)
+  expect_identical(state$kill, 1L)
+  expect_identical(state$wait, 1L)
+  state$confirm = TRUE
+  expect_true(artifact_stop("void-pid", emit = FALSE))
+  expect_null(artifact_proc_get("void-pid"))
 })
