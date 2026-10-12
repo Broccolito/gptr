@@ -611,7 +611,8 @@ optional_controller_run = function(main = optional_integrations_main,
   withCallingHandlers({
     dir.create(output, showWarnings = FALSE, recursive = TRUE)
     outcome = tryCatch(list(value = main(state), error = NULL),
-      error = function(e) list(value = NULL, error = e))
+      error = function(e) list(value = NULL, error = e),
+      interrupt = function(e) list(value = NULL, error = e))
     final_error = tryCatch({
       for (attempt in seq_len(2L)) {
         before_attempt = state$total
@@ -631,7 +632,7 @@ optional_controller_run = function(main = optional_integrations_main,
         if (state$total == before_attempt) break
       }
       NULL
-    }, error = identity)
+    }, error = identity, interrupt = identity)
     if (!is.null(outcome$error)) stop(outcome$error)
     if (!is.null(final_error)) stop(final_error)
     if (state$total > 0L) stop("Controller warnings captured: ", state$total)

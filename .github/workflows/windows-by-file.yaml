@@ -30,6 +30,10 @@ on:
         description: Run the reviewed child-only token diagnostic after successful install
         type: boolean
         default: false
+      startup_diagnostic:
+        description: Diagnose bounded PowerShell startup after verified install (Windows devel)
+        type: boolean
+        default: false
       source_sha:
         description: Full lowercase commit SHA required by optional mode
         type: string
@@ -57,17 +61,21 @@ jobs:
       GPTR_LEGACY_MINUTES: ${{ inputs.minutes }}
     steps:
       - name: Validate optional source nomination
-        if: inputs.optional || inputs.token_experiment
+        if: inputs.optional || inputs.token_experiment || inputs.startup_diagnostic
         shell: bash
         env:
           EXPERIMENT: ${{ inputs.token_experiment && 'true' || 'false' }}
           OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
           PLATFORM: ${{ inputs.platform }}
           NOFOLLOW: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          STARTUP: ${{ inputs.startup_diagnostic && 'true' || 'false' }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           if [[ "$EXPERIMENT" == true ]]; then
             [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$NOFOLLOW" == true ]]
+          fi
+          if [[ "$STARTUP" == true ]]; then
+            [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$EXPERIMENT" == false ]]
           fi
       - uses: actions/checkout@v6
         if: '!inputs.optional'
@@ -104,7 +112,7 @@ jobs:
       - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
         if: inputs.optional
         with:
-          r-version: release
+          r-version: ${{ inputs.startup_diagnostic && 'devel' || 'release' }}
           Ncpus: 1
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
@@ -141,6 +149,16 @@ jobs:
         run: |
           Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-token/test-controller.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
           Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-token/controller.R")) == 0L, length(lintr::lint("dev/ci/windows-token/test-controller.R")) == 0L)'
+      - name: Test and lint the default-off startup controller
+        if: inputs.optional && inputs.startup_diagnostic
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-startup/test-controller.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+          Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-startup/controller.R")) == 0L, length(lintr::lint("dev/ci/windows-startup/probe.R")) == 0L, length(lintr::lint("dev/ci/windows-startup/test-controller.R")) == 0L)'
       - name: Lint the reviewed integration runtime, fixtures and result gates
         if: inputs.optional
         shell: bash
@@ -156,6 +174,7 @@ jobs:
         shell: bash
         run: R CMD INSTALL .
       - name: Install the optional source for real child fixtures
+        id: optional_install
         if: inputs.optional
         shell: bash
         env:
@@ -177,6 +196,20 @@ jobs:
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
             --run Rscript --vanilla dev/ci/windows-token/controller.R verify-install
+      - name: Verify the installed startup environment runtime
+        id: startup_install
+        if: inputs.optional && inputs.startup_diagnostic && runner.os == 'Windows' && steps.optional_install.outcome == 'success'
+        timeout-minutes: 1
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_STARTUP_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_STARTUP_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-startup-install
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-startup/controller.R verify-install
       - name: Offline tests file by file
         if: '!inputs.optional'
         shell: bash
@@ -206,6 +239,19 @@ jobs:
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
             --run Rscript --vanilla dev/ci/windows-token/controller.R run
+      - name: Run the bounded startup diagnostic after verified install
+        if: always() && inputs.optional && inputs.startup_diagnostic && inputs.platform == 'windows' && runner.os == 'Windows' && steps.startup_install.outcome == 'success'
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_STARTUP_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_STARTUP_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-startup-run
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-startup/controller.R run
       - name: Run serial plan gates even after an optional test failure
         if: always() && inputs.optional && runner.os == 'Linux'
         shell: bash
