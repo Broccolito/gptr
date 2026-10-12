@@ -1,4 +1,40 @@
-## Active follow-up — 2026-10-12 (through `ee5088a`)
+## Current validation — 2026-10-12 (production `02ceac9`)
+
+Five reviewed tasks are committed/pushed: `e05bd26` strict POSIX guard registration,
+`b7d8850` neutral billing notices, `1731e06` cold-loader environment restoration,
+`ea5e07e` recoverable MCP shutdown, and `3fd14f9` owned-pump seed isolation.
+`02ceac9` makes optional test preflight metadata-only; real load failures remain failures.
+
+- DONE/offline: complete cold OAuth18/114, Codex41/450, MCP16/128 and reactor44/208:
+  119 cases/900 passes, zero failures/errors/warnings/skips, all eight caller-state flags TRUE.
+  Preserve both earlier seed-leaking runs and their first-case witnesses.
+- DONE/offline/native Mac: MCP7/252 pure assertions and four actual owned-listener
+  error/interrupt × seeded/absent retry cases pass. Access is revoked, recovery ownership
+  retained, serving blocked and the real retry closes the socket. First fixture shadow failure stays.
+- DONE/offline/native callbacks: pump RED5/77P6F -> GREEN5/83P0F; two real ready-callback
+  cases keep writes/results and agent-stream advancement while restoring caller seed/absence.
+  Automatic idle callbacks and deliberate RNGkind changes are outside this seed guard.
+- DONE/docs/style: 14 configured R/test lints0; roxygen8.1.1 has0 warnings and unchanged
+  metadata/NAMESPACE. Both changed guide pairs precompute with0 problems. Older7.3.3 selection,
+  two brace findings and the new test-name finding are retained, then corrected.
+- DONE/targeted Windows at e05: raw run38284961046 has25 checkpoint rows/122P0F/W plus
+  seven exact POSIX guards; all six mandatory cases and native denial/restoration16P execute.
+  Controller68/3431P, startup14/145P and55+3 lints pass; four exact children settle, no unknowns
+  or survivors. Original five-second limits and security test bodies are unchanged.
+- ONGOING: normal single-archive five-platform run38288459266 at exact production02ceac9;
+  restricted dependency profiles requested after five clean consumers. Prior c3 failure remains.
+- WAITING: final certified installation/site, remaining live provider/extensions/team/fan-out/
+  compaction/replay and native frontend/resource checks, independent full review and PR6 merge.
+  RStudio control still cannot distinguish the separate instance; no original-session input.
+
+Evidence: ignored primary `dev/.validation/readiness-20261011/root-current-02ceac9/ACTUAL.json`.
+Process-group RSS sampling does not certify detached descendant or true family peaks.
+Resource11:03: load8.79/11.93/11.21, CPU67.45% idle,126G used/1,041MiB unused,
+pressure76% free, swap20,368MiB/zero sampled paging, disk111GiB/no thermal warning.
+Heavy/GPU work stays held; preserve shared Ollama, original sessions and the dirty primary.
+Fresh plan checks are recorded separately; rerun after plan edits. Readiness and only-Windows-remaining stay false.
+
+## Previous follow-up — 2026-10-12 (through `ee5088a`)
 
 Startup identity fix committed/pushed: 14 controls, 145 passes, zero failures/errors/warnings/skips;
 all eight caller-state checks and three-file lint pass. Native Windows run38280873805 succeeded;
