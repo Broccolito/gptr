@@ -7,6 +7,23 @@ authorized live testing. Update a row after inspecting its evidence; retain fail
 older revision results. It does not replace the numbered implementation plans or authorize a
 release, model download, account change or CRAN submission.
 
+## Diagnostic execution tier — 2026-10-12
+
+| Case | Required execution and scope | State |
+|---|---|---|
+| DI01 exact private install | Install the original hosted `c3dad3d` archive into a fresh read-only private library; require real installer status0, loadability, all120 R records,14 guide pairs, five installed hashes and owned-process settlement. Emit a diagnostic installation record with release readiness false and dependency profiles blocked. The production R comparison applies only to nominated `a4c435c`; archive tests/docs retain c3 provenance. | WAITING; source peer review complete, root invocation/resource check required. |
+| DI02 history frontends | Using DI01's explicitly diagnostic installation record, execute all four R Markdown renderers, Quarto HTML and an actual fresh IRkernel bare-history MIME case serially. Independently verify bounded/inert display, full24-row preservation, counters, hashes and cleanup. Headless results do not establish GUI appearance or release readiness. | WAITING; prepared controllers and original failed evidence retained. |
+| DI03 functional discovery | Run the three key-free closure/storage/HTTP cases, then approved live file/network/extensions/worker and compaction cases within existing per-case deadlines and budgets. Bind each result to its diagnostic installation scope; preserve every failure and parent-session witness. | WAITING; GPU/high-memory cases remain held under resource limits. |
+| WS01 native startup | Dispatch the default-off Windows devel PowerShell ABBA diagnostic at full `a4c435c`, then audit raw startup timings, script-entry markers and owned cleanup. Retain the original five-second deadline and unchanged ACL security oracles; a startup diagnostic cannot clear the failing whole check. | WAITING; one hosted slot available, exact dispatch not yet performed. |
+| UX01 billing advisory | Test first, then deliberately reclassify only successful CLI billing-key removal as a typed informational notice using the existing regular-output path. Align existing message handlers and the active contract; retain filtering, explicit consent, once/quiet behavior and genuine warnings/errors. | ONGOING; inactive proposal under independent source review, no runtime change yet. |
+
+The c3 archive has independently audited Status OK release checks on Windows, macOS and
+Linux. Windows devel retains one pre-observed-script-boundary timeout; Linux devel remains
+ongoing. All-five acceptance, dependency profiles, final current archive, native UI, live
+provider matrix and merge remain open. The RStudio control tool still selects the original
+session, where no new R input was entered. Preserve that session and the shared Ollama model.
+Run four fresh serial cross-plan checks after this edit; record their actual outcome.
+
 ## Current readiness delta — 2026-10-12 09:01 PDT (through `0c82999`)
 
 Candidate `0c82999d8f2e1c390d2531d015e73d70ab721a0e` is committed and pushed.
