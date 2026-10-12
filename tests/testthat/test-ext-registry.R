@@ -461,3 +461,78 @@ test_that("filter validation rejects trailing line terminators", {
                  class = "gptr_error_invalid_argument")
   }
 })
+
+
+test_that("unregister callbacks discard package source while preserving user hooks", {
+  reg = local_registry()
+  user_env = new.env(parent = baseenv())
+  user_env$marker = "user hook data"
+  user = eval(parse(text = "function(event, ctx) marker", keep.source = TRUE), user_env)
+  user_attributes = attributes(user)
+  user_body = body(user)
+  spec = gptr_hook("turn_end", user)
+  id = registry_add(spec, "user", 3L)
+  # Parse the actual runtime factory with source retained, including an oversized srcfile.
+  # This exercises retained-source builds without changing options or the namespace.
+  factory = eval(parse(text = c(rep("# retained package source padding", 2048L),
+                               deparse(registry_unregister_fn)), keep.source = TRUE),
+                 environment(registry_unregister_fn))
+  expect_gt(length(serialize(attributes(factory), NULL, refhook = worker_refhook)), 32 * 1024)
+  off = factory(id)
+  source_free = function(value) {
+    if (any(names(attributes(value)) %in% c("srcref", "srcfile", "wholeSrcref"))) {
+      return(FALSE)
+    }
+    if (is.function(value)) {
+      return(source_free(formals(value)) && source_free(body(value)))
+    }
+    if (is.call(value) || is.pairlist(value) || is.expression(value) || is.list(value)) {
+      return(all(vapply(as.list(value), source_free, TRUE)))
+    }
+    TRUE
+  }
+  expect_true(source_free(off))
+  actual_size = length(serialize(off, NULL, refhook = worker_refhook))
+  clean_size = length(serialize(utils::removeSource(off), NULL, refhook = worker_refhook))
+  expect_identical(actual_size - clean_size, 0L)
+  expect_identical(environment(off)$id, id)
+  expect_identical(environment(off)$reg, reg)
+  expect_identical(parent.env(environment(off)), environment(registry_unregister_fn))
+  expect_identical(registry_all("hook")[[spec$name]]$handler, user)
+  expect_identical(attributes(user), user_attributes)
+  expect_identical(body(user), user_body)
+  expect_identical(environment(user), user_env)
+  expect_identical(user(NULL, NULL), "user hook data")
+  expect_true(off())
+  expect_length(registry_all("hook"), 0L)
+  expect_false(off())
+  expect_identical(attributes(user), user_attributes)
+  expect_identical(body(user), user_body)
+  expect_identical(environment(user), user_env)
+})
+
+test_that("source-free unregister callbacks keep worker references and permission guards", {
+  reg = local_registry()
+  user_env = new.env(parent = baseenv())
+  user_env$marker = "worker user data"
+  user = eval(parse(text = "function(event, ctx) marker", keep.source = TRUE), user_env)
+  user_attributes = attributes(user)
+  off = gptr_register(gptr_hook("turn_end", user))
+  payload = serialize(list(off = off, user = user), NULL, refhook = worker_refhook)
+  back = unserialize(payload, refhook = worker_refhook)
+  expect_identical(environment(back$off)$reg, emptyenv())
+  expect_false(back$off())
+  expect_length(registry_all("hook"), 1L)
+  expect_identical(back$user(NULL, NULL), "worker user data")
+  expect_s3_class(attr(back$user, "srcref"), "srcref")
+  expect_match(gptr_describe(back$user), "marker", fixed = TRUE, all = FALSE)
+  expect_identical(attributes(user), user_attributes)
+  expect_identical(environment(user), user_env)
+  reg$executing = c(c7 = "u1")
+  expect_error(off(), class = "gptr_error_permission")
+  expect_length(registry_all("hook"), 1L)
+  reg$executing = character()
+  expect_true(off())
+  expect_length(registry_all("hook"), 0L)
+  expect_false(off())
+})

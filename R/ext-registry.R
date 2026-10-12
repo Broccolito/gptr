@@ -506,11 +506,11 @@ ext_control_grant = function(run, what) {
 registry_unregister_fn = function(id) {
   force(id)
   reg = registry_env()
-  function() {
+  utils::removeSource(function() {
     ext_control_guard("gptr_register")
     if (!identical(registry_env(), reg)) return(invisible(FALSE))
     invisible(registry_remove(id))
-  }
+  })
 }
 
 #' Register a capability spec
