@@ -610,9 +610,11 @@ oauth_ask = function(what) {
 #' @return `gptr_login()` returns `TRUE` invisibly; `gptr_logout()` removes the stored
 #'   credential and forgets the access token held in memory, and returns `TRUE` invisibly when
 #'   it removed something, else `FALSE`.
-#' @examplesIf interactive()
-#' gptr_login("openrouter")
-#' gptr_logout("openrouter")
+#' @examples
+#' if (interactive()) {
+#'   gptr_login("openrouter")
+#'   gptr_logout("openrouter")
+#' }
 #' @export
 gptr_login = function(provider, method = c("auto", "oauth", "key")) {
   provider = check_string(provider, "provider")

@@ -19,7 +19,7 @@ test_that("cran_comments_problems() requires the consent design, precedents and 
             paste("'btw' 1.5.0, 'aisdk' 1.4.12, 'ellmer' 0.5.0, 'mcptools' 1.0.3; ?gptr_security;",
                   "SystemRequirements."),
             "## Examples, tests and vignettes",
-            paste("gptr_fake_provider(); No example uses `\\dontrun{}`; @examplesIf;",
+            paste("gptr_fake_provider(); No example uses `\\dontrun{}`; visible `if` guards;",
                   "gptr_login() gptr_mcp_serve()."),
             "## Test environments", "## R CMD check results", "## Reverse dependencies",
             paste0("`tools::package_dependencies(\"gptr\", reverse = TRUE, which = \"all\")`",

@@ -44,9 +44,10 @@ documented in the "Breaking changes" section of NEWS.md.
   `R CMD check` the package forces its replay mode, so an example can never call a model server,
   remote or local (only offline providers such as the scripted model answer).
 * No example uses `\dontrun{}` or `\donttest{}`. Code that needs a person at the console or a
-  local server is wrapped in `@examplesIf` with `interactive()` (and `rlang::is_installed()` for
-  suggested packages). The only pages whose examples are entirely conditional are `gptr_login()` /
-  `gptr_logout()`, which need a person to enter a key or complete an OAuth sign-in, and
+  local server is wrapped in visible `if` guards with `interactive()` (and
+  `rlang::is_installed()` for suggested packages). The only pages whose examples are entirely
+  conditional are `gptr_login()` / `gptr_logout()`, which need a person to enter a key or complete
+  an OAuth sign-in, and
   `gptr_mcp_serve()`, which starts a loopback HTTP server that examples must not leave running.
 * Tests use the scripted model and recorded wire fixtures; tests that start a local server (a
   mock provider, an MCP server or a Shiny app) or gptr worker processes are skipped on CRAN;

@@ -777,8 +777,8 @@ cran_comments_problems = function(lines) {
   text = paste(lines, collapse = "\n")
   phrases = c("0.7.0 -> 1.0.0", "get_response()", "dataframe_to_text()", "'btw' 1.5.0",
               "'aisdk' 1.4.12", "'ellmer' 0.5.0", "'mcptools' 1.0.3", "gptr_login()",
-              "gptr_mcp_serve()", "gptr_fake_provider()", "@examplesIf", "SystemRequirements",
-              "?gptr_security", "No example uses `\\dontrun{}`",
+              "gptr_mcp_serve()", "gptr_fake_provider()", "visible `if` guards",
+              "SystemRequirements", "?gptr_security", "No example uses `\\dontrun{}`",
               "tools::package_dependencies(\"gptr\", reverse = TRUE, which = \"all\")")
   hit = vapply(phrases, grepl, NA, x = text, fixed = TRUE)
   out = c(out, sprintf("cran-comments.md: must mention %s", phrases[!hit]))
