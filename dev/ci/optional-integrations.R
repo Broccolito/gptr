@@ -408,7 +408,7 @@ optional_result_rows = function(result) {
     list(test = test$test, passed = count("expectation_success"),
       failed = count(c("expectation_failure", "expectation_error")),
       warnings = count(c("expectation_warning", "warning")), skipped = count("expectation_skip"),
-      diagnostics = lapply(head(diagnostics, 25L), optional_condition_diagnostic),
+      diagnostics = lapply(utils::head(diagnostics, 25L), optional_condition_diagnostic),
       diagnostic_conditions_total = length(diagnostics),
       diagnostic_conditions_truncated = length(diagnostics) > 25L)
   })

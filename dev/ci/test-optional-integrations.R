@@ -2123,3 +2123,44 @@ testthat::test_that("private privilege diagnostics are mandatory pure coverage o
     testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
   }
 })
+
+
+testthat::test_that("raw result publication keeps diagnostics in a base-only support environment", {
+  scope = new.env(parent = baseenv())
+  original = environment(optional_result_rows)
+  for (name in c("optional_condition_diagnostic", "optional_result_rows")) {
+    value = get(name, envir = original, inherits = FALSE)
+    environment(value) = scope
+    scope[[name]] = value
+  }
+  testthat::expect_false(exists("head", envir = scope, inherits = TRUE))
+  testthat::expect_identical(environment(optional_result_rows), original)
+  empty = scope$optional_result_rows(list(list(test = "controlled empty", results = list())))[[1L]]
+  for (field in c("passed", "failed", "warnings", "skipped", "diagnostic_conditions_total")) {
+    testthat::expect_identical(empty[[field]], 0L)
+  }
+  testthat::expect_identical(empty$diagnostics, list())
+  testthat::expect_false(empty$diagnostic_conditions_truncated)
+  errors = list(
+    structure(list(message = "controlled original failure"),
+      class = c("expectation_failure", "condition")),
+    structure(list(message = "controlled original error"),
+      class = c("expectation_error", "fixture_publication_error", "error", "condition")))
+  diagnostics = c(errors, list(structure(list(message = "controlled original skip"),
+    class = c("expectation_skip", "condition"))),
+    rep(list(simpleWarning("controlled original warning")), 26L))
+  entries = c(list(structure(list(), class = "expectation_success")), diagnostics)
+  frozen = serialize(entries, NULL)
+  row = scope$optional_result_rows(list(list(test = "controlled bounded", results = entries)))[[1L]]
+  testthat::expect_identical(row$passed, 1L)
+  testthat::expect_identical(row$failed, 2L)
+  testthat::expect_identical(row$warnings, 26L)
+  testthat::expect_identical(row$skipped, 1L)
+  testthat::expect_identical(row$diagnostic_conditions_total, 29L)
+  testthat::expect_length(row$diagnostics, 25L)
+  testthat::expect_true(row$diagnostic_conditions_truncated)
+  testthat::expect_identical(row$diagnostics,
+    lapply(utils::head(diagnostics, 25L), optional_condition_diagnostic))
+  testthat::expect_identical(serialize(entries, NULL), frozen)
+  testthat::expect_error(optional_gate(list(row), "test-proc-writer-runtime.R", TRUE), "Failed")
+})
