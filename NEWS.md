@@ -81,6 +81,8 @@ scripts, loops and `if` statements, and the agent works on the objects already i
 
 ## Fixes
 
+* The gptr event pump preserves the caller's random seed while retaining callback results
+  and the advancement of agents' independent streams.
 * Failed MCP shutdown revokes access and retains the listener for an explicit stop retry.
   New serving requests are refused until shutdown is confirmed.
 * `.opts = list(record = FALSE)` suppresses console recording questions and recorded

@@ -152,6 +152,12 @@ and pauses its reactor callbacks until evaluation returns. A worker is a separat
 serializable context; it does not share the parent workspace. See
 [Teams and background work](teams-and-background.html).
 
+Each agent keeps its own random-number stream. When gptr services its event loop, it restores
+the caller's `.Random.seed` value or its absence. A `later` callback still runs and keeps its
+results and object changes; changes to that ambient seed are rolled back after the pump.
+The guard does not cover deliberate `RNGkind()` changes or callbacks dispatched automatically
+while R is idle.
+
 ## Find the right reference page
 
 The reference index groups every export by purpose:

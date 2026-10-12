@@ -196,7 +196,7 @@ reactor_run_remove = function(run) {
 #' @noRd
 later_run_now = function() {
   if (!isNamespaceLoaded("later")) return(invisible(FALSE))
-  tryCatch(later::run_now(0), error = function(e) {
+  tryCatch(with_seed_preserved(later::run_now(0)), error = function(e) {
     registry_diagnostic("reactor", "later", "error", conditionMessage(e))
   })
   invisible(TRUE)
