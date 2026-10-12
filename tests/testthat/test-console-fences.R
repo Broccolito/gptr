@@ -82,7 +82,9 @@ test_that("fenced code remains literal and unwrapped while following prose respe
   for (width in c(20L, 40L, 80L)) {
     for (colours in c(1L, 256L)) {
       out = fence_capture(text, colours, width)
-      first = if (colours == 1L) c("```r", code, "  ```") else {
+      first = if (colours == 1L) {
+        c("```r", code, "  ```")
+      } else {
         c("+- r", paste0("| ", code), "+-")
       }
       expect_identical(head(out, length(first)), first)
@@ -144,6 +146,7 @@ test_that("spinner clearing does not consume closing fences or box tool transiti
       kind = "text", delta = "## After"), ctx)
     console_on_message_end(fence_event("message_end", s,
       message = msg_assistant("ignored", api = "fake", provider = "fake", model = "fake-1")), ctx)
+    invisible(NULL)
   }))
   expect_identical(out, c("spinner-cleared", "+- r", "| value", "+-", "Heading",
     "  * r  1 + 1", "    -> + value", "After"))
@@ -166,6 +169,7 @@ test_that("a new text block does not inherit an earlier unfinished code fence", 
       kind = "text", delta = "## Next\n- item"), ctx)
     console_on_message_end(fence_event("message_end", s,
       message = msg_assistant("ignored", api = "fake", provider = "fake", model = "fake-1")), ctx)
+    invisible(NULL)
   }))
   expect_identical(out, c("+- r", "| old code", "Next", "- item"))
   expect_identical(length(fixture$fake$log$requests), 0L)

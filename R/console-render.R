@@ -100,6 +100,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   st$line_start = TRUE
   st$indent = 0L
   st$fence = FALSE
+  st$fence_n = 0L
   st$fence_lang = ""
   st$bold = FALSE
   st$code = FALSE
@@ -181,7 +182,8 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   fence_marker = function(line) {
     if (!st$fence) {
       st$fence = TRUE
-      st$fence_lang = trimws(substring(line, 4L))
+      st$fence_n = attr(regexpr("^`{3,}", line), "match.length")
+      st$fence_lang = trimws(substring(line, st$fence_n + 1L))
       emit(paste0(if (style) paste0(sgr("2"), sym$top, st$fence_lang, sgr("22")) else line, "\n"))
     } else {
       st$fence = FALSE
@@ -205,7 +207,10 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
         }
         line = substr(text, 1L, nl - 1L)
         text = substr(text, nl + 1L, nchar(text))
-        if (startsWith(line, "```")) {
+        opening = !st$fence && startsWith(line, "```")
+        closing = st$fence && grepl("^ {0,3}`{3,}[ \t]*$", line) &&
+          nchar(trimws(line)) >= st$fence_n
+        if (opening || closing) {
           fence_marker(line)
         } else if (style) {
           fence_line(line)
