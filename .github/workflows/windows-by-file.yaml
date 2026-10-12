@@ -22,6 +22,10 @@ on:
         description: Run the strict, provisioned optional-integration packet
         type: boolean
         default: false
+      nofollow_observer:
+        description: Enable bounded no-follow sampling; include proc-writer-runtime in the filter
+        type: boolean
+        default: false
       source_sha:
         description: Full lowercase commit SHA required by optional mode
         type: string
@@ -146,6 +150,7 @@ jobs:
           GITHUB_PAT: ''
           GITHUB_TOKEN: ''
           GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-owned
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
             --run Rscript --vanilla dev/ci/optional-integrations.R
