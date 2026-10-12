@@ -7,7 +7,52 @@ authorized live testing. Update a row after inspecting its evidence; retain fail
 older revision results. It does not replace the numbered implementation plans or authorize a
 release, model download, account change or CRAN submission.
 
-## Current readiness checkpoint — 2026-10-12 (prepared from `167082c`)
+## Current readiness checkpoint — 2026-10-12 08:26 PDT
+
+Candidate `c3dad3da9154165d3e71ef55965dfa2d77bcd543` is committed and pushed.
+Preserve the dirty primary checkout, original R sessions and shared Ollama model.
+Only executed evidence below is complete; archive and frontend gates remain open.
+
+- DONE/O: `29e07ed` fixes the two Linux sidecar fixtures without changing production
+  path matching or security oracles. Exact baseline fails twice; amended cases pass37,
+  full file passes669 with0F/E/W/S, configured lint0. Retain the first lint process's
+  512MiB-cap termination and unloaded-helper findings separately.
+- DONE/O: `89d23d2` replaces the timed-out Naur announcement with the primary ALGOL60
+  report in both guide sources. Actual precompute checks one guide/zero problems.
+  `c9bdf26` qualifies the restricted-scope publisher's `utils::head`; baseline error
+  retained, amended66 cases/3,296 passes/0F/E/W/S and two configured lints0.
+- DONE/O: `c3dad3d` registers17 Python and five R controller controls. Actual controls
+  pass; final R lint0, YAML has three jobs. Preserve original ownership/publication
+  failures and three lint findings. Actual evidence manifest `e4c9c653`; native
+  restricted-dependency checks and public CRAN reverse-dependency inventory are pending.
+- FAILED/F: original archive38255722226 source575 now has all five consumers audited:
+  125,995 passes/18 failures/0 warnings/2,300 guards, each1ERROR; NOTEs remain. Fixes
+  `028c389`, `167082c`, `457c707`, `29e07ed`, `89d23d2` require a fresh whole check.
+- ONGOING: exact archive38269972934 nominates full `c3dad3d`, builds once and checks the
+  same bytes on five contexts, then two serial dependency profiles/inventory. Maximum
+  two hosted consumers; producer success alone is insufficient for adoption.
+- FAILED/F: Windows38267442559 sourcec9 reaches the compiler and all26 token records.
+  Main72 rows have1,216P/3F; protocol7/136P; native1/28P/3F, all0 raw E/W/S. All eight
+  outer cleanup witnesses and nine native families settle. A1/B/A2 is permit/deny/permit
+  with exact restoration of three privileges, but original PROBE2 still fails. Bare
+  `tail()` in the private decoder and an unidentified stage=files observation error
+  need separately reviewed corrections/diagnostics; no security or resource waiver.
+- DONE/source-preview: native per-tab Chrome media-query dark/light transitions keep
+  Auto selected and apply the appropriate background without reload. Restore no
+  emulation and original Light, then close the owned tab. Evidence `ac2d8758`, source
+ 1356296; extension-decorated favicon URLs are not exact asset evidence.
+- WAIT: corrected certified archive installation, current examples/site/frontends,
+  live providers/extensions/team/fan-out/compaction/fresh replay, and native GUI tests.
+  RStudio control selects original port27070; alternate application times out, original
+  objects remain intact and no R input was sent. PowerShell startup route is under review.
+  Final review/merge/sync and every non-Windows-desktop gate remain required; no release.
+
+Resource08:24: load8.53/9.47/10.12, CPU19.45% idle,119G used/8,175MiB unused,
+pressure74% free, swap20,408MiB with zero sampled paging, disk127GiB/no thermal warning.
+Keep local heavy/GPU work held; run small isolated jobs serially. Detailed raw packets
+remain in the ignored primary `dev/.validation/readiness-20261011/` directory.
+
+## Historical readiness checkpoint — 2026-10-12 (prepared from `167082c`)
 
 Candidate `167082ce93fade1ae4f22e3e3343cfd510e7ab6f` includes the three corrections
 below and is pushed to origin/codex/skipped-platform-tests. Archive/resource statuses are
