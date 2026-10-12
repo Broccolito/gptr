@@ -2,6 +2,36 @@
 # readRenviron(), which turns `export D=4` into a variable named "export D"). This is the only
 # file in R/ that may call Sys.setenv() (test-lint-rules.R). House style: "=" and "|>" (S-9).
 
+#' Restore only Python's setup keys, leaving an untouched empty Windows value alone
+#' @noRd
+env_restore_python = function(before, keys, windows) {
+  key = if (windows) toupper else identity
+  read = function() {
+    values = Sys.getenv()
+    values[key(names(values)) %in% keys]
+  }
+  current = read()
+  if (anyDuplicated(key(names(current)))) return(FALSE)
+  changed = names(before)[vapply(names(before), function(name) {
+    !name %in% names(current) || !identical(current[[name]], before[[name]])
+  }, TRUE)]
+  blocked = if (windows) changed[before[changed] == ""] else character()
+  added = setdiff(names(current), names(before))
+  added = added[!key(added) %in% key(blocked)]
+  attempt = function(expr) {
+    isTRUE(tryCatch(force(expr), error = function(error) FALSE,
+                   interrupt = function(interrupt) FALSE))
+  }
+  ok = TRUE
+  for (name in added) {
+    ok = attempt(Sys.unsetenv(name)) && ok
+  }
+  for (name in setdiff(changed, blocked)) {
+    ok = attempt(do.call(Sys.setenv, stats::setNames(list(before[[name]]), name))) && ok
+  }
+  !length(blocked) && ok && identical(read(), before)
+}
+
 #' The built-in alias table: canonical name -> aliases (REQ-13)
 #' @noRd
 alias_builtin = function() {

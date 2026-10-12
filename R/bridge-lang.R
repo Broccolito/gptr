@@ -243,21 +243,55 @@ bridge_py_source = c(
 #' (its discovery ends in a uv-managed download; G5 item 21)
 #' @noRd
 bridge_py_main = function() {
-  if (!requireNamespace("reticulate", quietly = TRUE)) {
-    gptr_abort("peter$py() needs the 'reticulate' package.", "missing_package",
-               package = "reticulate", feature = "peter$py()")
+  keys = c("PATH", "VIRTUAL_ENV", "R_SESSION_INITIALIZED", "LD_LIBRARY_PATH",
+           "PYTHONPATH", "PYTHONIOENCODING")
+  windows = is_windows()
+  key = if (windows) toupper else identity
+  before = Sys.getenv()
+  before = before[key(names(before)) %in% keys]
+  if (anyDuplicated(key(names(before)))) {
+    gptr_abort("Python setup cannot preserve ambiguous environment names.", "not_available",
+               member = "py", provided_by = "reticulate")
   }
-  vars = c("RETICULATE_PYTHON", "RETICULATE_PYTHON_ENV", "VIRTUAL_ENV")
-  if (!reticulate::py_available(initialize = FALSE) && !any(nzchar(Sys.getenv(vars)))) {
-    gptr_abort(c("Python is not configured for peter$py().",
-                 paste("Set RETICULATE_PYTHON (or RETICULATE_PYTHON_ENV), activate a virtual",
-                       "environment, or initialise Python yourself (reticulate::py_config());",
-                       "gptr never lets reticulate download a managed Python.")),
-               "not_available", member = "py", provided_by = "reticulate")
+  restore = function() {
+    isTRUE(tryCatch(env_restore_python(before, keys, windows), error = function(error) FALSE,
+                   interrupt = function(interrupt) FALSE))
   }
-  main = reticulate::import_main(convert = FALSE)
-  if (!reticulate::py_has_attr(main, "_gptr_run")) {
-    reticulate::py_run_string(paste(bridge_py_source, collapse = "\n"), convert = FALSE)
+  failed = function(condition) {
+    if (!restore()) {
+      tryCatch(gptr_warn("Python setup failed and its environment could not be restored.",
+                         "state_restore", member = "py", env_restored = FALSE),
+               error = function(error) NULL, interrupt = function(interrupt) NULL)
+    }
+    stop(condition)
+  }
+  main = tryCatch({
+    if (!requireNamespace("reticulate", quietly = TRUE)) {
+      gptr_abort("peter$py() needs the 'reticulate' package.", "missing_package",
+                 package = "reticulate", feature = "peter$py()")
+    }
+    initialized = reticulate::py_available(initialize = FALSE)
+    if (!initialized && windows && any(before == "")) {
+      gptr_abort("Python setup cannot restore existing empty Windows environment values.",
+                 "not_available", member = "py", provided_by = "reticulate")
+    }
+    vars = c("RETICULATE_PYTHON", "RETICULATE_PYTHON_ENV", "VIRTUAL_ENV")
+    if (!initialized && !any(nzchar(Sys.getenv(vars)))) {
+      gptr_abort(c("Python is not configured for peter$py().",
+                   paste("Set RETICULATE_PYTHON (or RETICULATE_PYTHON_ENV), activate a virtual",
+                         "environment, or initialise Python yourself (reticulate::py_config());",
+                         "gptr never lets reticulate download a managed Python.")),
+                 "not_available", member = "py", provided_by = "reticulate")
+    }
+    main = reticulate::import_main(convert = FALSE)
+    if (!reticulate::py_has_attr(main, "_gptr_run")) {
+      reticulate::py_run_string(paste(bridge_py_source, collapse = "\n"), convert = FALSE)
+    }
+    main
+  }, error = failed, interrupt = failed)
+  if (!restore()) {
+    gptr_abort("Python setup could not restore its environment.", "not_available",
+               member = "py", provided_by = "reticulate", env_restored = FALSE)
   }
   main
 }
