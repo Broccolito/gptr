@@ -117,15 +117,17 @@ test_that("a delayed aborted checkpoint is charged without a late reply or histo
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
-  x = compaction_fixture(list(fake_text("late summary", delay = 1)))
+  x = compaction_fixture(function(request) {
+    reactor_timer(at = reactor_now() + 0.05, fn = function() {
+      seen$task = console_record(list(run = run$id))$task
+      run_abort(run, "user")
+    })
+    fake_text("late summary", delay = 1)
+  })
   local_service("compact.should", function(s, tokens, idle) TRUE)
   seen = compaction_events(c("before_request", "usage", "session_compact", "agent_end"))
   before = session_data(x$s)$entries
   run = run_start(x$s, msg_user("Continue."))
-  reactor_timer(at = reactor_now() + 0.05, fn = function() {
-    seen$task = console_record(list(run = run$id))$task
-    run_abort(run, "user")
-  })
   output = utils::capture.output(run_wait(list(run), timeout = 5))
   expect_true(any(grepl("thinking", output, fixed = TRUE)))
   expect_true(rlang::is_string(seen$task))
