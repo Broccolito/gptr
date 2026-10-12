@@ -1,3 +1,24 @@
+## Active follow-up — 2026-10-12 (through `ee5088a`)
+
+Startup identity fix committed/pushed: 14 controls, 145 passes, zero failures/errors/warnings/skips;
+all eight caller-state checks and three-file lint pass. Native Windows run38280873805 succeeded;
+raw artifact audit and the original unchanged full ACL file still need review/rerun.
+
+Diagnostic c3 closure, eleven-stage `.gptr` storage and loopback HTTP all pass: zero model
+requests/warnings, hashes unchanged, cleanup/restoration true. Storage6.184s/436.469MiB/6 samples;
+HTTP4.978s/196.328MiB/4 samples. Remaining live/matrix/compaction and GUI checks are open.
+
+Billing notice controls and five-file lint pass. Seven affected files preserve all eight
+caller-state checks (88 cases/648 assertions). Codex41/450 assertions pass, but cold testing
+adds GIT_ASKPASS/SSH_ASKPASS and an RNG seed. Both state changes remain under investigation;
+interrupted512MiB runs and fixture failures are retained. Fake CLI files use a nominated1GiB
+sampled-family guard one at a time; all observed groups settle. No final current archive yet.
+
+The RStudio tool still selects original port27070 despite two running app instances; no new
+R input was sent. Preserve both sessions and shared Ollama. Original ACL timeout, all-five
+archive/dependency gates and draft PR6 readiness remain open. Plan consistency checks are
+recorded separately in the current validation evidence.
+
 # Living testing plan
 
 Updated 2026-10-12 with current source regressions, native evidence and explicit storage, extension,
@@ -7,22 +28,55 @@ authorized live testing. Update a row after inspecting its evidence; retain fail
 older revision results. It does not replace the numbered implementation plans or authorize a
 release, model download, account change or CRAN submission.
 
+## Current diagnostic checkpoint — 2026-10-12 (prepared from `bae88bf`)
+
+Prepared from docs `bae88bf719eea6eb1258c873759a7f4de35d092f`; reviewed billing is uncommitted.
+The following proof applies only to its diagnostic source; final current-source archive WAITING.
+
+- DI01 DONE/diagnostic: install 13.996 s / controller 16.216 s; sampled family RSS
+  426.047 MiB / 16 samples / 0 sampling errors. All 120 R records, 14 guide pairs and five
+  read-only installed hashes pass. release_ready=false/profiles blocked; R map matches a4 only.
+- DI02 DONE/diagnostic: four Rmd renderers, Quarto and fresh actual IRkernel pass: 0 warnings,
+  requests, fresh usage/native-row growth; all 11 restore flags/hashes, full 24/latest eight,
+  inert text/HTML/Markdown, no LaTeX and holder removal. Retain first private-base `tail()`
+  failure and source-cleared isolated `utils::tail` fix `f729`. IRkernel: 2.041677 s /
+  173.344 MiB / 3 samples; Quarto: 2.13175 s / 458.281 MiB / 3 samples; 0 sampling errors.
+  Rmd: 0.56–0.80 s / one pre-fork sample each; true memory peak is unproved. GUI stays WAITING.
+- DI03 ONGOING: closure PASS 2.771 s / 184.734 MiB / 3 samples, 0 warnings/exact restoration;
+  storage, HTTP, live extensions/team and compaction WAITING.
+- UX01 DONE/offline: RED 4 cases / 34 passes / 21 failures; GREEN 4 / 55 / 0. Both have
+  0 errors/test warnings/skips/all eight state flags TRUE. Genuine warnings 1 + 1 remain,
+  outside unknown warnings 0; only removal is informational. Filtering intact; affected/lint ONGOING.
+- WS01 FAILED/controller: a4 run38276750681 has four ABBA DONE/status0/stderr0 attempts
+  (0.29–0.33 s), parent five/attempt settlement TRUE. Four unknown observations result from
+  numeric time passed to POSIXct-only `ps_handle`, not four proven survivors. Identity fix
+  adoption/native replay/full ACL rerun WAITING; original 5 s limit remains unchanged.
+- ARCHIVE FAILED: c3 run38269972934 has 126,006 passes / 1 failure / 0 warnings / 2,308 guards,
+  four Status OK and one Windows-devel ERROR; dependency profiles SKIPPED/blocked.
+- WAIT: final archive/dependencies, remaining live/native/GUI proof and independent review.
+  Draft PR6 is open/not ready; merge waits. Original RStudio port27070 received no new input;
+  allocator origin unproved. Preserve original sessions, dirty primary and shared Ollama.
+
+Resource09:38: load11.97/12.95/17.16, CPU46.78% idle,118G used/9,676MiB unused, pressure75%
+free, swap20,392MiB/zero sampled paging, disk119GiB/no thermal warning. Heavy/GPU work held.
+Root must run four fresh serial plan checks after this delta; none ran in the author lane.
+
 ## Diagnostic execution tier — 2026-10-12
 
 | Case | Required execution and scope | State |
 |---|---|---|
-| DI01 exact private install | Install the original hosted `c3dad3d` archive into a fresh read-only private library; require real installer status0, loadability, all120 R records,14 guide pairs, five installed hashes and owned-process settlement. Emit a diagnostic installation record with release readiness false and dependency profiles blocked. The production R comparison applies only to nominated `a4c435c`; archive tests/docs retain c3 provenance. | WAITING; source peer review complete, root invocation/resource check required. |
-| DI02 history frontends | Using DI01's explicitly diagnostic installation record, execute all four R Markdown renderers, Quarto HTML and an actual fresh IRkernel bare-history MIME case serially. Independently verify bounded/inert display, full24-row preservation, counters, hashes and cleanup. Headless results do not establish GUI appearance or release readiness. | WAITING; prepared controllers and original failed evidence retained. |
-| DI03 functional discovery | Run the three key-free closure/storage/HTTP cases, then approved live file/network/extensions/worker and compaction cases within existing per-case deadlines and budgets. Bind each result to its diagnostic installation scope; preserve every failure and parent-session witness. | WAITING; GPU/high-memory cases remain held under resource limits. |
-| WS01 native startup | Dispatch the default-off Windows devel PowerShell ABBA diagnostic at full `a4c435c`, then audit raw startup timings, script-entry markers and owned cleanup. Retain the original five-second deadline and unchanged ACL security oracles; a startup diagnostic cannot clear the failing whole check. | WAITING; one hosted slot available, exact dispatch not yet performed. |
-| UX01 billing advisory | Test first, then deliberately reclassify only successful CLI billing-key removal as a typed informational notice using the existing regular-output path. Align existing message handlers and the active contract; retain filtering, explicit consent, once/quiet behavior and genuine warnings/errors. | ONGOING; inactive proposal under independent source review, no runtime change yet. |
+| DI01 exact private install | Install the original hosted `c3dad3d` archive into a fresh read-only private library; require real installer status0, loadability, all120 R records,14 guide pairs, five installed hashes and owned-process settlement. Emit a diagnostic installation record with release readiness false and dependency profiles blocked. The production R comparison applies only to nominated `a4c435c`; archive tests/docs retain c3 provenance. | DONE/diagnostic: actual install13.996 s/controller16.216 s; all120 R records/14 guide pairs/five installed hashes verified read-only. release_ready=false, profiles blocked; R comparison is nominated a4 only. Final current-source archive WAITING. |
+| DI02 history frontends | Using DI01's explicitly diagnostic installation record, execute all four R Markdown renderers, Quarto HTML and an actual fresh IRkernel bare-history MIME case serially. Independently verify bounded/inert display, full24-row preservation, counters, hashes and cleanup. Headless results do not establish GUI appearance or release readiness. | DONE/diagnostic: all six cases pass with0 warnings/requests/usage or native growth, all11 restore flags/hashes and full24/latest8/inert3 MIME proofs. First Jupyter tail failure retained; fresh IRkernel passes after isolated fixture qualification. GUI/release acceptance WAITING; Rmd true peak unproved. |
+| DI03 functional discovery | Run the three key-free closure/storage/HTTP cases, then approved live file/network/extensions/worker and compaction cases within existing per-case deadlines and budgets. Bind each result to its diagnostic installation scope; preserve every failure and parent-session witness. | ONGOING: closure PASS2.771 s/184.734 MiB/3 samples,0 warnings and exact restoration. Storage/HTTP also PASS; all three key-free cases complete diagnostically. Live extensions/team/compaction WAITING. |
+| WS01 native startup | Dispatch the default-off Windows devel PowerShell ABBA diagnostic at full `a4c435c`, then audit raw startup timings, script-entry markers and owned cleanup. Retain the original five-second deadline and unchanged ACL security oracles; a startup diagnostic cannot clear the failing whole check. | FAILED/controller: actual four ABBA attempts DONE/status0/stderr0,0.29–0.33 s and parent5/attempt settlement TRUE. Four unknown numeric-time identity observations are not four proven survivors. Reviewed identity correction/native and full ACL replay WAITING;5 s unchanged. |
+| UX01 billing advisory | Test first, then deliberately reclassify only successful CLI billing-key removal as a typed informational notice using the existing regular-output path. Align existing message handlers and the active contract; retain filtering, explicit consent, once/quiet behavior and genuine warnings/errors. | DONE/offline: meaningful RED4/34P21F and GREEN4/55P0F, both0E/testW/S/all8 state TRUE. Genuine warnings1+1 retained/outside unknown0. Runtime classification applied uncommitted; affected suites/lint ONGOING. |
 
-The c3 archive has independently audited Status OK release checks on Windows, macOS and
-Linux. Windows devel retains one pre-observed-script-boundary timeout; Linux devel remains
-ongoing. All-five acceptance, dependency profiles, final current archive, native UI, live
-provider matrix and merge remain open. The RStudio control tool still selects the original
-session, where no new R input was entered. Preserve that session and the shared Ollama model.
-Run four fresh serial cross-plan checks after this edit; record their actual outcome.
+The c3 archive has all five raw checks: four Status OK and one Windows-devel ERROR;
+dependency profiles are skipped/blocked. DI01–03 prove only the stated diagnostic archive,
+not the later billing production change. All-five acceptance, final current archive, native
+UI, remaining live matrix and merge stay open. Older checkpoints below remain historical.
+The RStudio tool still selects original port27070; no new input was sent. Preserve the
+original session and shared Ollama. Run four fresh serial plan checks after this edit.
 
 ## Current readiness delta — 2026-10-12 09:01 PDT (through `0c82999`)
 

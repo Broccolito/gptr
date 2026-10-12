@@ -1,8 +1,62 @@
+## Active follow-up — 2026-10-12 (through `ee5088a`)
+
+Startup identity fix committed/pushed: 14 controls, 145 passes, zero failures/errors/warnings/skips;
+all eight caller-state checks and three-file lint pass. Native Windows run38280873805 succeeded;
+raw artifact audit and the original unchanged full ACL file still need review/rerun.
+
+Diagnostic c3 closure, eleven-stage `.gptr` storage and loopback HTTP all pass: zero model
+requests/warnings, hashes unchanged, cleanup/restoration true. Storage6.184s/436.469MiB/6 samples;
+HTTP4.978s/196.328MiB/4 samples. Remaining live/matrix/compaction and GUI checks are open.
+
+Billing notice controls and five-file lint pass. Seven affected files preserve all eight
+caller-state checks (88 cases/648 assertions). Codex41/450 assertions pass, but cold testing
+adds GIT_ASKPASS/SSH_ASKPASS and an RNG seed. Both state changes remain under investigation;
+interrupted512MiB runs and fixture failures are retained. Fake CLI files use a nominated1GiB
+sampled-family guard one at a time; all observed groups settle. No final current archive yet.
+
+The RStudio tool still selects original port27070 despite two running app instances; no new
+R input was sent. Preserve both sessions and shared Ollama. Original ACL timeout, all-five
+archive/dependency gates and draft PR6 readiness remain open. Plan consistency checks are
+recorded separately in the current validation evidence.
+
 # GPTR 1.0 implementation progress
 
 Implementation authorized by the maintainer on 2026-10-03. Current state, running lanes and next
 steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and tooling:
 `progress/infra.md`; fixes: `progress/fixes.md`; simplicity packages: `progress/simplicity.md`.
+
+## Current diagnostic checkpoint — 2026-10-12 (prepared from `bae88bf`)
+
+Prepared from docs `bae88bf719eea6eb1258c873759a7f4de35d092f`; reviewed billing is uncommitted.
+The following proof applies only to its diagnostic source; final current-source archive WAITING.
+
+- DI01 DONE/diagnostic: install 13.996 s / controller 16.216 s; sampled family RSS
+  426.047 MiB / 16 samples / 0 sampling errors. All 120 R records, 14 guide pairs and five
+  read-only installed hashes pass. release_ready=false/profiles blocked; R map matches a4 only.
+- DI02 DONE/diagnostic: four Rmd renderers, Quarto and fresh actual IRkernel pass: 0 warnings,
+  requests, fresh usage/native-row growth; all 11 restore flags/hashes, full 24/latest eight,
+  inert text/HTML/Markdown, no LaTeX and holder removal. Retain first private-base `tail()`
+  failure and source-cleared isolated `utils::tail` fix `f729`. IRkernel: 2.041677 s /
+  173.344 MiB / 3 samples; Quarto: 2.13175 s / 458.281 MiB / 3 samples; 0 sampling errors.
+  Rmd: 0.56–0.80 s / one pre-fork sample each; true memory peak is unproved. GUI stays WAITING.
+- DI03 ONGOING: closure PASS 2.771 s / 184.734 MiB / 3 samples, 0 warnings/exact restoration;
+  storage, HTTP, live extensions/team and compaction WAITING.
+- UX01 DONE/offline: RED 4 cases / 34 passes / 21 failures; GREEN 4 / 55 / 0. Both have
+  0 errors/test warnings/skips/all eight state flags TRUE. Genuine warnings 1 + 1 remain,
+  outside unknown warnings 0; only removal is informational. Filtering intact; affected/lint ONGOING.
+- WS01 FAILED/controller: a4 run38276750681 has four ABBA DONE/status0/stderr0 attempts
+  (0.29–0.33 s), parent five/attempt settlement TRUE. Four unknown observations result from
+  numeric time passed to POSIXct-only `ps_handle`, not four proven survivors. Identity fix
+  adoption/native replay/full ACL rerun WAITING; original 5 s limit remains unchanged.
+- ARCHIVE FAILED: c3 run38269972934 has 126,006 passes / 1 failure / 0 warnings / 2,308 guards,
+  four Status OK and one Windows-devel ERROR; dependency profiles SKIPPED/blocked.
+- WAIT: final archive/dependencies, remaining live/native/GUI proof and independent review.
+  Draft PR6 is open/not ready; merge waits. Original RStudio port27070 received no new input;
+  allocator origin unproved. Preserve original sessions, dirty primary and shared Ollama.
+
+Resource09:38: load11.97/12.95/17.16, CPU46.78% idle,118G used/9,676MiB unused, pressure75%
+free, swap20,392MiB/zero sampled paging, disk119GiB/no thermal warning. Heavy/GPU work held.
+Root must run four fresh serial plan checks after this delta; none ran in the author lane.
 
 ## Current readiness delta — 2026-10-12 09:01 PDT (through `0c82999`)
 
