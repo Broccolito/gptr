@@ -253,7 +253,9 @@ optional_original_os_guards = list(
     "files over the capture cap and symbolic links are not restorable",
     "undo restores mode bits; old rows, later edits and missing copies are not written",
     "a file that cannot be written or read is an item and the undo goes on",
-    "files that cannot be read are listed, never captured and stop nothing else"),
+    "files that cannot be read are listed, never captured and stop nothing else",
+    "checkpoint payloads are private before gzip or raw-copy writes",
+    "a checkpoint permission failure publishes no blob or private payload"),
   "test-tool-edit.R" = c(
     "Delete File refuses a directory, an empty Add File is empty, a move removes its name",
     "Delete File and a move remove only the file they name, whatever its characters",

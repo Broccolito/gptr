@@ -514,7 +514,9 @@ original_os_guards = list(
     "files over the capture cap and symbolic links are not restorable",
     "undo restores mode bits; old rows, later edits and missing copies are not written",
     "a file that cannot be written or read is an item and the undo goes on",
-    "files that cannot be read are listed, never captured and stop nothing else"),
+    "files that cannot be read are listed, never captured and stop nothing else",
+    "checkpoint payloads are private before gzip or raw-copy writes",
+    "a checkpoint permission failure publishes no blob or private payload"),
   "test-tool-edit.R" = c(
     "Delete File refuses a directory, an empty Add File is empty, a move removes its name",
     "Delete File and a move remove only the file they name, whatever its characters",
@@ -603,7 +605,7 @@ testthat::test_that("split filesystem cases require real assertions without late
     "test-tool-edit.R" = c(
       "two operations on one file through a directory link are refused",
       "patch additions respect the observed case-folding of the filesystem"))
-  testthat::expect_length(unlist(optional_original_os_guards), 20L)
+  testthat::expect_length(unlist(optional_original_os_guards), 22L)
   for (file in names(variants)) for (name in variants[[file]]) {
     testthat::expect_true(name %in% optional_titles[[file]])
     for (windows in c(FALSE, TRUE)) {
@@ -2219,3 +2221,38 @@ testthat::test_that("fixed observer diagnostics remain mandatory in the strict s
     testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
   }
 })
+
+testthat::test_that(
+  "checkpoint POSIX guards preserve all native and unknown-skip gates", {
+    file = "test-ckpt-files.R"
+    guards = c("checkpoint payloads are private before gzip or raw-copy writes",
+      "a checkpoint permission failure publishes no blob or private payload")
+    mandatory = original_regression_titles[[file]]
+    testthat::expect_length(mandatory, 6L)
+    testthat::expect_identical(optional_titles[[file]], mandatory)
+    for (name in guards) {
+      testthat::expect_true(optional_allowed_skip(file, name, TRUE))
+      testthat::expect_false(optional_allowed_skip(file, name, FALSE))
+      testthat::expect_false(optional_allowed_skip("test-windows-security.R", name, TRUE))
+    }
+    rows = c(lapply(mandatory, record), lapply(guards, function(name) {
+      record(name, passed = 0L, skipped = 1L)
+    }))
+    result = optional_gate(rows, file, TRUE)
+    testthat::expect_true(result$passed)
+    testthat::expect_identical(result$mandatory_cases, mandatory)
+    testthat::expect_identical(result$platform_guard_cases, guards)
+    testthat::expect_false(result$platform_guard_only)
+    testthat::expect_error(optional_gate(rows, file, FALSE), "Skipped")
+    for (windows in c(FALSE, TRUE)) {
+      for (index in seq_along(mandatory)) {
+        changed = lapply(mandatory, record)
+        changed[[index]]$skipped = 1L
+        testthat::expect_false(optional_allowed_skip(file, mandatory[[index]], windows))
+        testthat::expect_error(optional_gate(changed, file, windows), "Skipped")
+      }
+      unknown = c(lapply(mandatory, record),
+        list(record("unknown checkpoint guard", passed = 3L, skipped = 1L)))
+      testthat::expect_error(optional_gate(unknown, file, windows), "Skipped")
+    }
+  })
