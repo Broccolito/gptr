@@ -1,38 +1,33 @@
-## Current readiness handoff — 2026-10-12
+## Current readiness handoff — 2026-10-12 03:05 PDT
 
-Continue in /Users/wgu/.codex/worktrees/skipped-platform-tests/gptr,
-codex/skipped-platform-tests, pushed8fe5844. Preserve primary main718e81e/dirty files,
-secrets, all existing user R sessions and shared Ollama. Only actual Windows desktop live
-verification may remain at completion; no CRAN submission, tag or full-readiness claim.
+Continue isolated /Users/wgu/.codex/worktrees/skipped-platform-tests/gptr,
+codex/skipped-platform-tests, pushed d6a32d3. Preserve primary main718e81e/dirty files,
+secrets, existing user R sessions and shared Ollama. Only actual Windows desktop live
+verification may remain at completion; no CRAN submission, tag or readiness claim.
 
-Committed source fixes: Python3fec74748P; fences4cddcaa163P; observer8eea5eb144P;
-native launch display67afba1 40P; focused0F/0W/0S. Callr retirementea18992 applied after
-pre-retirement all-three-OS207-case source/installed acceptance. Changed-source affected
-921P/0F/0W/one CI-only guard,55-path lint0. Fresh help/docs/files/58examples0problems.
-Plan38227464940 GREEN: four stages,770Rblocks,0parse/style/lint,39unchanged hashes.
+Fixed optional CI Rscript controllerf3299e5 passes3184 assertions. Exact run38231403037
+Windows/Linux Phase A is GREEN: eight mandatory cases145/144P,0F/W/S, actual10 Python
+controls per host and all four settled owned cleanup witnesses. Prior callr preflight RED
+is retained. Phase B sampler-only2helper commitd6a32d3/lint0 is adopted; explicit CI flag
+and native9security/47writer acceptance remain pending. No stale observer tree was copied.
 
-Observer Linux38228279525 GREEN at8fe5844: eight cases144P/0F/0W/0S,5.924s and0outer
-warnings/new usage. Windows38227809133 failed BEFORE CASES in the CI callr bootstrap:
-tools:callr search entry absent.0warnings/owned cleanup settled. Architecture lane prepares
-fixed Rscript/processx CI transport; repeat both hosts before no-follow sampler/security.
+Native Python six fixtures/CIbfd2341 adds213source/installed cases and18lint paths, all
+lint0; three-OS execution pending. CP07 tests-first8c3e0ec actual26F/53P; current four-file
+runtime is UNCOMMITTED with attempt10F/120P/0W/0S, only floating JSON roundtrip drift.
+Client owns exact private-number codec; pr5 reviews. Preserve original failed logs and
+exact assertions; run affected pricing/budget/store/run/compaction/team/API suites afterward.
 
-Client lane owns newly required CP07 durable child-agent attribution and root descendant
-charge restoration. Repo-evolution lane corrects false embedded base-prefix assertions and
-whole-case warning accounting in the prepared native Python packet; pr5 reviews both.
-GUI attach manifest6b3124cf source-clear with actual12pure controls GREEN. No native GUI
-probe yet: the control service selected the original user session, then timed out selecting
-Dock. Existing user R is untouched. A fresh prelaunch census is required for owned GUI tests.
+Fresh f3299e5 four plan logs GREEN770Rblocks/0parse/style/lints/unchanged manifests;
+separate6c0856a38229960541 also GREEN. Existing help/docs/files/58examples clean but latest
+all14/site/browser/original-archive/manual/CRAN/dependency/revdep acceptance is pending.
+Prepared certified frontend/extensions/functional/compaction/artifact controllers need
+actual execution. Concrete reviewed PR/authorized merge/final installed verification remain.
 
-Prepared certified frontend, extension, functional, compaction and hosted-original-archive
-controllers remain unexecuted. Need current native three-OS matrix, strict Windows security,
-help/all14/site/URLs, normal-release original producer/five consumers/manual/CRAN/dependency/
-revdep gates, sealed Mac adoption and certified live frontend/model/workflow/resource checks.
-Concrete reviewed integration PR/authorized merge/final installed verification still remain.
-
-At02:19 disk183GiB is below200GiB admission,20GiBunused,load13.63/10.76/11.81,
-48.32%idle,swap21397.94MiB/0sampled paging,no thermal warning. Keep local work small/serial
-and bounded hosted work; no shared-model stop or foreign cleanup. This plan edit triggers
-four fresh hosted checks. Preserve every failed raw artifact and source identity.
+Computer control still selects original RStudio despite foreground request. No R entered
+there; separate app selector timed out. Need selectable fresh verified owned GUI family;
+no blind PID/window selection, allocator changes or user-session restart. UX07/08 native proof
+pending. At02:47 disk179GiB/19GiBunused/static swap21221.88MiB keeps heavy work held; use small
+serial source and at most2hosted jobs. This plan edit triggers four fresh hosted checks.
 
 ## Current readiness handoff — 2026-10-11 23:50 PDT
 

@@ -17,12 +17,13 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
 
 ## Resume log
 
-- 2026-10-12: committed Rscript/processx dependency retirement after three-OS native acceptance;
-  current921affected assertions and55lint paths pass. Help/docs/files/58examples clean.
-  Plan38227464940 passes all four checks; Linux observer38228279525 passes144assertions.
-  Windows38227809133 fails CI bootstrap before cases, with successful cleanup; repair ongoing.
-  Native malloc/fence fixes are committed; current GUI/provider/artifact acceptance pending.
-  Added required CP07 durable child attribution/root charge restoration. See current handoff.
+- 2026-10-12: fixed optional vanilla-Rscript controller passes3184 assertions; hosted exact
+  f3299e5 Windows/Linux observer8cases pass145/144P,0F/W/S,10Python controls each and all cleanup.
+  Native Python6cases/CI committedbfd2341 with18lint0; native213case3OS run pending.
+  Nofollow2helper samplerd6a32d3/lint0 committed; explicit flag/native security-writer pending.
+  CP07 corrected tests-first26F/53P; uncommitted runtime10F/120P reveals JSON precision loss;
+  exact codec/affected/live validation pending. Original user RStudio remains untouched.
+  See current handoff and TESTING_PLAN for remaining artifact/frontend/CRAN/documentation gates.
 - 2026-10-10: expanded usage documentation to 13 guides, refreshed reference comments and grouped
   pkgdown navigation; 71 documentation assertions and all 58 reference example pages passed;
   built and inspected the local site (89 HTML pages, no broken local links/fragments). Remote/PR

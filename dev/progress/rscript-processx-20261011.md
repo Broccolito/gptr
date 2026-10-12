@@ -1,3 +1,27 @@
+## Current checkpoint — 2026-10-12 03:05 PDT
+
+Exactf3299e5 run38231403037 completes both strict observer hosts: Windows145/Linux144P,
+eight mandatory unique titles each,0F/W/S, actual10Python controls each, zero outside/controller
+warnings/new model usage and four settled owned cleanup witnesses. Raw source archive identity
+and full logs independently audited. Fixed Rscript CI transport actual3184P/0F/W/S.
+Prior Windows tools:callr failure may mask an earlier body error; retained, not a native pass.
+
+Native Python additionbfd2341:213cases/12files/18lints, scoped lint0 after retained helper-name,
+brace/line/unused-binding failures. No predicate or ownership/resource gate weakened.
+Nofollow samplerd6a32d3 changes only two helpers,2lint0 and37/181/55 registry preserved;
+current observer2124533f/test2649df5c/scanner18347a8f unchanged. Flag and native Phase B pending.
+
+Durable accounting tests-first8c3e0ec: corrected26F/53P/0W/S; historical29F/51P retained with
+fixture errors separately identified. Reviewed runtime attempt10F/120P/0W/S exposes exact numeric
+JSON roundtrip loss. Pricing collision corrected; original metered helper unchanged. Four runtime
+files remain uncommitted pending private exact codec, all15cases and affected suite/IC33/lint/live.
+
+All four f3299e5 Linux plan logs pass770blocks/0parse/style/lints/unchanged source; historical
+822info/90warn index findings remain. Separate6c0856a38229960541 is GREEN. Current GUI selector
+still chooses original user RStudio and could not access a separate window; no R entered there.
+Exact source/installed3OS, security, all14/site, normal original archive/5consumers/CRAN/dependencies,
+certified frontends/models/compaction/resources and authorized PR merge remain pending.
+
 ## Current source regressions — 2026-10-12 02:05 PDT
 
 The pre-retirement three-OS native source/installed acceptance below remains GREEN.
