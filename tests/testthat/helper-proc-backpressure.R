@@ -312,7 +312,25 @@ bp_run = function(case, declared_links = list()) {
       rss = vapply(tracked$handles, function(handle) {
         if (isFALSE(proc_handle_alive(handle))) return(0)
         tryCatch(unname(ps::ps_memory_info(handle)[["rss"]]), error = function(error) {
-          if (isFALSE(proc_handle_alive(handle))) 0 else stop(error)
+          dead = tryCatch({
+            began = proc.time()[["elapsed"]]
+            confirmed = isFALSE(proc_handle_alive(handle))
+            if (!confirmed) {
+              for (target in c(1, 5, 10, 25, 50)) {
+                elapsed = proc.time()[["elapsed"]] - began
+                if (elapsed >= 0.05) break
+                remaining = target / 1000 - elapsed
+                if (remaining > 0) Sys.sleep(remaining)
+                if (isFALSE(proc_handle_alive(handle))) {
+                  confirmed = TRUE
+                  break
+                }
+              }
+            }
+            confirmed
+          }, error = function(observation_error) FALSE,
+            interrupt = function(observation_error) FALSE)
+          if (isTRUE(dead)) 0 else stop(error)
         })
       }, numeric(1))
       if (any(!is.finite(rss))) stop("Could not measure owned process memory.")

@@ -141,6 +141,15 @@ jobs:
         id: install_source
         shell: bash
         run: R CMD INSTALL --no-docs --no-multiarch .
+      - name: Check owned memory-query death controls
+        if: ${{ always() && steps.install_source.outcome == 'success' }}
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          mkdir -p rscript-evidence
+          Rscript --vanilla dev/ci/check-bp-memory-death.R tests/testthat/helper-proc-backpressure.R 2>&1 | tee rscript-evidence/bp-memory-death.log
       - name: Test source execution
         shell: bash
         env:
