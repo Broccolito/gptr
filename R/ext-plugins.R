@@ -903,10 +903,10 @@ plugin_file_factory = function(path) {
 #' @noRd
 plugin_dir_factory = function(files) {
   force(files)
-  function(gptr) {
+  utils::removeSource(function(gptr) {
     for (f in files) plugin_file_factory(f)(gptr)
     invisible(NULL)
-  }
+  })
 }
 
 #' A factory calling the exported entry `pkg::fun` of a package plugin (no `:::`)

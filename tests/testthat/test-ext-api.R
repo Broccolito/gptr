@@ -390,3 +390,112 @@ test_that("malformed context identities cannot silently become process context",
   expect_identical(get(".sid", envir = ctx_new(list(id = "s1"))), "s1")
   expect_identical(ctx_new(NULL, run = list(id = "u1"))$run, "u1")
 })
+
+
+test_that("package-created API methods discard source references without changing their frame", {
+  reg = local_registry()
+  constructor = eval(parse(text = deparse(api_build, width.cutoff = 500L),
+    keep.source = TRUE)[[1L]], envir = environment(api_build))
+  expect_false(is.null(attr(constructor, "srcref")))
+  info = ext_info_new("user")
+  api = constructor(info, reg)
+  methods = lapply(c("register", "on", "require", "has"), get, envir = api, inherits = FALSE)
+  frame = environment(methods[[1L]])
+  for (method in methods) {
+    expect_null(attr(method, "srcref"))
+    expect_null(attr(body(method), "srcref"))
+    expect_null(attr(body(method), "wholeSrcref"))
+    expect_null(attr(body(method), "srcfile"))
+    expect_identical(environment(method), frame)
+  }
+  expect_identical(get("api", envir = frame, inherits = FALSE), api)
+  expect_identical(get("info", envir = frame, inherits = FALSE), info)
+  expect_identical(get("reg", envir = frame, inherits = FALSE), reg)
+  expect_identical(get("gen", envir = frame, inherits = FALSE), reg$generation)
+  expect_identical(lapply(methods, function(method) names(formals(method))),
+    list("spec", c("event", "handler", "matcher"), "requires", "feature"))
+  api$state$value = raw(20L)
+  expect_identical(api$state$value, raw(20L))
+  handler = function(args, ctx) "source-ok"
+  off = methods[[1L]](gptr_command("source-api", handler))
+  expect_identical(registry_get("command", "source-api")$handler, handler)
+  expect_identical(registry_get("command", "source-api")$handler("", NULL), "source-ok")
+  off()
+  expect_null(registry_get("command", "source-api"))
+  hook_off = methods[[2L]]("source:done", function(event, ctx) NULL)
+  expect_length(registry_all("hook"), 1L)
+  expect_identical(registry_all("hook")[[1L]]$event, "source:done")
+  hook_off()
+  expect_length(registry_all("hook"), 0L)
+  expect_identical(methods[[3L]]("1.0"), TRUE)
+  expect_error(methods[[3L]](">= 2.0"), class = "gptr_error_api_version")
+  expect_identical(methods[[4L]]("kind.tool"), TRUE)
+  expect_identical(methods[[4L]]("kind.source-missing"), FALSE)
+})
+
+test_that("the package-created directory factory keeps file execution and worker user state", {
+  local_registry()
+  constructor = eval(parse(text = deparse(plugin_dir_factory, width.cutoff = 500L),
+    keep.source = TRUE)[[1L]], envir = environment(plugin_dir_factory))
+  expect_false(is.null(attr(constructor, "srcref")))
+  file = withr::local_tempfile(fileext = ".R")
+  text = c("function(gptr) {", "  payload = raw(30000L)",
+    "  gptr$state$payload = raw(20000L)",
+    "  gptr$register(gptr::gptr_command('source-directory', function(args, ctx) {",
+    "    length(payload) + length(gptr$state$payload)", "  }))", "}")
+  writeLines(text, file)
+  file_before = readBin(file, "raw", n = file.info(file)$size)
+  factory = constructor(file)
+  expect_null(attr(factory, "srcref"))
+  expect_null(attr(body(factory), "srcref"))
+  expect_null(attr(body(factory), "wholeSrcref"))
+  expect_null(attr(body(factory), "srcfile"))
+  expect_identical(get("files", envir = environment(factory), inherits = FALSE), file)
+  expect_true(ext_load(factory, source = "user", rank = 3L))
+  handler = registry_get("command", "source-directory")$handler
+  value = handler("", NULL)
+  expect_identical(value, 50000L)
+  before = serialize(handler, NULL, ascii = FALSE, refhook = worker_refhook)
+  records = worker_registry(character())
+  expect_length(records$specs, 1L)
+  expect_identical(records$specs[[1L]]$spec$handler, handler)
+  expect_identical(serialize(handler, NULL, ascii = FALSE, refhook = worker_refhook), before)
+  restored = unserialize(before, refhook = worker_refhook)
+  expect_identical(restored("", NULL), value)
+  expect_identical(readBin(file, "raw", n = file.info(file)$size), file_before)
+})
+
+test_that("user factory and handler source references and captured values remain untouched", {
+  local_registry()
+  home = new.env(parent = baseenv())
+  home$payload = raw(30000L)
+  text = c("function(gptr) {", "  gptr$state$payload = raw(20000L)",
+    "  gptr$register(gptr::gptr_command('source-user', function(args, ctx) {",
+    "    length(payload) + length(gptr$state$payload)", "  }))", "}")
+  factory = eval(parse(text = text, keep.source = TRUE)[[1L]], envir = home)
+  attr(factory, "user_mark") = raw(128L)
+  factory_before = serialize(list(attributes(factory), formals(factory), body(factory)), NULL)
+  expect_false(is.null(attr(factory, "srcref")))
+  expect_true(ext_load(factory, source = "user", rank = 3L))
+  expect_identical(serialize(list(attributes(factory), formals(factory), body(factory)), NULL),
+    factory_before)
+  expect_identical(home$payload, raw(30000L))
+  handler = registry_get("command", "source-user")$handler
+  expect_false(is.null(attr(handler, "srcref")))
+  expect_false(is.null(attr(body(handler), "srcref")))
+  value = handler("", NULL)
+  expect_identical(value, 50000L)
+  source_before = serialize(list(attributes(handler), formals(handler), body(handler)), NULL)
+  before = serialize(handler, NULL, ascii = FALSE, refhook = worker_refhook)
+  records = worker_registry(character())
+  expect_length(records$specs, 1L)
+  expect_identical(records$specs[[1L]]$spec$handler, handler)
+  expect_identical(serialize(list(attributes(handler), formals(handler), body(handler)), NULL),
+    source_before)
+  expect_identical(serialize(handler, NULL, ascii = FALSE, refhook = worker_refhook), before)
+  restored = unserialize(before, refhook = worker_refhook)
+  expect_identical(restored("", NULL), value)
+  expect_identical(home$payload, raw(30000L))
+  api = get("gptr", envir = environment(handler), inherits = FALSE)
+  expect_identical(api$state$payload, raw(20000L))
+})

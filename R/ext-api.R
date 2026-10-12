@@ -189,23 +189,23 @@ api_build = function(info, reg) {
   api$name = info$source
   api$dir = info$dir
   api$state = ext_state(info)
-  api$register = function(spec) {
+  api$register = utils::removeSource(function(spec) {
     api_alive(info, reg, gen)
     ext_register(info, spec)
-  }
-  api$on = function(event, handler, matcher = NULL) {
+  })
+  api$on = utils::removeSource(function(event, handler, matcher = NULL) {
     api_alive(info, reg, gen)
     ext_register(info, gptr_hook(event, handler, matcher))
-  }
-  api$require = function(requires) {
+  })
+  api$require = utils::removeSource(function(requires) {
     api_alive(info, reg, gen, read_only = TRUE)
     api_require(requires, info$source)
-  }
-  api$has = function(feature) {
+  })
+  api$has = utils::removeSource(function(feature) {
     api_alive(info, reg, gen, read_only = TRUE)
     check_string(feature, "feature")
     feature %in% gptr_api()$features
-  }
+  })
   class(api) = "gptr_extension_api"
   info$api = api
   api
