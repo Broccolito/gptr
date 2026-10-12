@@ -13,15 +13,13 @@ the living records and dev-only validation controllers. Preserve the dirty prima
 - DONE/normal archive: all five consumers in run38288459266 are independently raw-audited
   Status OK,0 errors/warnings/notes:129,180 passes and2,308 retained named guards.
   Original tar9d900a3e (2,553,795B),120 committed R files and14 rendered guide pairs match.
-  Dependency-only checking FAILED in the controller before a final package status:
-  one owned transient descendant disappeared during disk sampling. The narrow dev-only fix
-  preserves ownership/caps/fatal unknowns and all17 prior controls; eight new tests reproduce
-  two baseline errors and all25 pass after correction. Original-byte hosted profiles WAITING.
-  Suggests/inventory were skipped after that failure. The default-off original-only route
-  admits the same tar/manifest and six successful original producer/consumer job identities,
-  records the new controller separately and keeps all caps. All33 admission controls pass.
-  An unsupported gh option combination was caught before adoption and corrected; actual
-  bounded seven-job API admission passes. Hosted original-byte rerun remains WAITING.
+  The original transient-descendant controller failure is retained; its reviewed correction now
+  completes all three original-byte profiles in38298748762 with zero sampling errors and exact
+  owned settlement. Suggests is Status OK/0E/W/N; reverse-dependency inventory passes with empty
+  direct/recursive lists. Depends is1 ERROR:25,621P/4F/0W/476 named guards. One test requires
+  absent optional stringi; three image/token assertions follow a missing PNG. Source-reviewed
+  corrections preserve ASCII coverage, name optional Unicode guards and retain existing plots.
+  Fresh corrected-source profile acceptance remains WAITING; the archive was not rebuilt here.
 - DONE/worker assertions: run38290850451 source+installed have213 exact ordered cases
   per OS. Mac1,541P, Windows1,646P and Linux1,544P per context;0 failures/errors/R warnings,
   exact platform guards,18 clean lints and19 passing memory-death controls. All observed
@@ -54,26 +52,35 @@ the living records and dev-only validation controllers. Preserve the dirty prima
   specialist fan-out pass with23 real requests, zero warnings and exact caller restoration.
   Eight functional cases total72.832s; maximum sampled family529.453MiB. Parallel workers,
   remaining provider/steering/compaction coverage and native frontend appearance stay open.
-- ONGOING/strict Windows fixture: four new held-route controls69P and five configured lints0.
-  Tests exposed an AST missing-formal traversal error; one-line correction passes all original
-  ownership/selection assertions. Default-off CI routing is adopted; original strict75 and
-  additional held native gate require fresh hosted acceptance. Parent tokens stay untouched.
+- ONGOING/strict Windows fixture: held-route controls69P and five configured lints0. Run38300890432
+  selects no approved files because root supplied a devtools-style filter; native75/PS12/R2 and
+  held-native cases were skipped, so it proves no native acceptance. Correct exact-file filter
+  is dispatched as38302326460 at7390633. Parent tokens stay untouched; actual outcome WAITING.
 - OPEN/local browser experiment: pure8/34P; all three native arms hit unchanged1GiB family
   cap before page/shutdown proof, with zero sampling errors and exact owned settlement.
   Outer sampled maximum1646.156MiB stays under approved2GiB. Full-Chrome155 provision/rerun
   is pending; five diagnostic brace lints also need correction. Original failures are retained.
-- OPEN/current automatic CI: db1 run38292931362 connections has1 worker-spec size failure
-  (6,052,915B exceeds unchanged4MB); LC_ALL=C has8 Unicode fixture/literal/path failures.
-  Zero R warnings in both. Completed Windows release/oldrel4 also fail; exact raw triage
-  is pending. Source-reviewed Unicode correction is prepared; no acceptance claim yet.
+- OPEN/current automatic CI: db1 connections has1 strict4MB worker-spec failure (6,052,915B).
+  Numeric-only diagnostics pass3 controls/30P and the isolated IC70 case7P, all eight state
+  flags TRUE, zero warnings/skips and three configured lints0. Narrow spec1,526,449B contains
+  a1,521,980B command closure; its captured package API graph is being investigated. Full Mac
+  connections stops at artifact tests on unchanged2GiB family guard (sample2639.141MiB,
+  68.482s, zero sampling errors, exact owned cleanup), before the size witness. No cap waiver.
+  LC_ALL=C original8 failures remain retained. Latest candidate-only Unicode replay fixes all
+  six native READY comparisons:91 cases/927P/0F/2E/0W/eight exact Windows guards, all seven
+  caller-state flags TRUE. Two command-size failures11044/10828B exceed unchanged9998; neither
+  proposed encoding is adopted. Windows release/oldrel4 raw triage finds a distinct post-recovery
+  fixture failure, two dangling-link sampling warnings and a provider registration timing race;
+  minimal independently reviewed corrections and native verification remain OPEN.
 - WAITING: current site, live providers/extensions/team/fan-out/compaction/replay, native
   frontend/performance checks, independent full review and PR6 merge.
-  RStudio control still exposes original27070; no original-session input/restart/cleanup.
+  RStudio control still exposes original27070. Its File menu offers Open Project in New Session;
+  that safe fresh-window route is observed but not launched. No original R input/restart/cleanup.
 
 Evidence is retained under ignored primary `dev/.validation/readiness-20261011/`, including
 `normal-five-audit`, all three native audits and `github-legacy-closure-20261012`.
-Resource12:46: load9.82/11.02/11.83, CPU53.83% idle,125G used/1,946MiB unused,
-swap20,128MiB/zero sampled paging, disk459GiB, no thermal warning. User approved one serial
+Resource13:07: load13.48/10.52/10.46, CPU56.99% idle,127G used/374MiB unused,
+swap20,039.81MiB/zero sampled paging, disk459GiB, no thermal warning. User approved one serial
 private test family capped at2GiB sampled RAM/512MiB output; heavy/GPU work stays held.
 Sampled RSS does not establish instantaneous peaks or complete short/reparented-child coverage.
 Finish Mac, hosted and functional gates before final live Windows UI verification; Windows CI
