@@ -33,6 +33,8 @@ bp_disk_test_detach = function(link, directory, .env = parent.frame()) {
 
 bp_disk_test_main = function() {
   bp_disk_preserve(function() {
+    bp_disk_env_preflight(Sys.getenv(),
+      initialized = reticulate::py_available(initialize = FALSE))
     builtins = reticulate::import_builtins(convert = FALSE)
     main = builtins$vars(reticulate::import_main(convert = FALSE))
     keys = unlist(reticulate::py_to_r(builtins$list(main$keys())), use.names = FALSE)
@@ -196,9 +198,22 @@ test_that("the optional observer refuses a root replaced by a foreign directory 
 test_that("the optional observer preserves unchanged empty environment entries and rejects loss", {
   state = new.env(parent = emptyenv())
   original = c(EMPTY = "", VALUE = "original")
-  expect_error(bp_disk_env_preflight(original, windows = TRUE), "actual-empty")
+  expect_silent(bp_disk_env_preflight(original, windows = TRUE))
   expect_silent(bp_disk_env_preflight(original[["VALUE"]], windows = TRUE))
   expect_silent(bp_disk_env_preflight(original, windows = FALSE))
+  keys = c("PATH", "VIRTUAL_ENV", "R_SESSION_INITIALIZED", "LD_LIBRARY_PATH",
+    "PYTHONPATH", "PYTHONIOENCODING")
+  for (key in keys) {
+    unsafe = c(original, stats::setNames("", key))
+    expect_error(bp_disk_env_preflight(unsafe, windows = TRUE), "actual-empty")
+    expect_silent(bp_disk_env_preflight(unsafe, windows = TRUE, initialized = TRUE))
+    expect_silent(bp_disk_env_preflight(unsafe, windows = FALSE))
+    alias = c(original, stats::setNames("", tolower(key)))
+    expect_error(bp_disk_env_preflight(alias, windows = TRUE), "actual-empty")
+    safe = c(original, stats::setNames("synthetic", key))
+    expect_silent(bp_disk_env_preflight(safe, windows = TRUE))
+  }
+  expect_identical(original, c(EMPTY = "", VALUE = "original"))
   state$values = c(EMPTY = "", VALUE = "changed", ADDED = "synthetic")
   state$set = character()
   get = function() state$values
