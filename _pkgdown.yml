@@ -94,6 +94,7 @@ reference:
   - gptr_options
 - title: "Methods and other topics"
   contents:
+  - as.data.frame.gptr_session_summary
   - format.gptr_risk
   - format.gptr_session
   - gptr-background
