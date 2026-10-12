@@ -107,3 +107,20 @@ Passing the successor would certify strict denial only while this owned utility
 holds the fixed group disabled. Restored-token denial remains unproved and the
 ordinary retained case remains red. No global security, observer, release or
 readiness certificate follows from this diagnostic alone.
+
+
+## Held directory cleanup successor (unexecuted)
+
+The retained c281 Windows utility completed every token and ACL proof, then the
+first directory removal predicate was false. R documents that recursive=FALSE
+leaves directories undeleted. Only the held tail now checks the exact two owned
+direct-child paths, readable dot-entry parent membership, and immediate exact
+empty dot-entry listing, then uses recursive=TRUE with force=FALSE/expand=FALSE.
+Nominal success requires a real zero return plus readable parent absence.
+Unproven/populated fallback entries are retained. This is no same-user race
+sandbox. All 13 labels and the original 51,608-byte ordinary prefix are exact.
+Historical preparation/verification scripts and held-successor.patch describe
+the earlier freeze; the separately reviewed directory packet supplies this
+successor and its identity updates. Ordinary fixture cleanup is still a separate
+known defect; no ordinary native pass is claimed. Real empty/populated/missing/
+foreign controls and actual held Windows replay are required before adoption.

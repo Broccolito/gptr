@@ -328,7 +328,15 @@ testthat::test_that("held native postcondition tail and child decoder retain eve
     "PUBLIC-TOKEN-LIBRARY", "PUBLIC-TOKEN-COMPILE"),
     c("fresh", "directory", "file", "denied", "link", "missing", "script", "recovery",
       "parent_backup", "file_backup", "armed", "token_source", "token_library", "token_compile"))
-  scope$root = "PUBLIC-ROOT"
+  scope$root = "."
+  observed$removed = character()
+  scope$dir.exists = function(path) path %in% scope$paths[c("fresh", "directory")]
+  remove_definition = Filter(function(expression) {
+    is.call(expression) && identical(expression[[1L]], as.name("=")) &&
+      identical(expression[[2L]], as.name("remove_empty"))
+  }, parts)
+  testthat::expect_length(remove_definition, 1L)
+  eval(remove_definition[[1L]], envir = scope)
   scope$owner = file.path(scope$paths[["fresh"]], "owner")
   scope$marker = "GPTR_PROC_0123456789abcdef"
   scope$sentinel = charToRaw("PUBLIC-ABSENCE-SENTINEL")
@@ -353,7 +361,16 @@ testthat::test_that("held native postcondition tail and child decoder retain eve
   scope$list.files = function(path, ...) {
     arguments = list(...)
     stopifnot(identical(sort(names(arguments)), c("all.files", "no..")),
-      isTRUE(arguments[["all.files"]]), isTRUE(arguments[["no.."]]))
+      isTRUE(arguments[["all.files"]]), is.logical(arguments[["no.."]]),
+      length(arguments[["no.."]]) == 1L, !is.na(arguments[["no.."]]))
+    if (identical(arguments[["no.."]], FALSE)) {
+      if (identical(path, scope$root)) {
+        return(c(".", "..", basename(setdiff(scope$paths[c("fresh", "directory")],
+          observed$removed))))
+      }
+      stopifnot(path %in% scope$paths[c("fresh", "directory")])
+      return(c(".", ".."))
+    }
     if (identical(path, scope$root)) return(effect("dangling-entry", character()))
     if (identical(path, scope$paths[["directory"]])) {
       return(effect("existing-directory", character()))
@@ -370,8 +387,10 @@ testthat::test_that("held native postcondition tail and child decoder retain eve
     stopifnot(identical(path, utilities))
     effect("remove-utilities", rep(TRUE, length(utilities)))
   }
-  scope$unlink = function(path, recursive) {
-    stopifnot(identical(recursive, FALSE), path %in% scope$paths[c("fresh", "directory")])
+  scope$unlink = function(path, recursive, force, expand) {
+    stopifnot(identical(recursive, TRUE), identical(force, FALSE), identical(expand, FALSE),
+      path %in% scope$paths[c("fresh", "directory")])
+    observed$removed = c(observed$removed, path)
     key = if (identical(path, scope$paths[["fresh"]])) {
       "remove-fresh-directory"
     } else {
@@ -471,4 +490,79 @@ testthat::test_that("held helper scope supplies the real unqualified test_path b
   scope$mode = "warning"
   testthat::expect_warning(load(file, scope), "PUBLIC-UNQUALIFIED-HELPER-WARNING")
   testthat::expect_identical(snapshot(), before)
+})
+
+
+testthat::test_that("held cleanup removes only direct owned proven-empty directories", {
+  helper = new.env(parent = baseenv())
+  sys.source(file.path(dirname(held_controller_file), "held-packet", "amended",
+    "helper-proc-writer-runtime.R"), envir = helper)
+  definitions = Filter(function(expression) {
+    is.call(expression) && identical(expression[[1L]], as.name("=")) &&
+      identical(expression[[2L]], as.name("remove_empty"))
+  }, as.list(body(helper$rw_held_token_case))[-1L])
+  testthat::expect_length(definitions, 1L)
+  root = tempfile("held-empty-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
+  testthat::expect_true(dir.create(root))
+  withr::defer(unlink(root, recursive = TRUE, force = FALSE, expand = FALSE))
+  scope = new.env(parent = baseenv())
+  scope$root = root
+  scope$paths = c(fresh = file.path(root, "fresh"), directory = file.path(root, "directory"))
+  eval(definitions[[1L]], envir = scope)
+  testthat::expect_true(dir.create(scope$paths[["fresh"]]))
+  testthat::expect_true(dir.create(scope$paths[["directory"]]))
+  testthat::expect_true(scope$remove_empty(scope$paths[["fresh"]]))
+  testthat::expect_false(dir.exists(scope$paths[["fresh"]]))
+  testthat::expect_false("fresh" %in% list.files(root, all.files = TRUE, no.. = TRUE))
+  testthat::expect_true(scope$remove_empty(scope$paths[["directory"]]))
+  testthat::expect_false(dir.exists(scope$paths[["directory"]]))
+  testthat::expect_identical(sort(list.files(root, all.files = TRUE, no.. = FALSE)), c(".", ".."))
+})
+
+
+testthat::test_that("held empty cleanup refuses populated missing foreign and uncertain entries", {
+  helper = new.env(parent = baseenv())
+  sys.source(file.path(dirname(held_controller_file), "held-packet", "amended",
+    "helper-proc-writer-runtime.R"), envir = helper)
+  definitions = Filter(function(expression) {
+    is.call(expression) && identical(expression[[1L]], as.name("=")) &&
+      identical(expression[[2L]], as.name("remove_empty"))
+  }, as.list(body(helper$rw_held_token_case))[-1L])
+  testthat::expect_length(definitions, 1L)
+  root = tempfile("held-retain-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
+  outside = tempfile("held-foreign-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
+  testthat::expect_true(dir.create(root))
+  testthat::expect_true(dir.create(outside))
+  withr::defer(unlink(c(root, outside), recursive = TRUE, force = FALSE, expand = FALSE))
+  scope = new.env(parent = baseenv())
+  scope$root = root
+  scope$paths = c(fresh = file.path(root, "fresh"), directory = file.path(root, "directory"))
+  eval(definitions[[1L]], envir = scope)
+  testthat::expect_true(dir.create(scope$paths[["fresh"]]))
+  canary = file.path(scope$paths[["fresh"]], "canary")
+  sentinel = charToRaw("PUBLIC-RETAIN-EXACT")
+  writeBin(sentinel, canary)
+  testthat::expect_false(scope$remove_empty(scope$paths[["fresh"]]))
+  testthat::expect_identical(readBin(canary, "raw", n = length(sentinel) + 1L), sentinel)
+  testthat::expect_false(scope$remove_empty(scope$paths[["directory"]]))
+  testthat::expect_false(scope$remove_empty(outside))
+  testthat::expect_true(dir.exists(outside))
+  testthat::expect_false(scope$remove_empty(NA_character_))
+  testthat::expect_false(scope$remove_empty(character()))
+  uncertain = new.env(parent = scope)
+  uncertain$list.files = function(path, ...) character()
+  actual = scope$remove_empty
+  environment(actual) = uncertain
+  testthat::expect_false(actual(scope$paths[["fresh"]]))
+  testthat::expect_identical(readBin(canary, "raw", n = length(sentinel) + 1L), sentinel)
+  testthat::expect_true(dir.create(scope$paths[["directory"]]))
+  failed = new.env(parent = scope)
+  failed$unlink = function(path, recursive, force, expand) 1L
+  actual = scope$remove_empty
+  environment(actual) = failed
+  testthat::expect_false(actual(scope$paths[["directory"]]))
+  testthat::expect_true(dir.exists(scope$paths[["directory"]]))
+  failed$unlink = function(path, recursive, force, expand) 0L
+  testthat::expect_false(actual(scope$paths[["directory"]]))
+  testthat::expect_true(dir.exists(scope$paths[["directory"]]))
 })

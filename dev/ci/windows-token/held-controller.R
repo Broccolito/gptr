@@ -10,9 +10,9 @@ old_scope$token_assets = held_old_assets
 environment(held_old_verify) = old_scope
 held_assets = list(
   "README.md" = list(
-    bytes = 6742L, sha256 = "125ab8e1ba1bfead64db85155f1ded56f1e22b5c4575418090c949d21595d88e"),
+    bytes = 7812L, sha256 = "29ae06f77a2b353ffe9cef483d14e198056105560aa4b1aee489252cd153fe9c"),
   "amended/helper-proc-writer-runtime.R" = list(
-    bytes = 93286L, sha256 = "2d37ef99bf0bafab87283472477d24456d43c45b375ab5646bde8b49686acefd"),
+    bytes = 93695L, sha256 = "9e5adbb9f2b4d3bc2ba9327506ab2a61f9a4d06c85852975b46ce0d2b9b9fe12"),
   "baseline/fixtures/bp-disk-observer.py" = list(
     bytes = 13195L, sha256 = "18347a8f18677e1ec17efe0d345e797393202b6a50ec3dd1321b888da3314451"),
   "baseline/helper-bp-disk-observer.R" = list(
@@ -60,7 +60,7 @@ held_assets = list(
   "prior-frozen-8eedb863/source-proof.json" = list(
     bytes = 827L, sha256 = "582214b7877cebf39118480adbb69bfea3f71255a8aa6ac7feb140c9873f93bf"),
   "source-proof.json" = list(
-    bytes = 1408L, sha256 = "247465ee53dae8625ff949f2e7460a709ccdf5dd4d4c3fc614b634c510367ddc"),
+    bytes = 1781L, sha256 = "aef59635c249a949825399b2dca12bf1e58f2e0fafc0f28b1705e9c6e68b193a"),
   "token-held-protocol.R" = list(
     bytes = 1466L, sha256 = "dc508cbd90c6c8083d6a4421799e87235bb5fc27c1ff42d12fd3955216e89c03"),
   "token-held.ps1" = list(
@@ -68,7 +68,7 @@ held_assets = list(
   "verify-source.py" = list(
     bytes = 5607L, sha256 = "247a3edd999e114dc9e298fd197ace2947778daea0489d5ba3e3f1aa8e6ef526"),
   "manifest.json" = list(
-    bytes = 5458L, sha256 = "59c62ee9ea937f81145d81630246d84e312ca3283c606d5a05cc435ebf17e9b0")
+    bytes = 5790L, sha256 = "d3ff35aa84ec27ef3fef2b6b0e3dbd27ccc9a72da3b6b83a45cb76b1caf3ab08")
 )
 held_core$token_assets = held_assets
 held_core$token_titles = list(

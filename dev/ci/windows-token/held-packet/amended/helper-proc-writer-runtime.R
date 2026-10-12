@@ -1040,6 +1040,20 @@ rw_held_token_case = function(case, root) {
   present = function(path) {
     basename(path) %in% list.files(dirname(path), all.files = TRUE, no.. = TRUE)
   }
+  remove_empty = function(path) {
+    if (!is.character(path) || length(path) != 1L || is.na(path) ||
+        !(path %in% paths[c("fresh", "directory")]) || !identical(dirname(path), root)) {
+      return(FALSE)
+    }
+    parent = list.files(root, all.files = TRUE, no.. = FALSE)
+    if (!all(c(".", "..", basename(path)) %in% parent) || !dir.exists(path) ||
+        !identical(sort(list.files(path, all.files = TRUE, no.. = FALSE)), c(".", ".."))) {
+      return(FALSE)
+    }
+    status = unlink(path, recursive = TRUE, force = FALSE, expand = FALSE)
+    after = list.files(root, all.files = TRUE, no.. = FALSE)
+    identical(status, 0L) && all(c(".", "..") %in% after) && !(basename(path) %in% after)
+  }
   on.exit({
     stopifnot(!state$utility_unsettled, !state$settlement_failed)
     if (present(paths[["armed"]]) && !state$recovered) recover()
@@ -1053,12 +1067,9 @@ rw_held_token_case = function(case, root) {
     owner = file.path(paths[["fresh"]], "owner")
     if (file.exists(owner) && identical(readBin(owner, "raw", n = 27L), charToRaw(marker)))
       file.remove(owner)
-    if (dir.exists(paths[["fresh"]]) &&
-        !length(list.files(paths[["fresh"]], all.files = TRUE, no.. = TRUE)))
-      unlink(paths[["fresh"]], recursive = FALSE)
-    if (dir.exists(paths[["directory"]]) &&
-        !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE)))
-      unlink(paths[["directory"]], recursive = FALSE)
+    for (path in paths[c("fresh", "directory")]) {
+      if (present(path)) invisible(remove_empty(path))
+    }
   }, add = TRUE)
   phase("absence-link-create")
   stopifnot(isTRUE(file.symlink(paths[["missing"]], paths[["link"]])),
@@ -1700,9 +1711,8 @@ rw_held_token_case = function(case, root) {
     post("remove-utilities",
       all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
         "token_source", "token_library", "token_compile")]))),
-    post("remove-fresh-directory", identical(unlink(paths[["fresh"]], recursive = FALSE), 0L)),
-    post("remove-existing-directory",
-      identical(unlink(paths[["directory"]], recursive = FALSE), 0L)))
+    post("remove-fresh-directory", remove_empty(paths[["fresh"]])),
+    post("remove-existing-directory", remove_empty(paths[["directory"]])))
   fun("reactor_shutdown")()
   after = list(env = Sys.getenv(), cwd = getwd(), options = options(), seed = seed(),
     names = sort(ls(envir = globalenv(), all.names = TRUE)))
