@@ -754,14 +754,108 @@ files_pkgdown = function(root, args) {
   pkgdown_problems(lines, db)
 }
 
+# Copies only public package inputs and the site overlay to a fresh preview source.
+# This is not an archive certificate. A failed copy leaves its owned stage for inspection.
+site_stage = function(root, dest) {
+  scalar = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+  if (!scalar(root) || !scalar(dest) || !dir.exists(root)) {
+    stop("Site staging needs an existing source and a fresh destination", call. = FALSE)
+  }
+  if (is.na(Sys.readlink(root)) || nzchar(Sys.readlink(root))) {
+    stop("Site staging refuses an aliased public input", call. = FALSE)
+  }
+  root = normalizePath(root, winslash = "/", mustWork = TRUE)
+  parent = normalizePath(dirname(dest), winslash = "/", mustWork = TRUE)
+  name = basename(dest)
+  if (name %in% c("", ".", "..")) {
+    stop("Site staging destination must be fresh", call. = FALSE)
+  }
+  dest = file.path(parent, name)
+  compare = if (.Platform$OS.type == "windows") tolower else identity
+  if (identical(compare(root), compare(dest)) ||
+      startsWith(compare(dest), paste0(compare(root), "/"))) {
+    stop("Site staging destination must be outside the source", call. = FALSE)
+  }
+  if (compare(name) %in% compare(list.files(parent, all.files = TRUE, no.. = TRUE))) {
+    stop("Site staging destination must be fresh", call. = FALSE)
+  }
+  dirs = c("R", "man", "inst", "vignettes", "pkgdown")
+  required = c("DESCRIPTION", "NAMESPACE", "README.md", "_pkgdown.yml", dirs)
+  if (!all(file.exists(file.path(root, required)))) {
+    stop("Site staging is missing required public input", call. = FALSE)
+  }
+  if (!all(dir.exists(file.path(root, dirs)))) {
+    stop("Site staging public directories have the wrong type", call. = FALSE)
+  }
+  collect = function(rel) {
+    path = file.path(root, rel)
+    link = Sys.readlink(path)
+    actual = normalizePath(path, winslash = "/", mustWork = TRUE)
+    if (is.na(link) || nzchar(link) || !identical(compare(actual), compare(path))) {
+      stop("Site staging refuses an aliased public input", call. = FALSE)
+    }
+    info = file.info(path)
+    if (is.na(info$isdir)) stop("Site staging public input is unavailable", call. = FALSE)
+    if (info$isdir) {
+      children = list.files(path, all.files = FALSE, no.. = TRUE)
+      private = c("dev", "agents.md", "claude.md")
+      children = children[!tolower(children) %in% private]
+      items = lapply(sort(children, method = "radix"), function(child) {
+        collect(file.path(rel, child))
+      })
+      list(files = unlist(lapply(items, `[[`, "files"), use.names = FALSE),
+           dirs = c(rel, unlist(lapply(items, `[[`, "dirs"), use.names = FALSE)))
+    } else {
+      list(files = rel, dirs = character())
+    }
+  }
+  public = c("DESCRIPTION", "NAMESPACE", "README.md", "NEWS.md", "LICENSE", "LICENSE.md",
+             "_pkgdown.yml", dirs)
+  public = public[file.exists(file.path(root, public))]
+  if (any(file.info(file.path(root, setdiff(public, dirs)))$isdir)) {
+    stop("Site staging public files have the wrong type", call. = FALSE)
+  }
+  items = lapply(public, collect)
+  files = unlist(lapply(items, `[[`, "files"), use.names = FALSE)
+  directories = unlist(lapply(items, `[[`, "dirs"), use.names = FALSE)
+  before = unname(tools::md5sum(file.path(root, files)))
+  if (anyNA(before)) stop("Site staging cannot read a public input", call. = FALSE)
+  if (!dir.create(dest, mode = "0700")) stop("Site staging could not create its destination")
+  for (rel in directories) {
+    if (!dir.create(file.path(dest, rel), mode = "0700")) {
+      stop("Site staging could not create a public directory", call. = FALSE)
+    }
+  }
+  for (rel in files) {
+    if (!file.copy(file.path(root, rel), file.path(dest, rel), overwrite = FALSE)) {
+      stop("Site staging could not copy a public file", call. = FALSE)
+    }
+  }
+  source = unname(tools::md5sum(file.path(root, files)))
+  staged = unname(tools::md5sum(file.path(dest, files)))
+  if (!identical(before, source) || !identical(before, staged)) {
+    stop("Site staging public bytes changed during copying", call. = FALSE)
+  }
+  dest
+}
+
 # Builds the site into `dest`, outside the repository, without keys: pkgdown runs every example.
 # Not offline: pkgdown looks the package up on CRAN for the home page's links.
 site_build = function(root, dest) {
+  caller_root = root
+  root = normalizePath(root, winslash = "/", mustWork = TRUE)
+  absolute = startsWith(dest, "/") ||
+    (.Platform$OS.type == "windows" &&
+       (startsWith(dest, "\\") ||
+          (nchar(dest) >= 3L && substr(dest, 2L, 2L) == ":" &&
+             substr(dest, 3L, 3L) %in% c("/", "\\"))))
+  if (!absolute) dest = file.path(root, dest)
   dirs = rel_dirs(tempfile("rel-site-"))
+  stage = site_stage(caller_root, file.path(dirs[["proj"]], "source"))
   env = rel_child_env(dirs[["home"]], dirs[["tmp"]], dirs[["proj"]], offline = FALSE)
   code = sprintf(paste("pkgdown::build_site(%s, preview = FALSE, new_process = FALSE,",
                        "override = list(destination = %s))"),
-                 deparse(normalizePath(root, winslash = "/")), deparse(dest))
+                 deparse(stage), deparse(dest))
   res = processx::run(rel_exe("Rscript"), c("--vanilla", "-e", code), env = env,
                       error_on_status = FALSE, timeout = 1800)
   if (res$status == 0L) return(character())
