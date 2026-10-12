@@ -74,6 +74,6 @@ so no maintainer-only NOTE is assumed. Any other notes will be reviewed and expl
 
 ## Reverse dependencies
 
-`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-09-29:
+`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-10-12:
 none.
 No package depends on, imports, links to or suggests gptr.
