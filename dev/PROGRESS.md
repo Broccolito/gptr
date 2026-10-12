@@ -1,91 +1,96 @@
-## Current validation — 2026-10-12 (production `02ceac9`)
+## Current validation — 2026-10-12 (through `e153bc1`)
 
-Work in `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`. Production remains `02ceac9`; later commits update
-the living records and dev-only validation controllers. Preserve the dirty primary, original R sessions and shared Ollama.
+Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
+`codex/skipped-platform-tests`. Current production differs from `02ceac9` in four R files:
+plot capture, browser ownership, extension API methods and directory plugin wrappers.
+The other116 R files and all14 source/rendered guide pairs retain those historical bytes.
+Original archive certificates below apply to `02ceac9`; a new archive and release checks
+are required. Preserve the dirty primary, original R sessions and shared Ollama.
 
-- DONE/offline: complete cold OAuth, Codex, MCP and reactor files pass119 cases/900
-  assertions with0 failures/errors/warnings/skips and all eight caller-state flags TRUE.
-  MCP shutdown controls252P and four real owned Mac listener retry cases pass; pump
-  controls83P and two real callback cases pass; cold-loader controls71P pass.
-  Fourteen scoped configured lints and roxygen8.1.1 are clean; two guide pairs precompute.
-  `02ceac9` also corrects three Codex warning restarts and uses metadata-only preflight.
-- DONE/normal archive: all five consumers in run38288459266 are independently raw-audited
-  Status OK,0 errors/warnings/notes:129,180 passes and2,308 retained named guards.
-  Original tar9d900a3e (2,553,795B),120 committed R files and14 rendered guide pairs match.
-  The original transient-descendant controller failure is retained; its reviewed correction now
-  completes all three original-byte profiles in38298748762 with zero sampling errors and exact
-  owned settlement. Suggests is Status OK/0E/W/N; reverse-dependency inventory passes with empty
-  direct/recursive lists. Depends is1 ERROR:25,621P/4F/0W/476 named guards. One test requires
-  absent optional stringi; three image/token assertions follow a missing PNG. Source-reviewed
-  corrections preserve ASCII coverage, name optional Unicode guards and retain existing plots.
-  Fresh corrected-source profile acceptance remains WAITING; the archive was not rebuilt here.
-- DONE/worker assertions: run38290850451 source+installed have213 exact ordered cases
-  per OS. Mac1,541P, Windows1,646P and Linux1,544P per context;0 failures/errors/R warnings,
-  exact platform guards,18 clean lints and19 passing memory-death controls. All observed
-  owned families settle within unchanged caps. Pinned Python and six worker/artifact
-  success/error/cancel cases pass. This is hosted offline evidence, not local GUI acceptance.
-- OPEN/browser UX: each of those six contexts prints five native websocket EOF/reset
-  errors at deferred browser-close boundaries. All30 lines are retained. Passing R assertions
-  do not establish clean shutdown output; source review and a bounded native rerun are required.
-- FAILED/strict Windows: run38290862852 joint75 has1,407P/1F/0E/W/S; native token has30P/1F.
-  The ordinary utility keeps enabled privileges; the A-B-A diagnostic restores A2 before
-  its strict controls. Disabled B produces actual production PROBE1, enabled A1/A2 produce2.
-  Token/ACL restoration is exact, but effective denial in the original controls is unproved.
-  A held-B successor now has69 passing pure assertions and clean lint; native acceptance is
-  pending. Assertions, five-second limits and unknown-fatal
-  rules remain strict; do not treat this fixture failure as unsafe production acceptance.
-- DONE/GitHub triage: legacy issues1 and2 are closed as completed with reviewed explanations.
-  Issue2's supplied-model bug was fixed in2025; current documentation replaces issue1's link.
-  A fresh API read confirms zero open issues. PR6 is the only open PR and remains DRAFT.
-- WAITING/oldrel4: reproduce the older installed-size/temp-root NOTEs on current bytes/R4.2.3
-  with unchanged settings and owned teardown witnesses before choosing a fix or diagnostic A/B.
-- DONE/current private install: original tar installs in15.254s, peak sampled family435.719MiB,
-  zero install warnings/sampling errors, exact five installed hashes and14 guide pairs.
-  Current closure, eleven-stage .gptr storage/fresh-resume and real loopback MCP pass with
-  zero external requests/warnings, exact caller restoration and observed owned cleanup.
-  History passes all four Rmd modes, Quarto and actual IRkernel MIME publication; underlying
- 24 rows/latest8 display,11 state flags and0 requests/usage remain intact. This is synthetic
-  display/computation evidence; browser/native appearance and true short-case RAM peaks are separate.
-- DONE/current Azure functional cases: CSV/TSV/JSON/RDS/RData reopen, trusted skills and lazy
-  plugins, owned stdio MCP, fixed public-data download, configured public web and inline serial
-  specialist fan-out pass with23 real requests, zero warnings and exact caller restoration.
-  Eight functional cases total72.832s; maximum sampled family529.453MiB. Parallel workers,
-  remaining provider/steering/compaction coverage and native frontend appearance stay open.
-- ONGOING/strict Windows fixture: held-route controls69P and five configured lints0. Run38300890432
-  selects no approved files because root supplied a devtools-style filter; native75/PS12/R2 and
-  held-native cases were skipped, so it proves no native acceptance. Correct exact-file filter
-  is dispatched as38302326460 at7390633. Parent tokens stay untouched; actual outcome WAITING.
-- OPEN/local browser experiment: pure8/34P; all three native arms hit unchanged1GiB family
-  cap before page/shutdown proof, with zero sampling errors and exact owned settlement.
-  Outer sampled maximum1646.156MiB stays under approved2GiB. Full-Chrome155 provision/rerun
-  is pending; five diagnostic brace lints also need correction. Original failures are retained.
-- OPEN/current automatic CI: db1 connections has1 strict4MB worker-spec failure (6,052,915B).
-  Numeric-only diagnostics pass3 controls/30P and the isolated IC70 case7P, all eight state
-  flags TRUE, zero warnings/skips and three configured lints0. Narrow spec1,526,449B contains
-  a1,521,980B command closure; its captured package API graph is being investigated. Full Mac
-  connections stops at artifact tests on unchanged2GiB family guard (sample2639.141MiB,
-  68.482s, zero sampling errors, exact owned cleanup), before the size witness. No cap waiver.
-  LC_ALL=C original8 failures remain retained. Latest candidate-only Unicode replay fixes all
-  six native READY comparisons:91 cases/927P/0F/2E/0W/eight exact Windows guards, all seven
-  caller-state flags TRUE. Two command-size failures11044/10828B exceed unchanged9998; neither
-  proposed encoding is adopted. Windows release/oldrel4 raw triage finds a distinct post-recovery
-  fixture failure, two dangling-link sampling warnings and a provider registration timing race;
-  minimal independently reviewed corrections and native verification remain OPEN.
-- WAITING: current site, live providers/extensions/team/fan-out/compaction/replay, native
-  frontend/performance checks, independent full review and PR6 merge.
-  RStudio control still exposes original27070. Its File menu offers Open Project in New Session;
-  that safe fresh-window route is observed but not launched. No original R input/restart/cleanup.
+- DONE/current plot correction (`10ba94d`): recording an existing display list before
+  enabling recording preserves user plots. Tests-first58 cases/328P/4F becomes58/332P,
+  0 failures/errors/warnings/skips, all eight caller-state flags TRUE; four scoped lints0.
+  The optional-stringi edit-test correction remains unadopted; repeat Depends acceptance
+  with the corrected current archive and optional dependency genuinely absent.
+- DONE/current sampling/provider tests (`ff8639d`): exact declared dangling entries whose
+  entry and target are both absent no longer provoke file.info warnings; replaced/present/
+  undeclared/unknown cases stay fatal. The lifecycle test observes actual positive job
+  registration before completion. Tests-first73/947P/3F/1W becomes73/948P/0F/E/W/S,
+  all eight state flags TRUE and three lints0. Hosted Windows acceptance remains required.
+- DONE/current browser ownership (`ba3fcd3`): retain the owning browser/process across failed
+  close or recovery and confirm local process death before final websocket settlement.
+  Ten pure cases change33P/33F/1E to70P/0F/E/W/S; all eight state flags TRUE; two lints0.
+  This is constructor/cache/ownership evidence, not quiet native Chrome shutdown proof.
+- DONE/current package closure correction (`e153bc1`): exactly five utils::removeSource calls
+  remove source metadata from package-created API method/directory wrapper literals while
+  retaining closure environments and user functions/data. Complete ext-api/ext-plugins/
+  ext-load/worker-secrets scope:115 cases,837P/20F tests-first becomes857P/0F/E/W/S;
+  eight state flags TRUE and three lints0. The unchanged full4MB worker assertion still
+  requires current hosted acceptance. No arbitrary user closure is stripped or omitted.
+- DONE/historical cold suites (`02ceac9`):119 cases/900P/0F/E/W/S, eight state flags TRUE;
+  Mac owned MCP retry/pump controls,14 configured lints and roxygen8.1.1 clean.
+- DONE/historical normal archive: all five consumers38288459266 have raw-audited Status OK,
+  0 errors/warnings/notes,129,180P and2,308 named guards. Original tar9d900a3e is2,553,795B
+  with120 committed R files/14 guide pairs. Profiles38298748762 settle owned families with
+  zero sampling errors; Suggests is Status OK/0E/W/N and reverse-dependency inventory passes
+  with empty lists. Depends remains1 ERROR,25,621P/4F/0W/476 guards. Current production must
+  repeat all normal/profile gates; historical success is not current-source acceptance.
+- DONE/historical hosted workers38290850451: source+installed213 ordered cases per OS,
+  total9,462P/0F/E/R warnings; exact guards,18 lints and19 memory controls. Six real worker/
+  artifact success/error/cancel cases and pinned Python pass. Each context still prints five
+  native websocket EOF/reset lines (30 total); native browser output/performance stays OPEN.
+- FAILED/Windows fixture38302326460: correct registry selects75 but actually runs27/653P/
+  0F/E/W/S before helper-mcp-server lacks test_path context;48 writer cases never run.
+  PS twelve faults and two R protocol cases pass. Held-native32P/1F: six effective-denial
+  controls produce PROBE1, tokens/ACLs restore exactly, main/recovery processes settle,
+  then an original postcondition fails. Earlier wrong-filter38300890432 selected none;
+  retain it as failed runner evidence. The helper-context proposal has five pure cases82P/
+  0F/E/W/S but outer search restoration is FALSE, so it remains unadopted. A separately
+  reviewed thirteen-label postcondition diagnostic waits for that prerequisite; no original
+  predicate, assertion, token control, five-second limit or unknown-fatal rule is relaxed.
+- ONGOING/worker size: shipped numeric diagnostic passes3 controls/30P and isolated IC70/7P,
+  eight state flags TRUE and three lints0. Narrow spec1,526,449B contains1,521,980B handler;
+  graph diagnostics identify large package-created source attributes (overlapping/nonadditive).
+  Warmed private controls3/31P/0F/E/W/S preserve all eight flags; R NOJIT first-call metadata
+  explains the earlier private byte difference. Full Mac connections hits the approved2GiB
+  guard before its witness (2639.141MiB sampled, zero sampling errors, exact owned cleanup).
+  Automatic10ba94d run38304913361 is pending; retain its full worker numeric witness before
+  dispatching corrected current bytes. No local cap increase or full-size cure inferred.
+- OPEN/C-locale writer: native READY Unicode fixtures are corrected in private proposals;
+  full91 cases preserve zero warnings/eight exact Windows guards and parent state. All four
+  bootstrap proposals remain unadopted: latest Base6411428/11456B exceeds strict9998, with
+  960P/0F/2E. Private six-codec comparison now reproduces those strict failures with
+  eight state flags TRUE and zero warnings. Gzip+Base64 measures9068/8864B with exact raw/
+  metadata/actor roundtrips; a simple fifth correction is being prepared from these actual
+  measurements. All9998/12000 limits remain unchanged; no encoding is yet adopted.
+- DONE/historical private installation: original02 archive installs in15.254s, maximum
+  sampled family435.719MiB,0 install warnings/sampling errors, exact installed hashes.
+  Eight functional cases (closure, eleven-stage .gptr/fresh-resume, loopback MCP, real Azure
+  files/extensions/download/web/inline serial specialist fan-out) total72.832s, sampled
+  maximum529.453MiB, zero warnings, exact caller restoration and owned cleanup;23 external
+  Azure requests. Four Rmd history modes, Quarto and real IRkernel MIME publication pass
+  synthetic display/state checks. Current changed-source live/native acceptance stays WAITING.
+- DONE/GitHub: legacy issues1/2 closed as completed; fresh read confirms zero open issues.
+  PR6 is the only open PR and remains DRAFT. Independent ba3fcd3 source review covers253
+  paths/120R/14 guide pairs without another production defect; e153bc1 has its own narrow
+  peer review. Source review does not close runtime/release gates.
+- WAITING: oldrel4 installed-size/temp-root NOTE reproduction; current archive, five normal
+  consumers and dependency/C/connections/security gates; quiet native Chrome; responsive
+  white documentation site with light/dark logos and width/zoom/keyboard checks; Claude CLI,
+  Codex CLI, Jev, exact Ollama and current Azure workflows; ML/simulation/synthetic RNA,
+  interactive steering/abort/completion/inline!, real parallel fan-outs, compaction/replay and
+  native R/RStudio/VS Code/document appearance. RStudio still exposes original27070; observed
+  Open Project in New Session is the safe route, not proof of an owned fresh window.
 
-Evidence is retained under ignored primary `dev/.validation/readiness-20261011/`, including
-`normal-five-audit`, all three native audits and `github-legacy-closure-20261012`.
-Resource13:07: load13.48/10.52/10.46, CPU56.99% idle,127G used/374MiB unused,
-swap20,039.81MiB/zero sampled paging, disk459GiB, no thermal warning. User approved one serial
-private test family capped at2GiB sampled RAM/512MiB output; heavy/GPU work stays held.
-Sampled RSS does not establish instantaneous peaks or complete short/reparented-child coverage.
-Finish Mac, hosted and functional gates before final live Windows UI verification; Windows CI
-runs earlier. Merge only after reviewed applicable gates pass. Readiness/only-Windows-remaining
-remain false. Fresh four-stage plan checks are recorded separately after this edit.
+Evidence is retained in ignored primary `dev/.validation/readiness-20261011/`.
+Last resource13:31: load7.14/8.31/8.73, CPU71.51% idle,125G used/1784MiB unused,
+swap20,023.81MiB with zero sampled paging, disk458GiB, no thermal/performance warning.
+User authorizes one serial private test family capped at2GiB sampled RAM/512MiB output;
+heavy/GPU work stays held and shared Ollama is preserved. Sampling does not establish true
+instantaneous peaks. Update this plan after actual outcomes and rerun all four cross-plan
+checks after plan edits. Finish Mac/hosted/functional gates before the final live Windows UI
+verification; Windows CI runs earlier. Merge only after reviewed applicable gates pass.
+Readiness and only-Windows-remaining claims remain false.
 
 ## Previous follow-up — 2026-10-12 (through `ee5088a`)
 
