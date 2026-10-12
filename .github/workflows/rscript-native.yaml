@@ -1,5 +1,8 @@
 name: Rscript native workers and artifacts
 on:
+  push:
+    branches: [codex/skipped-platform-tests]
+    paths: [.github/workflows/rscript-native.yaml]
   workflow_dispatch:
     inputs:
       source_sha:
@@ -18,7 +21,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     env:
-      GPTR_EXPECTED_SOURCE: ${{ inputs.source_sha }}
+      GPTR_EXPECTED_SOURCE: ${{ inputs.source_sha || github.sha }}
       GPTR_LIVE_TESTS: 'false'
       NOT_CRAN: 'true'
       OPENBLAS_NUM_THREADS: '1'
@@ -32,7 +35,7 @@ jobs:
         run: '[[ "$GPTR_EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]'
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          ref: ${{ inputs.source_sha }}
+          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
       - name: Verify exact checkout
         shell: bash
@@ -70,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: rscript-${{ matrix.os }}-${{ inputs.source_sha }}
+          name: rscript-${{ matrix.os }}-${{ inputs.source_sha || github.sha }}
           path: rscript-evidence
           if-no-files-found: error
           retention-days: 14
