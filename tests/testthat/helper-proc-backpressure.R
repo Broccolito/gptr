@@ -255,7 +255,7 @@ bp_run = function(case, declared_links = list()) {
     observer_stats = list(initialization_elapsed = elapsed, before_rss = before_rss,
       after_rss = after_rss, supervisor_pid = ps::ps_pid(supervisor),
       supervisor_create_time = supervisor_time, peak_supervisor_rss = max(before_rss, after_rss),
-      peak_combined_rss = after_rss, last_disk = NULL)
+      peak_combined_rss = max(before_rss, after_rss), last_disk = NULL)
     if (elapsed >= 45 || max(before_rss, after_rss) > 1024^3) {
       stop("Optional observer initialization exceeded its unchanged resource bound")
     }

@@ -1965,3 +1965,119 @@ testthat::test_that(
   testthat::expect_identical(
     get0(".Random.seed", envir = globalenv(), inherits = FALSE), before$seed)
 })
+
+testthat::test_that("the optional sampler flag is explicit and cannot accept malformed values", {
+  testthat::expect_false(optional_observer_enabled(""))
+  testthat::expect_false(optional_observer_enabled("false"))
+  testthat::expect_true(optional_observer_enabled("true"))
+  for (value in c("TRUE", "1", " true", "false ", "unknown"))
+    testthat::expect_error(optional_observer_enabled(value), "Invalid nofollow observer flag")
+  testthat::expect_error(optional_observer_enabled(c("true", "false")), "Invalid nofollow")
+})
+
+optional_observer_fixture = function(case) {
+  list(case = case, sampling_errors = 0L, samples = 2L, owned_family_stopped = TRUE,
+    rss_cap = 1024^3, output_cap = 64 * 1024^2,
+    disk_observer = list(initialization_elapsed = 0.2, before_rss = 100, after_rss = 120,
+      supervisor_pid = 42L, supervisor_create_time = 1,
+      peak_supervisor_rss = 150, peak_combined_rss = 250,
+      last_disk = list(bytes = 16384, entries = 2L, max_depth = 1L, elapsed_s = 0.01)))
+}
+
+optional_observer_line = function(value) {
+  paste0("GPTR-BACKPRESSURE-WITNESS ", jsonlite::toJSON(value, auto_unbox = TRUE))
+}
+
+testthat::test_that("flagged native sampler coverage requires all eight measured cases", {
+  cases = c("ordered", "failed", "shutdown", "orphan", "binary", "timeout", "acl",
+    "native-absence")
+  lines = vapply(lapply(cases, optional_observer_fixture), optional_observer_line, "")
+  file = "test-proc-writer-runtime.R"
+  gate = optional_observer_gate(lines, TRUE, file, TRUE)
+  testthat::expect_true(gate$enabled)
+  testthat::expect_identical(gate$observed_cases, cases)
+  testthat::expect_identical(length(gate$measurements), 8L)
+  testthat::expect_error(optional_observer_gate(character(), TRUE, file, TRUE), "Missing")
+  testthat::expect_error(optional_observer_gate(lines[-1L], TRUE, file, TRUE), "Missing")
+  testthat::expect_error(optional_observer_gate(c(lines, lines[1L]), TRUE, file, TRUE), "Duplicate")
+  absent = optional_observer_fixture(cases[[1L]])
+  absent$disk_observer = NULL
+  testthat::expect_error(optional_observer_gate(c(optional_observer_line(absent), lines[-1L]),
+    TRUE, file, TRUE), "statistics")
+  testthat::expect_identical(optional_observer_gate(lines, FALSE, file, TRUE),
+    list(enabled = FALSE, observed_cases = character(), measurements = list()))
+  linux = optional_observer_gate(character(), TRUE, file, FALSE)
+  testthat::expect_true(linux$native_platform_guard_only)
+  testthat::expect_length(linux$observed_cases, 0L)
+  testthat::expect_length(linux$measurements, 0L)
+  testthat::expect_error(optional_observer_gate(lines, TRUE, file, FALSE), "Unexpected")
+})
+
+testthat::test_that("native sampler evidence rejects unknown resources and malformed snapshots", {
+  cases = c("ordered", "failed", "shutdown", "orphan", "binary", "timeout", "acl",
+    "native-absence")
+  original = lapply(cases, optional_observer_fixture)
+  fail = function(value, message = "Invalid") {
+    changed = original
+    changed[[1L]] = value
+    lines = vapply(changed, optional_observer_line, "")
+    testthat::expect_error(optional_observer_gate(lines, TRUE,
+      "test-proc-writer-runtime.R", TRUE), message)
+  }
+  for (field in c("initialization_elapsed", "before_rss", "after_rss", "supervisor_pid",
+      "supervisor_create_time", "peak_supervisor_rss", "peak_combined_rss")) {
+    changed = original[[1L]]
+    changed$disk_observer[[field]] = NULL
+    fail(changed)
+    changed$disk_observer[[field]] = -1
+    fail(changed)
+  }
+  for (field in c("bytes", "entries", "max_depth", "elapsed_s")) {
+    changed = original[[1L]]
+    changed$disk_observer$last_disk[[field]] = NULL
+    fail(changed)
+  }
+  changed = original[[1L]]
+  changed$disk_observer$peak_combined_rss = 1024^3 + 1
+  fail(changed)
+  changed = original[[1L]]
+  changed$disk_observer$last_disk$elapsed_s = 1
+  fail(changed)
+  changed = original[[1L]]
+  changed$sampling_errors = 1L
+  fail(changed)
+  changed = original[[1L]]
+  changed$owned_family_stopped = FALSE
+  fail(changed)
+  testthat::expect_error(optional_observer_gate("GPTR-BACKPRESSURE-WITNESS {", TRUE,
+    "test-proc-writer-runtime.R", TRUE), "Invalid")
+})
+
+testthat::test_that("the sampler accounts for RSS released during observer initialization", {
+  scope = new.env(parent = baseenv())
+  helper = file.path(dirname(runner_path), "..", "..", "tests", "testthat",
+    "helper-proc-backpressure.R")
+  sys.source(helper, envir = scope)
+  find = function(code) {
+    if (!is.call(code)) return(list())
+    selected = identical(code[[1L]], as.name("=")) && length(code) == 3L &&
+      identical(code[[2L]], as.name("observer_stats")) && is.call(code[[3L]]) &&
+      identical(code[[3L]][[1L]], as.name("list"))
+    result = if (selected) list(code[[3L]]) else list()
+    for (child in as.list(code)[-1L]) result = c(result, find(child))
+    result
+  }
+  initializer = find(body(scope$bp_run))
+  testthat::expect_length(initializer, 1L)
+  testthat::expect_true(all(c("peak_supervisor_rss", "peak_combined_rss") %in%
+    names(initializer[[1L]])))
+  for (rss in list(c(300, 100), c(100, 300))) {
+    values = list2env(list(before_rss = rss[[1L]], after_rss = rss[[2L]]),
+      parent = baseenv())
+    supervisor = eval(initializer[[1L]][["peak_supervisor_rss"]], envir = values)
+    combined = eval(initializer[[1L]][["peak_combined_rss"]], envir = values)
+    testthat::expect_identical(supervisor, 300)
+    testthat::expect_identical(combined, 300)
+    testthat::expect_gte(combined, supervisor)
+  }
+})

@@ -10,6 +10,10 @@ on:
         description: Approved test file name regex, passed as data through the environment
         default: 'doc-knitr|doc-jupyter|doc-history-display|bridge-lang|tool-search|artifact-app|artifact-browser-cleanup|config-content-cache|gptr-config|windows-security|proc-windows-backpressure|proc-backpressure-sampling'
         type: string
+      nofollow_observer:
+        description: Enable bounded no-follow sampling; include proc-writer-runtime in the filter
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -108,6 +112,7 @@ jobs:
           GITHUB_PAT: ''
           GITHUB_TOKEN: ''
           GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-owned
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
             --run Rscript --vanilla dev/ci/optional-integrations.R

@@ -329,6 +329,67 @@ optional_gate = function(rows, file, windows) {
     platform_guard_cases = guards, platform_guard_only = platform_only, rows = rows)
 }
 
+optional_observer_enabled = function(value = Sys.getenv("GPTR_OPTIONAL_NOFOLLOW_OBSERVER")) {
+  if (!is.character(value) || length(value) != 1L || is.na(value) ||
+      !value %in% c("", "false", "true")) stop("Invalid nofollow observer flag")
+  identical(value, "true")
+}
+
+optional_observer_gate = function(lines, enabled, file, windows) {
+  empty = list(enabled = enabled, observed_cases = character(), measurements = list())
+  if (!enabled || !identical(file, "test-proc-writer-runtime.R")) return(empty)
+  cases = c("ordered", "failed", "shutdown", "orphan", "binary", "timeout", "acl",
+    "native-absence")
+  prefix = "GPTR-BACKPRESSURE-WITNESS "
+  lines = lines[startsWith(lines, prefix)]
+  if (!windows) {
+    if (length(lines)) stop("Unexpected native nofollow observer witnesses")
+    return(c(empty, list(native_platform_guard_only = TRUE)))
+  }
+  if (!length(lines)) stop("Missing native nofollow observer witnesses")
+  if (length(lines) > length(cases)) stop("Duplicate native nofollow observer witnesses")
+  witnesses = lapply(lines, function(line) {
+    if (nchar(line, type = "bytes") > 65536L) stop("Invalid nofollow observer witness")
+    tryCatch(jsonlite::fromJSON(substring(line, nchar(prefix) + 1L), simplifyVector = FALSE),
+      error = function(error) stop("Invalid nofollow observer witness"))
+  })
+  observed = vapply(witnesses, function(x) {
+    if (!is.list(x) || !is.character(x$case) || length(x$case) != 1L ||
+        is.na(x$case) || !x$case %in% cases) stop("Invalid nofollow observer case")
+    x$case
+  }, "")
+  if (anyDuplicated(observed)) stop("Duplicate native nofollow observer witnesses")
+  if (!setequal(observed, cases)) stop("Missing native nofollow observer witnesses")
+  number = function(x, maximum = Inf, positive = FALSE) {
+    is.numeric(x) && length(x) == 1L && is.finite(x) &&
+      x >= 0 && (!positive || x > 0) && x <= maximum
+  }
+  measurements = lapply(witnesses, function(x) {
+    stats = x$disk_observer
+    if (!is.list(stats)) stop("Missing native nofollow observer statistics")
+    fields = c("initialization_elapsed", "before_rss", "after_rss", "supervisor_pid",
+      "supervisor_create_time", "peak_supervisor_rss", "peak_combined_rss")
+    disk = stats$last_disk
+    if (!all(vapply(fields, function(name) number(stats[[name]]), logical(1))) ||
+        !number(stats$supervisor_pid, positive = TRUE) ||
+        !number(stats$supervisor_create_time, positive = TRUE) ||
+        stats$initialization_elapsed >= 45 || stats$peak_supervisor_rss > 1024^3 ||
+        stats$peak_supervisor_rss < max(stats$before_rss, stats$after_rss) ||
+        stats$peak_combined_rss < stats$peak_supervisor_rss ||
+        stats$peak_combined_rss > 1024^3 || !is.list(disk) ||
+        !number(disk$bytes, 64 * 1024^2) || !number(disk$entries, 4096) ||
+        !number(disk$max_depth, 32) || !number(disk$elapsed_s) || disk$elapsed_s >= 1 ||
+        !identical(x$sampling_errors, 0L) || !number(x$samples, positive = TRUE) ||
+        !isTRUE(x$owned_family_stopped) || !number(x$rss_cap) || x$rss_cap != 1024^3 ||
+        !number(x$output_cap) || x$output_cap != 64 * 1024^2) {
+      stop("Invalid native nofollow observer statistics")
+    }
+    c(stats[fields], list(last_disk = disk[c("bytes", "entries", "max_depth", "elapsed_s")]))
+  })
+  list(enabled = TRUE, native_platform_guard_only = FALSE, observed_cases = observed,
+    measurements = stats::setNames(measurements, observed))
+}
+
 optional_condition_diagnostic = function(condition) {
   message = conditionMessage(condition)
   list(classes = class(condition), message = substr(message, 1L, 2000L),
@@ -645,9 +706,13 @@ optional_integrations_main = function(controller) {
   pattern = Sys.getenv("GPTR_OPTIONAL_FILTER")
   if (!nzchar(pattern)) stop("Set the explicit optional integration filter")
   files = optional_select(pattern, root)
+  observer_enabled = optional_observer_enabled()
+  if (observer_enabled && !"test-proc-writer-runtime.R" %in% basename(files))
+    stop("Flagged nofollow sampling requires the native writer runtime file")
   summary = list(passed = FALSE, source_sha = Sys.getenv("GPTR_EXPECTED_SOURCE"),
     filter = pattern, selected_files = basename(files), per_file_timeout_s = 300L,
-    external_live_tests_enabled = FALSE, results = list())
+    external_live_tests_enabled = FALSE, nofollow_observer_enabled = observer_enabled,
+    results = list())
   on.exit({
     optional_controller_phase(controller, "integration-summary-json", "controller")
     summary$controller_warnings = optional_controller_snapshot(controller)
@@ -741,7 +806,12 @@ optional_integrations_main = function(controller) {
       res = invoke("test", name, file)
       optional_controller_phase(controller, "test-result-gate", name)
       gate = optional_gate(res$result, name, .Platform$OS.type == "windows")
-      list(passed = TRUE, gate = gate, known_build_advisories = res$known_build_advisories)
+      lines = if (observer_enabled && identical(name, "test-proc-writer-runtime.R"))
+        readLines(file.path(output, paste0(name, "-stdout.log")), warn = FALSE) else character()
+      observer = optional_observer_gate(lines, observer_enabled, name,
+        .Platform$OS.type == "windows")
+      list(passed = TRUE, gate = gate, nofollow_observer = observer,
+        known_build_advisories = res$known_build_advisories)
     }, error = function(e) {
       reason = substr(conditionMessage(e), 1L, 2000L)
       cat(name, ": ", reason, "\n", sep = "", file = stderr())
