@@ -1518,6 +1518,7 @@ test_that("new sidecars are closed JSON data with explicit line arrays", {
 test_that("Windows leaves legacy sidecars pending without any RDS read", {
   local_project()
   local_gptr_options(quiet = FALSE)
+  testthat::local_mocked_bindings(is_windows = function() TRUE)
   f = file.path(getwd(), "legacy.R")
   writeLines('peter("first")', f)
   rec = doc_pending_new(path_norm(f), "deferred")
@@ -1529,12 +1530,13 @@ test_that("Windows leaves legacy sidecars pending without any RDS read", {
   before = unname(tools::md5sum(side))
   reads = 0L
   original = base::readRDS
-  testthat::local_mocked_bindings(is_windows = function() TRUE)
   testthat::local_mocked_bindings(readRDS = function(file, ...) {
     if (!identical(file, side)) return(original(file, ...))
     reads <<- reads + 1L
     rec
   }, .package = "base")
+  expect_identical(doc_sidecar_legacy_path(f), side)
+  expect_true(doc_sidecar_exists(side))
   expect_message(expect_null(doc_sidecar_read(f)), "legacy.*pending", ignore.case = TRUE)
   expect_identical(reads, 0L)
   expect_identical(unname(tools::md5sum(side)), before)
@@ -1893,6 +1895,10 @@ test_that("unknown or malformed POSIX owner identity never deserializes legacy s
   uid = NA_real_
   expect_null(doc_sidecar_read(f))
   local_mocked_bindings(is_windows = function() TRUE)
+  windows_modern = doc_sidecar_path(f)
+  write_atomic(windows_modern, bytes)
+  expect_true(doc_sidecar_exists(windows_modern))
+  expect_identical(readBin(windows_modern, "raw", n = length(bytes)), bytes)
   expect_identical(doc_sidecar_read(f)$upserts[[1]]$block_id, "aaaaaa")
   expect_identical(reads, 1L)
   expect_identical(unname(tools::md5sum(legacy)), before)
