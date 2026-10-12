@@ -190,6 +190,119 @@ test_that("writer cleanup retains its original state until settlement is confirm
   expect_true(proc_writer_stop(p))
   expect_null(table[["42"]])
   expect_identical(observe$removed, 1L)
+
+  # Registration may throw after native construction; cleanup must retain that exact actor.
+  exercise = function(settlement, original) {
+    root = withr::local_tempdir()
+    marker = "GPTR_PROC_0123456789abcdef"
+    target_marker = "GPTR_PROC_fedcba9876543210"
+    dir = file.path(root, paste0(marker, ".stdin"))
+    owner = file.path(dir, "owner")
+    payload = file.path(dir, "in-000000000001")
+    table = new.env(parent = emptyenv())
+    observe = new.env(parent = emptyenv())
+    observe$outcome = settlement
+    observe$killed = list()
+    observe$removed = 0L
+    p = list(get_pid = function() 42L, is_alive = function() TRUE,
+      get_input_connection = function() NULL)
+    actor = list(get_pid = function() 43L)
+    start = proc_writer_start
+    stop_writer = proc_writer_stop
+    scope = new.env(parent = environment(start))
+    environment(start) = scope
+    environment(stop_writer) = scope
+    scope$proc_writer_stop = stop_writer
+    scope$proc_writer_get = function(target) {
+      if (identical(target, p)) table[["42"]] else NULL
+    }
+    scope$proc_writer_table = function() table
+    scope$proc_pool_cap = function(...) 1L
+    scope$proc_marker_new = function() marker
+    scope$proc_writer_dir = function(...) dir
+    scope$proc_writer_missing = function(...) !dir.exists(dir)
+    scope$proc_self = function() list(pid = 1L, create_time = 10)
+    scope$proc_record = function(...) list(create_time = 20, marker = target_marker)
+    scope$proc_identity = function(pid, time) {
+      stopifnot(identical(pid, 42L), identical(time, 20))
+      list(alive = TRUE, handle = list())
+    }
+    scope$file.exists = function(...) TRUE
+    scope$proc_dir = function(...) root
+    scope$proc_writer_acl = function(...) ""
+    scope$shell_ps_encode = function(...) ""
+    scope$supervise_default = function() FALSE
+    scope$proc_writer_code = function(...) "1"
+    scope$rscript_path = function() "/fixture-only/Rscript"
+    scope$reactor_now = function() 1
+    scope$child_env = function(profile, set) {
+      stopifnot(identical(profile, "worker"))
+      c(SAFE = "YES", set)
+    }
+    scope$is_secret_name = function(names) rep(FALSE, length(names))
+    scope$lits_present = function(...) FALSE
+    scope$secrets_state = function() NULL
+    scope$proc_spawn = function(command, args, env, stdout, stderr, .marker, .on_spawn = NULL) {
+      stopifnot(identical(.marker, marker), identical(env[[target_marker]], "YES"))
+      dir.create(dir, mode = "0700")
+      writeBin(charToRaw(marker), owner)
+      writeBin(charToRaw("private-payload"), payload)
+      if (is.function(.on_spawn)) .on_spawn(actor)
+      stop(original)
+    }
+    scope$kill_all = function(process, grace) {
+      stopifnot(identical(process, actor), identical(grace, 0))
+      observe$killed = c(observe$killed, list(process))
+      if (inherits(observe$outcome, "condition")) stop(observe$outcome)
+      observe$outcome
+    }
+    scope$proc_writer_remove = function(value) {
+      stopifnot(identical(value, marker))
+      observe$removed = observe$removed + 1L
+      unlink(dir, recursive = TRUE)
+      !dir.exists(dir)
+    }
+    testthat::local_mocked_bindings(ps_create_time = function(...) 20, .package = "ps")
+    caught = tryCatch(start(p, 2), error = identity, interrupt = identity)
+    expect_identical(caught, original)
+    retained = table[["42"]]
+    expect_true(is.environment(retained))
+    expect_identical(retained$p, actor)
+    expect_identical(retained$target, p)
+    expect_identical(retained$marker, marker)
+    expect_identical(retained$dir, dir)
+    expect_identical(retained$canonical,
+      paste0(normalizePath(root, winslash = "/", mustWork = TRUE), "/", basename(dir)))
+    expect_identical(retained$stopping, FALSE)
+    expect_identical(observe$killed, list(actor))
+    expect_identical(observe$removed, 0L)
+    bytes = function(path) {
+      tryCatch(readBin(path, "raw", n = 1024L), error = function(error) NULL)
+    }
+    expect_identical(bytes(owner), charToRaw(marker))
+    expect_identical(bytes(payload), charToRaw("private-payload"))
+    observe$outcome = TRUE
+    expect_true(stop_writer(p))
+    expect_null(table[["42"]])
+    expect_identical(observe$killed, list(actor, actor))
+    expect_identical(observe$removed, 1L)
+    expect_false(dir.exists(dir))
+    expect_true(stop_writer(p))
+    expect_identical(observe$removed, 1L)
+  }
+  cleanup_error = structure(list(message = "synthetic cleanup error", call = NULL),
+    class = c("writer_cleanup_error", "error", "condition"))
+  cleanup_interrupt = structure(list(message = "synthetic cleanup interrupt", call = NULL),
+    class = c("interrupt", "condition"))
+  original_error = structure(list(message = "synthetic registration error", call = NULL),
+    class = c("writer_registration_error", "error", "condition"))
+  original_interrupt = structure(list(message = "synthetic registration interrupt", call = NULL),
+    class = c("interrupt", "condition"))
+  for (original in list(original_error, original_interrupt)) {
+    for (settlement in list(FALSE, NA, cleanup_error, cleanup_interrupt)) {
+      exercise(settlement, original)
+    }
+  }
 })
 
 test_that("writer refuses a changed mailbox root or owner before payload access", {

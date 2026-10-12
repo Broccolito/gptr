@@ -965,7 +965,9 @@ proc_writer_start = function(p, limit) {
   st$pending = NULL
   assign(key, st, envir = table)
   good = FALSE
-  on.exit(if (!good) proc_writer_stop(p), add = TRUE)
+  on.exit(if (!good) {
+    tryCatch(proc_writer_stop(p), error = function(error) NULL, interrupt = function(error) NULL)
+  }, add = TRUE)
   set = c(OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1", MKL_NUM_THREADS = "1",
           VECLIB_MAXIMUM_THREADS = "1")
   if (!is.null(rec)) set = c(set, stats::setNames("YES", rec$marker))
@@ -973,7 +975,8 @@ proc_writer_start = function(p, limit) {
   env = env[!is_secret_name(names(env)) &
               !vapply(env, lits_present, NA, st = secrets_state(), USE.NAMES = FALSE)]
   st$p = proc_spawn(command, args, env = env,
-    stdout = p$get_input_connection(), stderr = "|", .marker = marker)
+    stdout = p$get_input_connection(), stderr = "|", .marker = marker,
+    .on_spawn = function(actor) st$p = actor)
   st$writer_pid = st$p$get_pid()
   writer = proc_record(st$writer_pid, st$p)
   if (!is.null(writer)) st$writer_create = writer$create_time
