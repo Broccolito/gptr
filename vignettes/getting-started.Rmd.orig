@@ -113,7 +113,7 @@ s2$text
 ```
 
 A branch is always explicit. `gptr_fork()` copies the conversation into a new session whose
-workspace sees the original objects without copying them and keeps its own changes:
+workspace looks up objects in the parent environment and keeps ordinary assignments local:
 
 ```{r}
 branch = gptr_fork(s2)

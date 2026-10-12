@@ -4,19 +4,21 @@
 # gptr <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo-dark.png"/><img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo.png" align="right" width="120" height="139" alt="gptr logo"/></picture>
 
 gptr runs language model agents inside your live R session, using
-**in-memory compute**. They work with objects you already loaded,
-including datasets around **4 GB or larger**, and reuse your variables
-and intermediate results across turns. Load a dataset once, analyze it
-by name, and rerun the step you want to change. One function, `peter()`,
-is an interactive chat in the console and a programmable call that you
-put in scripts, loops and `if` statements.
+**in-memory compute**. They work with objects you already loaded and
+reuse your variables and intermediate results across turns. With enough
+available memory, this includes datasets around **4 GB or larger**. Load
+a dataset once, analyze it by name, and rerun the step you want to
+change. One function, `peter()`, is an interactive chat in the console
+and a programmable call that you put in scripts, loops and `if`
+statements.
 
 The model receives bounded object descriptions, previews and tool
 output; the R tool computes on the full object in your session. You
 choose what results to print or plot. Model requests still have latency,
-and R code can allocate copies or run expensive calculations. See
-`vignette("execution-model", package = "gptr")` for memory and
-data-sharing details.
+and R code can allocate copies or run expensive calculations. Separate R
+workers serialize selected inputs rather than sharing the parent
+workspace. See `vignette("execution-model", package = "gptr")` for
+memory and data-sharing details.
 
 Peter's name honors Peter Naur and Peter Cathcart Wason: readable
 programs and careful reasoning. See [Why Peter?](#why-peter) and
@@ -92,11 +94,11 @@ ls(work)
 
 s |> peter("Reuse fit to predict mpg for the same cars.")
 #> The predictions are stored in predicted.
-#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . s56d828fb07
+#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . sf33a812c1a
 head(work$predicted)
-#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
-#>          23.28261          21.91977          24.88595          20.10265
-#> Hornet Sportabout           Valiant
+#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive 
+#>          23.28261          21.91977          24.88595          20.10265 
+#> Hornet Sportabout           Valiant 
 #>          18.90014          18.79325
 s$turns
 #> [1] 2
@@ -131,11 +133,11 @@ abstracts = c(a = "We randomized 200 adults to drug or placebo.",
               b = "We followed a cohort of nurses for 20 years.")
 is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge)
 is_rct
-#>              a              b
-#>  TRUE (p=0.93) FALSE (p=0.08)
-#> judge-s1-1.0 . calibration unknown . 2026-10-10
+#>              a              b 
+#>  TRUE (p=0.93) FALSE (p=0.08) 
+#> judge-s1-1.0 . calibration unknown . 2026-10-11
 gptr_prob(is_rct)
-#>    a    b
+#>    a    b 
 #> 0.93 0.08
 ```
 

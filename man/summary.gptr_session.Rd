@@ -19,6 +19,7 @@ Reads a table of recorded turns without a model request. It does not generate a 
 workflow summary or export an executable script. To request prose, continue the session
 with \code{\link[=peter]{peter()}} and verify the model-generated answer against the recorded work.
 Both \code{summary(s)} and \code{s$history} retain every recorded message. Printing shows the latest
-eight messages and a snapshot of session metadata. Use \code{print(x, n = Inf)} to display every
-row, or \code{as.data.frame(x)} for an ordinary data frame without the display metadata.
+eight messages and a snapshot of session metadata. Notebook, R Markdown and Quarto displays
+use the same compact preview by default. Use \code{print(x, n = Inf)} to display every row, or
+\code{as.data.frame(x)} for an ordinary data frame without the display metadata.
 }

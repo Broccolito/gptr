@@ -36,8 +36,9 @@
 #' or configured models and `.stdin = TRUE` skip setup. CLI-reported login is not proof of online
 #' access or subscription billing. See `vignette("interactive-console", package = "gptr")`.
 #'
-#' The name honors Peter Cathcart Wason, whose work on reasoning framed the dual-process (System 1
-#' / System 2) view that gptr unifies, and Peter Naur of the Backus-Naur form, in the spirit of
+#' The name honors Peter Cathcart Wason, whose research with Jonathan Evans distinguished
+#' processes underlying reasoning and introspection, and Peter Naur of the Backus-Naur form,
+#' in the spirit of
 #' recording sessions as readable, replayable documents. A user object named `peter` hides the
 #' gateway; call `gptr::peter()` then.
 #'
