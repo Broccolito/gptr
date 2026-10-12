@@ -33,12 +33,13 @@ local_fake_env = function(.env = parent.frame()) {
   withr::local_envvar(fake_env(), .local_envir = .env)
 }
 
-# Evaluate `expr`, returning its value and the billing_env warning it raised (or NULL).
+# Evaluate `expr`, returning its value and the billing_env notice it raised (or NULL).
 with_billing_warning = function(expr) {
+  withr::local_options(gptr.quiet = FALSE)
   w = NULL
-  value = withCallingHandlers(expr, gptr_warning_billing_env = function(cnd) {
+  value = withCallingHandlers(expr, gptr_message_billing_env = function(cnd) {
     w <<- cnd
-    invokeRestart("muffleWarning")
+    invokeRestart("muffleMessage")
   })
   list(value = value, warning = w)
 }
@@ -98,7 +99,7 @@ test_that("cli-claude follows G6 3.7: enclosing-agent and billing variables go, 
   local_vault()
   local_fake_env()
   res = with_billing_warning(child_env("cli-claude"))
-  expect_s3_class(res$warning, "gptr_warning_billing_env")
+  expect_s3_class(res$warning, "gptr_message_billing_env")
   expect_identical(res$warning$variables, c("ANTHROPIC_API_KEY", "ANTHROPIC_PROFILE"))
   cc = res$value
   expect_false(any(c("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "ANTHROPIC_PROFILE",

@@ -196,7 +196,7 @@ child_env = function(profile, pass = character(), set = character(), provider = 
   billing = up %in% billing_up & !(up %in% c(pass_up, explicit))
   gone = sort(nm[billing & nzchar(env)])
   if (length(gone)) {
-    gptr_warn(paste0("Removed ", paste(gone, collapse = ", "), " from the environment of the ",
+    gptr_inform(paste0("Removed ", paste(gone, collapse = ", "), " from the environment of the ",
                      profile, " child: these variables switch the CLI to API billing or to ",
                      "another account."),
               "billing_env", variables = gone,

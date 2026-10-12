@@ -237,7 +237,7 @@ test_that("a workspace-write exec that changes control files is reported after i
                       gptr_warning_cli_sandbox = function(w) {
                         seen$events = length(opts$log$events)
                         seen$text = conditionMessage(w)
-                        invokeRestart("muffleWarning")
+                        invokeRestart("muffleMessage")
                       })
   expect_match(seen$text, ".gptr/settings.json", fixed = TRUE)
   expect_identical(event_types(opts)[[seen$events]], "done")
@@ -555,7 +555,7 @@ test_that("a control-file check that fails still completes the exec, then warns"
                       gptr_warning_cli_sandbox = function(w) {
                         seen$events = length(opts$log$events)
                         seen$text = conditionMessage(w)
-                        invokeRestart("muffleWarning")
+                        invokeRestart("muffleMessage")
                       })
   expect_identical(event_types(opts)[[seen$events]], "done")
   expect_length(opts$log$events, seen$events)
@@ -728,7 +728,7 @@ test_that("an exec that ends in an internal error has its control files checked,
     withCallingHandlers(code, gptr_warning_cli_sandbox = function(w) {
       seen$at = length(opts$log$events)
       seen$text = conditionMessage(w)
-      invokeRestart("muffleWarning")
+      invokeRestart("muffleMessage")
     })
   }
   item = list(id = "item_0", type = "agent_message", text = "x")
@@ -769,6 +769,7 @@ test_that("an exec that ends in an internal error has its control files checked,
 
 test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env", {
   skip_on_cran()
+  local_gptr_options(quiet = FALSE)
   f = local_fake_cli("codex", "text")
   local_mcp_stub()
   withr::local_envvar(OPENAI_API_KEY = "sk-p20fake-openai-0000000000000000",
@@ -780,9 +781,9 @@ test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, the token o
   seen$vars = character()
   s = withCallingHandlers(
     peter(big, model = f$model, envir = new.env(), mode = "edits"),
-    gptr_warning_billing_env = function(w) {
+    gptr_message_billing_env = function(w) {
       seen$vars = c(seen$vars, w$variables)
-      invokeRestart("muffleWarning")
+      invokeRestart("muffleMessage")
     })
   expect_identical(fake_argv(f)[[1]],
                    c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m",

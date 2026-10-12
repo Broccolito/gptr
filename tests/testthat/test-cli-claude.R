@@ -705,6 +705,7 @@ test_that("an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr
 
 test_that("billing and enclosing-agent variables never reach the claude child", {
   skip_on_cran()
+  local_gptr_options(quiet = FALSE)
   f = local_fake_cli("claude", "text")
   withr::local_envvar(ANTHROPIC_API_KEY = "sk-ant-api03-p20fake-000000000000000000000",
                       ANTHROPIC_PROFILE = "work", ANTHROPIC_FEDERATION_RULE_ID = "p20-rule",
@@ -714,10 +715,10 @@ test_that("billing and enclosing-agent variables never reach the claude child", 
   seen$text = character()
   s = withCallingHandlers(
     peter("Say hello", model = f$model, envir = new.env()),
-    gptr_warning_billing_env = function(w) {
+    gptr_message_billing_env = function(w) {
       seen$vars = c(seen$vars, w$variables)
       seen$text = c(seen$text, conditionMessage(w))
-      invokeRestart("muffleWarning")
+      invokeRestart("muffleMessage")
     })
   local_cli_cleanup(s)
   env = fake_env_names(f)[[1]]

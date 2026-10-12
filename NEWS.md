@@ -6,6 +6,9 @@ scripts, loops and `if` statements, and the agent works on the objects already i
 
 ## Breaking changes
 
+* Successful removal of CLI billing variables emits an informational
+  `gptr_message_billing_env` condition with the removed names, never their values. Handlers
+  use `muffleMessage`; the notice respects `gptr.quiet`. Actual billing refusals remain errors.
 * The whole interface of gptr 0.7.0 is removed: its only two exported functions,
   `get_response()` and `dataframe_to_text()`, are gone, and no 0.x name is kept as a shim or an
   alias. Code written for 0.7.0 is rewritten as follows.

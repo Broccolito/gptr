@@ -276,13 +276,14 @@ names the intermediate class when there is one. Fields are in addition to `messa
 Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02), `two_prompts` (P08;
 two unnamed string literals), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
 `doc_conflict` (P15; md5 conflict after three attempts), `s1_errors` (P13; failed elements in a vectorised call;
-field `errors`), `billing_env` (P03/P20; names of removed billing variables),
+field `errors`),
 `readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
 when `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs in live
 session entries; field `counts`).
 
 Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), `egress_ack` (P08, IC-71), `s1_split` (P13; once per
-session when a data frame is split into several states, naming `I(x)`), `notice`
+session when a data frame is split into several states, naming `I(x)`),
+`billing_env` (P03/P20; names of removed billing variables), `notice`
 (one-time notices: experimental routes, Codex overhead, uncalibrated emulation), `value_rebound` (P06),
 `progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2).
 
@@ -405,11 +406,11 @@ Set by gptr in child processes only (never in the user's session): `NO_COLOR=1`,
 in **every** profile (an Rscript child otherwise re-reads keys from `~/.Renviron`; IC-60); `GPTR_MCP_TOKEN`,
 `GPTR_SUBAGENT_DEPTH`, `GPTR_WORKER` as above. Removed from CLI children (G6 §3.7 verbatim, IC-65): for claude,
 secret-like names, registered values, `^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDE_PID$)` except the kept
-`CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, and with a `billing_env` warning
+`CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, and with a `billing_env` informational notice
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, `ANTHROPIC_BASE_URL`,
 `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`,
 `CLAUDE_CODE_USE_FOUNDRY`; for codex, secret-like names, registered values, `^(CODEX_MANAGED_|CODEX_SANDBOX)`, and
-with the warning `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN`, `OPENAI_BASE_URL` (`CODEX_HOME` kept).
+with the same notice `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN`, `OPENAI_BASE_URL` (`CODEX_HOME` kept).
 `child_env()` returns the complete vector without removed names directly to processx.
 The retired callr adapter is preserved only in excluded upstream experiments.
 
@@ -3137,7 +3138,7 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   `--max-turns <n> --max-budget-usd <x>` when a budget is in force (IC-65, IC-66) (never `--bare`; a CLI whose
   `-p` defaults to bare is handled by the probe of IC-65; the binary is native, never the `claude.cmd` shim); `<file>` for `--mcp-config` contains
   `{"mcpServers":{"gptr":{"type":"sdk","name":"gptr"}}}`; the system-prompt file holds the session's frozen T0 +
-  T1; the child environment is `child_env("cli-claude")` (billing variables removed with a `billing_env` warning).
+  T1; the child environment is `child_env("cli-claude")` (billing variables removed with a `billing_env` informational notice).
   Per turn `send` = one `{"type":"user","message":{"role":"user","content":<blocks>},"parent_tool_use_id":null,
   "session_id":""}` line. The normaliser handles `stream_event` lines with `anthropic_normaliser()` (P12),
   `control_request` lines by subtype: `mcp_message` -> `opts$mcp_dispatch(message)` (P18's
@@ -4759,7 +4760,7 @@ document are exact.
   `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, `ANTHROPIC_BASE_URL`,
   `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`; keep `CLAUDE_CODE_OAUTH_TOKEN`,
   `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`; `CLAUDE_CODE_USE_BEDROCK`/`VERTEX`/`FOUNDRY` are removed with the
-  `billing_env` warning. A capability probe (`--help`, version) detects a CLI whose `-p` defaults to `--bare`
+  `billing_env` informational notice. A capability probe (`--help`, version) detects a CLI whose `-p` defaults to `--bare`
   (which never reads the subscription login [07]) and passes the documented opt-out or stops with
   `gptr_error_cli_version`. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with
   `gptr_error_billing`. The wire log is per session (`cache/tmp/wire-<session id>.jsonl`).
