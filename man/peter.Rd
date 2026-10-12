@@ -142,7 +142,7 @@ in \code{envir}. Give a function a dedicated environment when those objects shou
 }
 
 \examples{
-fake = gptr_fake_provider(list("The data has 32 rows."))
+fake = gptr_fake_provider(list("The data has 32 rows.", "The data has 11 columns."))
 s = peter("How many rows does the data have?", mtcars, model = fake, envir = new.env())
 s$text
 s |> peter("And how many columns?")
