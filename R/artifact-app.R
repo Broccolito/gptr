@@ -590,7 +590,19 @@ artifact_chromote_missing = function() {
 #' @noRd
 artifact_browser = function() {
   b = artifact_state$browser
-  if (!is.null(b) && isTRUE(tryCatch(b$is_alive(), error = function(e) FALSE))) return(b)
+  if (!is.null(b)) {
+    alive = b$is_alive()
+    if (isTRUE(alive)) return(b)
+    if (!isFALSE(alive)) {
+      gptr_abort("The cached headless browser state is unavailable.", "io",
+                 operation = "open", path = NULL)
+    }
+    artifact_browser_close()
+    if (!is.null(artifact_state$browser)) {
+      gptr_abort("The cached headless browser changed during cleanup.", "io",
+                 operation = "open", path = NULL)
+    }
+  }
   args = c(chromote::get_chrome_args(), "--use-mock-keychain")
   b = chromote::Chromote$new(browser = chromote::Chrome$new(args = args))
   artifact_state$browser = b
@@ -601,16 +613,33 @@ artifact_browser = function() {
 #' @noRd
 artifact_browser_close = function() {
   b = artifact_state$browser
-  artifact_state$browser = NULL
-  if (!is.null(b)) {
-    # Chromote closes its websocket immediately after an unobserved async Browser.close.
-    # End our local process first so the container closes only its websocket, not a promise.
-    try({
-      browser = b$get_browser()
-      if (isTRUE(browser$is_local())) browser$close(wait = TRUE)
-    }, silent = TRUE)
-    try(b$close(), silent = TRUE)
+  if (is.null(b)) return(invisible(NULL))
+  browser = b$get_browser()
+  local = browser$is_local()
+  if (!isTRUE(local) && !isFALSE(local)) {
+    gptr_abort("The headless browser ownership is unavailable.", "io",
+               operation = "close", path = NULL)
   }
+  if (local) {
+    process = browser$get_process()
+    alive = process$is_alive()
+    if (!isTRUE(alive) && !isFALSE(alive)) {
+      gptr_abort("The owned headless browser state is unavailable.", "io",
+                 operation = "close", path = NULL)
+    }
+    # Keep the owner reachable; a live-local container close sends unobserved CDP.
+    if (alive) browser$close(wait = TRUE)
+    if (!isFALSE(process$is_alive())) {
+      gptr_abort("The owned headless browser did not stop.", "io",
+                 operation = "close", path = NULL)
+    }
+  }
+  b$close(wait = FALSE)
+  if (!isFALSE(b$is_active())) {
+    gptr_abort("The headless browser connection did not become inactive.", "io",
+               operation = "close", path = NULL)
+  }
+  if (identical(artifact_state$browser, b)) artifact_state$browser = NULL
   invisible(NULL)
 }
 
