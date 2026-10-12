@@ -798,3 +798,37 @@ is authorized. Parent raw environment equality is checked independently from R C
 startup normalization; an invalid native seed cannot prove either preservation or its failure.
 Use offline fake data/keys only, exact-owned cleanup and bounded fresh child processes.
 Native or cleanup unknowns remain failures, never passes or new capability skips.
+
+
+## Current readiness execution queue — 2026-10-11 23:12 PDT
+
+The maintainer requested completing every applicable non-Windows-desktop item. The
+existing frontend/provider, fourteen-guide and X01–14 tables remain the coverage contract;
+this queue orders their remaining work. Prepared source, a login/catalog entry and a
+headless render are not substitutes for execution or native visual observation. Only the
+Windows desktop live verification may remain at the final handoff. No CRAN submission,
+account logout, user workspace reset or shared-model stop is authorized.
+
+| Gate | Scope and next independent proof | Current state |
+|---|---|---|
+| R01 child execution | RPX01–06: exact seeded parent state, worker protocol, installed/source Shiny HTTP/browser and cancellation; Mac/Windows native plus Linux regression | ONGOING. Exact4d86 Mac source1422P and installed1422P,0F/0W,207 cases each; one named OS guard. Windows1438P/1F/0W,207 cases,3 named guards; installed did not run. One exact Windows path assertion corrected3574; run38211164788 active. |
+| R02 dependency retirement | RPX07: remove production callr only after R01 acceptance, retain upstream experiment separately; repeat native, metadata and exact-archive gates | WAITING R01; callr Import still present. |
+| R03 file and persistence safety | FT01/ST01/ST02: private JSONL/checkpoint creation, absence preconditions, sidecar structural/call bounds; installed tree/hash/mode deltas, corruption/rewind/refusal, text/doc reopens | ONGOING. Actual Mac551 storage and665 sidecar assertions pass,0F/0W/0S; scoped lint0. Earlier21/49-failure runs retained. Installed/current Windows and remaining extension packet pending. |
+| R04 Windows security | Native known-junction containment, strict effective-denial controls, exact ACL restoration, child death, writer concurrency and no-follow test supervisor controls | ONGOING source preparation. Execute10 Python and8 R observer controls before activating sampler; then9 security/47 writer cases. No warning suppression or weakened denial oracle. These hosted gates must finish before leaving only Windows desktop live verification. |
+| R05 dependencies and documents | Child-only Quarto discovery; private testthat/NumPy/pandas/reticulate identity; local applicable skipped doc-knitr/bridge-lang cases | ONGOING. Private testthat3.3.2 rebuilt under local R4.5.0; NumPy2.5.4/pandas3.0.6 installed privately. Compound CLI proof failed on relocated build-time LIBDIR, retained; exact real runtime library proof under review. Parent PATH unchanged. |
+| R06 compact history | UX05: certified actual IRkernel MIME and Rmd default/kable/paged/tibble plus Quarto, full24-row invariance/latest8 display,0requests/usage, exact cleanup | WAITING final immutable candidate certificate; six serial prepared cases. Native GUI history remains its own observation. |
+| R07 live providers and decisions | All five requested routes: Claude CLI, Codex CLI, Jev typed decisions, exact Ollama Qwen and Versa Azure; S1 logical/choice/score, emulated/native/local boundaries and configuration | ONGOING historical live/replay cells retained by revision; current remaining cells and capability-specific errors pending. No inference claim from inventory. Preserve shared Ollama. |
+| R08 live workflows | Functional Peter/file/scripts, interactive steering, queued/background work, named subagents and fan-out, bounded simulation/ML/single-cell examples; independent numerical/input and replay oracles | ONGOING historical scoped passes retained. Certified closure/storage/HTTP and five live file/resource/download/agent/web cases prepared; remaining team/cancel/summary-quality cases pending. |
+| R09 compaction | CP01–06: manual/automatic continuity, budget/abort/malformed/timeout, durable per-attempt usage, fresh resume/rewind, teams/shared attribution and strict replay across PTY/GUI/Rscript/Rmd/Quarto/IRkernel | ONGOING source regressions. Four certified manual/auto/budget/abort live cases and fresh resume prepared; real team/frontend cases still required. |
+| R10 extensions and MCP | EX01–03/FT02: trusted skills/local import/template/agents; directory/package plugin lazy load/unload/reload/trust refusal; stdio and HTTP auth/expiry/progress/error/cancel/reconnect/remove; bounded public download failures | ONGOING. Existing actual scoped MCP/web/download passes retained. Source-only remaining installed negative packet being prepared; external skill upload has no named destination/API and is documented as caller-controlled. |
+| R11 native UX and resources | UX04–06/X12–14: ordinary stdout/error stderr, current R.app post-error color, spinner/layout/newlines/tool-text-tool/interrupt; active width at narrow/wide windows, inline! completion/client limits; RSS/time/first feedback/owned cleanup | WAITING certified native RStudio/R.app/VSCode/terminal/notebook observation. Earlier native passes remain historical. No library claim to reflow emitted scrollback or alter third-party editor completion. |
+| R12 documentation and site | G01–14/Q01–02: README/help/14 guides use accurate in-memory/worker wording and Peter namesakes; all settings/slash/tool/extension/workflow tables; canonical light/dark logos, white background; fresh links/render and320–1920px/zoom checks | ONGOING. README/getting-started and2Rd regenerated,0problems; generated whitespace normalized. Theme storage guard/source asset audit clear. Fresh all-guide/reference/site/browser checks pending. |
+| R13 release helpers and CRAN | Q03–05: readonly doc checks, current normal-release build once, same-byte release/devel OS consumers, CRAN-mode/manual/incoming/deps-only/Suggests-only/revdeps/size/timing checks and all four plan gates | ONGOING. README-check mutation/fabricated notification reproduced6 failures; minimal scratch-render/report correction under test. Plan a9d8 gate25plans/770Rblocks/0parse/style/lints; newer plan gate pending. Local R4.5.0 is diagnostic, not current-release proof. |
+| R14 review and integration | Review complete candidate against pure-R/fixed-dependency/style/security contract, periodic commits/push, exact CI evidence, concrete PR review then authorized merge and final installed/live verification | ONGOING isolated codex/skipped-platform-tests. Existing PR4/5 already merged; no open PR at discovery. Main718e81e/shared dirty paths preserved. New reviewed integration PR/merge waits acceptance. |
+
+At23:05 CPU49.81%idle, load13.41/16.01/15.30, RAM122GiBused/5695MiBunused,
+swap21621.94MiB with sampled0paging,304GiB disk and no thermal/performance warning
+were observed. Four source-heavy agents and small serial offline tests continue; no new
+high-memory/GPU job is admitted while sustained load/swap limits fail. Hosted native uses
+at most two jobs. Recheck admission before each local-heavy or model job. Reports measure
+owned-family RSS separately from external model/unified memory and retain failed attempts.

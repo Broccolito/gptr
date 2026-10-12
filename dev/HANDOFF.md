@@ -1,3 +1,27 @@
+## Current readiness handoff — 2026-10-11 23:12 PDT
+
+Continue the accepted full readiness task in isolated branch codex/skipped-platform-tests,
+checkout /Users/wgu/.codex/worktrees/skipped-platform-tests/gptr. Preserve primary main
+718e81e and its shared dirty files, secrets, existing user R sessions and shared Ollama.
+The complete remaining execution queue is TESTING_PLAN R01–14; only actual Windows
+desktop live verification may remain at the final handoff. No release/submission claimed.
+
+Actual native38210053395 at4d86: Mac source+installed1422P each/0F/0W;
+Windows source1438P/1F/0W due one fixture path spelling, installed not reached.
+Reviewed3574 exact-path correction is pushed; native38211164788 active,2hosted jobs.
+Keep callr until RPX acceptance, then remove unused dependency/adapter and repeat gates.
+Actual storage551 and sidecar665 assertions pass; prior REDs retained. Private dependencies
+installed; compound reticulate runtime proof exposed relocated CPython LIBDIR oracle and
+needs fresh proof. README release-check mutation reproduced and scratch fix under test.
+
+Fresh final immutable certificate, headless/native frontends, live compaction/extensions,
+Windows observer/security gates, all-guide/site/browser checks and current normal-release
+exact-byte CRAN matrix remain pending. Source-only prepared packets under primary ignored
+dev/.validation/readiness-20261011 are not passes. New plan edits require all four fresh
+consolidation checks. Latest23:05load13.41/16.01/15.30/49.81%idle,122GiBused/5695MiBunused,
+swap21621.94MiB,304GiBdisk/no thermal warning: small serial offline/source work only until
+admission improves. Do not stop shared model or broadly kill processes.
+
 # GPTR 1.0 implementation - handoff
 
 ## Rscript replacement and full readiness active — 2026-10-11

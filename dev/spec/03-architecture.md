@@ -293,7 +293,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (119 files after IC-74)
+### 3.2 `R/` files (120 files after the Rscript launcher amendment)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -328,6 +328,7 @@ declares, if any.
 | `auth-store.R` | L0 | `auth.json` credential store (0600, lock, keyring references) | - | P03 |
 | `auth-childenv.R` | L0 | child-environment profiles (mcp, worker, cli-claude, cli-codex, helper, artifact) as complete vectors, `child_env_callr()`; empty `R_ENVIRON_USER`/`R_PROFILE_USER` files for every profile [IC-60] | - | P03 |
 | `proc-spawn.R` | L0 | G5 process engine: `processx::process$new` with `encoding = "UTF-8"` and file redirection, argv via `os_bytes()`, `.cmd`/`.bat` via `cmd.exe /d /c call` with metacharacter refusal, PowerShell `-EncodedCommand`, non-blocking `write_all()`, line reader, UTF-8 decode with code-page fallback | - | P04 |
+| `proc-rscript.R` | L0 | Fixed private `Rscript --vanilla` worker/artifact entries through processx; complete child environment, explicit libraries and retained owned startup files | - | P04 |
 | `proc-supervise.R` | L0 | `kill_all()` (kill_tree, then Windows `taskkill /F /T`, then group kill), grace periods, process tables, tree markers and the orphan sweep, `pid_alive()` (ps) [IC-59], `gptr_jobs()` [IC-36] | - | P04 |
 | `http-reactor.R` | L0 | the process reactor: curl multi pool, `processx::poll()` over curl fds and pipes, timers, tool FIFO, admission, pump depth and `allow_runs` defaults, `later::run_now(0)` in the outermost pump [IC-57], non-blocking stdin buffers | - | P04 |
 | `http-request.R` | L0 | request spec to curl handle (`pipewait = 0L`, `followlocation = 0L` [IC-64], connect/first-byte/idle timeouts, header handles materialised here only) | - | P04 |

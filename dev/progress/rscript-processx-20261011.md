@@ -1,3 +1,26 @@
+## Current checkpoint — 2026-10-11 23:12 PDT
+
+Native exact4d86a17202bffaea79cc80720901e34cade8bbd0 run38210053395 completed:
+macOS R4.6.1 source and installed each207cases/1422P/0F/0W, one named platform guard,
+no unexpected skips and outer warnings0. Windows R4.6.1 source207cases/1438P/1F/0W,
+three named guards; installed stage did not run. The sole Windows failure was exact
+path spelling in an expected spec.rds argument. Reviewed3574a1f7ae3a570623ccac9ba4a204e034a72ed1
+uses st$dir directly, matching production. New run38211164788 is active; no pass inferred.
+callr remains imported pending RPX acceptance. Both actual failed native packets remain.
+
+Additional actual Mac gates: six seeded native cases132P; artifact/architecture175P;
+private storage551P; sidecar bounds665P, all0F/0testW/0unexpectedS. Scoped runtime and
+sidecar lint0. Private testthat3.3.2 built under local R4.5.0 removes the prior startup
+advisory for subsequent runs. README and getting-started regenerated with0problems;
+Peter namesakes/help and notebook history help regenerated. Two sidecar/storage REDs
+and the intermediate NULL-field fixture failure remain retained separately.
+
+The comprehensive R01–14 queue in TESTING_PLAN names every remaining frontend/provider,
+compaction/extension/security/documentation/release gate. Primary main and shared Ollama
+remain preserved. Current source-only packets are not execution evidence. Final completion
+must leave only actual Windows desktop live verification, with current hosted Windows
+security/child and exact-archive package checks complete.
+
 # Bounded Rscript/processx launcher replacement — 2026-10-11
 
 Current candidate is `codex/skipped-platform-tests`, pushed through `3cf34ef9b865aeba1bb163a8fde0f779ec36adb8`.
