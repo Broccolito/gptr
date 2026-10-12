@@ -17,7 +17,8 @@ rscript_native_run = function() {
     XDG_CONFIG_HOME = dirs[["config"]], XDG_CACHE_HOME = dirs[["cache"]],
     XDG_DATA_HOME = dirs[["data"]], GPTR_PROJECT_ROOT = dirs[["project"]],
     GPTR_LIVE_TESTS = "false", GPTR_REPLAY = "replay", NOT_CRAN = "true")
-  packages = c("processx", "ps", "shiny", "httpuv", "later", "chromote", "openssl", "lintr")
+  packages = c("processx", "ps", "shiny", "httpuv", "later", "chromote", "openssl", "lintr",
+                "reticulate", "knitr")
   stopifnot(all(vapply(packages, requireNamespace, logical(1), quietly = TRUE)))
   if (mode == "source") pkgload::load_all(quiet = TRUE, helpers = FALSE)
   else loadNamespace("gptr")
@@ -29,7 +30,7 @@ rscript_native_run = function() {
   pattern = paste0("^(proc-rscript|proc-rscript-native|subagent-worker|",
     "subagent-worker-rscript|artifact-app|artifact-registry|artifact-browser-cleanup|",
     "proc-spawn|proc-supervise|",
-    "secrets-e2e|arch-layers)$")
+    "secrets-e2e|arch-layers|bridge-python-native)$")
   result = testthat::test_dir("tests/testthat", filter = pattern, package = "gptr",
     load_package = if (mode == "source") "none" else "installed", reporter = "summary",
     stop_on_failure = FALSE, stop_on_warning = FALSE)
@@ -41,11 +42,18 @@ rscript_native_run = function() {
     "a worker exits within 10 s when its parent is killed (IC-60)",
     "a parent killed with SIGTERM leaves children that the next load's sweep removes") else
     "a Windows worker exits within 10 s after its acknowledged parent dies (IC-60)"
-  bad_skips = rows$skipped & !rows$test %in% guards
+  python_guards = if (.Platform$OS.type == "windows") character() else c(
+    "native Windows Python startup refuses an empty known setup entry before initialization",
+    "native Windows Python startup refuses an empty case alias before initialization",
+    "native Windows initialized Python preserves an untouched empty setup entry")
+  python_skip = basename(rows$file) == "test-bridge-python-native.R" &
+    rows$test %in% python_guards
+  bad_skips = rows$skipped & !(rows$test %in% guards | python_skip)
   expected_files = paste0(c("proc-rscript", "proc-rscript-native", "subagent-worker",
     "subagent-worker-rscript", "artifact-app", "artifact-registry", "proc-spawn", "proc-supervise"),
     ".R")
   expected_files = c(expected_files, "artifact-browser-cleanup.R", "secrets-e2e.R", "arch-layers.R")
+  expected_files = c(expected_files, "bridge-python-native.R")
   file_names = sub("^test-", "", basename(rows$file))
   positive = !rows$skipped & rows$passed > 0L
   source_titles = function(expr) {
