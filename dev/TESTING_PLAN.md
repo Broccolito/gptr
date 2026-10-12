@@ -7,62 +7,59 @@ authorized live testing. Update a row after inspecting its evidence; retain fail
 older revision results. It does not replace the numbered implementation plans or authorize a
 release, model download, account change or CRAN submission.
 
-## Current readiness checkpoint — 2026-10-12 (prepared from `575cfa6`)
+## Current readiness checkpoint — 2026-10-12 (prepared from `167082c`)
 
-Prepared from isolated `codex/skipped-platform-tests` source
-`575cfa674b02e9fe318fa275d794478e213e0f08`; this does not certify a later commit.
-Preserve the primary dirty checkout, original R sessions, credentials and shared Ollama.
-Historical sections below remain evidence for their recorded sources.
+Candidate `167082ce93fade1ae4f22e3e3343cfd510e7ab6f` includes the three corrections
+below and is pushed to origin/codex/skipped-platform-tests. Archive/resource statuses are
+the frozen07:15 snapshot; results prove their stated source only. Preserve original
+sessions, user objects and shared Ollama.
 
-- DONE/O: committed writer retention passes 48 cases/593 assertions with zero failures,
-  errors or warnings and eight exact Windows guards. `575cfa6` commits the same-held-handle
-  BP correction and 19 permanent deterministic CI controls. Eight Mac native cases are
-  complete with zero sampling errors, positive samples, exact family settlement and
-  parent-state preservation. The corrected 132-case run passes 1,145 assertions with
-  zero failures/errors/warnings and the same eight guards; both configured R lints pass.
-  Retain the prior 1,131-pass/two-failure sampling RED and two-ms death witness. The first
-  post-fix suite had passing rows but its controller leaked `TESTTHAT_MAX_FAILS`; retain
-  that controller RED separately from the corrected scoped-environment rerun.
-- DONE/O: Linux run 38250216193 is independently raw-audited at `8fbe8e2`: both source and
-  installed contexts have 213 exact titles/1,544 passes, zero failures/test or invocation
-  warnings, four exact platform guards, 18 zero-result lint paths and 18 settled families.
-  Retain setup/action advisories. This source precedes `575cfa6`; it does not prove the
-  later BP/CI changes. Current exact `575cfa6` three-OS run 38253187892 has Mac/Windows
-  active and Linux queued; source/installed outcomes and independent raw audit are WAIT.
-- DONE/source-preview: theme controls pass all 12 Node cases. Fresh site `1356296` has
-  91 HTML pages, status 0, zero problems/warning markers and 78.49 s. Reported peak process
-  RSS 564,494,336 bytes is not a family sum. Static audit finds 4,290 local references,
-  1,211 fragments, zero broken references, all 63 API entries and all 14 guides. Twelve
-  actual width cells at 320/390/768/1440 pixels show no overflow, white body and loaded
-  logos; normal Dark/Light/Auto choices persist after reload with correct focus/logo/
-  favicon; final Light state, owned-tab close and exact-server death are confirmed.
-  Corrected storage preparation
-  and one opaque-origin native read-denial profile pass: the getter SecurityError prevents
-  getItem, with real Dark/Light/Auto UI/focus/logo/favicon and observed-system Auto.
-  Fresh quota remains unsupported at 8 MiB/64 writes/68 ms without a quota error, not a
-  pass; owned key/tab/server cleanup is confirmed. Write-only denial remains WAIT. CUA
-  supplies viewport/visibility, not context media emulation or real zoom; those cells
-  remain WAIT. Retain the authored forced-900-pixel no-JS boundary.
-- WAIT: Windows strict absence still has lookup 2/2 and PROBE2; preserve all six controls
-  and PROBE1. Token hosting is uncommitted; its first controller attempt failed a nested
-  source path before the seven tests. Correction, compiler timing, current-utility token
-  restoration and native feature proof remain WAIT. Diagnostic evidence cannot waive it.
-- WAIT: current source/installed three-OS native acceptance; current original archive and
-  all five same-byte release/devel consumers; manual/incoming Status: OK and zero CRAN
-  errors/warnings/notes; dependency-only, Suggests-only and reverse-dependency profiles;
-  fresh installed examples and all 14 guides.
-- WAIT: certified frontend/provider/extension/team/fanout/compaction/replay acceptance;
-  native GUI/allocator/interrupt/resource and local-heavy cases; final independent PR
-  review/merge/sync and all four fresh consolidation checks after this checkpoint.
-  Prepared source is not a pass. Only actual Windows desktop verification may remain
-  at completion; no archive/release/submission/readiness claim is made here.
+- DONE/O: exact `575cfa6` run 38253187892 is raw-audited on all three OSes, source and
+  installed: 6×213 titles/9,462 passes, zero failures/errors/row or invocation warnings,
+  exact OS guards Mac4/Windows3/Linux4, 57 controls, 54 lint checks and 62 settled observed
+  families with zero sampling errors. Guards are not coverage; setup advisories remain.
+- DONE/source-preview: site `1356296` has 91 pages/zero build problems or warning markers.
+  Static links/logos, 12 width cells and normal/read-denied/write-denied theme UI pass.
+  Separate 12 MiB quota proof has native QuotaExceededError/read OK/absent theme and owned
+  cleanup at 10,485,760 bytes/57 attempts/99 ms; retain original 8 MiB unsupported evidence.
+  Native Chrome Peter reference passes 100–200% zoom; home/interactive-console at 200%
+  have no overflow and a reachable homepage menu. Actual Size restores 100% before owned
+  close. Ineffective IAB shortcut stays NOT PASS; real media-query transition remains WAIT.
+- DONE/O: token `3302607` controller8/164, protocol7/136, old registry65/3,277 and Python13
+  pass; three new lint paths and old55 are clean. Caller env/cwd and14assets/51,608-byte
+  prefix stay unchanged. Retain nested-source runner RED. Actual Windows compilation,
+  token restoration/native proof and strict six-control denial/PROBE1 remain WAIT.
+- DONE/offline fixture: original compaction guards4/27 rerun, new R3/41 and Python6
+  collector controls pass; R has0F/E/W/S and exact parent-state restoration. All six
+  configured R lints are clean. Retain both new baseline REDs and prior five-path lint15
+  RED. Reviewed ddd154 changes only six ignored fixture files; production is unchanged.
+  No gptr namespace/model/archive certification; live team attribution/replay stays WAIT.
+- DONE/O: local `f3125f3` fixes the Peter example's second scripted reply. Retain its
+  baseline failure; final replies give32 rows/11 columns, same-session continuation and
+  unchanged data/live=false/zero warnings. Resolved roxygen8.1.1 emits one changed Rd,
+  zero warnings/unchanged metadata/lint0; two wrong-version/path bootstrap failures remain.
+  `028c389` accounting qualification passes18 cases/184 assertions with0F/E/W/S, lint0
+  and targeted codetools0. `167082c` corrects four existing skip_if platform guards after
+  official skip_on_os second-argument misuse: Mac10 cases/48 assertions/0F/E/W/S/lint0.
+  Exact native-empty oracles are unchanged; actual Windows full-file rerun remains WAIT.
+- FAILED/consumers: archive run38255722226 producer builds exact575,2,543,483 bytes/
+  SHA4a6d4aea, all120 R fingerprints and14 Rmd/14 HTML. Same-byte Windows release/devel
+  fail6/7 respectively, each1ERROR/1NOTE/0WARN/491 guards. Mac has25,235 passes/1 failure/
+  0WARN/438 guards, Status1ERROR/1NOTE: delayed-aborted-checkpoint fake_requests is0,
+  expected1; cause unresolved. Linux release also reports FAILURE, raw audit pending;
+  only Linux devel is IN PROGRESS/one hosted lease. Producer SUCCESS is not a certificate.
+  Four681 plan stages pass39 unchanged blobs/770 R/zero errors or lints, with90 historic
+  WARN; adoption needs four fresh checks. Windows PowerShell startup diagnosis stays WAIT.
+- WAIT: all archive consumers/manual/incoming clean CRAN/dependency/Suggests/revdeps,
+  current installed examples/guides, certified frontend/provider/extensions/team/compaction/
+  replay, native GUI/interrupt/resource acceptance and final review/merge/sync. Only actual
+  Windows desktop verification may remain at completion; no release/readiness claim.
 
-RStudio selection timed out; its Window menu showed only the original `gptr - main`
-entry. Original session and objects were reconfirmed; only its Window menu was dismissed.
-No R input, restart or cleanup. At 06:03 PDT load was 11.89/13.46/11.41, CPU 58.78% idle,
-113 GiB used/15 GiB unused RAM, 72% pressure-free,swap 20,957.88 MiB with zero paging and 150 GiB
-disk; no thermal warning was recorded. Keep small serial local work and at most two
-hosted jobs; disk/swap hold heavy/GPU expansion. Sessions/processes/Ollama stay intact.
+RStudio New Session showed rsession-arm64(86226) MallocStackLogging without R/Peter input;
+no new session is selectable. Cause is unproved; original session/objects stay untouched.
+Root's 07:15 resource point: load10.48/11.49/11.40, CPU50.81% idle,106G used/21G unused,
+pressure68% free, swap20,917.88MiB/zero sampled paging, disk126GiB and no thermal warning.
+Heavy/GPU/shared-model work stays held; only leased small serial work.
 
 ## Current readiness checkpoint — 2026-10-12 04:56 PDT
 
