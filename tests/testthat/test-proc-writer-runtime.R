@@ -1,3 +1,39 @@
+# Numeric evidence from the actual metadata constructor, never callback code or environment data.
+rw_writer_source_sizes = function(meta) {
+  count = function(x) {
+    if (missing(x) || is.null(x)) return(0L)
+    n = sum(c("srcref", "srcfile", "wholeSrcref") %in% names(attributes(x)))
+    if (is.function(x)) return(n + count(body(x)))
+    if (is.call(x) || is.expression(x) || is.pairlist(x)) {
+      for (part in as.list(x)) n = n + count(part)
+    }
+    n
+  }
+  scope = new.env(parent = environment(proc_writer_source))
+  scope$proc_writer_main = function(meta) meta
+  source = proc_writer_source
+  environment(source) = scope
+  text = source(meta)
+  normalized = eval(parse(text = text, keep.source = FALSE), new.env(parent = baseenv()))
+  fields = c("valid", "acl_parse", "acl_read")
+  callbacks = setNames(lapply(fields, function(name) {
+    list(original_bytes = length(serialize_leaf(meta[[name]])),
+         normalized_bytes = length(serialize_leaf(normalized[[name]])),
+         original_source_attributes = count(meta[[name]]),
+         normalized_source_attributes = count(normalized[[name]]))
+  }), fields)
+  bytes = serialize_leaf(normalized)
+  compressed = memCompress(bytes, type = "gzip")
+  encoded = gsub("\n", "", jsonlite::base64_enc(compressed), fixed = TRUE)
+  decimal = paste0("unserialize(as.raw(c(", paste(as.integer(bytes), collapse = ","), ")))")
+  list(callbacks = callbacks, metadata = list(original_bytes = length(serialize_leaf(meta)),
+    normalized_bytes = length(bytes), gzip_bytes = length(compressed),
+    base64_bytes = nchar(encoded, type = "bytes"),
+    decimal_literal_bytes = nchar(decimal, type = "bytes"),
+    default_literal_bytes = nchar(proc_writer_literal(normalized), type = "bytes"),
+    source_bytes = nchar(enc2utf8(text), type = "bytes")))
+}
+
 test_that("Windows production writer preserves ordered writes and idle EOF", {
   skip_on_cran()
   skip_if(.Platform$OS.type != "windows", "requires the actual Windows writer runtime")
@@ -359,6 +395,18 @@ test_that("full production writer bootstrap fits the unchanged Rscript limits", 
     args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
              "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker, .diagnostics = TRUE))),
     supervise = TRUE, timeout = 2)
+  libraries = .libPaths()
+  raw_libraries = serialize_leaf(libraries)
+  plain_libraries = paste0("unserialize(as.raw(c(",
+    paste(as.integer(raw_libraries), collapse = ","), ")))")
+  sizes = rw_writer_source_sizes(meta)
+  cat(json_encode(list(case = "production-data-literal-size", library_count = length(libraries),
+    serialized_library_bytes = length(raw_libraries),
+    plain_library_literal_bytes = nchar(plain_libraries, type = "bytes"),
+    compact_library_literal_bytes = nchar(proc_writer_literal(libraries, .compressed = TRUE),
+                                         type = "bytes"),
+    source_bytes = nchar(enc2utf8(proc_writer_source(meta)), type = "bytes"),
+    callbacks = sizes$callbacks, metadata = sizes$metadata)), "\n")
   code = proc_writer_code(meta)
   bytes = nchar(enc2utf8(code), type = "bytes")
   cat(json_encode(list(case = "full-production-bootstrap", expression_bytes = bytes)), "\n")
@@ -443,6 +491,117 @@ test_that("writer compressed bootstrap preserves exact trusted source and binary
   withr::defer(.libPaths(old))
   expect_identical(eval(parse(text = code), new.env(parent = baseenv())),
                    list(text = meta$text, bytes = meta$bytes))
+  # Clone the actual encoders and observe only the child's library setter, never the caller's.
+  scope = new.env(parent = environment(proc_writer_source))
+  scope$proc_writer_main = function(meta) {
+    list(dir = meta$dir, canonical = meta$canonical, shell = meta$shell, args = meta$args,
+         data = meta$data, valid = meta$valid(),
+         caller = exists(".writer_frame_canary", environment(meta$valid), inherits = FALSE))
+  }
+  scope$proc_writer_source = proc_writer_source
+  environment(scope$proc_writer_source) = scope
+  scope$proc_writer_code = proc_writer_code
+  environment(scope$proc_writer_code) = scope
+  libraries = c("/owned/library \u96ea", "/owned/quote ' and \"/caf\u00e9", "literal <U+00E9>")
+  scope$.libPaths = function() libraries
+  valid_home = new.env(parent = baseenv())
+  valid_home$.writer_frame_canary = "GPTR_WRITER_FRAME_CANARY"
+  valid = function() "valid"
+  environment(valid) = valid_home
+  paths = c("C:/owned/\u96ea/caf\u00e9", "C:/owned/\U0001f642/quote'\"\\name")
+  data = list(text = c("\u00e9", "<U+00E9>", "\U0001f642", NA_character_),
+              nested = setNames(list(c("\u03bb", "'\"\\\n\t")), "name \u96ea"))
+  trusted = list(dir = paths[[1L]], canonical = paths[[2L]], shell = paths[[2L]],
+                 args = c("--fixed", paths), data = data, valid = valid)
+  child = new.env(parent = baseenv())
+  child$.libPaths = function(value) {
+    child$libraries = value
+    invisible(value)
+  }
+  child$`::` = function(package, name) {
+    if (!exists("libraries", child, inherits = FALSE)) {
+      stop("Libraries must be installed before namespace lookup.")
+    }
+    getExportedValue(as.character(substitute(package)), as.character(substitute(name)))
+  }
+  expect_error(eval(quote(jsonlite::base64_dec("AA==")), child),
+               "Libraries must be installed before namespace lookup.", fixed = TRUE)
+  encoded = scope$proc_writer_code(trusted)
+  decoded = eval(parse(text = encoded), child)
+  expect_identical(decoded, list(dir = paths[[1L]], canonical = paths[[2L]],
+    shell = paths[[2L]], args = c("--fixed", paths), data = data, valid = "valid", caller = FALSE))
+  expect_identical(child$libraries, libraries)
+  # A repeated library prefix must fit compactly while preserving exact UTF-8 data.
+  compact_data = rep(paste0("/owned/", strrep("shared-library-prefix/", 16L),
+    "caf\u00e9/\u96ea/\U0001f642"), 8L)
+  raw_data = serialize_leaf(compact_data)
+  plain = paste0("unserialize(as.raw(c(", paste(as.integer(raw_data), collapse = ","), ")))")
+  compact = proc_writer_literal(compact_data, .compressed = TRUE)
+  expect_identical(eval(parse(text = compact), new.env(parent = baseenv())), compact_data)
+  expect_lt(nchar(compact, type = "bytes"), nchar(plain, type = "bytes"))
+  expect_true(all(as.integer(charToRaw(compact)) <= 127L))
+  expect_false(grepl("[\r\n]", compact))
+  cat(json_encode(list(case = "trusted-data-literal-size", serialized_bytes = length(raw_data),
+    plain_literal_bytes = nchar(plain, type = "bytes"),
+    compact_literal_bytes = nchar(compact, type = "bytes"))), "\n")
+  expect_identical(decoded$data$text[[2L]], "<U+00E9>")
+  expect_false(grepl("[\r\n]", encoded))
+  expect_lte(nchar(enc2utf8(encoded), type = "bytes"), 9998L)
+  expect_length(parse(text = encoded), 1L)
+  # Rebuild only the three fixed callbacks; unrelated closure metadata remains binary data.
+  source_home = new.env(parent = emptyenv())
+  source_home$lines = rep("GPTR_WRITER_SOURCE_ATTRIBUTE_CANARY", 256L)
+  fixed = eval(parse(text = 'function() { identity("valid") }', keep.source = FALSE), baseenv())
+  nested = body(fixed)[[2L]]
+  reference = structure(rep(1L, 8L), class = "srcref", srcfile = source_home)
+  attr(nested, "srcref") = reference
+  attr(nested, "wholeSrcref") = reference
+  attr(nested, "srcfile") = source_home
+  fixed_body = body(fixed)
+  fixed_body[[2L]] = nested
+  body(fixed) = fixed_body
+  other_home = new.env(parent = baseenv())
+  other_home$value = "user metadata \u96ea"
+  other = function() get("value", inherits = TRUE)
+  environment(other) = other_home
+  attr(other, "gptr_writer_metadata_canary") = as.raw(c(195, 169))
+  refs = list(valid = fixed, acl_parse = fixed, acl_read = fixed, extra = other, data = data)
+  before = serialize_leaf(refs)
+  scope$proc_writer_main = function(meta) meta
+  rebuilt = eval(parse(text = scope$proc_writer_source(refs), keep.source = FALSE),
+                 new.env(parent = baseenv()))
+  for (name in c("valid", "acl_parse", "acl_read")) {
+    expect_identical(rebuilt[[name]](), "valid")
+    expect_identical(environment(rebuilt[[name]]), baseenv())
+    expect_null(attr(body(rebuilt[[name]])[[2L]], "srcref"))
+    expect_null(attr(body(rebuilt[[name]])[[2L]], "wholeSrcref"))
+    expect_null(attr(body(rebuilt[[name]])[[2L]], "srcfile"))
+  }
+  expect_identical(rebuilt$extra(), other_home$value)
+  expect_identical(attr(rebuilt$extra, "gptr_writer_metadata_canary"), as.raw(c(195, 169)))
+  expect_identical(rebuilt$data, data)
+  expect_identical(serialize_leaf(refs), before)
+  sizes = rw_writer_source_sizes(refs)$callbacks
+  for (entry in sizes) {
+    expect_identical(entry$original_source_attributes, 3L)
+    expect_identical(entry$normalized_source_attributes, 0L)
+    expect_lt(entry$normalized_bytes, entry$original_bytes)
+  }
+  raw_data = serialize_leaf(data)
+  compressed_data = memCompress(raw_data, type = "gzip")
+  encoded_data = gsub("\n", "", jsonlite::base64_enc(compressed_data), fixed = TRUE)
+  literal = proc_writer_literal(data)
+  expected_literal = paste0("unserialize(memDecompress(jsonlite::base64_dec(\"", encoded_data,
+    "\"),type=\"gzip\"))")
+  expect_identical(literal, expected_literal)
+  expect_identical(memDecompress(jsonlite::base64_dec(encoded_data), type = "gzip"), raw_data)
+  expect_identical(eval(parse(text = literal), new.env(parent = baseenv())), data)
+  expect_true(all(as.integer(charToRaw(literal)) <= 127L))
+  expect_false(grepl("[\r\n]", literal))
+  cat(json_encode(list(case = "default-gzip-base64-data-literal-size",
+    serialized_bytes = length(raw_data), gzip_bytes = length(compressed_data),
+    base64_bytes = nchar(encoded_data, type = "bytes"),
+    default_literal_bytes = nchar(literal, type = "bytes"))), "\n")
 })
 
 test_that("writer full compressed bootstrap fits a long Windows mailbox path", {
@@ -457,6 +616,18 @@ test_that("writer full compressed bootstrap fits a long Windows mailbox path", {
     args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
              "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker, .diagnostics = TRUE))),
     supervise = TRUE, timeout = 2)
+  libraries = .libPaths()
+  raw_libraries = serialize_leaf(libraries)
+  plain_libraries = paste0("unserialize(as.raw(c(",
+    paste(as.integer(raw_libraries), collapse = ","), ")))")
+  sizes = rw_writer_source_sizes(meta)
+  cat(json_encode(list(case = "production-data-literal-size", library_count = length(libraries),
+    serialized_library_bytes = length(raw_libraries),
+    plain_library_literal_bytes = nchar(plain_libraries, type = "bytes"),
+    compact_library_literal_bytes = nchar(proc_writer_literal(libraries, .compressed = TRUE),
+                                         type = "bytes"),
+    source_bytes = nchar(enc2utf8(proc_writer_source(meta)), type = "bytes"),
+    callbacks = sizes$callbacks, metadata = sizes$metadata)), "\n")
   code = proc_writer_code(meta)
   bytes = nchar(enc2utf8(code), type = "bytes")
   cat(json_encode(list(case = "long-production-bootstrap", expression_bytes = bytes)), "\n")

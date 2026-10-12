@@ -831,12 +831,32 @@ proc_writer_code_bytes = function(code) {
   bytes
 }
 
+#' Encode trusted data without locale-sensitive text conversion
+#' @noRd
+proc_writer_literal = function(x, .compressed = FALSE) {
+  bytes = memCompress(serialize_leaf(x), type = "gzip")
+  if (!.compressed) {
+    encoded = gsub("\n", "", jsonlite::base64_enc(bytes), fixed = TRUE)
+    return(paste0("unserialize(memDecompress(jsonlite::base64_dec(\"", encoded,
+      "\"),type=\"gzip\"))"))
+  }
+  value = paste0("as.raw(c(", paste(as.integer(bytes), collapse = ","), "))")
+  paste0("unserialize(memDecompress(", value, ",type=\"gzip\"))")
+}
+
 #' Serialize only the trusted actor and its ownership metadata, never queued payloads
 #' @noRd
 proc_writer_source = function(meta) {
+  for (name in c("valid", "acl_parse", "acl_read")) {
+    x = meta[[name]]
+    if (is.function(x)) {
+      text = paste(deparse(x), collapse = "\n")
+      meta[[name]] = eval(parse(text = text, keep.source = FALSE), baseenv())
+    }
+  }
   code = paste0("tryCatch((function(meta) ",
     paste(deparse(body(proc_writer_main)), collapse = "\n"), ")(",
-    paste(deparse(meta), collapse = "\n"), "), error = function(e) quit(status = 1L))")
+    proc_writer_literal(meta), "), error = function(e) quit(status = 1L))")
   if (length(parse(text = code)) != 1L) {
     gptr_abort("Could not parse the trusted stdin bootstrap.",
                "io", operation = "write", path = NULL)
@@ -849,7 +869,7 @@ proc_writer_source = function(meta) {
 proc_writer_code = function(meta) {
   source = charToRaw(as_utf8(proc_writer_source(meta)))
   encoded = gsub("\n", "", jsonlite::base64_enc(memCompress(source, type = "gzip")), fixed = TRUE)
-  libraries = paste(deparse(.libPaths(), width.cutoff = 500L), collapse = "")
+  libraries = proc_writer_literal(.libPaths(), .compressed = TRUE)
   out = paste0("local({.libPaths(", libraries, ");cat(\"GPTR_STDIN_STAGE decode \",",
     "sprintf(\"%.6f\",proc.time()[[\"elapsed\"]]),\"\\n\",sep=\"\",file=stderr());",
     "flush(stderr());eval(parse(text=rawToChar(memDecompress(",

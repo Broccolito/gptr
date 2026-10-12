@@ -557,6 +557,26 @@ test_that("patch additions respect the observed case-folding of the filesystem",
   td = withr::local_tempdir()
   u = function(name) fs_path(file.path(td, name))
   env = function(...) paste(c("*** Begin Patch", ..., "*** End Patch"), collapse = "\n")
+  put_file(td, "case-probe.R", "probe\n")
+  folded = fs_case_insensitive(td)
+  expect_identical(file.exists(u("CASE-PROBE.R")), folded)
+  adds = env("*** Add File: new.R", "+1", "*** Add File: NEW.R", "+2")
+  if (folded) {
+    expect_error(patch_apply(adds, root = td), "more than one operation names", fixed = TRUE)
+    expect_false(file.exists(u("new.R")))
+  } else {
+    patch_apply(adds, root = td)
+    expect_identical(rd(u("new.R")), "1\n")
+    expect_identical(rd(u("NEW.R")), "2\n")
+    expect_true(all(c("new.R", "NEW.R") %in% list.files(td)))
+  }
+})
+
+test_that("Unicode patch additions respect filesystem case-folding with stringi", {
+  skip_if_not_installed("stringi")
+  td = withr::local_tempdir()
+  u = function(name) fs_path(file.path(td, name))
+  env = function(...) paste(c("*** Begin Patch", ..., "*** End Patch"), collapse = "\n")
   upd2 = function(p1, p2, l1, l2) {
     env(paste0("*** Update File: ", p1), "@@", paste0("-", l1), paste0("+", l1, "0"),
         paste0("*** Update File: ", p2), "@@", paste0("-", l2), paste0("+", l2, "0"))
@@ -564,7 +584,6 @@ test_that("patch additions respect the observed case-folding of the filesystem",
   put_file(td, "case-probe.R", "probe\n")
   folded = fs_case_insensitive(td)
   expect_identical(file.exists(u("CASE-PROBE.R")), folded)
-  expect_true(requireNamespace("stringi", quietly = TRUE))
   put_file(td, fs_path("\u00e9t\u00e9.R"), "e = 1\nf = 2\n")
   if (file.exists(u("\u00c9T\u00c9.R"))) {
     expect_error(patch_apply(upd2("\u00e9t\u00e9.R", "\u00c9T\u00c9.R", "e = 1", "f = 2"),
@@ -585,6 +604,12 @@ test_that("patch additions respect the observed case-folding of the filesystem",
     patch_apply(adds, root = td)
     expect_identical(rd(u("n\u00e9w.R")), "1\n")
     expect_identical(rd(u("N\u00c9W.R")), "2\n")
-    expect_true(all(c("n\u00e9w.R", "N\u00c9W.R") %in% list.files(td)))
+    entries = as_utf8(list.files(fs_path(td)))
+    expect_true(all(c("n\u00e9w.R", "N\u00c9W.R") %in% entries))
+    expect_false(any(c("n<U+00E9>w.R", "N<U+00C9>W.R") %in% entries))
+    expect_identical(charToRaw(entries[match("n\u00e9w.R", entries)]),
+                     as.raw(c(0x6e, 0xc3, 0xa9, 0x77, 0x2e, 0x52)))
+    expect_identical(charToRaw(entries[match("N\u00c9W.R", entries)]),
+                     as.raw(c(0x4e, 0xc3, 0x89, 0x57, 0x2e, 0x52)))
   }
 })

@@ -8,7 +8,8 @@ rs_parent_case = function(case, root, failure) {
   file.create(file.path(root, "case-started"))
   phase = function(text) cat(text, "\n", file = file.path(root, "phases.txt"), append = TRUE)
   probe = function(path, marker, mode) {
-    cat("READY \u03bb\n")
+    ready = rawToChar(as.raw(c(0x52, 0x45, 0x41, 0x44, 0x59, 0x20, 0xce, 0xbb)))
+    writeLines(ready, stdout(), useBytes = TRUE)
     flush(stdout())
     cat("WITNESS STDERR\n", file = stderr())
     flush(stderr())
