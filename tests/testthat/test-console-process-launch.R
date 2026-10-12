@@ -208,3 +208,80 @@ test_that("nested policies clear once and inactive policies emit no boundary out
     signalCondition(launch_condition())
   }, list(w$run)))), character())
 })
+
+test_that("bare command lookup closes the thinking row before its native diagnostic", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L, quiet = FALSE)
+  withr::local_options(cli.dynamic = TRUE)
+  local_mocked_bindings(front_end = function() "rstudio")
+  w = launch_record()
+  utils::capture.output(launch_request(w))
+  sp = w$rec$spinner
+  task = w$rec$task
+  start = sp$t0
+  parent_env = Sys.getenv()
+  path = rscript_path()
+  p = new.env(parent = emptyenv())
+  observed = new.env(parent = emptyenv())
+  observed$order = character()
+  local_mocked_bindings(process = list(new = function(...) {
+    observed$order = c(observed$order, "constructor")
+    p
+  }), .package = "processx")
+  local_mocked_bindings(proc_mark = function(...) NULL)
+  launch_capture(function(bytes) {
+    local_mocked_bindings(Sys.which = function(command) {
+      observed$order = c(observed$order, "lookup")
+      observed$command = command
+      observed$before_stderr = rawToChar(rawConnectionValue(bytes))
+      observed$shown = sp$shown
+      cat("SYNTHETIC-LOOKUP-DIAGNOSTIC\n", file = stderr())
+      stats::setNames(path, command)
+    }, .package = "base")
+    err = utils::capture.output({
+      observed$value = with_interrupt_policy(function() {
+        withCallingHandlers(proc_spawn("gptr-synthetic-bare", .on_spawn = function(child) {
+          observed$order = c(observed$order, "owned")
+          observed$child = child
+        }), gptr_process_spawn = function(cnd) {
+          observed$order = c(observed$order, "boundary")
+        })
+      }, list(w$run))
+    }, type = "message")
+    expect_identical(observed$order, c("boundary", "lookup", "constructor", "owned"))
+    expect_identical(observed$command, "gptr-synthetic-bare")
+    expect_identical(observed$before_stderr, paste0("\r", strrep(" ", 39L), "\r\n"))
+    expect_false(observed$shown)
+    expect_identical(err, "SYNTHETIC-LOOKUP-DIAGNOSTIC")
+    expect_identical(observed$value, p)
+    expect_identical(observed$child, p)
+    expect_identical(w$rec$spinner, sp)
+    expect_identical(w$rec$task, task)
+    expect_identical(sp$t0, start)
+    expect_true(w$rec$request_pending)
+    expect_identical(Sys.getenv(), parent_env)
+  })
+})
+
+test_that("lookup failure preserves its original error without starting a native process", {
+  local_project()
+  parent_env = Sys.getenv()
+  original = simpleError("synthetic lookup failure")
+  observed = new.env(parent = emptyenv())
+  observed$order = character()
+  local_mocked_bindings(Sys.which = function(command) {
+    observed$order = c(observed$order, "lookup")
+    stop(original)
+  }, .package = "base")
+  local_mocked_bindings(process = list(new = function(...) {
+    observed$order = c(observed$order, "constructor")
+    stop("unexpected constructor")
+  }), .package = "processx")
+  error = tryCatch(withCallingHandlers(proc_spawn("gptr-synthetic-bare"),
+    gptr_process_spawn = function(cnd) {
+      observed$order = c(observed$order, "boundary")
+    }), error = identity)
+  expect_identical(observed$order, c("boundary", "lookup"))
+  expect_identical(error, original)
+  expect_identical(Sys.getenv(), parent_env)
+})

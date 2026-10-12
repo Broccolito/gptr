@@ -32,6 +32,9 @@ proc_resolve = function(command, args = character()) {
     gptr_abort("Start R children with rscript_path(), never by name.", "invalid_argument",
                arg = "command", expected = "an absolute path such as rscript_path()")
   }
+  # Unix PATH lookup and native fork hooks can write before child stderr is redirected.
+  signalCondition(structure(list(message = "", call = NULL),
+    class = c("gptr_process_spawn", "condition")))
   path = if (grepl("[/\\\\]", command)) command else unname(Sys.which(command))
   if (!nzchar(path) || !file.exists(path)) {
     gptr_abort(paste0("Program not found: ", basename(command), "."), "spawn",
@@ -143,9 +146,6 @@ proc_spawn = function(command, args = character(), env = NULL, wd = NULL, stdin 
                  stdout = io(stdout), stderr = io(stderr), cleanup = TRUE,
                  cleanup_tree = cleanup_tree, supervise = supervise, encoding = "UTF-8",
                  windows_hide_window = TRUE, windows_verbatim_args = verbatim)
-  # Native fork hooks can write before child stderr is redirected; notify the scoped display.
-  signalCondition(structure(list(message = "", call = NULL),
-    class = c("gptr_process_spawn", "condition")))
   p = tryCatch(do.call(processx::process$new, px_args), error = function(e) e)
   if (inherits(p, "error")) {
     gptr_abort(paste0("Could not start ", basename(res$command), ": ", conditionMessage(p)),
