@@ -280,6 +280,10 @@ mcp_token_lookup = function(authorization) {
 #' builtin:mcp revokes it at the session's shutdown.
 #' @noRd
 mcp_serve_token = function(session, tools = mcp_default_tools()) {
+  if (isTRUE(the$mcp_server$stopping)) {
+    gptr_abort("The MCP server is stopping; retry its stop before serving new requests.",
+               "not_available", member = "mcp_serve")
+  }
   url = the$mcp_server$url
   sid = session_data(session)$id
   env = the$mcp_tokens
@@ -307,6 +311,10 @@ mcp_serve_token = function(session, tools = mcp_default_tools()) {
 mcp_serve_start = function(port = NULL) {
   st = the$mcp_server
   if (!is.null(st)) {
+    if (isTRUE(st$stopping)) {
+      gptr_abort("The MCP server is stopping; retry its stop before serving new requests.",
+                 "not_available", member = "mcp_serve")
+    }
     if (!is.null(port) && port != st$port) {
       arg_abort(port, "port", paste0("NULL or ", st$port, ", the port the MCP server listens on"))
     }
@@ -341,14 +349,45 @@ mcp_serve_start = function(port = NULL) {
 mcp_serve_stop = function() {
   st = the$mcp_server
   if (is.null(st)) return(invisible(FALSE))
-  the$mcp_server = NULL
-  httpuv::stopServer(st$srv)
-  rm(list = ls(the$mcp_tokens), envir = the$mcp_tokens)
-  st$envir = NULL
-  st$user = NULL
-  st$handle = NULL
-  job_remove(st$job)
-  ev_dispatch("mcp_serve_stop", list(url = st$url))
+  tokens = the$mcp_tokens
+  st$stopping = TRUE
+  condition = tryCatch({
+    with_seed_preserved(httpuv::stopServer(st$srv))
+    NULL
+  }, error = identity, interrupt = identity)
+  cleaned = tryCatch({
+    rm(list = ls(tokens), envir = tokens)
+    identical(ls(tokens), character())
+  }, error = function(error) FALSE, interrupt = function(interrupt) FALSE)
+  for (field in c("envir", "user", "handle")) {
+    released = tryCatch({
+      st[[field]] = NULL
+      is.null(st[[field]])
+    }, error = function(error) FALSE, interrupt = function(interrupt) FALSE)
+    cleaned = cleaned && released
+  }
+  stopped = tryCatch(identical(st$srv$isRunning(), FALSE),
+                     error = function(error) FALSE, interrupt = function(interrupt) FALSE)
+  complete = stopped && cleaned && identical(the$mcp_server, st)
+  if (complete) {
+    complete = tryCatch({
+      job_remove(st$job)
+      identical(the$mcp_server, st)
+    }, error = function(error) FALSE, interrupt = function(interrupt) FALSE)
+    if (complete) {
+      the$mcp_server = NULL
+      notified = tryCatch({
+        ev_dispatch("mcp_serve_stop", list(url = st$url))
+        NULL
+      }, error = identity, interrupt = identity)
+      if (is.null(condition)) condition = notified
+    }
+  }
+  if (!is.null(condition)) stop(condition)
+  if (!complete) {
+    gptr_abort("The MCP server stop could not be confirmed; its handle is retained for retry.",
+               "state_restore", member = "mcp_serve", stopped = stopped, refs_released = cleaned)
+  }
   invisible(TRUE)
 }
 
@@ -374,6 +413,9 @@ mcp_serve_busy = function(rec) {
 #' The httpuv handler; never throws into httpuv
 #' @noRd
 mcp_http_handle = function(st, req) {
+  if (isTRUE(st$stopping)) {
+    return(mcp_http_resp(503L, "{\"error\":\"server stopping\"}"))
+  }
   tryCatch(mcp_http_route(st, req), error = function(e) {
     mcp_http_resp(500L, "{\"error\":\"internal error\"}")
   })
@@ -493,6 +535,9 @@ mcp_handle_new = function(st, tok, stop) {
 #' in `$args` and the environment to start Codex with in `$env`) and in the environment of
 #' children gptr starts. One server runs per R process. Needs 'httpuv', 'later' and 'openssl'.
 #'
+#' If shutdown cannot be confirmed, access is revoked and the server is retained for retry.
+#' Call `gptr_mcp_serve(stop = TRUE)` again; new requests are refused until shutdown completes.
+#'
 #' @param tools The tools to serve: a subset of `c("r", "read", "edit", "write")`.
 #' @param envir Where served R code evaluates and its objects persist.
 #' @param port A port, or `NULL` for a free one.
@@ -518,6 +563,10 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   if (stop) {
     mcp_serve_stop()
     return(invisible(NULL))
+  }
+  if (isTRUE(the$mcp_server$stopping)) {
+    gptr_abort("The MCP server is stopping; retry its stop before serving new requests.",
+               "not_available", member = "mcp_serve")
   }
   if (!is.null(the$mcp_server$handle)) return(the$mcp_server$handle)
   st = mcp_serve_start(port)

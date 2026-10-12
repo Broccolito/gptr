@@ -194,5 +194,7 @@ objects without an intermediate dataset file, while returned text and images lea
 the connection. See [Execution model](execution-model.html) for the provider context boundary.
 The server exposes tools, not an MCP
 resource or prompt catalog. Stop it with `h$stop()` or `gptr_mcp_serve(stop = TRUE)` when finished.
+If shutdown fails, access is revoked and the server remains available for a stop retry. Call
+`gptr_mcp_serve(stop = TRUE)` again; new requests are refused until shutdown completes.
 For interactive approvals and recorded R work, see [Interactive console](interactive-console.html)
 and [Script as history](script-as-history.html).

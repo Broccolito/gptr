@@ -38,6 +38,10 @@ redacted; \code{as.character()} gives the text to paste; \verb{$config$codex} ho
 in \verb{$args} and the environment to start Codex with in \verb{$env}) and in the environment of
 children gptr starts. One server runs per R process. Needs 'httpuv', 'later' and 'openssl'.
 }
+\details{
+If shutdown cannot be confirmed, access is revoked and the server is retained for retry.
+Call \code{gptr_mcp_serve(stop = TRUE)} again; new requests are refused until shutdown completes.
+}
 \examples{
 if (interactive() && rlang::is_installed(c("httpuv", "later", "openssl"))) {
   h = gptr_mcp_serve(envir = new.env())
