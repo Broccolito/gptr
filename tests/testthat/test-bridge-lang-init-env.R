@@ -1,0 +1,171 @@
+# Prepared tests first. These mocks do not initialize or execute Python.
+py_init_test_keys = c("PATH", "VIRTUAL_ENV", "R_SESSION_INITIALIZED", "LD_LIBRARY_PATH",
+                      "PYTHONPATH", "PYTHONIOENCODING")
+
+py_init_test_values = function(prefix) {
+  stats::setNames(paste0(prefix, seq_along(py_init_test_keys)), py_init_test_keys)
+}
+
+py_init_test_env = function(values, extra = character(), .env = parent.frame()) {
+  controlled = c(names(values), "RETICULATE_PYTHON", extra)
+  old = Sys.getenv(controlled, unset = NA_character_)
+  if (.Platform$OS.type == "windows" && any(!is.na(old) & old == "")) {
+    stop("Synthetic fixture cannot restore an existing native-empty Windows setup key")
+  }
+  values = c(values, RETICULATE_PYTHON = "synthetic-configured-python")
+  withr::local_envvar(values, .local_envir = .env)
+}
+
+py_init_test_mocks = function(main, initialized, initialize, .env = parent.frame()) {
+  force(initialized)
+  testthat::local_mocked_bindings(
+    py_available = function(initialize = FALSE) initialized,
+    import_main = initialize,
+    py_has_attr = function(x, name) TRUE,
+    py_to_r = function(x) x,
+    py_get_item = function(x, key) x[[key + 1L]],
+    .package = "reticulate", .env = .env
+  )
+  invisible(main)
+}
+
+test_that("Python setup restores known R environment keys after new and existing initialization", {
+  skip_if_not_installed("reticulate")
+  for (initialized in c(FALSE, TRUE)) {
+    local({
+      py_init_test_env(py_init_test_values("before-"))
+      before = Sys.getenv(py_init_test_keys, unset = NA_character_)
+      before_raw = Sys.getenv()
+      main = new.env(parent = emptyenv())
+      initialize = function(convert = FALSE) {
+        do.call(Sys.setenv, as.list(py_init_test_values("initialization-")))
+        main
+      }
+      py_init_test_mocks(main, initialized, initialize)
+      result = bridge_py_main()
+      expect_identical(result, main)
+      expect_identical(Sys.getenv(py_init_test_keys, unset = NA_character_), before)
+      expect_identical(Sys.getenv(), before_raw)
+    })
+  }
+})
+
+test_that("Python setup restores keys before propagating the original error or interrupt", {
+  skip_if_not_installed("reticulate")
+  for (type in c("error", "interrupt")) {
+    for (stage in c("import", "helper")) {
+      local({
+        py_init_test_env(py_init_test_values("before-"))
+        before = Sys.getenv(py_init_test_keys, unset = NA_character_)
+        before_raw = Sys.getenv()
+        original = structure(list(message = "synthetic setup condition", call = NULL),
+                             class = c(paste0("synthetic_", type), type, "condition"))
+        initialize = function(convert = FALSE) {
+          do.call(Sys.setenv, as.list(py_init_test_values("initialization-")))
+          if (stage == "import") stop(original)
+          new.env(parent = emptyenv())
+        }
+        py_init_test_mocks(NULL, FALSE, initialize)
+        testthat::local_mocked_bindings(
+          py_has_attr = function(x, name) stage != "helper",
+          py_run_string = function(code, convert = FALSE) stop(original),
+          .package = "reticulate"
+        )
+        seen = tryCatch(bridge_py_main(), error = identity, interrupt = identity)
+        expect_identical(seen, original)
+        expect_identical(Sys.getenv(py_init_test_keys, unset = NA_character_), before)
+        expect_identical(Sys.getenv(), before_raw)
+      })
+    }
+  }
+})
+
+test_that("Python setup restores absent keys without adding empty environment entries", {
+  skip_if_not_installed("reticulate")
+  values = stats::setNames(rep(NA_character_, length(py_init_test_keys)), py_init_test_keys)
+  py_init_test_env(values)
+  before = Sys.getenv(py_init_test_keys, unset = NA_character_)
+  main = new.env(parent = emptyenv())
+  initialize = function(convert = FALSE) {
+    do.call(Sys.setenv, as.list(py_init_test_values("initialization-")))
+    main
+  }
+  py_init_test_mocks(main, FALSE, initialize)
+  expect_identical(bridge_py_main(), main)
+  expect_identical(Sys.getenv(py_init_test_keys, unset = NA_character_), before)
+  expect_false(any(py_init_test_keys %in% names(Sys.getenv())))
+})
+
+test_that("Python setup restores changed POSIX empty keys exactly", {
+  skip_if_not_installed("reticulate")
+  skip_on_os("windows", "requires POSIX empty environment restoration")
+  py_init_test_env(stats::setNames(rep("", length(py_init_test_keys)), py_init_test_keys))
+  before = Sys.getenv(py_init_test_keys, unset = NA_character_)
+  main = new.env(parent = emptyenv())
+  initialize = function(convert = FALSE) {
+    do.call(Sys.setenv, as.list(py_init_test_values("initialization-")))
+    main
+  }
+  py_init_test_mocks(main, FALSE, initialize)
+  expect_identical(bridge_py_main(), main)
+  expect_identical(Sys.getenv(py_init_test_keys, unset = NA_character_), before)
+  expect_true(all(py_init_test_keys %in% names(Sys.getenv())))
+})
+
+test_that("Python setup refuses un-restorable Windows empty keys before first initialization", {
+  skip_if_not_installed("reticulate")
+  skip_on_os("windows", "this injected-state fixture requires POSIX empty values")
+  py_init_test_env(py_init_test_values("before-"))
+  Sys.setenv(PYTHONPATH = "")
+  before = Sys.getenv(py_init_test_keys, unset = NA_character_)
+  state = new.env(parent = emptyenv())
+  state$calls = 0L
+  initialize = function(convert = FALSE) {
+    state$calls = state$calls + 1L
+    do.call(Sys.setenv, as.list(py_init_test_values("initialization-")))
+    new.env(parent = emptyenv())
+  }
+  py_init_test_mocks(NULL, FALSE, initialize)
+  testthat::local_mocked_bindings(is_windows = function() TRUE)
+  expect_error(bridge_py_main(), class = "gptr_error_not_available")
+  expect_identical(state$calls, 0L)
+  expect_identical(Sys.getenv(py_init_test_keys, unset = NA_character_), before)
+})
+
+test_that("Python setup keeps untouched empty keys when Python is already initialized", {
+  skip_if_not_installed("reticulate")
+  skip_on_os("windows", "this injected-state fixture requires POSIX empty values")
+  py_init_test_env(py_init_test_values("before-"))
+  Sys.setenv(PYTHONPATH = "")
+  before = Sys.getenv(py_init_test_keys, unset = NA_character_)
+  main = new.env(parent = emptyenv())
+  py_init_test_mocks(main, TRUE, function(convert = FALSE) main)
+  testthat::local_mocked_bindings(is_windows = function() TRUE)
+  expect_identical(bridge_py_main(), main)
+  expect_identical(Sys.getenv(py_init_test_keys, unset = NA_character_), before)
+})
+
+test_that("Python user evaluation keeps deliberate environment changes after setup restoration", {
+  skip_if_not_installed("reticulate")
+  py_init_test_env(py_init_test_values("before-"), extra = "GPTR_PY_INIT_USER_CANARY")
+  withr::local_envvar(GPTR_PY_INIT_USER_CANARY = NA_character_)
+  before = Sys.getenv(py_init_test_keys, unset = NA_character_)
+  state = new.env(parent = emptyenv())
+  state$setup_restored = FALSE
+  main = new.env(parent = emptyenv())
+  main$`_gptr_run` = function(src, rows) {
+    state$setup_restored = identical(Sys.getenv(py_init_test_keys, unset = NA_character_), before)
+    Sys.setenv(PATH = "deliberate-user-path", GPTR_PY_INIT_USER_CANARY = "deliberate-user-value")
+    list(list(out = "", err = "", repr = "42", error = NULL, kind = "int"), 42L)
+  }
+  initialize = function(convert = FALSE) {
+    do.call(Sys.setenv, as.list(py_init_test_values("initialization-")))
+    main
+  }
+  py_init_test_mocks(main, FALSE, initialize)
+  result = bridge_py("synthetic user source")
+  expect_true(state$setup_restored)
+  expect_identical(result$value, 42L)
+  expect_identical(Sys.getenv("PATH"), "deliberate-user-path")
+  expect_identical(Sys.getenv("GPTR_PY_INIT_USER_CANARY"), "deliberate-user-value")
+})
