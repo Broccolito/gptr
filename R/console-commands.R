@@ -228,6 +228,7 @@ cmd_env = function(args, ctx) {
 cmd_compact = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no conversation to compact yet.")
+  if (isTRUE(session_live(s)$compacting)) return("Compaction is already in progress.")
   compact = ext_service_get("compact.run")
   count = function() {
     sum(vapply(session_data(s)$entries, function(e) identical(e$type, "compaction"), NA))

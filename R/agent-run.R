@@ -59,6 +59,9 @@ run_new = function(s, opts, outer) {
   run$pending_model = NULL
   run$pending_compact = NULL
   run$compact_finish = NULL
+  run$compact_pending = NULL
+  run$compact_recovery = NULL
+  run$compact_defer = NULL
   run$blocked = NULL
   run$condition = NULL
   run$message = NULL
@@ -1006,7 +1009,9 @@ run_append_messages = function(run, msgs) {
 run_drive = function(run) {
   if (isTRUE(run$settled)) return(FALSE)
   if (isTRUE(run$busy)) return(TRUE)
-  tryCatch(run_step(run), error = function(e) run_fail(run, e))
+  tryCatch({
+    if (is.null(run$compact_pending)) run_step(run) else run_compact_resume(run)
+  }, error = function(e) run_fail(run, e))
   !isTRUE(run$settled)
 }
 
@@ -1064,12 +1069,15 @@ run_begin_request = function(run, messages) {
 #' A provider_stream() refusal (the IC-74 preflight reads the run's safety snapshot) ends the run
 #' with status error; a preparation hook that aborts stops it before any transfer starts.
 #' @noRd
-run_request = function(run) {
+run_request = function(run, check_compact = TRUE) {
   s = run$shell
   d = session_data(s)
   live = session_live(s)
   if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
-  if (identical(run$attempt, 0L) && !isTRUE(run$boundary_compacted)) run_compact_check(run)
+  if (check_compact && identical(run$attempt, 0L) && !isTRUE(run$boundary_compacted)) {
+    run_compact_check(run)
+    if (!is.null(run$compact_pending)) return(invisible(NULL))
+  }
   target = run_target(run)
   if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
   req = run_build(run, target)
@@ -1237,15 +1245,15 @@ run_response_error = function(run, msg) {
   if (is_context_overflow(msg, run$model$context, err)) {
     if (!isTRUE(run$overflow_used) && ext_service_has("compact.run")) {
       run$overflow_used = TRUE
-      if (run_compact(run, "overflow")) return(run_schedule_request(run, 0))
+      compacted = run_compact(run, "overflow")
+      if (!is.null(run$compact_pending)) {
+        run$compact_recovery = msg
+        run$busy = FALSE
+        return(invisible(NULL))
+      }
+      if (isTRUE(compacted)) return(run_schedule_request(run, 0))
     }
-    run$condition = run_condition(
-      run, msg, c("context_overflow", "provider"),
-      message = paste0("the context is still too large",
-                       if (isTRUE(run$overflow_used)) " after one compaction and retry" else "",
-                       ": ", msg$error_message %||% "context overflow"),
-      tokens = run_overflow_tokens(msg))
-    return(run_response_final(run, msg))
+    return(run_overflow_stop(run, msg))
   }
   if (run_retryable(msg, err) && run$attempt < 2L) {
     run$attempt = run$attempt + 1L
@@ -1255,6 +1263,18 @@ run_response_error = function(run, msg) {
   }
   if (run$attempt > 0L) run_emit(run, "retry_end", attempt = run$attempt, ok = FALSE)
   run$condition = run_condition(run, msg, provider_classes(err))
+  run_response_final(run, msg)
+}
+
+#' Finish overflow recovery without discarding the original failed response
+#' @noRd
+run_overflow_stop = function(run, msg) {
+  run$condition = run_condition(
+    run, msg, c("context_overflow", "provider"),
+    message = paste0("the context is still too large",
+                     if (isTRUE(run$overflow_used)) " after one compaction and retry" else "",
+                     ": ", msg$error_message %||% "context overflow"),
+    tokens = run_overflow_tokens(msg))
   run_response_final(run, msg)
 }
 
@@ -1322,15 +1342,43 @@ run_compact_check = function(run) {
 #' Compact the run's session (`compact.run`): TRUE when it did; a failure is a diagnostic
 #' @noRd
 run_compact = function(run, reason) {
-  ok = tryCatch({
-    ext_service_get("compact.run")(run$shell, reason)
-    TRUE
-  }, error = function(e) {
+  prior = run$compact_defer
+  run$compact_defer = TRUE
+  on.exit({
+    run$compact_defer = prior
+  }, add = TRUE)
+  result = tryCatch(list(ok = TRUE, value = {
+    if (is.null(run$compact_pending)) {
+      ext_service_get("compact.run")(run$shell, reason)
+    } else {
+      run$compact_pending$poll()
+    }
+  }), error = function(e) {
     registry_diagnostic("session", "compaction", "compaction_failed", conditionMessage(e))
-    FALSE
+    list(ok = FALSE, value = NULL)
   })
-  if (ok) run$boundary_compacted = TRUE
-  ok
+  if (inherits(result$value, "gptr_compaction_pending")) {
+    run$compact_pending = result$value
+    return(invisible(FALSE))
+  }
+  run$compact_pending = NULL
+  if (result$ok) run$boundary_compacted = TRUE
+  result$ok
+}
+
+#' Resume the request boundary only after its retained checkpoint completes
+#' @noRd
+run_compact_resume = function(run) {
+  if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
+  ok = run_compact(run, NULL)
+  if (!is.null(run$compact_pending) || run_halted(run)) return(invisible(NULL))
+  original = run$compact_recovery
+  run$compact_recovery = NULL
+  if (!is.null(original)) {
+    if (isTRUE(ok)) return(run_schedule_request(run, 0))
+    return(run_overflow_stop(run, original))
+  }
+  run_request(run, check_compact = FALSE)
 }
 
 #' Ask to extend a reached budget by the same amount (ask_human: the run's UI only)
@@ -1418,6 +1466,8 @@ run_settle = function(run, reason) {
   # A nested checkpoint has no ordinary message_end; charge it before persistence and agent_end.
   finish = run$compact_finish
   run$compact_finish = NULL
+  run$compact_pending = NULL
+  run$compact_recovery = NULL
   if (is.function(finish)) {
     failed = function(e) {
       run_accounting_error(run, e)
