@@ -95,19 +95,50 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          import hashlib, json, os, pathlib, tarfile
+          import hashlib, json, os, pathlib, subprocess, tarfile
           folder = pathlib.Path('artifact')
           archives = list(folder.glob('gptr_*.tar.gz'))
           assert len(archives) == 1, 'Expected exactly one normal gptr tarball'
           archive = archives[0]
+          def source_record(path, data):
+              blob = b'blob ' + str(len(data)).encode() + b'\0' + data
+              return {'path': path, 'git_blob_sha1': hashlib.sha1(blob).hexdigest(),
+                      'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
+          expected = []
+          tree = subprocess.check_output(['git', '-C', 'source', 'ls-tree', '-rz',
+                                          os.environ['SOURCE_SHA'], '--', 'R'])
+          for entry in tree.split(b'\0'):
+              if not entry:
+                  continue
+              header, raw_path = entry.split(b'\t', 1)
+              mode, kind, blob = header.decode('ascii').split()
+              path = raw_path.decode('utf-8')
+              if not path.endswith('.R'):
+                  continue
+              assert path.startswith('R/') and mode in {'100644', '100755'} and kind == 'blob'
+              record = source_record(path, (pathlib.Path('source') / path).read_bytes())
+              assert record['git_blob_sha1'] == blob, 'Checkout R bytes differ from committed blob'
+              expected.append(record)
+          expected.sort(key=lambda record: record['path'])
+          assert expected, 'Expected committed R sources'
+          actual = []
           with tarfile.open(archive) as tar:
               members = tar.getmembers()
+              for item in members:
+                  if item.name.startswith('gptr/R/') and item.name.endswith('.R'):
+                      assert item.isfile(), 'Archive R source is not a regular file'
+                      actual.append(source_record(item.name[5:], tar.extractfile(item).read()))
+          actual.sort(key=lambda record: record['path'])
+          assert actual == expected, 'Normal archive R sources differ from the nominated commit'
+          fingerprint = hashlib.sha256(json.dumps(expected, sort_keys=True,
+              separators=(',', ':')).encode()).hexdigest()
           for item in members:
               parts = pathlib.PurePosixPath(item.name).parts
               assert parts and parts[0] == 'gptr' and '..' not in parts, item.name
               assert len(parts) == 1 or parts[1] not in {'dev', 'docs'}, item.name
               assert not ({'.secrets', '.git', 'node_modules'} & set(parts)), item.name
           names = [item.name for item in members if item.isfile()]
+          assert len(names) == len(set(names)), 'Archive contains duplicate regular members'
           assert {'gptr/DESCRIPTION', 'gptr/NAMESPACE', 'gptr/LICENSE'} <= set(names)
           docs = [name for name in names if name.startswith('gptr/inst/doc/')]
           counts = {ext: sum(name.endswith(ext) for name in docs)
@@ -117,7 +148,8 @@ jobs:
                       'basename': archive.name, 'bytes': archive.stat().st_size,
                       'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
                       'producer_r': (folder / 'producer-r-version.txt').read_text().strip(),
-                      'guide_counts': counts}
+                      'guide_counts': counts, 'r_source_count': len(expected),
+                      'source_fingerprint_sha256': fingerprint}
           (folder / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               for key in ('basename', 'bytes', 'sha256'):
@@ -197,8 +229,24 @@ jobs:
           assert manifest['guide_counts'] == {'.Rmd': 14, '.html': 14}
           folder = pathlib.Path('metadata/gptr')
           folder.mkdir(parents=True)
+          records = []
           with tarfile.open(archive) as tar:
+              for item in tar.getmembers():
+                  if item.name.startswith('gptr/R/') and item.name.endswith('.R'):
+                      assert item.isfile(), 'Archive R source is not a regular file'
+                      data = tar.extractfile(item).read()
+                      blob = b'blob ' + str(len(data)).encode() + b'\0' + data
+                      records.append({'path': item.name[5:],
+                          'git_blob_sha1': hashlib.sha1(blob).hexdigest(),
+                          'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)})
               description = tar.extractfile('gptr/DESCRIPTION').read()
+          records.sort(key=lambda record: record['path'])
+          assert records and len(records) == len({record['path'] for record in records})
+          assert type(manifest['r_source_count']) is int
+          assert len(records) == manifest['r_source_count'], 'Archive R source count differs'
+          fingerprint = hashlib.sha256(json.dumps(records, sort_keys=True,
+              separators=(',', ':')).encode()).hexdigest()
+          assert fingerprint == manifest['source_fingerprint_sha256'], 'Archive R fingerprint differs'
           (folder / 'DESCRIPTION').write_bytes(description)
           pathlib.Path('evidence/verified-tarball.json').write_text(
               json.dumps(manifest, indent=2) + '\n')
