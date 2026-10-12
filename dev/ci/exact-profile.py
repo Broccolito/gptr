@@ -181,6 +181,69 @@ def verify_archive(archive, manifest, source, sha, repository):
     return description
 
 
+def replay_json(path, bound=65536):
+    if path is None or path.is_symlink() or not path.is_file() or path.stat().st_size > bound:
+        raise ValueError("Original replay evidence is missing or not a bounded regular file")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def replay_identity(manifest_path, source, sha, producer_run, controller_source, run, artifact, jobs):
+    package = "02ceac9c4a662cffe16188a592f7bdd3e2555280"
+    archive = "9d900a3e04d8ba38466bce899415bbec1111d17a519016e5e03bd196d63db70f"
+    manifest_sha = "0b96a5f3070a702bf10ac6b67095dc1719a3a74ccc54f0189c0de5aaef6048f8"
+    if source != package or sha != archive or producer_run != "38288459266":
+        raise ValueError("Only the nominated original archive may be replayed")
+    if not isinstance(controller_source, str) or not re.fullmatch(r"[0-9a-f]{40}", controller_source):
+        raise ValueError("Current controller identity is unavailable")
+    manifest = replay_json(manifest_path)
+    if digest(manifest_path) != manifest_sha or manifest != {
+            "source_sha": package, "basename": "gptr_1.0.0.tar.gz", "bytes": 2553795,
+            "sha256": archive, "producer_r": "R version 4.6.1 (2026-06-24)",
+            "guide_counts": {".Rmd": 14, ".html": 14}, "r_source_count": 120,
+            "source_fingerprint_sha256":
+                "5c4ab0011f056ff25a1c1d88385d710d02c9b1035d87a0134358d77a6318a3ba"}:
+        raise ValueError("Original producer manifest bytes or identity differ")
+    if not isinstance(run, dict) or type(run.get("id")) is not int or run["id"] != 38288459266 or \
+            run.get("head_sha") != package or run.get("path") != ".github/workflows/Exact-tarball.yaml" or \
+            run.get("event") != "workflow_dispatch" or type(run.get("run_attempt")) is not int or \
+            run["run_attempt"] != 1 or run.get("status") != "completed" or run.get("conclusion") != "failure":
+        raise ValueError("Original completed run identity differs")
+    if not isinstance(artifact, dict) or type(artifact.get("id")) is not int or \
+            artifact["id"] != 11764572361 or artifact.get("name") != "exact-source-tarball" or \
+            artifact.get("expired") is not False or artifact.get("digest") != \
+            "sha256:3255f4429bdf69f8acea68faefeef5ac64754cea9f65bdc03b0a2b13aff8efa6":
+        raise ValueError("Original artifact identity is unavailable or differs")
+    owner = artifact.get("workflow_run")
+    if not isinstance(owner, dict) or type(owner.get("id")) is not int or \
+            owner["id"] != 38288459266 or owner.get("head_sha") != package:
+        raise ValueError("Original artifact belongs to a different run or source")
+    names = ("producer", "Exact tarball (windows-latest, release)",
+             "Exact tarball (windows-latest, devel)", "Exact tarball (macos-latest, release)",
+             "Exact tarball (ubuntu-latest, release)", "Exact tarball (ubuntu-latest, devel)")
+    if not isinstance(jobs, list) or any(not isinstance(row, dict) for row in jobs):
+        raise ValueError("Original job inventory is unavailable")
+    admitted = []
+    for name in names:
+        rows = [row for row in jobs if row.get("name") == name]
+        if len(rows) != 1:
+            raise ValueError("Original producer or consumer is missing or ambiguous")
+        row = rows[0]
+        if type(row.get("id")) is not int or row["id"] <= 0 or \
+                type(row.get("run_id")) is not int or row["run_id"] != 38288459266 or \
+                row.get("head_sha") != package or type(row.get("run_attempt")) is not int or \
+                row["run_attempt"] != 1 or row.get("status") != "completed" or row.get("conclusion") != "success":
+            raise ValueError("Original producer and all five consumers must be clean and exact")
+        admitted.append(row["id"])
+    if len(set(admitted)) != 6:
+        raise ValueError("Original job identities are ambiguous")
+    return {"package_source_sha": package, "controller_source_sha": controller_source,
+            "producer_run_id": 38288459266, "producer_artifact_id": 11764572361,
+            "archive_sha256": archive, "manifest_sha256": manifest_sha,
+            "r_source_count": 120, "guide_counts": {".Rmd": 14, ".html": 14},
+            "original_job_ids": admitted, "original_run_conclusion": "failure",
+            "original_five_consumers_accepted": True, "dependency_profiles_accepted": False}
+
+
 def proc_record(pid):
     try:
         raw = Path(f"/proc/{pid}/stat").read_text()
@@ -322,7 +385,7 @@ def settle(process, known):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("verify", "settled", "depends", "suggests", "revdeps"), required=True)
+    parser.add_argument("--mode", choices=("verify", "replay", "settled", "depends", "suggests", "revdeps"), required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--archive-sha256", required=True)
@@ -331,11 +394,23 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--rscript", type=Path)
     parser.add_argument("--prior-mode", choices=("depends", "suggests"))
+    parser.add_argument("--producer-run")
+    parser.add_argument("--replay-run", type=Path)
+    parser.add_argument("--replay-artifact", type=Path)
+    parser.add_argument("--replay-jobs", type=Path)
     args = parser.parse_args()
     started = time.monotonic()
     if sys.platform != "linux":
         parser.error("This owned /proc supervisor requires Linux")
     os.umask(0o077)
+    replay = None
+    if args.mode == "replay":
+        controller_source = subprocess.run(
+            ["git", "-C", str(args.repository), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+        replay = replay_identity(args.manifest, args.source_sha, args.archive_sha256,
+            args.producer_run, controller_source, replay_json(args.replay_run),
+            replay_json(args.replay_artifact), replay_json(args.replay_jobs, 256 * 1024))
     manifest = json.loads(args.manifest.read_text())
     description = verify_archive(args.archive, manifest, args.source_sha,
                                  args.archive_sha256, args.repository)
@@ -354,7 +429,9 @@ def main():
     output_identity = (output_stat.st_dev, output_stat.st_ino)
     atomic_json(output / "verified-producer.json", manifest)
     (output / "DESCRIPTION").write_bytes(description)
-    if args.mode == "verify":
+    if args.mode in ("verify", "replay"):
+        if replay is not None:
+            atomic_json(output / "replay-identity.json", replay)
         return
     if args.rscript is None or not args.rscript.is_file() or not os.access(args.rscript, os.X_OK):
         raise ValueError("Nominate an executable Rscript")

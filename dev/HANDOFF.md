@@ -17,7 +17,11 @@ the living records and dev-only validation controllers. Preserve the dirty prima
   one owned transient descendant disappeared during disk sampling. The narrow dev-only fix
   preserves ownership/caps/fatal unknowns and all17 prior controls; eight new tests reproduce
   two baseline errors and all25 pass after correction. Original-byte hosted profiles WAITING.
-  Suggests/inventory were skipped after that failure; the archive does not clear other gates.
+  Suggests/inventory were skipped after that failure. The default-off original-only route
+  admits the same tar/manifest and six successful original producer/consumer job identities,
+  records the new controller separately and keeps all caps. All33 admission controls pass.
+  An unsupported gh option combination was caught before adoption and corrected; actual
+  bounded seven-job API admission passes. Hosted original-byte rerun remains WAITING.
 - DONE/worker assertions: run38290850451 source+installed have213 exact ordered cases
   per OS. Mac1,541P, Windows1,646P and Linux1,544P per context;0 failures/errors/R warnings,
   exact platform guards,18 clean lints and19 passing memory-death controls. All observed
@@ -37,15 +41,26 @@ the living records and dev-only validation controllers. Preserve the dirty prima
   A fresh API read confirms zero open issues. PR6 is the only open PR and remains DRAFT.
 - WAITING/oldrel4: reproduce the older installed-size/temp-root NOTEs on current bytes/R4.2.3
   with unchanged settings and owned teardown witnesses before choosing a fix or diagnostic A/B.
-- WAITING: current private local installation/site, live providers/extensions/team/fan-out/
-  compaction/replay, native frontend/performance checks, independent full review and PR6 merge.
+- DONE/current private install: original tar installs in15.254s, peak sampled family435.719MiB,
+  zero install warnings/sampling errors, exact five installed hashes and14 guide pairs.
+  Current closure, eleven-stage .gptr storage/fresh-resume and real loopback MCP pass with
+  zero external requests/warnings, exact caller restoration and observed owned cleanup.
+  History passes all four Rmd modes, Quarto and actual IRkernel MIME publication; underlying
+ 24 rows/latest8 display,11 state flags and0 requests/usage remain intact. This is synthetic
+  display/computation evidence; browser/native appearance and true short-case RAM peaks are separate.
+- OPEN/current automatic CI: db1 run38292931362 connections has1 worker-spec size failure
+  (6,052,915B exceeds unchanged4MB); LC_ALL=C has8 Unicode fixture/literal/path failures.
+  Zero R warnings in both. Source triage/tests-first corrections are required before closure.
+- WAITING: current site, live providers/extensions/team/fan-out/compaction/replay, native
+  frontend/performance checks, independent full review and PR6 merge.
   RStudio control still exposes original27070; no original-session input/restart/cleanup.
 
 Evidence is retained under ignored primary `dev/.validation/readiness-20261011/`, including
 `normal-five-audit`, all three native audits and `github-legacy-closure-20261012`.
-Resource11:59: load9.90/12.00/14.14, CPU39.46% idle,122G used/5,402MiB unused,
-swap20,176MiB/zero sampled paging, disk106GiB, no thermal warning. Heavy/GPU work stays held.
-No current02 local installation has run. Sampled RSS does not establish instantaneous peaks.
+Resource12:22: load15.44/15.13/14.25, CPU50.94% idle,123G used/4,313MiB unused,
+swap20,160MiB/zero sampled paging, disk266GiB, no thermal warning. User approved one serial
+private test family capped at2GiB sampled RAM/512MiB output; heavy/GPU work stays held.
+Sampled RSS does not establish instantaneous peaks or complete short/reparented-child coverage.
 Finish Mac, hosted and functional gates before final live Windows UI verification; Windows CI
 runs earlier. Merge only after reviewed applicable gates pass. Readiness/only-Windows-remaining
 remain false. Fresh four-stage plan checks are recorded separately after this edit.

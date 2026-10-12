@@ -12,6 +12,11 @@ on:
         required: false
         type: boolean
         default: false
+      original_profiles_only:
+        description: Recheck only the audited run38288459266 original archive; do not build
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -37,6 +42,7 @@ env:
 
 jobs:
   producer:
+    if: ${{ !inputs.original_profiles_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -343,14 +349,18 @@ jobs:
           retention-days: 14
 
   dependency-profiles:
-    if: ${{ inputs.dependency_profiles }}
+    if: ${{ always() && !cancelled() && (inputs.original_profiles_only || (inputs.dependency_profiles && needs.producer.result == 'success' && needs.check.result == 'success')) }}
     needs: [producer, check]
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    permissions:
+      contents: read
+      actions: read
     env:
-      EXPECTED_SOURCE: ${{ needs.producer.outputs.source_sha }}
-      EXPECTED_BASENAME: ${{ needs.producer.outputs.basename }}
-      EXPECTED_SHA256: ${{ needs.producer.outputs.sha256 }}
+      EXPECTED_SOURCE: ${{ inputs.original_profiles_only && inputs.source_sha || needs.producer.outputs.source_sha }}
+      EXPECTED_BASENAME: ${{ inputs.original_profiles_only && 'gptr_1.0.0.tar.gz' || needs.producer.outputs.basename }}
+      EXPECTED_SHA256: ${{ inputs.original_profiles_only && '9d900a3e04d8ba38466bce899415bbec1111d17a519016e5e03bd196d63db70f' || needs.producer.outputs.sha256 }}
+      PROFILE_ADMISSION: ${{ inputs.original_profiles_only && 'replay' || 'verify' }}
       TESTTHAT_CPUS: '1'
       MAKEFLAGS: '-j1'
     steps:
@@ -368,7 +378,33 @@ jobs:
           set -euo pipefail
           python controller/dev/ci/test-exact-profile.py \
             controller/dev/ci/exact-profile.py
+      - name: Read the immutable original run, artifact and five-consumer identities
+        if: ${{ inputs.original_profiles_only }}
+        timeout-minutes: 4
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p profile-evidence
+          timeout 60 gh api "repos/$GITHUB_REPOSITORY/actions/runs/38288459266" \
+            --jq '{id,head_sha,path,event,run_attempt,status,conclusion}' \
+            > profile-evidence/original-run.json
+          timeout 60 gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/11764572361" \
+            --jq '{id,name,expired,digest,workflow_run}' \
+            > profile-evidence/original-artifact.json
+          timeout 60 gh api "repos/$GITHUB_REPOSITORY/actions/runs/38288459266/jobs?filter=latest&per_page=100" \
+            --jq '[.jobs[] | {id,name,run_id,head_sha,run_attempt,status,conclusion}]' \
+            > profile-evidence/original-jobs.json
       - uses: actions/download-artifact@v5
+        if: ${{ inputs.original_profiles_only }}
+        with:
+          artifact-ids: '11764572361'
+          run-id: '38288459266'
+          github-token: ${{ github.token }}
+          path: artifact
+      - uses: actions/download-artifact@v5
+        if: ${{ !inputs.original_profiles_only }}
         with:
           name: exact-source-tarball
           path: artifact
@@ -379,8 +415,17 @@ jobs:
           set -euo pipefail
           mkdir -p metadata profile-evidence
           printf '%s\n' "$GITHUB_RUN_ID" > profile-evidence/workflow-run-id.txt
-          printf '%s\n' "$GITHUB_SHA" > profile-evidence/controller-source-sha.txt
-          python controller/dev/ci/exact-profile.py --mode verify \
+          actual=$(git -C controller rev-parse HEAD)
+          test "$actual" = "$GITHUB_SHA"
+          printf '%s\n' "$actual" > profile-evidence/controller-source-sha.txt
+          admission=()
+          if [[ "$PROFILE_ADMISSION" == replay ]]; then
+            admission=(--producer-run 38288459266
+              --replay-run profile-evidence/original-run.json
+              --replay-artifact profile-evidence/original-artifact.json
+              --replay-jobs profile-evidence/original-jobs.json)
+          fi
+          python controller/dev/ci/exact-profile.py --mode "$PROFILE_ADMISSION" "${admission[@]}" \
             --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
             --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
             --repository controller --output metadata/gptr

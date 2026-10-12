@@ -17,7 +17,11 @@ the living records and dev-only validation controllers. Preserve the dirty prima
   one owned transient descendant disappeared during disk sampling. The narrow dev-only fix
   preserves ownership/caps/fatal unknowns and all17 prior controls; eight new tests reproduce
   two baseline errors and all25 pass after correction. Original-byte hosted profiles WAITING.
-  Suggests/inventory were skipped after that failure; the archive does not clear other gates.
+  Suggests/inventory were skipped after that failure. The default-off original-only route
+  admits the same tar/manifest and six successful original producer/consumer job identities,
+  records the new controller separately and keeps all caps. All33 admission controls pass.
+  An unsupported gh option combination was caught before adoption and corrected; actual
+  bounded seven-job API admission passes. Hosted original-byte rerun remains WAITING.
 - DONE/worker assertions: run38290850451 source+installed have213 exact ordered cases
   per OS. Mac1,541P, Windows1,646P and Linux1,544P per context;0 failures/errors/R warnings,
   exact platform guards,18 clean lints and19 passing memory-death controls. All observed
@@ -37,15 +41,26 @@ the living records and dev-only validation controllers. Preserve the dirty prima
   A fresh API read confirms zero open issues. PR6 is the only open PR and remains DRAFT.
 - WAITING/oldrel4: reproduce the older installed-size/temp-root NOTEs on current bytes/R4.2.3
   with unchanged settings and owned teardown witnesses before choosing a fix or diagnostic A/B.
-- WAITING: current private local installation/site, live providers/extensions/team/fan-out/
-  compaction/replay, native frontend/performance checks, independent full review and PR6 merge.
+- DONE/current private install: original tar installs in15.254s, peak sampled family435.719MiB,
+  zero install warnings/sampling errors, exact five installed hashes and14 guide pairs.
+  Current closure, eleven-stage .gptr storage/fresh-resume and real loopback MCP pass with
+  zero external requests/warnings, exact caller restoration and observed owned cleanup.
+  History passes all four Rmd modes, Quarto and actual IRkernel MIME publication; underlying
+ 24 rows/latest8 display,11 state flags and0 requests/usage remain intact. This is synthetic
+  display/computation evidence; browser/native appearance and true short-case RAM peaks are separate.
+- OPEN/current automatic CI: db1 run38292931362 connections has1 worker-spec size failure
+  (6,052,915B exceeds unchanged4MB); LC_ALL=C has8 Unicode fixture/literal/path failures.
+  Zero R warnings in both. Source triage/tests-first corrections are required before closure.
+- WAITING: current site, live providers/extensions/team/fan-out/compaction/replay, native
+  frontend/performance checks, independent full review and PR6 merge.
   RStudio control still exposes original27070; no original-session input/restart/cleanup.
 
 Evidence is retained under ignored primary `dev/.validation/readiness-20261011/`, including
 `normal-five-audit`, all three native audits and `github-legacy-closure-20261012`.
-Resource11:59: load9.90/12.00/14.14, CPU39.46% idle,122G used/5,402MiB unused,
-swap20,176MiB/zero sampled paging, disk106GiB, no thermal warning. Heavy/GPU work stays held.
-No current02 local installation has run. Sampled RSS does not establish instantaneous peaks.
+Resource12:22: load15.44/15.13/14.25, CPU50.94% idle,123G used/4,313MiB unused,
+swap20,160MiB/zero sampled paging, disk266GiB, no thermal warning. User approved one serial
+private test family capped at2GiB sampled RAM/512MiB output; heavy/GPU work stays held.
+Sampled RSS does not establish instantaneous peaks or complete short/reparented-child coverage.
 Finish Mac, hosted and functional gates before final live Windows UI verification; Windows CI
 runs earlier. Merge only after reviewed applicable gates pass. Readiness/only-Windows-remaining
 remain false. Fresh four-stage plan checks are recorded separately after this edit.
@@ -66,7 +81,8 @@ remain false. Fresh four-stage plan checks are recorded separately after this ed
 | Case | Required acceptance | State |
 |---|---|---|
 | AR02 current original archive | Require all five original-byte consumers plus restricted dependency profiles, raw logs, all120 sources/14 guides and zero check errors/warnings/notes. | DONE/all five normal consumers at02:129,180P/0F/W and2,308 original guards; dependency profile controller FAILED; tests-first monitor correction has25 passing controls; original-byte hosted rerun WAITING. |
-| PF02 transient disk entries | Preserve live-byte charges, captured root identity, nonfollowing ancestors and fatal unknowns; accept only twice-confirmed vanished owned descendants. Keep prior17 controls and all sampling/settlement caps. | DONE/controller controls: baseline25/2 expected errors; amended25 pass. Hosted original-byte dependency/Suggests/inventory rerun WAITING. |
+| PF02 transient disk entries | Preserve live-byte charges, captured root identity, nonfollowing ancestors and fatal unknowns; accept only twice-confirmed vanished owned descendants. Keep prior17 controls and all sampling/settlement caps. | DONE/controller controls: baseline25/2 expected errors; amended25 pass. Original-only admission33 pass and actual seven-job API admission verifies. Hosted original-byte dependency/Suggests/inventory rerun WAITING. |
+| CI03 broad runtime variants | Keep the4MB worker-spec/security assertion and UTF-8 byte/data/path oracles; triage current connections and LC_ALL=C failures with meaningful tests-first corrections and independent review. | OPEN: db1 connections1 size failure/28,313P; LC_ALL=C8 Unicode failures/28,157P, both0 R warnings. No relaxed assertion or forced parent locale. |
 | WK02 current workers and Shiny | Run exact213 source/installed titles on Mac, Windows and Linux; require native success/error/cancel state, child settlement, pinned Python identity, zero outer warnings and exact platform guards. | DONE/hosted assertions on all three:9,462P across six contexts,0F/E/RW, exact guards,18 lints0/19 controls TRUE. Browser output has30 native close errors; UX03 remains OPEN. Local GUI/live WAITING. |
 | WS03 strict denied attributes | Keep the same real six controls and installed production probe under an exact owned-child token with effective denial; test body error/interrupt, partial privilege adjustment and failed restoration without mutating parent tokens. Preserve five-second deadline/caps and unknown fatal. | FAILED/current02: ordinary75 and strict token retain one failure each. Held-B successor is source preparation only; reviewed controls and native rerun WAITING. |
 | CR02 oldrel size and teardown | Recheck current bytes on R4.2.3 with current settings; record lazy-load database and allocated disk bytes. Capture owned teardown entry/completion, unlink return, root existence and bounded residual/child-settlement witnesses. Only if size persists, run source-retention diagnostic A/B on the same archive/R/dependencies. | WAITING: older same-source4.2.3/4.6.1 generated databases differ; source/retention alone is not causal proof. No production cleanup or byte-compilation change. |
@@ -1214,7 +1230,7 @@ account logout, user workspace reset or shared-model stop is authorized.
 | R03 file and persistence safety | FT01/ST01/ST02: private JSONL/checkpoint creation, absence preconditions, sidecar structural/call bounds; installed tree/hash/mode deltas, corruption/rewind/refusal, text/doc reopens | ONGOING. Actual Mac551 storage and665 sidecar assertions pass,0F/0W/0S; scoped lint0. Earlier21/49-failure runs retained. Installed/current Windows and remaining extension packet pending. |
 | R04 Windows security | Native known-junction containment, strict effective-denial controls, exact ACL restoration, child death, writer concurrency and no-follow test supervisor controls | ONGOING. Native run38214805977: Linux observer113P/0F/0W/0S; Windows81P/11F/0W/0S before callback through blanket empty-entry preflight, with0outer warnings/survivors. Six-key first-init correction has actual Mac tests-first2F/96P then144P/0F/0W/0S and two-file lint0. Both hosted native eight-case/ten-control reruns must pass before sampler adoption, then9 security/47 writer cases; denial/resource/cleanup gates unchanged. |
 | R05 dependencies and documents | Child-only Quarto discovery; private testthat/NumPy/pandas/reticulate identity; local applicable skipped doc-knitr/bridge-lang cases | ONGOING. Private testthat3.3.2 built under local R4.5.0; NumPy2.5.4/pandas3.0.6 privately installed. Direct reticulate PATH leak retained. Reviewed six-key GPTR setup guard has actual10-case23F RED then48P/0F/0W/0S GREEN, with original error/interrupt and restoration-uncertainty controls. Real GPTR-first native Python/knitr and native Windows case/empty boundaries still require execution. |
-| R06 compact history | UX05: certified actual IRkernel MIME and Rmd default/kable/paged/tibble plus Quarto, full24-row invariance/latest8 display,0requests/usage, exact cleanup | WAITING final immutable candidate certificate; six serial prepared cases. Native GUI history remains its own observation. |
+| R06 compact history | UX05: certified actual IRkernel MIME and Rmd default/kable/paged/tibble plus Quarto, full24-row invariance/latest8 display,0requests/usage, exact cleanup | DONE/current02 diagnostic install: six serial Rmd/Quarto/IRkernel cases pass exact MIME/HTML/data/restoration and0request gates. Native GUI/browser appearance and final changed-source artifact remain WAITING. |
 | R07 live providers and decisions | All five requested routes: Claude CLI, Codex CLI, Jev typed decisions, exact Ollama Qwen and Versa Azure; S1 logical/choice/score, emulated/native/local boundaries and configuration | ONGOING historical live/replay cells retained by revision; current remaining cells and capability-specific errors pending. No inference claim from inventory. Preserve shared Ollama. |
 | R08 live workflows | Functional Peter/file/scripts, interactive steering, queued/background work, named subagents and fan-out, bounded simulation/ML/single-cell examples; independent numerical/input and replay oracles | ONGOING historical scoped passes retained. Certified closure/storage/HTTP and five live file/resource/download/agent/web cases prepared; remaining team/cancel/summary-quality cases pending. |
 | R09 compaction | CP01–07: manual/automatic continuity, budget/abort/malformed/timeout, durable per-attempt usage, fresh resume/rewind, teams/shared attribution and strict replay across PTY/GUI/Rscript/Rmd/Quarto/IRkernel | ONGOING source regressions. Four certified manual/auto/budget/abort live cases and fresh resume prepared; real team/frontend cases still required. |

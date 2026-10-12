@@ -285,5 +285,132 @@ class DiskDisappearanceControls(unittest.TestCase):
                     self.assertIs(caught.exception, self.expected_error)
 
 
+MANIFEST_TEXT = """{
+  "source_sha": "02ceac9c4a662cffe16188a592f7bdd3e2555280",
+  "basename": "gptr_1.0.0.tar.gz",
+  "bytes": 2553795,
+  "sha256": "9d900a3e04d8ba38466bce899415bbec1111d17a519016e5e03bd196d63db70f",
+  "producer_r": "R version 4.6.1 (2026-06-24)",
+  "guide_counts": {
+    ".Rmd": 14,
+    ".html": 14
+  },
+  "r_source_count": 120,
+  "source_fingerprint_sha256": "5c4ab0011f056ff25a1c1d88385d710d02c9b1035d87a0134358d77a6318a3ba"
+}
+"""
+
+class ReplayAdmissionControls(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.owned = tempfile.TemporaryDirectory()
+        self.addCleanup(self.owned.cleanup)
+        self.manifest = Path(self.owned.name) / "manifest.json"
+        self.manifest.write_text(MANIFEST_TEXT, encoding="utf-8")
+        self.source = "02ceac9c4a662cffe16188a592f7bdd3e2555280"
+        self.archive = "9d900a3e04d8ba38466bce899415bbec1111d17a519016e5e03bd196d63db70f"
+        self.controller = "d" * 40
+        self.run = {"id": 38288459266, "head_sha": self.source,
+                    "path": ".github/workflows/Exact-tarball.yaml", "event": "workflow_dispatch",
+                    "run_attempt": 1, "status": "completed", "conclusion": "failure"}
+        self.artifact = {"id": 11764572361, "name": "exact-source-tarball", "expired": False,
+                         "digest": "sha256:3255f4429bdf69f8acea68faefeef5ac64754cea9f65bdc03b0a2b13aff8efa6",
+                         "workflow_run": {"id": 38288459266, "head_sha": self.source}}
+        names = ["producer", "Exact tarball (windows-latest, release)",
+                 "Exact tarball (windows-latest, devel)", "Exact tarball (macos-latest, release)",
+                 "Exact tarball (ubuntu-latest, release)", "Exact tarball (ubuntu-latest, devel)"]
+        self.jobs = [{"id": 100 + index, "name": name, "run_id": 38288459266,
+                      "head_sha": self.source, "run_attempt": 1,
+                      "status": "completed", "conclusion": "success"}
+                     for index, name in enumerate(names)]
+        self.jobs.append(dict(self.jobs[0], id=107, name="dependency-profiles", conclusion="failure"))
+
+    def admission(self, **changes):
+        args = {"manifest_path": self.manifest, "source": self.source, "sha": self.archive,
+                "producer_run": "38288459266", "controller_source": self.controller,
+                "run": self.run, "artifact": self.artifact, "jobs": self.jobs}
+        args.update(changes)
+        return MODULE.replay_identity(**args)
+
+    def test_original_archive_and_all_five_admission_keeps_controller_separate(self):
+        before = json.dumps([self.run, self.artifact, self.jobs], sort_keys=True)
+        value = self.admission()
+        self.assertEqual(value["package_source_sha"], self.source)
+        self.assertEqual(value["controller_source_sha"], self.controller)
+        self.assertNotEqual(value["package_source_sha"], value["controller_source_sha"])
+        self.assertEqual(value["producer_run_id"], 38288459266)
+        self.assertEqual(value["producer_artifact_id"], 11764572361)
+        self.assertEqual(value["r_source_count"], 120)
+        self.assertEqual(value["guide_counts"], {".Rmd": 14, ".html": 14})
+        self.assertEqual(value["original_run_conclusion"], "failure")
+        self.assertFalse(value["dependency_profiles_accepted"])
+        self.assertEqual(json.dumps([self.run, self.artifact, self.jobs], sort_keys=True), before)
+
+    def test_other_source_archive_or_producer_is_refused(self):
+        for change in ({"source": "a" * 40}, {"sha": "b" * 64},
+                       {"producer_run": "38288459267"}, {"producer_run": 38288459266}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.admission(**change)
+
+    def test_changed_manifest_bytes_or_identity_is_refused(self):
+        original = self.manifest.read_bytes()
+        for key, bad in (("bytes", 2553796), ("r_source_count", 119),
+                         ("guide_counts", {".Rmd": 13, ".html": 14}),
+                         ("source_fingerprint_sha256", "c" * 64)):
+            value = json.loads(original)
+            value[key] = bad
+            self.manifest.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.admission()
+            self.manifest.write_bytes(original)
+        self.manifest.write_bytes(original + b" ")
+        with self.assertRaises(ValueError):
+            self.admission()
+
+    def test_unavailable_aliased_or_oversized_manifest_is_refused(self):
+        alias = self.manifest.with_name("alias.json")
+        alias.symlink_to(self.manifest)
+        for path in (alias, self.manifest.with_name("missing.json"), self.manifest.parent):
+            with self.subTest(path=path), self.assertRaises((ValueError, OSError)):
+                self.admission(manifest_path=path)
+        self.manifest.write_bytes(b"x" * 65537)
+        with self.assertRaises(ValueError):
+            self.admission()
+
+    def test_unfinished_different_or_rerun_original_run_is_refused(self):
+        for key, bad in (("id", 38288459267), ("head_sha", "a" * 40),
+                         ("path", ".github/workflows/other.yaml"), ("event", "push"),
+                         ("run_attempt", 2), ("status", "in_progress"), ("conclusion", "success")):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.admission(run=dict(self.run, **{key: bad}))
+
+    def test_expired_replaced_or_foreign_artifact_is_refused(self):
+        for key, bad in (("id", 11764572362), ("name", "other"), ("expired", True),
+                         ("digest", "sha256:" + "a" * 64),
+                         ("workflow_run", {"id": 38288459267, "head_sha": self.source}),
+                         ("workflow_run", {"id": 38288459266, "head_sha": "a" * 40})):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.admission(artifact=dict(self.artifact, **{key: bad}))
+
+    def test_each_original_producer_or_consumer_must_be_unique_clean_and_exact(self):
+        for index in range(6):
+            for key, bad in (("status", "in_progress"), ("conclusion", "failure"),
+                             ("conclusion", "skipped"), ("head_sha", "a" * 40),
+                             ("run_id", 38288459267), ("run_attempt", 2)):
+                values = [dict(value) for value in self.jobs]
+                values[index][key] = bad
+                with self.subTest(index=index, key=key), self.assertRaises(ValueError):
+                    self.admission(jobs=values)
+            with self.subTest(index=index, mode="missing"), self.assertRaises(ValueError):
+                self.admission(jobs=self.jobs[:index] + self.jobs[index + 1:])
+            with self.subTest(index=index, mode="duplicate"), self.assertRaises(ValueError):
+                self.admission(jobs=self.jobs + [self.jobs[index]])
+
+    def test_unknown_controller_identity_is_refused(self):
+        for value in (None, 1, "a" * 39, "A" * 40, "not-a-sha"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.admission(controller_source=value)
+
+
 if __name__ == "__main__":
     unittest.main()
