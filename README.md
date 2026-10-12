@@ -96,9 +96,9 @@ s |> peter("Reuse fit to predict mpg for the same cars.")
 #> The predictions are stored in predicted.
 #> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . sf33a812c1a
 head(work$predicted)
-#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive 
-#>          23.28261          21.91977          24.88595          20.10265 
-#> Hornet Sportabout           Valiant 
+#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
+#>          23.28261          21.91977          24.88595          20.10265
+#> Hornet Sportabout           Valiant
 #>          18.90014          18.79325
 s$turns
 #> [1] 2
@@ -133,11 +133,11 @@ abstracts = c(a = "We randomized 200 adults to drug or placebo.",
               b = "We followed a cohort of nurses for 20 years.")
 is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge)
 is_rct
-#>              a              b 
-#>  TRUE (p=0.93) FALSE (p=0.08) 
+#>              a              b
+#>  TRUE (p=0.93) FALSE (p=0.08)
 #> judge-s1-1.0 . calibration unknown . 2026-10-11
 gptr_prob(is_rct)
-#>    a    b 
+#>    a    b
 #> 0.93 0.08
 ```
 
