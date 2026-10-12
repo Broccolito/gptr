@@ -320,6 +320,27 @@ rw_absence_observation = function(line) {
   list(key = key, label = paste(c(paste0("absence-", key), parts[-1L]), collapse = "-"))
 }
 
+rw_absence_control = function(line, seen = character()) {
+  bad = function() stop("Invalid absence denial control.")
+  if (!is.character(line) || length(line) != 1L || is.na(line) ||
+      nchar(line, type = "bytes") > 128L) bad()
+  if (!startsWith(line, "GPTR_ABSENCE_CONTROL")) return(NULL)
+  keys = c("PRE_FILE", "PRE_PARENT", "FILE_ACL", "PARENT_ACL", "FILE_LOOKUP",
+    "PARENT_LOOKUP")
+  if (!is.character(seen) || anyNA(seen) || length(seen) >= length(keys) ||
+      !identical(seen, keys[seq_along(seen)])) bad()
+  pattern = "^GPTR_ABSENCE_CONTROL (PRE_FILE|PRE_PARENT|FILE_ACL|PARENT_ACL|"
+  pattern = paste0(pattern, "FILE_LOOKUP|PARENT_LOOKUP) ([1-3])$")
+  if (!grepl(pattern, line)) bad()
+  parts = strsplit(line, " ", fixed = TRUE)[[1L]]
+  key = parts[[2L]]
+  value = as.integer(parts[[3L]])
+  if (!identical(key, keys[[length(seen) + 1L]]) ||
+      (!endsWith(key, "_LOOKUP") && value != 1L)) bad()
+  list(key = key, value = value,
+    label = paste0("absence-control-", tolower(gsub("_", "-", key)), "-", value))
+}
+
 # Run one native utility under the unchanged D-019 family/resource watchdog.
 rw_absence_case = function(case, root) {
   ns = asNamespace("gptr")
@@ -554,6 +575,19 @@ rw_absence_case = function(case, root) {
     "}",
     "$parentOriginal = StableOwnedAccess $false",
     "$fileOriginal = StableOwnedAccess $true",
+    "$attributes = [System.IO.File]::GetAttributes($denied)",
+    "if (($attributes -band [System.IO.FileAttributes]::ReparsePoint) -or",
+    "    ($attributes -band [System.IO.FileAttributes]::Directory)) {",
+    "  throw 'Positive file metadata control differs' }",
+    "[Console]::WriteLine('GPTR_ABSENCE_CONTROL PRE_FILE 1')",
+    "$entries = [System.IO.Directory]::GetFileSystemEntries($fresh)",
+    "$known = [System.IO.Path]::GetFullPath($denied)",
+    "$found = $false",
+    "foreach ($entry in $entries) {",
+    "  if ([System.IO.Path]::GetFullPath($entry) -ceq $known) { $found = $true }",
+    "}",
+    "if (-not $found) { throw 'Positive enumeration control differs' }",
+    "[Console]::WriteLine('GPTR_ABSENCE_CONTROL PRE_PARENT 1')",
     "WritePrivate $parentBackup ($parentOriginal.GetSecurityDescriptorSddlForm($access))",
     "WritePrivate $fileBackup ($fileOriginal.GetSecurityDescriptorSddlForm($access))",
     "WritePrivate $armed 'ARMED'",
@@ -572,6 +606,44 @@ rw_absence_case = function(case, root) {
     "$denyParent.AddAccessRule($rule)",
     "[System.IO.Directory]::SetAccessControl($fresh, $denyParent)",
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 7')",
+    "function AssertDenied($actual, [int]$rights, [int]$inheritance) {",
+    "  $owner = $actual.GetOwner([System.Security.Principal.SecurityIdentifier])",
+    "  $rules = @($actual.GetAccessRules($true, $true,",
+    "    [System.Security.Principal.SecurityIdentifier]))",
+    "  if (-not $actual.AreAccessRulesProtected -or -not $actual.AreAccessRulesCanonical -or",
+    "      $null -eq $owner -or -not $owner.Equals($sid) -or $rules.Count -ne 2) {",
+    "    throw 'Independent denial structure differs' }",
+    "  $denyRule = $rules[0]; $allowRule = $rules[1]",
+    "  $denyType = [System.Security.AccessControl.AccessControlType]::Deny",
+    "  $allowType = [System.Security.AccessControl.AccessControlType]::Allow",
+    "  $full = [System.Security.AccessControl.FileSystemRights]::FullControl",
+    "  if ($denyRule.IdentityReference.Value -ne $sid.Value -or $denyRule.IsInherited -or",
+    "      $denyRule.AccessControlType -ne $denyType -or",
+    "      [int]$denyRule.FileSystemRights -ne $rights -or",
+    "      [int]$denyRule.InheritanceFlags -ne 0 -or [int]$denyRule.PropagationFlags -ne 0) {",
+    "    throw 'Independent exact Deny differs' }",
+    "  if ($allowRule.IdentityReference.Value -ne $sid.Value -or $allowRule.IsInherited -or",
+    "      $allowRule.AccessControlType -ne $allowType -or",
+    "      $allowRule.FileSystemRights -ne $full -or",
+    "      [int]$allowRule.InheritanceFlags -ne $inheritance -or",
+    "      [int]$allowRule.PropagationFlags -ne 0) { throw 'Independent exact Allow differs' }",
+    "}",
+    "$actual = [System.IO.File]::GetAccessControl($denied, $sections)",
+    "AssertDenied $actual 128 0",
+    "[Console]::WriteLine('GPTR_ABSENCE_CONTROL FILE_ACL 1')",
+    "$actual = [System.IO.Directory]::GetAccessControl($fresh, $sections)",
+    "AssertDenied $actual 1 3",
+    "[Console]::WriteLine('GPTR_ABSENCE_CONTROL PARENT_ACL 1')",
+    "$fileLookup = 3",
+    "try { $null = [System.IO.File]::GetAttributes($denied); $fileLookup = 2 }",
+    "catch [System.UnauthorizedAccessException] { $fileLookup = 1 }",
+    "catch { $fileLookup = 3 }",
+    "[Console]::WriteLine('GPTR_ABSENCE_CONTROL FILE_LOOKUP ' + $fileLookup)",
+    "$parentLookup = 3",
+    "try { $null = [System.IO.Directory]::GetFileSystemEntries($fresh); $parentLookup = 2 }",
+    "catch [System.UnauthorizedAccessException] { $parentLookup = 1 }",
+    "catch { $parentLookup = 3 }",
+    "[Console]::WriteLine('GPTR_ABSENCE_CONTROL PARENT_LOOKUP ' + $parentLookup)",
     "$refused = $false",
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 8')",
     "try { & {", fun("proc_writer_acl")(paths[["denied"]], marker),
@@ -585,6 +657,8 @@ rw_absence_case = function(case, root) {
     "if (-not $refused) {",
     "  [Console]::WriteLine('GPTR_ABSENCE_PROBE 4')",
     "  throw 'Attribute denial not effective' }",
+    "if ($fileLookup -ne 1 -or $parentLookup -ne 1) {",
+    "  throw 'Independent native denial not effective' }",
     "[Console]::WriteLine('GPTR-ABSENCE-DENIED-REFUSED')",
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 9')",
     "} finally {",
@@ -638,6 +712,9 @@ rw_absence_case = function(case, root) {
     seen$status = NULL
     seen$last_stage = if (identity) 0L else 100L
     seen$observations = character()
+    seen$controls = character()
+    seen$control_values = integer()
+    seen$probe = NULL
     utility = NULL
     record = NULL
     settle = function() {
@@ -670,12 +747,24 @@ rw_absence_case = function(case, root) {
     stopifnot(is.list(record), is.finite(record$create_time))
     if (identity) saveRDS(record, file.path(root, "inner-identity.rds"))
     fun("reactor_proc")(utility, on_line = function(line) {
+      control = rw_absence_control(line, seen$controls)
+      if (!is.null(control)) {
+        stopifnot(identity, identical(seen$last_stage,
+          if (startsWith(control$key, "PRE_")) 4L else 7L))
+        seen$controls = c(seen$controls, control$key)
+        seen$control_values = c(seen$control_values, control$value)
+        phase(control$label)
+        return(invisible(NULL))
+      }
       observation = rw_absence_observation(line)
       if (!is.null(observation)) {
         key = observation$key
         stopifnot(!key %in% seen$observations, length(seen$observations) < 7L)
         if (key == "probe") {
-          stopifnot(identity, identical(seen$last_stage, 8L))
+          stopifnot(identity, identical(seen$last_stage, 8L),
+            identical(seen$controls, c("PRE_FILE", "PRE_PARENT", "FILE_ACL", "PARENT_ACL",
+              "FILE_LOOKUP", "PARENT_LOOKUP")))
+          seen$probe = observation$label
         } else {
           parent = startsWith(key, "parent-")
           stage = if (parent) {
@@ -715,6 +804,10 @@ rw_absence_case = function(case, root) {
       timeout = max(0, 5 - (fun("reactor_now")() - started)))
     elapsed = fun("reactor_now")() - started
     stopifnot(complete, identical(seen$status, 0L), elapsed <= 5, identical(seen$out, proof))
+    if (identity) {
+      stopifnot(identical(seen$control_values, rep(1L, 6L)),
+        identical(seen$probe, "absence-probe-1"))
+    }
     settle()
     utility = NULL
     list(proof = seen$out, elapsed = elapsed, status = seen$status,
@@ -804,7 +897,8 @@ rw_absence_run = function() {
   environment(runner) = scope
   scope$bp_child_case = rw_absence_case
   loader = bp_loader()
-  decoder = c(paste0("rw_absence_stage = ", paste(deparse(rw_absence_stage),
+  decoder = c(paste0("rw_absence_control = ", paste(deparse(rw_absence_control),
+    collapse = "\n")), paste0("rw_absence_stage = ", paste(deparse(rw_absence_stage),
     collapse = "\n")), paste0("rw_absence_status = ", paste(deparse(rw_absence_status),
     collapse = "\n")), paste0("rw_absence_observation = ", paste(deparse(rw_absence_observation),
     collapse = "\n")))

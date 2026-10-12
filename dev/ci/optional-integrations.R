@@ -39,7 +39,8 @@ optional_titles = list(
     "Windows checkpoint walks label links and forbid restoring through them",
     "Windows writes resolve links and edits refuse duplicate physical file operations",
     "Windows settings refresh after a same-size rewrite with unchanged file timestamps",
-    "Windows same-size gated rewrites revoke trust even with unchanged file timestamps"),
+    "Windows same-size gated rewrites revoke trust even with unchanged file timestamps",
+    "Windows known junctions are labelled and excluded from cache and checkpoint cleanup"),
   "test-windows-link-policy.R" = c(
     "Windows text reads canonical file bytes despite empty alias metadata",
     "Windows writes use the canonical target when readlink reports no link",
@@ -105,7 +106,9 @@ optional_titles = list(
     "writer refuses an alias published after its directory snapshot",
     "writer refuses a directory published after its directory snapshot",
     "absence observations retain only fixed probe and bounded parent ACL numbers",
-    "absence observations retain only fixed bounded file ACL differences"),
+    "absence observations retain only fixed bounded file ACL differences",
+    "absence denial controls require fixed ordered native lookup tokens",
+    "absence denial controls reject unknown order outcomes and private content"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",

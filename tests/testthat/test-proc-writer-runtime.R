@@ -878,3 +878,48 @@ test_that("absence observations retain only fixed bounded file ACL differences",
     expect_error(rw_absence_observation(line), "Invalid absence observation", fixed = TRUE)
   }
 })
+
+test_that("absence denial controls require fixed ordered native lookup tokens", {
+  keys = c("PRE_FILE", "PRE_PARENT", "FILE_ACL", "PARENT_ACL", "FILE_LOOKUP",
+    "PARENT_LOOKUP")
+  for (i in seq_along(keys)) {
+    seen = keys[seq_len(i - 1L)]
+    x = rw_absence_control(paste("GPTR_ABSENCE_CONTROL", keys[[i]], 1), seen)
+    expect_identical(x$key, keys[[i]])
+    expect_identical(x$value, 1L)
+    expect_identical(x$label, paste0("absence-control-",
+      tolower(gsub("_", "-", keys[[i]])), "-1"))
+  }
+  for (code in 2:3) {
+    x = rw_absence_control(paste("GPTR_ABSENCE_CONTROL FILE_LOOKUP", code), keys[1:4])
+    expect_identical(x$value, as.integer(code))
+    x = rw_absence_control(paste("GPTR_ABSENCE_CONTROL PARENT_LOOKUP", code), keys[1:5])
+    expect_identical(x$value, as.integer(code))
+  }
+  expect_null(rw_absence_control("GPTR_ABSENCE_STAGE 7"))
+  expect_null(rw_absence_control("GPTR_ABSENCE_PROBE 1"))
+})
+
+test_that("absence denial controls reject unknown order outcomes and private content", {
+  keys = c("PRE_FILE", "PRE_PARENT", "FILE_ACL", "PARENT_ACL", "FILE_LOOKUP",
+    "PARENT_LOOKUP")
+  for (line in c("GPTR_ABSENCE_CONTROL PRE_FILE 0", "GPTR_ABSENCE_CONTROL PRE_FILE 2",
+    "GPTR_ABSENCE_CONTROL PRE_FILE 3", "GPTR_ABSENCE_CONTROL PRE_FILE 01",
+    "GPTR_ABSENCE_CONTROL PRE_FILE 1 ", "GPTR_ABSENCE_CONTROL PRE_FILE 1\r",
+    "GPTR_ABSENCE_CONTROL PRE_FILE NaN", "GPTR_ABSENCE_CONTROL FILE_LOOKUP 1",
+    "GPTR_ABSENCE_CONTROL FOREIGN 1", "GPTR_ABSENCE_CONTROL PRE_FILE 1 PRIVATE-SID",
+    paste0("GPTR_ABSENCE_CONTROL PRE_FILE ", strrep("1", 128)))) {
+    expect_error(rw_absence_control(line), "Invalid absence denial control", fixed = TRUE)
+  }
+  for (seen in list("FOREIGN", c("PRE_FILE", "PRE_FILE"), NA_character_, keys)) {
+    expect_error(rw_absence_control("GPTR_ABSENCE_CONTROL PRE_FILE 1", seen),
+      "Invalid absence denial control", fixed = TRUE)
+  }
+  expect_error(rw_absence_control("GPTR_ABSENCE_CONTROL PRE_FILE 1", "PRE_FILE"),
+    "Invalid absence denial control", fixed = TRUE)
+  expect_error(rw_absence_control("GPTR_ABSENCE_CONTROL FILE_LOOKUP 4", keys[1:4]),
+    "Invalid absence denial control", fixed = TRUE)
+  for (line in list(NULL, NA_character_, c("GPTR_ABSENCE_CONTROL PRE_FILE 1", "private"))) {
+    expect_error(rw_absence_control(line), "Invalid absence denial control", fixed = TRUE)
+  }
+})

@@ -212,7 +212,9 @@ writer_runtime_titles = c(
   "writer refuses an alias published after its directory snapshot",
   "writer refuses a directory published after its directory snapshot",
   "absence observations retain only fixed probe and bounded parent ACL numbers",
-  "absence observations retain only fixed bounded file ACL differences")
+  "absence observations retain only fixed bounded file ACL differences",
+  "absence denial controls require fixed ordered native lookup tokens",
+  "absence denial controls reject unknown order outcomes and private content")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
@@ -1668,10 +1670,10 @@ testthat::test_that("bounded file ACL observations retain the complete mandatory
   file = "test-proc-writer-runtime.R"
   title = "absence observations retain only fixed bounded file ACL differences"
   expected = c(writer_runtime_titles[seq_len(44L)], title)
-  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(optional_titles[[file]][seq_len(45L)], expected)
   testthat::expect_identical(length(expected), 45L)
   testthat::expect_identical(anyDuplicated(expected), 0L)
-  rows = lapply(expected, record)
+  rows = lapply(writer_runtime_titles, record)
   i = 45L
   for (windows in c(FALSE, TRUE)) {
     result = optional_gate(rows, file, windows)
@@ -1755,5 +1757,80 @@ testthat::test_that("self marker cases retain the complete mandatory process vec
     }
     unknown = record("unrelated self marker capability guard", passed = 3L, skipped = 1L)
     testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
+  }
+})
+
+
+testthat::test_that(
+  "known native junction coverage is Windows mandatory and never a capability skip", {
+  file = "test-windows-security.R"
+  title = "Windows known junctions are labelled and excluded from cache and checkpoint cleanup"
+  testthat::expect_identical(tail(optional_titles[[file]], 1L), title)
+  rows = lapply(optional_titles[[file]], record)
+  i = match(title, optional_titles[[file]])
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_true(optional_gate(rows, file, windows)$passed)
+    testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+    testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+    for (field in c("failed", "warnings")) {
+      changed = rows
+      changed[[i]][[field]] = 1L
+      testthat::expect_error(optional_gate(changed, file, windows))
+    }
+  }
+  testthat::expect_false(optional_allowed_skip(file, title, TRUE))
+  for (field in c("skipped", "passed")) {
+    changed = rows
+    changed[[i]][[field]] = if (field == "passed") 0L else 1L
+    testthat::expect_error(optional_gate(changed, file, TRUE))
+  }
+  guarded = lapply(optional_titles[[file]], record, passed = 0L, skipped = 1L)
+  linux = optional_gate(guarded, file, FALSE)
+  testthat::expect_true(linux$platform_guard_only)
+  testthat::expect_length(linux$mandatory_cases, 0L)
+  testthat::expect_identical(linux$platform_guard_cases, optional_titles[[file]])
+  unknown = record("unknown junction capability", passed = 1L, skipped = 1L)
+  testthat::expect_error(optional_gate(c(rows, list(unknown)), file, FALSE), "Skipped")
+  raw = rows
+  raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+    structure(list(), class = "expectation_success"),
+    structure(list(message = "controlled junction fixture failure"),
+      class = c("expectation_error", "condition"))))))[[1L]]
+  testthat::expect_error(optional_gate(raw, file, TRUE), "Failed")
+})
+
+testthat::test_that(
+  "independent native denial controls remain mandatory pure cases on both hosts", {
+  file = "test-proc-writer-runtime.R"
+  added = c("absence denial controls require fixed ordered native lookup tokens",
+    "absence denial controls reject unknown order outcomes and private content")
+  testthat::expect_identical(optional_titles[[file]][46:47], added)
+  testthat::expect_identical(optional_titles[[file]], writer_runtime_titles)
+  rows = lapply(writer_runtime_titles, record)
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_true(optional_gate(rows, file, windows)$passed)
+    for (title in added) {
+      i = match(title, writer_runtime_titles)
+      testthat::expect_false(optional_allowed_skip(file, title, windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      for (field in c("failed", "warnings", "skipped", "passed")) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows))
+      }
+      late = rows
+      late[[i]]$passed = 3L
+      late[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      for (kind in c("expectation_error", "expectation_warning")) {
+        raw = rows
+        raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+          structure(list(), class = "expectation_success"),
+          structure(list(message = "controlled independent denial condition"),
+            class = c(kind, "condition"))))))[[1L]]
+        testthat::expect_error(optional_gate(raw, file, windows))
+      }
+    }
   }
 })

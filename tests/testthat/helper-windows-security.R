@@ -160,3 +160,58 @@ wsec_rewrite = function(path, text) {
                           info = "file contents actually changed")
   invisible(before)
 }
+
+
+# A real junction is a known MOUNT_POINT reparse entry, never a symbolic-link substitute.
+# Only the fresh link is removed; each subprocess has its own unchanged five-second limit.
+wsec_junction = function(target, link, .env = parent.frame()) {
+  force(target)
+  force(link)
+  testthat::expect_true(dir.exists(target), info = "junction target is an owned directory")
+  if (!dir.exists(target) || basename(link) %in%
+      list.files(dirname(link), all.files = TRUE, no.. = TRUE)) {
+    stop("Windows junction fixture requires a fresh link and existing target", call. = FALSE)
+  }
+  system = Sys.getenv("SystemRoot", unset = "")
+  shell = file.path(system, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+  query = file.path(system, "System32", "fsutil.exe")
+  if (!is_abs_path(system) || !file.exists(shell) || !file.exists(query)) {
+    stop("Windows junction fixture requires native system utilities", call. = FALSE)
+  }
+  create = withr::local_tempfile(pattern = "gptr-wsec-junction-", fileext = ".ps1",
+                                 .local_envir = .env)
+  cleanup = withr::local_tempfile(pattern = "gptr-wsec-unlink-", fileext = ".ps1",
+                                  .local_envir = .env)
+  writeLines(c("param([string]$Target, [string]$Link)",
+    "$ErrorActionPreference = 'Stop'",
+    "$null = New-Item -ItemType Junction -Path $Link -Value $Target -ErrorAction Stop"), create)
+  writeLines(c("param([string]$Link, [string]$Directory)",
+    "$ErrorActionPreference = 'Stop'",
+    "[System.IO.Directory]::Delete($Link, $false)"), cleanup)
+  # Registered before launch, so a partially completed native creation is still detached.
+  withr::defer({
+    wsec_unlink(link, TRUE, cleanup)
+    testthat::expect_true(dir.exists(target), info = "detaching a junction preserves its target")
+  }, envir = .env)
+  run = function(exe, args) {
+    x = processx::run(exe, args, timeout = 5, error_on_status = FALSE,
+      windows_hide_window = TRUE, cleanup_tree = TRUE, env = child_env("helper"))
+    if (!identical(x$status, 0L) || nchar(x$stdout, type = "bytes") > 131072L ||
+        nchar(x$stderr, type = "bytes") > 131072L) {
+      stop("Windows junction utility failed its bounded native proof", call. = FALSE)
+    }
+    x
+  }
+  run(shell, c("-NoProfile", "-NonInteractive", "-File", create,
+    "-Target", target, "-Link", link))
+  native = run(query, c("reparsepoint", "query", link))
+  tag = regmatches(native$stdout, regexpr("0x[[:xdigit:]]{8}\\b", native$stdout))
+  testthat::expect_identical(tolower(tag), "0xa0000003")
+  if (!identical(tolower(tag), "0xa0000003")) {
+    stop("Windows junction inspection did not confirm the mount-point tag", call. = FALSE)
+  }
+  info = wsec_link_info(target, link)
+  testthat::expect_true(info$target_exists && info$exists && info$directory)
+  info$cleanup_script = cleanup
+  invisible(info)
+}
