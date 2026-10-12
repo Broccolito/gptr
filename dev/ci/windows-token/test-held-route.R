@@ -411,3 +411,64 @@ testthat::test_that("held native postcondition tail and child decoder retain eve
   testthat::expect_identical(deparse(body(decoded$rw_absence_postcondition)),
     deparse(body(helper$rw_absence_postcondition)))
 })
+
+
+testthat::test_that("held helper scope supplies the real unqualified test_path before loading", {
+  setup = Filter(function(expression) {
+    is.call(expression) &&
+      ((identical(expression[[1L]], as.name("=")) &&
+        identical(expression[[2L]], quote(scope$test_path))) ||
+       identical(expression[[1L]], quote(testthat::local_test_directory)) ||
+       identical(expression[[1L]], quote(testthat::source_test_helpers)))
+  }, as.list(body(held_original_file))[-1L])
+  testthat::expect_length(setup, 3L)
+  load = function(file, scope) NULL
+  body(load) = as.call(c(list(quote(`{`)), setup, list(quote(invisible(scope)))))
+  owned = tempfile("held-unqualified-helper-",
+    tmpdir = normalizePath(tempdir(), mustWork = TRUE))
+  stopifnot(dir.create(owned, mode = "0700"))
+  withr::defer(unlink(owned, recursive = TRUE))
+  helpers = file.path(owned, "helpers")
+  fixtures = file.path(helpers, "fixtures", "bench")
+  stopifnot(dir.create(fixtures, recursive = TRUE, mode = "0700"))
+  writeLines(c(
+    "captured = test_path",
+    "resolved = normalizePath(test_path('fixtures', 'bench'), winslash = '/',",
+    "  mustWork = TRUE)",
+    "if (identical(mode, 'error')) stop(original)",
+    "if (identical(mode, 'interrupt')) stop(original)",
+    "if (identical(mode, 'warning')) warning('PUBLIC-UNQUALIFIED-HELPER-WARNING')"),
+    file.path(helpers, "helper-unqualified.R"))
+  file = file.path(helpers, "test-proc-writer-runtime.R")
+  snapshot = function() {
+    list(env = Sys.getenv(), options = options(), cwd = getwd(), libraries = .libPaths(),
+      search = search(), kind = RNGkind(),
+      seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE),
+      names = ls(envir = globalenv(), all.names = TRUE))
+  }
+  before = snapshot()
+  scope = new.env(parent = baseenv())
+  scope$mode = "success"
+  testthat::expect_no_error(load(file, scope))
+  testthat::expect_identical(scope$test_path, testthat::test_path)
+  testthat::expect_identical(scope$captured, testthat::test_path)
+  testthat::expect_identical(scope$resolved,
+    normalizePath(fixtures, winslash = "/", mustWork = TRUE))
+  testthat::expect_identical(parent.env(scope), baseenv())
+  testthat::expect_identical(snapshot(), before)
+  scope$mode = "error"
+  scope$original = simpleError("PUBLIC-UNQUALIFIED-HELPER-ERROR")
+  failed = tryCatch(load(file, scope), error = identity)
+  testthat::expect_s3_class(failed, "error")
+  testthat::expect_identical(failed$parent, scope$original)
+  testthat::expect_identical(snapshot(), before)
+  scope$mode = "interrupt"
+  scope$original = structure(list(message = "PUBLIC-UNQUALIFIED-HELPER-INTERRUPT"),
+    class = c("interrupt", "condition"))
+  failed = tryCatch(load(file, scope), interrupt = identity)
+  testthat::expect_identical(failed, scope$original)
+  testthat::expect_identical(snapshot(), before)
+  scope$mode = "warning"
+  testthat::expect_warning(load(file, scope), "PUBLIC-UNQUALIFIED-HELPER-WARNING")
+  testthat::expect_identical(snapshot(), before)
+})

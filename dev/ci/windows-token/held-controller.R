@@ -192,6 +192,7 @@ held_original_file = function(file) {
   held_core$token_installed_witness(root)
   packet = file.path(root, "dev", "ci", "windows-token", "held-packet")
   scope = new.env(parent = asNamespace("gptr"))
+  scope$test_path = testthat::test_path
   testthat::local_test_directory(dirname(file), package = "gptr")
   testthat::source_test_helpers(dirname(file), env = scope)
   original_run = get("bp_run", envir = scope, inherits = FALSE)
