@@ -458,14 +458,14 @@ console_spinner_stop = function(rec) {
 #' Called by the outer blocking policy without handling or changing the condition. Tool frames
 #' are excluded by console_foreground(), so clear bytes never enter their captured output.
 #' @noRd
-console_before_message = function(runs) {
+console_before_message = function(runs, newline = FALSE) {
   for (run in runs) {
     rec = console_record(list(run = run$id))
     if (!is.null(rec) && console_foreground(rec) && !is.null(rec$spinner)) {
       shown = isTRUE(rec$spinner$shown)
       rec$spinner$clear()
-      # Native R GUIs retain a CR overwrite range until LF; close it before ordinary notices.
-      if (shown && identical(front_end(), "rgui")) {
+      # Close native launch boundaries; R GUIs also need LF before ordinary notices.
+      if (shown && (newline || identical(front_end(), "rgui"))) {
         cat("\n")
         utils::flush.console()
       }

@@ -143,6 +143,9 @@ proc_spawn = function(command, args = character(), env = NULL, wd = NULL, stdin 
                  stdout = io(stdout), stderr = io(stderr), cleanup = TRUE,
                  cleanup_tree = cleanup_tree, supervise = supervise, encoding = "UTF-8",
                  windows_hide_window = TRUE, windows_verbatim_args = verbatim)
+  # Native fork hooks can write before child stderr is redirected; notify the scoped display.
+  signalCondition(structure(list(message = "", call = NULL),
+    class = c("gptr_process_spawn", "condition")))
   p = tryCatch(do.call(processx::process$new, px_args), error = function(e) e)
   if (inherits(p, "error")) {
     gptr_abort(paste0("Could not start ", basename(res$command), ": ", conditionMessage(p)),
