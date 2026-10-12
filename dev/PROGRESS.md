@@ -17,6 +17,11 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
 
 ## Resume log
 
+- 2026-10-12 04:56 PDT: pushed `3694161` visible help guards; 47 release cases/201 passes,
+  five lint paths clean and roxygen 8.1.1 zero warnings. Current Linux native repeat still
+  fails three pre-GPTR fixture checks; Windows denial remains failed with safe runtime refusal.
+  See the latest [handoff](HANDOFF.md) for exact scopes, retained failures and open gates.
+
 - 2026-10-12 03:45 PDT: durable recovery062f1f2 passes18cases184P and491affected cases2749P/0F/E/W/S,
   8lint0. No-follow gates8754d77 pass3236P; registered PhaseB38236352196 Windows969P/1F/Linux553P/0F/W+17Windows guards, raw audit complete. Exactc1692a6 consumer gate now true CRAN/zero notes;12pure controls.
   Raw2e111e0 plan38234265477 all4stages pass; latest plan needs4fresh checks. Portable reader

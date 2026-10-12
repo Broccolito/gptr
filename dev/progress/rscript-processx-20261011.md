@@ -1,3 +1,60 @@
+## Current readiness checkpoint — 2026-10-12 04:56 PDT
+
+Continue the isolated `codex/skipped-platform-tests` candidate, pushed through
+`369416160c04b0dbcf71b3a66829c91617406cf6`. Preserve the primary dirty checkout,
+original R sessions, credentials and shared Ollama. Completion still requires every
+non-Windows-desktop gate below; no release or CRAN submission is claimed.
+
+- DONE/O: visible interactive login/MCP example guards retain their original predicates and
+  calls. Tests-first 4 cases had 18 passes/3 failures; final release suite has 47 cases,
+  201 passes and zero failures/errors/warnings/skips. Five configured lint paths are clean.
+  Roxygen 8.1.1 regenerated only two help files with zero warnings and unchanged NAMESPACE
+  and DESCRIPTION. Retain the earlier wrong-library version assertion and test-helper lint
+  failure separately. Fresh site execution against these guards remains waiting.
+- DONE/O: spinner boundary `9c408bf` closes the owned waiting row before executable lookup;
+  130 affected cases/660 passes, zero failures/errors/warnings/skips. This does not establish
+  the cause or suppression of the native macOS allocator diagnostic. Native UX07/08 remains.
+- DONE/source-preview: all 14 guides have exact embedded light/dark logos; README and
+  precompute run in 16 children with zero statuses/warnings. Source `d136a80` site has 92 HTML
+  pages/4,324 local references and no broken links. Actual 52 browser width cells have no
+  document overflow and white defaults; dark theme was observed and restored. Pandoc 3.10
+  removes 232 deprecation warnings, but the retained build still has two conditional-example
+  warnings. Reviewed new guards and public-site staging need a fresh build; installed/archive
+  guides, wide-table keyboard scrolling, no-JS branding and real zoom are not certified.
+- F: `d136a80` native run 38239772106 has all 213 source titles on Mac/Windows/Linux,
+  with 1/4/3 failures respectively; installed contexts and 18-path lint did not run. All
+  worker/Shiny cases and owned-family settlement checks passed in their executed scope.
+  Seed scalar fix `32c7fff` passes 11 offline controls. Fixed-stage diagnostics `bee6762`
+  pass 12 controls/one lint path; Linux repeat 38244197592 still has 213 source cases,
+  1,449 passes/3 failures/zero row warnings/four named capability guards. Two failures occur
+  at independent Python-version validation and one at the absent-variable preflight before
+  GPTR first evaluation. Keep strict version/absence checks and diagnose startup rather than
+  waive them; current source+installed three-OS acceptance remains waiting.
+- F: exact `02031c5` run 38242018712 selected 64 raw cases: 9 security, 3 transport, 4 sampling
+  and 48 writer. Windows has 937 passes/one failure/zero row warnings or skips; Linux has
+  522 passes/zero failures or warnings and 17 named Windows guards. The separate registry
+  suite has 65 cases/3,277 passes; this is not the native case count. Prior `b7f82b0` really
+  selected 64 different cases (8 disk observer + 9 security + 47 writer). Repeat the original
+  scope with the added writer case (65), or the explicit joint 72-case scope. Eight current
+  Windows writer witnesses settle within caps with zero sampling errors. The absence fixture
+  denial is ineffective; production safely refuses the existing directory. Three enabled
+  child privileges are observed, not proven causal. Owned-child A-B-A token diagnostics are
+  being prepared; no production/token/DACL waiver is authorized or applied.
+- DONE/H: `d23f40d` plan run 38238363782 passes all four stages, 39 unchanged source blobs,
+  770 R blocks and zero parse/style/lint errors; retain 90 historical index warnings.
+  This checkpoint needs fresh four-stage checks after commit.
+- WAITING: exact original archive and five same-byte release/devel consumers, manual/incoming
+  zero-error/warning/note CRAN gate, dependency-only/Suggests profiles, current examples and
+  installed guides, certified frontend/provider/extension/team/compaction/replay executions,
+  native UX/resource cases and final independent PR review/merge/sync. Prepared scripts are
+  not passes. Only actual Windows desktop live verification may remain at completion.
+
+CUA still selects the original RStudio `gptr - main` session despite the foreground reply;
+no R code, restart or cleanup was sent there. At 04:44 PDT load 11.44/9.53/9.81, 60.56% CPU
+idle, 1,473 MiB unused, 47% memory-pressure free, static swap 21,085.88 MiB and only 150 GiB
+free disk require small serial local jobs and at most two hosted jobs. No thermal warning;
+preserve unrelated models/processes and hold heavy/GPU expansion.
+
 ## Current checkpoint — 2026-10-12 03:45 PDT
 
 Source062f1f2 durable recovery is GREEN:18cases184P,225affected cases1051P and final
