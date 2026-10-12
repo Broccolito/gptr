@@ -53,12 +53,19 @@ ckpt_store_put = function(path) {
     gz = size <= 8e6 && !grepl(ckpt_no_compress, path[i], ignore.case = TRUE)
     dest = ckpt_blob_path(hashes[i], if (gz) ".gz" else "")
     dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
-    tmp = paste0(dest, ".tmp-", Sys.getpid())
+    tmp = tempfile(paste0(basename(dest), ".tmp-"), tmpdir = dirname(dest))
+    on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
+    tryCatch(write_atomic(tmp, raw(), expected_md5 = NA_character_), error = function(e) {
+      gptr_abort("Cannot create a private checkpoint blob.", "workspace", path = dest)
+    })
     if (gz) {
       con = gzfile(tmp, "wb", compression = 1L)
       tryCatch(writeBin(readBin(path[i], "raw", size), con), finally = close(con))
     } else {
-      file.copy(path[i], tmp, overwrite = TRUE)
+      if (!isTRUE(file.copy(path[i], tmp, overwrite = TRUE, copy.mode = FALSE))) {
+        gptr_abort(paste0("Cannot copy checkpoint content from ", path[i], "."),
+                   "workspace", path = dest)
+      }
     }
     if (!file.rename(tmp, dest)) unlink(tmp)
     if (!file.exists(dest)) {

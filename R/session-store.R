@@ -112,6 +112,7 @@ store_write_lines = function(path, lines, append = TRUE) {
 #' The connection-owning writer (the connection is closed by on.exit() on every path)
 #' @noRd
 store_write_now = function(path, lines, append) {
+  if (!file.exists(path)) write_atomic(path, raw(), expected_md5 = NA_character_)
   con = file(path, open = if (append) "ab" else "wb")
   on.exit(close(con), add = TRUE)
   writeLines(as_utf8(lines), con, sep = "\n", useBytes = TRUE)
