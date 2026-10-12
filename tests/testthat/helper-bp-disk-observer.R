@@ -1,6 +1,12 @@
 # Prepared optional test observer; no package/runtime API or dependency changes.
-bp_disk_env_preflight = function(before, windows = .Platform$OS.type == "windows") {
-  if (isTRUE(windows) && any(before == "")) {
+bp_disk_env_preflight = function(before, windows = .Platform$OS.type == "windows",
+    initialized = FALSE) {
+  # Unchanged unrelated empty entries need no setter. First initialization can
+  # change these six reticulate setup keys; refuse their un-restorable values.
+  keys = c("PATH", "VIRTUAL_ENV", "R_SESSION_INITIALIZED", "LD_LIBRARY_PATH",
+    "PYTHONPATH", "PYTHONIOENCODING")
+  selected = toupper(names(before)) %in% keys
+  if (isTRUE(windows) && !isTRUE(initialized) && any(before[selected] == "")) {
     stop("Optional observer cannot restore a Windows actual-empty environment entry")
   }
   invisible(NULL)
@@ -32,8 +38,8 @@ bp_disk_env_restore = function(before, get = Sys.getenv,
 bp_disk_preserve = function(callback) {
   old_options = options()
   old_env = Sys.getenv()
-  # No callback/Python initialization runs unless exact restoration is supported.
-  bp_disk_env_preflight(old_env)
+  # Generic callbacks may leave empty entries untouched. Changed-only restore
+  # below still refuses any Windows empty entry that changes or disappears.
   old_wd = getwd()
   old_libs = .libPaths()
   old_kind = RNGkind()
@@ -70,6 +76,8 @@ bp_disk_observer = function(root, declarations = list(), source = NULL) {
         !requireNamespace("reticulate", quietly = TRUE)) {
       stop("The optional nofollow observer requires its provisioned Python runtime")
     }
+    bp_disk_env_preflight(Sys.getenv(),
+      initialized = reticulate::py_available(initialize = FALSE))
     configured = reticulate::py_config()$python
     if (!identical(normalizePath(configured, winslash = "/", mustWork = TRUE),
         normalizePath(python, winslash = "/", mustWork = TRUE))) {
