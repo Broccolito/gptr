@@ -3,7 +3,7 @@
     {
       "before": "baseline/helper-proc-writer-runtime.R",
       "after": "amended/helper-proc-writer-runtime.R",
-      "hunks": 10
+      "hunks": 11
     },
     {
       "before": "baseline/test-token-native.R",
@@ -18,5 +18,7 @@
   "new_r_protocol_titles": 2,
   "powershell_fault_cases": 12,
   "native_fixture_titles": 1,
-  "execution": false
+  "execution": false,
+  "postcondition_keys": 13,
+  "postcondition_predicates_and_order_unchanged": true
 }

@@ -102,6 +102,71 @@ replace('"rw_absence_observation", "rw_absence_privilege", "token_trial_line", "
 target = root / 'amended/helper-proc-writer-runtime.R'
 target.parent.mkdir(parents=True, exist_ok=True)
 amended = prefix + amended
+postcondition_leaf = r'''# Fixed labels observe each original postcondition once without changing its result.
+rw_absence_postcondition = function(key, value, phase) {
+  keys = c("owner-marker", "existing-file", "denied-file", "missing-target", "dangling-entry",
+    "existing-directory", "fresh-entries", "remove-owner", "remove-existing-file",
+    "remove-denied-file", "remove-utilities", "remove-fresh-directory",
+    "remove-existing-directory")
+  if (!is.character(key) || length(key) != 1L || is.na(key) || !key %in% keys) {
+    stop("Invalid absence postcondition diagnostic.")
+  }
+  emit = function(status) {
+    tryCatch(phase(paste0("absence-post-", key, "-", status)),
+      error = function(error) NULL, interrupt = function(error) NULL)
+    invisible(NULL)
+  }
+  result = tryCatch(force(value), error = function(error) {
+    emit("error")
+    stop(error)
+  }, interrupt = function(error) {
+    emit("interrupt")
+    stop(error)
+  })
+  emit(if (isTRUE(result)) "1" else "0")
+  result
+}
+'''
+postconditions_before = r'''  stopifnot(identical(readBin(owner, "raw", n = 27L), charToRaw(marker)),
+    identical(bytes(paths[["file"]]), sentinel), identical(bytes(paths[["denied"]]), sentinel),
+    !file.exists(paths[["missing"]]),
+    !(basename(paths[["link"]]) %in% list.files(root, all.files = TRUE, no.. = TRUE)),
+    !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE)),
+    identical(sort(list.files(paths[["fresh"]], all.files = TRUE, no.. = TRUE)),
+      sort(c("owner", "denied-file"))))
+  stopifnot(file.remove(owner), file.remove(paths[["file"]]), file.remove(paths[["denied"]]),
+    all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
+      "token_source", "token_library", "token_compile")])),
+    identical(unlink(paths[["fresh"]], recursive = FALSE), 0L),
+    identical(unlink(paths[["directory"]], recursive = FALSE), 0L))'''
+postconditions_after = r'''  post = function(key, value) rw_absence_postcondition(key, value, phase)
+  stopifnot(post("owner-marker", identical(readBin(owner, "raw", n = 27L), charToRaw(marker))),
+    post("existing-file", identical(bytes(paths[["file"]]), sentinel)),
+    post("denied-file", identical(bytes(paths[["denied"]]), sentinel)),
+    post("missing-target", !file.exists(paths[["missing"]])),
+    post("dangling-entry",
+      !(basename(paths[["link"]]) %in% list.files(root, all.files = TRUE, no.. = TRUE))),
+    post("existing-directory",
+      !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE))),
+    post("fresh-entries", identical(sort(list.files(paths[["fresh"]], all.files = TRUE,
+      no.. = TRUE)), sort(c("owner", "denied-file")))))
+  stopifnot(post("remove-owner", file.remove(owner)),
+    post("remove-existing-file", file.remove(paths[["file"]])),
+    post("remove-denied-file", file.remove(paths[["denied"]])),
+    post("remove-utilities",
+      all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
+        "token_source", "token_library", "token_compile")]))),
+    post("remove-fresh-directory", identical(unlink(paths[["fresh"]], recursive = FALSE), 0L)),
+    post("remove-existing-directory",
+      identical(unlink(paths[["directory"]], recursive = FALSE), 0L)))'''
+held_start = amended.index('rw_held_token_case = function')
+amended = amended[:held_start] + postcondition_leaf + '\n' + amended[held_start:]
+assert amended.count(postconditions_before) == 1
+amended = amended.replace(postconditions_before, postconditions_after)
+decoder_before = '    "rw_absence_observation", "rw_absence_privilege", "token_held_line", "token_held_decode")'
+decoder_after = '    "rw_absence_observation", "rw_absence_privilege", "token_held_line", "token_held_decode",\n    "rw_absence_postcondition")'
+assert amended.count(decoder_before) == 1
+amended = amended.replace(decoder_before, decoder_after)
 target.write_text(amended)
 assert amended.startswith(prefix)
 # Every original six-control statement and strict probe requirement remains in order.
@@ -156,6 +221,9 @@ proof = {'unchanged_ordinary_prefix_bytes': len((packet / 'baseline/helper-proc-
          'strict_control_values': 'all six equal1', 'production_probe': 'PROBE1 unchanged',
          'old_aba_removed_only_from_successor': True,
          'baseline_native_source': '02ceac9c4a662cffe16188a592f7bdd3e2555280',
+         'postcondition_keys': 13,
+         'postcondition_leaf_source': 'c37550e35c9d8d9c723a3d27656183f5adfd8b552e37641afd512984856d89aa',
+         'postcondition_predicates_and_order_unchanged': True,
          'execution': False}
 (root / 'source-proof.json').write_text(json.dumps(proof, indent=2) + '\n')
 print('prepared source successor; no parsing or execution')

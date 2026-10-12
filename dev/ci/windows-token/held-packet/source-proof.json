@@ -18,5 +18,8 @@
   "ordinary_prefix_sha256": "56a0abb8eb595fbd103c8f423c4b5dba9438a5644c3dce19126ff1d70915f482",
   "ordinary_prefix_retained_source": "source/dev/ci/windows-token/packet/baseline/helper-proc-writer-runtime.R",
   "experimental_baseline_file": "baseline/helper-proc-writer-runtime.R",
-  "experimental_baseline_bytes": 91738
+  "experimental_baseline_bytes": 91738,
+  "postcondition_keys": 13,
+  "postcondition_leaf_source": "c37550e35c9d8d9c723a3d27656183f5adfd8b552e37641afd512984856d89aa",
+  "postcondition_predicates_and_order_unchanged": true
 }

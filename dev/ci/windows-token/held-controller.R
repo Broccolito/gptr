@@ -12,7 +12,7 @@ held_assets = list(
   "README.md" = list(
     bytes = 6742L, sha256 = "125ab8e1ba1bfead64db85155f1ded56f1e22b5c4575418090c949d21595d88e"),
   "amended/helper-proc-writer-runtime.R" = list(
-    bytes = 91830L, sha256 = "432724450b7cfa31a0c389de2cac9c29bff727947427b18776c38ca53d6b7095"),
+    bytes = 93286L, sha256 = "2d37ef99bf0bafab87283472477d24456d43c45b375ab5646bde8b49686acefd"),
   "baseline/fixtures/bp-disk-observer.py" = list(
     bytes = 13195L, sha256 = "18347a8f18677e1ec17efe0d345e797393202b6a50ec3dd1321b888da3314451"),
   "baseline/helper-bp-disk-observer.R" = list(
@@ -40,11 +40,11 @@ held_assets = list(
   "current-token.cs" = list(
     bytes = 13340L, sha256 = "c8ca069362b0a07a8a16187c9a8d32b60d685a29b0ecf36712d6baf26ebffb88"),
   "forward-inverse.json" = list(
-    bytes = 590L, sha256 = "60e6bcb545848de70803bd22067fd80eb77094ad4afd0d6eb95c0a110b23c55a"),
+    bytes = 674L, sha256 = "17c5250e575ffba362f5999c250c850423cbf8c5e23b392c0d204e05451cfe62"),
   "held-successor.patch" = list(
-    bytes = 9682L, sha256 = "89845f2e3b8626138cdf9676e8aa72fce70d9a4e1b1ba47d07c0278b0819beee"),
+    bytes = 13269L, sha256 = "7603c678097aea269a810d55168285c4195ce019e13fa7c44decd2abc65f1b9d"),
   "prepare-source.py" = list(
-    bytes = 8930L, sha256 = "93f2c5777e9ddd6703600de71bc7ecc87dfdc8f01f01a8f21968dca00100aba6"),
+    bytes = 13008L, sha256 = "960e842abb906395c23d3ab5374d3fbaa4c3123c4eb1697dc9f035e5b7b341fc"),
   "prior-frozen-85814a4b/manifest.json" = list(
     bytes = 3861L, sha256 = "85814a4bdf405285f2adf30e94ad1460fcf9457aa4e3fb3cee736305e3f3787f"),
   "prior-frozen-85814a4b/prepare-source.py" = list(
@@ -60,15 +60,15 @@ held_assets = list(
   "prior-frozen-8eedb863/source-proof.json" = list(
     bytes = 827L, sha256 = "582214b7877cebf39118480adbb69bfea3f71255a8aa6ac7feb140c9873f93bf"),
   "source-proof.json" = list(
-    bytes = 1225L, sha256 = "5f6cf5d0fb552cba3768881acfb1d12bc0e5550136d5ccab912ea8a91691b1dc"),
+    bytes = 1408L, sha256 = "247465ee53dae8625ff949f2e7460a709ccdf5dd4d4c3fc614b634c510367ddc"),
   "token-held-protocol.R" = list(
     bytes = 1466L, sha256 = "dc508cbd90c6c8083d6a4421799e87235bb5fc27c1ff42d12fd3955216e89c03"),
   "token-held.ps1" = list(
     bytes = 2070L, sha256 = "f66e7892e1157ab2f422075281a72f65638770d08ea0764afbe5b8b4cb8b7851"),
   "verify-source.py" = list(
-    bytes = 5288L, sha256 = "253dc87735cd9c9584348e38e51d1b44cddd8812151a3c55a1ac38dcbefe09d2"),
+    bytes = 5607L, sha256 = "247a3edd999e114dc9e298fd197ace2947778daea0489d5ba3e3f1aa8e6ef526"),
   "manifest.json" = list(
-    bytes = 5132L, sha256 = "a6c677519a18d71505aaa6f8100b15f8554590f3b28cadc256c8f4392e0a6441")
+    bytes = 5458L, sha256 = "59c62ee9ea937f81145d81630246d84e312ca3283c606d5a05cc435ebf17e9b0")
 )
 held_core$token_assets = held_assets
 held_core$token_titles = list(

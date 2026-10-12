@@ -978,6 +978,31 @@ rw_absence_run = function() {
     declared_links = list(list(entry = "dangling-file", target = "missing-target")))
 }
 
+# Fixed labels observe each original postcondition once without changing its result.
+rw_absence_postcondition = function(key, value, phase) {
+  keys = c("owner-marker", "existing-file", "denied-file", "missing-target", "dangling-entry",
+    "existing-directory", "fresh-entries", "remove-owner", "remove-existing-file",
+    "remove-denied-file", "remove-utilities", "remove-fresh-directory",
+    "remove-existing-directory")
+  if (!is.character(key) || length(key) != 1L || is.na(key) || !key %in% keys) {
+    stop("Invalid absence postcondition diagnostic.")
+  }
+  emit = function(status) {
+    tryCatch(phase(paste0("absence-post-", key, "-", status)),
+      error = function(error) NULL, interrupt = function(error) NULL)
+    invisible(NULL)
+  }
+  result = tryCatch(force(value), error = function(error) {
+    emit("error")
+    stop(error)
+  }, interrupt = function(error) {
+    emit("interrupt")
+    stop(error)
+  })
+  emit(if (isTRUE(result)) "1" else "0")
+  result
+}
+
 rw_held_token_case = function(case, root) {
   ns = asNamespace("gptr")
   fun = function(name) get(name, ns, inherits = FALSE)
@@ -1658,18 +1683,26 @@ rw_held_token_case = function(case, root) {
   result = run_utility(paths[["script"]], proof, identity = TRUE)
   recover()
   owner = file.path(paths[["fresh"]], "owner")
-  stopifnot(identical(readBin(owner, "raw", n = 27L), charToRaw(marker)),
-    identical(bytes(paths[["file"]]), sentinel), identical(bytes(paths[["denied"]]), sentinel),
-    !file.exists(paths[["missing"]]),
-    !(basename(paths[["link"]]) %in% list.files(root, all.files = TRUE, no.. = TRUE)),
-    !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE)),
-    identical(sort(list.files(paths[["fresh"]], all.files = TRUE, no.. = TRUE)),
-      sort(c("owner", "denied-file"))))
-  stopifnot(file.remove(owner), file.remove(paths[["file"]]), file.remove(paths[["denied"]]),
-    all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
-      "token_source", "token_library", "token_compile")])),
-    identical(unlink(paths[["fresh"]], recursive = FALSE), 0L),
-    identical(unlink(paths[["directory"]], recursive = FALSE), 0L))
+  post = function(key, value) rw_absence_postcondition(key, value, phase)
+  stopifnot(post("owner-marker", identical(readBin(owner, "raw", n = 27L), charToRaw(marker))),
+    post("existing-file", identical(bytes(paths[["file"]]), sentinel)),
+    post("denied-file", identical(bytes(paths[["denied"]]), sentinel)),
+    post("missing-target", !file.exists(paths[["missing"]])),
+    post("dangling-entry",
+      !(basename(paths[["link"]]) %in% list.files(root, all.files = TRUE, no.. = TRUE))),
+    post("existing-directory",
+      !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE))),
+    post("fresh-entries", identical(sort(list.files(paths[["fresh"]], all.files = TRUE,
+      no.. = TRUE)), sort(c("owner", "denied-file")))))
+  stopifnot(post("remove-owner", file.remove(owner)),
+    post("remove-existing-file", file.remove(paths[["file"]])),
+    post("remove-denied-file", file.remove(paths[["denied"]])),
+    post("remove-utilities",
+      all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
+        "token_source", "token_library", "token_compile")]))),
+    post("remove-fresh-directory", identical(unlink(paths[["fresh"]], recursive = FALSE), 0L)),
+    post("remove-existing-directory",
+      identical(unlink(paths[["directory"]], recursive = FALSE), 0L)))
   fun("reactor_shutdown")()
   after = list(env = Sys.getenv(), cwd = getwd(), options = options(), seed = seed(),
     names = sort(ls(envir = globalenv(), all.names = TRUE)))
@@ -1700,7 +1733,8 @@ rw_held_token_run = function(packet) {
   scope$bp_child_case = rw_held_token_case
   loader = bp_loader()
   decoders = c("rw_absence_control", "rw_absence_stage", "rw_absence_status",
-    "rw_absence_observation", "rw_absence_privilege", "token_held_line", "token_held_decode")
+    "rw_absence_observation", "rw_absence_privilege", "token_held_line", "token_held_decode",
+    "rw_absence_postcondition")
   definitions = vapply(decoders, function(name) {
     paste0(name, " = ", paste(deparse(get(name, envir = environment(rw_held_token_run),
       inherits = TRUE)), collapse = "\n"))

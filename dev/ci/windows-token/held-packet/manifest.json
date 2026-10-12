@@ -14,8 +14,8 @@
       "sha256": "125ab8e1ba1bfead64db85155f1ded56f1e22b5c4575418090c949d21595d88e"
     },
     "amended/helper-proc-writer-runtime.R": {
-      "bytes": 91830,
-      "sha256": "432724450b7cfa31a0c389de2cac9c29bff727947427b18776c38ca53d6b7095"
+      "bytes": 93286,
+      "sha256": "2d37ef99bf0bafab87283472477d24456d43c45b375ab5646bde8b49686acefd"
     },
     "baseline/fixtures/bp-disk-observer.py": {
       "bytes": 13195,
@@ -70,16 +70,16 @@
       "sha256": "c8ca069362b0a07a8a16187c9a8d32b60d685a29b0ecf36712d6baf26ebffb88"
     },
     "forward-inverse.json": {
-      "bytes": 590,
-      "sha256": "60e6bcb545848de70803bd22067fd80eb77094ad4afd0d6eb95c0a110b23c55a"
+      "bytes": 674,
+      "sha256": "17c5250e575ffba362f5999c250c850423cbf8c5e23b392c0d204e05451cfe62"
     },
     "held-successor.patch": {
-      "bytes": 9682,
-      "sha256": "89845f2e3b8626138cdf9676e8aa72fce70d9a4e1b1ba47d07c0278b0819beee"
+      "bytes": 13269,
+      "sha256": "7603c678097aea269a810d55168285c4195ce019e13fa7c44decd2abc65f1b9d"
     },
     "prepare-source.py": {
-      "bytes": 8930,
-      "sha256": "93f2c5777e9ddd6703600de71bc7ecc87dfdc8f01f01a8f21968dca00100aba6"
+      "bytes": 13008,
+      "sha256": "960e842abb906395c23d3ab5374d3fbaa4c3123c4eb1697dc9f035e5b7b341fc"
     },
     "prior-frozen-85814a4b/manifest.json": {
       "bytes": 3861,
@@ -110,8 +110,8 @@
       "sha256": "582214b7877cebf39118480adbb69bfea3f71255a8aa6ac7feb140c9873f93bf"
     },
     "source-proof.json": {
-      "bytes": 1225,
-      "sha256": "5f6cf5d0fb552cba3768881acfb1d12bc0e5550136d5ccab912ea8a91691b1dc"
+      "bytes": 1408,
+      "sha256": "247465ee53dae8625ff949f2e7460a709ccdf5dd4d4c3fc614b634c510367ddc"
     },
     "token-held-protocol.R": {
       "bytes": 1466,
@@ -122,8 +122,8 @@
       "sha256": "f66e7892e1157ab2f422075281a72f65638770d08ea0764afbe5b8b4cb8b7851"
     },
     "verify-source.py": {
-      "bytes": 5288,
-      "sha256": "253dc87735cd9c9584348e38e51d1b44cddd8812151a3c55a1ac38dcbefe09d2"
+      "bytes": 5607,
+      "sha256": "247a3edd999e114dc9e298fd197ace2947778daea0489d5ba3e3f1aa8e6ef526"
     }
   },
   "prepared_only": true,
@@ -131,5 +131,13 @@
   "native_run": false,
   "r_or_powershell_parsing_or_execution": false,
   "ordinary_fixture_adoption": false,
-  "restored_privilege_acceptance": false
+  "restored_privilege_acceptance": false,
+  "postcondition_diagnostics": {
+    "source_manifest_sha256": "c37550e35c9d8d9c723a3d27656183f5adfd8b552e37641afd512984856d89aa",
+    "original_keys": 13,
+    "original_predicates_order_and_counts_preserved": true,
+    "ordinary_prefix_bytes": 51608,
+    "native_case_correction": false,
+    "native_execution": false
+  }
 }

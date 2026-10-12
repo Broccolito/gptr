@@ -1,15 +1,40 @@
 --- baseline/helper-proc-writer-runtime.R
 +++ amended/helper-proc-writer-runtime.R
-@@ -978,7 +978,7 @@
+@@ -978,7 +978,32 @@
      declared_links = list(list(entry = "dangling-file", target = "missing-target")))
  }
  
 -rw_token_case = function(case, root) {
++# Fixed labels observe each original postcondition once without changing its result.
++rw_absence_postcondition = function(key, value, phase) {
++  keys = c("owner-marker", "existing-file", "denied-file", "missing-target", "dangling-entry",
++    "existing-directory", "fresh-entries", "remove-owner", "remove-existing-file",
++    "remove-denied-file", "remove-utilities", "remove-fresh-directory",
++    "remove-existing-directory")
++  if (!is.character(key) || length(key) != 1L || is.na(key) || !key %in% keys) {
++    stop("Invalid absence postcondition diagnostic.")
++  }
++  emit = function(status) {
++    tryCatch(phase(paste0("absence-post-", key, "-", status)),
++      error = function(error) NULL, interrupt = function(error) NULL)
++    invisible(NULL)
++  }
++  result = tryCatch(force(value), error = function(error) {
++    emit("error")
++    stop(error)
++  }, interrupt = function(error) {
++    emit("interrupt")
++    stop(error)
++  })
++  emit(if (isTRUE(result)) "1" else "0")
++  result
++}
++
 +rw_held_token_case = function(case, root) {
    ns = asNamespace("gptr")
    fun = function(name) get(name, ns, inherits = FALSE)
    phase = function(text) {
-@@ -1116,11 +1116,11 @@
+@@ -1116,11 +1141,11 @@
      "  if ($libraryHash -cne $tokenLibraryExpected) { throw 'Token library digest' }",
      "} finally { $libraryStream.Dispose() }",
      "[void][System.Reflection.Assembly]::LoadFile($tokenLibrary)",
@@ -23,7 +48,7 @@
      observations,
      "[Console]::WriteLine('GPTR_ABSENCE_STAGE 1')",
      paste0("$link = ", literal(paths[["link"]])),
-@@ -1280,9 +1280,10 @@
+@@ -1280,9 +1305,10 @@
      "    [Console]::WriteLine($value)",
      "  }",
      "}",
@@ -36,7 +61,7 @@
      "$attributes = [System.IO.File]::GetAttributes($denied)",
      "if (($attributes -band [System.IO.FileAttributes]::ReparsePoint) -or",
      "    ($attributes -band [System.IO.FileAttributes]::Directory)) {",
-@@ -1342,7 +1343,7 @@
+@@ -1342,7 +1368,7 @@
      "$actual = [System.IO.Directory]::GetAccessControl($fresh, $sections)",
      "AssertDenied $actual 1 3",
      "[Console]::WriteLine('GPTR_ABSENCE_CONTROL PARENT_ACL 1')",
@@ -45,7 +70,7 @@
      "$fileLookup = 3",
      "try { $null = [System.IO.File]::GetAttributes($denied); $fileLookup = 2 }",
      "catch [System.UnauthorizedAccessException] { $fileLookup = 1 }",
-@@ -1370,6 +1371,7 @@
+@@ -1370,6 +1396,7 @@
      "  throw 'Independent native denial not effective' }",
      "[Console]::WriteLine('GPTR-ABSENCE-DENIED-REFUSED')",
      "[Console]::WriteLine('GPTR_ABSENCE_STAGE 9')",
@@ -53,7 +78,7 @@
      "} finally {",
      "  try {",
      "    if ($null -ne $parentOriginal) {",
-@@ -1469,22 +1471,20 @@
+@@ -1469,22 +1496,20 @@
        phase(sprintf("token-compiler-identity-%d-%.6f", record$pid, record$create_time))
      }
      accept_line = function(line) {
@@ -83,7 +108,7 @@
          stopifnot(identity, identical(seen$last_stage,
            if (startsWith(control$key, "PRE_")) 4L else 7L))
          seen$controls = c(seen$controls, control$key)
-@@ -1494,6 +1494,8 @@
+@@ -1494,6 +1519,8 @@
        }
        privilege = rw_absence_privilege(line, seen$privileges)
        if (!is.null(privilege)) {
@@ -92,7 +117,7 @@
          stopifnot(identity, identical(seen$last_stage,
            if (startsWith(privilege$key, "PRE_")) 4L else 7L))
          seen$privileges = c(seen$privileges, privilege$key)
-@@ -1563,7 +1565,7 @@
+@@ -1563,7 +1590,7 @@
      stopifnot(complete, identical(seen$status, 0L), elapsed <= limit,
        identical(seen$out, proof), !seen$protocol_failed, !seen$stderr)
      if (identity) {
@@ -101,7 +126,46 @@
        stopifnot(identical(seen$privileges, c("PRE_BACKUP", "PRE_RESTORE",
          "PRE_CHANGE_NOTIFY", "LOOKUP_BACKUP", "LOOKUP_RESTORE", "LOOKUP_CHANGE_NOTIFY")))
        stopifnot(identical(seen$control_values, rep(1L, 6L)),
-@@ -1679,7 +1681,7 @@
+@@ -1656,18 +1683,26 @@
+   result = run_utility(paths[["script"]], proof, identity = TRUE)
+   recover()
+   owner = file.path(paths[["fresh"]], "owner")
+-  stopifnot(identical(readBin(owner, "raw", n = 27L), charToRaw(marker)),
+-    identical(bytes(paths[["file"]]), sentinel), identical(bytes(paths[["denied"]]), sentinel),
+-    !file.exists(paths[["missing"]]),
+-    !(basename(paths[["link"]]) %in% list.files(root, all.files = TRUE, no.. = TRUE)),
+-    !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE)),
+-    identical(sort(list.files(paths[["fresh"]], all.files = TRUE, no.. = TRUE)),
+-      sort(c("owner", "denied-file"))))
+-  stopifnot(file.remove(owner), file.remove(paths[["file"]]), file.remove(paths[["denied"]]),
+-    all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
+-      "token_source", "token_library", "token_compile")])),
+-    identical(unlink(paths[["fresh"]], recursive = FALSE), 0L),
+-    identical(unlink(paths[["directory"]], recursive = FALSE), 0L))
++  post = function(key, value) rw_absence_postcondition(key, value, phase)
++  stopifnot(post("owner-marker", identical(readBin(owner, "raw", n = 27L), charToRaw(marker))),
++    post("existing-file", identical(bytes(paths[["file"]]), sentinel)),
++    post("denied-file", identical(bytes(paths[["denied"]]), sentinel)),
++    post("missing-target", !file.exists(paths[["missing"]])),
++    post("dangling-entry",
++      !(basename(paths[["link"]]) %in% list.files(root, all.files = TRUE, no.. = TRUE))),
++    post("existing-directory",
++      !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE))),
++    post("fresh-entries", identical(sort(list.files(paths[["fresh"]], all.files = TRUE,
++      no.. = TRUE)), sort(c("owner", "denied-file")))))
++  stopifnot(post("remove-owner", file.remove(owner)),
++    post("remove-existing-file", file.remove(paths[["file"]])),
++    post("remove-denied-file", file.remove(paths[["denied"]])),
++    post("remove-utilities",
++      all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
++        "token_source", "token_library", "token_compile")]))),
++    post("remove-fresh-directory", identical(unlink(paths[["fresh"]], recursive = FALSE), 0L)),
++    post("remove-existing-directory",
++      identical(unlink(paths[["directory"]], recursive = FALSE), 0L)))
+   fun("reactor_shutdown")()
+   after = list(env = Sys.getenv(), cwd = getwd(), options = options(), seed = seed(),
+     names = sort(ls(envir = globalenv(), all.names = TRUE)))
+@@ -1679,7 +1714,7 @@
  
  
  # Experimental runner only. Not registered/applied to ordinary native package tests.
@@ -110,7 +174,7 @@
    stopifnot(identical(.Platform$OS.type, "windows"),
      identical(Sys.getenv("GPTR_OPTIONAL_NOFOLLOW_OBSERVER"), "true"))
    bounded_source = function(name, limit, expected) {
-@@ -1690,22 +1692,22 @@
+@@ -1690,22 +1725,23 @@
    }
    source = bounded_source("current-token.cs", 32768L,
      "c8ca069362b0a07a8a16187c9a8d32b60d685a29b0ecf36712d6baf26ebffb88")
@@ -126,7 +190,8 @@
    loader = bp_loader()
    decoders = c("rw_absence_control", "rw_absence_stage", "rw_absence_status",
 -    "rw_absence_observation", "rw_absence_privilege", "token_trial_line", "token_trial_decode")
-+    "rw_absence_observation", "rw_absence_privilege", "token_held_line", "token_held_decode")
++    "rw_absence_observation", "rw_absence_privilege", "token_held_line", "token_held_decode",
++    "rw_absence_postcondition")
    definitions = vapply(decoders, function(name) {
 -    paste0(name, " = ", paste(deparse(get(name, envir = environment(rw_token_run),
 +    paste0(name, " = ", paste(deparse(get(name, envir = environment(rw_held_token_run),

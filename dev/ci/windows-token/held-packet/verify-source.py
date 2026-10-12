@@ -78,12 +78,17 @@ assert 'UnauthorizedAccessException' in window and 'GPTR_ABSENCE_PROBE 1' in win
 assert 'Independent native denial not effective' in window
 assert 'identical(seen$control_values, rep(1L, 6L))' in helper
 assert 'identical(seen$probe, "absence-probe-1")' in helper
+held_body = helper[helper.index('rw_held_token_case = function'):]
+assert held_body.count('post("') == 13
+assert 'rw_absence_postcondition = function(key, value, phase)' in helper
+assert '"rw_absence_postcondition")' in held_body
 
 proof = {'forward_and_inverse': verified, 'ordinary_helper_prefix_bytes': len(ordinary),
          'bridge_and_watchdog_copies_exact': True, 'controls_inside_window': 6,
          'actual_generated_production_probe_inside_window': True,
          'new_r_protocol_titles': 2, 'powershell_fault_cases': 12,
-         'native_fixture_titles': 1, 'execution': False}
+         'native_fixture_titles': 1, 'execution': False,
+         'postcondition_keys': 13, 'postcondition_predicates_and_order_unchanged': True}
 (root / 'forward-inverse.json').write_text(json.dumps(proof, indent=2) + '\n')
 files = {}
 for path in sorted(root.rglob('*')):
