@@ -1839,3 +1839,129 @@ testthat::test_that("owned nofollow observer controls are mandatory and strict o
     testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
   }
 })
+
+
+testthat::test_that(
+  "optional children use a fixed vanilla Rscript entry and complete direct environment", {
+  home = tempfile("optional-launch-control-")
+  dir.create(home, mode = "0700")
+  on.exit(unlink(home, recursive = TRUE), add = TRUE)
+  root = file.path(home, "project")
+  dir.create(file.path(root, "dev", "ci"), recursive = TRUE)
+  writeLines("optional_child = function(action, file) NULL",
+    file.path(root, "dev", "ci", "optional-integrations.R"))
+  launch = file.path(home, "launch")
+  dir.create(launch, mode = "0700")
+  before = Sys.getenv()
+  supplied = c(before, GPTROPT_CONTROL = "YES")
+  seen = new.env(parent = emptyenv())
+  handle = new.env(parent = emptyenv())
+  spawn = function(...) {
+    seen$args = list(...)
+    handle
+  }
+  actual = optional_child_start("preflight", NULL, root, launch,
+    file.path(home, "stdout.log"), file.path(home, "stderr.log"), supplied,
+    spawn = spawn)
+  testthat::expect_identical(actual, handle)
+  testthat::expect_identical(seen$args$args[[1L]], "--vanilla")
+  testthat::expect_identical(length(seen$args$args), 4L)
+  testthat::expect_identical(seen$args$env, supplied)
+  testthat::expect_identical(seen$args$wd, root)
+  testthat::expect_false(seen$args$supervise)
+  testthat::expect_true(seen$args$cleanup_tree)
+  testthat::expect_identical(Sys.getenv(), before)
+  request = readRDS(seen$args$args[[3L]])
+  testthat::expect_identical(request$action, "preflight")
+  testthat::expect_null(request$file)
+  testthat::expect_identical(request$libpaths, .libPaths())
+  testthat::expect_false(any(vapply(request, is.function, logical(1))))
+  script = readLines(seen$args$args[[2L]], warn = FALSE)
+  testthat::expect_silent(parse(text = script))
+  testthat::expect_true(any(grepl(
+    "source(request$source, local = scope)", script, fixed = TRUE)))
+  testthat::expect_false(any(grepl("callr|tools:callr|Sys.setenv|Sys.unsetenv", script)))
+  testthat::expect_error(optional_child_start("unapproved", NULL, root, launch,
+    "out", "err", supplied, spawn = spawn), "Unapproved child action")
+})
+
+testthat::test_that(
+  "optional child result transport preserves original errors and rejects incomplete exits", {
+  home = tempfile("optional-result-control-")
+  dir.create(home, mode = "0700")
+  on.exit(unlink(home, recursive = TRUE), add = TRUE)
+  path = file.path(home, "result.rds")
+  handle = new.env(parent = emptyenv())
+  handle$get_exit_status = function() 0L
+  testthat::expect_error(optional_child_result(handle, path), "result missing")
+  value = list(result = list(passed = TRUE), outside_test_warning_classes = character())
+  saveRDS(list(value = value, error = NULL), path)
+  testthat::expect_identical(optional_child_result(handle, path), value)
+  error = structure(list(message = "controlled original child error", call = NULL),
+    class = c("optional_control_error", "error", "condition"))
+  saveRDS(list(value = NULL, error = error), path)
+  captured = tryCatch(optional_child_result(handle, path), error = identity)
+  testthat::expect_identical(captured, error)
+  saveRDS(list(value = value, error = NULL), path)
+  handle$get_exit_status = function() 1L
+  testthat::expect_error(optional_child_result(handle, path), "nonzero exit")
+  handle$get_exit_status = function() NULL
+  testthat::expect_error(optional_child_result(handle, path), "Unknown child exit")
+  handle$get_exit_status = function() 0L
+  saveRDS(list(value = value), path)
+  testthat::expect_error(optional_child_result(handle, path), "Malformed child result")
+})
+
+testthat::test_that(
+  "a real optional Rscript child returns a private result with unchanged caller state", {
+  home = tempfile("optional-native-control-")
+  dir.create(home, mode = "0700")
+  marker = optional_marker()
+  process = NULL
+  settled = FALSE
+  on.exit({
+    if (!is.null(process)) process$kill_tree()
+    ps::ps_kill_tree(marker)
+    family = optional_wait_family(function() is.null(process) || !process$is_alive(),
+      function() ps::ps_find_tree(marker))
+    settled = family$settled
+    if (settled) unlink(home, recursive = TRUE)
+    if (!settled) stop("Owned acceptance child family did not settle")
+  }, add = TRUE)
+  root = file.path(home, "project")
+  dir.create(file.path(root, "dev", "ci"), recursive = TRUE)
+  fixture = c(
+    "optional_child = function(action, file) {",
+    "  cat('OPTIONAL-CONTROL-STDOUT\\n')",
+    "  cat('OPTIONAL-CONTROL-STDERR\\n', file = stderr())",
+    "  list(result = list(passed = TRUE, action = action, file = file),",
+    "    outside_test_warning_classes = character(), libpaths = .libPaths())",
+    "}")
+  writeLines(fixture, file.path(root, "dev", "ci", "optional-integrations.R"))
+  launch = file.path(home, "launch")
+  dir.create(launch, mode = "0700")
+  stdout = file.path(home, "stdout.log")
+  stderr = file.path(home, "stderr.log")
+  before = list(environment = Sys.getenv(), options = options(), wd = getwd(),
+    libpaths = .libPaths(), rng = RNGkind(),
+    seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE))
+  stopifnot(!marker %in% names(before$environment))
+  env = c(before$environment, stats::setNames("YES", marker))
+  process = optional_child_start("test", "controlled-file.R", root, launch, stdout, stderr, env)
+  process$wait(10000L)
+  testthat::expect_false(process$is_alive())
+  value = optional_child_result(process, file.path(launch, "result.rds"))
+  testthat::expect_true(value$result$passed)
+  testthat::expect_identical(value$result$action, "test")
+  testthat::expect_identical(value$result$file, "controlled-file.R")
+  testthat::expect_identical(value$libpaths, before$libpaths)
+  testthat::expect_identical(readLines(stdout, warn = FALSE), "OPTIONAL-CONTROL-STDOUT")
+  testthat::expect_identical(readLines(stderr, warn = FALSE), "OPTIONAL-CONTROL-STDERR")
+  testthat::expect_identical(Sys.getenv(), before$environment)
+  testthat::expect_identical(options(), before$options)
+  testthat::expect_identical(getwd(), before$wd)
+  testthat::expect_identical(.libPaths(), before$libpaths)
+  testthat::expect_identical(RNGkind(), before$rng)
+  testthat::expect_identical(
+    get0(".Random.seed", envir = globalenv(), inherits = FALSE), before$seed)
+})
