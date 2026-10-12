@@ -134,6 +134,49 @@ bp_child_handles = function(handle, children = ps::ps_children, alive = proc_han
   })
 }
 
+# Retain only a fixed reason from this exact observer class at the file-sampling stage.
+# The reticulate formatter adds an exception prefix and a hint after the first line.
+bp_observer_reason = function(stage, error) {
+  if (!identical(stage, "files") ||
+      !inherits(error, "gptr_owned_disk_observer.ObservationError")) return(NULL)
+  tryCatch({
+    message = conditionMessage(error)
+    if (!is.character(message) || length(message) != 1L || is.na(message) ||
+        nchar(message, type = "bytes") > 8192L) return(NULL)
+    line = strsplit(message, "\n", fixed = TRUE)[[1L]]
+    if (!length(line)) return(NULL)
+    line = sub("\r$", "", line[[1L]])
+    prefixes = c("gptr_owned_disk_observer.ObservationError: ", "ObservationError: ")
+    for (prefix in prefixes) {
+      if (startsWith(line, prefix)) {
+        line = substring(line, nchar(prefix) + 1L)
+        break
+      }
+    }
+    codes = c("observer-anchor-identity-changed", "observer-anchor-not-direct-directory",
+      "observer-byte-limit", "observer-declaration-bound", "observer-declared-entry-not-link",
+      "observer-depth-limit", "observer-directory-entry-absent",
+      "observer-directory-identity-changed", "observer-directory-unreadable",
+      "observer-duplicate-declaration", "observer-entry-disappearance-uncertain",
+      "observer-entry-kind-unknown", "observer-entry-limit",
+      "observer-initial-entry-or-time-limit", "observer-invalid-bound",
+      "observer-invalid-declaration", "observer-invalid-entry-name",
+      "observer-invalid-relative-path", "observer-link-entry-absent",
+      "observer-link-identity-changed", "observer-link-payload-invalid",
+      "observer-link-target-differs", "observer-link-target-unreadable",
+      "observer-listed-metadata-changed", "observer-listed-metadata-unavailable",
+      "observer-local-root-required", "observer-metadata-invalid",
+      "observer-metadata-unavailable", "observer-native-attributes-unavailable",
+      "observer-parent-chain-invalid", "observer-parent-entry-absent",
+      "observer-parent-enumeration-unavailable", "observer-parent-not-direct-directory",
+      "observer-reparse-attributes-inconsistent", "observer-root-entry-absent",
+      "observer-root-not-direct-directory", "observer-snapshot-deadline",
+      "observer-undeclared-reparse-entry", "observer-unexpected-reparse-tag",
+      "observer-unknown-reparse-tag")
+    if (line %in% codes) line else NULL
+  }, error = function(condition) NULL, interrupt = function(condition) NULL)
+}
+
 # Retain a bounded diagnostic without copying arbitrary condition messages or file content.
 bp_sample_error = function(stage, error) {
   number = function(x) {
@@ -141,8 +184,13 @@ bp_sample_error = function(stage, error) {
   }
   classes = class(error)
   classes = classes[grepl("^[A-Za-z][A-Za-z0-9_.]{0,63}$", classes)]
-  list(stage = stage, class = utils::head(classes, 8L),
+  result = list(stage = stage, class = utils::head(classes, 8L),
     errno = number(error$errno), pid = number(error$pid))
+  if (identical(stage, "files") &&
+      inherits(error, "gptr_owned_disk_observer.ObservationError")) {
+    result = c(result, list(observer_reason = bp_observer_reason(stage, error)))
+  }
+  result
 }
 
 # Only bounded structural fields from this owned synthetic case survive an early failure.
