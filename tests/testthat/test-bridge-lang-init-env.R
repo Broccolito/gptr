@@ -169,3 +169,62 @@ test_that("Python user evaluation keeps deliberate environment changes after set
   expect_identical(Sys.getenv("PATH"), "deliberate-user-path")
   expect_identical(Sys.getenv("GPTR_PY_INIT_USER_CANARY"), "deliberate-user-value")
 })
+
+test_that("Python setup never completes when environment restoration is uncertain", {
+  skip_if_not_installed("reticulate")
+  for (type in c("false", "error", "interrupt")) {
+    local({
+      py_init_test_env(py_init_test_values("before-"))
+      main = new.env(parent = emptyenv())
+      py_init_test_mocks(main, FALSE, function(convert = FALSE) main)
+      restore = function(...) {
+        if (type == "false") return(FALSE)
+        stop(structure(list(message = "synthetic restoration condition", call = NULL),
+                       class = c(type, "condition")))
+      }
+      testthat::local_mocked_bindings(env_restore_python = restore)
+      error = expect_error(bridge_py_main(), class = "gptr_error_not_available")
+      expect_identical(error$env_restored, FALSE)
+    })
+  }
+})
+
+test_that("Python setup keeps its original failure when restoration also fails", {
+  skip_if_not_installed("reticulate")
+  for (type in c("error", "interrupt")) {
+    local({
+      py_init_test_env(py_init_test_values("before-"))
+      original = structure(list(message = "synthetic setup condition", call = NULL),
+                           class = c(paste0("synthetic_", type), type, "condition"))
+      initialize = function(convert = FALSE) stop(original)
+      py_init_test_mocks(NULL, FALSE, initialize)
+      testthat::local_mocked_bindings(env_restore_python = function(...) FALSE)
+      state = new.env(parent = emptyenv())
+      expect_warning({
+        state$seen = tryCatch(bridge_py_main(), error = identity, interrupt = identity)
+      }, class = "gptr_warning_state_restore")
+      expect_identical(state$seen, original)
+      diagnostic = structure(list(message = "synthetic diagnostic failure", call = NULL),
+                             class = c(type, "condition"))
+      testthat::local_mocked_bindings(gptr_warn = function(...) stop(diagnostic))
+      seen = tryCatch(bridge_py_main(), error = identity, interrupt = identity)
+      expect_identical(seen, original)
+    })
+  }
+})
+
+test_that("Python setup rejects a changed initialized Windows empty key without normalizing it", {
+  skip_if_not_installed("reticulate")
+  skip_on_os("windows", "this injected-state fixture requires POSIX empty values")
+  py_init_test_env(py_init_test_values("before-"))
+  Sys.setenv(PYTHONPATH = "")
+  main = new.env(parent = emptyenv())
+  py_init_test_mocks(main, TRUE, function(convert = FALSE) {
+    Sys.setenv(PYTHONPATH = "unexpected-initialized-change")
+    main
+  })
+  testthat::local_mocked_bindings(is_windows = function() TRUE)
+  error = expect_error(bridge_py_main(), class = "gptr_error_not_available")
+  expect_identical(error$env_restored, FALSE)
+  expect_identical(Sys.getenv("PYTHONPATH", unset = NA_character_), "unexpected-initialized-change")
+})
