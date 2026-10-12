@@ -247,8 +247,12 @@ py_native_child = function(case, root, failure) {
         assert_native(length(complete) == 4L && all(complete), "linux-cli-diagnostics")
       }
       seen$stage = "independent-cli-run"
+      cli_env = Sys.getenv()
+      if (identical(Sys.info()[["sysname"]], "Linux")) {
+        cli_env = cli_environment(cli_env, "prepend", library_dir)
+      }
       cli = gptr:::proc_run(configured, c("-I", "-c", cli_code, library), timeout = 10,
-        env = Sys.getenv(), echo = FALSE)
+        env = cli_env, echo = FALSE)
       phase(if (identical(cli$status, 0L)) "cli-exit-zero" else "cli-exit-not-zero")
       phase(if (isTRUE(cli$timed_out)) "cli-timeout" else "cli-no-timeout")
       phase(if (identical(cli$stderr, "")) "cli-stderr-empty" else "cli-stderr-not-empty")
@@ -268,7 +272,7 @@ py_native_child = function(case, root, failure) {
       assert_native(same_path(cli_identity$library, library) &&
         identical(cli_identity$sha256, library_sha) && cli_identity$library_bytes > 0 &&
         cli_identity$library_bytes <= 64 * 1024^2, "independent-library-hash")
-      cli_version_phase("original", cli_identity$version, unname(pins[[1L]]), Sys.getenv())
+      cli_version_phase("original", cli_identity$version, unname(pins[[1L]]), cli_env)
       assert_native(identical(cli_identity$version, unname(pins[[1L]])), "independent-version")
       cli_state = identical(snapshot(), before)
       seen$stage = "python-first-eval"
