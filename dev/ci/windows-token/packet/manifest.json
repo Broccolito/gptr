@@ -1,0 +1,107 @@
+{
+  "baseline": {
+    "original_helper_prefix_bytes": 51608,
+    "original_helper_prefix_exact": true,
+    "run": 38242018712,
+    "source": "02031c5970d06144baa03d066f769ff5272865d1",
+    "source_tar_sha256": "d20401577a8bcbf19ae082bf7b42b50c9c878c361993fa3ef71b31cd3f24744e"
+  },
+  "caps": {
+    "combined_rss_bytes": 1073741824,
+    "disk_output_bytes": 67108864,
+    "dll_bytes": 1048576,
+    "fragment_bytes": 8192,
+    "native_privilege_count": 256,
+    "native_token_snapshot_bytes": 65536,
+    "protocol_line_bytes": 96,
+    "protocol_records": 26,
+    "source_bytes": 32768
+  },
+  "clocks": {
+    "active_watchdog_seconds": 45,
+    "case_seconds": 30,
+    "compiler_soft_seconds": 30,
+    "external_file_supervisor_seconds": 300,
+    "measured_utility_seconds": 5,
+    "recovery_seconds": 5,
+    "total_seconds": 60
+  },
+  "files": {
+    "README.md": {
+      "bytes": 7914,
+      "sha256": "967cde94b13c847939d593a5815a512f72fc1139eab9937e54e10794fb992b15"
+    },
+    "amended/helper-proc-writer-runtime.R": {
+      "bytes": 91738,
+      "sha256": "2acd08d324155ee2fac743d2e5ef1a84d06bde0d677849a546bff6e47863f1a5"
+    },
+    "baseline/fixtures/bp-disk-observer.py": {
+      "bytes": 13195,
+      "sha256": "18347a8f18677e1ec17efe0d345e797393202b6a50ec3dd1321b888da3314451"
+    },
+    "baseline/helper-bp-disk-observer.R": {
+      "bytes": 5680,
+      "sha256": "2124533f1a8c31e1778b50ca5b3224c21317021648b09e05fed676d1a8a2e682"
+    },
+    "baseline/helper-proc-backpressure.R": {
+      "bytes": 18600,
+      "sha256": "766798d6bd8e69044f81d6dec332d8f79804cdeb3c737f5284ad0b1890baf5c7"
+    },
+    "baseline/helper-proc-writer-runtime.R": {
+      "bytes": 51608,
+      "sha256": "56a0abb8eb595fbd103c8f423c4b5dba9438a5644c3dce19126ff1d70915f482"
+    },
+    "baseline/test-proc-writer-runtime.R": {
+      "bytes": 46164,
+      "sha256": "9a03efc17f572532104814048bcbb0a703de8c4ef644207690494a92f7c4eb63"
+    },
+    "controls/test-token-native.R": {
+      "bytes": 3737,
+      "sha256": "e4e23f3ebd7d624c1158e70a55422996951c21c33eb1b40292e02df6255ad9a1"
+    },
+    "controls/test-token-protocol.R": {
+      "bytes": 4101,
+      "sha256": "833bc3981343c217bd0d0afcb80e032d191a90692ca10afa4bbc4aa2ee2f1de8"
+    },
+    "current-token.cs": {
+      "bytes": 13340,
+      "sha256": "c8ca069362b0a07a8a16187c9a8d32b60d685a29b0ecf36712d6baf26ebffb88"
+    },
+    "experimental-helper.patch": {
+      "bytes": 41084,
+      "sha256": "5b1f1004bd7d0c2a06fe4746bb077a1424a64751ef7463928edf04c082418fe4"
+    },
+    "token-protocol.R": {
+      "bytes": 3372,
+      "sha256": "2ad2c7a8694a932fa51bdc1bf2fed5607eeae5333d9a4d23254718f6495a8174"
+    },
+    "token-trial.ps1": {
+      "bytes": 4454,
+      "sha256": "aae0e9b54331f8dc3a94bc2e8fe49d734bbc74345dbfb69ac803e4d28142e2c6"
+    }
+  },
+  "prepared_controls": {
+    "actual_execution": "none",
+    "compile_time_pure_checks": 10,
+    "native_windows_titles": 1,
+    "pure_protocol_titles": 7,
+    "raw_expected_feature_status": "unresolved; strict original complete remains mandatory"
+  },
+  "preserved": [
+    "complete original helper prefix",
+    "exact six-control and strict PROBE1 blocks",
+    "exact Deny-rule assertions",
+    "original ACL restore and independent recovery",
+    "exact PID/create-time settlement and unknown-state refusal",
+    "nofollow observer and fixed resource caps"
+  ],
+  "privileges_fixed": [
+    "SeBackupPrivilege",
+    "SeRestorePrivilege",
+    "SeChangeNotifyPrivilege"
+  ],
+  "refreeze": "Disable NewState uses zero, full expected snapshot preserves other flags; ten pure controls unchanged count; original freeze retained.",
+  "scope": "ignored test-only experiment; no package/Imports/runtime/registry/CI changes",
+  "status": "inactive-source-prepared-unexecuted",
+  "token_authority": "current utility process only; no PID/handle/name input; no parent token changes"
+}

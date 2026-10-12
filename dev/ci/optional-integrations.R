@@ -468,6 +468,10 @@ optional_child = function(action, file = NULL) {
   result = withCallingHandlers({
     if (action == "preflight") {
       optional_preflight()
+    } else if (action %in% c("token-protocol", "token-native")) {
+      scope = new.env(parent = environment())
+      sys.source(file.path("dev", "ci", "windows-token", "controller.R"), envir = scope)
+      scope$token_child(action)
     } else {
       pkgload::load_all(".", helpers = FALSE, quiet = TRUE)
       optional_result_rows(testthat::test_file(file,
@@ -484,7 +488,8 @@ optional_child = function(action, file = NULL) {
 
 optional_child_start = function(action, file, root, dir, stdout, stderr, env,
                                  spawn = processx::process$new) {
-  if (!action %in% c("preflight", "test")) stop("Unapproved child action")
+  if (!action %in% c("preflight", "test", "token-protocol", "token-native"))
+    stop("Unapproved child action")
   script = file.path(dir, "child.R")
   data = file.path(dir, "request.rds")
   result = file.path(dir, "result.rds")

@@ -26,6 +26,10 @@ on:
         description: Enable bounded no-follow sampling; include proc-writer-runtime in the filter
         type: boolean
         default: false
+      token_experiment:
+        description: Run the reviewed child-only token diagnostic after successful install
+        type: boolean
+        default: false
       source_sha:
         description: Full lowercase commit SHA required by optional mode
         type: string
@@ -53,9 +57,18 @@ jobs:
       GPTR_LEGACY_MINUTES: ${{ inputs.minutes }}
     steps:
       - name: Validate optional source nomination
-        if: inputs.optional
+        if: inputs.optional || inputs.token_experiment
         shell: bash
-        run: '[[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]'
+        env:
+          EXPERIMENT: ${{ inputs.token_experiment && 'true' || 'false' }}
+          OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          PLATFORM: ${{ inputs.platform }}
+          NOFOLLOW: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$EXPERIMENT" == true ]]; then
+            [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$NOFOLLOW" == true ]]
+          fi
       - uses: actions/checkout@v6
         if: '!inputs.optional'
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -118,6 +131,16 @@ jobs:
         run: |
           python dev/ci/test-optional-dependencies.py
           Rscript --vanilla -e 'testthat::test_file("dev/ci/test-optional-integrations.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+      - name: Test and lint the default-off token controller
+        if: inputs.optional && inputs.token_experiment
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-token/test-controller.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+          Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-token/controller.R")) == 0L, length(lintr::lint("dev/ci/windows-token/test-controller.R")) == 0L)'
       - name: Lint the reviewed integration runtime, fixtures and result gates
         if: inputs.optional
         shell: bash
@@ -139,6 +162,21 @@ jobs:
           GITHUB_PAT: ''
           GITHUB_TOKEN: ''
         run: R CMD INSTALL .
+      - name: Verify the installed token runtime and immutable diagnostic packet
+        id: token_install
+        if: inputs.optional && inputs.token_experiment
+        timeout-minutes: 1
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-token-install
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/controller.R verify-install
       - name: Offline tests file by file
         if: '!inputs.optional'
         shell: bash
@@ -154,6 +192,20 @@ jobs:
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
             --run Rscript --vanilla dev/ci/optional-integrations.R
+      - name: Run the strict child-only token diagnostic after verified install
+        if: always() && inputs.optional && inputs.token_experiment && inputs.platform == 'windows' && inputs.nofollow_observer && runner.os == 'Windows' && steps.token_install.outcome == 'success'
+        timeout-minutes: 12
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-token-experiment
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/controller.R run
       - name: Run serial plan gates even after an optional test failure
         if: always() && inputs.optional && runner.os == 'Linux'
         shell: bash
