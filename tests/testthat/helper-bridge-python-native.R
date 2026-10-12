@@ -215,7 +215,7 @@ py_native_child = function(case, root, failure) {
             } else {
               gptr:::proc_run(configured, probe_args, env = env, timeout = 10, echo = FALSE)
             }
-          }, error = identity)
+          }, error = function(error) error)
           if (inherits(probe, "error")) {
             phase(paste0("cli-probe-", variant, "-condition"))
             complete = c(complete, FALSE)
