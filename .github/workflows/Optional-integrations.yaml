@@ -72,6 +72,13 @@ jobs:
           extra-packages: any::pkgload any::testthat any::repr any::reticulate any::chromote any::lintr
           needs: check
       - uses: ./.github/actions/optional-dependencies
+      - name: Test the pinned no-follow observer operations
+        timeout-minutes: 1
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: python -I -B dev/ci/bp-disk-observer/run-controls.py
       - name: Test the pure dependency and result gates
         shell: bash
         env:

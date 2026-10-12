@@ -12,6 +12,7 @@ paths = c(
   "tests/testthat/test-tool-write.R", "tests/testthat/test-tool-walk.R",
   "tests/testthat/test-ckpt-files.R", "tests/testthat/test-tool-edit.R",
   "tests/testthat/test-storage-boundaries.R",
+  "tests/testthat/helper-bp-disk-observer.R", "tests/testthat/test-bp-disk-observer.R",
   "tests/testthat/helper-proc-backpressure.R", "tests/testthat/test-proc-windows-backpressure.R",
   "tests/testthat/helper-proc-writer-prototype.R", "tests/testthat/test-proc-writer-prototype.R",
   "tests/testthat/test-proc-backpressure-sampling.R",

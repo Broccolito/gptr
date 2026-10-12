@@ -31,6 +31,15 @@ optional_titles = list(
   "test-gptr-config.R" = c(
     "a trust decision taken in this process lapses when a gated file changes (IC-52)",
     "gptr's own write keeps an in-process decision without recording it (IC-52)"),
+  "test-bp-disk-observer.R" = c(
+    "the optional observer initializes privately and restores wrapper failures",
+    "the optional observer charges a real dangling link without following its target",
+    "the optional observer refuses a real foreign directory link and preserves its canary",
+    "the optional observer restores caller state after initialization and errors",
+    "the optional observer refuses a root replaced by a foreign directory link",
+    "the optional observer preserves unchanged empty environment entries and rejects loss",
+    "the optional observer restores changed and missing POSIX empty environment entries",
+    "the optional observer restores library paths after success and failure"),
   "test-windows-security.R" = c(
     "Windows true symbolic links are readable and detached without deleting targets",
     "Windows safe instruction links remain while escaped and guarded inputs stay private",

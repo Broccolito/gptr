@@ -47,10 +47,21 @@ bp_disk_test_main = function() {
   })
 }
 
+bp_disk_test_python = function() {
+  skip_if_not_installed("reticulate")
+  skip_if(!nzchar(Sys.getenv("RETICULATE_PYTHON")),
+    "optional observer has no explicit provisioned Python")
+  skip_if(!nzchar(Sys.getenv("RETICULATE_USE_MANAGED_VENV")),
+    "optional observer has no explicit managed-provisioning policy")
+  # A configured invalid executable, identity or policy must reach the wrapper
+  # and fail. Availability guards cannot convert configured errors into skips.
+}
+
 test_that("the optional observer initializes privately and restores wrapper failures", {
   skip_on_cran()
+  bp_disk_test_python()
   bp_disk_test_state()
-  root = withr::local_tempdir()
+  root = withr::local_tempdir(tmpdir = normalizePath(tempdir(), mustWork = TRUE))
   source = withr::local_tempfile(fileext = ".py")
   # The new alias is deliberately absent from __main__; class defaults and
   # methods must resolve it from the same private execution dictionary.
@@ -80,8 +91,9 @@ test_that("the optional observer initializes privately and restores wrapper fail
 
 test_that("the optional observer charges a real dangling link without following its target", {
   skip_on_cran()
+  bp_disk_test_python()
   bp_disk_test_state()
-  root = withr::local_tempdir()
+  root = withr::local_tempdir(tmpdir = normalizePath(tempdir(), mustWork = TRUE))
   target = file.path(root, "missing-target")
   link = file.path(root, "dangling-file")
   writeBin(charToRaw("seven!!"), target)
@@ -107,8 +119,9 @@ test_that("the optional observer charges a real dangling link without following 
 
 test_that("the optional observer refuses a real foreign directory link and preserves its canary", {
   skip_on_cran()
+  bp_disk_test_python()
   bp_disk_test_state()
-  base = withr::local_tempdir()
+  base = withr::local_tempdir(tmpdir = normalizePath(tempdir(), mustWork = TRUE))
   root = file.path(base, "owned")
   foreign = file.path(base, "foreign")
   expect_true(dir.create(root))
@@ -130,6 +143,7 @@ test_that("the optional observer refuses a real foreign directory link and prese
 
 test_that("the optional observer restores caller state after initialization and errors", {
   skip_on_cran()
+  bp_disk_test_python()
   bp_disk_test_state()
   value = list(numbers = c(3L, 4L))
   bytes = serialize(value, NULL)
@@ -146,15 +160,16 @@ test_that("the optional observer restores caller state after initialization and 
   expect_match(conditionMessage(failure), "synthetic-observer-error", fixed = TRUE)
   expect_identical(options(), prior)
   expect_identical(serialize(value, NULL), bytes)
-  root = withr::local_tempdir()
+  root = withr::local_tempdir(tmpdir = normalizePath(tempdir(), mustWork = TRUE))
   observe = bp_disk_observer(root)
   expect_identical(as.numeric(observe()$bytes), 0)
 })
 
 test_that("the optional observer refuses a root replaced by a foreign directory link", {
   skip_on_cran()
+  bp_disk_test_python()
   bp_disk_test_state()
-  base = withr::local_tempdir()
+  base = withr::local_tempdir(tmpdir = normalizePath(tempdir(), mustWork = TRUE))
   root = file.path(base, "owned")
   saved = file.path(base, "saved-owned")
   foreign = file.path(base, "foreign")
@@ -220,7 +235,9 @@ test_that("the optional observer restores changed and missing POSIX empty enviro
     state$values = state$values[!names(state$values) %in% keys]
   }
   for (missing in c(FALSE, TRUE)) {
-    state$values = if (missing) c(VALUE = "original", ADDED = "synthetic") else {
+    state$values = if (missing) {
+      c(VALUE = "original", ADDED = "synthetic")
+    } else {
       c(EMPTY = "changed", VALUE = "original", ADDED = "synthetic")
     }
     state$set = character()
@@ -237,7 +254,7 @@ test_that("the optional observer restores changed and missing POSIX empty enviro
 test_that("the optional observer restores library paths after success and failure", {
   bp_disk_test_state()
   prior = .libPaths()
-  owned = withr::local_tempdir()
+  owned = withr::local_tempdir(tmpdir = normalizePath(tempdir(), mustWork = TRUE))
   bytes = serialize(list(public = c(3L, 4L)), NULL)
   for (failing in c(FALSE, TRUE)) {
     state = new.env(parent = emptyenv())

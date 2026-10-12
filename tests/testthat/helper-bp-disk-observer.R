@@ -35,12 +35,14 @@ bp_disk_preserve = function(callback) {
   # No callback/Python initialization runs unless exact restoration is supported.
   bp_disk_env_preflight(old_env)
   old_wd = getwd()
+  old_libs = .libPaths()
   old_kind = RNGkind()
   on.exit({
     added = setdiff(names(options()), names(old_options))
     if (length(added)) options(stats::setNames(rep(list(NULL), length(added)), added))
     options(old_options)
     setwd(old_wd)
+    .libPaths(old_libs)
     bp_disk_env_restore(old_env)
   }, add = TRUE)
   withr::with_preserve_seed((function() {
