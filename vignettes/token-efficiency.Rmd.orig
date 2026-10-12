@@ -135,6 +135,18 @@ one a fresh root allowance. With `gptr_parallel()`, member `budget =`, `tools =`
 run, cap concurrency and inspect the returned children's statuses. See
 `vignette("teams-and-background", package = "gptr")`.
 
+## Compaction
+
+At the chat prompt, `/compact` replaces older model context with a summary. Add a focus when
+particular details must survive, for example `/compact retain the model comparison and next
+steps`. Automatic compaction follows the configured context and cold-cache thresholds; see
+the [configuration guide](configuration.html).
+
+Compaction can make a model request and add usage. It keeps the R objects already in your
+session, while the model no longer sees every older turn verbatim. Preserve important decisions
+in project files and named R objects. A changed request prefix can also affect provider cache
+reuse.
+
 ## Three different caches
 
 | Mechanism | What is reused | What to inspect |

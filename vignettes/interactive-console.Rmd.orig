@@ -210,9 +210,10 @@ adding a code/output note to the next prompt. Returning to the chat prompt does 
 progress while it waits for input. Under Rscript, background runs advance only inside blocking
 gptr calls. Inline R tools still occupy the same R process while they execute.
 
-At the chat prompt, one Ctrl-C prints a hint; two consecutive interrupts leave the chat. IDEs
-that cannot resume an interrupted evaluation use an abort fallback; pause/resume behavior is
-not uniformly verified across front ends.
+At the chat prompt, one interrupt prints a hint; two consecutive interrupts leave the chat.
+Use Ctrl-C in a terminal and the front end's interrupt key in an IDE: Esc in RStudio, R.app,
+RGui and Positron. IDEs that cannot resume an interrupted evaluation use an abort fallback;
+pause/resume behavior is not uniformly verified across front ends.
 
 The equivalent session verbs work from R:
 

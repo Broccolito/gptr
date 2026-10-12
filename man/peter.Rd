@@ -121,8 +121,9 @@ a second Ctrl-C aborts. Backgrounding returns to the chat prompt; use
 \code{!!gptr::gptr_wait(gptr::gptr_last())} there to wait for completion. Returning to the prompt
 does not guarantee progress while the chat waits for input. Under Rscript, background runs
 advance only inside blocking gptr calls.
-Front ends that cannot resume use an abort fallback. \verb{/exit}, Ctrl-C twice at the prompt
-or the end of piped input return the session invisibly, so \code{s = peter()} keeps the conversation.
+Front ends that cannot resume use an abort fallback. \verb{/exit}, two consecutive interrupts at
+the prompt or the end of piped input return the session invisibly, so \code{s = peter()} keeps the
+conversation. Use Ctrl-C in a terminal; RStudio, R.app, RGui and Positron use Esc.
 
 Options: \code{gptr.verbose} (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}

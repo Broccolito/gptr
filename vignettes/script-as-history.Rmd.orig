@@ -155,7 +155,8 @@ R Markdown, Quarto and Jupyter formats; pending writes can be recovered before l
 | `"record"` | Regenerate stale blocks; fresh blocks replay. |
 
 A call's `replay =` argument wins over process options, the `GPTR_REPLAY` environment variable
-and settings. For a script intended to run without model calls:
+and settings. In any R front end, use `gptr_source("analysis.R", replay = "replay")` to
+run a recorded script without model calls. From a Unix shell:
 
 ```sh
 GPTR_REPLAY=replay Rscript --vanilla analysis.R
@@ -189,9 +190,9 @@ gptr_blocks("analysis.Rmd")
 gptr_doc(FALSE)
 ```
 
-Use Quarto's renderer for `.qmd`; `gptr_source()` is not a renderer for either format. Arrange
-the document's setup to load gptr, prepare its input data and select a model or replay mode.
-Plain R chunks still execute when the report is rendered.
+Use `quarto render analysis.qmd` for `.qmd`; `gptr_source()` is not a renderer for either
+format. Arrange the document's setup to load gptr, prepare its input data and select a model
+or replay mode. Plain R chunks still execute when the report is rendered.
 
 In IRkernel, session answers render as safe Markdown, with ordinary progress separate from
 error messages. The executed R code of a pending recorded block is shown once in the cell

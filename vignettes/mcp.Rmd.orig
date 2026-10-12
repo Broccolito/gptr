@@ -49,7 +49,7 @@ using its documentation before registering it. For a server script you already h
 ```{r, eval = FALSE}
 gptr_mcp_add(
   "catalog",
-  command = file.path(R.home("bin"), "Rscript"),
+  command = "Rscript",
   args = c("--vanilla", "/absolute/path/to/mcp-server.R"),
   env = c(CATALOG_API_KEY = "${CATALOG_API_KEY}"),
   exposure = "r", timeout = 60, scope = "user"

@@ -822,8 +822,9 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' `!!gptr::gptr_wait(gptr::gptr_last())` there to wait for completion. Returning to the prompt
 #' does not guarantee progress while the chat waits for input. Under Rscript, background runs
 #' advance only inside blocking gptr calls.
-#' Front ends that cannot resume use an abort fallback. `/exit`, Ctrl-C twice at the prompt
-#' or the end of piped input return the session invisibly, so `s = peter()` keeps the conversation.
+#' Front ends that cannot resume use an abort fallback. `/exit`, two consecutive interrupts at
+#' the prompt or the end of piped input return the session invisibly, so `s = peter()` keeps the
+#' conversation. Use Ctrl-C in a terminal; RStudio, R.app, RGui and Positron use Esc.
 #'
 #' Options: `gptr.verbose` (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 #' knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`

@@ -448,6 +448,51 @@ stale_problems = function(source_lines, knitted_lines, where) {
   sprintf("%s: code differs from its source; re-run dev/release/precompute.R", where)
 }
 
+# The exact canonical light/dark vectors, embedded so source and installed guides need no assets.
+vig_brand_block = function(root) {
+  encode = function(name) {
+    path = file.path(root, "man", "figures", name)
+    size = file.info(path)$size
+    if (length(size) != 1L || !is.finite(size) || size < 1 || size > 65536 || dir.exists(path)) {
+      stop("canonical vignette logo is missing or exceeds 65536 bytes", call. = FALSE)
+    }
+    bytes = readBin(path, "raw", n = size + 1L)
+    if (length(bytes) != size) stop("canonical vignette logo changed while read", call. = FALSE)
+    paste0("data:image/svg+xml;base64,", gsub("[\r\n]", "", jsonlite::base64_enc(bytes)))
+  }
+  light = encode("logo.svg")
+  dark = encode("logo-dark.svg")
+  c("<!-- gptr-vignette-brand:start -->", "<style>",
+    "html:not([data-bs-theme]) body { background: #fff; color: #1c1e22; }",
+    ".gptr-vignette-brand { float: right; width: 120px; margin: 0 0 1rem 1rem; }",
+    ".gptr-vignette-brand img { display: block; max-width: 100%; height: auto; }",
+    "html[data-bs-theme] .gptr-vignette-brand { display: none; }",
+    "@media (max-width: 600px) {",
+    "  .gptr-vignette-brand { float: none; width: 72px; margin: 0 0 1rem; }",
+    "}", "</style>", '<picture class="gptr-vignette-brand">',
+    paste0('  <source media="(prefers-color-scheme: dark)" srcset="', dark, '">'),
+    paste0('  <img src="', light, '" width="120" height="139" alt="gptr logo">'),
+    "</picture>", "<!-- gptr-vignette-brand:end -->")
+}
+
+# Preserve the YAML/body and replace exactly one owned block, rather than stacking copies.
+vig_brand_insert = function(lines, block) {
+  edges = which(lines == "---")
+  if (length(edges) < 2L || edges[[1L]] != 1L) {
+    stop("vignette branding needs an initial YAML header", call. = FALSE)
+  }
+  begin = which(lines == "<!-- gptr-vignette-brand:start -->")
+  end = which(lines == "<!-- gptr-vignette-brand:end -->")
+  if (length(begin) || length(end)) {
+    if (length(begin) != 1L || length(end) != 1L || begin <= edges[[2L]] || end < begin ||
+        begin == 1L || end == length(lines) || lines[begin - 1L] != "" || lines[end + 1L] != "") {
+      stop("vignette branding has an incomplete or duplicate owned block", call. = FALSE)
+    }
+    lines = lines[-seq.int(begin - 1L, end + 1L)]
+  }
+  append(lines, c("", block, ""), after = edges[[2L]])
+}
+
 # Knits the vignettes (write = TRUE: into vignettes/; FALSE: into a scratch copy, which proves
 # that they still run offline) in children against the package installed into a temporary
 # library, then checks the committed Markdown. `limit` is acceptance 4's 60 s.
@@ -459,6 +504,8 @@ vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, rea
   if (!all(file.exists(origs))) {
     return(sprintf("vignettes/%s.Rmd.orig is missing", names[!file.exists(origs)]))
   }
+  brand = if (length(names)) tryCatch(vig_brand_block(root), error = function(e) NULL)
+  if (length(names) && is.null(brand)) return("vignettes: canonical light/dark logos unavailable")
   dirs = rel_dirs(work)
   env = rel_child_env(dirs[["home"]], dirs[["tmp"]], dirs[["proj"]], lib = dirs[["lib"]])
   rel_install(root, dirs[["lib"]], env)
@@ -475,7 +522,13 @@ vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, rea
   for (nm in names) {
     knit = sprintf("knitr::knit('%1$s.Rmd.orig', '%1$s.Rmd', quiet = TRUE)", nm)
     failed = sprintf("vignettes/%s.Rmd.orig: knitting failed:", nm)
-    problems = c(problems, run(knit, out_dir, failed))
+    result = run(knit, out_dir, failed)
+    problems = c(problems, result)
+    if (!length(result)) {
+      out = file.path(out_dir, paste0(nm, ".Rmd"))
+      lines = readLines(out, encoding = "UTF-8", warn = FALSE)
+      writeLines(vig_brand_insert(lines, brand), out, useBytes = TRUE)
+    }
   }
   seconds = proc.time()[["elapsed"]] - t0
   if (seconds >= limit) {
@@ -521,6 +574,11 @@ vig_committed_problems = function(root, name) {
            "%\\VignetteEngine{knitr::rmarkdown}", "%\\VignetteEncoding{UTF-8}")
   found = vapply(need, function(n) any(grepl(n, rmd_lines, fixed = TRUE)), NA)
   out = sprintf("%s: header lacks %s", where, need[!found])
+  branded = tryCatch(vig_brand_insert(rmd_lines, vig_brand_block(root)),
+                     error = function(e) NULL)
+  if (!identical(branded, rmd_lines)) {
+    out = c(out, paste0(where, ": canonical embedded logos are missing or stale; run precompute.R"))
+  }
   if (any(grepl("^```+\\s*\\{", rmd_lines))) {
     out = c(out, sprintf("%s: has executable chunks; ship precomputed Markdown only", where))
   }
@@ -732,6 +790,9 @@ cran_comments_problems = function(lines) {
 
 # Rewrites the "## Reverse dependencies" section with the result of the submission-day run.
 cran_comments_set_revdeps = function(lines, revdeps, date = Sys.Date()) {
+  if (is.null(revdeps)) {
+    stop("Reverse-dependency query did not find gptr; status is unknown", call. = FALSE)
+  }
   start = which(lines == "## Reverse dependencies")
   if (length(start) != 1L) {
     stop("cran-comments.md needs exactly one `## Reverse dependencies` section", call. = FALSE)

@@ -33,3 +33,11 @@ test_that("cran_comments_problems() requires the consent design, precedents and 
   no_sysreq = sub("SystemRequirements", "", lines, fixed = TRUE)
   expect_true(any(grepl("must mention SystemRequirements", cran_comments_problems(no_sysreq))))
 })
+
+
+test_that("cran_comments_set_revdeps() refuses an unknown package lookup", {
+  lines = c("## Reverse dependencies", "old")
+  expect_error(cran_comments_set_revdeps(lines, NULL), "status is unknown", fixed = TRUE)
+  expect_match(paste(cran_comments_set_revdeps(lines, character()), collapse = "\n"),
+               "No package depends on, imports, links to or suggests gptr.", fixed = TRUE)
+})

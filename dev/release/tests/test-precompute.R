@@ -2,6 +2,12 @@ toy_vignette_package = function(vignette_code) {
   root = file.path(tempfile("toyvig-"), "toyvig")
   dir.create(file.path(root, "R"), recursive = TRUE)
   dir.create(file.path(root, "vignettes"))
+  figures = file.path(root, "man", "figures")
+  dir.create(figures, recursive = TRUE)
+  for (name in c("logo.svg", "logo-dark.svg")) {
+    writeLines('<svg xmlns="http://www.w3.org/2000/svg"><text>toy</text></svg>',
+               file.path(figures, name))
+  }
   writeLines(c("Package: toyvig", "Title: Toy Package for the Vignette Runner", "Version: 0.0.1",
                "Authors@R: person(\"A\", \"B\", email = \"a@b.org\", role = c(\"aut\", \"cre\"))",
                "Description: A toy package used by the gptr release self-tests.",
@@ -75,7 +81,6 @@ readme_tree_snapshot = function(root) {
 toy_readme_assets = function(fail = FALSE) {
   root = toy_vignette_package(c("library(toyvig)", "twice(21)"))
   figures = file.path(root, "man", "figures")
-  dir.create(figures, recursive = TRUE)
   writeLines("relative asset canary", file.path(figures, "canary.txt"))
   writeLines("committed README canary", file.path(root, "README.md"))
   readme = readLines(file.path(root, "README.Rmd"))
