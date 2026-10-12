@@ -1,14 +1,3 @@
-// Start in light mode and retain the reader's subsequent theme choice.
-try {
-  if (localStorage.getItem("theme") === null) {
-    document.documentElement.setAttribute("data-bs-theme", "light");
-    localStorage.setItem("theme", "light");
-  }
-} catch {
-  // Blocked storage must not stop favicon and responsive-content setup.
-  document.documentElement.setAttribute("data-bs-theme", "light");
-}
-
 // Keep the tab icon in step with the native pkgdown light switch.
 (() => {
   const icon = document.getElementById("gptr-favicon");
