@@ -20,7 +20,7 @@ py_native_child = function(case, root, failure) {
     "independent-cli-status", "bounded-cli-identity", "closed-cli-identity",
     "independent-private-venv", "independent-library-hash", "independent-version",
     "first-python-result", "compiled-import-result", "bounded-import-identity",
-    "closed-import-identity")
+    "closed-import-identity", "linux-cli-diagnostics", "owned-r-absent-seed")
   run = function() {
     assert_native = function(value, stage) {
       seen$stage = stage
@@ -68,6 +68,46 @@ py_native_child = function(case, root, failure) {
       }
       startsWith(path, paste0(dir, "/"))
     }
+    cli_environment = function(raw, variant, library_dir) {
+      stopifnot(is.character(raw), !anyNA(raw), !is.null(names(raw)),
+        all(nzchar(names(raw))), !anyDuplicated(toupper(names(raw))),
+        length(variant) == 1L, variant %in% c("inherited", "prepend", "unset", "direct"),
+        is.character(library_dir), length(library_dir) == 1L, !is.na(library_dir),
+        nzchar(library_dir))
+      if (variant %in% c("inherited", "direct")) return(raw)
+      hits = which(toupper(names(raw)) == "LD_LIBRARY_PATH")
+      old = if (length(hits)) raw[[hits]] else ""
+      env = raw[!toupper(names(raw)) %in% "LD_LIBRARY_PATH"]
+      if (variant == "prepend") {
+        value = if (nzchar(old)) paste(library_dir, old, sep = ":") else library_dir
+        env = c(env, LD_LIBRARY_PATH = value)
+      }
+      env
+    }
+    cli_version_phase = function(variant, version, expected, env, mapped = NULL) {
+      stopifnot(length(variant) == 1L,
+        variant %in% c("inherited", "prepend", "unset", "direct", "original"))
+      version_text = function(x) {
+        valid = is.character(x) && length(x) == 1L && !is.na(x) &&
+          grepl("^[0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,4}$", x)
+        if (valid) x else "invalid"
+      }
+      type_text = function(x) {
+        types = c("character", "integer", "double", "logical", "NULL")
+        if (length(x) == 1L && !anyNA(x) && typeof(x) %in% types) typeof(x) else "invalid"
+      }
+      hits = which(toupper(names(env)) == "LD_LIBRARY_PATH")
+      present = length(hits) == 1L &&
+        library_dir %in% strsplit(env[[hits]], ":", fixed = TRUE)[[1L]]
+      phase(paste0("cli-version-", variant, "-expected-", version_text(expected),
+        "-observed-", version_text(version)))
+      phase(paste0("cli-type-", variant, "-expected-", type_text(expected),
+        "-observed-", type_text(version)))
+      phase(paste0("cli-admitted-dir-", variant, if (present) "-present" else "-absent"))
+      phase(paste0("cli-mapped-", variant,
+        if (isTRUE(mapped)) "-yes" else if (identical(mapped, FALSE)) "-no" else "-unknown"))
+      invisible(NULL)
+    }
     seed = function(name, value, exact_name = FALSE) {
       raw = Sys.getenv()
       hits = which(toupper(names(raw)) == toupper(name))
@@ -88,6 +128,11 @@ py_native_child = function(case, root, failure) {
     phase(if (any(toupper(names(Sys.getenv())) == "PYTHONIOENCODING"))
       "preseed-encoding-present" else "preseed-encoding-absent")
     if (case == "absent") {
+      # R.sh may seed LD_LIBRARY_PATH after the complete native launch vector was supplied.
+      # This deliberate setup belongs only to this disposable owned R-session fixture.
+      seen$stage = "owned-r-absent-seed"
+      phase("owned-r-absent-seed")
+      Sys.unsetenv(absent)
       assert_native(!any(toupper(names(Sys.getenv())) %in% absent), "native-absent-seed")
     }
     if (case == "unrelated") {
@@ -145,6 +190,62 @@ py_native_child = function(case, root, failure) {
         "print(json.dumps(dict(executable=os.path.abspath(sys.executable), prefix=sys.prefix,",
         " base_prefix=sys.base_prefix, version='.'.join(map(str, sys.version_info[:3])),",
         " library=library, sha256=hash.hexdigest(), library_bytes=read)))", sep = "\n")
+      # This Linux-only diagnostic precedes the unchanged strict identity/version oracle.
+      # Only public numeric versions and fixed booleans leave these owned CLI probes.
+      library_dir = dirname(normalizePath(library, winslash = "/", mustWork = TRUE))
+      if (identical(Sys.info()[["sysname"]], "Linux")) {
+        probe_code = paste("import os, sys, json",
+          "library = os.path.realpath(sys.argv[1])",
+          "with open('/proc/self/maps', encoding='utf-8') as stream:",
+          " maps = stream.read(1024 * 1024 + 1)", "assert len(maps) <= 1024 * 1024",
+          "entries = [line.split(None, 5) for line in maps.splitlines()]",
+          "mapped = any(len(row) == 6 and os.path.realpath(row[5]) == library for row in entries)",
+          "print(json.dumps(dict(version='.'.join(map(str, sys.version_info[:3])),",
+          " admitted_library_mapped=mapped)))", sep = "\n")
+        probe_args = c("-I", "-c", probe_code, library)
+        complete = logical()
+        for (variant in c("inherited", "prepend", "unset", "direct")) {
+          seen$stage = "linux-cli-diagnostics"
+          env = cli_environment(Sys.getenv(), variant, library_dir)
+          probe = tryCatch({
+            if (variant == "direct") {
+              processx::run(configured, probe_args, env = env, timeout = 10,
+                error_on_status = FALSE, cleanup_tree = TRUE, supervise = FALSE,
+                encoding = "UTF-8", echo = FALSE, spinner = FALSE)
+            } else {
+              gptr:::proc_run(configured, probe_args, env = env, timeout = 10, echo = FALSE)
+            }
+          }, error = identity)
+          if (inherits(probe, "error")) {
+            phase(paste0("cli-probe-", variant, "-condition"))
+            complete = c(complete, FALSE)
+            next
+          }
+          timeout = if (variant == "direct") isTRUE(probe$timeout) else isTRUE(probe$timed_out)
+          phase(paste0("cli-probe-", variant,
+            if (identical(probe$status, 0L)) "-exit-zero" else "-exit-not-zero"))
+          phase(paste0("cli-probe-", variant, if (timeout) "-timeout" else "-no-timeout"))
+          phase(paste0("cli-probe-", variant,
+            if (identical(probe$stderr, "")) "-stderr-empty" else "-stderr-not-empty"))
+          bounded = is.character(probe$stdout) && length(probe$stdout) == 1L &&
+            !is.na(probe$stdout) && nchar(probe$stdout, type = "bytes") <= 4096L
+          identity = if (bounded) tryCatch(jsonlite::fromJSON(probe$stdout),
+            error = function(error) NULL) else NULL
+          closed = is.list(identity) &&
+            identical(names(identity), c("version", "admitted_library_mapped")) &&
+            is.character(identity$version) && length(identity$version) == 1L &&
+            !is.na(identity$version) &&
+            grepl("^[0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,4}$", identity$version) &&
+            is.logical(identity$admitted_library_mapped) &&
+            length(identity$admitted_library_mapped) == 1L &&
+            !is.na(identity$admitted_library_mapped)
+          cli_version_phase(variant, if (closed) identity$version else NULL,
+            unname(pins[[1L]]), env, if (closed) identity$admitted_library_mapped else NULL)
+          complete = c(complete, identical(probe$status, 0L) && !timeout &&
+            identical(probe$stderr, "") && closed)
+        }
+        assert_native(length(complete) == 4L && all(complete), "linux-cli-diagnostics")
+      }
       seen$stage = "independent-cli-run"
       cli = gptr:::proc_run(configured, c("-I", "-c", cli_code, library), timeout = 10,
         env = Sys.getenv(), echo = FALSE)
@@ -167,6 +268,7 @@ py_native_child = function(case, root, failure) {
       assert_native(same_path(cli_identity$library, library) &&
         identical(cli_identity$sha256, library_sha) && cli_identity$library_bytes > 0 &&
         cli_identity$library_bytes <= 64 * 1024^2, "independent-library-hash")
+      cli_version_phase("original", cli_identity$version, unname(pins[[1L]]), Sys.getenv())
       assert_native(identical(cli_identity$version, unname(pins[[1L]])), "independent-version")
       cli_state = identical(snapshot(), before)
       seen$stage = "python-first-eval"
