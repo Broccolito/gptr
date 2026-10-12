@@ -3,7 +3,8 @@
 Five reviewed tasks are committed/pushed: `e05bd26` strict POSIX guard registration,
 `b7d8850` neutral billing notices, `1731e06` cold-loader environment restoration,
 `ea5e07e` recoverable MCP shutdown, and `3fd14f9` owned-pump seed isolation.
-`02ceac9` makes optional test preflight metadata-only; real load failures remain failures.
+`02ceac9` makes optional test preflight metadata-only and corrects three Codex warning
+handlers to `muffleWarning`; real load failures remain failures.
 
 - DONE/offline: complete cold OAuth18/114, Codex41/450, MCP16/128 and reactor44/208:
   119 cases/900 passes, zero failures/errors/warnings/skips, all eight caller-state flags TRUE.
@@ -21,6 +22,23 @@ Five reviewed tasks are committed/pushed: `e05bd26` strict POSIX guard registrat
   seven exact POSIX guards; all six mandatory cases and native denial/restoration16P execute.
   Controller68/3431P, startup14/145P and55+3 lints pass; four exact children settle, no unknowns
   or survivors. Original five-second limits and security test bodies are unchanged.
+- DONE/archive consumers: run38288459266 Windows release and devel each report raw Status OK,
+  0 errors/warnings/notes,25,792P/495 named guards. Original tar9d900a3e (2,553,795B),
+  all120 committed R files/14 guide pairs match. Other three consumers/profiles stay ONGOING.
+- DONE/Mac workers: run38290850451 source and installed each have213 exact ordered cases,
+  1,541P/0F/E/W, four exact Windows guards and outer warnings0; all18 lints/19 memory-death
+  controls pass. All18 sampled owned families settle within unchanged caps; pinned Python
+  3.12.10/numpy2.3.4/pandas2.3.3 and six worker/artifact outcomes per context pass.
+  Source135.483s/installed89.926s; maximum sampled family RSS521,060,352B.
+  This is hosted offline acceptance; current local installed/live frontend proof stays WAITING.
+- FAILED/strict Windows: run38290862852 joint75 has1,407P/1F/0E/W/S; native token has30P/1F.
+  Enabled utility privileges give PROBE2; held-disabled B gives actual production PROBE1,
+  and restored A2 returns2. All26 token records and restoration/readback pass. No deadline,
+  assertion, output cap or unknown-result rule is relaxed. A held-B fixture successor is
+  source preparation only; strict denial acceptance remains open.
+- WAITING/oldrel4: older automatic1731e06 had installed-size/temp-root NOTEs. Same120 R files
+  and keep-source setting have different generated database sizes by R version; exact cause
+  and removal outcome are unproved. Require fresh current R4.2.3 and owned teardown witnesses.
 - ONGOING: normal single-archive five-platform run38288459266 at exact production02ceac9;
   restricted dependency profiles requested after five clean consumers. Prior c3 failure remains.
 - WAITING: final certified installation/site, remaining live provider/extensions/team/fan-out/
@@ -29,8 +47,11 @@ Five reviewed tasks are committed/pushed: `e05bd26` strict POSIX guard registrat
 
 Evidence: ignored primary `dev/.validation/readiness-20261011/root-current-02ceac9/ACTUAL.json`.
 Process-group RSS sampling does not certify detached descendant or true family peaks.
-Resource11:03: load8.79/11.93/11.21, CPU67.45% idle,126G used/1,041MiB unused,
-pressure76% free, swap20,368MiB/zero sampled paging, disk111GiB/no thermal warning.
+Resource11:36: load12.85/12.82/15.47, CPU46.58% idle,125G used/2,073MiB unused,
+pressure72% free, swap20,280MiB/zero sampled paging, disk110GiB/no thermal warning.
+No current02 local installation has run; the source-cleared diagnostic adopter remains held.
+RStudio installed-path selection still exposes original port27070; mounted path times out.
+Only its window menu was inspected and dismissed; no R input/restart/cleanup was sent.
 Heavy/GPU work stays held; preserve shared Ollama, original sessions and the dirty primary.
 Fresh plan checks are recorded separately; rerun after plan edits. Readiness and only-Windows-remaining stay false.
 
