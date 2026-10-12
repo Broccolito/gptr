@@ -98,7 +98,7 @@ test_that("Python setup restores absent keys without adding empty environment en
 
 test_that("Python setup restores changed POSIX empty keys exactly", {
   skip_if_not_installed("reticulate")
-  skip_on_os("windows", "requires POSIX empty environment restoration")
+  skip_if(.Platform$OS.type == "windows", "requires POSIX empty environment restoration")
   py_init_test_env(stats::setNames(rep("", length(py_init_test_keys)), py_init_test_keys))
   before = Sys.getenv(py_init_test_keys, unset = NA_character_)
   main = new.env(parent = emptyenv())
@@ -114,7 +114,8 @@ test_that("Python setup restores changed POSIX empty keys exactly", {
 
 test_that("Python setup refuses un-restorable Windows empty keys before first initialization", {
   skip_if_not_installed("reticulate")
-  skip_on_os("windows", "this injected-state fixture requires POSIX empty values")
+  skip_if(.Platform$OS.type == "windows",
+          "this injected-state fixture requires POSIX empty values")
   py_init_test_env(py_init_test_values("before-"))
   Sys.setenv(PYTHONPATH = "")
   before = Sys.getenv(py_init_test_keys, unset = NA_character_)
@@ -134,7 +135,8 @@ test_that("Python setup refuses un-restorable Windows empty keys before first in
 
 test_that("Python setup keeps untouched empty keys when Python is already initialized", {
   skip_if_not_installed("reticulate")
-  skip_on_os("windows", "this injected-state fixture requires POSIX empty values")
+  skip_if(.Platform$OS.type == "windows",
+          "this injected-state fixture requires POSIX empty values")
   py_init_test_env(py_init_test_values("before-"))
   Sys.setenv(PYTHONPATH = "")
   before = Sys.getenv(py_init_test_keys, unset = NA_character_)
@@ -215,7 +217,8 @@ test_that("Python setup keeps its original failure when restoration also fails",
 
 test_that("Python setup rejects a changed initialized Windows empty key without normalizing it", {
   skip_if_not_installed("reticulate")
-  skip_on_os("windows", "this injected-state fixture requires POSIX empty values")
+  skip_if(.Platform$OS.type == "windows",
+          "this injected-state fixture requires POSIX empty values")
   py_init_test_env(py_init_test_values("before-"))
   Sys.setenv(PYTHONPATH = "")
   main = new.env(parent = emptyenv())
