@@ -183,7 +183,7 @@ usage_ancestor_restore = function(data, d) {
   }
   ids = unlist(ids, use.names = FALSE)
   if (anyDuplicated(ids) || !identical(ids[[1L]], row$session) ||
-      !identical(ids[[2L]], row$parent_id) || !identical(tail(ids, 1L), d$id) ||
+      !identical(ids[[2L]], row$parent_id) || !identical(utils::tail(ids, 1L), d$id) ||
       !(is.null(data$receiver_parent) || session_id_ok(data$receiver_parent)) ||
       !identical(data$receiver_parent, d$parent_id)) {
     usage_invalid("durable usage ancestry",
