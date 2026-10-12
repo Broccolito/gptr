@@ -4639,12 +4639,33 @@ keeps its dedicated session. P18/P20 tests cover a fork and a plan-mode parent.
 
 **IC-60 Child processes.** (cran-10, fid-4, fid-5, fid-6, fid-18, cran-11, safe-9, cran-19, fid-20)
 
+**Approved bounded-launch amendment, 2026-10-11.** Replace only `worker_spawn()` and
+`artifact_launch_shiny()` callr launches with two fixed trusted `Rscript --vanilla` entrypoints
+through the existing processx engine. This supersedes their P19/P23 launcher selection after
+living-plan RPX01–06 acceptance; callr Import retirement additionally requires RPX07.
+Historical callr examples and upstream parity results are baseline evidence.
+
+The new entrypoints pass complete `child_env()` directly, without a parent environment setter,
+shared callr hook or empty-value normalization. Capture explicit library paths before launch;
+set them before worker namespace/spec execution. Shiny serving remains self-contained and does
+not load gptr, preserving P23's `package = FALSE` boundary. Trusted bootstrap/spec/function files
+are privately owned; no serialized user value, function body or credential enters argv. Keep
+GPTR public handles, spec/result/JSONL/permission protocols, UTF-8 streams and errors unchanged;
+no general callr or `r_process` API clone is introduced. Failed/uncertain launch, identity or kill
+retains its owning state and private files until exact settlement; watcher cancellation cannot
+convert uncertainty into cleanup permission. All supervision, marker, orphan, stop and bounded
+stdin contracts below still apply. Native macOS/Windows installed-package and devtools tests must
+prove parent objects/options/raw environment/cwd/RNG preservation, child startup/library filtering,
+EOF/cancel/parent death and Shiny ready/failure/watchdog before retirement. No Import is added;
+DESCRIPTION removal waits for the final dependency/metadata/artifact gates.
+
 - `rscript_path()` (P01) = `file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else
   "Rscript")`; every test helper, fixture server and fake CLI uses it (fake CLIs run as `c(rscript_path(),
   fake_cli)` through `options(gptr.cli_path)`); lint rejects a bare `"R"` or `"Rscript"` command in `proc_spawn()`
   and `proc_run()` (R CMD check puts failing dummy R and Rscript scripts first on PATH).
 - `child_env()` returns a **complete** named character vector without the removed names (processx rejects `NA`
-  in `env`); `child_env_callr(env)` converts it for callr (removed names as `NA`). Every profile (mcp, helper,
+  in `env`); the baseline `child_env_callr(env)` adapter converts it for callr (removed names as `NA`)
+  until the two-launch migration passes. Every profile (mcp, helper,
   cli-claude, cli-codex, worker, artifact) points `R_ENVIRON_USER` and `R_PROFILE_USER` at gptr's empty files and
   drops `R_ENVIRON` unless passed explicitly (an Rscript child otherwise re-reads keys from `~/.Renviron`).
 - `proc_spawn()` and every `callr::r_bg()` pass `encoding = "UTF-8"` (processx drops non-ASCII bytes of piped

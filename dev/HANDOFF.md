@@ -1,5 +1,31 @@
 # GPTR 1.0 implementation - handoff
 
+## Rscript/processx replacement authorized; tests first — 2026-10-11
+
+The maintainer authorized replacing the two worker/Shiny callr launches with fixed,
+trusted `Rscript --vanilla` entrypoints through processx. The plan and IC-60/architecture
+amendment are prepared in `codex/skipped-platform-tests`. Tests-first checkpoint `1cabcfc`
+is pushed. The initial Mac helper run is RED: 5 test errors, 0 passes/test warnings/skips
+(missing launcher/library helpers and spawn callback); its separate testthat build-version
+startup advisory is retained. The focused Mac working-tree helper now passes 33 assertions
+with 0 failures/test warnings/skips; its runtime commit is not yet nominated. Core launcher/
+callback source preparation is ongoing. Worker/Shiny native parity and four fresh plan checks
+remain PENDING; this helper pass closes neither the full replacement nor dependency gate.
+No replacement child behavior or callr removal is proved. DESCRIPTION and the current
+installed runtime remain unchanged by this documentation checkpoint.
+
+Review/commit this plan checkpoint before proceeding with worker/Shiny migration. Require
+installed-package and devtools proof on native macOS/Windows, exact parent state, child startup/library
+filtering, worker protocols/exports/permission/EOF/cancel/parent death, Shiny loopback/
+ready/startup failure/watchdog and exact owned settlement before dependency removal.
+See [replacement progress](progress/rscript-processx-20261011.md) for RPX scope and checks.
+The callr results below remain historical evidence for the separate upstream repair.
+
+At the coordinator's 22:12 PDT resource snapshot: load 15.04/19.74/18.26, CPU idle
+26.72%, RAM 111 GiB used/16 GiB unused, swap 21717.94 MiB with sampled delta 0,
+disk 302 GiB and no recorded thermal warning. Local-heavy work remains HELD on load;
+the shared Ollama model is preserved. Fresh native execution needs coordinator clearance.
+
 ## Native callr required gates GREEN; admissions remain OPEN — 2026-10-11
 
 Exact `189e2025db66518d56c0eb8d22beb3338d04cd92`

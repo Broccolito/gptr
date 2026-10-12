@@ -24,6 +24,11 @@ contract's signatures govern. The local Ollama amendment of 2026-10-03,
 `07-local-ollama.md` (contract IC-74), extends these sections and takes precedence
 where older Jev-only assumptions conflict.
 
+The approved 2026-10-11 Rscript/processx amendment (IC-60; living-plan RPX01–07)
+replaces only the P19 worker and P23 Shiny launch mechanism after native acceptance.
+Older callr examples describe the baseline. The dependency exception in §9 is
+conditional: callr remains required in the current package until those gates pass.
+
 ---
 
 ## 0. How this design was synthesised
@@ -1367,9 +1372,14 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
   `codex.exe` are preferred; WindowsApps Python stubs skipped (UNCERTAIN).
 - Child environment adds `NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`,
   `PYTHONIOENCODING=utf-8`, `PYTHONUNBUFFERED=1` to the `helper` profile.
-- R children are started through callr (Rscript path, libpaths and `_R_CHECK_R_ON_PATH_` handled [13 §1 item
-  14]); every other R child (test helpers, fixture servers, fake CLIs) uses `rscript_path()`, never a PATH lookup,
-  because R CMD check puts failing dummy `R`/`Rscript` scripts first on PATH [13 §2.10; IC-60]. `supervise` is
+- Baseline worker and Shiny R children use callr. The approved IC-60 amendment replaces only those
+  launches with fixed trusted `Rscript --vanilla` scripts through `proc_spawn()`, after RPX01–06 proof.
+  Explicit library setup precedes worker namespace load; Shiny serving remains self-contained without
+  loading gptr (P23's `package = FALSE` boundary). All R children use absolute `rscript_path()`, never
+  a PATH lookup: R CMD check puts failing dummy `R`/`Rscript` scripts first on PATH [13 §2.10; IC-60].
+  Complete filtered child environments go directly to processx, without temporarily setting parent
+  variables. Serialization, streams, failures and cleanup retain their existing GPTR contracts.
+  `supervise` is
   `supervise_default()`: `TRUE` except under `check_running()` (supervisor fifos are a fatal check error
   [13 §2.10]); every long-lived child exits when the parent dies (workers on stdin EOF, EPIPE or a dead parent pid;
   artifacts through their watchdog; CLI children through supervision); tree markers under
@@ -2257,6 +2267,15 @@ API [07]). Documents record quoted canonical ids.
 `Depends: R (>= 4.2.0)` (UTF-8 native encoding on current Windows, the `_` pipe placeholder; oldrel-4 today;
 proven by an oldrel-4 CI job) [13 §2.7]. `NeedsCompilation: no`. `License: MIT + file LICENSE`.
 
+**Approved dependency exception, 2026-10-11.** The maintainer authorized retiring callr after
+RPX01–07 acceptance for the two fixed Rscript/processx entrypoints. This narrowly amends the
+original fixed dependency decision and P19/P23 launcher choice; it adds no dependency or compiled
+code. The current eight Imports below remain until native installed-package/devtools parity,
+caller preservation, protocol/lifecycle regression and exact-artifact gates pass. Then remove
+only callr and its unused adapter, verify the resulting closure, and retain the other seven
+non-base Imports. A private upstream callr pass is historical evidence, not this migration's
+acceptance. DESCRIPTION removal is deferred.
+
 ### 9.1 Imports (8 non-base; dependency closure 9 packages, 10 with callr 3.8.0's otel)
 
 | Package | Floor (raised by P01 to what CI proves) | Load-bearing use | Why not base R or another package |
@@ -2264,7 +2283,7 @@ proven by an oldrel-4 CI job) [13 §2.7]. `NeedsCompilation: no`. `License: MIT 
 | jsonlite | 1.8.8 | every wire body, JSONL, settings, schemas | no JSON in base |
 | curl | 6.0.0 | the reactor: multi handles, `multi_fdset()`, `multi_cancel()`, `pipewait = 0L`; one transport for streams, System 1, MCP HTTP, OAuth and catalog refresh | only curl multi streams interruptibly [02, 10a INFRA-01]; httr2 blocks on headers and batches output [10a E1/E2] |
 | processx | 3.8.0 | `poll()` over curl fds and pipes; MCP stdio, CLI providers, bridges; `kill_tree()` | `system2()` cannot poll or stream |
-| callr | 3.7.0 | worker sub-agents and artifact children running package functions (Rscript path, libpaths, `_R_CHECK_R_ON_PATH_`) | a hand-written worker re-opens solved Windows problems [J-cran, J-impl] |
+| callr | 3.7.0 | baseline worker/artifact launch; retained until RPX07 accepts removal | original Windows/libpath rationale [J-cran, J-impl]; replacement requires native parity evidence |
 | rlang | 1.1.0 | `new_weakref()` (live index), `obj_address()`, `env_binding_are_lazy()/_active()`, `hash()`/`hash_file()` (XXH128), `duplicate()`, `check_installed()` | no weak references or addresses in base R; rlang is required anyway when cli condition helpers are used [13 §2.6]; **quosures are not used in the gateway** (§6.4 R3) |
 | cli | 3.6.0 | console rendering and capability detection, `hash_sha256()` for ids and cache keys | front-end quirks are encoded there [18 §2.1.5] |
 | yaml | 2.3.0 | SKILL.md, agent and template frontmatter (string keys keep their source text against YAML 1.1 coercion [05 fact-check; IC-71]) | a hand parser lost 4 of 37 real skills to folded scalars [05] |

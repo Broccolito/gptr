@@ -761,3 +761,40 @@ The shared Ollama model is preserved without stopping, unloading, changing setti
 requests. No VM is needed for source development; native Windows runner evidence is mandatory.
 Record completed runs in [task progress](progress/skipped-platform-tests-20261010.md) and
 [handoff](HANDOFF.md) so final status updates do not trigger another plan-edit/check loop.
+
+## Bounded Rscript/processx replacement — accepted 2026-10-11
+
+The maintainer authorized replacing only the worker and Shiny callr launches with two fixed,
+trusted `Rscript --vanilla` entrypoints through the existing processx engine. Implement this
+in phases: failing tests, the two launch changes, native parity/regression checks, then
+conditional dependency removal. The approved dependency exception permits removing callr;
+it adds no Import or compiled code. Keep callr in DESCRIPTION until RPX07 passes.
+
+The CE01–07 section above records the separate upstream experiment. Its completed native
+callr evidence is historical and remains in [the companion ledger](progress/skipped-platform-tests-20261010.md).
+It does not prove these replacement entrypoints. The first Mac helper packet is expected RED:
+five test errors from missing launcher/library helpers and spawn callback, with 0 passes/test
+warnings/skips. The separate testthat build-version startup advisory is retained. RPX01 records
+this tests-first result. The focused Mac working-tree helper now passes 33 assertions with
+0 failures/test warnings/skips; worker/Shiny native parity remains P. The runtime commit is not
+yet nominated by this helper result. Track subsequent outcomes in [replacement progress](progress/rscript-processx-20261011.md) and HANDOFF without
+rewriting historical results.
+
+| Case | Independent acceptance evidence | State |
+|---|---|---|
+| RPX01 tests first | Freeze baseline/source/library hashes and append meaningful worker, artifact and native parent-environment tests. Retain actual baseline failures and classify scaffold errors separately. Use installed-package and devtools contexts. | F retained: 5 errors/0 passes; O focused Mac helper 33P/0F/0W/0S; full acceptance P |
+| RPX02 bootstrap and environment | Absolute `rscript_path()`, fixed scripts and `--vanilla`; complete filtered `child_env()` passed directly, with no parent setter/bridge. Set captured library paths before worker namespace load; keep Shiny serving self-contained without loading gptr. Native seeds prove exact empty/absent/nonempty/case/UTF-8 parent preservation; startup/library/PATH/secret canaries and platform case-matching have explicit child oracles. Record R/processx essential-variable behavior separately. | P |
+| RPX03 worker protocol | Fake provider with independent sum 7/mean 3.5 and exact shipped/exported object checks; permission/ask/result/error/JSONL contracts; split UTF-8, paths with spaces, stdout/stderr, partial writes, EOF and recovery. Preserve caller objects/options/environment/cwd/RNG/connections on success, startup failure and cancellation. | P |
+| RPX04 Shiny protocol | Actual owned loopback HTTP/ready proof, token and atomic port, explicit library/data loading, immutable revision and redacted logs. Startup failure and parent watchdog must preserve existing public handle/status/error behavior and avoid user browser/settings changes. | P |
+| RPX05 lifecycle and ownership | Native cancellation, EOF/EPIPE, unsupervised parent-only death within the existing 10-second oracle, exact PID/creation-time/marker settlement and foreign sentinel preservation. Failed launch or unknown/failed kill retains a recoverable owner/job and private files; watcher cancellation cannot turn uncertainty into deletion permission. Keep existing deadlines/caps. | P |
+| RPX06 native/regression gates | Native macOS and Windows in installed-package AND devtools contexts, plus Linux regression coverage. Strict raw error/warning/skip/unique-positive gates, affected full suites, architecture/lint and all four fresh plan checks. Record exact artifact/library source, elapsed time, memory scope and zero survivors. Local Mac work waits for resource clearance. | P |
+| RPX07 retire dependency | Only after RPX01–06 pass, verify no production callr use, remove its Import and unused adapter, preserve every other dependency and pure-R contract, then rerun metadata/docs, native affected checks and exact-archive CRAN/release gates. No general callr/r_process replacement API is introduced. | P; DESCRIPTION unchanged |
+
+The accepted scope amends [architecture §6.7/§9](spec/03-architecture.md) and
+[IC-60](spec/04-interface-contract.md); P19/P23 callr examples remain baseline design history.
+The implementation retains GPTR's public handles and protocols. No fork installation, shared
+namespace hook, caller empty-value normalization, new library bridge or unbounded launcher
+is authorized. Parent raw environment equality is checked independently from R Core's child
+startup normalization; an invalid native seed cannot prove either preservation or its failure.
+Use offline fake data/keys only, exact-owned cleanup and bounded fresh child processes.
+Native or cleanup unknowns remain failures, never passes or new capability skips.
