@@ -27,7 +27,8 @@ where older Jev-only assumptions conflict.
 The approved 2026-10-11 Rscript/processx amendment (IC-60; living-plan RPX01–07)
 replaces only the P19 worker and P23 Shiny launch mechanism after native acceptance.
 Older callr examples describe the baseline. The dependency exception in §9 is
-conditional: callr remains required in the current package until those gates pass.
+adopted after source and installed native gates passed on Mac, Windows and Linux.
+Final changed-source and exact-archive acceptance remains required.
 
 ---
 
@@ -326,7 +327,7 @@ declares, if any.
 | `auth-redact.R` | L0 | one redactor with sink profiles; streaming hold-back; `gptr_redact()`; `gptr_scrub()` [IC-70] | - | P03 |
 | `auth-dotenv.R` | L0 | own `.env` parser, alias table (`jev-key` -> `TYPESAFE_API_KEY`), `gptr_env()` | - | P03 |
 | `auth-store.R` | L0 | `auth.json` credential store (0600, lock, keyring references) | - | P03 |
-| `auth-childenv.R` | L0 | child-environment profiles (mcp, worker, cli-claude, cli-codex, helper, artifact) as complete vectors, `child_env_callr()`; empty `R_ENVIRON_USER`/`R_PROFILE_USER` files for every profile [IC-60] | - | P03 |
+| `auth-childenv.R` | L0 | child-environment profiles (mcp, worker, cli-claude, cli-codex, helper, artifact) as complete vectors; empty `R_ENVIRON_USER`/`R_PROFILE_USER` files for every profile [IC-60] | - | P03 |
 | `proc-spawn.R` | L0 | G5 process engine: `processx::process$new` with `encoding = "UTF-8"` and file redirection, argv via `os_bytes()`, `.cmd`/`.bat` via `cmd.exe /d /c call` with metacharacter refusal, PowerShell `-EncodedCommand`, non-blocking `write_all()`, line reader, UTF-8 decode with code-page fallback | - | P04 |
 | `proc-rscript.R` | L0 | Fixed private `Rscript --vanilla` worker/artifact entries through processx; complete child environment, explicit libraries and retained owned startup files | - | P04 |
 | `proc-supervise.R` | L0 | `kill_all()` (kill_tree, then Windows `taskkill /F /T`, then group kill), grace periods, process tables, tree markers and the orphan sweep, `pid_alive()` (ps) [IC-59], `gptr_jobs()` [IC-36] | - | P04 |
@@ -409,16 +410,16 @@ declares, if any.
 | `mcp-namespace.R` | L4 | `peter$mcp$<server>$<tool>()`, budgeted signature catalog, lazy connect | mcp | P18 |
 | `mcp-server.R` | L4 | MCP dispatcher over the session's tools; claude `sdk` transport; loopback HTTP; `gptr_mcp_serve()` | - | P18 |
 | `auth-oauth.R` | L0 | PKCE S256, loopback or paste callback, locked refresh; `gptr_login()`, `gptr_logout()` | - | P18 |
-| `subagent-backends.R` | L4 | backends `inline`, `worker` (callr), `cli`; limits; `auto` rule | subagents | P19 |
+| `subagent-backends.R` | L4 | backends `inline`, `worker` (Rscript/processx), `cli`; limits; `auto` rule | subagents | P19 |
 | `subagent-team.R` | L4 | teams (`agents =`), fan-out (`parallel =`, through the internal `gptr_map()`), `gptr_parallel()` | - | P19 |
-| `subagent-worker.R` | L4 | `worker_main()` run inside callr children (JSONL events out, answers in) | - | P19 |
+| `subagent-worker.R` | L4 | `worker_main()` run inside fixed Rscript/processx children (JSONL events out, answers in) | - | P19 |
 | `cli-common.R` | L1 | CLI discovery (native binaries preferred), minimum-version probe, one-time notice, billing-switch scrub | cli | P20 |
 | `cli-claude.R` | L1 | `cli-claude` adapter: stream-json, control protocol, in-process `sdk` MCP, `can_use_tool` | - | P20 |
 | `cli-codex.R` | L1 | `cli-codex` adapter: `codex exec --json --ignore-user-config -`, sandbox mapping, MCP via `-c` | - | P20 |
 | `agent-background.R` | L3 | experimental background runs serviced by `later`; session rows of the job table | - | P21 |
 | `bridge-sh.R` | L4 | `peter$sh/script/bg/jobs()` (`peter$out()` is P10's); the `interpreter` kind and built-in interpreters | bridges | P22 |
 | `bridge-lang.R` | L4 | `peter$py()`, `peter$sql()`, `peter$knit()` | lang | P22 |
-| `artifact-app.R` | L4 | `peter$app()`: working copy, immutable snapshots, callr child, validation ladder, screenshot | artifacts | P23 |
+| `artifact-app.R` | L4 | `peter$app()`: working copy, immutable snapshots, Rscript/processx child, validation ladder, screenshot | artifacts | P23 |
 | `artifact-registry.R` | L4 | `gptr_artifacts()`, stop, relaunch, lazy orphan sweep | - | P23 |
 
 ### 3.3 `inst/` and shipped data
@@ -2271,20 +2272,18 @@ proven by an oldrel-4 CI job) [13 §2.7]. `NeedsCompilation: no`. `License: MIT 
 **Approved dependency exception, 2026-10-11.** The maintainer authorized retiring callr after
 RPX01–07 acceptance for the two fixed Rscript/processx entrypoints. This narrowly amends the
 original fixed dependency decision and P19/P23 launcher choice; it adds no dependency or compiled
-code. The current eight Imports below remain until native installed-package/devtools parity,
-caller preservation, protocol/lifecycle regression and exact-artifact gates pass. Then remove
-only callr and its unused adapter, verify the resulting closure, and retain the other seven
-non-base Imports. A private upstream callr pass is historical evidence, not this migration's
-acceptance. DESCRIPTION removal is deferred.
+code. Native source and installed gates passed on Mac, Windows and Linux; callr and its
+unused adapter are now removed. The other seven non-base Imports and their floors remain.
+Repeat metadata, native and exact-archive gates on the changed source and measure its closure.
+Archived upstream callr experiments are historical evidence and excluded from package builds.
 
-### 9.1 Imports (8 non-base; dependency closure 9 packages, 10 with callr 3.8.0's otel)
+### 9.1 Imports (7 non-base; resulting installed closure measured at final acceptance)
 
 | Package | Floor (raised by P01 to what CI proves) | Load-bearing use | Why not base R or another package |
 |---|---|---|---|
 | jsonlite | 1.8.8 | every wire body, JSONL, settings, schemas | no JSON in base |
 | curl | 6.0.0 | the reactor: multi handles, `multi_fdset()`, `multi_cancel()`, `pipewait = 0L`; one transport for streams, System 1, MCP HTTP, OAuth and catalog refresh | only curl multi streams interruptibly [02, 10a INFRA-01]; httr2 blocks on headers and batches output [10a E1/E2] |
 | processx | 3.8.0 | `poll()` over curl fds and pipes; MCP stdio, CLI providers, bridges; `kill_tree()` | `system2()` cannot poll or stream |
-| callr | 3.7.0 | baseline worker/artifact launch; retained until RPX07 accepts removal | original Windows/libpath rationale [J-cran, J-impl]; replacement requires native parity evidence |
 | rlang | 1.1.0 | `new_weakref()` (live index), `obj_address()`, `env_binding_are_lazy()/_active()`, `hash()`/`hash_file()` (XXH128), `duplicate()`, `check_installed()` | no weak references or addresses in base R; rlang is required anyway when cli condition helpers are used [13 §2.6]; **quosures are not used in the gateway** (§6.4 R3) |
 | cli | 3.6.0 | console rendering and capability detection, `hash_sha256()` for ids and cache keys | front-end quirks are encoded there [18 §2.1.5] |
 | yaml | 2.3.0 | SKILL.md, agent and template frontmatter (string keys keep their source text against YAML 1.1 coercion [05 fact-check; IC-71]) | a hand parser lost 4 of 37 real skills to folded scalars [05] |
@@ -2292,8 +2291,9 @@ acceptance. DESCRIPTION removal is deferred.
 
 Base packages imported: `methods` (G7 pre-image defusing of S4), `stats`, `tools`, `utils`, `grDevices`,
 `graphics`; `parallel` is not needed (per-agent L'Ecuyer streams are seeded from hash bits and swapped by
-`rng_swap()` [IC-61]). The closure (these plus R6 via processx and callr) was verified with
-`tools::package_dependencies()` by J-cran and J-impl; it is far below the 20-Import NOTE [13 §2.6]. No httr2
+`rng_swap()` [IC-61]). The original closure was verified with `tools::package_dependencies()` by J-cran and J-impl.
+The final artifact must verify the seven-Import closure after callr retirement; retain the
+20-Import NOTE check [13 §2.6]. No httr2
 (its closure adds 7 packages; its parallel path retries without bound), no openssl in Imports (only opt-in
 OAuth and the MCP server need it).
 

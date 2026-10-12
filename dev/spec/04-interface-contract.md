@@ -410,8 +410,8 @@ secret-like names, registered values, `^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_AGENT_S
 `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`,
 `CLAUDE_CODE_USE_FOUNDRY`; for codex, secret-like names, registered values, `^(CODEX_MANAGED_|CODEX_SANDBOX)`, and
 with the warning `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN`, `OPENAI_BASE_URL` (`CODEX_HOME` kept).
-`child_env()` returns the complete vector without removed names (processx form); callr receives
-`child_env_callr()` (removed names as `NA`).
+`child_env()` returns the complete vector without removed names directly to processx.
+The retired callr adapter is preserved only in excluded upstream experiments.
 
 Tests set (`tests/testthat/setup.R`, P01): `R_USER_CONFIG_DIR`, `R_USER_DATA_DIR`, `R_USER_CACHE_DIR`, `HOME`,
 `USERPROFILE`, `APPDATA`, `LOCALAPPDATA` and `XDG_CONFIG_HOME` to temporary directories, `GPTR_PROJECT_ROOT` to a
@@ -2409,7 +2409,6 @@ ok = ext_load(function(gptr) gptr$register(gptr_command("hi", function(args, ctx
 | `alias_resolve(names, aliases = NULL)` | `auth-dotenv.R` | chr of canonical names | P03 |
 | `auth_store_get(key)`, `auth_store_set(key, record)`, `auth_store_remove(key)` | `auth-store.R` | credential store (`auth.json`, 0600, lock, keyring references; §11.8) | P05, P18 |
 | `child_env(profile, pass = character(), set = character(), provider = NULL)` | `auth-childenv.R` | the **complete** named chr for processx `env` (removed names absent; processx rejects `NA`); `profile` in `mcp`, `worker`, `cli-claude`, `cli-codex`, `helper`, `artifact` or a registered `child_env` spec name; **every** profile sets `R_ENVIRON_USER`/`R_PROFILE_USER` to empty files and drops `R_ENVIRON` unless passed (IC-60); the CLI profiles follow G6 §3.7 verbatim (IC-65) | P04, P18, P19, P20, P22, P23 |
-| `child_env_callr(env)` | `auth-childenv.R` | the callr form of a `child_env()` result: every variable of `Sys.getenv()` absent from `env` added as `NA` | P19, P23 |
 | `secret_scan(code, tainted = character())` | `auth-secrets.R` | `list(findings = df(rule, name, level, guard), level = int(1), guard = lgl(1), assigned = chr)` (G6 §3.8) | P11 |
 | `builtin_secrets(gptr)` | `auth-secrets.R` | registers `secret_source`, `redaction_rule`, `env_alias`, `child_env` specs | P02 load |
 | `gptr_scrub()` | `auth-redact.R` | §6.6 (IC-70); `secret_register()` also scans live sessions' in-memory entries for a new value and warns `secret_late` with counts | users, P24 |
@@ -2904,7 +2903,7 @@ mcp_close(conn)
 | `builtin_subagents(gptr)` | `subagent-backends.R` | registers `backend` specs `inline`, `worker`, `cli` (the `cli` backend's tests are P20's, IC-36), the routes `team` (order 15) and `fanout` (order 16) (IC-39), and the `r_session` fragment for sub-agents (IC-68) | P02 load |
 | `subagent_backend(agent, model)` | `subagent-backends.R` | `chr(1)`: the `auto` rule (inline, except `cli` for CLI-only models; the agent's `backend` when given) | P19 |
 | `subagent_start(spec, parent_run)` | `subagent-backends.R` | starts a child through the backend: `spec` = `list(agent = <spec:agent>, prompt, context (list of call items), model, mode, depth, export, objects, preset, rng_state, registry)`; returns a handle `list(session = <session>, fds = function() int, poll = function() NULL, cancel = function() NULL)`; enforces the limits of §6.13 of `03` (`max_tasks` only at depth >= 1, IC-39; pools capped at 2 under check, IC-60); budget charged to the root (IC-66) | P19 |
-| `worker_main(spec_path, result_path)` | `subagent-worker.R` | runs inside a callr child (started with `supervise_default()`, `encoding = "UTF-8"` and `child_env_callr(child_env("worker"))`): reads the spec (`readRDS`), re-registers `spec$registry` (IC-69), runs `peter()` with the `jsonl` frontend on stdout and answers on stdin (§11.11), exits on stdin EOF, EPIPE or a dead parent pid (checked every 5 s, IC-60), saves exports with `save_rds()` | P19 (callr) |
+| `worker_main(spec_path, result_path)` | `subagent-worker.R` | runs inside a fixed `Rscript --vanilla` child (started with `supervise_default()`, UTF8 pipes and the complete `child_env("worker")` vector): reads the spec (`readRDS`), re-registers `spec$registry` (IC-69), runs `peter()` with the `jsonl` frontend on stdout and answers on stdin (§11.11), exits on stdin EOF, EPIPE or a dead parent pid (checked every 5 s, IC-60), saves exports with `save_rds()` | P19 (Rscript/processx) |
 
 Example calls:
 
@@ -2966,7 +2965,7 @@ by_cyl = peter$sql("select cyl, avg(mpg) as mpg from mtcars group by cyl", name 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `builtin_artifacts(gptr)` | `artifact-app.R` | registers `artifact_type` specs `shiny` and `html`, the member `app` (§9.4), the `artifacts` prompt section (IC-68) and the `artifacts` checkpointer | P02 load |
-| `artifact_serve(dir, port_file, parent_pid, token)` | `artifact-app.R` | runs inside the callr child: picks a free 127.0.0.1 port from `port_candidates()`, publishes it by atomic rename of `port_file`, starts a parent-PID watchdog, runs the app behind the `gptr_token` check (IC-71); stdout/stderr are read by the parent and appended redacted to `app-vNNN.log` (IC-70) | P23 (callr) |
+| `artifact_serve(dir, port_file, parent_pid, token)` | `artifact-app.R` | runs inside the fixed self-contained Rscript/processx child: picks a free 127.0.0.1 port from `port_candidates()`, publishes it by atomic rename of `port_file`, starts a parent-PID watchdog, runs the app behind the `gptr_token` check (IC-71); stdout/stderr are read by the parent and appended redacted to `app-vNNN.log` (IC-70) | P23 (Rscript/processx) |
 
 
 Example calls (inside an `r` evaluation):

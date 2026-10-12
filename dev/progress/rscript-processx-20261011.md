@@ -1,3 +1,49 @@
+## Current source regressions — 2026-10-12 02:05 PDT
+
+The pre-retirement three-OS native source/installed acceptance below remains GREEN.
+Callr retirement is applied in the isolated candidate, pending repeated current-source
+native and exact-archive gates. The historical upstream callr experiment stays excluded
+under dev; its unresolved admission/publication boundaries do not block the replacement.
+
+Actual tests-first Python startup23F then48P/0F/0W/0S preserves six setup keys and original
+conditions; first-init/native Windows and real persistent Python/knitr acceptance remain.
+Streamed backtick closing actual87F then163P/0F/0W/0S prevents later prose entering code;
+capture-only NULL fixture corrections remain distinct from the runtime fix. Native launch
+layout actual10F/28P then40P/0F/0W/0S clears the owned foreground waiting row before native
+construction without suppressing stderr, changing allocator variables or claiming a macOS
+allocator repair. Native origin and installed GUI display are still pending. Scoped lints0.
+
+Observer native38214805977 is LinuxGREEN113P and WindowsRED81P/11F, all0W/0S;
+Windows failures occur at blanket full-map empty-entry preflight before callback. Owned
+cleanup has0survivors/0outer warnings. Scoped six-key first-init correction has Mac actual
+RED2F/96P thenGREEN144P/0F/0W/0S; rerun both provisioned hosts before sampler adoption.
+Do not normalize missing/empty entries or weaken effective-denial controls.
+
+Computer-use timed out while selecting the Dock, not during a model/test operation.
+No commands were sent to the existing user's RStudio session. Preserve its workspace and
+all existing GUI PIDs. Only a freshly owned verified family may receive test guards.
+At01:55PDT load9.38/12.68/15.76,53.78%idle,123GiBused/4399MiBunused, static swap21405.94MiB,
+0sampled paging,190GiBdisk and no thermal warning: hold local-heavy jobs, use small serial
+regressions and at most2hosted jobs. Four fresh plan checks are required after these edits.
+All final artifact/frontend/model/compaction/site/security/CRAN gates remain explicit.
+
+## Current checkpoint — 2026-10-11 23:50 PDT
+
+All three pre-retirement native hosts now pass source AND installed contexts:
+[Mac/Windows38211164788](https://github.com/Broccolito/gptr/actions/runs/38211164788)
+at3574 has1422P/1439P per context; [Linux38212625104](https://github.com/Broccolito/gptr/actions/runs/38212625104)
+at8f03 has1425P per context. Each207cases/0failures/test warnings/outer warnings/
+unexpected skips; existing named guards retained. Raw downloaded rows inspected.
+callr still imported; independently reviewed removal packet and CI rebase await application.
+
+Observer phase-A Mac provisioned controls113P/0F/W/S and pure Python10controls pass.
+Canonical owned temp is necessary: shared Mac T ancestors exceed fixed4096entries;
+limits were not increased. Unconfigured ordinary profile34P/5capability skips, distinct
+from strict provisioned coverage. Hosted Windows/Linux native controls remain required.
+GPTR Python setup seven-case mocked baseline is RED; direct reticulate compound proof
+shows PATH mutation. New UX07/UX08 malloc diagnostic/fence boundary investigations are
+in TESTING_PLAN; user attachment is evidence, not an executed candidate proof.
+
 ## Current checkpoint — 2026-10-11 23:12 PDT
 
 Native exact4d86a17202bffaea79cc80720901e34cade8bbd0 run38210053395 completed:

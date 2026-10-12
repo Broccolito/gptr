@@ -1,26 +1,61 @@
-## Current readiness handoff — 2026-10-11 23:12 PDT
+## Current readiness handoff — 2026-10-12 02:05 PDT
 
-Continue the accepted full readiness task in isolated branch codex/skipped-platform-tests,
-checkout /Users/wgu/.codex/worktrees/skipped-platform-tests/gptr. Preserve primary main
-718e81e and its shared dirty files, secrets, existing user R sessions and shared Ollama.
-The complete remaining execution queue is TESTING_PLAN R01–14; only actual Windows
-desktop live verification may remain at the final handoff. No release/submission claimed.
+Continue in /Users/wgu/.codex/worktrees/skipped-platform-tests/gptr,
+codex/skipped-platform-tests. Preserve primary main718e81e/dirty files, secrets, existing
+user R sessions and shared Ollama. Only actual Windows desktop live verification may remain
+at completion. No release/submission or full-readiness claim is made.
 
-Actual native38210053395 at4d86: Mac source+installed1422P each/0F/0W;
-Windows source1438P/1F/0W due one fixture path spelling, installed not reached.
-Reviewed3574 exact-path correction is pushed; native38211164788 active,2hosted jobs.
-Keep callr until RPX acceptance, then remove unused dependency/adapter and repeat gates.
-Actual storage551 and sidecar665 assertions pass; prior REDs retained. Private dependencies
-installed; compound reticulate runtime proof exposed relocated CPython LIBDIR oracle and
-needs fresh proof. README release-check mutation reproduced and scratch fix under test.
+Current source: Python3fec74748P; streamed fences4cddcaa163P; observer8eea5eb144P;
+all focused0F/0W/0S and scoped lint0. Native-launch display40P is applied and reviewed but
+not yet committed or observed in a certified GUI. Actual RED evidence is retained.
+Pre-retirement native all3OS source/installed207cases are GREEN; reviewed callr retirement
+is applied, pending current-source repeated native/archive gates. Observer hosted38214805977
+is LinuxGREEN113P / WindowsRED81P11F; first-init correction requires fresh native rerun
+before optional sampler. Final native Python and Windows case/empty startup proofs pending.
 
-Fresh final immutable certificate, headless/native frontends, live compaction/extensions,
-Windows observer/security gates, all-guide/site/browser checks and current normal-release
-exact-byte CRAN matrix remain pending. Source-only prepared packets under primary ignored
-dev/.validation/readiness-20261011 are not passes. New plan edits require all four fresh
-consolidation checks. Latest23:05load13.41/16.01/15.30/49.81%idle,122GiBused/5695MiBunused,
-swap21621.94MiB,304GiBdisk/no thermal warning: small serial offline/source work only until
-admission improves. Do not stop shared model or broadly kill processes.
+Source-cleared ignored packets include original hosted-archive adopter6a6d2f28,
+compaction-extra cb9cd4c8 and corrected capturefixture7e7bb460. They are preparations, not
+execution. Source/installed current native gates, help/all14/site, exact normal hosted
+producer/five original-byte consumers, immutable archive adoption, certified frontend/model/
+extension/compaction/storage/security and final CRAN/revdep checks remain. Hardcoded older
+controller dependency paths are being replaced by explicit certificate/library inputs.
+
+Computer-use service timed out during window selection. No commands were sent to the user's
+existing RStudio session. Two separate app processes may have been opened by the fresh
+project picker; inspect exact project/PID creation ownership before any intervention.
+At01:55PDT disk190GiB is below the200GiB local-heavy admission threshold;123GiBused,
+4399MiBunused,swap21405.94MiB/0sampled paging,load9.38/12.68/15.76,no thermal warning.
+Keep local work small/serial; at most2hosted jobs. Fresh four plan checks are now required.
+
+## Current readiness handoff — 2026-10-11 23:50 PDT
+
+Continue full readiness in isolated codex/skipped-platform-tests at
+/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr. Preserve primary main718e81e,
+its dirty files, existing user R sessions, secrets and shared Ollama. Only actual Windows
+desktop live verification may remain at completion; no release/submission claimed.
+
+Pre-retirement native acceptance is GREEN: Mac+Windows38211164788 at3574 source/installed
+1422P/1439P per context; Linux38212625104 at8f03 source/installed1425P. Each207cases,
+0failures/warnings/outer warnings/unexpected skips. Earlier REDs retained. Reviewed callr
+retirement core and observer-aware CI subtraction are prepared; Import still present.
+
+Actual Mac storage551P/sidecar665P, release helper42P, docs/files0problems; plan392c009
+local and hosted38211975848 all four stages pass. Observer configured8cases113P plus
+10 pure Python controls pass; ordinary absent interpreter yields34P/5explicit capability
+skips. Windows/Linux observer native proof must precede optional sampler activation.
+
+Direct reticulate initialization changes PATH; seven GPTR Python setup mock regressions
+are tests-first RED and a six-key setup-only guard is pending. User-reported malloc native
+diagnostic and streamed R-fence closing error are now UX07/UX08 in TESTING_PLAN. Source
+investigation and tests-first packets are ongoing; no native visual pass is inferred.
+
+Fresh immutable candidate certificate, six headless history cases, native/frontends,
+live compaction/extensions, security, all-guide/site/browser and current normal-release
+exact-byte CRAN gates remain. Source-only prepared packets under ignored dev/.validation
+are not passes. At23:47 load10.80/11.53/11.90,71.4%idle,123GiBused/4724MiBunused,
+static swap21549.94MiB/0sampled paging,303GiB disk/no thermal warning; Ollama residency
+empty. Use bounded serial local work and at most2hosted jobs, recheck resources. Do not
+stop any shared model or broadly kill processes. Fresh plan edits require four checks.
 
 # GPTR 1.0 implementation - handoff
 

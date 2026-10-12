@@ -234,7 +234,7 @@ plan that owns each file, is `dev/spec/03-architecture.md` section 3.2.
 Final lists (`dev/spec/03-architecture.md` section 9), written once into
 `DESCRIPTION` by the foundation plan P01:
 
-- **Imports:** jsonlite, curl, processx, callr, rlang, cli, yaml, ps (pid
+- **Imports:** jsonlite, curl, processx, rlang, cli, yaml, ps (pid
   liveness; already in the closure through processx; contract IC-59), plus the
   base packages methods, stats, tools, utils, grDevices, graphics.
 - **Suggests:** testthat (>= 3.2.0), withr, knitr, rmarkdown, later, httpuv,
@@ -246,6 +246,10 @@ Final lists (`dev/spec/03-architecture.md` section 9), written once into
   agenticr) in Imports or Suggests (S-10). rlang quosures are not used in the
   gateway (copy-safety rule R3). rtiktoken, urlchecker, spelling and pkgdown are
   development tools used only under `dev/` or at release.
+
+The approved 2026-10-11 RPX amendment retires only callr after native source and installed
+acceptance on Mac, Windows and Linux. Its archived experiments remain under excluded `dev/`.
+Fresh metadata, native and exact-archive gates must confirm the resulting package.
 
 A plan may not add an Import or a Suggests entry. The one named DESCRIPTION
 exception: P25 adds `VignetteBuilder: knitr` together with the vignettes
