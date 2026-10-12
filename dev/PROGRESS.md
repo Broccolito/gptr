@@ -4,6 +4,40 @@ Implementation authorized by the maintainer on 2026-10-03. Current state, runnin
 steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and tooling:
 `progress/infra.md`; fixes: `progress/fixes.md`; simplicity packages: `progress/simplicity.md`.
 
+## Current readiness checkpoint — 2026-10-12 (prepared from `575cfa6`)
+
+Prepared from `575cfa674b02e9fe318fa275d794478e213e0f08`, preserving old ledger bytes.
+Writer 48/593 and committed BP 19 controls/eight Mac native cases pass. Corrected full 132
+passes 1,145 assertions, zero failures/errors/warnings and eight exact Windows guards;
+two configured R lints pass. Retain the prior sampling RED and the first passing-row
+attempt's separate `TESTTHAT_MAX_FAILS` controller leak; corrected scoped state passes.
+
+Linux run 38250216193 raw-audits both source/installed 213 exact titles/1,544 passes,
+zero test/invocation warnings, four guards, 18 lint paths and 18 settled families at `8fbe8e2`.
+It precedes the BP/CI commit; setup advisories remain. Current exact `575cfa6` three-OS
+run 38253187892 has Mac/Windows active and Linux queued; source/installed outcomes and
+raw audit remain WAIT.
+Fresh 135 source preview has 91 HTML/status 0/problems 0/warning-markers 0; static 4,290 refs/
+1,211 fragments/zero broken/all 63 APIs+14 guides. Actual 12 width cells are contained,
+white and logo-loaded; normal Dark/Light/Auto persists reload with correct focus/logo/
+favicon. Its final Light state, owned-tab close and exact-server death are confirmed.
+RSS 564,494,336 is process-only.
+Storage preparation and one opaque native read-denial profile pass, including real
+Dark/Light/Auto UI, focus/logo/favicon and observed-system Auto. Fresh native quota is
+unsupported at 8 MiB/64 writes/68 ms without a quota error, not a pass; owned key/tab/server
+cleanup is confirmed. Write-only denial, context media change and real zoom remain WAIT.
+
+WAIT: strict Windows denial/PROBE1 and token compiler/restoration/native experiment
+(first nested-source controller RED before seven tests); current three-OS acceptance;
+original archive/five exact consumers/manual+incoming clean CRAN/dependency-only/Suggests/
+revdeps/examples/installed guides; certified frontend/provider/extensions/team/compaction/
+replay; native GUI/resource/local-heavy; final PR/merge/sync and four fresh plan checks.
+Source-prepared work is not a pass. Original RStudio/session objects remain open and
+untouched; only the Window menu was dismissed, without R input/restart/cleanup. At 06:03
+load 11.89/13.46/11.41, 58.78% idle,15 GiB unused, 72% pressure-free,swap 20,957.88 MiB/zero paging,
+150 GiB disk and no recorded thermal warning still hold heavy expansion/Ollama changes.
+See the newest handoff/testing checkpoint for exact scopes and preserved RED evidence.
+
 ## Milestone ledger
 
 | Milestone | Plans | Status | Evidence |

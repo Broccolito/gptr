@@ -7,6 +7,63 @@ authorized live testing. Update a row after inspecting its evidence; retain fail
 older revision results. It does not replace the numbered implementation plans or authorize a
 release, model download, account change or CRAN submission.
 
+## Current readiness checkpoint — 2026-10-12 (prepared from `575cfa6`)
+
+Prepared from isolated `codex/skipped-platform-tests` source
+`575cfa674b02e9fe318fa275d794478e213e0f08`; this does not certify a later commit.
+Preserve the primary dirty checkout, original R sessions, credentials and shared Ollama.
+Historical sections below remain evidence for their recorded sources.
+
+- DONE/O: committed writer retention passes 48 cases/593 assertions with zero failures,
+  errors or warnings and eight exact Windows guards. `575cfa6` commits the same-held-handle
+  BP correction and 19 permanent deterministic CI controls. Eight Mac native cases are
+  complete with zero sampling errors, positive samples, exact family settlement and
+  parent-state preservation. The corrected 132-case run passes 1,145 assertions with
+  zero failures/errors/warnings and the same eight guards; both configured R lints pass.
+  Retain the prior 1,131-pass/two-failure sampling RED and two-ms death witness. The first
+  post-fix suite had passing rows but its controller leaked `TESTTHAT_MAX_FAILS`; retain
+  that controller RED separately from the corrected scoped-environment rerun.
+- DONE/O: Linux run 38250216193 is independently raw-audited at `8fbe8e2`: both source and
+  installed contexts have 213 exact titles/1,544 passes, zero failures/test or invocation
+  warnings, four exact platform guards, 18 zero-result lint paths and 18 settled families.
+  Retain setup/action advisories. This source precedes `575cfa6`; it does not prove the
+  later BP/CI changes. Current exact `575cfa6` three-OS run 38253187892 has Mac/Windows
+  active and Linux queued; source/installed outcomes and independent raw audit are WAIT.
+- DONE/source-preview: theme controls pass all 12 Node cases. Fresh site `1356296` has
+  91 HTML pages, status 0, zero problems/warning markers and 78.49 s. Reported peak process
+  RSS 564,494,336 bytes is not a family sum. Static audit finds 4,290 local references,
+  1,211 fragments, zero broken references, all 63 API entries and all 14 guides. Twelve
+  actual width cells at 320/390/768/1440 pixels show no overflow, white body and loaded
+  logos; normal Dark/Light/Auto choices persist after reload with correct focus/logo/
+  favicon; final Light state, owned-tab close and exact-server death are confirmed.
+  Corrected storage preparation
+  and one opaque-origin native read-denial profile pass: the getter SecurityError prevents
+  getItem, with real Dark/Light/Auto UI/focus/logo/favicon and observed-system Auto.
+  Fresh quota remains unsupported at 8 MiB/64 writes/68 ms without a quota error, not a
+  pass; owned key/tab/server cleanup is confirmed. Write-only denial remains WAIT. CUA
+  supplies viewport/visibility, not context media emulation or real zoom; those cells
+  remain WAIT. Retain the authored forced-900-pixel no-JS boundary.
+- WAIT: Windows strict absence still has lookup 2/2 and PROBE2; preserve all six controls
+  and PROBE1. Token hosting is uncommitted; its first controller attempt failed a nested
+  source path before the seven tests. Correction, compiler timing, current-utility token
+  restoration and native feature proof remain WAIT. Diagnostic evidence cannot waive it.
+- WAIT: current source/installed three-OS native acceptance; current original archive and
+  all five same-byte release/devel consumers; manual/incoming Status: OK and zero CRAN
+  errors/warnings/notes; dependency-only, Suggests-only and reverse-dependency profiles;
+  fresh installed examples and all 14 guides.
+- WAIT: certified frontend/provider/extension/team/fanout/compaction/replay acceptance;
+  native GUI/allocator/interrupt/resource and local-heavy cases; final independent PR
+  review/merge/sync and all four fresh consolidation checks after this checkpoint.
+  Prepared source is not a pass. Only actual Windows desktop verification may remain
+  at completion; no archive/release/submission/readiness claim is made here.
+
+RStudio selection timed out; its Window menu showed only the original `gptr - main`
+entry. Original session and objects were reconfirmed; only its Window menu was dismissed.
+No R input, restart or cleanup. At 06:03 PDT load was 11.89/13.46/11.41, CPU 58.78% idle,
+113 GiB used/15 GiB unused RAM, 72% pressure-free,swap 20,957.88 MiB with zero paging and 150 GiB
+disk; no thermal warning was recorded. Keep small serial local work and at most two
+hosted jobs; disk/swap hold heavy/GPU expansion. Sessions/processes/Ollama stay intact.
+
 ## Current readiness checkpoint — 2026-10-12 04:56 PDT
 
 Continue the isolated `codex/skipped-platform-tests` candidate, pushed through
