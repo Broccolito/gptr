@@ -79,11 +79,11 @@ toy_readme_assets = function(fail = FALSE) {
   writeLines("relative asset canary", file.path(figures, "canary.txt"))
   writeLines("committed README canary", file.path(root, "README.md"))
   readme = readLines(file.path(root, "README.Rmd"))
-  readme = sub('comment = "#>", error = FALSE',
-               'comment = "#>", error = FALSE, fig.path = "man/figures/readme-"',
+  readme = sub("comment = \"#>\", error = FALSE",
+               "comment = \"#>\", error = FALSE, fig.path = \"man/figures/readme-\"",
                readme, fixed = TRUE)
-  writeLines(c(readme, "", "```{r}", 'readLines("man/figures/canary.txt")',
-               "plot(1:2)", if (fail) 'stop("deliberate README failure")', "```"),
+  writeLines(c(readme, "", "```{r}", "readLines(\"man/figures/canary.txt\")",
+               "plot(1:2)", if (fail) "stop(\"deliberate README failure\")", "```"),
              file.path(root, "README.Rmd"))
   root
 }

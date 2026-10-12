@@ -482,10 +482,21 @@ vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, rea
     problems = c(problems, sprintf("vignettes: knitting took %.1f s (limit %g s)", seconds, limit))
   }
   if (readme) {
+    readme_root = root
+    if (!write) {
+      readme_root = dirs[["wd"]]
+      stopifnot(file.copy(file.path(root, "README.Rmd"), readme_root, overwrite = TRUE))
+      figures = file.path(root, "man", "figures")
+      if (dir.exists(figures)) {
+        scratch_man = file.path(readme_root, "man")
+        dir.create(scratch_man, showWarnings = FALSE)
+        stopifnot(file.copy(figures, scratch_man, recursive = TRUE, overwrite = TRUE))
+      }
+    }
     # -smart: pandoc would turn ASCII quotes into curly ones, and README.md must stay ASCII.
     render = paste("rmarkdown::render('README.Rmd', quiet = TRUE, output_format =",
                    "rmarkdown::github_document(html_preview = FALSE, md_extensions = '-smart'))")
-    problems = c(problems, run(render, root, "README.Rmd: rendering failed:"))
+    problems = c(problems, run(render, readme_root, "README.Rmd: rendering failed:"))
   }
   left = setdiff(rel_files(dirs[c("home", "tmp", "proj")]), before)
   if (length(left)) {
@@ -730,8 +741,12 @@ cran_comments_set_revdeps = function(lines, revdeps, date = Sys.Date()) {
   call = "`tools::package_dependencies(\"gptr\", reverse = TRUE, which = \"all\")`"
   body = c("", sprintf("%s run on %s:", call, format(date, "%Y-%m-%d")),
            sprintf("%s.", if (length(revdeps)) paste(sort(revdeps), collapse = ", ") else "none"),
-           if (length(revdeps)) "Their maintainers were told at least two weeks before submission."
-           else "No package depends on, imports, links to or suggests gptr.",
+           if (length(revdeps)) {
+             paste("Any required reverse-dependency checks and maintainer",
+                   "notifications remain to be documented before submission.")
+           } else {
+             "No package depends on, imports, links to or suggests gptr."
+           },
            if (length(nxt)) "")
   c(lines[seq_len(start)], body, if (length(nxt)) lines[nxt[1L]:length(lines)])
 }
