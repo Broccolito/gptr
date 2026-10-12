@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Linux-only, original-archive restricted checks and read-only CRAN inventory."""
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -226,23 +227,73 @@ def family_members(root_pid, known, rows):
     return {pid: rows[pid] for pid in owned}
 
 
-def walk_error(error):
-    raise error
+def walk_error(error, root=None, root_identity=None):
+    if not isinstance(error, FileNotFoundError) or error.errno != errno.ENOENT or \
+            root is None or root_identity is None or not isinstance(error.filename, str):
+        raise error
+    path = Path(error.filename)
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        raise error
+    if not path.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise error
+    def unchanged_root():
+        value = root.lstat()
+        return stat.S_ISDIR(value.st_mode) and (value.st_dev, value.st_ino) == root_identity
+    try:
+        if not unchanged_root():
+            raise error
+        missing = None
+        current = root
+        for index, name in enumerate(relative.parts):
+            current = current / name
+            try:
+                value = current.lstat()  # Every existing ancestor must be a nonfollowing directory.
+            except FileNotFoundError as absent:
+                if absent.errno != errno.ENOENT:
+                    raise error
+                missing = current
+                break
+            if index == len(relative.parts) - 1 or not stat.S_ISDIR(value.st_mode):
+                raise error  # Reappearance, file ancestor or link/redirection is not absence.
+        if missing is None or not unchanged_root():
+            raise error
+        try:
+            missing.lstat()
+        except FileNotFoundError as absent:
+            if absent.errno == errno.ENOENT and unchanged_root():
+                return  # Exact owned descendant remains absent; no bytes remain to charge.
+        raise error
+    except OSError:
+        raise error  # Unavailable metadata never becomes zero or replaces the original condition.
 
 
-def disk_bytes(output):
+def disk_bytes(output, root_identity=None):
+    output = Path(output).absolute()
+    value = output.lstat()
+    observed = (value.st_dev, value.st_ino)
+    if not stat.S_ISDIR(value.st_mode) or (root_identity is not None and observed != root_identity):
+        raise ValueError("Owned disk root changed or is not a nonfollowing directory")
+    if root_identity is None:
+        root_identity = observed
     total = 0
-    for parent, dirs, files in os.walk(output, followlinks=False, onerror=walk_error):
+    for parent, dirs, files in os.walk(output, followlinks=False,
+                                      onerror=lambda error: walk_error(error, output, root_identity)):
         for name in dirs + files:
             path = Path(parent) / name
             try:
                 item = path.lstat()
-            except FileNotFoundError:
+            except FileNotFoundError as error:
+                walk_error(error, output, root_identity)
                 continue
             if stat.S_ISREG(item.st_mode) or stat.S_ISLNK(item.st_mode):
                 total += item.st_size
             elif not stat.S_ISDIR(item.st_mode):
                 raise ValueError("Unknown owned output type")
+    value = output.lstat()
+    if not stat.S_ISDIR(value.st_mode) or (value.st_dev, value.st_ino) != root_identity:
+        raise ValueError("Owned disk root changed during observation")
     return total
 
 
@@ -299,6 +350,8 @@ def main():
             raise ValueError("Previous exact owned settlement was not proved")
         return
     output.mkdir(mode=0o700)  # Never reuse a prior run or delete failure evidence.
+    output_stat = output.lstat()
+    output_identity = (output_stat.st_dev, output_stat.st_ino)
     atomic_json(output / "verified-producer.json", manifest)
     (output / "DESCRIPTION").write_bytes(description)
     if args.mode == "verify":
@@ -340,7 +393,7 @@ def main():
                     controller = proc_record(os.getpid())
                     if controller is None:
                         raise ValueError("Controller identity unavailable")
-                    disk = disk_bytes(output)
+                    disk = disk_bytes(output, output_identity)
                     state["samples"] += 1
                     for key, value in (("peak_family_rss", family_rss),
                                        ("peak_controller_rss", controller["rss"]),

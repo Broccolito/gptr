@@ -2,7 +2,7 @@
 
 Work in `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
 `codex/skipped-platform-tests`. Production remains `02ceac9`; later commits update
-only the living records. Preserve the dirty primary, original R sessions and shared Ollama.
+the living records and dev-only validation controllers. Preserve the dirty primary, original R sessions and shared Ollama.
 
 - DONE/offline: complete cold OAuth, Codex, MCP and reactor files pass119 cases/900
   assertions with0 failures/errors/warnings/skips and all eight caller-state flags TRUE.
@@ -13,7 +13,11 @@ only the living records. Preserve the dirty primary, original R sessions and sha
 - DONE/normal archive: all five consumers in run38288459266 are independently raw-audited
   Status OK,0 errors/warnings/notes:129,180 passes and2,308 retained named guards.
   Original tar9d900a3e (2,553,795B),120 committed R files and14 rendered guide pairs match.
-  Restricted dependency profiles are ONGOING; the archive does not clear other gates.
+  Dependency-only checking FAILED in the controller before a final package status:
+  one owned transient descendant disappeared during disk sampling. The narrow dev-only fix
+  preserves ownership/caps/fatal unknowns and all17 prior controls; eight new tests reproduce
+  two baseline errors and all25 pass after correction. Original-byte hosted profiles WAITING.
+  Suggests/inventory were skipped after that failure; the archive does not clear other gates.
 - DONE/worker assertions: run38290850451 source+installed have213 exact ordered cases
   per OS. Mac1,541P, Windows1,646P and Linux1,544P per context;0 failures/errors/R warnings,
   exact platform guards,18 clean lints and19 passing memory-death controls. All observed
@@ -61,7 +65,8 @@ remain false. Fresh four-stage plan checks are recorded separately after this ed
 
 | Case | Required acceptance | State |
 |---|---|---|
-| AR02 current original archive | Require all five original-byte consumers plus restricted dependency profiles, raw logs, all120 sources/14 guides and zero check errors/warnings/notes. | DONE/all five normal consumers at02:129,180P/0F/W and2,308 original guards; restricted profiles ONGOING. |
+| AR02 current original archive | Require all five original-byte consumers plus restricted dependency profiles, raw logs, all120 sources/14 guides and zero check errors/warnings/notes. | DONE/all five normal consumers at02:129,180P/0F/W and2,308 original guards; dependency profile controller FAILED; tests-first monitor correction has25 passing controls; original-byte hosted rerun WAITING. |
+| PF02 transient disk entries | Preserve live-byte charges, captured root identity, nonfollowing ancestors and fatal unknowns; accept only twice-confirmed vanished owned descendants. Keep prior17 controls and all sampling/settlement caps. | DONE/controller controls: baseline25/2 expected errors; amended25 pass. Hosted original-byte dependency/Suggests/inventory rerun WAITING. |
 | WK02 current workers and Shiny | Run exact213 source/installed titles on Mac, Windows and Linux; require native success/error/cancel state, child settlement, pinned Python identity, zero outer warnings and exact platform guards. | DONE/hosted assertions on all three:9,462P across six contexts,0F/E/RW, exact guards,18 lints0/19 controls TRUE. Browser output has30 native close errors; UX03 remains OPEN. Local GUI/live WAITING. |
 | WS03 strict denied attributes | Keep the same real six controls and installed production probe under an exact owned-child token with effective denial; test body error/interrupt, partial privilege adjustment and failed restoration without mutating parent tokens. Preserve five-second deadline/caps and unknown fatal. | FAILED/current02: ordinary75 and strict token retain one failure each. Held-B successor is source preparation only; reviewed controls and native rerun WAITING. |
 | CR02 oldrel size and teardown | Recheck current bytes on R4.2.3 with current settings; record lazy-load database and allocated disk bytes. Capture owned teardown entry/completion, unlink return, root existence and bounded residual/child-settlement witnesses. Only if size persists, run source-retention diagnostic A/B on the same archive/R/dependencies. | WAITING: older same-source4.2.3/4.6.1 generated databases differ; source/retention alone is not causal proof. No production cleanup or byte-compilation change. |

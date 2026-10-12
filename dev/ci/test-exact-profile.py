@@ -160,5 +160,130 @@ class ProfileControls(unittest.TestCase):
         self.assertFalse(MODULE.settled_profile({}, source, archive, manifest, "depends"))
 
 
+class DiskDisappearanceControls(unittest.TestCase):
+    def run_disappearance(self, root, path, mutate=lambda: None):
+        import errno
+        from unittest import mock
+        original = FileNotFoundError(errno.ENOENT, "synthetic vanished entry", str(path))
+        self.expected_error = original
+        def walk(top, followlinks, onerror):
+            self.assertEqual(top, root)
+            self.assertFalse(followlinks)
+            yield str(root), [], ["keep"]
+            mutate()
+            onerror(original)
+        with mock.patch.object(MODULE.os, "walk", side_effect=walk):
+            return MODULE.disk_bytes(root), original
+
+    def test_confirmed_disappeared_leaf_preserves_live_byte_charge(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent) / "owned"
+            root.mkdir()
+            (root / "keep").write_bytes(b"eight123")
+            value, original = self.run_disappearance(root, root / "gone")
+            self.assertEqual(value, 8)
+            self.assertTrue(root.is_dir())
+
+    def test_confirmed_disappeared_parent_preserves_live_byte_charge(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent) / "owned"
+            root.mkdir()
+            (root / "keep").write_bytes(b"eight123")
+            ancestor = root / "gone"
+            ancestor.mkdir()
+            value, original = self.run_disappearance(root, ancestor / "child", ancestor.rmdir)
+            self.assertEqual(value, 8)
+            self.assertTrue(root.is_dir())
+
+    def test_disappeared_root_is_not_a_benign_descendant(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent) / "owned"
+            root.mkdir()
+            (root / "keep").write_bytes(b"eight123")
+            def remove_root():
+                (root / "keep").unlink()
+                root.rmdir()
+            with self.assertRaises(FileNotFoundError) as caught:
+                self.run_disappearance(root, root / "gone", remove_root)
+            self.assertIs(caught.exception, self.expected_error)
+
+    def test_replaced_root_is_not_a_benign_descendant(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent) / "owned"
+            root.mkdir()
+            (root / "keep").write_bytes(b"eight123")
+            def replace_root():
+                root.rename(Path(parent) / "held-original")
+                root.mkdir()
+            with self.assertRaises(FileNotFoundError) as caught:
+                self.run_disappearance(root, root / "gone", replace_root)
+            self.assertIs(caught.exception, self.expected_error)
+
+    def test_reappeared_file_or_directory_is_not_zero(self):
+        import tempfile
+        for directory in (False, True):
+            with self.subTest(directory=directory), tempfile.TemporaryDirectory() as parent:
+                root = Path(parent) / "owned"
+                root.mkdir()
+                (root / "keep").write_bytes(b"eight123")
+                path = root / "gone"
+                mutate = path.mkdir if directory else lambda: path.write_bytes(b"new")
+                with self.assertRaises(FileNotFoundError) as caught:
+                    self.run_disappearance(root, path, mutate)
+                self.assertIs(caught.exception, self.expected_error)
+
+    def test_symlink_or_dangling_ancestor_never_authorizes_absence(self):
+        import tempfile
+        for dangling in (False, True):
+            with self.subTest(dangling=dangling), tempfile.TemporaryDirectory() as parent:
+                root = Path(parent) / "owned"
+                root.mkdir()
+                (root / "keep").write_bytes(b"eight123")
+                target = Path(parent) / "target"
+                if not dangling:
+                    target.mkdir()
+                    (target / "canary").write_bytes(b"unchanged")
+                (root / "alias").symlink_to(target, target_is_directory=True)
+                with self.assertRaises(FileNotFoundError) as caught:
+                    self.run_disappearance(root, root / "alias" / "missing")
+                self.assertIs(caught.exception, self.expected_error)
+                if not dangling:
+                    self.assertEqual((target / "canary").read_bytes(), b"unchanged")
+
+    def test_escaped_or_root_path_never_authorizes_absence(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent) / "owned"
+            root.mkdir()
+            (root / "keep").write_bytes(b"eight123")
+            for path in (root, Path(parent) / "foreign", root / ".." / "escaped"):
+                with self.subTest(path=path), self.assertRaises(FileNotFoundError) as caught:
+                    self.run_disappearance(root, path)
+                self.assertIs(caught.exception, self.expected_error)
+
+    def test_permission_and_unknown_ancestor_observation_rethrow_original(self):
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent) / "owned"
+            root.mkdir()
+            (root / "keep").write_bytes(b"eight123")
+            path = root / "gone"
+            actual = Path.lstat
+            for error in (PermissionError("synthetic"), OSError("synthetic")):
+                def inspect(value, *args, **kwargs):
+                    if value == path:
+                        raise error
+                    return actual(value, *args, **kwargs)
+                with self.subTest(error=type(error).__name__), mock.patch.object(Path, "lstat", inspect):
+                    with self.assertRaises(FileNotFoundError) as caught:
+                        self.run_disappearance(root, path)
+                    self.assertIs(caught.exception, self.expected_error)
+
+
 if __name__ == "__main__":
     unittest.main()

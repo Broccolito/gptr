@@ -2,7 +2,7 @@
 
 Work in `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
 `codex/skipped-platform-tests`. Production remains `02ceac9`; later commits update
-only the living records. Preserve the dirty primary, original R sessions and shared Ollama.
+the living records and dev-only validation controllers. Preserve the dirty primary, original R sessions and shared Ollama.
 
 - DONE/offline: complete cold OAuth, Codex, MCP and reactor files pass119 cases/900
   assertions with0 failures/errors/warnings/skips and all eight caller-state flags TRUE.
@@ -13,7 +13,11 @@ only the living records. Preserve the dirty primary, original R sessions and sha
 - DONE/normal archive: all five consumers in run38288459266 are independently raw-audited
   Status OK,0 errors/warnings/notes:129,180 passes and2,308 retained named guards.
   Original tar9d900a3e (2,553,795B),120 committed R files and14 rendered guide pairs match.
-  Restricted dependency profiles are ONGOING; the archive does not clear other gates.
+  Dependency-only checking FAILED in the controller before a final package status:
+  one owned transient descendant disappeared during disk sampling. The narrow dev-only fix
+  preserves ownership/caps/fatal unknowns and all17 prior controls; eight new tests reproduce
+  two baseline errors and all25 pass after correction. Original-byte hosted profiles WAITING.
+  Suggests/inventory were skipped after that failure; the archive does not clear other gates.
 - DONE/worker assertions: run38290850451 source+installed have213 exact ordered cases
   per OS. Mac1,541P, Windows1,646P and Linux1,544P per context;0 failures/errors/R warnings,
   exact platform guards,18 clean lints and19 passing memory-death controls. All observed
