@@ -300,13 +300,18 @@ jobs:
         shell: Rscript --vanilla {0}
         run: |
           options(Ncpus = 2L)
+          Sys.unsetenv("NOT_CRAN")
+          stopifnot(is.na(Sys.getenv("NOT_CRAN", unset = NA_character_)))
+          writeLines("NOT_CRAN is unset; manual and incoming checks are enabled.",
+                     "evidence/check-environment.txt")
           archive = normalizePath(file.path("artifact", Sys.getenv("EXPECTED_BASENAME")),
                                   mustWork = TRUE)
           writeLines(R.version.string, "evidence/consumer-r-version.txt")
           writeLines("R CMD check has not returned a final Status line.",
                      "evidence/check-summary.txt")
           result = rcmdcheck::rcmdcheck(path = archive, args = "--as-cran",
-                                      check_dir = "check", error_on = "never")
+                                      check_dir = "check", error_on = "never",
+                                      env = c(NOT_CRAN = NA_character_))
           log = list.files("check", pattern = "^00check[.]log$", recursive = TRUE,
                            full.names = TRUE)
           status = if (length(log) == 1L) {
@@ -318,9 +323,9 @@ jobs:
                       paste("notes", length(result$notes)))
           writeLines(summary, "evidence/check-summary.txt")
           cat(summary, sep = "\n")
-          stopifnot(length(log) == 1L, length(status) == 1L,
-                    !any(grepl("ERROR|WARNING", status)), length(result$errors) == 0L,
-                    length(result$warnings) == 0L)
+          stopifnot(length(log) == 1L, identical(status, "Status: OK"),
+                    length(result$errors) == 0L, length(result$warnings) == 0L,
+                    length(result$notes) == 0L)
       - name: Preserve check logs and provenance even after failure
         if: always()
         uses: actions/upload-artifact@v4
