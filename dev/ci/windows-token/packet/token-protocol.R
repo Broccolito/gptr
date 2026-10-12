@@ -51,7 +51,7 @@ token_trial_decode = function(lines) {
       any(records[, c("FILE_LOOKUP", "PARENT_LOOKUP")] > 2L) ||
       any(records[, "PROBE"] > 2L) ||
       any(records[, c("TOKEN_EXACT", "ACL_EXACT")] != 1L) ||
-      any(tail(values, 2L) != 1L)) reject()
+      any(utils::tail(values, 2L) != 1L)) reject()
   group_contribution = all(records["A1", c("FILE_LOOKUP", "PARENT_LOOKUP", "PROBE")] == 2L) &&
     all(records["B", c("FILE_LOOKUP", "PARENT_LOOKUP", "PROBE")] == 1L) &&
     all(records["A2", c("FILE_LOOKUP", "PARENT_LOOKUP", "PROBE")] == 2L)

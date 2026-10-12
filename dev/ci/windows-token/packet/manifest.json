@@ -72,8 +72,8 @@
       "sha256": "5b1f1004bd7d0c2a06fe4746bb077a1424a64751ef7463928edf04c082418fe4"
     },
     "token-protocol.R": {
-      "bytes": 3372,
-      "sha256": "2ad2c7a8694a932fa51bdc1bf2fed5607eeae5333d9a4d23254718f6495a8174"
+      "bytes": 3379,
+      "sha256": "85620345d0756a8a50f6fe08a5efb1c1355ff67202a4e4b9b7da58d35036c921"
     },
     "token-trial.ps1": {
       "bytes": 4454,
@@ -103,5 +103,15 @@
   "refreeze": "Disable NewState uses zero, full expected snapshot preserves other flags; ten pure controls unchanged count; original freeze retained.",
   "scope": "ignored test-only experiment; no package/Imports/runtime/registry/CI changes",
   "status": "inactive-source-prepared-unexecuted",
+  "successor": {
+    "corrected_source_execution": "PENDING",
+    "evidence_run": 38267442559,
+    "evidence_source": "c9bdf269ec7c1d10087ba738aeafa3b1267c609f",
+    "historical_native": "1 case/28 passes/3 failures; all26 A-B-A records retained",
+    "historical_protocol": "7 cases/136 passes/0 conditions",
+    "original_restored_feature_probe": 2,
+    "predecessor_manifest_sha256": "b4bf49f1e796b57c223dc8e7e01012024541cfe94662cce2b2fd3bfe1dc4bcf7",
+    "qualification": "utils::tail in serialized base-parent decoder; all semantics/caps/authority unchanged"
+  },
   "token_authority": "current utility process only; no PID/handle/name input; no parent token changes"
 }

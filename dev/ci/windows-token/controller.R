@@ -24,11 +24,11 @@ token_assets = list(
   "experimental-helper.patch" = list(
     bytes = 41084L, sha256 = "5b1f1004bd7d0c2a06fe4746bb077a1424a64751ef7463928edf04c082418fe4"),
   "token-protocol.R" = list(
-    bytes = 3372L, sha256 = "2ad2c7a8694a932fa51bdc1bf2fed5607eeae5333d9a4d23254718f6495a8174"),
+    bytes = 3379L, sha256 = "85620345d0756a8a50f6fe08a5efb1c1355ff67202a4e4b9b7da58d35036c921"),
   "token-trial.ps1" = list(
     bytes = 4454L, sha256 = "aae0e9b54331f8dc3a94bc2e8fe49d734bbc74345dbfb69ac803e4d28142e2c6"),
   "manifest.json" = list(
-    bytes = 3854L, sha256 = "b4bf49f1e796b57c223dc8e7e01012024541cfe94662cce2b2fd3bfe1dc4bcf7"))
+    bytes = 4423L, sha256 = "c874e9eb49204a990bd3d3a8183c059bf01fc558d58ca6fd30ab9af783ae34aa"))
 
 token_support_file = file.path("dev", "ci", "optional-integrations.R")
 if (!file.exists(token_support_file)) {

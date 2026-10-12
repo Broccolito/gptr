@@ -235,3 +235,36 @@ testthat::test_that("token sources resolve both root and nested test-file layout
   testthat::expect_error(replay(support, missing), "not readable")
   testthat::expect_identical(getwd(), before)
 })
+
+
+testthat::test_that("token decoder preserves exact A-B-A in a base-only child environment", {
+  root = dirname(dirname(dirname(dirname(normalizePath(token_controller_file,
+    winslash = "/", mustWork = TRUE)))))
+  path = file.path(root, "dev", "ci", "windows-token", "packet", "token-protocol.R")
+  scope = new.env(parent = baseenv())
+  sys.source(path, envir = scope)
+  testthat::expect_false(exists("tail", envir = scope, inherits = TRUE))
+  keys = c("BACKUP", "RESTORE", "CHANGE_NOTIFY", "FILE_LOOKUP", "PARENT_LOOKUP",
+    "PROBE", "TOKEN_EXACT", "ACL_EXACT")
+  lines = unlist(lapply(c("A1", "B", "A2"), function(phase) {
+    values = c(rep(if (phase == "B") 1L else 2L, 6L), 1L, 1L)
+    paste("GPTR_TOKEN", phase, keys, values)
+  }), use.names = FALSE)
+  lines = c(lines, "GPTR_TOKEN END TOKEN_RESTORED 1", "GPTR_TOKEN END HANDLE_CLOSED 1")
+  original = serialize(lines, NULL)
+  diagnostic = scope$token_trial_decode(lines)
+  testthat::expect_identical(dim(diagnostic$records), c(3L, 8L))
+  testthat::expect_identical(dimnames(diagnostic$records), list(c("A1", "B", "A2"), keys))
+  testthat::expect_true(diagnostic$group_contribution)
+  testthat::expect_false(diagnostic$individual_privilege_identified)
+  testthat::expect_false(diagnostic$feature_accepted)
+  testthat::expect_identical(serialize(lines, NULL), original)
+  for (i in c(25L, 26L)) {
+    bad = lines
+    bad[[i]] = sub(" 1$", " 2", bad[[i]])
+    testthat::expect_error(scope$token_trial_decode(bad), "Invalid owned-token diagnostic")
+  }
+  testthat::expect_error(scope$token_trial_decode(lines[-26L]), "Invalid owned-token diagnostic")
+  testthat::expect_error(scope$token_trial_decode(c(lines, lines[[26L]])),
+    "Invalid owned-token diagnostic")
+})
