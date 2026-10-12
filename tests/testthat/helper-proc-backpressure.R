@@ -192,8 +192,15 @@ bp_case_failure = function(error) {
     writer_phases = phases, writer_acl_phases = acl_phases)
 }
 
-bp_run = function(case) {
-  root = withr::local_tempdir(paste0("gptr-backpressure-", case, "-"))
+bp_run = function(case, declared_links = list()) {
+  observer_enabled = identical(Sys.getenv("GPTR_OPTIONAL_NOFOLLOW_OBSERVER"), "true")
+  started = if (observer_enabled) proc.time()[["elapsed"]] else NULL
+  root = if (observer_enabled) {
+    temp_root = normalizePath(tempdir(), winslash = "/", mustWork = TRUE)
+    withr::local_tempdir(paste0("gptr-backpressure-", case, "-"), tmpdir = temp_root)
+  } else {
+    withr::local_tempdir(paste0("gptr-backpressure-", case, "-"))
+  }
   dirs = stats::setNames(file.path(root, c("home", "config", "cache", "data", "project", "tmp")),
                         c("home", "config", "cache", "data", "project", "tmp"))
   for (dir in dirs) dir.create(dir)
@@ -221,7 +228,38 @@ bp_run = function(case) {
     stats::setNames("YES", marker)))
   out = file.path(root, "stdout.txt")
   err = file.path(root, "stderr.txt")
-  started = proc.time()[["elapsed"]]
+  if (!observer_enabled) started = proc.time()[["elapsed"]]
+  observe = NULL
+  observer_stats = NULL
+  supervisor_rss = NULL
+  if (observer_enabled) {
+    supervisor = ps::ps_handle(Sys.getpid())
+    supervisor_time = as.numeric(ps::ps_create_time(supervisor))
+    supervisor_rss = function() {
+      if (!identical(ps::ps_pid(supervisor), Sys.getpid()) ||
+          !is.finite(supervisor_time) ||
+          !identical(as.numeric(ps::ps_create_time(supervisor)), supervisor_time) ||
+          !isTRUE(ps::ps_is_running(supervisor))) {
+        stop("The supervising observer process identity is unavailable")
+      }
+      rss = unname(ps::ps_memory_info(supervisor)[["rss"]])
+      if (length(rss) != 1L || !is.finite(rss) || rss < 0) {
+        stop("The supervising observer process memory is unavailable")
+      }
+      rss
+    }
+    before_rss = supervisor_rss()
+    observe = bp_disk_observer(root, declarations = declared_links)
+    after_rss = supervisor_rss()
+    elapsed = proc.time()[["elapsed"]] - started
+    observer_stats = list(initialization_elapsed = elapsed, before_rss = before_rss,
+      after_rss = after_rss, supervisor_pid = ps::ps_pid(supervisor),
+      supervisor_create_time = supervisor_time, peak_supervisor_rss = max(before_rss, after_rss),
+      peak_combined_rss = after_rss, last_disk = NULL)
+    if (elapsed >= 45 || max(before_rss, after_rss) > 1024^3) {
+      stop("Optional observer initialization exceeded its unchanged resource bound")
+    }
+  }
   driver = file.path(root, "driver.R")
   writeLines(c(paste0(".libPaths(", paste(deparse(.libPaths()), collapse = "\n"), ")"),
     "(function(args) {",
@@ -278,12 +316,22 @@ bp_run = function(case) {
         })
       }, numeric(1))
       if (any(!is.finite(rss))) stop("Could not measure owned process memory.")
+      parent_rss = if (observer_enabled) supervisor_rss() else 0
       sample_stage = "files"
-      files = list.files(root, recursive = TRUE, full.names = TRUE, all.files = TRUE)
-      sizes = file.info(files, extra_cols = FALSE)$size
-      unknown = is.na(sizes) & file.exists(files)
-      if (any(unknown)) stop("Could not measure owned case files.")
-      c(rss = sum(rss), disk = sum(sizes, na.rm = TRUE))
+      if (observer_enabled) {
+        disk = observe()
+        observer_stats$last_disk = disk
+        observer_stats$peak_supervisor_rss = max(observer_stats$peak_supervisor_rss, parent_rss)
+        observer_stats$peak_combined_rss = max(observer_stats$peak_combined_rss,
+          parent_rss + sum(rss))
+        c(rss = sum(rss), disk = disk$bytes, combined = parent_rss + sum(rss))
+      } else {
+        files = list.files(root, recursive = TRUE, full.names = TRUE, all.files = TRUE)
+        sizes = file.info(files, extra_cols = FALSE)$size
+        unknown = is.na(sizes) & file.exists(files)
+        if (any(unknown)) stop("Could not measure owned case files.")
+        c(rss = sum(rss), disk = sum(sizes, na.rm = TRUE))
+      }
     }, error = identity)
     if (inherits(sample, "condition")) {
       sampling_errors = sampling_errors + 1L
@@ -293,7 +341,8 @@ bp_run = function(case) {
     }
     peak_rss = max(peak_rss, sample[["rss"]])
     peak_disk = max(peak_disk, sample[["disk"]])
-    if (peak_rss > 1024^3 || peak_disk > 64 * 1024^2) {
+    if (peak_rss > 1024^3 || peak_disk > 64 * 1024^2 ||
+        (observer_enabled && sample[["combined"]] > 1024^3)) {
       guard = "resource_limit"
       break
     }
@@ -333,6 +382,7 @@ bp_run = function(case) {
     outer_identity = outer_record, inner_identity = inner_record, phases = phases,
     case_failure = case_failure,
     result = result)
+  if (observer_enabled) witness$disk_observer = observer_stats
   cat("GPTR-BACKPRESSURE-WITNESS ", json_encode(witness), "\n", sep = "")
   witness
 }

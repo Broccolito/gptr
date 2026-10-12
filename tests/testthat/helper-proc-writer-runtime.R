@@ -903,5 +903,6 @@ rw_absence_run = function() {
     collapse = "\n")), paste0("rw_absence_observation = ", paste(deparse(rw_absence_observation),
     collapse = "\n")))
   scope$bp_loader = function() c(loader, decoder)
-  runner("native-absence")
+  runner("native-absence",
+    declared_links = list(list(entry = "dangling-file", target = "missing-target")))
 }
