@@ -1,33 +1,33 @@
-## Current readiness handoff — 2026-10-12 03:05 PDT
+## Current readiness handoff — 2026-10-12 03:45 PDT
 
 Continue isolated /Users/wgu/.codex/worktrees/skipped-platform-tests/gptr,
-codex/skipped-platform-tests, pushed d6a32d3. Preserve primary main718e81e/dirty files,
+codex/skipped-platform-tests, pushed062f1f2. Preserve primary main718e81e/dirty files,
 secrets, existing user R sessions and shared Ollama. Only actual Windows desktop live
-verification may remain at completion; no CRAN submission, tag or readiness claim.
+verification may remain at completion; no submission/tag/readiness claim.
 
-Fixed optional CI Rscript controllerf3299e5 passes3184 assertions. Exact run38231403037
-Windows/Linux Phase A is GREEN: eight mandatory cases145/144P,0F/W/S, actual10 Python
-controls per host and all four settled owned cleanup witnesses. Prior callr preflight RED
-is retained. Phase B sampler-only2helper commitd6a32d3/lint0 is adopted; explicit CI flag
-and native9security/47writer acceptance remain pending. No stale observer tree was copied.
+Durable accounting fix062f1f2:18cases184P; final491cases2749P/0F/E/W/S;8path lint0.
+Exact private numeric tags preserve public21columns/global JSON/pricing. Three intentional
+fixture/contract repairs keep valid identity and reject forged headers; no runtime exception.
+Retain all prior actual REDs. Certified CP05 live teams/compaction/replay still required.
 
-Native Python six fixtures/CIbfd2341 adds213source/installed cases and18lint paths, all
-lint0; three-OS execution pending. CP07 tests-first8c3e0ec actual26F/53P; current four-file
-runtime is UNCOMMITTED with attempt10F/120P/0W/0S, only floating JSON roundtrip drift.
-Client owns exact private-number codec; pr5 reviews. Preserve original failed logs and
-exact assertions; run affected pricing/budget/store/run/compaction/team/API suites afterward.
+No-follow gates8754d77:64pure cases3236P/0F/E/W/S/3lint0. Registered portb7f82b0 dispatched
+38236352196 exact8+9+47 cases with sampler explicitly enabled: Windows64rows969P/1F/0W/S; Linux553P/0F/W plus17Windows guards. Raw audit confirms
+eight Windows witnesses/peak941MB/owned cleanup; denial fixture ineffective, existing input refused. Separate unavailable
+workflow dispatch returned404 and created no run. Earlier Phase A145/144P remains GREEN.
 
-Fresh f3299e5 four plan logs GREEN770Rblocks/0parse/style/lints/unchanged manifests;
-separate6c0856a38229960541 also GREEN. Existing help/docs/files/58examples clean but latest
-all14/site/browser/original-archive/manual/CRAN/dependency/revdep acceptance is pending.
-Prepared certified frontend/extensions/functional/compaction/artifact controllers need
-actual execution. Concrete reviewed PR/authorized merge/final installed verification remain.
+Callr retiredea18992 after three-platform native parity. Later Pythonbfd2341/213cases18lint0
+needs current3OS source+installed execution. Exact gatec1692a6 requires true CRAN mode/clean
+Status: OK;12source controls pass. Current original archive/5consumers/manual/incoming,
+dependency-only/Suggests-only/revdeps/certified install are still pending. Portable reader
+logos/prose and NULL-revdeps guard reviewed; tests-first docs work is ongoing in dirty tests.
 
-Computer control still selects original RStudio despite foreground request. No R entered
-there; separate app selector timed out. Need selectable fresh verified owned GUI family;
-no blind PID/window selection, allocator changes or user-session restart. UX07/08 native proof
-pending. At02:47 disk179GiB/19GiBunused/static swap21221.88MiB keeps heavy work held; use small
-serial source and at most2hosted jobs. This plan edit triggers four fresh hosted checks.
+Exact2e111e0 Plan38234265477 all4stages GREEN/39immutable blobs/770Rblocks/0parse/style/lints;
+90historical index warnings remain. Current TESTING_PLAN edit needs4fresh checks.
+Prepared certified frontend/extensions/functional/compaction controllers need actual runs.
+CUA still chooses original gptr-main/27070; no R entered/restarted/changed. Native UX07/08
+requires selectable fresh GUI ownership; do not suppress allocator output or change parent.
+At03:45 disk161GiB/907MiBunused/static swap21133.88MiB: keep work small/serial, at most2hosted
+jobs, no heavy/GPU expansion or foreign cleanup. Current plan contains all remaining gates.
 
 ## Current readiness handoff — 2026-10-11 23:50 PDT
 

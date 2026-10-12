@@ -17,6 +17,11 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
 
 ## Resume log
 
+- 2026-10-12 03:45 PDT: durable recovery062f1f2 passes18cases184P and491affected cases2749P/0F/E/W/S,
+  8lint0. No-follow gates8754d77 pass3236P; registered PhaseB38236352196 Windows969P/1F/Linux553P/0F/W+17Windows guards, raw audit complete. Exactc1692a6 consumer gate now true CRAN/zero notes;12pure controls.
+  Raw2e111e0 plan38234265477 all4stages pass; latest plan needs4fresh checks. Portable reader
+  docs/revdeps controls ongoing; all current native/artifact/live gates remain explicitly open.
+
 - 2026-10-12: fixed optional vanilla-Rscript controller passes3184 assertions; hosted exact
   f3299e5 Windows/Linux observer8cases pass145/144P,0F/W/S,10Python controls each and all cleanup.
   Native Python6cases/CI committedbfd2341 with18lint0; native213case3OS run pending.

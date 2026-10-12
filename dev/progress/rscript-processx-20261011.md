@@ -1,26 +1,28 @@
-## Current checkpoint — 2026-10-12 03:05 PDT
+## Current checkpoint — 2026-10-12 03:45 PDT
 
-Exactf3299e5 run38231403037 completes both strict observer hosts: Windows145/Linux144P,
-eight mandatory unique titles each,0F/W/S, actual10Python controls each, zero outside/controller
-warnings/new model usage and four settled owned cleanup witnesses. Raw source archive identity
-and full logs independently audited. Fixed Rscript CI transport actual3184P/0F/W/S.
-Prior Windows tools:callr failure may mask an earlier body error; retained, not a native pass.
+Source062f1f2 durable recovery is GREEN:18cases184P,225affected cases1051P and final
+491cases2749P/0F/E/W/S;8lint0. Exact private big-endian numeric tags retain the21-column
+public ledger/global JSON/pricing. Old26F53P/10F120P, numeric RED154P17F1E,244case2E and
+agent-run1F evidence remains. Legitimate foreign imports retain original ID; forged-header
+fixture corrected, typed forgery refusal and all abort/cleanup/original-condition checks kept.
 
-Native Python additionbfd2341:213cases/12files/18lints, scoped lint0 after retained helper-name,
-brace/line/unused-binding failures. No predicate or ownership/resource gate weakened.
-Nofollow samplerd6a32d3 changes only two helpers,2lint0 and37/181/55 registry preserved;
-current observer2124533f/test2649df5c/scanner18347a8f unchanged. Flag and native Phase B pending.
+Nofollow8754d77 gates64cases3236P/0F/E/W/S/3lint0 after actual3missing-helper errors and
+2decreasing-RSS failures. Registered workflow portb7f82b0 adds only defaultfalse input/env.
+Actual38236352196 exactb7f82b0 selects8observer+9security+47writer and enables the sampler:
+Windows mandatory step failed, Linux still active; raw audit ongoing, no native pass.
+Earlier Phase A38231403037 remains145/144P/0F/W/S with four settled cleanup witnesses.
+Callr retirementea18992 is committed; nativebfd2341 adds213cases/18lint0,3OS execution open.
 
-Durable accounting tests-first8c3e0ec: corrected26F/53P/0W/S; historical29F/51P retained with
-fixture errors separately identified. Reviewed runtime attempt10F/120P/0W/S exposes exact numeric
-JSON roundtrip loss. Pricing collision corrected; original metered helper unchanged. Four runtime
-files remain uncommitted pending private exact codec, all15cases and affected suite/IC33/lint/live.
+Exact-archive workflowc1692a6 explicitly unsets NOT_CRAN and refuses any non-OK status or
+notes/errors/warnings;12actual source-provenance controls pass. Original current archive,
+manual/incoming/5consumer/dependency/Suggests/revdep and certified installed runs still open.
+Reviewed portable reader14logos/prose +NULL-revdeps guard tests-first work ongoing.
 
-All four f3299e5 Linux plan logs pass770blocks/0parse/style/lints/unchanged source; historical
-822info/90warn index findings remain. Separate6c0856a38229960541 is GREEN. Current GUI selector
-still chooses original user RStudio and could not access a separate window; no R entered there.
-Exact source/installed3OS, security, all14/site, normal original archive/5consumers/CRAN/dependencies,
-certified frontends/models/compaction/resources and authorized PR merge remain pending.
+Raw2e111e0 plan38234265477 all4stages/39exact blobs/770Rblocks/0parse/style/lints GREEN;
+90historical index warnings distinct. Fresh current plan requires4checks. Original RStudio
+still selected despite foreground request; safe reversible visibility check restored, no R
+executed/restarted/changed. Native UX07/08 proof, all certified live/headless/GUI/model/
+compaction/extensions/resource and PR/merge gates remain pending. See TESTING_PLAN.
 
 ## Current source regressions — 2026-10-12 02:05 PDT
 

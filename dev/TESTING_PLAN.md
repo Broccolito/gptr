@@ -135,7 +135,7 @@ external destination is authorized. Never expose the test MCP server publicly.
 | CP04 persistence | Snapshot `.gptr` context/workflow/session/checkpoint deltas before/after compaction; restart/resume/rewind from each supported boundary; corruption is rejected and no secret/context content leaks | ONGOING durable per-attempt JSONL usage/rebuild with schema/session-ID validation; full resume/rewind deltas WAITING, connects ST01/ST02 and IM06. |
 | CP05 teams/replay | Child-only versus parent compaction, fan-out shared-budget attribution, cancellation and recorded summary/Peter/R documents; fresh strict replay has zero new provider requests/usage with stable fingerprints | ONGOING offline child/root shared accounting; real team compaction/replay WAITING. |
 | CP06 frontends/resources | Representative PTY and native GUI progress/interrupt, Rscript/Rmd/Quarto/IRkernel execution; Claude/Codex native compaction scope distinguished from harness compaction, Qwen/Azure route capability stated; RSS/output growth bounded | WAITING; no universal model/client pass from one probe |
-| CP07 durable child usage | Reopen ordinary, aborted and compacted child sessions with their original agent/session attribution; reopen the root with every descendant charge included in shared usage and budgets. Preserve legacy records, reject conflicting duplicates, and restore totals without traversing child files. Fresh strict replay adds no request or charge. | ONGOING. Review reproduced source defects: ordinary recovery hardcodes main and root recovery omits live-only child rollups. Corrected tests-first26F/53P; runtime attempt10F/120P/0W/0S isolates private JSON precision loss. Exact scalar preservation is being fixed before affected suites and certified CP05; no approximate oracle waiver. |
+| CP07 durable child usage | Reopen ordinary, aborted and compacted child sessions with their original agent/session attribution; reopen the root with every descendant charge included in shared usage and budgets. Preserve legacy records, reject conflicting duplicates, and restore totals without traversing child files. Fresh strict replay adds no request or charge. | ONGOING. Source062f1f2:18cases184P plus491affected cases2749P,0F/E/W/S;8lint0. Exact private numeric persistence and valid identity/forgery controls pass. Certified live teams/shared budgets/fresh strict replay remain WAITING. |
 | UX04 ordinary console output | Regular replies/progress/setup/cancellation/handled UI guidance use normal stdout; actual errors use stderr. Preserve calling handlers, suppression, quiet/once/redaction, one teed message event and no menu bytes in tool results; JSONL remains parseable, user sinks restored. Confirm actual color and spinner row cleanup in R.app/RStudio/PTY/VSCode/IRkernel and document hosts. | DONE reviewed source6e7e859:3355 broad/290 C assertions, zero failures/test warnings;11-file lint0 and reference/guides clean. Installed039 color FAIL after post-error CR independently reproduced in base R.app. Minimal6501a64 boundary fix DONE source48 focused/286 affected,0 failures/test warnings/lints. Fresh installed native color and other clients WAITING resource recovery. |
 | UX05 compact history display | Public s$history/summary/show retain full data but print eight recent messages plus metadata, omission count and full-table escape hatches. Check empty/subset/unknown counts, redaction/control text, narrow/current widths, UTF8/C locale, no requests or session/home mutation. Include notebook text/HTML/Markdown/LaTeX MIME and Rmd/Quarto default/kable/paged renderers so inherited data.frame methods cannot bypass the bounded display. | DONE reviewed sourcea6f8d12:81 focused normal/C assertions, included in3355 broad/290 C packets, lint0 and earlier reference/guide checks. Installed039 native computation/latest8 of24/full-data/restoration/0warnings DONE; color FAIL remains separate. Alternate-renderer ad4e6a9 DONE source58 focused/726 affected/58 C assertions,0 failures/test warnings/lints,1 isolated-PATH Quarto skip. Actual installed IRkernel/Rmd four-renderer/Quarto previews, new help and other clients WAITING resource recovery. |
 | UX06 JSONL literal prompts | Finite scripted stdin reserves stdout for JSON events; slash/help and !code are literal prompts except documented exit, one provider error recovers, ordinary notices stay on protocol stderr, complete caller/input/connection state restores. | DONE scoped installed039:55 valid JSON lines,4fake/0external,1error then recovery,11 restoration flags,0warnings;1.336s and sampled154.4MiB/two samples. This is protocol coverage; native REPL slash/inline behavior remains in its separate rows. |
@@ -803,40 +803,45 @@ Use offline fake data/keys only, exact-owned cleanup and bounded fresh child pro
 Native or cleanup unknowns remain failures, never passes or new capability skips.
 
 
-## Current verification checkpoint — 2026-10-12 03:05 PDT
+## Current verification checkpoint — 2026-10-12 03:45 PDT
 
-Candidate commits f3299e5/bfd2341/8c3e0ec/d6a32d3 are pushed. The fixed vanilla-Rscript
-optional controller passes3184 offline assertions; the prior Windows callr preflight
-failure is retained and may have masked an earlier body error. Exact f3299e5 run38231403037
-now passes eight mandatory observer cases on each host: Windows145/Linux144 assertions,
-0failures/warnings/skips, both actual10-control Python suites and all four settled owned
-cleanup witnesses. Phase B's two reviewed sampler hunks are committed and lint-clean;
-strict native security/writer execution and explicit observer enablement remain pending.
+Accounting fix062f1f2 is committed and pushed. All18 durable cases pass184 assertions;
+all225 affected execution/storage/compaction cases pass1051 assertions. The final pricing,
+budget, store, compaction, team, lifecycle, gateway, API and IC-33 subset passes491cases/
+2749assertions,0failures/errors/warnings/skips. Eight-path lint is clean. Private fixed-endian
+numeric tags preserve exact doubles; public21columns/global JSON/pricing remain unchanged.
+Retain original26F/53P and10F/120P, numeric boundary RED154P/17F/1E, and old contract failures.
+Valid foreign imports preserve original identity; the old test forged only its header.
+Corrected fixtures prove full ledger preservation and reject tampered identities.
 
-The native Python fixtures/CI are committed: six additional cases,213 total source/installed
-cases,18-path lint0. All three OS executions are still required. The existing helper's
-assertion name/braces were corrected after retained lint failures; no oracle was relaxed.
+Measured no-follow CI gates8754d77 pass64pure cases/3236assertions/0F/E/W/S; three-path lint0.
+Registered workflow portb7f82b0 dispatched run38236352196 with the explicit default-false flag
+set true and the exact8observer/9security/47writer selection. Windows64rows969P/1F/0W/S; Linux553P/0F/W plus17Windows guards. Raw audit verifies
+eight Windows sampler witnesses/peak941MB/owned cleanup; denial fixture did not deny lookup,
+production refused existing input. Effective-denial fixture correction remains ONGOING, with
+no warning waiver or resource-cap increase. The unavailable separate workflow filename created
+no run. Earlier Phase A38231403037 remains GREEN145/144P and four settled cleanup witnesses.
 
-CP07 actual corrected tests-first is26F/53P/0W/0S. The runtime attempt is10F/120P/0W/0S;
-remaining failures expose private JSON floating-point precision loss. The pricing-helper
-name collision and two test-fixture errors were corrected before runtime adoption.
-An exact private-number codec is being prepared; do not replace exact row assertions with
-approximate comparisons or claim durable accounting complete. Original failed logs remain.
+Callr was retired in ea18992 after three-platform native parity; current DESCRIPTION has
+seven external Imports and six base/recommended imports. The later six Python fixtures/CI
+bfd2341 add213source/installed cases/18lint paths; three-OS current execution remains WAITING.
+Exact-archive consumer gatec1692a6 now explicitly unsets NOT_CRAN and requires Status: OK with
+zero errors/warnings/notes;12source-provenance controls pass. Actual current original archive,
+five consumers/manual/incoming/dependency-only/Suggests-only/reverse-dependency proof is WAITING.
 
-Exact f3299e5 Linux artifact contains all four clean plan checks:25plans/770Rblocks,
-0parse/style/lints, unchanged source manifests;822info/90historical index warnings retained.
-Separate6c0856a run38229960541 is also GREEN with byte-identical plan inputs.
-Help/docs/files/58examples were clean before the latest source additions; fresh all14-guide,
-site/original-archive/CRAN/dependency/revdep and certified live acceptance remain required.
+Exact2e111e0 plan run38234265477 passes all four stages with39input hashes unchanged:
+25plans/770Rblocks/0parse/style/lints. Retain822info/90historical index warnings separately.
+Portable14-guide logos, concise compaction/interrupt/Quarto prose and unknown-revdeps rejection
+are source-reviewed; tests-first/builds/installed/site/visual acceptance remain ONGOING.
+All certified frontend/model/extension/compaction and in-memory performance rows stay open.
 
-Native UX07/UX08 visual proof is pending. Despite the user's foreground selection, computer
-control still selects the original RStudio window and lists no separate validation window.
-No R commands were entered there. The separate application selector timed out; preserve all
-existing user sessions and require fresh prelaunch ownership before any native guard.
-At02:47 disk179GiB is below200GiB admission,19GiB unused and swap21221.88MiB; keep local work
-small/serial and hosted jobs bounded. Preserve shared Ollama and foreign processes. Only actual
-Windows desktop live verification may remain at completion; all other pending rows stay open.
-This plan edit requires four fresh checks.
+Computer control still selects original gptr-main/port27070 after the foreground request and
+safe reversible window-selection check; no R was entered, restarted or changed there.
+UX07/08 native origin/visual proof requires a selectable fresh owned GUI session. At03:45
+load8.17/10.89/13.01,58.50%idle,907MiBunused/static swap21133.88MiB and161GiBdisk keep new
+heavy/GPU work held. Small serial source checks and at most2hosted jobs continue; preserve
+shared Ollama and foreign files/processes. Only actual Windows desktop verification may remain
+at completion; this is not that completion claim. Four fresh plan checks are required.
 
 ## Current readiness execution queue — 2026-10-11 23:50 PDT
 
