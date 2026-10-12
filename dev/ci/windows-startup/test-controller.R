@@ -1,4 +1,4 @@
-# Pure controls: no native process, Windows API, provider, environment or package mutation.
+# Controls launch or signal no process; one case queries the current native process read-only.
 path = file.path("dev", "ci", "windows-startup", "controller.R")
 if (!file.exists(path)) path = "controller.R"
 source(path, local = TRUE)
@@ -46,9 +46,12 @@ testthat::test_that("stale or dead exact handles are never signalled and unknown
   handle = list(pid = expected$pid, create_time = expected$create_time)
   state = new.env(parent = emptyenv())
   state$signals = list()
-  make = function(pid, time) {
+  fresh = c(handle, list(native = TRUE))
+  make = function(pid, time = NULL) {
     testthat::expect_identical(pid, handle$pid)
-    testthat::expect_identical(time, handle$create_time)
+    if (is.null(time)) return(fresh)
+    testthat::expect_s3_class(time, "POSIXct")
+    testthat::expect_identical(as.numeric(time), handle$create_time)
     handle
   }
   kill = function(value) state$signals[[length(state$signals) + 1L]] = value
@@ -63,9 +66,12 @@ testthat::test_that("stale or dead exact handles are never signalled and unknown
     running = function(value) stop("controlled lookup failure"), kill = kill), "unknown")
   testthat::expect_identical(startup_identity(expected,
     make = function(pid, time) stop("controlled identity failure"), kill = kill), "unknown")
-  live = startup_identity(expected, make, running = function(value) TRUE, kill = kill)
+  live = startup_identity(expected, make, running = function(value) TRUE, kill = kill,
+    pid = function(value) value$pid, created = function(value) {
+      as.POSIXct(value$create_time, origin = "1970-01-01", tz = "UTC")
+    })
   testthat::expect_identical(live, "alive")
-  testthat::expect_identical(state$signals, list(handle))
+  testthat::expect_identical(state$signals, list(fresh))
 })
 
 testthat::test_that("the external clock includes constructor time and never waits past 60", {
@@ -219,4 +225,156 @@ testthat::test_that("the reused controller finalizes interrupted mains without r
     structure(list(message = "controlled precedence interrupt", call = NULL),
       class = c("interrupt", "condition")))
   for (primary in conditions) for (fault in conditions) run(primary, fault)
+})
+
+testthat::test_that("journal identities reconstruct the current process with POSIXct time", {
+  original = ps::ps_handle()
+  expected_pid = ps::ps_pid(original)
+  expected_time = as.numeric(ps::ps_create_time(original))
+  journal = charToRaw(paste(owner, "1", "empty", expected_pid,
+    sprintf("%.17g", expected_time), sep = "|"))
+  decoded = startup_decode(journal, owner, 1L, TRUE)
+  seen = new.env(parent = emptyenv())
+  seen$calls = 0L
+  seen$fresh_calls = 0L
+  make = function(pid, time = NULL) {
+    seen$calls = seen$calls + 1L
+    if (is.null(time)) {
+      seen$fresh_calls = seen$fresh_calls + 1L
+      handle = ps::ps_handle(pid)
+      seen$native_pid = ps::ps_pid(handle)
+      seen$native_time = as.numeric(ps::ps_create_time(handle))
+      return(handle)
+    }
+    seen$pid = pid
+    seen$time = time
+    if (!inherits(time, "POSIXct")) stop("Constructor requires a POSIXct timestamp")
+    ps::ps_handle(pid, time)
+  }
+  testthat::expect_identical(startup_identity(decoded, make = make), "alive")
+  testthat::expect_identical(seen$calls, 2L)
+  testthat::expect_identical(seen$fresh_calls, 1L)
+  testthat::expect_identical(seen$pid, expected_pid)
+  testthat::expect_s3_class(seen$time, "POSIXct")
+  testthat::expect_identical(as.numeric(seen$time), expected_time)
+  testthat::expect_identical(attr(seen$time, "tzone"), "UTC")
+  testthat::expect_identical(seen$native_pid, expected_pid)
+  testthat::expect_identical(seen$native_time, expected_time)
+})
+
+testthat::test_that("live journals require exact fresh PID and time before signalling", {
+  expected = startup_decode(identity_bytes, owner, 1L, TRUE)
+  supplied = list(kind = "supplied")
+  exact = list(kind = "fresh", pid = expected$pid, create_time = expected$create_time)
+  near = expected$create_time + 2^-22
+  testthat::expect_identical(near - expected$create_time, 2^-22)
+  candidates = list(exact, list(kind = "fresh", pid = expected$pid, create_time = near),
+    list(kind = "fresh", pid = expected$pid, create_time = expected$create_time + 0.005),
+    list(kind = "fresh", pid = expected$pid + 1L, create_time = expected$create_time))
+  testthat::expect_lt(abs(candidates[[3L]]$create_time - expected$create_time), 0.01)
+  for (index in seq_along(candidates)) {
+    state = new.env(parent = emptyenv())
+    state$calls = list()
+    state$running = list()
+    state$signals = list()
+    fresh = candidates[[index]]
+    make = function(pid, time = NULL) {
+      state$calls = c(state$calls, list(list(pid = pid, time = time)))
+      if (is.null(time)) fresh else supplied
+    }
+    running = function(value) {
+      state$running = c(state$running, list(value))
+      TRUE
+    }
+    kill = function(value) state$signals = c(state$signals, list(value))
+    observed = startup_identity(expected, make, running, kill,
+      pid = function(value) value$pid, created = function(value) {
+        as.POSIXct(value$create_time, origin = "1970-01-01", tz = "UTC")
+      })
+    testthat::expect_identical(observed, if (index == 1L) "alive" else "unknown")
+    testthat::expect_length(state$calls, 2L)
+    testthat::expect_identical(state$calls[[2L]], list(pid = expected$pid, time = NULL))
+    testthat::expect_identical(state$signals, if (index == 1L) list(fresh) else list())
+    testthat::expect_identical(state$running,
+      if (index == 1L) list(supplied, fresh) else list(supplied))
+  }
+})
+
+testthat::test_that("fresh identity construction queries and liveness fail closed", {
+  expected = startup_decode(identity_bytes, owner, 1L, TRUE)
+  supplied = list(kind = "supplied")
+  fresh = list(kind = "fresh")
+  faults = list(simpleError("controlled fresh error"),
+    structure(list(message = "controlled fresh interrupt", call = NULL),
+      class = c("interrupt", "condition")))
+  for (stage in c("make", "pid", "created", "running")) for (fault in faults) {
+    state = new.env(parent = emptyenv())
+    state$signals = list()
+    make = function(pid, time = NULL) {
+      if (!is.null(time)) return(supplied)
+      if (stage == "make") stop(fault)
+      fresh
+    }
+    pid = function(value) {
+      if (stage == "pid") stop(fault)
+      expected$pid
+    }
+    created = function(value) {
+      if (stage == "created") stop(fault)
+      as.POSIXct(expected$create_time, origin = "1970-01-01", tz = "UTC")
+    }
+    running = function(value) {
+      if (identical(value, fresh) && stage == "running") stop(fault)
+      TRUE
+    }
+    kill = function(value) state$signals = c(state$signals, list(value))
+    testthat::expect_identical(startup_identity(expected, make, running, kill, pid, created),
+      "unknown")
+    testthat::expect_length(state$signals, 0L)
+  }
+  for (stage in c("pid", "created", "running")) {
+    state = new.env(parent = emptyenv())
+    state$signals = list()
+    make = function(pid, time = NULL) if (is.null(time)) fresh else supplied
+    pid = function(value) if (stage == "pid") NA_integer_ else expected$pid
+    created = function(value) {
+      time = if (stage == "created") NA_real_ else expected$create_time
+      as.POSIXct(time, origin = "1970-01-01", tz = "UTC")
+    }
+    running = function(value) if (identical(value, fresh) && stage == "running") NA else TRUE
+    kill = function(value) state$signals = c(state$signals, list(value))
+    testthat::expect_identical(startup_identity(expected, make, running, kill, pid, created),
+      "unknown")
+    testthat::expect_length(state$signals, 0L)
+  }
+})
+
+testthat::test_that("fresh exact handles that die or are recycled never admit a signal", {
+  expected = startup_decode(identity_bytes, owner, 1L, TRUE)
+  supplied = list(kind = "supplied")
+  fresh = list(kind = "fresh", raw_time = 17L)
+  for (reason in c("dead", "recycled")) {
+    state = new.env(parent = emptyenv())
+    state$signals = list()
+    state$queries = character()
+    make = function(pid, time = NULL) if (is.null(time)) fresh else supplied
+    pid = function(value) {
+      state$queries = c(state$queries, "pid")
+      expected$pid
+    }
+    created = function(value) {
+      state$queries = c(state$queries, "time")
+      as.POSIXct(expected$create_time, origin = "1970-01-01", tz = "UTC")
+    }
+    running = function(value) {
+      if (identical(value, supplied)) return(TRUE)
+      state$queries = c(state$queries, "native-running")
+      if (reason == "dead") FALSE else identical(value$raw_time, 18L)
+    }
+    kill = function(value) state$signals = c(state$signals, list(value))
+    testthat::expect_identical(startup_identity(expected, make, running, kill, pid, created),
+      "dead-exact")
+    testthat::expect_identical(state$queries, c("pid", "time", "native-running"))
+    testthat::expect_length(state$signals, 0L)
+  }
 })

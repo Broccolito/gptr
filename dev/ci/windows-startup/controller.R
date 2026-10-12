@@ -96,15 +96,24 @@ startup_scan = function(folder, owner,
   list(unknown = unknown, attempts = attempts, identities = identities)
 }
 
-# Exact handles make a recycled PID a dead original process, never an admitted signal target.
+# Only a fresh native-time handle matching the journal exactly may admit a signal.
 startup_identity = function(identity, make = ps::ps_handle, running = ps::ps_is_running,
-                            kill = NULL) {
+                            kill = NULL, pid = ps::ps_pid, created = ps::ps_create_time) {
   tryCatch({
-    handle = make(identity$pid, identity$create_time)
+    time = as.POSIXct(identity$create_time, origin = "1970-01-01", tz = "UTC")
+    handle = make(identity$pid, time)
     alive = running(handle)
     if (identical(alive, FALSE)) return("dead-exact")
     if (!identical(alive, TRUE)) return("unknown")
-    if (!is.null(kill)) kill(handle)
+    fresh = make(identity$pid)
+    if (!identical(pid(fresh), identity$pid) ||
+        !identical(as.numeric(created(fresh)), identity$create_time)) {
+      return("unknown")
+    }
+    alive = running(fresh)
+    if (identical(alive, FALSE)) return("dead-exact")
+    if (!identical(alive, TRUE)) return("unknown")
+    if (!is.null(kill)) kill(fresh)
     "alive"
   }, error = function(error) "unknown", interrupt = function(error) "unknown")
 }
