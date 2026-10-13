@@ -102,6 +102,7 @@ arch_layer_table = function() {
     "doc-io.R", "L4", "P15",
     "doc-formats.R", "L4", "P15",
     "doc-replay.R", "L4", "P15",
+    "doc-export.R", "L4", "P15",
     "doc-knitr.R", "L5", "P15",
     "ckpt-objects.R", "L4", "P16",
     "ckpt-files.R", "L4", "P16",

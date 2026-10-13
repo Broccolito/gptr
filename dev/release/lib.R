@@ -2,7 +2,7 @@
 # source this file from the repository root; every *_problems() finder returns the problems
 # found (empty = pass). Self-tests: Rscript --vanilla -e 'testthat::test_dir("dev/release/tests")'
 
-# 03 section 4.4: the 63 exports in eight groups.
+# Public exports in eight groups; gptr_export adds recorded-script export.
 rel_export_groups = function() {
   list(
     "The gateway" = "peter",
@@ -11,8 +11,8 @@ rel_export_groups = function() {
                            "gptr_scrub"),
     "Discovery and MCP" = c("gptr_skills", "gptr_agents", "gptr_plugins", "gptr_mcp",
                             "gptr_mcp_add", "gptr_mcp_remove", "gptr_mcp_serve"),
-    "Documents and artifacts" = c("gptr_doc", "gptr_source", "gptr_blocks", "gptr_cache",
-                                  "gptr_artifacts"),
+    "Documents and artifacts" = c("gptr_doc", "gptr_source", "gptr_blocks", "gptr_export",
+                                  "gptr_cache", "gptr_artifacts"),
     "Session SDK" = c("gptr_step", "gptr_wait", "gptr_steer", "gptr_cancel", "gptr_fork",
                       "gptr_on", "gptr_parallel", "gptr_sessions", "gptr_resume", "gptr_last",
                       "gptr_jobs", "gptr_usage", "gptr_rewind", "gptr_checkpoints"),

@@ -8,7 +8,7 @@ local_arch_sources = function() {
 
 test_that("the layer table lists the files of architecture section 3.2", {
   table = arch_layer_table()
-  expect_identical(nrow(table), 120L)
+  expect_identical(nrow(table), 121L)
   expect_false(anyDuplicated(table$file) > 0)
   expect_true(all(table$layer %in% c("L0", "L1", "L2", "L3", "L4", "L5", "L6", "-")))
   expect_identical(sum(table$plan == "P01"), 15L)
@@ -17,12 +17,15 @@ test_that("the layer table lists the files of architecture section 3.2", {
   expect_identical(table$layer[table$file == "s1-ollama.R"], "L4")
   expect_identical(table$layer[table$file == "proc-rscript.R"], "L0")
   expect_identical(table$plan[table$file == "proc-rscript.R"], "P04")
+  expect_identical(table$layer[table$file == "doc-export.R"], "L4")
+  expect_identical(table$plan[table$file == "doc-export.R"], "P15")
 })
 
 test_that("every file under R/ has a layer and every function one home", {
   dir = local_arch_sources()
   files = list.files(dir, pattern = "[.][Rr]$")
   expect_identical(setdiff(files, arch_layer_table()$file), character())
+  expect_identical(setdiff(arch_layer_table()$file, files), character())
   map = arch_fun_map(dir)
   expect_identical(unique(map$fun[duplicated(map$fun)]), character())
 })
