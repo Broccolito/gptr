@@ -211,8 +211,10 @@ test_that("model code peter$grep() runs through the shim; the recorded code keep
 test_that("gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value boxed", {
   local_gptr_options(unsafe_no_permissions = TRUE)
   e = new.env()
-  e$big = stats::runif(1.5e6)
-  e$small = stats::runif(25000)
+  with_seed_preserved({
+    e$big = stats::runif(1.5e6)
+    e$small = stats::runif(25000)
+  })
   fake = local_fake_provider(list(
     fake_tool("r", code = "gptr_return(big)"), "Returned big.",
     fake_tool("r", code = "gptr_return(small)"), "Returned small.",
