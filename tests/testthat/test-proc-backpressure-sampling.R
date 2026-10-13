@@ -220,3 +220,279 @@ test_that("backpressure observer diagnostics preserve the original typed failure
     expect_identical(environment(bp_observer_reason), old_scope)
   }
 })
+
+
+test_that("backpressure census retries one ENOENT only with the same live parent", {
+  handle = new.env(parent = emptyenv())
+  child = new.env(parent = emptyenv())
+  first = structure(list(message = "PUBLIC-CENSUS-ENOENT", call = NULL, errno = 2L),
+    class = c("os_error", "ps_error", "error", "condition"))
+  seen = new.env(parent = emptyenv())
+  seen$calls = seen$checks = seen$recoveries = 0L
+  children = function(p, recursive) {
+    expect_identical(p, handle)
+    expect_true(recursive)
+    seen$calls = seen$calls + 1L
+    if (seen$calls == 1L) stop(first)
+    list(child)
+  }
+  alive = function(p) {
+    expect_identical(p, handle)
+    seen$checks = seen$checks + 1L
+    TRUE
+  }
+  value = bp_child_handles(handle, children, alive)
+  expect_identical(value, list(child))
+  expect_identical(seen$calls, 2L)
+  expect_identical(seen$checks, 2L)
+  expect_identical(seen$recoveries, 0L)
+  seen$calls = seen$checks = 0L
+  value = bp_child_handles(handle, children, alive, recovered = function() {
+    seen$recoveries = seen$recoveries + 1L
+  })
+  expect_identical(value, list(child))
+  expect_identical(seen$calls, 2L)
+  expect_identical(seen$checks, 2L)
+  expect_identical(seen$recoveries, 1L)
+  walk = function(expression) {
+    if (missing(expression)) return(list())
+    found = if (is.call(expression)) list(expression) else list()
+    if (is.call(expression) || is.expression(expression) || is.pairlist(expression)) {
+      for (part in as.list(expression)) found = c(found, walk(part))
+    }
+    found
+  }
+  calls = walk(body(bp_run))
+  increments = Filter(function(call) {
+    length(call) == 3L &&
+      identical(call[[1L]], as.name("=")) &&
+      identical(call[[2L]], quote(tracked$census_retries)) &&
+      identical(call[[3L]], quote(tracked$census_retries + 1L))
+  }, calls)
+  expect_length(increments, 1L)
+  witnesses = Filter(function(call) {
+    identical(call[[1L]], as.name("list")) && "census_retries" %in% names(call)
+  }, calls)
+  expect_length(witnesses, 1L)
+  expect_identical(witnesses[[1L]][["census_retries"]], quote(tracked$census_retries))
+})
+
+test_that("backpressure census preserves permission and uncertain parent observations", {
+  handle = new.env(parent = emptyenv())
+  first = structure(list(message = "PUBLIC-CENSUS-ENOENT", call = NULL, errno = 2L),
+    class = c("os_error", "ps_error", "error", "condition"))
+  variants = list(first, simpleError("PUBLIC-CENSUS-UNKNOWN"),
+    structure(list(message = "PUBLIC-CENSUS-PERMISSION", call = NULL, errno = 13L),
+      class = c("os_error", "ps_error", "error", "condition")))
+  for (failure in variants) {
+    for (state in list(FALSE, NA)) {
+      seen = new.env(parent = emptyenv())
+      seen$calls = 0L
+      children = function(p, recursive) {
+        seen$calls = seen$calls + 1L
+        stop(failure)
+      }
+      actual = tryCatch(bp_child_handles(handle, children, function(p) state), error = identity)
+      expect_identical(actual, failure)
+      expect_identical(seen$calls, 1L)
+    }
+  }
+  for (state in list(simpleError("PUBLIC-IDENTITY-ERROR"),
+      structure(list(message = "PUBLIC-IDENTITY-INTERRUPT", call = NULL),
+        class = c("interrupt", "condition")))) {
+    children = function(p, recursive) stop(first)
+    actual = tryCatch(bp_child_handles(handle, children, function(p) stop(state)),
+      error = identity, interrupt = identity)
+    expect_identical(actual, first)
+  }
+  for (errno in list(NULL, NA_real_, c(2L, 2L), TRUE, 13L)) {
+    first$errno = errno
+    seen = new.env(parent = emptyenv())
+    seen$calls = 0L
+    children = function(p, recursive) {
+      seen$calls = seen$calls + 1L
+      stop(first)
+    }
+    actual = tryCatch(bp_child_handles(handle, children, function(p) TRUE), error = identity)
+    expect_identical(actual, first)
+    expect_identical(seen$calls, 1L)
+  }
+})
+
+test_that("backpressure census keeps the first condition when its sole retry is incomplete", {
+  handle = new.env(parent = emptyenv())
+  child = new.env(parent = emptyenv())
+  first = structure(list(message = "PUBLIC-CENSUS-ENOENT", call = NULL, errno = 2L),
+    class = c("os_error", "ps_error", "error", "condition"))
+  variants = list(first, simpleError("PUBLIC-SECOND-ERROR"),
+    structure(list(message = "PUBLIC-SECOND-INTERRUPT", call = NULL),
+      class = c("interrupt", "condition")), FALSE)
+  for (second in variants) {
+    seen = new.env(parent = emptyenv())
+    seen$calls = seen$recoveries = 0L
+    children = function(p, recursive) {
+      seen$calls = seen$calls + 1L
+      if (seen$calls == 1L) stop(first)
+      if (inherits(second, "condition")) stop(second)
+      second
+    }
+    actual = tryCatch(bp_child_handles(handle, children, function(p) TRUE,
+      recovered = function() seen$recoveries = seen$recoveries + 1L),
+      error = identity, interrupt = identity)
+    expect_identical(actual, first)
+    expect_identical(seen$calls, 2L)
+    expect_identical(seen$recoveries, 0L)
+  }
+  for (state in list(FALSE, NA)) {
+    seen = new.env(parent = emptyenv())
+    seen$calls = seen$checks = 0L
+    children = function(p, recursive) {
+      seen$calls = seen$calls + 1L
+      if (seen$calls == 1L) stop(first)
+      list(child)
+    }
+    alive = function(p) {
+      seen$checks = seen$checks + 1L
+      if (seen$checks == 1L) TRUE else state
+    }
+    actual = tryCatch(bp_child_handles(handle, children, alive), error = identity)
+    expect_identical(actual, first)
+    expect_identical(seen$calls, 2L)
+  }
+  seen = new.env(parent = emptyenv())
+  seen$calls = 0L
+  children = function(p, recursive) {
+    seen$calls = seen$calls + 1L
+    if (seen$calls == 1L) stop(first)
+    warning("PUBLIC-RETRY-WARNING")
+    list(child)
+  }
+  expect_warning({
+    value = bp_child_handles(handle, children, function(p) TRUE)
+  }, "PUBLIC-RETRY-WARNING", fixed = TRUE)
+  expect_identical(value, list(child))
+  children = function(p, recursive) {
+    seen$calls = seen$calls + 1L
+    if (seen$calls == 1L) stop(first)
+    list(child)
+  }
+  for (failure in list(simpleError("PUBLIC-RETRY-PUBLICATION"),
+      structure(list(message = "PUBLIC-RETRY-INTERRUPT", call = NULL),
+        class = c("interrupt", "condition")))) {
+    seen$calls = 0L
+    actual = tryCatch(bp_child_handles(handle, children, function(p) TRUE,
+      recovered = function() stop(failure)), error = identity, interrupt = identity)
+    expect_identical(actual, first)
+  }
+})
+
+
+test_that("backpressure census retries one ESRCH without changing failure ownership", {
+  handle = new.env(parent = emptyenv())
+  child = new.env(parent = emptyenv())
+  first = structure(list(message = "PUBLIC-CENSUS-ESRCH", call = NULL, errno = 3L),
+    class = c("os_error", "ps_error", "error", "condition"))
+  before = serialize(first, NULL)
+  seen = new.env(parent = emptyenv())
+  seen$calls = seen$checks = seen$recoveries = 0L
+  children = function(p, recursive) {
+    expect_identical(p, handle)
+    expect_true(recursive)
+    seen$calls = seen$calls + 1L
+    if (seen$calls == 1L) stop(first)
+    list(child)
+  }
+  alive = function(p) {
+    expect_identical(p, handle)
+    seen$checks = seen$checks + 1L
+    TRUE
+  }
+  recovered = function() seen$recoveries = seen$recoveries + 1L
+  actual = tryCatch(bp_child_handles(handle, children, alive, recovered = recovered),
+    error = identity, interrupt = identity)
+  expect_identical(actual, list(child))
+  expect_identical(seen$calls, 2L)
+  expect_identical(seen$checks, 2L)
+  expect_identical(seen$recoveries, 1L)
+  for (state in list(FALSE, NA)) {
+    seen$calls = seen$checks = seen$recoveries = 0L
+    actual = tryCatch(bp_child_handles(handle, children, function(p) state,
+      recovered = recovered), error = identity, interrupt = identity)
+    expect_identical(actual, first)
+    expect_identical(seen$calls, 1L)
+    expect_identical(seen$recoveries, 0L)
+  }
+  for (state in list(simpleError("PUBLIC-ESRCH-IDENTITY-ERROR"),
+      structure(list(message = "PUBLIC-ESRCH-IDENTITY-INTERRUPT", call = NULL),
+        class = c("interrupt", "condition")))) {
+    seen$calls = seen$recoveries = 0L
+    actual = tryCatch(bp_child_handles(handle, children, function(p) stop(state),
+      recovered = recovered), error = identity, interrupt = identity)
+    expect_identical(actual, first)
+    expect_identical(seen$calls, 1L)
+    expect_identical(seen$recoveries, 0L)
+  }
+  for (failure in list(
+      structure(list(message = "PUBLIC-ESRCH-PERMISSION", call = NULL, errno = 13L),
+        class = c("os_error", "ps_error", "error", "condition")),
+      structure(list(message = "PUBLIC-ESRCH-WRONG-CLASS", call = NULL, errno = 3L),
+        class = c("os_error", "error", "condition")),
+      structure(list(message = "PUBLIC-ESRCH-NONSCALAR", call = NULL, errno = c(3L, 3L)),
+        class = c("os_error", "ps_error", "error", "condition")))) {
+    seen$calls = 0L
+    blocked = function(p, recursive) {
+      seen$calls = seen$calls + 1L
+      stop(failure)
+    }
+    actual = tryCatch(bp_child_handles(handle, blocked, function(p) TRUE),
+      error = identity, interrupt = identity)
+    expect_identical(actual, failure)
+    expect_identical(seen$calls, 1L)
+  }
+  for (second in list(simpleError("PUBLIC-ESRCH-RETRY-ERROR"),
+      structure(list(message = "PUBLIC-ESRCH-RETRY-INTERRUPT", call = NULL),
+        class = c("interrupt", "condition")), FALSE)) {
+    seen$calls = seen$checks = seen$recoveries = 0L
+    retry = function(p, recursive) {
+      seen$calls = seen$calls + 1L
+      if (seen$calls == 1L) stop(first)
+      if (inherits(second, "condition")) stop(second)
+      second
+    }
+    actual = tryCatch(bp_child_handles(handle, retry, alive, recovered = recovered),
+      error = identity, interrupt = identity)
+    expect_identical(actual, first)
+    expect_identical(seen$calls, 2L)
+    expect_identical(seen$checks, 1L)
+    expect_identical(seen$recoveries, 0L)
+  }
+  for (state in list(FALSE, NA)) {
+    seen$calls = seen$checks = seen$recoveries = 0L
+    checked = function(p) {
+      seen$checks = seen$checks + 1L
+      if (seen$checks == 1L) TRUE else state
+    }
+    actual = tryCatch(bp_child_handles(handle, children, checked, recovered = recovered),
+      error = identity, interrupt = identity)
+    expect_identical(actual, first)
+    expect_identical(seen$calls, 2L)
+    expect_identical(seen$checks, 2L)
+    expect_identical(seen$recoveries, 0L)
+  }
+  for (failure in list(simpleError("PUBLIC-ESRCH-RECOVERY-ERROR"),
+      structure(list(message = "PUBLIC-ESRCH-RECOVERY-INTERRUPT", call = NULL),
+        class = c("interrupt", "condition")))) {
+    seen$calls = seen$checks = seen$recoveries = 0L
+    publication = function() {
+      seen$recoveries = seen$recoveries + 1L
+      stop(failure)
+    }
+    actual = tryCatch(bp_child_handles(handle, children, alive, recovered = publication),
+      error = identity, interrupt = identity)
+    expect_identical(actual, first)
+    expect_identical(seen$calls, 2L)
+    expect_identical(seen$checks, 2L)
+    expect_identical(seen$recoveries, 1L)
+  }
+  expect_identical(serialize(first, NULL), before)
+})

@@ -126,11 +126,24 @@ bp_child_case = function(case, root, failure) {
   result
 }
 
-# ps_children() can throw at its final parent-identity check if the original parent exits
-# during enumeration. Previously tracked descendants still belong to this owned family.
-bp_child_handles = function(handle, children = ps::ps_children, alive = proc_handle_alive) {
+# Preserve a typed dead-parent result; one ENOENT retry must return a complete census
+# with the same original parent still alive. Never drop an uncertain census or error.
+bp_child_handles = function(handle, children = ps::ps_children, alive = proc_handle_alive,
+                            recovered = function() NULL) {
   tryCatch(children(handle, recursive = TRUE), error = function(error) {
-    if (isFALSE(alive(handle))) list() else stop(error)
+    state = tryCatch(alive(handle), error = function(error) NA,
+      interrupt = function(error) NA)
+    if (isFALSE(state) && inherits(error, "no_such_process")) return(list())
+    transient = inherits(error, "ps_error") && inherits(error, "os_error") &&
+      is.numeric(error$errno) && length(error$errno) == 1L && !is.na(error$errno) &&
+      error$errno %in% c(2, 3)
+    if (!isTRUE(state) || !transient) stop(error)
+    tryCatch({
+      observed = children(handle, recursive = TRUE)
+      stopifnot(is.list(observed), isTRUE(alive(handle)))
+      recovered()
+      observed
+    }, error = function(retry_error) stop(error), interrupt = function(retry_error) stop(error))
   })
 }
 
@@ -327,6 +340,7 @@ bp_run = function(case, declared_links = list()) {
   outer_record = proc_record(p$get_pid())
   tracked = new.env(parent = emptyenv())
   tracked$handles = list()
+  tracked$census_retries = 0L
   remember = function(handle) {
     key = paste(ps::ps_pid(handle), as.numeric(ps::ps_create_time(handle)), sep = ":")
     tracked$handles[[key]] = handle
@@ -359,7 +373,10 @@ bp_run = function(case, declared_links = list()) {
     sample = tryCatch({
       root_handle = tracked$handles[[1L]]
       if (isTRUE(proc_handle_alive(root_handle))) {
-        for (child in bp_child_handles(root_handle)) remember(child)
+        children = bp_child_handles(root_handle, recovered = function() {
+          tracked$census_retries = tracked$census_retries + 1L
+        })
+        for (child in children) remember(child)
       }
       sample_stage = "memory"
       rss = vapply(tracked$handles, function(handle) {
@@ -471,6 +488,7 @@ bp_run = function(case, declared_links = list()) {
     case_deadline = 30, outer_deadline = 60, input_cap = 4 * 1024^2,
     rss_cap = 1024^3, output_cap = 64 * 1024^2, peak_rss = peak_rss, peak_disk = peak_disk,
     samples = samples, sampling_errors = sampling_errors, sample_error = sample_error,
+    census_retries = tracked$census_retries,
     owned_family_stopped = stopped,
     outer_identity = outer_record, inner_identity = inner_record, phases = phases,
     case_failure = case_failure,
