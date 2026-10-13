@@ -121,7 +121,11 @@ optional_titles = list(
     "absence observations retain only fixed bounded file ACL differences",
     "absence denial controls require fixed ordered native lookup tokens",
     "absence denial controls reject unknown order outcomes and private content",
-    "absence privilege diagnostics reject unknown and unordered private output"),
+    "absence privilege diagnostics reject unknown and unordered private output",
+    "ordinary absence cleanup removes only direct owned proven-empty directories",
+    "ordinary absence cleanup retains populated missing foreign and uncertain entries",
+    "ordinary absence cleanup canonicalizes Windows separator spelling",
+    "ordinary absence cleanup refuses aliases and preserves metadata conditions"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",

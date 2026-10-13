@@ -1242,3 +1242,146 @@ test_that("absence privilege diagnostics reject unknown and unordered private ou
   expect_error(rw_absence_privilege(NA_character_), "Invalid absence privilege diagnostic",
     fixed = TRUE)
 })
+
+
+# Extract only the actual ordinary fixture leaf; never launch its Windows utilities.
+rw_empty_test_scope = function(root, paths) {
+  definitions = Filter(function(expression) {
+    is.call(expression) && identical(expression[[1L]], as.name("=")) &&
+      identical(expression[[2L]], as.name("remove_empty"))
+  }, as.list(body(rw_absence_case))[-1L])
+  expect_length(definitions, 1L)
+  stopifnot(length(definitions) == 1L)
+  scope = new.env(parent = baseenv())
+  scope$root = root
+  scope$paths = paths
+  eval(definitions[[1L]], envir = scope)
+  scope
+}
+
+test_that("ordinary absence cleanup removes only direct owned proven-empty directories", {
+  root = tempfile("absence-empty-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
+  expect_true(dir.create(root))
+  withr::defer(unlink(root, recursive = TRUE, force = FALSE, expand = FALSE))
+  paths = c(fresh = file.path(root, "fresh"), directory = file.path(root, "directory"))
+  scope = rw_empty_test_scope(root, paths)
+  expect_true(dir.create(paths[["fresh"]]))
+  expect_true(dir.create(paths[["directory"]]))
+  expect_true(scope$remove_empty(paths[["fresh"]]))
+  expect_false(dir.exists(paths[["fresh"]]))
+  expect_false("fresh" %in% list.files(root, all.files = TRUE, no.. = TRUE))
+  expect_true(scope$remove_empty(paths[["directory"]]))
+  expect_false(dir.exists(paths[["directory"]]))
+  expect_identical(sort(list.files(root, all.files = TRUE, no.. = FALSE)), c(".", ".."))
+})
+
+test_that("ordinary absence cleanup retains populated missing foreign and uncertain entries", {
+  root = tempfile("absence-retain-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
+  outside = tempfile("absence-foreign-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
+  expect_true(dir.create(root))
+  expect_true(dir.create(outside))
+  withr::defer(unlink(c(root, outside), recursive = TRUE, force = FALSE, expand = FALSE))
+  paths = c(fresh = file.path(root, "fresh"), directory = file.path(root, "directory"))
+  scope = rw_empty_test_scope(root, paths)
+  expect_true(dir.create(paths[["fresh"]]))
+  canary = file.path(paths[["fresh"]], "canary")
+  sentinel = charToRaw("PUBLIC-ORDINARY-RETAIN")
+  writeBin(sentinel, canary)
+  expect_false(scope$remove_empty(paths[["fresh"]]))
+  expect_identical(readBin(canary, "raw", n = length(sentinel) + 1L), sentinel)
+  expect_false(scope$remove_empty(paths[["directory"]]))
+  expect_false(scope$remove_empty(outside))
+  expect_true(dir.exists(outside))
+  expect_false(scope$remove_empty(NA_character_))
+  expect_false(scope$remove_empty(character()))
+  uncertain = new.env(parent = scope)
+  uncertain$list.files = function(path, ...) character()
+  actual = scope$remove_empty
+  environment(actual) = uncertain
+  expect_false(actual(paths[["fresh"]]))
+  expect_identical(readBin(canary, "raw", n = length(sentinel) + 1L), sentinel)
+  expect_true(dir.create(paths[["directory"]]))
+  failed = new.env(parent = scope)
+  failed$unlink = function(path, recursive, force, expand) 1L
+  actual = scope$remove_empty
+  environment(actual) = failed
+  expect_false(actual(paths[["directory"]]))
+  expect_true(dir.exists(paths[["directory"]]))
+  failed$unlink = function(path, recursive, force, expand) 0L
+  expect_false(actual(paths[["directory"]]))
+  expect_true(dir.exists(paths[["directory"]]))
+})
+
+test_that("ordinary absence cleanup canonicalizes Windows separator spelling", {
+  root = "C:\\owned\\fixture"
+  paths = c(fresh = "C:\\owned\\fixture/fresh", directory = "C:\\owned\\fixture/directory")
+  scope = rw_empty_test_scope(root, paths)
+  scope$removed = FALSE
+  scope$calls = list()
+  scope$dirname = function(path) "C:/owned/fixture"
+  scope$dir.exists = function(path) !scope$removed
+  scope$list.files = function(path, ...) {
+    stopifnot(identical(list(...), list(all.files = TRUE, no.. = FALSE)))
+    if (identical(path, paths[["fresh"]])) return(c(".", ".."))
+    if (scope$removed) c(".", "..") else c(".", "..", "fresh")
+  }
+  scope$normalizePath = function(path, winslash, ...) {
+    arguments = list(...)
+    stopifnot(identical(names(arguments), "mustWork"), isTRUE(arguments[["mustWork"]]))
+    scope$calls[[length(scope$calls) + 1L]] = list(path, winslash, arguments[["mustWork"]])
+    values = c("C:/owned/fixture", "C:/owned/fixture/fresh", "C:/owned/fixture")
+    values[[length(scope$calls)]]
+  }
+  scope$unlink = function(path, recursive, force, expand) {
+    expect_identical(path, "C:/owned/fixture/fresh")
+    expect_identical(list(recursive, force, expand), list(TRUE, FALSE, FALSE))
+    scope$removed = TRUE
+    0L
+  }
+  expect_true(scope$remove_empty(paths[["fresh"]]))
+  expect_true(scope$removed)
+  expect_identical(scope$calls, list(list(root, "/", TRUE), list(paths[["fresh"]], "/", TRUE),
+    list("C:/owned/fixture", "/", TRUE)))
+})
+
+test_that("ordinary absence cleanup refuses aliases and preserves metadata conditions", {
+  root = "C:/owned/fixture"
+  paths = c(fresh = "C:/owned/fixture/fresh", directory = "C:/owned/fixture/directory")
+  scope = rw_empty_test_scope(root, paths)
+  scope$dirname = function(path) root
+  scope$dir.exists = function(path) TRUE
+  scope$list.files = function(path, ...) {
+    stopifnot(identical(list(...), list(all.files = TRUE, no.. = FALSE)))
+    if (identical(path, root)) c(".", "..", "fresh") else c(".", "..")
+  }
+  scope$deletions = 0L
+  scope$unlink = function(...) {
+    scope$deletions = scope$deletions + 1L
+    0L
+  }
+  scope$normalizePath = function(path, winslash, ...) {
+    arguments = list(...)
+    stopifnot(identical(names(arguments), "mustWork"), isTRUE(arguments[["mustWork"]]))
+    if (identical(path, paths[["fresh"]])) "C:/foreign/fresh" else root
+  }
+  expect_false(scope$remove_empty(paths[["fresh"]]))
+  expect_identical(scope$deletions, 0L)
+  originals = list(simpleError("PUBLIC-ORDINARY-METADATA-ERROR"),
+    structure(list(message = "PUBLIC-ORDINARY-METADATA-INTERRUPT"),
+      class = c("interrupt", "condition")), simpleWarning("PUBLIC-ORDINARY-METADATA-WARNING"))
+  for (original in originals) {
+    scope$normalizePath = function(...) stop(original)
+    failed = tryCatch(scope$remove_empty(paths[["fresh"]]),
+      error = identity, interrupt = identity, warning = identity)
+    expect_identical(failed, original)
+    expect_identical(scope$deletions, 0L)
+  }
+  original = simpleWarning("PUBLIC-ORDINARY-METADATA-WARNING")
+  scope$normalizePath = function(...) {
+    warning(original)
+    stop("Warning must abort cleanup before deletion")
+  }
+  failed = tryCatch(scope$remove_empty(paths[["fresh"]]), warning = identity)
+  expect_identical(failed, original)
+  expect_identical(scope$deletions, 0L)
+})

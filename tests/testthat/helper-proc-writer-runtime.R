@@ -391,6 +391,29 @@ rw_absence_case = function(case, root) {
   present = function(path) {
     basename(path) %in% list.files(dirname(path), all.files = TRUE, no.. = TRUE)
   }
+  remove_empty = function(path) {
+    withCallingHandlers({
+      if (!is.character(path) || length(path) != 1L || is.na(path) ||
+          !(path %in% paths[c("fresh", "directory")])) {
+        return(FALSE)
+      }
+      parent = list.files(root, all.files = TRUE, no.. = FALSE)
+      if (!all(c(".", "..", basename(path)) %in% parent) || !dir.exists(path) ||
+          !identical(sort(list.files(path, all.files = TRUE, no.. = FALSE)), c(".", ".."))) {
+        return(FALSE)
+      }
+      canonical = c(root = normalizePath(root, winslash = "/", mustWork = TRUE),
+        path = normalizePath(path, winslash = "/", mustWork = TRUE),
+        parent = normalizePath(dirname(path), winslash = "/", mustWork = TRUE))
+      if (!identical(canonical[["parent"]], canonical[["root"]]) ||
+          !identical(canonical[["path"]], file.path(canonical[["root"]], basename(path)))) {
+        return(FALSE)
+      }
+      status = unlink(canonical[["path"]], recursive = TRUE, force = FALSE, expand = FALSE)
+      after = list.files(canonical[["root"]], all.files = TRUE, no.. = FALSE)
+      identical(status, 0L) && all(c(".", "..") %in% after) && !(basename(path) %in% after)
+    }, warning = function(w) stop(w))
+  }
   on.exit({
     stopifnot(!state$utility_unsettled, !state$settlement_failed)
     if (present(paths[["armed"]]) && !state$recovered) recover()
@@ -403,12 +426,9 @@ rw_absence_case = function(case, root) {
     owner = file.path(paths[["fresh"]], "owner")
     if (file.exists(owner) && identical(readBin(owner, "raw", n = 27L), charToRaw(marker)))
       file.remove(owner)
-    if (dir.exists(paths[["fresh"]]) &&
-        !length(list.files(paths[["fresh"]], all.files = TRUE, no.. = TRUE)))
-      unlink(paths[["fresh"]], recursive = FALSE)
-    if (dir.exists(paths[["directory"]]) &&
-        !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE)))
-      unlink(paths[["directory"]], recursive = FALSE)
+    for (path in paths[c("fresh", "directory")]) {
+      if (present(path)) invisible(remove_empty(path))
+    }
   }, add = TRUE)
   phase("absence-link-create")
   stopifnot(isTRUE(file.symlink(paths[["missing"]], paths[["link"]])),
@@ -949,8 +969,7 @@ rw_absence_case = function(case, root) {
       sort(c("owner", "denied-file"))))
   stopifnot(file.remove(owner), file.remove(paths[["file"]]), file.remove(paths[["denied"]]),
     all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed")])),
-    identical(unlink(paths[["fresh"]], recursive = FALSE), 0L),
-    identical(unlink(paths[["directory"]], recursive = FALSE), 0L))
+    remove_empty(paths[["fresh"]]), remove_empty(paths[["directory"]]))
   fun("reactor_shutdown")()
   after = list(env = Sys.getenv(), cwd = getwd(), options = options(), seed = seed(),
     names = sort(ls(envir = globalenv(), all.names = TRUE)))
