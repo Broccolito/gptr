@@ -231,3 +231,80 @@ test_that("Python setup rejects a changed initialized Windows empty key without 
   expect_identical(error$env_restored, FALSE)
   expect_identical(Sys.getenv("PYTHONPATH", unset = NA_character_), "unexpected-initialized-change")
 })
+
+
+test_that("Python setup preserves the caller's absent or configured uv option", {
+  skip_if_not_installed("reticulate")
+  for (prior in list(NULL, structure("caller-uv", marker = "caller"))) {
+    local({
+      withr::local_options(list(reticulate.uv_binary = prior))
+      py_init_test_env(py_init_test_values("before-"))
+      main = new.env(parent = emptyenv())
+      py_init_test_mocks(main, FALSE, function(convert = FALSE) {
+        options(reticulate.uv_binary = "initialization-uv")
+        main
+      })
+      before = options()
+      expect_identical(bridge_py_main(), main)
+      expect(identical(options(), before), "setup must preserve the exact caller options")
+      expect(identical(getOption("reticulate.uv_binary"), prior),
+        "setup must preserve the exact caller uv option")
+    })
+  }
+})
+
+test_that("Python setup preserves its uv option before the original error or interrupt", {
+  skip_if_not_installed("reticulate")
+  for (type in c("error", "interrupt")) {
+    for (stage in c("import", "helper")) {
+      for (prior in list(NULL, structure("caller-uv", marker = "caller"))) {
+        local({
+          withr::local_options(list(reticulate.uv_binary = prior))
+          py_init_test_env(py_init_test_values("before-"))
+          original = structure(list(message = "synthetic uv setup condition", call = NULL),
+            class = c(paste0("synthetic_", type), type, "condition"))
+          py_init_test_mocks(NULL, FALSE, function(convert = FALSE) {
+            options(reticulate.uv_binary = "initialization-uv")
+            if (stage == "import") stop(original)
+            new.env(parent = emptyenv())
+          })
+          testthat::local_mocked_bindings(
+            py_has_attr = function(x, name) stage != "helper",
+            py_run_string = function(code, convert = FALSE) stop(original),
+            .package = "reticulate"
+          )
+          before = options()
+          env_before = Sys.getenv()
+          seen = tryCatch(bridge_py_main(), error = identity, interrupt = identity)
+          expect_identical(seen, original)
+          expect(identical(options(), before), "failed setup must preserve caller options")
+          expect_identical(Sys.getenv(), env_before)
+          expect(identical(getOption("reticulate.uv_binary"), prior),
+            "failed setup must preserve the exact caller uv option")
+        })
+      }
+    }
+  }
+})
+
+test_that("Python user evaluation keeps deliberate option changes after setup", {
+  skip_if_not_installed("reticulate")
+  withr::local_options(reticulate.uv_binary = NULL)
+  py_init_test_env(py_init_test_values("before-"))
+  state = new.env(parent = emptyenv())
+  state$setup_restored = FALSE
+  main = new.env(parent = emptyenv())
+  main$`_gptr_run` = function(src, rows) {
+    state$setup_restored = is.null(getOption("reticulate.uv_binary"))
+    options(reticulate.uv_binary = "deliberate-user-uv")
+    list(list(out = "", err = "", repr = "42", error = NULL, kind = "int"), 42L)
+  }
+  py_init_test_mocks(main, FALSE, function(convert = FALSE) {
+    options(reticulate.uv_binary = "initialization-uv")
+    main
+  })
+  result = bridge_py("synthetic user source")
+  expect(isTRUE(state$setup_restored), "setup must restore its option before user evaluation")
+  expect_identical(result$value, 42L)
+  expect_identical(getOption("reticulate.uv_binary"), "deliberate-user-uv")
+})

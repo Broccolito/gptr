@@ -243,6 +243,8 @@ bridge_py_source = c(
 #' (its discovery ends in a uv-managed download; G5 item 21)
 #' @noRd
 bridge_py_main = function() {
+  uv_option = options("reticulate.uv_binary")
+  on.exit(options(uv_option), add = TRUE)
   keys = c("PATH", "VIRTUAL_ENV", "R_SESSION_INITIALIZED", "LD_LIBRARY_PATH",
            "PYTHONPATH", "PYTHONIOENCODING")
   windows = is_windows()
