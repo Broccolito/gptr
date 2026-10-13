@@ -3,6 +3,8 @@
 #' Run the on_load() queue and load the built-ins (load errors are kept, never raised)
 #' @noRd
 .onLoad = function(libname, pkgname) {
+  old = options("callr.condition_handler_cli_message")
+  on.exit(options(old), add = TRUE)
   on_load_run()
   load_builtins = ns_fun("ext_load_builtins")
   if (!is.null(load_builtins)) {
