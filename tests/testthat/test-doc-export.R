@@ -11,7 +11,7 @@ export_fixture = function(call = "s = peter(\"one\")", body = "x = 1", header = 
   f = file.path(getwd(), "history.R")
   h = utils::modifyList(list(model = "fake/fake-1", prompt = prompt_hash("one"),
                             sha = doc_body_sha(body), session = "s0123456789ab", turn = 1L), header)
-  writeLines(c(before, call, doc_render_block("abc123", h, body), after), f)
+  writeLines(c(before, call, doc_render_block("abc123", h, body), after), f, useBytes = TRUE)
   f
 }
 
@@ -109,12 +109,65 @@ test_that("Peter export keeps calls active and recorded code inert exactly once"
 
 test_that("history export keeps quoted notes and UTF-8 output inert and bounded", {
   local_project()
+  accent = intToUtf8(0xe9L)
+  literal_cases = list(
+    mixed_double = list(text = paste0('"caf', accent, ' \\u001b"'),
+      expected = paste0("caf", accent, " \u001b")),
+    mixed_single = list(text = paste0("'caf", accent, " \\u001b'"),
+      expected = paste0("caf", accent, " \u001b")),
+    plain = list(text = paste0('"caf', accent, '"'), expected = paste0("caf", accent)),
+    unicode_only = list(text = '"caf\\u00e9 \\u001b"', expected = paste0("caf", accent, " \u001b")),
+    octal = list(text = paste0('"caf', accent, ' \\033"'),
+      expected = paste0("caf", accent, " \u001b")),
+    raw = list(text = paste0('r"(caf', accent, ' \\u001b)"'),
+      expected = paste0("caf", accent, " \\u001b")),
+    escaped_backslash = list(text = paste0('"caf', accent, ' \\\\u001b"'),
+      expected = paste0("caf", accent, " \\u001b")),
+    hex = list(text = paste0('"caf', accent, ' \\x1b"'),
+      expected = paste0("caf", accent, " \u001b")),
+    braced_unicode = list(text = paste0('"caf', accent, ' \\u{1b}"'),
+      expected = paste0("caf", accent, " \u001b")),
+    large_unicode = list(text = paste0('"caf', accent, ' \\U0001f642"'),
+      expected = paste0("caf", accent, " ", intToUtf8(0x1f642L))),
+    escaped_unicode_octal = list(text = paste0('"caf', accent, ' \\\\u001b \\033"'),
+      expected = paste0("caf", accent, " \\u001b \u001b")),
+    raw_single = list(text = paste0("R'---[caf", accent, " \\u001b]---'"),
+      expected = paste0("caf", accent, " \\u001b")),
+    octal_comment = list(text = paste0('"caf', accent, ' \\033" # \\u001b'),
+      expected = paste0("caf", accent, " \u001b")),
+    single_octal_comment = list(text = paste0("'caf", accent, " \\033' # \\U0001f642"),
+      expected = paste0("caf", accent, " \u001b")),
+    escaped_unicode_comment = list(text = paste0('"caf', accent, ' \\\\u001b" # \\u001b'),
+      expected = paste0("caf", accent, " \\u001b")),
+    escaped_quote_comment = list(text = paste0('"caf', accent, ' \\" \\033" # \\u001b'),
+      expected = paste0("caf", accent, ' " \u001b')),
+    slash_run_comment = list(text = paste0('"caf', accent, ' \\\\\\\\u001b \\033" # \\u001b'),
+      expected = paste0("caf", accent, " \\\\u001b \u001b")),
+    multiline_comment = list(text = paste0('"caf', accent, '\n \\033" # \\u001b'),
+      expected = paste0("caf", accent, "\n \u001b")),
+    whitespace_comment = list(text = paste0(' \t"caf', accent, ' \\033" # \\u001b'),
+      expected = paste0("caf", accent, " \u001b")),
+    newline_comment = list(text = paste0('"caf', accent, ' \\033" # \\u001b\n'),
+      expected = paste0("caf", accent, " \u001b")))
+  for (literal in literal_cases) {
+    expect_identical(doc_unquote(literal$text), literal$expected)
+  }
+  expect_null(doc_unquote(paste0('"caf', accent, ' \\u001b \\033"')))
+  untouched = new.env(parent = emptyenv())
+  untouched$n = 0L
+  expect_null(doc_unquote('"literal"; untouched$n = 1L'))
+  expect_identical(untouched$n, 0L)
   prompt = "quotes \" \\ \n x = 99 # \r\t\u001b caf\u00e9"
   body = c("x = 2", "## Decision: Text is not code.\u001b",
            paste0("#> ", rep(paste0("caf\u00e9 ", strrep("x", 100L)), 20L)))
   f = export_fixture(call = paste0("s = peter(", doc_str_literal(prompt), ")"), body = body,
                      header = list(prompt = prompt_hash(prompt)))
   target = file.path(getwd(), "notes.R")
+  source_utf8 = grepl("caf\xc3\xa9", rawToChar(export_read(f)), fixed = TRUE, useBytes = TRUE)
+  source_native_escape = grepl("<U+00E9>", rawToChar(export_read(f)), fixed = TRUE)
+  expect_true(source_utf8)
+  expect_false(source_native_escape)
+  expect_identical(doc_scan_calls(doc_read(f)$lines)$prompt, prompt)
   gptr_export(f, target)
   out = readLines(target, encoding = "UTF-8")
   expect_true(any(grepl("^# Recorded prompt: ", out)))
@@ -211,6 +264,10 @@ test_that("export preserves BOM CRLF final-newline and ordinary source bytes", {
                      after = "answer = sum(user) + x")
   bytes = doc_serialize(readLines(f), eol = "\r\n", bom = TRUE, final_nl = FALSE)
   export_write(f, bytes)
+  source_utf8 = grepl("caf\xc3\xa9", rawToChar(export_read(f)), fixed = TRUE, useBytes = TRUE)
+  source_native_escape = grepl("<U+00E9>", rawToChar(export_read(f)), fixed = TRUE)
+  expect_true(source_utf8)
+  expect_false(source_native_escape)
   target = file.path(getwd(), "crlf.R")
   gptr_export(f, target)
   out = doc_read(target)
@@ -220,7 +277,7 @@ test_that("export preserves BOM CRLF final-newline and ordinary source bytes", {
   expect_identical(export_read(f), bytes)
   expect_true(all(c("# caf\u00e9 user note", "user = c(", "  2, 4", ")") %in% out$lines))
   e = new.env(parent = baseenv())
-  source(target, local = e, encoding = "UTF-8-BOM")
+  source(exprs = parse(text = out$lines, encoding = "UTF-8"), local = e)
   expect_identical(e$answer, 7)
 })
 
