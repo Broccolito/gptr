@@ -491,16 +491,48 @@ test_that("manual compaction on an active session completes without an orphan co
                                     usage = usage_new(input = 100, output = 5))), should = FALSE)
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
+  ordinary = list(status = x$s$status, busy = x$run$busy,
+                  request_closed = x$run$request_closed,
+                  requests = length(fake_requests(x$fake)), usage = nrow(x$s$usage))
+  ordinary_id = x$run$request_id
+  manual_started = reactor_now()
+  # Keep the abort active through admission and manual work, before expectation formatting.
+  text = cmd_compact("", session_live(x$s)$ctx)
+  manual_completed = reactor_now()
+  entries = cp_wait_entries(x$s)
+  guard_released = FALSE
+  if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
+      all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
+      identical(ordinary$status, "running") && isTRUE(ordinary$busy) &&
+      identical(ordinary$request_closed, FALSE) && ordinary$requests == 1L &&
+      ordinary$usage == 0L && identical(text, "Conversation compacted.") &&
+      manual_completed < x$guard_at && length(entries) == 1L &&
+      identical(entries[[1L]]$details$reason, "manual") &&
+      identical(entries[[1L]]$summary, "Manual summary.") &&
+      length(fake_requests(x$fake)) == 2L && nrow(x$s$usage) == 1L &&
+      identical(x$s$usage$input[[1L]], 100) && identical(x$s$usage$output[[1L]], 5) &&
+      !identical(x$s$usage$request_id[[1L]], ordinary_id) && isTRUE(x$run$busy) &&
+      !isTRUE(x$run$settled) && identical(x$run$request_id, ordinary_id) &&
+      identical(x$s$status, "running") && identical(x$run$request_closed, FALSE) &&
+      !isTRUE(x$run$signal$aborted) &&
+      is.null(x$run$compact_pending) && is.null(x$run$compact_finish) &&
+      is.null(x$run$compact_defer) && !isTRUE(session_live(x$s)$compacting)) {
+    guard_released = identical(reactor_cancel(x$guard), 1L)
+  }
+  reason = if (identical(x$run$signal$reason, "fixture-guard")) "fixture-guard" else
+    if (is.null(x$run$signal$reason)) "none" else "other"
+  diagnostic = paste0("guard_remaining=", x$guard_at - manual_started,
+                      "; manual_elapsed=", manual_completed - manual_started,
+                      "; abort_reason=", reason)
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
-  expect_identical(x$s$status, "running")
-  expect_true(x$run$busy)
-  expect_false(x$run$request_closed)
-  expect_length(fake_requests(x$fake), 1L)
-  expect_identical(nrow(x$s$usage), 0L)
-  ordinary_id = x$run$request_id
-  text = cmd_compact("", session_live(x$s)$ctx)
-  expect_identical(text, "Conversation compacted.")
+  expect_identical(ordinary$status, "running")
+  expect_true(ordinary$busy)
+  expect_false(ordinary$request_closed)
+  expect_identical(ordinary$requests, 1L)
+  expect_identical(ordinary$usage, 0L)
+  expect_identical(text, "Conversation compacted.", info = diagnostic)
+  expect_true(guard_released, info = diagnostic)
   expect_length(cp_wait_entries(x$s), 1L)
   expect_identical(cp_wait_entries(x$s)[[1L]]$details$reason, "manual")
   expect_identical(cp_wait_entries(x$s)[[1L]]$summary, "Manual summary.")
