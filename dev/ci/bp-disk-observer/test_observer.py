@@ -347,5 +347,66 @@ class ObserverControls(unittest.TestCase):
         with self.assertRaisesRegex(ObservationError, "snapshot-deadline"):
             observer.snapshot(declared_only=True)
 
+    def test_nested_ordinary_marker_disappearance_keeps_other_bytes(self):
+        fs = Operations()
+        fs.add("cache", metadata("directory", 2, 3))
+        nested = os.path.join(fs.root, "cache")
+        marker = "GPTR_PROC_PUBLIC.json"
+        full = os.path.join(nested, marker)
+        fs.children[nested] = ["keep", marker]
+        fs.info[os.path.join(nested, "keep")] = metadata(size=11, inode=4)
+        fs.info[full] = metadata(size=17, inode=5)
+        observer = self.observer(fs)
+        original = fs.lstat
+        observed = []
+
+        def disappearing(path):
+            observed.append(path)
+            if path == full:
+                fs.children[nested].remove(marker)
+                raise FileNotFoundError(errno.ENOENT, "owned ordinary marker disappeared")
+            return original(path)
+
+        fs.lstat = disappearing
+        sample = observer.snapshot()
+        self.assertEqual(sample["disappeared"], 1)
+        self.assertEqual(sample["bytes"], 13)
+        self.assertEqual(sample["directories"], 2)
+        self.assertEqual(sample["max_depth"], 1)
+        self.assertGreaterEqual(fs.scan_paths.count(nested), 2)
+        self.assertEqual(observed.count(full), 1)
+
+    def test_nested_ordinary_marker_reappearance_or_unknown_parent_is_fatal(self):
+        for mode, reason in (("case-changed", "disappearance-uncertain"),
+                             ("unreadable", "directory-unreadable"),
+                             ("replaced", "directory-identity-changed")):
+            with self.subTest(mode=mode):
+                fs = Operations()
+                fs.add("cache", metadata("directory", 2, 3))
+                nested = os.path.join(fs.root, "cache")
+                marker = "GPTR_PROC_PUBLIC.json"
+                full = os.path.join(nested, marker)
+                fs.children[nested] = [marker]
+                fs.info[full] = metadata(size=17, inode=5)
+                observer = self.observer(fs)
+                original = fs.lstat
+
+                def uncertain(path):
+                    if path == full:
+                        if mode == "case-changed":
+                            changed = marker.swapcase()
+                            fs.children[nested] = [changed]
+                            fs.info[os.path.join(nested, changed)] = metadata(size=19, inode=6)
+                        elif mode == "unreadable":
+                            fs.children[nested] = PermissionError(errno.EACCES, "unknown parent")
+                        else:
+                            fs.info[nested] = metadata("directory", 2, 99)
+                        raise FileNotFoundError(errno.ENOENT, "unproved marker disappearance")
+                    return original(path)
+
+                fs.lstat = uncertain
+                with self.assertRaisesRegex(ObservationError, reason):
+                    observer.snapshot()
+
 if __name__ == "__main__":
     unittest.main()

@@ -244,7 +244,8 @@ bp_run = function(case, declared_links = list()) {
   observer_enabled = identical(Sys.getenv("GPTR_OPTIONAL_NOFOLLOW_OBSERVER"), "true")
   declared_only = !observer_enabled && .Platform$OS.type == "windows" &&
     identical(declared_links, list(list(entry = "dangling-file", target = "missing-target")))
-  observer_enabled = observer_enabled || declared_only
+  observer_enabled = observer_enabled || declared_only ||
+    (.Platform$OS.type == "windows" && !length(declared_links))
   started = if (observer_enabled) proc.time()[["elapsed"]] else NULL
   root = if (observer_enabled) {
     temp_root = normalizePath(tempdir(), winslash = "/", mustWork = TRUE)

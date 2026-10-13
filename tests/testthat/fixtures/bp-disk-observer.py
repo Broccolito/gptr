@@ -213,7 +213,11 @@ class DiskObserver:
         def vanished(parent, identity, name):
             # Only a precise ENOENT plus readable same-identity direct-parent
             # enumeration can establish disappearance. No file.exists fallback.
-            if name in {entry.name for entry in names(parent, identity)}:
+            present = {entry.name for entry in names(parent, identity)}
+            if self.windows:
+                present = {value.casefold() for value in present}
+                name = name.casefold()
+            if name in present:
                 raise ObservationError("observer-entry-disappearance-uncertain")
             counters["disappeared"] += 1
 
