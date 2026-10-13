@@ -172,8 +172,10 @@ gptr_providers(check = TRUE)
 session = peter("Inspect the columns of mtcars.", mtcars, model = "codex")
 ```
 
-These calls run a child process and use its active authentication and billing. A CLI-reported
-login can include an API-key login; check the CLI's account and billing before use.
+These calls run a child process. The built-in `claude-cli` route uses the Claude CLI's signed-in
+plan/OAuth authentication and refuses API-key billing. For API-key use, explicitly choose the direct
+`anthropic` provider. The Codex route uses the CLI's active authentication and billing. A Codex
+CLI-reported login can include an API-key login; check the CLI's account and billing before use.
 Live R access goes through
 gptr's MCP permission gate; the Codex route needs the suggested packages `httpuv`, `later` and
 `openssl`. First use asks for an acknowledgment. gptr checks required CLI flags and rejects
