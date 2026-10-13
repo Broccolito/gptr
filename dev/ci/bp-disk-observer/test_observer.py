@@ -571,5 +571,151 @@ class LiteralLookupControls(unittest.TestCase):
                 self.assertEqual(api.closed, [])
 
 
+class DirectoryDisappearanceControls(unittest.TestCase):
+    def absent(self, code=2):
+        api = NativeAPI()
+        api.handle, api.code = -1, code
+        return getattr(observer, "_windows_entry")("C:\\owned\\gone", api=api)
+
+    def test_owned_directory_absence_before_or_after_scan_keeps_proven_bytes(self):
+        for when in (1, 2):
+            with self.subTest(lookup=when):
+                fs = Operations()
+                fs.add("cache", metadata("directory", 2, 3))
+                nested = os.path.join(fs.root, "cache")
+                fs.children[nested] = ["keep"]
+                fs.info[os.path.join(nested, "keep")] = metadata(size=7, inode=4)
+                scanner = DiskObserver(fs.root, operations=fs, windows=True)
+                original, calls = fs.find_entry, [0]
+
+                def disappearing(path):
+                    if path == nested:
+                        calls[0] += 1
+                        if calls[0] >= when:
+                            fs.children[fs.root] = []
+                            return self.absent()
+                    return original(path)
+
+                fs.find_entry = disappearing
+                sample = scanner.snapshot()
+                self.assertEqual(sample["disappeared"], 1)
+                self.assertEqual(sample["bytes"], 2 if when == 1 else 9)
+                self.assertGreaterEqual(fs.scan_paths.count(fs.root), 2)
+                self.assertNotIn(os.path.join(nested, "keep"), fs.scan_paths)
+
+    def test_nested_missing_ancestor_requires_confirmed_outer_parent_absence(self):
+        fs = Operations()
+        fs.add("cache", metadata("directory", 2, 3))
+        nested = os.path.join(fs.root, "cache")
+        child = os.path.join(nested, "child")
+        fs.children[nested] = ["child"]
+        fs.info[child] = metadata("directory", 3, 4)
+        fs.children[child] = []
+        scanner = DiskObserver(fs.root, operations=fs, windows=True)
+        original, calls = fs.find_entry, [0]
+
+        def disappearing(path):
+            if path == nested:
+                calls[0] += 1
+                if calls[0] >= 2:
+                    fs.children[fs.root] = []
+                    return self.absent(3)
+            return original(path)
+
+        fs.find_entry = disappearing
+        sample = scanner.snapshot()
+        self.assertEqual((sample["disappeared"], sample["bytes"]), (1, 5))
+        self.assertNotIn(child, fs.scan_paths)
+        self.assertGreaterEqual(fs.scan_paths.count(fs.root), 2)
+
+    def test_missing_lookup_cannot_hide_present_replaced_denied_or_reparse_parent(self):
+        modes = (("present", "disappearance-uncertain"),
+                 ("case-reappeared", "disappearance-uncertain"),
+                 ("replaced", "directory-identity-changed"),
+                 ("denied", "directory-unreadable"),
+                 ("reparse", "unknown-reparse-tag"))
+        for mode, reason in modes:
+            with self.subTest(mode=mode):
+                fs = Operations()
+                fs.add("cache", metadata("directory", 2, 3))
+                nested = os.path.join(fs.root, "cache")
+                scanner = DiskObserver(fs.root, operations=fs, windows=True)
+                original = fs.find_entry
+
+                def uncertain(path):
+                    if path == nested:
+                        if mode != "present":
+                            fs.children[fs.root] = []
+                        if mode == "case-reappeared":
+                            fs.children[fs.root] = ["CACHE"]
+                            fs.info[os.path.join(fs.root, "CACHE")] = metadata("directory", 2, 99)
+                        elif mode == "replaced":
+                            fs.info[fs.root] = metadata("directory", 0, 99)
+                        elif mode == "denied":
+                            fs.children[fs.root] = PermissionError(errno.EACCES, "owned refusal")
+                        elif mode == "reparse":
+                            fs.info[fs.root] = metadata("directory", 0, 1, 0x80000000)
+                        return self.absent()
+                    return original(path)
+
+                fs.find_entry = uncertain
+                with self.assertRaisesRegex(ObservationError, reason):
+                    scanner.snapshot()
+
+    def test_missing_root_unknown_lookup_and_confirmation_limits_remain_fatal(self):
+        modes = (("root", "entry-absent"),
+                 ("permission", "parent-enumeration-unavailable"),
+                 ("unknown", "parent-enumeration-unavailable"),
+                 ("entries", "entry-limit"),
+                 ("deadline", "snapshot-deadline"))
+        for mode, reason in modes:
+            with self.subTest(mode=mode):
+                fs = Operations()
+                fs.add("cache", metadata("directory", 2, 3))
+                nested = os.path.join(fs.root, "cache")
+                now = [0]
+                scanner = DiskObserver(fs.root, operations=fs, windows=True,
+                    max_entries=5 if mode == "entries" else 4096, clock=lambda: now[0])
+                original = fs.find_entry
+
+                def missing(path):
+                    if path == (fs.root if mode == "root" else nested):
+                        fs.children[fs.root] = []
+                        if mode == "deadline":
+                            now[0] = 1
+                        return self.absent(5 if mode == "permission" else 995 if mode == "unknown" else 2)
+                    return original(path)
+
+                fs.find_entry = missing
+                with self.assertRaisesRegex(ObservationError, reason):
+                    scanner.snapshot()
+
+
+    def test_nested_declared_link_postcheck_absence_is_always_fatal(self):
+        fs = Operations()
+        fs.add("cache", metadata("directory", 2, 3))
+        nested = os.path.join(fs.root, "cache")
+        alias = os.path.join(nested, "alias")
+        fs.children[nested] = ["alias"]
+        fs.info[alias] = metadata("link", 0, 4, 0xA000000C)
+        scanner = DiskObserver(fs.root, [{"entry": "cache/alias", "target": "missing"}],
+            operations=fs, windows=True)
+        original = fs.find_entry
+
+        def disappeared(path):
+            if path == nested and not fs.children[fs.root]:
+                return self.absent()
+            return original(path)
+
+        def readlink(path):
+            self.assertEqual(path, alias)
+            fs.children[fs.root] = []
+            return "../missing"
+
+        fs.find_entry, fs.readlink = disappeared, readlink
+        with self.assertRaisesRegex(ObservationError, "link-entry-absent"):
+            scanner.snapshot()
+
+
 if __name__ == "__main__":
     unittest.main()

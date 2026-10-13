@@ -11,6 +11,10 @@ class ObservationError(RuntimeError):
     pass
 
 
+class _EntryAbsent(ObservationError):
+    pass
+
+
 
 class _WindowsEntry:
     def __init__(self, name, attributes, tag):
@@ -62,7 +66,7 @@ def _windows_entry(path, *, api=None):
     if handle in (None, 0, -1, ctypes.c_void_p(-1).value):
         code = ctypes.get_last_error() if api is None else api.last_error()
         if code in (2, 3):
-            raise ObservationError("observer-parent-entry-absent")
+            raise _EntryAbsent("observer-parent-entry-absent")
         raise ObservationError("observer-parent-enumeration-unavailable")
     failure = None
     entry = None
@@ -140,7 +144,7 @@ class DiskObserver:
 
         try:
             initial = self._metadata(self.root, tick=tick)
-        except FileNotFoundError:
+        except (FileNotFoundError, _EntryAbsent):
             raise ObservationError("observer-root-entry-absent") from None
         if initial["kind"] != "directory":
             raise ObservationError("observer-root-not-direct-directory")
@@ -210,14 +214,14 @@ class DiskObserver:
                 except OSError:
                     raise ObservationError("observer-parent-enumeration-unavailable") from None
             if found is None:
-                raise ObservationError("observer-parent-entry-absent")
+                raise _EntryAbsent("observer-parent-entry-absent")
             current = os.path.join(current, part)
             if index + 1 == len(parts):
                 return found
             try:
                 item = self._metadata(current, found)
             except FileNotFoundError:
-                raise ObservationError("observer-parent-entry-absent") from None
+                raise _EntryAbsent("observer-parent-entry-absent") from None
             if item["kind"] != "directory":
                 raise ObservationError("observer-parent-not-direct-directory")
 
@@ -284,7 +288,7 @@ class DiskObserver:
             try:
                 item = self._metadata(path, tick=tick)
             except FileNotFoundError:
-                raise ObservationError("observer-directory-entry-absent") from None
+                raise _EntryAbsent("observer-directory-entry-absent") from None
             if item["kind"] != "directory" or item["identity"] != identity:
                 raise ObservationError("observer-directory-identity-changed")
 
@@ -347,7 +351,7 @@ class DiskObserver:
                         raise ObservationError("observer-link-target-differs")
                     try:
                         after = self._metadata(full, tick=tick)
-                    except FileNotFoundError:
+                    except (FileNotFoundError, _EntryAbsent):
                         raise ObservationError("observer-link-entry-absent") from None
                     if after != item:
                         raise ObservationError("observer-link-identity-changed")
@@ -358,12 +362,18 @@ class DiskObserver:
                 elif item["kind"] == "directory":
                     if not declared_only:
                         charge(item["size"])
-                        walk(full, rel, item["identity"], depth + 1)
+                        try:
+                            walk(full, rel, item["identity"], depth + 1)
+                        except _EntryAbsent:
+                            vanished(path, identity, name)
                 elif not declared_only:
                     charge(item["size"])
             direct(path, identity)
 
-        walk(self.root, "", self.root_identity, 0)
+        try:
+            walk(self.root, "", self.root_identity, 0)
+        except _EntryAbsent:
+            raise ObservationError("observer-directory-entry-absent") from None
         counters["elapsed_s"] = self.clock() - started
         if counters["elapsed_s"] >= self.max_seconds:
             raise ObservationError("observer-snapshot-deadline")
