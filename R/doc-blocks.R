@@ -1297,7 +1297,7 @@ doc_session_code = function(session) {
 #' Header facts common to every block
 #' @noRd
 doc_header_common = function(site, call_ordinal, model) {
-  list(model = model, date = format(Sys.Date(), "%Y-%m-%d"),
+  list(model = model, date = with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d")),
        prompt = site$prompt_hash %||% prompt_hash(site$template %||% ""),
        call = if (isTRUE(call_ordinal > 1L)) as.integer(call_ordinal) else NULL,
        args = site$args_hash)

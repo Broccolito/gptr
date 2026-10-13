@@ -172,7 +172,7 @@ s1_cache_record = function(key, answer, model_version, alias, question, state, s
        prob = s1_cache_num(prob),
        probabilities = if (!is.null(probs)) lapply(as.list(probs), s1_cache_num),
        confidence = s1_cache_num(answer[["confidence"]]),
-       date = format(Sys.Date()),
+       date = with_calendar_preserved(format(Sys.Date())),
        usage = list(input_tokens = s1_cache_num(s1_count(usage[["input"]])),
                     output_tokens = s1_cache_num(s1_count(usage[["output"]]))))
 }

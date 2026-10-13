@@ -710,8 +710,9 @@ ckpt_turn_rows = function(tree, path, branch, ck, exclude = character()) {
     seg = match(path[starts[j]:ends[j]], tree$ids)
     first = tree$entries[[seg[1L]]]
     data.frame(turn = j, id = path[ends[j]],
-               time = as.POSIXct(sub("Z$", "", first$timestamp %||% NA), tz = "UTC",
-                                 format = "%Y-%m-%dT%H:%M:%OS"),
+               time = with_calendar_preserved(as.POSIXct(
+                 sub("Z$", "", first$timestamp %||% NA), tz = "UTC",
+                 format = "%Y-%m-%dT%H:%M:%OS")),
                prompt = substr(msg_text(first$message), 1L, 60L),
                ckpt_turn_counts(tree$entries[seg[tree$ctype[seg] == "gptr.checkpoint"]], ck),
                branch = branch)

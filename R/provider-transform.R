@@ -306,7 +306,8 @@ entry_ms = function(ts) {
     return(if (is.finite(ts[[1]])) as.numeric(ts[[1]]) else 0)
   }
   if (!is.character(ts) || !length(ts) || is.na(ts[[1]])) return(0)
-  t = as.POSIXct(sub("Z$", "", ts[[1]]), format = "%Y-%m-%dT%H:%M:%OS", tz = "UTC")
+  t = with_calendar_preserved(as.POSIXct(
+    sub("Z$", "", ts[[1]]), format = "%Y-%m-%dT%H:%M:%OS", tz = "UTC"))
   if (is.na(t)) 0 else round(as.numeric(t) * 1000)
 }
 

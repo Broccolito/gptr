@@ -48,7 +48,9 @@ artifact_working_file = function(dir, kind) {
 
 #' ISO 8601 UTC time with milliseconds (contract 1.2)
 #' @noRd
-artifact_time = function() format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC")
+artifact_time = function() {
+  with_calendar_preserved(format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC"))
+}
 
 #' Path of artifact.json
 #' @noRd

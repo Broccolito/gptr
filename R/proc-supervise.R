@@ -181,7 +181,8 @@ proc_mark = function(p, marker, command) {
   rec = list(marker = marker, pid = pid, create_time = proc_create_time(pid),
              parent_pid = self$pid, parent_create = self$create_time,
              command = basename(command),
-             started = format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC"))
+             started = with_calendar_preserved(format(
+               Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC")))
   je = jobs_env()
   assign(marker, rec, envir = je$procs)
   assign(marker, p, envir = je$handles)

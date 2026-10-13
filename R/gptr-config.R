@@ -466,7 +466,7 @@ trust_store = function(root, trusted, fp = NULL) {
     rec = x[["projects"]][[key]]
     if (!settings_is_object(rec)) rec = list()
     rec$trusted = isTRUE(trusted)
-    rec$date = format(Sys.Date())
+    rec$date = with_calendar_preserved(format(Sys.Date()))
     rec$fingerprint = fp$fp
     rec$files = if (length(fp$files)) as.list(fp$files) else json_obj()
     x$version = x[["version"]] %||% 1L

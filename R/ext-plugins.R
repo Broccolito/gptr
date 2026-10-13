@@ -257,7 +257,8 @@ fm_chr_list = function(x, split = "[,[:space:]]+") {
 res_file_sig = function(paths) {
   if (!length(paths)) return("")
   fi = file.info(paths, extra_cols = FALSE)
-  paste(paths, format(fi$mtime, "%Y%m%d%H%M%OS6"), fi$size, sep = ":", collapse = "|")
+  paste(paths, with_calendar_preserved(format(fi$mtime, "%Y%m%d%H%M%OS6")),
+        fi$size, sep = ":", collapse = "|")
 }
 
 #' Parse a file once per version (path, modification time and size)

@@ -729,7 +729,8 @@ doc_sidecar_decode = function(x, path) {
   list(doc = path_norm(x$doc), base_md5 = x$base_md5 %||% NA_character_, upserts = ups,
        session = x$session, pid = as.integer(x$pid),
        create_time = as.numeric(x$create_time %||% NA_real_),
-       time = as.POSIXct(as.numeric(x$time %||% NA_real_), origin = "1970-01-01", tz = "UTC"),
+       time = with_calendar_preserved(as.POSIXct(
+         as.numeric(x$time %||% NA_real_), origin = "1970-01-01", tz = "UTC")),
        kind = x$kind)
 }
 

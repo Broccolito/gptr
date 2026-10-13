@@ -363,7 +363,8 @@ compaction_gptr_from_json = function(g) {
 #' @noRd
 iso_ms = function(x) {
   if (!rlang::is_string(x)) return(NULL)
-  t = as.numeric(as.POSIXct(sub("Z$", "", x), format = "%Y-%m-%dT%H:%M:%OS", tz = "UTC"))
+  t = as.numeric(with_calendar_preserved(as.POSIXct(
+    sub("Z$", "", x), format = "%Y-%m-%dT%H:%M:%OS", tz = "UTC")))
   if (!is.finite(t)) return(NULL)
   round(t * 1000)
 }

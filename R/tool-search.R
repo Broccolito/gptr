@@ -555,7 +555,8 @@ print.gptr_files = function(x, ...) {
   lines = paste0(x$path, ifelse(slash, "/", ""))
   if (isTRUE(attr(x, "long"))) {
     size = vapply(x$size, function(s) if (is.na(s)) "-" else format_size(s), "")
-    lines = sprintf("%8s  %s  %s", size, format(x$mtime, "%Y-%m-%d %H:%M"), lines)
+    lines = sprintf("%8s  %s  %s", size,
+                    with_calendar_preserved(format(x$mtime, "%Y-%m-%d %H:%M")), lines)
   }
   shown = budget_head(lines, member_budget())
   limit = attr(x, "limit")

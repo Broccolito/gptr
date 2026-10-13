@@ -21,12 +21,18 @@ iso_tzdir_probe = function(value, formatter, windows = FALSE, restore = NULL) {
       }), parent = environment(env_restore_python))
   }
   fun = iso_time
-  environment(fun) = list2env(list(Sys.getenv = read,
+  scope = list2env(list(Sys.getenv = read,
     is_windows = function() windows, env_restore_python = restore,
     format = function(...) {
       state$calls = state$calls + 1L
       formatter(state)
     }), parent = environment(iso_time))
+  preserve = get0("with_calendar_preserved", envir = environment(iso_time), inherits = FALSE)
+  if (!is.null(preserve)) {
+    environment(preserve) = scope
+    scope$with_calendar_preserved = preserve
+  }
+  environment(fun) = scope
   list(fun = fun, state = state)
 }
 

@@ -424,7 +424,7 @@ context_provide_environment = function(ctx, budget) {
     art = ".gptr/artifacts"
     if (is.null(workspace_dir())) art = file.path(tempdir(), "gptr", "artifacts")
   }
-  lines = c(paste0("Date: ", format(Sys.Date(), "%Y-%m-%d")),
+  lines = c(paste0("Date: ", with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d"))),
             paste0("Working directory: ", wd),
             if (!is.null(doc$path)) paste0("Document: ", path_rel(doc$path, root)),
             if (!is.null(art)) paste0("Artifacts: ", art),

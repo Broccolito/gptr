@@ -334,7 +334,7 @@ mcp_era_get = function(spec) {
   if (!one(x[["era"]]) || !one(x[["date"]]) || !(x[["era"]] %in% c("modern", "legacy"))) {
     return(NULL)
   }
-  when = as.POSIXct(x[["date"]], format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+  when = with_calendar_preserved(as.POSIXct(x[["date"]], format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"))
   if (is.na(when) || difftime(Sys.time(), when, units = "days") > 7) return(NULL)
   x
 }
@@ -344,7 +344,8 @@ mcp_era_get = function(spec) {
 mcp_era_put = function(spec, era, version) {
   write_atomic(mcp_cache_path("mcp-era", spec, create = TRUE),
                json_encode(list(era = era, version = version,
-                                date = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"))))
+                                date = with_calendar_preserved(format(
+                                  Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")))))
 }
 
 #' Forget the cached era of a server

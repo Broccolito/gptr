@@ -53,7 +53,7 @@ plan_slug = function(text) {
 #' A new path <workspace root>/plans/<YYYY-MM-DD>-<slug>.md, or <slug>-<n>.md when taken
 #' @noRd
 plan_path = function(slug) {
-  base = paste0(format(Sys.Date(), "%Y-%m-%d"), "-", slug)
+  base = paste0(with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d")), "-", slug)
   path = ws_path("plans", paste0(base, ".md"))
   n = 1L
   while (file.exists(path)) {
