@@ -338,17 +338,42 @@ test_that("a yielded checkpoint leaves all caller state intact across both waits
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
   after_short = snapshot()
+  pending = x$run$compact_pending
+  ids = x$run$request_ids
+  guard_released = FALSE
+  # Guard the finite yield; release only after its caller state and owner are proved.
+  if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
+      all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
+      identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      is.list(pending) && identical(x$run$compact_pending, pending) &&
+      identical(x$run$request_ids, ids) && is.function(x$run$compact_finish) &&
+      identical(session_live(x$s)$run, x$run) && isTRUE(session_live(x$s)$compacting) &&
+      length(fake_requests(x$fake)) == 1L && nrow(x$s$usage) == 0L &&
+      length(cp_wait_entries(x$s)) == 0L &&
+      all(vapply(names(before), function(name) {
+        identical(before[[name]], after_short[[name]])
+      }, logical(1L)))) {
+    guard_released = identical(reactor_cancel(x$guard), 1L)
+  }
+  second_started = reactor_now()
+  gptr_wait(x$s, timeout = 1)
+  second_completed = reactor_now()
+  after = snapshot()
+  reason = if (identical(x$run$signal$reason, "fixture-guard")) "fixture-guard" else
+    if (is.null(x$run$signal$reason)) "none" else "other"
+  diagnostic = paste0("guard_remaining=", x$guard_at - second_started,
+                      "; second_wait_elapsed=", second_completed - second_started,
+                      "; abort_reason=", reason)
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
   expect_true(all(vapply(names(before), function(name) {
     identical(before[[name]], after_short[[name]])
   }, logical(1L))))
-  gptr_wait(x$s, timeout = 1)
-  after = snapshot()
   expect_true(all(vapply(names(before), function(name) {
     identical(before[[name]], after[[name]])
   }, logical(1L))))
-  expect_identical(x$s$status, "idle")
+  expect_true(guard_released, info = diagnostic)
+  expect_identical(x$s$status, "idle", info = diagnostic)
   cp_wait_finished(x)
 })
 
