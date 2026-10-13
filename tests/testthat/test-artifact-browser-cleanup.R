@@ -298,3 +298,101 @@ test_that("remote browser socket cleanup preserves caller RNG without a local pr
     })
   }
 })
+
+
+test_that("browser cleanup accepts delayed callbacks within its existing shutdown deadline", {
+  for (delay in c(0.31, 1, 9)) {
+    x = artifact_browser_fixture()
+    process = x$owner$get_process()
+    pump = x$scope$pump
+    x$scope$pump = function(loop, ...) {
+      x$state$clock = x$state$clock + delay
+      pump(loop, ...)
+    }
+    expect_invisible(x$close())
+    expect_true(x$state$clock > delay && x$state$clock < 10)
+    expect_length(x$state$pump_timeouts, 1L)
+    expect_true(all(x$state$pump_timeouts > 0 & x$state$pump_timeouts <= 0.02))
+    expect_identical(x$owner$get_process(), process)
+    expect_identical(x$state$events[[1L]], "websocket")
+    expect_identical(utils::tail(x$state$events, 2L), c("process", "wait"))
+    expect_false(x$state$alive)
+    expect_false(x$state$active)
+    expect_null(x$scope$artifact_state$browser)
+    expect_null(x$scope$artifact_state$browser_owner)
+  }
+})
+
+test_that("browser cleanup retains ownership after deadline or clock failure", {
+  for (mode in c("deadline", "stalled", "nonfinite", "backward")) {
+    x = artifact_browser_fixture()
+    if (mode %in% c("deadline", "nonfinite")) {
+      pump = x$scope$pump
+      x$scope$pump = function(loop, ...) {
+        pump(loop, ...)
+        if (mode == "deadline") {
+          x$state$clock = x$state$clock + 11
+        } else {
+          x$scope$clock = function() c(elapsed = NA_real_)
+        }
+      }
+    } else if (mode == "stalled") {
+      x$scope$clock = function() c(elapsed = 0)
+    } else {
+      x$scope$clock = function() {
+        x$state$clock = x$state$clock - 0.01
+        c(elapsed = x$state$clock)
+      }
+    }
+    seen = tryCatch(x$close(), error = identity)
+    expect_s3_class(seen, "gptr_error_io")
+    expect_identical(x$scope$artifact_state$browser, x$container)
+    expect_identical(x$scope$artifact_state$browser_owner, x$owner)
+    expect_true(x$state$alive)
+    expect_false(any(x$state$events %in% c("process", "wait")))
+    expect_identical(x$state$events[[1L]], "websocket")
+    if (mode %in% c("stalled", "backward")) {
+      expect_length(x$state$pump_timeouts, 64L)
+    } else {
+      expect_length(x$state$pump_timeouts, 1L)
+    }
+  }
+})
+
+test_that("delayed browser callbacks preserve exact conditions and replacement caches", {
+  for (kind in c("error", "interrupt")) {
+    x = artifact_browser_fixture()
+    original = structure(list(message = "controlled delayed callback", call = NULL),
+      class = c(paste0("controlled_", kind), kind, "condition"))
+    x$state$pump_error = original
+    pump = x$scope$pump
+    x$scope$pump = function(loop, ...) {
+      force(list(...))
+      x$state$clock = x$state$clock + 11
+      pump(loop, ...)
+    }
+    seen = tryCatch(x$close(), error = identity, interrupt = identity)
+    expect_identical(seen, original)
+    expect_identical(x$scope$artifact_state$browser, x$container)
+    expect_identical(x$scope$artifact_state$browser_owner, x$owner)
+    expect_true(x$state$alive)
+    expect_false(any(x$state$events %in% c("process", "wait")))
+  }
+  for (field in c("browser", "owner")) {
+    x = artifact_browser_fixture()
+    x$state[[paste0("replace_", field)]] = TRUE
+    pump = x$scope$pump
+    x$scope$pump = function(loop, ...) {
+      x$state$clock = x$state$clock + 0.31
+      pump(loop, ...)
+    }
+    seen = tryCatch(x$close(), error = identity)
+    expect_s3_class(seen, "gptr_error_io")
+    expect_identical(x$scope$artifact_state$browser,
+      if (field == "browser") x$replacement else x$container)
+    expect_identical(x$scope$artifact_state$browser_owner,
+      if (field == "owner") x$replacement else x$owner)
+    expect_true(x$state$alive)
+    expect_false(any(x$state$events %in% c("process", "wait")))
+  }
+})

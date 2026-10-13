@@ -769,7 +769,8 @@ artifact_browser_close = function(b = artifact_state$browser,
       left = until - proc.time()[["elapsed"]]
     }
     elapsed = proc.time()[["elapsed"]] - started
-    if (!is.finite(elapsed) || elapsed < 0.2 || elapsed > 0.3) {
+    # The shared deadline bounds callback and scheduling delays beyond this grace.
+    if (!is.finite(elapsed) || elapsed < 0.2) {
       gptr_abort("The headless browser close loop did not settle.", "io",
                  operation = "close", path = NULL)
     }
