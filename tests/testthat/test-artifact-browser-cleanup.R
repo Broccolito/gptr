@@ -301,6 +301,25 @@ test_that("remote browser socket cleanup preserves caller RNG without a local pr
 
 
 test_that("browser cleanup accepts delayed callbacks within its existing shutdown deadline", {
+  started = 1
+  target = started + 0.2
+  expect_lt(target - started, 0.2)
+  x = artifact_browser_fixture()
+  x$state$clock = started
+  x$scope$clock = function() c(elapsed = x$state$clock)
+  pump = x$scope$pump
+  x$scope$pump = function(loop, ...) {
+    pump(loop, ...)
+    x$state$clock = target
+  }
+  expect_invisible(x$close())
+  expect_identical(x$state$clock, target)
+  expect_length(x$state$pump_timeouts, 1L)
+  expect_identical(x$state$events, c("websocket", "pump", "process", "wait"))
+  expect_false(x$state$alive)
+  expect_false(x$state$active)
+  expect_null(x$scope$artifact_state$browser)
+  expect_null(x$scope$artifact_state$browser_owner)
   for (delay in c(0.31, 1, 9)) {
     x = artifact_browser_fixture()
     process = x$owner$get_process()
