@@ -171,7 +171,7 @@ See [language models](language-models.html) for the supported connection routes.
 
 ## R options
 
-The [complete option reference](../reference/gptr_options.html) gives types, defaults and
+The complete option reference (`?gptr_options`) gives types, defaults and
 units for every option. The index below groups every documented `gptr.*` option; names are
 shown after the common `gptr.` prefix. Use `options()` for these controls, not an unregistered
 key in `gptr_config()`. Settings-backed options participate in the precedence described above.
