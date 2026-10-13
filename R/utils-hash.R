@@ -56,9 +56,31 @@ id_new = function(prefix = "", n = 10L) {
 #' ISO 8601 UTC time with milliseconds, locale independent (04 section 1.2)
 #' @noRd
 iso_time = function(t = as.numeric(Sys.time())) {
-  ms = round(t * 1000)
-  paste0(format(.POSIXct(ms %/% 1000, tz = "UTC"), "%Y-%m-%dT%H:%M:%S", tz = "UTC"), ".",
-         sprintf("%03d", as.integer(ms %% 1000)), "Z", recycle0 = TRUE)
+  windows = is_windows()
+  before = Sys.getenv()
+  key = if (windows) toupper else identity
+  before = before[key(names(before)) == "TZDIR"]
+  result = NULL
+  on.exit({
+    restored = isTRUE(tryCatch(env_restore_python(before, "TZDIR", windows),
+      error = function(error) FALSE, interrupt = function(interrupt) FALSE))
+    if (!restored) {
+      if (!inherits(result, "condition")) {
+        gptr_abort("Timestamp formatting could not restore its timezone environment state.",
+                   "state_restore", env_restored = FALSE)
+      }
+      tryCatch(gptr_warn("Timestamp formatting failed and its timezone state was not restored.",
+                        "state_restore", env_restored = FALSE),
+        error = function(error) NULL, interrupt = function(interrupt) NULL)
+    }
+  }, add = TRUE)
+  result = tryCatch({
+    ms = round(t * 1000)
+    paste0(format(.POSIXct(ms %/% 1000, tz = "UTC"), "%Y-%m-%dT%H:%M:%S", tz = "UTC"), ".",
+           sprintf("%03d", as.integer(ms %% 1000)), "Z", recycle0 = TRUE)
+  }, error = identity, interrupt = identity)
+  if (inherits(result, "condition")) stop(result)
+  result
 }
 
 #' An 8-hex entry id not in `taken` (12 hex after 100 collisions)
