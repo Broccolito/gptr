@@ -893,10 +893,13 @@ artifact_session_browse = function(url, width, height, timeout) {
     reactor_pump(until = function() FALSE, slice_ms = 50L, timeout = 0.1)
   }
   errors = json_decode(eval_js(artifact_js_errors))
+  png = tryCatch(b$Page$captureScreenshot(format = "png")$data, error = identity)
+  capture_failed = inherits(png, "error")
   list(connected = isTRUE(state$connected), disconnected = isTRUE(state$disconnected),
        output_errors = vapply(errors, function(e) paste0(e$id, ": ", e$message), character(1)),
        js_errors = unique(seen$js),
-       png = b$Page$captureScreenshot(format = "png")$data)
+       png = if (capture_failed) NULL else png,
+       screenshot_error = if (capture_failed) conditionMessage(png) else NULL)
 }
 
 #' The body of artifact_session_check()
@@ -918,6 +921,9 @@ artifact_session_run = function(rec, png, width, height, timeout) {
   msgs = c(
     if (length(res$output_errors)) paste0("output error in ", res$output_errors),
     if (length(res$js_errors)) paste0("JavaScript error: ", res$js_errors),
+    if (length(res$screenshot_error)) {
+      paste0("The screenshot could not be captured: ", res$screenshot_error)
+    },
     artifact_log_messages(rec$log),
     if (res$disconnected) "the Shiny session disconnected: the server function failed",
     if (!res$connected && !res$disconnected) {
@@ -938,7 +944,9 @@ artifact_session_run = function(rec, png, width, height, timeout) {
 #'
 #' `ok` is NA when the check could not run (no chromote or no Chrome: an HTTP-only check, which
 #' the messages say; report 17 section 7, risk 4), TRUE when the session connected with no
-#' output, JavaScript or server-log errors, else FALSE. `.Random.seed` is preserved: chromote's
+#' output, JavaScript or server-log errors, else FALSE. A screenshot failure is reported in
+#' `messages`, with `screenshot = NULL`; `ok` still describes the page validation.
+#' `.Random.seed` is preserved: chromote's
 #' port picker calls sample() (report 17 verification log item 6; IC-61).
 #' @return `list(ok, messages, screenshot = <png path> | NULL)`
 #' @noRd
