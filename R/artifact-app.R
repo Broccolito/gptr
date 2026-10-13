@@ -604,7 +604,7 @@ artifact_browser = function() {
     }
   }
   args = c(chromote::get_chrome_args(), "--use-mock-keychain")
-  b = chromote::Chromote$new(browser = chromote::Chrome$new(args = args))
+  b = with_seed_preserved(chromote::Chromote$new(browser = chromote::Chrome$new(args = args)))
   artifact_state$browser = b
   b
 }
@@ -627,14 +627,16 @@ artifact_browser_close = function() {
       gptr_abort("The owned headless browser state is unavailable.", "io",
                  operation = "close", path = NULL)
     }
-    # Keep the owner reachable; a live-local container close sends unobserved CDP.
-    if (alive) browser$close(wait = TRUE)
+    # Close the socket before waiting for the owned process; retain the owner on failure.
+    if (alive) with_seed_preserved(b$close(wait = TRUE))
     if (!isFALSE(process$is_alive())) {
       gptr_abort("The owned headless browser did not stop.", "io",
                  operation = "close", path = NULL)
     }
+    # An exited process can leave its close callback queued on Chromote's own loop.
+    with_seed_preserved(later::run_now(timeoutSecs = 0.2, loop = b$get_child_loop()))
   }
-  b$close(wait = FALSE)
+  with_seed_preserved(b$close(wait = FALSE))
   if (!isFALSE(b$is_active())) {
     gptr_abort("The headless browser connection did not become inactive.", "io",
                operation = "close", path = NULL)
