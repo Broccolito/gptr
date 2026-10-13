@@ -1,48 +1,25 @@
-## Current validation checkpoint — source `4cdde1d`, 2026-10-13
+## Current task checkpoint — source `601ce96`, 2026-10-13
 
-The runtime fixes and Windows comparison source are adopted; main is unmerged and readiness is false.
-The new normal certificate binds this source. Each consumer/provider row has its own measured scope.
-Use one root-owned serial family: 2 GiB sampled RAM/512 MiB output; preserve original R and shared Ollama.
+Seven task commits are adopted and pushed. The new source controls below pass their measured scopes; the installed artifact remains the predecessor `4cdde1d`. Next normal build/install is HELD until this checkpoint commits and supplies the final clean SHA. Main is unmerged and release readiness remains false. Use one root-owned serial family with the existing 2 GiB sampled RAM/512 MiB output limits; preserve original R sessions and shared Ollama.
 
-| Gate | Current result | Remaining condition |
+| Gate | Retained result | Next condition |
 | --- | --- | --- |
-| Normal private 4cd | PASS: 121 R files/14 guide pairs/64 exports; archive c2f73fb8, 2,604,088 B; 79 read-only installed files/five MD5 | Other profiles, current archive check/as-cran and release gates |
-| First optional Python | PASS: reticulate/Matrix absent before public typed refusal; Python uninitialized; all8/connections/W0 | No Python evaluation or broad optional-dependency claim |
-| Python6 | PASS: 6 cases/119P, three exact Windows skips; native checks20/21/21, all8/connections/W0 | Windows native scope and complete package suite |
-| Cold7/public23 | PASS: seven fresh operations/840 state flags; public23/247P with all canonical conditions empty; all8/W0 | Named operations and replay cases only |
-| Rscript/Rmd/Jupyter | PASS: ten display oracles/all13 states/env6 unchanged/W0/request0; Rmd actual escaped pre and Jupyter MIME/full-value proofs | Synthetic history display only; interactive/native frontends |
-| Jev typed | LIVE+fresh replay PASS: logical/choice/score, three/zero native usage rows; same three-block document/all8/W0 | No calibration or generative-tool claim |
-| Azure integrations | Files/resources/download/web LIVE PASS: 2/4/3/3 requests, all8/W0; recovered resource arity error and real public download/search | Four fixed integration cases only |
-| Azure numeric/steering | Function/simulation/steering LIVE PASS:4/2/6 requests, all8/W0; locked B1000/n20 coverage.952/mean-.005778123 with RNG preserved; median19.2 and running→steer→idle | Three fixed numeric/control-flow cases only |
-| Azure regression | LIVE+fresh replay PASS:2/0 requests and usage, one unchanged document52a099fc/three executable R expressions; all8/W0 | Reference regression only; earlier explicit-opt-out replay remains NONPASS |
-| Azure teams | LIVE+fresh replay PASS: 8/0 requests, two unchanged blocks/all8/W0; printed scalar reports match | Recorded report/provenance scope; older390 report mismatch remains NONPASS |
-| Manual compaction | LIVE+resume PASS: 4/0 requests and5/0 usage events; all8/W0/installed bytes unchanged | Other compaction/resume/fanout/ML workflows |
-| Corrected auto/budget fixtures | LIVE+resume PASS:5/3 requests and usage→0;7245 threshold below7319 context, one durable checkpoint attempt/gate preserved; all8/W0. Budget typed stop/fit input unchanged | Corrected fixed fixtures only; other compaction/fanout workflow gates |
-| Original auto/budget triggers | NONPASS: compact_ids assertion, all8/W0/owned cleanup; original runs retained | Full-prompt estimate differed from runtime latest context; original failures retained separately, no runtime failure claim |
-| ML/RNA | NONPASS: prediction-identical oracle; all8/W0/owned cleanup, eight samples0 errors/207.953MiB | Source audit identifies generated matrix/vector recycling giving wrong distances; no engine/copy defect evidenced. RNA unrun |
-| Native default Shiny V6 | NONPASS: lifecycle1000/death/cache/late12s pass, seed/objects FALSE; Shiny C++ error and51 allocator/display markers | Stop V2 baseline INCONCLUSIVE: no C++ marker, all8/W0/death preserved; cooperative unrun. No cure or timing-cause proof |
-| Artifact readiness/memory | Readiness PASS: representative103-byte socket/loopback200/all8/W0. Full67 hits2GiB at2,468.094MiB; fresh app-file method hits2,183.594MiB/15 processes | Neither publishes complete canonical/all8/W receipts; bounded active-case/per-PID diagnostics pending, no memory-cause claim |
-| Full Mac/archive | Prior fb8 suite stops at2,094.672MiB after827.960s; original archive check not run | Fresh profile is bound; complete suite remains resource-held, no cap increase |
-| Windows comparison | Run38408117805 stops after20 static controls at silent six-path lint gate; offending finding absent from raw | Named lint print/RDS diagnostic source-cleared; adoption and explicit rerun NEXT. Later native/RSS stages not run |
-| Current hosted checks | 14:56UTC snapshot retained. Latest15:17:56UTC:9 success/1 failure/3 running(two Windows/connections); Windows Python setup PASS. LC_C31,245P1F/W0/73S: compaction-wait351 aborted vs idle; examples/vignettes OK. Plan PASS/pkgdown SKIPPED | LC failure source diagnosis pending; remaining job/raw/native acceptance. Skipped Pages is not deployment |
-| Claude auth | Latest paired native statuses1/loggedIn FALSE/method none/sameConfig TRUE; AUTH_UNAVAILABLE | No authenticated provider proof; preserve earlier live auth failures and230s/50s deadlines |
-| Codex current regression | LIVE+fresh replay PASS:1/0 requests and usage, unchanged one-block document580409ef/all8/W0;25.184s/552.859MiB and1.339s/33.641MiB sampled | Regression only; broader CLI/provider gates |
-| Other predecessor scopes | Functional Quarto/Q19 pass their recorded fb8 scopes; Quarto whole-object/native failures retained | Fresh remaining providers/workflows, original serialization and native acceptance |
-| Adopted source controls | Reason46/calendar/Busy/FIFO/observer/census/Unicode/UV/Matrix/browser/OpenSSL controls and configured lints pass their exact scopes | Complete current CI/package/native/teardown acceptance |
-| Site/release/merge | Prior site/ICO receipts remain historical; last verified deployment2450c9e. CRAN submission being prepared | Current rendering/publication, size/check/profile/teardown gates and merge |
+| Yielded caller-state wait | Adopted: one original case/17P and one lint0; all8/W0/cleanup | Complete15 and current hosted acceptance |
+| Image loader controls | Adopted: three cases/15P and two lint0; all8/W0 | Noncold mock-encoder scope; genuine cold image and new installed proof remain open |
+| R-tool/prompt suite | Adopted: complete112 cases/661P and two lint0; all8/W0, canonical conditions empty | Paired fixed image loader and two isolated fixture RNG draws; no cold-image or model-math efficacy claim |
+| Shiny stop controls | Adopted: four appended controls/79P and two lint0; all8/W0 | Original50/full54, new installed and connected-WebSocket/native teardown remain open |
+| Intentional-stop UX | HTTP-only paired contrast: baseline child1/Execution halted/callback FALSE; cooperative child0/callback TRUE. Both all8/W0/exact death | Private source procedure only; earlier native C++/allocator/display failures remain NONPASS |
+| Helper lint | Adopted after V5: qualified original17 RED → six-path zero GREEN; probes5/20P, canonical conditions empty, all8/W0/cleanup | Source namespace without helpers; no Windows runtime claim. V2 zero/missing-null, V3 extra17 internals and V4 attached-testthat failures remain NONQUALIFIED |
+| Configuration reference | Two source/generated guide files use an installed help topic; adopted in601ce96 | Fresh normal guide/build and consumer proof still required |
+| Normal/consumers | Prior4cd private normal, first optional Python, Python6, cold7/public23 and Rscript/Rmd/Jupyter pass their recorded scopes | Next normal HELD, not done; new runtime artifact, complete suite and original-archive/as-cran check required |
+| Providers/workflows | Prior4cd Jev typed, fixed Azure integrations/numeric/regression/printed teams, manual and corrected auto/budget/resumes, Codex regression pass separately | New artifact rebinding; no blanket provider/workflow completion |
+| New plural team | root-cp-team2 NONPASS: coef repeats successful sums and misses the printed scalar; TOKENS budget refuses the projected next request (limit60000/used56210; eight turns also used), all8/W0/cleanup | No resume/replay/fanout acceptance. New c00a prompt computes once, prints the scalar and finalizes; source-only UNBOUND/UNRUN until a fresh artifact |
+| ML/RNA | Prediction-identical NONPASS from generated matrix/vector recycling; no engine/copy defect evidenced | RNA unrun; no numerical waiver |
+| Artifact/native memory | Full67 and fresh-file attempts hit 2 GiB before canonical publication; native default Shiny remains NONPASS | Original failures retained; bounded memory diagnostics do not prove a cure. Headless-shell40-byte version is version-only, no GUI acceptance |
+| Hosted predecessor9e8 | All13 required checks completed:10 success/3 failures. Windows release23F13E; oldrel4 7F25E; W0/S104 each. noSuggests ladder refuses relaunch while cleanup remains pending | Windows audit645f retains initialization/resource bounds and oldrel HTTP timing failure. Exact noSuggests cleanup cause unobserved; no601 CI acceptance asserted |
+| Full suite/release | Prior full Mac aggregate cap abort retained; current full suite/as-cran, native UX, Claude authentication, site/main links and merge remain open | Fresh normal, named profile/skip/raw/state/cleanup evidence and current CI required |
 
-P/F/E/W/S mean assertions/failures/errors/warnings/skips; all8 means canonical caller states.
-Pass rows require their own warning/state/installed-byte/cleanup gates; sparse RSS samples are not true peaks.
-Root read complete current provider/frontend raw; the packet pins those reports without broadening their scopes.
-The current Artifact aborts publish no canonical counts or complete caller-state/whole-warning result.
-Their aggregate samples cannot assign memory to a particular PID or active test; the new method is not a cure.
-Retain prior Mac partial glyphs,425s Artifact proxy/socket failures, Python option failures and native warnings.
-Quarto whole-object/NULL/lint and CLI/auth/deadline failures remain separate; source controls do not erase them.
-The special-file controls establish a checkpoint hashing hazard; live FIFO stat evidence supports a hypothesis.
-Prior hosted3c/fb8 failures, Windows resource failures and the older390 four-cylinder report mismatch remain retained.
-Ollama/Qwen catalogue presence is not inference readiness; preserve shared models without reconfiguration.
-No new current rendering, full suite, as-cran, authenticated Claude, ML/fanout or release acceptance is claimed.
-Run four cross-plan checks with these pinned overlays before committing; keep every historical suffix below exact.
+All8 names the canonical caller-state contract. Passing source controls require their own complete conditions, whole-warning, source/parent and owned-cleanup receipts; sparse RSS samples are not true peaks. Preserve every original lint/profile, wait, image/RNG, Shiny/native, Artifact, hosted, model and authentication failure. The prior4cd installed artifact does not certify the adopted runtime changes. Run the existing four cross-plan checks before committing this checkpoint; then bind fresh normal validation to the final clean SHA. Keep the historical suffix below exact.
 
 Earlier evidence below remains historical; it does not override these current gates.
 

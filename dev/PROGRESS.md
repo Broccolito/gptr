@@ -1,11 +1,8 @@
-## Current source checkpoint — `4cdde1d`, 2026-10-13
+## Current task checkpoint — source `601ce96`, 2026-10-13
 
-The current normal archive/private installation and rebound Python/cold/public consumers pass.
-Three history frontends, Jev typed and measured Azure integrations/numeric/teams/manual cases pass separately.
-Corrected auto/budget live/resume pass; original trigger failures and ML/RNA remain NONPASS.
-Both current Artifact methods hit 2 GiB before canonical publication; native Shiny remains NONPASS.
-Hosted checks, Windows lint/native/resource gates, Claude authentication and release/merge remain open.
-This checkpoint requires its pinned four-check replay; see [TESTING_PLAN.md](TESTING_PLAN.md).
+Seven task commits are adopted and pushed. Yielded wait1/17P, image3/15P, complete R-tool/prompt112/661P and Shiny4/79P pass their scoped source controls and configured lints with all8/W0. HTTP-only intentional-stop UX shows the owned cooperative child exits normally; connected/native teardown remains open. Helper V5 qualifies the original17 RED and six-path zero GREEN with probes5/20P/all8/W0; V2/V3/V4 failures remain NONQUALIFIED.
+New plural-team2 remains projected-token-budget NONPASS, without resume/replay/fanout. Its c00a compute-once/print/finalize prompt is source-only UNBOUND/UNRUN. Hosted predecessor9e8 has13 completed checks:10 success/3 failures; Windows initialization/resource bounds and noSuggests ladder cleanup remain open.
+Next normal build/install is HELD until this checkpoint commits, not done. Prior4cd artifact/consumer/provider passes retain their scopes. Genuine cold image, original50/full54 Shiny, full suite/as-cran, ML/RNA, native UX, authentication and release/merge remain open. Run the existing four cross-plan checks and use the final clean SHA for fresh artifact binding; see [TESTING_PLAN.md](TESTING_PLAN.md).
 
 Earlier evidence below remains historical; it does not override these current gates.
 
