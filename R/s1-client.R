@@ -791,7 +791,8 @@ s1_jev_model = function(id, name, context = 64000) {
   list(id = id, name = name, family = "jev", type = "classifier", release_date = "2026-09-15",
        context = context, max_output = 0, reasoning = FALSE, thinking_levels = "off",
        input = "text", tool_call = FALSE, structured_output = TRUE,
-       prices = data.frame(from = as.Date("2026-09-15"), tier = "default", input = 0.042,
+       prices = data.frame(from = structure(20711, class = "Date"), # 2026-09-15
+                           tier = "default", input = 0.042,
                            output = 0, cache_read = 0, stringsAsFactors = FALSE),
        status = "active")
 }

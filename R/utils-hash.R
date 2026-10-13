@@ -48,7 +48,7 @@ id_new = function(prefix = "", n = 10L) {
   n = check_number(n, "n", min = 1, max = 64, int = TRUE)
   the$id_count = the$id_count + 1
   seed = paste(
-    format(Sys.time(), "%Y%m%d%H%M%OS6"), Sys.getpid(), the$id_count, id_salt()
+    sprintf("%.6f", as.numeric(Sys.time())), Sys.getpid(), the$id_count, id_salt()
   )
   paste0(prefix, substr(cli::hash_sha256(seed), 1L, n))
 }
