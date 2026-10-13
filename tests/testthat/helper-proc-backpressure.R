@@ -256,6 +256,18 @@ bp_case_failure = function(error) {
     writer_phases = phases, writer_acl_phases = acl_phases)
 }
 
+# The diagnostic callback is absent in every ordinary test/check invocation.
+bp_rss_capture = function(stage, data, supervisor_rss = NULL, prior_failure = FALSE) {
+  if (!identical(Sys.getenv("GPTR_SUPERVISOR_RSS_DIAGNOSTIC"), "true")) return(invisible(NULL))
+  observed = tryCatch({
+    callback = getOption("gptr.test.rss_capture")
+    stopifnot(is.function(callback))
+    callback(stage, data, supervisor_rss)
+  }, error = base::identity, interrupt = base::identity)
+  if (inherits(observed, "condition") && !prior_failure) stop(observed)
+  invisible(NULL)
+}
+
 bp_run = function(case, declared_links = list()) {
   observer_enabled = identical(Sys.getenv("GPTR_OPTIONAL_NOFOLLOW_OBSERVER"), "true")
   declared_only = !observer_enabled && .Platform$OS.type == "windows" &&
@@ -317,6 +329,11 @@ bp_run = function(case, declared_links = list()) {
       rss
     }
     before_rss = supervisor_rss()
+    writer = exists("rw_child_case", mode = "function") && identical(bp_child_case, rw_child_case)
+    bp_rss_capture("before_observer", list(case = case, writer = writer,
+      supervisor_pid = Sys.getpid(), supervisor_create_time = supervisor_time,
+      before_rss = before_rss, resource_failure = before_rss > 1024^3), supervisor_rss,
+      prior_failure = before_rss > 1024^3)
     observe = bp_disk_observer(root, declarations = declared_links, declared_only = declared_only)
     after_rss = supervisor_rss()
     elapsed = proc.time()[["elapsed"]] - started
@@ -325,6 +342,9 @@ bp_run = function(case, declared_links = list()) {
       supervisor_create_time = supervisor_time, peak_supervisor_rss = max(before_rss, after_rss),
       peak_combined_rss = max(before_rss, after_rss), last_disk = NULL)
     if (declared_only) observer_stats$scope = "declared-entry-and-ordinary-files"
+    bp_rss_capture("initialization", c(list(case = case, writer = writer,
+      resource_failure = elapsed >= 45 || max(before_rss, after_rss) > 1024^3), observer_stats),
+      prior_failure = elapsed >= 45 || max(before_rss, after_rss) > 1024^3)
     if (elapsed >= 45 || max(before_rss, after_rss) > 1024^3) {
       stop("Optional observer initialization exceeded its unchanged resource bound")
     }
@@ -408,6 +428,17 @@ bp_run = function(case, declared_links = list()) {
       }, numeric(1))
       if (any(!is.finite(rss))) stop("Could not measure owned process memory.")
       parent_rss = if (observer_enabled) supervisor_rss() else 0
+      bp_rss_capture("sample", list(case = case, supervisor_pid = Sys.getpid(),
+        supervisor_create_time = if (observer_enabled) supervisor_time else NULL,
+        supervisor_rss = parent_rss, processes = lapply(seq_along(tracked$handles), function(i) {
+          handle = tracked$handles[[i]]
+          list(pid = ps::ps_pid(handle), create_time = as.numeric(ps::ps_create_time(handle)),
+            rss = unname(rss[[i]]))
+        }), children_rss = sum(rss), combined_rss = parent_rss + sum(rss),
+        resource_failure = sum(rss) > 1024^3 ||
+          (observer_enabled && parent_rss + sum(rss) > 1024^3)),
+        prior_failure = sum(rss) > 1024^3 ||
+          (observer_enabled && parent_rss + sum(rss) > 1024^3))
       sample_stage = "files"
       if (observer_enabled) {
         disk = observe()
@@ -447,6 +478,8 @@ bp_run = function(case, declared_links = list()) {
       }
     }, error = identity)
     if (inherits(sample, "condition")) {
+      bp_rss_capture("sample_failure", list(case = case, observation_stage = sample_stage,
+        classes = class(sample)), prior_failure = TRUE)
       sampling_errors = sampling_errors + 1L
       sample_error = bp_sample_error(sample_stage, sample)
       guard = "resource_observation"
@@ -497,6 +530,9 @@ bp_run = function(case, declared_links = list()) {
     case_failure = case_failure,
     result = result)
   if (observer_enabled) witness$disk_observer = observer_stats
+  bp_rss_capture("settled", list(case = case, complete = finished, guard = guard,
+    sampling_errors = sampling_errors, owned_family_stopped = stopped,
+    peak_rss = peak_rss, peak_disk = peak_disk), prior_failure = !finished)
   cat("GPTR-BACKPRESSURE-WITNESS ", json_encode(witness), "\n", sep = "")
   witness
 }
