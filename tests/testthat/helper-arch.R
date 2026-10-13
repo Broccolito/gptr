@@ -228,6 +228,8 @@ arch_fun_map = function(dir = arch_source_dir()) {
 
 # Every function call of a file, from the parse data: df(file, line, fun, pkg, text)
 pd_calls = function(path) {
+  old = options(keep.parse.data = TRUE)
+  on.exit(options(old), add = TRUE)
   exprs = parse(path, keep.source = TRUE, encoding = "UTF-8")
   pd = utils::getParseData(exprs, includeText = TRUE)
   empty = data.frame(file = character(), line = integer(), fun = character(),

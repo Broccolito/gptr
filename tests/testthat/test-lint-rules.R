@@ -116,6 +116,8 @@ lint_scopes = function(path) {
 
 # Every rule over the given files: df(file, line, rule, text)
 lint_scan = function(paths) {
+  old = options(keep.parse.data = TRUE)
+  on.exit(options(old), add = TRUE)
   hits = list()
   for (path in paths) {
     file = basename(path)
@@ -237,4 +239,56 @@ test_that("the file and function exemptions of the rules hold", {
 test_that("S3 methods of Suggests generics and closure state pass (IC-72, acceptance 7)", {
   fixture = testthat::test_path("fixtures", "lint", "s3-methods.R")
   expect_identical(nrow(lint_scan(fixture)), 0L)
+})
+
+
+test_that("lint token and call rules preserve caller-disabled parse data", {
+  path = withr::local_tempfile(pattern = "parse-disabled-", fileext = ".R")
+  writeLines(c(paste0("x <", "- 1"), "Sys.setenv(A = '1')", "readLines('x')",
+               "f = function() { env[['.Random.seed']] = 1L }"), path)
+  for (setting in c(FALSE, TRUE)) {
+    withr::local_options(list(keep.parse.data = setting))
+    before = options()
+    calls = pd_calls(path)
+    expect(identical(calls$fun, c("Sys.setenv", "readLines")),
+           "disabled parse data must not hide real function calls")
+    expect(identical(calls$line, 2:3), "call lines must retain their original positions")
+    expect(identical(options(), before), "call scanning must restore all caller options")
+    if (!nrow(calls)) stop("The lint call table is missing.")
+    hits = lint_scan(path)
+    expect(identical(hits$rule, c("left_assign", "setenv", "readlines_encoding", "random_seed")),
+           "token, call and scope violations must remain visible")
+    expect(identical(hits$line[1:3], 1:3), "violation lines must retain their original positions")
+    expect(identical(options(), before), "lint scanning must restore all caller options")
+  }
+})
+
+test_that("lint parsers restore disabled parse data on errors and interrupts", {
+  path = withr::local_tempfile(fileext = ".R")
+  writeLines("f = function(", path)
+  withr::local_options(keep.parse.data = FALSE)
+  before = options()
+  malformed = tryCatch(pd_calls(path), error = identity)
+  expect(inherits(malformed, "error"), "malformed source must retain a genuine parse error")
+  expect(identical(options(), before), "a genuine parse error must restore caller options")
+  writeLines("x = 1", path)
+  for (scanner in list(pd_calls, lint_scan)) {
+    for (kind in c("error", "interrupt")) {
+      original = structure(list(message = paste("fixed parse", kind), call = NULL),
+                           class = c(paste0("gptr_test_parse_", kind), kind, "condition"))
+      observed = new.env(parent = emptyenv())
+      fn = scanner
+      scope = new.env(parent = environment(fn))
+      scope$parse = function(...) {
+        observed$enabled = getOption("keep.parse.data")
+        stop(original)
+      }
+      environment(fn) = scope
+      before = options()
+      caught = tryCatch(fn(path), error = identity, interrupt = identity)
+      expect(identical(caught, original), "the original parse condition must remain primary")
+      expect(identical(observed$enabled, TRUE), "the parser must have parse data enabled")
+      expect(identical(options(), before), "every parse failure must restore caller options")
+    }
+  }
 })
