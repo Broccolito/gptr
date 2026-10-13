@@ -1,12 +1,14 @@
-## Process validation checkpoint — source `0ec54ac`, 2026-10-13
+## Process validation checkpoint — source `fb8f07f`, 2026-10-13
 
-Calendar10/106P/all8/lint26zero and browser grace27/1,511P/all8/lint2zero are adopted.
-Certified390 cold3/Rscript/Rmd/Jupyter and Codex/Jev replay pass only their recorded scopes.
-Public390/busy retain TZDIR failures; fresh current artifact and original replay are pending.
-Plain Quarto fails objects/options without GPTR while preserving its two user bindings.
-Mac GC V3 is diagnostic-only. Explicit CfT fixture remains NONPASS; default browser and Claude
-authentication are still open.
-Use one owned serial family. See [TESTING_PLAN](../TESTING_PLAN.md) for all current gates.
+Normal archive/install, public23, Cold7 and three history frontends pass their state gates.
+Busy focused/full15/lint and Codex/Jev/Azure live plus replay pass within their scopes.
+The Mac suite exceeds its RAM cap; owned cleanup passes, final suite/all8 reports are absent.
+Strict Quarto retains objects FALSE; identity diagnostics do not waive that serialized oracle.
+Default Google Shiny now fails ps_handle timestamp typing/cleanup/env; lifecycle is incomplete.
+Explicit framework setup admits private Quarto/native controls all8; earlier env failures remain.
+GC V3 is a Mac diagnostic only; Windows source checks do not prove native RSS or GC efficacy.
+Use one owned serial family; see [TESTING_PLAN](../TESTING_PLAN.md) for the sole current table.
+
 
 Earlier evidence below remains historical; it does not override these current gates.
 

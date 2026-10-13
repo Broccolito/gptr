@@ -1,13 +1,14 @@
-## Current source checkpoint — `0ec54ac`, 2026-10-13
+## Current source checkpoint — `fb8f07f`, 2026-10-13
 
-Reason46, browser grace and calendar preservation are adopted after scoped source passes.
-Calendar10/106P/all8 and26 lints0 need a fresh current artifact and original public/busy replay.
-Certified390 retains normal/cold3, Rscript/Rmd/Jupyter and scoped Codex/Jev/Azure passes.
-Plain Quarto reproduces framework-object/options failure without GPTR; two user bindings stay exact.
-Mac GC V3 passes its diagnostic2×7 schema; direct RSS rises32KiB. V2 failure remains retained.
-Explicit CfT fixture/Claude auth and the four-cylinder report's incorrect number remain NONPASS.
-Current default browser quietness is unverified.
-See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current table and next gates.
+Normal archive/install, public23 and seven fresh cold operations pass.
+Three history frontends and Codex/Jev/Azure regression/teams cells pass their state gates.
+Busy focused/full15/lint and the last four-plan replay pass.
+The Mac suite hit its 2 GiB guard before final results; partial failures remain unresolved.
+Strict Quarto/default Google Shiny remain NONPASS; private controls now pass all8.
+Windows source controls/lint/YAML/compile-only Python pass; native comparison stays unaccepted.
+Broader workflows, Claude auth, site, hosted, profiles/CRAN and merge remain open.
+See [TESTING_PLAN.md](TESTING_PLAN.md) for scoped results and retained failures.
+
 
 Earlier evidence below remains historical; it does not override these current gates.
 
