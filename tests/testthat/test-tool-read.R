@@ -368,3 +368,78 @@ test_that("a non-ASCII file is read and classed by its extension in any locale (
   expect_match(read_file(paste0(td, "/caf\u00e9.rds"))$text,
                "^\\[Binary file: .*\\.rds \\(6B\\)\\. Not shown as text\\. .*readRDS\\(\\)\\.\\]$")
 })
+
+
+test_that("inline image encoding delegates native and fallback availability", {
+  skip_if(!nzchar(system.file(package = "openssl")), "openssl is not installed.")
+  stopifnot(requireNamespace("openssl", quietly = TRUE))
+  record = new.env(parent = emptyenv())
+  local_mocked_bindings(oauth_available = function(pkg, feature) {
+    record$calls[[length(record$calls) + 1L]] = list(pkg = pkg, feature = feature)
+    record$available
+  }, .package = "gptr")
+  bytes = as.raw(rep(0:255, 2L))
+  original = bytes
+  for (available in c(TRUE, FALSE)) {
+    record$available = available
+    record$calls = list()
+    encoded = base64_raw(bytes)
+    calls = record$calls
+    expect(length(calls) == 1L && identical(calls[[1L]]$pkg, "openssl") &&
+             is.character(calls[[1L]]$feature) && nzchar(calls[[1L]]$feature),
+           "Image encoding must check the guarded optional loader once.")
+    expect_identical(jsonlite::base64_dec(encoded), original)
+    expect_false(grepl("[\r\n]", encoded))
+    expect_identical(bytes, original)
+  }
+})
+
+test_that("inline image encoding preserves optional-loader condition identity", {
+  skip_if(!nzchar(system.file(package = "openssl")), "openssl is not installed.")
+  stopifnot(requireNamespace("openssl", quietly = TRUE))
+  record = new.env(parent = emptyenv())
+  local_mocked_bindings(oauth_available = function(pkg, feature) {
+    stop(record$condition)
+  }, .package = "gptr")
+  conditions = list(
+    simpleError("controlled optional-loader failure"),
+    structure(list(message = "controlled optional-loader interrupt", call = NULL),
+              class = c("interrupt", "condition")),
+    structure(list(message = "controlled restoration refusal", call = NULL),
+              class = c("gptr_error_state_restore", "gptr_error", "error", "condition"))
+  )
+  bytes = as.raw(1:5)
+  original = bytes
+  for (condition in conditions) {
+    record$condition = condition
+    seen = tryCatch(base64_raw(bytes), error = identity, interrupt = identity)
+    expect(identical(seen, condition),
+           "Image encoding must propagate the original optional-loader condition.")
+  }
+  expect_identical(bytes, original)
+})
+
+test_that("inline image encoding skips an absent optional dependency before loading", {
+  calls = new.env(parent = emptyenv())
+  calls$loads = 0L
+  calls$guards = 0L
+  scope = new.env(parent = environment(base64_raw))
+  scope$isNamespaceLoaded = function(pkg) FALSE
+  scope$system.file = function(...) ""
+  scope$requireNamespace = function(...) {
+    calls$loads = calls$loads + 1L
+    FALSE
+  }
+  scope$oauth_available = function(...) {
+    calls$guards = calls$guards + 1L
+    stop("An absent optional dependency must not be loaded.")
+  }
+  encode = base64_raw
+  environment(encode) = scope
+  bytes = as.raw(rep(0:255, 2L))
+  encoded = encode(bytes)
+  expect(identical(calls$loads, 0L) && identical(calls$guards, 0L),
+         "Missing optional-package metadata must short-circuit before the loader.")
+  expect_identical(jsonlite::base64_dec(encoded), bytes)
+  expect_false(grepl("[\r\n]", encoded))
+})

@@ -311,7 +311,10 @@ image_dims = function(b, mime) {
 #' base64 without line breaks (openssl when installed; jsonlite wraps every 72 characters)
 #' @noRd
 base64_raw = function(b) {
-  if (requireNamespace("openssl", quietly = TRUE)) return(as.character(openssl::base64_encode(b)))
+  if ((isNamespaceLoaded("openssl") || nzchar(system.file(package = "openssl"))) &&
+      oauth_available("openssl", "Image base64 encoding")) {
+    return(as.character(openssl::base64_encode(b)))
+  }
   gsub("[\r\n]", "", jsonlite::base64_enc(b))
 }
 
