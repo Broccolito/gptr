@@ -1,18 +1,11 @@
-## Continue from source `4cdde1d` — 2026-10-13
+## Continue from artifact `b214596`, control `efccc5f` — 2026-10-13
 
-Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`.
-Branch `codex/skipped-platform-tests`; main is unmerged and release readiness is false.
-The current normal archive, first optional Python refusal, Python6, Cold7 and public23 pass.
-Rscript/Rmd/Jupyter, Jev typed and measured Azure integrations/numeric/regression/teams/compaction cases pass.
-Original auto/budget triggers and current ML/RNA remain NONPASS; corrected auto/budget live/resume pass.
-Artifact methods still exceed 2 GiB; native Shiny retains caller-state and raw errors.
-Current hosted checks are unfinished; Windows comparison stopped at its silent lint gate.
-See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current table and retained failures.
-
-Keep one root-owned serial family: 2 GiB sampled RAM/512 MiB output, with owned cleanup.
-Preserve original R sessions and shared Ollama; no model load, unload or reconfiguration.
-Next: qualify the compaction fixture and diagnostic routes, then remaining current release gates.
-Run four cross-plan checks with these pinned overlays before committing this checkpoint.
+Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`; main remains unmerged and release readiness is false.
+See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current table. Accepted b214 normal/cold8/public23/Rscript/Rmd/Jupyter and Claude regression live/fresh replay retain their scopes. The dev-only census correction is adopted at efccc5f after Mac controls14/79P and three lint0; package bytes remain b214.
+Short two-child manual team/fanout LIVE plus fresh resume/replay pass all six phases/all8/W0/owned cleanup, with zero resume/replay requests/usage/native events and the original600s origin. Original automatic stress/budget failures remain; no automatic-compaction or fanout numeric-reexecution claim.
+Keep one root-owned serial family:2 GiB sampled RAM/512 MiB output with exact owned cleanup. Preserve original R sessions and shared Ollama; no model load, unload or reconfiguration.
+Next: browser/Shiny raw quietness and connections, protected native GUI routing/Quarto, ML prediction/RNA, remaining provider/workflow scopes, hosted/native Windows, full suite/as-cran, installed-size review, site/main publication and merge. Current valid screenshot PNGs still retain FIFO/CVDisplayLink errors; no front cure.
+Four cross-plan checks pass (all four statuses0):117.991s/1505.484 MiB sampled,108 samples/0 errors, source/parent/owned cleanup TRUE; [exact receipt](/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011/installed-batch-efccc-V2-four-plan-PR5-ACTUAL-ACCEPTANCE.json).
 
 Earlier evidence below remains historical; it does not override these current gates.
 
