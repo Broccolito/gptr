@@ -45,14 +45,18 @@ programs and careful reasoning. See [Why Peter?](#why-peter) and
   allow rule permits them. The permission gate is not a sandbox: see
   `?gptr_security`.
 
+Read the [guides and function
+reference](https://broccolito.github.io/gptr/) online.
+
 ## Installation
 
-These guides describe the 1.0 development version. Install it from
-GitHub with R 4.2 or later:
+These guides describe the 1.0 development preview on
+`codex/skipped-platform-tests`, including APIs not yet on `main`.
+Install this branch from GitHub with R 4.2 or later:
 
 ``` r
 install.packages("pak")  # if pak is not installed
-pak::pak("Broccolito/gptr")
+pak::pak("Broccolito/gptr@codex/skipped-platform-tests")
 ```
 
 `install.packages("gptr")` installs the CRAN version, which may still
@@ -94,11 +98,11 @@ ls(work)
 
 s |> peter("Reuse fit to predict mpg for the same cars.")
 #> The predictions are stored in predicted.
-#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . s7dcc0b241b
+#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . scfa0ab65e6
 head(work$predicted)
-#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
-#>          23.28261          21.91977          24.88595          20.10265
-#> Hornet Sportabout           Valiant
+#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive 
+#>          23.28261          21.91977          24.88595          20.10265 
+#> Hornet Sportabout           Valiant 
 #>          18.90014          18.79325
 s$turns
 #> [1] 2
@@ -133,11 +137,11 @@ abstracts = c(a = "We randomized 200 adults to drug or placebo.",
               b = "We followed a cohort of nurses for 20 years.")
 is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge)
 is_rct
-#>              a              b
-#>  TRUE (p=0.93) FALSE (p=0.08)
+#>              a              b 
+#>  TRUE (p=0.93) FALSE (p=0.08) 
 #> judge-s1-1.0 . calibration unknown . 2026-10-12
 gptr_prob(is_rct)
-#>    a    b
+#>    a    b 
 #> 0.93 0.08
 ```
 
@@ -181,6 +185,25 @@ inference locality and no automatic cloud fallback. A local model does
 not make a workflow local if another step sends data to a cloud model or
 network tool.
 
+## Exporting recorded R
+
+A synchronized `.R` history can become a new ordinary R script or a
+clean Peter script:
+
+``` r
+gptr_doc("analysis.R", sync = TRUE)
+gptr_export("analysis.R", "analysis-raw.R")
+gptr_export("analysis.R", "analysis-peter.R", format = "peter")
+```
+
+The default keeps recorded R executable and turns Peter calls into
+comments. The Peter format keeps calls active and recorded code inert,
+with bounded output and notes beside the turns. Both preserve ordinary
+source and refuse stale or ambiguous records. Export does not run or
+verify the result, recover unrecorded console work, or save your input
+objects. See `vignette("script-as-history", package = "gptr")` for
+interleaved R and a second session.
+
 ## Learn more
 
 Start with `vignette("getting-started", package = "gptr")`. Most guides
@@ -203,9 +226,9 @@ MCP server or external program are shown without running them.
 | Understand execution, environments and result objects | `vignette("execution-model")` |
 | Inspect usage, budgets, caching and compaction | `vignette("token-efficiency")` |
 
-The function reference documents all 63 exports. In R, use
-`help(package = "gptr")`, `?peter`, `?gptr_options`, `?gptr_security`
-and `?gptr_egress`.
+The function reference documents the exported APIs. In R, use
+`help(package = "gptr")`, `?peter`, `?gptr_export`, `?gptr_options`,
+`?gptr_security` and `?gptr_egress`.
 
 ## Why `peter()`?
 

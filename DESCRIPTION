@@ -27,7 +27,8 @@ Description: Runs large language model agents inside the running 'R'
     Writing files and evaluating model-generated code require the user's
     permission by default.
 License: MIT + file LICENSE
-URL: https://github.com/Broccolito/gptr
+URL: https://broccolito.github.io/gptr/,
+    https://github.com/Broccolito/gptr
 BugReports: https://github.com/Broccolito/gptr/issues
 Depends:
     R (>= 4.2.0)
@@ -81,3 +82,4 @@ SystemRequirements: Optional: Ollama (>= 0.35.1) for native local decision model
     and 'codex' (Codex) for subscription providers, 'quarto' for 'Quarto'
     documents, and a 'Chrome'-family browser for app screenshots.
 Config/roxygen2/version: 8.1.1
+RoxygenNote: 7.3.3

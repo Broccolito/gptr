@@ -74,7 +74,7 @@ summary(s)
 #> 3 1     tool_result  + top <data.frame 3 x 2>  r      6
 #> 4 1     assistant    The three most fuel-e...         1639
 #> # 4 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . s4753b89c94
+#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . s416578bed6
 ```
 
 The named `data = force(data)` supplies the helper's argument as an explicit context value:
@@ -247,12 +247,74 @@ gptr_doc(FALSE)
 A notebook edited since a pending block was queued may need conflict resolution. Reopening
 or listing a file is not proof that pending blocks were applied successfully.
 
+## Exporting a recorded script
+
+`gptr_export()` reads a synchronized `.R` history and writes a new `.R` file without running
+it or asking a model. Its default `format = "r"` turns Peter calls into comments and keeps
+the recorded R executable. With `format = "peter"`, calls remain active and the previous
+recorded code becomes comments, so that code is not executed a second time. Ordinary user
+code and comments retain their source order. Existing destination files are never replaced.
+
+For example, save the following as `analysis.R`. With a configured model and the usual
+permission checks, its first three prompts steer one session; the fourth starts another.
+The ordinary plot runs between them, using objects in the same R environment.
+
+
+``` r
+cars = datasets::mtcars
+
+analysis = gptr::peter("Fit mpg ~ wt in cars with stats::lm(); store fit.") |>
+  gptr::peter("Reuse fit to calculate predicted for all rows of cars.") |>
+  gptr::peter("Summarize observed mpg minus predicted; store residual_summary.")
+
+# User code and this comment stay in the exported source.
+graphics::plot(cars$mpg, predicted, xlab = "Observed mpg", ylab = "Predicted mpg")
+graphics::abline(a = 0, b = 1)
+
+verification = gptr::peter("Check predicted length and finite values; store checks.")
+```
+
+Record it deliberately, inspect the code and results, then synchronize before exporting:
+
+
+``` r
+work = new.env(parent = globalenv())
+gptr_doc("analysis.R")
+gptr_source("analysis.R", replay = "record", envir = work)
+work$residual_summary
+work$checks
+gptr_doc("analysis.R", sync = TRUE)
+
+gptr_export("analysis.R", "analysis-raw.R")
+gptr_export("analysis.R", "analysis-peter.R", format = "peter")
+gptr_doc(FALSE)
+```
+
+The export operation creates no model request. Running the Peter export can create new
+requests; running the raw export executes its recorded R and ordinary user code. Review
+those effects, then validate the raw result in a fresh environment with the intended inputs.
+For this example, input preparation is already in the source. For an analysis that uses a
+large object loaded earlier, supply that object in the new environment; exporting does not
+serialize the dataset or make an intermediate data file.
+
+In the Peter format, recorded Decision and Steer notes and bounded `#>` output follow each
+operand of this separate-line pipeline. Other layouts keep feedback after the complete
+statement. Notes and output are comments, not assertions that the analysis is correct. Each
+block keeps at most twelve output lines and eighty characters per output line.
+
+Export requires fresh completed records and no pending sidecar. It refuses computed or
+nested prompts, mixed Peter/ordinary pipelines, shared-line statements, interpolated-input
+hashes, missing or edited blocks and secret-marked records. Raw export also refuses later
+ordinary code that depends on a removed session handle, such as `analysis$value`; put needed
+results in ordinary R objects, or retain the Peter format. Earlier unrecorded console input
+is not reconstructed. Preserved user code can still require gptr or other packages, read or
+write files, or call the network. Export is a source transformation, not verified replay.
+
 ## Asking Peter to summarize a completed workflow
 
 Choose the deliverable explicitly. A history document, an ordinary executable script and a
-narrative summary have different roles. gptr provides recording and replay APIs; it has no
-one-call export that guarantees an arbitrary conversation becomes a complete executable
-workflow.
+narrative summary have different roles. `gptr_export()` transforms an explicitly recorded
+R document; it cannot recover arbitrary conversation turns into a complete workflow.
 
 With your own live-model session `s`, ask for a narrative by making a model request such as:
 
@@ -292,3 +354,5 @@ history.
 
 See `vignette("system-one", package = "gptr")` for typed decisions and
 `vignette("teams-and-background", package = "gptr")` for orchestration and SDK control.
+
+

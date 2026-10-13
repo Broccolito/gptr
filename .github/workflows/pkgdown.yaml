@@ -1,0 +1,174 @@
+name: Publish pkgdown documentation
+on:
+  push:
+    branches: [main, codex/skipped-platform-tests]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    if: >-
+      github.repository == 'Broccolito/gptr' &&
+      (github.ref == 'refs/heads/main' ||
+       (github.ref == 'refs/heads/codex/skipped-platform-tests' &&
+        github.sha == vars.GPTR_PAGES_BOOTSTRAP_SHA))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pages: read
+    env:
+      GPTR_LIVE_TESTS: 'false'
+      R_ENVIRON_USER: /dev/null
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MAKEFLAGS: '-j1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Verify the nominated source
+        shell: bash
+        env:
+          BOOTSTRAP_SHA: ${{ vars.GPTR_PAGES_BOOTSTRAP_SHA }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            [[ "$GITHUB_REF" == refs/heads/codex/skipped-platform-tests ]]
+            [[ "$BOOTSTRAP_SHA" =~ ^[0-9a-f]{40}$ ]]
+            test "$GITHUB_SHA" = "$BOOTSTRAP_SHA"
+          fi
+      - name: Read the configured Pages URL
+        id: pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - name: Verify the canonical URL
+        shell: bash
+        env:
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
+        run: 'test "${PAGES_URL%/}" = https://broccolito.github.io/gptr'
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        with:
+          r-version: release
+          Ncpus: 1
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-pandoc@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        with:
+          pandoc-version: '3.10'
+      - name: Stage only public package inputs
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla - <<'RSCRIPT'
+          source('dev/release/lib.R')
+          stopifnot('pandoc' %in% names(formals(site_build)),
+            exists('site_render', inherits = FALSE), exists('site_build_args', inherits = FALSE))
+          site_stage('.', file.path(Sys.getenv('RUNNER_TEMP'), 'gptr-pages-package'))
+          RSCRIPT
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        timeout-minutes: 10
+        with:
+          working-directory: ${{ runner.temp }}/gptr-pages-package
+          dependencies: '"hard"'
+          packages: local::.
+          extra-packages: |
+            pkgdown@2.2.1
+            rmarkdown@2.32
+            knitr@1.52
+            bslib@0.12.0
+            testthat@3.3.2
+          install-pandoc: false
+          install-quarto: false
+      - name: Check the public site builder and generated index
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla - <<'RSCRIPT'
+          testthat::test_dir('dev/release/tests', filter = 'site-stage|pkgdown',
+            stop_on_failure = TRUE, stop_on_warning = TRUE)
+          RSCRIPT
+          Rscript --vanilla dev/release/check-files.R pkgdown
+      - name: Build with the admitted Pandoc and strict warning gates
+        shell: bash
+        timeout-minutes: 32
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla - <<'RSCRIPT'
+          expected = c(pkgdown = '2.2.1', rmarkdown = '2.32', knitr = '1.52', bslib = '0.12.0')
+          actual = vapply(names(expected), function(pkg) as.character(utils::packageVersion(pkg)), '')
+          stopifnot(identical(actual, expected))
+          RSCRIPT
+          pandoc_dir="$(dirname "$(command -v pandoc)")"
+          Rscript --vanilla dev/release/build-site.R "$RUNNER_TEMP/gptr-pages-site" \
+            --pandoc "$pandoc_dir"
+      - name: Validate the public output before publishing
+        shell: bash
+        run: |
+          python3 -I -B - <<'PYTHON'
+          import hashlib, json, os, pathlib, stat
+          site = pathlib.Path(os.environ['RUNNER_TEMP']) / 'gptr-pages-site'
+          assert site.is_dir() and not site.is_symlink()
+          assert (site / 'index.html').is_file()
+          guides = sorted(path.stem for path in pathlib.Path('vignettes').glob('*.Rmd'))
+          assert len(guides) == 14
+          assert all((site / 'articles' / (name + '.html')).is_file() for name in guides)
+          entries, total = [], 0
+          for path in sorted(site.rglob('*')):
+              relative = path.relative_to(site)
+              parts = relative.parts
+              assert not any(part.lower() in ('dev', '.git', '.github', '.secrets',
+                  'agents.md', 'claude.md') for part in parts), str(relative)
+              info = path.lstat()
+              assert not any(part.startswith('.') and part != '.nojekyll' for part in parts) or (
+                  relative.as_posix() == 'reference/.DollarNames.gptr_session.html' and
+                  stat.S_ISREG(info.st_mode)), str(relative)
+              assert not stat.S_ISLNK(info.st_mode), str(relative)
+              if stat.S_ISDIR(info.st_mode):
+                  continue
+              assert stat.S_ISREG(info.st_mode) and info.st_nlink == 1, str(relative)
+              assert path.suffix.lower() not in ('.env', '.rds', '.rdb', '.rdx', '.rdata')
+              total += info.st_size
+              assert len(entries) < 10000 and total <= 128 * 1024 * 1024
+              entries.append(dict(path=relative.as_posix(), bytes=info.st_size,
+                  sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
+          evidence = pathlib.Path(os.environ['RUNNER_TEMP']) / 'gptr-pages-output.json'
+          evidence.write_text(json.dumps(dict(source_sha=os.environ['GITHUB_SHA'],
+              url='https://broccolito.github.io/gptr/', guides=guides,
+              bytes=total, files=entries), indent=2) + '\n', encoding='utf-8')
+          print('Verified public site:', len(entries), 'files;', len(guides), 'guides')
+          PYTHON
+          git diff --exit-code
+      - name: Archive only the validated website
+        shell: bash
+        run: |
+          tar --directory="$RUNNER_TEMP/gptr-pages-site" \
+            --create --file="$RUNNER_TEMP/artifact.tar" .
+      - name: Upload only the validated website
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish the successful documentation build
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

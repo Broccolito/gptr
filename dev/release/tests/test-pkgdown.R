@@ -1,5 +1,6 @@
 test_that("pkgdown_yaml() lists every page once, secondary group members never", {
   parsed = yaml::yaml.load(paste(pkgdown_yaml(), collapse = "\n"))
+  expect_identical(parsed$url, "https://broccolito.github.io/gptr/")
   listed = unlist(lapply(parsed$reference, `[[`, "contents"))
   expect_false(anyDuplicated(listed) > 0L)
   expect_false(any(c("gptr_logout", "gptr_agents", "gptr_mcp_remove", "gptr_resume",
