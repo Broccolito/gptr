@@ -1,10 +1,10 @@
-## Process validation checkpoint — `8f2be45`, 2026-10-12
+## Process validation checkpoint — `4040706`, 2026-10-12
 
-Declared, marker, census and registry fixes are committed; all 121 package R files are unchanged.
-Local controls pass: 16 Python/9 R256P, 18 Python/10 R281P, 11/374P and 70/3,695P; lints 0.
-The latest completed CI still has Ubuntu errno 3 failure and two Windows dangling-file warnings.
-Browser job counters do not erase two native warnings or two close-timeout promises.
-Cold TZDIR and public-replay state failures remain open; original security limits are unchanged.
+Auth 55/486P and CLI offline 6/138P pass; both configured lints are clean.
+Public replay V7 passes 23/247P/all8; these use the predecessor private install.
+Completed `8f2be45` Windows checks fail observer limits, mock signature and Python admission.
+Ubuntu oldrel4 sampling passes with zero census retries; native browser conditions remain.
+Cold TZDIR and CLI completion stay open; no original security/resource limit is relaxed.
 Fresh native proof is pending; full current results are in [TESTING_PLAN](../TESTING_PLAN.md).
 
 Earlier evidence below remains historical; it does not override these current gates.

@@ -1,46 +1,51 @@
-## Current validation checkpoint — `8f2be45`, 2026-10-12
+## Current validation checkpoint — `4040706`, 2026-10-12
 
-Candidate and origin are `8f2be45`; main is unmerged and release readiness is false.
-All 121 package R files match `3677f5b`, the source of the current private installed certificate.
-Four test/CI tasks and the ICO are adopted; local passes do not replace native acceptance.
+Candidate is `4040706`; main is unmerged and release readiness is false.
+The private certificate is source `3677f5b`; current `R/auth-redact.R` has since changed.
+Auth runtime and CLI offline tests are adopted; prior install passes remain scoped evidence.
 Use one root-owned serial family: 2 GiB sampled RAM/512 MiB output; no GPU/model expansion.
 
 | Gate | Current result | Remaining condition |
 | --- | --- | --- |
-| Normal private | PASS: 121 R/14 pairs/five MD5 | Fresh final archive/five checks/profiles |
-| Unicode export | C+UTF8 10/176P; broad 321/2,434P; lint 0 | Adopted 3677; final-source CI |
+| Normal private | Predecessor PASS: 121 R/14 pairs/five MD5 | Fresh final archive/five checks/profiles |
+| Auth parsing | 55/486P/all8; two lints 0 | Current installed/native/live proof |
+| CLI offline | 6/138P/all8; lint 0 | Actual authenticated CLI completion |
+| Unicode export | C+UTF8 10/176P; broad 321/2,434P; lint 0 | Final-source CI |
 | Local site | 14 guides/all8/320–1440 px/200% PASS | Prior favicon NONPASS; fresh ICO check |
 | Declared entry | 16 Python/9 R256P; three lints 0 | Native ACL/token/no-follow proof |
 | Ordinary marker | 18 Python/10 R281P; three lints 0 | Native marker warning closure |
-| Census | GREEN 11/374P; two lints 0 | Native errno 3 replay |
+| Census | GREEN 11/374P; two lints 0 | Actual retry path remains unobserved |
 | Registry | GREEN 70/3,695P; two lints 0 | Fresh strict hosted collection |
-| Completed CI | 38340193031: 12/13 successful | Ubuntu oldrel4: two F/errno 3/sampler error |
-| Windows CI | Each 29,728P/0F/2W/112S | Dangling-file probe warnings |
-| Browser CI | 29,438P/0F/0 R-W/52S | Two native W/two close-timeout promises |
-| ACK diagnostic | Close 1000/dead/cache/all8 | NONPASS: 17 Chrome startup markers |
-| GPU diagnostic | Close 1000/all8/cleanup | NONPASS: socket W/eight Chrome markers |
-| Offline browser | 18/280P/80F/1E; all8 | NONQUALIFIED: with_seed witness changed |
-| Cold Rscript | NONPASS: TZDIR added at namespace load | Causal owner/correction unproved |
-| Public replay V5 | 23/247P/0F/E/W/S; complete TRUE | NONPASS: seed/objects FALSE |
+| Completed CI | 38347269352/source 8f2: 11/13 successful | Both Windows contexts fail |
+| Windows release | 29,507P/56F/0W/99S; families settled | Observer limit/mock/Python pins |
+| Windows oldrel4 | 29,426P/35F/0W/99S; families settled | Observer limit and 1 GiB guard |
+| Ubuntu oldrel4 | 29,536P/0F/0 R-W/67S; sampler 0 | No retry observed; two native W/two promises |
+| Connections CI | 29,655P/0F/0 R-W/52S | One native W/one close-timeout promise |
+| Browser grace | Scoped normal 1000/12 s/all8; NONPASS: 17 Chrome markers | Production ownership controls/current artifact |
+| ACK/GPU diagnostics | Dead/cache/all8/cleanup recorded | Prior native warnings/markers remain |
+| Cold frontend | Four diagnostics; TZDIR at base formatter | Nonacceptance; preservation unresolved |
+| Public replay V7 | PASS: 23/247P/0F/E/W/S/all8 | Predecessor install; broader frontend gates |
 | Jev typed | Live+fresh replay PASS; 3/0 native usage | Broader live workflows pending |
-| Other live/native | Reviewed cases available | CLI/Azure/tools/steering/fanout/ML/RNA/Shiny |
+| CLI live trace | NONPASS: 50 s deadline after turn_end | FIFO checkpoint hypothesis, no syscall proof |
+| Other live/native | Reviewed cases available | Azure/tools/steering/fanout/ML/RNA/Shiny |
 | Release/merge | Not ready; submission being prepared | As-cran/size/teardown/publication/merge |
 
 Counts are assertions P, failures F, errors E, warnings W and skips S; all8 means caller states.
 Accepted local controls retain source/parent state, owned cleanup and zero sampling errors.
-The certificate archive is `5e38ed50` (2,580,415 bytes); final-source acceptance must be refreshed.
+The predecessor archive is `5e38ed50` (2,580,415 bytes); current acceptance must be refreshed.
 The site pass retains raw `✖ Favicons not ok.`; ICO `c0443220` is adopted, not rerendered.
 Jev's two startup/dead samples per child do not prove inference-time peak RAM or calibration.
-The shared Qwen model remains resource-held; no load, unload or reconfiguration is authorized.
+Ollama/Qwen validation remains resource-held; preserve the shared Ollama model.
+No model load, unload or reconfiguration is authorized.
 
-Retain qualified RED census 11/263P/50F/2E and registry 70/3,660P/35F, plus prior matcher/sandbox
-refusals, rMarker1 nonqualified and lMarker2 lint NONPASS. Public V3 stopped before a child;
-V4 reached tests with 23/237P/10F and options/seed/objects FALSE. V5 closes those test failures
-and the options difference; seed/user-object preservation and its causal owner remain unresolved.
-Retain abnormal 1006/EOF, GPU/ACK failures and all raw native output; no quiet waiver is admitted.
-The last verified deployed source is `2450c9e`. The 8f2 snapshot has CI in progress and Pages
-skipped; it proves no new publication. Run four cross-plan checks, then final-source gates.
-All frozen V11–V18 checkpoints and historical evidence below remain immutable.
+Retain prior Ubuntu errno 3, Windows dangling-file warnings, all RED/nonqualified attempts,
+public V5 seed/objects NONPASS and cold frontend failures. V7's no-praise replay restores all8.
+Retain Claude's 230 s deadline and the later 50 s trace: message_end/turn_end only, no return.
+The two observed supervisor FIFOs support a checkpoint hypothesis, not a proven blocked call.
+Retain the prior state 2/zero-event browser failure with its unentered tail and 15 Chrome markers.
+Browser 1006/EOF, late ACK promises and startup markers remain open; no quiet waiver is admitted.
+The last verified deployed source is `2450c9e`; 8f2 Pages was skipped, with no new publication.
+Run four cross-plan checks, then final-source gates. All earlier evidence remains immutable.
 
 Earlier evidence below remains historical; it does not override these current gates.
 

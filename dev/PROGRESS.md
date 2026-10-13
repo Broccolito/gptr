@@ -1,9 +1,9 @@
-## Current checkpoint — `8f2be45`, 2026-10-12
+## Current checkpoint — `4040706`, 2026-10-12
 
-Four test/CI tasks and the ICO are committed; package R bytes remain identical to `3677f5b`.
-Local declared/marker/census/registry controls and lints pass; native acceptance stays open.
-Normal/private install, functional site and typed Jev pass within their recorded scopes.
-Cold frontend/replay, raw browser/Windows conditions and fresh favicon acceptance stay open.
+Auth runtime and CLI offline tests are committed; the installed `3677f5b` is a predecessor.
+Auth 55/486P, CLI 6/138P and public replay V7 23/247P pass in their recorded scopes.
+The completed `8f2be45` CI has 11 successful contexts and two Windows failures.
+Cold TZDIR, CLI completion, browser raw conditions and fresh favicon acceptance stay open.
 See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current results table and retained failures.
 Next: four cross-plan checks, final-source archive/CI/live gates, publication and merge.
 
