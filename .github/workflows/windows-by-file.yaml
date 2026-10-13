@@ -31,7 +31,7 @@ on:
         type: boolean
         default: false
       held_token:
-        description: Run strict79 with the reviewed held-disabled owned-utility fixture
+        description: Run strict83 with the reviewed held-disabled owned-utility fixture
         type: boolean
         default: false
       declared_link_diagnostic:

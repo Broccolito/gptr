@@ -72,7 +72,11 @@ optional_titles = list(
     "backpressure sample diagnostics are bounded and omit arbitrary messages",
     "backpressure observer diagnostics retain only current fixed reason codes",
     "backpressure observer diagnostics reject unknown or private message forms",
-    "backpressure observer diagnostics preserve the original typed failure"),
+    "backpressure observer diagnostics preserve the original typed failure",
+    "backpressure census retries one ENOENT only with the same live parent",
+    "backpressure census preserves permission and uncertain parent observations",
+    "backpressure census keeps the first condition when its sole retry is incomplete",
+    "backpressure census retries one ESRCH without changing failure ownership"),
   "test-proc-writer-runtime.R" = c(
     "Windows production writer preserves ordered writes and idle EOF",
     "Windows production writer death is a typed IO failure",
