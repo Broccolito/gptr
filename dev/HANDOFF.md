@@ -1,19 +1,18 @@
-## Continue from source `fb8f07f` — 2026-10-13
+## Continue from source `c08b86d` — 2026-10-13
 
 Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`.
 Branch `codex/skipped-platform-tests`; main is unmerged and release readiness is false.
-Reason46, browser grace, calendar preservation and the Busy fixture are adopted.
-Current normal archive/install, public23, Cold7 and three history frontends pass their scopes.
-Codex/Jev and Azure regression/teams live plus fresh replay pass their recorded scopes.
+UV/Matrix setup, attained browser deadline and OpenSSL state fixes pass local controls and lint.
+The seven-target Windows comparison is adopted; its explicit current dispatch is in progress.
+The fb8 archive, installed consumers and provider receipts remain exact predecessor scopes.
 Current results and open conditions are listed once in [TESTING_PLAN.md](TESTING_PLAN.md).
 
 Keep one root-owned serial family: 2 GiB sampled RAM/512 MiB output, with owned cleanup.
 Preserve original R sessions and shared Ollama; no model load, unload or reconfiguration.
-The Mac suite was interrupted by its RAM guard; no complete-suite receipt was published.
-Strict Quarto/default-browser Shiny remain NONPASS; private source controls now pass.
-Next: correct and replay those scopes, then broader live, hosted, site and release gates.
-Retain all prior failures and run four cross-plan checks with these pinned document overlays.
-
+Functional Quarto passes its identity scope; original whole-object serialization remains NONPASS.
+Native Shiny caller states/diagnostics, Mac partial/focused failures and hosted failures stay open.
+Next: build the final normal archive, then rebind consumers and current integration gates.
+Run four cross-plan checks with these pinned overlays before committing this checkpoint.
 
 Earlier evidence below remains historical; it does not override these current gates.
 

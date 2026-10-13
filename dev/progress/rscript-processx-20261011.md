@@ -1,14 +1,12 @@
-## Process validation checkpoint — source `fb8f07f`, 2026-10-13
+## Process validation checkpoint — source `c08b86d`, 2026-10-13
 
-Normal archive/install, public23, Cold7 and three history frontends pass their state gates.
-Busy focused/full15/lint and Codex/Jev/Azure live plus replay pass within their scopes.
-The Mac suite exceeds its RAM cap; owned cleanup passes, final suite/all8 reports are absent.
-Strict Quarto retains objects FALSE; identity diagnostics do not waive that serialized oracle.
-Default Google Shiny now fails ps_handle timestamp typing/cleanup/env; lifecycle is incomplete.
-Explicit framework setup admits private Quarto/native controls all8; earlier env failures remain.
-GC V3 is a Mac diagnostic only; Windows source checks do not prove native RSS or GC efficacy.
+UV13/89P, Matrix16/148P, browser27/1,520P and OpenSSL12/120P pass local controls/all8/lint.
+These source commits require a new normal archive; fb8 installed/provider receipts remain separate.
+Windows comparison dispatch is in progress; source/static checks do not prove native RSS or GC efficacy.
+Functional Quarto retains exact users/framework identities; original serialization remains NONPASS.
+Native Shiny lifecycle components pass while caller states and raw native diagnostics remain NONPASS.
+Interrupted Mac/focused suites, hosted errors and Claude AUTH_UNAVAILABLE remain open.
 Use one owned serial family; see [TESTING_PLAN](../TESTING_PLAN.md) for the sole current table.
-
 
 Earlier evidence below remains historical; it does not override these current gates.
 
