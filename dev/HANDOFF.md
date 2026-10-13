@@ -1,11 +1,13 @@
-## Continue from artifact `b214596`, control `efccc5f` — 2026-10-13
+## Continue from installed artifact `4e03861`, control `116817b` — 2026-10-13
 
-Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`; main remains unmerged and release readiness is false.
-See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current table. Accepted b214 normal/cold8/public23/Rscript/Rmd/Jupyter and Claude regression live/fresh replay retain their scopes. The dev-only census correction is adopted at efccc5f after Mac controls14/79P and three lint0; package bytes remain b214.
-Short two-child manual team/fanout LIVE plus fresh resume/replay pass all six phases/all8/W0/owned cleanup, with zero resume/replay requests/usage/native events and the original600s origin. Original automatic stress/budget failures remain; no automatic-compaction or fanout numeric-reexecution claim.
-Keep one root-owned serial family:2 GiB sampled RAM/512 MiB output with exact owned cleanup. Preserve original R sessions and shared Ollama; no model load, unload or reconfiguration.
-Next: browser/Shiny raw quietness and connections, protected native GUI routing/Quarto, ML prediction/RNA, remaining provider/workflow scopes, hosted/native Windows, full suite/as-cran, installed-size review, site/main publication and merge. Current valid screenshot PNGs still retain FIFO/CVDisplayLink errors; no front cure.
-Four cross-plan checks pass (all four statuses0):117.991s/1505.484 MiB sampled,108 samples/0 errors, source/parent/owned cleanup TRUE; [exact receipt](/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011/installed-batch-efccc-V2-four-plan-PR5-ACTUAL-ACCEPTANCE.json).
+Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`; main remains unmerged. [TESTING_PLAN.md](TESTING_PLAN.md) is the sole current table.
+Current normal install, four provider LIVE/replay pairs, four LIVE integrations and local site render pass their fixed checks; sampled responsive/light-dark review passes. Installed4e and later source/control revisions remain separate; executable changes require the next normal artifact.
+Adopted census `f9caeb0` passes18/109 plus three lints; adopted reference prose `e1bef32` passes caller-preserving roxygen generation. Browser marker-family fix is adopted `cab1129` after35/1773 plus two lints. Lint `951c126` passes6/32 and loop `e586afc`13/105 plus two lints each; old failed baselines stay retained. Pipeline-guide wording is corrected in116817b; native CI closure remains open.
+The199-file memory run completes but is NONPASS from four failures/errors, test/whole warnings and caller-state drift. Original as-cran remains guard-aborted; retained Mac CI has six browser-marker teardown errors, and Windows comparison remains NONPASS. Current CI is still ongoing.
+PNG/lifecycle/caller checks pass in screenshot/public-cycle cells, but native display errors and incomplete FIFO lifetime keep strict native gates open. Only the approved mounted RStudio duplicate was closed; original and native-UX sessions remain alive. CUA routes protected original port27070, so fresh UI testing remains blocked.
+Keep one root-owned serial2GiB/512MiB family and exact owned cleanup. Preserve original R sessions/shared Ollama; no model reconfiguration. Next: fresh normal/direct package check/site, current13/native CI, generated-Shiny/provider-history and real parallel stress, five consumers/profiles, Quarto whole-render, native/Qwen, CRAN review, main publication and merge.
+Release-size optimization is pending: fresh measurements, safe reductions, relevant/full checks and measured cran-comments; preserve any actual NOTE and request consideration if needed.
+Use the unchanged four cross-plan checks on exact116817b plus these three document overlays before checkpoint adoption. All historical suffixes stay byte-identical; this owner makes no check-run or completed-release claim.
 
 Earlier evidence below remains historical; it does not override these current gates.
 
