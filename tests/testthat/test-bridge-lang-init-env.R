@@ -308,3 +308,111 @@ test_that("Python user evaluation keeps deliberate option changes after setup", 
   expect_identical(result$value, 42L)
   expect_identical(getOption("reticulate.uv_binary"), "deliberate-user-uv")
 })
+
+
+# Clone only the namespace-loader lookup; the actual setup body and formals stay intact.
+py_init_test_main_loader = function(loader) {
+  main = bridge_py_main
+  scope = new.env(parent = environment(main))
+  scope$requireNamespace = loader
+  environment(main) = scope
+  main
+}
+
+test_that("Python setup preserves the caller's absent or configured Matrix callback", {
+  skip_if_not_installed("reticulate")
+  callback = function(condition) invisible(NULL)
+  for (prior in list(NULL, callback)) {
+    local({
+      withr::local_options(list(ambiguousMethodSelection = prior))
+      py_init_test_env(py_init_test_values("before-"))
+      main = new.env(parent = emptyenv())
+      py_init_test_mocks(main, FALSE, function(convert = FALSE) main)
+      state = new.env(parent = emptyenv())
+      state$calls = 0L
+      setup = py_init_test_main_loader(function(package, quietly = FALSE) {
+        state$calls = state$calls + 1L
+        options(ambiguousMethodSelection = function(condition) "initialization")
+        TRUE
+      })
+      before = options()
+      result = setup()
+      after = options()
+      expect_identical(result, main)
+      expect_identical(state$calls, 1L)
+      expect(identical(after, before), "setup must preserve the exact caller Matrix options")
+      expect(identical(getOption("ambiguousMethodSelection"), prior),
+        "setup must preserve the exact caller Matrix callback")
+    })
+  }
+})
+
+test_that("Python setup preserves its Matrix callback before the original error or interrupt", {
+  skip_if_not_installed("reticulate")
+  callback = function(condition) invisible(NULL)
+  for (type in c("error", "interrupt")) {
+    for (stage in c("namespace", "import", "helper")) {
+      for (prior in list(NULL, callback)) {
+        local({
+          withr::local_options(list(ambiguousMethodSelection = prior))
+          py_init_test_env(py_init_test_values("before-"))
+          original = structure(list(message = "synthetic Matrix setup condition", call = NULL),
+            class = c(paste0("synthetic_", type), type, "condition"))
+          py_init_test_mocks(NULL, FALSE, function(convert = FALSE) {
+            if (stage == "import") stop(original)
+            new.env(parent = emptyenv())
+          })
+          testthat::local_mocked_bindings(
+            py_has_attr = function(x, name) stage != "helper",
+            py_run_string = function(code, convert = FALSE) stop(original),
+            .package = "reticulate"
+          )
+          setup = py_init_test_main_loader(function(package, quietly = FALSE) {
+            options(ambiguousMethodSelection = function(condition) "initialization")
+            if (stage == "namespace") stop(original)
+            TRUE
+          })
+          before = options()
+          env_before = Sys.getenv()
+          seen = tryCatch(setup(), error = identity, interrupt = identity)
+          after = options()
+          env_after = Sys.getenv()
+          expect_identical(seen, original)
+          expect(identical(after, before), "failed setup must preserve caller Matrix options")
+          expect_identical(env_after, env_before)
+          expect(identical(getOption("ambiguousMethodSelection"), prior),
+            "failed setup must preserve the exact caller Matrix callback")
+        })
+      }
+    }
+  }
+})
+
+test_that("Python user evaluation keeps deliberate Matrix callback changes after setup", {
+  skip_if_not_installed("reticulate")
+  withr::local_options(ambiguousMethodSelection = NULL)
+  py_init_test_env(py_init_test_values("before-"))
+  state = new.env(parent = emptyenv())
+  state$setup_restored = FALSE
+  user_callback = function(condition) "deliberate user choice"
+  main = new.env(parent = emptyenv())
+  main$`_gptr_run` = function(src, rows) {
+    state$setup_restored = is.null(getOption("ambiguousMethodSelection"))
+    options(ambiguousMethodSelection = user_callback)
+    list(list(out = "", err = "", repr = "42", error = NULL, kind = "int"), 42L)
+  }
+  py_init_test_mocks(main, FALSE, function(convert = FALSE) main)
+  setup = py_init_test_main_loader(function(package, quietly = FALSE) {
+    options(ambiguousMethodSelection = function(condition) "initialization")
+    TRUE
+  })
+  evaluate = bridge_py
+  scope = new.env(parent = environment(evaluate))
+  scope$bridge_py_main = setup
+  environment(evaluate) = scope
+  result = evaluate("synthetic user source")
+  expect(isTRUE(state$setup_restored),
+    "setup must restore its Matrix callback before user evaluation")
+  expect_identical(result$value, 42L)
+  expect_identical(getOption("ambiguousMethodSelection"), user_callback)
+})
