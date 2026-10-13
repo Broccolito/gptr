@@ -1,61 +1,58 @@
-## Current validation checkpoint — source `3c50722`, 2026-10-13
+## Current validation checkpoint — source `0ec54ac`, 2026-10-13
 
-Eight accepted scopes are adopted at `3c50722`; main is unmerged and readiness is false.
-The private certificate is source `3677f5b`, before current auth and these runtime changes.
+Reason46, browser grace and calendar preservation are adopted; main is unmerged and readiness is
+false.
+The private certificate/archive remains exact390; current24 R files differ.
 Use one root-owned serial family: 2 GiB sampled RAM/512 MiB output; no GPU/model expansion.
 
 | Gate | Current result | Remaining condition |
 | --- | --- | --- |
-| Normal private | Predecessor PASS:121 R/14 pairs/five MD5 | Fresh final archive/five checks/profiles |
-| Auth parsing | 55/486P/all8; two lints0 | Current installed/native/live proof |
-| CLI offline | 6/138P/all8; lint0 | Actual authenticated CLI completion |
-| .onLoad | Qualified RED3/7P/5F; GREEN3/12P/all8; two lints0 | Current installed/cold-load proof |
-| Date | RED2/3P/2F; GREEN2/11P/all8; four lints0 | Current cold-load proof |
-| Observer mock | GREEN8/145P/all8; empty diagnostics/lint0 | Current native observer proof |
-| FIFO | Qualified RED33/181P/7E; GREEN33/235P/all8/empty diagnostics; two lints0 | Fresh archive and actual live CLI completion |
-| ISO time | RED4/29P/13F; GREEN4/42P/all8/empty diagnostics; two lints0 | Current installed/cold-load proof |
-| Literal lookup | Qualified stdlib RED24/1F/20E; GREEN24 quiet | Native Windows lookup/identity/no-follow proof |
-| Windows Python syntax | Three quiet phases:6 jobs/7 rows,9 files+2 embedded programs | Provisioning/ABI/private-runtime/native proof |
-| Browser source controls | V9 GREEN24/1,430P/all8/empty diagnostics; four lints0 | Current installed quiet shutdown/native replay |
+| Normal private 390 | PASS 121 R/14 pairs/five MD5; archive dc150d2e, 2,597,323 B | Fresh current artifact, five consumers/profiles/as-cran |
+| Cross-plan 390 | All4 PASS; 770 R blocks0 issues/lint0; 39 sources unchanged | Repeat after this plan adoption; 912 index findings retained |
+| Cold installed 390 | Three fixed operations/360 state checks/zero warnings PASS | Fresh artifact and broader frontend/live behavior |
+| Rscript/Rmd/Jupyter 390 | PASS13 restored states, six environment phases, after-return; Jupyter35 MIME proofs | Native interactive frontend coverage |
+| Quarto history 390 | NONPASS: objects FALSE; only .QuartoInlineRender changes before display; other12/env6 exact | Framework-closure boundary observed, not exclusive GPTR cause; raw WARN retained |
+| Plain Quarto control | NONPASS objects/options, other11 TRUE; two synthetic user bindings exact; no GPTR namespace | Framework serialization first changes before plain output; options cause unobserved |
+| Public replay 390 | 23/247P/0F/E/W/S; env FALSE, other7 TRUE; V9 final TZDIR-only addition at first test end | Fresh calendar artifact and original replay pending; prior V7/V8 retained |
+| Busy manual compaction | Prior intended1case/10P/2F/1E, zero W/S; env FALSE after TZDIR addition | UNQUALIFIED RED; no fixture adoption; rebind four modes after calendar correction |
+| Auth and CLI source | 55/486P and6/138P/all8; configured lints0 | Real authenticated CLI completion |
+| Calendar source | RED10/87P19F→GREEN10/106P/all8/W0;26 lints0, adopted0ec54ac | Fresh artifact/cold/public23/busy15 integration; source properties only |
+| .onLoad/Date/ISO source | 3/12P, 2/11P, 4/42P/all8/lints0 | Cold3 proves only its three installed operations |
+| FIFO source | 33/235P/all8/empty diagnostics/two lints0 | Real CLI completion; prior options errors retained |
+| Observer mock/literal | 8/145P/all8/lint0 and24 quiet injected controls | Native Windows identity/no-follow proof |
+| Reason46 | RED1/121P18F→GREEN1/139P/all8; two lints0, adopted03b | Fresh hosted diagnostic integration |
+| Windows Python syntax | Three quiet syntax/semantic phases | Provisioning/ABI/private-runtime/native proof |
+| GC Mac component V3 | Scoped diagnostic PASS2×7/all8/W0; direct RSS+32KiB | No RSS-reduction/true-peak/Windows/helper adoption proof; V2 shape NONPASS retained |
+| Browser source/grace | RED27/1,478P/0F/1E→GREEN27/1,511P/all8/empty diagnostics; two lints0, adopted1c0b | Fresh installed/native/full-CI proof; original unqualified grace baseline retained |
+| Explicit CfT fixture390 | 1000/death/cache/12 s/all8/cleanup pass; overall NONPASS ten CVDisplayLink-6670 errors | Current default browser quietness unverified; no warning waiver |
+| One-flag CfT diagnostic | Quiet1000/death/cache/12 s/all8/default-args restored PASS | Testing-only flag; no default adoption or release closure |
 | Unicode export | C+UTF8 10/176P; broad321/2,434P; lint0 | Final-source CI |
-| Local site | 14 guides/all8/320–1440 px/200% PASS | Prior favicon NONPASS; fresh ICO check |
-| Declared entry | 16 Python/9 R256P; three lints0 | Native ACL/token/no-follow proof |
-| Ordinary marker | 18 Python/10 R281P; three lints0 | Native marker warning closure |
-| Census | GREEN11/374P; two lints0 | Actual retry path remains unobserved |
-| Registry | GREEN70/3,695P; two lints0 | Fresh strict hosted collection |
-| Prior951 CI | Run38354365636:11/13 success, two Windows failed | New final-source CI and full native logs |
-| 951 Windows release | 29,661P/50F/12E/0 R-W/99S | Entry-limit/mock/Python settings/init-bound; close-timeout diagnostic |
-| 951 Windows oldrel4 | 29,528P/2F/32E/0 R-W/99S | Entry-limit/mock/Python settings/init-bound |
-| Ubuntu oldrel4 | Prior29,536P/0F/0 R-W/67S; sampler0 | No retry observed; two native W/two promises |
-| Connections CI | Prior29,655P/0F/0 R-W/52S | One native W/one close-timeout promise |
-| Browser native | Prior1000/12 s/all8; NONPASS17 Chrome markers | Current artifact and all unfiltered native/late conditions |
-| ACK/GPU diagnostics | Dead/cache/all8/cleanup recorded; CfT192,634,606 B pinned | No CfT execution; startup/native conditions remain |
-| Public replay V7 | PASS23/247P/0F/E/W/S/all8 | Predecessor install; broader frontend gates |
-| Jev typed | Live+fresh replay PASS;3/0 native usage | Broader live workflows pending |
-| CLI live trace | NONPASS50 s after turn_end; two owned FIFOs | No blocked-syscall proof or real CLI completion |
-| Other live/native | Reviewed cases available | Azure/tools/steering/fanout/ML/RNA/Shiny |
-| Release/merge | Not ready; submission being prepared | As-cran/size/teardown/publication/merge |
+| Site/ICO | Prior14 guides/320–1440 px/Chrome200% PASS; ICO source adopted | Fresh current ICO/render still queued; prior favicon NONPASS retained |
+| Declared entry/marker | 16 Python/9 R256P and18 Python/10 R281P; lints0 | Native ACL/token/no-follow/marker proof |
+| Census/registry | 11/374P and70/3,695P; configured lints0 | Fresh strict hosted collection; actual retry unobserved |
+| Hosted3c LC | 30,923P19F/0 R-W/73S; reason whitelist mismatch | Fresh hosted integration; two setup SyntaxWarnings retained |
+| Hosted3c connections | 31,033P26F3E/0 R-W/52S; strict4MB worker proof passes separately | Browser5F2E, busy manual2F1E, reason19F; scoped fixes do not close job |
+| Prior951 Windows | Release50F12E; oldrel4 2F32E, both0 R-W | Full new Windows raw/provision/native proof |
+| Hosted03b snapshot | Latest retained snapshot: 3 success/10 in progress/0 completed failures of13 | No current1c0b CI result or readiness claim |
+| Jev typed390 | Live+fresh replay scoped PASS/all8/W0;3/0 native usage rows; replay0 requests | Current artifact and broader provider/workflow replay |
+| Claude390 live/auth | Two live auth failures; paired native status1/loggedIn FALSE/method none/same path TRUE | Working-terminal nonsecret path/context comparison; no repeated login request |
+| Azure390 scoped live/replay | Seven phases PASS/all8/W0: functions4req, simulation2, steering6, teams9; teams replay0; regression2/replay0 | Numeric/caller PASS; four-cylinder report20.09 vs computed26.66364 is numerical NONPASS; teams replay report-only |
+| Codex390 regression | LIVE+fresh replay scoped PASS/all8/W0;1/0 requests, unchanged replay document | Current artifact; broader tools/files/skills/plugins, ML/RNA/Shiny/history workflows |
+| Ollama/Qwen | Resource-held | Preserve shared model; no load/unload/reconfiguration |
+| Release/merge | Not ready; CRAN submission being prepared | Current checks/size/teardown/publication/merge |
 
 P/F/E/W/S mean assertions/failures/errors/warnings/skips; all8 means caller states.
-Local controls retain source/parent state, owned cleanup and zero sampling errors.
-Literal and syntax children do not establish R caller-state or native Windows acceptance.
-The prior 951 status snapshot is 2026-10-13 07:12:50 UTC; both Windows full raw logs are retained.
-Their checkout is merge1de7a6a6; mock signature, six missing Python settings and observer failures
-remain open. Initialization failed the unchanged45 s OR1 GiB gate; its actual component is unmeasured.
-Release's native-absence case alone records PROBE1/ACL/restoration/cleanup and zero sampler errors.
-The exact Browser.close timeout appears in release captured output despite zero R warnings.
-Its repeated log appearance is not proof of separate events; no quiet waiver is admitted.
-The predecessor archive is5e38ed50 (2,580,415 B). ICOc0443220 is adopted, not rerendered.
-Preserve shared Ollama/original sessions; no model load, unload or reconfiguration is authorized.
-
-Retain every historical RED/NONPASS, including FIFO options34diffobj.*, ISO TZDIR cold diagnostics,
-public V5 seed/objects, V7 browser NULL and V8 lint failures,1006/EOF/ACK promises and startup markers.
-FIFO's explicit pinned diffobj admission is before the source-test snapshot; no repair or cold claim.
-Claude's230 s failure and50 s trace have message_end/turn_end only. Stat-only supervisor FIFO proof
-supports the checkpoint hypothesis; source controls are not real CLI completion or a blocked-call stack.
-Jev's startup/dead samples do not establish inference-time peak RAM or calibration.
+Certified390 and its installed/provider cells do not cover current browser/calendar runtime.
+GC V2 shape failure and plain-control objects/options failures remain NONPASS.
+GC V3 validates the Mac diagnostic schema only; its direct RSS increases32KiB.
+Plain Quarto proves framework serialization changes without GPTR; the options cause is not observed.
+Busy V4 adds only TZDIR; intended conditions do not qualify RED while environment restoration fails.
+Keep prior raw native warnings/promises, CLI deadlines, auth, options/seed/NULL/lint failures.
+Retain the original grace baseline's two extra failures; eager-dots V2 supplies the accepted local
+proof.
 The last verified deployed source is2450c9e; later skipped Pages runs are not publication.
-Run four cross-plan checks, then final-source gates. All earlier evidence remains immutable.
+Run four cross-plan checks with the four pinned document overlays before committing; then continue
+final-source gates.
 
 Earlier evidence below remains historical; it does not override these current gates.
 

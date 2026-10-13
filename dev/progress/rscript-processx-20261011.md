@@ -1,11 +1,12 @@
-## Process validation checkpoint — source `3c50722`, 2026-10-13
+## Process validation checkpoint — source `0ec54ac`, 2026-10-13
 
-.onLoad3/12P, Date2/11P and ISO4/42P pass all8 with clean configured lints.
-FIFO33/235P/all8 and two lints0 pass after explicit framework admission; prior NONPASSs stay.
-Observer mock8/145P and literal24 are scoped controls; private-Python syntax is not provisioning.
-Browser24/1,430P/all8/empty diagnostics and four lints0 pass; installed/native quietness stays open.
-Prior951 Windows release50F/12E and oldrel4 2F/32E remain failed with zero R warnings.
-Use one owned serial family; preserve shared resources. See [TESTING_PLAN](../TESTING_PLAN.md).
+Calendar10/106P/all8/lint26zero and browser grace27/1,511P/all8/lint2zero are adopted.
+Certified390 cold3/Rscript/Rmd/Jupyter and Codex/Jev replay pass only their recorded scopes.
+Public390/busy retain TZDIR failures; fresh current artifact and original replay are pending.
+Plain Quarto fails objects/options without GPTR while preserving its two user bindings.
+Mac GC V3 is diagnostic-only. Explicit CfT fixture remains NONPASS; default browser and Claude
+authentication are still open.
+Use one owned serial family. See [TESTING_PLAN](../TESTING_PLAN.md) for all current gates.
 
 Earlier evidence below remains historical; it does not override these current gates.
 

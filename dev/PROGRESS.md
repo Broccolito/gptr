@@ -1,12 +1,13 @@
-## Current source checkpoint — `3c50722`, 2026-10-13
+## Current source checkpoint — `0ec54ac`, 2026-10-13
 
-Eight accepted scopes are adopted; the `3677f5b` private install is a predecessor.
-Date, .onLoad, FIFO, ISO and observer controls pass in their recorded source scopes.
-Literal lookup24 and private-Python syntax pass; native Windows acceptance remains open.
-Prior951 CI has11 successes/two Windows failures; raw causes are retained, not waived.
-Browser24/1,430P/all8 and four lints0 pass; current installed quiet shutdown remains pending.
-See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current table and retained conditions.
-Next: final archive/CI/cold/native/live/publication/merge gates and four plan checks.
+Reason46, browser grace and calendar preservation are adopted after scoped source passes.
+Calendar10/106P/all8 and26 lints0 need a fresh current artifact and original public/busy replay.
+Certified390 retains normal/cold3, Rscript/Rmd/Jupyter and scoped Codex/Jev/Azure passes.
+Plain Quarto reproduces framework-object/options failure without GPTR; two user bindings stay exact.
+Mac GC V3 passes its diagnostic2×7 schema; direct RSS rises32KiB. V2 failure remains retained.
+Explicit CfT fixture/Claude auth and the four-cylinder report's incorrect number remain NONPASS.
+Current default browser quietness is unverified.
+See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current table and next gates.
 
 Earlier evidence below remains historical; it does not override these current gates.
 

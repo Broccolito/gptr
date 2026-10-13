@@ -1,18 +1,17 @@
-## Continue from source `3c50722` — 2026-10-13
+## Continue from source `0ec54ac` — 2026-10-13
 
 Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`.
 Branch `codex/skipped-platform-tests`; main is unmerged and release readiness is false.
-Eight accepted source scopes are adopted at `3c50722`; their full SHA is in the source proof.
-The private certificate remains source `3677f5b`; it does not certify current runtime.
+Reason46, browser grace and calendar preservation are adopted after scoped source validation.
+The private archive remains exact390; current24 R files differ and need a fresh artifact.
 Current results and open conditions are listed once in [TESTING_PLAN.md](TESTING_PLAN.md).
 
 Keep one root-owned serial family: 2 GiB sampled RAM/512 MiB output, with owned cleanup.
-Preserve original R sessions and the shared Ollama model; no GPU or model expansion.
-Next: fresh final-source archive/CI, cold and native preservation, then live CLI completion.
-Retain all prior options, cold-load, browser NULL/lint and Windows failure receipts.
-Windows private-Python provisioning is syntax-checked, not executed or native-accepted.
-Review/merge PR 6 and verify the merged artifact after remaining gates pass.
-Run four cross-plan checks after this adopted update; preserve historical bytes.
+Preserve original R sessions and shared Ollama; no model load, unload or reconfiguration.
+Next: fresh normal artifact, cold/public replay, busy15, frontends/native and hosted gates.
+Installed390 public/busy TZDIR failures and plain Quarto objects/options failures remain retained.
+Codex/Jev/Azure scoped passes do not close broader workflows; Claude authentication remains open.
+Run the four cross-plan checks with only these four pinned document overlays before committing.
 
 Earlier evidence below remains historical; it does not override these current gates.
 
