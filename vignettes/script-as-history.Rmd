@@ -74,7 +74,7 @@ summary(s)
 #> 3 1     tool_result  + top <data.frame 3 x 2>  r      6
 #> 4 1     assistant    The three most fuel-e...         1639
 #> # 4 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . s416578bed6
+#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . scce30dce90
 ```
 
 The named `data = force(data)` supplies the helper's argument as an explicit context value:

@@ -98,7 +98,7 @@ ls(work)
 
 s |> peter("Reuse fit to predict mpg for the same cars.")
 #> The predictions are stored in predicted.
-#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . scfa0ab65e6
+#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . sf2b26d438c
 head(work$predicted)
 #>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive 
 #>          23.28261          21.91977          24.88595          20.10265 
