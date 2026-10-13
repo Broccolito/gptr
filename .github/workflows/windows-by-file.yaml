@@ -239,7 +239,7 @@ jobs:
           GITHUB_TOKEN: ''
         run: |
           Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-rss/test-probe.R", reporter = testthat::SummaryReporter$new(show_praise = FALSE), stop_on_failure = TRUE, stop_on_warning = TRUE)'
-          Rscript --vanilla -e 'paths = c(list.files("dev/ci/windows-rss", pattern = "[.]R$", full.names = TRUE), "tests/testthat/helper-proc-backpressure.R"); stopifnot(all(vapply(paths, function(path) length(lintr::lint(path)) == 0L, logical(1))))'
+          Rscript --vanilla -e 'paths = c(list.files("dev/ci/windows-rss", pattern = "[.]R$", full.names = TRUE), "tests/testthat/helper-proc-backpressure.R"); lints = stats::setNames(lapply(paths, lintr::lint), paths); saveRDS(lints, "optional-evidence/windows-rss-lint.rds"); print(lints); stopifnot(all(vapply(lints, function(lint) length(lint) == 0L, logical(1))))'
       - name: Test the pinned no-follow observer operations
         if: inputs.optional
         timeout-minutes: 1
