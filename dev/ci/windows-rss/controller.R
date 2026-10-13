@@ -82,19 +82,15 @@
         process = processx::process$new(file.path(R.home("bin"), "Rscript.exe"),
           c("--vanilla", file.path(root, "dev/ci/windows-rss/cell.R"), config_path),
           stdout = stdout, stderr = stderr, env = environment, wd = root, supervise = FALSE)
-        root_handle = ps::ps_handle(process$get_pid())
+        root_pid = process$get_pid()
+        root_handle = ps::ps_handle(root_pid)
         root_time = as.numeric(ps::ps_create_time(root_handle))
-        remember = function(handle) {
-          time = as.numeric(ps::ps_create_time(handle))
-          stopifnot(is.finite(time))
-          key = paste(ps::ps_pid(handle), time, sep = ":")
-          handles[[key]] <<- list(handle = handle, time = time)
-        }
-        remember(root_handle)
+        stopifnot(isTRUE(process$is_alive()), identical(ps::ps_pid(root_handle), root_pid),
+          length(root_time) == 1L, is.finite(root_time), root_time > 0)
+        handles = list(list(handle = root_handle, pid = root_pid, time = root_time))
         repeat {
           sample = tryCatch({
-            stopifnot(identical(as.numeric(ps::ps_create_time(root_handle)), root_time))
-            for (handle in ps::ps_find_tree(marker)) remember(handle)
+            handles = support$rss_census(root_handle, root_pid, root_time, marker, handles)
             rss = vapply(handles, function(row) memory(row$handle, row$time), numeric(1))
             parent_rss = memory(outer, outer_time)
             total = parent_rss + sum(rss)

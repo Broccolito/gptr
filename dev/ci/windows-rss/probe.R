@@ -89,6 +89,63 @@ rss_capture = function(output, collect, gc_observation,
   list(callback = callback, state = state)
 }
 
+# Discover marker-free descendants only through the exact owned cell root.
+# Remembered handles retain their admitted PID/time; a reused PID is never substituted.
+rss_census = function(root, root_pid, root_time, marker, remembered = list(),
+                      children = ps::ps_children, marked = ps::ps_find_tree,
+                      pid = ps::ps_pid, create_time = ps::ps_create_time,
+                      alive = ps::ps_is_running, supervisor_pid = Sys.getpid()) {
+  valid_pid = function(value) {
+    is.numeric(value) && length(value) == 1L && is.finite(value) && value > 0 &&
+      value <= .Machine$integer.max && value == floor(value)
+  }
+  stopifnot(valid_pid(root_pid), valid_pid(supervisor_pid), root_pid != supervisor_pid,
+    is.numeric(root_time), length(root_time) == 1L, is.finite(root_time), root_time > 0,
+    is.character(marker), length(marker) == 1L, !is.na(marker), nzchar(marker),
+    is.list(remembered))
+  state = new.env(parent = emptyenv())
+  state$rows = list()
+  remember = function(handle, expected_pid = NULL, expected_time = NULL) {
+    observed_pid = pid(handle)
+    observed_time = as.numeric(create_time(handle))
+    stopifnot(valid_pid(observed_pid), observed_pid != supervisor_pid,
+      length(observed_time) == 1L, is.finite(observed_time), observed_time > 0)
+    observed_pid = as.integer(observed_pid)
+    if (!is.null(expected_pid)) {
+      stopifnot(valid_pid(expected_pid), identical(observed_pid, as.integer(expected_pid)))
+    }
+    if (!is.null(expected_time)) stopifnot(identical(observed_time, expected_time))
+    existing = which(vapply(state$rows, function(row) identical(row$pid, observed_pid), logical(1)))
+    if (length(existing)) {
+      stopifnot(length(existing) == 1L, identical(state$rows[[existing]]$time, observed_time))
+    } else {
+      state$rows[[length(state$rows) + 1L]] = list(handle = handle, pid = observed_pid,
+        time = observed_time)
+    }
+    invisible(NULL)
+  }
+  remember(root, root_pid, root_time)
+  for (row in remembered) {
+    stopifnot(is.list(row), identical(names(row), c("handle", "pid", "time")),
+      valid_pid(row$pid), is.numeric(row$time), length(row$time) == 1L,
+      is.finite(row$time), row$time > 0)
+    remember(row$handle, row$pid, row$time)
+  }
+  running = alive(root)
+  stopifnot(is.logical(running), length(running) == 1L, !is.na(running))
+  if (running) {
+    descendants = children(root, recursive = TRUE)
+    stopifnot(is.list(descendants))
+    remember(root, root_pid, root_time)
+    for (handle in descendants) remember(handle)
+  }
+  carrying_marker = marked(marker)
+  stopifnot(is.list(carrying_marker))
+  for (handle in carrying_marker) remember(handle)
+  remember(root, root_pid, root_time)
+  state$rows
+}
+
 # Same-handle death confirmation reuses the existing case sampler's 50 ms bound.
 rss_memory = function(handle, time, create_time = ps::ps_create_time,
                       alive = ps::ps_is_running, memory_info = ps::ps_memory_info,
