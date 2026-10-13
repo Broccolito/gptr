@@ -149,7 +149,7 @@ test_that("backpressure observer diagnostics retain only current fixed reason co
   source = readLines(test_path("fixtures", "bp-disk-observer.py"))
   lines = grep("raise ObservationError", source, value = TRUE, fixed = TRUE)
   codes = sort(unique(sub(".*ObservationError\\(\"([a-z-]+)\"\\).*", "\\1", lines)))
-  expect_length(codes, 40L)
+  expect_length(codes, 46L)
   prefixes = c("", "ObservationError: ", "gptr_owned_disk_observer.ObservationError: ")
   for (code in codes) {
     for (prefix in prefixes) {
