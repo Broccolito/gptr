@@ -594,6 +594,199 @@ artifact_chromote_missing = function() {
   NULL
 }
 
+#' Start a marked local Chrome owner with the artifact child environment
+#' @noRd
+artifact_browser_launch = function(args) {
+  check_strings(args, "args")
+  if (!is.null(artifact_state$browser_pending)) {
+    gptr_abort("The pending headless browser must finish cleanup before launching another.", "io",
+               operation = "open", path = NULL)
+  }
+  reserved = paste0("^--(headless|remote-debugging-port|remote-debugging-address|",
+    "remote-debugging-pipe|remote-allow-origins|user-data-dir|crash-dumps-dir)(=|$)")
+  if (any(grepl(reserved, args))) {
+    arg_abort(args, "args", "Chrome arguments that do not replace its owned profile or endpoint")
+  }
+  path = chromote::find_chrome()
+  check_string(path, "Chrome path")
+  port = port_candidates(1L)[[1L]]
+  mode = getOption("chromote.headless")
+  if (is.null(mode)) {
+    mode = Sys.getenv("CHROMOTE_HEADLESS", "")
+    if (!nzchar(mode)) mode = NULL
+  }
+  if (!is.null(mode)) check_string(mode, "chromote.headless")
+  headless = if (is.null(mode)) "--headless" else paste0("--headless=", mode)
+  root = tempfile("gptr-chrome-")
+  if (!dir.create(root, mode = "0700")) {
+    gptr_abort("Could not create the private headless browser directory.", "io",
+               operation = "open", path = root)
+  }
+  held = new.env(parent = emptyenv())
+  held$process = NULL
+  held$record = NULL
+  held$pid = NA_integer_
+  owner = NULL
+  lease = NULL
+  returned = FALSE
+  on.exit(if (!returned) {
+    settled = tryCatch({
+      if (is.null(held$process)) {
+        unlink(root, recursive = TRUE) == 0L
+      } else if (isTRUE(kill_all(held$process, grace = 0))) {
+        owner$release()
+        TRUE
+      } else {
+        FALSE
+      }
+    }, error = function(e) FALSE, interrupt = function(e) FALSE)
+    if (!is.null(lease) && identical(artifact_state$browser_pending, lease)) {
+      if (settled) artifact_state$browser_pending = NULL
+    } else if (!settled && !is.null(held$process)) {
+      # A caller replaced the private slot: retain this exact owner as a cleanup job.
+      tryCatch(job_add("artifact", marker, "headless-browser-cleanup", pid = held$pid,
+        stop = function() {
+          if (!isTRUE(kill_all(held$process, grace = 0))) {
+            gptr_abort("The owned headless browser cleanup did not settle.", "io",
+                       operation = "close", path = stderr)
+          }
+          owner$release()
+          job_remove(marker)
+          invisible(NULL)
+        }, status = function() {
+          alive = tryCatch(held$process$is_alive(),
+            error = function(e) NA, interrupt = function(e) NA)
+          if (isTRUE(alive)) "running" else if (isFALSE(alive)) "stopped" else "unknown"
+        }), error = function(e) NULL, interrupt = function(e) NULL)
+    }
+  }, add = TRUE)
+  profile = file.path(root, "profile")
+  crashes = file.path(root, "crashes")
+  stdout = tempfile("gptr-chrome-stdout-", fileext = ".log")
+  stderr = tempfile("gptr-chrome-stderr-", fileext = ".log")
+  if (!dir.create(profile, mode = "0700") || !dir.create(crashes, mode = "0700") ||
+      !all(file.create(c(stdout, stderr)))) {
+    gptr_abort("Could not prepare the private headless browser files.", "io",
+               operation = "open", path = root)
+  }
+  Sys.chmod(c(stdout, stderr), mode = "0600")
+  argv = c(headless, paste0("--remote-debugging-port=", port),
+    paste0("--remote-allow-origins=http://127.0.0.1:", port),
+    paste0("--user-data-dir=", profile), paste0("--crash-dumps-dir=", crashes), args)
+  marker = proc_marker_new()
+  owner = list(is_local = function() TRUE, get_process = function() held$process,
+    get_host = function() "127.0.0.1", get_port = function() port,
+    close = function(wait = FALSE) {
+      if (!isFALSE(wait)) arg_abort(wait, "wait", "FALSE for the owned close deadline")
+      process = held$process
+      alive = process$is_alive()
+      if (!isTRUE(alive) && !isFALSE(alive)) {
+        gptr_abort("The owned headless browser state is unavailable.", "io",
+                   operation = "close", path = stderr)
+      }
+      if (alive) process$signal(tools::SIGTERM)
+      invisible(NULL)
+    }, release = function() {
+      process = held$process
+      if (!isFALSE(process$is_alive())) {
+        gptr_abort("The owned headless browser has not stopped.", "io",
+                   operation = "close", path = stderr)
+      }
+      current = proc_record(process$get_pid(), process = process)
+      if (!is.null(current)) {
+        if (is.null(held$record)) held$record = current
+        if (!identical(current, held$record) || !identical(current$marker, marker) ||
+            !isTRUE(proc_release(process)) ||
+            !is.null(proc_record(process$get_pid(), process = process))) {
+          gptr_abort("The owned headless browser marker did not finish cleanup.", "io",
+                     operation = "close", path = stderr)
+        }
+      }
+      tree = proc_tree(marker)
+      if (length(tree) || isTRUE(attr(tree, "unavailable"))) {
+        gptr_abort("The owned headless browser family did not finish cleanup.", "io",
+                   operation = "close", path = stderr)
+      }
+      link = Sys.readlink(root)
+      if (length(link) != 1L || (!is.na(link) && nzchar(link)) ||
+          unlink(root, recursive = TRUE) != 0L || dir.exists(root) || file.exists(root)) {
+        gptr_abort("The private headless browser directory did not finish cleanup.", "io",
+                   operation = "close", path = root)
+      }
+      # Raw logs remain available to callers after the exact marked family settles.
+      invisible(NULL)
+    })
+  lease = list(browser = NULL, owner = owner)
+  if (!is.null(artifact_state$browser_pending)) {
+    gptr_abort("The pending headless browser changed before launch.", "io",
+               operation = "open", path = stderr)
+  }
+  artifact_state$browser_pending = lease
+  process = proc_spawn(path, argv, env = child_env("artifact"), stdout = stdout,
+    stderr = stderr, supervise = supervise_default(), .marker = marker, .on_spawn = function(p) {
+      held$process = p
+      held$pid = p$get_pid()
+    })
+  if (!identical(held$process, process)) {
+    gptr_abort("The owned headless browser handle changed during launch.", "io",
+               operation = "open", path = stderr)
+  }
+  held$record = proc_record(process$get_pid(), process = process)
+  if (is.null(held$record) || !identical(held$record$marker, marker)) {
+    gptr_abort("The owned headless browser marker is unavailable.", "io",
+               operation = "open", path = stderr)
+  }
+  if (!identical(artifact_state$browser_pending, lease)) {
+    gptr_abort("The pending headless browser changed during launch.", "io",
+               operation = "open", path = stderr)
+  }
+  artifact_state$browser_pending = NULL
+  returned = TRUE
+  owner
+}
+
+#' Admit only the returned owner's live loopback DevTools endpoint
+#' @noRd
+artifact_browser_ready = function(owner) {
+  process = owner$get_process()
+  path = process$get_error_file()
+  port = owner$get_port()
+  deadline = proc.time()[["elapsed"]] + 10
+  endpoint = paste0("^DevTools listening on ws://127\\.0\\.0\\.1:", port,
+    "/devtools/browser/[A-Za-z0-9-]+$")
+  ready = function() {
+    alive = process$is_alive()
+    if (!isTRUE(alive)) {
+      gptr_abort("The owned headless browser stopped or its state became unavailable.", "io",
+                 operation = "open", path = path)
+    }
+    bytes = readBin(path, "raw", n = 1048577L)
+    if (length(bytes) > 1048576L) {
+      gptr_abort("The headless browser startup log exceeded its limit.", "io",
+                 operation = "open", path = path)
+    }
+    text = raw_to_utf8(bytes)
+    lines = strsplit(text, "\n", fixed = TRUE)[[1L]]
+    if (!endsWith(text, "\n")) lines = utils::head(lines, -1L)
+    lines = sub("\r$", "", lines)
+    announced = grep("^DevTools listening on ws://", lines, value = TRUE)
+    if (!length(announced)) return(FALSE)
+    if (length(announced) != 1L || !grepl(endpoint, announced)) {
+      gptr_abort("The headless browser announced a different endpoint.", "io",
+                 operation = "open", path = path)
+    }
+    TRUE
+  }
+  admitted = reactor_pump(until = ready, slice_ms = 50L, allow_runs = character(), timeout = 10)
+  alive = process$is_alive()
+  finished = proc.time()[["elapsed"]]
+  if (!isTRUE(admitted) || !isTRUE(alive) || !is.finite(finished) || finished >= deadline) {
+    gptr_abort("The owned headless browser startup timed out or did not remain alive.", "io",
+               operation = "open", path = path)
+  }
+  invisible(TRUE)
+}
+
 #' The process's headless browser, started once: the cold start costs about 3.4 s, later checks
 #' 1.1-2.1 s (report 17 section 2.3). The mock keychain keeps macOS Chrome from waiting on the
 #' user's keychain, which hangs navigation without one (CI, an isolated HOME).
@@ -648,7 +841,7 @@ artifact_browser = function() {
     }
   }
   args = c(chromote::get_chrome_args(), "--use-mock-keychain")
-  owner = with_seed_preserved(chromote::Chrome$new(args = args))
+  owner = with_seed_preserved(artifact_browser_launch(args))
   lease = list(browser = NULL, owner = owner)
   changed = !is.null(artifact_state$browser) || !is.null(artifact_state$browser_owner) ||
     !is.null(artifact_state$browser_pending)
@@ -656,9 +849,11 @@ artifact_browser = function() {
   if (!changed) {
     artifact_state$browser_pending = lease
     artifact_state$browser_owner = owner
-    b = tryCatch(with_seed_preserved(chromote::Chromote$new(
-      browser = chromote::ChromeRemote$new(host = owner$get_host(), port = owner$get_port()))),
-      error = function(e) e, interrupt = function(e) e)
+    b = tryCatch(with_seed_preserved({
+      artifact_browser_ready(owner)
+      chromote::Chromote$new(browser = chromote::ChromeRemote$new(
+        host = owner$get_host(), port = owner$get_port()))
+    }), error = function(e) e, interrupt = function(e) e)
     changed = !is.null(artifact_state$browser) ||
       !identical(artifact_state$browser_owner, owner) ||
       !identical(artifact_state$browser_pending, lease)
@@ -815,6 +1010,10 @@ artifact_browser_close = function(b = artifact_state$browser,
                operation = "close", path = NULL)
   }
   remaining()
+  if (is.function(owner$release)) {
+    with_seed_preserved(owner$release())
+    remaining()
+  }
   if (cached && (!identical(artifact_state$browser, b) ||
                  !identical(artifact_state$browser_owner, owner))) {
     gptr_abort("The cached headless browser changed during cleanup.", "io",

@@ -107,7 +107,9 @@ artifact_owner_fixture = function(remote = FALSE) {
       heads = list(quote(chromote::Chrome$new), quote(chromote::ChromeRemote$new),
         quote(chromote::Chromote$new), quote(chromote::get_chrome_args),
         quote(later::run_now), quote(proc.time), quote(Sys.sleep))
-      names = c("new_owner", "new_remote", "new_container", "chrome_args", "pump", "clock", "nap")
+      heads = c(heads, list(quote(artifact_browser_launch)))
+      names = c("new_owner", "new_remote", "new_container", "chrome_args", "pump", "clock", "nap",
+        "new_owner")
       for (i in seq_along(heads)) {
         if (identical(expr[[1L]], heads[[i]])) expr[[1L]] = as.name(names[[i]])
       }
@@ -155,6 +157,10 @@ artifact_owner_fixture = function(remote = FALSE) {
     }
     state$constructed = make_container(if (is.null(browser)) owner else browser)
     state$constructed
+  }
+  scope$artifact_browser_ready = function(value) {
+    stopifnot(identical(value, owner))
+    invisible(TRUE)
   }
   scope$chrome_args = function() character()
   scope$clock = function() {

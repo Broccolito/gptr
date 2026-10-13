@@ -489,7 +489,7 @@ job_frame = function(recs) {
   if (!length(recs)) {
     return(data.frame(id = character(), kind = character(), name = character(),
                       pid = integer(), status = character(),
-                      started = as.POSIXct(character(), tz = "UTC"),
+                      started = structure(numeric(), class = c("POSIXct", "POSIXt"), tzone = "UTC"),
                       stringsAsFactors = FALSE))
   }
   data.frame(id = vapply(recs, function(r) r$id, ""),
