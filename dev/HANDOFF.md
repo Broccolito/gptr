@@ -1,26 +1,18 @@
-## Continue from `b562910` — 2026-10-12
+## Continue from `8f2be45` — 2026-10-12
 
-Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`; HEAD is `b562910`, origin is `0756f64`. Main is unmerged.
-[TESTING_PLAN.md](TESTING_PLAN.md) holds full coverage, current counts and pending gates.
-Preserve dirty primary, original/native R sessions, R.app, VS Code and shared Ollama.
-Only three approved extra RStudio sessions exited; exact receipts are retained.
-Use one admitted local family, capped at 2 GiB sampled RAM and 512 MiB output.
+Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`.
+Branch `codex/skipped-platform-tests`; main is unmerged and release readiness is false.
+The private installed certificate remains source `3677f5b`; all 121 R files are unchanged.
+Local normal/site, typed Jev and reviewed test controls pass only in their recorded scopes.
+Current results and open conditions are listed once in [TESTING_PLAN.md](TESTING_PLAN.md).
 
-Next:
-
-- g3070 regeneration passes 14 guides, 57 release assertions, seven lints and all eight states.
-  Whitespace checks pass; 26 generated targets are adopted at b562910. Render/publish final bytes.
-- Native public close reaches 1000/dead/cache-clear with state intact, but one socket logger
-  warning and 15 Chrome markers fail quiet acceptance. Original RStudio warning stays open.
-- Finish LC_ALL=C decoding: the byte-writer amendment still fails; the bounded causal matrix
-  passes, but no production correction is adopted. Retain both outcomes.
-- Windows fixture Mac validation/adoption is complete; replay ordinary/declared-link/held
-  controls on Windows with unchanged security/caps. Fresh 0756 CI is still in progress.
-- Refresh normal artifact/consumers/CRAN and live models/frontends, steering/teams/tools,
-  .gptr/replay/compaction/in-memory workflows. Run four cross-plan checks and push reviewed tasks.
-- Review/merge PR 6 after current gates pass, then test its merged artifact. Live Windows UI
-  remains the final frontend gate; other gates remain open. Published docs certify `2450c9e`.
+Keep one root-owned serial family: 2 GiB sampled RAM/512 MiB output, with owned cleanup.
+Preserve the original R sessions and shared Ollama model; no GPU or model expansion.
+Next: run four cross-plan checks, then fresh final-source archive/CI and dependency profiles.
+Resolve cold TZDIR preservation, public replay, native warnings and browser quietness.
+Recheck the adopted ICO, complete remaining live/native workflows and refresh publication.
+Review/merge PR 6 and verify the merged artifact only after the remaining gates pass.
+Frozen V11–V18 checkpoints, raw failures and nonqualified attempts remain retained.
 
 Earlier evidence below remains historical; it does not override these current gates.
 

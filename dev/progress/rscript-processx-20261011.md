@@ -1,26 +1,11 @@
-## Runtime/child-process checkpoint through `b562910` — 2026-10-12
+## Process validation checkpoint — `8f2be45`, 2026-10-12
 
-Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`; HEAD `b562910`, origin `0756f64`.
-Full coverage and pending gates: [TESTING_PLAN.md](../TESTING_PLAN.md).
-
-- Browser 15/258 and metadata 15/88 pass serially; three lints 0 and scoped state/source/cleanup pass.
-  Native n3080 closes 1000/dead/cache-clear/all eight states, but one socket logger warning and
-  15 Chrome markers fail quiet acceptance. Chrome debug-key presence is unobservable.
-- Compaction/worker 26/231 passes locally at 233,096 bytes. Hosted 7928 worker passes at 232,655
-  bytes with unchanged spec; full connections job fails only its old URL fixture.
-- Ordinary 52/682 and registry 69/3,587 pass locally; strict held requires 79. Native Windows
-  ordinary/declared-link/held replay retains ACL/token identity and original 5/30/60 s caps.
-- Two Windows-oriented fixtures pass Mac amended/complete 59/627, state and lint; retained
-  baseline is 59/589P/4F/1E. Test-only 0756 is pushed; fresh 13-check CI/Windows are in progress.
-- g3070 generation passes 57 release assertions, all eight states, seven lints and raw warnings 0;
-  26 generated targets are adopted at b562910. Render/publication and normal consumers remain.
-- LC_ALL=C byte-writer amendment fails 2F/1E/1W; causal normalization matrix passes without an
-  adopted production fix. Certified 2450 cold inspection fails only options/env preservation;
-  changed names are callr.condition_handler_cli_message/TZDIR, not a restoration waiver.
-
-Preserve original/native R sessions, R.app, VS Code and shared model; three approved extra exits
-have exact receipts. One 2 GiB/512 MiB family at a time. Refresh artifact/CRAN/live/merged gates,
-update the plan and run four cross-plan checks. Original RStudio MallocStackLogging stays open.
+Declared, marker, census and registry fixes are committed; all 121 package R files are unchanged.
+Local controls pass: 16 Python/9 R256P, 18 Python/10 R281P, 11/374P and 70/3,695P; lints 0.
+The latest completed CI still has Ubuntu errno 3 failure and two Windows dangling-file warnings.
+Browser job counters do not erase two native warnings or two close-timeout promises.
+Cold TZDIR and public-replay state failures remain open; original security limits are unchanged.
+Fresh native proof is pending; full current results are in [TESTING_PLAN](../TESTING_PLAN.md).
 
 Earlier evidence below remains historical; it does not override these current gates.
 

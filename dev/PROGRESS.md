@@ -1,27 +1,11 @@
-## Current progress through `b562910` — 2026-10-12
+## Current checkpoint — `8f2be45`, 2026-10-12
 
-HEAD is `b562910`, origin `0756f64`; main is unmerged. Full coverage: [TESTING_PLAN.md](TESTING_PLAN.md).
-Completed local scopes include history/replay, browser 15/258, metadata 15/88, lint 0,
-compaction/worker 26/231, ordinary 52/682 and registry 69/3,587, with scoped state intact.
-7928 hosted worker also passes the unchanged 4 MB bound at 232,655 bytes; its full job fails the
-old URL fixture. Fresh 0756 CI has all 13 checks in progress; this is not final CI acceptance.
-
-g3070 generation passes 14 guides, nine release cases/57 assertions, seven lints 0, all eight
-states and zero raw warnings; 48.928 s, sampled 511.3125 MiB, owned cleanup TRUE. Whitespace
-checks pass and 26 targets are adopted at b562910, not yet pushed. Retain g3010 failure.
-Windows two-fixture Mac amended/complete both pass 59/627 with state/lint intact; baseline
-59/589P/4F/1E remains. Only fixtures were adopted/pushed at 0756; fresh Windows acceptance is open.
-
-Native n3080 reaches close 1000/dead/cache-clear/all eight states, but FAILS one socket logger
-warning and 15 Chrome markers. LC_ALL=C byte-writer amendment FAILS 2F/1E/1W; the bounded
-normalization matrix passes 12 valid/two negative cases, without a production correction.
-Certified 2450 top 20 inspection preserves originals/inspection state but fails cold env/options;
-changed names are observed, not waived. Three approved extra RStudio exits preserve protected sessions.
-
-Open: final normal artifact/consumers/CRAN, current CI/native Windows, locale decoding, quiet
-browser close, live workflows/frontends, fresh site publication and reviewed PR 6 merge/testing.
-Use one admitted 2 GiB/512 MiB family; update plan/four cross-plan checks and commit/push by task.
-Readiness remains false; published site and normal certificate still cover `2450c9e`.
+Four test/CI tasks and the ICO are committed; package R bytes remain identical to `3677f5b`.
+Local declared/marker/census/registry controls and lints pass; native acceptance stays open.
+Normal/private install, functional site and typed Jev pass within their recorded scopes.
+Cold frontend/replay, raw browser/Windows conditions and fresh favicon acceptance stay open.
+See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current results table and retained failures.
+Next: four cross-plan checks, final-source archive/CI/live gates, publication and merge.
 
 Earlier evidence below remains historical; it does not override these current gates.
 
