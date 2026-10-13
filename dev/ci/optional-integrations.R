@@ -437,16 +437,20 @@ optional_marker = function(time = Sys.time()) {
 }
 
 optional_wait_family = function(root_stopped, remaining, seconds = 5,
-                                now = function() proc.time()[["elapsed"]], pause = Sys.sleep) {
+                                now = function() proc.time()[["elapsed"]], pause = Sys.sleep,
+                                known_stopped = function() TRUE) {
   started = now()
   polls = 0L
   repeat {
     polls = polls + 1L
     stopped = root_stopped()
     count = length(remaining())
+    known = known_stopped()
+    stopifnot(is.logical(known), length(known) == 1L, !is.na(known))
     elapsed = now() - started
-    if ((stopped && count == 0L) || elapsed >= seconds) {
-      return(list(settled = stopped && count == 0L, root_stopped = stopped,
+    settled = stopped && count == 0L && known
+    if (settled || elapsed >= seconds) {
+      return(list(settled = settled, root_stopped = stopped,
         remaining_marked_processes = count, settlement_elapsed_s = elapsed,
         settlement_polls = polls))
     }

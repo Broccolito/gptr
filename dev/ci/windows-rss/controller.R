@@ -139,6 +139,40 @@
       if (is.null(failure) && conditions$warnings != warnings_before) {
         failure = simpleError("RSS comparison controller retained an unmuffled warning")
       }
+      # Settlement and the final check share the exact same owned-handle proof.
+      known = new.env(parent = emptyenv())
+      known$observations = list()
+      known$first_condition = NULL
+      known_stopped = function() {
+        known$observations = list()
+        stopped = TRUE
+        for (row in handles) {
+          observed = list2env(list(pid = NULL, create_time = row$time,
+            observed_create_time = NULL, identity_matches = NULL, running = NULL,
+            condition_classes = character()), parent = emptyenv())
+          checked = tryCatch({
+            observed$pid = ps::ps_pid(row$handle)
+            created = as.numeric(ps::ps_create_time(row$handle))
+            stopifnot(length(created) == 1L, is.finite(created))
+            observed$observed_create_time = created
+            observed$identity_matches = identical(created, row$time)
+            stopifnot(observed$identity_matches)
+            running = ps::ps_is_running(row$handle)
+            stopifnot(is.logical(running), length(running) == 1L, !is.na(running))
+            observed$running = running
+            NULL
+          }, error = base::identity, interrupt = base::identity)
+          if (inherits(checked, "condition")) observed$condition_classes = class(checked)
+          value = as.list(observed)
+          known$observations[[length(known$observations) + 1L]] = value
+          if (inherits(checked, "condition")) {
+            if (is.null(known$first_condition)) known$first_condition = value
+            stop(checked)
+          }
+          if (isTRUE(observed$running)) stopped = FALSE
+        }
+        stopped
+      }
       cleanup = support$rss_cleanup(
         function() {
           if (!is.null(process)) process$kill_tree()
@@ -147,15 +181,8 @@
         function() {
           support$optional_wait_family(function() {
             is.null(process) || !process$is_alive()
-          }, function() ps::ps_find_tree(marker))
-        },
-        function() {
-          for (row in handles) {
-            stopifnot(identical(as.numeric(ps::ps_create_time(row$handle)), row$time),
-              isFALSE(ps::ps_is_running(row$handle)))
-          }
-          TRUE
-        }, launch_unknown = attempted && is.null(process))
+          }, function() ps::ps_find_tree(marker), known_stopped = known_stopped)
+        }, known_stopped, launch_unknown = attempted && is.null(process))
       if (is.null(failure) && !is.null(cleanup$error)) failure = cleanup$error
       receipt = list(label = label, scope = scope, collect = collect, product_acceptance = FALSE,
         status = if (!is.null(failure)) 1L else outcome$status,
@@ -169,6 +196,16 @@
         samples = samples, sampling_errors = sample_errors, peak_sampled_family_rss = peak,
         elapsed = proc.time()[["elapsed"]] - began, cell_bound = seconds,
         whole_controller_warning_count = conditions$warnings - warnings_before)
+      if (!isTRUE(cleanup$complete)) {
+        receipt$known_handle_observations = if (!is.null(known$first_condition)) {
+          list(known$first_condition)
+        } else {
+          Filter(function(row) {
+            !isTRUE(row$identity_matches) || !isFALSE(row$running) ||
+              length(row$condition_classes) > 0L
+          }, known$observations)
+        }
+      }
       published = tryCatch({
         readback()
         support$rss_write(receipt, file.path(folder, "controller.json"))

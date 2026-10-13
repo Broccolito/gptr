@@ -2,6 +2,7 @@ local({
   support = new.env(parent = baseenv())
   sys.source("gc-observation.R", support)
   sys.source("probe.R", support)
+  sys.source("../optional-integrations.R", support)
   testthat::test_that("RSS comparison collects once only at the real ordered writer boundary", {
     root = withr::local_tempdir()
     calls = 0L
@@ -94,6 +95,82 @@ local({
     testthat::expect_identical(value$error, original)
     testthat::expect_false(value$complete)
     testthat::expect_true(value$family$settled)
+  })
+  testthat::test_that("RSS settlement waits for a remembered handle after root and marker death", {
+    clock = new.env(parent = emptyenv())
+    clock$time = 0
+    clock$observations = 0L
+    value = support$optional_wait_family(function() TRUE, function() list(),
+      now = function() clock$time, pause = function(seconds) {
+        clock$time = clock$time + seconds
+      }, known_stopped = function() {
+        clock$observations = clock$observations + 1L
+        clock$time >= 0.1
+      })
+    testthat::expect(isTRUE(value$settled), "Remembered handle must die before settlement")
+    testthat::expect(identical(value$root_stopped, TRUE), "Root death must remain independent")
+    testthat::expect(identical(value$remaining_marked_processes, 0L), "Marker tree must be empty")
+    testthat::expect(clock$time >= 0.1 && clock$time < 5, "Known death must fit the old bound")
+    testthat::expect(clock$observations > 1L, "Known death must be observed after the first poll")
+  })
+  testthat::test_that(
+    "RSS persistent remembered handles remain fatal at the same five-second bound", {
+    clock = new.env(parent = emptyenv())
+    clock$time = 0
+    value = support$rss_cleanup(function() NULL, function() NULL, function() {
+      support$optional_wait_family(function() TRUE, function() list(),
+        now = function() clock$time, pause = function(seconds) {
+          clock$time = clock$time + seconds
+        }, known_stopped = function() FALSE)
+    }, function() FALSE, FALSE)
+    testthat::expect(identical(value$complete, FALSE), "A live remembered handle must stay fatal")
+    testthat::expect(inherits(value$error, "error"), "Failure must retain a condition")
+    testthat::expect(identical(value$family$settled, FALSE), "Joint settlement must fail")
+    testthat::expect(identical(value$family$root_stopped, TRUE), "Root status must stay exact")
+    testthat::expect(identical(value$family$remaining_marked_processes, 0L),
+      "Marker count stays exact")
+    testthat::expect(identical(clock$time, 5), "The existing five-second budget must not increase")
+  })
+  testthat::test_that("RSS unknown remembered status and original conditions cannot imply death", {
+    for (unknown in list(NA, NULL, 1, c(TRUE, FALSE))) {
+      observed = new.env(parent = emptyenv())
+      observed$calls = 0L
+      caught = tryCatch(support$optional_wait_family(function() TRUE, function() list(),
+        known_stopped = function() {
+          observed$calls = observed$calls + 1L
+          unknown
+        }), error = base::identity)
+      testthat::expect(inherits(caught, "error"), "Unknown known-handle status must be fatal")
+      testthat::expect(identical(observed$calls, 1L), "Status must be checked without retries")
+    }
+    for (original in list(simpleError("Fixed known-handle query failure"),
+      structure(list(message = "Fixed known-handle interrupt"),
+        class = c("interrupt", "condition")))) {
+      caught = tryCatch(support$optional_wait_family(function() TRUE, function() list(),
+        known_stopped = function() stop(original)),
+        error = base::identity, interrupt = base::identity)
+      testthat::expect(identical(caught, original),
+        "The original query condition must stay identical")
+    }
+  })
+  testthat::test_that("RSS remembered death never bypasses root or marker settlement", {
+    for (state in list(list(root = FALSE, marked = list()),
+      list(root = TRUE, marked = list(TRUE)))) {
+      clock = new.env(parent = emptyenv())
+      clock$time = 0
+      value = support$optional_wait_family(function() state$root, function() state$marked,
+        seconds = 0.1, now = function() clock$time, pause = function(seconds) {
+          clock$time = clock$time + seconds
+        }, known_stopped = function() TRUE)
+      testthat::expect(identical(value$settled, FALSE), "Root and marker gates remain mandatory")
+      testthat::expect(identical(value$root_stopped, state$root), "Original root field stays exact")
+      testthat::expect(identical(value$remaining_marked_processes, length(state$marked)),
+        "Original marker count stays exact")
+      testthat::expect(identical(clock$time, 0.1), "The caller's original bound stays exact")
+    }
+    value = support$optional_wait_family(function() TRUE, function() list())
+    testthat::expect(isTRUE(value$settled),
+      "Unchanged callers retain the default known-dead predicate")
   })
 
 })
