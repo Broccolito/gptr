@@ -161,7 +161,12 @@ class DiskObserver:
         return {"kind": kind, "size": item.st_size, "tag": tag,
                 "identity": (item.st_dev, item.st_ino)}
 
-    def snapshot(self):
+    def snapshot(self, *, declared_only=False):
+        if not isinstance(declared_only, bool):
+            raise ObservationError("observer-invalid-bound")
+        if declared_only and (len(self.declarations) != 1 or
+                              any("/" in entry for entry in self.declarations)):
+            raise ObservationError("observer-invalid-declaration")
         counters = {"entries": 0, "directories": 0, "declared_links": 0,
                     "disappeared": 0, "bytes": 0, "max_depth": 0}
         started = self.clock()
@@ -254,9 +259,10 @@ class DiskObserver:
                 elif rel in self.declarations:
                     raise ObservationError("observer-declared-entry-not-link")
                 elif item["kind"] == "directory":
-                    charge(item["size"])
-                    walk(full, rel, item["identity"], depth + 1)
-                else:
+                    if not declared_only:
+                        charge(item["size"])
+                        walk(full, rel, item["identity"], depth + 1)
+                elif not declared_only:
                     charge(item["size"])
             direct(path, identity)
 

@@ -230,5 +230,122 @@ class ObserverControls(unittest.TestCase):
             self.observer(fs, clock=clock)
 
 
+    def test_declared_only_charges_link_without_denied_directory_traversal(self):
+        fs = Operations()
+        fs.add("alias", metadata("link", 0, 3, 0xA000000C), "missing")
+        fs.add("denied", metadata("directory", 0, 4))
+        denied = os.path.join(fs.root, "denied")
+        fs.children[denied] = PermissionError(errno.EACCES, "owned denied directory")
+        fs.add("ordinary", metadata(size=100))
+        observer = self.observer(fs, [{"entry": "alias", "target": "missing"}])
+        sample = observer.snapshot(declared_only=True)
+        self.assertEqual(sample["bytes"], 16384)
+        self.assertEqual(sample["declared_links"], 1)
+        self.assertEqual(sample["directories"], 1)
+        self.assertEqual(sample["max_depth"], 0)
+        self.assertNotIn(denied, fs.scan_paths)
+        self.assertNotIn(os.path.join(fs.root, "missing"), fs.stat_paths)
+        with self.assertRaisesRegex(ObservationError, "directory-unreadable"):
+            observer.snapshot()
+
+    def test_declared_only_absence_requires_a_readable_same_identity_root(self):
+        fs = Operations()
+        observer = self.observer(fs, [{"entry": "alias", "target": "missing"}])
+        sample = observer.snapshot(declared_only=True)
+        self.assertEqual(sample["declared_links"], 0)
+        self.assertEqual(sample["bytes"], 0)
+        self.assertGreaterEqual(fs.scan_paths.count(fs.root), 1)
+        fs.info[fs.root] = metadata("directory", 0, 99)
+        with self.assertRaisesRegex(ObservationError, "identity-changed"):
+            observer.snapshot(declared_only=True)
+        fs = Operations()
+        observer = self.observer(fs, [{"entry": "alias", "target": "missing"}])
+        fs.children[fs.root] = PermissionError(errno.EACCES, "owned unreadable root")
+        with self.assertRaisesRegex(ObservationError, "directory-unreadable"):
+            observer.snapshot(declared_only=True)
+
+    def test_declared_only_refuses_replacement_foreign_target_and_unknown_tag(self):
+        for item, target, reason in (
+                (metadata(size=70000000), None, "declared-entry-not-link"),
+                (metadata("link", 0, 3, 0xA000000C), "../foreign", "link-target-differs"),
+                (metadata("link", 0, 3, 0x80000000), "missing", "unknown-reparse-tag")):
+            with self.subTest(reason=reason):
+                fs = Operations()
+                fs.add("alias", item, target)
+                observer = self.observer(fs, [{"entry": "alias", "target": "missing"}])
+                with self.assertRaisesRegex(ObservationError, reason):
+                    observer.snapshot(declared_only=True)
+        fs = Operations()
+        fs.add("foreign", metadata("link", 0, 4, 0xA000000C), "missing")
+        observer = self.observer(fs, [{"entry": "alias", "target": "missing"}])
+        with self.assertRaisesRegex(ObservationError, "undeclared-reparse"):
+            observer.snapshot(declared_only=True)
+
+    def test_declared_only_rechecks_link_identity_and_direct_parent(self):
+        fs = Operations()
+        fs.add("alias", metadata("link", 0, 3, 0xA000000C), "missing")
+        observer = self.observer(fs, [{"entry": "alias", "target": "missing"}])
+
+        def replacing(path):
+            fs.info[path] = metadata("link", 0, 99, 0xA000000C)
+            return "missing"
+
+        fs.readlink = replacing
+        with self.assertRaisesRegex(ObservationError, "link-identity-changed"):
+            observer.snapshot(declared_only=True)
+        fs = Operations()
+        observer = self.observer(fs, [{"entry": "alias", "target": "missing"}])
+        fs.info[fs.root] = metadata("directory", 0, 1, 0x80000000)
+        fs.stat_paths.clear()
+        with self.assertRaisesRegex(ObservationError, "unknown-reparse-tag"):
+            observer.snapshot(declared_only=True)
+        self.assertNotIn(fs.root, fs.stat_paths)
+
+    def test_declared_only_keeps_exact_disappearance_and_bound_failures(self):
+        fs = Operations()
+        fs.add("alias", metadata("link", 0, 3, 0xA000000C), "missing")
+        observer = self.observer(fs, [{"entry": "alias", "target": "missing"}])
+        original = fs.lstat
+
+        def disappearing(path):
+            if path == os.path.join(fs.root, "alias"):
+                fs.children[fs.root].remove("alias")
+                raise FileNotFoundError(errno.ENOENT, "owned vanished link")
+            return original(path)
+
+        fs.lstat = disappearing
+        sample = observer.snapshot(declared_only=True)
+        self.assertEqual(sample["disappeared"], 1)
+        self.assertEqual(sample["bytes"], 0)
+        fs = Operations()
+        fs.add("alias", metadata("link", 0, 3, 0xA000000C), "missing")
+        with self.assertRaisesRegex(ObservationError, "byte-limit"):
+            self.observer(fs, [{"entry": "alias", "target": "missing"}],
+                          byte_cap=16383).snapshot(declared_only=True)
+        fs.add("other", metadata())
+        with self.assertRaisesRegex(ObservationError, "entry-limit"):
+            self.observer(fs, [{"entry": "alias", "target": "missing"}],
+                          max_entries=1).snapshot(declared_only=True)
+
+    def test_declared_only_rejects_invalid_modes_declarations_and_late_reads(self):
+        fs = Operations()
+        observer = self.observer(fs, [{"entry": "alias", "target": "missing"}])
+        with self.assertRaisesRegex(ObservationError, "invalid-bound"):
+            observer.snapshot(declared_only="yes")
+        with self.assertRaisesRegex(ObservationError, "invalid-declaration"):
+            self.observer(fs).snapshot(declared_only=True)
+        with self.assertRaisesRegex(ObservationError, "invalid-declaration"):
+            self.observer(fs, [{"entry": "nested/alias", "target": "missing"}]).snapshot(
+                declared_only=True)
+        now = [0]
+
+        def clock():
+            now[0] += 0.6
+            return now[0]
+
+        observer.clock = clock
+        with self.assertRaisesRegex(ObservationError, "snapshot-deadline"):
+            observer.snapshot(declared_only=True)
+
 if __name__ == "__main__":
     unittest.main()

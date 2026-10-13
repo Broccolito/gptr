@@ -46,6 +46,26 @@ jobs:
           r-version: ${{ matrix.config.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        id: windows_python
+        if: runner.os == 'Windows'
+        with:
+          python-version: '3.12.10'
+      - name: Declare the Windows nofollow fixture runtime
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GPTR_TEST_PYTHON: ${{ steps.windows_python.outputs.python-path }}
+        run: |
+          python -I - <<'PYTHON'
+          import os, pathlib
+          executable = pathlib.Path(os.environ['GPTR_TEST_PYTHON']).resolve(strict=True)
+          value = executable.as_posix()
+          assert executable.is_file() and not any(c in value for c in '\r\n')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as stream:
+              stream.write('RETICULATE_PYTHON=' + value + '\n')
+              stream.write('RETICULATE_USE_MANAGED_VENV=false\n')
+          PYTHON
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck

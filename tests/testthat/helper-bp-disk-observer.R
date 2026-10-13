@@ -57,7 +57,12 @@ bp_disk_preserve = function(callback) {
   })())
 }
 
-bp_disk_observer = function(root, declarations = list(), source = NULL) {
+bp_disk_observer = function(root, declarations = list(), source = NULL, declared_only = FALSE) {
+  if (!is.logical(declared_only) || length(declared_only) != 1L || is.na(declared_only) ||
+      (declared_only && !identical(declarations,
+        list(list(entry = "dangling-file", target = "missing-target"))))) {
+    stop("The declared observer requires its exact owned fixture declaration")
+  }
   bp_disk_preserve(function() {
     absolute = FALSE
     if (is.character(root) && length(root) == 1L && !is.na(root)) {
@@ -109,7 +114,9 @@ bp_disk_observer = function(root, declarations = list(), source = NULL) {
     observer = namespace[["DiskObserver"]](root,
       declarations = reticulate::r_to_py(declarations, convert = FALSE))
     function() {
-      sample = bp_disk_preserve(function() reticulate::py_to_r(observer$snapshot()))
+      sample = bp_disk_preserve(function() {
+        reticulate::py_to_r(observer$snapshot(declared_only = declared_only))
+      })
       fields = c("entries", "directories", "declared_links", "disappeared", "bytes",
         "max_depth", "elapsed_s")
       if (!is.list(sample) || !identical(sort(names(sample)), sort(fields)) ||
