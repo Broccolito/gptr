@@ -50,7 +50,7 @@ session = session |> peter("Explain the largest residuals.")
 Prompts and ordinary R can alternate. A pipe adds turns to the same mutable session; assigning
 the session to another name does not make a branch. Use `gptr_fork()` for a branch.
 
-A top-level pipe chain owns one recorded block, placed after the complete statement. A later
+Each Peter call in a top-level pipe owns a block after the complete statement. A later
 continuation that uses `session` still needs that handle. Raw export refuses such a dependency
 when it would remove the handle; the export recipe below uses a new top-level call instead.
 
