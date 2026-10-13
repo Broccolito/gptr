@@ -860,3 +860,229 @@ test_that("a checkpoint permission failure publishes no blob or private payload"
   expect_null(ckpt_blob_find(hash))
   expect_length(list.files(ckpt_store_root(), recursive = TRUE, pattern = "[.]tmp-"), 0L)
 })
+
+
+test_that("checkpoint baseline excludes owned FIFOs before hashing", {
+  skip_on_os("windows")
+  proj = local_project(files = list("source.R" = "answer = 42", "empty.txt" = character()))
+  pipe = file.path(proj, "supervisor_stdin")
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  original = hash_file
+  hashed = character()
+  local_mocked_bindings(hash_file = function(path) {
+    if (any(path == pipe)) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    hashed <<- c(hashed, path)
+    original(path)
+  })
+  ck = ckpt_ck_new("s0000000090")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  expect_setequal(names(tr$hash), c("source.R", "empty.txt"))
+  expect_setequal(basename(hashed), c("source.R", "empty.txt"))
+  expect_true("supervisor_stdin" %in% tr$stat$path)
+  expect_false(ckpt_capturable(pipe))
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+})
+
+test_that("checkpoint changed FIFOs and links stay listed without capture or restore", {
+  skip_on_os("windows")
+  proj = local_project(files = list("source.R" = "answer = 42"))
+  ck = ckpt_ck_new("s0000000091")
+  call = list(id = "fifo", name = "r", input = list(code = "invisible(NULL)"))
+  token = ckpt_files_before(ck, call, 1L)
+  pipe = file.path(proj, "supervisor_stdout")
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  link = file.path(proj, "source-link")
+  expect_true(file.symlink(file.path(proj, "source.R"), link))
+  original = hash_file
+  local_mocked_bindings(hash_file = function(path) {
+    if (any(path %in% c(pipe, link))) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    original(path)
+  })
+  fragment = ckpt_files_after(ck, call, token)
+  rows = stats::setNames(fragment$files, vapply(fragment$files, function(row) row$path, ""))
+  expect_setequal(names(rows), c("supervisor_stdout", "source-link"))
+  expect_identical(rows$supervisor_stdout$post, "")
+  expect_false(rows$supervisor_stdout$restorable)
+  expect_identical(rows$supervisor_stdout$reason, "not a regular file")
+  expect_false(rows[["source-link"]]$restorable)
+  expect_identical(rows[["source-link"]]$reason, "symbolic link")
+  ckpt_files_undo(ck, fragment)
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  expect_true(ckpt_is_link(link))
+  expect_identical(readLines(file.path(proj, "source.R")), "answer = 42")
+})
+
+test_that("checkpoint racy scans reject a tracked regular file replaced by a FIFO", {
+  skip_on_os("windows")
+  proj = local_project(files = list("empty.txt" = character()))
+  ck = ckpt_ck_new("s0000000092")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  observed = tr$stat
+  tr$walk_time = observed$mtime[1L]
+  pipe = file.path(proj, "empty.txt")
+  expect_true(file.remove(pipe))
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  original = hash_file
+  local_mocked_bindings(ckpt_walk = function(root) observed, hash_file = function(path) {
+    if (any(path == pipe)) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    original(path)
+  })
+  scan = ckpt_files_scan(tr)
+  expect_identical(scan$modified, "empty.txt")
+  rows = ckpt_files_step(tr)
+  expect_length(rows, 1L)
+  expect_identical(rows[[1L]]$status, "modified")
+  expect_identical(rows[[1L]]$post, "")
+  expect_false(rows[[1L]]$restorable)
+  expect_identical(rows[[1L]]$reason, "not a regular file")
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+})
+
+test_that("checkpoint file-type uncertainty preserves original stat conditions", {
+  skip_on_os("windows")
+  proj = local_project(files = list("source.R" = "answer = 42"))
+  path = file.path(proj, "source.R")
+  regular = ckpt_regular
+  for (kind in c("error", "interrupt")) {
+    condition = structure(list(message = "fixed stat condition", call = NULL),
+      class = c("ckpt_stat_condition", kind, "condition"))
+    actual = testthat::with_mocked_bindings(
+      tryCatch(regular(path), error = identity, interrupt = identity),
+      ps_fs_stat = function(paths, follow) stop(condition), .package = "ps")
+    expect_identical(actual, condition)
+  }
+  for (type in list(NA_character_, "unknown", character(), 1L)) {
+    actual = testthat::with_mocked_bindings(regular(path),
+      ps_fs_stat = function(paths, follow) list(type = type), .package = "ps")
+    expect_identical(actual, FALSE)
+  }
+  expect_identical(regular(character()), logical())
+  expect_error(regular(file.path(proj, "absent")), class = "ps_error")
+  expect_identical(regular(c(path, proj)), c(TRUE, FALSE))
+})
+
+test_that("checkpoint Windows fallback keeps existing filesystem and link guards", {
+  proj = local_project(files = list("source.R" = "answer = 42", "empty.txt" = character()))
+  paths = file.path(proj, c("source.R", "empty.txt", "absent"))
+  regular = ckpt_regular
+  local_mocked_bindings(is_windows = function() TRUE)
+  testthat::with_mocked_bindings({
+    expect_identical(regular(c(paths, proj)), c(TRUE, TRUE, FALSE, FALSE))
+    expect_true(ckpt_capturable(paths[1L]))
+    expect_true(ckpt_capturable(paths[2L]))
+    expect_false(ckpt_capturable(paths[3L]))
+    local_mocked_bindings(ckpt_is_link = function(path) rep(TRUE, length(path)))
+    expect_false(regular(paths[1L]))
+  }, ps_fs_stat = function(...) stop("Windows must not call POSIX stat"), .package = "ps")
+})
+
+
+test_that("checkpoint undo refuses a regular post-image replaced by an owned FIFO", {
+  skip_on_os("windows")
+  proj = local_project(files = list("source.R" = "answer = 1"))
+  ck = ckpt_ck_new("s0000000093")
+  call = list(id = "fifo-undo", name = "r", input = list(code = "invisible(NULL)"))
+  token = ckpt_files_before(ck, call, 1L)
+  pipe = file.path(proj, "source.R")
+  writeLines("answer = 2", pipe)
+  fragment = ckpt_files_after(ck, call, token)
+  expect_true(fragment$files[[1L]]$restorable)
+  expect_true(file.remove(pipe))
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  original = hash_file
+  local_mocked_bindings(hash_file = function(path) {
+    if (any(path == pipe)) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    original(path)
+  })
+  for (force in c(FALSE, TRUE)) {
+    result = ckpt_files_undo(ck, fragment, force = force)
+    expect_identical(result$ok, FALSE)
+    expect_identical(result$action, "not restored (not a regular file)")
+    expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  }
+})
+
+
+test_that("checkpoint prediction preserves capture of a newly created regular file", {
+  proj = local_project()
+  path = file.path(proj, "created.R")
+  ck = ckpt_ck_new("s0000000094")
+  call = list(id = "created", name = "write", input = list(path = path, content = "answer = 42"))
+  expect_false(file.exists(path))
+  expect_false(ckpt_capturable(path))
+  token = ckpt_files_before(ck, call, 1L)
+  expect_false(file.exists(path))
+  writeLines("answer = 42", path)
+  fragment = ckpt_files_after(ck, call, token)
+  expect_length(fragment$files, 1L)
+  expect_identical(fragment$files[[1L]]$status, "created")
+  expect_true(fragment$files[[1L]]$restorable)
+  expect_true(nzchar(fragment$files[[1L]]$post))
+  expect_identical(readLines(path), "answer = 42")
+  expect_true(ckpt_files_undo(ck, fragment)$ok)
+  expect_false(file.exists(path))
+})
+
+
+test_that("checkpoint explicit paths reject FIFO and preserve regular size-cap semantics", {
+  skip_on_os("windows")
+  proj = local_project()
+  local_gptr_options(checkpoint_capture_max = 1)
+  ck = ckpt_ck_new("s0000000095")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  tr$per_turn = TRUE
+  pipe = file.path(proj, "supervisor_stdin")
+  call = list(id = "explicit-fifo", name = "write", input = list(path = pipe, content = ""))
+  token = ckpt_files_before(ck, call, 1L)
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  original = hash_file
+  local_mocked_bindings(hash_file = function(path) {
+    if (any(path == pipe)) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    original(path)
+  })
+  fragment = ckpt_files_after(ck, call, token)
+  expect_length(fragment$files, 1L)
+  row = fragment$files[[1L]]
+  expect_true(row$abs)
+  expect_identical(row$path, pipe)
+  expect_identical(row$status, "created")
+  expect_identical(row$post, "")
+  expect_false(row$restorable)
+  expect_identical(row$reason, "not a regular file")
+  expect_identical(ckpt_files_undo(ck, fragment, force = TRUE)$ok, FALSE)
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  path = file.path(proj, "over-cap.R")
+  call = list(id = "explicit-regular", name = "write", input = list(path = path, content = "42"))
+  token = ckpt_files_before(ck, call, 1L)
+  writeLines("answer = 42", path)
+  regular = ckpt_files_after(ck, call, token)$files[[1L]]
+  expect_true(regular$restorable)
+  expect_identical(regular$reason, "")
+  expect_identical(regular$post, "")
+  expect_identical(readLines(path), "answer = 42")
+})

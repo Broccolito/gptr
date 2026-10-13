@@ -231,10 +231,22 @@ ckpt_ingest = function(tr, rel) {
   h
 }
 
+#' Is each path a regular file, without following links or reading its contents?
+#' @noRd
+ckpt_regular = function(full) {
+  if (!length(full)) return(logical())
+  # ps's POSIX stat is unavailable on Windows; named pipes use a separate namespace there.
+  if (is_windows()) return(file.exists(full) & !dir.exists(full) & !ckpt_is_link(full))
+  type = ps::ps_fs_stat(full, follow = FALSE)$type
+  if (!is.character(type) || length(type) != length(full)) return(rep(FALSE, length(full)))
+  type %in% "regular file" & !ckpt_is_link(full)
+}
+
 #' Can `full` be captured: a readable regular file, no link, within gptr.checkpoint_capture_max?
 #' @noRd
 ckpt_capturable = function(full) {
-  file.exists(full) && !dir.exists(full) && !ckpt_is_link(full) && file.access(full, 4L) == 0L &&
+  file.exists(full) && !dir.exists(full) && isTRUE(ckpt_regular(full)) &&
+    file.access(full, 4L) == 0L &&
     isTRUE(file.size(full) <= gptr_opt("checkpoint_capture_max"))
 }
 
@@ -248,6 +260,7 @@ ckpt_files_baseline = function(tr) {
   tr$stat = w
   w = w[!w$link & w$size <= gptr_opt("checkpoint_track_file_max") &
           file.access(file.path(tr$root, w$path), 4L) == 0L, , drop = FALSE]
+  w = w[ckpt_regular(file.path(tr$root, w$path)), , drop = FALSE]
   w = w[order(!grepl(ckpt_source_re, w$path), w$size), , drop = FALSE]
   ckpt_ingest(tr, w$path[cumsum(w$size) <= gptr_opt("checkpoint_track_total")])
 }
@@ -265,7 +278,9 @@ ckpt_files_scan = function(tr) {
   n = w[match(both, w$path), , drop = FALSE]
   changed = o$size != n$size | o$mtime != n$mtime | o$link != n$link
   racy = !changed & !n$link & n$mtime >= tr$walk_time - 2 & both %in% names(tr$hash)
-  racy[racy] = file.access(file.path(tr$root, both[racy]), 4L) == 0L
+  regular = ckpt_regular(file.path(tr$root, both[racy]))
+  changed[racy] = !regular
+  racy[racy] = regular & file.access(file.path(tr$root, both[racy]), 4L) == 0L
   racy[racy] = hash_file(file.path(tr$root, both[racy])) != tr$hash[both[racy]]
   list(walk = w, time = time, created = setdiff(w$path, old$path), modified = both[changed | racy],
        deleted = setdiff(old$path, w$path))
@@ -299,6 +314,8 @@ ckpt_files_step = function(tr) {
     post = if (keep) ckpt_ingest(tr, p) else ""
     reason = if (link) {
       "symbolic link"
+    } else if (status[i] != "deleted" && !keep && !ckpt_regular(file.path(tr$root, p))) {
+      "not a regular file"
     } else if (status[i] != "created" && !nzchar(pre)) {
       "no pre-image: over the size cap or outside the baseline"
     } else {
@@ -400,9 +417,16 @@ ckpt_files_explicit = function(tr, paths) {
     if (identical(now, before) || identical(before, "?")) next
     status = if (!nzchar(before)) "created" else if (!nzchar(now)) "deleted" else "modified"
     link = ckpt_is_link(p)
+    reason = if (link) {
+      "symbolic link"
+    } else if (nzchar(now) && !isTRUE(ckpt_regular(p))) {
+      "not a regular file"
+    } else {
+      ""
+    }
     rows[[length(rows) + 1L]] = ckpt_file_row(
       p, TRUE, status, before, if (identical(now, "?")) "" else now, tr$explicit_mode[[p]],
-      file.size(p), as.numeric(file.mtime(p)), !link, if (link) "symbolic link" else "")
+      file.size(p), as.numeric(file.mtime(p)), !nzchar(reason), reason)
     tr$explicit[p] = now
     rel = ckpt_walked(tr, p)
     if (!is.na(rel)) {
@@ -530,6 +554,10 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
       next
     }
     exists = file.exists(full) && !dir.exists(full)
+    if (exists && !isTRUE(ckpt_regular(full))) {
+      out = ckpt_item(out, item, FALSE, paste0("not ", verb, " (not a regular file)"))
+      next
+    }
     held = if (identical(r$status, if (redo) "created" else "deleted")) {
       !exists
     } else if (nzchar(left)) {

@@ -2287,7 +2287,7 @@ Archived upstream callr experiments are historical evidence and excluded from pa
 | rlang | 1.1.0 | `new_weakref()` (live index), `obj_address()`, `env_binding_are_lazy()/_active()`, `hash()`/`hash_file()` (XXH128), `duplicate()`, `check_installed()` | no weak references or addresses in base R; rlang is required anyway when cli condition helpers are used [13 §2.6]; **quosures are not used in the gateway** (§6.4 R3) |
 | cli | 3.6.0 | console rendering and capability detection, `hash_sha256()` for ids and cache keys | front-end quirks are encoded there [18 §2.1.5] |
 | yaml | 2.3.0 | SKILL.md, agent and template frontmatter (string keys keep their source text against YAML 1.1 coercion [05 fact-check; IC-71]) | a hand parser lost 4 of 37 real skills to folded scalars [05] |
-| ps | 1.7.0 | `pid_alive()`: session and document locks, orphan sweep, watchdogs, the no-leftover-process tests, with a creation-time check against pid reuse [IC-59] | already in the closure through processx, so the closure does not grow; the base substitute `tools::pskill(pid, 0)` terminates the process on Windows; an undeclared `ps::` call is a check WARNING (reproduced) |
+| ps | 1.8.0 | `pid_alive()`: session and document locks, orphan sweep, watchdogs, the no-leftover-process tests, with a creation-time check against pid reuse [IC-59] | already in the closure through processx, so the closure does not grow; the base substitute `tools::pskill(pid, 0)` terminates the process on Windows; an undeclared `ps::` call is a check WARNING (reproduced) |
 
 Base packages imported: `methods` (G7 pre-image defusing of S4), `stats`, `tools`, `utils`, `grDevices`,
 `graphics`; `parallel` is not needed (per-agent L'Ecuyer streams are seeded from hash bits and swapped by
