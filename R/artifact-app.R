@@ -8,6 +8,8 @@
 artifact_state = new.env(parent = emptyenv())
 artifact_state$procs = new.env(parent = emptyenv())
 artifact_state$browser = NULL
+artifact_state$browser_owner = NULL
+artifact_state$browser_pending = NULL
 artifact_state$swept = FALSE
 
 #' Validate an artifact id (contract 11.6, IC-63); returns it invisibly
@@ -589,59 +591,229 @@ artifact_chromote_missing = function() {
 #' user's keychain, which hangs navigation without one (CI, an isolated HOME).
 #' @noRd
 artifact_browser = function() {
+  if (!is.null(artifact_state$browser_pending)) {
+    gptr_abort("The pending headless browser must finish cleanup before opening another.", "io",
+               operation = "open", path = NULL)
+  }
   b = artifact_state$browser
+  owner = artifact_state$browser_owner
   if (!is.null(b)) {
-    alive = b$is_alive()
-    if (isTRUE(alive)) return(b)
+    if (is.null(owner)) {
+      if (!isFALSE(b$get_browser()$is_local())) {
+        gptr_abort("The cached headless browser ownership is unavailable.", "io",
+                   operation = "open", path = NULL)
+      }
+      alive = b$is_alive()
+    } else {
+      connection = b$get_browser()
+      if (!isTRUE(owner$is_local()) || !isFALSE(connection$is_local()) ||
+          !is.null(connection$get_process()) ||
+          !identical(connection$get_host(), owner$get_host()) ||
+          !identical(connection$get_port(), owner$get_port())) {
+        gptr_abort("The cached headless browser ownership changed.", "io",
+                   operation = "open", path = NULL)
+      }
+      alive = owner$get_process()$is_alive()
+    }
+    if (isTRUE(alive)) {
+      if (!isTRUE(b$is_active())) {
+        gptr_abort("The cached headless browser connection is inactive or unavailable.", "io",
+                   operation = "open", path = NULL)
+      }
+      if (!identical(artifact_state$browser, b) ||
+          !identical(artifact_state$browser_owner, owner)) {
+        gptr_abort("The cached headless browser changed while opening.", "io",
+                   operation = "open", path = NULL)
+      }
+      return(b)
+    }
     if (!isFALSE(alive)) {
       gptr_abort("The cached headless browser state is unavailable.", "io",
                  operation = "open", path = NULL)
     }
+  }
+  if (!is.null(b) || !is.null(owner)) {
     artifact_browser_close()
-    if (!is.null(artifact_state$browser)) {
+    if (!is.null(artifact_state$browser) || !is.null(artifact_state$browser_owner)) {
       gptr_abort("The cached headless browser changed during cleanup.", "io",
                  operation = "open", path = NULL)
     }
   }
   args = c(chromote::get_chrome_args(), "--use-mock-keychain")
-  b = with_seed_preserved(chromote::Chromote$new(browser = chromote::Chrome$new(args = args)))
+  owner = with_seed_preserved(chromote::Chrome$new(args = args))
+  lease = list(browser = NULL, owner = owner)
+  changed = !is.null(artifact_state$browser) || !is.null(artifact_state$browser_owner) ||
+    !is.null(artifact_state$browser_pending)
+  b = NULL
+  if (!changed) {
+    artifact_state$browser_pending = lease
+    artifact_state$browser_owner = owner
+    b = tryCatch(with_seed_preserved(chromote::Chromote$new(
+      browser = chromote::ChromeRemote$new(host = owner$get_host(), port = owner$get_port()))),
+      error = function(e) e, interrupt = function(e) e)
+    changed = !is.null(artifact_state$browser) ||
+      !identical(artifact_state$browser_owner, owner) ||
+      !identical(artifact_state$browser_pending, lease)
+  }
+  if (inherits(b, "condition") || changed) {
+    if (!inherits(b, "condition")) lease["browser"] = list(b)
+    # This private slot reserves the one returned owner; a replacement cache is foreign.
+    artifact_state$browser_pending = lease
+    cleaned = tryCatch({
+      artifact_browser_close(b = lease$browser, owner = lease$owner, cached = FALSE)
+      TRUE
+    }, error = function(e) FALSE, interrupt = function(e) FALSE)
+    artifact_state$browser_pending = if (cleaned) NULL else lease
+    if (cleaned && identical(artifact_state$browser_owner, owner)) {
+      artifact_state$browser_owner = NULL
+    }
+    if (inherits(b, "condition")) stop(b)
+    gptr_abort("The cached headless browser changed during construction.", "io",
+               operation = "open", path = NULL)
+  }
   artifact_state$browser = b
+  artifact_state$browser_pending = NULL
   b
 }
 
-#' Close the headless browser (CRAN: external software is closed explicitly, 13 C-42)
+#' Close the headless browser and its separately retained local owner
 #' @noRd
-artifact_browser_close = function() {
-  b = artifact_state$browser
-  if (is.null(b)) return(invisible(NULL))
-  browser = b$get_browser()
-  local = browser$is_local()
-  if (!isTRUE(local) && !isFALSE(local)) {
+artifact_browser_close = function(b = artifact_state$browser,
+                                   owner = artifact_state$browser_owner, cached = TRUE) {
+  if (cached && !is.null(artifact_state$browser_pending)) {
+    lease = artifact_state$browser_pending
+    if (!is.list(lease) || !identical(names(lease), c("browser", "owner")) ||
+        is.null(lease$owner)) {
+      gptr_abort("The pending headless browser ownership is unavailable.", "io",
+                 operation = "close", path = NULL)
+    }
+    outcome = tryCatch({
+      artifact_browser_close(b = lease$browser, owner = lease$owner, cached = FALSE)
+      NULL
+    }, error = function(e) e, interrupt = function(e) e)
+    if (inherits(outcome, "condition")) {
+      artifact_state$browser_pending = lease
+      stop(outcome)
+    }
+    changed = !identical(artifact_state$browser_pending, lease)
+    artifact_state$browser_pending = NULL
+    if (identical(artifact_state$browser_owner, lease$owner)) artifact_state$browser_owner = NULL
+    if (changed) {
+      gptr_abort("The pending headless browser changed during cleanup.", "io",
+                 operation = "close", path = NULL)
+    }
+    return(invisible(NULL))
+  }
+  if (is.null(b) && is.null(owner)) return(invisible(NULL))
+  if (is.null(owner)) {
+    if (!isFALSE(b$get_browser()$is_local())) {
+      gptr_abort("The headless browser ownership is unavailable.", "io",
+                 operation = "close", path = NULL)
+    }
+    with_seed_preserved(b$close(wait = FALSE))
+    if (!isFALSE(b$is_active())) {
+      gptr_abort("The headless browser connection did not become inactive.", "io",
+                 operation = "close", path = NULL)
+    }
+    if (cached && identical(artifact_state$browser, b)) artifact_state$browser = NULL
+    return(invisible(NULL))
+  }
+  if (!isTRUE(owner$is_local())) {
     gptr_abort("The headless browser ownership is unavailable.", "io",
                operation = "close", path = NULL)
   }
-  if (local) {
-    process = browser$get_process()
-    alive = process$is_alive()
-    if (!isTRUE(alive) && !isFALSE(alive)) {
-      gptr_abort("The owned headless browser state is unavailable.", "io",
+  process = owner$get_process()
+  deadline = proc.time()[["elapsed"]] + 10
+  remaining = function() {
+    left = deadline - proc.time()[["elapsed"]]
+    if (length(left) != 1L || !is.finite(left) || left <= 0) {
+      gptr_abort("The owned headless browser close timed out.", "io",
                  operation = "close", path = NULL)
     }
-    # Close the socket before waiting for the owned process; retain the owner on failure.
-    if (alive) with_seed_preserved(b$close(wait = TRUE))
-    if (!isFALSE(process$is_alive())) {
-      gptr_abort("The owned headless browser did not stop.", "io",
-                 operation = "close", path = NULL)
-    }
-    # An exited process can leave its close callback queued on Chromote's own loop.
-    with_seed_preserved(later::run_now(timeoutSecs = 0.2, loop = b$get_child_loop()))
+    left
   }
-  with_seed_preserved(b$close(wait = FALSE))
-  if (!isFALSE(b$is_active())) {
+  remaining()
+  alive = process$is_alive()
+  remaining()
+  if (!isTRUE(alive) && !isFALSE(alive)) {
+    gptr_abort("The owned headless browser state is unavailable.", "io",
+               operation = "close", path = NULL)
+  }
+  if (!is.null(b)) {
+    connection = b$get_browser()
+    if (!isFALSE(connection$is_local()) || !is.null(connection$get_process()) ||
+        !identical(connection$get_host(), owner$get_host()) ||
+        !identical(connection$get_port(), owner$get_port())) {
+      gptr_abort("The headless browser connection ownership changed.", "io",
+                 operation = "close", path = NULL)
+    }
+    # The remote adapter disconnects without a second CDP Browser.close request.
+    if (alive) with_seed_preserved(b$close(wait = FALSE))
+    loop = b$get_child_loop()
+    remaining()
+    started = proc.time()[["elapsed"]]
+    until = started + 0.2
+    left = until - started
+    steps = 0L
+    while (left > 0) {
+      if (steps >= 64L) {
+        gptr_abort("The headless browser close loop did not settle.", "io",
+                   operation = "close", path = NULL)
+      }
+      steps = steps + 1L
+      with_seed_preserved(later::run_now(timeoutSecs = min(0.02, left, remaining()), loop = loop))
+      remaining()
+      left = until - proc.time()[["elapsed"]]
+      if (left > 0) Sys.sleep(min(0.01, left, remaining()))
+      remaining()
+      left = until - proc.time()[["elapsed"]]
+    }
+    elapsed = proc.time()[["elapsed"]] - started
+    if (!is.finite(elapsed) || elapsed < 0.2 || elapsed > 0.3) {
+      gptr_abort("The headless browser close loop did not settle.", "io",
+                 operation = "close", path = NULL)
+    }
+    # A dead owner's native socket callback must settle before a local disconnect retry.
+    if (!alive) with_seed_preserved(b$close(wait = FALSE))
+    remaining()
+  }
+  if ((cached && (!identical(artifact_state$browser, b) ||
+                  !identical(artifact_state$browser_owner, owner))) ||
+      !identical(owner$get_process(), process)) {
+    gptr_abort("The cached headless browser changed during cleanup.", "io",
+               operation = "close", path = NULL)
+  }
+  alive = process$is_alive()
+  remaining()
+  if (!isTRUE(alive) && !isFALSE(alive)) {
+    gptr_abort("The owned headless browser state is unavailable.", "io",
+               operation = "close", path = NULL)
+  }
+  if (alive) {
+    with_seed_preserved(owner$close(wait = FALSE))
+    remaining()
+    with_seed_preserved(process$wait(timeout = floor(remaining() * 1000)))
+    remaining()
+  }
+  if (!isFALSE(process$is_alive())) {
+    gptr_abort("The owned headless browser did not stop.", "io",
+               operation = "close", path = NULL)
+  }
+  remaining()
+  if (!is.null(b) && !isFALSE(b$is_active())) {
     gptr_abort("The headless browser connection did not become inactive.", "io",
                operation = "close", path = NULL)
   }
-  if (identical(artifact_state$browser, b)) artifact_state$browser = NULL
+  remaining()
+  if (cached && (!identical(artifact_state$browser, b) ||
+                 !identical(artifact_state$browser_owner, owner))) {
+    gptr_abort("The cached headless browser changed during cleanup.", "io",
+               operation = "close", path = NULL)
+  }
+  if (cached) {
+    artifact_state$browser = NULL
+    artifact_state$browser_owner = NULL
+  }
   invisible(NULL)
 }
 
