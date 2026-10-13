@@ -51,21 +51,82 @@ jobs:
         if: runner.os == 'Windows'
         with:
           python-version: '3.12.10'
-      - name: Declare the Windows nofollow fixture runtime
+      - name: Provision the Windows private numerical Python and admit its native library
         if: runner.os == 'Windows'
         shell: bash
         env:
-          GPTR_TEST_PYTHON: ${{ steps.windows_python.outputs.python-path }}
+          GPTR_BASE_PYTHON: ${{ steps.windows_python.outputs.python-path }}
         run: |
-          python -I - <<'PYTHON'
-          import os, pathlib
-          executable = pathlib.Path(os.environ['GPTR_TEST_PYTHON']).resolve(strict=True)
-          value = executable.as_posix()
-          assert executable.is_file() and not any(c in value for c in '\r\n')
-          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as stream:
-              stream.write('RETICULATE_PYTHON=' + value + '\n')
-              stream.write('RETICULATE_USE_MANAGED_VENV=false\n')
-          PYTHON
+          "$GPTR_BASE_PYTHON" - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, sys
+          assert sys.version_info[:3] == (3, 12, 10)
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'gptr-rscript-python'
+          assert not root.exists(), 'Private Python directory must be fresh'
+          root.mkdir(mode=0o700)
+          subprocess.run([sys.executable, '-m', 'venv', str(root)], check=True, timeout=120)
+          executable = root / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+          assert executable.is_file()
+          subprocess.run([str(executable), '-m', 'pip', 'install', '--only-binary=:all:',
+                          'numpy==2.3.4', 'pandas==2.3.3'], check=True, timeout=180)
+          query = """
+          import hashlib, json, os, pathlib, sys, sysconfig
+          base = pathlib.Path(sys.base_prefix).resolve(strict=True)
+          prefix = pathlib.Path(sys.prefix).resolve(strict=True)
+          assert base != prefix and sys.version_info[:3] == (3, 12, 10)
+          version = f'{sys.version_info.major}.{sys.version_info.minor}'
+          if os.name == 'nt':
+              candidates = [base / f'python{version.replace(".", "")}.dll']
+          else:
+              name = sysconfig.get_config_var('LDLIBRARY')
+              directory = sysconfig.get_config_var('LIBDIR')
+              assert isinstance(name, str) and name and isinstance(directory, str) and directory
+              extension = '.dylib' if sys.platform == 'darwin' else '.so'
+              candidates = [pathlib.Path(directory) / name, base / pathlib.Path(name).name,
+                            base / 'lib' / f'libpython{version}{extension}']
+          libraries = {path.resolve(strict=True) for path in candidates if path.is_file()}
+          assert len(libraries) == 1, 'Exactly one canonical native library must be admitted'
+          library = libraries.pop()
+          assert os.path.normcase(os.path.commonpath([str(library), str(base)])) == \
+              os.path.normcase(str(base)) and library != base
+          size = library.stat().st_size
+          assert 0 < size <= 64 * 1024 * 1024
+          digest = hashlib.sha256()
+          count = 0
+          with library.open('rb') as stream:
+              while True:
+                  chunk = stream.read(1024 * 1024)
+                  if not chunk:
+                      break
+                  count += len(chunk)
+                  assert count <= 64 * 1024 * 1024
+                  digest.update(chunk)
+          assert count == size == library.stat().st_size
+          result = json.dumps(dict(python=os.path.abspath(sys.executable), prefix=str(prefix),
+              base_prefix=str(base), library=str(library), sha256=digest.hexdigest(),
+              library_bytes=count, version='.'.join(map(str, sys.version_info[:3]))))
+          assert len(result.encode('utf-8')) <= 4096
+          print(result)
+          """
+          process = subprocess.run([str(executable), '-I', '-c', query], check=True, timeout=10,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          assert not process.stderr and len(process.stdout) <= 4096
+          witness = json.loads(process.stdout)
+          assert list(witness) == ['python', 'prefix', 'base_prefix', 'library', 'sha256',
+                                   'library_bytes', 'version']
+          assert witness['version'] == '3.12.10'
+          settings = dict(RETICULATE_PYTHON=str(executable), RETICULATE_USE_MANAGED_VENV='false',
+              GPTR_PY_NATIVE_PREFIX=str(root), GPTR_PY_NATIVE_VERSION='3.12.10',
+              GPTR_NP_NATIVE_VERSION='2.3.4', GPTR_PD_NATIVE_VERSION='2.3.3',
+              GPTR_PY_NATIVE_LIBPYTHON=witness['library'], GPTR_PY_NATIVE_LIB_SHA256=witness['sha256'])
+          assert all('\n' not in value and '\r' not in value for value in settings.values())
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              for key, value in settings.items():
+                  output.write(key + '=' + value + '\n')
+          evidence = pathlib.Path(os.environ['RUNNER_TEMP']) / 'gptr-check-python-evidence'
+          evidence.mkdir(exist_ok=True)
+          (evidence / 'python-admission.json').write_text(json.dumps(witness, indent=2),
+                                                         encoding='utf-8')
+          PY
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
@@ -79,6 +140,14 @@ jobs:
       - name: Fail unless R CMD check wrote its status
         shell: bash
         run: grep '^Status:' check/gptr.Rcheck/00check.log
+      - name: Retain the Windows numerical Python admission
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-python-admission-${{ matrix.config.r }}
+          path: ${{ runner.temp }}/gptr-check-python-evidence/python-admission.json
+          if-no-files-found: error
+          retention-days: 5
 
   no-suggests:
     runs-on: ubuntu-latest
