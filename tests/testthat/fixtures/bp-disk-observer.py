@@ -2,12 +2,94 @@
 import errno
 import math
 import os
+import re
 import stat
 import time
 
 
 class ObservationError(RuntimeError):
     pass
+
+
+
+class _WindowsEntry:
+    def __init__(self, name, attributes, tag):
+        self.name = name
+        self.st_file_attributes = attributes
+        self.st_reparse_tag = tag
+
+    def stat(self, *, follow_symlinks):
+        if follow_symlinks is not False:
+            raise ObservationError("observer-native-following-request-refused")
+        return self
+
+
+def _windows_entry(path, *, api=None):
+    # FindFirstFileW with one literal name reads entry attributes, not a link's
+    # target. The caller has already checked each preceding lexical component.
+    import ctypes
+    import ntpath
+
+    if not isinstance(path, str):
+        raise ObservationError("observer-native-literal-path-invalid")
+    literal = path[4:] if path.startswith("\\\\?\\") else path
+    drive, tail = ntpath.splitdrive(literal)
+    parts = re.split(r"[\\/]", tail)
+    if (not isinstance(path, str) or "\0" in literal or len(path) > 32768 or
+            not re.fullmatch(r"[A-Za-z]:", drive) or
+            not tail.startswith(("\\", "/")) or len(parts) < 2 or
+            any(not part or part in (".", "..") or len(part) > 256 or
+                "*" in part or "?" in part or ":" in part for part in parts[1:])):
+        raise ObservationError("observer-native-literal-path-invalid")
+    name = parts[-1]
+
+    class FindData(ctypes.Structure):
+        # Fixed Win32 widths also let pure injected controls inspect the layout.
+        _fields_ = [("attributes", ctypes.c_uint32), ("times", ctypes.c_uint32 * 6),
+                    ("size_high", ctypes.c_uint32), ("size_low", ctypes.c_uint32),
+                    ("tag", ctypes.c_uint32), ("reserved", ctypes.c_uint32),
+                    ("name", ctypes.c_uint16 * 260), ("alternate", ctypes.c_uint16 * 14)]
+
+    if ctypes.sizeof(FindData) != 592:
+        raise ObservationError("observer-native-find-data-layout-invalid")
+    native = ctypes.WinDLL("kernel32.dll", use_last_error=True) if api is None else api
+    native.FindFirstFileW.argtypes = [ctypes.c_wchar_p, ctypes.POINTER(FindData)]
+    native.FindFirstFileW.restype = ctypes.c_void_p
+    native.FindClose.argtypes = [ctypes.c_void_p]
+    native.FindClose.restype = ctypes.c_int
+    data = FindData()
+    handle = native.FindFirstFileW("\\\\?\\" + literal, ctypes.byref(data))
+    if handle in (None, 0, -1, ctypes.c_void_p(-1).value):
+        code = ctypes.get_last_error() if api is None else api.last_error()
+        if code in (2, 3):
+            raise ObservationError("observer-parent-entry-absent")
+        raise ObservationError("observer-parent-enumeration-unavailable")
+    failure = None
+    entry = None
+    try:
+        units = list(data.name)
+        if 0 not in units:
+            raise ObservationError("observer-native-returned-name-invalid")
+        try:
+            returned = bytes(data.name).decode("utf-16-le").split("\0", 1)[0]
+        except UnicodeError:
+            raise ObservationError("observer-native-returned-name-invalid") from None
+        if ntpath.normcase(returned) != ntpath.normcase(name):
+            raise ObservationError("observer-native-returned-name-differs")
+        entry = _WindowsEntry(returned, int(data.attributes),
+                              int(data.tag) if data.attributes & 0x400 else 0)
+    except BaseException as error:
+        failure = error
+    finally:
+        try:
+            if not native.FindClose(handle):
+                raise ObservationError("observer-native-search-close-unavailable")
+        except BaseException as error:
+            if failure is None:
+                failure = error
+    if failure is not None:
+        raise failure
+    return entry
 
 
 class DiskObserver:
@@ -107,15 +189,26 @@ class DiskObserver:
             raise ObservationError("observer-anchor-identity-changed")
         for index, part in enumerate(parts):
             found = None
-            try:
-                with self.ops.scandir(current) as iterator:
-                    for candidate in iterator:
-                        tick()
-                        if os.path.normcase(candidate.name) == os.path.normcase(part):
-                            found = candidate
-                            break
-            except OSError:
-                raise ObservationError("observer-parent-enumeration-unavailable") from None
+            lookup = getattr(self.ops, "find_entry", None)
+            if self.windows and (self.ops is os or callable(lookup)):
+                # Charge the one returned lexical entry, rather than enumerate
+                # unrelated siblings again for every owned-root recheck.
+                tick()
+                try:
+                    literal = os.path.join(current, part)
+                    found = _windows_entry(literal) if self.ops is os else lookup(literal)
+                except OSError:
+                    raise ObservationError("observer-parent-enumeration-unavailable") from None
+            else:
+                try:
+                    with self.ops.scandir(current) as iterator:
+                        for candidate in iterator:
+                            tick()
+                            if os.path.normcase(candidate.name) == os.path.normcase(part):
+                                found = candidate
+                                break
+                except OSError:
+                    raise ObservationError("observer-parent-enumeration-unavailable") from None
             if found is None:
                 raise ObservationError("observer-parent-entry-absent")
             current = os.path.join(current, part)

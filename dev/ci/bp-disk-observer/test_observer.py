@@ -1,6 +1,7 @@
 """Source-first pure operation controls; no imports or tests have been run."""
 import errno
 import os
+import observer
 import stat
 import unittest
 from contextlib import nullcontext
@@ -33,6 +34,7 @@ class Operations:
                      self.root: metadata("directory", 0, 1)}
         self.children = {self.anchor: [os.path.basename(self.root)], self.root: []}
         self.targets, self.stat_paths, self.scan_paths = {}, [], []
+        self.find_paths = []
 
     def add(self, name, info, target=None):
         self.info[os.path.join(self.root, name)] = info
@@ -55,6 +57,20 @@ class Operations:
         if isinstance(values, BaseException):
             raise values
         return nullcontext(iter(Entry(name, self.info[os.path.join(path, name)]) for name in values))
+
+    def find_entry(self, path):
+        self.find_paths.append(path)
+        parent, name = os.path.split(path)
+        values = self.children[parent]
+        if isinstance(values, BaseException):
+            raise values
+        if "*" in name or "?" in name:
+            raise ObservationError("observer-native-literal-path-invalid")
+        found = next((item for item in values
+                      if os.path.normcase(item) == os.path.normcase(name)), None)
+        if found is None:
+            raise ObservationError("observer-parent-entry-absent")
+        return Entry(found, self.info[os.path.join(parent, found)])
 
     def readlink(self, path):
         return self.targets[path]
@@ -407,6 +423,153 @@ class ObserverControls(unittest.TestCase):
                 fs.lstat = uncertain
                 with self.assertRaisesRegex(ObservationError, reason):
                     observer.snapshot()
+
+
+class NativeCall:
+    def __init__(self, callback):
+        self.callback = callback
+
+    def __call__(self, *arguments):
+        return self.callback(*arguments)
+
+
+class NativeAPI:
+    def __init__(self, name="café", attributes=0, tag=0):
+        self.name, self.attributes, self.tag = name, attributes, tag
+        self.handle, self.code, self.closed, self.paths = 42, 5, [], []
+        self.close_result, self.close_error, self.layout = True, None, None
+        self.FindFirstFileW = NativeCall(self.first)
+        self.FindClose = NativeCall(self.close)
+
+    def first(self, path, pointer):
+        import ctypes
+        self.paths.append(path)
+        data = pointer._obj
+        self.layout = ctypes.sizeof(data)
+        data.attributes, data.tag = self.attributes, self.tag
+        encoded = self.name.encode("utf-16-le", errors="surrogatepass")
+        for index in range(len(encoded) // 2):
+            data.name[index] = int.from_bytes(encoded[index * 2:index * 2 + 2], "little")
+        return self.handle
+
+    def close(self, handle):
+        self.closed.append(handle)
+        if self.close_error is not None:
+            raise self.close_error
+        return self.close_result
+
+    def last_error(self):
+        return self.code
+
+
+class LiteralLookupControls(unittest.TestCase):
+    def native(self, path, api):
+        return getattr(observer, "_windows_entry")(path, api=api)
+
+    def test_crowded_unowned_parent_does_not_spend_owned_entry_budget(self):
+        fs = Operations()
+        root_name = os.path.basename(fs.root)
+        siblings = ["unowned-" + str(index) for index in range(1400)]
+        fs.children[fs.anchor] = siblings + [root_name]
+        for index, name in enumerate(siblings):
+            fs.info[os.path.join(fs.anchor, name)] = metadata(size=70000000, inode=1000 + index)
+        scanner = DiskObserver(fs.root, operations=fs, windows=True)
+        result = scanner.snapshot()
+        self.assertEqual(result["bytes"], 0)
+        self.assertEqual(result["directories"], 1)
+        self.assertEqual(result["entries"], 3)
+        self.assertNotIn(fs.anchor, fs.scan_paths)
+        self.assertEqual(fs.find_paths, [fs.root] * 4)
+        self.assertTrue(all(path not in fs.stat_paths for path in fs.info
+                            if os.path.basename(path).startswith("unowned-")))
+
+    def test_literal_lookup_retains_ancestor_native_identity_checks(self):
+        fs = Operations()
+        scanner = DiskObserver(fs.root, operations=fs, windows=True)
+        self.assertEqual(fs.find_paths, [fs.root])
+        fs.info[fs.root] = metadata("directory", 0, 1, 0x80000000)
+        fs.stat_paths.clear()
+        with self.assertRaisesRegex(ObservationError, "unknown-reparse-tag"):
+            scanner.snapshot()
+        self.assertNotIn(fs.root, fs.stat_paths)
+        fs = Operations()
+        scanner = DiskObserver(fs.root, operations=fs, windows=True)
+        fs.info[fs.anchor] = metadata("directory", 0, 999)
+        with self.assertRaisesRegex(ObservationError, "anchor-identity-changed"):
+            scanner.snapshot()
+
+    def test_native_literal_unicode_extended_path_layout_and_close(self):
+        for path in ("C:\\owned\\café", "\\\\?\\C:\\owned\\café"):
+            with self.subTest(path=path):
+                api = NativeAPI()
+                entry = self.native(path, api)
+                self.assertEqual(entry.name, "café")
+                self.assertEqual(api.paths, ["\\\\?\\C:\\owned\\café"])
+                self.assertEqual(api.closed, [42])
+                self.assertEqual(api.layout, 592)
+                self.assertIs(entry.stat(follow_symlinks=False), entry)
+                with self.assertRaisesRegex(ObservationError, "following-request-refused"):
+                    entry.stat(follow_symlinks=True)
+                self.assertEqual((entry.st_file_attributes, entry.st_reparse_tag), (0, 0))
+        api = NativeAPI(attributes=0x400, tag=0xA000000C)
+        entry = self.native("C:\\owned\\café", api)
+        self.assertEqual((entry.st_file_attributes, entry.st_reparse_tag),
+                         (0x400, 0xA000000C))
+        self.assertEqual(api.closed, [42])
+
+    def test_native_lookup_absence_permission_and_unknown_return_fail_closed(self):
+        for code, reason in ((2, "parent-entry-absent"), (3, "parent-entry-absent"),
+                             (5, "parent-enumeration-unavailable"),
+                             (995, "parent-enumeration-unavailable")):
+            with self.subTest(code=code):
+                api = NativeAPI()
+                api.handle, api.code = -1, code
+                with self.assertRaisesRegex(ObservationError, reason):
+                    self.native("C:\\owned\\café", api)
+                self.assertEqual(api.closed, [])
+        api = NativeAPI(name="foreign")
+        with self.assertRaisesRegex(ObservationError, "returned-name-differs"):
+            self.native("C:\\owned\\café", api)
+        self.assertEqual(api.closed, [42])
+        api = NativeAPI(name="invalid\ud800")
+        with self.assertRaisesRegex(ObservationError, "returned-name-invalid"):
+            self.native("C:\\owned\\café", api)
+        self.assertEqual(api.closed, [42])
+
+    def test_native_close_failure_and_original_query_condition_priority(self):
+        api = NativeAPI()
+        api.close_result = False
+        with self.assertRaisesRegex(ObservationError, "search-close-unavailable"):
+            self.native("C:\\owned\\café", api)
+        self.assertEqual(api.closed, [42])
+        api = NativeAPI(name="foreign")
+        api.close_error = RuntimeError("synthetic-close-error")
+        with self.assertRaisesRegex(ObservationError, "returned-name-differs"):
+            self.native("C:\\owned\\café", api)
+        self.assertEqual(api.closed, [42])
+        api = NativeAPI()
+        original = KeyboardInterrupt("synthetic-close-interrupt")
+        api.close_error = original
+        caught = None
+        try:
+            self.native("C:\\owned\\café", api)
+        except BaseException as error:
+            caught = error
+        self.assertIs(caught, original)
+        self.assertEqual(api.closed, [42])
+
+    def test_native_literal_ambiguity_is_rejected_before_any_query(self):
+        for path in ("C:\\owned\\caf*", "C:\\owned?\\café", "C:\\owned\\..\\café",
+                     "C:\\owned\\café\\", "C:café", "\\\\server\\share\\café",
+                     "C:\\owned\\café\0foreign", "C:\\owned\\name:stream",
+                     "é:\\owned\\café", None):
+            with self.subTest(path=path):
+                api = NativeAPI()
+                with self.assertRaisesRegex(ObservationError, "literal-path-invalid"):
+                    self.native(path, api)
+                self.assertEqual(api.paths, [])
+                self.assertEqual(api.closed, [])
+
 
 if __name__ == "__main__":
     unittest.main()
