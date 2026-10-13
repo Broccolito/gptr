@@ -90,11 +90,12 @@ rss_capture = function(output, collect, gc_observation,
 }
 
 # Discover marker-free descendants only through the exact owned cell root.
-# Remembered handles retain their admitted PID/time; a reused PID is never substituted.
+# Remembered exact handles remain for cleanup; a new PID/time pair needs confirmed old death.
 rss_census = function(root, root_pid, root_time, marker, remembered = list(),
                       children = ps::ps_children, marked = ps::ps_find_tree,
                       pid = ps::ps_pid, create_time = ps::ps_create_time,
-                      alive = ps::ps_is_running, supervisor_pid = Sys.getpid()) {
+                      alive = ps::ps_is_running, supervisor_pid = Sys.getpid(),
+                      identity_observation = NULL) {
   valid_pid = function(value) {
     is.numeric(value) && length(value) == 1L && is.finite(value) && value > 0 &&
       value <= .Machine$integer.max && value == floor(value)
@@ -102,7 +103,7 @@ rss_census = function(root, root_pid, root_time, marker, remembered = list(),
   stopifnot(valid_pid(root_pid), valid_pid(supervisor_pid), root_pid != supervisor_pid,
     is.numeric(root_time), length(root_time) == 1L, is.finite(root_time), root_time > 0,
     is.character(marker), length(marker) == 1L, !is.na(marker), nzchar(marker),
-    is.list(remembered))
+    is.list(remembered), is.null(identity_observation) || is.function(identity_observation))
   state = new.env(parent = emptyenv())
   state$rows = list()
   remember = function(handle, expected_pid = NULL, expected_time = NULL) {
@@ -115,10 +116,41 @@ rss_census = function(root, root_pid, root_time, marker, remembered = list(),
       stopifnot(valid_pid(expected_pid), identical(observed_pid, as.integer(expected_pid)))
     }
     if (!is.null(expected_time)) stopifnot(identical(observed_time, expected_time))
-    existing = which(vapply(state$rows, function(row) identical(row$pid, observed_pid), logical(1)))
+    same_pid = which(vapply(state$rows, function(row) identical(row$pid, observed_pid), logical(1)))
+    existing = same_pid[vapply(same_pid, function(i) {
+      identical(state$rows[[i]]$time, observed_time)
+    }, logical(1))]
     if (length(existing)) {
-      stopifnot(length(existing) == 1L, identical(state$rows[[existing]]$time, observed_time))
+      stopifnot(length(existing) == 1L)
     } else {
+      for (i in same_pid) {
+        previous = state$rows[[i]]
+        running = tryCatch(alive(previous$handle), error = base::identity,
+          interrupt = base::identity)
+        failure = if (inherits(running, "condition")) {
+          running
+        } else {
+          tryCatch({
+            stopifnot(identical(running, FALSE))
+            NULL
+          }, error = base::identity, interrupt = base::identity)
+        }
+        classes = if (inherits(running, "condition")) class(running) else character()
+        classes = utils::head(classes[grepl("^[A-Za-z][A-Za-z0-9_.]{0,63}$", classes)], 8L)
+        witness = list(pid = observed_pid, pid_type = typeof(observed_pid),
+          remembered_time = previous$time, remembered_time_type = typeof(previous$time),
+          observed_time = observed_time, observed_time_type = typeof(observed_time),
+          remembered_running = if (is.logical(running) && length(running) == 1L &&
+            !is.na(running)) running else NULL,
+          running_type = typeof(running), running_length = length(running),
+          condition_classes = classes)
+        published = tryCatch({
+          if (!is.null(identity_observation)) identity_observation(witness)
+          NULL
+        }, error = base::identity, interrupt = base::identity)
+        if (inherits(failure, "condition")) stop(failure)
+        if (inherits(published, "condition")) stop(published)
+      }
       state$rows[[length(state$rows) + 1L]] = list(handle = handle, pid = observed_pid,
         time = observed_time)
     }

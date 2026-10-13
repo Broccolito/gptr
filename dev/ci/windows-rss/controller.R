@@ -90,7 +90,13 @@
         handles = list(list(handle = root_handle, pid = root_pid, time = root_time))
         repeat {
           sample = tryCatch({
-            handles = support$rss_census(root_handle, root_pid, root_time, marker, handles)
+            handles = support$rss_census(root_handle, root_pid, root_time, marker, handles,
+              identity_observation = function(value) {
+                text = jsonlite::toJSON(value, auto_unbox = TRUE, null = "null", digits = NA)
+                stopifnot(nchar(text, type = "bytes") <= 2048L)
+                cat(text, "\n", file = file.path(folder, "identity-collisions.jsonl"),
+                  append = TRUE, sep = "")
+              })
             rss = vapply(handles, function(row) memory(row$handle, row$time), numeric(1))
             parent_rss = memory(outer, outer_time)
             total = parent_rss + sum(rss)

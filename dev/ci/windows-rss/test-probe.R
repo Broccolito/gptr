@@ -360,5 +360,100 @@ local({
       testthat::expect(inherits(caught, "error"), "Malformed census results must remain fatal")
     }
   })
+  testthat::test_that("RSS census keeps confirmed dead and newly owned instances of one PID", {
+    root = list(pid = 10L, time = 1)
+    old = list(pid = 20L, time = 2, original = TRUE)
+    new = list(pid = 20L, time = 3, original = FALSE)
+    seen = new.env(parent = emptyenv())
+    seen$observations = list()
+    alive = function(handle) !identical(handle, old)
+    rows = census(root, 10L, 1, "fixed", list(list(handle = old, pid = 20L, time = 2)),
+      children = function(handle, recursive) list(new, new),
+      marked = function(marker) list(old, new), pid = function(handle) handle$pid,
+      create_time = function(handle) handle$time, alive = alive, supervisor_pid = 1L)
+    testthat::expect(identical(vapply(rows, function(row) row$pid, integer(1)),
+      c(10L, 20L, 20L)), "Both exact identities must remain admitted once")
+    testthat::expect(identical(vapply(rows, function(row) row$time, numeric(1)), c(1, 2, 3)),
+      "A new creation time must not replace the old creation time")
+    testthat::expect(identical(rows[[2L]]$handle, old) && identical(rows[[3L]]$handle, new),
+      "Cleanup must retain both exact owned handles")
+    values = vapply(rows, function(row) {
+      support$rss_memory(row$handle, row$time,
+        create_time = function(handle) handle$time, alive = alive,
+        memory_info = function(handle) c(rss = as.numeric(handle$pid)))
+    }, numeric(1))
+    testthat::expect(identical(values, c(10, 0, 20)),
+      "Exact dead admission must contribute zero and new admission must be counted once")
+    again = census(root, 10L, 1, "fixed", rows,
+      children = function(handle, recursive) list(new), marked = function(marker) list(new),
+      pid = function(handle) handle$pid, create_time = function(handle) handle$time,
+      alive = alive, supervisor_pid = 1L)
+    testthat::expect(identical(again, rows), "A later census must preserve all cleanup identities")
+  })
+  testthat::test_that("RSS census refuses live and unknown conflicting exact handles", {
+    root = list(pid = 10L, time = 1)
+    old = list(pid = 20L, time = 2)
+    new = list(pid = 20L, time = 3)
+    for (running in list(TRUE, NA, NULL, 0, c(FALSE, FALSE))) {
+      seen = new.env(parent = emptyenv())
+      seen$observations = list()
+      caught = tryCatch(census(root, 10L, 1, "fixed",
+        list(list(handle = old, pid = 20L, time = 2)),
+        children = function(handle, recursive) list(new), marked = function(marker) list(),
+        pid = function(handle) handle$pid, create_time = function(handle) handle$time,
+        alive = function(handle) if (identical(handle, old)) running else TRUE,
+        supervisor_pid = 1L, identity_observation = function(value) {
+          seen$observations[[length(seen$observations) + 1L]] = value
+        }), error = base::identity)
+      testthat::expect(inherits(caught, "error"), "Only scalar logical FALSE may admit a conflict")
+      testthat::expect(identical(length(seen$observations), 1L),
+        "The conflicting identity must be observed before the fatal condition")
+      if (length(seen$observations) == 1L) {
+        value = seen$observations[[1L]]
+        testthat::expect(identical(value$pid, 20L) && identical(value$remembered_time, 2) &&
+          identical(value$observed_time, 3), "The witness must retain exact numeric identities")
+        testthat::expect(identical(value$running_type, typeof(running)) &&
+          identical(value$running_length, length(running)), "Unknown status must stay typed")
+      }
+    }
+  })
+  testthat::test_that("RSS conflicting-handle queries retain original errors and interrupts", {
+    root = list(pid = 10L, time = 1)
+    old = list(pid = 20L, time = 2)
+    new = list(pid = 20L, time = 3)
+    for (original in list(simpleError("Fixed conflicting handle query failure"),
+      structure(list(message = "Fixed conflicting handle interrupt"),
+        class = c("interrupt", "condition")))) {
+      seen = new.env(parent = emptyenv())
+      seen$value = NULL
+      caught = tryCatch(census(root, 10L, 1, "fixed",
+        list(list(handle = old, pid = 20L, time = 2)),
+        children = function(handle, recursive) list(new), marked = function(marker) list(),
+        pid = function(handle) handle$pid, create_time = function(handle) handle$time,
+        alive = function(handle) if (identical(handle, old)) stop(original) else TRUE,
+        supervisor_pid = 1L, identity_observation = function(value) {
+          seen$value = value
+          stop("Fixed secondary diagnostic publication failure")
+        }), error = base::identity, interrupt = base::identity)
+      testthat::expect(identical(caught, original),
+        "Original query conditions must retain priority")
+      testthat::expect(is.list(seen$value) &&
+        identical(seen$value$condition_classes, class(original)),
+        "The witness must retain classes without copying the original message")
+    }
+  })
+  testthat::test_that("RSS confirmed-dead conflict observation cannot hide publication failure", {
+    root = list(pid = 10L, time = 1)
+    old = list(pid = 20L, time = 2)
+    new = list(pid = 20L, time = 3)
+    original = simpleError("Fixed conflict publication failure")
+    caught = tryCatch(census(root, 10L, 1, "fixed",
+      list(list(handle = old, pid = 20L, time = 2)),
+      children = function(handle, recursive) list(new), marked = function(marker) list(),
+      pid = function(handle) handle$pid, create_time = function(handle) handle$time,
+      alive = function(handle) !identical(handle, old), supervisor_pid = 1L,
+      identity_observation = function(value) stop(original)), error = base::identity)
+    testthat::expect(identical(caught, original), "Failed witness publication must remain fatal")
+  })
 
 })
