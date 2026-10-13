@@ -34,6 +34,10 @@ on:
         description: Run strict75 with the reviewed held-disabled owned-utility fixture
         type: boolean
         default: false
+      declared_link_diagnostic:
+        description: Collect owned Windows link metadata separately from strict security results
+        type: boolean
+        default: false
       startup_diagnostic:
         description: Diagnose bounded PowerShell startup after verified install (Windows devel)
         type: boolean
@@ -65,7 +69,7 @@ jobs:
       GPTR_LEGACY_MINUTES: ${{ inputs.minutes }}
     steps:
       - name: Validate optional source nomination
-        if: inputs.optional || inputs.token_experiment || inputs.startup_diagnostic || inputs.held_token
+        if: inputs.optional || inputs.token_experiment || inputs.startup_diagnostic || inputs.held_token || inputs.declared_link_diagnostic
         shell: bash
         env:
           EXPERIMENT: ${{ inputs.token_experiment && 'true' || 'false' }}
@@ -74,6 +78,7 @@ jobs:
           NOFOLLOW: ${{ inputs.nofollow_observer && 'true' || 'false' }}
           STARTUP: ${{ inputs.startup_diagnostic && 'true' || 'false' }}
           HELD: ${{ inputs.held_token && 'true' || 'false' }}
+          LINK_DIAGNOSTIC: ${{ inputs.declared_link_diagnostic && 'true' || 'false' }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           if [[ "$EXPERIMENT" == true ]]; then
@@ -82,6 +87,10 @@ jobs:
           if [[ "$HELD" == true ]]; then
             [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$NOFOLLOW" == true ]]
             [[ "$EXPERIMENT" == false && "$STARTUP" == false ]]
+          fi
+          if [[ "$LINK_DIAGNOSTIC" == true ]]; then
+            [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$HELD" == true ]]
+            [[ "$NOFOLLOW" == true && "$EXPERIMENT" == false && "$STARTUP" == false ]]
           fi
           if [[ "$STARTUP" == true ]]; then
             [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$EXPERIMENT" == false ]]
@@ -245,6 +254,24 @@ jobs:
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
             --run Rscript --vanilla dev/ci/windows-token/held-controller.R verify-install
+      - name: Collect declared-link metadata under the unchanged owned watchdog
+        if: inputs.optional && inputs.held_token && inputs.declared_link_diagnostic && runner.os == 'Windows' && steps.held_install.outcome == 'success'
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_EXPERIMENT_OPTIONAL: 'true'
+          GPTR_EXPERIMENT_PLATFORM: windows
+          GPTR_HELD_B: 'true'
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: 'true'
+          GPTR_DECLARED_LINK_DIAGNOSTIC: 'true'
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-declared-link-diagnostic
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-token/test-declared-link.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+          Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-token/declared-link.R")) == 0L, length(lintr::lint("dev/ci/windows-token/declared-link-probe.R")) == 0L, length(lintr::lint("dev/ci/windows-token/test-declared-link.R")) == 0L)'
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/declared-link.R
       - name: Run twelve PowerShell fault and two R protocol controls
         id: held_pure
         if: inputs.optional && inputs.held_token && steps.held_install.outcome == 'success'
