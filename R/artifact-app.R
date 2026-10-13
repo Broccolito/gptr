@@ -438,7 +438,12 @@ artifact_build_html = function(id, dir, data, ctx) {
 
 #' Is openssl installed? (a seam for tests)
 #' @noRd
-artifact_has_openssl = function() requireNamespace("openssl", quietly = TRUE)
+artifact_has_openssl = function() {
+  if (!isNamespaceLoaded("openssl") && !nzchar(system.file(package = "openssl"))) {
+    return(FALSE)
+  }
+  oauth_available("openssl", "Artifact access tokens")
+}
 
 #' A per-launch 128-bit access token as 32 hex digits, never from R's RNG (IC-61, IC-71), or ""
 #' with a one-time notice when neither openssl nor /dev/urandom is available

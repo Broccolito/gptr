@@ -160,9 +160,9 @@ oauth_parse_redirect = function(input, redirect_uri, state, issuer, iss_supporte
 
 # ---- Suggests, randomness, PKCE ------------------------------------------------------------
 
-#' Load a Suggests package without changing the caller's RNG or known initialization keys
+#' Check a Suggests package without changing the caller's RNG or known initialization keys
 #' @noRd
-oauth_need = function(pkg, feature) {
+oauth_available = function(pkg, feature) {
   keys = c("PATH", "GIT_ASKPASS", "SSH_ASKPASS")
   windows = is_windows()
   key = if (windows) toupper else identity
@@ -195,7 +195,13 @@ oauth_need = function(pkg, feature) {
     gptr_abort("Dependency setup could not restore its initialization environment state.",
                "state_restore", package = pkg, env_restored = FALSE)
   }
-  if (!isTRUE(ok)) {
+  isTRUE(ok)
+}
+
+#' Require an optional dependency after preserving its initialization state
+#' @noRd
+oauth_need = function(pkg, feature) {
+  if (!oauth_available(pkg, feature)) {
     gptr_abort(paste0(feature, " needs the '", pkg, "' package; install it with ",
                       "install.packages(\"", pkg, "\")."), "missing_package", package = pkg,
                feature = feature)

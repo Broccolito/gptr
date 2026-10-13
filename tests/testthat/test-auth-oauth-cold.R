@@ -16,9 +16,15 @@ oauth_cold_env = function(values, .env = parent.frame()) {
 
 oauth_cold_need = function(loader, windows = FALSE, warm = FALSE, extra = list()) {
   need = oauth_need
-  environment(need) = list2env(c(list(requireNamespace = loader,
+  scope = list2env(c(list(requireNamespace = loader,
     is_windows = function() windows, isNamespaceLoaded = function(pkg) warm), extra),
     parent = environment(oauth_need))
+  available = get0("oauth_available", envir = environment(oauth_need), inherits = FALSE)
+  if (!is.null(available)) {
+    environment(available) = scope
+    scope$oauth_available = available
+  }
+  environment(need) = scope
   need
 }
 
