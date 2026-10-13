@@ -422,3 +422,39 @@ test_that("artifact browser spawn refusal preserves its condition without a fore
     expect_identical(x$scope$artifact_state$browser_pending, foreign)
   }
 })
+
+test_that("artifact browser release settles only its exact retained stopped family", {
+  for (mode in c("settled", "unconfirmed", "changed", "refused")) {
+    x = artifact_launch_fixture()
+    owner = x$launch(character())
+    record = x$scope$proc_record(2468L, x$process)
+    x$state$alive = FALSE
+    x$state$family_calls = 0L
+    x$scope$proc_release = function(process) {
+      expect_identical(process, x$process)
+      if (mode == "changed") x$state$record_changed = TRUE
+      invisible(mode != "refused")
+    }
+    x$scope$proc_cleanup_record = function(retained) {
+      expect_identical(retained, record)
+      expect_false(x$state$alive)
+      x$state$family_calls = x$state$family_calls + 1L
+      if (mode == "settled") x$state$registered = FALSE
+      list(killed = 0L, complete = mode == "settled")
+    }
+    outcome = tryCatch(owner$release(), error = identity)
+    if (mode == "settled") {
+      expect_null(outcome)
+      expect_null(x$scope$proc_record(2468L, x$process))
+      expect_false(dir.exists(x$state$roots[[1L]]))
+    } else {
+      expect_s3_class(outcome, "gptr_error_io")
+      expect_true(x$state$registered)
+      expect_true(dir.exists(x$state$roots[[1L]]))
+    }
+    expect_identical(x$state$family_calls,
+      if (mode %in% c("settled", "unconfirmed")) 1L else 0L)
+    expect_identical(x$state$signals, integer())
+    expect_true(all(file.exists(x$state$files)))
+  }
+})

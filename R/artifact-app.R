@@ -696,8 +696,15 @@ artifact_browser_launch = function(args) {
       if (!is.null(current)) {
         if (is.null(held$record)) held$record = current
         if (!identical(current, held$record) || !identical(current$marker, marker) ||
-            !isTRUE(proc_release(process)) ||
-            !is.null(proc_record(process$get_pid(), process = process))) {
+            !isTRUE(proc_release(process))) {
+          gptr_abort("The owned headless browser marker did not finish cleanup.", "io",
+                     operation = "close", path = stderr)
+        }
+        retained = proc_record(process$get_pid(), process = process)
+        if (!is.null(retained) &&
+            (!identical(retained, held$record) ||
+             !isTRUE(proc_cleanup_record(retained)$complete) ||
+             !is.null(proc_record(process$get_pid(), process = process)))) {
           gptr_abort("The owned headless browser marker did not finish cleanup.", "io",
                      operation = "close", path = stderr)
         }
