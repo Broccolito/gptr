@@ -388,6 +388,8 @@ ns_expected_t0 = function() {
     paste0("- In r, assign results to names and print compact summaries (dim(), head",
            "(), peter$describe(x)) rather than whole objects"),
     "- Use = for assignment and |> for pipes in all R code you write",
+    paste0("- R recycles matrix/vector arithmetic down columns; use sweep(x, 2L,",
+           " values, \"-\") for feature-wise centering or distances"),
     "- Use edit for precise changes (edits[].oldText must match exactly)",
     paste0("- When changing multiple separate locations in one file, use one edit ca",
            "ll with multiple entries in edits[] instead of multiple edit calls"),
