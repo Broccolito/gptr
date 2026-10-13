@@ -114,7 +114,7 @@ articles:
   contents:
   - getting-started
   - why-peter
-- title: "Use Peter"
+- title: "Ask Peter"
   contents:
   - language-models
   - system-one
@@ -125,7 +125,7 @@ articles:
   - script-as-history
   - teams-and-background
   - tools-and-artifacts
-- title: "Extend Peter"
+- title: "Extend gptr"
   contents:
   - skills-and-plugins
   - mcp

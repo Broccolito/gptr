@@ -14,8 +14,9 @@ old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1
 ```
 
 Call `peter()` without a prompt from an interactive R console to chat. It uses your current
-environment and the configured model. Give it an explicit model when you want to choose the
-route. The [language-model guide](language-models.html) covers API, CLI and local setup.
+environment and the configured model. Choose a route explicitly with
+`peter(model = "openai/gpt-6-sol")`. The [language-model guide](language-models.html) covers
+API, CLI and local setup.
 
 On a new console with no explicit or configured model, Peter first offers Codex CLI, Claude Code
 CLI and manual API/Ollama setup. Selecting an installed CLI that reports `Signed in` saves its
@@ -36,11 +37,13 @@ overrides it. Use `gptr_config(model = "provider/model", .scope = "user")` to ch
 
 ```{r, eval = FALSE}
 library(gptr)
-s = peter(model = "openai/gpt-6-sol")
+session = peter()
+# At peter>, enter: Plot mpg against wt in mtcars.
+# Then enter: /exit
 ```
 
 The default prompt is `peter> `; other permission modes appear as `peter[plan]> `,
-`peter[edits]> ` or `peter[auto]> `. Enter `/exit` to return the session invisibly to `s`.
+`peter[edits]> ` or `peter[auto]> `. Enter `/exit` to return the session invisibly to `session`.
 Objects created by the agent remain in the environment where the console runs.
 R tools compute on those in-memory objects across turns; you can inspect or reuse them at the
 R prompt without exporting and reloading a dataset. Model context is a separate, bounded
@@ -60,30 +63,21 @@ that frontend treats every input line as a literal model prompt (or a JSON promp
 `/exit` and `/quit` end the stream. Slash commands and `!` execution use the console frontend.
 JSONL stdout contains event records, with human-readable notices on stderr.
 
-An existing session can become a chat. This offline example creates one first:
-
-```{r}
-library(gptr)
-work = new.env()
-work$x = 1:5
-fake = gptr_fake_provider(list("The vector has five values.", "Their sum is fifteen."))
-s = peter("Describe x.", x = work$x, model = fake, envir = work)
-s$text
-```
+Continue the same session from R:
 
 ```{r, eval = FALSE}
-s |> peter()
-# At peter>, enter: What is their sum?
+session |> peter()
+# At peter>, enter: Explain the pattern in that plot.
 # Then enter: /exit
 ```
 
-Piping continues the same session and uses its kept workspace. To explore independently,
-use `gptr_fork(s) |> peter()`; writes then stay in the fork's overlay. `/clear` resets the
+Piping uses the session's kept workspace. To explore independently, use
+`gptr_fork(session) |> peter()`; writes stay in the fork's overlay. `/clear` resets the
 conversation while retaining workspace objects, model and mode.
 
 ## Enter prompts, objects and your own R
 
-Ordinary text is a prompt. `@x` attaches a visible R object by name, and `@analysis.R` adds the
+Ask in ordinary language. `@x` attaches a visible R object by name, and `@analysis.R` adds the
 beginning of a text file. Quote a path containing spaces as `@"analysis notes.txt"`.
 Files take precedence when a mention matches both a file and an object. A file mention sends
 at most its first 40 lines; binary files contribute a description rather than their contents.
@@ -218,10 +212,10 @@ pause/resume behavior is not uniformly verified across front ends.
 The equivalent session verbs work from R:
 
 ```{r, eval = FALSE}
-gptr_steer(s, "Use the existing fit instead of fitting again.")
-gptr_steer(s, "Summarize the diagnostics at the end.", as = "follow_up")
-gptr_wait(s)
-gptr_cancel(s)
+gptr_steer(session, "Use the existing fit instead of fitting again.")
+gptr_steer(session, "Summarize the diagnostics at the end.", as = "follow_up")
+gptr_wait(session)
+gptr_cancel(session)
 ```
 
 For persistent conversation storage, initialize a project with `gptr_init(path)` and review its
@@ -229,6 +223,18 @@ trust decision. `gptr_sessions()` lists stored sessions, and `gptr_resume(id)` r
 The [script-as-history guide](script-as-history.html) covers document recording, replay and
 transcripts; the [language-model guide](language-models.html) covers scripted calls that need
 no interactive console.
+
+## Try an offline turn
+
+This scripted example uses a fake provider with a fixed reply; it needs no key or network.
+
+```{r}
+library(gptr)
+work = list2env(list(x = 1:5))
+fake = gptr_fake_provider(list("The vector has five values."))
+session = peter("Describe x.", x = work$x, model = fake, envir = work)
+session$text
+```
 
 ```{r cleanup, include = FALSE}
 options(old_options)

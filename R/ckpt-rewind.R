@@ -591,13 +591,13 @@ ckpt_ext_state = function(s) {
 #'   list(tool = "r", input = list(code = "x = 1")), "Made x.",
 #'   list(tool = "r", input = list(code = "x = x + 1")), "Added one."))
 #' e = new.env()
-#' s = peter("Make x", model = fake, mode = "auto", envir = e)
-#' s |> peter("Add one to x")
+#' session = peter("Make x", model = fake, mode = "auto", envir = e)
+#' session |> peter("Add one to x")
 #' e$x
-#' s |> gptr_rewind()
+#' session |> gptr_rewind()
 #' e$x
-#' s$editor_text
-#' gptr_checkpoints(s, all = TRUE)
+#' session$editor_text
+#' gptr_checkpoints(session, all = TRUE)
 #' options(op)
 gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversation", "workspace"),
                        force = FALSE, preview = FALSE) {

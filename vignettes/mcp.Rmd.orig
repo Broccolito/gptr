@@ -104,11 +104,11 @@ error. Filter a large result before printing or passing it to a model.
 Tool arguments cross the connection as serialized data; an external server does not share R's
 object bindings. Serving R below lets another agent request computation on live local objects.
 
+Choose a model in [Language models](language-models.html), then make an ordinary request.
 The model uses the same functions inside its `r` tool:
 
 ```{r, eval = FALSE}
-peter("Use the catalog MCP server to find normalization references",
-      model = "provider/model")
+peter("Find normalization references using the catalog MCP server.")
 ```
 
 MCP tools called by model code pass gptr's permission policies. Server descriptions and results
@@ -146,17 +146,17 @@ change:
 ```{r, eval = FALSE}
 workspace = new.env()
 workspace$measurements = data.frame(value = c(2, 3, 5))
-h = gptr_mcp_serve(tools = c("r", "read"), envir = workspace)
-h$url
-h$config$codex
-h$stop()
+server = gptr_mcp_serve(tools = c("r", "read"), envir = workspace)
+server$url
+server$config$codex
+server$stop()
 ```
 
 The handle provides `$url`, `$port`, `$token_env`, `$config` and `$stop()`. `$config` contains
 client snippets for Codex, Claude Code, Claude Desktop and Cursor. Printed snippets redact the
-token; `as.character(h$config$claude_code)` produces the actual configuration text for deliberate
-copying. Treat that text as a credential. The Codex snippet supplies `$args` and `$env` for the
-client process; it is not a command to paste without its environment.
+token; `as.character(server$config$claude_code)` produces the actual configuration text for
+deliberate copying. Treat that text as a credential. The Codex snippet supplies `$args` and `$env`
+for the client process; it is not a command to paste without its environment.
 
 One server runs per R process, bound to `127.0.0.1` with a bearer token. It serves requests while R
 waits at the console or inside a gptr call. Calls use a dedicated gptr session and the permission
@@ -169,7 +169,8 @@ organize objects but is not an operating-system sandbox. The R tool can use its 
 objects without an intermediate dataset file, while returned text and images leave R through
 the connection. See [Execution model](execution-model.html) for the provider context boundary.
 The server exposes tools, not an MCP
-resource or prompt catalog. Stop it with `h$stop()` or `gptr_mcp_serve(stop = TRUE)` when finished.
+resource or prompt catalog. Stop it with `server$stop()` or `gptr_mcp_serve(stop = TRUE)`
+when finished.
 If shutdown fails, access is revoked and the server remains available for a stop retry. Call
 `gptr_mcp_serve(stop = TRUE)` again; new requests are refused until shutdown completes.
 For interactive approvals and recorded R work, see [Interactive console](interactive-console.html)

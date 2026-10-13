@@ -114,10 +114,10 @@ sdk_sessions = function(x, arg = "x") {
 #' @return `s`, invisibly. A run that settles in status `error`, `blocked`, `budget` or
 #'   `max_turns` signals the condition documented in [peter()].
 #' @examples
-#' s = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
-#'          envir = new.env())
-#' gptr_step(s)
-#' s$turns
+#' session = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")),
+#'   .run = FALSE, envir = new.env())
+#' gptr_step(session)
+#' session$turns
 #' @export
 gptr_step = function(s, turns = 1L) {
   check_class(s, "gptr_session", "s")
@@ -195,9 +195,9 @@ gptr_wait = function(x, timeout = Inf) {
 #' @param as `"steer"` or `"follow_up"`.
 #' @return `s`, invisibly, at once.
 #' @examples
-#' s = peter("Summarise mtcars", model = gptr_fake_provider(list("ok")), .run = FALSE,
-#'          envir = new.env())
-#' gptr_steer(s, "Use only the mpg column", as = "follow_up")
+#' session = peter("Summarise mtcars", model = gptr_fake_provider(list("ok")),
+#'   .run = FALSE, envir = new.env())
+#' gptr_steer(session, "Use only the mpg column", as = "follow_up")
 #' @export
 gptr_steer = function(s, text, as = c("steer", "follow_up")) {
   check_class(s, "gptr_session", "s")
@@ -217,9 +217,9 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
 #' @param x A session or a list of sessions.
 #' @return `x`, invisibly.
 #' @examples
-#' s = peter("long task", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
-#'          envir = new.env())
-#' gptr_cancel(s)
+#' session = peter("long task", model = gptr_fake_provider(list(list(hang = TRUE))),
+#'   .run = FALSE, envir = new.env())
+#' gptr_cancel(session)
 #' @export
 gptr_cancel = function(x) {
   ss = sdk_sessions(x)
@@ -246,14 +246,15 @@ gptr_cancel = function(x) {
 #' @param matcher `NULL`, a tool-name glob for tool events, or `function(event)` returning a flag.
 #' @return A function of no arguments that removes the hook, invisibly.
 #' @examples
-#' s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
+#' session = peter("hi", model = gptr_fake_provider(list("hello")),
+#'   .run = FALSE, envir = new.env())
 #' log = new.env()
 #' log$roles = character()
-#' off = gptr_on(s, "message_end", function(event, ctx) {
+#' off = gptr_on(session, "message_end", function(event, ctx) {
 #'   log$roles = c(log$roles, event$message$role)
 #'   NULL
 #' })
-#' gptr_step(s)
+#' gptr_step(session)
 #' off()
 #' log$roles
 #' @export

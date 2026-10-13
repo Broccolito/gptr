@@ -24,60 +24,61 @@ those objects in the replay environment; working on data already loaded in R doe
 an intermediate dataset file. See [Execution model](execution-model.html) for object lifetimes
 and the separate costs of checkpoints, workers and snapshots.
 
-The executed examples use fake providers and separate work environments. Recording and
-file-writing recipes are shown as code to run deliberately in your own temporary project.
+The examples below are recipes for your configured model. Run recording and file-writing
+steps deliberately in a temporary project. The offline examples used to build this guide
+are kept separately at the end; they use fake providers and make no network requests.
 
-## Calls in ordinary R scripts and functions
+## Program in natural language, then use ordinary R
 
-`peter()` is an R function. A helper can call it, inspect the returned session, and pass its
-answer to other R code. Give it an environment when results should outlive the helper call.
+Write a prompt for each step. A pipe continues the same session, so the next prompt can use
+the objects created by the previous one. Keep prompts on separate lines and put short notes
+where they help explain the next step.
 
-```{r}
+```{r, eval = FALSE}
 library(gptr)
-work = new.env()
-work$mtcars = mtcars
-fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "top = head(mtcars[order(-mtcars$mpg), c('mpg', 'wt')], 3)")),
-  "The three most fuel-efficient cars are stored in top."
-))
+cars = datasets::mtcars
 
-rank_cars = function(data, model, envir) {
-  peter("Find the three most fuel-efficient cars.", data = force(data), model = model, envir = envir,
-        mode = auto)
+session = peter("Fit mpg ~ wt in cars with stats::lm(); store fit.") |>
+  # Reuse the fitted model.
+  peter("Use fit to predict mpg for every row of cars; store predicted.") |>
+  peter("Summarize observed mpg minus predicted; store residual_summary.")
+
+graphics::plot(cars$mpg, predicted)
+session = session |> peter("Explain the largest residuals.")
+```
+
+Prompts and ordinary R can alternate. A pipe adds turns to the same mutable session; assigning
+the session to another name does not make a branch. Use `gptr_fork()` for a branch.
+
+A top-level pipe chain owns one recorded block, placed after the complete statement. A later
+continuation that uses `session` still needs that handle. Raw export refuses such a dependency
+when it would remove the handle; the export recipe below uses a new top-level call instead.
+
+### Calls inside functions
+
+`peter()` is an R function. Give it an environment when results should outlive a helper call:
+
+```{r, eval = FALSE}
+rank_cars = function(data, envir) {
+  peter("Find the three most fuel-efficient cars in data; store top.",
+        data = force(data), envir = envir)
 }
-s = rank_cars(work$mtcars, fake, work)
-s$text
+work = list2env(list(data = mtcars))
+session = rank_cars(work$data, work)
 work$top
-summary(s)
+summary(session)
 ```
 
-The named `data = force(data)` supplies the helper's argument as an explicit context value:
-its formal `data` is not a binding in `work`. If you attach an object by name instead, it must
-be visible from the environment where the session evaluates.
+`data = force(data)` supplies model context; it does not create an R binding in `work`.
+Here `work$data` is prepared before the call, so the R tool can read it. Objects attached by
+name must be visible from the evaluation environment.
+`summary(session)` reads recorded turns without a model call; it is not a narrative or an
+executable workflow.
 
-`summary(s)` reads a compact table of recorded turns without a model call; it does not
-produce a narrative or an executable workflow.
-
-This works in an R file, but a call nested inside a function, loop or another expression does
-not own a document block. It may run another model request when the script is executed
-again. Keep calls whose agent code you want recorded as top-level statements; keep reusable
-ordinary R calculations in functions. System 1 cache hits have their own rules and do not
-make an arbitrary loop into a recorded workflow.
-
-## Continuing one session with a pipe
-
-```{r}
-follow = gptr_fake_provider(list("A first answer.", "An answer incorporating the follow-up."),
-                            name = "follow")
-first = peter("Summarize the analysis.", model = follow, envir = new.env())
-second = first |> peter("Mention the sample size too.")
-identical(first, second)
-second$turns
-```
-
-A pipe adds turns to the same mutable session. A top-level pipe chain is one statement for
-recording; its executed code follows that chain. `gptr_fork()` explicitly branches a session;
-assigning it to another variable does not branch it.
+A call nested inside a function, loop or another expression does not own a document block.
+Running that code again may make another model request. Keep recordable prompts at top level
+and reusable R calculations in functions. System 1 cache hits do not make an arbitrary loop
+into a recorded workflow.
 
 ## Recording a designated R script
 
@@ -85,17 +86,12 @@ assigning it to another variable does not branch it.
 `gptr_doc()` reports the binding; `gptr_doc(FALSE)` removes it. It does not create a workflow
 from past conversation turns.
 
-For an offline recording exercise, save this as `analysis.R` in a temporary directory:
+Save this as `analysis.R` in a temporary directory:
 
 ```{r, eval = FALSE}
 library(gptr)
-fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(
-    code = "top = head(mtcars[order(-mtcars$mpg), c('mpg', 'wt')], 3)",
-    note = "ranked by mpg; ties keep the order of the data")),
-  "The selected rows are in top."
-))
-result = peter("Find the three most fuel-efficient cars.", model = fake, mode = auto)
+cars = datasets::mtcars
+session = peter("Find the three most fuel-efficient cars in cars; store top.")
 top
 ```
 
@@ -109,8 +105,8 @@ gptr_blocks("analysis.R")
 gptr_doc(FALSE)
 ```
 
-The missing block causes a fake model request, and the executed code is recorded below the
-call. The header identifies the block, model, date and prompt hash; the body hash identifies
+A missing block makes a model request, and the executed code is recorded below the call.
+ The header identifies the block, model, date and prompt hash; the body hash identifies
 its recorded code. `## Decision:` retains a model-supplied note, and `#>` retains bounded
 output. A note is a model explanation, not proof that the code is correct.
 
@@ -219,7 +215,9 @@ or listing a file is not proof that pending blocks were applied successfully.
 it or asking a model. Its default `format = "r"` turns Peter calls into comments and keeps
 the recorded R executable. With `format = "peter"`, calls remain active and the previous
 recorded code becomes comments, so that code is not executed a second time. Ordinary user
-code and comments retain their source order. Existing destination files are never replaced.
+code and comments retain their source order. Choose a new `.R` destination in an existing
+directory, different from the source; existing paths are never replaced. Export also
+refuses a source that changes during publication.
 
 For example, save the following as `analysis.R`. With a configured model and the usual
 permission checks, its first three prompts steer one session; the fourth starts another.
@@ -228,15 +226,16 @@ The ordinary plot runs between them, using objects in the same R environment.
 ```{r, eval = FALSE}
 cars = datasets::mtcars
 
-analysis = gptr::peter("Fit mpg ~ wt in cars with stats::lm(); store fit.") |>
-  gptr::peter("Reuse fit to calculate predicted for all rows of cars.") |>
+session = gptr::peter("Fit mpg ~ wt in cars with stats::lm(); store fit.") |>
+  # Reuse the fitted model.
+  gptr::peter("Use fit to predict mpg for every row of cars; store predicted.") |>
   gptr::peter("Summarize observed mpg minus predicted; store residual_summary.")
 
 # User code and this comment stay in the exported source.
 graphics::plot(cars$mpg, predicted, xlab = "Observed mpg", ylab = "Predicted mpg")
 graphics::abline(a = 0, b = 1)
 
-verification = gptr::peter("Check predicted length and finite values; store checks.")
+session = gptr::peter("Check predicted length and finite values; store checks.")
 ```
 
 Record it deliberately, inspect the code and results, then synchronize before exporting:
@@ -269,7 +268,7 @@ block keeps at most twelve output lines and eighty characters per output line.
 Export requires fresh completed records and no pending sidecar. It refuses computed or
 nested prompts, mixed Peter/ordinary pipelines, shared-line statements, interpolated-input
 hashes, missing or edited blocks and secret-marked records. Raw export also refuses later
-ordinary code that depends on a removed session handle, such as `analysis$value`; put needed
+ordinary code that depends on a removed session handle, such as `session$value`; put needed
 results in ordinary R objects, or retain the Peter format. Earlier unrecorded console input
 is not reconstructed. Preserved user code can still require gptr or other packages, read or
 write files, or call the network. Export is a source transformation, not verified replay.
@@ -280,18 +279,19 @@ Choose the deliverable explicitly. A history document, an ordinary executable sc
 narrative summary have different roles. `gptr_export()` transforms an explicitly recorded
 R document; it cannot recover arbitrary conversation turns into a complete workflow.
 
-With your own live-model session `s`, ask for a narrative by making a model request such as:
+With your configured model, continue `session` to request a narrative:
 
 ```{r, eval = FALSE}
-summary_session = s |> peter(
-  "Summarize the steps actually completed, decisions, inputs, outputs and unresolved issues.\nKeep proposed work separate from completed work; name saved files only if verified.",
+session = session |> peter(
+  "Summarize completed steps, decisions, inputs, outputs and open issues.
+Separate proposed work. Name saved files only when verified.",
   mode = plan
 )
-summary_session$text
+session$text
 ```
 
-The answer is **model-generated text** and adds a turn to `s`. Check its claims against the
-workspace, files and history before treating it as a record. `gptr_usage(s)` shows the
+The answer is **model-generated text** and adds a turn to `session`. Check its claims against the
+workspace, files and history before treating it as a record. `gptr_usage(session)` shows the
 request's usage; a summary request is not free merely because it summarizes existing work.
 
 For a Peter history document, designate the target before recording top-level prompts,
@@ -302,11 +302,12 @@ turns are not automatically recovered into validated blocks.
 For an ordinary R script, request a separate, explicit implementation:
 
 ```{r, eval = FALSE}
-script_session = s |> peter(
-  "Draft an ordinary R script implementing the verified analysis.\nInclude libraries, input paths, parameters, computations and explicit output saves.\nDo not call Peter; identify any missing input or step instead of inventing it.",
+session = session |> peter(
+  "Write ordinary R for the verified analysis, including inputs and output saves.
+Do not call Peter. Identify missing inputs or steps instead of inventing them.",
   mode = plan
 )
-script_session$text
+session$text
 ```
 
 This returns **model-generated output**, not an exported or validated script. Save only
@@ -316,6 +317,40 @@ history.
 
 See `vignette("system-one", package = "gptr")` for typed decisions and
 `vignette("teams-and-background", package = "gptr")` for orchestration and SDK control.
+
+## Offline examples used to build this guide
+
+The documentation build runs the following examples with fake providers in separate work
+environments. They need no credentials or network and do not start workers or external CLIs.
+The setup is hidden in the rendered guide to keep the main recipes focused on your analysis.
+
+```{r offline-history-functions, include = FALSE}
+library(gptr)
+work = new.env()
+work$mtcars = mtcars
+fake = gptr_fake_provider(list(
+  list(tool = "r", input = list(
+    code = "top = head(mtcars[order(-mtcars$mpg), c('mpg', 'wt')], 3)")),
+  "The three most fuel-efficient cars are stored in top."
+))
+
+rank_cars = function(data, model, envir) {
+  peter("Find the three most fuel-efficient cars.", data = force(data),
+        model = model, envir = envir, mode = auto)
+}
+session = rank_cars(work$mtcars, fake, work)
+session$text
+work$top
+summary(session)
+```
+
+```{r offline-history-pipe, include = FALSE}
+follow = gptr_fake_provider(list("A first answer.", "An answer incorporating the follow-up."),
+                            name = "follow")
+session = peter("Summarize the analysis.", model = follow, envir = new.env())
+session = session |> peter("Mention the sample size too.")
+session$turns
+```
 
 ```{r cleanup, include = FALSE}
 options(old_options)

@@ -927,10 +927,10 @@ session_root_id = function(s) {
 #' @return A new idle `gptr_session`.
 #' @examples
 #' fake = gptr_fake_provider(list("A", "B"))
-#' s = peter("first", model = fake, envir = new.env())
-#' f = gptr_fork(s)
-#' f |> peter("branch")
-#' c(s$turns, f$turns)
+#' session = peter("first", model = fake, envir = new.env())
+#' branch_session = gptr_fork(session)
+#' branch_session |> peter("branch")
+#' c(session$turns, branch_session$turns)
 #' @export
 gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
   check_class(s, "gptr_session", "s")

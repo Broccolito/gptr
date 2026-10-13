@@ -18,26 +18,20 @@ inputs, or `gptr_parallel()` for independently specified calls. Each returns a s
 children can be inspected. The reactor overlaps model I/O; ordinary inline R code still
 executes in the one R process.
 
-The following examples use scripted providers with the inline backend, without network calls
-or worker/CLI processes. Real-model, background and rewind recipes are not executed.
+The recipes below use your configured model. The separate offline examples used to build
+this guide use fake providers and the inline backend, with no network, worker or CLI calls.
+Background and rewind recipes are not executed.
 
 ## A team of named roles
 
-```{r}
+```{r, eval = FALSE}
 library(gptr)
-reviewer = gptr_fake_provider(list("A scripted review; check the actual analysis separately."),
-                              name = "reviewer")
-reviews = peter("Review the analysis workflow.", model = reviewer, envir = new.env(),
-                 agents = list(
-                   statistics = gptr_agent(system = "Check the statistical assumptions.",
-                                           backend = "inline"),
-                   code = gptr_agent(system = "Check the code and input/output handling.",
-                                     backend = "inline")
-                 ))
-reviews$kind
-names(reviews$children)
-reviews$statistics$text
-reviews$code$status
+session = peter("Review the analysis workflow.", agents = list(
+  statistics = gptr_agent(system = "Check the statistical assumptions."),
+  code = gptr_agent(system = "Check the code and input/output handling.")
+))
+session$statistics$text
+session$code$status
 ```
 
 The member names identify roles. `gptr_agent()` can specify each role's model, system text,
@@ -48,15 +42,16 @@ boundary or protection against arbitrary code mutating an external resource. Wor
 use separate R processes and serialize selected inputs, with their own memory and temporary
 file costs; CLI backends need their external CLI and authentication. See
 [Execution model](execution-model.html) for copy-on-modify and backend boundaries.
+Role definitions do not waive the usual tool permission checks.
 
-`reviews$text` joins member reports under headings; `reviews$value` is their named list of
-values, and `reviews$statistics` is the member session. A report is model-generated output,
+`session$text` joins member reports under headings; `session$value` is their named list of
+values, and `session$statistics` is the member session. A report is model-generated output,
 not verification. Inspect each child's status and the actual results before relying on it.
 
 Continuing a team without `agents =` asks the container's model to synthesize those reports:
 
 ```{r, eval = FALSE}
-reviews |> peter("Reconcile the reviews into one prioritized list of fixes.")
+session = session |> peter("Reconcile the reviews into one prioritized list of fixes.")
 ```
 
 This adds a model request. `agents =` starts new children; it cannot be used to continue a
@@ -65,21 +60,17 @@ piped session. Teams and fan-outs run in the foreground and cannot be combined w
 
 ## A fan-out over input elements
 
-```{r}
+```{r, eval = FALSE}
 cohorts = list(A = 1:3, B = 4:6, C = 7:9)
-cohort_model = gptr_fake_provider(list("A scripted cohort summary."), name = "cohort")
-summaries = peter("Summarize this cohort.", cohorts, model = cohort_model,
-                  envir = new.env(), parallel = 2, .opts = list(backend = "inline"))
-summaries$kind
-summaries$text
-vapply(summaries$children, function(child) child$status, "")
+session = peter("Summarize this cohort.", cohorts, parallel = 2)
+session$A$text
 ```
 
 `parallel = 2` limits active children, not the number of inputs processed: every element is
 queued. Exactly one attached context object must supply the batch, as a list, atomic vector
 or data-frame rows. Each child receives its own element. Unique nonempty element names become
-child names; otherwise positions are used. Inspect a child with `summaries$A` or
-`summaries[[1]]`.
+child names; otherwise positions are used. Inspect a child with `session$A` or
+`session[[1]]`.
 
 For object-producing work, keep each child's results separate and specify exports only when
 needed. Export-name collisions are reported and results are collected in task order; this
@@ -87,18 +78,14 @@ is not an automatic merge of competing analyses.
 
 ## Independent calls with gptr_parallel()
 
-```{r}
-team = gptr_parallel(
-  planner = peter("Plan the analysis.",
-               model = gptr_fake_provider(list("A scripted plan."), name = "planner"),
-               envir = new.env()),
-  review = peter("Review the inputs.",
-                 model = gptr_fake_provider(list("A scripted input review."), name = "inputs"),
-                 envir = new.env()),
+```{r, eval = FALSE}
+session = gptr_parallel(
+  planner = peter("Plan the analysis."),
+  review = peter("Review the inputs."),
   max_active = 2
 )
-team$planner$text
-team$review$text
+session$planner$text
+session$review$text
 ```
 
 The calls are deferred while the members are constructed, then scheduled together. You can
@@ -118,18 +105,15 @@ token-efficiency vignette. `on_error = "return"` keeps failed members for inspec
 `gptr_step()` advances it by model turns; `gptr_wait()` starts queued work and pumps until
 settlement or timeout. Returned sessions can be inspected at each stage.
 
-```{r}
-staged_model = gptr_fake_provider(list("First answer.", "Answer after the follow-up."),
-                                  name = "staged")
-staged = peter("Prepare a plan.", model = staged_model, envir = new.env(), .run = FALSE)
-staged$status
-staged$turns
-gptr_step(staged, turns = 1)
-staged$text
+```{r, eval = FALSE}
+session = peter("Prepare a plan.", .run = FALSE)
+session$status
+gptr_step(session, turns = 1)
+session$text
 
-gptr_steer(staged, "Include an input validation step.", as = "follow_up")
-gptr_wait(staged, timeout = 10)
-staged$text
+gptr_steer(session, "Include an input validation step.", as = "follow_up")
+gptr_wait(session, timeout = 10)
+session$text
 ```
 
 A steer reaches a running agent after its current tool results; a follow-up is delivered when
@@ -138,20 +122,18 @@ Piping a prompt into a running session uses the same steering mechanism. `gptr_w
 out leaves the run running; it does not cancel it. `gptr_cancel()` aborts active runs, keeps
 partial history and leaves idle sessions alone.
 
-`gptr_on(s, event, function(event, ctx) ...)` subscribes to cataloged session events and
+`gptr_on(session, event, function(event, ctx) ...)` subscribes to cataloged session events and
 returns a function that removes the listener. Keep reporting state outside the agent's
 workspace and remove listeners when finished:
 
-```{r}
+```{r, eval = FALSE}
 observed = new.env()
 observed$roles = character()
-tracked = peter("Say hello.", model = gptr_fake_provider(list("Hello."), name = "tracked"),
-                envir = new.env(), .run = FALSE)
-off = gptr_on(tracked, "message_end", function(event, ctx) {
+off = gptr_on(session, "message_end", function(event, ctx) {
   observed$roles = c(observed$roles, event$message$role)
   NULL
 })
-gptr_step(tracked)
+session = session |> peter("Check the plan's assumptions.")
 off()
 observed$roles
 ```
@@ -165,22 +147,21 @@ a short task and an explicit workspace:
 ```{r, eval = FALSE}
 work = new.env()
 work$fit = fit
-s = peter("Inspect the model fit and propose follow-up checks.", fit = work$fit, envir = work,
-          background = TRUE)
-s$status
+session = peter("Inspect fit and propose follow-up checks.", fit = work$fit, envir = work,
+                background = TRUE)
+session$status
 gptr_jobs()
-s |> peter("Prioritize residual diagnostics.")
-gptr_wait(s, timeout = 30)
-# If it is still running and you want to stop it:
-gptr_cancel(s)
+session = session |> peter("Prioritize residual diagnostics.")
+gptr_wait(session, timeout = 30)
+# Cancel only if the run is still active and you want to stop it.
+gptr_cancel(session)
 ```
 
 With `gptr.background_tools = "idle"` (default), an R tool can run at an idle tick and occupy
 the R console until it finishes. `"wait"` defers those tools to a blocking gptr call. Rscript,
 knitr and Quarto have no idle-console progress: use `gptr_wait()` or another blocking call.
 Other front ends have the support limits documented in `help("gptr-background", package = "gptr")`;
-do not infer
-support from the mere return of a session object.
+do not infer support from the mere return of a session object.
 
 An approval or question at an idle tick parks the session as `waiting`, without performing
 the action. A later blocking call resumes it and the model repeats its request before the
@@ -192,23 +173,98 @@ usual prompt. That extra request can use tokens. A waiting session has no active
 After a modifying run, inspect checkpoints and preview a rewind before restoring state:
 
 ```{r, eval = FALSE}
-gptr_checkpoints(s)
-gptr_rewind(s, turn = -1, restore = "all", preview = TRUE)
-gptr_rewind(s, turn = -1, restore = "all")
-gptr_usage(s, by = "agent")
+gptr_checkpoints(session)
+gptr_rewind(session, turn = -1, restore = "all", preview = TRUE)
+gptr_rewind(session, turn = -1, restore = "all")
+gptr_usage(session, by = "agent")
 ```
 
 `restore = "conversation"` changes the conversation; `"workspace"` restores captured
 workspace state; `"all"` requests both. Restoration covers captured objects/files and
 registered checkpointers, with conflicts and unsupported changes reported. It does not undo
 arbitrary external services or uncaptured side effects. Check the report and restored data.
-An assignment such as `t = s` refers to the same session; use `gptr_fork()` for a branch.
+Assigning a session to another name keeps the same object; use `gptr_fork()` for a branch.
 
 For a top-level team or fan-out call in a designated history document, child code is recorded
 under that statement and replay can reconstruct the children. Recording, answer caches and
 usable blocks must be present; a narrative team report alone is not a replayable workflow.
 See `vignette("script-as-history", package = "gptr")` for recording and summary recipes,
 and `vignette("token-efficiency", package = "gptr")` for shared budgets and usage.
+
+## Offline examples used to build this guide
+
+The documentation build runs the following examples with fake providers in separate work
+environments. They need no credentials or network and do not start workers or external CLIs.
+The setup is hidden in the rendered guide to keep the main recipes focused on your analysis.
+
+```{r offline-team, include = FALSE}
+library(gptr)
+reviewer = gptr_fake_provider(list("A scripted review; check the actual analysis separately."),
+                              name = "reviewer")
+session = peter("Review the analysis workflow.", model = reviewer, envir = new.env(),
+                 agents = list(
+                   statistics = gptr_agent(system = "Check the statistical assumptions.",
+                                           backend = "inline"),
+                   code = gptr_agent(system = "Check the code and input/output handling.",
+                                     backend = "inline")
+                 ))
+session$kind
+names(session$children)
+session$statistics$text
+session$code$status
+```
+
+```{r offline-fan-out, include = FALSE}
+cohorts = list(A = 1:3, B = 4:6, C = 7:9)
+cohort_model = gptr_fake_provider(list("A scripted cohort summary."), name = "cohort")
+session = peter("Summarize this cohort.", cohorts, model = cohort_model,
+                  envir = new.env(), parallel = 2, .opts = list(backend = "inline"))
+session$kind
+session$text
+vapply(session$children, function(child) child$status, "")
+```
+
+```{r offline-parallel, include = FALSE}
+session = gptr_parallel(
+  planner = peter("Plan the analysis.",
+               model = gptr_fake_provider(list("A scripted plan."), name = "planner"),
+               envir = new.env()),
+  review = peter("Review the inputs.",
+                 model = gptr_fake_provider(list("A scripted input review."), name = "inputs"),
+                 envir = new.env()),
+  max_active = 2
+)
+session$planner$text
+session$review$text
+```
+
+```{r offline-deferred, include = FALSE}
+staged_model = gptr_fake_provider(list("First answer.", "Answer after the follow-up."),
+                                  name = "session")
+session = peter("Prepare a plan.", model = staged_model, envir = new.env(), .run = FALSE)
+session$status
+session$turns
+gptr_step(session, turns = 1)
+session$text
+
+gptr_steer(session, "Include an input validation step.", as = "follow_up")
+gptr_wait(session, timeout = 10)
+session$text
+```
+
+```{r offline-events, include = FALSE}
+observed = new.env()
+observed$roles = character()
+session = peter("Say hello.", model = gptr_fake_provider(list("Hello."), name = "session"),
+                envir = new.env(), .run = FALSE)
+off = gptr_on(session, "message_end", function(event, ctx) {
+  observed$roles = c(observed$roles, event$message$role)
+  NULL
+})
+gptr_step(session)
+off()
+observed$roles
+```
 
 ```{r cleanup, include = FALSE}
 options(old_options)

@@ -100,8 +100,15 @@ gptr_config(
 ```
 
 Use a call's `budget` to limit total work, and review `gptr_usage()` for actual or unknown
-usage. A cost limit uses the route's available prices; unknown prices or usage are not a
-guarantee of free execution. Disabling a direct tool does not make in-process R a sandbox.
+usage:
+
+```{r, eval = FALSE}
+session = peter("Summarize mtcars in three sentences.")
+gptr_usage(session)
+```
+
+A cost limit uses the route's available prices; unknown prices or usage are not a guarantee
+of free execution. Disabling a direct tool does not make in-process R a sandbox.
 
 | Context and history setting | Default and purpose |
 |---|---|
@@ -185,8 +192,8 @@ key in `gptr_config()`. Settings-backed options participate in the precedence de
 | System 1 | `s1_max_active`, `s1_rounds`, `s1_state_max`, `s1_max_elements` |
 | Documents, MCP and artifacts | `doc_output_lines`, `doc_source_frames`, `mcp_timeout`, `mcp_probe_timeout`, `mcp_debug`, `artifact_max_bytes` |
 
-For example, a function can temporarily reduce the size of model-visible R output and restore
-the caller's option on exit:
+A function can temporarily limit model-visible R output and restore the caller's option on
+exit. This example uses a fake provider so it runs offline:
 
 ```{r}
 short_run = function() {

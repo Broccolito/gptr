@@ -81,10 +81,11 @@
 #'   console), or a typed System 1 vector for classifier models.
 #' @examples
 #' fake = gptr_fake_provider(list("The data has 32 rows.", "The data has 11 columns."))
-#' s = peter("How many rows does the data have?", mtcars, model = fake, envir = new.env())
-#' s$text
-#' s |> peter("And how many columns?")
-#' identical(gptr_last(), s)
+#' session = peter("How many rows does the data have?", mtcars,
+#'   model = fake, envir = new.env())
+#' session$text
+#' session |> peter("And how many columns?")
+#' identical(gptr_last(), session)
 #' @seealso [gptr_security], [gptr_egress] and [gptr_options];
 #'   `vignette("language-models", package = "gptr")` for connecting models and scripted calls.
 #' @export

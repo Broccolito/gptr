@@ -28,15 +28,25 @@ small objects.
 Peter's name commemorates Peter Naur and Peter Cathcart Wason. The
 [Why Peter? guide](why-peter.html) connects their work on programs and reasoning to gptr.
 
-This vignette runs without a network connection or a key. Every call uses
-`gptr_fake_provider()`, a scripted model that ships with the package, so the output is
-reproducible. Start with this example before connecting an API, subscription command-line tool
-or local Ollama model through the [language-model guide](language-models.html).
+Choose a model through the [language-model guide](language-models.html), then ask Peter for
+the work you want. Live examples are shown without running them. The executable examples use
+scripted fake providers, so this guide builds without a key or network request.
 
 ## A first call
 
-A fake provider plays a script in which each element is one model reply. A reply can call a
-tool: the `r` tool runs R code in the environment you give to `peter()`.
+```{r, eval = FALSE}
+library(gptr)
+session = peter("Fit mpg from wt in mtcars. Save the model as fit.", mtcars)
+session |> peter("Use fit to predict mpg and plot the predictions.")
+```
+
+Peter writes and runs R through its tools. The pipe adds work to the same session, so the next
+turn can reuse `fit`. The default permission mode asks before changes unless a rule allows them.
+
+### Try it offline
+
+This fake provider supplies a fixed sequence of tool calls and replies. It does not infer code
+from the prompt.
 
 ```{r}
 library(gptr)
@@ -46,16 +56,20 @@ fake = gptr_fake_provider(list(
     "fit = lm(mpg ~ wt, data = cars)", "gptr_return(coef(fit))", sep = "\n"
   ))),
   "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon.",
-  list(tool = "r", input = list(code = "predicted = predict(fit)\ngptr_return(head(predicted))")),
+  list(tool = "r", input = list(
+    code = "predicted = predict(fit)\ngptr_return(head(predicted))"
+  )),
   "The first six predictions are ready."
 ))
 
 work = new.env()
 work$cars = mtcars
-s = peter("Fit mpg on wt in cars and return the coefficients.", cars = work$cars,
-          model = fake, envir = work, mode = auto)
-s$text
-s$value
+session = peter(
+  "Fit mpg on wt in cars and return the coefficients.",
+  cars = work$cars, model = fake, envir = work, mode = auto
+)
+session$text
+session$value
 ```
 
 Prompts are always quoted strings. Identifiers such as the mode can be bare names, the way
@@ -65,7 +79,8 @@ This vignette needs it because nobody is there to answer. At the console the def
 `manual`, asks before changes unless a permission rule already allows them. The fake provider
 supplies the tool code explicitly; a real model chooses its own code from the prompt.
 
-`s$text` is the final answer, and `s$value` is the value the tool selected with `gptr_return()`.
+`session$text` is the final answer, and `session$value` is the value the tool selected with
+`gptr_return()`.
 The object the agent created is in `work`, like any object you created yourself:
 
 ```{r}
@@ -76,8 +91,8 @@ coef(work$fit)
 Reuse that fitted object in the next turn. No data file or repeated fit is needed:
 
 ```{r}
-s |> peter("Reuse fit to predict mpg and return the first six predictions.")
-s$value
+session |> peter("Reuse fit to predict mpg and return the first six predictions.")
+session$value
 head(work$predicted)
 ```
 
@@ -85,9 +100,9 @@ head(work$predicted)
 token usage:
 
 ```{r}
-s$status
-s$turns
-gptr_usage(s, by = "model")
+session$status
+session$turns
+gptr_usage(session, by = "model")
 ```
 
 ## The pipe steers one session
@@ -104,21 +119,23 @@ fake2 = gptr_fake_provider(list(
   "Four."
 ))
 
-s2 = peter("Compute the mean mpg for each number of cylinders.", model = fake2, envir = work,
-          mode = auto)
-s3 = s2 |> peter("Which group is the most economical?")
-identical(s2, s3)
-s2$turns
-s2$text
+group_session = peter(
+  "Compute the mean mpg for each number of cylinders.",
+  model = fake2, envir = work, mode = auto
+)
+continued_session = group_session |> peter("Which group is the most economical?")
+identical(group_session, continued_session)
+group_session$turns
+group_session$text
 ```
 
 A branch is always explicit. `gptr_fork()` copies the conversation into a new session whose
 workspace looks up objects in the parent environment and keeps ordinary assignments local:
 
 ```{r}
-branch = gptr_fork(s2)
-branch |> peter("Answer in one word.")
-c(original = s2$turns, branch = branch$turns)
+branch_session = gptr_fork(group_session)
+branch_session |> peter("Answer in one word.")
+c(original = group_session$turns, branch = branch_session$turns)
 ```
 
 The overlay separates ordinary bindings, rather than making a full data snapshot. Reference
@@ -158,7 +175,7 @@ commands, `@name` attaches an object and `!code` runs your own R immediately. Th
 
 ```{r, eval = FALSE}
 peter()
-s |> peter()
+session |> peter()
 ```
 
 ## Connecting a real model
@@ -174,8 +191,8 @@ gptr_providers()
 gptr_models(provider = "openai")
 gptr_config(model = "openai/gpt-6-sol", .scope = "user")
 
-res = peter("Describe the mpg and wt columns.", mtcars)
-res$text
+session = peter("Describe the mpg and wt columns.", mtcars)
+session$text
 ```
 
 The first time a provider is used interactively, gptr shows what is sent to it and records your
