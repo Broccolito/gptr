@@ -329,11 +329,13 @@ bp_run = function(case, declared_links = list()) {
       rss
     }
     before_rss = supervisor_rss()
-    writer = exists("rw_child_case", mode = "function") && identical(bp_child_case, rw_child_case)
+    writer = exists("rw_child_case", mode = "function") &&
+      identical(bp_child_case, get("rw_child_case"))
     bp_rss_capture("before_observer", list(case = case, writer = writer,
       supervisor_pid = Sys.getpid(), supervisor_create_time = supervisor_time,
       before_rss = before_rss, resource_failure = before_rss > 1024^3), supervisor_rss,
       prior_failure = before_rss > 1024^3)
+    bp_disk_observer = get("bp_disk_observer", mode = "function")
     observe = bp_disk_observer(root, declarations = declared_links, declared_only = declared_only)
     after_rss = supervisor_rss()
     elapsed = proc.time()[["elapsed"]] - started
@@ -539,21 +541,21 @@ bp_run = function(case, declared_links = list()) {
 
 bp_expect_bounded = function(x) {
   label = paste(x$case, x$os, x$guard, paste(x$phases, collapse = "/"))
-  expect_true(x$owned_family_stopped, label = label)
-  expect_identical(x$sampling_errors, 0L)
-  expect_gte(x$samples, 1L)
-  expect_lte(x$peak_rss, x$rss_cap)
-  expect_lte(x$peak_disk, x$output_cap)
-  expect_lte(x$elapsed, 60)
-  expect_true(is.list(x$outer_identity) && is.finite(x$outer_identity$create_time))
-  expect_true(is.list(x$inner_identity) && is.finite(x$inner_identity$create_time))
-  expect_true(x$complete, label = label)
+  testthat::expect_true(x$owned_family_stopped, label = label)
+  testthat::expect_identical(x$sampling_errors, 0L)
+  testthat::expect_gte(x$samples, 1L)
+  testthat::expect_lte(x$peak_rss, x$rss_cap)
+  testthat::expect_lte(x$peak_disk, x$output_cap)
+  testthat::expect_lte(x$elapsed, 60)
+  testthat::expect_true(is.list(x$outer_identity) && is.finite(x$outer_identity$create_time))
+  testthat::expect_true(is.list(x$inner_identity) && is.finite(x$inner_identity$create_time))
+  testthat::expect_true(x$complete, label = label)
   if (!x$complete) return(FALSE)
-  expect_identical(x$result$input_bytes, 4000000L)
-  expect_true(x$result$stdin_empty)
-  expect_true(x$result$watchers_empty)
-  expect_true(x$result$inner_dead)
-  expect_true(x$result$marker_removed)
-  expect_true(x$result$reactor_responsive)
+  testthat::expect_identical(x$result$input_bytes, 4000000L)
+  testthat::expect_true(x$result$stdin_empty)
+  testthat::expect_true(x$result$watchers_empty)
+  testthat::expect_true(x$result$inner_dead)
+  testthat::expect_true(x$result$marker_removed)
+  testthat::expect_true(x$result$reactor_responsive)
   TRUE
 }
