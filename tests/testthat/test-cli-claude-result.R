@@ -58,3 +58,133 @@ test_that("a successful result remains a successful turn", {
   expect_null(ev$message$error_message)
   expect_identical(msg_text(ev$message), "Synthetic answer.")
 })
+
+
+# Real fake-CLI children emit a terminal result, then await another stdin request.
+# Capture ownership at message_end, before the built-in agent_end retirement hook.
+cli_terminal_snapshot = function() {
+  list(options = options(), env = Sys.getenv(), cwd = getwd(), libs = .libPaths(),
+    search = search(), rng = RNGkind(),
+    seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE),
+    globals = mget(ls(envir = globalenv(), all.names = TRUE), envir = globalenv()))
+}
+
+# The fake CLI helpers are sourced above at run time, where lintr cannot resolve them.
+cli_terminal_wait = function(case, failed) {
+  local_project()
+  local_gptr_options(context = "none", max_attempts = 1L)
+  fake = local_fake_cli("claude", case) # nolint: object_usage_linter.
+  seen = new.env(parent = emptyenv())
+  seen$events = character()
+  seen$messages = 0L
+  off = gptr_register(gptr_hook("message_end", function(event, ctx) {
+    if (!identical(event$role, "assistant")) return(NULL)
+    seen$messages = seen$messages + 1L
+    seen$session = ctx$session
+    seen$run = ctx_run(ctx)
+    seen$state = pcli_tracked(ctx$session$id)
+    seen$process = seen$state$process
+    seen$pid = seen$process$get_pid()
+    seen$handle = ps::ps_handle(seen$pid)
+    seen$ctime = ps::ps_create_time(seen$handle)
+    seen$alive = ps::ps_is_running(seen$handle)
+    seen$record = proc_record(seen$pid, seen$process)
+    seen$watch = seen$state$watch
+    seen$job = seen$state$job
+    seen$timer = seen$state$turn_timer
+    seen$stream_task = seen$state$stream_turn$id
+    seen$events = c(seen$events, "message_end")
+    NULL
+  }))
+  withr::defer(off())
+  removers = list()
+  withr::defer(for (remove in rev(removers)) remove())
+  for (name in c("turn_end", "agent_end")) {
+    removers[[length(removers) + 1L]] = gptr_register(gptr_hook(name, function(event, ctx) {
+      seen$events = c(seen$events, event$type)
+      NULL
+    }))
+  }
+  withr::defer({
+    if (exists("session", envir = seen, inherits = FALSE)) {
+      state = pcli_tracked(seen$session$id)
+      if (!is.null(state)) pcli_stop_child(state, wait_ack = FALSE)
+      pcli_untrack(seen$session$id)
+    }
+  })
+  # Initialize the process-identity diagnostic before measuring the public call.
+  ps::ps_handle(Sys.getpid())
+  home = new.env(parent = baseenv())
+  home$sentinel = c(2L, 5L, 7L)
+  before = cli_terminal_snapshot()
+  started = proc.time()[["elapsed"]]
+  value = tryCatch(peter("Give the fixed synthetic fixture result.", model = fake$model,
+    envir = home), error = identity)
+  seconds = proc.time()[["elapsed"]] - started
+  after = cli_terminal_snapshot()
+  # Snapshot precedes any failure formatting; no state restoration wraps peter().
+  expect_identical(vapply(names(before), function(k) identical(before[[k]], after[[k]]), NA),
+    stats::setNames(rep(TRUE, 8L), names(before)))
+  expect_identical(home$sentinel, c(2L, 5L, 7L))
+  expect_lt(seconds, 20)
+  expect_identical(seen$messages, 1L)
+  expect_identical(seen$events, c("message_end", "turn_end", "agent_end"))
+  expect_true(seen$alive)
+  expect_true(is.finite(seen$ctime))
+  expect_identical(fake_pids(fake), seen$pid) # nolint: object_usage_linter.
+  expect_false(seen$process$is_alive())
+  expect_false(ps::ps_is_running(seen$handle))
+  expect_true(isTRUE(seen$run$settled))
+  expect_null(session_live(seen$session)$run)
+  expect_null(seen$state$process)
+  expect_null(seen$state$turn_timer)
+  expect_false(isTRUE(seen$state$turn_open))
+  reactor = reactor_get()
+  for (id in c(seen$watch, seen$timer, seen$stream_task, seen$run$task)) {
+    expect_true(is.character(id) && length(id) == 1L && nzchar(id))
+    expect_false(exists(id, envir = reactor$procs, inherits = FALSE))
+    expect_false(exists(id, envir = reactor$timers, inherits = FALSE))
+    expect_false(exists(id, envir = reactor$tasks, inherits = FALSE))
+  }
+  expect_false(exists(as.character(seen$pid), envir = reactor$stdin, inherits = FALSE))
+  expect_true(is.list(seen$record) && proc_marker_valid(seen$record$marker))
+  expect_null(proc_record(seen$pid, seen$process))
+  tree = proc_tree(seen$record$marker)
+  expect_false(isTRUE(attr(tree, "unavailable")))
+  expect_length(tree, 0L)
+  expect_false(file.exists(file.path(proc_dir(create = FALSE),
+    paste0(seen$record$marker, ".json"))))
+  expect_false(seen$job %in% gptr_jobs()$id)
+  expect_false(seen$run$id %in% reactor$served)
+  expect_false(exists(seen$run$id, envir = reactor$runs, inherits = FALSE))
+  expect_true(isTRUE(seen$state$stream_turn$finished))
+  expect_identical(nrow(seen$session$usage), 1L)
+  expect_identical(length(fake_log(fake, "turn")), 1L) # nolint: object_usage_linter.
+  expect_identical(length(fake_log(fake, "handshake")), 1L) # nolint: object_usage_linter.
+  if (failed) {
+    expect_s3_class(value, "gptr_error_auth")
+    stored = session_data(seen$session)$condition
+    expect_identical(stored, seen$run$condition)
+    expect_identical(value$session, seen$session)
+    # gateway_signal adds the public session handle; every original field stays exact.
+    signalled = value
+    signalled$session = stored$session
+    expect_identical(signalled, stored)
+    expect_identical(seen$session$status, "error")
+  } else {
+    expect_identical(value, seen$session)
+    expect_identical(value$status, "idle")
+    expect_identical(value$text, "Hello from the fake claude CLI.")
+  }
+  invisible(NULL)
+}
+
+test_that("a foreground auth failure retires the fake CLI waiting for more stdin", {
+  skip_on_cran()
+  cli_terminal_wait("auth-wait", failed = TRUE)
+})
+
+test_that("a foreground success retires the fake CLI waiting for more stdin", {
+  skip_on_cran()
+  cli_terminal_wait("text", failed = FALSE)
+})
