@@ -24,7 +24,10 @@ test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)"
   expect_identical(tools::toTitleCase(d[["Title"]]), unname(d[["Title"]]))
   expect_identical(unname(d[["License"]]), "MIT + file LICENSE")
   expect_identical(unname(d[["Copyright"]]), "file inst/COPYRIGHTS")
-  expect_identical(unname(d[["URL"]]), "https://github.com/Broccolito/gptr")
+  expect_identical(
+    trimws(strsplit(unname(d[["URL"]]), ",", fixed = TRUE)[[1L]]),
+    c("https://broccolito.github.io/gptr/", "https://github.com/Broccolito/gptr")
+  )
   expect_identical(unname(d[["BugReports"]]), "https://github.com/Broccolito/gptr/issues")
   expect_identical(unname(d[["Language"]]), "en-US")
   expect_identical(unname(d[["Encoding"]]), "UTF-8")
