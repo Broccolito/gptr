@@ -1,12 +1,28 @@
-## Current validation — 2026-10-12 (through `756c2b1`)
+## Runtime/child-process checkpoint through `b562910` — 2026-10-12
 
-Continue in `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`. Eight production R files differ from historical `02ceac9`:
-plot capture, browser ownership, extension API methods, directory plugin wrappers and writer
-metadata encoding and three asynchronous-compaction files. The other112 R files and all14
-source/rendered guide pairs retain those
-bytes. Historical archive/install/consumer certificates do not accept these current changes.
-Preserve the dirty primary, original R sessions and shared Ollama.
+Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`; HEAD `b562910`, origin `0756f64`.
+Full coverage and pending gates: [TESTING_PLAN.md](../TESTING_PLAN.md).
+
+- Browser 15/258 and metadata 15/88 pass serially; three lints 0 and scoped state/source/cleanup pass.
+  Native n3080 closes 1000/dead/cache-clear/all eight states, but one socket logger warning and
+  15 Chrome markers fail quiet acceptance. Chrome debug-key presence is unobservable.
+- Compaction/worker 26/231 passes locally at 233,096 bytes. Hosted 7928 worker passes at 232,655
+  bytes with unchanged spec; full connections job fails only its old URL fixture.
+- Ordinary 52/682 and registry 69/3,587 pass locally; strict held requires 79. Native Windows
+  ordinary/declared-link/held replay retains ACL/token identity and original 5/30/60 s caps.
+- Two Windows-oriented fixtures pass Mac amended/complete 59/627, state and lint; retained
+  baseline is 59/589P/4F/1E. Test-only 0756 is pushed; fresh 13-check CI/Windows are in progress.
+- g3070 generation passes 57 release assertions, all eight states, seven lints and raw warnings 0;
+  26 generated targets are adopted at b562910. Render/publication and normal consumers remain.
+- LC_ALL=C byte-writer amendment fails 2F/1E/1W; causal normalization matrix passes without an
+  adopted production fix. Certified 2450 cold inspection fails only options/env preservation;
+  changed names are callr.condition_handler_cli_message/TZDIR, not a restoration waiver.
+
+Preserve original/native R sessions, R.app, VS Code and shared model; three approved extra exits
+have exact receipts. One 2 GiB/512 MiB family at a time. Refresh artifact/CRAN/live/merged gates,
+update the plan and run four cross-plan checks. Original RStudio MallocStackLogging stays open.
+
+Earlier evidence below remains historical; it does not override these current gates.
 
 - DONE/current plot capture (`10ba94d`): record existing display lists before enabling
   recording. Tests-first58 cases/328P/4F becomes58/332P/0F/E/W/S; eight caller-state flags
@@ -68,12 +84,43 @@ Preserve the dirty primary, original R sessions and shared Ollama.
   Mac/Linux jobs share six invalid-state errors closing the headless browser's WebSocket;
   connections adds worker spec4,758,068B exceeding the unchanged4MB limit. No warnings in
   inspected suite summaries. Oldrel4 installed9.7Mb and owned temporary-directory notes remain
-  OPEN. Windows outcomes pending. No historical run or local scoped pass overrides these.
+  OPEN. Both Windows jobs later fail with one assertion, one browser error and two dangling-file
+  metadata warnings; current ordinary-cleanup and metadata diagnosis remain OPEN. No historical
+  run or local scoped pass overrides these.
 - DONE/private site renderer: Pandoc3.10 path/bytes/SHA admitted in2.339s/91.859375MiB;
   same-public259-input/all14-guide render74.965s/869.203125MiB/23,263,677B, zero R warnings
   and zero raw native warning/error lines, zero sampling errors and owned cleanup TRUE.
-  Prior229 deprecations retained. Public build helper/CI compatibility, refreshed eight-file
-  source render and browser appearance remain WAITING; this is a source preview only.
+  Prior229 deprecations retained. Public build helper/CI compatibility and refreshed changed-source
+  reference render remain WAITING; scoped configuration/index appearance passes below; this is a source preview only.
+- DONE/current registry callbacks (`95fcb28`): remove source metadata only from the package-created
+  unregister literal; keep the original closure environment, registry identity and user functions.
+  Tests-first31/203P/2F becomes31/205P/0F/E/W/S; affected150/1012P/0F/E/W with the named Windows
+  parent-death guard only. All eight caller flags TRUE, two lints0; affected35.262s/1063.328125MiB,
+  zero sampling errors and owned cleanup TRUE. Local full retained-source4MB proof now passes; current CI stays OPEN.
+- HISTORICAL/held cleanup reruns: Windows38316032571 at784522f fails six offline empty-directory
+  controls before native/security execution. Canonical-path successor v4 reproduces12/199P/7F/1E
+  then reaches209P/3F,0E/W/S/all eight TRUE; three failures expose an outdated synthetic path seam.
+  Source-reviewed v5 corrects only that seam and checks all thirteen postconditions/nineteen labels;
+  actual v5 and exact75 native reruns remain WAITING. The sandbox-sampling attempt is invalid evidence.
+- HISTORICAL/native browser diagnostic: retained Chrome process dies while its socket is still open;
+  one public child-loop pump settles the close callback, then unchanged cleanup releases ownership.
+  Actual3.363s/1465.46875MiB has abnormal close1006/native EOF and changes seed/objects despite
+  zero R warnings. Native Chrome stderr also contains allocator/display diagnostics. Graceful-close
+  and scoped RNG preservation are independently source-reviewed; actual quiet/state acceptance OPEN.
+- HISTORICAL/history export: immutable initial draft refuses ambiguous/missing/secret records and keeps
+  raw recorded R versus inert Peter comments distinct. Actual nine-case baseline4P/9E and amended5P/9E
+  expose missing fixture byte helpers and wrong doc_file_arg format arguments; zero W/S and all eight
+  caller flags TRUE do not make those runs passes. Corrected per-operand notes, parse/raw numeric+plot
+  replay, affected checks, lint, roxygen sync and public examples remain under implementation.
+- DONE/scoped documentation appearance: actual Chrome200% zoom and320px effective width stay within
+  the page; mobile navigation opens and keyboard-scrollable tables contain their own overflow.
+  Light/dark logo switching persists and light restores white. Configuration/index HTML and assets
+  match the warning-free private render; the served Peter reference is older HTML with identical CSS.
+  This does not certify fresh changed-source references or generated Shiny/native-console layout.
+- SOURCE PREPARED/generated Shiny: real Azure create/revise fixture uses locked iris data, independent
+  reactive/plot oracles, revision immutability, authenticated HTTP/browser checks,320/768/1440px
+  screenshots, actual200% zoom, distinct owned processes and exact shutdown. Execution waits for
+  browser acceptance and a fresh current archive/library certificate; no generated app pass is claimed.
 - DONE/main protection: active ruleset24955100 requires PRs, all13 automatic package checks,
   an up-to-date base and resolved threads. No bypass actors; force pushes/deletion blocked;
   zero required approvals, feature branch and existing merge methods unchanged.
@@ -89,8 +136,8 @@ Preserve the dirty primary, original R sessions and shared Ollama.
 - DONE/GitHub: legacy issues1/2 closed as completed; fresh inventory has zero open issues.
   PR6 remains the only open draft PR. Current narrow corrections have independent source review.
 - WAITING: current full CI4MB/C/Windows/security acceptance, five archive consumers and
-  Depends/Suggests profiles; oldrel4 size/teardown; quiet native Chrome; responsive white site,
-  light/dark logos and keyboard/zoom; native R/RStudio/VS Code/documents and resize/completion;
+  Depends/Suggests profiles; oldrel4 size/teardown; quiet native Chrome and fresh references; generated Shiny appearance;
+  native R/RStudio/VS Code/documents and resize/completion;
   current Claude CLI/Codex CLI/Jev/Azure and exact Ollama workflows; in-memory ML/simulation/
   synthetic RNA, steering/abort/inline!, real parallel teams, .gptr layout/replay/compaction.
   Verify the owned fresh RStudio project before any commands; preserve original port27070.
@@ -99,9 +146,10 @@ Four serial cross-plan stages pass at `plan-current-a037-20261012`:39 source fil
 770 R blocks with zero parse/style problems and zero lints;136.046s/1632.015625MiB sampled
 family/33,913,476B output/0 sampling errors and owned cleanup TRUE.
 
-Evidence is in ignored primary `dev/.validation/readiness-20261011/`. At15:10 PDT: load
-9.94/13.38/16.11, CPU49.69% idle,126G used/1081MiB unused, swap19,436.38MiB with zero
-sampled paging, disk475GiB and no thermal/performance warning. Do not increase concurrency.
+Evidence is in ignored primary `dev/.validation/readiness-20261011/`. At17:00 PDT: load
+17.29/14.05/15.73, CPU48.6% idle,109G used/18G unused, swap19,316.38MiB with zero
+sampled paging, disk440GiB and no thermal/performance warning. One bounded serial family
+is admitted; remote source lanes continue without increasing concurrency or shared-model changes.
 User authorizes one serial private family capped at2GiB sampled RSS/512MiB output; heavy/GPU
 work stays held. Sampled RSS is not a true instantaneous peak. Update the plan after actual
 outcomes and rerun all four cross-plan checks after plan edits. Finish all applicable Mac,
