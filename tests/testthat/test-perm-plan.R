@@ -241,17 +241,30 @@ test_that("a peter() call inside a loop body does not receive the plan (IC-56)",
   run_env$gw = structure(function() plan_pending_get(addr),
                          class = c("gptr_gateway", "function"))
   script = file.path(root, "script.R")
-  for (src in c("for (i in 1:2) got = gw()", "while (TRUE) {\n  got = gw()\n  break\n}")) {
-    plan_capture(plan_session(home), paste("1.", src), plan_ctx(plan_session(home)))
-    writeLines(src, script)
-    source(script, local = run_env, keep.source = TRUE)
-    expect_null(run_env$got)
-    expect_false(exists(addr, envir = plan_store(), inherits = FALSE))
+  for (keep in c(FALSE, TRUE)) {
+    withr::local_options(keep.parse.data = keep)
+    for (src in c("for (i in 1L) got = gw()",
+                  "while (TRUE) {\n  got = gw()\n  break\n}",
+                  "repeat {\n  got = gw()\n  break\n}")) {
+      plan_capture(plan_session(home), paste("1.", src), plan_ctx(plan_session(home)))
+      writeLines(src, script)
+      source(script, local = run_env, keep.source = TRUE)
+      after = getOption("keep.parse.data")
+      expect(identical(after, keep), "Loop detection must preserve the parse-data option.")
+      expect(is.null(run_env$got), "The first gateway call in a loop must discard the plan.")
+      expect_false(exists(addr, envir = plan_store(), inherits = FALSE))
+    }
+    # A function defined in a loop is called later, outside that loop: FUNCTION is a boundary.
+    for (src in c("got = gw()", "for (i in 1L) f = function() gw()\ngot = f()")) {
+      plan_capture(plan_session(home), "1. top", plan_ctx(plan_session(home)))
+      writeLines(src, script)
+      source(script, local = run_env, keep.source = TRUE)
+      after = getOption("keep.parse.data")
+      expect(identical(after, keep), "Top-level handoff must preserve the parse-data option.")
+      expect(identical(as.character(run_env$got), "1. top"),
+             "A gateway call outside the loop must receive the pending plan.")
+    }
   }
-  plan_capture(plan_session(home), "1. top", plan_ctx(plan_session(home)))
-  writeLines("got = gw()", script)
-  source(script, local = run_env, keep.source = TRUE)
-  expect_identical(as.character(run_env$got), "1. top")
 })
 
 test_that("the execute menu follows the plan run: mode, tools, a queued go-ahead (6.8.5)", {
