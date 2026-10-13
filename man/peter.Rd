@@ -143,10 +143,11 @@ in \code{envir}. Give a function a dedicated environment when those objects shou
 
 \examples{
 fake = gptr_fake_provider(list("The data has 32 rows.", "The data has 11 columns."))
-s = peter("How many rows does the data have?", mtcars, model = fake, envir = new.env())
-s$text
-s |> peter("And how many columns?")
-identical(gptr_last(), s)
+session = peter("How many rows does the data have?", mtcars,
+  model = fake, envir = new.env())
+session$text
+session |> peter("And how many columns?")
+identical(gptr_last(), session)
 }
 \seealso{
 \link{gptr_security}, \link{gptr_egress} and \link{gptr_options};

@@ -24,8 +24,6 @@ html[data-bs-theme] .gptr-vignette-brand { display: none; }
 <!-- gptr-vignette-brand:end -->
 
 
-
-
 A skill teaches a workflow; a prompt template turns a repeated request into a slash command;
 an agent definition describes a specialist. A plugin distributes these resources and can add R
 tools or MCP servers. Start with Markdown when instructions are enough. Use the
@@ -50,7 +48,7 @@ is loaded on demand. Preload a known skill with `skills = "name"`:
 
 
 ``` r
-peter("Review the normalization steps", skills = "analysis-review", model = "provider/model")
+peter("Review the normalization steps.", skills = "analysis-review")
 peter$read("skill:analysis-review/SKILL.md")
 peter$read("skill:analysis-review/references/checklist.md")
 ```
@@ -60,7 +58,8 @@ separate files and tell the skill when to read them. A skill supplies instructio
 snapshot; objects named in its text must still be available to the tools that use them. See
 [Execution model](execution-model.html) for the R environment and provider context,
 [Language models](language-models.html)
-for selecting a provider, and [Tools and artifacts](tools-and-artifacts.html) for reading files.
+for choosing the model used by these calls, and [Tools and artifacts](tools-and-artifacts.html)
+for reading files.
 
 ## Write a skill
 
@@ -146,7 +145,7 @@ Load a definition by name or file; pass it to `agents =` to make the specialist 
 ``` r
 reviewer = gptr_agent("reviewer")
 reviewer = gptr_agent(file = ".gptr/agents/reviewer.md")
-peter("Have the reviewer check this analysis", agents = list(reviewer))
+peter("Have the reviewer check this analysis.", agents = list(reviewer))
 ```
 
 Definitions can also set `skills`, `backend`, permission `mode` and a structured `returns`
@@ -196,10 +195,14 @@ The factory registers the promised records:
 ``` r
 gptr_plugin = function(gptr) {
   gptr$require(">= 1.0, < 2")
-  schema = list(type = "object", required = I(c("a", "b")),
-                properties = list(a = list(type = "number"), b = list(type = "number")))
-  gptr$register(gptr::gptr_tool("add", "Add two numbers", parameters = schema,
-                               fun = function(a, b) a + b, exposure = "r", namespace = "gptrlab"))
+  schema = list(
+    type = "object", required = I(c("a", "b")),
+    properties = list(a = list(type = "number"), b = list(type = "number"))
+  )
+  gptr$register(gptr::gptr_tool(
+    "add", "Add two numbers", parameters = schema,
+    fun = function(a, b) a + b, exposure = "r", namespace = "gptrlab"
+  ))
 }
 ```
 
@@ -209,8 +212,8 @@ Enable an installed plugin, or an existing directory, for a call:
 
 
 ``` r
-peter("Review the analysis", plugins = "gptrlab")
-peter("Review the analysis", plugins = "./lab-plugin")
+peter("Review the analysis.", plugins = "gptrlab")
+peter("Review the analysis.", plugins = "./lab-plugin")
 gptr_config(plugins = "gptrlab", .scope = "user")
 gptr_check("gptrlab", error = TRUE)
 ```
@@ -240,7 +243,7 @@ registration and produce a diagnostic. Built-in permission safeguards remain act
 `gptr_registry(diagnostics = TRUE)` when a resource is missing or shadowed; `gptr_reload()`
 rereads changed resources for later use.
 
-The smallest executable extension can be tried offline without creating a plugin:
+To add instructions for one call, pass a small extension:
 
 
 ``` r
@@ -248,9 +251,18 @@ library(gptr)
 units = function(gptr) {
   gptr$register(gptr_prompt_section("example_units", "Report quantities with units."))
 }
-fake = gptr_fake_provider(list("The distance is 3 m."))
-s = peter("Report the distance", extensions = units, model = fake, envir = new.env())
-s$text
+```
+
+
+``` r
+session = peter("Report a distance of 3 metres.", extensions = units)
+session
+```
+
+The output below uses a fixed offline reply:
+
+
+```
 #> [1] "The distance is 3 m."
 ```
 

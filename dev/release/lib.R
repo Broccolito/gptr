@@ -440,6 +440,29 @@ rel_code_lines = function(blocks) {
   x[nzchar(x)]
 }
 
+# Normalize rendered padding without removing blank lines inside Markdown code fences.
+md_normalize = function(lines) {
+  lines = sub("[ \t]+$", "", lines)
+  keep = rep(TRUE, length(lines))
+  fence = ""
+  blanks = 0L
+  for (i in seq_along(lines)) {
+    if (!nzchar(fence)) {
+      mark = regmatches(lines[[i]], regexpr("^ {0,3}(`{3,}|~{3,})", lines[[i]]))
+      if (length(mark)) fence = sub("^ +", "", mark)
+    } else if (grepl(paste0("^ {0,3}", substr(fence, 1L, 1L), "{", nchar(fence),
+                           ",}[ \t]*$"), lines[[i]])) {
+      fence = ""
+    }
+    if (nzchar(fence)) next
+    blanks = if (nzchar(lines[[i]])) 0L else blanks + 1L
+    keep[[i]] = blanks <= 2L
+  }
+  lines = lines[keep]
+  if (nzchar(fence)) return(lines)
+  lines[seq_len(max(c(0L, which(nzchar(lines)))))]
+}
+
 # A knitted file is stale when its code differs from the code of its source.
 stale_problems = function(source_lines, knitted_lines, where) {
   same = identical(rel_code_lines(rmd_chunks(source_lines)),
@@ -527,7 +550,7 @@ vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, rea
     if (!length(result)) {
       out = file.path(out_dir, paste0(nm, ".Rmd"))
       lines = readLines(out, encoding = "UTF-8", warn = FALSE)
-      writeLines(vig_brand_insert(lines, brand), out, useBytes = TRUE)
+      writeLines(md_normalize(vig_brand_insert(lines, brand)), out, useBytes = TRUE)
     }
   }
   seconds = proc.time()[["elapsed"]] - t0
@@ -549,7 +572,13 @@ vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, rea
     # -smart: pandoc would turn ASCII quotes into curly ones, and README.md must stay ASCII.
     render = paste("rmarkdown::render('README.Rmd', quiet = TRUE, output_format =",
                    "rmarkdown::github_document(html_preview = FALSE, md_extensions = '-smart'))")
-    problems = c(problems, run(render, readme_root, "README.Rmd: rendering failed:"))
+    result = run(render, readme_root, "README.Rmd: rendering failed:")
+    problems = c(problems, result)
+    if (!length(result)) {
+      out = file.path(readme_root, "README.md")
+      lines = readLines(out, encoding = "UTF-8", warn = FALSE)
+      writeLines(md_normalize(lines), out, useBytes = TRUE)
+    }
   }
   left = setdiff(rel_files(dirs[c("home", "tmp", "proj")]), before)
   if (length(left)) {

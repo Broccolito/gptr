@@ -24,36 +24,20 @@ html[data-bs-theme] .gptr-vignette-brand { display: none; }
 <!-- gptr-vignette-brand:end -->
 
 
-
-
 Generative models (System 2) produce text and code. Typed decision models (System 1) answer
 with a logical value, a choice, or a numeric score, together with their probabilities. gptr
 returns R vectors that can be used in comparisons, filters and control flow. A batch returns
 one answer per input.
 
-Every executed example below uses a fake classifier, with synthetic probabilities chosen for
-the demonstration. These outputs are not evidence of a model's accuracy or calibration.
+The executed examples use `judge`, a fake classifier with synthetic probabilities. Its setup
+is hidden to keep the examples short. The outputs show the interface, not model accuracy or
+calibration.
 
 
 ``` r
 library(gptr)
-
-judge = gptr_fake_provider(function(state, question) {
-  txt = paste(unlist(state), collapse = " ")
-  if (identical(question$type, "choice")) {
-    if (grepl("lobe", txt)) return(c(liver = 0.03, lung = 0.91, brain = 0.03, other = 0.03))
-    if (grepl("Hepatocyte", txt)) return(c(liver = 0.88, lung = 0.04, brain = 0.03, other = 0.05))
-    return(c(liver = 0.05, lung = 0.05, brain = 0.80, other = 0.10))
-  }
-  if (identical(question$type, "score")) {
-    if (grepl("Anaphylaxis", txt)) return(c(0.02, 0.08, 0.90))
-    return(c(0.85, 0.10, 0.05))
-  }
-  if (grepl("randomized|succeeded|mixed model", txt)) return(0.94)
-  if (grepl("pilot", txt)) return(0.55)
-  0.07
-}, name = "judge", type = "classifier")
 ```
+
 
 ## Logical decisions and probabilities
 
@@ -64,8 +48,9 @@ abstracts = c(
   cohort = "We followed 5000 nurses for 20 years and recorded incident diabetes.",
   pilot = "A pilot study of 30 patients; the allocation method is not reported."
 )
-is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts,
-               model = judge, envir = new.env())
+is_rct = peter("Is this a randomized trial?", abstracts, model = judge,
+               envir = new.env())
+
 is_rct
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
@@ -99,14 +84,14 @@ studies = data.frame(
   sample_size = c(200L, 5000L, 30L),
   row.names = names(abstracts)
 )
-peter("Does this study report randomized allocation?", studies, model = judge,
-      envir = new.env())
+peter("Was allocation randomized?", studies, model = judge, envir = new.env())
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
 #> judge-s1-1.0 . calibration unknown . 2026-10-12
 
 record = list(abstract = abstracts[["trial"]], sample_size = 200L,
               allocation = "randomized")
+
 length(peter("Was allocation randomized?", record, model = judge, envir = new.env()))
 #> [1] 1
 ```
@@ -126,8 +111,9 @@ confidence is also uncertain when the minimum is positive. For yes/no decisions,
 
 
 ``` r
-screened = peter("Is this abstract about a randomized controlled trial?", abstracts,
-                 model = judge, min_confidence = 0.8, envir = new.env())
+screened = peter("Is this a randomized trial?", abstracts, model = judge,
+                 min_confidence = 0.8, envir = new.env())
+
 screened
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)    NA (p=0.55)
@@ -145,9 +131,10 @@ choice, not a negative model answer.
 
 ``` r
 is_trial = function(text) {
-  peter("Is this abstract about a randomized controlled trial?", text = force(text),
+  peter("Is this a randomized trial?", text = force(text),
         model = judge, min_confidence = 0.8, envir = new.env())
 }
+
 included = character()
 review = character()
 for (id in names(abstracts)) {
@@ -155,6 +142,7 @@ for (id in names(abstracts)) {
   if (isTRUE(decision)) included = c(included, id)
   if (is.na(decision)) review = c(review, id)
 }
+
 list(included = included, review = review)
 #> $included
 #> [1] "trial"
@@ -181,8 +169,9 @@ escalation, with its own egress, permissions and usage.
 samples = c(s1 = "Biopsy of the right lower lobe",
             s2 = "Hepatocytes from a resected liver segment",
             s3 = "Cortex from an epilepsy resection")
-tissue = peter("Which tissue does this description refer to?", samples, model = judge,
+tissue = peter("Which tissue is this?", samples, model = judge,
                choices = c("liver", "lung", "brain", "other"), envir = new.env())
+
 tissue
 #>             s1             s2             s3
 #>  lung (p=0.91) liver (p=0.88) brain (p=0.80)
@@ -196,9 +185,10 @@ gptr_prob(tissue, "probabilities")
 #> s2  0.88 0.04  0.03  0.05
 #> s3  0.05 0.05  0.80  0.10
 
-severity = peter("How severe is this adverse event?",
+severity = peter("Rate this event's severity.",
                  c(a = "Mild headache", b = "Anaphylaxis requiring adrenaline"),
                  model = judge, levels = c("mild", "moderate", "severe"), envir = new.env())
+
 severity
 #>                a                b
 #> 0.20 (conf 0.85) 1.88 (conf 0.90)
@@ -255,25 +245,23 @@ identity cannot promise durable reuse. Use `gptr_cache()` to inspect the cache.
 
 
 ``` r
-strong = gptr_fake_provider(list("A careful answer from the strong model."), name = "strong")
-fast = gptr_fake_provider(list("A quick answer from the fast model."), name = "fast")
 tasks = c("Rename a column.", "Choose a mixed model for repeated measurements.")
 for (task in tasks) {
   hard = peter("Does this task need the stronger model?", task, model = judge,
                 envir = new.env())
-  answer = peter(task, model = if (isTRUE(hard)) strong else fast, envir = new.env())
-  print(answer$text)
+  session = peter(task, model = if (isTRUE(hard)) strong else fast, envir = new.env())
+  print(session$text)
 }
 #> [1] "A quick answer from the fast model."
 #> [1] "A careful answer from the strong model."
 
-analysis = peter("Summarize mtcars in one sentence.",
-                 model = gptr_fake_provider(list("The summary succeeded: 32 cars, 11 variables.")),
-                 envir = new.env())
-analysis |> peter("Did the analysis succeed?", model = judge)
+session = peter("Summarize mtcars in one sentence.", model = summary_model,
+                envir = new.env())
+
+session |> peter("Did the analysis succeed?", model = judge)
 #> [1] TRUE (p=0.94)
 #> judge-s1-1.0 . calibration unknown . 2026-10-12
-analysis$turns
+session$turns
 #> [1] 1
 ```
 

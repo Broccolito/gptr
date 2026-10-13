@@ -24,8 +24,6 @@ html[data-bs-theme] .gptr-vignette-brand { display: none; }
 <!-- gptr-vignette-brand:end -->
 
 
-
-
 The model usually works through the `r` tool and calls helpers inside that R code. You can call
 the same helpers from the R console. A model call passes permission checks; a helper you call
 yourself executes directly. [Configuration](configuration.html) explains modes and permissions.
@@ -38,18 +36,21 @@ the model's `r` input.
 
 ## Inspect objects, files and output
 
-This example is offline: the fake provider requests one read-only object summary and then emits
-a fixed response. It demonstrates helper execution, without testing a language model's reasoning.
+Start with a request in ordinary language. Choose a model as described in
+[Language models](language-models.html), then use the objects in your R session:
 
 
 ``` r
 library(gptr)
-fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "peter$describe(head(mtcars), budget = 60L)")),
-  "The preview contains six rows of mtcars."
-))
-s = peter("Describe the first six rows", model = fake, envir = new.env(), mode = auto)
-s$text
+session = peter("Describe the first six rows of mtcars.")
+session
+```
+
+The output below is scripted for an offline build. It calls
+`peter$describe(head(mtcars), budget = 60L)` without contacting a real model.
+
+
+```
 #> [1] "The preview contains six rows of mtcars."
 ```
 
@@ -198,9 +199,25 @@ installed runtime. All model calls still pass permission checks.
 
 ## Build a versioned artifact
 
-`peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE,
-launch = interactive())` turns an artifact's working files into an immutable version.
-The built-in kinds are `"shiny"` and `"html"`; plugins can register other artifact types.
+With a data frame called `survey` in your session, ask Peter to build a view:
+
+
+``` r
+peter("Create a Shiny app showing survey as a table.")
+```
+
+To version working files yourself, use:
+
+
+``` r
+peter$app(
+  id, data = character(), title = NULL, kind = "shiny",
+  check = TRUE, launch = interactive()
+)
+```
+
+Each call creates an immutable version. The built-in kinds are `"shiny"` and `"html"`;
+plugins can register other artifact types.
 
 For Shiny, write `.gptr/artifacts/<id>/app.R` with a final `shinyApp(ui, server)` expression.
 Do not call `runApp()`, change the working directory or install packages inside the app. This
@@ -220,9 +237,9 @@ writeLines(c(
   "}",
   "shinyApp(ui, server)"
 ), file.path(dir, "app.R"))
-h = peter$app("survey-view", data = "survey", title = "Survey", launch = FALSE)
-h$version
-h$checks
+artifact = peter$app("survey-view", data = "survey", title = "Survey", launch = FALSE)
+artifact$version
+artifact$checks
 gptr_artifacts("survey-view", open = TRUE)
 ```
 

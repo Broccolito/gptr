@@ -50,14 +50,16 @@ reference](https://broccolito.github.io/gptr/) online.
 
 ## Installation
 
-These guides describe the 1.0 development preview on
-`codex/skipped-platform-tests`, including APIs not yet on `main`.
-Install this branch from GitHub with R 4.2 or later:
+Install gptr from GitHub's `main` branch with R 4.2 or later:
 
 ``` r
 install.packages("pak")  # if pak is not installed
-pak::pak("Broccolito/gptr@codex/skipped-platform-tests")
+pak::pak("Broccolito/gptr@main")
 ```
+
+These guides describe the 1.0 development preview. Some APIs, including
+`gptr_export()`, are still awaiting merge to `main`. CRAN submission is
+being prepared.
 
 `install.packages("gptr")` installs the CRAN version, which may still
 expose the older 0.7 API. Check `packageVersion("gptr")` before
@@ -74,9 +76,25 @@ subscription billing; an API-key login can also appear signed in. See
 
 ## A first session
 
-The example below uses `gptr_fake_provider()`, a scripted model that
-ships with the package, so it runs without a key. With a real model only
-the `model` argument changes.
+With a configured model, tell Peter what to do:
+
+``` r
+library(gptr)
+session = peter("Fit mpg from wt in mtcars. Save the model as fit.", mtcars)
+session |> peter("Plot fit's residuals and explain what they show.")
+```
+
+The pipe continues the same session. The usual permission checks apply.
+
+<details>
+
+<summary>
+
+Run this pattern offline
+</summary>
+
+This scripted model needs no key or server. It supplies the tool code
+rather than generating it.
 
 ``` r
 library(gptr)
@@ -89,33 +107,41 @@ fake = gptr_fake_provider(list(
 ))
 work = new.env()
 work$cars = mtcars
-s = peter("How does fuel economy depend on weight?", cars = work$cars,
-          model = fake, envir = work, mode = auto)
-s$text
+session = peter(
+  "How does fuel economy depend on weight?",
+  cars = work$cars, model = fake, envir = work, mode = auto
+)
+session$text
 #> [1] "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon."
 ls(work)
 #> [1] "cars" "fit"
 
-s |> peter("Reuse fit to predict mpg for the same cars.")
+session |> peter("Reuse fit to predict mpg for the same cars.")
 #> The predictions are stored in predicted.
-#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . sf2b26d438c
+#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . s717997f285
 head(work$predicted)
-#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive 
-#>          23.28261          21.91977          24.88595          20.10265 
-#> Hornet Sportabout           Valiant 
+#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
+#>          23.28261          21.91977          24.88595          20.10265
+#> Hornet Sportabout           Valiant
 #>          18.90014          18.79325
-s$turns
+session$turns
 #> [1] 2
 ```
 
-The second turn uses the existing `fit` and `cars`. The same pattern
-works with a large object already in your workspace; this illustrative
-recipe does not allocate or load a 4 GB dataset:
+The second turn reuses `fit` and `cars`.
+
+</details>
+
+The same pattern works with a large object already in your workspace.
+This recipe does not allocate or load a 4 GB dataset:
 
 ``` r
 # counts is a numeric matrix, around 4 GB, already loaded in this R session.
-s = peter("Compute colSums(counts) as totals and return the six largest totals.", counts)
-s |> peter("Reuse totals to plot their distribution.")
+session = peter(
+  "Compute colSums(counts) as totals and return the six largest totals.",
+  counts
+)
+session |> peter("Reuse totals to plot their distribution.")
 ```
 
 These calls use your configured model and the usual permission checks.
@@ -129,21 +155,33 @@ does not automatically save the input dataset.
 A System 1 question returns a typed R vector with the probabilities
 attached:
 
+<details>
+
+<summary>
+
+Offline typed-decision example
+</summary>
+
 ``` r
 judge = gptr_fake_provider(function(state, question) {
   if (grepl("randomized", paste(unlist(state), collapse = " "))) 0.93 else 0.08
 }, name = "judge", type = "classifier")
 abstracts = c(a = "We randomized 200 adults to drug or placebo.",
               b = "We followed a cohort of nurses for 20 years.")
-is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge)
+is_rct = peter(
+  "Is this abstract about a randomized controlled trial?",
+  abstracts, model = judge
+)
 is_rct
-#>              a              b 
-#>  TRUE (p=0.93) FALSE (p=0.08) 
+#>              a              b
+#>  TRUE (p=0.93) FALSE (p=0.08)
 #> judge-s1-1.0 . calibration unknown . 2026-10-12
 gptr_prob(is_rct)
-#>    a    b 
+#>    a    b
 #> 0.93 0.08
 ```
+
+</details>
 
 ## With a real model
 
@@ -157,8 +195,11 @@ gptr_providers()                 # what is configured
 gptr_config(model = "openai/gpt-6-sol", .scope = "session")
 peter()                          # chat in the console
 
-res = peter("Fit a mixed model of weight on diet with a random intercept per mouse.", mice)
-res$value                        # the object the agent designated as its result
+session = peter(
+  "Fit a mixed model of weight on diet with a random intercept per mouse.",
+  mice
+)
+session$value                    # the object the agent designated as its result
 
 if (peter("Is this abstract about a randomized controlled trial?", abstract, model = jev)) {
   included = c(included, id)

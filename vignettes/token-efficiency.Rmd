@@ -24,12 +24,11 @@ html[data-bs-theme] .gptr-vignette-brand { display: none; }
 <!-- gptr-vignette-brand:end -->
 
 
-
-
 Keep data and computation in R, and send models enough context to choose useful actions.
-An object around 4 GB can remain in the same R session across turns: the model sees a compact
-description while its R tool computes on the object. No repeated export and reload cycle is
-required; R copies, calculation time and model-request latency still depend on the workflow.
+For inline work, an object around 4 GB can remain in the same R session across turns. The model
+sees a compact description while its R tool computes on the object. No repeated export and
+reload cycle is required; R copies, computation time and request latency still depend on the
+workflow. Workers receive serialized context rather than sharing the parent workspace.
 Four practices help:
 
 - Refer to live objects with a compact description rather than printing large tables into a
@@ -58,7 +57,7 @@ view$sections
 #> 4    modes   T0     84
 #> 5  context   T0    152
 view$total_tokens
-#> [1] 1806
+#> [1] 1813
 ```
 
 `gptr_prompt()` inspects the system sections and tool definitions with estimated token counts;
@@ -96,17 +95,10 @@ and size rules differ. See the system-one vignette.
 ``` r
 work = new.env()
 work$mtcars = mtcars
-code = paste(
-  "fits = lapply(split(mtcars, mtcars$cyl), function(d) stats::lm(mpg ~ wt, data = d))",
-  "slopes = sapply(fits, function(f) stats::coef(f)[[2]])",
-  "slopes", sep = "\n"
-)
-fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = code)),
-  "The fitted weight slopes are stored in slopes."
-))
-s = peter("Fit mpg on weight by cylinder count and compare the slopes.", mtcars,
-          model = fake, envir = work, mode = auto)
+
+session = peter("Compare mpg and weight by cylinder count.", mtcars,
+                model = fake, envir = work, mode = auto)
+
 work$slopes
 #>         4         6         8
 #> -5.647025 -2.780106 -2.192438
@@ -120,25 +112,26 @@ full spilled text can be read through `peter$out(id)` when an output ID was supp
 
 
 ``` r
-gptr_usage(s, by = "model")
+gptr_usage(session, by = "model")
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 fake/fake-1  2         3276   48      0           0            0
+#> 1 fake/fake-1  2         3262   48      0           0            0
 #>
 #> # 1 row
 #> 2 requests, 3.3k tokens in, $0.0000
-ledger = gptr_usage(s, detail = TRUE)
+
+ledger = gptr_usage(session, detail = TRUE)
 aggregate(tokens ~ component, data = ledger, FUN = sum)
 #>       component tokens
 #> 1      attached    130
-#> 2   environment    140
+#> 2   environment    154
 #> 3        images      0
 #> 4         other    162
 #> 5       project      0
 #> 6            t0   2604
-#> 7            t1    620
+#> 7            t1    614
 #> 8  tool_results     53
 #> 9         tools   1942
-#> 10   transcript     78
+#> 10   transcript     70
 #> 11    workspace     76
 ```
 
@@ -156,14 +149,13 @@ hardware cost or latency.
 
 
 ``` r
-small = gptr_fake_provider(list("Done."))
-res = tryCatch(
+budget_error = tryCatch(
   peter("Summarize mpg.", model = small, envir = new.env(), budget = list(tokens = 500)),
   gptr_error_budget = function(e) e
 )
-class(res)[1]
+class(budget_error)[1]
 #> [1] "gptr_error_budget_tokens"
-res$session$status
+budget_error$session$status
 #> [1] "budget"
 ```
 
@@ -175,7 +167,7 @@ settings deliberately when different defaults are needed:
 
 ``` r
 gptr_config(budget = list(tokens = 20000, cost = 1, turns = 10), .scope = "session")
-s = peter("Review this analysis.", budget = list(tokens = 12000, turns = 6))
+session = peter("Review this analysis.", budget = list(tokens = 12000, turns = 6))
 ```
 
 Checks happen before requests using estimated next-input tokens and usage already recorded.
@@ -205,11 +197,11 @@ reuse.
 
 ## Three different caches
 
-| Mechanism | What is reused | What to inspect |
+| Mechanism | What is reused | Inspect |
 |---|---|---|
-| Provider prompt cache | A supported repeated request prefix | `gptr_usage(s)` cache columns |
-| System 1 answer cache | A matching input/question/model decision | Result metadata and `gptr_cache()` |
-| Document replay and System 2 answer cache | Recorded code and the call's saved answer | `gptr_blocks(path)` and `gptr_cache()` |
+| Provider prompt cache | A repeated request prefix | `gptr_usage(session)` |
+| System 1 answer cache | Matching input, question and model | Metadata and `gptr_cache()` |
+| Replay / System 2 cache | Recorded code and saved answer | `gptr_blocks(path)`, `gptr_cache()` |
 
 A stable prefix makes provider cache reuse possible. Providers decide whether a cache hit
 occurs, subject to their support, minimum size, expiry and pricing; gptr does not guarantee a
@@ -222,7 +214,7 @@ its R code. Clearing an answer cache changes what can be reused.
 
 ``` r
 peter("Summarize the model fit.", fit, .opts = list(context = "names"))
-peter("Compute mean(x) in R and return only that number.", .opts = list(context = "none"))
+peter("Find the mean of x. Return one number.", .opts = list(context = "none"))
 peter("Compute the mean.", x, .opts = list(preset = "minimal"))
 ```
 

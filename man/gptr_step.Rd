@@ -26,8 +26,8 @@ running session is advanced the same way.
 remain available outside the function that creates the session.
 }
 \examples{
-s = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
-         envir = new.env())
-gptr_step(s)
-s$turns
+session = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")),
+  .run = FALSE, envir = new.env())
+gptr_step(session)
+session$turns
 }

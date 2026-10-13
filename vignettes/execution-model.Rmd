@@ -24,8 +24,6 @@ html[data-bs-theme] .gptr-vignette-brand { display: none; }
 <!-- gptr-vignette-brand:end -->
 
 
-
-
 Peter combines a model with your current R workspace. A language model requests tools and
 returns a session; a decision model returns a typed vector. The same `peter()` gateway handles
 both. An inline agent can compute on a multi-GB object already loaded in R, keep intermediate
@@ -41,29 +39,37 @@ what the model receives, and where memory or file transfers still occur.
 5. Tool results return to the model until it finishes, is interrupted, or reaches a limit.
 6. The session retains the conversation, status, usage and a designated result, if there is one.
 
-This example uses a scripted provider, so it runs offline and always requests the same R code:
+For an ordinary interactive call, start with a prompt and the data:
 
 
 ``` r
 library(gptr)
+
+session = peter("Fit fuel economy against weight.", mtcars)
+session = session |> peter("Plot the fitted relationship.")
+```
+
+The executed example below uses a scripted `fake` provider. It runs offline and requests the
+same R code each time; its setup is hidden. An explicit environment keeps the fitted object.
+
+
+``` r
 work = new.env()
 work$d = mtcars
-fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "fit = lm(mpg ~ wt, data = d)\ngptr_return(fit)")),
-  "The regression is ready."
-))
-s = peter("Fit fuel economy against weight.", d = work$d, model = fake,
-          envir = work, mode = "auto")
-s$text
+
+session = peter("Fit fuel economy against weight.", d = work$d, model = fake,
+                envir = work, mode = "auto")
+
+session$text
 #> [1] "The regression is ready."
-s$status
+session$status
 #> [1] "idle"
-coef(s$value)
+coef(session$value)
 #> (Intercept)          wt
 #>   37.285126   -5.344472
 ```
 
-`gptr_return(fit)` designates `fit` as the result. The final model text is `s$text`; it does
+`gptr_return(fit)` designates `fit` as the result. The final model text is `session$text`; it does
 not automatically become the fitted object. The result also remains available as `work$fit`.
 
 ## Where objects live
@@ -80,7 +86,7 @@ gptr_describe(work$d, budget = 60)
 #> [2] "  mpg:dbl cyl:dbl disp:dbl hp:dbl drat:dbl wt:dbl qsec:dbl vs:dbl am:dbl gear:dbl carb:dbl"
 ls(work)
 #> [1] "d"   "fit"
-identical(s$value, work$fit)
+identical(session$value, work$fit)
 #> [1] TRUE
 ```
 
@@ -113,7 +119,7 @@ A continued session reuses its kept home environment unless you explicitly suppl
 When the default environment is a function call frame, gptr uses it during the active run and
 does not retain it as the session's home afterward. An explicit working environment can retain
 named results.
-An explicit `gptr_fork(s)` branches the conversation and uses a workspace overlay. Restoring a
+An explicit `gptr_fork(session)` branches the conversation and uses a workspace overlay. Restoring a
 session from disk restores its conversation; it does not restore all of your R objects.
 
 Each model request has provider and transport latency. R evaluation takes the time and memory
@@ -126,61 +132,62 @@ than assuming every object is a fully resident data frame.
 
 
 ``` r
-s$id
-#> [1] "s89ddffef89"
-s$model
+session$id
+#> [1] "s18abe8678d"
+session$model
 #> [1] "fake/fake-1"
-s$turns
+session$turns
 #> [1] 1
-names(s$messages[[1]])
+names(session$messages[[1]])
 #> [1] "role"      "content"   "source"    "timestamp"
-gptr_usage(s)
+gptr_usage(session)
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 s89ddffef89  2         3243   20      0           0            0
+#> 1 s18abe8678d  2         3237   20      0           0            0
 #>
 #> # 1 row
 #> 2 requests, 3.2k tokens in, $0.0000
-identical(gptr_last(), s)
+identical(gptr_last(), session)
 #> [1] TRUE
 ```
 
 | Interface | Use |
 |---|---|
-| `s$text`, `s$value`, `s$status` | Inspect the latest answer, designated R result and state |
-| `s$messages`, `s$history`, `s$usage` | Inspect conversation, the per-message history table and accounting |
-| `s |> peter("next question")` | Add a turn to the same conversation |
+| `session$text`, `session$value`, `session$status` | Inspect the answer, R result and state |
+| `session$messages`, `session$history`, `session$usage` | Inspect conversation, history and usage |
+| `session |> peter("next question")` | Add a turn to the same conversation |
 | `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()` | Drive or control a session |
 | `gptr_sessions()`, `gptr_resume()`, `gptr_last()` | Find stored or live sessions |
 | `gptr_on()` | Attach a session event handler |
 | `gptr_fork()`, `gptr_checkpoints()`, `gptr_rewind()` | Branch or recover supported state |
 
-Printing `s$history` or `summary(s)` shows eight recent messages and session details, without
-a model request. The underlying table keeps every message; unknown token counts stay unknown.
+Printing `session$history` or `summary(session)` shows eight recent messages and session details
+without a model request. The underlying table keeps every message; unknown token counts stay
+unknown.
 
 
 ``` r
-s$history
+session$history
 #>   turn  role         preview                   tools  tokens
 #> 1 1     user         Fit fuel economy agai...         8
-#> 2 1     assistant                              r      1633
+#> 2 1     assistant                              r      1630
 #> 3 1     tool_result  + fit <lm length 12>      r      5
-#> 4 1     assistant    The regression is ready.         1630
+#> 4 1     assistant    The regression is ready.         1627
 #> # 4 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . s89ddffef89
-print(s$history, n = Inf)
+#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . s18abe8678d
+print(session$history, n = Inf)
 #>   turn  role         preview                   tools  tokens
 #> 1 1     user         Fit fuel economy agai...         8
-#> 2 1     assistant                              r      1633
+#> 2 1     assistant                              r      1630
 #> 3 1     tool_result  + fit <lm length 12>      r      5
-#> 4 1     assistant    The regression is ready.         1630
+#> 4 1     assistant    The regression is ready.         1627
 #> # 4 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . s89ddffef89
-as.data.frame(s$history)
+#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . s18abe8678d
+as.data.frame(session$history)
 #>   turn        role                          preview tools tokens
 #> 1    1        user Fit fuel economy against weight.            8
-#> 2    1   assistant                                      r   1633
+#> 2    1   assistant                                      r   1630
 #> 3    1 tool_result             + fit <lm length 12>     r      5
-#> 4    1   assistant         The regression is ready.         1630
+#> 4    1   assistant         The regression is ready.         1627
 ```
 
 Without an initialized project workspace, session files use a temporary directory.

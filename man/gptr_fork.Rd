@@ -27,8 +27,8 @@ at zero cost, and its writes stay in the overlay.
 }
 \examples{
 fake = gptr_fake_provider(list("A", "B"))
-s = peter("first", model = fake, envir = new.env())
-f = gptr_fork(s)
-f |> peter("branch")
-c(s$turns, f$turns)
+session = peter("first", model = fake, envir = new.env())
+branch_session = gptr_fork(session)
+branch_session |> peter("branch")
+c(session$turns, branch_session$turns)
 }

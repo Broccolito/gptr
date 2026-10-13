@@ -82,4 +82,3 @@ SystemRequirements: Optional: Ollama (>= 0.35.1) for native local decision model
     and 'codex' (Codex) for subscription providers, 'quarto' for 'Quarto'
     documents, and a 'Chrome'-family browser for app screenshots.
 Config/roxygen2/version: 8.1.1
-RoxygenNote: 7.3.3

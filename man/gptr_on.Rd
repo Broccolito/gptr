@@ -24,14 +24,15 @@ Registers a session-scoped hook (rank 0) for one cataloged event (such as \code{
 \verb{function(event, ctx)} and returns what the event allows. Forks never copy listeners.
 }
 \examples{
-s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
+session = peter("hi", model = gptr_fake_provider(list("hello")),
+  .run = FALSE, envir = new.env())
 log = new.env()
 log$roles = character()
-off = gptr_on(s, "message_end", function(event, ctx) {
+off = gptr_on(session, "message_end", function(event, ctx) {
   log$roles = c(log$roles, event$message$role)
   NULL
 })
-gptr_step(s)
+gptr_step(session)
 off()
 log$roles
 }

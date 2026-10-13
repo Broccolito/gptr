@@ -43,6 +43,6 @@ Teams and fan-outs count child requests against their shared root budget.
 }
 \examples{
 gptr_usage()
-s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
-gptr_usage(s)
+session = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+gptr_usage(session)
 }
