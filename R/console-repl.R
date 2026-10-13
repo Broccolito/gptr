@@ -799,14 +799,15 @@ on_load(ext_declare_builtin("console", builtin_console))
 
 #' @section The interactive console:
 #' `peter()` without a prompt opens a console when someone can answer (interactive R or
-#' IRkernel); `peter(.stdin = TRUE)` reads its input from standard input, and `s |> peter()`
-#' opens it on `s`. With no explicit or configured model, the interactive console first offers
-#' Codex CLI, Claude Code CLI or API configuration instructions. Choosing an available CLI saves
-#' its default model at user scope; cancelling returns to R. Piped input skips this setup.
+#' IRkernel); `peter(.stdin = TRUE)` reads its input from standard input, and
+#' `session |> peter()` opens it on `session`. With no explicit or configured model, the
+#' interactive console first offers Codex CLI, Claude Code CLI or API configuration
+#' instructions. Choosing an available CLI saves its default model at user scope; cancelling
+#' returns to R. Piped input skips this setup.
 #' Each input is one of:
 #'
-#' * a prompt, sent as `s |> peter("...")` with `{name}` interpolation; `@file` adds the head of a
-#'   file (at most 40 lines) and `@object` attaches an object by name;
+#' * a prompt, sent as `session |> peter("...")` with `{name}` interpolation; `@file` adds
+#'   the head of a file (at most 40 lines) and `@object` attaches an object by name;
 #' * `!code`: R code run in the session's environment; the code and its output go with the next
 #'   prompt (at most 300 estimated tokens). `!!code` omits that note. Both execute your own R
 #'   immediately, without the model's permission gate or a model request. Workspace changes
@@ -823,8 +824,8 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' does not guarantee progress while the chat waits for input. Under Rscript, background runs
 #' advance only inside blocking gptr calls.
 #' Front ends that cannot resume use an abort fallback. `/exit`, two consecutive interrupts at
-#' the prompt or the end of piped input return the session invisibly, so `s = peter()` keeps the
-#' conversation. Use Ctrl-C in a terminal; RStudio, R.app, RGui and Positron use Esc.
+#' the prompt or the end of piped input return the session invisibly, so `session = peter()`
+#' keeps the conversation. Use Ctrl-C in a terminal; RStudio, R.app, RGui and Positron use Esc.
 #'
 #' Options: `gptr.verbose` (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 #' knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`

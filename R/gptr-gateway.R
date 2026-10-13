@@ -43,10 +43,11 @@
 #' gateway; call `gptr::peter()` then.
 #'
 #' @section Sessions and results:
-#' A pipe such as `s |> peter("Explain the result.")` adds work to the same session and kept
-#' workspace. Use [gptr_fork()] to branch explicitly. The final answer is `s$text`; `s$value`
-#' is the R value selected by [gptr_return()] during a tool call. Agent-created objects remain
-#' in `envir`. Give a function a dedicated environment when those objects should stay local.
+#' A pipe such as `session |> peter("Explain the result.")` adds work to the same session
+#' and kept workspace. Use [gptr_fork()] to branch explicitly. The final answer is
+#' `session$text`; `session$value` is the R value selected by [gptr_return()] during a tool
+#' call. Agent-created objects remain in `envir`. Give a function a dedicated environment when
+#' those objects should stay local.
 #'
 #' @usage
 #' peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,

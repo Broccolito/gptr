@@ -481,10 +481,10 @@ as.character.gptr_session = function(x, ...) session_text(x)
 #' Reads a table of recorded turns without a model request. It does not generate a narrative
 #' workflow summary or export an executable script. To request prose, continue the session
 #' with [peter()] and verify the model-generated answer against the recorded work.
-#' Both `summary(s)` and `s$history` retain every recorded message. Printing shows the latest
-#' eight messages and a snapshot of session metadata. Notebook, R Markdown and Quarto displays
-#' use the same compact preview by default. Use `print(x, n = Inf)` to display every row, or
-#' `as.data.frame(x)` for an ordinary data frame without the display metadata.
+#' Both `summary(session)` and `session$history` retain every recorded message. Printing shows
+#' the latest eight messages and a snapshot of session metadata. Notebook, R Markdown and
+#' Quarto displays use the same compact preview by default. Use `print(x, n = Inf)` to display
+#' every row, or `as.data.frame(x)` for an ordinary data frame without the display metadata.
 #'
 #' @param object A `gptr_session`.
 #' @param ... Unused.
