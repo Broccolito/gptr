@@ -497,7 +497,7 @@ artifact_child_env = function(ports) {
 #' rename; a watchdog stops the app when the parent is gone. Errors are reported on stderr
 #' before the parent checks the port publication.
 #' @noRd
-artifact_serve = function(dir, port_file, parent_pid, token) {
+artifact_serve = function(dir, port_file, parent_pid, token, stop_dir = NULL) {
   report = function(e) {
     message("Error: ", conditionMessage(e))
     invisible(NULL)
@@ -509,6 +509,7 @@ artifact_serve = function(dir, port_file, parent_pid, token) {
   }
   parent = tryCatch(ps::ps_handle(as.integer(parent_pid)), error = function(e) NULL)
   watchdog = function() {
+    if (!is.null(stop_dir) && dir.exists(stop_dir)) return(shiny::stopApp())
     up = !is.null(parent) && isTRUE(tryCatch(ps::ps_is_running(parent), error = function(e) FALSE))
     if (!up) {
       message("gptr: the parent R process is gone; stopping the app")
@@ -952,8 +953,8 @@ artifact_session_check = function(rec, png, width = artifact_shot_size[["width"]
 #' @noRd
 artifact_launch_timeout = 30
 
-#' Seconds between the interrupt and the tree kill of a stop (report 17 section 2.2: 2 s was
-#' exceeded once under load)
+#' One grace budget for a cooperative exit and any interrupt fallback (report 17 section 2.2:
+#' 2 s was exceeded once under load); forced tree settlement keeps its existing bounds
 #' @noRd
 artifact_stop_grace = 3
 
@@ -972,15 +973,53 @@ artifact_wait_port = function(proc, port_file, timeout = artifact_launch_timeout
 
 #' Closures over the child process only (a record never holds the launching frame)
 #' @noRd
-artifact_proc_fns = function(proc, dir = NULL) {
+artifact_proc_fns = function(proc, dir = NULL, stop_dir = NULL) {
+  private_dir = if (!is.null(stop_dir) && !is.null(dir)) path_norm(dir) else NULL
+  if (!is.null(stop_dir) && !identical(stop_dir, file.path(private_dir, "stop"))) {
+    stop("The artifact stop request must stay inside its private launch directory.")
+  }
   owner = new.env(parent = emptyenv())
   owner$disposed = FALSE
   dispose = function(grace) {
     if (owner$disposed) return(invisible(TRUE))
-    if (!isTRUE(kill_all(proc, grace = grace))) return(invisible(FALSE))
-    if (!is.null(dir) && unlink(dir, recursive = TRUE) != 0L) return(invisible(FALSE))
-    owner$disposed = TRUE
-    invisible(TRUE)
+    request = NULL
+    remaining = grace
+    if (!is.null(stop_dir) && grace > 0) {
+      deadline = NULL
+      request = tryCatch({
+        deadline = reactor_now() + grace
+        if (isTRUE(proc$is_alive())) {
+          if (!dir.exists(private_dir) || !identical(path_norm(dir), private_dir) ||
+              !identical(path_norm(stop_dir), stop_dir)) {
+            stop("The private artifact stop request path changed.")
+          }
+          if (!dir.exists(stop_dir) && !dir.create(stop_dir, mode = "0700")) {
+            stop("Could not request a graceful artifact stop.")
+          }
+          milliseconds = as.integer(floor(max(0, deadline - reactor_now()) * 1000))
+          if (milliseconds > 0L) proc$wait(milliseconds)
+        }
+        NULL
+      }, error = base::identity, interrupt = base::identity)
+      budget = tryCatch({
+        if (is.null(deadline)) 0 else max(0, deadline - reactor_now())
+      }, error = base::identity, interrupt = base::identity)
+      if (inherits(budget, "condition")) {
+        remaining = 0
+        if (is.null(request)) request = budget
+      } else {
+        remaining = budget
+      }
+    }
+    cleanup = tryCatch({
+      if (isTRUE(kill_all(proc, grace = remaining))) {
+        if (is.null(dir) || unlink(dir, recursive = TRUE) == 0L) owner$disposed = TRUE
+      }
+      owner$disposed
+    }, error = base::identity, interrupt = base::identity)
+    if (!is.null(request)) stop(request)
+    if (inherits(cleanup, "condition")) stop(cleanup)
+    invisible(cleanup)
   }
   list(alive = function() {
     alive = tryCatch(proc$is_alive(), error = function(e) NA)
@@ -1035,6 +1074,7 @@ artifact_launch_shiny = function(version_dir, ctx) {
     gptr_abort("Cannot create the private artifact launch directory.", "artifact",
                id = id, stage = "launch", log = character())
   }
+  stop_dir = file.path(path_norm(dir), "stop")
   owner = new.env(parent = emptyenv())
   owner$p = NULL
   owner$settled = NULL
@@ -1060,7 +1100,7 @@ artifact_launch_shiny = function(version_dir, ctx) {
         tryCatch(artifact_log_sync(log_record, final = isTRUE(owner$settled)),
                  error = function(e) NULL, interrupt = function(e) NULL)
         if (!isTRUE(owner$settled)) {
-          fns = artifact_proc_fns(owner$p, dir)
+          fns = artifact_proc_fns(owner$p, dir, stop_dir)
           pid = tryCatch(owner$p$get_pid(), error = function(e) NA_integer_,
                          interrupt = function(e) NA_integer_)
           handle = c(list(url = NA_character_, pid = pid, port = NA_integer_,
@@ -1074,7 +1114,7 @@ artifact_launch_shiny = function(version_dir, ctx) {
   token = artifact_token()
   proc = proc_rscript(
     "artifact", args = list(dir = path_norm(version_dir), port_file = path_norm(port_file),
-                             parent_pid = Sys.getpid(), token = token),
+                             parent_pid = Sys.getpid(), token = token, stop_dir = stop_dir),
     dir = dir, env = artifact_child_env(artifact_ports(id)), stdout = raw, stderr = "2>&1",
     wd = path_norm(version_dir), .fun = artifact_serve, .on_spawn = function(p) {
       owner$p = p
@@ -1098,7 +1138,7 @@ artifact_launch_shiny = function(version_dir, ctx) {
   }
   url = sprintf("http://127.0.0.1:%d/", port)
   if (nzchar(token)) url = paste0(url, "?gptr_token=", token)
-  fns = artifact_proc_fns(proc, dir)
+  fns = artifact_proc_fns(proc, dir, stop_dir)
   handle = list(url = url, pid = proc$get_pid(), stop = fns$stop, alive = fns$alive,
                 settled = fns$settled, port = port, token = token, raw = raw, log = log)
   returned = TRUE

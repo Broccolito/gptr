@@ -1101,3 +1101,138 @@ test_that("post-launch artifact cleanup cannot replace a registration condition"
   expect_false(is.null(rec))
   expect_identical(rec$handle, handle)
 })
+
+
+test_that("a private artifact stop request exits before forced cleanup", {
+  dir = withr::local_tempdir()
+  request = file.path(path_norm(dir), "stop")
+  state = new.env(parent = emptyenv())
+  state$alive = TRUE
+  state$time = 10
+  state$waits = 0L
+  state$kills = 0L
+  proc = list(is_alive = function() state$alive, wait = function(milliseconds) {
+    state$waits = state$waits + 1L
+    expect_true(dir.exists(request))
+    expect_identical(milliseconds, 3000L)
+    state$time = 11
+    state$alive = FALSE
+  })
+  local_mocked_bindings(reactor_now = function() state$time,
+    kill_all = function(p, grace) {
+      state$kills = state$kills + 1L
+      expect_identical(p, proc)
+      expect_false(state$alive)
+      expect_identical(grace, 2)
+      TRUE
+    })
+  expect_true(dir.exists(dir))
+  fns = artifact_proc_fns(proc, dir, request)
+  expect_true(fns$stop())
+  expect_true(fns$settled())
+  expect_false(dir.exists(dir))
+  expect_identical(state$waits, 1L)
+  expect_identical(state$kills, 1L)
+  expect_true(fns$stop())
+  expect_identical(state$kills, 1L)
+})
+
+test_that("artifact cooperative wait and kill share one grace deadline", {
+  dir = withr::local_tempdir()
+  request = file.path(path_norm(dir), "stop")
+  state = new.env(parent = emptyenv())
+  state$time = 10
+  state$alive = TRUE
+  proc = list(is_alive = function() state$alive, wait = function(milliseconds) {
+    expect_true(dir.exists(request))
+    expect_identical(milliseconds, 3000L)
+    state$time = 13
+  })
+  local_mocked_bindings(reactor_now = function() state$time,
+    kill_all = function(p, grace) {
+      expect_identical(p, proc)
+      expect_identical(grace, 0)
+      expect_true(state$alive)
+      state$alive = FALSE
+      TRUE
+    })
+  expect_identical(artifact_stop_grace, 3)
+  expect_true(artifact_proc_fns(proc, dir, request)$stop())
+  expect_false(dir.exists(dir))
+})
+
+test_that("artifact stop keeps the request condition before fallback cleanup conditions", {
+  original = list(
+    structure(list(message = "fixed stop wait error", call = NULL),
+      class = c("artifact_stop_wait_test", "error", "condition")),
+    structure(list(message = "fixed stop wait interrupt", call = NULL),
+      class = c("interrupt", "condition")))
+  secondary = simpleError("fixed fallback cleanup error")
+  for (condition in original) {
+    dir = withr::local_tempdir()
+    request = file.path(path_norm(dir), "stop")
+    state = new.env(parent = emptyenv())
+    state$called = FALSE
+    proc = list(is_alive = function() TRUE, wait = function(milliseconds) stop(condition))
+    local_mocked_bindings(reactor_now = function() 10, kill_all = function(p, grace) {
+      expect_identical(p, proc)
+      expect_identical(grace, 3)
+      state$called = TRUE
+      stop(secondary)
+    })
+    expect_true(dir.exists(dir))
+    fns = artifact_proc_fns(proc, dir, request)
+    caught = tryCatch(fns$stop(), error = base::identity, interrupt = base::identity)
+    expect_identical(caught, condition)
+    expect_true(state$called)
+    expect_false(fns$settled())
+    expect_true(dir.exists(dir))
+    expect_true(dir.exists(request))
+  }
+  for (condition in original) {
+    for (stage in c("initial", "after_wait", "after_error")) {
+      dir = withr::local_tempdir()
+      request = file.path(path_norm(dir), "stop")
+      state = new.env(parent = emptyenv())
+      state$clock_calls = 0L
+      state$called = FALSE
+      proc = list(is_alive = function() TRUE, wait = function(milliseconds) {
+        if (stage == "after_error") stop(condition)
+        invisible(NULL)
+      })
+      local_mocked_bindings(reactor_now = function() {
+        state$clock_calls = state$clock_calls + 1L
+        if (stage == "initial" || state$clock_calls == 3L) {
+          if (stage == "after_error") stop(secondary)
+          stop(condition)
+        }
+        10
+      }, kill_all = function(p, grace) {
+        expect_identical(p, proc)
+        expect_identical(grace, 0)
+        state$called = TRUE
+        stop(secondary)
+      })
+      fns = artifact_proc_fns(proc, dir, request)
+      caught = tryCatch(fns$stop(), error = base::identity, interrupt = base::identity)
+      expect_identical(caught, condition)
+      expect_true(state$called)
+      expect_false(fns$settled())
+      expect_true(dir.exists(dir))
+    }
+  }
+})
+
+test_that("an artifact stop request cannot write outside its private bootstrap", {
+  dir = withr::local_tempdir()
+  foreign = withr::local_tempdir()
+  request = file.path(path_norm(foreign), "stop")
+  proc = list(is_alive = function() stop("must not probe a foreign stop request"))
+  expect_true(dir.exists(dir))
+  expect_true(dir.exists(foreign))
+  expect_error(artifact_proc_fns(proc, dir, request),
+    "The artifact stop request must stay inside its private launch directory.", fixed = TRUE)
+  expect_false(dir.exists(request))
+  expect_true(dir.exists(dir))
+  expect_true(dir.exists(foreign))
+})
