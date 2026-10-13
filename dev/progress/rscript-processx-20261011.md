@@ -1,11 +1,11 @@
-## Process validation checkpoint — `4040706`, 2026-10-12
+## Process validation checkpoint — source `3c50722`, 2026-10-13
 
-Auth 55/486P and CLI offline 6/138P pass; both configured lints are clean.
-Public replay V7 passes 23/247P/all8; these use the predecessor private install.
-Completed `8f2be45` Windows checks fail observer limits, mock signature and Python admission.
-Ubuntu oldrel4 sampling passes with zero census retries; native browser conditions remain.
-Cold TZDIR and CLI completion stay open; no original security/resource limit is relaxed.
-Fresh native proof is pending; full current results are in [TESTING_PLAN](../TESTING_PLAN.md).
+.onLoad3/12P, Date2/11P and ISO4/42P pass all8 with clean configured lints.
+FIFO33/235P/all8 and two lints0 pass after explicit framework admission; prior NONPASSs stay.
+Observer mock8/145P and literal24 are scoped controls; private-Python syntax is not provisioning.
+Browser24/1,430P/all8/empty diagnostics and four lints0 pass; installed/native quietness stays open.
+Prior951 Windows release50F/12E and oldrel4 2F/32E remain failed with zero R warnings.
+Use one owned serial family; preserve shared resources. See [TESTING_PLAN](../TESTING_PLAN.md).
 
 Earlier evidence below remains historical; it does not override these current gates.
 

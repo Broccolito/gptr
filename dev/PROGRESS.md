@@ -1,11 +1,12 @@
-## Current checkpoint — `4040706`, 2026-10-12
+## Current source checkpoint — `3c50722`, 2026-10-13
 
-Auth runtime and CLI offline tests are committed; the installed `3677f5b` is a predecessor.
-Auth 55/486P, CLI 6/138P and public replay V7 23/247P pass in their recorded scopes.
-The completed `8f2be45` CI has 11 successful contexts and two Windows failures.
-Cold TZDIR, CLI completion, browser raw conditions and fresh favicon acceptance stay open.
-See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current results table and retained failures.
-Next: four cross-plan checks, final-source archive/CI/live gates, publication and merge.
+Eight accepted scopes are adopted; the `3677f5b` private install is a predecessor.
+Date, .onLoad, FIFO, ISO and observer controls pass in their recorded source scopes.
+Literal lookup24 and private-Python syntax pass; native Windows acceptance remains open.
+Prior951 CI has11 successes/two Windows failures; raw causes are retained, not waived.
+Browser24/1,430P/all8 and four lints0 pass; current installed quiet shutdown remains pending.
+See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current table and retained conditions.
+Next: final archive/CI/cold/native/live/publication/merge gates and four plan checks.
 
 Earlier evidence below remains historical; it does not override these current gates.
 

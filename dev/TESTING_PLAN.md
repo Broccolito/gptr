@@ -1,50 +1,60 @@
-## Current validation checkpoint — `4040706`, 2026-10-12
+## Current validation checkpoint — source `3c50722`, 2026-10-13
 
-Candidate is `4040706`; main is unmerged and release readiness is false.
-The private certificate is source `3677f5b`; current `R/auth-redact.R` has since changed.
-Auth runtime and CLI offline tests are adopted; prior install passes remain scoped evidence.
+Eight accepted scopes are adopted at `3c50722`; main is unmerged and readiness is false.
+The private certificate is source `3677f5b`, before current auth and these runtime changes.
 Use one root-owned serial family: 2 GiB sampled RAM/512 MiB output; no GPU/model expansion.
 
 | Gate | Current result | Remaining condition |
 | --- | --- | --- |
-| Normal private | Predecessor PASS: 121 R/14 pairs/five MD5 | Fresh final archive/five checks/profiles |
-| Auth parsing | 55/486P/all8; two lints 0 | Current installed/native/live proof |
-| CLI offline | 6/138P/all8; lint 0 | Actual authenticated CLI completion |
-| Unicode export | C+UTF8 10/176P; broad 321/2,434P; lint 0 | Final-source CI |
+| Normal private | Predecessor PASS:121 R/14 pairs/five MD5 | Fresh final archive/five checks/profiles |
+| Auth parsing | 55/486P/all8; two lints0 | Current installed/native/live proof |
+| CLI offline | 6/138P/all8; lint0 | Actual authenticated CLI completion |
+| .onLoad | Qualified RED3/7P/5F; GREEN3/12P/all8; two lints0 | Current installed/cold-load proof |
+| Date | RED2/3P/2F; GREEN2/11P/all8; four lints0 | Current cold-load proof |
+| Observer mock | GREEN8/145P/all8; empty diagnostics/lint0 | Current native observer proof |
+| FIFO | Qualified RED33/181P/7E; GREEN33/235P/all8/empty diagnostics; two lints0 | Fresh archive and actual live CLI completion |
+| ISO time | RED4/29P/13F; GREEN4/42P/all8/empty diagnostics; two lints0 | Current installed/cold-load proof |
+| Literal lookup | Qualified stdlib RED24/1F/20E; GREEN24 quiet | Native Windows lookup/identity/no-follow proof |
+| Windows Python syntax | Three quiet phases:6 jobs/7 rows,9 files+2 embedded programs | Provisioning/ABI/private-runtime/native proof |
+| Browser source controls | V9 GREEN24/1,430P/all8/empty diagnostics; four lints0 | Current installed quiet shutdown/native replay |
+| Unicode export | C+UTF8 10/176P; broad321/2,434P; lint0 | Final-source CI |
 | Local site | 14 guides/all8/320–1440 px/200% PASS | Prior favicon NONPASS; fresh ICO check |
-| Declared entry | 16 Python/9 R256P; three lints 0 | Native ACL/token/no-follow proof |
-| Ordinary marker | 18 Python/10 R281P; three lints 0 | Native marker warning closure |
-| Census | GREEN 11/374P; two lints 0 | Actual retry path remains unobserved |
-| Registry | GREEN 70/3,695P; two lints 0 | Fresh strict hosted collection |
-| Completed CI | 38347269352/source 8f2: 11/13 successful | Both Windows contexts fail |
-| Windows release | 29,507P/56F/0W/99S; families settled | Observer limit/mock/Python pins |
-| Windows oldrel4 | 29,426P/35F/0W/99S; families settled | Observer limit and 1 GiB guard |
-| Ubuntu oldrel4 | 29,536P/0F/0 R-W/67S; sampler 0 | No retry observed; two native W/two promises |
-| Connections CI | 29,655P/0F/0 R-W/52S | One native W/one close-timeout promise |
-| Browser grace | Scoped normal 1000/12 s/all8; NONPASS: 17 Chrome markers | Production ownership controls/current artifact |
-| ACK/GPU diagnostics | Dead/cache/all8/cleanup recorded | Prior native warnings/markers remain |
-| Cold frontend | Four diagnostics; TZDIR at base formatter | Nonacceptance; preservation unresolved |
-| Public replay V7 | PASS: 23/247P/0F/E/W/S/all8 | Predecessor install; broader frontend gates |
-| Jev typed | Live+fresh replay PASS; 3/0 native usage | Broader live workflows pending |
-| CLI live trace | NONPASS: 50 s deadline after turn_end | FIFO checkpoint hypothesis, no syscall proof |
+| Declared entry | 16 Python/9 R256P; three lints0 | Native ACL/token/no-follow proof |
+| Ordinary marker | 18 Python/10 R281P; three lints0 | Native marker warning closure |
+| Census | GREEN11/374P; two lints0 | Actual retry path remains unobserved |
+| Registry | GREEN70/3,695P; two lints0 | Fresh strict hosted collection |
+| Prior951 CI | Run38354365636:11/13 success, two Windows failed | New final-source CI and full native logs |
+| 951 Windows release | 29,661P/50F/12E/0 R-W/99S | Entry-limit/mock/Python settings/init-bound; close-timeout diagnostic |
+| 951 Windows oldrel4 | 29,528P/2F/32E/0 R-W/99S | Entry-limit/mock/Python settings/init-bound |
+| Ubuntu oldrel4 | Prior29,536P/0F/0 R-W/67S; sampler0 | No retry observed; two native W/two promises |
+| Connections CI | Prior29,655P/0F/0 R-W/52S | One native W/one close-timeout promise |
+| Browser native | Prior1000/12 s/all8; NONPASS17 Chrome markers | Current artifact and all unfiltered native/late conditions |
+| ACK/GPU diagnostics | Dead/cache/all8/cleanup recorded; CfT192,634,606 B pinned | No CfT execution; startup/native conditions remain |
+| Public replay V7 | PASS23/247P/0F/E/W/S/all8 | Predecessor install; broader frontend gates |
+| Jev typed | Live+fresh replay PASS;3/0 native usage | Broader live workflows pending |
+| CLI live trace | NONPASS50 s after turn_end; two owned FIFOs | No blocked-syscall proof or real CLI completion |
 | Other live/native | Reviewed cases available | Azure/tools/steering/fanout/ML/RNA/Shiny |
 | Release/merge | Not ready; submission being prepared | As-cran/size/teardown/publication/merge |
 
-Counts are assertions P, failures F, errors E, warnings W and skips S; all8 means caller states.
-Accepted local controls retain source/parent state, owned cleanup and zero sampling errors.
-The predecessor archive is `5e38ed50` (2,580,415 bytes); current acceptance must be refreshed.
-The site pass retains raw `✖ Favicons not ok.`; ICO `c0443220` is adopted, not rerendered.
-Jev's two startup/dead samples per child do not prove inference-time peak RAM or calibration.
-Ollama/Qwen validation remains resource-held; preserve the shared Ollama model.
-No model load, unload or reconfiguration is authorized.
+P/F/E/W/S mean assertions/failures/errors/warnings/skips; all8 means caller states.
+Local controls retain source/parent state, owned cleanup and zero sampling errors.
+Literal and syntax children do not establish R caller-state or native Windows acceptance.
+The prior 951 status snapshot is 2026-10-13 07:12:50 UTC; both Windows full raw logs are retained.
+Their checkout is merge1de7a6a6; mock signature, six missing Python settings and observer failures
+remain open. Initialization failed the unchanged45 s OR1 GiB gate; its actual component is unmeasured.
+Release's native-absence case alone records PROBE1/ACL/restoration/cleanup and zero sampler errors.
+The exact Browser.close timeout appears in release captured output despite zero R warnings.
+Its repeated log appearance is not proof of separate events; no quiet waiver is admitted.
+The predecessor archive is5e38ed50 (2,580,415 B). ICOc0443220 is adopted, not rerendered.
+Preserve shared Ollama/original sessions; no model load, unload or reconfiguration is authorized.
 
-Retain prior Ubuntu errno 3, Windows dangling-file warnings, all RED/nonqualified attempts,
-public V5 seed/objects NONPASS and cold frontend failures. V7's no-praise replay restores all8.
-Retain Claude's 230 s deadline and the later 50 s trace: message_end/turn_end only, no return.
-The two observed supervisor FIFOs support a checkpoint hypothesis, not a proven blocked call.
-Retain the prior state 2/zero-event browser failure with its unentered tail and 15 Chrome markers.
-Browser 1006/EOF, late ACK promises and startup markers remain open; no quiet waiver is admitted.
-The last verified deployed source is `2450c9e`; 8f2 Pages was skipped, with no new publication.
+Retain every historical RED/NONPASS, including FIFO options34diffobj.*, ISO TZDIR cold diagnostics,
+public V5 seed/objects, V7 browser NULL and V8 lint failures,1006/EOF/ACK promises and startup markers.
+FIFO's explicit pinned diffobj admission is before the source-test snapshot; no repair or cold claim.
+Claude's230 s failure and50 s trace have message_end/turn_end only. Stat-only supervisor FIFO proof
+supports the checkpoint hypothesis; source controls are not real CLI completion or a blocked-call stack.
+Jev's startup/dead samples do not establish inference-time peak RAM or calibration.
+The last verified deployed source is2450c9e; later skipped Pages runs are not publication.
 Run four cross-plan checks, then final-source gates. All earlier evidence remains immutable.
 
 Earlier evidence below remains historical; it does not override these current gates.

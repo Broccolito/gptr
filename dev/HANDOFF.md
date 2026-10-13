@@ -1,18 +1,18 @@
-## Continue from `4040706` — 2026-10-12
+## Continue from source `3c50722` — 2026-10-13
 
 Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`.
 Branch `codex/skipped-platform-tests`; main is unmerged and release readiness is false.
-The private certificate remains source `3677f5b`; current auth runtime has since changed.
-Auth/CLI offline controls and public replay V7 pass only in their recorded scopes.
+Eight accepted source scopes are adopted at `3c50722`; their full SHA is in the source proof.
+The private certificate remains source `3677f5b`; it does not certify current runtime.
 Current results and open conditions are listed once in [TESTING_PLAN.md](TESTING_PLAN.md).
 
 Keep one root-owned serial family: 2 GiB sampled RAM/512 MiB output, with owned cleanup.
-Preserve the original R sessions and shared Ollama model; no GPU or model expansion.
-Next: four cross-plan checks, then fresh final-source archive/CI and dependency profiles.
-Resolve Windows observer/provisioning, cold TZDIR, CLI completion and browser quietness.
-Recheck the adopted ICO, complete remaining live/native workflows and refresh publication.
-Review/merge PR 6 and verify the merged artifact only after the remaining gates pass.
-Frozen checkpoints, raw failures and nonqualified attempts remain retained.
+Preserve original R sessions and the shared Ollama model; no GPU or model expansion.
+Next: fresh final-source archive/CI, cold and native preservation, then live CLI completion.
+Retain all prior options, cold-load, browser NULL/lint and Windows failure receipts.
+Windows private-Python provisioning is syntax-checked, not executed or native-accepted.
+Review/merge PR 6 and verify the merged artifact after remaining gates pass.
+Run four cross-plan checks after this adopted update; preserve historical bytes.
 
 Earlier evidence below remains historical; it does not override these current gates.
 
