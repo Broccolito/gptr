@@ -329,6 +329,14 @@ testthat::test_that("held native postcondition tail and child decoder retain eve
     c("fresh", "directory", "file", "denied", "link", "missing", "script", "recovery",
       "parent_backup", "file_backup", "armed", "token_source", "token_library", "token_compile"))
   scope$root = "."
+  scope$normalizePath = function(path, winslash, ...) {
+    arguments = list(...)
+    stopifnot(identical(names(arguments), "mustWork"), isTRUE(arguments[["mustWork"]]),
+      identical(winslash, "/"))
+    if (path %in% c(scope$root, "/PUBLIC-OWNED")) return("/PUBLIC-OWNED")
+    stopifnot(path %in% scope$paths[c("fresh", "directory")])
+    file.path("/PUBLIC-OWNED", path)
+  }
   observed$removed = character()
   scope$dir.exists = function(path) path %in% scope$paths[c("fresh", "directory")]
   remove_definition = Filter(function(expression) {
@@ -364,14 +372,14 @@ testthat::test_that("held native postcondition tail and child decoder retain eve
       isTRUE(arguments[["all.files"]]), is.logical(arguments[["no.."]]),
       length(arguments[["no.."]]) == 1L, !is.na(arguments[["no.."]]))
     if (identical(arguments[["no.."]], FALSE)) {
-      if (identical(path, scope$root)) {
+      if (path %in% c(scope$root, "/PUBLIC-OWNED")) {
         return(c(".", "..", basename(setdiff(scope$paths[c("fresh", "directory")],
           observed$removed))))
       }
       stopifnot(path %in% scope$paths[c("fresh", "directory")])
       return(c(".", ".."))
     }
-    if (identical(path, scope$root)) return(effect("dangling-entry", character()))
+    if (path %in% c(scope$root, "/PUBLIC-OWNED")) return(effect("dangling-entry", character()))
     if (identical(path, scope$paths[["directory"]])) {
       return(effect("existing-directory", character()))
     }
@@ -389,9 +397,10 @@ testthat::test_that("held native postcondition tail and child decoder retain eve
   }
   scope$unlink = function(path, recursive, force, expand) {
     stopifnot(identical(recursive, TRUE), identical(force, FALSE), identical(expand, FALSE),
-      path %in% scope$paths[c("fresh", "directory")])
-    observed$removed = c(observed$removed, path)
-    key = if (identical(path, scope$paths[["fresh"]])) {
+      path %in% file.path("/PUBLIC-OWNED", scope$paths[c("fresh", "directory")]))
+    original = basename(path)
+    observed$removed = c(observed$removed, original)
+    key = if (identical(original, scope$paths[["fresh"]])) {
       "remove-fresh-directory"
     } else {
       "remove-existing-directory"
@@ -403,7 +412,14 @@ testthat::test_that("held native postcondition tail and child decoder retain eve
   environment(actual) = scope
   testthat::expect_no_error(actual())
   testthat::expect_identical(observed$effects, keys)
-  testthat::expect_identical(observed$labels, paste0("absence-post-", keys, "-1"))
+  testthat::expect_identical(observed$labels[startsWith(observed$labels, "absence-post-")],
+    paste0("absence-post-", keys, "-1"))
+  testthat::expect_identical(observed$labels, c(
+    paste0("absence-post-", keys[seq_len(11L)], "-1"),
+    "absence-cleanup-fresh-before-1-1-1-1", "absence-cleanup-fresh-canonical-1-1",
+    "absence-cleanup-fresh-after-0-1-1", "absence-post-remove-fresh-directory-1",
+    "absence-cleanup-directory-before-1-1-1-1", "absence-cleanup-directory-canonical-1-1",
+    "absence-cleanup-directory-after-0-1-1", "absence-post-remove-existing-directory-1"))
 
   parts = as.list(body(helper$rw_held_token_run))[-1L]
   find_assignment = function(name) {
@@ -565,4 +581,97 @@ testthat::test_that("held empty cleanup refuses populated missing foreign and un
   failed$unlink = function(path, recursive, force, expand) 0L
   testthat::expect_false(actual(scope$paths[["directory"]]))
   testthat::expect_true(dir.exists(scope$paths[["directory"]]))
+})
+
+
+
+testthat::test_that("held empty cleanup canonicalizes actual Windows separator spelling", {
+  helper = new.env(parent = baseenv())
+  sys.source(file.path(dirname(held_controller_file), "held-packet", "amended",
+    "helper-proc-writer-runtime.R"), envir = helper)
+  definitions = Filter(function(expression) {
+    is.call(expression) && identical(expression[[1L]], as.name("=")) &&
+      identical(expression[[2L]], as.name("remove_empty"))
+  }, as.list(body(helper$rw_held_token_case))[-1L])
+  testthat::expect_length(definitions, 1L)
+  scope = new.env(parent = baseenv())
+  scope$root = "C:\\owned\\fixture"
+  scope$paths = c(fresh = "C:\\owned\\fixture/fresh",
+    directory = "C:\\owned\\fixture/directory")
+  scope$removed = FALSE
+  scope$calls = list()
+  scope$witness = character()
+  scope$dirname = function(path) "C:/owned/fixture"
+  scope$dir.exists = function(path) !scope$removed
+  scope$list.files = function(path, ...) {
+    stopifnot(identical(list(...), list(all.files = TRUE, no.. = FALSE)))
+    if (identical(path, scope$paths[["fresh"]])) return(c(".", ".."))
+    if (scope$removed) c(".", "..") else c(".", "..", "fresh")
+  }
+  scope$normalizePath = function(path, winslash, ...) {
+    arguments = list(...)
+    stopifnot(identical(names(arguments), "mustWork"), isTRUE(arguments[["mustWork"]]))
+    scope$calls[[length(scope$calls) + 1L]] = list(path, winslash, arguments[["mustWork"]])
+    values = c("C:/owned/fixture", "C:/owned/fixture/fresh", "C:/owned/fixture")
+    values[[length(scope$calls)]]
+  }
+  scope$unlink = function(path, recursive, force, expand) {
+    testthat::expect_identical(path, "C:/owned/fixture/fresh")
+    testthat::expect_identical(list(recursive, force, expand), list(TRUE, FALSE, FALSE))
+    scope$removed = TRUE
+    0L
+  }
+  capture = function(line) scope$witness = c(scope$witness, line)
+  eval(definitions[[1L]], envir = scope)
+  testthat::expect_true(scope$remove_empty(scope$paths[["fresh"]], .witness = capture))
+  testthat::expect_true(scope$removed)
+  testthat::expect_identical(scope$calls, list(
+    list(scope$root, "/", TRUE), list(scope$paths[["fresh"]], "/", TRUE),
+    list("C:/owned/fixture", "/", TRUE)))
+  testthat::expect_identical(scope$witness, c("absence-cleanup-fresh-before-0-1-1-1",
+    "absence-cleanup-fresh-canonical-1-1", "absence-cleanup-fresh-after-0-1-1"))
+})
+
+
+testthat::test_that("held cleanup retains aliases and exact metadata errors before deletion", {
+  helper = new.env(parent = baseenv())
+  sys.source(file.path(dirname(held_controller_file), "held-packet", "amended",
+    "helper-proc-writer-runtime.R"), envir = helper)
+  definitions = Filter(function(expression) {
+    is.call(expression) && identical(expression[[1L]], as.name("=")) &&
+      identical(expression[[2L]], as.name("remove_empty"))
+  }, as.list(body(helper$rw_held_token_case))[-1L])
+  testthat::expect_length(definitions, 1L)
+  scope = new.env(parent = baseenv())
+  scope$root = "C:/owned/fixture"
+  scope$paths = c(fresh = "C:/owned/fixture/fresh", directory = "C:/owned/fixture/directory")
+  scope$dirname = function(path) scope$root
+  scope$dir.exists = function(path) TRUE
+  scope$list.files = function(path, ...) {
+    if (identical(path, scope$root)) c(".", "..", "fresh") else c(".", "..")
+  }
+  scope$deletions = 0L
+  scope$unlink = function(...) {
+    scope$deletions = scope$deletions + 1L
+    0L
+  }
+  scope$normalizePath = function(path, winslash, ...) {
+    arguments = list(...)
+    stopifnot(identical(names(arguments), "mustWork"), isTRUE(arguments[["mustWork"]]))
+    if (identical(path, scope$paths[["fresh"]])) "C:/foreign/fresh" else scope$root
+  }
+  eval(definitions[[1L]], envir = scope)
+  testthat::expect_false(scope$remove_empty(scope$paths[["fresh"]]))
+  testthat::expect_identical(scope$deletions, 0L)
+  originals = list(simpleError("PUBLIC-CLEANUP-METADATA-ERROR"),
+    structure(list(message = "PUBLIC-CLEANUP-METADATA-INTERRUPT"),
+      class = c("interrupt", "condition")),
+    simpleWarning("PUBLIC-CLEANUP-METADATA-WARNING"))
+  for (original in originals) {
+    scope$normalizePath = function(...) stop(original)
+    failed = tryCatch(scope$remove_empty(scope$paths[["fresh"]]),
+      error = identity, interrupt = identity, warning = identity)
+    testthat::expect_identical(failed, original)
+    testthat::expect_identical(scope$deletions, 0L)
+  }
 })

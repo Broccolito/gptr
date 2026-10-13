@@ -3,7 +3,7 @@
     {
       "before": "baseline/helper-proc-writer-runtime.R",
       "after": "amended/helper-proc-writer-runtime.R",
-      "hunks": 11
+      "hunks": 13
     },
     {
       "before": "baseline/test-token-native.R",
@@ -20,5 +20,7 @@
   "native_fixture_titles": 1,
   "execution": false,
   "postcondition_keys": 13,
-  "postcondition_predicates_and_order_unchanged": true
+  "postcondition_predicates_and_order_unchanged": false,
+  "postcondition_keys_and_order_unchanged": true,
+  "canonical_cleanup_source_only": true
 }

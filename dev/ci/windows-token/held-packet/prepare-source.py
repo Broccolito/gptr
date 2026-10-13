@@ -167,6 +167,22 @@ decoder_before = '    "rw_absence_observation", "rw_absence_privilege", "token_h
 decoder_after = '    "rw_absence_observation", "rw_absence_privilege", "token_held_line", "token_held_decode",\n    "rw_absence_postcondition")'
 assert amended.count(decoder_before) == 1
 amended = amended.replace(decoder_before, decoder_after)
+# Strict owned empty cleanup successor; the ordinary prefix remains byte-exact.
+held_start = amended.index('rw_held_token_case = function')
+head, held = amended[:held_start], amended[held_start:]
+present_end = '  present = function(path) {\n    basename(path) %in% list.files(dirname(path), all.files = TRUE, no.. = TRUE)\n  }\n'
+empty_cleanup = '  remove_empty = function(path, .witness = NULL) {\n    withCallingHandlers({\n      if (!is.character(path) || length(path) != 1L || is.na(path) ||\n          !(path %in% paths[c("fresh", "directory")])) {\n        return(FALSE)\n      }\n      key = if (identical(path, paths[["fresh"]])) "fresh" else "directory"\n      record = function(stage, bits) {\n        if (!is.null(.witness)) {\n          stopifnot(is.function(.witness))\n          .witness(paste0("absence-cleanup-", key, "-", stage, "-",\n            paste(as.integer(bits), collapse = "-")))\n        }\n      }\n      parent = list.files(root, all.files = TRUE, no.. = FALSE)\n      parent_ok = all(c(".", "..", basename(path)) %in% parent)\n      exists = dir.exists(path)\n      empty = identical(sort(list.files(path, all.files = TRUE, no.. = FALSE)), c(".", ".."))\n      record("before", c(identical(dirname(path), root), parent_ok, exists, empty))\n      if (!parent_ok || !exists || !empty) return(FALSE)\n      canonical = c(root = normalizePath(root, winslash = "/", mustWork = TRUE),\n        path = normalizePath(path, winslash = "/", mustWork = TRUE),\n        parent = normalizePath(dirname(path), winslash = "/", mustWork = TRUE))\n      parent_match = identical(canonical[["parent"]], canonical[["root"]])\n      path_match = identical(canonical[["path"]],\n        file.path(canonical[["root"]], basename(path)))\n      record("canonical", c(parent_match, path_match))\n      if (!parent_match || !path_match) return(FALSE)\n      status = unlink(canonical[["path"]], recursive = TRUE, force = FALSE, expand = FALSE)\n      after = list.files(canonical[["root"]], all.files = TRUE, no.. = FALSE)\n      parent_known = all(c(".", "..") %in% after)\n      removed = !(basename(path) %in% after)\n      record("after", c(status, parent_known, removed))\n      identical(status, 0L) && parent_known && removed\n    }, warning = function(w) stop(w))\n  }\n'
+assert held.count(present_end) == 1
+held = held.replace(present_end, present_end + empty_cleanup)
+cleanup_before = '    if (dir.exists(paths[["fresh"]]) &&\n        !length(list.files(paths[["fresh"]], all.files = TRUE, no.. = TRUE)))\n      unlink(paths[["fresh"]], recursive = FALSE)\n    if (dir.exists(paths[["directory"]]) &&\n        !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE)))\n      unlink(paths[["directory"]], recursive = FALSE)'
+cleanup_after = '    for (path in paths[c("fresh", "directory")]) {\n      if (present(path)) invisible(remove_empty(path, .witness = phase))\n    }'
+assert held.count(cleanup_before) == 1
+held = held.replace(cleanup_before, cleanup_after)
+held = held.replace('post("remove-fresh-directory", identical(unlink(paths[["fresh"]], recursive = FALSE), 0L))',
+    'post("remove-fresh-directory", remove_empty(paths[["fresh"]], .witness = phase))')
+held = held.replace('post("remove-existing-directory",\n      identical(unlink(paths[["directory"]], recursive = FALSE), 0L))',
+    'post("remove-existing-directory", remove_empty(paths[["directory"]], .witness = phase))')
+amended = head + held
 target.write_text(amended)
 assert amended.startswith(prefix)
 # Every original six-control statement and strict probe requirement remains in order.

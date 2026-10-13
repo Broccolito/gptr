@@ -1040,19 +1040,41 @@ rw_held_token_case = function(case, root) {
   present = function(path) {
     basename(path) %in% list.files(dirname(path), all.files = TRUE, no.. = TRUE)
   }
-  remove_empty = function(path) {
-    if (!is.character(path) || length(path) != 1L || is.na(path) ||
-        !(path %in% paths[c("fresh", "directory")]) || !identical(dirname(path), root)) {
-      return(FALSE)
-    }
-    parent = list.files(root, all.files = TRUE, no.. = FALSE)
-    if (!all(c(".", "..", basename(path)) %in% parent) || !dir.exists(path) ||
-        !identical(sort(list.files(path, all.files = TRUE, no.. = FALSE)), c(".", ".."))) {
-      return(FALSE)
-    }
-    status = unlink(path, recursive = TRUE, force = FALSE, expand = FALSE)
-    after = list.files(root, all.files = TRUE, no.. = FALSE)
-    identical(status, 0L) && all(c(".", "..") %in% after) && !(basename(path) %in% after)
+  remove_empty = function(path, .witness = NULL) {
+    withCallingHandlers({
+      if (!is.character(path) || length(path) != 1L || is.na(path) ||
+          !(path %in% paths[c("fresh", "directory")])) {
+        return(FALSE)
+      }
+      key = if (identical(path, paths[["fresh"]])) "fresh" else "directory"
+      record = function(stage, bits) {
+        if (!is.null(.witness)) {
+          stopifnot(is.function(.witness))
+          .witness(paste0("absence-cleanup-", key, "-", stage, "-",
+            paste(as.integer(bits), collapse = "-")))
+        }
+      }
+      parent = list.files(root, all.files = TRUE, no.. = FALSE)
+      parent_ok = all(c(".", "..", basename(path)) %in% parent)
+      exists = dir.exists(path)
+      empty = identical(sort(list.files(path, all.files = TRUE, no.. = FALSE)), c(".", ".."))
+      record("before", c(identical(dirname(path), root), parent_ok, exists, empty))
+      if (!parent_ok || !exists || !empty) return(FALSE)
+      canonical = c(root = normalizePath(root, winslash = "/", mustWork = TRUE),
+        path = normalizePath(path, winslash = "/", mustWork = TRUE),
+        parent = normalizePath(dirname(path), winslash = "/", mustWork = TRUE))
+      parent_match = identical(canonical[["parent"]], canonical[["root"]])
+      path_match = identical(canonical[["path"]],
+        file.path(canonical[["root"]], basename(path)))
+      record("canonical", c(parent_match, path_match))
+      if (!parent_match || !path_match) return(FALSE)
+      status = unlink(canonical[["path"]], recursive = TRUE, force = FALSE, expand = FALSE)
+      after = list.files(canonical[["root"]], all.files = TRUE, no.. = FALSE)
+      parent_known = all(c(".", "..") %in% after)
+      removed = !(basename(path) %in% after)
+      record("after", c(status, parent_known, removed))
+      identical(status, 0L) && parent_known && removed
+    }, warning = function(w) stop(w))
   }
   on.exit({
     stopifnot(!state$utility_unsettled, !state$settlement_failed)
@@ -1068,7 +1090,7 @@ rw_held_token_case = function(case, root) {
     if (file.exists(owner) && identical(readBin(owner, "raw", n = 27L), charToRaw(marker)))
       file.remove(owner)
     for (path in paths[c("fresh", "directory")]) {
-      if (present(path)) invisible(remove_empty(path))
+      if (present(path)) invisible(remove_empty(path, .witness = phase))
     }
   }, add = TRUE)
   phase("absence-link-create")
@@ -1711,8 +1733,8 @@ rw_held_token_case = function(case, root) {
     post("remove-utilities",
       all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
         "token_source", "token_library", "token_compile")]))),
-    post("remove-fresh-directory", remove_empty(paths[["fresh"]])),
-    post("remove-existing-directory", remove_empty(paths[["directory"]])))
+    post("remove-fresh-directory", remove_empty(paths[["fresh"]], .witness = phase)),
+    post("remove-existing-directory", remove_empty(paths[["directory"]], .witness = phase)))
   fun("reactor_shutdown")()
   after = list(env = Sys.getenv(), cwd = getwd(), options = options(), seed = seed(),
     names = sort(ls(envir = globalenv(), all.names = TRUE)))

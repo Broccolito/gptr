@@ -24,13 +24,23 @@
   "postcondition_predicates_and_order_unchanged": false,
   "postcondition_keys_and_order_unchanged": true,
   "directory_cleanup_successor": {
-    "baseline_source": "c281c720e3c338d26bda70bc17505931bec01bb2",
+    "baseline_source": "784522f5a47657270dad80f7fcd8842bcb1a0273",
     "predicates_corrected": 2,
     "ordinary_prefix_changed": false,
     "direct_parent_and_dot_entries_required": true,
     "recursive": true,
     "force": false,
     "expand": false,
-    "native_execution": false
+    "native_execution": false,
+    "canonical_existing_paths": true,
+    "winslash": "/",
+    "mustWork": true,
+    "alias_canonical_target_refused": true,
+    "metadata_warning_error_interrupt_before_delete": true,
+    "fixed_cleanup_witnesses": [
+      "before",
+      "canonical",
+      "after"
+    ]
   }
 }

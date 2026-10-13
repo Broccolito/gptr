@@ -88,7 +88,8 @@ proof = {'forward_and_inverse': verified, 'ordinary_helper_prefix_bytes': len(or
          'actual_generated_production_probe_inside_window': True,
          'new_r_protocol_titles': 2, 'powershell_fault_cases': 12,
          'native_fixture_titles': 1, 'execution': False,
-         'postcondition_keys': 13, 'postcondition_predicates_and_order_unchanged': True}
+         'postcondition_keys': 13, 'postcondition_predicates_and_order_unchanged': False,
+         'postcondition_keys_and_order_unchanged': True, 'canonical_cleanup_source_only': True}
 (root / 'forward-inverse.json').write_text(json.dumps(proof, indent=2) + '\n')
 files = {}
 for path in sorted(root.rglob('*')):

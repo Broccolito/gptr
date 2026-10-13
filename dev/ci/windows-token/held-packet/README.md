@@ -124,3 +124,6 @@ the earlier freeze; the separately reviewed directory packet supplies this
 successor and its identity updates. Ordinary fixture cleanup is still a separate
 known defect; no ordinary native pass is claimed. Real empty/populated/missing/
 foreign controls and actual held Windows replay are required before adoption.
+
+
+The prepared cleanup successor canonicalizes existing owned root, target and direct-parent paths with explicit forward slashes and strict existence. Exact admitted target, parent membership, dot-entry empty proof and deletion absence remain required; aliases resolving to another target are refused. Fixed numeric before/canonical/after phase bits distinguish separator admission, empty proof and deletion outcomes without copying environment values. Metadata warnings/errors/interrupts stop before deletion. Native acceptance is still pending; the ordinary helper prefix is unchanged.
