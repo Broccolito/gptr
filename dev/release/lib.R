@@ -842,7 +842,7 @@ site_stage = function(root, dest) {
 
 # Builds the site into `dest`, outside the repository, without keys: pkgdown runs every example.
 # Not offline: pkgdown looks the package up on CRAN for the home page's links.
-site_build = function(root, dest) {
+site_build = function(root, dest, pandoc = NULL) {
   caller_root = root
   root = normalizePath(root, winslash = "/", mustWork = TRUE)
   absolute = startsWith(dest, "/") ||
@@ -854,13 +854,118 @@ site_build = function(root, dest) {
   dirs = rel_dirs(tempfile("rel-site-"))
   stage = site_stage(caller_root, file.path(dirs[["proj"]], "source"))
   env = rel_child_env(dirs[["home"]], dirs[["tmp"]], dirs[["proj"]], offline = FALSE)
-  code = sprintf(paste("pkgdown::build_site(%s, preview = FALSE, new_process = FALSE,",
-                       "override = list(destination = %s))"),
-                 deparse(stage), deparse(dest))
+  proof = file.path(dirs[["scripts"]], "site-result.rds")
+  if (!file.create(proof, showWarnings = FALSE) ||
+      !isTRUE(Sys.chmod(proof, "0600", use_umask = FALSE))) {
+    stop("Site building could not create its private child proof", call. = FALSE)
+  }
+  literal = function(x) paste(deparse(x), collapse = "\n")
+  code = paste0("site_render = ", paste(deparse(site_render), collapse = "\n"),
+                "\nsite_render(", literal(stage), ", ", literal(dest), ", ",
+                literal(pandoc), ", ", literal(proof), ")")
   res = processx::run(rel_exe("Rscript"), c("--vanilla", "-e", code), env = env,
                       error_on_status = FALSE, timeout = 1800)
-  if (res$status == 0L) return(character())
-  sprintf("pkgdown::build_site() failed: %s", rel_tail(c(res$stdout, res$stderr)))
+  if (nzchar(res$stdout)) cat(res$stdout, file = stdout())
+  if (nzchar(res$stderr)) cat(res$stderr, file = stderr())
+  if (res$status != 0L) {
+    return(sprintf("pkgdown::build_site() failed: %s", rel_tail(c(res$stdout, res$stderr))))
+  }
+  raw = paste(c(res$stdout, res$stderr), collapse = "\n")
+  native_warning = "(^|[\\r\\n])[ \\t]*(\\[WARNING\\]|Warning:|Warning in |Deprecated:)"
+  if (grepl(native_warning, raw, perl = TRUE)) {
+    return("pkgdown::build_site() emitted native warnings; see retained child output")
+  }
+  report = tryCatch({
+    size = file.info(proof, extra_cols = FALSE)$size
+    if (!is.finite(size) || size <= 0 || size > 65536) stop("invalid child proof size")
+    readRDS(proof)
+  }, error = function(e) NULL)
+  scalar = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+  valid = is.list(report) && identical(report$status, 0L) && identical(report$warnings, 0L) &&
+    is.list(report$pandoc) && identical(report$pandoc$version, "3.10") &&
+    scalar(report$pandoc$directory) && scalar(report$pandoc$executable) &&
+    scalar(report$pandoc$md5)
+  if (valid) {
+    id = report$pandoc
+    valid = isTRUE(file.exists(id$executable)) && !isTRUE(dir.exists(id$executable)) &&
+      identical(normalizePath(dirname(id$executable), winslash = "/", mustWork = TRUE),
+                id$directory) &&
+      identical(normalizePath(id$executable, winslash = "/", mustWork = TRUE), id$executable) &&
+      identical(unname(tools::md5sum(id$executable)), id$md5)
+    if (!is.null(pandoc)) {
+      valid = valid && identical(normalizePath(pandoc, winslash = "/", mustWork = TRUE),
+                                 id$directory)
+    }
+  }
+  if (!isTRUE(valid)) return("pkgdown::build_site() returned invalid or changed child proof")
+  character()
+}
+
+# Fixed disposable-child body. Public rmarkdown discovery changes only this child's cache.
+site_render = function(stage, dest, pandoc, proof) {
+  state = new.env(parent = emptyenv())
+  state$warnings = 0L
+  state$pandoc = NULL
+  withCallingHandlers({
+    original = tryCatch({
+      if (!is.null(pandoc) &&
+          (!is.character(pandoc) || length(pandoc) != 1L || is.na(pandoc) || !nzchar(pandoc))) {
+        stop("Pandoc directory must be one nonempty string", call. = FALSE)
+      }
+      identity = function(found) {
+        if (!identical(as.character(found$version), "3.10")) {
+          stop("Site rendering requires compatible Pandoc 3.10", call. = FALSE)
+        }
+        directory = normalizePath(found$dir, winslash = "/", mustWork = TRUE)
+        executable = file.path(directory,
+                               if (.Platform$OS.type == "windows") "pandoc.exe" else "pandoc")
+        info = file.info(executable, extra_cols = FALSE)
+        if (nrow(info) != 1L || is.na(info$isdir) || info$isdir ||
+            is.na(info$size) || info$size <= 0 || file.access(executable, 1L) != 0L) {
+          stop("Site rendering cannot admit its Pandoc executable", call. = FALSE)
+        }
+        executable = normalizePath(executable, winslash = "/", mustWork = TRUE)
+        md5 = unname(tools::md5sum(executable))
+        if (is.na(md5)) stop("Site rendering cannot read its Pandoc executable", call. = FALSE)
+        list(version = "3.10", directory = directory, executable = executable, md5 = md5)
+      }
+      before = identity(rmarkdown::find_pandoc(cache = FALSE, dir = pandoc, version = "3.10"))
+      if (!is.null(pandoc) &&
+          !identical(before$directory, normalizePath(pandoc, winslash = "/", mustWork = TRUE))) {
+        stop("Site rendering selected a different Pandoc directory", call. = FALSE)
+      }
+      state$pandoc = before
+      pkgdown::build_site(stage, preview = FALSE, new_process = FALSE,
+                          override = list(destination = dest))
+      after = identity(rmarkdown::find_pandoc(cache = TRUE))
+      if (!identical(before, after)) stop("Site renderer changed during rendering", call. = FALSE)
+      NULL
+    }, error = function(e) e, interrupt = function(e) e)
+    report = list(status = if (is.null(original)) 0L else 1L,
+                  warnings = state$warnings, pandoc = state$pandoc)
+    publication = tryCatch(saveRDS(report, proof), error = function(e) e, interrupt = function(e) e)
+    if (!is.null(original)) stop(original)
+    if (!is.null(publication)) stop(publication)
+    if (state$warnings > 0L) stop("Site rendering emitted R warnings", call. = FALSE)
+    invisible(report)
+  }, warning = function(w) {
+    state$warnings = state$warnings + 1L
+  })
+}
+
+# Destination remains positional; renderer selection is explicit and optional.
+site_build_args = function(args, default = file.path(dirname(tempdir()), "gptr-site")) {
+  usage = function() stop("Usage: build-site.R [destination] [--pandoc DIRECTORY]", call. = FALSE)
+  pandoc = NULL
+  flag = which(args == "--pandoc")
+  if (length(flag)) {
+    if (length(flag) != 1L || flag == length(args)) usage()
+    pandoc = args[flag + 1L]
+    if (is.na(pandoc) || !nzchar(pandoc) || startsWith(pandoc, "--")) usage()
+    args = args[-c(flag, flag + 1L)]
+  }
+  if (length(args) > 1L || anyNA(args) || any(!nzchar(args)) || any(startsWith(args, "--"))) usage()
+  list(dest = if (length(args)) args[1L] else default, pandoc = pandoc)
 }
 
 # ---- cran-comments.md (Task 13) ----------------------------------------------------------------
