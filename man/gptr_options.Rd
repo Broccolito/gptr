@@ -213,7 +213,7 @@ provider keys: read at the first use of a provider; see \code{\link[=gptr_env]{g
 processes only.
 \item \code{GPTR_LIVE_TESTS}: \code{"true"} enables the package's live tests; not used at run time.
 \item \verb{_R_CHECK_PACKAGE_NAME_}: set by \verb{R CMD check}; outside the package's own tests gptr then
-replays recorded document blocks only and runs at most two child processes at a time.
+replays recorded document blocks only and caps each child-process pool at two.
 }
 }
 

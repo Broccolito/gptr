@@ -27,8 +27,13 @@ env_allow_common = c("TZ", "LANG", "LANGUAGE", "LC_ALL", "LC_COLLATE", "LC_CTYPE
 # What an R worker additionally needs. Only gptr variables that 04 section 3.2 defines; the
 # others a worker needs (GPTR_WORKER, GPTR_PROJECT_ROOT) are passed by P19 through `set =`.
 # R_ARCH is retained for architecture-specific R executable and processx lookups (WIN-1).
+# Preserve explicit nonsecret check and numerical-thread policy in R worker descendants.
+# Missing, blank and unfamiliar values are passed unchanged; no core count is inferred.
 env_allow_r = c("R_HOME", "R_ARCH", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE", "R_USER",
-                "R_USER_CONFIG_DIR", "R_USER_DATA_DIR", "R_USER_CACHE_DIR", "GPTR_SUBAGENT_DEPTH")
+                "R_USER_CONFIG_DIR", "R_USER_DATA_DIR", "R_USER_CACHE_DIR", "GPTR_SUBAGENT_DEPTH",
+                "_R_CHECK_PACKAGE_NAME_", "_R_CHECK_LIMIT_CORES_", "OMP_THREAD_LIMIT",
+                "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+                "VECLIB_MAXIMUM_THREADS")
 
 #' The six built-in profiles as child_env spec fields (base, keep, drop, set, billing)
 #' @noRd

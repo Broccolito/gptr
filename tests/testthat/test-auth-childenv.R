@@ -313,3 +313,95 @@ test_that("inherited settings containing registered values or derived forms are 
   }
   expect_identical(child("helper", pass = "CONFIG")[["CONFIG"]], parent[["CONFIG"]])
 })
+
+# Explicit nonsecret check/thread policy stays with R workers, without widening MCP's allowlist.
+test_that("worker environments forward explicit check and thread policy", {
+  context = c(`_R_CHECK_PACKAGE_NAME_` = "gptr", `_R_CHECK_LIMIT_CORES_` = "TRUE",
+    OMP_THREAD_LIMIT = "2", OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1",
+    MKL_NUM_THREADS = "1", VECLIB_MAXIMUM_THREADS = "1")
+  withr::local_envvar(context)
+  before = Sys.getenv()
+  env = child_env("worker")
+  expect_identical(env[names(context)], context)
+  expect_false(any(names(context) %in% names(child_env("mcp"))))
+  expect_false(anyNA(env))
+  expect_identical(Sys.getenv(), before)
+})
+
+test_that("worker policy keeps absent blank arbitrary and explicitly overridden values", {
+  keys = c("_R_CHECK_PACKAGE_NAME_", "_R_CHECK_LIMIT_CORES_", "OMP_THREAD_LIMIT",
+    "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
+  withr::with_envvar(stats::setNames(rep(NA_character_, length(keys)), keys), {
+    expect_false(any(keys %in% names(child_env("worker"))))
+  })
+  for (value in c("", "leave-as-is")) {
+    context = stats::setNames(rep(value, length(keys)), keys)
+    withr::with_envvar(context, {
+      expect_identical(child_env("worker")[keys], context)
+      expect_identical(Sys.getenv(keys, names = FALSE), unname(context))
+    })
+  }
+  context = stats::setNames(rep("2", length(keys)), keys)
+  explicit = stats::setNames(rep("1", length(keys)), keys)
+  withr::with_envvar(context, {
+    expect_identical(child_env("worker", set = explicit)[keys], explicit)
+    expect_identical(Sys.getenv(keys, names = FALSE), unname(context))
+  })
+})
+
+test_that("worker policy construction preserves caller state and explicit overrides", {
+  local_vault()
+  withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr", OMP_THREAD_LIMIT = "2")
+  capture = function() {
+    list(env = Sys.getenv(), options = options(), cwd = getwd(), libs = .libPaths(),
+      kind = RNGkind(), search = search(),
+      seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE),
+      objects = serialize(mget(ls(envir = globalenv(), all.names = TRUE),
+        envir = globalenv(), inherits = FALSE), NULL))
+  }
+  before = capture()
+  env = child_env("worker", set = c(`_R_CHECK_PACKAGE_NAME_` = "", OMP_THREAD_LIMIT = "1"))
+  expect_identical(env[["_R_CHECK_PACKAGE_NAME_"]], "")
+  expect_identical(env[["OMP_THREAD_LIMIT"]], "1")
+  expect_identical(Sys.getenv("_R_CHECK_PACKAGE_NAME_"), "gptr")
+  expect_identical(Sys.getenv("OMP_THREAD_LIMIT"), "2")
+  after = capture()
+  for (name in names(before)) expect_identical(after[[name]], before[[name]], label = name)
+})
+
+test_that("an Rscript worker retains check policy and its caller unchanged", {
+  skip_on_cran()
+  local_vault()
+  context = c(`_R_CHECK_PACKAGE_NAME_` = "gptr", `_R_CHECK_LIMIT_CORES_` = "TRUE",
+    OMP_THREAD_LIMIT = "2", OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1",
+    MKL_NUM_THREADS = "1", VECLIB_MAXIMUM_THREADS = "1")
+  withr::local_envvar(context)
+  # These three exact loaded-source functions need only base R in this private child.
+  probe = paste(
+    paste("check_running =", paste(deparse(check_running), collapse = "\n")),
+    paste("proc_pool_cap =", paste(deparse(proc_pool_cap), collapse = "\n")),
+    paste("supervise_default =", paste(deparse(supervise_default), collapse = "\n")),
+    paste0("context = ", paste(deparse(context), collapse = "\n")),
+    "stopifnot(identical(Sys.getenv(names(context), names = FALSE), unname(context)),",
+    "  check_running(), identical(proc_pool_cap(8L), 2L),",
+    "  identical(supervise_default(), FALSE))",
+    "cat('WORKER_CHECK_CONTEXT_CHILD_OK')", sep = "\n")
+  capture = function() {
+    list(env = Sys.getenv(), options = options(), cwd = getwd(), libs = .libPaths(),
+      kind = RNGkind(), search = search(),
+      seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE),
+      objects = serialize(mget(ls(envir = globalenv(), all.names = TRUE),
+        envir = globalenv(), inherits = FALSE), NULL))
+  }
+  before = capture()
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", probe), env = child_env("worker"),
+    stdout = "|", stderr = "|")
+  withr::defer(if (p$is_alive()) p$kill_tree())
+  p$wait(10000L)
+  expect_false(p$is_alive())
+  expect_identical(p$get_exit_status(), 0L)
+  expect_identical(p$read_all_output(), "WORKER_CHECK_CONTEXT_CHILD_OK")
+  expect_identical(p$read_all_error(), "")
+  after = capture()
+  for (name in names(before)) expect_identical(after[[name]], before[[name]], label = name)
+})
