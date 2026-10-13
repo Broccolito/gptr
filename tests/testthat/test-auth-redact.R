@@ -988,3 +988,87 @@ test_that("scrub discovery does not turn lock metadata into rewrite targets", {
   expect_identical(nrow(gptr_scrub()), 0L)
   expect_identical(nrow(gptr_scrub(pid)), 1L)
 })
+
+
+# Exact user-state comparison around the leaf; no state is restored by this observer.
+redact_parse_snapshot = function() {
+  list(env = Sys.getenv(), options = options(), cwd = getwd(), libs = .libPaths(),
+       kind = RNGkind(), search = search(),
+       seed = get0(".Random.seed", globalenv(), inherits = FALSE),
+       objects = serialize(mget(ls(globalenv(), all.names = TRUE), globalenv(),
+                                inherits = FALSE), NULL))
+}
+
+test_that("recorded literal rewriting preserves caller-disabled parse data", {
+  local_vault()
+  secret_register(fake_ghp, "GITHUB_PAT", "test")
+  withr::local_seed(842L)
+  code = paste0("token = '", fake_ghp, "'")
+  expected = "token = Sys.getenv(\"GITHUB_PAT\")"
+  for (setting in c(FALSE, TRUE)) {
+    withr::local_options(list(keep.parse.data = setting))
+    before = redact_parse_snapshot()
+    rewritten = code_rewrite_literals(code)
+    history = code_for_history(code)
+    after = redact_parse_snapshot()
+    testthat::expect(identical(rewritten, list(code = expected, needs = "GITHUB_PAT")),
+                "the literal rewrite and needs metadata must be exact")
+    testthat::expect(identical(history, structure(expected, needs = "GITHUB_PAT")),
+                "history must retain the exact replayable literal")
+    testthat::expect(identical(after, before), "all eight caller fields must be exact")
+  }
+})
+
+test_that("recorded literal parse failures restore caller parse settings", {
+  local_vault()
+  secret_register(fake_ghp, "GITHUB_PAT", "test")
+  withr::local_seed(843L)
+  withr::local_options(keep.parse.data = FALSE)
+  code = paste0("token = '", fake_ghp, "' +")
+  before = redact_parse_snapshot()
+  malformed = code_rewrite_literals(code)
+  after = redact_parse_snapshot()
+  testthat::expect(identical(malformed, list(code = code, needs = character())),
+              "malformed code must retain the exact original fallback")
+  testthat::expect(identical(after, before), "all eight caller fields must be exact")
+  holder = new.env(parent = emptyenv())
+  fn = code_rewrite_literals
+  scope = new.env(parent = environment(fn))
+  scope$parse = function(...) {
+    holder$enabled = getOption("keep.parse.data")
+    stop("fixed parse failure")
+  }
+  environment(fn) = scope
+  before = redact_parse_snapshot()
+  fallback = fn(code)
+  after = redact_parse_snapshot()
+  testthat::expect(identical(fallback, list(code = code, needs = character())),
+              "the parser failure must retain the exact original fallback")
+  testthat::expect(identical(holder$enabled, TRUE), "parse data must be enabled while parsing")
+  testthat::expect(identical(after, before), "all eight caller fields must be exact")
+})
+
+test_that("recorded literal failures retain original conditions and caller state", {
+  local_vault()
+  secret_register(fake_ghp, "GITHUB_PAT", "test")
+  withr::local_seed(844L)
+  withr::local_options(keep.parse.data = FALSE)
+  code = paste0("token = '", fake_ghp, "'")
+  for (kind in c("error", "interrupt")) {
+    original = structure(list(message = paste("fixed", kind), call = NULL),
+                         class = c(paste0("gptr_test_", kind), kind, "condition"))
+    fn = code_rewrite_literals
+    scope = new.env(parent = environment(fn))
+    if (identical(kind, "error")) {
+      scope$secret_name_of = function(value) stop(original)
+    } else {
+      scope$parse = function(...) stop(original)
+    }
+    environment(fn) = scope
+    before = redact_parse_snapshot()
+    seen = tryCatch(fn(code), error = function(e) e, interrupt = function(e) e)
+    after = redact_parse_snapshot()
+    testthat::expect(identical(seen, original), "the original condition object must be exact")
+    testthat::expect(identical(after, before), "all eight caller fields must be exact")
+  }
+})
