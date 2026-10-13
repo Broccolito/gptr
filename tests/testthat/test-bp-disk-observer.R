@@ -71,11 +71,16 @@ test_that("the optional observer initializes privately and restores wrapper fail
   expect_false("GPTR_PRIVATE_PATH" %in% before$keys)
   writeLines(c("from os import path as GPTR_PRIVATE_PATH", "class DiskObserver:",
     "    def __init__(self, root, declarations=(), selected=GPTR_PRIVATE_PATH.basename):",
-    "        self.name = selected(root)", "    def snapshot(self):",
+    "        self.name = selected(root)", "    def snapshot(self, *, declared_only=False):",
+    "        if declared_only: raise RuntimeError('synthetic-private-declared-mode')",
     "        return dict(entries=0, directories=1, declared_links=0, disappeared=0,",
     "                    bytes=len(self.name)*0, max_depth=0, elapsed_s=0)"), source)
   observe = bp_disk_observer(root, source = source)
   expect_identical(as.numeric(observe()$bytes), 0)
+  declared = bp_disk_observer(root,
+    list(list(entry = "dangling-file", target = "missing-target")), source = source,
+    declared_only = TRUE)
+  expect_error(declared(), "synthetic-private-declared-mode")
   expect_identical(bp_disk_test_main(), before)
   writeLines(c("from os import path as GPTR_PRIVATE_PATH", "class DiskObserver:",
     "    def __init__(self, root, declarations=(), selected=GPTR_PRIVATE_PATH.basename):",
@@ -84,7 +89,7 @@ test_that("the optional observer initializes privately and restores wrapper fail
   expect_identical(bp_disk_test_main(), before)
   writeLines(c("from os import path as GPTR_PRIVATE_PATH", "class DiskObserver:",
     "    def __init__(self, root, declarations=(), selected=GPTR_PRIVATE_PATH.basename):",
-    "        self.name = selected(root)", "    def snapshot(self):",
+    "        self.name = selected(root)", "    def snapshot(self, *, declared_only=False):",
     "        raise RuntimeError('synthetic-private-snapshot-error')"), source)
   failure = bp_disk_observer(root, source = source)
   expect_error(failure(), "synthetic-private-snapshot-error")
