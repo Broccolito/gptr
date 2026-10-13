@@ -370,8 +370,9 @@ compact_should = function(s, tokens, idle_s) {
 }
 
 #' The checkpoint compactor's trigger: the threshold (waiting for 20% growth of the window
-#' after a threshold compaction, IC-71) or the cold rule (idle beyond the tail TTL with at
-#' least `gptr.compact_cold_min` tokens); an unknown count or idle time is no evidence (IC-74)
+#' after a threshold compaction, or 20% of the finite cap for an unknown window, IC-71) or the
+#' cold rule (idle beyond the tail TTL with at least `gptr.compact_cold_min` tokens). An unknown
+#' count or idle time is no evidence (IC-74).
 #' @noRd
 compact_checkpoint_should = function(session, ctx) {
   num = function(x) suppressWarnings(as.numeric(x %||% NA_real_))[1]
@@ -386,9 +387,20 @@ compact_checkpoint_should = function(session, ctx) {
   if (tokens >= thr) {
     last = compact_last(session)
     after = num(last$details$tokens_after)
-    if (is.na(after)) after = 0
-    waits = !is.null(last) && identical(last$details$reason, "threshold") && !is.na(window)
-    if (!waits || tokens >= after + 0.2 * window) return(structure(TRUE, reason = "threshold"))
+    waits = !is.null(last) && identical(last$details$reason, "threshold")
+    if (waits && is.na(window) && is.finite(thr)) {
+      multiplier = num(session_data(session)$estimator$m %||% 1)
+      calibrated = after * multiplier
+      if (is.finite(multiplier) && multiplier > 0 && is.finite(tokens) &&
+          is.finite(after) && after >= 0 && is.finite(calibrated) &&
+          tokens >= calibrated + 0.2 * thr) {
+        return(structure(TRUE, reason = "threshold"))
+      }
+    } else {
+      if (is.na(after)) after = 0
+      waits = waits && !is.na(window)
+      if (!waits || tokens >= after + 0.2 * window) return(structure(TRUE, reason = "threshold"))
+    }
   }
   ttl = if (identical(prompt_cache_gap_state(session)$ttl, "1h")) 3600 else 300
   if (!is.na(idle) && idle > ttl && tokens >= gptr_opt("compact_cold_min")) {

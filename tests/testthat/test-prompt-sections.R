@@ -1282,3 +1282,41 @@ test_that("gptr_prompt() accepts a session's own rank-0 preset (IC-69)", {
   expect_identical(attr(gptr_prompt(s, preset = "p07_own"), "preset"), "p07_own")
   expect_error(gptr_prompt(preset = "p07_own"), class = "gptr_error_invalid_argument")
 })
+
+# ---- Finite-cap floor protection with an unknown context window (IC-71) -------------------------
+
+test_that("an unknown window honors a finite compaction floor before provider transfer", {
+  local_project()
+  fake = local_fake_provider(list("unused"))
+  s = session_new("fake/fake-1", "auto", home = new.env(), preset = "minimal")
+  local_gptr_options(compact_at = 1500)
+  original = prompt_model
+  local_mocked_bindings(prompt_model = function(ref) {
+    model = original(ref)
+    model$context = NA_real_
+    model
+  }, prompt_static_tokens = function(frozen, session_id = NULL) 1000)
+  refusal = tryCatch(prompt_freeze(s, list(interactive = FALSE)), error = identity)
+  expect_true(inherits(refusal, "gptr_error_invalid_argument"))
+  expect_identical(refusal$arg, "compact_at")
+  message = if (inherits(refusal, "condition")) conditionMessage(refusal) else ""
+  expect_match(message, "Increase compact_at", fixed = TRUE)
+  expect_null(session_data(s)$frozen)
+  expect_length(session_data(s)$entries, 0L)
+  expect_length(fake_requests(fake), 0L)
+  expect_equal(nrow(session_data(s)$usage), 0L)
+})
+
+test_that("unknown-window floor checks cut reinjection only for a finite cap", {
+  frozen = list(model = "m", preset = "standard", tools_json = "",
+                sections = data.frame(tokens = 500))
+  local_mocked_bindings(prompt_model = function(ref) list(context = NA_real_, max_output = NA))
+  local_gptr_options(compact_at = 4000)
+  expect_identical(prompt_floor_check(frozen, 500, 0), frozen)
+  cut = prompt_floor_check(frozen, 9000, 10000)
+  expect_equal(cut$reinject, list(project = 1000, skills = 1000))
+  local_gptr_options(compact_at = Inf)
+  expect_identical(prompt_floor_check(frozen, 9000, 10000), frozen)
+  local_gptr_options(compact_at = NA)
+  expect_identical(prompt_floor_check(frozen, 9000, 10000), frozen)
+})

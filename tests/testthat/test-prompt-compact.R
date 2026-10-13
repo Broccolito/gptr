@@ -1088,3 +1088,149 @@ test_that("a checkpoint reply without a usage record makes the summed usage unkn
   expect_identical(n$i, 3L)
   expect_null(compactions(s)[[2]]$usage)
 })
+
+# ---- Finite-cap growth protection with an unknown context window (IC-71) ------------------------
+
+test_that("unknown-window threshold compaction waits for measured finite-cap growth", {
+  x = compact_session()
+  s = x$s
+  local_gptr_options(compact_at = 1500)
+  local_mocked_bindings(compact_target = function(s, reason = NULL) {
+    list(context = NA_real_, max_output = NA)
+  })
+  msg_entry(s, msg_user("hi"))
+  expect_true(compact_should(s, tokens = 1500, idle_s = 0))
+  session_append(s, list(type = "compaction", summary = "checkpoint", first_kept_entry_id = NULL,
+                         tokens_before = 8000,
+                         details = list(reason = "threshold", tokens_after = 7000),
+                         usage = NULL, gptr = list(blocks = list(block_text("c")),
+                                                   state = compact_state_empty(), n = 1L)))
+  expect_false(compact_should(s, tokens = 7000, idle_s = 0))
+  expect_false(compact_should(s, tokens = 7001, idle_s = 0))
+  expect_false(compact_should(s, tokens = 7299, idle_s = 0))
+  hit = compact_should(s, tokens = 7300, idle_s = 0)
+  expect_true(hit)
+  expect_identical(attr(hit, "reason"), "threshold")
+  expect_length(fake_requests(x$fake), 0L)
+  expect_equal(nrow(session_data(s)$usage), 0L)
+})
+
+test_that("unknown-window growth requires finite post-checkpoint and current counts", {
+  x = compact_session()
+  s = x$s
+  local_gptr_options(compact_at = 1500)
+  measured = new.env()
+  measured$after = 7000
+  local_mocked_bindings(compact_target = function(s, reason = NULL) {
+    list(context = NA_real_, max_output = NA)
+  }, compact_last = function(s) {
+    list(details = list(reason = "threshold", tokens_after = measured$after))
+  })
+  for (after in list(NULL, NA_real_, NaN, Inf, -Inf, -1)) {
+    measured$after = after
+    expect_false(compact_should(s, tokens = 8000, idle_s = 0))
+  }
+  measured$after = 7000
+  for (tokens in c(NA_real_, NaN, Inf, -Inf)) {
+    expect_false(compact_should(s, tokens = tokens, idle_s = 0))
+  }
+  expect_true(compact_should(s, tokens = 7300, idle_s = 0))
+  expect_length(fake_requests(x$fake), 0L)
+  expect_equal(nrow(session_data(s)$usage), 0L)
+})
+
+test_that("finite-cap growth produces one durable checkpoint charge at the boundary", {
+  local_project()
+  x = compact_session(list("## Goal\n- keep the result"))
+  s = x$s
+  local_gptr_options(compact_at = 12000)
+  original = prompt_model
+  local_mocked_bindings(prompt_model = function(ref) {
+    model = original(ref)
+    model$context = NA_real_
+    model
+  })
+  msg_entry(s, msg_user("hi"))
+  session_append(s, list(type = "compaction", summary = "checkpoint", first_kept_entry_id = NULL,
+                         tokens_before = 18000,
+                         details = list(reason = "threshold", tokens_after = 14000),
+                         usage = NULL, gptr = list(blocks = list(block_text("c")),
+                                                   state = compact_state_empty(), n = 1L)))
+  d = session_data(s)
+  d$estimator = list(m = 1.08, n = 1L)
+  calibrated = 14000 * d$estimator$m
+  boundary = calibrated + 0.2 * 12000
+  expect_false(compact_should(s, tokens = calibrated, idle_s = 0))
+  expect_false(compact_should(s, tokens = boundary - 1, idle_s = 0))
+  expect_length(fake_requests(x$fake), 0L)
+  expect_equal(nrow(session_data(s)$usage), 0L)
+  hit = compact_should(s, tokens = boundary, idle_s = 0)
+  expect_identical(attr(hit, "reason"), "threshold")
+  compact_run(s, attr(hit, "reason"))
+  expect_length(fake_requests(x$fake), 1L)
+  expect_equal(nrow(session_data(s)$usage), 1L)
+  expect_length(compactions(s), 2L)
+})
+
+test_that("finite-cap waiting leaves known-window cold and disabled-cap rules intact", {
+  x = compact_session()
+  s = x$s
+  local_gptr_options(compact_at = 1500, compact_cold_min = 1000)
+  target = new.env()
+  target$window = NA_real_
+  local_mocked_bindings(compact_target = function(s, reason = NULL) {
+    list(context = target$window, max_output = 8192)
+  }, compact_last = function(s) {
+    list(details = list(reason = "threshold", tokens_after = 7000))
+  })
+  cold = compact_should(s, tokens = 7000, idle_s = 400)
+  expect_identical(attr(cold, "reason"), "cold")
+  local_gptr_options(compact_at = Inf)
+  expect_false(compact_should(s, tokens = 7000, idle_s = 0))
+  expect_identical(attr(compact_should(s, tokens = 7000, idle_s = 400), "reason"), "cold")
+  local_gptr_options(compact_at = 1500)
+  target$window = 200000
+  expect_false(compact_should(s, tokens = 46999, idle_s = 0))
+  expect_true(compact_should(s, tokens = 47000, idle_s = 0))
+  expect_length(fake_requests(x$fake), 0L)
+  expect_equal(nrow(session_data(s)$usage), 0L)
+})
+
+test_that("unknown-window growth compares checkpoint and current counts on one calibrated basis", {
+  x = compact_session()
+  s = x$s
+  d = session_data(s)
+  local_gptr_options(compact_at = 1500)
+  local_mocked_bindings(compact_target = function(s, reason = NULL) {
+    list(context = NA_real_, max_output = NA)
+  }, compact_last = function(s) {
+    list(details = list(reason = "threshold", tokens_after = 7000))
+  })
+  d$estimator = list(m = 1.08, n = 1L)
+  calibrated = 7000 * d$estimator$m
+  expect_false(compact_should(s, tokens = calibrated, idle_s = 0))
+  expect_false(compact_should(s, tokens = calibrated + 299, idle_s = 0))
+  expect_true(compact_should(s, tokens = calibrated + 300, idle_s = 0))
+  d$estimator$m = 1.2
+  calibrated = 7000 * d$estimator$m
+  expect_false(compact_should(s, tokens = calibrated, idle_s = 0))
+  expect_false(compact_should(s, tokens = calibrated + 299, idle_s = 0))
+  expect_true(compact_should(s, tokens = calibrated + 300, idle_s = 0))
+  d$estimator$m = 0.9
+  calibrated = 7000 * d$estimator$m
+  expect_false(compact_should(s, tokens = calibrated, idle_s = 0))
+  expect_false(compact_should(s, tokens = calibrated + 299, idle_s = 0))
+  expect_true(compact_should(s, tokens = calibrated + 300, idle_s = 0))
+  for (multiplier in c(NA_real_, NaN, Inf, -Inf, 0, -1)) {
+    d$estimator$m = multiplier
+    expect_false(compact_should(s, tokens = 8000, idle_s = 0))
+  }
+  d$estimator = NULL
+  expect_false(compact_should(s, tokens = 7000, idle_s = 0))
+  expect_true(compact_should(s, tokens = 7300, idle_s = 0))
+  d$estimator = list(n = 1L)
+  expect_false(compact_should(s, tokens = 7000, idle_s = 0))
+  expect_true(compact_should(s, tokens = 7300, idle_s = 0))
+  expect_length(fake_requests(x$fake), 0L)
+  expect_equal(nrow(d$usage), 0L)
+})
