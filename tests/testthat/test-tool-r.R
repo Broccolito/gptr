@@ -37,7 +37,7 @@ test_that("the r schema is frozen in one of four variants (IC-68)", {
   expect_identical(spec$exposure, "direct")
   expect_identical(spec$snippet, paste("Run R code in the user's live session (objects persist;",
                                        "plots come back as images)"))
-  expect_identical(length(spec$guidelines), 3L)
+  expect(identical(length(spec$guidelines), 4L), "The r tool has four guidance rules.")
   expect_error(ns_resolve("r"), class = "gptr_error_unknown_member")
 })
 
@@ -48,7 +48,9 @@ test_that("the r spec reproduces P07's stand-in in each of its four variants (IC
   spec = registry_get("tool", "r")
   expect_identical(spec$description, t$description)
   expect_identical(spec$snippet, t$snippet)
-  expect_identical(as.character(spec$guidelines), as.character(unlist(t$guidelines)))
+  # Keep the original three guidelines byte-exact to the historical P07 benchmark.
+  expect_identical(as.character(spec$guidelines)[seq_along(t$guidelines)],
+                   as.character(unlist(t$guidelines)))
   for (doc in c(TRUE, FALSE)) {
     for (human in c(TRUE, FALSE)) {
       want = t$input_schema

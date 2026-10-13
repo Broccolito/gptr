@@ -16,7 +16,9 @@ r_tool_guidelines = c(
         "data that is already in memory"),
   paste("In r, assign results to names and print compact summaries (dim(), head(),",
         "peter$describe(x)) rather than whole objects"),
-  "Use = for assignment and |> for pipes in all R code you write"
+  "Use = for assignment and |> for pipes in all R code you write",
+  paste("R recycles matrix/vector arithmetic down columns; use sweep(x, 2L, values, \"-\")",
+        "for feature-wise centering or distances")
 )
 
 #' The `r` input schema variant (IC-68): `record` and `note` only with a document bound at freeze,
