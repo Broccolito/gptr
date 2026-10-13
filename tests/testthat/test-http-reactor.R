@@ -402,12 +402,30 @@ test_that("INFRA-28: the wire log writes redacted lines open-append-close", {
   expect_null(rec$status)
   expect_setequal(names(rec), c("ts", "request_id", "provider", "model", "url", "bytes",
                                 "seconds", "event"))
-  expect_type(rec$ts, "double")
+  expect_true(is.numeric(rec$ts))
+  expect_length(rec$ts, 1L)
+  expect_true(is.finite(rec$ts))
   expect_lt(abs(rec$ts - as.numeric(Sys.time())), 60)
   expect_false(any(grepl("sk-wire-test-0123456789abcdef", lines, fixed = TRUE)))
   wire_log(tr, "done", 200L)
   last = json_decode(utils::tail(readLines(path, encoding = "UTF-8"), 1L))
   expect_identical(last$status, 200L)
+  # JSON numeric scalars may decode as integer at whole seconds, or double otherwise.
+  clocked_wire_log = wire_log
+  clock = new.env(parent = environment(clocked_wire_log))
+  clock$Sys.time = function() as.POSIXct(epoch, origin = "1970-01-01", tz = "UTC")
+  environment(clocked_wire_log) = clock
+  for (epoch in c(1700000000, 1700000000.125)) {
+    clocked_wire_log(tr, "start")
+    timed = json_decode(utils::tail(readLines(path, encoding = "UTF-8"), 1L))
+    expect_true(is.numeric(timed$ts))
+    expect_length(timed$ts, 1L)
+    expect_true(is.finite(timed$ts))
+    expect_identical(as.numeric(timed$ts), epoch)
+    expect_identical(timed$event, "start")
+    expect_identical(timed$request_id, tr$request_id)
+    expect_null(timed$status)
+  }
 })
 
 test_that("the wire log is off by default and stays inside the workspace or tempdir()", {

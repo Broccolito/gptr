@@ -190,8 +190,27 @@ test_that("a delayed checkpoint error falls back once without retrying the reque
                                     usage = usage_new(input = 100, output = 5)), "Done."))
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
+  pending = x$run$compact_pending
+  ids = x$run$request_ids
+  again = cp_wait_short(x)
+  guard_released = FALSE
+  # Guard the finite waits, then release before expectation formatting and completion.
+  if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
+      all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
+      identical(again$value, x$s) && again$elapsed < 0.2 &&
+      identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      is.list(pending) && identical(x$run$compact_pending, pending) &&
+      identical(x$run$request_ids, ids) && length(fake_requests(x$fake)) == 1L &&
+      nrow(x$s$usage) == 0L && length(cp_wait_entries(x$s)) == 0L) {
+    reactor_cancel(x$guard)
+    guard_released = TRUE
+  }
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
+  expect_lt(again$elapsed, 0.2)
+  expect_true(guard_released)
+  expect_identical(x$run$compact_pending, pending)
+  expect_identical(x$run$request_ids, ids)
   expect_identical(x$s$status, "running")
   gptr_wait(x$s, timeout = 1)
   expect_identical(x$s$status, "idle")
