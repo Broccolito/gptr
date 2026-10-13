@@ -18,12 +18,15 @@ compaction_entries = function(s) {
 compaction_events = function(types, .env = parent.frame()) {
   seen = new.env(parent = emptyenv())
   seen$events = list()
+  offs = list()
+  withr::defer({
+    for (off in offs) off()
+  }, envir = .env)
   for (type in types) {
-    off = gptr_register(gptr_hook(type, function(event, ctx) {
+    offs[[length(offs) + 1L]] = gptr_register(gptr_hook(type, function(event, ctx) {
       seen$events[[length(seen$events) + 1L]] = event
       NULL
     }))
-    withr::defer(off(), envir = .env)
   }
   seen
 }
@@ -463,4 +466,47 @@ test_that("the JSONL sink records checkpoint request and usage without exposing 
   expect_identical(usage[[1L]]$run, run$id)
   expect_true(is.character(usage[[1L]]$row[[1L]]$started))
   expect_false(any(grepl("INTERNAL_SYNTHETIC_SUMMARY", lines, fixed = TRUE)))
+})
+
+test_that("compaction event fixtures remove every hook on return and error", {
+  reg = local_registry()
+  user_env = new.env(parent = baseenv())
+  user_env$marker = "unrelated user hook"
+  user = eval(parse(text = "function(event, ctx) marker", keep.source = TRUE), user_env)
+  user_attributes = attributes(user)
+  user_body = body(user)
+  spec = gptr_hook("turn_end", user)
+  off = gptr_register(spec)
+  withr::defer(off())
+  types = c("before_request", "usage", "session_compact", "agent_end")
+  for (abort in c(FALSE, TRUE)) {
+    before = as.list(reg$recs, all.names = TRUE)
+    invoke = function() {
+      seen = compaction_events(types)
+      ids = setdiff(ls(reg$recs, all.names = TRUE), names(before))
+      expect_length(ids, length(types))
+      hooks = lapply(ids, get, envir = reg$recs, inherits = FALSE)
+      expect_setequal(vapply(hooks, function(rec) rec$spec$event, ""), types)
+      for (type in types) {
+        hook = Filter(function(rec) identical(rec$spec$event, type), hooks)
+        expect_length(hook, 1L)
+        hook[[1L]]$spec$handler(list(type = type), NULL)
+      }
+      expect_identical(vapply(seen$events, function(event) event$type, ""), types)
+      if (abort) stop("fixture exit", call. = FALSE)
+      invisible(NULL)
+    }
+    if (abort) {
+      expect_error(invoke(), "fixture exit", fixed = TRUE)
+    } else {
+      invoke()
+    }
+    expect_identical(as.list(reg$recs, all.names = TRUE), before)
+  }
+  expect_identical(registry_all("hook")[[spec$name]]$handler, user)
+  expect_identical(attributes(user), user_attributes)
+  expect_identical(body(user), user_body)
+  expect_identical(environment(user), user_env)
+  expect_s3_class(attr(user, "srcref"), "srcref")
+  expect_identical(user(NULL, NULL), "unrelated user hook")
 })
