@@ -1,12 +1,11 @@
-## Current source checkpoint — `c08b86d`, 2026-10-13
+## Current source checkpoint — `4cdde1d`, 2026-10-13
 
-UV/Matrix, attained browser deadline and OpenSSL local controls/lints pass; task commits are adopted.
-The Windows comparison is explicitly running on c08b; its default stays off and no outcome is claimed.
-The new normal artifact is pending; accepted fb8 installed/provider scopes remain predecessor evidence.
-Functional Quarto/Q19 pass separately; whole-object serialization and native Shiny remain NONPASS.
-Mac partial/focused and hosted failures stay open; latest Claude native status is AUTH_UNAVAILABLE.
-The V5 four-plan replay passed; this checkpoint requires its own pinned four-check replay.
-See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current table and retained failures.
+The current normal archive/private installation and rebound Python/cold/public consumers pass.
+Three history frontends, Jev typed and measured Azure integrations/numeric/teams/manual cases pass separately.
+Corrected auto/budget live/resume pass; original trigger failures and ML/RNA remain NONPASS.
+Both current Artifact methods hit 2 GiB before canonical publication; native Shiny remains NONPASS.
+Hosted checks, Windows lint/native/resource gates, Claude authentication and release/merge remain open.
+This checkpoint requires its pinned four-check replay; see [TESTING_PLAN.md](TESTING_PLAN.md).
 
 Earlier evidence below remains historical; it does not override these current gates.
 

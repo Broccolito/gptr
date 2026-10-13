@@ -1,17 +1,17 @@
-## Continue from source `c08b86d` — 2026-10-13
+## Continue from source `4cdde1d` — 2026-10-13
 
 Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`.
 Branch `codex/skipped-platform-tests`; main is unmerged and release readiness is false.
-UV/Matrix setup, attained browser deadline and OpenSSL state fixes pass local controls and lint.
-The seven-target Windows comparison is adopted; its explicit current dispatch is in progress.
-The fb8 archive, installed consumers and provider receipts remain exact predecessor scopes.
-Current results and open conditions are listed once in [TESTING_PLAN.md](TESTING_PLAN.md).
+The current normal archive, first optional Python refusal, Python6, Cold7 and public23 pass.
+Rscript/Rmd/Jupyter, Jev typed and measured Azure integrations/numeric/regression/teams/compaction cases pass.
+Original auto/budget triggers and current ML/RNA remain NONPASS; corrected auto/budget live/resume pass.
+Artifact methods still exceed 2 GiB; native Shiny retains caller-state and raw errors.
+Current hosted checks are unfinished; Windows comparison stopped at its silent lint gate.
+See [TESTING_PLAN.md](TESTING_PLAN.md) for the sole current table and retained failures.
 
 Keep one root-owned serial family: 2 GiB sampled RAM/512 MiB output, with owned cleanup.
 Preserve original R sessions and shared Ollama; no model load, unload or reconfiguration.
-Functional Quarto passes its identity scope; original whole-object serialization remains NONPASS.
-Native Shiny caller states/diagnostics, Mac partial/focused failures and hosted failures stay open.
-Next: build the final normal archive, then rebind consumers and current integration gates.
+Next: qualify the compaction fixture and diagnostic routes, then remaining current release gates.
 Run four cross-plan checks with these pinned overlays before committing this checkpoint.
 
 Earlier evidence below remains historical; it does not override these current gates.

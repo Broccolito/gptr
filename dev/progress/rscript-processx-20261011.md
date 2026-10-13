@@ -1,11 +1,10 @@
-## Process validation checkpoint — source `c08b86d`, 2026-10-13
+## Process validation checkpoint — source `4cdde1d`, 2026-10-13
 
-UV13/89P, Matrix16/148P, browser27/1,520P and OpenSSL12/120P pass local controls/all8/lint.
-These source commits require a new normal archive; fb8 installed/provider receipts remain separate.
-Windows comparison dispatch is in progress; source/static checks do not prove native RSS or GC efficacy.
-Functional Quarto retains exact users/framework identities; original serialization remains NONPASS.
-Native Shiny lifecycle components pass while caller states and raw native diagnostics remain NONPASS.
-Interrupted Mac/focused suites, hosted errors and Claude AUTH_UNAVAILABLE remain open.
+Current normal, first optional refusal, Python6, Cold7/public23 and three history frontends pass separately.
+Jev typed and measured Azure integrations/numeric/teams/manual cases preserve caller state and installed bytes.
+Corrected auto/budget live/resume pass; original triggers and ML/RNA retain failures, no runtime cause.
+Artifact67 and fresh app-file methods both hit 2 GiB before complete canonical/state receipts.
+Native Shiny caller states/raw diagnostics, Windows gates and Claude AUTH_UNAVAILABLE remain open.
 Use one owned serial family; see [TESTING_PLAN](../TESTING_PLAN.md) for the sole current table.
 
 Earlier evidence below remains historical; it does not override these current gates.
