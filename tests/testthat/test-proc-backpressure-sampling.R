@@ -147,9 +147,13 @@ test_that("backpressure sample diagnostics are bounded and omit arbitrary messag
 
 test_that("backpressure observer diagnostics retain only current fixed reason codes", {
   source = readLines(test_path("fixtures", "bp-disk-observer.py"))
-  lines = grep("raise ObservationError", source, value = TRUE, fixed = TRUE)
-  codes = sort(unique(sub(".*ObservationError\\(\"([a-z-]+)\"\\).*", "\\1", lines)))
+  lines = grep("raise (ObservationError|_EntryAbsent)", source, value = TRUE)
+  codes = sort(unique(sub(".*(ObservationError|_EntryAbsent)\\(\"([a-z-]+)\"\\).*",
+    "\\2", lines)))
   expect_length(codes, 46L)
+  base_lines = grep("raise ObservationError", lines, value = TRUE, fixed = TRUE)
+  base_codes = sub(".*ObservationError\\(\"([a-z-]+)\"\\).*", "\\1", base_lines)
+  expect_identical(setdiff(codes, base_codes), "observer-parent-entry-absent")
   prefixes = c("", "ObservationError: ", "gptr_owned_disk_observer.ObservationError: ")
   for (code in codes) {
     for (prefix in prefixes) {
