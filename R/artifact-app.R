@@ -715,10 +715,20 @@ artifact_browser_launch = function(args) {
                    operation = "close", path = stderr)
       }
       link = Sys.readlink(root)
-      if (length(link) != 1L || (!is.na(link) && nzchar(link)) ||
-          unlink(root, recursive = TRUE) != 0L || dir.exists(root) || file.exists(root)) {
-        gptr_abort("The private headless browser directory did not finish cleanup.", "io",
-                   operation = "close", path = root)
+      if (length(link) != 1L || (!is.na(link) && nzchar(link))) {
+        gptr_abort(paste0("The private headless browser directory did not finish cleanup: ",
+                         "link check failed."), "io", operation = "close", path = root,
+                   cleanup_stage = "link")
+      }
+      removed = unlink(root, recursive = TRUE)
+      if (removed != 0L) {
+        gptr_abort(paste0("The private headless browser directory did not finish cleanup: ",
+                         "unlink returned ", removed, "."), "io", operation = "close", path = root,
+                   cleanup_stage = "unlink", unlink_status = removed)
+      }
+      if (dir.exists(root) || file.exists(root)) {
+        gptr_abort("The private headless browser directory did not finish cleanup: path remains.",
+                   "io", operation = "close", path = root, cleanup_stage = "remaining")
       }
       # Raw logs remain available to callers after the exact marked family settles.
       invisible(NULL)

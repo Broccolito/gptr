@@ -459,3 +459,38 @@ test_that("artifact browser release settles only its exact retained stopped fami
     expect_true(all(file.exists(x$state$files)))
   }
 })
+
+test_that("artifact browser directory failure reports its stage and retains retry ownership", {
+  for (mode in c("link-shape", "link-target", "unlink", "remaining")) {
+    x = artifact_launch_fixture()
+    owner = x$launch(character())
+    root = x$state$roots[[1L]]
+    x$state$alive = FALSE
+    x$state$unlink_calls = 0L
+    if (mode == "link-shape") x$scope$Sys.readlink = function(path) character()
+    if (mode == "link-target") x$scope$Sys.readlink = function(path) "controlled-foreign-target"
+    x$scope$unlink = function(path, recursive) {
+      expect_identical(path, root)
+      expect_true(recursive)
+      x$state$unlink_calls = x$state$unlink_calls + 1L
+      if (mode == "unlink") 1L else 0L
+    }
+    seen = tryCatch(owner$release(), error = identity)
+    expect_s3_class(seen, "gptr_error_io")
+    expect_identical(seen$operation, "close")
+    expect_identical(seen$path, root)
+    expect_identical(seen$cleanup_stage,
+      if (startsWith(mode, "link")) "link" else mode)
+    expect_identical(x$state$unlink_calls, if (startsWith(mode, "link")) 0L else 1L)
+    if (mode == "unlink") expect_identical(seen$unlink_status, 1L)
+    expect_true(dir.exists(root))
+    expect_identical(owner$get_process(), x$process)
+    expect_identical(x$state$signals, integer())
+    expect_true(all(file.exists(x$state$files)))
+    x$scope$Sys.readlink = base::Sys.readlink
+    x$scope$unlink = base::unlink
+    expect_invisible(owner$release())
+    expect_false(dir.exists(root))
+    expect_true(all(file.exists(x$state$files)))
+  }
+})
