@@ -97,13 +97,33 @@ claimed.
 The complete local `17aa0bf` original-archive as-cran check finished with Status OK:
 zero errors, warnings and notes; 29,509 test passes, zero failures/warnings and 441 skips.
 All 15 complete raw streams were quiet. Source, Python-parent and exact owned cleanup checks
-passed. Four hosted `17aa0bf` consumers of the same 2,625,414-byte archive also reported
+passed. Five hosted `17aa0bf` consumers of the same 2,625,414-byte archive also reported
 zero errors, warnings and notes: Windows release/devel each 29,338 passes/504 skips,
-macOS release 29,478 passes/441 skips and Ubuntu release 29,469 passes/443 skips.
+macOS release 29,478 passes/441 skips and Ubuntu release/devel each 29,469 passes/443 skips.
 This hosted archive differs from the local normal archive bytes. Windows installation was
 reported as 35/40 s; first-check-log through DONE spans were 1,416.608527/1,630.627287 s,
 excluding setup and pre-output startup, not whole-job wall times. Their native10 bodies
-were gated off under CRAN; remaining CI profiles, native Windows and win-builder are pending.
+were gated off under CRAN. Depends/Suggests profiles also completed with Status OK, zero
+errors/warnings/notes and 29,114 passes/488 skips and 29,469 passes/443 skips. A separate
+required Windows release native10 run passed 1,824 assertions with one POSIX-only skip and
+32 strict witnesses; the whole check still has one ERROR from the empty-checkpoint
+idle/aborted assertion. Its abort reason/timing was not recorded. Exact reviewed fixture and startup interrupt cleanup changes are adopted;
+the final combined normal artifact and complete check remain pending. Current source
+`1cb200f` also includes accepted README/main-link and hook documentation controls
+(two cases/10 passes, zero warnings and lint findings);
+win-builder and complete current CI remain required before submission.
+
+The later `945fa60` required Windows release check reports Status OK, with 30,752
+passes, zero failures/warnings and 103 accounted skips. Two are HTTP-only fallbacks
+because the headless browser did not start, so working screenshot/render-error browser
+coverage remains pending. Ten native entries completed; full witness artifacts were
+not retained on success. Installed size 9.8 Mb is INFO in this result.
+
+Current `945fa60` required Linux oldrel4 reports one ERROR and two NOTEs: installed
+size 9.8 Mb and a retained temporary directory. Its sole test failure is the private
+headless-browser directory cleanup condition; the deletion result and residual contents
+were not recorded, so its cause is unassigned. These current NOTEs are retained separately
+from the accepted five-consumer/profiles checks above.
 
 Historical Windows R 4.2 reported an installed-size NOTE of 9.7 Mb (`R/gptr.rdb`
 8,117,319 bytes; installation about 49 s). That NOTE remains retained and must be addressed
