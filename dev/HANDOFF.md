@@ -1,13 +1,20 @@
-## Continue from installed artifact `4e03861`, control `116817b` — 2026-10-13
+## Continue from installed artifact `071fa7e`, control `bf90762` — 2026-10-13
 
-Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`; main remains unmerged. [TESTING_PLAN.md](TESTING_PLAN.md) is the sole current table.
-Current normal install, four provider LIVE/replay pairs, four LIVE integrations and local site render pass their fixed checks; sampled responsive/light-dark review passes. Installed4e and later source/control revisions remain separate; executable changes require the next normal artifact.
-Adopted census `f9caeb0` passes18/109 plus three lints; adopted reference prose `e1bef32` passes caller-preserving roxygen generation. Browser marker-family fix is adopted `cab1129` after35/1773 plus two lints. Lint `951c126` passes6/32 and loop `e586afc`13/105 plus two lints each; old failed baselines stay retained. Pipeline-guide wording is corrected in116817b; native CI closure remains open.
-The199-file memory run completes but is NONPASS from four failures/errors, test/whole warnings and caller-state drift. Original as-cran remains guard-aborted; retained Mac CI has six browser-marker teardown errors, and Windows comparison remains NONPASS. Current CI is still ongoing.
-PNG/lifecycle/caller checks pass in screenshot/public-cycle cells, but native display errors and incomplete FIFO lifetime keep strict native gates open. Only the approved mounted RStudio duplicate was closed; original and native-UX sessions remain alive. CUA routes protected original port27070, so fresh UI testing remains blocked.
-Keep one root-owned serial2GiB/512MiB family and exact owned cleanup. Preserve original R sessions/shared Ollama; no model reconfiguration. Next: fresh normal/direct package check/site, current13/native CI, generated-Shiny/provider-history and real parallel stress, five consumers/profiles, Quarto whole-render, native/Qwen, CRAN review, main publication and merge.
-Release-size optimization is pending: fresh measurements, safe reductions, relevant/full checks and measured cran-comments; preserve any actual NOTE and request consideration if needed.
-Use the unchanged four cross-plan checks on exact116817b plus these three document overlays before checkpoint adoption. All historical suffixes stay byte-identical; this owner makes no check-run or completed-release claim.
+Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`; main remains unmerged. [TESTING_PLAN.md](TESTING_PLAN.md) is the current gate table. Exact source control is `bf90762796dc3aee20803cc5e294580557213563`; the latest installed certificate still belongs to `071fa7e`.
+
+Fresh exact `071fa7e` normal build/install is accepted: certificate `fb0c3e5f` (6,438 B), archive 2,618,439 B, 121 R files/14 guide pairs/79 read-only files; install 14.668 s, complete family 43.455 s and quiet raw logs. Existing 12 provider/integration phases and site evidence still use installed `4e03861` and retain their fixed historical scope.
+
+Direct as-cran stopped at the retained 2 GiB cap after 303.410 s, with size 10.5 Mb INFO and no final `Status: OK`. The trace-padding fix and separate 4 GiB full-check route are prepared; raw errors, complete tests and owned cleanup remain required. Retain old suite/native failures, `e1bef32` CI's 3 successes/10 failures and qualified Windows fixture/resource findings. All 13 current `071fa7e` jobs were in progress at the retained snapshot; no current CI acceptance exists.
+
+Installed logical size is 6,972,558 B (`du` 7,256 KiB); docs 1,224,249 B, extdata 83,185 B, data 0 B, `R/gptr.rdb` 5,022,274 B. Six matched cells support retaining default byte compilation despite the smaller experimental install; both profiles recorded cold `TZDIR` ENV NONPASS before the scoped empty-date fix. The CRAN draft records measured sizes, rejected reductions and incomplete check timing without a submission/ready claim.
+
+Five corrections are accepted through `bf90762`: `9eb7c13` knitr captures the expected failing-knit diagnostic (1 case/10 passes, lint zero); `bc638cc` subclass reasons pass 135P/1F→140P/lint zero; `1e538e6` unknown-meter fixture passes 21P/1F→23P/lint zero; `0d84948` standard-check-context Windows fixtures pass 27 cases/418 expectations and two lints zero. `bf90762` fixes one empty pricing-date line: full focused file manual RED17/219P/1F→GREEN17/220P, two lints zero. All scoped caller-state/warning/connection gates pass. Initial cold Windows 3→5 connections and older benchmark TZDIR NONPASS remain retained; native Windows and the newly rebuilt artifact remain pending.
+
+Client integration owns Shiny/browser; RepoEvolution owns models, workflows and compaction; MallocOrigin owns RStudio/Quarto UX. Root owns dependencies, shared integration, candidate changes and final adoption.
+
+Bounded light jobs may run in parallel under the current resource authorization. The separately authorized full check has a 4 GiB family RSS cap; other validation families retain 2 GiB RSS and 512 MiB output caps. Preserve original R/native sessions and shared Ollama models; use exact owned cleanup and no model reconfiguration.
+
+Preserve original RStudio/native-UX sessions and original port27070 routing; no broad session cleanup. Next evidence must cover the new artifact's public/native/Quarto/provider workflows, complete check and current CI. Run the existing four cross-plan checks on exact `bf90762` and these four overlays before adopting the checkpoint. Historical suffixes remain exact.
 
 Earlier evidence below remains historical; it does not override these current gates.
 

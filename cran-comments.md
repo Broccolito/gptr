@@ -57,6 +57,34 @@ documented in the "Breaking changes" section of NEWS.md.
   code.
 * Under `R CMD check` every pool of child processes is capped at two.
 
+## Size, reduction review and measured timings
+
+The fresh macOS normal build of `071fa7e` produces a 2,618,439-byte source archive and a
+6,972,558-byte logical installation (`du`: 7,256 KiB). Installed documentation is 1,224,249
+bytes, extdata is 83,185 bytes and data is absent. The largest installed file is the pure-R
+byte-code/lazy-load database `R/gptr.rdb` (5,022,274 bytes). The 14 rendered guides and their
+sources are retained for usable installed documentation; source-retention metadata is already
+excluded from the normal installation. The targeted metadata/duplicate review found no
+unnecessary payload that could be removed safely.
+
+A same-archive install comparison measured 6,973,589 bytes with default byte compilation and
+3,660,393 bytes without it; these are separate matched installs, not relabelled normal sizes.
+Three fresh processes per profile, with default JIT unchanged, produced matching functional
+outputs and all 64 exported function identities. Disabling byte compilation slowed median
+first fake-provider chat from 0.177 to 0.571 seconds and a five-call loop from 0.567 to 1.167
+seconds, so default compilation is retained for in-memory execution. Both profiles also
+retained the same cold TZDIR environment change; this experiment is not a completed
+caller-preservation or full-package check.
+
+The normal installation took 14.668 seconds; the complete build/install family took 43.455
+seconds. The direct `R CMD check --as-cran --no-manual` attempt was interrupted by the local
+2 GiB RSS guard after 303.410 seconds. Its displayed installed-size value of 10.5 Mb was INFO;
+this is neither a final check time nor `Status: OK`. A separately authorized 4 GiB full check
+is pending. Any final size NOTE will be retained and explained. We request CRAN's
+consideration of the necessary byte-compiled R code if the final accepted installation
+remains above 5 MB; documentation, data and the source archive are already below the stated
+size targets. Submission and release readiness are not established by these measurements.
+
 ## Test environments
 
 * Local: macOS (aarch64), R 4.5.0.
