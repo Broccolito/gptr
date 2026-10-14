@@ -229,9 +229,12 @@ test_that("print escapes answer controls without truncating or rewriting session
       shown = withVisible(print(session))
     }, type = "message")
   })
-  expected = c(plain, strrep("x", 450L),
+  # cat() uses the console's native encoding for printable Unicode.
+  printed_plain = if (isTRUE(l10n_info()[["UTF-8"]])) plain else enc2native(plain)
+  expected = c(printed_plain, strrep("x", 450L),
     paste0("<U+001B>[31mred<U+001B>[0m <U+001B>]0;title<U+0007> CR<U+000D>back<U+0008> C1",
       "<U+009B> bidi<U+202E> hidden<U+200B>"), session_footer(session))
+  expect_identical(console_escape(plain), plain)
   expect_identical(out, expected)
   expect_identical(err, character())
   expect_false(shown$visible)
