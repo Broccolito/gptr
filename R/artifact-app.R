@@ -618,6 +618,16 @@ artifact_browser_launch = function(args) {
   if (!is.null(mode)) check_string(mode, "chromote.headless")
   headless = if (is.null(mode)) "--headless" else paste0("--headless=", mode)
   root = tempfile("gptr-chrome-")
+  temp = file.path(root, "tmp")
+  if (!is_windows()) {
+    socket = file.path(temp, "org.chromium.Chromium.XXXXXX", "SingletonSocket")
+    limit = if (is_macos()) 253L else 107L
+    if (nchar(socket, type = "bytes") > limit) {
+      gptr_abort(paste0("The private headless browser socket path is too long. ",
+        "Restart R with a shorter TMPDIR to run the headless check."), "io",
+        operation = "open", path = root)
+    }
+  }
   if (!dir.create(root, mode = "0700")) {
     gptr_abort("Could not create the private headless browser directory.", "io",
                operation = "open", path = root)
@@ -665,6 +675,7 @@ artifact_browser_launch = function(args) {
   stdout = tempfile("gptr-chrome-stdout-", fileext = ".log")
   stderr = tempfile("gptr-chrome-stderr-", fileext = ".log")
   if (!dir.create(profile, mode = "0700") || !dir.create(crashes, mode = "0700") ||
+      !dir.create(temp, mode = "0700") ||
       !all(file.create(c(stdout, stderr)))) {
     gptr_abort("Could not prepare the private headless browser files.", "io",
                operation = "open", path = root)
@@ -720,6 +731,34 @@ artifact_browser_launch = function(args) {
                          "link check failed."), "io", operation = "close", path = root,
                    cleanup_stage = "link")
       }
+      if (!is_windows()) {
+        links = Sys.readlink(temp)
+        if (length(links) != 1L || (!is.na(links) && nzchar(links))) {
+          gptr_abort("The private headless browser temp ancestor is not plain.", "io",
+                     operation = "close", path = root)
+        }
+        if (file.exists(temp)) {
+          children = list.files(temp, full.names = TRUE, all.files = TRUE, no.. = TRUE)
+          links = Sys.readlink(c(temp, children))
+          if (length(links) != length(children) + 1L || anyNA(links) || any(nzchar(links))) {
+            gptr_abort("The private headless browser temp ancestors are unavailable or linked.",
+                       "io", operation = "close", path = root)
+          }
+          for (child in children) {
+            socket = file.path(child, "SingletonSocket")
+            link = Sys.readlink(socket)
+            if (length(link) != 1L || (!is.na(link) && nzchar(link)) ||
+                (file.exists(socket) && is.na(link))) {
+              gptr_abort("The private headless browser socket leaf is unavailable or linked.",
+                         "io", operation = "close", path = root)
+            }
+            if (file.exists(socket) && !isTRUE(file.remove(socket))) {
+              gptr_abort("The private headless browser socket leaf did not finish cleanup.",
+                         "io", operation = "close", path = root)
+            }
+          }
+        }
+      }
       removed = unlink(root, recursive = TRUE)
       if (removed != 0L) {
         gptr_abort(paste0("The private headless browser directory did not finish cleanup: ",
@@ -739,7 +778,8 @@ artifact_browser_launch = function(args) {
                operation = "open", path = stderr)
   }
   artifact_state$browser_pending = lease
-  process = proc_spawn(path, argv, env = child_env("artifact"), stdout = stdout,
+  process = proc_spawn(path, argv, env = child_env("artifact", set = c(TMPDIR = temp,
+    TMP = temp, TEMP = temp, MAC_CHROMIUM_TMPDIR = temp)), stdout = stdout,
     stderr = stderr, supervise = supervise_default(), .marker = marker, .on_spawn = function(p) {
       held$process = p
       held$pid = p$get_pid()

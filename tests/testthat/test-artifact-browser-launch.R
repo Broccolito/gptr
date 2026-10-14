@@ -42,9 +42,9 @@ artifact_launch_fixture = function() {
     stopifnot(identical(n, 1L))
     54321L
   }
-  scope$child_env = function(profile) {
+  scope$child_env = function(profile, set = character()) {
     stopifnot(identical(profile, "artifact"))
-    c(PATH = "/synthetic/bin", SAFE_SETTING = "fixture")
+    c(PATH = "/synthetic/bin", SAFE_SETTING = "fixture", set)
   }
   scope$supervise_default = function() TRUE
   scope$proc_marker_new = function() "GPTR_PROC_0123456789abcdef"
@@ -493,4 +493,201 @@ test_that("artifact browser directory failure reports its stage and retains retr
     expect_false(dir.exists(root))
     expect_true(all(file.exists(x$state$files)))
   }
+})
+
+artifact_launch_temp = function(x) {
+  path = unname(x$state$calls$env["TMPDIR"])
+  expect_true(length(path) == 1L && !is.na(path) && nzchar(path))
+  if (length(path) != 1L || is.na(path) || !nzchar(path)) {
+    stop("The owned Chrome temporary directory was not forwarded.")
+  }
+  path
+}
+
+test_that("artifact launch gives only its child a separate private temporary directory", {
+  x = artifact_launch_fixture()
+  before = Sys.getenv()
+  owners = list(x$launch(character()), x$launch(character()))
+  expect_true(all(vapply(owners, function(owner) owner$is_local(), logical(1))))
+  temp = artifact_launch_temp(x)
+  keys = c("TMPDIR", "TMP", "TEMP", "MAC_CHROMIUM_TMPDIR")
+  expect_identical(unname(x$state$calls$env[keys]), rep(temp, 4L))
+  expect_identical(temp, file.path(x$state$roots[[2L]], "tmp"))
+  expect_true(dir.exists(temp))
+  expect_false(identical(x$state$roots[[1L]], x$state$roots[[2L]]))
+  expect_identical(dirname(x$state$roots), rep(tempdir(), 2L))
+  if (!is_windows()) {
+    expect_identical(bitwAnd(as.integer(file.info(temp)$mode), 511L), 448L)
+    socket = file.path(temp, "org.chromium.Chromium.XXXXXX", "SingletonSocket")
+    expect_lte(nchar(socket, type = "bytes"), if (is_macos()) 253L else 107L)
+  }
+  expect_identical(Sys.getenv(), before)
+  expect_true(all(file.exists(x$state$files)))
+  expect_false(dirname(x$state$calls$stderr) %in% x$state$roots)
+})
+
+test_that("artifact launch enforces Linux and macOS socket path limits before spawning", {
+  skip_on_os("windows")
+  for (mac in c(FALSE, TRUE)) {
+    limit = if (mac) 253L else 107L
+    for (extra in 0:1) {
+      x = artifact_launch_fixture()
+      x$scope$is_windows = function() FALSE
+      x$scope$is_macos = function() mac
+      suffix = nchar(file.path("tmp", "org.chromium.Chromium.XXXXXX", "SingletonSocket"),
+        type = "bytes") + 1L
+      root = paste0("/virtual-browser-", strrep("x", limit + extra - suffix - 17L))
+      expect_identical(nchar(file.path(root, "tmp", "org.chromium.Chromium.XXXXXX",
+        "SingletonSocket"), type = "bytes"), limit + extra)
+      x$scope$tempfile = function(pattern, ...) {
+        if (identical(pattern, "gptr-chrome-")) root else base::tempfile(pattern, ...)
+      }
+      x$scope$dir.create = function(path, mode) {
+        expect_true(path %in% c(root, file.path(root, c("profile", "crashes", "tmp"))))
+        expect_identical(mode, "0700")
+        TRUE
+      }
+      spawn = x$scope$proc_spawn
+      x$state$virtual_spawns = 0L
+      x$scope$proc_spawn = function(...) {
+        process = spawn(...)
+        x$state$virtual_spawns = x$state$virtual_spawns + 1L
+        x$state$roots = character() # Virtual paths are never created or passed to real unlink.
+        process
+      }
+      if (extra == 0L) {
+        expect_true(x$launch(character())$is_local())
+        expect_identical(x$state$virtual_spawns, 1L)
+      } else {
+        expect_error(x$launch(character()), "Restart R with a shorter TMPDIR",
+          class = "gptr_error_io")
+        expect_identical(x$state$calls, list())
+        expect_identical(x$state$virtual_spawns, 0L)
+      }
+      expect_false(file.exists(root))
+    }
+  }
+})
+
+test_that("a dead settled browser removes a real owned POSIX SingletonSocket only", {
+  skip_on_os("windows")
+  python = Sys.getenv("RETICULATE_PYTHON", unset = unname(Sys.which("python3")))
+  skip_if(!nzchar(python) || !file.exists(python), "a provisioned Python is unavailable")
+  x = artifact_launch_fixture()
+  owner = x$launch(character())
+  temp = artifact_launch_temp(x)
+  child = file.path(temp, "controlled-child")
+  expect_true(dir.create(child, mode = "0700"))
+  socket = file.path(child, "SingletonSocket")
+  withr::defer(if (file.exists(socket)) file.remove(socket))
+  before = getwd()
+  code = paste("import os,socket,stat,sys; s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);",
+    "os.chdir(os.path.dirname(sys.argv[1])); s.bind('SingletonSocket'); s.close();",
+    "assert stat.S_ISSOCK(os.lstat(sys.argv[1]).st_mode);",
+    "print('GPTR_OWNED_POSIX_SOCKET_CREATED')")
+  answer = system2(python, c("-I", "-c", shQuote(code), shQuote(socket)),
+    stdout = TRUE, stderr = TRUE, timeout = 5)
+  expect_identical(answer, "GPTR_OWNED_POSIX_SOCKET_CREATED")
+  expect_identical(getwd(), before)
+  expect_true(file.exists(socket))
+  outside = withr::local_tempfile()
+  expect_true(file.create(outside))
+  x$state$alive = FALSE
+  expect_invisible(owner$release())
+  expect_false(file.exists(x$state$roots[[1L]]))
+  expect_true(file.exists(outside))
+  expect_true(all(file.exists(x$state$files)))
+  expect_identical(x$state$signals, integer())
+})
+
+test_that("owned socket cleanup refuses linked or unobserved ancestors without outside removal", {
+  skip_on_os("windows")
+  for (stage in c("temp", "child", "socket", "unknown")) {
+    x = artifact_launch_fixture()
+    owner = x$launch(character())
+    temp = artifact_launch_temp(x)
+    child = file.path(temp, "controlled-child")
+    expect_true(dir.create(child))
+    socket = file.path(child, "SingletonSocket")
+    outside = withr::local_tempdir()
+    keep = file.path(outside, "SingletonSocket")
+    expect_true(file.create(keep))
+    path = switch(stage, temp = temp, child = child, socket = socket, unknown = child)
+    if (stage == "unknown") {
+      x$scope$Sys.readlink = function(value) {
+        result = base::Sys.readlink(value)
+        result[value == path] = NA_character_
+        result
+      }
+    } else {
+      unlink(path, recursive = TRUE)
+      expect_true(file.symlink(if (stage == "socket") keep else outside, path))
+    }
+    x$state$remove_calls = 0L
+    x$scope$file.remove = function(value) {
+      x$state$remove_calls = x$state$remove_calls + 1L
+      stop("A linked or unknown ancestor must not reach file.remove.")
+    }
+    x$state$alive = FALSE
+    expect_error(owner$release(), class = "gptr_error_io")
+    expect_identical(x$state$remove_calls, 0L)
+    expect_true(file.exists(keep))
+    expect_true(dir.exists(x$state$roots[[1L]]))
+    expect_identical(owner$get_process(), x$process)
+    expect_true(all(file.exists(x$state$files)))
+    x$scope$Sys.readlink = base::Sys.readlink
+    x$scope$file.remove = base::file.remove
+    if (stage != "unknown") expect_true(file.remove(path))
+    expect_invisible(owner$release())
+    expect_true(file.exists(keep))
+  }
+})
+
+test_that("socket removal preserves failure conditions and requires exact dead settled ownership", {
+  skip_on_os("windows")
+  x = artifact_launch_fixture()
+  owner = x$launch(character())
+  child = file.path(artifact_launch_temp(x), "controlled-child")
+  expect_true(dir.create(child))
+  socket = file.path(child, "SingletonSocket")
+  expect_true(file.create(socket))
+  for (kind in c("refused", "error", "interrupt")) {
+    original = structure(list(message = "controlled socket removal", call = NULL),
+      class = c(paste0("controlled_", kind), kind, "condition"))
+    x$scope$file.remove = function(path) {
+      expect_identical(path, socket)
+      if (kind == "refused") FALSE else stop(original)
+    }
+    x$state$alive = FALSE
+    seen = tryCatch(owner$release(), error = identity, interrupt = identity)
+    if (kind == "refused") expect_s3_class(seen, "gptr_error_io") else
+      expect_identical(seen, original)
+    expect_true(file.exists(socket))
+    expect_true(dir.exists(x$state$roots[[1L]]))
+    expect_true(all(file.exists(x$state$files)))
+  }
+  x$scope$file.remove = function(path) stop("Unsettled ownership must not remove a socket.")
+  for (alive in list(TRUE, NA, NULL, 0)) {
+    x$state$alive = alive
+    expect_error(owner$release(), class = "gptr_error_io")
+    expect_true(file.exists(socket))
+  }
+  x$state$alive = FALSE
+  for (tree in list(list(survivor = TRUE), structure(list(), unavailable = TRUE))) {
+    x$state$tree = tree
+    expect_error(owner$release(), class = "gptr_error_io")
+    expect_true(file.exists(socket))
+  }
+  borrowed = artifact_owner_fixture(remote = TRUE)
+  borrowed$scope$file.remove = x$scope$file.remove
+  borrowed$scope$unlink = function(...) stop("A borrowed browser must not remove a tree.")
+  expect_invisible(borrowed$close())
+  expect_true(borrowed$state$alive)
+  expect_identical(borrowed$state$events, "websocket")
+  expect_true(file.exists(socket))
+  x$state$tree = list()
+  x$scope$file.remove = base::file.remove
+  expect_invisible(owner$release())
+  expect_false(file.exists(socket))
+  expect_true(all(file.exists(x$state$files)))
 })
