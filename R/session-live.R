@@ -97,6 +97,7 @@ live_entries_all = function() {
 }
 
 on_load(secret_live_entries_set(live_entries_all))
+on_load(registry_session_owner_set(session_by_id))
 
 #' Remember the most recently active session (a strong reference, IC-71)
 #' @noRd

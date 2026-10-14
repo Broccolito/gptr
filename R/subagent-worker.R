@@ -357,7 +357,7 @@ worker_unserialisable = function(x, seen = new.env(parent = emptyenv()), depth =
 #' @noRd
 worker_registry = function(sids) {
   reg = registry_env()
-  recs = lapply(ls(reg$recs), get, envir = reg$recs)
+  recs = registry_recs(reg, ls(reg$recs))
   specs = list()
   for (rec in recs[order(vapply(recs, function(r) as.numeric(r$order), 0))]) {
     scoped = isTRUE(rec$session %in% sids) && identical(rec$rank, 0L)
