@@ -176,7 +176,11 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: windows-python-admission-${{ matrix.config.r }}
-          path: ${{ runner.temp }}/gptr-check-python-evidence/python-admission.json
+          path: |
+            ${{ runner.temp }}/gptr-check-python-evidence/python-admission.json
+            check/gptr.Rcheck/00check.log
+            check/gptr.Rcheck/tests/native-*.Rout*
+            check/gptr.Rcheck/tests/testthat.Rout*
           if-no-files-found: error
           retention-days: 5
 
