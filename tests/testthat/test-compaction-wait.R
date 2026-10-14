@@ -35,6 +35,24 @@ cp_wait_fixture = function(script, budget = NULL, should = TRUE, .env = parent.f
        guard = guard, guard_at = guard_at)
 }
 
+# Offline scheduling uses a controlled clock; timer and task callbacks remain real.
+# The other fixtures retain their wall-clock waits and completion aborts.
+cp_wait_clock = function(.env = parent.frame()) {
+  r = reactor_get()
+  stopifnot(!length(ls(r$transfers)), !length(ls(r$procs)), !length(ls(r$stdin)),
+            !length(ls(r$runs)), !length(ls(r$timers)), !length(ls(r$tasks)),
+            !length(r$queue), !length(r$fifo), identical(r$depth, 0L))
+  clock = new.env(parent = emptyenv())
+  clock$now = reactor_now()
+  original_io = reactor_io
+  local_mocked_bindings(reactor_now = function() clock$now,
+    reactor_io = function(r, allow_runs, slice_ms, t_end) {
+      clock$now = clock$now + reactor_wait_ms(r, allow_runs, slice_ms, t_end) / 1000
+      original_io(r, allow_runs, slice_ms = 0, t_end = clock$now)
+    }, .env = .env)
+  clock
+}
+
 cp_wait_short = function(x) {
   started = reactor_now()
   result = gptr_wait(x$s, timeout = 0.04)
@@ -332,6 +350,7 @@ test_that("a yielded checkpoint consumes its request budget before a retry can s
 })
 
 test_that("an overflow checkpoint yields and resumes the same ordinary request once", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(list(overflow = TRUE),
                           fake_text("Useful summary.", delay = 0.3), "Done."), should = FALSE)
   # Admit the overflow and its checkpoint before measuring the truly in-flight finite wait.
@@ -926,6 +945,47 @@ test_that("an admitted stuck checkpoint still aborts under its independent compl
   expect_identical(sum(x$events$types == "agent_end"), 1L)
   restored = rebuild_usage(store_read(x$s$file)$entries, session_data(x$s))
   expect_identical(restored$request_id, x$s$usage$request_id)
+  cp_wait_prefix(x)
+  cp_wait_finished(x)
+})
+
+test_that("the offline overflow completion guard aborts at its unchanged deadline", {
+  clock = cp_wait_clock()
+  x = cp_wait_fixture(list(list(overflow = TRUE), list(hang = TRUE)), should = FALSE)
+  reactor_pump(until = function() length(fake_requests(x$fake)) >= 2L || x$run$settled,
+               timeout = 0.8)
+  pending = x$run$compact_pending
+  finish = x$run$compact_finish
+  ids = x$run$request_ids
+  retained = function() {
+    identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted) && identical(session_live(x$s)$run, x$run) &&
+      isTRUE(session_live(x$s)$compacting) && isTRUE(x$run$overflow_used) &&
+      is.list(pending) && is.function(finish) && length(ids) == 2L &&
+      identical(x$run$compact_pending, pending) && identical(x$run$compact_finish, finish) &&
+      identical(x$run$request_ids, ids) && length(fake_requests(x$fake)) == 2L &&
+      nrow(x$s$usage) == 1L && length(cp_wait_entries(x$s)) == 0L
+  }
+  expect_true(retained())
+  guard_released = retained() && identical(reactor_cancel(x$guard), 1L)
+  expect_true(guard_released)
+  started = reactor_now()
+  guard = reactor_timer(started + 0.8,
+                        function() run_abort(x$run, "fixture-completion-guard"))
+  withr::defer(reactor_cancel(guard))
+  gptr_wait(x$s, timeout = 0.79)
+  expect_true(retained())
+  expect_identical(x$run$compact_pending, pending)
+  expect_identical(x$run$compact_finish, finish)
+  expect_identical(x$run$request_ids, ids)
+  gptr_wait(x$s, timeout = 0.02)
+  expect_identical(x$s$status, "aborted")
+  expect_identical(x$run$signal$reason, "fixture-completion-guard")
+  expect_equal(clock$now - started, 0.8, tolerance = 1e-9)
+  expect_length(fake_requests(x$fake), 2L)
+  expect_identical(nrow(x$s$usage), 2L)
+  expect_identical(x$s$usage$stop_reason[[2L]], "aborted")
+  expect_length(cp_wait_entries(x$s), 0L)
   cp_wait_prefix(x)
   cp_wait_finished(x)
 })
