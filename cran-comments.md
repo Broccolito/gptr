@@ -1,10 +1,62 @@
-## Current size and check checkpoint — normal `c45ce88`, source `47b818b`, 2026-10-14 12:42 UTC
+## Current size and check checkpoint — source `8a223740`, normal `208a02d`, 2026-10-14
 
-The accepted normal `c45ce88` source archive is 2,635,212 bytes; its default-byte-compiled installation is 6,978,777 logical bytes. `R/gptr.rdb` is the largest file at 5,027,767 bytes. Combined documentation is 1,727,666 bytes; extdata is 83,185 bytes and data is empty. All 14 guides remain. Build took 20.744 s, install 14.609 s and the whole family 44.820 s; peak sampled RSS was 524.828125 MiB with 36 samples and no sampling errors. Certificate `9a192e8b` and archive `80256852` have independent build/install acceptance.
+The Root-accepted normal archive is 2,635,896 bytes; its default-byte-compiled installation is
+6,978,719 logical bytes. `R/gptr.rdb` is the largest file at 5,027,765 bytes. Combined
+documentation is 1,727,596 bytes; extdata is 83,185 bytes and data is empty. All 14 guides
+remain. Build took 20.789 s, install 14.727 s and the whole family 44.912 s; peak sampled RSS
+was 515.234375 MiB, with 36 samples and no sampling errors. Certificate `3bac436c` and
+archive `acb502e8` establish normal build/install only.
 
-The installed 5 MB target remains unmet; source/documentation/data goals are met. Earlier source-metadata and duplication reductions are retained. Default byte compilation remains because the matched comparison showed slower first chat and repeated calls without it; retain useful debugging/security support and all guides. Keep the installed-size NOTE visible and request CRAN consideration. A current full as-cran check and refreshed installation/check timings are still required after the remaining fixes; no submission acceptance is claimed.
+The completed exact-archive as-cran check exited 0 with zero errors/warnings and one
+NOTE: unable to verify current time. It recorded 29,939 test passes and 441 skips.
+Whole elapsed time was 548.859 s (check phase 548.473 s), with 1,968 MiB sampled RSS,
+472 samples and no sampling errors. Root verified all 15 raw logs, with no native fatal
+markers; inputs, the supervising Python parent and owned cleanup were preserved (`f2955720`).
+The strict zero-NOTE acceptance gate remains NONPASS. Public clock endpoints reset
+connections or return HTTP 503; retained R probes parsed no time, so local clock drift is
+not established. Clock verification remains enabled.
 
-The two latest commits only change tested fixtures; the current source still needs a new normal archive and check. Required c45 CI has started; preceding Windows ordinary suites pass but oldrel4 retains an incomplete native absence witness and size NOTE. Current generated Shiny has functional passes but GUI-deadline/native-diagnostic failures. Quarto user objects pass while its original whole-workspace serialization differs on a Quarto-owned object. Public clock endpoints currently reset connections or return HTTP 503; retained R clock probes parsed no time. Keep the environmental clock NOTE, without inferring clock drift or disabling verification. Full-source 200-file, current as-cran, native frontend, merge and publication gates remain open. Complete Mac work before final live Windows verification. Earlier evidence below remains historical.
+The check deliberately retains package source for debugging (`R_KEEP_PKG_SOURCE=yes`):
+its installed logical files total 10,058,592 bytes, including an 8,113,945-byte R database
+(R directory 8,170,066; doc 1,224,500; help 479,569; extdata 83,185; data 0).
+R's displayed 10.5 Mb (R 8.5/doc 1.2) is size INFO, not a size NOTE, and differs from the
+normal default installation above. The installed 5 MB target remains unmet; source,
+documentation and data goals are met. Earlier metadata/duplication reductions are retained.
+Default byte compilation remains because the matched comparison showed slower first chat
+and repeated calls without it. We retain useful debugging/security support, offline test
+coverage and all guides, preserve historical size NOTEs, and request CRAN consideration
+of the necessary byte-compiled R code. No submission acceptance is claimed.
+
+Current source `8a223740` includes the `b61d0db` socket/owned-temporary-directory correction;
+its scoped 45 cases/2,051 passes include 11 real-socket assertions. Both lint paths are
+clean, with all-eight state/connections/W0/source-parent/owned cleanup (`63743edd`). The measured normal
+archive/check above and all 13 successful required CI jobs still use `208a02d`. At 14:44 UTC,
+b61 CI had one Ubuntu release dependency-setup failure: a Launchpad PPA connection timeout
+before R checking, leaving the root reader without evidence; nine jobs were still running.
+No package failure or stall is established. `8a223740` adds three existing log paths in
+one CI upload scalar; static YAML correspondence and Git diff checks pass, while gates,
+actions and retention remain unchanged. It establishes no new native Windows proof.
+Current CI acceptance and a fresh combined artifact/check remain pending. PR6 remains open/unmerged, and full
+native Windows Rout/32-witness proof was not published. Original c45 failures remain retained.
+
+The separate 200-file Mac source run stopped at its unchanged 4 GiB RSS guard. Subsequent
+batch1 completed 40 files/966 cases/9,083 passes with no bad canonical conditions, two
+browser-startup skips and four deliberately converted warning signals observed by the
+outer wrapper; zero unexpected canonical warnings. Caller
+options/seed/objects differ despite source/parent/connections/owned cleanup preservation;
+273.593 s/2,761.125 MiB/235 samples/zero sampling errors. Remaining four batches are held
+for attribution; no production defect or whole-source completion is established.
+
+Latest saved-app GUI2 published a failure within its lease: layout fit at 320/768/1440
+and native 200%/100% reset and owned cleanup were observed, but threshold/rows 8/150 at
+Species-tab768 later became 7.8/149 at1440, with cause unproved. Earlier deadlines and
+known Chromium fatal diagnostics remain retained. Shipped skill guidance is now integrated
+at `a17646c`: the existing case has 12 passes/zero FEWS and lint is clean, with all-eight
+state/connections/W0/source-parent/owned cleanup (`bdc70b6b`, `69803d7a`). GREEN took
+4.650 s/384.954 MiB and lint 4.717 s/385 MiB; repeat baseline 11 passes/one NULL-versus-FALSE
+failure and original selector/lint NONPASSs remain retained. Numeric GUI comparison awaits
+a fresh normal artifact; this is not whole GUI acceptance. Native/frontend validation, source completion, main merge and publication
+remain open. Earlier evidence below is historical.
 
 ## Historical local verification (`ef5201e`, updated 2026-10-14 10:15 UTC)
 
