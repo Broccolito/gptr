@@ -245,6 +245,7 @@ test_that("a delayed checkpoint error falls back once without retrying the reque
 })
 
 test_that("a yielded empty checkpoint retries once and preserves both known charges", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("", delay = 0.3,
                                     usage = usage_new(input = 100, output = 5)),
                           fake_text("Useful summary.", delay = 0.1,
@@ -987,6 +988,54 @@ test_that("the offline overflow completion guard aborts at its unchanged deadlin
   expect_identical(nrow(x$s$usage), 2L)
   expect_identical(x$s$usage$stop_reason[[2L]], "aborted")
   expect_length(cp_wait_entries(x$s), 0L)
+  cp_wait_prefix(x)
+  cp_wait_finished(x)
+})
+
+test_that("the offline empty checkpoint completion guard aborts at its unchanged deadline", {
+  clock = cp_wait_clock()
+  x = cp_wait_fixture(list(list(hang = TRUE)))
+  reactor_pump(until = function() length(fake_requests(x$fake)) >= 1L || x$run$settled,
+               timeout = 0.8)
+  pending = x$run$compact_pending
+  finish = x$run$compact_finish
+  ids = x$run$request_ids
+  retained = function() {
+    identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted) && identical(session_live(x$s)$run, x$run) &&
+      isTRUE(session_live(x$s)$compacting) && is.list(pending) && is.function(finish) &&
+      length(ids) == 1L && identical(x$run$compact_pending, pending) &&
+      identical(x$run$compact_finish, finish) && identical(x$run$request_ids, ids) &&
+      length(fake_requests(x$fake)) == 1L && nrow(x$s$usage) == 0L &&
+      length(cp_wait_entries(x$s)) == 0L
+  }
+  expect_true(retained())
+  guard_released = retained() && identical(reactor_cancel(x$guard), 1L)
+  expect_true(guard_released)
+  started = reactor_now()
+  guard = reactor_timer(started + 0.8,
+                        function() run_abort(x$run, "fixture-completion-guard"))
+  withr::defer(reactor_cancel(guard))
+  gptr_wait(x$s, timeout = 0.79)
+  expect_true(retained())
+  expect_identical(x$run$compact_pending, pending)
+  expect_identical(x$run$compact_finish, finish)
+  expect_identical(x$run$request_ids, ids)
+  gptr_wait(x$s, timeout = 0.02)
+  expect_identical(x$s$status, "aborted")
+  expect_identical(x$run$signal$reason, "fixture-completion-guard")
+  expect_equal(clock$now - started, 0.8, tolerance = 1e-9)
+  expect_identical(reactor_cancel(guard), 0L)
+  expect_length(fake_requests(x$fake), 1L)
+  expect_identical(nrow(x$s$usage), 1L)
+  expect_identical(x$s$usage$stop_reason, "aborted")
+  expect_identical(x$run$request_ids, x$s$usage$request_id)
+  expect_identical(sum(x$events$types == "usage"), 1L)
+  expect_identical(sum(x$events$types == "agent_end"), 1L)
+  expect_length(cp_wait_entries(x$s), 0L)
+  gptr_cancel(x$s)
+  expect_identical(nrow(x$s$usage), 1L)
+  expect_identical(sum(x$events$types == "agent_end"), 1L)
   cp_wait_prefix(x)
   cp_wait_finished(x)
 })
