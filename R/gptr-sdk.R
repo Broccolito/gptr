@@ -142,6 +142,10 @@ gptr_step = function(s, turns = 1L) {
 #' any is started, so a refusal starts none. On timeout the sessions keep their `running` status
 #' and no condition is raised.
 #'
+#' `timeout` limits reactor polling; it does not interrupt R code. Request preparation
+#' and synchronous callbacks finish their current step before the deadline is checked
+#' again, so a call can return after the specified time.
+#'
 #' A timeout is not cancellation. Inspect `$status` and use [gptr_cancel()] if you want to
 #' abort active work. In Rscript and rendered reports, a blocking call such as this is how
 #' experimental background sessions progress when there is no idle console.
