@@ -107,6 +107,9 @@ test_that("texts are ASCII and never mention str( (IC-67)", {
 test_that("the r_session core carries exactly one fragments marker on its own line", {
   lines = strsplit(prompt_text("r_session"), "\n", fixed = TRUE)[[1]]
   expect_identical(sum(lines == "{{fragments}}"), 1L)
+  compose = lines[startsWith(lines, "- Compose:")]
+  expect_length(compose, 1L)
+  expect_match(compose, "Use = for assignment and |> for pipes.", fixed = TRUE)
   expect_identical(lines[length(lines)],
                    paste0("- Never call q(), quit(), readline() or menu(), and do not install, ",
                           "update or remove packages unless the user asked."))
