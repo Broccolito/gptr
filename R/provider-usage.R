@@ -154,7 +154,8 @@ prices_df = function(x) {
     x %||% list()
   }
   if (!is.list(rows)) usage_invalid("prices", "a list of price records or a data frame")
-  out = data.frame(from = as.Date(character()), tier = character(), stringsAsFactors = FALSE)
+  out = data.frame(from = structure(numeric(), class = "Date"), tier = character(),
+    stringsAsFactors = FALSE)
   for (k in cols) out[[k]] = numeric()
   for (row in rows) {
     usage_record_check(row, "price")
