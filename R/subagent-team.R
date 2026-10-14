@@ -304,6 +304,66 @@ subagent_value = function(s) {
   if (verbosity() >= 2L) invisible(s) else s
 }
 
+#' Bounded facts from matched R results of the settled child's current task, not its prose
+#' No code, output, arguments or private values leave the child's transcript.
+#' @noRd
+subagent_r_progress = function(child) {
+  d = session_data(child)
+  live = session_live(child)
+  if (!identical(d$status, "idle") ||
+      (!is.null(live$run) && !isTRUE(live$run$settled))) return(NULL)
+  messages = list()
+  checkpoint = FALSE
+  id = d$leaf
+  remaining = length(d$entries)
+  while (!is.null(id) && remaining > 0L) {
+    i = get0(id, envir = d$index, inherits = FALSE)
+    if (is.null(i)) return(NULL)
+    e = d$entries[[i]]
+    if (identical(e$type, "compaction")) {
+      checkpoint = TRUE
+      break
+    }
+    m = if (identical(e$type, "message")) e$message else NULL
+    if (identical(m$role, "user") && (m$source %||% "prompt") %in% c("prompt", "parent")) break
+    if (!is.null(m)) messages[[length(messages) + 1L]] = m
+    id = e$parent_id
+    remaining = remaining - 1L
+  }
+  if (remaining == 0L && !is.null(id)) return(NULL)
+  calls = character()
+  outcomes = character()
+  for (m in rev(messages)) {
+    if (identical(m$role, "assistant")) {
+      for (block in m$content) {
+        if (identical(block$type, "tool_call") && identical(block$name, "r")) {
+          if (block$id %in% calls) outcomes[block$id] = "unverified"
+          calls = c(calls, block$id)
+        }
+      }
+    } else if (identical(m$role, "tool_result") && identical(m$tool_name, "r") &&
+               m$tool_call_id %in% calls) {
+      key = m$tool_call_id
+      if (key %in% names(outcomes) || sum(calls == key) != 1L) {
+        outcomes[key] = "unverified"
+      } else {
+        details = m$details
+        complete = identical(m$is_error, FALSE) && identical(details$status, "ok") &&
+          is.numeric(details$n_done) && isTRUE(is.finite(details$n_done)) &&
+          isTRUE(details$n_done > 0) && identical(details$n_done, details$n_total)
+        outcomes[key] = if (complete) "succeeded" else
+          if (isTRUE(m$is_error)) "failed" else "unverified"
+      }
+    }
+  }
+  outcomes[setdiff(unique(calls), names(outcomes))] = "unverified"
+  if (!any(outcomes %in% c("succeeded", "failed"))) return(NULL)
+  paste0("(R tool results", if (checkpoint) " since child checkpoint", ": ",
+         sum(outcomes == "succeeded"), " succeeded; ", sum(outcomes == "failed"),
+         " failed; ", sum(outcomes == "unverified"), " unverified.",
+         if (checkpoint) " Earlier tool details unavailable.", ")")
+}
+
 #' `provide()` of the `agent_reports` context block: one `<agent_report from="<name>">` element
 #' per child of a team or fan-out (IC-55, user-role data), cut to gptr.child_text_max bytes, then
 #' by characters, with a notice, to min(2000, budget / n) tokens less one for the joining newline
@@ -318,6 +378,8 @@ subagent_reports_block = function(ctx, budget) {
   parts = vapply(names(d$children), function(nm) {
     cd = session_data(d$children[[nm]])
     txt = if (is.na(cd$last_text)) "(no report)" else subagent_text_cut(cd$last_text, max_bytes)
+    progress = subagent_r_progress(d$children[[nm]])
+    if (!is.null(progress)) txt = subagent_text_cut(paste0(progress, "\n", txt), max_bytes)
     if (!identical(cd$status, "idle")) txt = paste0("(ended with status ", cd$status, ")\n", txt)
     n = nchar(txt)
     el = function(k) {
