@@ -256,21 +256,6 @@ doc_setting = function(key, default) {
   tryCatch(setting_get(key, default = default), error = function(e) default) %||% default
 }
 
-#' Parse R text so that parse-data columns and getParseText() (which cuts source lines with
-#' substr()) count the same unit (IC-62). In a UTF-8 locale marked UTF-8 is parsed: nothing is
-#' translated and both count characters. Elsewhere the parser would translate marked text to the
-#' native encoding (in a C locale each non-ASCII character becomes "<U+00E9>" text), so the
-#' unmarked UTF-8 bytes are parsed and both count bytes. Strings read back from the result go
-#' through as_utf8(). Parse data is kept even where the caller turned it off: sys.source() sets
-#' `keep.parse.data = FALSE` while the sourced code runs.
-#' @noRd
-doc_parse_text = function(lines, keep_source = TRUE) {
-  old = options(keep.parse.data = TRUE)
-  on.exit(options(old), add = TRUE)
-  text = if (isTRUE(l10n_info()[["UTF-8"]])) as_utf8(lines) else os_bytes(lines)
-  parse(text = text, keep.source = keep_source)
-}
-
 #' An empty call table (the columns of doc_scan_calls())
 #' @noRd
 doc_calls_empty = function() {

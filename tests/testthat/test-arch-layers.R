@@ -85,3 +85,34 @@ test_that("arch_check() flags calls that cross a boundary (negative controls)", 
     "agent-loop.R provider_stream", "tool-read.R session_new", "doc-replay.R code_targets"
   ))
 })
+
+test_that("the retained-source R parser has one L0 home (IC-33, IC-56)", {
+  map = arch_fun_map(local_arch_sources())
+  home = map$file[map$fun == "doc_parse_text"]
+  expect_identical(home, "utils-encoding.R")
+  table = arch_layer_table()
+  expect_identical(table$layer[match(home, table$file)], "L0")
+})
+
+test_that("the shared parser preserves source bytes and options without evaluation (IC-62)", {
+  lines = c('label = "\u00e9";\tfor (i in 1L) gateway()', 'stop("must not be evaluated")')
+  for (keep in c(FALSE, TRUE)) {
+    withr::local_options(keep.parse.data = keep)
+    parsed = doc_parse_text(lines)
+    expect_length(parsed, 3L)
+    expect_identical(charToRaw(as_utf8(parsed[[1L]][[3L]])), charToRaw("\u00e9"))
+    expect_identical(parsed[[2L]][[1L]], as.name("for"))
+    expect_identical(parsed[[3L]][[1L]], as.name("stop"))
+    pd = utils::getParseData(parsed)
+    symbol = pd[pd$token == "SYMBOL_FUNCTION_CALL" & pd$text == "gateway", ]
+    expect_length(symbol$id, 1L)
+    expect_identical(as_utf8(utils::getParseText(pd, symbol$id)), "gateway")
+    expect_identical(getOption("keep.parse.data"), keep)
+    expect_error(doc_parse_text("if ("), class = "simpleError")
+    expect_identical(getOption("keep.parse.data"), keep)
+    no_source = doc_parse_text(lines, keep_source = FALSE)
+    expect_identical(no_source[[2L]], quote(for (i in 1L) gateway()))
+    expect_null(utils::getParseData(no_source))
+    expect_identical(getOption("keep.parse.data"), keep)
+  }
+})
