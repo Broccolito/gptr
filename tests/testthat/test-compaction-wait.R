@@ -231,15 +231,28 @@ test_that("a yielded empty checkpoint retries once and preserves both known char
                                     usage = usage_new(input = 100, output = 5)),
                           fake_text("Useful summary.", delay = 0.1,
                                     usage = usage_new(input = 120, output = 7)), "Done."))
-  short = cp_wait_short(x)
-  admitted = cp_wait_admit(x)
+  # Cold request preparation is cooperative R work, not part of the in-flight wait oracle.
+  startup_started = reactor_now()
+  reactor_pump(until = function() {
+    length(fake_requests(x$fake)) >= 1L || isTRUE(x$run$settled)
+  }, timeout = 0.8)
+  startup_completed = reactor_now()
   pending = x$run$compact_pending
   finish = x$run$compact_finish
   ids = x$run$request_ids
+  admission_ready = startup_completed < x$guard_at &&
+    identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+    !isTRUE(x$run$signal$aborted) && identical(session_live(x$s)$run, x$run) &&
+    isTRUE(session_live(x$s)$compacting) && is.list(pending) && is.function(finish) &&
+    length(ids) == 1L && length(fake_requests(x$fake)) == 1L && nrow(x$s$usage) == 0L &&
+    length(cp_wait_entries(x$s)) == 0L
+  short = cp_wait_short(x)
+  admitted = cp_wait_admit(x)
   waits_completed = reactor_now()
   guard_released = FALSE
   # Bound admission, then release its abort before assertion formatting.
-  if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
+  if (admission_ready && identical(short$value, x$s) && short$elapsed < 0.2 &&
+      admitted$started &&
       all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
       identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
       !isTRUE(x$run$signal$aborted) && isTRUE(session_live(x$s)$compacting) &&
@@ -252,9 +265,12 @@ test_that("a yielded empty checkpoint retries once and preserves both known char
   }
   admission_reason = if (identical(x$run$signal$reason, "fixture-guard")) "fixture-guard" else
     if (is.null(x$run$signal$reason)) "none" else "other"
-  admission_diagnostic = paste0("finite_elapsed=", short$elapsed,
+  admission_diagnostic = paste0("startup_elapsed=", startup_completed - startup_started,
+                                "; finite_elapsed=", short$elapsed,
                                 "; guard_remaining=", x$guard_at - waits_completed,
                                 "; abort_reason=", admission_reason)
+  expect_true(admission_ready, info = admission_diagnostic)
+  expect_lt(startup_completed - startup_started, 0.8)
   expect_true(guard_released, info = admission_diagnostic)
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
@@ -270,7 +286,7 @@ test_that("a yielded empty checkpoint retries once and preserves both known char
   completion_completed = reactor_now()
   completion_guard_released = FALSE
   if (guard_released && identical(x$s$status, "idle") && isTRUE(x$run$settled) &&
-      !isTRUE(x$run$signal$aborted) && completion_completed < completion_guard_at) {
+      !isTRUE(x$run$signal$aborted)) {
     completion_guard_released = identical(reactor_cancel(completion_guard), 1L)
   }
   completion_reason = if (identical(x$run$signal$reason, "fixture-completion-guard"))
@@ -279,6 +295,7 @@ test_that("a yielded empty checkpoint retries once and preserves both known char
   completion_diagnostic = paste0("completion_elapsed=", completion_completed - completion_started,
                                  "; guard_remaining=", completion_guard_at - completion_completed,
                                  "; abort_reason=", completion_reason)
+  cat(completion_diagnostic, "\n")
   expect_identical(x$s$status, "idle")
   expect_true(completion_guard_released, info = completion_diagnostic)
   expect_length(fake_requests(x$fake), 3L)
@@ -317,8 +334,44 @@ test_that("a yielded checkpoint consumes its request budget before a retry can s
 test_that("an overflow checkpoint yields and resumes the same ordinary request once", {
   x = cp_wait_fixture(list(list(overflow = TRUE),
                           fake_text("Useful summary.", delay = 0.3), "Done."), should = FALSE)
+  # Admit the overflow and its checkpoint before measuring the truly in-flight finite wait.
+  startup_started = reactor_now()
+  reactor_pump(until = function() {
+    length(fake_requests(x$fake)) >= 2L || isTRUE(x$run$settled)
+  }, timeout = 0.8)
+  startup_completed = reactor_now()
+  pending = x$run$compact_pending
+  finish = x$run$compact_finish
+  ids = x$run$request_ids
+  admission_ready = startup_completed < x$guard_at &&
+    identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+    !isTRUE(x$run$signal$aborted) && identical(session_live(x$s)$run, x$run) &&
+    isTRUE(session_live(x$s)$compacting) && isTRUE(x$run$overflow_used) &&
+    is.list(pending) && is.function(finish) && length(ids) == 2L &&
+    length(fake_requests(x$fake)) == 2L && nrow(x$s$usage) == 1L &&
+    length(cp_wait_entries(x$s)) == 0L
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x, requests = 2L)
+  waits_completed = reactor_now()
+  guard_released = FALSE
+  if (admission_ready && identical(short$value, x$s) && short$elapsed < 0.2 &&
+      admitted$started && all(admitted$elapsed < 0.2) && all(admitted$values) &&
+      admitted$retained && identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted) && isTRUE(session_live(x$s)$compacting) &&
+      identical(x$run$compact_pending, pending) && identical(x$run$compact_finish, finish) &&
+      identical(x$run$request_ids, ids) && length(fake_requests(x$fake)) == 2L &&
+      nrow(x$s$usage) == 1L && length(cp_wait_entries(x$s)) == 0L &&
+      waits_completed < x$guard_at) {
+    guard_released = identical(reactor_cancel(x$guard), 1L)
+  }
+  reason = x$run$signal$reason %||% "none"
+  diagnostic = paste0("startup_elapsed=", startup_completed - startup_started,
+                      "; finite_elapsed=", short$elapsed,
+                      "; guard_remaining=", x$guard_at - waits_completed,
+                      "; abort_reason=", reason)
+  expect_true(admission_ready, info = diagnostic)
+  expect_lt(startup_completed - startup_started, 0.8)
+  expect_true(guard_released, info = diagnostic)
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
   expect_identical(x$s$status, "running")
@@ -326,8 +379,25 @@ test_that("an overflow checkpoint yields and resumes the same ordinary request o
   expect_length(fake_requests(x$fake), 2L)
   expect_length(cp_wait_entries(x$s), 0L)
   expect_identical(nrow(x$s$usage), 1L)
+  # Completion has its own original-sized guard; expectations consume neither phase's budget.
+  completion_started = reactor_now()
+  completion_guard_at = completion_started + 0.8
+  completion_guard = reactor_timer(completion_guard_at,
+                                   function() run_abort(x$run, "fixture-completion-guard"))
+  withr::defer(reactor_cancel(completion_guard))
   gptr_wait(x$s, timeout = 1)
-  expect_identical(x$s$status, "idle")
+  completion_completed = reactor_now()
+  completion_guard_released = FALSE
+  if (guard_released && identical(x$s$status, "idle") && isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted)) {
+    completion_guard_released = identical(reactor_cancel(completion_guard), 1L)
+  }
+  completion_diagnostic = paste0("completion_elapsed=", completion_completed - completion_started,
+                                 "; guard_remaining=", completion_guard_at - completion_completed,
+                                 "; abort_reason=", x$run$signal$reason %||% "none")
+  cat(completion_diagnostic, "\n")
+  expect_identical(x$s$status, "idle", info = completion_diagnostic)
+  expect_true(completion_guard_released, info = completion_diagnostic)
   expect_length(fake_requests(x$fake), 3L)
   expect_length(cp_wait_entries(x$s), 1L)
   expect_identical(cp_wait_entries(x$s)[[1L]]$details$reason, "overflow")
@@ -803,6 +873,59 @@ test_that("a manual command cannot replace a yielded automatic checkpoint", {
   expect_equal(x$s$usage$output[[1L]], 5)
   expect_identical(sum(x$events$types == "session_compact"), 1L)
   expect_identical(sum(x$events$types == "agent_end"), 1L)
+  cp_wait_prefix(x)
+  cp_wait_finished(x)
+})
+
+test_that("an admitted stuck checkpoint still aborts under its independent completion guard", {
+  x = cp_wait_fixture(list(fake_text("Must not finish.", hang = TRUE)))
+  startup_started = reactor_now()
+  reactor_pump(until = function() {
+    length(fake_requests(x$fake)) >= 1L || isTRUE(x$run$settled)
+  }, timeout = 0.8)
+  startup_completed = reactor_now()
+  pending = x$run$compact_pending
+  finish = x$run$compact_finish
+  ids = x$run$request_ids
+  admission_ready = startup_completed < x$guard_at &&
+    identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+    !isTRUE(x$run$signal$aborted) && identical(session_live(x$s)$run, x$run) &&
+    isTRUE(session_live(x$s)$compacting) && is.list(pending) && is.function(finish) &&
+    length(ids) == 1L && length(fake_requests(x$fake)) == 1L && nrow(x$s$usage) == 0L &&
+    length(cp_wait_entries(x$s)) == 0L
+  short = cp_wait_short(x)
+  guard_released = FALSE
+  if (admission_ready && identical(short$value, x$s) && short$elapsed < 0.2 &&
+      identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted) && identical(x$run$compact_pending, pending) &&
+      identical(x$run$compact_finish, finish) && identical(x$run$request_ids, ids) &&
+      length(fake_requests(x$fake)) == 1L && nrow(x$s$usage) == 0L &&
+      length(cp_wait_entries(x$s)) == 0L && reactor_now() < x$guard_at) {
+    guard_released = identical(reactor_cancel(x$guard), 1L)
+  }
+  expect_true(admission_ready)
+  expect_lt(startup_completed - startup_started, 0.8)
+  expect_true(guard_released)
+  expect_identical(short$value, x$s)
+  expect_lt(short$elapsed, 0.2)
+  completion_guard = reactor_timer(reactor_now() + 0.8,
+                                   function() run_abort(x$run, "fixture-completion-guard"))
+  withr::defer(reactor_cancel(completion_guard))
+  gptr_wait(x$s, timeout = 1)
+  expect_identical(x$s$status, "aborted")
+  expect_identical(x$run$signal$reason, "fixture-completion-guard")
+  expect_length(fake_requests(x$fake), 1L)
+  expect_length(cp_wait_entries(x$s), 0L)
+  expect_identical(nrow(x$s$usage), 1L)
+  expect_true(all(is.na(unlist(x$s$usage[1L, setdiff(usage_token_columns, "cost")],
+                              use.names = FALSE))))
+  expect_identical(x$s$usage$cost, 0)
+  expect_identical(x$s$usage$stop_reason, "aborted")
+  expect_identical(x$run$request_ids, x$s$usage$request_id)
+  expect_identical(sum(x$events$types == "usage"), 1L)
+  expect_identical(sum(x$events$types == "agent_end"), 1L)
+  restored = rebuild_usage(store_read(x$s$file)$entries, session_data(x$s))
+  expect_identical(restored$request_id, x$s$usage$request_id)
   cp_wait_prefix(x)
   cp_wait_finished(x)
 })
