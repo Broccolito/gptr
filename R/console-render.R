@@ -26,28 +26,6 @@ console_interrupt_key = function() {
   if (front_end() %in% c("rgui", "rstudio", "positron")) "Esc" else "Ctrl-C"
 }
 
-#' Untrusted text as valid UTF-8; an invalid string shows its non-ASCII bytes as <xx>
-#' @noRd
-console_utf8 = function(x) {
-  x = as_utf8(as.character(x))
-  bad = !validUTF8(x)
-  x[bad] = iconv(x[bad], "UTF-8", "ASCII", sub = "byte")
-  x
-}
-
-#' Escape untrusted text for display with P11's ui_escape() (IC-53 item 8), keeping line feeds
-#' unless `newlines = FALSE`; per character, so escaping commutes with chunking. NA stays NA.
-#' @noRd
-console_escape = function(x, newlines = TRUE) {
-  if (!newlines) return(ui_escape(x))
-  x = console_utf8(x)
-  ok = !is.na(x)
-  # The appended line feed keeps trailing empty lines through strsplit()
-  x[ok] = vapply(strsplit(paste0(x[ok], "\n"), "\n", fixed = TRUE),
-                 function(lines) paste(ui_escape(lines), collapse = "\n"), "")
-  x
-}
-
 #' Lines of untrusted text for one-line displays: split on CRLF, CR and LF, then escaped
 #' @noRd
 console_lines = function(x) {

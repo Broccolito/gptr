@@ -173,6 +173,46 @@ spill_write = function(text, prefix) {
   path
 }
 
+#' Untrusted text as valid UTF-8; an invalid string shows its non-ASCII bytes as <xx>
+#' @noRd
+console_utf8 = function(x) {
+  x = as_utf8(as.character(x))
+  bad = !validUTF8(x)
+  x[bad] = iconv(x[bad], "UTF-8", "ASCII", sub = "byte")
+  x
+}
+
+#' Escape untrusted text for display with P11's ui_escape() (IC-53 item 8), keeping line feeds
+#' unless `newlines = FALSE`; per character, so escaping commutes with chunking. NA stays NA.
+#' @noRd
+console_escape = function(x, newlines = TRUE) {
+  if (!newlines) return(ui_escape(x))
+  x = console_utf8(x)
+  ok = !is.na(x)
+  # The appended line feed keeps trailing empty lines through strsplit()
+  x[ok] = vapply(strsplit(paste0(x[ok], "\n"), "\n", fixed = TRUE),
+                 function(lines) paste(ui_escape(lines), collapse = "\n"), "")
+  x
+}
+
+#' Escape control (except TAB), bidi and zero-width characters for display as <U+XXXX>
+#'
+#' The rule of perm-classify.R's risk_escape(); a front-end file may not call a capability file
+#' (architecture section 2.2).
+#' @noRd
+ui_escape = function(x) {
+  vapply(console_utf8(x), function(s) {
+    if (is.na(s)) return(s)
+    cp = utf8ToInt(s)
+    bad = (cp <= 0x1F & cp != 0x09) | (cp >= 0x7F & cp <= 0x9F) | cp == 0x061C |
+      (cp >= 0x200B & cp <= 0x200F) | (cp >= 0x202A & cp <= 0x202E) |
+      (cp >= 0x2060 & cp <= 0x2069) | cp == 0xFEFF
+    out = vapply(cp, intToUtf8, character(1))
+    out[bad] = sprintf("<U+%04X>", cp[bad])
+    paste(out, collapse = "")
+  }, character(1), USE.NAMES = FALSE)
+}
+
 #' Clean terminal output: drop ANSI/OSC sequences, keep the last frame of \r progress lines,
 #' cap lines at 400 characters. Returns lines.
 #' @noRd

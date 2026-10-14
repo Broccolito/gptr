@@ -431,8 +431,8 @@ session_history = function(s) {
 print.gptr_session = function(x, ...) {
   txt = session_text(x)
   txt = txt[!is.na(txt) & nzchar(txt)]
-  if (length(txt)) msg_verbatim(txt)
-  msg_verbatim(cli::col_grey(session_footer(x)))
+  if (length(txt)) msg_verbatim(console_escape(txt))
+  msg_verbatim(cli::col_grey(console_escape(session_footer(x), newlines = FALSE)))
   invisible(x)
 }
 
@@ -625,8 +625,9 @@ session_history_display_text = function(text) {
 #' @exportS3Method utils::str
 str.gptr_session = function(object, ...) {
   d = session_data(object)
-  msg_verbatim(paste0("<gptr_session ", d$id, " | ", d$kind, " | ", d$status, " | ", d$turns,
-                      " turns | ", d$model, ">"))
+  text = paste0("<gptr_session ", d$id, " | ", d$kind, " | ", d$status, " | ", d$turns,
+                " turns | ", d$model, ">")
+  msg_verbatim(console_escape(text, newlines = FALSE))
   invisible(NULL)
 }
 

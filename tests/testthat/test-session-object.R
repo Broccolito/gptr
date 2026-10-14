@@ -214,6 +214,95 @@ test_that("unknown usage prints as unknown, never as zero (IC-74)", {
   expect_match(session_footer(test_session()), " . 0 turns . 0 tokens . $0.0000 . ", fixed = TRUE)
 })
 
+test_that("print escapes answer controls without truncating or rewriting session data", {
+  testthat::local_reproducible_output(width = 80)
+  plain = paste0("caf", intToUtf8(0xE9), " ", intToUtf8(0x3B2), " ", intToUtf8(0x2192),
+                 " {literal}")
+  answer = paste0(plain, "\n", strrep("x", 450L), "\n",
+    "\033[31mred\033[0m \033]0;title\a CR\rback\b C1", intToUtf8(0x9B),
+    " bidi", intToUtf8(0x202E), " hidden", intToUtf8(0x200B))
+  session = answered_session(answer)
+  before = list(text = session$text, messages = session$messages, history = session$history,
+                footer = session_footer(session))
+  out = utils::capture.output({
+    err = utils::capture.output({
+      shown = withVisible(print(session))
+    }, type = "message")
+  })
+  expected = c(plain, strrep("x", 450L),
+    paste0("<U+001B>[31mred<U+001B>[0m <U+001B>]0;title<U+0007> CR<U+000D>back<U+0008> C1",
+      "<U+009B> bidi<U+202E> hidden<U+200B>"), session_footer(session))
+  expect_identical(out, expected)
+  expect_identical(err, character())
+  expect_false(shown$visible)
+  expect_identical(shown$value, session)
+  expect_identical(format(session), answer)
+  expect_identical(as.character(session), answer)
+  expect_identical(list(text = session$text, messages = session$messages, history = session$history,
+                        footer = session_footer(session)), before)
+})
+
+test_that("print preserves trailing newlines and displays invalid UTF-8 as inert bytes", {
+  testthat::local_reproducible_output(width = 80)
+  answer = rawToChar(as.raw(c(0x61, 0xFF, 0x09, 0x0A, 0x62, 0x0A)))
+  Encoding(answer) = "UTF-8"
+  session = answered_session(answer)
+  before = session$text
+  out = utils::capture.output(print(session))
+  expect_identical(out, c("a<ff>\t", "b", "", session_footer(session)))
+  expect_identical(session$text, before)
+  expect_identical(format(session), before)
+  expect_identical(as.character(session), before)
+})
+
+test_that("session footer and structure escape metadata before applying trusted styles", {
+  testthat::local_reproducible_output(width = 80)
+  session = answered_session()
+  data = session_data(session)
+  data$last_text = NA_character_
+  data$status = "\033[31midle\033[0m"
+  data$model = "fake/\033]0;model\a\nsecond"
+  data$id = "session\rforged"
+  data$kind = "chat\b"
+  before = list(status = data$status, model = data$model, id = data$id, kind = data$kind,
+                text = session$text, messages = session$messages, history = session$history)
+  dot = if (cli::is_utf8_output()) " \u00b7 " else " . "
+  footer = paste(c("<U+001B>[31midle<U+001B>[0m",
+    "fake/<U+001B>]0;model<U+0007><U+000A>second", "1 turn", "1.2k tokens", "$0.0123",
+    "session<U+000D>forged"), collapse = dot)
+  withr::local_options(cli.num_colors = 256L)
+  printed = utils::capture.output(print(session))
+  expect_identical(printed, as.character(cli::col_grey(footer)))
+  expect_identical(cli::ansi_strip(printed), footer)
+  structure = utils::capture.output(utils::str(session))
+  expect_identical(structure, paste0("<gptr_session session<U+000D>forged | chat<U+0008> | ",
+    "<U+001B>[31midle<U+001B>[0m | 1 turns | ",
+    "fake/<U+001B>]0;model<U+0007><U+000A>second>"))
+  expect_identical(list(status = data$status, model = data$model, id = data$id, kind = data$kind,
+                        text = session$text, messages = session$messages,
+                        history = session$history), before)
+})
+
+test_that("session display leaves actual error classes and explicit stderr routing intact", {
+  testthat::local_reproducible_output(width = 80)
+  session = answered_session()
+  failure = tryCatch(gptr_abort("actual failure", "session_display_fixture"), error = identity)
+  expect_s3_class(failure, "gptr_error_session_display_fixture")
+  expect_s3_class(failure, "error")
+  out = utils::capture.output({
+    err = utils::capture.output({
+      print(session)
+      utils::str(session)
+      msg_verbatim(conditionMessage(failure), stream = "stderr")
+    }, type = "message")
+  })
+  expect_identical(err, "actual failure")
+  expect_length(out, 3L)
+  expect_identical(out[[1L]], session$text)
+  expect_identical(out[[2L]], session_footer(session))
+  expect_match(out[[3L]], "<gptr_session ", fixed = TRUE)
+})
+
 # ---------------------------------------------------------------- the value policy (03 section 5.1)
 
 test_that("a small bound value is copied, a large one held by name, an anonymous one boxed", {
