@@ -21,7 +21,8 @@ test_that("peter$sql() uses the one DBI connection in the calling frame", {
   f = function(missing_arg) {
     shop = DBI::dbConnect(RSQLite::SQLite(), ":memory:")
     on.exit(DBI::dbDisconnect(shop), add = TRUE)
-    DBI::dbWriteTable(shop, "orders", data.frame(id = 1:30, region = rep(c("n", "s", "e"), 10)))
+    with_seed_preserved(DBI::dbWriteTable(shop, "orders",
+      data.frame(id = 1:30, region = rep(c("n", "s", "e"), 10))))
     x = bridge_sql("SELECT * FROM orders WHERE id > 5")
     agg = bridge_sql("SELECT region, COUNT(*) AS n FROM orders GROUP BY region ORDER BY region")
     upd = bridge_sql("UPDATE orders SET region = 'w' WHERE id < 3")
@@ -88,7 +89,8 @@ skip_if_no_python = function() {
 }
 
 test_that("peter$py() refuses a Python that reticulate would have to provision", {
-  skip_if_not_installed("reticulate")
+  withr::with_options(list(ambiguousMethodSelection = getOption("ambiguousMethodSelection")),
+    skip_if_not_installed("reticulate"))
   testthat::local_mocked_bindings(py_available = function(initialize = FALSE) FALSE,
                                   .package = "reticulate")
   withr::local_envvar(RETICULATE_PYTHON = NA, RETICULATE_PYTHON_ENV = NA, VIRTUAL_ENV = NA)
@@ -98,29 +100,55 @@ test_that("peter$py() refuses a Python that reticulate would have to provision",
 
 test_that("peter$py() keeps objects in __main__, shows the last value and one-line errors", {
   skip_if_no_python()
+  seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
   bridge_py("counter = 41")
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
   r = bridge_py("counter += 1\ncounter")
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
   expect_s3_class(r, "gptr_py")
   expect_identical(names(unclass(r)), c("name", "output", "repr"))
   expect_identical(r$value, 42L)
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
   expect_identical(r$repr, "42")
   expect_identical(r$kind, "int")
   expect_output(print(r), "^42$")
   expect_identical(out_get(r$id), "42")
   e = bridge_py("x = 1\ny = undefined_name + x")
   expect_match(e$error, "NameError", fixed = TRUE)
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
   s = bridge_py("def f(:\n  pass")
   expect_match(s$error, "^SyntaxError")
   expect_false(grepl("\n", s$error, fixed = TRUE))
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
   expect_identical(bridge_py("x")$value, 1L)
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
   w = bridge_py("import sys\nsys.stderr.write('to stderr\\n')\nprint('hello')")
   expect_identical(w$output, c("hello", "[stderr]", "to stderr"))
   expect_null(w$value)
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
+  draws = bridge_py("r['stats::runif'](3)")$value
+  expect_length(draws, 3L)
+  expect_true(all(is.finite(draws) & draws >= 0 & draws <= 1))
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
+  withr::with_seed(104, {
+    seeded = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+    draws = bridge_py("r['stats::runif'](3)")$value
+    expect_length(draws, 3L)
+    expect_true(all(is.finite(draws) & draws >= 0 & draws <= 1))
+    expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seeded))
+    error = bridge_py("r[\"function() { stats::runif(1); stop('rng error') }\"]()")
+    expect_match(error$error, "rng error", fixed = TRUE)
+    expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seeded))
+  })
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
+  expect_identical(bridge_py("counter")$value, 42L)
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
 })
 
 test_that("peter$py() receives R objects by name and knitr python chunks share __main__", {
   skip_if_no_python()
-  skip_if_not(reticulate::py_module_available("pandas"), "pandas is not installed")
+  skip_if_not(with_seed_preserved(reticulate::py_module_available("pandas")),
+    "pandas is not installed")
   log = local_bridge_events()
   sales = data.frame(region = rep(c("north", "south"), 50), revenue = seq_len(100))
   r = bridge_py("t = sales.groupby('region').revenue.sum()\nt", name = sales)
@@ -131,11 +159,15 @@ test_that("peter$py() receives R objects by name and knitr python chunks share _
   expect_identical(names(v), c("north", "south"))
   expect_identical(log$events[[length(log$events)]]$digest, "#> py: Series 2")
   expect_identical(bridge_py("a + b", name = list(a = 1L, b = 2L))$value, 3L)
-  skip_if_not_installed("knitr")
+  skip_if_not(nzchar(system.file(package = "knitr")), "knitr is not installed")
+  seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  cold = bridge_knit("asis", "knitr is ready")
+  expect_identical(as.character(cold), character())
+  expect_true(identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed))
   bridge_py("shared_value = 42")
   opts = knitr::opts_chunk$merge(list(engine = "python", code = "print(shared_value)",
                                       label = "k", echo = FALSE, results = "markup"))
-  out = knitr::knit_engines$get("python")(opts)
+  out = with_seed_preserved(knitr::knit_engines$get("python")(opts))
   expect_match(paste(out, collapse = ""), "42", fixed = TRUE)
 })
 
@@ -213,7 +245,7 @@ test_that("the python and sql engines run through peter$py() and peter$sql()", {
   f = function() {
     shop = DBI::dbConnect(RSQLite::SQLite(), ":memory:")
     on.exit(DBI::dbDisconnect(shop), add = TRUE)
-    DBI::dbWriteTable(shop, "orders", data.frame(id = 1:3))
+    with_seed_preserved(DBI::dbWriteTable(shop, "orders", data.frame(id = 1:3)))
     bridge_knit("sql", "SELECT COUNT(*) AS n FROM orders")
   }
   out = f()

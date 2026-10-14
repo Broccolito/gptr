@@ -243,6 +243,7 @@ bridge_py_source = c(
 #' (its discovery ends in a uv-managed download; G5 item 21)
 #' @noRd
 bridge_py_main = function() {
+  with_seed_preserved({
   setup_options = options("reticulate.uv_binary", "ambiguousMethodSelection")
   on.exit(options(setup_options), add = TRUE)
   keys = c("PATH", "VIRTUAL_ENV", "R_SESSION_INITIALIZED", "LD_LIBRARY_PATH",
@@ -296,6 +297,7 @@ bridge_py_main = function() {
                member = "py", provided_by = "reticulate", env_restored = FALSE)
   }
   main
+  })
 }
 
 #' All display lines of a gptr_py: output, then the repr of the last value, then the error
@@ -311,6 +313,7 @@ bridge_py_lines = function(x) {
 #' are attributes (P22 self-review 3).
 #' @noRd
 bridge_py = function(code, name = NULL, max_rows = 10L) {
+  with_seed_preserved({
   src_lines = bridge_chr(code)
   check_strings(src_lines, "code")
   rows = check_number(max_rows %||% 10L, "max_rows", min = 1, int = TRUE)
@@ -338,6 +341,7 @@ bridge_py = function(code, name = NULL, max_rows = 10L) {
                    seconds = reactor_now() - t0, bytes_out = nchar(text, type = "bytes"),
                    bytes_err = nchar(r$err, type = "bytes"), spill = NULL, digest = digest))
   x
+  })
 }
 
 #' Fields of a Python result: `$value` converts the last Python value to R through reticulate;
@@ -348,7 +352,9 @@ bridge_py = function(code, name = NULL, max_rows = 10L) {
 #' @export
 #' @noRd
 `$.gptr_py` = function(x, name) {
-  if (identical(name, "value")) return(reticulate::py_to_r(attr(x, "py", exact = TRUE)))
+  if (identical(name, "value")) {
+    return(with_seed_preserved(reticulate::py_to_r(attr(x, "py", exact = TRUE))))
+  }
   if (name %in% c("error", "kind", "id")) return(attr(x, name, exact = TRUE))
   .subset2(x, name)
 }
@@ -447,7 +453,7 @@ bridge_knit = function(engine, code) {
                       timeout = bridge_knit_timeout(), bridge = "knit", label = engine, level = 3L)
     return(bridge_text(bridge_cmd_lines(res), out_id = res$id))
   }
-  if (!requireNamespace("knitr", quietly = TRUE)) {
+  if (!with_seed_preserved(requireNamespace("knitr", quietly = TRUE))) {
     gptr_abort("peter$knit() needs the 'knitr' package for this engine.", "missing_package",
                package = "knitr", feature = "peter$knit()")
   }
