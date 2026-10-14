@@ -1,11 +1,11 @@
-## Current size and check checkpoint — `674602f`, 2026-10-14
+## Measured normal `211b781`; current source `be4b2ec`, 2026-10-14
 
-The accepted normal source archive is 2,639,707 bytes. Its default-byte-compiled installation
-occupies 6,981,252 logical bytes, including the 5,030,130-byte `R/gptr.rdb`. Installed doc/ is
-1,224,500 bytes, help/ 487,225 bytes and html/ 15,771 bytes: combined documentation is
-1,727,496 bytes. Extdata is 83,185 bytes and data/ is empty; all 14 guides remain. Build took
-20.726 s, installation 14.977 s and the whole family 44.619 s, with peak sampled RSS of
-520 MiB, 35 samples, no sampling errors and quiet build/install logs. These measurements
+The accepted normal source archive is 2,640,029 bytes. Its default-byte-compiled installation
+occupies 6,981,116 logical bytes, including the 5,030,093-byte `R/gptr.rdb`. Installed doc/ is
+1,224,500 bytes, help/ 487,184 bytes and html/ 15,771 bytes: combined documentation is
+1,727,455 bytes. Extdata is 83,185 bytes and data/ is empty; all 14 guides remain. Build took
+20.825 s, installation 14.532 s and the whole family 46.379 s, with peak sampled RSS of
+518.375 MiB, 36 samples, no sampling errors and quiet build/install logs. These measurements
 establish build/install only. The installed 5 MB target remains unmet. We retain necessary
 byte compilation, useful debugging/security support, offline tests and guides, preserve
 historical size NOTEs, and request CRAN consideration of the required byte-compiled R code.
@@ -18,19 +18,22 @@ unable to verify current time. The guarded family took 560.787 s with peak sampl
 Strict zero-NOTE acceptance remains incomplete. Public-clock transport probes failed before
 obtaining a parseable remote time; no system-clock skew is established. Clock verification
 and the original acceptance gates remain enabled. A complete check of the accepted
-`674602f` artifact remains pending.
+`211b781` artifact remains pending; the subsequently integrated source `be4b2ec`
+also requires fresh combined normal/check evidence.
 
 The preceding `208a02d` source-retaining check installation is a different measurement from
 the default installation above: 10,058,592 logical bytes, including an 8,113,945-byte R
 database; displayed 10.5 Mb was size INFO. Historical size NOTEs remain visible below.
 
-At 18:04:55 UTC the current required CI run had two successes, five failures and six running
-jobs. The known failures concern the token ratchet and four stale prompt expectations;
-Corrections are now integrated in source `49eb762`, but fresh combined installed/check/CI
-evidence remains pending. Complete source-suite
-preservation, applicable installed/live/native checks and final submission checks remain
-pending. Main remains unmerged; no submission or release acceptance is claimed. Earlier
-evidence below remains historical.
+The historical 18:04:55 UTC CI snapshot had two successes, five failures and six running
+jobs, concerning the token ratchet and four stale prompt expectations. Those corrections
+were integrated in source `49eb762`. The historical required-CI snapshot for `211b781`
+at 20:13 UTC has ten successes, two failures and one running job. The 20:32 UTC required
+`c5a2b8e` snapshot has three successes, no completed failures and ten running checks.
+There is no complete CI acceptance for the newer integrated `be4b2ec` source.
+Complete source preservation, applicable installed/live/native checks, the complete as-cran
+check and final submission checks remain pending. Main remains unmerged; no submission or
+release acceptance is claimed. Earlier evidence below remains historical.
 
 
 ## Historical local verification (`ef5201e`, updated 2026-10-14 10:15 UTC)
