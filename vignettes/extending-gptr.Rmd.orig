@@ -141,11 +141,8 @@ the callback; it is not a general R code security filter. See
 
 This example uses an offline provider so the event sequence is reproducible:
 
-```{r hook-provider, include = FALSE}
-fake = gptr_fake_provider(list("hello"))
-```
-
 ```{r}
+fake = gptr_fake_provider(list("hello"))
 session = peter("Say hello.", model = fake, .run = FALSE, envir = new.env())
 seen = new.env()
 seen$roles = character()

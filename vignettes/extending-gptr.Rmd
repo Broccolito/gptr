@@ -156,6 +156,7 @@ This example uses an offline provider so the event sequence is reproducible:
 
 
 ``` r
+fake = gptr_fake_provider(list("hello"))
 session = peter("Say hello.", model = fake, .run = FALSE, envir = new.env())
 seen = new.env()
 seen$roles = character()
