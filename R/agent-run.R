@@ -870,25 +870,34 @@ run_start = function(s, input, opts = list()) {
   run = run_new(s, opts, outer)
   replay_notice(s)
   input = run_initial_input(run, input)
-  live$run = run
-  d$status = "running"
-  d$reason = NULL
-  d$condition = NULL
-  d$budget = run$budget
-  if (is.null(d$parent_id)) last_set(s)
-  reactor_run_add(run)
-  # a failure before the run is wired settles it with status error and re-signals
+  # Startup failures settle the registered run before re-signalling the original condition.
   started = tryCatch({
+    live$run = run
+    d$status = "running"
+    d$reason = NULL
+    d$condition = NULL
+    d$budget = run$budget
+    if (is.null(d$parent_id)) last_set(s)
+    reactor_run_add(run)
     input = run_freeze(run, input)
     run_emit(run, "agent_start")
     run_emit(run, "turn_start")
     if (!is.null(input)) run_append_messages(run, input)
     run_wire(run)
     TRUE
-  }, error = function(e) e)
+  }, error = function(e) e, interrupt = function(e) e)
   if (!isTRUE(started)) {
-    run_fail(run, started)
-    stop(started)
+    if (inherits(started, "interrupt")) {
+      on.exit({
+        signalCondition(started)
+        invokeRestart("abort")
+      }, add = TRUE)
+      suspendInterrupts(tryCatch(run_abort(run, "interrupt"),
+                                 error = function(e) NULL, interrupt = function(e) NULL))
+    } else {
+      run_fail(run, started)
+      stop(started)
+    }
   }
   run
 }

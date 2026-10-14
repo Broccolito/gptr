@@ -2085,3 +2085,153 @@ test_that("inside a run set_model() refuses a decision-only model; a second abor
   expect_identical(box$run$signal$reason, "first")
   expect_length(tool_results(s2), 1L)
 })
+
+# ---------------------------------------------------------------- interrupts during startup
+
+test_that("an interrupt during startup aborts the registered run and preserves the condition", {
+  local_permissive()
+  fake = local_fake_provider(list("never requested"))
+  s = test_session()
+  box = new.env(parent = emptyenv())
+  primary = structure(list(message = "startup interrupted", call = quote(run_start()),
+                           marker = new.env(parent = emptyenv())),
+                      class = c("interrupt", "condition"))
+  abort = run_abort
+  withr::defer({
+    if (!is.null(box$run) && !isTRUE(box$run$settled)) abort(box$run, "test_cleanup")
+  })
+  local_hook("agent_start", function(event, ctx) {
+    box$run = session_live(s)$run
+    signalCondition(primary)
+  }, session = s$id)
+  r = reactor_get()
+  runs = ls(r$runs, all.names = TRUE)
+  connections = showConnections(all = TRUE)
+  seen = tryCatch(run_start(s, msg_user("go")), interrupt = identity, error = identity)
+  expect_identical(seen, primary)
+  expect_true(isTRUE(box$run$settled))
+  expect_identical(s$status, "aborted")
+  expect_identical(box$run$signal$reason, "interrupt")
+  expect_null(session_live(s)$run)
+  expect_null(box$run$home)
+  expect_null(box$run$scratch)
+  expect_null(box$run$outer)
+  expect_null(box$run$opts$call)
+  expect_identical(ls(r$runs, all.names = TRUE), runs)
+  expect_false(box$run$id %in% registry_env()$runs)
+  expect_identical(showConnections(all = TRUE), connections)
+  expect_length(fake_requests(fake), 0L)
+})
+
+test_that("an interrupt after startup wiring cancels only that run's reactor work", {
+  local_permissive()
+  fake = local_fake_provider(list("never requested"))
+  s = test_session(home = new.env())
+  box = new.env(parent = emptyenv())
+  primary = structure(list(message = "wired startup interrupted", call = quote(run_wire())),
+                      class = c("interrupt", "condition"))
+  abort = run_abort
+  withr::defer({
+    if (!is.null(box$run) && !isTRUE(box$run$settled)) abort(box$run, "test_cleanup")
+  })
+  r = reactor_get()
+  other = c(reactor_task(function() FALSE, run = "other_startup_probe"),
+            reactor_timer(reactor_now() + 600, function() NULL, run = "other_startup_probe"),
+            reactor_enqueue_tool("other_startup_probe", function() NULL))
+  withr::defer(reactor_cancel(other))
+  before = list(runs = ls(r$runs), tasks = ls(r$tasks), timers = ls(r$timers), fifo = r$fifo)
+  wire = run_wire
+  testthat::local_mocked_bindings(run_wire = function(run) {
+    box$run = run
+    wire(run)
+    run$fifo = c(run$fifo, reactor_enqueue_tool(run, function() stop("must not run")))
+    box$ids = c(run$task, run$timers, run$fifo)
+    signalCondition(primary)
+  })
+  seen = tryCatch(run_start(s, msg_user("go")), interrupt = identity, error = identity)
+  expect_identical(seen, primary)
+  expect_length(box$ids, 3L)
+  expect_true(isTRUE(box$run$settled))
+  expect_identical(s$status, "aborted")
+  expect_null(session_live(s)$run)
+  expect_null(box$run$home)
+  expect_identical(ls(r$runs), before$runs)
+  expect_identical(ls(r$tasks), before$tasks)
+  expect_identical(ls(r$timers), before$timers)
+  expect_identical(r$fifo, before$fifo)
+  expect_false(box$run$id %in% registry_env()$runs)
+  expect_length(fake_requests(fake), 0L)
+})
+
+test_that("a startup interrupt remains original when abort cleanup errors or interrupts", {
+  local_permissive()
+  local_fake_provider(list("never requested"))
+  abort = run_abort
+  probe = function(secondary) {
+    s = test_session()
+    box = new.env(parent = emptyenv())
+    box$aborts = 0L
+    box$secondary_seen = FALSE
+    primary = structure(list(message = "original startup interrupt", call = quote(run_start()),
+                             marker = new.env(parent = emptyenv())),
+                        class = c("interrupt", "condition"))
+    withr::defer({
+      if (!is.null(box$run) && !isTRUE(box$run$settled)) abort(box$run, "test_cleanup")
+    })
+    local_hook("agent_start", function(event, ctx) {
+      box$run = session_live(s)$run
+      signalCondition(primary)
+    }, session = s$id)
+    observe = function(cnd) {
+      if (identical(cnd, secondary)) box$secondary_seen = TRUE
+    }
+    testthat::local_mocked_bindings(run_abort = function(run, reason = "user") {
+      box$aborts = box$aborts + 1L
+      abort(run, reason)
+      withCallingHandlers({
+        if (inherits(secondary, "interrupt")) signalCondition(secondary) else stop(secondary)
+      }, error = observe, interrupt = observe)
+    })
+    seen = tryCatch(run_start(s, msg_user("go")), interrupt = identity, error = identity)
+    expect_identical(seen, primary)
+    expect_identical(box$aborts, 1L)
+    expect_true(box$secondary_seen)
+    expect_true(isTRUE(box$run$settled))
+    expect_identical(s$status, "aborted")
+    expect_null(session_live(s)$run)
+    expect_false(exists(box$run$id, envir = reactor_get()$runs, inherits = FALSE))
+  }
+  probe(simpleError("secondary cleanup error"))
+  probe(structure(list(message = "secondary cleanup interrupt", call = NULL),
+                  class = c("interrupt", "condition")))
+})
+
+test_that("an interrupt during reactor registration releases the partially started run", {
+  local_permissive()
+  fake = local_fake_provider(list("never requested"))
+  s = test_session()
+  box = new.env(parent = emptyenv())
+  primary = structure(list(message = "registration interrupted", call = quote(reactor_run_add())),
+                      class = c("interrupt", "condition"))
+  abort = run_abort
+  withr::defer({
+    if (!is.null(box$run) && !isTRUE(box$run$settled)) abort(box$run, "test_cleanup")
+  })
+  r = reactor_get()
+  runs = ls(r$runs, all.names = TRUE)
+  add = reactor_run_add
+  testthat::local_mocked_bindings(reactor_run_add = function(run) {
+    box$run = run
+    add(run)
+    signalCondition(primary)
+  })
+  seen = tryCatch(run_start(s, msg_user("go")), interrupt = identity, error = identity)
+  expect_identical(seen, primary)
+  expect_true(isTRUE(box$run$settled))
+  expect_identical(s$status, "aborted")
+  expect_identical(box$run$signal$reason, "interrupt")
+  expect_null(session_live(s)$run)
+  expect_null(box$run$home)
+  expect_identical(ls(r$runs, all.names = TRUE), runs)
+  expect_length(fake_requests(fake), 0L)
+})
