@@ -717,5 +717,185 @@ class DirectoryDisappearanceControls(unittest.TestCase):
             scanner.snapshot()
 
 
+class PosixLookupControls(unittest.TestCase):
+    def crowded(self, count):
+        fs = Operations()
+        names = ["unowned-" + str(index) for index in range(count)]
+        fs.children[fs.anchor] = names + [os.path.basename(fs.root)]
+        for index, name in enumerate(names):
+            fs.info[os.path.join(fs.anchor, name)] = metadata(size=70000000, inode=1000 + index)
+        return fs, names
+
+    def test_posix_crowded_parent_rechecks_charge_only_the_matched_component(self):
+        fs, siblings = self.crowded(1400)
+        seen = []
+        original = fs.scandir
+
+        def scanning(path):
+            def rows():
+                with original(path) as values:
+                    for entry in values:
+                        seen.append((path, entry.name))
+                        yield entry
+                    if path == fs.anchor:
+                        raise AssertionError("parent scan continued beyond the exact entry")
+            return nullcontext(rows())
+
+        fs.scandir = scanning
+        scanner = DiskObserver(fs.root, operations=fs, windows=False, clock=lambda: 0)
+        sample = scanner.snapshot()
+        self.assertEqual(sample["entries"], 3)
+        self.assertEqual(sample["directories"], 1)
+        self.assertEqual(sample["bytes"], 0)
+        self.assertEqual(fs.scan_paths.count(fs.anchor), 4)
+        self.assertTrue(all(os.path.join(fs.anchor, name) not in fs.stat_paths
+                            for name in siblings))
+        self.assertEqual(sum(name == os.path.basename(fs.root) for _, name in seen), 4)
+        self.assertEqual(fs.find_paths, [])
+
+    def test_posix_wide_parent_initialization_keeps_the_original_small_entry_cap(self):
+        fs, siblings = self.crowded(5000)
+        scanner = DiskObserver(fs.root, operations=fs, windows=False,
+                               max_entries=3, clock=lambda: 0)
+        sample = scanner.snapshot()
+        self.assertEqual(sample["entries"], 3)
+        self.assertEqual(sample["bytes"], 0)
+        self.assertTrue(all(os.path.join(fs.anchor, name) not in fs.stat_paths
+                            for name in siblings))
+
+    def test_posix_unowned_name_scans_remain_deadline_bounded_and_close(self):
+        for phase in ("initialize", "snapshot"):
+            with self.subTest(phase=phase):
+                fs, siblings = self.crowded(1400)
+                seen, closed, now = [], [], [0]
+                original = fs.scandir
+
+                class Trace:
+                    def __enter__(self):
+                        def rows():
+                            with original(fs.anchor) as values:
+                                for entry in values:
+                                    seen.append(entry.name)
+                                    yield entry
+                        return rows()
+
+                    def __exit__(self, *condition):
+                        closed.append(fs.anchor)
+
+                fs.scandir = lambda path: Trace() if path == fs.anchor else original(path)
+
+                def clock():
+                    now[0] += 0.01
+                    return now[0]
+
+                if phase == "initialize":
+                    with self.assertRaisesRegex(ObservationError, "initial-entry-or-time-limit"):
+                        DiskObserver(fs.root, operations=fs, windows=False, clock=clock)
+                else:
+                    scanner = DiskObserver(fs.root, operations=fs, windows=False, clock=lambda: 0)
+                    seen.clear()
+                    closed.clear()
+                    scanner.clock = clock
+                    with self.assertRaisesRegex(ObservationError, "snapshot-deadline"):
+                        scanner.snapshot()
+                self.assertGreater(len(seen), 0)
+                self.assertLess(len(seen), len(siblings))
+                self.assertEqual(closed, [fs.anchor])
+
+    def test_posix_case_alias_absence_and_metadata_refusals_stay_distinct(self):
+        fs = Operations()
+        actual = os.path.basename(fs.root).upper()
+        fs.children[fs.anchor] = [actual]
+        fs.info[os.path.join(fs.anchor, actual)] = fs.info[fs.root]
+        # The synthetic lstat would accept the original path; exact listing
+        # spelling must reject the alias before that query can occur.
+        with self.assertRaisesRegex(ObservationError, "root-entry-absent"):
+            DiskObserver(fs.root, operations=fs, windows=False)
+        self.assertNotIn(fs.root, fs.stat_paths)
+        for error, message in ((FileNotFoundError(errno.ENOENT, "synthetic absence"),
+                                "root-entry-absent"),
+                               (PermissionError(errno.EACCES, "synthetic denial"),
+                                "metadata-unavailable"),
+                               (NotADirectoryError(errno.ENOTDIR, "synthetic replacement"),
+                                "metadata-unavailable"),
+                               (OSError(errno.EIO, "synthetic unavailable metadata"),
+                                "metadata-unavailable")):
+            with self.subTest(errno=error.errno):
+                fs = Operations()
+                fs.info[fs.root] = error
+                with self.assertRaisesRegex(ObservationError, message):
+                    DiskObserver(fs.root, operations=fs, windows=False)
+                self.assertEqual(fs.scan_paths, [fs.anchor])
+
+    def test_posix_ancestor_links_root_replacement_and_anchor_identity_fail_closed(self):
+        fs = Operations()
+        parent = os.path.join(fs.anchor, "alias-parent")
+        fs.children[fs.anchor] = ["alias-parent"]
+        fs.info[parent] = metadata("link", 0, 20)
+        fs.root = os.path.join(parent, "owned")
+        with self.assertRaisesRegex(ObservationError, "parent-not-direct-directory"):
+            DiskObserver(fs.root, operations=fs, windows=False)
+        self.assertNotIn(parent, fs.scan_paths)
+        self.assertNotIn(fs.root, fs.stat_paths)
+        fs = Operations()
+        scanner = DiskObserver(fs.root, operations=fs, windows=False)
+        fs.info[fs.root] = metadata("link", 0, 99)
+        fs.scan_paths.clear()
+        with self.assertRaisesRegex(ObservationError, "directory-identity-changed"):
+            scanner.snapshot()
+        self.assertNotIn(fs.root, fs.scan_paths)
+        fs = Operations()
+        scanner = DiskObserver(fs.root, operations=fs, windows=False)
+        fs.info[fs.anchor] = metadata("directory", 0, 999)
+        with self.assertRaisesRegex(ObservationError, "anchor-identity-changed"):
+            scanner.snapshot()
+
+    def test_posix_nested_bytes_and_dangling_link_postcheck_never_follow_targets(self):
+        fs = Operations()
+        fs.add("directory", metadata("directory", 2, 3))
+        nested = os.path.join(fs.root, "directory")
+        fs.children[nested] = ["data"]
+        fs.info[os.path.join(nested, "data")] = metadata(size=7, inode=4)
+        fs.add("alias", metadata("link", 0, 5), "missing")
+        scanner = DiskObserver(fs.root, [{"entry": "alias", "target": "missing"}],
+                               operations=fs, windows=False)
+        sample = scanner.snapshot()
+        self.assertEqual(sample["bytes"], 9 + 16384)
+        self.assertEqual(sample["directories"], 2)
+        self.assertEqual(sample["declared_links"], 1)
+        self.assertNotIn(os.path.join(fs.root, "missing"), fs.stat_paths)
+        self.assertNotIn(os.path.join(fs.root, "alias"), fs.scan_paths)
+        original = fs.readlink
+
+        def replacing(path):
+            fs.info[path] = metadata("link", 0, 99)
+            return original(path)
+
+        fs.readlink = replacing
+        with self.assertRaisesRegex(ObservationError, "link-identity-changed"):
+            scanner.snapshot()
+        self.assertNotIn(os.path.join(fs.root, "missing"), fs.stat_paths)
+
+    def test_posix_owned_entries_depth_and_bytes_keep_the_existing_bounds(self):
+        fs = Operations()
+        for index in range(4093):
+            fs.add("data-" + str(index), metadata(size=1, inode=1000 + index))
+        scanner = DiskObserver(fs.root, operations=fs, windows=False, clock=lambda: 0)
+        sample = scanner.snapshot()
+        self.assertEqual(sample["entries"], 4096)
+        self.assertEqual(sample["bytes"], 4093)
+        fs.add("overflow", metadata(size=1, inode=9999))
+        with self.assertRaisesRegex(ObservationError, "entry-limit"):
+            scanner.snapshot()
+        fs = Operations()
+        fs.add("directory", metadata("directory", 0, 3))
+        with self.assertRaisesRegex(ObservationError, "depth-limit"):
+            DiskObserver(fs.root, operations=fs, windows=False, max_depth=0).snapshot()
+        fs = Operations()
+        fs.add("data", metadata(size=7))
+        with self.assertRaisesRegex(ObservationError, "byte-limit"):
+            DiskObserver(fs.root, operations=fs, windows=False, byte_cap=6).snapshot()
+
+
 if __name__ == "__main__":
     unittest.main()

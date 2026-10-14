@@ -50,7 +50,7 @@ bp_disk_test_main = function() {
 }
 
 bp_disk_test_python = function() {
-  skip_if_not_installed("reticulate")
+  skip_if(!length(find.package("reticulate", quiet = TRUE)), "{reticulate} is not installed")
   skip_if(!nzchar(Sys.getenv("RETICULATE_PYTHON")),
     "optional observer has no explicit provisioned Python")
   skip_if(!nzchar(Sys.getenv("RETICULATE_USE_MANAGED_VENV")),

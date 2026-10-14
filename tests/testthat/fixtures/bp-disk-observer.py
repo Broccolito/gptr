@@ -137,8 +137,9 @@ class DiskObserver:
         if initial_anchor["kind"] != "directory":
             raise ObservationError("observer-anchor-not-direct-directory")
         self.anchor_identity = initial_anchor["identity"]
-        def tick():
-            entries[0] += 1
+        def tick(*, entry=True):
+            if entry:
+                entries[0] += 1
             if entries[0] > self.max_entries or self.clock() - started >= self.max_seconds:
                 raise ObservationError("observer-initial-entry-or-time-limit")
 
@@ -207,8 +208,13 @@ class DiskObserver:
                 try:
                     with self.ops.scandir(current) as iterator:
                         for candidate in iterator:
-                            tick()
-                            if os.path.normcase(candidate.name) == os.path.normcase(part):
+                            # Unrelated names consume time, not the owned-entry
+                            # budget. Keep exact POSIX spelling even on volumes
+                            # where lstat would accept a differently cased alias.
+                            tick(entry=False)
+                            if (candidate.name == part or (self.windows and
+                                    os.path.normcase(candidate.name) == os.path.normcase(part))):
+                                tick()
                                 found = candidate
                                 break
                 except OSError:
@@ -278,11 +284,12 @@ class DiskObserver:
             if counters["bytes"] > self.byte_cap:
                 raise ObservationError("observer-byte-limit")
 
-        def tick():
+        def tick(*, entry=True):
             check()
-            counters["entries"] += 1
-            if counters["entries"] > self.max_entries:
-                raise ObservationError("observer-entry-limit")
+            if entry:
+                counters["entries"] += 1
+                if counters["entries"] > self.max_entries:
+                    raise ObservationError("observer-entry-limit")
 
         def direct(path, identity):
             try:
