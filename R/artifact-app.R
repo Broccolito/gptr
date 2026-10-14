@@ -1032,7 +1032,7 @@ artifact_browser_close = function(b = artifact_state$browser,
       with_seed_preserved(later::run_now(timeoutSecs = min(0.02, left, remaining()), loop = loop))
       remaining()
       left = until - proc.time()[["elapsed"]]
-      if (left > 0) Sys.sleep(min(0.01, left, remaining()))
+      if (left > 0) Sys.sleep(min(0.01, max(0.001, left), remaining()))
       remaining()
       left = until - proc.time()[["elapsed"]]
     }

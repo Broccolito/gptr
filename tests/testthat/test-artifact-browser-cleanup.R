@@ -342,6 +342,45 @@ test_that("browser cleanup accepts delayed callbacks within its existing shutdow
   }
 })
 
+test_that("browser cleanup advances a fractional grace remainder on a coarse clock", {
+  x = artifact_browser_fixture()
+  x$state$milliseconds = 100L
+  x$state$naps = numeric()
+  x$scope$clock = function() {
+    c(elapsed = floor(x$state$milliseconds / 10) / 100)
+  }
+  # R 4.2 Windows reports elapsed time in 10 ms ticks and rounds sleeps to milliseconds.
+  expect_gt(0.1 + 0.2, 30 / 100)
+  pump = x$scope$pump
+  x$scope$pump = function(loop, ...) {
+    pump(loop, ...)
+    x$state$milliseconds = max(300L, x$state$milliseconds)
+  }
+  x$scope$nap = function(seconds) {
+    x$state$naps = c(x$state$naps, seconds)
+    x$state$milliseconds = x$state$milliseconds + as.integer(1000 * seconds + 0.5)
+  }
+  seen = tryCatch(x$close(), error = identity)
+  expect_identical(list(
+    closed = is.null(seen),
+    condition = if (inherits(seen, "condition")) class(seen) else character(),
+    condition_message = if (inherits(seen, "condition")) conditionMessage(seen) else character(),
+    positive_waits = length(x$state$naps) > 0L && all(x$state$naps >= 0.001),
+    bounded_waits = all(x$state$naps <= 0.01),
+    grace_finished = x$scope$clock()[["elapsed"]] >= 0.1 + 0.2,
+    within_deadline = x$scope$clock()[["elapsed"]] < 10.1,
+    bounded_steps = length(x$state$pump_timeouts) < 64L,
+    dead = !x$state$alive,
+    inactive = !x$state$active,
+    browser_cleared = is.null(x$scope$artifact_state$browser),
+    owner_cleared = is.null(x$scope$artifact_state$browser_owner)
+  ), list(closed = TRUE, condition = character(), condition_message = character(),
+    positive_waits = TRUE,
+    bounded_waits = TRUE, grace_finished = TRUE, within_deadline = TRUE,
+    bounded_steps = TRUE, dead = TRUE, inactive = TRUE,
+    browser_cleared = TRUE, owner_cleared = TRUE))
+})
+
 test_that("browser cleanup retains ownership after deadline or clock failure", {
   for (mode in c("deadline", "stalled", "nonfinite", "backward")) {
     x = artifact_browser_fixture()
