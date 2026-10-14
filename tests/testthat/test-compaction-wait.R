@@ -614,20 +614,55 @@ test_that("a manual command cannot replace a yielded automatic checkpoint", {
                                     usage = usage_new(input = 100, output = 5)), "Done."))
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
+  pending = x$run$compact_pending
+  finish = x$run$compact_finish
+  ids = x$run$request_ids
+  retained = function() {
+    identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted) && isTRUE(session_live(x$s)$compacting) &&
+      is.list(pending) && is.function(finish) && length(ids) == 1L &&
+      identical(x$run$compact_pending, pending) && identical(x$run$compact_finish, finish) &&
+      identical(x$run$request_ids, ids) && length(fake_requests(x$fake)) == 1L &&
+      nrow(x$s$usage) == 0L && length(cp_wait_entries(x$s)) == 0L &&
+      identical(sum(x$events$types == "session_before_compact"), 1L) &&
+      identical(sum(x$events$types == "before_request"), 1L)
+  }
+  initial_retained = retained()
+  manual_started = reactor_now()
+  text = cmd_compact("", session_live(x$s)$ctx)
+  command_retained = retained()
+  direct = compact_run(x$s, "manual")
+  direct_retained = retained()
+  manual_completed = reactor_now()
+  guard_released = FALSE
+  # Guard the finite waits and both manual calls, not later expectation formatting.
+  # Release only after each call preserves the same uncharged automatic checkpoint.
+  if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
+      all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
+      initial_retained && command_retained && direct_retained &&
+      identical(text, "Compaction is already in progress.") && identical(direct, x$s) &&
+      manual_completed < x$guard_at) {
+    guard_released = identical(reactor_cancel(x$guard), 1L)
+  }
+  reason = if (identical(x$run$signal$reason, "fixture-guard")) "fixture-guard" else
+    if (is.null(x$run$signal$reason)) "none" else "other"
+  diagnostic = paste0("guard_remaining=", x$guard_at - manual_started,
+                      "; manual_elapsed=", manual_completed - manual_started,
+                      "; abort_reason=", reason)
+  expect_identical(short$value, x$s)
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
   expect_identical(x$s$status, "running")
   expect_true(isTRUE(session_live(x$s)$compacting))
-  pending = x$run$compact_pending
-  finish = x$run$compact_finish
-  ids = x$run$request_ids
   expect_true(is.list(pending))
   expect_true(is.function(finish))
   expect_length(ids, 1L)
-  text = cmd_compact("", session_live(x$s)$ctx)
-  expect_identical(text, "Compaction is already in progress.")
-  direct = compact_run(x$s, "manual")
+  expect_true(initial_retained, info = diagnostic)
+  expect_true(command_retained, info = diagnostic)
+  expect_true(direct_retained, info = diagnostic)
+  expect_identical(text, "Compaction is already in progress.", info = diagnostic)
   expect_identical(direct, x$s)
+  expect_true(guard_released, info = diagnostic)
   expect_identical(x$run$compact_pending, pending)
   expect_identical(x$run$compact_finish, finish)
   expect_identical(x$run$request_ids, ids)
@@ -638,7 +673,9 @@ test_that("a manual command cannot replace a yielded automatic checkpoint", {
   expect_identical(sum(x$events$types == "session_before_compact"), 1L)
   expect_identical(sum(x$events$types == "before_request"), 1L)
   gptr_wait(x$s, timeout = 1)
-  expect_identical(x$s$status, "idle")
+  reason = if (identical(x$run$signal$reason, "fixture-guard")) "fixture-guard" else
+    if (is.null(x$run$signal$reason)) "none" else "other"
+  expect_identical(x$s$status, "idle", info = paste0("abort_reason=", reason))
   expect_length(fake_requests(x$fake), 2L)
   expect_length(cp_wait_entries(x$s), 1L)
   expect_identical(cp_wait_entries(x$s)[[1L]]$details$reason, "threshold")
