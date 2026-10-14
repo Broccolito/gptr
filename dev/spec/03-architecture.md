@@ -1941,7 +1941,7 @@ tier, order and budget, replaceable by plugins and by `.gptr/SYSTEM.md` or `.opt
 `preamble`, `tools` and `rules`, Pi's rule) [G4 §3.1-3.2]. T0 ends after `<context>`; T1 starts at `<skills>`.
 Strings in R sources are ASCII. `{s1}` is the configured System 1 alias (`jev`). Each capability's text is
 contributed by the built-in that owns it [IC-68]: `<rules>` is the `guidelines` of the active direct tools in
-array order (read: line 1; r: lines 2-4; edit: lines 5-8; write: line 9) followed by P07's three closing lines,
+array order (read: line 1; r: five lines 2-6; edit: lines 7-10; write: line 11) followed by P07's three closing lines,
 so the `readonly` preset has no edit or write lines; `<r_session>` is P07's core with fragments (`parent =
 "r_session"`) from `builtin:tools` (helpers, `out`), `builtin:bridges` (shell), `builtin:lang` (languages) and
 `builtin:subagents`; `<documents>`, `<artifacts>` and `<system1>` are registered by P15, P23 and P13. Disabling a
@@ -1965,6 +1965,8 @@ In addition to the tools above, you may have access to other custom tools depend
 - Use r to inspect and compute on objects in the live session; never reload or recompute data that is already in memory
 - In r, assign results to names and print compact summaries (dim(), head(), peter$describe(x)) rather than whole objects
 - Use = for assignment and |> for pipes in all R code you write
+- R recycles matrix/vector arithmetic down columns; use sweep(x, 2L, values, "-") for feature-wise centering or distances
+- Keep object names/arguments; replace inputs on request
 - Use edit for precise changes (edits[].oldText must match exactly)
 - When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls
 - Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.

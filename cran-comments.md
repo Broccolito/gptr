@@ -1,31 +1,37 @@
-## Current size and check checkpoint — `e616782`, 2026-10-14
+## Current size and check checkpoint — `674602f`, 2026-10-14
 
-The accepted normal source archive is 2,638,671 bytes. Its default-byte-compiled installation
-occupies 6,980,979 logical bytes, including the 5,030,057-byte `R/gptr.rdb`. Combined installed
-documentation is 1,727,357 bytes; all 14 guides remain. Build took 21.005 s, installation
-14.746 s and the whole family 44.798 s, with peak sampled RSS of 526.21875 MiB and quiet
-build/install logs. These measurements establish build/install only. The installed 5 MB
-target remains unmet. We retain necessary byte compilation, useful debugging/security
-support, offline tests and guides, preserve historical size NOTEs, and request CRAN
-consideration of the required byte-compiled R code. Earlier reductions remain retained.
+The accepted normal source archive is 2,639,707 bytes. Its default-byte-compiled installation
+occupies 6,981,252 logical bytes, including the 5,030,130-byte `R/gptr.rdb`. Installed doc/ is
+1,224,500 bytes, help/ 487,225 bytes and html/ 15,771 bytes: combined documentation is
+1,727,496 bytes. Extdata is 83,185 bytes and data/ is empty; all 14 guides remain. Build took
+20.726 s, installation 14.977 s and the whole family 44.619 s, with peak sampled RSS of
+520 MiB, 35 samples, no sampling errors and quiet build/install logs. These measurements
+establish build/install only. The installed 5 MB target remains unmet. We retain necessary
+byte compilation, useful debugging/security support, offline tests and guides, preserve
+historical size NOTEs, and request CRAN consideration of the required byte-compiled R code.
+Earlier reductions remain retained.
 
-The complete exact-archive `e616782` as-cran check exited 0 with zero errors and warnings,
-30,111 test passes and 441 skips (414 On CRAN and 27 other accounted skips). It reported
-one NOTE, unable to verify current time. The guarded family took 560.787 s with peak sampled
-RSS of 2,035.0625 MiB, 479 samples and no sampling errors; inputs and owned cleanup were
-preserved. Strict zero-NOTE acceptance remains incomplete. The preceding public-clock
-probes failed before obtaining a parseable remote time; no system-clock skew is established.
-Clock verification and the original acceptance gates remain enabled.
+The preceding exact-archive `e616782` as-cran check exited 0 with zero errors and warnings,
+30,111 test passes and 441 accounted skips (414 On CRAN and 27 other). It reported one NOTE,
+unable to verify current time. The guarded family took 560.787 s with peak sampled RSS of
+2,035.0625 MiB, 479 samples and no sampling errors; inputs and owned cleanup were preserved.
+Strict zero-NOTE acceptance remains incomplete. Public-clock transport probes failed before
+obtaining a parseable remote time; no system-clock skew is established. Clock verification
+and the original acceptance gates remain enabled. A complete check of the accepted
+`674602f` artifact remains pending.
 
 The preceding `208a02d` source-retaining check installation is a different measurement from
 the default installation above: 10,058,592 logical bytes, including an 8,113,945-byte R
 database; displayed 10.5 Mb was size INFO. Historical size NOTEs remain visible below.
 
-At 17:11:43 UTC eleven current required CI jobs had succeeded and two Windows jobs were
-still running, with no completed failures; current CI acceptance remains pending. Complete source-suite preservation, applicable
-installed/live/native checks and final submission checks remain pending. Focused browser-prefix controls pass,
-but do not establish native-platform or whole-suite acceptance. Main remains unmerged;
-no submission or release acceptance is claimed. Earlier evidence below remains historical.
+At 18:04:55 UTC the current required CI run had two successes, five failures and six running
+jobs. The known failures concern the token ratchet and four stale prompt expectations;
+Corrections are now integrated in source `49eb762`, but fresh combined installed/check/CI
+evidence remains pending. Complete source-suite
+preservation, applicable installed/live/native checks and final submission checks remain
+pending. Main remains unmerged; no submission or release acceptance is claimed. Earlier
+evidence below remains historical.
+
 
 ## Historical local verification (`ef5201e`, updated 2026-10-14 10:15 UTC)
 
