@@ -292,3 +292,55 @@ test_that("lint parsers restore disabled parse data on errors and interrupts", {
     }
   }
 })
+
+test_that("call scanning keeps compound text lazy without changing security or debug source", {
+  path = withr::local_tempfile(fileext = ".R")
+  lines = c(
+    "f = function(x) {",
+    "\t# Retained comment and a tab before a qualified call.",
+    "\tcli::cli_text(x)",
+    "  nested(readLines('unsafe'), stats::runif(1))",
+    "  stop('must not execute')",
+    "}",
+    paste0('label = "\u00e9', strrep("x", 1200L), '"')
+  )
+  bytes = charToRaw(enc2utf8(paste(lines, collapse = "\n")))
+  writeBin(bytes, path)
+  withr::local_options(keep.parse.data = FALSE)
+  before = options()
+  original = utils::getParseData
+  observed = new.env(parent = emptyenv())
+  observed$full = FALSE
+  testthat::local_mocked_bindings(getParseData = function(x, ...) {
+    args = list(...)
+    if (isTRUE(observed$full)) args$includeText = TRUE
+    result = do.call(original, c(list(x), args), quote = TRUE)
+    observed$data = result
+    result
+  }, .package = "utils")
+  calls = pd_calls(path)
+  lazy = observed$data
+  hits = lint_scan(path)
+  observed$full = TRUE
+  full_calls = pd_calls(path)
+  full = observed$data
+  full_hits = lint_scan(path)
+  expect_identical(calls, full_calls)
+  expect_identical(hits, full_hits)
+  expect_identical(calls$fun, c("cli_text", "nested", "readLines", "runif", "stop"))
+  expect_identical(calls$pkg, c("cli", "", "", "stats", ""))
+  expect_identical(calls$line, c(3L, 4L, 4L, 4L, 5L))
+  expect_identical(calls$text[calls$fun == "readLines"], "readLines('unsafe')")
+  expect_setequal(hits$rule, c("non_ascii", "cli_literal", "readlines_encoding", "rng"))
+  fields = setdiff(names(lazy), "text")
+  expect_identical(lapply(lazy[fields], identity), lapply(full[fields], identity))
+  expect_true(inherits(attr(lazy, "srcfile"), "srcfile"))
+  expect_identical(enc2utf8(getSrcLines(attr(lazy, "srcfile"), 1L, length(lines))),
+                   enc2utf8(lines))
+  expect_identical(utils::getParseText(lazy, lazy$id), utils::getParseText(full, full$id))
+  expect(any(!lazy$terminal & !nzchar(lazy$text)) &&
+           sum(nchar(lazy$text, type = "bytes")) < sum(nchar(full$text, type = "bytes")),
+         "unused compound source text must stay lazy rather than being eagerly expanded")
+  expect_identical(readBin(path, "raw", file.size(path)), bytes)
+  expect_identical(options(), before)
+})

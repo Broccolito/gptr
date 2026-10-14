@@ -231,7 +231,7 @@ pd_calls = function(path) {
   old = options(keep.parse.data = TRUE)
   on.exit(options(old), add = TRUE)
   exprs = parse(path, keep.source = TRUE, encoding = "UTF-8")
-  pd = utils::getParseData(exprs, includeText = TRUE)
+  pd = utils::getParseData(exprs, includeText = NA)
   empty = data.frame(file = character(), line = integer(), fun = character(),
                      pkg = character(), text = character())
   if (is.null(pd)) return(empty)
