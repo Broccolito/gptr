@@ -131,6 +131,14 @@ jobs:
         with:
           extra-packages: any::rcmdcheck
           needs: check
+      - name: Isolate checker temporary files on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          gptr_check_tmp=$(mktemp -d "$RUNNER_TEMP/gptr-check-tmp.XXXXXX")
+          chmod 700 "$gptr_check_tmp"
+          printf 'TMPDIR=%s\nTMP=%s\nTEMP=%s\n' \
+            "$gptr_check_tmp" "$gptr_check_tmp" "$gptr_check_tmp" >> "$GITHUB_ENV"
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
