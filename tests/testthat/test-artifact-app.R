@@ -760,6 +760,11 @@ test_that("the shiny-bslib skill has its catalog line, house style and a valid e
   close = which(lines == "```")
   code = lines[(open + 1L):(close[close > open][1L] - 1L)]
   expect_no_error(parse(text = code, keep.source = FALSE))
+  ui = Filter(function(x) {
+    is.call(x) && identical(x[[1L]], quote(`=`)) && identical(x[[2L]], quote(ui))
+  }, as.list(parse(text = code, keep.source = FALSE)))
+  expect_length(ui, 1L)
+  expect_identical(as.list(ui[[1L]][[3L]])[["fillable"]], FALSE)
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
   expect_true(artifact_static_check(code)$ok)

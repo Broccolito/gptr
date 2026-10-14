@@ -17,7 +17,8 @@ Rules for app.R:
 - One file ending in `shinyApp(ui, server)`; the objects in `data` exist under their names. Never
   read files or call `setwd()`, `runApp()` or `install.packages()`.
 - Ship small data (the rows and columns shown); check it in r with `dim()` or `peter$describe(x)`.
-- `page_sidebar(sidebar = sidebar(...), ...)` with the inputs in its named `sidebar` argument;
+- For simple stacked dashboards with bounded plot heights, use
+  `page_sidebar(sidebar = sidebar(...), fillable = FALSE, ...)` with inputs in its named `sidebar`;
   compact KPIs as `value_box()` in
   `layout_columns(..., fill = FALSE)`;
   each chart or table in `card(card_header(), ..., full_screen = TRUE)`; never nest cards or pages.
@@ -25,6 +26,8 @@ Rules for app.R:
   `plotOutput(..., height = "300px")`) and legible axis text. Wrap wide tables in a standard
   `table-responsive` div with `tabindex = 0`, `role = "region"` and a descriptive `aria-label`
   so keyboard users can scroll horizontally.
+- Prefer `numericInput()` for exact numeric thresholds when keyboard focus must preserve the
+  value; use sliders for visual adjustments.
 - `renderPlot()` with ggplot2 and `theme_minimal()`; plotly, DT or leaflet only if `<r_env>` lists
   them. Filter once in `reactive()`; `req()` for empty inputs, `validate(need())` for empty
   results; no custom CSS or JS. Use `=` and `|>`.
@@ -34,6 +37,7 @@ library(shiny)
 library(bslib)
 ui = page_sidebar(
   title = "Markers",
+  fillable = FALSE,
   sidebar = sidebar(textInput("gene", "Gene")),
   layout_columns(value_box("Markers shown", textOutput("n")), fill = FALSE),
   card(
