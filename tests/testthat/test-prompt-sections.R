@@ -354,7 +354,8 @@ test_that("fragments are inserted at the marker, or the marker line is dropped",
   expect_false(grepl("{{fragments}}", none, fixed = TRUE))
   expect_false(grepl("\n\n", none, fixed = TRUE))
   two = prompt_insert_fragments(core, c("- one", "- two"))
-  expect_match(two, "tool calls.\n- one\n- two\n- To hand a result", fixed = TRUE)
+  expect_match(two, "- Source with source(path, local = TRUE).\n- one\n- two\n- To hand a result",
+               fixed = TRUE)
 })
 
 test_that("a section over its budget is truncated with a diagnostic", {

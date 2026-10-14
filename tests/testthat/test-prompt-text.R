@@ -116,7 +116,8 @@ test_that("the r_session core carries exactly one fragments marker on its own li
 })
 
 test_that("r_session sources scripts in the calling environment", {
-  expect_match(prompt_text("r_session"), "source(path, local = TRUE)", fixed = TRUE)
+  expect_match(prompt_text("r_session"), "- Source with source(path, local = TRUE).",
+               fixed = TRUE)
   home = new.env(parent = baseenv())
   home$path = withr::local_tempfile(fileext = ".R")
   home$input = 42L
