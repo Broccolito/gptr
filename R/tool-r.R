@@ -18,7 +18,9 @@ r_tool_guidelines = c(
         "peter$describe(x)) rather than whole objects"),
   "Use = for assignment and |> for pipes in all R code you write",
   paste("R recycles matrix/vector arithmetic down columns; use sweep(x, 2L, values, \"-\")",
-        "for feature-wise centering or distances")
+        "for feature-wise centering or distances"),
+  paste("Use the object names and function arguments the user specifies; never substitute",
+        "example data or overwrite supplied inputs unless asked")
 )
 
 #' The `r` input schema variant (IC-68): `record` and `note` only with a document bound at freeze,

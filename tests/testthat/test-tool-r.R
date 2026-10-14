@@ -37,8 +37,38 @@ test_that("the r schema is frozen in one of four variants (IC-68)", {
   expect_identical(spec$exposure, "direct")
   expect_identical(spec$snippet, paste("Run R code in the user's live session (objects persist;",
                                        "plots come back as images)"))
-  expect(identical(length(spec$guidelines), 4L), "The r tool has four guidance rules.")
+  expect(identical(length(spec$guidelines), 5L), "The r tool has five guidance rules.")
   expect_error(ns_resolve("r"), class = "gptr_error_unknown_member")
+})
+
+test_that("specified R input guidance reaches every preset and both CLI transports", {
+  rule = paste("Use the object names and function arguments the user specifies; never substitute",
+               "example data or overwrite supplied inputs unless asked")
+  instruction = paste("Use only the R tool. Fit stats::lm(mpg ~ wt + hp, data = analysis_input),",
+                      "save it as fit, then call gptr::gptr_return(fit).")
+  created = character()
+  withr::defer(unlink(created))
+  for (preset in c("minimal", "standard", "readonly", "extended")) {
+    session = p07_session(preset = preset)
+    frozen = prompt_compose(session, list(interactive = FALSE, preset = preset))
+    expect_match(frozen$t0, paste0("- ", rule), fixed = TRUE, label = preset)
+    occurrences = gregexpr(rule, frozen$t0, fixed = TRUE)[[1L]]
+    expect_identical(as.integer(sum(occurrences > 0L)), 1L, label = preset)
+    context = list(system = frozen[c("t0", "t1")], messages = list(msg_user(instruction)))
+    state = new.env(parent = emptyenv())
+    files = pcli_claude_files(state, context, session$id)
+    created = c(created, unlist(files, use.names = FALSE))
+    expect_match(read_utf8(files$system)$text, rule, fixed = TRUE, label = preset)
+    expect_identical(pcli_claude_content(context$messages)[[1L]]$text, instruction)
+    codex = pcli_codex_prompt(context, fresh = TRUE)
+    expect_match(codex, rule, fixed = TRUE, label = preset)
+    expect_true(endsWith(codex, instruction), label = preset)
+    expect_identical(pcli_codex_prompt(context, fresh = FALSE), instruction)
+  }
+  session = p07_session(preset = "minimal")
+  without_r = prompt_compose(session, list(interactive = FALSE, tools = "-r"))
+  expect_false("r" %in% without_r$tool_names)
+  expect_false(grepl(rule, without_r$t0, fixed = TRUE))
 })
 
 test_that("the r spec reproduces P07's stand-in in each of its four variants (IC-68)", {
