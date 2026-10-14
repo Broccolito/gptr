@@ -59,10 +59,10 @@ documented in the "Breaking changes" section of NEWS.md.
 
 ## Size, reduction review and measured timings
 
-The accepted normal macOS build of `96d58d8` has a 2,619,768-byte source archive and a
-6,972,504-byte logical installation (7,413,760 allocated bytes): documentation 1,224,249 bytes,
+The accepted normal macOS build of `17aa0bf` has a 2,621,421-byte source archive and a
+6,970,908-byte logical installation (7,421,952 allocated bytes): documentation 1,224,249 bytes,
 extdata 83,185 bytes and no data directory. The largest file is the byte-compiled pure-R
-lazy-load database `R/gptr.rdb` (5,022,298 bytes). All 14 rendered guides and their sources are
+lazy-load database `R/gptr.rdb` (5,022,289 bytes). All 14 rendered guides and their sources are
 retained; normal source-retention metadata is excluded. Targeted metadata/duplicate review found
 no safely removable payload. The installed total exceeds our 5 MB target; documentation/data
 and source archive remain below their respective targets.
@@ -75,15 +75,15 @@ first fake-provider chat time increased from 0.177 to 0.571 s, and the five-call
 cold TZDIR environment change remains retained; these measurements are not full caller-state
 preservation or package-check acceptance.
 
-Normal installation took 14.282 s; the build/install family took 46.288 s with 558.84375 MiB
-sampled RSS and 37 samples with zero sampling errors. The earlier `071fa7e` attempt hit a
-local 2 GiB guard at 303.410 s. The complete `96d58d8` direct as-cran check took 477.467 s
-(2,165.890625 MiB sampled, 426 samples with zero sampling errors) and ended with one ERROR
-at the parser-layer architecture test; all other stages passed. Its keep-source installed
-size of 10.5 Mb was INFO, not a size NOTE. The unchanged parser has now been relocated and
-tested; a fresh final archive/check and win-builder remain required. Any resulting NOTE will
-be retained and explained. We request CRAN consideration of the necessary compiled R code
-if the final installation remains above 5 MB; submission and release readiness are pending.
+Normal installation took 14.354 s; the build/install family took 43.419 s with 518.390625 MiB
+sampled RSS and 35 samples with zero sampling errors. The complete `17aa0bf` direct as-cran
+check took 494.597 s (1,698.9375 MiB sampled, 423 samples with zero sampling errors) and
+finished with Status OK, zero errors, warnings and notes. Its keep-source installed size of
+10.5 Mb was INFO, not a size NOTE. The earlier 2 GiB abort and parser-layer failure remain
+historical. We request CRAN consideration of the necessary compiled R code if the final
+installation remains above 5 MB. Current hosted CI and win-builder remain required before
+submission; any resulting NOTE will be retained and explained. No submission acceptance is
+claimed.
 
 ## Test environments
 
@@ -94,12 +94,21 @@ if the final installation remains above 5 MB; submission and release readiness a
 
 ## R CMD check results
 
-The complete local `96d58d8` as-cran check had one ERROR: the architecture test found a
-forbidden permission-parser dependency. It recorded 29,477 passes/one failure/zero warnings/
-441 skips; other package, documentation, example and vignette stages were OK. The unchanged
-parser has since moved to the permitted lower layer with focused security controls passing.
-A fresh final source check and win-builder (R-devel) remain required before submission.
-Earlier zero-error records remain historical. Any final notes will be reviewed and explained.
+The complete local `17aa0bf` original-archive as-cran check finished with Status OK:
+zero errors, warnings and notes; 29,509 test passes, zero failures/warnings and 441 skips.
+All 15 complete raw streams were quiet. Source, Python-parent and exact owned cleanup checks
+passed. Four hosted `17aa0bf` consumers of the same 2,625,414-byte archive also reported
+zero errors, warnings and notes: Windows release/devel each 29,338 passes/504 skips,
+macOS release 29,478 passes/441 skips and Ubuntu release 29,469 passes/443 skips.
+This hosted archive differs from the local normal archive bytes. Windows installation was
+reported as 35/40 s; first-check-log through DONE spans were 1,416.608527/1,630.627287 s,
+excluding setup and pre-output startup, not whole-job wall times. Their native10 bodies
+were gated off under CRAN; remaining CI profiles, native Windows and win-builder are pending.
+
+Historical Windows R 4.2 reported an installed-size NOTE of 9.7 Mb (`R/gptr.rdb`
+8,117,319 bytes; installation about 49 s). That NOTE remains retained and must be addressed
+in the final submission record. The broader source suite is incomplete after time/resource
+limits; earlier failed checks remain historical. Any final notes will be reviewed and explained.
 
 ## Reverse dependencies
 
