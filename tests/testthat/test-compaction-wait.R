@@ -428,6 +428,7 @@ test_that("an overflow checkpoint yields and resumes the same ordinary request o
 })
 
 test_that("a yielded checkpoint without metering stays unknown after durable reconstruction", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Done."))
   original = provider_stream
   local_mocked_bindings(provider_stream = function(model, context, opts, emit, done,
