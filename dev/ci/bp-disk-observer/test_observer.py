@@ -140,6 +140,139 @@ class ObserverControls(unittest.TestCase):
             observer.snapshot()
         self.assertEqual(fs.stat_paths.count(alias), 1)
 
+    def test_matched_link_disappearance_keeps_fixed_charge_and_parent_proof(self):
+        for windows in (False, True):
+            for declared_only in (False, True):
+                for stage in ("lookup", "lstat"):
+                    with self.subTest(windows=windows, declared=declared_only, stage=stage):
+                        fs = Operations()
+                        fs.add("dangling-file", metadata("link", 0, 3, 0xA000000C),
+                               "missing-target")
+                        alias = os.path.join(fs.root, "dangling-file")
+                        scanner = DiskObserver(fs.root,
+                            [{"entry": "dangling-file", "target": "missing-target"}],
+                            operations=fs, windows=windows, clock=lambda: 0)
+                        readlink, lstat, find = fs.readlink, fs.lstat, fs.find_entry
+                        matched = [False]
+
+                        def target(path):
+                            value = readlink(path)
+                            self.assertEqual(path, alias)
+                            matched[0] = True
+                            if stage == "lookup":
+                                fs.children[fs.root].remove("dangling-file")
+                            return value
+
+                        def native(path):
+                            if path == alias and matched[0] and stage == "lookup":
+                                raise observer._EntryAbsent("observer-parent-entry-absent")
+                            return find(path)
+
+                        def missing(path):
+                            if path == alias and matched[0] and stage == "lstat":
+                                fs.children[fs.root].remove("dangling-file")
+                                raise FileNotFoundError(errno.ENOENT, "owned link removed")
+                            return lstat(path)
+
+                        fs.readlink, fs.find_entry, fs.lstat = target, native, missing
+                        sample = scanner.snapshot(declared_only=declared_only)
+                        self.assertEqual((sample["bytes"], sample["declared_links"],
+                                          sample["disappeared"]), (16384, 1, 1))
+                        self.assertIsNone(scanner.last_failure)
+                        self.assertGreaterEqual(fs.scan_paths.count(fs.root), 2)
+                        self.assertNotIn(os.path.join(fs.root, "missing-target"), fs.stat_paths)
+                        self.assertNotIn(alias, fs.scan_paths)
+
+    def test_matched_link_disappearance_without_exact_proof_stays_fatal(self):
+        modes = (("present", "disappearance-uncertain"),
+                 ("case-alias", "disappearance-uncertain"),
+                 ("parent-changed", "directory-identity-changed"),
+                 ("parent-denied", "directory-unreadable"),
+                 ("file-replaced", "listed-metadata-changed"),
+                 ("link-replaced", "link-identity-changed"),
+                 ("wrong-target", "link-target-differs"),
+                 ("unknown-attributes", "native-attributes-unavailable"),
+                 ("unknown-metadata", "metadata-unavailable"))
+        for declared_only in (False, True):
+            for mode, reason in modes:
+                with self.subTest(declared=declared_only, mode=mode):
+                    fs = Operations()
+                    fs.add("dangling-file", metadata("link", 0, 3, 0xA000000C),
+                           "missing-target")
+                    alias = os.path.join(fs.root, "dangling-file")
+                    scanner = DiskObserver(fs.root,
+                        [{"entry": "dangling-file", "target": "missing-target"}],
+                        operations=fs, windows=True, clock=lambda: 0)
+                    readlink, lstat = fs.readlink, fs.lstat
+                    matched = [False]
+
+                    def target(path):
+                        value = readlink(path)
+                        matched[0] = True
+                        return "../foreign" if mode == "wrong-target" else value
+
+                    def unavailable(path):
+                        if path != alias or not matched[0]:
+                            return lstat(path)
+                        if mode == "file-replaced":
+                            return metadata(size=17, inode=99)
+                        if mode == "link-replaced":
+                            return metadata("link", 0, 99, 0xA000000C)
+                        if mode == "unknown-attributes":
+                            item = metadata("link", 0, 3, 0xA000000C)
+                            del item.st_file_attributes
+                            return item
+                        if mode == "unknown-metadata":
+                            raise OSError(errno.EIO, "unknown owned metadata")
+                        if mode == "case-alias":
+                            fs.children[fs.root] = ["DANGLING-FILE"]
+                            fs.info[os.path.join(fs.root, "DANGLING-FILE")] = metadata(
+                                "link", 0, 99, 0xA000000C)
+                        elif mode == "parent-changed":
+                            fs.children[fs.root] = []
+                            fs.info[fs.root] = metadata("directory", 0, 99)
+                        elif mode == "parent-denied":
+                            fs.children[fs.root] = PermissionError(errno.EACCES, "owned refusal")
+                        raise FileNotFoundError(errno.ENOENT, "unproved link removal")
+
+                    fs.readlink, fs.lstat = target, unavailable
+                    with self.assertRaisesRegex(ObservationError, reason):
+                        scanner.snapshot(declared_only=declared_only)
+                    self.assertIsNotNone(scanner.last_failure)
+                    self.assertNotIn(os.path.join(fs.root, "missing-target"), fs.stat_paths)
+                    self.assertNotIn(alias, fs.scan_paths)
+
+    def test_proven_link_removal_keeps_byte_entry_and_deadline_limits(self):
+        for mode, reason in (("bytes", "byte-limit"), ("entries", "entry-limit"),
+                             ("deadline", "snapshot-deadline")):
+            with self.subTest(mode=mode):
+                fs = Operations()
+                fs.add("dangling-file", metadata("link", 0, 3, 0xA000000C), "missing-target")
+                now = [0]
+                scanner = DiskObserver(fs.root,
+                    [{"entry": "dangling-file", "target": "missing-target"}],
+                    operations=fs, windows=True, clock=lambda: now[0],
+                    byte_cap=16383 if mode == "bytes" else 64 * 1024 ** 2,
+                    max_entries=6 if mode == "entries" else 4096)
+                original = fs.readlink
+
+                def removed(path):
+                    value = original(path)
+                    fs.children[fs.root].remove("dangling-file")
+                    if mode == "deadline":
+                        now[0] = 1
+                    return value
+
+                def absent(path):
+                    if path == os.path.join(fs.root, "dangling-file"):
+                        raise observer._EntryAbsent("observer-parent-entry-absent")
+                    parent, name = os.path.split(path)
+                    return Entry(name, fs.info[path])
+
+                fs.readlink, fs.find_entry = removed, absent
+                with self.assertRaisesRegex(ObservationError, reason):
+                    scanner.snapshot()
+
     def test_successful_nested_directory_sum_and_ancestor_alias_refusal(self):
         fs = Operations()
         fs.add("directory", metadata("directory", 2, 3))

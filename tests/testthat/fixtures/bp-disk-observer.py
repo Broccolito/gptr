@@ -386,7 +386,15 @@ class DiskObserver:
                         operation[0] = "link-recheck"
                         after = self._metadata(full, tick=tick)
                     except (FileNotFoundError, _EntryAbsent):
-                        raise ObservationError("observer-link-entry-absent") from None
+                        # Charge the matched link even after verified owned removal.
+                        # A missing parent cannot prove this exact entry disappeared.
+                        try:
+                            vanished(path, identity, name)
+                        except _EntryAbsent:
+                            raise ObservationError("observer-link-entry-absent") from None
+                        charge(self.link_charge)
+                        counters["declared_links"] += 1
+                        continue
                     if after != item:
                         raise ObservationError("observer-link-identity-changed")
                     charge(self.link_charge)

@@ -12,8 +12,8 @@ ROOT = pathlib.Path(__file__).absolute().parent
 SOURCE_PATHS = {"observer.py": ROOT.parents[2] / "tests/testthat/fixtures/bp-disk-observer.py",
                 "test_observer.py": ROOT / "test_observer.py"}
 SOURCE_HASHES = {
-    "observer.py": "30d8ec93eee298da87eec6c4894cc2f1df1d145ee75c48bac7c8b68c70d18840",
-    "test_observer.py": "b92f5a3259808233158cb3939c9ea35323ae3e45e3de3f0aec94351181ed7a1e",
+    "observer.py": "a8e0499fb5ba47886780b5fefbeb9bd1e95e06885c3bb9e35222769e4a05ffbd",
+    "test_observer.py": "9ce14cf062e1941c80266c16165f6303a8653d171f4ef4aa0d8a7bf5edab6504",
 }
 
 
@@ -39,7 +39,7 @@ def main():
         sys.modules["observer"] = load_source("observer", "observer.py")
         controls = load_source("gptr_observer_controls", "test_observer.py")
         suite = unittest.defaultTestLoader.loadTestsFromModule(controls)
-        if suite.countTestCases() != 36:
+        if suite.countTestCases() != 39:
             raise RuntimeError("The prepared observer control count differs")
         result = unittest.TextTestRunner(stream=sys.stderr, verbosity=1).run(suite)
     witness = {"cases": result.testsRun, "failures": len(result.failures),
@@ -47,7 +47,7 @@ def main():
                "warnings": len(observed), "elapsed_s": time.monotonic() - started,
                "passed": result.wasSuccessful() and not observed and not result.skipped}
     print(json.dumps(witness, sort_keys=True))
-    if not witness["passed"] or witness["cases"] != 36:
+    if not witness["passed"] or witness["cases"] != 39:
         raise SystemExit(1)
 
 
