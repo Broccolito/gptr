@@ -1,39 +1,41 @@
-## Measured normal `211b781`; current source `be4b2ec`, 2026-10-14
+## Measured normal `211b781`; source `2042e56`, 2026-10-14
 
 The accepted normal source archive is 2,640,029 bytes. Its default-byte-compiled installation
 occupies 6,981,116 logical bytes, including the 5,030,093-byte `R/gptr.rdb`. Installed doc/ is
 1,224,500 bytes, help/ 487,184 bytes and html/ 15,771 bytes: combined documentation is
 1,727,455 bytes. Extdata is 83,185 bytes and data/ is empty; all 14 guides remain. Build took
 20.825 s, installation 14.532 s and the whole family 46.379 s, with peak sampled RSS of
-518.375 MiB, 36 samples, no sampling errors and quiet build/install logs. These measurements
-establish build/install only. The installed 5 MB target remains unmet. We retain necessary
-byte compilation, useful debugging/security support, offline tests and guides, preserve
+518.375 MiB, 36 samples, no sampling errors and quiet build/install logs. These are preceding
+artifact build/install measurements; a fresh combined artifact is still required after the
+reviewed source changes. The installed 5 MB target remains unmet. We retain necessary byte
+compilation, useful debugging/security support, offline tests and guides, preserve the visible
 historical size NOTEs, and request CRAN consideration of the required byte-compiled R code.
-Earlier reductions remain retained.
+Earlier metadata/duplicate reductions and their timing comparisons remain documented below.
 
 The preceding exact-archive `e616782` as-cran check exited 0 with zero errors and warnings,
-30,111 test passes and 441 accounted skips (414 On CRAN and 27 other). It reported one NOTE,
+30,111 test passes and 441 accounted skips (414 On CRAN and 27 other), but reported one NOTE:
 unable to verify current time. The guarded family took 560.787 s with peak sampled RSS of
 2,035.0625 MiB, 479 samples and no sampling errors; inputs and owned cleanup were preserved.
-Strict zero-NOTE acceptance remains incomplete. Public-clock transport probes failed before
-obtaining a parseable remote time; no system-clock skew is established. Clock verification
-and the original acceptance gates remain enabled. A complete check of the accepted
-`211b781` artifact remains pending; the subsequently integrated source `be4b2ec`
-also requires fresh combined normal/check evidence.
+Strict zero-NOTE acceptance remains incomplete. Clock transport probes did not obtain a
+parseable remote time, so system-clock skew is not established. Verification and limits stay
+enabled. The different preceding keep-source `208a02d` installation measured 10,058,592 bytes,
+including an 8,113,945-byte R database; displayed 10.5 Mb was size INFO, not normal size.
 
-The preceding `208a02d` source-retaining check installation is a different measurement from
-the default installation above: 10,058,592 logical bytes, including an 8,113,945-byte R
-database; displayed 10.5 Mb was size INFO. Historical size NOTEs remain visible below.
+Integrated bridge controls preserve parent RNG and other caller state in absent/existing-seed
+profiles: 17 cases/148 assertions each, all eight state checks, zero warnings and connections
+3→3; absent 15.036 s/818.140625 MiB sampled, present 15.413 s/844.84375 MiB. Both configured
+lint paths return zero (4.645 s/370.46875 MiB). Root and independent peer accept that scope;
+it does not accept a complete source suite or a fresh installed check.
+Original source-suite memory/state refusals remain retained. All 200 source test files still
+need complete disjoint-session validation under unchanged resource/state/condition gates.
+The required `9f6bad2` CI snapshot at 21:43 UTC has ten successes, no completed failures and
+three running jobs; it is partial. Earlier CI failures remain historical, not waived.
 
-The historical 18:04:55 UTC CI snapshot had two successes, five failures and six running
-jobs, concerning the token ratchet and four stale prompt expectations. Those corrections
-were integrated in source `49eb762`. The historical required-CI snapshot for `211b781`
-at 20:13 UTC has ten successes, two failures and one running job. The 20:32 UTC required
-`c5a2b8e` snapshot has three successes, no completed failures and ten running checks.
-There is no complete CI acceptance for the newer integrated `be4b2ec` source.
-Complete source preservation, applicable installed/live/native checks, the complete as-cran
-check and final submission checks remain pending. Main remains unmerged; no submission or
-release acceptance is claimed. Earlier evidence below remains historical.
+Fresh combined normal/check and applicable installed/live/native checks, win-builder and
+submission checks remain pending. Final live Windows verification follows completion of Mac
+work. Main is unmerged; no submission, deployment or release acceptance is claimed. Subsequent
+artifact/check evidence will be bound to the actual clean commit containing these source changes. Earlier
+evidence below remains historical.
 
 
 ## Historical local verification (`ef5201e`, updated 2026-10-14 10:15 UTC)
