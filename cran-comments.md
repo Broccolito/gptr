@@ -1,3 +1,37 @@
+## Current local verification (`ef5201e`, updated 2026-10-14 10:15 UTC)
+
+The normal default-byte-compiled macOS installation of the exact `ef5201e` archive occupies
+6,973,927 logical bytes; its source archive is 2,627,841 bytes. `R/gptr.rdb` is 5,023,427 bytes.
+Combined installed documentation is 1,727,218 bytes (doc/ 1,224,500, help/ 486,947,
+html/ 15,771); extdata is 83,185 bytes and there is no data directory. All 14 guides remain.
+Build took 20.620 s and installation 14.564 s; the guarded family took 44.816 s, with
+526.375 MiB sampled process-family RSS. The installed 5 MB target remains unmet. We retain
+necessary byte compilation and useful debugging support, keep the historical installed-size
+NOTE visible below, and request CRAN consideration rather than waiving it.
+
+The complete local exact-archive as-cran check reported 29,708 passes, zero failures or
+warnings, 441 accounted skips and one clock NOTE; it took 462.626 s with 2,189.125 MiB
+sampled process-family RSS. All three exact R clock probes failed while preserving all eight
+caller-state checks, so no unchanged retry is claimed. A separate Mac source-suite attempt
+stopped at its unchanged 4 GiB guard (800.292 s, 4,099.109 MiB); final canonical and caller-state
+completion are unavailable. Neither result establishes native Windows acceptance.
+
+Current required CI completed with six successes and seven failures. Six Linux jobs retain
+observer status1/root; C-locale also has one Unicode failure. Windows oldrel4 native08 reaches
+the observer-snapshot deadline with one sampling error, and its ordinary suite has one MCP
+initialize −32601 failure. macOS and Windows release pass; connections completes all 199
+contexts with 32,233 passes/zero failures or warnings/52 skips. Scoped registry 81P/lint evidence remains, but the broader run fails a collected-session
+shutdown hook and the weak-registry proposal is held pending a fix. C/UTF-8 controls/lints
+remain ready for integration; no full-suite RSS-cause claim. Scoped MCP
+cold/ordinary controls and its whole 30-case family pass, retaining one original .cmd platform
+skip. Corrected Shiny controls/offline HTML have independent scoped acceptance with preserved
+data/connections; browser/server/live-generated-app scope remains open. The original broader 260-case preflight failure for two escaped-quote title metadata defects
+is retained separately from the actual shutdown-hook failure. All three fan-out phases exit 0,
+but parent-summary fidelity remains OPEN/NONPASS despite narrow runtime/accounting evidence;
+summarization and final acceptance are not closed. Final native/live verification,
+win-builder, main merge and publication remain pending. The `68e3e1f`/`aeb5702`
+measurements and check results below are historical and do not override this checkpoint.
+
 ## Submission
 
 This is a major update (0.7.0 -> 1.0.0) and a complete rewrite by the same maintainer. gptr is
@@ -57,7 +91,7 @@ documented in the "Breaking changes" section of NEWS.md.
   code.
 * Under `R CMD check` every pool of child processes is capped at two.
 
-## Size, reduction review and measured timings
+## Historical size, reduction review and measured timings (`aeb5702`)
 
 The accepted normal macOS build of `aeb5702` has a 2,624,087-byte source archive and a
 6,973,605-byte logical installation. Installed doc/ is 1,224,500 bytes, help/ 486,962 bytes
@@ -91,7 +125,7 @@ remains above 5 MB. No submission acceptance is claimed.
   oldrel-1, oldrel-4), a no-Suggests job and an `LC_ALL=C` job, each failing on any warning.
 * win-builder (R-devel): pending; run before submission.
 
-## R CMD check results
+## Historical R CMD check results (`aeb5702` and earlier)
 
 The complete local original-archive check of `aeb5702` finished with Status OK: zero errors,
 warnings and notes; 29,618 test passes, zero failures or warnings and 441 accounted skips.
