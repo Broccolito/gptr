@@ -42,8 +42,7 @@ test_that("the r schema is frozen in one of four variants (IC-68)", {
 })
 
 test_that("specified R input guidance reaches every preset and both CLI transports", {
-  rule = paste("Use the object names and function arguments the user specifies; never substitute",
-               "example data or overwrite supplied inputs unless asked")
+  rule = "Keep object names/arguments; replace inputs on request"
   instruction = paste("Use only the R tool. Fit stats::lm(mpg ~ wt + hp, data = analysis_input),",
                       "save it as fit, then call gptr::gptr_return(fit).")
   created = character()

@@ -19,8 +19,7 @@ r_tool_guidelines = c(
   "Use = for assignment and |> for pipes in all R code you write",
   paste("R recycles matrix/vector arithmetic down columns; use sweep(x, 2L, values, \"-\")",
         "for feature-wise centering or distances"),
-  paste("Use the object names and function arguments the user specifies; never substitute",
-        "example data or overwrite supplied inputs unless asked")
+  "Keep object names/arguments; replace inputs on request"
 )
 
 #' The `r` input schema variant (IC-68): `record` and `note` only with a document bound at freeze,

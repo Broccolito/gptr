@@ -390,6 +390,7 @@ ns_expected_t0 = function() {
     "- Use = for assignment and |> for pipes in all R code you write",
     paste0("- R recycles matrix/vector arithmetic down columns; use sweep(x, 2L,",
            " values, \"-\") for feature-wise centering or distances"),
+    "- Keep object names/arguments; replace inputs on request",
     "- Use edit for precise changes (edits[].oldText must match exactly)",
     paste0("- When changing multiple separate locations in one file, use one edit ca",
            "ll with multiple entries in edits[] instead of multiple edit calls"),
