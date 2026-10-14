@@ -105,6 +105,7 @@ class DiskObserver:
                  windows=None, max_entries=4096, max_depth=32, max_seconds=1,
                  byte_cap=64 * 1024 ** 2):
         self.ops, self.clock = operations, clock
+        self.last_failure = None
         self.windows = os.name == "nt" if windows is None else windows
         self.max_entries, self.max_depth = max_entries, max_depth
         self.max_seconds, self.byte_cap = max_seconds, byte_cap
@@ -265,6 +266,7 @@ class DiskObserver:
                 "identity": (item.st_dev, item.st_ino)}
 
     def snapshot(self, *, declared_only=False):
+        self.last_failure = None
         if not isinstance(declared_only, bool):
             raise ObservationError("observer-invalid-bound")
         if declared_only and (len(self.declarations) != 1 or
@@ -274,6 +276,24 @@ class DiskObserver:
                     "disappeared": 0, "bytes": 0, "max_depth": 0}
         started = self.clock()
         deadline = started + self.max_seconds
+        operation = ["walk-boundary"]
+
+        def retain_failure():
+            # Fixed structural fields only. Diagnostics cannot replace the original failure.
+            try:
+                elapsed = self.clock() - started
+                limits = {"entries": 4097, "directories": 4097, "declared_links": 17,
+                          "disappeared": 4097, "bytes": self.byte_cap + 1, "max_depth": 32}
+                if not math.isfinite(elapsed) or elapsed < 0:
+                    return
+                report = {name: min(counters[name], limit) for name, limit in limits.items()}
+                report.update(operation=operation[0], elapsed_s=min(elapsed, 60),
+                              elapsed_capped=elapsed > 60, max_seconds=self.max_seconds,
+                              counters_capped=any(counters[name] > limit
+                                                  for name, limit in limits.items()))
+                self.last_failure = report
+            except BaseException:
+                pass
 
         def check():
             if self.clock() >= deadline:
@@ -292,6 +312,7 @@ class DiskObserver:
                     raise ObservationError("observer-entry-limit")
 
         def direct(path, identity):
+            operation[0] = "directory-identity"
             try:
                 item = self._metadata(path, tick=tick)
             except FileNotFoundError:
@@ -302,6 +323,7 @@ class DiskObserver:
         def names(path, identity):
             direct(path, identity)
             try:
+                operation[0] = "directory-enumeration"
                 with self.ops.scandir(path) as iterator:
                     for entry in iterator:
                         tick()
@@ -310,6 +332,7 @@ class DiskObserver:
                                 "/" in name or "\\" in name or "\0" in name or len(name) > 256):
                             raise ObservationError("observer-invalid-entry-name")
                         yield entry
+                        operation[0] = "directory-enumeration"
             except OSError:
                 raise ObservationError("observer-directory-unreadable") from None
             direct(path, identity)
@@ -326,6 +349,7 @@ class DiskObserver:
             counters["disappeared"] += 1
 
         def walk(path, relative, identity, depth):
+            operation[0] = "walk-boundary"
             check()
             if depth > self.max_depth:
                 raise ObservationError("observer-depth-limit")
@@ -336,6 +360,7 @@ class DiskObserver:
                 full = os.path.join(path, name)
                 rel = name if not relative else relative + "/" + name
                 try:
+                    operation[0] = "entry-metadata"
                     item = self._metadata(full, entry)
                 except FileNotFoundError:
                     vanished(path, identity, name)
@@ -347,6 +372,7 @@ class DiskObserver:
                     if self.windows and item["tag"] != 0xA000000C:
                         raise ObservationError("observer-unexpected-reparse-tag")
                     try:
+                        operation[0] = "link-target"
                         target = self.ops.readlink(full)
                     except OSError:
                         raise ObservationError("observer-link-target-unreadable") from None
@@ -357,6 +383,7 @@ class DiskObserver:
                     if actual != self.declarations[rel]:
                         raise ObservationError("observer-link-target-differs")
                     try:
+                        operation[0] = "link-recheck"
                         after = self._metadata(full, tick=tick)
                     except (FileNotFoundError, _EntryAbsent):
                         raise ObservationError("observer-link-entry-absent") from None
@@ -378,10 +405,15 @@ class DiskObserver:
             direct(path, identity)
 
         try:
-            walk(self.root, "", self.root_identity, 0)
-        except _EntryAbsent:
-            raise ObservationError("observer-directory-entry-absent") from None
-        counters["elapsed_s"] = self.clock() - started
-        if counters["elapsed_s"] >= self.max_seconds:
-            raise ObservationError("observer-snapshot-deadline")
-        return counters
+            try:
+                walk(self.root, "", self.root_identity, 0)
+            except _EntryAbsent:
+                raise ObservationError("observer-directory-entry-absent") from None
+            operation[0] = "final-accounting"
+            counters["elapsed_s"] = self.clock() - started
+            if counters["elapsed_s"] >= self.max_seconds:
+                raise ObservationError("observer-snapshot-deadline")
+            return counters
+        except ObservationError:
+            retain_failure()
+            raise

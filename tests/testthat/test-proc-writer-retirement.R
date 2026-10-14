@@ -432,11 +432,52 @@ idle_restart_child_case = function(case, root, failure) {
 }
 
 
+# The native case retains only fixed structural failure metadata from its exact observer.
+idle_restart_observer = function(observe, read = function(object) {
+  reticulate::py_to_r(object$last_failure)
+}, publish = function(record) {
+  cat("GPTR-DISK-OBSERVER-FAILURE ", json_encode(record), "\n", sep = "")
+}) {
+  observer = get("observer", envir = environment(observe), inherits = FALSE)
+  function() {
+    tryCatch(observe(), error = function(error) {
+      tryCatch(bp_disk_preserve(function() {
+        record = read(observer)
+        limits = c(entries = 4097, directories = 4097, declared_links = 17,
+          disappeared = 4097, bytes = 64 * 1024^2 + 1, max_depth = 32)
+        fields = c(names(limits), "operation", "elapsed_s", "elapsed_capped",
+          "max_seconds", "counters_capped")
+        stopifnot(is.list(record), identical(sort(names(record)), sort(fields)),
+          all(vapply(names(limits), function(name) {
+            x = record[[name]]
+            is.numeric(x) && length(x) == 1L && is.finite(x) &&
+              x >= 0 && x <= limits[[name]] && x == floor(x)
+          }, logical(1))), is.character(record$operation), length(record$operation) == 1L,
+          !is.na(record$operation), record$operation %in% c("walk-boundary",
+            "directory-identity", "directory-enumeration", "entry-metadata",
+            "link-target", "link-recheck", "final-accounting"),
+          is.numeric(record$elapsed_s), length(record$elapsed_s) == 1L,
+          is.finite(record$elapsed_s), record$elapsed_s >= 0, record$elapsed_s <= 60,
+          is.numeric(record$max_seconds), length(record$max_seconds) == 1L,
+          is.finite(record$max_seconds), record$max_seconds > 0, record$max_seconds <= 1,
+          is.logical(record$elapsed_capped), length(record$elapsed_capped) == 1L,
+          !is.na(record$elapsed_capped), is.logical(record$counters_capped),
+          length(record$counters_capped) == 1L, !is.na(record$counters_capped))
+        publish(record)
+      }), error = function(secondary) NULL, interrupt = function(secondary) NULL)
+      stop(error)
+    })
+  }
+}
+
+
 idle_restart_run = function() {
   scope = new.env(parent = environment(bp_run))
   runner = bp_run
   environment(runner) = scope
   scope$bp_child_case = idle_restart_child_case
+  base_observer = get("bp_disk_observer", mode = "function")
+  scope$bp_disk_observer = function(...) idle_restart_observer(base_observer(...))
   runner("idle-restart")
 }
 
