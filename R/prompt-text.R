@@ -77,6 +77,7 @@ prompt_text_table = list(
     "instead. Use tempfile() for scratch files.\n",
     "- Compose: one r call can loop, branch and combine many operations and helpers. Prefer ",
     "one call that computes the whole answer and prints a small result over many tool calls.\n",
+    "- Source files with source(path, local = TRUE) to keep code in this call's environment.\n",
     "{{fragments}}\n",
     "- To hand a result to the user's peter() call (a fitted model, a table), assign it and ",
     "call gptr_return(obj).\n",

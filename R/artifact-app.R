@@ -1509,7 +1509,7 @@ artifact_start = function(id, version, type, ctx = NULL, session_check = FALSE) 
              error = function(e) NULL, interrupt = function(e) NULL)
     rec$checks = checks
     artifact_version_checks_set(id, version, checks)
-    tail = artifact_log_tail(rec$log)
+    tail = unique(c(artifact_log_messages(rec$log), artifact_log_tail(rec$log)))
     gptr_abort(paste0("Artifact ", id, " v", sprintf("%03d", version), " failed at stage ",
                       stage, ": ", http$reason, ".", artifact_tail_text(tail, rec$log)),
                "artifact", id = id, stage = stage, log = tail)

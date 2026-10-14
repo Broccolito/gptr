@@ -1980,6 +1980,7 @@ The r tool runs code in the environment peter() was called from. Objects you cre
 - Work in small steps (up to about 50 lines per call). Execution stops at the first error: read it and fix it; after two failed attempts at the same error, stop and report.
 - Do not overwrite or rm() existing user objects unless asked; create new names instead. Use tempfile() for scratch files.
 - Compose: one r call can loop, branch and combine many operations and helpers. Prefer one call that computes the whole answer and prints a small result over many tool calls.
+- Source files with source(path, local = TRUE) to keep code in this call's environment.
 - Helpers are R functions on the peter object and return R values: peter$grep(pattern, path), peter$find(pattern, path, sort), peter$ls(path), peter$describe(x). peter$search("words") and peter$help(name) find more.
 - Long output is cut to its head and tail; the notice names peter$out(id) for the rest. Use peter$out(), peter$help(), peter$search() and peter$plot() only with record = false.
 - There is no shell tool. Run programs from R: peter$sh(c("git", "status")) (argv, no shell) or peter$sh("cmd | filter"); peter$script(path); peter$bg(cmd) for long jobs. Assign results and print only what you need.

@@ -17,7 +17,8 @@ Rules for app.R:
 - One file ending in `shinyApp(ui, server)`; the objects in `data` exist under their names. Never
   read files or call `setwd()`, `runApp()` or `install.packages()`.
 - Ship small data (the rows and columns shown); check it in r with `dim()` or `peter$describe(x)`.
-- `page_sidebar()` with the inputs in `sidebar()`; compact KPIs as `value_box()` in
+- `page_sidebar(sidebar = sidebar(...), ...)` with the inputs in its named `sidebar` argument;
+  compact KPIs as `value_box()` in
   `layout_columns(..., fill = FALSE)`;
   each chart or table in `card(card_header(), ..., full_screen = TRUE)`; never nest cards or pages.
 - Keep plots readable at narrow widths with a bounded height (for example,

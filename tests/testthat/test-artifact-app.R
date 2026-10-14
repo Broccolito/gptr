@@ -603,13 +603,18 @@ test_that("artifact_start() runs the ladder, records the run and keeps the port 
 test_that("an app whose page fails stops at the http stage with status failed", {
   skip_if_cannot_launch()
   local_project()
-  bad_page = c("library(shiny)", "ui = function(req) stop('the page failed')",
+  bad_page = c("library(shiny)",
+               "fail = function(n) if (n > 0L) fail(n - 1L) else stop('the page failed')",
+               "ui = function(req) fail(50L)",
                "server = function(input, output, session) {}", "shinyApp(ui, server)")
   version_one("page", bad_page)
   withr::defer(artifact_stop("page", emit = FALSE))
   cnd = expect_error(artifact_start("page", 1L, shiny_type()), class = "gptr_error_artifact")
   expect_identical(cnd$stage, "http")
   expect_match(conditionMessage(cnd), "HTTP 500", fixed = TRUE)
+  expect_match(conditionMessage(cnd), "the page failed", fixed = TRUE)
+  expect_true(any(grepl("the page failed", cnd$log, fixed = TRUE)))
+  expect_lte(length(cnd$log), 50L)
   expect_identical(artifact_status("page"), "failed")
   expect_false(artifact_meta_read("page")$versions[[1]]$checks$http)
 })
@@ -750,6 +755,8 @@ test_that("the shiny-bslib skill has its catalog line, house style and a valid e
   expect_match(txt, "peter$app(\"<id>\", data = c(\"obj\"))", fixed = TRUE)
   open = which(lines == "```r")
   expect_length(open, 1L)
+  expect_match(paste(lines[seq_len(open - 1L)], collapse = "\n"),
+               "sidebar = sidebar(...)", fixed = TRUE)
   close = which(lines == "```")
   code = lines[(open + 1L):(close[close > open][1L] - 1L)]
   expect_no_error(parse(text = code, keep.source = FALSE))
