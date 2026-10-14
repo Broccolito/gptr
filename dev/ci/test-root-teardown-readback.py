@@ -8,8 +8,68 @@ import stat
 import sys
 
 
+def descendants(parent, name, expected):
+    """Read bounded metadata below the exact owned child-temp; never follow a link."""
+    rows = []
+    limits = {"truncated": False, "depth_truncated": False}
+    okay = True
+
+    def walk(parent_fd, component, previous, prefix, depth):
+        nonlocal okay
+        descriptor = None
+        try:
+            descriptor = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                 dir_fd=parent_fd)
+            current = os.fstat(descriptor)
+            if (current.st_dev, current.st_ino, current.st_uid) != (
+                    previous.st_dev, previous.st_ino, expected.st_uid):
+                raise ValueError("owned descendant identity changed")
+            with os.scandir(descriptor) as iterator:
+                for entry in iterator:
+                    if len(rows) == 64:
+                        limits["truncated"] = True
+                        break
+                    relative = prefix + "/" + entry.name
+                    try:
+                        value = os.stat(entry.name, dir_fd=descriptor, follow_symlinks=False)
+                    except OSError as error:
+                        okay = False
+                        rows.append({"relative": relative, "qualified": False,
+                                     "error_class": type(error).__name__, "errno": error.errno})
+                        continue
+                    row = {"relative": relative, "qualified": True,
+                           "device": value.st_dev, "inode": value.st_ino,
+                           "mode": value.st_mode, "mode_text": stat.filemode(value.st_mode),
+                           "uid": value.st_uid, "symlink": stat.S_ISLNK(value.st_mode)}
+                    rows.append(row)
+                    if stat.S_ISDIR(value.st_mode):
+                        if value.st_dev != expected.st_dev or value.st_uid != expected.st_uid:
+                            row["descent_refused"] = "different device or owner"
+                            okay = False
+                        elif depth == 3:
+                            limits["depth_truncated"] = True
+                        else:
+                            walk(descriptor, entry.name, value, relative, depth + 1)
+        except (OSError, ValueError) as error:
+            okay = False
+            # Attach lookup evidence to the already-recorded directory; never retry it.
+            target = next((row for row in rows if row["relative"] == prefix), None)
+            value = {"error_class": type(error).__name__, "errno": getattr(error, "errno", None)}
+            if target is None:
+                limits["root_error"] = value
+            else:
+                target["lookup_error"] = value
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+
+    walk(parent, name, expected, name, 1)
+    return {"qualified": okay, "maximum_entries": 64, "maximum_depth": 3,
+            **limits, "entries": rows}
+
+
 def entries(root, expected):
-    """Inspect at most 20 immediate owned entries; do not recurse or follow links."""
+    """Inspect 20 immediate entries and bounded child-temp metadata without following links."""
     descriptor = None
     try:
         descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -24,9 +84,15 @@ def entries(root, expected):
                     truncated = True
                     break
                 value = os.stat(entry.name, dir_fd=descriptor, follow_symlinks=False)
-                rows.append({"name": entry.name, "mode": value.st_mode, "uid": value.st_uid,
-                             "directory": stat.S_ISDIR(value.st_mode),
-                             "symlink": stat.S_ISLNK(value.st_mode)})
+                row = {"name": entry.name, "mode": value.st_mode, "uid": value.st_uid,
+                       "directory": stat.S_ISDIR(value.st_mode),
+                       "symlink": stat.S_ISLNK(value.st_mode)}
+                if entry.name == "child-temp" and row["directory"] and not row["symlink"]:
+                    if value.st_dev == actual.st_dev and value.st_uid == actual.st_uid:
+                        row["descendants"] = descendants(descriptor, entry.name, value)
+                    else:
+                        row["descent_refused"] = "different device or owner"
+                rows.append(row)
         return {"qualified": True, "truncated": truncated, "entries": rows}
     except (OSError, ValueError) as error:
         return {"qualified": False, "error_class": type(error).__name__}
