@@ -233,12 +233,54 @@ test_that("a yielded empty checkpoint retries once and preserves both known char
                                     usage = usage_new(input = 120, output = 7)), "Done."))
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
+  pending = x$run$compact_pending
+  finish = x$run$compact_finish
+  ids = x$run$request_ids
+  waits_completed = reactor_now()
+  guard_released = FALSE
+  # Bound admission, then release its abort before assertion formatting.
+  if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
+      all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
+      identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted) && isTRUE(session_live(x$s)$compacting) &&
+      is.list(pending) && is.function(finish) && length(ids) == 1L &&
+      identical(x$run$compact_pending, pending) && identical(x$run$compact_finish, finish) &&
+      identical(x$run$request_ids, ids) && length(fake_requests(x$fake)) == 1L &&
+      nrow(x$s$usage) == 0L && length(cp_wait_entries(x$s)) == 0L &&
+      waits_completed < x$guard_at) {
+    guard_released = identical(reactor_cancel(x$guard), 1L)
+  }
+  admission_reason = if (identical(x$run$signal$reason, "fixture-guard")) "fixture-guard" else
+    if (is.null(x$run$signal$reason)) "none" else "other"
+  admission_diagnostic = paste0("finite_elapsed=", short$elapsed,
+                                "; guard_remaining=", x$guard_at - waits_completed,
+                                "; abort_reason=", admission_reason)
+  expect_true(guard_released, info = admission_diagnostic)
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
   expect_identical(x$s$status, "running")
   expect_length(fake_requests(x$fake), 1L)
+  # Completion keeps its own unchanged 0.8 s abort, excluding assertion formatting.
+  completion_started = reactor_now()
+  completion_guard_at = completion_started + 0.8
+  completion_guard = reactor_timer(completion_guard_at,
+                                   function() run_abort(x$run, "fixture-completion-guard"))
+  withr::defer(reactor_cancel(completion_guard))
   gptr_wait(x$s, timeout = 1)
+  completion_completed = reactor_now()
+  completion_guard_released = FALSE
+  if (guard_released && identical(x$s$status, "idle") && isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted) && completion_completed < completion_guard_at) {
+    completion_guard_released = identical(reactor_cancel(completion_guard), 1L)
+  }
+  completion_reason = if (identical(x$run$signal$reason, "fixture-completion-guard"))
+    "fixture-completion-guard" else if (identical(x$run$signal$reason, "fixture-guard"))
+    "fixture-guard" else if (is.null(x$run$signal$reason)) "none" else "other"
+  completion_diagnostic = paste0("completion_elapsed=", completion_completed - completion_started,
+                                 "; guard_remaining=", completion_guard_at - completion_completed,
+                                 "; abort_reason=", completion_reason)
   expect_identical(x$s$status, "idle")
+  expect_true(completion_guard_released, info = completion_diagnostic)
   expect_length(fake_requests(x$fake), 3L)
   expect_identical(nrow(x$s$usage), 3L)
   expect_equal(x$s$usage$input[1:2], c(100, 120))
@@ -441,8 +483,58 @@ test_that("malformed hook and custom results fall back once across deferred wait
     }))
   withr::defer(off_comp())
   local_gptr_options(compactor = "wait-invalid")
+  # Measure fallback setup separately from finite waits on its pending checkpoint.
+  startup_started = reactor_now()
+  reactor_pump(until = function() {
+    length(fake_requests(x$fake)) >= 1L || isTRUE(x$run$settled)
+  }, timeout = 0.8)
+  startup_completed = reactor_now()
+  pending = x$run$compact_pending
+  finish = x$run$compact_finish
+  ids = x$run$request_ids
+  retained = function() {
+    identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted) && isTRUE(session_live(x$s)$compacting) &&
+      is.list(pending) && is.function(finish) && length(ids) == 1L &&
+      identical(x$run$compact_pending, pending) && identical(x$run$compact_finish, finish) &&
+      identical(x$run$request_ids, ids) && length(fake_requests(x$fake)) == 1L &&
+      nrow(x$s$usage) == 0L && length(cp_wait_entries(x$s)) == 0L &&
+      identical(seen$calls, 1L) && identical(seen$input$reason, "threshold") &&
+      identical(seen$input$target$ref, "fake/fake-1") && is.null(prompt_ctx(x$s)$input) &&
+      identical(sum(x$events$types == "session_before_compact"), 1L) &&
+      identical(sum(x$events$types == "before_request"), 1L)
+  }
+  admission_ready = retained() && startup_completed < x$guard_at
+  admission_guard_released = FALSE
+  if (admission_ready) {
+    admission_guard_released = identical(reactor_cancel(x$guard), 1L)
+    if (admission_guard_released) {
+      x$guard_at = reactor_now() + 0.8
+      x$guard = reactor_timer(x$guard_at, function() run_abort(x$run, "fixture-guard"))
+      withr::defer(reactor_cancel(x$guard))
+    }
+  }
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
+  again = cp_wait_short(x)
+  waits_completed = reactor_now()
+  guard_released = FALSE
+  if (admission_ready && admission_guard_released && identical(short$value, x$s) &&
+      short$elapsed < 0.2 && admitted$started && all(admitted$elapsed < 0.2) &&
+      all(admitted$values) && admitted$retained && identical(again$value, x$s) &&
+      again$elapsed < 0.2 && retained() && waits_completed < x$guard_at) {
+    guard_released = identical(reactor_cancel(x$guard), 1L)
+  }
+  reason = if (identical(x$run$signal$reason, "fixture-guard")) "fixture-guard" else
+    if (is.null(x$run$signal$reason)) "none" else "other"
+  diagnostic = paste0("startup_elapsed=", startup_completed - startup_started,
+                      "; finite_elapsed=", short$elapsed, ",", again$elapsed,
+                      "; guard_remaining=", x$guard_at - waits_completed,
+                      "; abort_reason=", reason)
+  expect_true(admission_ready, info = diagnostic)
+  expect_lt(startup_completed - startup_started, 0.8)
+  expect_true(admission_guard_released, info = diagnostic)
+  expect_true(guard_released, info = diagnostic)
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
   expect_identical(x$s$status, "running")
@@ -450,7 +542,6 @@ test_that("malformed hook and custom results fall back once across deferred wait
   expect_identical(seen$input$reason, "threshold")
   expect_identical(seen$input$target$ref, "fake/fake-1")
   expect_null(prompt_ctx(x$s)$input)
-  again = cp_wait_short(x)
   expect_lt(again$elapsed, 0.2)
   expect_identical(seen$calls, 1L)
   expect_identical(sum(x$events$types == "session_before_compact"), 1L)
@@ -536,6 +627,27 @@ test_that("manual compaction on an active session completes without an orphan co
                                     usage = usage_new(input = 30, output = 3)),
                           fake_text("Manual summary.", delay = 0.1,
                                     usage = usage_new(input = 100, output = 5))), should = FALSE)
+  # This title starts with an active request; measure its in-flight finite wait separately.
+  startup_started = reactor_now()
+  reactor_pump(until = function() {
+    length(fake_requests(x$fake)) >= 1L || isTRUE(x$run$settled)
+  }, timeout = 0.8)
+  startup_completed = reactor_now()
+  admission_ready = length(fake_requests(x$fake)) == 1L && isTRUE(x$run$busy) &&
+    !isTRUE(x$run$settled) && identical(x$s$status, "running") &&
+    identical(x$run$request_closed, FALSE) && !isTRUE(x$run$signal$aborted) &&
+    nrow(x$s$usage) == 0L && length(cp_wait_entries(x$s)) == 0L &&
+    is.null(x$run$compact_pending) && startup_completed < x$guard_at
+  admission_guard_released = FALSE
+  if (admission_ready) {
+    admission_guard_released = identical(reactor_cancel(x$guard), 1L)
+    if (admission_guard_released) {
+      # Admission and the timed wait/manual work each retain an explicit 0.8-second guard.
+      x$guard_at = reactor_now() + 0.8
+      x$guard = reactor_timer(x$guard_at, function() run_abort(x$run, "fixture-guard"))
+      withr::defer(reactor_cancel(x$guard))
+    }
+  }
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
   ordinary = list(status = x$s$status, busy = x$run$busy,
@@ -548,7 +660,8 @@ test_that("manual compaction on an active session completes without an orphan co
   manual_completed = reactor_now()
   entries = cp_wait_entries(x$s)
   guard_released = FALSE
-  if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
+  if (admission_ready && admission_guard_released &&
+      identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
       all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
       identical(ordinary$status, "running") && isTRUE(ordinary$busy) &&
       identical(ordinary$request_closed, FALSE) && ordinary$requests == 1L &&
@@ -568,9 +681,14 @@ test_that("manual compaction on an active session completes without an orphan co
   }
   reason = if (identical(x$run$signal$reason, "fixture-guard")) "fixture-guard" else
     if (is.null(x$run$signal$reason)) "none" else "other"
-  diagnostic = paste0("guard_remaining=", x$guard_at - manual_started,
+  diagnostic = paste0("startup_elapsed=", startup_completed - startup_started,
+                      "; admission_ready=", admission_ready,
+                      "; guard_remaining=", x$guard_at - manual_started,
                       "; manual_elapsed=", manual_completed - manual_started,
                       "; abort_reason=", reason)
+  expect_true(admission_ready, info = diagnostic)
+  expect_lt(startup_completed - startup_started, 0.8)
+  expect_true(admission_guard_released, info = diagnostic)
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
   expect_identical(ordinary$status, "running")
