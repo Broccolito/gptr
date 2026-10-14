@@ -890,7 +890,22 @@ rw_absence_case = function(case, root) {
     complete = fun("reactor_pump")(until = function() !is.null(seen$status),
       timeout = max(0, 5 - (fun("reactor_now")() - started)))
     elapsed = fun("reactor_now")() - started
-    stopifnot(complete, identical(seen$status, 0L), elapsed <= 5, identical(seen$out, proof))
+    observations = c(`wait-complete` = isTRUE(complete),
+      `exit-observed` = !is.null(seen$status), `exit-zero` = identical(seen$status, 0L),
+      `elapsed-within-bound` = isTRUE(elapsed <= 5), `proof-exact` = identical(seen$out, proof))
+    failure = tryCatch({
+      stopifnot(complete, identical(seen$status, 0L), elapsed <= 5, identical(seen$out, proof))
+      NULL
+    }, error = base::identity, interrupt = base::identity)
+    publication = tryCatch({
+      for (name in names(observations)) {
+        phase(paste0("absence-", if (identity) "main" else "recovery", "-", name, "-",
+                     as.integer(observations[[name]])))
+      }
+      NULL
+    }, error = base::identity, interrupt = base::identity)
+    if (!is.null(failure)) stop(failure)
+    if (!is.null(publication)) stop(publication)
     if (identity) {
       stopifnot(identical(seen$privileges, c("PRE_BACKUP", "PRE_RESTORE",
         "PRE_CHANGE_NOTIFY", "LOOKUP_BACKUP", "LOOKUP_RESTORE", "LOOKUP_CHANGE_NOTIFY")))
