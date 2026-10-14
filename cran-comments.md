@@ -1,4 +1,12 @@
-## Current local verification (`ef5201e`, updated 2026-10-14 10:15 UTC)
+## Current size artifact `97541fc`, integrated source `33720c1` — updated 2026-10-14 11:34 UTC
+
+The last accepted normal artifact is exact `97541fceaea89109aa0569a826099ad672e86033`, certificate `9be61be2`/archive `478b9c55` (Root `35ba7b31`, independent `c9326dad`). Its source archive is 2,629,562 bytes and default-byte-compiled installation is 6,975,176 logical bytes. The largest file, `R/gptr.rdb`, is 5,023,604 bytes. Documentation occupies 1,728,234 bytes (doc/ 1,224,500, help/ 487,963, html/ 15,771); extdata is 83,185 bytes/data 0, with all 14 guides retained. Build took 20.982 s/install 14.619 s/family 45.004 s, peaking at 517.46875 MiB sampled RSS with zero sampling errors. A new normal archive/check for integrated `33720c1e075f5f4617435841085e3e51cf533aef` remains pending.
+
+The installed 5 MB target is unmet; source/documentation size goals are met. Preserve useful compilation, debugging/security support and guides. Keep historical safe reductions/size NOTE visible and request CRAN consideration rather than waiving it.
+
+Eleven reviewed task commits are pushed. Prompt/oracle controls 93/512 plus lint and concise 11/115/unchanged 14-transcript benchmark are integrated; original CI failures remain. GC focused 38/190 and broader 262/1,638, four lint paths zero/peer `0470`, and compaction 17/474/lint (15 wall-clock cases plus negative 0.8-second boundary) are integrated scoped proof, not a full-source RSS cure. Durable team code is committed; V4 44/241 and V5 brace-only lint 0 (`2943b1bd`) leave combined/live fidelity pending, with no V5 full-suite claim. Required `33720c1` run `38556457796` has all 13 jobs running at 11:27 UTC (`79f8f938`); outcome pending. Final prior `97541fc` CI has two successes/11 failures; both Windows ordinary suites report 30,942P/4F/0W/103S from four now-corrected prompt assertions. Windows release reports installed 9.8Mb INFO and oldrel4 retains the 9.7Mb installed-size NOTE; these check installations are separate from the measured Mac normal artifact, not a Mac size change. Strict native witnesses remain unaudited. Exact-owned Chrome close, Chrome CV/generated Shiny, Quarto/final frontends, protected-Main native verification, full-source/combined checks, merge and publication remain open. Complete Mac work before final live Windows verification. Earlier bodies below remain historical and unchanged.
+
+## Historical local verification (`ef5201e`, updated 2026-10-14 10:15 UTC)
 
 The normal default-byte-compiled macOS installation of the exact `ef5201e` archive occupies
 6,973,927 logical bytes; its source archive is 2,627,841 bytes. `R/gptr.rdb` is 5,023,427 bytes.

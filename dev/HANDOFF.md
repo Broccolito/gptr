@@ -1,4 +1,20 @@
-## Continue from certified `ef5201e` — updated 2026-10-14 10:15 UTC
+## Continue from integrated `33720c1`, last normal `97541fc` — updated 2026-10-14 11:34 UTC
+
+Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`; current source `33720c1e075f5f4617435841085e3e51cf533aef`. Eleven reviewed task commits are pushed. Main merge/publication remain pending; prior `ef5201e`/older bodies and failures below remain historical.
+
+| Gate | Current result and next step |
+| --- | --- |
+| Normal artifact | Last normal artifact is `97541fc`: certificate `9be61be2`, archive `478b9c55`, Root acceptance `35ba7b31` and independent acceptance `c9326dad`; exact 121 R sources, 14 guide pairs, 79 read-only files/five MD5s. Archive 2,629,562 B; installed 6,975,176 B; Rdb 5,023,604 B; docs 1,728,234 B; extdata 83,185 B/data 0. Build 20.982 s/install 14.619 s/family 45.004 s/517.46875 MiB sampled/36 samples, zero sampling errors. No new `33720c1` archive/check is claimed. |
+| Prompt/oracles | Integrated `4b59d85`: exact prompt-oracle family 93 cases/512 assertions and lint pass; concise prompt controls 11/115 plus the unchanged four-static-prefix/14-transcript golden benchmark pass (`6ade0330`). Original 59-token CI increase/fixtures remain retained; no golden or tolerance change. |
+| GC/state | Integrated `296ee2b`: public self-capturing shutdown ninth case gives focused 38/190 and broader 262/1,638 PASS; four final lint paths are zero and peer `0470` is clear. Retain original weak-shutdown/FIFO failures. This is scoped state/lifetime proof, not a full-source 4 GiB RSS cure. |
+| Compaction timing | Integrated `33720c1`: compaction 17 cases/474 assertions and lint pass, including 15 wall-clock cases and the negative 0.8-second boundary. Existing model/live and full-source memory gates remain separate. |
+| Team fidelity | Durable team code is committed (`71cc9c4`): V4 function controls 44/241 pass; V5 is brace-only lint 0 (`2943b1bd`), without a V5 full-suite claim. Combined integration/live parent-summary fidelity remains pending; earlier false no-taskwork summary despite child AIC 156.6523 stays retained. |
+| Required CI | The 11:27 UTC snapshot of required `33720c1` run `38556457796` has all 13 jobs running (`79f8f938`); no new outcome is claimed. Final prior `97541fc` CI is two successes/11 failures. Both Windows ordinary suites have 30,942P/4F/0W/103S from the same four stale prompt assertions, corrected in `33720c1`; native witnesses remain unaudited. Original failures stay historical. PR5 exact-owned graceful Chrome close remains in progress. |
+| Native/frontends/release | Protected Main remains selected by computer control, no R input. Preserve working R sessions/shared models. Chrome CV/generated Shiny, Quarto/final installed frontends, native console/allocator UX, full-source RSS/completion, combined checks, merge and publication remain open. Finish Mac work before final live Windows verification; Windows is not the sole remaining gate. |
+
+Installed 5 MB goal remains unmet. Retain useful byte compilation/debugging support, all guides, the size NOTE and CRAN consideration request. Root owns integration/shared adoption and the four cross-plan checks; rebuild and bind the new actual artifact before final consumer/check claims.
+
+## Historical checkpoint — certified `ef5201e`, updated 2026-10-14 10:15 UTC
 
 Checkout `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`; artifact source `ef5201ecc65b109c682a4cf81fd9e84aaed8a5fa`. Main merge and publication remain pending. The earlier `68e3e1f`/`aeb5702` checkpoint below is historical; its receipts remain unchanged. [TESTING_PLAN.md](TESTING_PLAN.md) records the current gates.
 
