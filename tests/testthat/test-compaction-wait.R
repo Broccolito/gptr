@@ -558,6 +558,7 @@ test_that("a pending checkpoint keeps served R disabled until its owning run com
 })
 
 test_that("malformed hook and custom results fall back once across deferred waits", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Done."))
   seen = new.env(parent = emptyenv())
   seen$calls = 0L
