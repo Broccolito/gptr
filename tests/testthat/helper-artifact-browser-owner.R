@@ -11,6 +11,11 @@ artifact_owner_fixture = function(remote = FALSE) {
   state$active = TRUE
   state$local = TRUE
   state$events = character()
+  state$close_order = character()
+  state$cdp_calls = 0L
+  state$cdp_error = NULL
+  state$cdp_delay = 0
+  state$cdp_dead = FALSE
   state$clock = 0
   state$pump_timeouts = numeric()
   state$owner_calls = 0L
@@ -54,6 +59,7 @@ artifact_owner_fixture = function(remote = FALSE) {
     stopifnot(length(timeout) == 1L, is.finite(timeout), timeout > 0, timeout <= 10000)
     state$wait_timeout = timeout
     state$events = c(state$events, "wait")
+    state$close_order = c(state$close_order, "wait")
     state$during = c(state$during, list(scope$artifact_state$browser))
     draw("close")
     if (state$replace_pending_wait) scope$artifact_state$browser_pending = replacement
@@ -66,6 +72,7 @@ artifact_owner_fixture = function(remote = FALSE) {
     close = function(wait) {
       stopifnot(identical(wait, FALSE))
       state$events = c(state$events, "process")
+      state$close_order = c(state$close_order, "process")
       state$during = c(state$during, list(scope$artifact_state$browser))
       draw("close")
       if (!is.null(state$process_error)) stop(state$process_error)
@@ -75,7 +82,19 @@ artifact_owner_fixture = function(remote = FALSE) {
       get_host = function() host, get_port = function() state$port)
   }
   make_container = function(browser) {
-    list(get_browser = function() browser, is_alive = function() process$is_alive(),
+    list(Browser = list(close = function(wait_, timeout_) {
+      stopifnot(identical(wait_, FALSE), length(timeout_) == 1L,
+        is.finite(timeout_), timeout_ > 0)
+      state$cdp_timeout = timeout_
+      state$cdp_calls = state$cdp_calls + 1L
+      state$close_order = c(state$close_order, "browser")
+      state$during = c(state$during, list(scope$artifact_state$browser))
+      draw("close")
+      if (!is.null(state$cdp_error)) stop(state$cdp_error)
+      state$clock = state$clock + state$cdp_delay
+      if (state$cdp_dead) state$alive = FALSE
+      invisible(NULL)
+    }), get_browser = function() browser, is_alive = function() process$is_alive(),
       is_active = function() {
         if (!is.null(state$active_error)) stop(state$active_error)
         state$active
@@ -92,6 +111,7 @@ artifact_owner_fixture = function(remote = FALSE) {
           if (state$wait_dead) state$alive = FALSE
         } else {
           state$events = c(state$events, "websocket")
+          state$close_order = c(state$close_order, "websocket")
         }
         if (!is.null(state$socket_error)) stop(state$socket_error)
         if (state$needs_pump) stop("The retained socket callback has not settled")
@@ -179,6 +199,7 @@ artifact_owner_fixture = function(remote = FALSE) {
       identical(loop, get("loop", envir = environment(make_remote))))
     state$pump_timeouts = c(state$pump_timeouts, args[["timeoutSecs"]])
     state$events = c(state$events, "pump")
+    state$close_order = c(state$close_order, "pump")
     state$during = c(state$during, list(scope$artifact_state$browser))
     state$alive_at_pump = state$alive
     draw("pump")

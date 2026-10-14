@@ -415,3 +415,100 @@ test_that("delayed browser callbacks preserve exact conditions and replacement c
     expect_false(any(x$state$events %in% c("process", "wait")))
   }
 })
+
+test_that("an owned connected browser requests ordinary close before its adapter disconnects", {
+  x = artifact_browser_fixture()
+  x$state$cdp_dead = TRUE
+  expect_invisible(x$close())
+  expect_identical(x$state$cdp_calls, 1L)
+  expect_true(x$state$cdp_timeout > 0 && x$state$cdp_timeout < 10)
+  expect_identical(utils::head(x$state$close_order, 2L), c("browser", "websocket"))
+  expect_false(any(x$state$close_order %in% c("process", "wait")))
+  expect_false(x$state$alive)
+  expect_false(x$state$active)
+  expect_null(x$scope$artifact_state$browser)
+  expect_null(x$scope$artifact_state$browser_owner)
+  before = x$state$close_order
+  expect_invisible(x$close())
+  expect_identical(x$state$close_order, before)
+})
+
+test_that("ordinary owned-browser close preserves errors and interrupts before disconnect", {
+  for (kind in c("error", "interrupt")) {
+    x = artifact_browser_fixture()
+    original = structure(list(message = "controlled owned browser command", call = NULL),
+      class = c(paste0("controlled_", kind), kind, "condition"))
+    x$state$cdp_error = original
+    x$state$draw_close = TRUE
+    seed_present = exists(".Random.seed", globalenv(), inherits = FALSE)
+    seed = get0(".Random.seed", globalenv(), inherits = FALSE)
+    objects = ls(envir = globalenv(), all.names = TRUE)
+    seen = tryCatch(x$close(), error = identity, interrupt = identity)
+    expect_identical(seen, original)
+    expect_identical(x$state$cdp_calls, 1L)
+    expect_identical(x$state$close_order, "browser")
+    expect_true(x$state$alive)
+    expect_true(x$state$active)
+    expect_identical(x$scope$artifact_state$browser, x$container)
+    expect_identical(x$scope$artifact_state$browser_owner, x$owner)
+    expect_identical(exists(".Random.seed", globalenv(), inherits = FALSE), seed_present)
+    expect_identical(get0(".Random.seed", globalenv(), inherits = FALSE), seed)
+    expect_identical(ls(envir = globalenv(), all.names = TRUE), objects)
+    x$state$cdp_error = NULL
+    expect_invisible(x$close())
+    expect_identical(x$state$cdp_calls, 2L)
+    expect_null(x$scope$artifact_state$browser)
+    expect_null(x$scope$artifact_state$browser_owner)
+  }
+})
+
+test_that("ordinary browser commands never reach borrowed dead or mismatched owners", {
+  control = artifact_browser_fixture()
+  expect_invisible(control$close())
+  expect_identical(control$state$cdp_calls, 1L)
+  for (mode in c("borrowed", "dead", "mismatched", "unconnected", "inactive")) {
+    x = artifact_browser_fixture(local = if (mode == "borrowed") FALSE else TRUE)
+    x$state$cdp_error = simpleError("the unowned browser command must not run")
+    if (mode == "dead") x$state$alive = FALSE
+    if (mode == "mismatched") x$state$port = 9999L
+    if (mode == "unconnected") x$scope$artifact_state$browser = NULL
+    if (mode == "inactive") x$state$active = FALSE
+    seen = tryCatch(x$close(), error = identity)
+    if (mode == "mismatched") {
+      expect_s3_class(seen, "gptr_error_io")
+      expect_identical(x$state$events, character())
+      expect_identical(x$scope$artifact_state$browser, x$container)
+    } else {
+      expect_null(seen)
+      expect_null(x$scope$artifact_state$browser)
+    }
+    expect_identical(x$state$cdp_calls, 0L)
+    expect_false("browser" %in% x$state$close_order)
+    if (mode %in% c("borrowed", "dead", "mismatched")) {
+      expect_false(any(x$state$close_order %in% c("process", "wait")))
+    } else {
+      expect_identical(utils::tail(x$state$close_order, 2L), c("process", "wait"))
+    }
+  }
+})
+
+test_that("ordinary browser close retains the existing bounded exact-owner fallback", {
+  x = artifact_browser_fixture()
+  expect_invisible(x$close())
+  expect_identical(x$state$cdp_calls, 1L)
+  expect_true(x$state$cdp_timeout > 0 && x$state$cdp_timeout < 10)
+  expect_identical(utils::head(x$state$close_order, 2L), c("browser", "websocket"))
+  expect_identical(utils::tail(x$state$close_order, 2L), c("process", "wait"))
+  expect_true(x$state$wait_timeout > 0 && x$state$wait_timeout < 10000)
+  expect_false(x$state$alive)
+  x = artifact_browser_fixture()
+  x$state$cdp_delay = 11
+  seen = tryCatch(x$close(), error = identity)
+  expect_s3_class(seen, "gptr_error_io")
+  expect_identical(x$state$cdp_calls, 1L)
+  expect_identical(x$state$close_order, "browser")
+  expect_true(x$state$alive)
+  expect_true(x$state$active)
+  expect_identical(x$scope$artifact_state$browser, x$container)
+  expect_identical(x$scope$artifact_state$browser_owner, x$owner)
+})

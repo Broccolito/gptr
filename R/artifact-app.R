@@ -967,8 +967,16 @@ artifact_browser_close = function(b = artifact_state$browser,
       gptr_abort("The headless browser connection ownership changed.", "io",
                  operation = "close", path = NULL)
     }
-    # The remote adapter disconnects without a second CDP Browser.close request.
-    if (alive) with_seed_preserved(b$close(wait = FALSE))
+    # Request ordinary shutdown of this owned browser before disconnecting its adapter.
+    if (alive) {
+      active = b$is_active()
+      remaining()
+      if (isTRUE(active)) {
+        with_seed_preserved(b$Browser$close(wait_ = FALSE, timeout_ = remaining()))
+      }
+      remaining()
+      with_seed_preserved(b$close(wait = FALSE))
+    }
     loop = b$get_child_loop()
     remaining()
     started = proc.time()[["elapsed"]]
