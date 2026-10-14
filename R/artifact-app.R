@@ -1012,7 +1012,7 @@ artifact_browser_close = function(b = artifact_state$browser,
       active = b$is_active()
       remaining()
       if (isTRUE(active)) {
-        with_seed_preserved(b$Browser$close(wait_ = FALSE, timeout_ = remaining()))
+        with_seed_preserved(b$Browser$close(wait_ = TRUE, timeout_ = remaining()))
       }
       remaining()
       with_seed_preserved(b$close(wait = FALSE))

@@ -14,6 +14,9 @@ artifact_owner_fixture = function(remote = FALSE) {
   state$close_order = character()
   state$cdp_calls = 0L
   state$cdp_error = NULL
+  state$cdp_ack_error = NULL
+  state$cdp_acknowledged = FALSE
+  state$disconnect_acknowledged = logical()
   state$cdp_delay = 0
   state$cdp_dead = FALSE
   state$clock = 0
@@ -83,7 +86,7 @@ artifact_owner_fixture = function(remote = FALSE) {
   }
   make_container = function(browser) {
     list(Browser = list(close = function(wait_, timeout_) {
-      stopifnot(identical(wait_, FALSE), length(timeout_) == 1L,
+      stopifnot(isTRUE(wait_) || isFALSE(wait_), length(timeout_) == 1L,
         is.finite(timeout_), timeout_ > 0)
       state$cdp_timeout = timeout_
       state$cdp_calls = state$cdp_calls + 1L
@@ -93,6 +96,10 @@ artifact_owner_fixture = function(remote = FALSE) {
       if (!is.null(state$cdp_error)) stop(state$cdp_error)
       state$clock = state$clock + state$cdp_delay
       if (state$cdp_dead) state$alive = FALSE
+      if (isTRUE(wait_)) {
+        if (!is.null(state$cdp_ack_error)) stop(state$cdp_ack_error)
+        state$cdp_acknowledged = TRUE
+      }
       invisible(NULL)
     }), get_browser = function() browser, is_alive = function() process$is_alive(),
       is_active = function() {
@@ -105,6 +112,7 @@ artifact_owner_fixture = function(remote = FALSE) {
         draw("close")
         state$during = c(state$during, list(scope$artifact_state$browser))
         state$socket_wait = wait
+        state$disconnect_acknowledged = c(state$disconnect_acknowledged, state$cdp_acknowledged)
         if (isTRUE(wait)) {
           state$events = c(state$events, "legacy-rpc")
           if (!is.null(state$process_error)) stop(state$process_error)

@@ -512,3 +512,49 @@ test_that("ordinary browser close retains the existing bounded exact-owner fallb
   expect_identical(x$scope$artifact_state$browser, x$container)
   expect_identical(x$scope$artifact_state$browser_owner, x$owner)
 })
+
+
+test_that("owned browser disconnect waits for the close acknowledgment", {
+  x = artifact_browser_fixture()
+  x$state$cdp_delay = 0.25
+  x$state$cdp_dead = TRUE
+  expect_invisible(x$close())
+  expect_identical(x$state$disconnect_acknowledged, TRUE)
+  expect_true(x$state$clock >= 0.25)
+  expect_true(x$state$cdp_timeout > 0 && x$state$cdp_timeout < 10)
+  expect_identical(utils::head(x$state$close_order, 2L), c("browser", "websocket"))
+  expect_false(any(x$state$close_order %in% c("process", "wait")))
+  expect_null(x$scope$artifact_state$browser)
+  expect_null(x$scope$artifact_state$browser_owner)
+})
+
+test_that("owned browser acknowledgment failures retain the connection for retry", {
+  for (kind in c("error", "interrupt")) {
+    x = artifact_browser_fixture()
+    original = structure(list(message = "controlled close acknowledgment", call = NULL),
+      class = c(paste0("controlled_", kind), kind, "condition"))
+    x$state$cdp_ack_error = original
+    x$state$draw_close = TRUE
+    seed_present = exists(".Random.seed", globalenv(), inherits = FALSE)
+    seed = get0(".Random.seed", globalenv(), inherits = FALSE)
+    objects = ls(envir = globalenv(), all.names = TRUE)
+    seen = tryCatch(x$close(), error = identity, interrupt = identity)
+    held = list(condition = seen, order = x$state$close_order,
+      alive = x$state$alive, active = x$state$active,
+      browser = identical(x$scope$artifact_state$browser, x$container),
+      owner = identical(x$scope$artifact_state$browser_owner, x$owner),
+      acknowledged = x$state$cdp_acknowledged,
+      seed_unchanged =
+        identical(exists(".Random.seed", globalenv(), inherits = FALSE), seed_present) &&
+        identical(get0(".Random.seed", globalenv(), inherits = FALSE), seed),
+      objects_unchanged = identical(ls(envir = globalenv(), all.names = TRUE), objects))
+    x$state$cdp_ack_error = NULL
+    expect_invisible(x$close())
+    expect_identical(list(held = held, commands = x$state$cdp_calls),
+      list(held = list(condition = original, order = "browser", alive = TRUE, active = TRUE,
+        browser = TRUE, owner = TRUE, acknowledged = FALSE, seed_unchanged = TRUE,
+        objects_unchanged = TRUE), commands = 2L))
+    expect_null(x$scope$artifact_state$browser)
+    expect_null(x$scope$artifact_state$browser_owner)
+  }
+})
