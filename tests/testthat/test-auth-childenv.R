@@ -334,13 +334,21 @@ test_that("worker policy keeps absent blank arbitrary and explicitly overridden 
   withr::with_envvar(stats::setNames(rep(NA_character_, length(keys)), keys), {
     expect_false(any(keys %in% names(child_env("worker"))))
   })
-  for (value in c("", "leave-as-is")) {
-    context = stats::setNames(rep(value, length(keys)), keys)
-    withr::with_envvar(context, {
-      expect_identical(child_env("worker")[keys], context)
-      expect_identical(Sys.getenv(keys, names = FALSE), unname(context))
-    })
-  }
+  # Windows removes variables set to ""; model present blank entries without changing it.
+  context = stats::setNames(rep("", length(keys)), keys)
+  before = Sys.getenv()
+  parent = c(before[!toupper(names(before)) %in% toupper(keys)], context)
+  worker = child_env
+  environment(worker) = list2env(list(Sys.getenv = function(...) parent),
+                                parent = environment(worker))
+  expect_identical(worker("worker")[keys], context)
+  expect_identical(child_env("worker", set = context)[keys], context)
+  expect_identical(Sys.getenv(), before)
+  context = stats::setNames(rep("leave-as-is", length(keys)), keys)
+  withr::with_envvar(context, {
+    expect_identical(child_env("worker")[keys], context)
+    expect_identical(Sys.getenv(keys, names = FALSE), unname(context))
+  })
   context = stats::setNames(rep("2", length(keys)), keys)
   explicit = stats::setNames(rep("1", length(keys)), keys)
   withr::with_envvar(context, {

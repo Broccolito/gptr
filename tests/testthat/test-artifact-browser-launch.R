@@ -61,7 +61,8 @@ artifact_launch_fixture = function() {
     state$calls = list(command = command, args = args, env = env, stdout = stdout,
       stderr = stderr, supervise = supervise)
     profile = sub("^--user-data-dir=", "", args[startsWith(args, "--user-data-dir=")])
-    state$roots = c(state$roots, dirname(profile))
+    stopifnot(length(profile) == 1L, endsWith(profile, "/profile"))
+    state$roots = c(state$roots, substr(profile, 1L, nchar(profile) - nchar("/profile")))
     state$files = c(state$files, stdout, stderr)
     extra = list(...)
     stopifnot(identical(names(extra), c(".marker", ".on_spawn")),
