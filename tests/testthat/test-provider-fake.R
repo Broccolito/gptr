@@ -587,11 +587,48 @@ test_that("mock requests bypass configured proxies for loopback only", {
   expect_identical(curl::curl_fetch_memory(srv$url)$status_code, 200L)
 })
 
+test_that("loopback collision setup retries an unavailable first candidate", {
+  seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  ports = c(49152L, 49153L)
+  attempts = integer()
+  server = new.env(parent = emptyenv())
+  start = function(host, port, app) {
+    expect_identical(host, "127.0.0.1")
+    expect_identical(app, list())
+    attempts <<- c(attempts, port)
+    set.seed(42L)
+    if (identical(port, ports[[1L]])) stop("synthetic port already held")
+    server
+  }
+  held = mock_hold_loopback(ports, start = start)
+  expect_identical(attempts, ports)
+  expect_identical(held$port, ports[[2L]])
+  expect_identical(held$server, server)
+  expect_identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed)
+})
+
+test_that("loopback collision setup retains failure when every candidate is unavailable", {
+  seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  ports = c(49152L, 49153L)
+  attempts = integer()
+  failure = simpleError("synthetic port reservation failure")
+  start = function(host, port, app) {
+    attempts <<- c(attempts, port)
+    set.seed(43L)
+    stop(failure)
+  }
+  error = tryCatch(mock_hold_loopback(ports, start = start), error = identity)
+  expect_identical(attempts, ports)
+  expect_identical(error, failure)
+  expect_identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed)
+})
+
 test_that("the mock skips a port another process holds on loopback", {
   skip_if_not_installed("httpuv")
   ports = port_candidates(20L)
-  held = httpuv::startServer("127.0.0.1", ports[[1L]], list())
-  withr::defer(httpuv::stopServer(held))
+  held = mock_hold_loopback(ports)
+  withr::defer(with_seed_preserved(httpuv::stopServer(held$server)))
+  ports = c(held$port, setdiff(ports, held$port))
   local_mocked_bindings(port_candidates = function(n) ports)
   srv = local_mock_server("json", body = "{}")
   expect_false(srv$port == ports[[1L]])

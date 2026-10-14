@@ -103,6 +103,19 @@ mock_writes = function(file) {
   )
 }
 
+# Hold a loopback port for a collision test; generated candidates are not reservations.
+# Failed binds try the next candidate; when none binds, retain the last original error.
+mock_hold_loopback = function(ports, start = httpuv::startServer) {
+  failure = simpleError("No candidate port was supplied.")
+  for (port in ports) {
+    server = tryCatch(with_seed_preserved(start("127.0.0.1", port, list())),
+      error = identity)
+    if (!inherits(server, "error")) return(list(server = server, port = port))
+    failure = server
+  }
+  stop(failure)
+}
+
 # Start the mock server for the calling test; see contract section 12.2 for the scenarios.
 # `...` are scenario arguments (n, interval, delay, status, body, retry_after, answers, headers,
 # chunked, log_writes, ...); function arguments are sent to the child without their environment.
