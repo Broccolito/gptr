@@ -2,7 +2,7 @@
 url: https://broccolito.github.io/gptr/
 
 repo:
-  branch: codex/skipped-platform-tests
+  branch: main
 
 template:
   bootstrap: 5

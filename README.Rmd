@@ -56,8 +56,7 @@ install.packages("pak")  # if pak is not installed
 pak::pak("Broccolito/gptr@main")
 ```
 
-These guides describe the 1.0 development preview. Some APIs, including `gptr_export()`, are
-still awaiting merge to `main`. CRAN submission is being prepared.
+This README documents gptr 1.0. CRAN submission is being prepared.
 
 `install.packages("gptr")` installs the CRAN version, which may still expose the older 0.7 API.
 Check `packageVersion("gptr")` before following these examples. No model server or CLI is
@@ -104,7 +103,7 @@ session = peter(
 session$text
 ls(work)
 
-session |> peter("Reuse fit to predict mpg for the same cars.")
+session = session |> peter("Reuse fit to predict mpg for the same cars.")
 head(work$predicted)
 session$turns
 ```
@@ -146,7 +145,7 @@ is_rct = peter(
   "Is this abstract about a randomized controlled trial?",
   abstracts, model = judge
 )
-is_rct
+as.logical(is_rct)
 gptr_prob(is_rct)
 ```
 
