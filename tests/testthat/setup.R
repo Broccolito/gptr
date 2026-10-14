@@ -5,8 +5,57 @@
 local({
   linux = identical(Sys.info()[["sysname"]], "Linux")
   # Chromium adds a Unix socket suffix; nested CI roots can exceed sun_path's 108-byte limit.
+  evidence = Sys.getenv("GPTR_TEST_ROOT_EVIDENCE", unset = "")
+  diagnostic = linux && nzchar(evidence)
+  if (diagnostic) {
+    state = new.env(parent = emptyenv())
+    state$schema = 1L
+    state$pid = Sys.getpid()
+    state$unlink_attempted = FALSE
+    state$unlink_returned = FALSE
+    state$unlink_status = NULL
+    state$unlink_condition_classes = list()
+    state$last_priority_reached = FALSE
+  }
   root = withr::local_tempdir("gptr-tests-", tmpdir = if (linux) "/tmp" else tempdir(),
-                            .local_envir = testthat::teardown_env())
+                            .local_envir = testthat::teardown_env(), clean = !diagnostic)
+  if (diagnostic) {
+    # This replaces only local_tempdir's original callback, in the same registration slot.
+    withr::defer({
+      state$unlink_attempted = TRUE
+      condition = tryCatch({
+        state$unlink_status = unlink(root, recursive = TRUE)
+        state$unlink_returned = TRUE
+        NULL
+      }, error = identity, interrupt = identity)
+      if (!is.null(condition)) {
+        state$unlink_condition_classes = as.list(class(condition))
+        stop(condition)
+      }
+    }, envir = testthat::teardown_env())
+    state$root = root
+    reader = Sys.getenv("GPTR_TEST_ROOT_READER", unset = "")
+    python = Sys.getenv("GPTR_TEST_ROOT_PYTHON", unset = "")
+    record = file.path(evidence, paste0("suite-", state$pid, "-", basename(root), ".json"))
+    publish = function() {
+      jsonlite::write_json(as.list(state), paste0(record, ".tmp"), auto_unbox = TRUE,
+                          pretty = TRUE, null = "null")
+      stopifnot(file.rename(paste0(record, ".tmp"), record))
+    }
+    # Observe after existing suite callbacks; metadata failure cannot replace the test error.
+    withr::defer({
+      state$last_priority_reached = TRUE
+      tryCatch({
+        publish()
+        status = system2(python, c("-I", "-B", shQuote(reader), "teardown", shQuote(record)),
+                         timeout = 5)
+        if (!identical(status, 0L)) message("GPTR_TEST_ROOT_READER_NONZERO")
+      }, error = function(e) message("GPTR_TEST_ROOT_PUBLICATION_ERROR:", class(e)[1L]),
+      interrupt = function(e) message("GPTR_TEST_ROOT_PUBLICATION_INTERRUPT"))
+    }, envir = testthat::teardown_env(), priority = "last")
+    stopifnot(dir.exists(evidence), file.exists(reader), file.exists(python), !file.exists(record))
+    publish()
+  }
   if (linux) stopifnot(Sys.chmod(root, "0700"))
   dirs = c(
     config = "user-config", data = "user-data", cache = "user-cache", home = "home",

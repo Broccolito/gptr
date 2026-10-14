@@ -139,12 +139,35 @@ jobs:
           chmod 700 "$gptr_check_tmp"
           printf 'TMPDIR=%s\nTMP=%s\nTEMP=%s\n' \
             "$gptr_check_tmp" "$gptr_check_tmp" "$gptr_check_tmp" >> "$GITHUB_ENV"
+      - name: Prepare exact Linux suite-root evidence
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          gptr_root_evidence="$RUNNER_TEMP/gptr-test-root-evidence"
+          mkdir -m 700 "$gptr_root_evidence"
+          printf 'GPTR_TEST_ROOT_EVIDENCE=%s\nGPTR_TEST_ROOT_READER=%s\nGPTR_TEST_ROOT_PYTHON=%s\n' \
+            "$gptr_root_evidence" "$GITHUB_WORKSPACE/dev/ci/test-root-teardown-readback.py" \
+            /usr/bin/python3 >> "$GITHUB_ENV"
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
           build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
           args: 'c("--no-manual", "--as-cran")'
           error-on: '"warning"'
+      - name: Observe exact Linux suite roots and check-child exit
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          /usr/bin/python3 -I -B dev/ci/test-root-teardown-readback.py \
+            child-exit "$RUNNER_TEMP/gptr-test-root-evidence"
+      - name: Retain Linux suite-root teardown evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-suite-root-${{ matrix.config.r }}
+          path: ${{ runner.temp }}/gptr-test-root-evidence
+          if-no-files-found: error
+          retention-days: 5
       - name: Fail unless R CMD check wrote its status
         shell: bash
         run: grep '^Status:' check/gptr.Rcheck/00check.log
@@ -176,10 +199,33 @@ jobs:
           dependencies: '"hard"'
           extra-packages: any::rcmdcheck any::testthat any::knitr any::rmarkdown
           needs: check
+      - name: Prepare exact Linux suite-root evidence
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          gptr_root_evidence="$RUNNER_TEMP/gptr-test-root-evidence"
+          mkdir -m 700 "$gptr_root_evidence"
+          printf 'GPTR_TEST_ROOT_EVIDENCE=%s\nGPTR_TEST_ROOT_READER=%s\nGPTR_TEST_ROOT_PYTHON=%s\n' \
+            "$gptr_root_evidence" "$GITHUB_WORKSPACE/dev/ci/test-root-teardown-readback.py" \
+            /usr/bin/python3 >> "$GITHUB_ENV"
       - uses: r-lib/actions/check-r-package@v2
         with:
           args: 'c("--no-manual", "--as-cran")'
           error-on: '"warning"'
+      - name: Observe exact Linux suite roots and check-child exit
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          /usr/bin/python3 -I -B dev/ci/test-root-teardown-readback.py \
+            child-exit "$RUNNER_TEMP/gptr-test-root-evidence"
+      - name: Retain Linux suite-root teardown evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-suite-root-noSuggests
+          path: ${{ runner.temp }}/gptr-test-root-evidence
+          if-no-files-found: error
+          retention-days: 5
       - name: Fail unless R CMD check wrote its status
         run: grep '^Status:' check/gptr.Rcheck/00check.log
 
@@ -202,10 +248,33 @@ jobs:
         with:
           extra-packages: any::rcmdcheck
           needs: check
+      - name: Prepare exact Linux suite-root evidence
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          gptr_root_evidence="$RUNNER_TEMP/gptr-test-root-evidence"
+          mkdir -m 700 "$gptr_root_evidence"
+          printf 'GPTR_TEST_ROOT_EVIDENCE=%s\nGPTR_TEST_ROOT_READER=%s\nGPTR_TEST_ROOT_PYTHON=%s\n' \
+            "$gptr_root_evidence" "$GITHUB_WORKSPACE/dev/ci/test-root-teardown-readback.py" \
+            /usr/bin/python3 >> "$GITHUB_ENV"
       - uses: r-lib/actions/check-r-package@v2
         with:
           args: 'c("--no-manual", "--as-cran")'
           error-on: '"warning"'
+      - name: Observe exact Linux suite roots and check-child exit
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          /usr/bin/python3 -I -B dev/ci/test-root-teardown-readback.py \
+            child-exit "$RUNNER_TEMP/gptr-test-root-evidence"
+      - name: Retain Linux suite-root teardown evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-suite-root-locale-C
+          path: ${{ runner.temp }}/gptr-test-root-evidence
+          if-no-files-found: error
+          retention-days: 5
       - name: Fail unless R CMD check wrote its status
         run: grep '^Status:' check/gptr.Rcheck/00check.log
 
