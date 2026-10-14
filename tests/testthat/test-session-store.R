@@ -864,6 +864,9 @@ test_that("gptr_resume() validates x", {
 })
 
 test_that("gptr_resume(block =) returns the session replay bound to the block, never a fallback", {
+  old = the$replay_blocks
+  the$replay_blocks = new.env(parent = emptyenv())
+  withr::defer(assign("replay_blocks", old, envir = the))
   s = test_session()
   session_replay_bind("6413d0", s)
   expect_identical(replay_lookup("6413d0"), s)

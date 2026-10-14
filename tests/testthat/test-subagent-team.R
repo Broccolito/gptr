@@ -156,6 +156,9 @@ test_that("model-issued teams are limited to gptr.subagents.max_tasks (IC-39)", 
 })
 
 test_that("replayed children bound to a block are attached to the replayed team (IC-46)", {
+  old = the$replay_blocks
+  the$replay_blocks = new.env(parent = emptyenv())
+  withr::defer(assign("replay_blocks", old, envir = the))
   local_team_fake()
   team = session_new("fake/fake-1", "auto", home = new.env(), kind = "replayed")
   td = session_data(team)
