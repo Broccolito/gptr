@@ -59,31 +59,30 @@ documented in the "Breaking changes" section of NEWS.md.
 
 ## Size, reduction review and measured timings
 
-The accepted normal macOS build of `17aa0bf` has a 2,621,421-byte source archive and a
-6,970,908-byte logical installation (7,421,952 allocated bytes): documentation 1,224,249 bytes,
-extdata 83,185 bytes and no data directory. The largest file is the byte-compiled pure-R
-lazy-load database `R/gptr.rdb` (5,022,289 bytes). All 14 rendered guides and their sources are
-retained; normal source-retention metadata is excluded. Targeted metadata/duplicate review found
-no safely removable payload. The installed total exceeds our 5 MB target; documentation/data
-and source archive remain below their respective targets.
+The accepted normal macOS build of `aeb5702` has a 2,624,087-byte source archive and a
+6,973,605-byte logical installation. Installed doc/ is 1,224,500 bytes, help/ 486,962 bytes
+and html/ 15,771 bytes (combined documentation 1,727,233 bytes); extdata is 83,185 bytes
+and data is empty. The largest file is the byte-compiled pure-R lazy-load database
+`R/gptr.rdb`, at 5,023,081 bytes. All 14 rendered guides and their sources are retained.
+Normal source-retention metadata is excluded. Targeted metadata and duplicate review found
+no safely removable payload. The installation exceeds our 5 MB target; documentation,
+data and source archive remain below their targets.
 
-A separate matched install comparison measured 6,973,589 bytes with default byte compilation
-and 3,660,393 bytes without it. Three fresh processes per profile used unchanged default JIT,
-matched functional outputs and all 64 export identities. Without byte compilation, median
-first fake-provider chat time increased from 0.177 to 0.571 s, and the five-call loop from
-0.567 to 1.167 s. Default compilation is retained for in-memory execution. Both profiles'
-cold TZDIR environment change remains retained; these measurements are not full caller-state
-preservation or package-check acceptance.
+A historical matched installation comparison measured 6,973,589 bytes with default byte
+compilation and 3,660,393 bytes without it. Three fresh processes per profile used unchanged
+default JIT, matched functional outputs and all 64 export identities. Without byte compilation,
+median first fake-provider chat time increased from 0.177 to 0.571 s, and the five-call loop
+from 0.567 to 1.167 s. We retain default byte compilation for in-memory execution.
 
-Normal installation took 14.354 s; the build/install family took 43.419 s with 518.390625 MiB
-sampled RSS and 35 samples with zero sampling errors. The complete `17aa0bf` direct as-cran
-check took 494.597 s (1,698.9375 MiB sampled, 423 samples with zero sampling errors) and
-finished with Status OK, zero errors, warnings and notes. Its keep-source installed size of
-10.5 Mb was INFO, not a size NOTE. The earlier 2 GiB abort and parser-layer failure remain
-historical. We request CRAN consideration of the necessary compiled R code if the final
-installation remains above 5 MB. Current hosted CI and win-builder remain required before
-submission; any resulting NOTE will be retained and explained. No submission acceptance is
-claimed.
+Measured timings are build 20.491 s; install 14.581 s; whole build/install family 44.768 s
+(548 MiB sampled, 36 samples, zero sampling errors). The complete original-archive local
+as-cran check took 493.69 s (2,232 MiB sampled, 419 samples, zero sampling errors).
+Its separate keep-source installation totals 10,049,777 logical file bytes, including
+8,105,590 bytes for the R database. The checker displays installed size 10.5 Mb and R 8.5 Mb
+as INFO, not a size NOTE. These display units and the keep-source installation differ from
+the normal logical byte totals. Historical size NOTEs remain retained below. We request
+CRAN consideration of the necessary byte-compiled R code because normal installation
+remains above 5 MB. No submission acceptance is claimed.
 
 ## Test environments
 
@@ -94,24 +93,37 @@ claimed.
 
 ## R CMD check results
 
-The complete local `17aa0bf` original-archive as-cran check finished with Status OK:
-zero errors, warnings and notes; 29,509 test passes, zero failures/warnings and 441 skips.
-All 15 complete raw streams were quiet. Source, Python-parent and exact owned cleanup checks
-passed. Five hosted `17aa0bf` consumers of the same 2,625,414-byte archive also reported
-zero errors, warnings and notes: Windows release/devel each 29,338 passes/504 skips,
-macOS release 29,478 passes/441 skips and Ubuntu release/devel each 29,469 passes/443 skips.
-This hosted archive differs from the local normal archive bytes. Windows installation was
-reported as 35/40 s; first-check-log through DONE spans were 1,416.608527/1,630.627287 s,
-excluding setup and pre-output startup, not whole-job wall times. Their native10 bodies
-were gated off under CRAN. Depends/Suggests profiles also completed with Status OK, zero
-errors/warnings/notes and 29,114 passes/488 skips and 29,469 passes/443 skips. A separate
-required Windows release native10 run passed 1,824 assertions with one POSIX-only skip and
-32 strict witnesses; the whole check still has one ERROR from the empty-checkpoint
-idle/aborted assertion. Its abort reason/timing was not recorded. Exact reviewed fixture and startup interrupt cleanup changes are adopted;
-the final combined normal artifact and complete check remain pending. Current source
-`1cb200f` also includes accepted README/main-link and hook documentation controls
-(two cases/10 passes, zero warnings and lint findings);
-win-builder and complete current CI remain required before submission.
+The complete local original-archive check of `aeb5702` finished with Status OK: zero errors,
+warnings and notes; 29,618 test passes, zero failures or warnings and 441 accounted skips.
+The skips are 414 On CRAN and 27 explicit optional-package, locale, live-opt-in and source-tree
+cases. All 15 complete raw logs passed the unchanged error/warning gates; source inputs,
+the Python parent and exact owned cleanup checks passed. Windows-only entry scripts were
+no-ops on this Mac; this result does not establish native Windows coverage.
+
+All 13 required CI jobs succeeded on the same source revision. Both Windows ordinary suites
+reported 30,861 passes, zero failures or warnings and 103 skips. Release reported Status OK
+and installed size 9.8 Mb as INFO; oldrel4 retained one installed-size NOTE at 9.7 Mb. Two
+HTTP-only browser-startup skips remain, and successful artifacts omit full native witnesses.
+The Linux source suite completed all 199 contexts with 32,143 passes, zero failures or
+warnings, 52 skips and unchanged connection tables, taking 1,996.9 s. Linux checks still
+retain directory NOTEs; their residual contents and deletion cause were not recorded.
+
+A separate Mac source-suite attempt remains incomplete after its 4 GiB memory guard stopped
+the family; it is not replaced by the successful archive check or Linux result. Reviewed source/control changes are now integrated in clean source `68e3e1f`; the
+measured sizes and check results above remain scoped to the certified `aeb5702` artifact.
+A fresh combined normal build, full check, source-suite validation and CI remain pending,
+as do final native and live validation, win-builder, main merge and publication. Detailed
+fixture, provider and GUI evidence is retained in the internal testing documents.
+
+Historical five hosted `17aa0bf` consumers of the same 2,625,414-byte archive reported zero
+errors, warnings and notes: Windows release/devel each 29,338 passes/504 skips, macOS release
+29,478 passes/441 skips and Ubuntu release/devel each 29,469 passes/443 skips. This hosted
+archive differs from the local normal archive. Depends/Suggests profiles also completed with
+Status OK/zero errors, warnings and notes: 29,114 passes/488 skips and 29,469 passes/443 skips.
+Their native10 bodies were CRAN no-ops. Separate required Windows release native10 passed
+1,824 assertions/one POSIX-only skip/32 strict witnesses; that whole check retained the sole
+empty-checkpoint idle/aborted ERROR, with abort reason/timing unrecorded. Earlier failed checks
+remain historical; reviewed fixture and startup changes are included in the final artifact.
 
 The later `945fa60` required Windows release check reports Status OK, with 30,752
 passes, zero failures/warnings and 103 accounted skips. Two are HTTP-only fallbacks
@@ -119,10 +131,10 @@ because the headless browser did not start, so working screenshot/render-error b
 coverage remains pending. Ten native entries completed; full witness artifacts were
 not retained on success. Installed size 9.8 Mb is INFO in this result.
 
-Current `945fa60` required Linux oldrel4 reports one ERROR and two NOTEs: installed
+Historical `945fa60` required Linux oldrel4 reports one ERROR and two NOTEs: installed
 size 9.8 Mb and a retained temporary directory. Its sole test failure is the private
 headless-browser directory cleanup condition; the deletion result and residual contents
-were not recorded, so its cause is unassigned. These current NOTEs are retained separately
+were not recorded, so its cause is unassigned. Those historical NOTEs are retained separately
 from the accepted five-consumer/profiles checks above.
 
 Historical Windows R 4.2 reported an installed-size NOTE of 9.7 Mb (`R/gptr.rdb`
