@@ -436,7 +436,7 @@ last_user_message = function(s) {
 }
 
 test_that("NS-6: a team through peter(), its members, its text, and its continuation", {
-  local_team_fake(function(request) {
+  fake = local_team_fake(function(request) {
     if (grepl("Reconcile", request$last_user, fixed = TRUE)) "One list of fixes." else
       paste("Review:", request$last_user)
   })
@@ -452,11 +452,11 @@ test_that("NS-6: a team through peter(), its members, its text, and its continua
   expect_identical(out, reviews)
   expect_identical(reviews$turns, 1L)
   expect_identical(session_data(reviews)$last_text, "One list of fixes.")
-  m = last_user_message(reviews)
-  kinds = vapply(m$content, function(b) b$kind %||% b$type, "")
-  expect_true("agent_reports" %in% kinds)
-  rep = m$content[[match("agent_reports", kinds)]]$text
-  expect_match(rep, "<agent_report from=\"stats\"", fixed = TRUE)
+  messages = tail(fake_requests(fake), 1L)[[1L]]$messages
+  blocks = unlist(lapply(messages, function(m) m$content), recursive = FALSE)
+  reports = Filter(function(b) identical(b$kind, "agent_reports"), blocks)
+  expect_length(reports, 1L)
+  expect_match(reports[[1L]]$text, "<agent_report from=\"stats\"", fixed = TRUE)
 })
 
 test_that("a fan-out runs every element, parallel at a time (P19 acceptance 6)", {
@@ -602,4 +602,147 @@ test_that("NS-6: the team statement owns one block and replays with zero request
   expect_match(e2$reviews$text, "### code (fake/fake-1)\nThe code runs; lme4 is unused.",
                fixed = TRUE)
   expect_identical(readLines(f, encoding = "UTF-8"), txt)
+})
+# ---- Durable parent context --------------------------------------------------------------------
+
+test_that("team and fanout checkpoints receive the original task and child reports", {
+  fake = local_team_fake(function(request) {
+    if (grepl("<compaction_request>", request$last_user, fixed = TRUE)) "Checkpoint." else
+      "metric = 156.6523"
+  })
+  for (kind in c("team", "fanout")) {
+    count = length(fake_requests(fake))
+    home = new.env(parent = baseenv())
+    home$dat = transform(mtcars, mpg = mpg + 0.25)
+    formula = stats::as.formula("mpg ~ wt + hp", env = baseenv())
+    home$fit = stats::lm(formula, data = home$dat)
+    before = serialize(list(dat = home$dat, fit = home$fit), NULL)
+    task = "Measure the existing fit without replacing the loaded data."
+    session = if (identical(kind, "team")) {
+      peter(task, agents = list(first = agent(model = "fake/fake-1"),
+                               second = agent(model = "fake/fake-1")), envir = home)
+    } else {
+      peter(task, list(first = 1, second = 2), parallel = 2, envir = home)
+    }
+    messages = lapply(Filter(function(e) identical(e$type, "message"),
+                             session_data(session)$entries), function(e) e$message)
+    expect_identical(vapply(messages, function(m) m$source, ""), c("prompt", "agent"))
+    kinds = unlist(lapply(messages, function(m) {
+      vapply(m$content, function(b) b$kind %||% b$type, "")
+    }), use.names = FALSE)
+    expect_identical(kinds, c("text", "agent_reports"))
+    expect_identical(extract_state(prompt_path(session))$user, task)
+    expect_length(extract_state(prompt_path(session))$objects, 0L)
+    compact_run(session, "manual")
+    request = tail(fake_requests(fake), 1L)[[1L]]
+    text = paste(unlist(lapply(request$messages, function(message) {
+      vapply(message$content, function(block) block$text %||% "", "")
+    }), use.names = FALSE), collapse = "\n")
+    expect_match(text, task, fixed = TRUE)
+    expect_true(all(vapply(c("first", "second"), function(name) {
+      grepl(paste0("<agent_report from=\"", name, "\">\nmetric = 156.6523"),
+            text, fixed = TRUE)
+    }, logical(1))))
+    expect_length(fake_requests(fake), count + 3L)
+    expect_identical(nrow(session$usage), 3L)
+    expect_identical(session$turns, 0L)
+    expect_identical(serialize(list(dat = home$dat, fit = home$fit), NULL), before)
+  }
+})
+
+test_that("gptr_parallel checkpoints retain reports without inventing a parent task", {
+  fake = local_team_fake(list("Plan ready.", "Checks ready.", "Checkpoint."))
+  session = gptr_parallel(planner = peter("Plan the analysis", envir = new.env()),
+                          checker = peter("Check the fit", envir = new.env()))
+  messages = lapply(Filter(function(e) identical(e$type, "message"),
+                           session_data(session)$entries), function(e) e$message)
+  expect_identical(vapply(messages, function(m) m$source, ""), "agent")
+  expect_length(extract_state(prompt_path(session))$user, 0L)
+  compact_run(session, "manual")
+  request = tail(fake_requests(fake), 1L)[[1L]]
+  text = paste(unlist(lapply(request$messages, function(message) {
+    vapply(message$content, function(block) block$text %||% "", "")
+  }), use.names = FALSE), collapse = "\n")
+  expect_true(all(vapply(c("Plan ready.", "Checks ready."), function(report) {
+    grepl(report, text, fixed = TRUE)
+  }, logical(1))))
+  expect_length(fake_requests(fake), 3L)
+  expect_identical(nrow(session$usage), 3L)
+  expect_identical(session$turns, 0L)
+})
+
+test_that("a rebuilt parent retains task and reports without reading child journals", {
+  fake = local_team_fake(list("156.6523"))
+  task = "Report the existing fit metric."
+  session = peter(task, list(first = 1, second = 2), parallel = 2, envir = new.env())
+  file = session$file
+  usage = session$usage
+  # Detach this test-owned shell explicitly; resume must rebuild, not return a live alias.
+  lock_release(lock_path(file))
+  live_forget(session)
+  last_set(NULL)
+  reads = character()
+  read = store_read
+  local_mocked_bindings(store_read = function(path) {
+    reads <<- c(reads, path)
+    read(path)
+  })
+  resumed = gptr_resume(file, envir = new.env())
+  expect_false(identical(resumed, session))
+  expect_identical(reads, file)
+  expect_length(resumed$children, 0L)
+  expect_identical(resumed$usage$request_id, usage$request_id)
+  expect_identical(nrow(resumed$usage), nrow(usage))
+  expect_length(fake_requests(fake), 2L)
+  expect_identical(extract_state(prompt_path(resumed))$user, task)
+  request = request_build(resumed, model_resolve("fake/fake-1"))
+  text = paste(unlist(lapply(request$context$messages, function(message) {
+    vapply(message$content, function(block) block$text %||% "", "")
+  }), use.names = FALSE), collapse = "\n")
+  expect_true(all(vapply(c(task, "<agent_report from=\"first\">",
+                          "<agent_report from=\"second\">", "156.6523"), function(value) {
+    grepl(value, text, fixed = TRUE)
+  }, logical(1))))
+  expect_length(fake_requests(fake), 2L)
+})
+
+test_that("stored child reports deduplicate unchanged turns and allow updated reports", {
+  local_team_fake(list("Original report."))
+  session = peter("Review it", agents = list(stats = agent(model = "fake/fake-1")))
+  reports = function() {
+    Filter(function(b) identical(b$kind, "agent_reports"), context_turn_blocks(session))
+  }
+  expect_length(reports(), 0L)
+  child = session_data(session$stats)
+  child$last_text = "Updated report."
+  blocks = reports()
+  expect_length(blocks, 1L)
+  expect_match(blocks[[1L]]$text, "Updated report.", fixed = TRUE)
+})
+
+test_that("durable partial reports keep status bounds escaped names and redaction", {
+  secret = paste0("sk-", strrep("a", 24L))
+  fake = local_team_fake(function(request) {
+    if (request$n == 1L) fake_error("No result.", status = 400L) else
+      paste(secret, strrep("r\u00e9sum\u00e9 ", 100L))
+  })
+  local_gptr_options(child_text_max = 128L)
+  home = new.env()
+  home$groups = stats::setNames(list(1, 2), c('a"b', "second"))
+  session = gptr_map(team_call("Review each group", parallel = 2L, envir = home,
+                              context = list(sym_item("groups", home$groups))))
+  messages = lapply(Filter(function(e) identical(e$type, "message"),
+                           session_data(session)$entries), function(e) e$message)
+  reports = Filter(function(m) identical(m$source, "agent"), messages)
+  text = paste(unlist(lapply(reports, function(message) {
+    vapply(message$content, function(block) block$text %||% "", "")
+  }), use.names = FALSE), collapse = "\n")
+  expect_length(reports, 1L)
+  expect_match(text, paste0('<agent_report from="a&quot;b">\n',
+                            "(ended with status error)"), fixed = TRUE)
+  expect_match(text, "[secret:api-key]", fixed = TRUE)
+  expect_lte(nchar(text, type = "bytes"), 600L)
+  expect_false(grepl(secret, paste(readLines(session$file), collapse = "\n"), fixed = TRUE))
+  expect_length(fake_requests(fake), 2L)
+  expect_length(extract_state(prompt_path(session))$objects, 0L)
 })

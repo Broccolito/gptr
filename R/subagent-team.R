@@ -211,6 +211,7 @@ gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("ret
          start = function() parallel_start(m, nm, backend, team, cur, caller))
   })
   subagent_schedule(items, max_active, function(i, h) subagent_record_end(team, h))
+  subagent_record_reports(team)
   if (identical(on_error, "stop")) {
     for (ch in session_data(team)$children) {
       cnd = session_data(ch)$condition
@@ -263,6 +264,8 @@ subagent_container = function(call, kind, cur, fallback = NULL) {
   if (!is.null(info$spec)) {
     registry_add(info$spec, source = "session", rank = 0L, session = session_data(s)$id)
   }
+  session_append(s, list(type = "message", message = msg_user(
+    redact(call$prompt, "context"), source = if (is.null(cur)) "prompt" else "parent")))
   s
 }
 
@@ -287,6 +290,7 @@ subagent_run_children = function(container, items, max_total, call) {
   })
   taken = character()
   for (h in handles) taken = subagent_export(h, call$envir, taken)
+  subagent_record_reports(container)
   idle = vapply(handles, function(h) identical(session_data(h$session)$status, "idle"), NA)
   d = session_data(container)
   subagent_emit(container, "agent_end", status = if (all(idle)) "idle" else "error",
@@ -330,6 +334,17 @@ subagent_reports_block = function(ctx, budget) {
     el(lo)
   }, "")
   paste(parts, collapse = "\n")
+}
+
+#' Persist bounded, typed child reports as agent data for checkpoints and resume
+#' @noRd
+subagent_record_reports = function(s) {
+  text = subagent_reports_block(list(session = s), 20000L)
+  if (!is.null(text)) {
+    session_append(s, list(type = "message", message = msg_user(
+      block_context("agent_reports", text), source = "agent")))
+  }
+  invisible(s)
 }
 
 # ---- the `team` route (order 15) ----------------------------------------------------------------
