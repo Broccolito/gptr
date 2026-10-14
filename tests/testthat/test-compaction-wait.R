@@ -310,11 +310,33 @@ test_that("a yielded checkpoint without metering stays unknown after durable rec
   })
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
+  pending = x$run$compact_pending
+  ids = x$run$request_ids
+  guard_released = FALSE
+  # The abort guards finite yielding, then releases only an unchanged uncharged owner.
+  if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
+      all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
+      identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      is.list(pending) && identical(x$run$compact_pending, pending) &&
+      identical(x$run$request_ids, ids) && is.function(x$run$compact_finish) &&
+      identical(session_live(x$s)$run, x$run) && isTRUE(session_live(x$s)$compacting) &&
+      length(fake_requests(x$fake)) == 1L && nrow(x$s$usage) == 0L &&
+      length(cp_wait_entries(x$s)) == 0L) {
+    guard_released = identical(reactor_cancel(x$guard), 1L)
+  }
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
   expect_identical(x$s$status, "running")
+  second_started = reactor_now()
   gptr_wait(x$s, timeout = 1)
-  expect_identical(x$s$status, "idle")
+  second_completed = reactor_now()
+  reason = if (identical(x$run$signal$reason, "fixture-guard")) "fixture-guard" else
+    if (is.null(x$run$signal$reason)) "none" else "other"
+  diagnostic = paste0("guard_remaining=", x$guard_at - second_started,
+                      "; second_wait_elapsed=", second_completed - second_started,
+                      "; abort_reason=", reason)
+  expect_true(guard_released, info = diagnostic)
+  expect_identical(x$s$status, "idle", info = diagnostic)
   expect_identical(nrow(x$s$usage), 2L)
   expect_true(all(is.na(unlist(x$s$usage[1L, usage_token_columns], use.names = FALSE))))
   expect_false(x$s$usage$estimated[[1L]])
