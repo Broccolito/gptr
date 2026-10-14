@@ -500,3 +500,154 @@ test_that("backpressure census retries one ESRCH without changing failure owners
   }
   expect_identical(serialize(first, NULL), before)
 })
+
+
+
+test_that("backpressure failed observer metrics retain bounded fields and fatal routing", {
+  failure = structure(list(message = "observer-snapshot-deadline\nFAKE-private-path", call = NULL),
+    class = c("gptr_owned_disk_observer.ObservationError", "error", "condition"))
+  before = serialize(failure, NULL)
+  record = list(entries = 251L, directories = 8L, declared_links = 0L,
+    disappeared = 0L, bytes = 8602L, max_depth = 2L, operation = "directory-identity",
+    elapsed_s = 1.05, elapsed_capped = FALSE, max_seconds = 1, counters_capped = FALSE)
+  observe = local({
+    observer = new.env(parent = emptyenv())
+    function() stop("The diagnostic must not run another snapshot.")
+  })
+  seen = new.env(parent = emptyenv())
+  seen$reads = 0L
+  read = function(object) {
+    expect(identical(object, get("observer", environment(observe), inherits = FALSE)),
+      "The diagnostic read must use the exact private observer.")
+    seen$reads = seen$reads + 1L
+    record
+  }
+  # Evaluate the actual fatal sampler branch without starting a child or Python.
+  walk = function(expression) {
+    if (missing(expression)) return(list())
+    found = list()
+    if (is.call(expression) && identical(expression[[1L]], as.name("if")) &&
+        identical(expression[[2L]], quote(inherits(sample, "condition")))) found = list(expression)
+    if (is.call(expression) || is.expression(expression) || is.pairlist(expression)) {
+      for (part in as.list(expression)) found = c(found, walk(part))
+    }
+    found
+  }
+  branches = walk(body(bp_run))
+  expect(identical(length(branches), 1L), "The sampler must keep one original failure branch.")
+  scope = new.env(parent = baseenv())
+  scope$sample = failure
+  scope$sample_stage = "files"
+  scope$observer_enabled = TRUE
+  scope$observe = observe
+  scope$sampling_errors = 0L
+  scope$sample_error = scope$guard = NULL
+  scope$case = "timeout"
+  scope$bp_rss_capture = function(...) invisible(NULL)
+  scope$bp_sample_error = function(stage, error, observe = NULL) {
+    # An old branch has no observer argument and retains its legacy record.
+    if (is.null(observe)) {
+      bp_sample_error(stage, error)
+    } else {
+      bp_sample_error(stage, error, observe = observe, read = read)
+    }
+  }
+  eval(call("for", as.name("iteration"), 1L, branches[[1L]]), envir = scope)
+  expect(identical(scope$sampling_errors, 1L), "An observer failure must remain a sampling error.")
+  expect(identical(scope$guard, "resource_observation"), "The resource gate must remain fatal.")
+  expect(identical(seen$reads, 1L), "The failed scan must read its diagnostics exactly once.")
+  expect(identical(scope$sample_error$observer_failure, record),
+    "The failed scan must publish its bounded structural metrics.")
+  expect(identical(scope$sample_error$observer_reason, "observer-snapshot-deadline"),
+    "The original fixed observer reason must remain unchanged.")
+  expect(identical(scope$sample_error$class, class(failure)),
+    "The original observer condition classes must remain unchanged.")
+  expect(identical(serialize(failure, NULL), before),
+    "The diagnostic must not modify the original observer condition.")
+  expect(!any(grepl("FAKE-private", unlist(scope$sample_error), fixed = TRUE)),
+    "The witness must omit private condition text and paths.")
+})
+
+
+test_that("backpressure failed observer metrics reject malformed and unavailable records", {
+  failure = structure(list(message = "observer-snapshot-deadline", call = NULL),
+    class = c("gptr_owned_disk_observer.ObservationError", "error", "condition"))
+  before = serialize(failure, NULL)
+  record = list(entries = 1L, directories = 1L, declared_links = 0L,
+    disappeared = 0L, bytes = 0L, max_depth = 0L, operation = "walk-boundary",
+    elapsed_s = 1, elapsed_capped = FALSE, max_seconds = 1, counters_capped = FALSE)
+  observe = local({
+    observer = new.env(parent = emptyenv())
+    function() NULL
+  })
+  old = bp_sample_error("files", failure)
+  variants = list(NULL, list(), record[-1L], c(record, list(path = "FAKE-private-path")),
+    c(record, list(entries = 1L)), structure(record, private = "FAKE-private-path"))
+  replacements = list(entries = list(-1, 4098, 1.5, Inf, NA_real_, TRUE, "1", c(1, 2)),
+    directories = list(4098), declared_links = list(18), disappeared = list(4098),
+    bytes = list(64 * 1024^2 + 2), max_depth = list(33),
+    operation = list("FAKE-private-path", NA_character_, c("walk-boundary", "link-target")),
+    elapsed_s = list(-1, 61, Inf, "1"), max_seconds = list(0, 2, NA_real_),
+    elapsed_capped = list(NA, 1L), counters_capped = list(NA, c(FALSE, TRUE)))
+  for (name in names(replacements)) {
+    for (value in replacements[[name]]) {
+      malformed = record
+      malformed[[name]] = value
+      variants[[length(variants) + 1L]] = malformed
+    }
+  }
+  malformed = record
+  malformed$entries = structure(1L, private = "FAKE-private-path")
+  variants[[length(variants) + 1L]] = malformed
+  for (value in variants) {
+    actual = tryCatch(bp_sample_error("files", failure, observe = observe,
+      read = function(object) value), error = identity, interrupt = identity)
+    expect(identical(actual, old), "Unavailable or invalid metrics must retain the legacy witness.")
+  }
+  # A sampler from an older fixture need not expose the private observer binding.
+  legacy = function() NULL
+  environment(legacy) = new.env(parent = baseenv())
+  actual = tryCatch(bp_sample_error("files", failure, observe = legacy,
+    read = function(object) stop("This read must not occur.")), error = identity)
+  expect(identical(actual, old), "A missing private observer must retain the legacy witness.")
+  for (kind in c("error", "interrupt")) {
+    secondary = structure(list(message = "FAKE-private-secondary", call = NULL),
+      class = c(kind, "condition"))
+    actual = tryCatch(bp_sample_error("files", failure, observe = observe,
+      read = function(object) stop(secondary)), error = identity, interrupt = identity)
+    expect(identical(actual, old), "A diagnostic condition must not replace the original failure.")
+  }
+  expect(identical(serialize(failure, NULL), before),
+    "Rejected diagnostics must not modify the original condition.")
+  expect(identical(tryCatch(stop(failure), error = identity), failure),
+    "The original observer failure must remain rethrowable unchanged.")
+})
+
+
+test_that("backpressure failed observer metrics never read outside the typed file failure", {
+  failure = structure(list(message = "observer-snapshot-deadline", call = NULL),
+    class = c("gptr_owned_disk_observer.ObservationError", "error", "condition"))
+  seen = new.env(parent = emptyenv())
+  seen$reads = 0L
+  observe = local({
+    observer = new.env(parent = emptyenv())
+    function() NULL
+  })
+  read = function(object) {
+    seen$reads = seen$reads + 1L
+    stop("Forbidden diagnostic read.")
+  }
+  for (stage in c("children", "memory")) {
+    actual = tryCatch(bp_sample_error(stage, failure, observe = observe, read = read),
+      error = identity)
+    expect(identical(actual, bp_sample_error(stage, failure)),
+      "Non-file failures must retain their original witness.")
+  }
+  class(failure) = c("other.ObservationError", "error", "condition")
+  actual = tryCatch(bp_sample_error("files", failure, observe = observe, read = read),
+    error = identity)
+  expect(identical(actual, bp_sample_error("files", failure)),
+    "Other observer classes must retain their original witness.")
+  expect(identical(seen$reads, 0L),
+    "Diagnostics must not read outside the exact typed file failure.")
+})

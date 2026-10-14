@@ -194,7 +194,9 @@ bp_observer_reason = function(stage, error) {
 }
 
 # Retain a bounded diagnostic without copying arbitrary condition messages or file content.
-bp_sample_error = function(stage, error) {
+bp_sample_error = function(stage, error, observe = NULL, read = function(object) {
+  reticulate::py_to_r(object$last_failure)
+}) {
   number = function(x) {
     if (is.numeric(x) && length(x) == 1L && is.finite(x)) unname(x) else NULL
   }
@@ -205,6 +207,38 @@ bp_sample_error = function(stage, error) {
   if (identical(stage, "files") &&
       inherits(error, "gptr_owned_disk_observer.ObservationError")) {
     result = c(result, list(observer_reason = bp_observer_reason(stage, error)))
+    if (is.function(observe)) {
+      failure = tryCatch(bp_disk_preserve(function() {
+        observer = get("observer", envir = environment(observe), inherits = FALSE)
+        record = read(observer)
+        limits = c(entries = 4097, directories = 4097, declared_links = 17,
+          disappeared = 4097, bytes = 64 * 1024^2 + 1, max_depth = 32)
+        fields = c(names(limits), "operation", "elapsed_s", "elapsed_capped",
+          "max_seconds", "counters_capped")
+        stopifnot(is.list(record), identical(names(attributes(record)), "names"),
+          identical(sort(names(record)), sort(fields)),
+          all(vapply(names(limits), function(name) {
+            x = record[[name]]
+            is.numeric(x) && length(x) == 1L && is.null(attributes(x)) &&
+              is.finite(x) && x >= 0 && x <= limits[[name]] && x == floor(x)
+          }, logical(1))), is.character(record$operation), length(record$operation) == 1L,
+          is.null(attributes(record$operation)), !is.na(record$operation),
+          record$operation %in% c("walk-boundary", "directory-identity", "directory-enumeration",
+            "entry-metadata", "link-target", "link-recheck", "final-accounting"),
+          is.numeric(record$elapsed_s), length(record$elapsed_s) == 1L,
+          is.null(attributes(record$elapsed_s)), is.finite(record$elapsed_s),
+          record$elapsed_s >= 0, record$elapsed_s <= 60,
+          is.numeric(record$max_seconds), length(record$max_seconds) == 1L,
+          is.null(attributes(record$max_seconds)), is.finite(record$max_seconds),
+          record$max_seconds > 0, record$max_seconds <= 1,
+          is.logical(record$elapsed_capped), length(record$elapsed_capped) == 1L,
+          is.null(attributes(record$elapsed_capped)), !is.na(record$elapsed_capped),
+          is.logical(record$counters_capped), length(record$counters_capped) == 1L,
+          is.null(attributes(record$counters_capped)), !is.na(record$counters_capped))
+        record[fields]
+      }), error = function(secondary) NULL, interrupt = function(secondary) NULL)
+      if (!is.null(failure)) result$observer_failure = failure
+    }
   }
   result
 }
@@ -483,7 +517,8 @@ bp_run = function(case, declared_links = list()) {
       bp_rss_capture("sample_failure", list(case = case, observation_stage = sample_stage,
         classes = class(sample)), prior_failure = TRUE)
       sampling_errors = sampling_errors + 1L
-      sample_error = bp_sample_error(sample_stage, sample)
+      sample_error = bp_sample_error(sample_stage, sample,
+        observe = if (observer_enabled) observe else NULL)
       guard = "resource_observation"
       break
     }
