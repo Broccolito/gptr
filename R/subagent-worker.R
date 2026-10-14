@@ -249,8 +249,9 @@ worker_exports_save = function(export, envir, result_path, status) {
 #' @noRd
 worker_outcome = function(s) {
   d = session_data(s)
+  usage = lapply(subagent_usage_sums(d$usage), function(x) if (is.na(x)) NULL else x)
   list(status = d$status, text = if (is.na(d$last_text)) "" else d$last_text,
-       usage = subagent_usage_sums(d$usage), turns = d$turns)
+       usage = usage, turns = d$turns)
 }
 
 #' The watchdog (a reactor task every 0.5 s): a `cancel` line or end of input aborts the run; a

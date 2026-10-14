@@ -229,14 +229,16 @@ local_active = function(.env = parent.frame()) {
   box = new.env(parent = emptyenv())
   box$active = 0L
   box$peak = 0L
-  ids = c(hook_add("subagent_start", function(event, ctx) {
+  callback = new.env(parent = baseenv())
+  callback$box = box
+  ids = c(hook_add("subagent_start", local(function(event, ctx) {
     box$active = box$active + 1L
     box$peak = max(box$peak, box$active)
     NULL
-  }), hook_add("subagent_end", function(event, ctx) {
+  }, envir = callback)), hook_add("subagent_end", local(function(event, ctx) {
     box$active = box$active - 1L
     NULL
-  }))
+  }, envir = callback)))
   withr::defer(for (id in ids) hook_remove(id), envir = .env)
   box
 }
@@ -707,4 +709,81 @@ test_that(
   expect_true(x$result$wd_unchanged)
   expect_true(x$result$globals_unchanged)
   expect_true(x$result$seed_unchanged)
+})
+
+
+test_that("unknown worker cost stays unknown through the result wire without warnings", {
+  local_project()
+  session = session_new("fake/fake-1", "auto", home = new.env())
+  data = session_data(session)
+  data$last_text = "done"
+  data$turns = 2L
+  data$usage = data.frame(request_id = c("qa", "qa", "qb"), input = c(3, 3, 10),
+    output = c(2, 2, 3), cache_read = 0, cache_write_5m = 0, cache_write_1h = 0,
+    reasoning = 0, cost = NA_real_)
+  io = local_worker_io()
+  worker_send(io$io, c(list(type = "result"), worker_outcome(session)))
+  wire = textConnectionValue(io$io$out)
+  expect_length(wire, 1L)
+  result = io$sent()[[1L]]
+  expect("cost" %in% names(result$usage) && is.null(result$usage$cost),
+         "Unknown worker cost must be JSON null.")
+  expect_identical(result$usage$input, 13L)
+  expect_identical(result$usage$output, 5L)
+  state = stub_worker_state()
+  state$result_path = tempfile()
+  local_mocked_bindings(worker_cleanup = function(st) invisible(TRUE))
+  worker_on_line(state, wire)
+  observed = new.env(parent = emptyenv())
+  observed$warnings = list()
+  withCallingHandlers(worker_on_exit(state, 0L), warning = function(e) {
+    observed$warnings[[length(observed$warnings) + 1L]] =
+      list(classes = class(e), message = conditionMessage(e))
+    invokeRestart("muffleWarning")
+  })
+  expect(identical(observed$warnings, list()), "Unknown worker usage must not warn.")
+  usage = state$final[[length(state$final)]]$message$usage
+  expect_identical(usage$input, 13)
+  expect_identical(usage$output, 5)
+  expect_identical(usage$cache_read, 0)
+  expect_identical(usage$cost$total, NA_real_)
+  expect_true(state$exited)
+})
+
+test_that("unknown worker counters preserve known zeros and cost through the result wire", {
+  local_project()
+  session = session_new("fake/fake-1", "auto", home = new.env())
+  data = session_data(session)
+  data$usage = data.frame(request_id = c("qa", "qb"), input = c(NA_real_, 3),
+    output = c(2, 3), cache_read = 0, cache_write_5m = c(4, 6), cache_write_1h = 0,
+    reasoning = c(NA_real_, 0), cost = c(0.01, 0.02))
+  io = local_worker_io()
+  worker_send(io$io, c(list(type = "result"), worker_outcome(session)))
+  wire = textConnectionValue(io$io$out)
+  expect_length(wire, 1L)
+  result = io$sent()[[1L]]
+  expect(is.null(result$usage$input) && is.null(result$usage$reasoning),
+         "Unknown worker counters must be JSON null.")
+  expect_identical(result$usage$cache_read, 0L)
+  expect_identical(result$usage$cost, 0.01 + 0.02)
+  state = stub_worker_state()
+  state$result_path = tempfile()
+  local_mocked_bindings(worker_cleanup = function(st) invisible(TRUE))
+  worker_on_line(state, wire)
+  observed = new.env(parent = emptyenv())
+  observed$warnings = list()
+  withCallingHandlers(worker_on_exit(state, 0L), warning = function(e) {
+    observed$warnings[[length(observed$warnings) + 1L]] =
+      list(classes = class(e), message = conditionMessage(e))
+    invokeRestart("muffleWarning")
+  })
+  expect(identical(observed$warnings, list()), "Unknown worker usage must not warn.")
+  usage = state$final[[length(state$final)]]$message$usage
+  expect_identical(usage$input, NA_real_)
+  expect_identical(usage$reasoning, NA_real_)
+  expect_identical(usage$output, 5)
+  expect_identical(usage$cache_read, 0)
+  expect_identical(usage$cache_write_5m, 10)
+  expect_identical(usage$cache_write_1h, 0)
+  expect_identical(usage$cost$total, 0.01 + 0.02)
 })
