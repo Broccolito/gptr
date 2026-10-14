@@ -17,8 +17,13 @@ Rules for app.R:
 - One file ending in `shinyApp(ui, server)`; the objects in `data` exist under their names. Never
   read files or call `setwd()`, `runApp()` or `install.packages()`.
 - Ship small data (the rows and columns shown); check it in r with `dim()` or `peter$describe(x)`.
-- `page_sidebar()` with the inputs in `sidebar()`; KPIs as `value_box()` in `layout_columns()`;
+- `page_sidebar()` with the inputs in `sidebar()`; compact KPIs as `value_box()` in
+  `layout_columns(..., fill = FALSE)`;
   each chart or table in `card(card_header(), ..., full_screen = TRUE)`; never nest cards or pages.
+- Keep plots readable at narrow widths with a bounded height (for example,
+  `plotOutput(..., height = "300px")`) and legible axis text. Wrap wide tables in a standard
+  `table-responsive` div with `tabindex = 0`, `role = "region"` and a descriptive `aria-label`
+  so keyboard users can scroll horizontally.
 - `renderPlot()` with ggplot2 and `theme_minimal()`; plotly, DT or leaflet only if `<r_env>` lists
   them. Filter once in `reactive()`; `req()` for empty inputs, `validate(need())` for empty
   results; no custom CSS or JS. Use `=` and `|>`.
@@ -29,8 +34,15 @@ library(bslib)
 ui = page_sidebar(
   title = "Markers",
   sidebar = sidebar(textInput("gene", "Gene")),
-  layout_columns(value_box("Markers shown", textOutput("n"))),
-  card(card_header("Top markers"), tableOutput("top"), full_screen = TRUE)
+  layout_columns(value_box("Markers shown", textOutput("n")), fill = FALSE),
+  card(
+    card_header("Top markers"),
+    div(
+      class = "table-responsive", tabindex = 0, role = "region",
+      `aria-label` = "Top markers", tableOutput("top")
+    ),
+    full_screen = TRUE
+  )
 )
 server = function(input, output, session) {
   shown = reactive(markers[grepl(input$gene, markers$gene, ignore.case = TRUE), ])
