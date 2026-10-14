@@ -515,7 +515,9 @@ test_that("artifact launch gives only its child a separate private temporary dir
   expect_identical(temp, file.path(x$state$roots[[2L]], "tmp"))
   expect_true(dir.exists(temp))
   expect_false(identical(x$state$roots[[1L]], x$state$roots[[2L]]))
-  expect_identical(dirname(x$state$roots), rep(tempdir(), 2L))
+  parent = normalizePath(dirname(x$state$roots), winslash = "/", mustWork = TRUE)
+  expect_identical(parent,
+    rep(normalizePath(tempdir(), winslash = "/", mustWork = TRUE), 2L))
   if (!is_windows()) {
     expect_identical(bitwAnd(as.integer(file.info(temp)$mode), 511L), 448L)
     socket = file.path(temp, "org.chromium.Chromium.XXXXXX", "SingletonSocket")
@@ -530,17 +532,26 @@ test_that("artifact launch enforces Linux and macOS socket path limits before sp
   skip_on_os("windows")
   for (mac in c(FALSE, TRUE)) {
     limit = if (mac) 253L else 107L
-    for (extra in 0:1) {
+    for (path_case in c("check", "boundary", "overlong")) {
       x = artifact_launch_fixture()
       x$scope$is_windows = function() FALSE
       x$scope$is_macos = function() mac
       suffix = nchar(file.path("tmp", "org.chromium.Chromium.XXXXXX", "SingletonSocket"),
         type = "bytes") + 1L
-      root = paste0("/virtual-browser-", strrep("x", limit + extra - suffix - 17L))
+      # R CMD check used this 38-byte startup parent and a 12-byte nonce on Linux.
+      parent = "/tmp/RtmpoAySAX/working_dir/RtmpxBVU2J"
+      root = if (path_case == "check") {
+        expect_identical(nchar(parent, type = "bytes"), 38L)
+        file.path(parent, paste0("gptr-", strrep("x", 12L)))
+      } else {
+        paste0("/virtual-browser-",
+          strrep("x", limit + as.integer(path_case == "overlong") - suffix - 17L))
+      }
       expect_identical(nchar(file.path(root, "tmp", "org.chromium.Chromium.XXXXXX",
-        "SingletonSocket"), type = "bytes"), limit + extra)
+        "SingletonSocket"), type = "bytes"),
+        if (path_case == "check") 105L else limit + as.integer(path_case == "overlong"))
       x$scope$tempfile = function(pattern, ...) {
-        if (identical(pattern, "gptr-chrome-")) root else base::tempfile(pattern, ...)
+        if (identical(pattern, "gptr-")) root else base::tempfile(pattern, ...)
       }
       x$scope$dir.create = function(path, mode) {
         expect_true(path %in% c(root, file.path(root, c("profile", "crashes", "tmp"))))
@@ -555,7 +566,7 @@ test_that("artifact launch enforces Linux and macOS socket path limits before sp
         x$state$roots = character() # Virtual paths are never created or passed to real unlink.
         process
       }
-      if (extra == 0L) {
+      if (path_case != "overlong") {
         expect_true(x$launch(character())$is_local())
         expect_identical(x$state$virtual_spawns, 1L)
       } else {

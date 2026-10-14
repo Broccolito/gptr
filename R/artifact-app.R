@@ -617,7 +617,7 @@ artifact_browser_launch = function(args) {
   }
   if (!is.null(mode)) check_string(mode, "chromote.headless")
   headless = if (is.null(mode)) "--headless" else paste0("--headless=", mode)
-  root = tempfile("gptr-chrome-")
+  root = tempfile("gptr-")
   temp = file.path(root, "tmp")
   if (!is_windows()) {
     socket = file.path(temp, "org.chromium.Chromium.XXXXXX", "SingletonSocket")
