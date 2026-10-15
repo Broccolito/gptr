@@ -36,7 +36,8 @@ Rules for app.R:
   value; use sliders for visual adjustments.
 - `renderPlot()` with ggplot2 and `theme_minimal()`; plotly, DT or leaflet only if `<r_env>` lists
   them. Filter once in `reactive()`; `req()` for empty inputs, `validate(need())` for empty
-  results; no custom CSS or JS. Use `=` and `|>`.
+  results; no custom CSS or JS. Use `=` for assignment and `|>` for data transforms;
+  add ggplot2 geoms, labels, scales and themes with `+`.
 
 ```r
 library(shiny)
