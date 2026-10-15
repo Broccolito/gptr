@@ -704,6 +704,143 @@ class LiteralLookupControls(unittest.TestCase):
                 self.assertEqual(api.closed, [])
 
 
+class NativeBindingControls(unittest.TestCase):
+    def test_abi_type_is_reused_but_query_buffers_and_handles_are_fresh(self):
+        class CapturingAPI(NativeAPI):
+            def first(self, path, pointer):
+                buffers.append(pointer._obj)
+                return super().first(path, pointer)
+
+        buffers = []
+        api = CapturingAPI(attributes=0x400, tag=0xA000000C)
+        first = observer._windows_entry("C:\\owned\\café", api=api)
+        api.attributes, api.tag = 0, 0
+        second = observer._windows_entry("C:\\owned\\café", api=api)
+        self.assertEqual((first.st_file_attributes, first.st_reparse_tag),
+                         (0x400, 0xA000000C))
+        self.assertEqual((second.st_file_attributes, second.st_reparse_tag), (0, 0))
+        self.assertEqual(len(buffers), 2)
+        self.assertIsNot(buffers[0], buffers[1])
+        self.assertIs(type(buffers[0]), type(buffers[1]))
+        self.assertEqual(api.closed, [42, 42])
+        self.assertEqual(api.paths, ["\\\\?\\C:\\owned\\café"] * 2)
+
+    def test_real_dll_and_signatures_are_bound_once_but_queries_repeat(self):
+        import ctypes
+        from unittest.mock import patch
+
+        class ConfiguredCall(NativeCall):
+            def __init__(self, callback):
+                self.configured = []
+                super().__init__(callback)
+
+            def __setattr__(self, name, value):
+                if name in ("argtypes", "restype"):
+                    self.configured.append(name)
+                super().__setattr__(name, value)
+
+        api = NativeAPI()
+        api.FindFirstFileW = ConfiguredCall(api.first)
+        api.FindClose = ConfiguredCall(api.close)
+        with patch.object(observer, "_windows_native", None, create=True), \
+                patch.object(ctypes, "WinDLL", return_value=api, create=True) as load:
+            for _ in range(3):
+                observer._windows_entry("C:\\owned\\café")
+        self.assertEqual(load.call_count, 1)
+        self.assertEqual(load.call_args.args, ("kernel32.dll",))
+        self.assertEqual(load.call_args.kwargs, {"use_last_error": True})
+        self.assertEqual(api.FindFirstFileW.configured, ["argtypes", "restype"])
+        self.assertEqual(api.FindClose.configured, ["argtypes", "restype"])
+        self.assertEqual(api.paths, ["\\\\?\\C:\\owned\\café"] * 3)
+        self.assertEqual(api.closed, [42] * 3)
+
+    def test_invalid_paths_do_not_initialize_native_bindings(self):
+        import ctypes
+        from unittest.mock import patch
+
+        with patch.object(observer, "_windows_native", None, create=True), \
+                patch.object(ctypes, "WinDLL", create=True) as load:
+            for path in (None, "C:relative", "C:\\owned\\*", "C:\\owned\\..\\café",
+                         "C:\\owned\\name:stream", "\\\\server\\share\\café"):
+                with self.subTest(path=path), self.assertRaisesRegex(
+                        ObservationError, "literal-path-invalid"):
+                    observer._windows_entry(path)
+        load.assert_not_called()
+
+    def test_injected_apis_are_independent_of_the_cached_real_binding(self):
+        import ctypes
+        from unittest.mock import patch
+
+        real = NativeAPI()
+        injected = NativeAPI(attributes=0x400, tag=0xA000000C)
+        with patch.object(observer, "_windows_native", None, create=True), \
+                patch.object(ctypes, "WinDLL", return_value=real, create=True) as load:
+            first = observer._windows_entry("C:\\owned\\café")
+            second = observer._windows_entry("C:\\owned\\café", api=injected)
+            injected.attributes, injected.tag = 0, 0
+            third = observer._windows_entry("C:\\owned\\café", api=injected)
+        self.assertEqual(load.call_count, 1)
+        self.assertEqual(first.st_file_attributes, 0)
+        self.assertEqual(second.st_file_attributes, 0x400)
+        self.assertEqual(third.st_file_attributes, 0)
+        self.assertEqual(real.closed, [42])
+        self.assertEqual(injected.closed, [42, 42])
+
+    def test_binding_failure_is_not_cached(self):
+        import ctypes
+        from unittest.mock import patch
+
+        api = NativeAPI()
+        original = OSError("synthetic-loader-failure")
+        with patch.object(observer, "_windows_native", None, create=True), \
+                patch.object(ctypes, "WinDLL", side_effect=[original, api, api],
+                             create=True) as load:
+            with self.assertRaises(OSError) as caught:
+                observer._windows_entry("C:\\owned\\café")
+            self.assertIs(caught.exception, original)
+            for _ in range(2):
+                observer._windows_entry("C:\\owned\\café")
+        self.assertEqual(load.call_count, 2)
+        self.assertEqual(api.closed, [42, 42])
+
+    def test_missing_entry_requeries_the_same_binding_without_stale_results(self):
+        import ctypes
+        from unittest.mock import patch
+
+        api = NativeAPI()
+        api.handle = -1
+        with patch.object(observer, "_windows_native", None, create=True), \
+                patch.object(ctypes, "WinDLL", return_value=api, create=True) as load, \
+                patch.object(ctypes, "get_last_error", return_value=2,
+                             create=True) as last_error:
+            with self.assertRaisesRegex(ObservationError, "parent-entry-absent"):
+                observer._windows_entry("C:\\owned\\café")
+            api.handle = 42
+            entry = observer._windows_entry("C:\\owned\\café")
+        self.assertEqual(load.call_count, 1)
+        last_error.assert_called_once_with()
+        self.assertEqual(entry.name, "café")
+        self.assertEqual(api.paths, ["\\\\?\\C:\\owned\\café"] * 2)
+        self.assertEqual(api.closed, [42])
+
+    def test_delayed_lookup_keeps_the_original_snapshot_deadline(self):
+        fs = Operations()
+        now = [0]
+        scanner = DiskObserver(fs.root, operations=fs, windows=True, clock=lambda: now[0])
+        find = fs.find_entry
+
+        def delayed(path):
+            result = find(path)
+            now[0] = 1
+            return result
+
+        fs.find_entry = delayed
+        with self.assertRaisesRegex(ObservationError, "snapshot-deadline"):
+            scanner.snapshot()
+        self.assertEqual(scanner.max_seconds, 1)
+        self.assertEqual(scanner.last_failure["max_seconds"], 1)
+
+
 class DirectoryDisappearanceControls(unittest.TestCase):
     def absent(self, code=2):
         api = NativeAPI()

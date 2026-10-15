@@ -28,6 +28,39 @@ class _WindowsEntry:
         return self
 
 
+_windows_types = None
+_windows_native = None
+
+
+def _windows_bindings(api):
+    import ctypes
+    global _windows_types, _windows_native
+
+    if api is None and _windows_native is not None:
+        return _windows_native
+    if _windows_types is None:
+        class FindData(ctypes.Structure):
+            # Only the immutable ABI is shared; every query gets fresh data.
+            _fields_ = [("attributes", ctypes.c_uint32), ("times", ctypes.c_uint32 * 6),
+                        ("size_high", ctypes.c_uint32), ("size_low", ctypes.c_uint32),
+                        ("tag", ctypes.c_uint32), ("reserved", ctypes.c_uint32),
+                        ("name", ctypes.c_uint16 * 260), ("alternate", ctypes.c_uint16 * 14)]
+
+        if ctypes.sizeof(FindData) != 592:
+            raise ObservationError("observer-native-find-data-layout-invalid")
+        _windows_types = FindData, ctypes.POINTER(FindData)
+    find_data, pointer = _windows_types
+    native = ctypes.WinDLL("kernel32.dll", use_last_error=True) if api is None else api
+    native.FindFirstFileW.argtypes = [ctypes.c_wchar_p, pointer]
+    native.FindFirstFileW.restype = ctypes.c_void_p
+    native.FindClose.argtypes = [ctypes.c_void_p]
+    native.FindClose.restype = ctypes.c_int
+    bindings = find_data, native
+    if api is None:
+        _windows_native = bindings
+    return bindings
+
+
 def _windows_entry(path, *, api=None):
     # FindFirstFileW with one literal name reads entry attributes, not a link's
     # target. The caller has already checked each preceding lexical component.
@@ -47,21 +80,8 @@ def _windows_entry(path, *, api=None):
         raise ObservationError("observer-native-literal-path-invalid")
     name = parts[-1]
 
-    class FindData(ctypes.Structure):
-        # Fixed Win32 widths also let pure injected controls inspect the layout.
-        _fields_ = [("attributes", ctypes.c_uint32), ("times", ctypes.c_uint32 * 6),
-                    ("size_high", ctypes.c_uint32), ("size_low", ctypes.c_uint32),
-                    ("tag", ctypes.c_uint32), ("reserved", ctypes.c_uint32),
-                    ("name", ctypes.c_uint16 * 260), ("alternate", ctypes.c_uint16 * 14)]
-
-    if ctypes.sizeof(FindData) != 592:
-        raise ObservationError("observer-native-find-data-layout-invalid")
-    native = ctypes.WinDLL("kernel32.dll", use_last_error=True) if api is None else api
-    native.FindFirstFileW.argtypes = [ctypes.c_wchar_p, ctypes.POINTER(FindData)]
-    native.FindFirstFileW.restype = ctypes.c_void_p
-    native.FindClose.argtypes = [ctypes.c_void_p]
-    native.FindClose.restype = ctypes.c_int
-    data = FindData()
+    find_data, native = _windows_bindings(api)
+    data = find_data()
     handle = native.FindFirstFileW("\\\\?\\" + literal, ctypes.byref(data))
     if handle in (None, 0, -1, ctypes.c_void_p(-1).value):
         code = ctypes.get_last_error() if api is None else api.last_error()
