@@ -30,7 +30,8 @@ mock_provider = function(scenario, url) {
     max_output = 8192, reasoning = TRUE, thinking_levels = c("off", "low", "medium", "high"),
     thinking = NULL, input = c("text", "image"), tool_call = TRUE, structured_output = TRUE,
     prices = data.frame(
-      from = as.Date("2026-01-01"), tier = "default", input = 0, output = 0, cache_read = 0,
+      from = with_calendar_preserved(as.Date("2026-01-01")), tier = "default", input = 0,
+      output = 0, cache_read = 0,
       cache_write_5m = 0, cache_write_1h = 0
     ),
     cache_min = NA_real_,
@@ -68,14 +69,16 @@ mock_log = function(file) {
   requests = records[kinds == "request"]
   if (!length(requests)) {
     return(data.frame(
-      time = as.POSIXct(numeric(), origin = "1970-01-01"), method = character(),
+      time = with_calendar_preserved(as.POSIXct(numeric(), origin = "1970-01-01")),
+      method = character(),
       path = character(), headers = character(), body = character(), disconnected = logical()
     ))
   }
   ends = records[kinds == "end"]
   end_ids = vapply(ends, function(r) as.integer(r$id), integer(1))
   out = data.frame(
-    time = as.POSIXct(vapply(requests, function(r) r$time, numeric(1)), origin = "1970-01-01"),
+    time = with_calendar_preserved(as.POSIXct(
+      vapply(requests, function(r) r$time, numeric(1)), origin = "1970-01-01")),
     method = vapply(requests, function(r) r$method, ""),
     path = vapply(requests, function(r) r$path, ""),
     headers = vapply(requests, function(r) r$headers, ""),
