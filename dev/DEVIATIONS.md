@@ -2213,3 +2213,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   2. On Windows the reactor gives `processx::poll()` the pipes only and waits at most 5 ms while a transfer is active; `curl::multi_run(timeout = 0)` still drives curl. processx 3.9.0 (same on its main branch) closes the socket pair it makes for a Windows poll over curl sockets but keeps the pair's handle values and its select flag: until a poll without curl sockets, every read of a pending pipe sends to the closed pair and fails with system error 10038 when no output is waiting (hosted probes 37672983832, 37674400273; no failure after transfers through this reactor), and every poll without curl sockets closes both values again (processx source; no probe broke another socket: 13 httpuv servers started after such a poll answered every request).
 - Contract-visible: on Windows a reactor iteration polls the pipes only and checks curl at most 5 ms apart while a transfer is active; a stop returns up to 2 s later while killed processes exit; no section amended.
 - Tests: test-proc-supervise.R "kill_all() returns once the processes it signalled stop running (WIN-2)"; test-http-reactor.R "on Windows one pump drives both without curl's sockets in processx::poll() (WIN-2)"; test-provider-registry.R "process_jsonl drives a real child through P04's process engine" checks the job row per event (D-019 item 5). Evidence: progress/infra.md Task WIN-2.
+
+## D-181 - P08 preserve paired RStudio host resizing during tool restoration (2026-10-15)
+- Rule: an interactive RStudio tool records the initial RSTUDIO_CONSOLE_WIDTH. On restoration,
+  preserve the current width only if that host metric changed, is an integer10–10000, and exactly
+  matches the current width option. A genuine host update is not an option changed by the agent.
+  Other options and unchanged, invalid, unmatched, noninteractive and non-RStudio widths restore.
+- Contract-visible: no API change; console output follows the host resize already delivered while
+  the tool runs. An explicitly fixed cli.width remains fixed. This narrow exception prevents
+  restoration from rolling back the user's window resize; it does not permit arbitrary tool
+  option changes to survive.
+- Tests: all35 original test-eval-core cases plus success/error/interrupt/later-tool paired resize
+  and ordinary/invalid/unmatched/nonhost controls;37 cases/286 assertions and two lints pass.
+  Baseline has six failures confined to the new paired-resize case. Full connections and scoped
+  caller/source/cleanup predicates pass. Fresh native production widening remains pending.
+  Evidence: eval-host-width-1f9c189-source-only-v2/ACTUAL-ACCEPTANCE.json (9be1b1ed) and the
+  actual14-row native eval_open/eval_restore trace; coordinator records remain in dev/TESTING_PLAN.md.
