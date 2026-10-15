@@ -2217,12 +2217,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 ## D-181 - P08 preserve paired RStudio host resizing during tool restoration (2026-10-15)
 - Rule: an interactive RStudio tool records the initial RSTUDIO_CONSOLE_WIDTH. On restoration,
   preserve the current width only if that host metric changed, is an integer10–10000, and exactly
-  matches the current width option. A genuine host update is not an option changed by the agent.
-  Other options and unchanged, invalid, unmatched, noninteractive and non-RStudio widths restore.
+  matches the current width option. This paired-metric heuristic recognizes the observed resize;
+  it does not authenticate who changed the metric or option. Other options and unchanged, invalid,
+  unmatched, noninteractive and non-RStudio widths restore.
 - Contract-visible: no API change; console output follows the host resize already delivered while
   the tool runs. An explicitly fixed cli.width remains fixed. This narrow exception prevents
-  restoration from rolling back the user's window resize; it does not permit arbitrary tool
-  option changes to survive.
+  restoration from rolling back the observed window resize. Unpaired tool option changes still
+  restore; code that changes both the metric and matching width can satisfy the heuristic.
 - Tests: all35 original test-eval-core cases plus success/error/interrupt/later-tool paired resize
   and ordinary/invalid/unmatched/nonhost controls;37 cases/286 assertions and two lints pass.
   Baseline has six failures confined to the new paired-resize case. Full connections and scoped
