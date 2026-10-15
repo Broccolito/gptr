@@ -404,3 +404,77 @@ test_that("Peter export places feedback between separate pipeline operands witho
   expect_identical(e$hits, 3L)
   expect_identical(export_read(f), bytes)
 })
+
+test_that("raw prompt comments wrap losslessly while source and executable code stay intact", {
+  local_project()
+  prompt = paste0(
+    strrep("Keep  the original words and spacing. ", 8L),
+    "\nInjected = TRUE\r\t\u001b quotes \" and \\; caf\u00e9 \U0001f642.")
+  call = paste0("session = peter(", doc_str_literal(prompt), ")")
+  body = c("hits = hits + 1L", "answer = 42L")
+  f = export_fixture(call = call, body = body, header = list(prompt = prompt_hash(prompt)),
+    before = "hits = 0L", after = "after = hits")
+  bytes = export_read(f)
+  before = export_state()
+  target = file.path(getwd(), "wrapped-raw.R")
+  gptr_export(f, target)
+  expect_identical(export_state(), before)
+  expect_identical(export_read(f), bytes)
+  out = readLines(target, encoding = "UTF-8")
+  start = which(startsWith(out, "# Recorded prompt: "))
+  metadata = out[seq.int(start, match(body[1L], out) - 1L)]
+  expect_gt(length(metadata), 1L)
+  expect_true(all(nchar(metadata) <= 80L))
+  expect_true(all(startsWith(metadata, "# ")))
+  expect_true(all(validUTF8(metadata)))
+  expect_false(any(grepl("[[:cntrl:]]", metadata)))
+  literal = paste0(c(substring(metadata[1L], 20L), substring(metadata[-1L], 3L)),
+    collapse = "")
+  expect_identical(literal, doc_str_literal(prompt))
+  expect_identical(doc_unquote(literal), prompt)
+  expect_true(paste0("# ", call) %in% out)
+  expected = parse(text = c("hits = 0L", body, "after = hits"), keep.source = FALSE)
+  expect_identical(parse(target, keep.source = FALSE), expected)
+  plain = new.env(parent = baseenv())
+  source(target, local = plain, encoding = "UTF-8")
+  expect_identical(plain$hits, 1L)
+  expect_identical(plain$answer, 42L)
+  expect_identical(plain$after, 1L)
+  expect_false(any(vapply(c("session", "Injected"), exists, NA,
+    envir = plain, inherits = FALSE)))
+  peter = file.path(getwd(), "wrapped-peter.R")
+  gptr_export(f, peter, "peter")
+  peter_lines = readLines(peter, encoding = "UTF-8")
+  expect_true(call %in% peter_lines)
+  expect_false(any(startsWith(peter_lines, "# Recorded prompt: ")))
+})
+
+test_that("raw prompt wrapping preserves width boundaries and long unbroken Unicode tokens", {
+  local_project()
+  prompts = c(strrep("a", 59L), strrep("a", 60L),
+    strrep("caf\u00e9\U0001f642", 2048L))
+  for (i in seq_along(prompts)) {
+    prompt = prompts[i]
+    call = paste0("session = peter(", doc_str_literal(prompt), ")")
+    f = export_fixture(call = call, body = "value = 42L",
+      header = list(prompt = prompt_hash(prompt)))
+    target = file.path(getwd(), paste0("boundary-", i, ".R"))
+    gptr_export(f, target)
+    out = readLines(target, encoding = "UTF-8")
+    start = which(startsWith(out, "# Recorded prompt: "))
+    metadata = out[seq.int(start, match("value = 42L", out) - 1L)]
+    expect_true(all(nchar(metadata) <= 80L))
+    expect_true(all(validUTF8(metadata)))
+    if (i == 1L) {
+      expect_identical(metadata, paste0("# Recorded prompt: ", doc_str_literal(prompt)))
+    } else {
+      expect_gt(length(metadata), 1L)
+    }
+    literal = paste0(c(substring(metadata[1L], 20L), substring(metadata[-1L], 3L)),
+      collapse = "")
+    expect_identical(literal, doc_str_literal(prompt))
+    expect_identical(doc_unquote(literal), prompt)
+    expect_identical(parse(target, keep.source = FALSE),
+      parse(text = "value = 42L", keep.source = FALSE))
+  }
+})

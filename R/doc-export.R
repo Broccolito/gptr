@@ -64,6 +64,34 @@ doc_export_body = function(body, format, indent = "") {
   body
 }
 
+#' Wrap escaped prompt metadata without changing its characters or executable source.
+#' @noRd
+doc_export_prompt = function(prompt) {
+  literal = doc_str_literal(prompt)
+  prefix = "# Recorded prompt: "
+  if (nchar(literal) <= 80L - nchar(prefix)) return(paste0(prefix, literal))
+  points = utf8ToInt(literal)
+  total = length(points)
+  # A latter-half space leaves at least thirty characters per nonfinal fragment.
+  out = character(total %/% 30L + 1L)
+  start = 1L
+  i = 0L
+  while (start <= total) {
+    width = 80L - nchar(prefix)
+    end = min(start + width - 1L, total)
+    if (end < total) {
+      spaces = which(points[seq.int(start, end)] == 32L)
+      spaces = spaces[spaces > width %/% 2L]
+      if (length(spaces)) end = start + spaces[length(spaces)] - 2L
+    }
+    i = i + 1L
+    out[[i]] = paste0(prefix, intToUtf8(points[seq.int(start, end)]))
+    start = end + 1L
+    prefix = "# "
+  }
+  out[seq_len(i)]
+}
+
 #' Validate ownership and transform lines without invoking a model, source() or recovery.
 #' @noRd
 doc_export_lines = function(lines, format) {
@@ -152,7 +180,7 @@ doc_export_lines = function(lines, format) {
       }
       feedback = doc_export_body(body, format, indent)
       if (identical(format, "r")) {
-        feedback = c(paste0("# Recorded prompt: ", doc_str_literal(hit$prompt)), feedback)
+        feedback = c(doc_export_prompt(hit$prompt), feedback)
       }
       if (separate) {
         edits[[length(edits) + 1L]] = list(start = b$start, end = b$end, lines = character())
@@ -206,6 +234,9 @@ doc_export_lines = function(lines, format) {
 #' pipe operator or a comment follows the closing call. Feedback follows the next operand's
 #' indentation (at most 74 characters); other layouts keep feedback after the complete
 #' statement. Peter calls already show their prompts, so only raw R adds prompt comments.
+#' Long raw prompt comments wrap at eighty characters. Strip the recorded-prompt prefix from
+#' the first line and the two-character comment prefix from continuations, then join without
+#' separators to recover the complete escaped R string literal.
 #' A Peter-only pipeline on one line keeps grouped feedback after the statement.
 #' Call source is never reformatted.
 #'

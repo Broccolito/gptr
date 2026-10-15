@@ -33,6 +33,9 @@ Feedback follows each pipeline operand when calls end on separate lines and only
 pipe operator or a comment follows the closing call. Feedback follows the next operand's
 indentation (at most 74 characters); other layouts keep feedback after the complete
 statement. Peter calls already show their prompts, so only raw R adds prompt comments.
+Long raw prompt comments wrap at eighty characters. Strip the recorded-prompt prefix from
+the first line and the two-character comment prefix from continuations, then join without
+separators to recover the complete escaped R string literal.
 A Peter-only pipeline on one line keeps grouped feedback after the statement.
 Call source is never reformatted.
 
