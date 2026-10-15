@@ -3,11 +3,14 @@
 Current evidence, remaining work and source boundaries are recorded in
 [Mac validation checkpoint](progress/mac-validation-20261015.md).
 The coordinator integrates in `/Users/wgu/.codex/worktrees/mac-final-integration/gptr`;
-immutable f5 validation continues separately. Fresh R 4.6.1 is installed and its
-cleanup is complete. The f5 archive passed full as-CRAN with zero errors, warnings
-or notes. Native Code/Jupyter browser checks, final integration checks, current
-CI/merge/publication and final live Windows verification are still open.
-Historical sections below retain their original source and NONPASS qualifications.
+frozen J `bc13abaa` remains the accepted baseline while three focused successors
+are integrated. Fresh R 4.6.1 installation/cleanup, J normal build, full as-CRAN check,
+standard user loading, Shiny history/raw replay and local site rebuild pass within
+their stated scopes. Current-app browser interaction, native Code/Jupyter, successor
+build/check and final CI/merge/publication remain open. Current J CI has a token-budget
+failure under investigation; I's earlier check retains its real CRAN metadata warning.
+Final live Windows verification remains last. Historical sections retain their
+original source and NONPASS qualifications.
 
 ## Historical checkpoint — fresh Mac validation preparation, 2026-10-15
 
