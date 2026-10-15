@@ -1,4 +1,48 @@
-## Current integration checkpoint — `1d0e40f`, 2026-10-15
+## Current checkpoint — fresh Mac validation, 2026-10-15
+
+Coordinator worktree: `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`,
+branch `codex/skipped-platform-tests`. Package source is `a75fe3839cb20b700509d08396a2f030684d9e39`.
+The maintainer replaced the VM route with a clean R installation on the original
+Mac. The old R environment is backed up on WD_BLACK; R 4.6.1 ARM64 and R.app
+GUI 1.83/build 8608 are installed and verified. The temporary-installer cleanup
+failure is resolved by a separately reviewed successful cleanup; its original
+failure receipt remains preserved. The primary dirty checkout, user files,
+shared Ollama models and documentation servers are untouched.
+
+| Status | Evidence and next action |
+| --- | --- |
+| Complete, fresh dependencies | 139 compatible binary packages cover 40 explicit testing/documentation/frontend roots plus rtiktoken. All selected namespaces verify with zero warnings. Cold magick and IRkernel initialization is isolated in a disposable probe; all eight installer-parent state checks pass. No old package library was restored. |
+| Complete execution; independent review active | Fresh normal build/install: source archive 2,656,120 bytes; installed package 7,007,000 bytes; all 14 guides included. Whole family 41.336 seconds, peak sampled RSS 489.5 MiB; build/install 19.818/14.226 seconds. Original compilation and package contents retained. Installed 5 MB goal remains unmet. |
+| Running, fresh validation | Three lanes bind the verified fresh artifact: Shiny/browser; models/workflows/compaction; frontends/UX. New-R source batches, full as-cran and plan checks remain pending. Prepared routes and old passes are not new-R acceptance. |
+| Complete, preceding source scope | The same a75 source passed 200 files, 4,210 cases and 33,418 assertions with 44 accounted skips in the prior R environment. All eight caller, full-connection and owned-cleanup gates passed; one direct test-owned process warning remains qualified. |
+| Retained, preceding full check | The a75 archive ran 30,625 assertions, zero test failures/warnings and 445 accounted skips. Its sole current-time NOTE remains visible and the strict controller was NONPASS. Fresh R as-cran must settle independently. |
+| Complete, current hosted CI | All 13 a75 required jobs pass. Each Windows host preserves all 32 original native witnesses; oldrel-4's size NOTE remains visible. Final live Windows verification is a separate last gate. |
+| Queued, delivery | PR6 remains draft/unmerged. Current-main synchronization, actual public Pages publication and the final standard-user-library installation follow Mac validation. CRAN submission is being prepared, not submitted. |
+
+Root owns shared documents, dependencies, integration, Git and rebuilds. Fast alone
+controls GUI interactions. Agents use separate private files, sessions, working
+directories and outputs. Run independent tests concurrently after resource checks:
+at most four private families/12 GiB aggregate declared R caps, ordinary CPU 1,
+and at most two internally parallel heavy jobs/12 CPU workers. Admit a GPU or
+large-memory test separately; never evict a shared model or stop an unowned process.
+Preserve every original correctness, security, deadline, state and cleanup check.
+
+Fresh-host evidence and the detailed local execution plan are in the ignored
+`dev/.validation/readiness-20261011/host-r-reinstall-20261015/` tree. Outstanding
+Mac work includes genuine Shiny create/edit/interaction and Shiny-specific history
+exports/replay; fresh provider, worker/fan-out and compaction tests; native R.app,
+RStudio, terminal, Code, R Markdown, Quarto and authenticated Jupyter checks;
+combined source/as-cran checks; current-head CI, reviewed merge and public-site
+verification. Earlier large in-memory, file/plugin/skill/MCP/search/download and
+`.gptr` evidence retains its exact source scope. Client-specific limitations stay
+explicit. Finish all Mac work before final live Windows verification.
+
+The historical sections below retain their original dates, source revisions and
+NONPASS qualifications. The UTM route is superseded. Rerun all four cross-plan
+tools after this saved-plan update, using the clean control revision required
+by the original native preflight. Those checks remain queued at this checkpoint.
+
+## Historical integration checkpoint — `1d0e40f`, 2026-10-15
 
 Coordinator worktree: `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`. The tested RStudio width correction is committed at `1d0e40fdfcef84daac6069b81fdc04b781dc808a`. The preceding normal artifact and comprehensive results certify `1f9c18996bf3ff49f6174a95a7d0869647fe5ca7`; they do not certify the new correction. Primary `/Users/wgu/Desktop/gptr`, working R/Code sessions, shared Ollama models and documentation servers remain protected. PR6 is draft/unmerged; current public publication and CRAN submission remain pending.
 
