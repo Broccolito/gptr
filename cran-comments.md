@@ -1,22 +1,24 @@
 ## Submission and verification
 
-gptr 1.0.0 is a pure-R agent harness in the live R session; no native compilation.
-Models are opt-in; examples and all 14 precomputed guides run offline without keys.
-Current product source is 6619619; accepted normal measurements remain b240e63. Its current as-cran attempt b64824f1 is
-NONPASS: 12 failures share a private 255-byte socket estimate above the unchanged 253-byte
-limit. A short-label C1 remedy is queued; no new check pass or release acceptance is claimed.
+gptr 1.0.0 is pure R; examples/all 14 precomputed guides are offline without keys.
+Product source is 41e61d2; accepted normal 6715ba4 is build/install only: Root d20b74b7,
+Consumer ac105b0d, certificate 8bfec161. Full current archive check/timings remain pending;
+short-label preparation does not convert the earlier socket-path failure to a pass.
 
 ## Current size and CRAN consideration
 
-Normal default-byte-compiled logical bytes: archive 2,652,699; installed 6,989,699;
-R/gptr.rdb 5,038,679; doc/help/html 1,224,500/487,099/15,771 (combined 1,727,370);
-data 0. The largest installed files are R/gptr.rdb and help/gptr.rdb (258,375).
-All 121 R sources/14 guide pairs and 79 read-only installed files/five MD5s match.
-Archive, documentation and data meet our 10/5/5 MB goals; installation exceeds 5 MB.
-Root/independent receipts 4f6f72cc/52883847 accept build/install only, certificate `77b5b4bb`.
-Five logs are quiet; build/install/owned cleanup pass. Whole 45.366 s/522.921875 MiB,
-36 samples/no sampling errors; outer build/install 22.288/16.545 s, inner 21.130/14.874 s.
+Default-byte-compiled logical bytes: archive 2,654,366; installed 6,990,639; Rdb 5,039,903;
+doc/help/html 1,224,500/486,595/15,771 (combined 1,726,866); data 0; help/gptr.rdb 257,883.
+121 R sources/14 guide pairs/79 read-only files/five MD5s/five quiet logs/owned cleanup match.
+Whole 42.196 s/564.296875 MiB, 34 samples/no errors; outer build/install 20.932/15.129 s,
+inner 20.245/14.332 s. Archive/docs/data meet 10/5/5 MB goals; installed 5 MB is unmet.
 No source stripping, disabled byte compilation or new code reduction is claimed.
+Current B1 passes 40 files/978 cases/9,418 assertions/four skips, states/connections/cleanup;
+Fresh normal/all five source batches/full check/site/genuine Shiny/V4/live integration4 and
+R.app/VS Code/current CI/PR6 merge/final Windows remain open. Nine frontend/PTY scopes pass
+at 6715; Quarto serialization and RStudio/history native shutdown remain NONPASS. The
+three-file label fix is offline accepted (52ca6191), integrated in 41e61d2; corrected LIVE is pending.
+Four families/12 GiB total (4+4+2+2) require fresh healthy resource admission; per-job guards stay exact.
 
 Default installation already omits optional source-retention metadata. A historical matched
 archive comparison measured installed 6,962,112 bytes normally versus 10,047,490 with
@@ -32,6 +34,8 @@ in-memory execution; optional source retention remains available, not forcibly d
 The unmet installed-size goal remains visible. Historical Windows oldrel-4/R 4.2.3
 installed-size NOTE 9.8 Mb and earlier 9.7 Mb remain recorded. We request CRAN's
 consideration of the necessary byte-compiled pure-R code and retained useful guides.
+
+The complete check and remaining-gates wording below retain their historical snapshot.
 
 ## Historical complete check — exact 2e228d3 archive
 
