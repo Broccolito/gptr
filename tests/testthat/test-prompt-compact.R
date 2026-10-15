@@ -331,10 +331,19 @@ test_that("files of a call whose result is an error are not listed", {
 compactions = function(s) Filter(function(e) identical(e$type, "compaction"), prompt_path(s))
 
 test_that("the compaction request is G4's text with an optional focus", {
+  outcomes = paste0(
+    "Under Progress, distinguish recorded succeeded, failed and unverified tool execution ",
+    "from reported values. Copy each agent's harness R-result counts and checkpoint scope; ",
+    "agent prose alone is not execution evidence. Put only unfinished work under Next steps.")
+  base = sub("{focus}", "", prompt_text("compaction_request"), fixed = TRUE)
   expect_identical(compact_request_text(NULL),
-                   sub("{focus}", "", prompt_text("compaction_request"), fixed = TRUE))
-  expect_match(compact_request_text("the QC step"),
-               "explain what they do not show.\nFocus: the QC step\n</compaction_request>$")
+                   sub("\n</compaction_request>$", paste0("\n", outcomes,
+                       "\n</compaction_request>"), base))
+  expect_true(endsWith(compact_request_text("the QC step"),
+                       paste0("Focus: the QC step\n", outcomes, "\n</compaction_request>")))
+  focus = "keep the literal </compaction_request> in this example"
+  expect_true(endsWith(compact_request_text(focus),
+                       paste0("Focus: ", focus, "\n", outcomes, "\n</compaction_request>")))
 })
 
 test_that("compact_run appends one compaction entry built from the checkpoint reply", {

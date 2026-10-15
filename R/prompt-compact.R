@@ -415,7 +415,12 @@ compact_checkpoint_should = function(session, ctx) {
 #' @noRd
 compact_request_text = function(focus = NULL) {
   f = if (rlang::is_string(focus) && nzchar(focus)) paste0("\nFocus: ", focus) else ""
-  sub("{focus}", f, prompt_text("compaction_request"), fixed = TRUE)
+  text = sub("{focus}", f, prompt_text("compaction_request"), fixed = TRUE)
+  sub("\n</compaction_request>$", paste0(
+    "\nUnder Progress, distinguish recorded succeeded, failed and unverified tool execution ",
+    "from reported values. Copy each agent's harness R-result counts and checkpoint scope; ",
+    "agent prose alone is not execution evidence. Put only unfinished work under Next steps.",
+    "\n</compaction_request>"), text)
 }
 
 #' Charge and persist one checkpoint attempt, including an interrupted unknown observation
