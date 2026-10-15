@@ -1,24 +1,16 @@
 ## Submission and verification
 
-gptr 1.0.0 is pure R; examples/all 14 precomputed guides are offline without keys.
-Product source is 41e61d2; accepted normal 6715ba4 is build/install only: Root d20b74b7,
-Consumer ac105b0d, certificate 8bfec161. Full current archive check/timings remain pending;
-short-label preparation does not convert the earlier socket-path failure to a pass.
+gptr 1.0.0 is pure R. Examples and all 14 precomputed guides run offline without credentials.
+
+The certified f48f825 archive completed R CMD check --as-cran --no-manual with Status OK: no errors, warnings or notes. Tests passed 30,538 assertions with 445 accounted skips (418 On CRAN and 27 for specific contexts or optional dependencies). The check took 495.431 s; sampled process-family peak RSS was 2,025.234375 MiB. This does not establish native Windows or live-provider/GUI acceptance; current required CI and final submission checks remain pending.
 
 ## Current size and CRAN consideration
 
-Default-byte-compiled logical bytes: archive 2,654,366; installed 6,990,639; Rdb 5,039,903;
-doc/help/html 1,224,500/486,595/15,771 (combined 1,726,866); data 0; help/gptr.rdb 257,883.
-121 R sources/14 guide pairs/79 read-only files/five MD5s/five quiet logs/owned cleanup match.
-Whole 42.196 s/564.296875 MiB, 34 samples/no errors; outer build/install 20.932/15.129 s,
-inner 20.245/14.332 s. Archive/docs/data meet 10/5/5 MB goals; installed 5 MB is unmet.
-No source stripping, disabled byte compilation or new code reduction is claimed.
-Current B1 passes 40 files/978 cases/9,418 assertions/four skips, states/connections/cleanup;
-Fresh normal/all five source batches/full check/site/genuine Shiny/V4/live integration4 and
-R.app/VS Code/current CI/PR6 merge/final Windows remain open. Nine frontend/PTY scopes pass
-at 6715; Quarto serialization and RStudio/history native shutdown remain NONPASS. The
-three-file label fix is offline accepted (52ca6191), integrated in 41e61d2; corrected LIVE is pending.
-Four families/12 GiB total (4+4+2+2) require fresh healthy resource admission; per-job guards stay exact.
+The default-byte-compiled archive is 2,654,286 B and installed package 6,989,229 B, including R/gptr.rdb 5,039,928 B. Installed doc/help/html are 1,224,500/485,171/15,771 B (combined documentation 1,725,442 B); extdata is 83,185 B and data 0. Build took 22.139 s; install 15.277 s; whole build/install family 43.790 s, sampled peak RSS 520.84375 MiB.
+
+The installed 5 MB target remains unmet. Byte compilation, all guides and security/debug support are retained; no new source stripping or reduction is claimed. Please consider the necessary package contents and the measured reductions discussed below. Size NOTES from earlier checks remain disclosed. This current check instead reports installed 10.5 Mb (R 8.5 Mb) as INFO, not a NOTE: its keep-source installation is 10,069,760 B with Rdb 8,129,421 B, a separate profile from the normal installation above.
+
+Historical comparisons and remaining-gate wording below retain their earlier snapshots. Tested guidance/Windows fixture changes are integrated in source 2654a21; fresh combined normal/check validation is pending; submission, merge and publication are not yet complete.
 
 Default installation already omits optional source-retention metadata. A historical matched
 archive comparison measured installed 6,962,112 bytes normally versus 10,047,490 with
