@@ -3385,9 +3385,14 @@ Consumes:
 
 - P01: `block_context()`, `msg_operator()`, `as_utf8()`; P02: `registry_get()`; P03: `redact(x, profile = "persist")`.
 - Tasks 3-5: `model_canonical()`, `entry_model_change()`, `entry_custom()`, `session_append()`, `session_emit()`, `session_live()`, `run_current()`.
+- Initial recording for P19: P01 `check_class()`; P05 `stream_chat_model()`; Task 9
+  `run_model_resolve(ref, sid)` (available before P19 uses the completed kernel).
 
 Produces:
 
+- `session_record_initial_model(s)` records one typed initial `model_change` on an empty session,
+  resolves session-only models, refuses decision-only models and leaves routers deferred; no request,
+  prompt freeze or `model_select` event. It leaves a started session unchanged.
 - `session_set_model(s, ref, reason = "user")` (resolves, appends `model_change`, emits `model_select`), `session_set_mode(s, mode, source = "user")` (appends `gptr.mode_change`; a running run gets an operator `mode` message after the current tool results), `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())` (FIFO items `list(text, blocks, source, t)`, `queue_update`; refused with `gptr_error_permission` from model code of the same session tree, IC-55), `session_root_id(s)`, `mode_block_text(s, mode)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -3483,6 +3488,17 @@ Append to `R/session-object.R`:
 
 ```r
 # ---------------------------------------------------------------------------- verbs
+
+#' Record an empty container's already-selected model once, without a selection event
+#' @noRd
+session_record_initial_model = function(s) {
+  check_class(s, "gptr_session", "s")
+  d = session_data(s)
+  if (length(d$entries)) return(invisible(s))
+  if (!startsWith(d$model, "router:")) stream_chat_model(run_model_resolve(d$model, d$id))
+  session_append(s, entry_model_change(d$model, d$thinking, reason = "initial"))
+  invisible(s)
+}
 
 #' Switch the session's model: resolve, append `model_change`, emit `model_select`
 #' @noRd
