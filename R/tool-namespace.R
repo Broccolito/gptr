@@ -1440,12 +1440,9 @@ tool_obj = function(required, ...) {
 
 tool_read_schema = tool_obj(
   "path",
-  path = tool_prop("string", paste(
-    "File path (relative or absolute), or a literal skill:<name>/<path> virtual path.",
-    "Do not prepend directories to skill: paths."
-  )),
-  offset = tool_prop("number", "Line number to start reading from (1-indexed)"),
-  limit = tool_prop("number", "Maximum number of lines to read")
+  path = tool_prop("string", "File path, or literal skill:<name>/<path> (no directory prefix)."),
+  offset = tool_prop("number", "First line (1-indexed)"),
+  limit = tool_prop("number", "Maximum lines")
 )
 tool_edit_item = tool_obj(
   c("oldText", "newText"),
