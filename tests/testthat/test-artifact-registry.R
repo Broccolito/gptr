@@ -394,6 +394,46 @@ test_that("a broken app returns the child's error to the model", {
   expect_identical(gptr_artifacts("broken")$status, "failed")
 })
 
+test_that("a repaired app relaunches after its failed child has settled", {
+  skip_if_cannot_launch()
+  local_project()
+  withr::defer(artifact_stop("repaired", emit = FALSE))
+  broken = c("library(shiny)", "stop('controlled startup failure')",
+             "shinyApp(fluidPage(), function(input, output, session) {})")
+  write_working("repaired", broken)
+  expect_error(peter$app("repaired", launch = TRUE, check = FALSE),
+               "controlled startup failure", class = "gptr_error_artifact")
+  failed = artifact_proc_get("repaired")
+  expect_length(failed$handle, 0L)
+  expect_identical(artifact_status("repaired"), "failed")
+  expect_false(artifact_handle("repaired")$checks$launch)
+  write_working("repaired", tiny_app)
+  app = peter$app("repaired", launch = TRUE, check = FALSE)
+  expect_identical(app$status, "running")
+  expect_identical(app$version, 2L)
+  expect_true(app$checks$launch && app$checks$http)
+  rec = artifact_proc_get("repaired")
+  expect_true(artifact_stop("repaired", emit = FALSE))
+  expect_false(pid_alive(rec$pid, rec$create_time))
+  expect_null(artifact_proc_get("repaired"))
+  expect_false(file.exists(file.path(artifact_dir("repaired"), "run", "run.json")))
+  expect_false(artifact_job_id("repaired") %in% job_list("artifact")$id)
+})
+
+test_that("builtin failed-launch placeholders settle without signalling unknown processes", {
+  signals = 0L
+  local_mocked_bindings(artifact_kill = function(...) {
+    signals = signals + 1L
+    stop("an unknown process must not be signalled")
+  })
+  type = list(stop = artifact_stop_handle)
+  expect_true(artifact_stop_settled(type, list()))
+  expect_false(artifact_stop_settled(type, list(pid = NA_integer_)))
+  expect_false(artifact_stop_settled(type, list(pid = Sys.getpid())))
+  expect_false(artifact_stop_settled(type, list(stop = function() FALSE)))
+  expect_identical(signals, 0L)
+})
+
 
 test_that("an unsettled artifact stop retains recovery state until a confirmed retry", {
   local_project()

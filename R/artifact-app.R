@@ -1426,7 +1426,10 @@ artifact_launch_shiny = function(version_dir, ctx) {
 
 #' The `stop` of the built-in artifact types
 #' @noRd
-artifact_stop_handle = function(handle) handle$stop()
+artifact_stop_handle = function(handle) {
+  if (!length(handle)) return(invisible(TRUE))
+  handle$stop()
+}
 
 #' One GET through the reactor (architecture 6.15: "checks HTTP 200 through the reactor"); the
 #' HTTP status, or NA when nothing answered. No retry and no redirect (IC-64).
