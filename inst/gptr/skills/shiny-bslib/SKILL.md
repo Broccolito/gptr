@@ -26,6 +26,9 @@ Rules for app.R:
   `plotOutput(..., height = "300px")`) and legible axis text. Wrap wide tables in a standard
   `table-responsive` div with `tabindex = 0`, `role = "region"` and a descriptive `aria-label`
   so keyboard users can scroll horizontally.
+- Stack chart and table cards when a sidebar leaves little content width; check each card
+  against the visible content area at 320, 768 and 1440 pixels and at 200% browser zoom.
+  Page scroll width alone can miss a clipped sidebar main area.
 - Prefer `numericInput()` for exact numeric thresholds when keyboard focus must preserve the
   value; use sliders for visual adjustments.
 - `renderPlot()` with ggplot2 and `theme_minimal()`; plotly, DT or leaflet only if `<r_env>` lists
