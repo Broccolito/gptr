@@ -16,7 +16,10 @@ bp_child_case = function(case, root, failure) {
   ns = asNamespace("gptr")
   fun = function(name) get(name, ns, inherits = FALSE)
   phase = function(text) cat(text, "\n", file = file.path(root, "phases.txt"), append = TRUE)
-  old_options = options(gptr.stdin_timeout = 2, gptr.supervise = FALSE, gptr.quiet = TRUE)
+  # Successful Windows transfer uses the existing cancellation-case budget.
+  # The no-reader case keeps its strict two-second stdin deadline.
+  limit = if (.Platform$OS.type == "windows" && identical(case, "duplex")) 20 else 2
+  old_options = options(gptr.stdin_timeout = limit, gptr.supervise = FALSE, gptr.quiet = TRUE)
   on.exit(options(old_options), add = TRUE)
   p = NULL
   on.exit({
