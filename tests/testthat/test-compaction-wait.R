@@ -686,6 +686,7 @@ test_that("aborting before a checkpoint starts preserves the zero-charge boundar
 })
 
 test_that("a deferred checkpoint accounting failure cannot start an ordinary request", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Must not start."))
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
