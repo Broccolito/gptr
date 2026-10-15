@@ -56,6 +56,22 @@ gptr_mcp_add(
 )
 ```
 
+An R server using a private package library needs that search path explicitly:
+
+```{r, eval = FALSE}
+gptr_mcp_add(
+  "my-r-server",
+  command = file.path(R.home("bin"), "Rscript"),
+  args = c("--vanilla", "/absolute/path/to/server.R"),
+  env = c(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep)),
+  scope = "project"
+)
+```
+
+Servers using R's standard library do not need this setting. MCP child processes
+receive a filtered environment. Declare only trusted library paths; keep credentials
+in their separate placeholders.
+
 For an existing HTTP service:
 
 ```{r, eval = FALSE}

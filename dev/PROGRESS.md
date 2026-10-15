@@ -1,4 +1,15 @@
-## Current checkpoint — fresh Mac validation, 2026-10-15
+## Current checkpoint — integrated Mac validation, 2026-10-15
+
+Current evidence, remaining work and source boundaries are recorded in
+[Mac validation checkpoint](progress/mac-validation-20261015.md).
+The coordinator integrates in `/Users/wgu/.codex/worktrees/mac-final-integration/gptr`;
+immutable f5 validation continues separately. Fresh R 4.6.1 is installed and its
+cleanup is complete. The f5 archive passed full as-CRAN with zero errors, warnings
+or notes. Native Code/Jupyter browser checks, final integration checks, current
+CI/merge/publication and final live Windows verification are still open.
+Historical sections below retain their original source and NONPASS qualifications.
+
+## Historical checkpoint — fresh Mac validation preparation, 2026-10-15
 
 Coordinator worktree: `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`,
 branch `codex/skipped-platform-tests`. Package source is `a75fe3839cb20b700509d08396a2f030684d9e39`.
