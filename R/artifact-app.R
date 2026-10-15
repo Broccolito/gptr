@@ -898,6 +898,16 @@ artifact_browser = function() {
     }
   }
   args = c(chromote::get_chrome_args(), "--use-mock-keychain")
+  if (identical(Sys.info()[["sysname"]], "Darwin")) {
+    # Use Core Animation for headless display timing without replacing user features.
+    enabled = startsWith(args, "--enable-features=")
+    features = unlist(strsplit(sub("^--enable-features=", "", args[enabled]), ",",
+      fixed = TRUE), use.names = FALSE)
+    if (!"CADisplayLinkInGpu" %in% sub("[<:.].*$", "", trimws(features))) {
+      features = c(features, "CADisplayLinkInGpu")
+    }
+    args = c(args[!enabled], paste0("--enable-features=", paste(features, collapse = ",")))
+  }
   owner = with_seed_preserved(artifact_browser_launch(args))
   lease = list(browser = NULL, owner = owner)
   changed = !is.null(artifact_state$browser) || !is.null(artifact_state$browser_owner) ||

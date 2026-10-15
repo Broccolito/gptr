@@ -330,3 +330,80 @@ test_that("artifact owner construction and loop callbacks preserve seeded and ab
     }
   }
 })
+
+test_that("Mac artifact browsers merge display timing without replacing user features", {
+  cases = list(
+    list(args = character(), expected = c("--use-mock-keychain",
+      "--enable-features=CADisplayLinkInGpu")),
+    list(args = c("--mute-audio", "--enable-features=FeatureA,FeatureB"),
+      expected = c("--mute-audio", "--use-mock-keychain",
+        "--enable-features=FeatureA,FeatureB,CADisplayLinkInGpu")),
+    list(args = c("--enable-features=FeatureA", "--mute-audio",
+      "--enable-features=FeatureB"), expected = c("--mute-audio", "--use-mock-keychain",
+        "--enable-features=FeatureA,FeatureB,CADisplayLinkInGpu")),
+    list(args = "--enable-features=FeatureA,CADisplayLinkInGpu", expected =
+      c("--use-mock-keychain", "--enable-features=FeatureA,CADisplayLinkInGpu")),
+    list(args = "--enable-features=CADisplayLinkInGpu<Trial:param/value,FeatureA",
+      expected = c("--use-mock-keychain",
+        "--enable-features=CADisplayLinkInGpu<Trial:param/value,FeatureA")),
+    list(args = "--enable-features=CADisplayLinkInGpu.Group:param/value,FeatureA",
+      expected = c("--use-mock-keychain",
+        "--enable-features=CADisplayLinkInGpu.Group:param/value,FeatureA")),
+    list(args = "--enable-features= FeatureA, CADisplayLinkInGpu ", expected =
+      c("--use-mock-keychain", "--enable-features= FeatureA, CADisplayLinkInGpu ")),
+    list(args = c("--disable-features=CADisplayLinkInGpu", "--enable-features=FeatureA"),
+      expected = c("--disable-features=CADisplayLinkInGpu", "--use-mock-keychain",
+        "--enable-features=FeatureA,CADisplayLinkInGpu")),
+    list(args = "--enable-features=", expected = c("--use-mock-keychain",
+      "--enable-features=CADisplayLinkInGpu"))
+  )
+  for (case in cases) {
+    x = artifact_owner_fixture()
+    x$scope$artifact_state$browser = x$scope$artifact_state$browser_owner = NULL
+    x$scope$Sys.info = function() c(sysname = "Darwin")
+    x$scope$chrome_args = function() case$args
+    x$state$launched = NULL
+    x$scope$new_owner = function(args) {
+      x$state$launched = args
+      x$owner
+    }
+    browser = x$open()
+    expect_identical(x$state$launched, case$expected)
+    expect_identical(x$scope$chrome_args(), case$args)
+    expect_identical(x$scope$artifact_state$browser, browser)
+    expect_identical(x$scope$artifact_state$browser_owner, x$owner)
+    expect_false(browser$get_browser()$is_local())
+    expect_null(browser$get_browser()$get_process())
+  }
+})
+
+test_that("artifact display timing is Mac only and preserves the caller RNG", {
+  for (platform in c("Linux", "Windows", "Darwin")) {
+    local({
+      withr::local_preserve_seed()
+      set.seed(917L)
+      seed = get0(".Random.seed", globalenv(), inherits = FALSE)
+      options_before = options()
+      x = artifact_owner_fixture()
+      x$scope$artifact_state$browser = x$scope$artifact_state$browser_owner = NULL
+      x$scope$Sys.info = function() c(sysname = platform)
+      args = c("--mute-audio", "--disable-features=FeatureA")
+      x$scope$chrome_args = function() args
+      x$state$launched = NULL
+      x$scope$new_owner = function(args) {
+        x$state$launched = args
+        runif(1)
+        x$owner
+      }
+      x$open()
+      expected = c(args, "--use-mock-keychain")
+      if (platform == "Darwin") {
+        expected = c(expected, "--enable-features=CADisplayLinkInGpu")
+      }
+      expect_identical(x$state$launched, expected)
+      expect_identical(x$scope$chrome_args(), args)
+      expect_identical(get0(".Random.seed", globalenv(), inherits = FALSE), seed)
+      expect_identical(options(), options_before)
+    })
+  }
+})

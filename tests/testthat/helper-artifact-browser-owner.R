@@ -191,6 +191,7 @@ artifact_owner_fixture = function(remote = FALSE) {
     invisible(TRUE)
   }
   scope$chrome_args = function() character()
+  scope$Sys.info = function() c(sysname = "Linux")
   scope$clock = function() {
     state$clock = state$clock + 0.01
     c(elapsed = state$clock)
