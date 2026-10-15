@@ -799,8 +799,9 @@ test_that("settled team and fanout R results reach the checkpoint without privat
     expect_false(grepl("PRIVATE_TOOL_OUTPUT", text, fixed = TRUE))
     expect_match(request$last_user, paste0(
       "Under Progress, distinguish recorded succeeded, failed and unverified tool execution ",
-      "from reported values. Copy each agent's harness R-result counts and checkpoint scope; ",
-      "agent prose alone is not execution evidence. Put only unfinished work under Next steps."),
+      "from reported values. Copy each agent's harness R-result counts with the label ",
+      "`R tool results` and checkpoint scope; agent prose alone is not execution evidence. ",
+      "Put only unfinished work under Next steps."),
       fixed = TRUE)
     expect_length(fake_requests(fake), count + 5L)
     expect_identical(nrow(session$usage), 5L)

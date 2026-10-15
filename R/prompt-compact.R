@@ -418,8 +418,9 @@ compact_request_text = function(focus = NULL) {
   text = sub("{focus}", f, prompt_text("compaction_request"), fixed = TRUE)
   sub("\n</compaction_request>$", paste0(
     "\nUnder Progress, distinguish recorded succeeded, failed and unverified tool execution ",
-    "from reported values. Copy each agent's harness R-result counts and checkpoint scope; ",
-    "agent prose alone is not execution evidence. Put only unfinished work under Next steps.",
+    "from reported values. Copy each agent's harness R-result counts with the label ",
+    "`R tool results` and checkpoint scope; agent prose alone is not execution evidence. ",
+    "Put only unfinished work under Next steps.",
     "\n</compaction_request>"), text)
 }
 
