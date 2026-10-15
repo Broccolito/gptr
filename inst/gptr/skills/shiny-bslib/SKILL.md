@@ -19,9 +19,10 @@ Rules for app.R:
 - One file ending in `shinyApp(ui, server)`; the objects in `data` exist under their names. Never
   read files or call `setwd()`, `runApp()` or `install.packages()`.
 - Ship small data (the rows and columns shown); check it in r with `dim()` or `peter$describe(x)`.
-- For simple stacked dashboards with bounded plot heights, use
-  `page_sidebar(sidebar = sidebar(...), fillable = FALSE, ...)` with inputs in its named `sidebar`;
-  compact KPIs as `value_box()` in
+- Start dashboards with `page_sidebar(sidebar = sidebar(...), fillable = FALSE, ...)`.
+  Set `fillable = FALSE` explicitly so the main area can shrink beside an open sidebar;
+  bslib's filling layout otherwise imposes a desktop minimum width. Keep inputs in the named
+  `sidebar`; compact KPIs as `value_box()` in
   `layout_columns(..., fill = FALSE)`;
   each chart or table in `card(card_header(), ..., full_screen = TRUE)`; never nest cards or pages.
 - Keep plots readable at narrow widths with a bounded height (for example,
