@@ -97,7 +97,7 @@ jobs:
           sudo apt-get update
           packages=(
             libcurl4-openssl-dev libssl-dev xz-utils cmake make libuv1-dev zlib1g-dev
-            libsecret-1-dev pandoc libmagick++-dev gsfonts libpng-dev libfreetype6-dev
+            libsecret-1-dev pandoc libmagick++-dev gsfonts libpng-dev libfreetype-dev
             libjpeg-dev libtiff-dev libwebp-dev libicu-dev libfontconfig1-dev
             libfribidi-dev libharfbuzz-dev python3 libxml2-dev
           )
