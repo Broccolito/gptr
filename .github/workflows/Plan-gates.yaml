@@ -120,6 +120,12 @@ jobs:
           Rscript --vanilla - > plan-evidence/dependencies.log 2>&1 <<'RSCRIPT'
           library(pak, lib.loc = Sys.getenv("R_LIB_FOR_PAK"))
           requirements = pak::sysreqs_check_installed()
+          if (is.data.frame(requirements) && is.logical(requirements$installed) &&
+              is.character(requirements$system_package) && !anyNA(requirements$installed) &&
+              any(!requirements$installed)) {
+            print(requirements[!requirements$installed,
+              c("system_package", "installed"), drop = FALSE], row.names = FALSE)
+          }
           stopifnot(is.data.frame(requirements), nrow(requirements) > 0L,
             is.logical(requirements$installed),
             is.character(requirements$system_package),
