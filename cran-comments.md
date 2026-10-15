@@ -2,9 +2,9 @@
 
 gptr 1.0.0 is a pure-R agent harness in the live R session; no native compilation.
 Models are opt-in; examples and all 14 precomputed guides run offline without keys.
-The accepted package source/normal artifact is b240e63; later changes only touch excluded
-plan, CI and checkpoint files. Build/install is accepted; its
-complete original-archive as-cran check and release acceptance remain pending.
+Current product source is 6619619; accepted normal measurements remain b240e63. Its current as-cran attempt b64824f1 is
+NONPASS: 12 failures share a private 255-byte socket estimate above the unchanged 253-byte
+limit. A short-label C1 remedy is queued; no new check pass or release acceptance is claimed.
 
 ## Current size and CRAN consideration
 
@@ -49,12 +49,12 @@ is INFO, distinct from the current default installation. No new full check is cl
 
 ## Remaining release gates
 
-Current B2/B5 pass 80 files/1,488 cases/9,276 assertions/14 admitted skips with caller
-states/connections/cleanup preserved; prior B1/B3/B4 remain scoped at 2e228d3. Six current
-frontend cells pass narrowly; strict Quarto serialized-state NONPASS remains. Shiny v002
-is overall NONPASS (300 s GUI lease/CV/websocket); saved v002 model-free GUI is prepared.
-IM05's 4 GiB allocation/8 GiB cap fails private head/tail namespace; V5 is queued. Stronger
-fan-out private assertions fail; V2 is prepared, with no production defect/retry claimed.
-Next plan/CI/full archive checks, native Mac/GUI, site/docs, win-builder, reviewed merge/
-publication and final live Windows verification remain pending; old Windows jobs are separate.
+Accepted b240 source B2/B5 and six frontend scopes remain separate from fresh batches/native checks pending after the next build.
+Browser/compact-prompt/three-line skill/four APT dependencies are integrated in clean 6619619; next normal/short-label check/new CI are queued.
+Worker V2 and locked 4 GiB IM05 pass narrowly; original fan-out omission remains, corrected LIVE pending. Compact controls 57/334,44/308,9/97+lints 3 pass.
+Qwen BASE/STEER dat/model-frame/numerics/all-eight/W0/replay0 pass without a connection-table claim; BASE false narration/orphan `</think>` and raw `<-` remain.
+Modified Shiny widths/keyboard/200% pass under a private flag; original clipping/focus/CV/deadline failures and unmeasured R connections remain.
+PTY retry 39.361 s is overall NONPASS: ioctl 120→80→120, only first incoming width observed; `!` Tab/error/REPL unreached. Earlier failures remain.
+Guarded AppleScript/System Events RStudio fallback is user-authorized; fresh-artifact actual pending/Main untouched. Current CI/native Mac/GUI/site/docs/win-builder/merge/publication/final live Windows remain open.
+At most four bounded families/10 GiB R caps/CPU 1: source batches 4 GiB each, at most two plus one 2 GiB light; internally parallel ≤2/CPU workers ≤12.
 Finish Mac work first. Submission/release readiness is false; historical failures remain recorded.
