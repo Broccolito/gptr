@@ -272,6 +272,8 @@ reactor_io = function(r, allow_runs, slice_ms, t_end) {
   }
   if (length(pollables)) {
     processx::poll(pollables, as.integer(min(wait, .Machine$integer.max)))
+    # Keep R host events responsive after short or immediately ready polls.
+    Sys.sleep(0)
   } else if (wait > 0) {
     Sys.sleep(wait / 1000)
   }
