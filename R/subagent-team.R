@@ -125,6 +125,7 @@ parallel_team = function(members, caller, cur) {
   if (!is.null(pr) && is.null(registry_get("provider", pid))) {
     registry_add(pr, source = "session", rank = 0L, session = td$id)
   }
+  session_record_initial_model(team)
   kids = td$children
   for (nm in names(members)) {
     d = session_data(members[[nm]])
@@ -264,6 +265,7 @@ subagent_container = function(call, kind, cur, fallback = NULL) {
   if (!is.null(info$spec)) {
     registry_add(info$spec, source = "session", rank = 0L, session = session_data(s)$id)
   }
+  session_record_initial_model(s)
   session_append(s, list(type = "message", message = msg_user(
     redact(call$prompt, "context"), source = if (is.null(cur)) "prompt" else "parent")))
   s

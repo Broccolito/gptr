@@ -2507,6 +2507,7 @@ row = usage_row(msg, session = s$id, agent = "main", parent_id = NA_character_, 
 | `session_live(s)` | the live record or `NULL` (detached copy) | P06, P14, P19, P20, P21 |
 | `session_home(s)` | the kept home or `NULL` | P09, P16, P19 |
 | `session_append(s, entry)` | appends an entry (R shape) to `.d$entries` and the store (`persist` redaction at ingress, inside `suspendInterrupts()`), moves the leaf, returns the entry id invisibly | all plans that write entries |
+| `session_record_initial_model(s)` | on an empty session, resolves its already-selected model (including session-only specs; routers remain deferred), refuses decision-only models, and records one typed initial `model_change`; no request, prompt freeze or `model_select` event | P19 |
 | `session_set_model(s, ref, reason = "user")` | resolves `ref`, appends `model_change`, emits `model_select` | P08, P14 |
 | `session_set_mode(s, mode, source = "user")` | appends `gptr.mode_change`; the next user message (idle) or an operator message after the current tool results (running) carries the new `<mode>` block | P08, P11, P14 |
 | `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())` | the queue behind `gptr_steer()`; `source` in `pipe`, `pause_menu`, `repl`, `api_user`, `extension`, `agent`; only user sources become operator relays; a call from model code of the same session tree is refused (IC-55) | P08, P14, P19 |
@@ -4231,7 +4232,8 @@ succeeds with a later-collating file calling `on_load()` at top level". DESCRIPT
 functions, by a function-level allowlist (req-13, cons-2, req-32):
 
 - *Kernel SDK* (callable from any layer L3-L6 and from L4 built-ins): `session_data()` (read), `session_live()`,
-  `session_home()`, `session_append()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`,
+  `session_home()`, `session_append()`, `session_record_initial_model()`, `session_set_model()`,
+  `session_set_mode()`, `session_enqueue()`,
   `session_value_set()`, `session_value_get()`, `session_replay_apply()`, `session_replay_new()`,
   `session_replay_bind()`, `replay_lookup()`, `session_run()`, `run_start()`, `run_wait()`, `run_abort()`,
   `run_current()`, `run_eval_env()`, `run_emit()`, `dispatch_nested()`, `perm_check()`,

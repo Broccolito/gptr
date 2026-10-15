@@ -759,6 +759,19 @@ session_values_df = function(s) {
 
 # ---------------------------------------------------------------------------- verbs
 
+#' Record the already-selected model once before a container's first entry, without a request
+#' or a model_select event. Resolve session-only specs and refuse decision-only models before
+#' recording; routers retain their selection for resolution at the next request.
+#' @noRd
+session_record_initial_model = function(s) {
+  check_class(s, "gptr_session", "s")
+  d = session_data(s)
+  if (length(d$entries)) return(invisible(s))
+  if (!startsWith(d$model, "router:")) stream_chat_model(run_model_resolve(d$model, d$id))
+  session_append(s, entry_model_change(d$model, d$thinking, reason = "initial"))
+  invisible(s)
+}
+
 #' Switch the session's model: resolve, append `model_change`, emit `model_select`
 #' Pure resolution (IC-74; the preflight runs at the next request); a decision-only model is
 #' refused before anything is recorded (`gptr_error_not_available`, D-017).

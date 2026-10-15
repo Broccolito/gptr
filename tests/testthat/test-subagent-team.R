@@ -984,3 +984,98 @@ test_that("recorded team block replay retains R facts without repeating complete
   expect_match(text, fact, fixed = TRUE)
   expect_length(fake_requests(x$fake), 2L)
 })
+
+test_that("public containers resume their selected model before a parent request", {
+  local_team_fake()
+  fake = local_fake_provider(list("Child done."), name = "persist-model")
+  selected = "persist-model/persist-model-1"
+  local_gptr_options(model = "wrong-default/wrong-default-1")
+  for (kind in c("team", "fanout", "parallel")) {
+    session = if (identical(kind, "team")) {
+      peter("Review it", agents = list(first = agent(model = selected),
+                                       second = agent(model = selected)),
+            model = selected, envir = new.env())
+    } else if (identical(kind, "fanout")) {
+      peter("Review it", list(first = 1, second = 2), parallel = 2,
+            model = selected, envir = new.env())
+    } else {
+      gptr_parallel(first = peter("Review first", model = selected, envir = new.env()),
+                     second = peter("Review second", model = selected, envir = new.env()))
+    }
+    expect_s3_class(session, "gptr_session")
+    expect_identical(session$model, selected)
+    expect_identical(session$status, "idle")
+    expect_null(session_data(session)$frozen)
+    expect_false(any(vapply(session_data(session)$entries, function(e) {
+      identical(e$type, "message") && identical(e$message$role, "assistant")
+    }, FALSE)))
+    file = session$file
+    usage = session$usage
+    count = length(fake_requests(fake))
+    lock_release(lock_path(file))
+    live_forget(session)
+    last_set(NULL)
+    resumed = gptr_resume(file, envir = new.env())
+    expect_false(identical(resumed, session))
+    expect_identical(resumed$model, selected)
+    expect_null(session_data(resumed)$frozen)
+    expect_length(resumed$children, 0L)
+    expect_identical(resumed$usage$request_id, usage$request_id)
+    expect_identical(nrow(resumed$usage), 2L)
+    expect_length(fake_requests(fake), count)
+  }
+  expect_length(fake_requests(fake), 6L)
+})
+
+test_that("container model selection stores only its existing typed identity", {
+  local_team_fake()
+  fake = local_fake_provider(list("Child done."), name = "persist-identity")
+  selected = "persist-identity/persist-identity-1"
+  session = peter("Review it", list(first = 1), parallel = 1,
+                   model = selected, envir = new.env())
+  entries = Filter(function(e) identical(e$type, "model_change"),
+                     store_read(session$file)$entries)
+  expect_length(entries, 1L)
+  if (length(entries) == 1L) {
+    entry = entries[[1L]]
+    expect_identical(entry_model_ref(entry), selected)
+    expect_identical(entry$provider, "persist-identity")
+    expect_identical(entry$model_id, "persist-identity-1")
+    expect_identical(entry$gptr, list(ref = selected, reason = "initial"))
+    expect_setequal(names(entry), c("type", "provider", "model_id", "gptr", "id",
+                                    "parent_id", "timestamp"))
+    expect_null(entry$parent_id)
+  }
+  expect_null(session_data(session)$frozen)
+  expect_length(fake_requests(fake), 1L)
+  expect_identical(nrow(session$usage), 1L)
+})
+
+test_that("legacy containers without a model entry keep the existing resume fallback", {
+  fake = local_team_fake(list("Child done."))
+  session = peter("Review it", list(first = 1), parallel = 1, envir = new.env())
+  file = session$file
+  usage = session$usage
+  records = store_read(file)
+  changes = Filter(function(e) identical(e$type, "model_change"), records$entries)
+  ids = vapply(changes, function(e) e$id, "")
+  kept = Filter(function(e) !identical(e$type, "model_change"), records$entries)
+  kept = lapply(kept, function(e) {
+    if (!is.null(e$parent_id) && e$parent_id %in% ids) e["parent_id"] = list(NULL)
+    e
+  })
+  lock_release(lock_path(file))
+  live_forget(session)
+  last_set(NULL)
+  writeLines(c(json_encode(records$header), vapply(kept, entry_json_line, "")),
+               file, useBytes = TRUE)
+  resumed = gptr_resume(file, envir = new.env())
+  expect_identical(resumed$model, "unknown/unknown")
+  expect_identical(resumed$usage$request_id, usage$request_id)
+  expect_identical(nrow(resumed$usage), 1L)
+  expect_length(fake_requests(fake), 1L)
+  expect_null(rebuild_model(list()))
+  expect_identical(rebuild_model(list(list(type = "message", message = msg_assistant(
+    "Earlier parent reply.", api = "fake", provider = "fake", model = "fake-1")))),
+    "fake/fake-1")
+})

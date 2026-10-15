@@ -138,7 +138,8 @@ arch_layer_table = function() {
 # The kernel SDK of IC-33: functions any L3-L6 file and any built-in may call directly
 arch_kernel_sdk = function() {
   c(
-    "session_data", "session_live", "session_home", "session_append", "session_set_model",
+    "session_data", "session_live", "session_home", "session_append",
+    "session_record_initial_model", "session_set_model",
     "session_set_mode", "session_enqueue", "session_value_set", "session_value_get",
     "session_replay_apply", "session_replay_new", "session_replay_bind", "replay_lookup",
     "session_run", "run_start", "run_wait", "run_abort", "run_current", "run_eval_env",
