@@ -1017,15 +1017,12 @@ artifact_browser_close = function(b = artifact_state$browser,
       gptr_abort("The headless browser connection ownership changed.", "io",
                  operation = "close", path = NULL)
     }
-    # Request ordinary shutdown of this owned browser before disconnecting its adapter.
+    # Disconnect first so an intentional process stop cannot truncate its open socket.
     if (alive) {
-      active = b$is_active()
-      remaining()
-      if (isTRUE(active)) {
-        with_seed_preserved(b$Browser$close(wait_ = TRUE, timeout_ = remaining()))
-      }
+      b$is_active()
       remaining()
       with_seed_preserved(b$close(wait = FALSE))
+      remaining()
     }
     loop = b$get_child_loop()
     remaining()
