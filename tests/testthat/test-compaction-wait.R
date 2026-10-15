@@ -204,25 +204,54 @@ test_that("cancelling a yielded checkpoint charges unknown once and never append
 })
 
 test_that("a delayed checkpoint error falls back once without retrying the request", {
-  x = cp_wait_fixture(list(fake_text("", delay = 0.3, stop = "error",
-                                    usage = usage_new(input = 100, output = 5)), "Done."))
+  clock = cp_wait_clock()
+  injected = new.env(parent = emptyenv())
+  injected$n = 0L
+  x = cp_wait_fixture(function(request) {
+    if (identical(request$n, 1L)) {
+      injected$n = injected$n + 1L
+      clock$now = clock$now + 0.55
+      return(fake_text("", delay = 0.3, stop = "error",
+                       usage = usage_new(input = 100, output = 5)))
+    }
+    "Done."
+  })
+  # Admit cooperative request preparation before timing the in-flight waits.
+  startup_started = reactor_now()
+  reactor_pump(until = function() {
+    length(fake_requests(x$fake)) >= 1L || isTRUE(x$run$settled)
+  }, timeout = 0.8)
+  startup_completed = reactor_now()
+  pending = x$run$compact_pending
+  finish = x$run$compact_finish
+  ids = x$run$request_ids
+  admission_ready = startup_completed < x$guard_at &&
+    identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+    !isTRUE(x$run$signal$aborted) && identical(session_live(x$s)$run, x$run) &&
+    isTRUE(session_live(x$s)$compacting) && is.list(pending) && is.function(finish) &&
+    length(ids) == 1L && length(fake_requests(x$fake)) == 1L && nrow(x$s$usage) == 0L &&
+    length(cp_wait_entries(x$s)) == 0L && identical(injected$n, 1L)
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
-  pending = x$run$compact_pending
-  ids = x$run$request_ids
   again = cp_wait_short(x)
+  waits_completed = reactor_now()
   guard_released = FALSE
   # Guard the finite waits, then release before expectation formatting and completion.
-  if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
+  if (admission_ready && identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
       all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
       identical(again$value, x$s) && again$elapsed < 0.2 &&
       identical(x$s$status, "running") && !isTRUE(x$run$settled) &&
+      !isTRUE(x$run$signal$aborted) && isTRUE(session_live(x$s)$compacting) &&
       is.list(pending) && identical(x$run$compact_pending, pending) &&
+      identical(x$run$compact_finish, finish) &&
       identical(x$run$request_ids, ids) && length(fake_requests(x$fake)) == 1L &&
-      nrow(x$s$usage) == 0L && length(cp_wait_entries(x$s)) == 0L) {
-    reactor_cancel(x$guard)
-    guard_released = TRUE
+      nrow(x$s$usage) == 0L && length(cp_wait_entries(x$s)) == 0L &&
+      waits_completed < x$guard_at) {
+    guard_released = identical(reactor_cancel(x$guard), 1L)
   }
+  expect_identical(injected$n, 1L)
+  expect_true(admission_ready)
+  expect_lt(startup_completed - startup_started, 0.8)
   expect_lt(short$elapsed, 0.2)
   cp_wait_admitted(admitted)
   expect_lt(again$elapsed, 0.2)
@@ -240,6 +269,7 @@ test_that("a delayed checkpoint error falls back once without retrying the reque
   expect_identical(x$s$usage$stop_reason[[1L]], "error")
   expect_equal(x$s$usage$input[[1L]], 100)
   expect_identical(sum(x$events$types == "session_compact"), 1L)
+  expect_identical(injected$n, 1L)
   cp_wait_prefix(x)
   cp_wait_finished(x)
 })
