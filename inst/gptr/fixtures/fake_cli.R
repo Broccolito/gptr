@@ -7,7 +7,7 @@
 # 0.157.0; case "old" reports older versions, "bare-default"/"bare-optout" change the claude
 # help, "old"/"noresume" the codex help), logs its argv, pid, environment variable NAMES (never
 # values), stdin lines and the start ("turn") and end ("turn_done") of each claude turn as JSON
-# lines to the log file, and replays
+# lines to <log file>.<pid>, and replays
 # <fixtures dir>/claude-<case>.ndjson or codex-<case>.jsonl line by line. Fixture lines that are
 # JSON objects with a "fake" key are directives:
 #   {"fake":"sleep","seconds":0.5}                       pause
@@ -47,7 +47,9 @@ out = function(txt) {
 }
 log_line = function(kind, ...) {
   if (!nzchar(opt$log)) return(invisible(NULL))
-  con = file(opt$log, open = "ab")
+  # one file per process: Windows appends by a seek to the end before each write, so concurrent
+  # children appending to one file can overwrite each other's lines
+  con = file(paste0(opt$log, ".", Sys.getpid()), open = "ab")
   on.exit(close(con))
   writeLines(to_json(list(kind = kind, pid = Sys.getpid(), t = as.numeric(Sys.time()), ...)),
              con, useBytes = TRUE)

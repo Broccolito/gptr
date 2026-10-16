@@ -163,7 +163,12 @@ local_mock_server = function(scenario, ..., .env = parent.frame()) {
   }
   withr::defer(stop_server(), envir = .env)
   deadline = Sys.time() + 30
-  while (!file.exists(config$ready)) {
+  repeat {
+    # the server renames a complete file into place, but Windows can briefly refuse to open it
+    # ("Permission denied"): a failed read is retried like a missing file
+    ready = tryCatch(json_decode(readLines(config$ready, encoding = "UTF-8")),
+                     warning = function(w) NULL, error = function(e) NULL)
+    if (!is.null(ready)) break
     if (!proc$is_alive()) {
       errors = readLines(file.path(dir, "stderr.txt"), encoding = "UTF-8", warn = FALSE)
       stop("the mock server exited: ", paste(errors, collapse = "\n"))
@@ -171,7 +176,6 @@ local_mock_server = function(scenario, ..., .env = parent.frame()) {
     if (Sys.time() > deadline) stop("the mock server did not start within 30 s")
     Sys.sleep(0.05)
   }
-  ready = json_decode(readLines(config$ready, encoding = "UTF-8"))
   url = sprintf("http://127.0.0.1:%d/%s", as.integer(ready$port), token)
   list(
     url = url,
