@@ -1,16 +1,17 @@
-## Current checkpoint — integrated Mac validation, 2026-10-15
+## Current checkpoint — K Mac validation, 2026-10-15
 
-Current evidence, remaining work and source boundaries are recorded in
+Current evidence and exact source boundaries are recorded in
 [Mac validation checkpoint](progress/mac-validation-20261015.md).
-The coordinator integrates in `/Users/wgu/.codex/worktrees/mac-final-integration/gptr`;
-frozen J `bc13abaa` remains the accepted baseline while three focused successors
-are integrated. Fresh R 4.6.1 installation/cleanup, J normal build, full as-CRAN check,
-standard user loading, Shiny history/raw replay and local site rebuild pass within
-their stated scopes. Current-app browser interaction, native Code/Jupyter, successor
-build/check and final CI/merge/publication remain open. Current J CI has a token-budget
-failure under investigation; I's earlier check retains its real CRAN metadata warning.
-Final live Windows verification remains last. Historical sections retain their
-original source and NONPASS qualifications.
+Package candidate K `2bf18595` in `/Users/wgu/.codex/worktrees/mac-final-integration/gptr`
+passes its combined normal build/install, full as-CRAN check (0 errors/warnings/notes),
+standard-user loading, plan checks and local site rebuild. Separate release notes
+are integrated in `/Users/wgu/.codex/worktrees/release-validation-notes/gptr` while
+active GUI tests retain K unchanged. The three focused fixes and a separate Qwen
+steering/replay comparison pass; original failures and qualifications remain visible.
+Native Code/Jupyter continuation, final-head required CI, PR6 merge and public-site
+verification have separate gates in the linked checkpoint and ignored local
+`host-r-reinstall-20261015/PLAN.md` ledger. No submission or release is claimed.
+Final live Windows verification remains last after Mac work.
 
 ## Historical checkpoint — fresh Mac validation preparation, 2026-10-15
 

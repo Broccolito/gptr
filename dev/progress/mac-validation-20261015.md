@@ -1,17 +1,19 @@
 # Mac validation checkpoint — 2026-10-15
 
-Root owns tracked integration. Current release-candidate
-source J is `bc13abaa51738310c5e9d40efd9fe11276e8d313` in
-`/Users/wgu/.codex/worktrees/mac-release-candidate/gptr`. J adds one packaged Shiny
-skill clarification to frozen I `7c3d92c0290a47c2f519bfbab3ec532f2ef5d6f5`:
-use `=` for assignment, `|>` for data transforms and `+` for ggplot2 layers.
-All 121 R files, 14 vignettes and 64 exports are unchanged from I. J normal
-build/install, full as-CRAN check, genuine Shiny history and ordinary user installation
-are accepted, including the new app browser interaction. Root integrated three tested
-successors: readable history comments, tool-description token savings and deterministic
-checkpoint-test startup timing. Their combined successor build/check remains pending.
-PR6 is draft/unmerged; no release
-or CRAN submission has occurred.
+The exact current package candidate K is `2bf18595f65030ed8d253ef5cbd4ccc173d95205`
+in `/Users/wgu/.codex/worktrees/mac-final-integration/gptr`. Its three focused fixes
+(history comment wrapping, concise tool descriptions and checkpoint-test startup)
+now pass the combined normal build/install and full as-CRAN check. Release notes
+are coordinated separately in `/Users/wgu/.codex/worktrees/release-validation-notes/gptr`
+so active GUI checks keep their original source unchanged. Only excluded release
+metadata changes there; the 667 public package inputs must remain byte-identical.
+PR6 is draft/unmerged. Submission preparation is underway; no CRAN submission or
+release has occurred. Frozen J and older evidence remain separately identified.
+
+This is a timestamped checkpoint. The operational ledger at
+`/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011/host-r-reinstall-20261015/PLAN.md`
+records subsequent running/completed/queued/blocked transitions and exact private
+outputs. A prepared packet or a passed check for a different artifact is not acceptance.
 
 Root owns dependencies, shared documents, Git and dispatch; Fast alone owns GUI.
 Use separate private sessions/output paths, at most four families/12 GiB declared
@@ -25,6 +27,13 @@ becomes current merely through a metadata rebind.
 
 | Scope | Current result and limits |
 | --- | --- |
+| K normal build/install | Accepted: archive **2,660,769 B**, installed **7,012,965 B**, Rdb **5,046,506 B**, documentation **1,729,695 B**, data **0 B**. All 667 public inputs, 121 R files, 14 guide pairs, 64 exports, 80 read-only files/20 inclusive directories and five MD5s match. Three phases/owned cleanup and five raw logs pass; 46.508 s, 497.359375 MiB, 34 valid samples/0 errors. Default byte compilation retained. |
+| K full as-CRAN check | Accepted **Status OK, zero errors/warnings/notes**: 30,643 passing assertions, 446 accounted skips (421 On CRAN/25 specific), all 59 examples and 15 quiet raw logs. Whole 491.329 s, 2,187.625 MiB, 417 valid samples/0 errors; 98 sampled owned identities absent, four protected identities unchanged, no signals. Keep-source installation 10,099,974 B/Rdb 8,141,788 B; displayed 10.6 Mb is INFO. This does not imply native Windows or R-caller-all-eight acceptance. |
+| K standard user installation | Ordinary `library(gptr)` passes from the standard library; all four phases/all-eight/W0/cleanup pass. Eight existing dependencies and all 402 non-gptr entries/root identity remain unchanged; no downloads. Whole 19.226 s/333.625 MiB/20 valid samples. User package 7,007,800 B/Rdb 5,046,404 B is explicitly distinct from the private normal profile. |
+| K plan and site checks | Four plan stages pass: 770 R blocks/0 parse-style problems, 746 inputs/0 lints; existing 90 static WARN/822 INFO/0 ERROR retained. Whole 111.411 s/1,149.09375 MiB/94 samples. Hosted K plan independently passes. Site five phases/89 staging assertions/9 controls pass: 265 assets/123 HTML/3,706 links/822 fragments, 77.965 s/774.734375 MiB/72 samples. All 14 guides, CSS and logos match J; 20 generated differences are exhaustively explained. Local build is not deployed-site or new GUI acceptance. |
+| Optional HTML dependency follow-up | Separate binary overlay supplies 10 missing packages, including Plotly/DT, without changing the sealed 139-package library. Installation all-eight/W0 passes. Original focused shiny-html tests now pass 69 assertions/0 failures/warnings/skips, resolving the missing-Plotly skip. Historical 520-pass/one-skip benchmark remains unchanged; this is not a new full browser benchmark. |
+| K Qwen steering comparison | Separate context="names" comparison passes two user turns, exact transformed input/model frame/numeric result and same-session history. Four requests/10,236 known tokens stay within the original budget. LIVE 23.549 s, R peak 180.625 MiB; external Ollama RSS peak 15,397.96875 MiB/API model size 19,597,076,220 B, below the original 32 GiB cap; actual 32,768-token context and one permitted cold-start catalog timeout recorded. Fresh replay makes zero requests/usage/native rows. All-eight/W0/source/parent/cleanup pass. Raw `<-` remains a model-style qualification; the earlier context="none" input-fidelity failure is retained. |
+| Current native client continuation | Jupyter J executed all seven cells/tool42, saved all MIME forms and passed all 13 GUI predicates, but its final gate remains NONPASS due an upstream legacy heartbeat-unit warning. The private all-route client correction passes all 25 offline controls; fresh K browser run is awaiting local sign-in. Code J/K prebody routing failures remain NONPASS with zero R input; a supported private accessibility configuration is source-reviewed and still unrun. No frontend pass is inferred from these preparations. |
 | J normal build/install | Accepted: archive **2,659,416 B**, installed **7,010,625 B**, Rdb **5,044,726 B**, doc/help/html **1,729,155 B**, data **0 B**. All 667 current public inputs, 121 R files, 14 exact guide pairs, 64 exports, 80 read-only files/20 inclusive directories and five MD5s match. Five raw logs are quiet; default byte compilation/final loading and three natural-zero phases/owned cleanup pass. Whole **43.471 s**, sampled peak **527.90625 MiB**, 35 valid samples/0 errors. Outer build/install 22.104/15.105 s; inner R build/install 20.470/14.274 s. Controller output peak 41,312,784 B and CSV peak 52,741,580 B remain distinct, both below 512 MiB. No caller-R all-eight or full-check claim is inferred. |
 | J full as-CRAN check | Accepted **Status OK, zero errors/warnings/notes**: 30,600 passing assertions, 446 accounted skips (421 On CRAN/25 specific), all 59 examples, all 15 raw logs quiet. Whole 474.206 s, sampled peak 2,120.171875 MiB, 411 valid samples/0 errors. All 105 sampled owned identities are absent; all four protected identities unchanged, no signals. Keep-source installation 10,097,097 B/Rdb 8,139,173 B; displayed 10.5 Mb is INFO. This J result does not erase I's actual incoming-network warning or establish Windows/native-browser acceptance. |
 | History comment wrapping | Integrated focused fix: long generated raw-prompt metadata wraps at 80 characters and reconstructs the exact escaped literal. Actual RED six expected failures; GREEN 211 passing assertions, zero failures/warnings/skips, parsing/two-file lint clear; 7.189 s/252.375 MiB. Separate actual re-export of immutable genuine J history passes: 24/8 metadata lines, maximum 79 characters, lossless prompts; Peter bytes and raw executable AST unchanged. Fresh raw replay and six numeric/image cases pass with zero provider requests/warnings and all-eight/connections/cleanup restored. Whole 8.317 s/501.234375 MiB, 8 valid samples/0 errors. This source-level result is not final-installed-package acceptance. |
@@ -43,37 +52,34 @@ becomes current merely through a metadata rebind.
 | Original source and model/workflow evidence | Fresh R 4.6.1 **44a** five-batch result remains 200 files/4,210 cases/33,418 assertions/44 accounted skips; all-eight/full connections/captured-wrapper W0/cleanup pass. The direct test-owned process warning remains qualified. Later changes have focused evidence, not a new J five-batch run. The f5 model/workflow index retains in-memory 4 GiB, scientific/raw replay, integrations/extensions, storage, compaction/resume and overlapping-worker scopes; recovered tool errors/one prediction warning/unknown costs and synthetic-data limits remain explicit. |
 | Size | Default byte compilation, useful debugging/security metadata and local docs remain. The installed **5 MB goal is unmet**. Prior finite audits found no further demonstrated safe reduction or exact installed duplicate. Historical keep-source check size, Windows size NOTES and the slower rejected no-bytecompile trial remain separate. Request CRAN consideration; do not conceal size or infer a J keep-source measurement from normal install. |
 
-## Running, queued and blocked
+## Running, queued and blocked at this checkpoint
 
-- **Final successor check queued:** J passed the original full as-CRAN route with
-  incoming checks enabled. Integrate and test the three focused fixes, then rebuild
-  and rerun combined checks from the settled successor. I transport/timeout outcomes
-  remain visible; twelve matcher controls retain inline warning detection.
-- **J browser complete:** model-free interaction with the newly generated app passed
-  the original 300-second authenticated lease and numeric/accessibility predicates.
-  Genuine history/replay and source-level wrapped re-export remain separate scopes.
-- **CI running/successor queued:** J required CI retains its actual token-budget
-  failure. The integrated successor passes the unchanged local budgets with 19 fewer
-  tokens. Current Windows jobs await readback. Historical f5 oldrel4 failed six
-  ordinary checkpoint-timing assertions; its native child-process/security witnesses
-  passed. The deterministic local reproduction and test-only correction now pass.
-  Hosted checks do not
-  establish live Windows acceptance; remaining Mac work is still open.
-- **Human/client prerequisites:** VS Code terminal/editor needs exact-owned-window
-  Accessibility interaction. ChatGPT and Codex Computer Use are visibly enabled;
-  actual private-window access still needs testing. The fresh Jupyter server/login
-  is running; the user was prompted for local sign-in, with no token content read.
-  Expired/authentication-failed pages and headless IRkernel execution do not count
-  as authenticated notebook GUI acceptance. Do not bypass either prerequisite.
-- **Other frontend qualifications:** functional Quarto output remains positive while
-  its own serialized closure changes, also reproduced without gptr. Qwen steering
-  retains its original input-fidelity NONPASS; numerical/replay and other provider
-  positives do not remove it. Final client/history acceptance is limited to exact
-  receipts, not a universal slash/settings/interrupt or provider claim.
-- **Delivery after gates:** finalize review and permitted PR6 merge, synchronize main
-  safely, verify the accepted standard-user installation and publish pkgdown from
-  the accepted source. Verify the actual public site and links. Final live Windows
-  verification remains last after Mac integration; hosted CI is a separate gate.
+- **Complete:** K normal build/install, genuine as-CRAN check, standard-user loading,
+  four source-plan stages, hosted plan gate and current local pkgdown rebuild.
+  The three focused successors are now covered by combined K checks; historical
+  clock/network/raw warnings and failed fixtures remain retained.
+- **Running:** fresh K Jupyter browser test after a private client compatibility
+  correction. Human local sign-in is required; no credential value is read or
+  copied. Original seven cells, all 13 GUI predicates, warning, state and cleanup
+  gates remain unchanged. Its final result belongs in the operational ledger.
+- **Queued:** source-reviewed Code terminal/editor runs with two supported private
+  accessibility settings. Exact PID/birth/executable/private profile/nonce/window
+  ownership and original 180/150-second bounds remain mandatory. Original routing
+  failures are not R-test passes; no unowned window receives input.
+- **CI:** preceding J retains its token-budget failure. K passes all unchanged local
+  token budgets with 19 fewer tokens. Required hosted CI and Windows artifacts
+  await final-head readback; no cancellation, baseline relaxation or bypass.
+  Historical Windows oldrel4 timing failures remain beside the deterministic
+  test-only correction and its passing local reproduction. Hosted CI does not
+  replace final live Windows verification.
+- **Qualifications:** Quarto functional output passes, while its framework closure
+  serialization drift reproduces without gptr and remains recorded. The separate
+  Qwen context-names steering/replay comparison passes; it does not erase the
+  earlier failed model instructions or guarantee future model behavior.
+- **Delivery:** review final-head checks, merge PR6 only after required gates,
+  synchronize main safely and verify actual public Pages publication and links.
+  Keep local GUI evidence distinct from deployed-site verification. Final live
+  Windows verification remains last after Mac integration and native checks.
 
 The full 13-guide requirement matrix remains in `dev/TESTING_PLAN.md`; the package
 contains 14 guides. Primary `/Users/wgu/Desktop/gptr` stays dirty/preserved; frozen J and
@@ -88,6 +94,13 @@ B = `/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011`;
 H = `B/host-r-reinstall-20261015`. Hashes below identify immutable scope, not a
 new audit or acceptance of every linked platform/model.
 
+- **K normal:** `H/normal-final-K-prepared/CONSUMER-ACTUAL-ACCEPTANCE.json`, SHA256 `64c2527680dbda851d2af95e4697b56897d5a56c6a500f4650623e8d48818015`; certificate `41529ac3cf80f7d93aecb5cb4dc38aa37374a530ef1faa6aeeec515e4474756f`; Root receipt `0d827beed30dbfd489f176cc198b7e36aaf55154ad8b907fa97906bdf9718de8`.
+- **K full check:** `H/cran-check/cK/peer/PR5-K-C1-FULL-AS-CRAN-ACTUAL-ACCEPTANCE.json`, SHA256 `223252d12968855c66fe69dc3bdef54ba423811eb8e0df95260391390a2f8e74`.
+- **K user installation:** `H/default-install-final-K-prepared/ACTUAL-ACCEPTANCE.json`, SHA256 `c0731264c1cf73b4412f9957e34c736c0b6fbbaf3f2f42398a81ffd3e24306e0`.
+- **K plan/site:** `B/plan-crosschecks-final-K-prepared/ACTUAL-ACCEPTANCE.json` (`1a6a910f3935ff6d331f8f07d90ea55ecd37045f174330c8b6bb70b81e81fc8a`); `B/current-2bf1859-delivery/pkgdown-prepared/PKGDOWN-2BF1859-ACTUAL-LOCAL-ACCEPTANCE.json` (`8e3fa4c235d934a26f328108c4eb8edc79813d7c231fbc13ee7aa89271ba4c21`).
+- **K Qwen:** `H/model-smoke/qwen-context-names-K-prepared/QWEN-CONTEXT-NAMES-K-LIVE-REPLAY-ACTUAL-ACCEPTANCE.json`, SHA256 `447fbfe9850c53f0ed147280dfdb632af1da7c489b318cd1ad9297b5c2c4227f`.
+- **Optional HTML tests:** `H/plotly-overlay-prepared/FOCUSED-SHINY-HTML-ACTUAL-ACCEPTANCE.json`, SHA256 `922c903b428c4437a0834c3bb95dfb75d6235d236570cb1f7b83b63a51538294`.
+- **CRAN/hosted timing scope:** `B/current-2bf1859-delivery/CRAN-VS-HOSTED-TIMING-SCOPE.json`, SHA256 `28dc9f2d8d475b5626a1b0ddf32eb0f08f46f187b8bfd7e9690b24d0395e8948`.
 - **J normal:** `H/normal-final-J-prepared/CONSUMER-ACTUAL-ACCEPTANCE.json`, 22,305 B, SHA256 `c5ec9038e26e6195ad298b0447575fc0e7e205711716e44d9fa83bbf98f2e226`. Its output is `runs/bc13abaa51738310c5e9d40efd9fe11276e8d313-root-normal-1`; certificate `4e565d51f4354ec8894b170e6c3b054de301a4e7cb4f356e25ca0b8aacc159e0`; Root acceptance `d2ab4def07a7ea0ffe8ce148becf766d19b75ba40fccaa1efa9ff5f09ba0fdeb`.
 - **J full check:** `H/cran-check/cJ/peer/PR5-J-C1-FULL-AS-CRAN-ACTUAL-ACCEPTANCE.json`, 17,237 B, SHA256 `3c1573d9f22a27a58da171aa3cb41f2392e2dda17be0bc6b75806d25035a6d5d`.
 - **History successor:** `H/history-comment-wrap-source-only/ACTUAL-SCOPED-ACCEPTANCE.json`, SHA256 `1ed6306e9beed4902b1d3ebf5bc104dd704d26de6def8c7c81088d97eed6eee5`; `H/history-comment-wrap-J-offline-prepared/OFFLINE-J-REEXPORT-ACTUAL-SCOPED-ACCEPTANCE.json`, 18,461 B, SHA256 `2df667e61c173fced2d9f0bab2955b8a21c3db62fd2da555b77e62e36ee40bc1`.
