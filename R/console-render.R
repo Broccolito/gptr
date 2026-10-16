@@ -26,28 +26,6 @@ console_interrupt_key = function() {
   if (front_end() %in% c("rgui", "rstudio", "positron")) "Esc" else "Ctrl-C"
 }
 
-#' Untrusted text as valid UTF-8; an invalid string shows its non-ASCII bytes as <xx>
-#' @noRd
-console_utf8 = function(x) {
-  x = as_utf8(as.character(x))
-  bad = !validUTF8(x)
-  x[bad] = iconv(x[bad], "UTF-8", "ASCII", sub = "byte")
-  x
-}
-
-#' Escape untrusted text for display with P11's ui_escape() (IC-53 item 8), keeping line feeds
-#' unless `newlines = FALSE`; per character, so escaping commutes with chunking. NA stays NA.
-#' @noRd
-console_escape = function(x, newlines = TRUE) {
-  if (!newlines) return(ui_escape(x))
-  x = console_utf8(x)
-  ok = !is.na(x)
-  # The appended line feed keeps trailing empty lines through strsplit()
-  x[ok] = vapply(strsplit(paste0(x[ok], "\n"), "\n", fixed = TRUE),
-                 function(lines) paste(ui_escape(lines), collapse = "\n"), "")
-  x
-}
-
 #' Lines of untrusted text for one-line displays: split on CRLF, CR and LF, then escaped
 #' @noRd
 console_lines = function(x) {
@@ -100,6 +78,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   st$line_start = TRUE
   st$indent = 0L
   st$fence = FALSE
+  st$fence_n = 0L
   st$fence_lang = ""
   st$bold = FALSE
   st$code = FALSE
@@ -181,7 +160,8 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   fence_marker = function(line) {
     if (!st$fence) {
       st$fence = TRUE
-      st$fence_lang = trimws(substring(line, 4L))
+      st$fence_n = attr(regexpr("^`{3,}", line), "match.length")
+      st$fence_lang = trimws(substring(line, st$fence_n + 1L))
       emit(paste0(if (style) paste0(sgr("2"), sym$top, st$fence_lang, sgr("22")) else line, "\n"))
     } else {
       st$fence = FALSE
@@ -205,7 +185,10 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
         }
         line = substr(text, 1L, nl - 1L)
         text = substr(text, nl + 1L, nchar(text))
-        if (startsWith(line, "```")) {
+        opening = !st$fence && startsWith(line, "```")
+        closing = st$fence && grepl("^ {0,3}`{3,}[ \t]*$", line) &&
+          nchar(trimws(line)) >= st$fence_n
+        if (opening || closing) {
           fence_marker(line)
         } else if (style) {
           fence_line(line)
@@ -453,14 +436,14 @@ console_spinner_stop = function(rec) {
 #' Called by the outer blocking policy without handling or changing the condition. Tool frames
 #' are excluded by console_foreground(), so clear bytes never enter their captured output.
 #' @noRd
-console_before_message = function(runs) {
+console_before_message = function(runs, newline = FALSE) {
   for (run in runs) {
     rec = console_record(list(run = run$id))
     if (!is.null(rec) && console_foreground(rec) && !is.null(rec$spinner)) {
       shown = isTRUE(rec$spinner$shown)
       rec$spinner$clear()
-      # Native R GUIs retain a CR overwrite range until LF; close it before ordinary notices.
-      if (shown && identical(front_end(), "rgui")) {
+      # Close native launch boundaries; R GUIs also need LF before ordinary notices.
+      if (shown && (newline || identical(front_end(), "rgui"))) {
         cat("\n")
         utils::flush.console()
       }

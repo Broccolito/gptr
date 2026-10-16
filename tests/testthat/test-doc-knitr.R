@@ -123,8 +123,17 @@ test_that("a knit that fails still removes the label hook, so the next knit runs
                "```{r boom, error = FALSE}", "stop(\"boom\")", "```", "",
                "```{r gptr-abc123}", "b = 2", "```"), rmd)
   e = new.env(parent = environment(doc_knitr_skip))
-  expect_error(knitr::knit(rmd, output = file.path(getwd(), "fail.md"), envir = e, quiet = TRUE),
-               "boom")
+  cnd = NULL
+  messages = utils::capture.output({
+    output = utils::capture.output({
+      cnd = expect_error(knitr::knit(rmd, output = file.path(getwd(), "fail.md"),
+                                     envir = e, quiet = TRUE), "boom")
+    })
+  }, type = "message")
+  expect_true(inherits(cnd, "error"))
+  diagnostic = paste(c(output, messages), collapse = "\n")
+  expect_match(diagnostic, "Quitting from ", fixed = TRUE)
+  expect_match(diagnostic, "fail.Rmd:5-7 [boom]", fixed = TRUE)
   expect_null(knitr::opts_hooks$get("label"))
   expect_null(knitr::knit_hooks$get("after.knit"))
   expect_identical(knitr::knit_hooks$get("document"), doc_hook)

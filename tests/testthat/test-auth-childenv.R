@@ -33,12 +33,13 @@ local_fake_env = function(.env = parent.frame()) {
   withr::local_envvar(fake_env(), .local_envir = .env)
 }
 
-# Evaluate `expr`, returning its value and the billing_env warning it raised (or NULL).
+# Evaluate `expr`, returning its value and the billing_env notice it raised (or NULL).
 with_billing_warning = function(expr) {
+  withr::local_options(gptr.quiet = FALSE)
   w = NULL
-  value = withCallingHandlers(expr, gptr_warning_billing_env = function(cnd) {
+  value = withCallingHandlers(expr, gptr_message_billing_env = function(cnd) {
     w <<- cnd
-    invokeRestart("muffleWarning")
+    invokeRestart("muffleMessage")
   })
   list(value = value, warning = w)
 }
@@ -89,7 +90,7 @@ test_that("mcp and worker are allowlists; the worker gets only its provider's ke
                class = "gptr_error_invalid_argument")
 })
 
-test_that("the worker keeps R_ARCH, which processx reads while callr sets its variables (WIN-1)", {
+test_that("the worker keeps R_ARCH for architecture-specific executable lookup (WIN-1)", {
   withr::local_envvar(R_ARCH = "/x64")
   expect_identical(child_env("worker")[["R_ARCH"]], "/x64")
 })
@@ -98,7 +99,7 @@ test_that("cli-claude follows G6 3.7: enclosing-agent and billing variables go, 
   local_vault()
   local_fake_env()
   res = with_billing_warning(child_env("cli-claude"))
-  expect_s3_class(res$warning, "gptr_warning_billing_env")
+  expect_s3_class(res$warning, "gptr_message_billing_env")
   expect_identical(res$warning$variables, c("ANTHROPIC_API_KEY", "ANTHROPIC_PROFILE"))
   cc = res$value
   expect_false(any(c("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "ANTHROPIC_PROFILE",
@@ -141,17 +142,6 @@ test_that("helper and artifact inherit minus secrets and registered values", {
   expect_true("GITHUB_PAT" %in% names(child_env("helper", pass = "GITHUB_PAT")))
   art = child_env("artifact")
   expect_false(any(c(secret_vars, "PLAIN_BUT_REGISTERED") %in% names(art)))
-})
-
-test_that("child_env_callr() unsets every other inherited variable with NA", {
-  local_vault()
-  local_fake_env()
-  env = child_env("mcp")
-  ce = child_env_callr(env)
-  expect_identical(ce[names(env)], env)
-  expect_true(all(is.na(ce[secret_vars])))
-  expect_setequal(names(ce), union(names(env), names(Sys.getenv())))
-  expect_error(child_env_callr(c(A = NA_character_)), class = "gptr_error_invalid_argument")
 })
 
 # A .Renviron that defines a FAKE token, pointed to by the parent's R_ENVIRON_USER.
@@ -197,27 +187,26 @@ test_that("Rscript children of the mcp and helper profiles never see a .Renviron
   expect_identical(run_rscript(child_env("helper"), probe), "")
 })
 
-test_that("a callr worker sees neither the .Renviron key nor the file", {
+test_that("an Rscript worker sees neither the .Renviron key nor the source file", {
   skip_on_cran()
   local_vault()
   renviron = local_fake_renviron()
-  res = callr::r(function() c(Sys.getenv("RENVIRON_ONLY_TOKEN"), Sys.getenv("R_ENVIRON_USER")),
-                 env = child_env_callr(child_env("worker")), user_profile = FALSE)
+  probe = paste0("cat(Sys.getenv('RENVIRON_ONLY_TOKEN'), '\n', ",
+                 "Sys.getenv('R_ENVIRON_USER'), sep = '')")
+  res = strsplit(run_rscript(child_env("worker"), probe), "\n", fixed = TRUE)[[1L]]
   expect_identical(res[1], "")
   expect_false(identical(normalizePath(res[2], winslash = "/", mustWork = FALSE), renviron))
-  expect_false(grepl("callr-uev", res[2], fixed = TRUE))
+  expect_identical(file.size(res[2]), 0)
 })
 test_that("environment inputs reject malformed names and values without exposing secrets", {
   for (nm in c(NA_character_, "", "A=B", "A\nB")) {
     bad = stats::setNames("FAKEinvalidSecretValue123", nm)
     expect_error(child_env("helper", set = bad), class = "gptr_error_invalid_argument")
-    expect_error(child_env_callr(bad), class = "gptr_error_invalid_argument")
   }
   for (bad in list(c(A = "x", a = "y"), c(A = NA_character_), list(A = 1),
                    list(A = c("x", "y")), list(A = NULL), new.env())) {
     expect_error(child_env("helper", set = bad), class = "gptr_error_invalid_argument")
   }
-  expect_error(child_env_callr(c(A = "x", a = "y")), class = "gptr_error_invalid_argument")
   expect_error(child_env("helper", pass = "A=B"), class = "gptr_error_invalid_argument")
 })
 
@@ -325,14 +314,102 @@ test_that("inherited settings containing registered values or derived forms are 
   expect_identical(child("helper", pass = "CONFIG")[["CONFIG"]], parent[["CONFIG"]])
 })
 
-test_that("callr unsets every omitted POSIX case variant when merging environments", {
-  parent = c(Config = "FAKEparentOnlyValue", CONFIG = "FAKEsecondParentValue")
-  convert = child_env_callr
-  environment(convert) = list2env(list(Sys.getenv = function(...) parent),
-                                 parent = environment(convert))
-  out = convert(c(CONFIG = "clean"))
-  expect_identical(out[["CONFIG"]], "clean")
-  if (.Platform$OS.type != "windows") expect_true(is.na(out[["Config"]]))
-  removed = convert(c(OTHER = "clean"))
-  if (.Platform$OS.type != "windows") expect_true(all(is.na(removed[names(parent)])))
+# Explicit nonsecret check/thread policy stays with R workers, without widening MCP's allowlist.
+test_that("worker environments forward explicit check and thread policy", {
+  context = c(`_R_CHECK_PACKAGE_NAME_` = "gptr", `_R_CHECK_LIMIT_CORES_` = "TRUE",
+    OMP_THREAD_LIMIT = "2", OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1",
+    MKL_NUM_THREADS = "1", VECLIB_MAXIMUM_THREADS = "1")
+  withr::local_envvar(context)
+  before = Sys.getenv()
+  env = child_env("worker")
+  expect_identical(env[names(context)], context)
+  expect_false(any(names(context) %in% names(child_env("mcp"))))
+  expect_false(anyNA(env))
+  expect_identical(Sys.getenv(), before)
+})
+
+test_that("worker policy keeps absent blank arbitrary and explicitly overridden values", {
+  keys = c("_R_CHECK_PACKAGE_NAME_", "_R_CHECK_LIMIT_CORES_", "OMP_THREAD_LIMIT",
+    "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
+  withr::with_envvar(stats::setNames(rep(NA_character_, length(keys)), keys), {
+    expect_false(any(keys %in% names(child_env("worker"))))
+  })
+  # Windows removes variables set to ""; model present blank entries without changing it.
+  context = stats::setNames(rep("", length(keys)), keys)
+  before = Sys.getenv()
+  parent = c(before[!toupper(names(before)) %in% toupper(keys)], context)
+  worker = child_env
+  environment(worker) = list2env(list(Sys.getenv = function(...) parent),
+                                parent = environment(worker))
+  expect_identical(worker("worker")[keys], context)
+  expect_identical(child_env("worker", set = context)[keys], context)
+  expect_identical(Sys.getenv(), before)
+  context = stats::setNames(rep("leave-as-is", length(keys)), keys)
+  withr::with_envvar(context, {
+    expect_identical(child_env("worker")[keys], context)
+    expect_identical(Sys.getenv(keys, names = FALSE), unname(context))
+  })
+  context = stats::setNames(rep("2", length(keys)), keys)
+  explicit = stats::setNames(rep("1", length(keys)), keys)
+  withr::with_envvar(context, {
+    expect_identical(child_env("worker", set = explicit)[keys], explicit)
+    expect_identical(Sys.getenv(keys, names = FALSE), unname(context))
+  })
+})
+
+test_that("worker policy construction preserves caller state and explicit overrides", {
+  local_vault()
+  withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr", OMP_THREAD_LIMIT = "2")
+  capture = function() {
+    list(env = Sys.getenv(), options = options(), cwd = getwd(), libs = .libPaths(),
+      kind = RNGkind(), search = search(),
+      seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE),
+      objects = serialize(mget(ls(envir = globalenv(), all.names = TRUE),
+        envir = globalenv(), inherits = FALSE), NULL))
+  }
+  before = capture()
+  env = child_env("worker", set = c(`_R_CHECK_PACKAGE_NAME_` = "", OMP_THREAD_LIMIT = "1"))
+  expect_identical(env[["_R_CHECK_PACKAGE_NAME_"]], "")
+  expect_identical(env[["OMP_THREAD_LIMIT"]], "1")
+  expect_identical(Sys.getenv("_R_CHECK_PACKAGE_NAME_"), "gptr")
+  expect_identical(Sys.getenv("OMP_THREAD_LIMIT"), "2")
+  after = capture()
+  for (name in names(before)) expect_identical(after[[name]], before[[name]], label = name)
+})
+
+test_that("an Rscript worker retains check policy and its caller unchanged", {
+  skip_on_cran()
+  local_vault()
+  context = c(`_R_CHECK_PACKAGE_NAME_` = "gptr", `_R_CHECK_LIMIT_CORES_` = "TRUE",
+    OMP_THREAD_LIMIT = "2", OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1",
+    MKL_NUM_THREADS = "1", VECLIB_MAXIMUM_THREADS = "1")
+  withr::local_envvar(context)
+  # These three exact loaded-source functions need only base R in this private child.
+  probe = paste(
+    paste("check_running =", paste(deparse(check_running), collapse = "\n")),
+    paste("proc_pool_cap =", paste(deparse(proc_pool_cap), collapse = "\n")),
+    paste("supervise_default =", paste(deparse(supervise_default), collapse = "\n")),
+    paste0("context = ", paste(deparse(context), collapse = "\n")),
+    "stopifnot(identical(Sys.getenv(names(context), names = FALSE), unname(context)),",
+    "  check_running(), identical(proc_pool_cap(8L), 2L),",
+    "  identical(supervise_default(), FALSE))",
+    "cat('WORKER_CHECK_CONTEXT_CHILD_OK')", sep = "\n")
+  capture = function() {
+    list(env = Sys.getenv(), options = options(), cwd = getwd(), libs = .libPaths(),
+      kind = RNGkind(), search = search(),
+      seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE),
+      objects = serialize(mget(ls(envir = globalenv(), all.names = TRUE),
+        envir = globalenv(), inherits = FALSE), NULL))
+  }
+  before = capture()
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", probe), env = child_env("worker"),
+    stdout = "|", stderr = "|")
+  withr::defer(if (p$is_alive()) p$kill_tree())
+  p$wait(10000L)
+  expect_false(p$is_alive())
+  expect_identical(p$get_exit_status(), 0L)
+  expect_identical(p$read_all_output(), "WORKER_CHECK_CONTEXT_CHILD_OK")
+  expect_identical(p$read_all_error(), "")
+  after = capture()
+  for (name in names(before)) expect_identical(after[[name]], before[[name]], label = name)
 })

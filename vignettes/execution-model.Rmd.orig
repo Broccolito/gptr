@@ -1,8 +1,8 @@
 ---
-title: "How Peter runs inside R"
+title: "Execution model"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{How Peter runs inside R}
+  %\VignetteIndexEntry{Execution model}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -13,10 +13,10 @@ old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1
 ```
 
 Peter combines a model with your current R workspace. A language model requests tools and
-returns a session; a decision model returns a typed vector. The same `peter()` gateway handles
-both. An inline agent can compute on a multi-GB object already loaded in R, keep intermediate
-variables, and reuse them across turns. This guide explains where that computation happens,
-what the model receives, and where memory or file transfers still occur.
+returns a session; a decision model returns a typed vector. `peter()` handles both. An inline
+agent can compute on a multi-GB object already loaded in R, keep intermediate variables, and
+reuse them across turns. This guide explains where that computation happens, what the model
+receives, and where memory or file transfers still occur.
 
 ## One language model turn
 
@@ -27,24 +27,39 @@ what the model receives, and where memory or file transfers still occur.
 5. Tool results return to the model until it finishes, is interrupted, or reaches a limit.
 6. The session retains the conversation, status, usage and a designated result, if there is one.
 
-This example uses a scripted provider, so it runs offline and always requests the same R code:
+For an ordinary interactive call, start with a prompt and the data:
 
-```{r}
+```{r, eval = FALSE}
 library(gptr)
-work = new.env()
-work$d = mtcars
+
+session = peter("Fit fuel economy against weight.", mtcars)
+session |> peter("Plot the fitted relationship.")
+```
+
+The executed example below uses a scripted `fake` provider. It runs offline and requests the
+same R code each time; its setup is hidden. An explicit environment keeps the fitted object.
+
+```{r fake-agent, include = FALSE}
+library(gptr)
 fake = gptr_fake_provider(list(
   list(tool = "r", input = list(code = "fit = lm(mpg ~ wt, data = d)\ngptr_return(fit)")),
   "The regression is ready."
 ))
-s = peter("Fit fuel economy against weight.", d = work$d, model = fake,
-          envir = work, mode = "auto")
-s$text
-s$status
-coef(s$value)
 ```
 
-`gptr_return(fit)` designates `fit` as the result. The final model text is `s$text`; it does
+```{r}
+work = new.env()
+work$d = mtcars
+
+session = peter("Fit fuel economy against weight.", d = work$d, model = fake,
+                envir = work, mode = auto)
+
+session$text
+session$status
+coef(session$value)
+```
+
+`gptr_return(fit)` designates `fit` as the result. The final model text is `session$text`; it does
 not automatically become the fitted object. The result also remains available as `work$fit`.
 
 ## Where objects live
@@ -57,7 +72,7 @@ it does not create a binding called `d` in a different evaluation environment.
 ```{r}
 gptr_describe(work$d, budget = 60)
 ls(work)
-identical(s$value, work$fit)
+identical(session$value, work$fit)
 ```
 
 The inline `r` tool evaluates against those actual bindings. It does not need to write a
@@ -71,7 +86,7 @@ compact descriptions that can include schema, sample values and summaries. The f
 object remains available to R code. Printed tool output is bounded, with an output handle for
 long results, and captured plots can be sent as images. Those previews and results may contain
 data values; the permission and egress controls still apply. System 1 decisions instead send
-encoded input states under their own size rules; see [System 1](system-one.html).
+encoded input states under their own size rules; see [System 1 decisions](system-one.html).
 
 `context = "names"` reduces workspace context to names and attachments to headers;
 `context = "none"` omits both built-in workspace and attached-object descriptions. These settings
@@ -89,7 +104,7 @@ A continued session reuses its kept home environment unless you explicitly suppl
 When the default environment is a function call frame, gptr uses it during the active run and
 does not retain it as the session's home afterward. An explicit working environment can retain
 named results.
-An explicit `gptr_fork(s)` branches the conversation and uses a workspace overlay. Restoring a
+An explicit `gptr_fork(session)` branches the conversation and uses a workspace overlay. Restoring a
 session from disk restores its conversation; it does not restore all of your R objects.
 
 Each model request has provider and transport latency. R evaluation takes the time and memory
@@ -101,31 +116,29 @@ than assuming every object is a fully resident data frame.
 ## What the session retains
 
 ```{r}
-s$id
-s$model
-s$turns
-names(s$messages[[1]])
-gptr_usage(s)
-identical(gptr_last(), s)
+session$id
+session$model
+session$turns
+gptr_usage(session)
 ```
 
 | Interface | Use |
 |---|---|
-| `s$text`, `s$value`, `s$status` | Inspect the latest answer, designated R result and state |
-| `s$messages`, `s$history`, `s$usage` | Inspect conversation, the per-message history table and accounting |
-| `s |> peter("next question")` | Add a turn to the same conversation |
+| `session$text`, `session$value`, `session$status` | Inspect the answer, R result and state |
+| `session$messages`, `session$history`, `session$usage` | Inspect conversation, history and usage |
+| `session |> peter("next question")` | Add a turn to the same conversation |
 | `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()` | Drive or control a session |
 | `gptr_sessions()`, `gptr_resume()`, `gptr_last()` | Find stored or live sessions |
 | `gptr_on()` | Attach a session event handler |
 | `gptr_fork()`, `gptr_checkpoints()`, `gptr_rewind()` | Branch or recover supported state |
 
-Printing `s$history` or `summary(s)` shows eight recent messages and session details, without
-a model request. The underlying table keeps every message; unknown token counts stay unknown.
+Printing `session$history` or `summary(session)` shows eight recent messages and session details
+without a model request. The underlying table keeps every message; unknown token counts stay
+unknown.
 
 ```{r history-display}
-s$history
-print(s$history, n = Inf)
-as.data.frame(s$history)
+session$history
+as.data.frame(session$history)
 ```
 
 Without an initialized project workspace, session files use a temporary directory.
@@ -146,28 +159,14 @@ separate. A permission gate is not an isolation boundary. External CLIs also hav
 and tool controls; live R requests still pass through gptr's MCP gate. Use [Configuration](configuration.html)
 and `?gptr_security` to choose a mode and understand its limits.
 
-HTTP requests, CLI processes, MCP connections and workers share a cooperative reactor.
-Multiple requests can wait for I/O together. Inline R code runs serially in the owning R process
-and pauses its reactor callbacks until evaluation returns. A worker is a separate R process and receives
-serializable context; it does not share the parent workspace. See
+HTTP requests, CLI processes, MCP connections and workers share one event loop. Multiple
+requests can wait for I/O together. Inline R code runs serially in the owning R process and
+pauses event-loop callbacks until evaluation returns. A worker is a separate R process and
+receives serializable context; it does not share the parent workspace. See
 [Teams and background work](teams-and-background.html).
 
-## Find the right reference page
-
-The reference index groups every export by purpose:
-
-| Area | Start here |
-|---|---|
-| Gateway and settings | `?peter`, `?gptr_config`, `?gptr_options` |
-| Providers and decisions | `?gptr_providers`, `?gptr_models`, `?gptr_prob` |
-| Environment and execution | `?gptr_describe`, `?gptr_return`, `?gptr_risk` |
-| Documents and sessions | `?gptr_doc`, `?gptr_source`, `?gptr_sessions`, `?gptr_step` |
-| Skills, plugins and MCP | `?gptr_skills`, `?gptr_plugins`, `?gptr_mcp` |
-| Extension development | `?gptr_api`, `?gptr_register`, `?gptr_spec`, `?gptr_check` |
-| Artifacts and accounting | `?gptr_artifacts`, `?gptr_usage`, `?gptr_cache` |
-
-For a new provider or tool, follow [Extending gptr](extending-gptr.html). For common workflows,
-start with [Getting started](getting-started.html) rather than the internal implementation.
+Agent code draws from its own random-number stream, so your `.Random.seed` is preserved,
+except after a deliberate `RNGkind()` change or a callback R runs while idle.
 
 ```{r cleanup, include = FALSE}
 options(old_options)

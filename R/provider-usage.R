@@ -120,8 +120,9 @@ price_date = function(x, arg = "from") {
       !grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", x)) {
     usage_invalid(arg, "one valid YYYY-MM-DD date")
   }
-  date = tryCatch(as.Date(x, format = "%Y-%m-%d"), error = function(e) as.Date(NA))
-  if (is.na(date) || !identical(format(date, "%Y-%m-%d"), x)) {
+  date = with_calendar_preserved(tryCatch(as.Date(x, format = "%Y-%m-%d"),
+                                        error = function(e) as.Date(NA)))
+  if (is.na(date) || !identical(with_calendar_preserved(format(date, "%Y-%m-%d")), x)) {
     usage_invalid(arg, "one valid YYYY-MM-DD date")
   }
   date
@@ -153,7 +154,8 @@ prices_df = function(x) {
     x %||% list()
   }
   if (!is.list(rows)) usage_invalid("prices", "a list of price records or a data frame")
-  out = data.frame(from = as.Date(character()), tier = character(), stringsAsFactors = FALSE)
+  out = data.frame(from = structure(numeric(), class = "Date"), tier = character(),
+    stringsAsFactors = FALSE)
   for (k in cols) out[[k]] = numeric()
   for (row in rows) {
     usage_record_check(row, "price")
@@ -190,7 +192,7 @@ price_rates = function(row) {
 #' An unknown prompt size selects a row only when every tier's effective rates are identical;
 #' future rates never price an earlier request.
 #' @noRd
-price_select = function(prices, prompt_tokens, when = Sys.Date()) {
+price_select = function(prices, prompt_tokens, when = with_calendar_preserved(Sys.Date())) {
   when = price_date(when, "when")
   prompt_tokens = usage_num(prompt_tokens, default = NA_real_, arg = "prompt_tokens")
   prices = prices_df(prices)
@@ -220,7 +222,7 @@ usage_charge = function(tokens, rate) {
 
 #' Fill metered API cost from the model's dated price evidence
 #' @noRd
-usage_cost = function(usage, model, when = Sys.Date()) {
+usage_cost = function(usage, model, when = with_calendar_preserved(Sys.Date())) {
   u = usage_as(usage)
   row = price_select(model[["prices"]], usage_prompt_tokens(u), when)
   if (is.null(row)) {
@@ -358,7 +360,7 @@ usage_row = function(msg, session, agent, parent_id, started, seconds, multiplie
     p = provider_get(model[["provider"]])
     model = tryCatch(provider_preflight(model, p), gptr_error = function(e) model)
   }
-  when = as.Date(started, tz = "UTC")
+  when = with_calendar_preserved(as.Date(started, tz = "UTC"))
   sel = if (!is.null(model)) price_select(model[["prices"]], usage_prompt_tokens(u), when)
   cost = if (identical(route, "plan-cli")) {
     usage_reported_cost(msg[["usage"]])

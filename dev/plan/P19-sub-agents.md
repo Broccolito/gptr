@@ -1179,9 +1179,14 @@ git commit -m "feat(subagent): add child sessions, the inline and cli backends a
 
 **Interfaces:**
 - Consumes: Tasks 1-2; P04 `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`; P06 `run_current()`, `run_start()`, `session_new()`, `session_data()`, `session_live()`, `session_home()`, `replay_lookup(block, child = NULL)`, the `.d` fields `parent_id`, `kind`, `depth`, `children`, `queue`, `status`, `condition`, `block`; P08 `gateway_defer(expr_fun)`; P01 `verbosity()`, `ev_new()`, `check_number()`, `check_list()`, `check_choice()`, `gptr_opt()`; P02 `ev_dispatch()`, `registry_add()`; service `console.interrupt_policy` (P14, `function(expr_fun, runs, mode = c("call", "repl")) value`). Tests: P04 `reactor_timer(at, fn, run = NULL)`, `reactor_now()`; P06 `session_replay_bind(block, s, child = NULL)`, `gptr_usage()`; P08 `peter()`; P01 `fake_error(message = "overloaded", status = 529L, after = 0L)`.
+- Consumes also: P06 `session_record_initial_model(s)` after registering the container's provider.
 - Produces: the export `gptr_parallel(..., .list = NULL, max_active = NULL, on_error = c("return", "stop"))` (04 section 6.5). Internal, for Tasks 4-8: `subagent_schedule(items, max_total, on_settle = NULL)` (items `list(start = function() <handle>, pool)`) -> handles; `subagent_drive(st)`, `subagent_pool_count(st, pool)`, `subagent_fill(st)`, `subagent_any_settled(st)`, `subagent_reap(st)`, `subagent_cancel_all(st)`; `subagent_route_checks(call)`, `subagent_task_limit(n, cur)`, `subagent_container_model(call, fallback = NULL, parent = NULL)`, `subagent_container(call, kind, cur, fallback_model = NULL)`, `subagent_container_end(s, doc, statuses)`, `subagent_run_children(container, items, max_total, target)`, `subagent_doc_replay(call, names, kind)`, `subagent_replay_attach(s, names, kind)`, `subagent_value(s)`, `subagent_reports_block(ctx, budget)`; `subagent_envir_call(envir)`, `parallel_members(dots, .list)`, `parallel_container(members, caller, cur)`, `parallel_start(m, nm, team, cur, caller)`, `parallel_stop_on_error(team)`.
 
 The scheduler is the reactor loop of report 15 sections 2.3-2.4 (prototype `p3_inline_agents.R`, `p10_mixed.R`, verification log items 39 and 46: inline, worker and CLI agents in one `processx::poll()`), reduced to what P04 and P06 already provide: it starts children while the total and each pool allow (an item whose pool is full is skipped for now, so a full worker pool does not hold back inline children), then pumps P04's reactor until a child settles (`allow_runs` = the children's runs inside an `r` evaluation, IC-57), and reports each settled child once. Every exit path that is not a normal finish cancels the running children (Ctrl-C under P14's policy, or an error such as a replay guard refusing a later child). A container is a P06 session of kind `team` or `fanout` (a child of the running session inside a run, IC-39) whose children are the agents; it runs no turn of its own until it is piped into `peter()`. `gptr_parallel()` forces its `...` inside P08's `gateway_defer()`, so each `peter()` call returns an unstarted session (P08 queues its rendered input), adopts the top-level members as children of a new team container (P06 has no verb that re-parents a session; see the self-review) and starts them with their own RNG streams and the team's nested group. The members' P08 pending run options are not used (P21 starts pending sessions the same way); a member without a kept home evaluates in the caller of `gptr_parallel()` through a call record that P06 releases at settlement [R2].
+
+A new container records its selected model once after registering any session-only provider, through
+P06's dedicated initial-recording verb. Routers stay deferred; no request or selection event is emitted,
+and the ordinary model setter retains its change semantics.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1548,6 +1553,7 @@ subagent_container = function(call, kind, cur, fallback_model = NULL) {
   if (!is.null(info$spec)) {
     registry_add(info$spec, source = "session", rank = 0L, session = session_data(s)$id)
   }
+  session_record_initial_model(s)
   s
 }
 
@@ -1712,6 +1718,7 @@ parallel_container = function(members, caller, cur) {
     pr = registry_get("provider", pid, session = first$id)
     if (!is.null(pr)) registry_add(pr, source = "session", rank = 0L, session = td$id)
   }
+  session_record_initial_model(team)
   kids = td$children
   for (nm in names(members)) {
     d = session_data(members[[nm]])

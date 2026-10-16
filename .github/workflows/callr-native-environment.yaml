@@ -1,0 +1,91 @@
+name: callr-native-environment
+
+on:
+  push:
+    branches: [codex/skipped-platform-tests]
+    paths:
+      - '.github/workflows/callr-native-environment.yaml'
+      - 'dev/upstream/callr-native-environment/**'
+      - 'dev/ci/*callr*'
+      - 'tests/testthat/*callr*environment.R'
+      - 'tests/testthat/test-callr-startup-admission.R'
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full lowercase source commit containing the reviewed upstream packet
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    env:
+      GPTR_LIVE_TESTS: 'false'
+      NOT_CRAN: 'true'
+      GPTR_EXPECTED_SOURCE: ${{ github.event_name == 'push' && github.sha || inputs.source_sha }}
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+    steps:
+      - name: Validate source nomination
+        shell: bash
+        run: '[[ "$GPTR_EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event_name == 'push' && github.sha || inputs.source_sha }}
+          persist-credentials: false
+      - name: Verify exact source
+        shell: bash
+        run: 'test "$(git rev-parse HEAD)" = "$GPTR_EXPECTED_SOURCE"'
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        with:
+          r-version: release
+          Ncpus: 1
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          needs: check
+          extra-packages: any::pkgload any::testthat any::lintr any::otelsdk
+      - name: Install GPTR for real child fixtures
+        shell: bash
+        run: R CMD INSTALL .
+      - name: Pure controller admission checks without R children
+        shell: bash
+        run: python -B dev/ci/test_callr_native.py
+      - name: Lint GPTR regression fixtures and dedicated R controller
+        shell: bash
+        run: |
+          Rscript --vanilla dev/ci/lint-callr-native.R
+      - name: Run pinned stock then repaired dependency in isolated libraries
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: python dev/ci/run-callr-native.py --root "$RUNNER_TEMP"
+      - name: Keep native proof and unresolved admission rows
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: callr-${{ runner.os }}-${{ github.event_name == 'push' && github.sha || inputs.source_sha }}
+          path: |
+            ${{ runner.temp }}/callr-evidence/summary.json
+            ${{ runner.temp }}/callr-evidence/*/identity.json
+            ${{ runner.temp }}/callr-evidence/*/source-diff.json
+            ${{ runner.temp }}/callr-evidence/*/install.log
+            ${{ runner.temp }}/callr-evidence/*/results.json
+            ${{ runner.temp }}/callr-evidence/*/cleanup.json
+            ${{ runner.temp }}/callr-evidence/*/controller-warnings.json
+            ${{ runner.temp }}/callr-evidence/*/*.log
+          if-no-files-found: error
+          retention-days: 14

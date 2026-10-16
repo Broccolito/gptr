@@ -1,0 +1,135 @@
+name: Optional offline integrations
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full lowercase commit SHA containing the reviewed integration packet
+        required: true
+        type: string
+      filter:
+        description: Approved test file name regex, passed as data through the environment
+        default: 'doc-knitr|doc-jupyter|doc-history-display|bridge-lang|tool-search|artifact-app|artifact-browser-cleanup|config-content-cache|gptr-config|windows-security|proc-windows-backpressure|proc-backpressure-sampling'
+        type: string
+      nofollow_observer:
+        description: Enable bounded no-follow sampling; include proc-writer-runtime in the filter
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: optional-integrations-${{ inputs.source_sha }}
+  cancel-in-progress: false
+jobs:
+  optional:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      GPTR_EXPECTED_SOURCE: ${{ inputs.source_sha }}
+      GPTR_OPTIONAL_FILTER: ${{ inputs.filter }}
+      GPTR_LIVE_TESTS: 'false'
+      GPTR_REPLAY: replay
+      NOT_CRAN: 'true'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+      BLIS_NUM_THREADS: '1'
+      MAKEFLAGS: '-j1'
+      TESTTHAT_CPUS: '1'
+    steps:
+      - name: Validate source nomination
+        shell: bash
+        run: '[[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]'
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Verify source identity and retain canonical source checksum
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert actual == os.environ['SOURCE_SHA']
+          folder = pathlib.Path('optional-evidence')
+          folder.mkdir()
+          archive = folder / 'source.tar'
+          with archive.open('wb') as output:
+              subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], stdout=output, check=True)
+          (folder / 'source-identity.json').write_text(json.dumps(
+              {'source_sha': actual, 'source_archive_sha256':
+               hashlib.sha256(archive.read_bytes()).hexdigest()}, indent=2))
+          PY
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        with:
+          r-version: release
+          Ncpus: 1
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        with:
+          extra-packages: any::pkgload any::testthat any::repr any::reticulate any::chromote any::lintr
+          needs: check
+      - uses: ./.github/actions/optional-dependencies
+      - name: Test the pinned no-follow observer operations
+        timeout-minutes: 1
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: python -I -B dev/ci/bp-disk-observer/run-controls.py
+      - name: Test the pure dependency and result gates
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          python dev/ci/test-optional-dependencies.py
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/test-optional-integrations.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+      - name: Lint the reviewed integration runtime, fixtures and result gates
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-lint
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/lint-optional.R
+      - name: Install this source for the real child fixtures
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: R CMD INSTALL .
+      - name: Run mandatory optional cases with five-minute owned-child bounds
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-owned
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/optional-integrations.R
+      - name: Run the serial plan gates even after a test failure
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          python dev/ci/test-check-plans.py
+          python dev/ci/check-plans.py --out optional-evidence/plan-checks
+      - name: Preserve source, dependencies, actual browser and all failed cases
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: optional-${{ matrix.os }}-${{ inputs.source_sha }}
+          path: optional-evidence/
+          if-no-files-found: error
+          retention-days: 14

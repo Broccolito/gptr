@@ -2,7 +2,7 @@
 % Please edit documentation in R/session-object.R
 \name{str.gptr_session}
 \alias{str.gptr_session}
-\title{Show the structure of a session in one line (never touches user objects)}
+\title{Show a session's structure}
 \usage{
 \method{str}{gptr_session}(object, ...)
 }
@@ -15,5 +15,5 @@
 \code{NULL}, invisibly.
 }
 \description{
-Show the structure of a session in one line (never touches user objects)
+Show a session's structure
 }

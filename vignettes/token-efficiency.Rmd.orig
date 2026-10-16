@@ -14,9 +14,10 @@ old_options = options(gptr.quiet = TRUE, gptr.interactive = FALSE, gptr.record =
 ```
 
 Keep data and computation in R, and send models enough context to choose useful actions.
-An object around 4 GB can remain in the same R session across turns: the model sees a compact
-description while its R tool computes on the object. No repeated export and reload cycle is
-required; R copies, calculation time and model-request latency still depend on the workflow.
+For inline work, an object around 4 GB can remain in the same R session across turns. The model
+sees a compact description while its R tool computes on the object. No repeated export and
+reload cycle is required; R copies, computation time and request latency still depend on the
+workflow. Workers receive serialized context rather than sharing the parent workspace.
 Four practices help:
 
 - Refer to live objects with a compact description rather than printing large tables into a
@@ -42,12 +43,8 @@ view$total_tokens
 `gptr_prompt()` inspects the system sections and tool definitions with estimated token counts;
 printing it shows their text. It does not query a provider. The `standard` preset describes
 most capabilities as functions in `peter$`, with the core model-visible `r`, `read`, `edit`
-and `write` tools and `ask` when applicable.
-
-The source benchmark's recorded o200k static-prefix counts are 1,262 for `minimal`, 2,335 for
-`standard` without optional sections, 2,813 with every section, and 2,956 with `ask` as well.
-These are measured fixture counts, not a promise about every runtime context or tokenizer.
-The first user message, project instructions and object descriptions add to them.
+and `write` tools and `ask` when applicable. `view$total_tokens` already counts the tool array
+and a preview of the first message; your prompt and the objects you attach add to it.
 
 ## Object descriptions and result size
 
@@ -59,11 +56,9 @@ writeLines(gptr_describe(iris, budget = 60))
 `gptr_describe()` summarizes class, shape and values within a budget (150 tokens by default).
 Packages can register methods for their own classes. Generative-model context normally uses
 these descriptions and names; **System 1 questions send their input states**, so their egress
-and size rules differ. See the system-one vignette.
+and size rules differ. See [System 1 decisions](system-one.html).
 
-```{r}
-work = new.env()
-work$mtcars = mtcars
+```{r fake-regression, include = FALSE}
 code = paste(
   "fits = lapply(split(mtcars, mtcars$cyl), function(d) stats::lm(mpg ~ wt, data = d))",
   "slopes = sapply(fits, function(f) stats::coef(f)[[2]])",
@@ -73,8 +68,14 @@ fake = gptr_fake_provider(list(
   list(tool = "r", input = list(code = code)),
   "The fitted weight slopes are stored in slopes."
 ))
-s = peter("Fit mpg on weight by cylinder count and compare the slopes.", mtcars,
-          model = fake, envir = work, mode = auto)
+```
+
+```{r}
+work = new.env()
+
+session = peter("Compare mpg and weight by cylinder count.", mtcars,
+                model = fake, envir = work, mode = auto)
+
 work$slopes
 ```
 
@@ -85,8 +86,9 @@ full spilled text can be read through `peter$out(id)` when an output ID was supp
 ## Reported usage and estimated components
 
 ```{r}
-gptr_usage(s, by = "model")
-ledger = gptr_usage(s, detail = TRUE)
+gptr_usage(session, by = "model")
+
+ledger = gptr_usage(session, detail = TRUE)
 aggregate(tokens ~ component, data = ledger, FUN = sum)
 ```
 
@@ -102,14 +104,17 @@ hardware cost or latency.
 
 ## Budgets and partial results
 
-```{r}
+```{r fake-budget, include = FALSE}
 small = gptr_fake_provider(list("Done."))
-res = tryCatch(
-  peter("Summarize mpg.", model = small, envir = new.env(), budget = list(tokens = 500)),
+```
+
+```{r}
+budget_error = tryCatch(
+  peter("Summarize mpg.", model = small, budget = list(tokens = 500)),
   gptr_error_budget = function(e) e
 )
-class(res)[1]
-res$session$status
+class(budget_error)[1]
+budget_error$session$status
 ```
 
 The estimated input for the first request already exceeds 500 tokens, so this call stops
@@ -119,7 +124,7 @@ settings deliberately when different defaults are needed:
 
 ```{r, eval = FALSE}
 gptr_config(budget = list(tokens = 20000, cost = 1, turns = 10), .scope = "session")
-s = peter("Review this analysis.", budget = list(tokens = 12000, turns = 6))
+session = peter("Review this analysis.", budget = list(tokens = 12000, turns = 6))
 ```
 
 Checks happen before requests using estimated next-input tokens and usage already recorded.
@@ -133,15 +138,27 @@ Teams and fan-outs share the root call's budget; launching more children does no
 one a fresh root allowance. With `gptr_parallel()`, member `budget =`, `tools =` and per-run
 `.opts` are not applied. Set the intended limits through the governing settings or enclosing
 run, cap concurrency and inspect the returned children's statuses. See
-`vignette("teams-and-background", package = "gptr")`.
+[Teams and background work](teams-and-background.html).
+
+## Compaction
+
+At the chat prompt, `/compact` replaces older model context with a summary. Add a focus when
+particular details must survive, for example `/compact retain the model comparison and next
+steps`. Automatic compaction follows the configured context and cold-cache thresholds; see
+[Configuration](configuration.html).
+
+Compaction can make a model request and add usage. It keeps the R objects already in your
+session, while the model no longer sees every older turn verbatim. Preserve important decisions
+in project files and named R objects. A changed request prefix can also affect provider cache
+reuse.
 
 ## Three different caches
 
-| Mechanism | What is reused | What to inspect |
+| Mechanism | What is reused | Inspect |
 |---|---|---|
-| Provider prompt cache | A supported repeated request prefix | `gptr_usage(s)` cache columns |
-| System 1 answer cache | A matching input/question/model decision | Result metadata and `gptr_cache()` |
-| Document replay and System 2 answer cache | Recorded code and the call's saved answer | `gptr_blocks(path)` and `gptr_cache()` |
+| Provider prompt cache | A repeated request prefix | `gptr_usage(session)` |
+| System 1 answer cache | Matching input, question and model | Metadata and `gptr_cache()` |
+| Replay / System 2 cache | Recorded code and saved answer | `gptr_blocks(path)`, `gptr_cache()` |
 
 A stable prefix makes provider cache reuse possible. Providers decide whether a cache hit
 occurs, subject to their support, minimum size, expiry and pricing; gptr does not guarantee a
@@ -153,7 +170,7 @@ its R code. Clearing an answer cache changes what can be reused.
 
 ```{r, eval = FALSE}
 peter("Summarize the model fit.", fit, .opts = list(context = "names"))
-peter("Compute mean(x) in R and return only that number.", .opts = list(context = "none"))
+peter("Find the mean of x. Return one number.", .opts = list(context = "none"))
 peter("Compute the mean.", x, .opts = list(preset = "minimal"))
 ```
 
@@ -161,7 +178,7 @@ peter("Compute the mean.", x, .opts = list(preset = "minimal"))
 `"none"` omits both built-in workspace and attached-object descriptions; the R bindings still
 exist and can be used by tool code, as `x` is in the second example. Prompt text, tool results,
 images and other context blocks can still reach the model. System 1 input states use a separate
-encoding route. [Execution and memory](execution-model.html) explains these boundaries.
+encoding route. [Execution model](execution-model.html) explains these boundaries.
 `preset = "minimal"` reduces the tool/prompt surface; it does not authorize actions or remove
 required safety checks.
 
@@ -169,19 +186,6 @@ required safety checks.
 For a long workflow, continue one session, keep intermediate data in R and request concise
 reports between stages. Use a new session or an explicit fork when a separate analysis is
 intended.
-
-## The source benchmark
-
-The source repository contains offline golden transcripts, component counts and ratchets for
-prompt growth and extra requests:
-
-```sh
-Rscript --vanilla dev/bench/tokens/run.R --check
-```
-
-These fixture measurements support regression checks. They do not prove universal token
-savings or calibration against every provider. Live calibration is a separate, explicitly
-enabled release check; implementation or offline acceptance alone does not establish it.
 
 ```{r cleanup, include = FALSE}
 options(old_options)

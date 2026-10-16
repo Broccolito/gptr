@@ -86,7 +86,8 @@ fake_model_record = function(name, type, api, log) {
     thinking_levels = c("off", "minimal", "low", "medium", "high"), thinking = NULL,
     input = c("text", "image"), tool_call = TRUE, structured_output = TRUE,
     prices = data.frame(
-      from = as.Date("2026-01-01"), tier = "default", input = 0, output = 0, cache_read = 0,
+      from = with_calendar_preserved(as.Date("2026-01-01")),
+      tier = "default", input = 0, output = 0, cache_read = 0,
       cache_write_5m = 0, cache_write_1h = 0
     ),
     cache_min = NA_real_,

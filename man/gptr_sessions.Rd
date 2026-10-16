@@ -50,8 +50,8 @@ when the intention is to execute the recorded analysis again.
 is not lost.
 }
 \examples{
-s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
-identical(gptr_last(), s)
+session = peter("hi", model = gptr_fake_provider(list("hello")))
+identical(gptr_last(), session)
 gptr_sessions()
-identical(gptr_resume(s$id), s)
+identical(gptr_resume(session$id), session)
 }

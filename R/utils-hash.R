@@ -48,17 +48,46 @@ id_new = function(prefix = "", n = 10L) {
   n = check_number(n, "n", min = 1, max = 64, int = TRUE)
   the$id_count = the$id_count + 1
   seed = paste(
-    format(Sys.time(), "%Y%m%d%H%M%OS6"), Sys.getpid(), the$id_count, id_salt()
+    sprintf("%.6f", as.numeric(Sys.time())), Sys.getpid(), the$id_count, id_salt()
   )
   paste0(prefix, substr(cli::hash_sha256(seed), 1L, n))
+}
+
+#' Evaluate an owned calendar expression and restore only its timezone-directory state
+#' Capture precedes lazy input evaluation; local dates, timezone arguments and dispatch stay intact.
+#' @noRd
+with_calendar_preserved = function(expr) {
+  windows = is_windows()
+  before = Sys.getenv()
+  key = if (windows) toupper else identity
+  before = before[key(names(before)) == "TZDIR"]
+  result = NULL
+  on.exit({
+    restored = isTRUE(tryCatch(env_restore_python(before, "TZDIR", windows),
+      error = function(error) FALSE, interrupt = function(interrupt) FALSE))
+    if (!restored) {
+      if (!inherits(result, "condition")) {
+        gptr_abort("Calendar formatting could not restore its timezone environment state.",
+                   "state_restore", env_restored = FALSE)
+      }
+      tryCatch(gptr_warn("Calendar formatting failed and its timezone state was not restored.",
+                        "state_restore", env_restored = FALSE),
+        error = function(error) NULL, interrupt = function(interrupt) NULL)
+    }
+  }, add = TRUE)
+  result = tryCatch(withVisible(force(expr)), error = identity, interrupt = identity)
+  if (inherits(result, "condition")) stop(result)
+  if (result$visible) result$value else invisible(result$value)
 }
 
 #' ISO 8601 UTC time with milliseconds, locale independent (04 section 1.2)
 #' @noRd
 iso_time = function(t = as.numeric(Sys.time())) {
-  ms = round(t * 1000)
-  paste0(format(.POSIXct(ms %/% 1000, tz = "UTC"), "%Y-%m-%dT%H:%M:%S", tz = "UTC"), ".",
-         sprintf("%03d", as.integer(ms %% 1000)), "Z", recycle0 = TRUE)
+  with_calendar_preserved({
+    ms = round(t * 1000)
+    paste0(format(.POSIXct(ms %/% 1000, tz = "UTC"), "%Y-%m-%dT%H:%M:%S", tz = "UTC"), ".",
+           sprintf("%03d", as.integer(ms %% 1000)), "Z", recycle0 = TRUE)
+  })
 }
 
 #' An 8-hex entry id not in `taken` (12 hex after 100 collisions)

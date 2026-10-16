@@ -906,12 +906,24 @@ test_that("the direct schemas serialise byte for byte as contract section 9.2 (P
                fixed = TRUE)
 })
 
-test_that("the specs reproduce P07's stand-ins byte for byte (prefix-baseline.json)", {
+test_that("the specs preserve P07's stand-ins apart from read's path and line guidance", {
   sb = jsonlite::fromJSON(test_path("fixtures", "bench", "prefix-baseline.json"),
                           simplifyVector = FALSE)$standins
   for (t in sb$tools) {
     if (!(t$name %in% caps)) next
     spec = registry_get("tool", t$name)
+    if (identical(t$name, "read")) {
+      expect_identical(t$input_schema$properties$path$description,
+                       "Path to the file to read (relative or absolute)")
+      props = spec$parameters$properties
+      expect_match(props$path$description, "literal skill:<name>/<path>", fixed = TRUE)
+      expect_match(props$path$description, "no directory prefix", fixed = TRUE)
+      expect_match(props$offset$description, "First line.*1-indexed")
+      expect_match(props$limit$description, "Maximum.*lines")
+      for (nm in c("path", "offset", "limit")) {
+        t$input_schema$properties[[nm]]$description = props[[nm]]$description
+      }
+    }
     expect_identical(spec$description, t$description, label = t$name)
     expect_identical(json_encode(spec$parameters), json_encode(t$input_schema), label = t$name)
     expect_identical(spec$snippet, t$snippet, label = t$name)

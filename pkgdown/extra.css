@@ -28,30 +28,20 @@ img.logo {
   content: url("reference/figures/logo-dark.png");
 }
 
+/* The site header supplies branding even when JavaScript is disabled. */
+.template-article .gptr-vignette-brand {
+  display: none;
+}
+
+/* Keep the wrapper as the one table scrollport and keyboard focus target. */
+#main .table-responsive > table {
+  display: table;
+  overflow: visible;
+}
+
 /* Keep the portrait logo and long titles in the header at every width. */
 .page-header {
   display: flow-root;
-}
-
-#main, .row > aside {
-  min-width: 0;
-}
-
-#main {
-  overflow-wrap: anywhere;
-}
-
-#main pre, #main pre code {
-  overflow-wrap: normal;
-  word-break: normal;
-}
-
-#main pre, #main .sourceCode {
-  max-width: 100%;
-}
-
-#main pre {
-  overflow-x: auto;
 }
 
 .table-responsive:focus-visible, #main pre:focus-visible {

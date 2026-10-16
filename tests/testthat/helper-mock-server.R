@@ -30,7 +30,8 @@ mock_provider = function(scenario, url) {
     max_output = 8192, reasoning = TRUE, thinking_levels = c("off", "low", "medium", "high"),
     thinking = NULL, input = c("text", "image"), tool_call = TRUE, structured_output = TRUE,
     prices = data.frame(
-      from = as.Date("2026-01-01"), tier = "default", input = 0, output = 0, cache_read = 0,
+      from = with_calendar_preserved(as.Date("2026-01-01")), tier = "default", input = 0,
+      output = 0, cache_read = 0,
       cache_write_5m = 0, cache_write_1h = 0
     ),
     cache_min = NA_real_,
@@ -68,14 +69,16 @@ mock_log = function(file) {
   requests = records[kinds == "request"]
   if (!length(requests)) {
     return(data.frame(
-      time = as.POSIXct(numeric(), origin = "1970-01-01"), method = character(),
+      time = with_calendar_preserved(as.POSIXct(numeric(), origin = "1970-01-01")),
+      method = character(),
       path = character(), headers = character(), body = character(), disconnected = logical()
     ))
   }
   ends = records[kinds == "end"]
   end_ids = vapply(ends, function(r) as.integer(r$id), integer(1))
   out = data.frame(
-    time = as.POSIXct(vapply(requests, function(r) r$time, numeric(1)), origin = "1970-01-01"),
+    time = with_calendar_preserved(as.POSIXct(
+      vapply(requests, function(r) r$time, numeric(1)), origin = "1970-01-01")),
     method = vapply(requests, function(r) r$method, ""),
     path = vapply(requests, function(r) r$path, ""),
     headers = vapply(requests, function(r) r$headers, ""),
@@ -101,6 +104,19 @@ mock_writes = function(file) {
     time = vapply(records, function(r) as.numeric(r$time), numeric(1)),
     event = vapply(records, function(r) r$event, "")
   )
+}
+
+# Hold a loopback port for a collision test; generated candidates are not reservations.
+# Failed binds try the next candidate; when none binds, retain the last original error.
+mock_hold_loopback = function(ports, start = httpuv::startServer) {
+  failure = simpleError("No candidate port was supplied.")
+  for (port in ports) {
+    server = tryCatch(with_seed_preserved(start("127.0.0.1", port, list())),
+      error = identity)
+    if (!inherits(server, "error")) return(list(server = server, port = port))
+    failure = server
+  }
+  stop(failure)
 }
 
 # Start the mock server for the calling test; see contract section 12.2 for the scenarios.

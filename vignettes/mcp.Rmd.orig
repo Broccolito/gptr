@@ -20,7 +20,7 @@ server or change configuration, so they are shown without being run.
 
 ```{r, eval = FALSE}
 library(gptr)
-gptr_mcp(server = NULL, tools = FALSE, refresh = FALSE)
+gptr_mcp()
 ```
 
 The default listing reads configuration and cached counts. It does not start a process or contact
@@ -49,12 +49,28 @@ using its documentation before registering it. For a server script you already h
 ```{r, eval = FALSE}
 gptr_mcp_add(
   "catalog",
-  command = file.path(R.home("bin"), "Rscript"),
+  command = "Rscript",
   args = c("--vanilla", "/absolute/path/to/mcp-server.R"),
   env = c(CATALOG_API_KEY = "${CATALOG_API_KEY}"),
-  exposure = "r", timeout = 60, scope = "user"
+  scope = "user"
 )
 ```
+
+An R server using a private package library needs that search path explicitly:
+
+```{r, eval = FALSE}
+gptr_mcp_add(
+  "my-r-server",
+  command = file.path(R.home("bin"), "Rscript"),
+  args = c("--vanilla", "/absolute/path/to/server.R"),
+  env = c(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep)),
+  scope = "project"
+)
+```
+
+Servers using R's standard library do not need this setting. MCP child processes
+receive a filtered environment. Declare only trusted library paths; keep credentials
+in their separate placeholders.
 
 For an existing HTTP service:
 
@@ -62,7 +78,7 @@ For an existing HTTP service:
 gptr_mcp_add(
   "catalog-http", url = "http://127.0.0.1:8000/mcp",
   headers = c(Authorization = "Bearer ${CATALOG_API_KEY}"),
-  exposure = "r", timeout = 60, scope = "project"
+  scope = "project"
 )
 ```
 
@@ -104,11 +120,11 @@ error. Filter a large result before printing or passing it to a model.
 Tool arguments cross the connection as serialized data; an external server does not share R's
 object bindings. Serving R below lets another agent request computation on live local objects.
 
+Choose a model in [Language models](language-models.html), then make an ordinary request.
 The model uses the same functions inside its `r` tool:
 
 ```{r, eval = FALSE}
-peter("Use the catalog MCP server to find normalization references",
-      model = "provider/model")
+peter("Find normalization references using the catalog MCP server.")
 ```
 
 MCP tools called by model code pass gptr's permission policies. Server descriptions and results
@@ -126,7 +142,7 @@ as tools, in which case call the advertised tool signature. See
 For an OAuth-capable HTTP server, sign in from an interactive R session:
 
 ```{r, eval = FALSE}
-gptr_login("mcp:catalog-http", method = "auto")
+gptr_login("mcp:catalog-http")
 gptr_logout("mcp:catalog-http")
 ```
 
@@ -146,17 +162,17 @@ change:
 ```{r, eval = FALSE}
 workspace = new.env()
 workspace$measurements = data.frame(value = c(2, 3, 5))
-h = gptr_mcp_serve(tools = c("r", "read"), envir = workspace)
-h$url
-h$config$codex
-h$stop()
+server = gptr_mcp_serve(tools = c("r", "read"), envir = workspace)
+server$url
+server$config$codex
+server$stop()
 ```
 
 The handle provides `$url`, `$port`, `$token_env`, `$config` and `$stop()`. `$config` contains
 client snippets for Codex, Claude Code, Claude Desktop and Cursor. Printed snippets redact the
-token; `as.character(h$config$claude_code)` produces the actual configuration text for deliberate
-copying. Treat that text as a credential. The Codex snippet supplies `$args` and `$env` for the
-client process; it is not a command to paste without its environment.
+token; `as.character(server$config$claude_code)` produces the actual configuration text for
+deliberate copying. Treat that text as a credential. The Codex snippet supplies `$args` and `$env`
+for the client process; it is not a command to paste without its environment.
 
 One server runs per R process, bound to `127.0.0.1` with a bearer token. It serves requests while R
 waits at the console or inside a gptr call. Calls use a dedicated gptr session and the permission
@@ -168,7 +184,7 @@ Serving `r` permits code execution in the supplied environment; a separate envir
 organize objects but is not an operating-system sandbox. The R tool can use its already-loaded
 objects without an intermediate dataset file, while returned text and images leave R through
 the connection. See [Execution model](execution-model.html) for the provider context boundary.
-The server exposes tools, not an MCP
-resource or prompt catalog. Stop it with `h$stop()` or `gptr_mcp_serve(stop = TRUE)` when finished.
+The server exposes tools, not an MCP resource or prompt catalog. Stop it with `server$stop()`
+or `gptr_mcp_serve(stop = TRUE)` when finished.
 For interactive approvals and recorded R work, see [Interactive console](interactive-console.html)
 and [Script as history](script-as-history.html).

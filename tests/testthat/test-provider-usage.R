@@ -374,3 +374,47 @@ test_that("usage row scalar fields cannot recycle into multiple accounting rows"
                  class = "gptr_error_invalid_argument")
   }
 })
+
+test_that("empty price tables preserve cold timezone state and their Date schema", {
+  # Serialize the exact function bodies into base scope so R starts without timezone warming.
+  scope = new.env(parent = baseenv())
+  for (name in c("%||%", "price_threshold", "prices_df")) {
+    fun = utils::removeSource(get(name, envir = asNamespace("gptr"), inherits = FALSE))
+    environment(fun) = scope
+    assign(name, fun, envir = scope)
+  }
+  dir = withr::local_tempdir()
+  functions = file.path(dir, "functions.rds")
+  result = file.path(dir, "result.rds")
+  script = file.path(dir, "cold-prices.R")
+  saveRDS(scope, functions)
+  writeLines(c(
+    "args = commandArgs(trailingOnly = TRUE)",
+    "scope = readRDS(args[[1L]])",
+    "before = Sys.getenv()",
+    "value = scope$prices_df(NULL)",
+    "saveRDS(list(unchanged = identical(Sys.getenv(), before),",
+    "  tzdir_absent = !\"TZDIR\" %in% names(before), value = value), args[[2L]])"
+  ), script)
+  expected = data.frame(from = structure(numeric(), class = "Date"), tier = character(),
+    input = numeric(), output = numeric(), cache_read = numeric(),
+    cache_write_5m = numeric(), cache_write_1h = numeric(), stringsAsFactors = FALSE)
+  zoneinfo = c(Sys.getenv("TZDIR", unset = ""), file.path(R.home("share"), "zoneinfo"),
+    "/usr/share/zoneinfo", "/usr/share/lib/zoneinfo")
+  zoneinfo = zoneinfo[nzchar(zoneinfo) & dir.exists(zoneinfo)]
+  # Absence is mandatory; also check an existing directory when this R build has one.
+  tzdirs = c(list(NA_character_), as.list(utils::head(zoneinfo, 1L)))
+  for (tzdir in tzdirs) {
+    withr::with_envvar(c(TZDIR = tzdir), {
+      out = processx::run(rscript_path(), c("--vanilla", script, functions, result),
+        timeout = 10, error_on_status = FALSE)
+      expect_identical(out$status, 0L)
+      expect_identical(out$stdout, "")
+      expect_identical(out$stderr, "")
+      actual = readRDS(result)
+      expect_identical(actual$tzdir_absent, is.na(tzdir))
+      expect(isTRUE(actual$unchanged), "Empty price construction changed the caller environment.")
+      expect_identical(actual$value, expected)
+    })
+  }
+})

@@ -626,3 +626,61 @@ test_that("a visible value is printed with the print methods visible from envir"
   expect_equal(res$outputs, list(character(), character(), character(), character(), "custom fn",
                                  character()))
 })
+
+test_that("paired RStudio resizes survive tool success, errors and interrupts", {
+  withr::local_options(width = 52L, max.print = 123L, cli.width = 45L)
+  withr::local_envvar(RSTUDIO_CONSOLE_WIDTH = "52")
+  local_mocked_bindings(gptr_is_interactive = function() TRUE,
+    front_end = function() "rstudio")
+  connections = showConnections(all = TRUE)
+  e = new.env()
+  endings = c(ok = "invisible(1)", error = "stop('tool error')",
+    interrupt = "signalCondition(structure(list(), class = c('interrupt', 'condition')))")
+  for (status in names(endings)) {
+    options(width = 52L)
+    Sys.setenv(RSTUDIO_CONSOLE_WIDTH = "52")
+    code = paste("Sys.setenv(RSTUDIO_CONSOLE_WIDTH = '99')",
+      "options(width = 99L, max.print = 17L)", endings[[status]], sep = "\n")
+    result = eval_r(code, e)
+    expect_identical(result$status, status)
+    expect_identical(getOption("width"), 99L)
+    expect_identical(Sys.getenv("RSTUDIO_CONSOLE_WIDTH"), "99")
+    expect_identical(getOption("max.print"), 123L)
+    expect_identical(cli::console_width(), 45L)
+    expect_identical(showConnections(all = TRUE), connections)
+    expect_identical(eval_r("invisible(1)", e)$status, "ok")
+    expect_identical(getOption("width"), 99L)
+  }
+})
+
+test_that("unpaired metrics and ordinary tool widths restore the caller width", {
+  withr::local_options(width = 52L, cli.width = 45L)
+  withr::local_envvar(RSTUDIO_CONSOLE_WIDTH = "52")
+  human = TRUE
+  host = "rstudio"
+  local_mocked_bindings(gptr_is_interactive = function() human,
+    front_end = function() host)
+  cases = list(
+    unchanged = list(metric = "52", width = 99L),
+    unmatched = list(metric = "99", width = 70L),
+    missing = list(metric = "", width = 99L),
+    invalid = list(metric = "oops", width = 99L),
+    fractional = list(metric = "99.5", width = 99L),
+    small = list(metric = "9", width = 99L),
+    large = list(metric = "10001", width = 99L),
+    noninteractive = list(metric = "99", width = 99L, human = FALSE),
+    nonhost = list(metric = "99", width = 99L, host = "terminal"))
+  connections = showConnections(all = TRUE)
+  for (case in cases) {
+    options(width = 52L)
+    Sys.setenv(RSTUDIO_CONSOLE_WIDTH = "52")
+    human = case$human %||% TRUE
+    host = case$host %||% "rstudio"
+    e = list2env(list(metric = case$metric, tool_width = case$width))
+    result = eval_r("Sys.setenv(RSTUDIO_CONSOLE_WIDTH = metric); options(width = tool_width)", e)
+    expect_identical(result$status, "ok")
+    expect_identical(getOption("width"), 52L)
+    expect_identical(cli::console_width(), 45L)
+    expect_identical(showConnections(all = TRUE), connections)
+  }
+})

@@ -44,7 +44,8 @@ write_atomic = function(path, content, mode = "0600", expected_md5 = NULL) {
       expected = "a path in an existing directory"
     )
   }
-  before = if (file.exists(path)) unname(tools::md5sum(path)) else NA_character_
+  present = file.exists(path)
+  before = if (present) unname(tools::md5sum(path)) else NA_character_
   old = file.info(path, extra_cols = FALSE)$mode
   if (!is.na(old)) mode = old
   tmp = tempfile(".gptr-write-", tmpdir = dir)
@@ -64,7 +65,7 @@ write_atomic = function(path, content, mode = "0600", expected_md5 = NULL) {
   for (attempt in 1:4) {
     if (!is.null(expected_md5)) {
       now = if (file.exists(path)) unname(tools::md5sum(path)) else NA_character_
-      if (!identical(expected_md5, now)) {
+      if ((is.na(expected_md5) && file.exists(path)) || !identical(expected_md5, now)) {
         gptr_abort(paste0("The document changed on disk since it was read: ", path),
                    "doc_write", path = path, reason = "conflict")
       }
@@ -73,7 +74,7 @@ write_atomic = function(path, content, mode = "0600", expected_md5 = NULL) {
     if (attempt < 4L) Sys.sleep(0.1)
   }
   now = if (file.exists(path)) unname(tools::md5sum(path)) else NA_character_
-  if (!identical(before, now)) {
+  if (!identical(present, file.exists(path)) || !identical(before, now)) {
     gptr_abort(
       paste0("Cannot write '", path, "': the file changed while gptr was writing it."),
       "doc_write",
@@ -81,7 +82,21 @@ write_atomic = function(path, content, mode = "0600", expected_md5 = NULL) {
       reason = if (is.null(expected_md5)) "concurrent change" else "conflict"
     )
   }
+  if (!present) {
+    # The rename fallback must establish privacy before writing any payload too.
+    if (!file.create(path, showWarnings = FALSE) ||
+          !isTRUE(Sys.chmod(path, "0600", use_umask = FALSE))) {
+      # A failed permission callback may have coincided with a foreign write.
+      if (file.exists(path) && isTRUE(file.size(path) == 0)) unlink(path)
+      gptr_abort("Cannot create a private destination file.", "doc_write", path = path,
+                 reason = "destination permissions")
+    }
+  }
   write_bytes(path, bytes)
+  if (!isTRUE(Sys.chmod(path, mode, use_umask = FALSE))) {
+    gptr_abort("Cannot preserve destination permissions.", "doc_write", path = path,
+               reason = "destination permissions")
+  }
   invisible(path)
 }
 
@@ -220,6 +235,25 @@ path_norm = function(path) {
 path_key = function(path) {
   key = path_norm(path)
   if (is_windows() || is_macos()) tolower(key) else key
+}
+
+#' Is each existing path itself a link or canonical alias? Windows readlink has no target.
+#' Compare the canonical path with its canonical parent plus the requested final component.
+#' Resolving only the parent avoids labelling ordinary descendants of a directory link as links.
+#' A final-component short spelling can be conservatively flagged too; missing Windows targets
+#' cannot be classified by canonicalisation alone.
+#' @noRd
+path_is_link = function(path) {
+  link = Sys.readlink(path)
+  out = !is.na(link) & nzchar(link)
+  if (!is_windows()) return(out)
+  existing = which(!out & file.exists(path))
+  if (!length(existing)) return(out)
+  requested = path[existing]
+  parent = path_norm(dirname(requested))
+  lexical = vapply(file.path(parent, basename(requested)), path_lexical, "")
+  out[existing] = tolower(path_norm(requested)) != tolower(lexical)
+  out
 }
 
 #' Is each path equal to or inside `root`? (compares path keys)

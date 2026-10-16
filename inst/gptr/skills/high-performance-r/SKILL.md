@@ -27,7 +27,8 @@ fast, and never lose or duplicate what is already in memory.
    `data.table` in-place updates (`:=`, `set()`, `setorder()`, `setnames()`), work on column
    subsets, and `rm(tmp); invisible(gc())` large temporaries.
 4. **Probe before `library()` of an unloaded compiled package** when the session holds
-   valuable objects: `callr::r(function() loadNamespace("pkg"))` first. In R 4.4 (and,
+   valuable objects: probe first in an isolated `Rscript --vanilla` process using the current
+   R's absolute executable and explicit library paths. In R 4.4 (and,
    probably, every release before 4.6.1) one failed `dyn.load()` with a long error can corrupt
    the session so the *next* package load crashes R.
 5. **Measure.** `system.time()` for one-off timing, `bench::mark()` to compare, `profvis`

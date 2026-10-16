@@ -30,8 +30,8 @@ A tool call never opens a browser: when an MCP server needs a sign-in, the call 
 an error naming this function.
 }
 \examples{
-\dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
-gptr_login("openrouter")
-gptr_logout("openrouter")
-\dontshow{\}) # examplesIf}
+if (interactive()) {
+  gptr_login("openrouter")
+  gptr_logout("openrouter")
+}
 }

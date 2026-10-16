@@ -73,7 +73,13 @@ test_that("a BMP is converted with magick or omitted with a note", {
   bmp[1:2] = charToRaw("BM")
   bmp[c(3, 11, 15, 19, 23, 27, 29, 35, 57)] = as.raw(c(58, 54, 40, 1, 1, 1, 24, 4, 0xff))
   expect_identical(detect_image_mime(bmp), "image/bmp")
+  before = list(env = Sys.getenv(), options = options(),
+    seed = get0(".Random.seed", globalenv(), inherits = FALSE))
   r = read_file(put_file(td, "image.bmp", bmp))
+  expect(identical(Sys.getenv(), before$env), "image conversion must preserve caller environment")
+  expect(identical(options(), before$options), "image conversion must preserve caller options")
+  expect(identical(get0(".Random.seed", globalenv(), inherits = FALSE), before$seed),
+    "image conversion must preserve caller RNG state")
   if (requireNamespace("magick", quietly = TRUE)) {
     expect_match(r$text, "Read image file [image/png]", fixed = TRUE)
     expect_match(r$text, "[Image converted from image/bmp to image/png.]", fixed = TRUE)
@@ -367,4 +373,288 @@ test_that("a non-ASCII file is read and classed by its extension in any locale (
   expect_identical(utils::capture.output(print(read_lines_value(code))), c("x = 1", "y = 2"))
   expect_match(read_file(paste0(td, "/caf\u00e9.rds"))$text,
                "^\\[Binary file: .*\\.rds \\(6B\\)\\. Not shown as text\\. .*readRDS\\(\\)\\.\\]$")
+})
+
+
+test_that("inline image encoding delegates native and fallback availability", {
+  skip_if(!nzchar(system.file(package = "openssl")), "openssl is not installed.")
+  stopifnot(requireNamespace("openssl", quietly = TRUE))
+  record = new.env(parent = emptyenv())
+  local_mocked_bindings(oauth_available = function(pkg, feature) {
+    record$calls[[length(record$calls) + 1L]] = list(pkg = pkg, feature = feature)
+    record$available
+  }, .package = "gptr")
+  bytes = as.raw(rep(0:255, 2L))
+  original = bytes
+  for (available in c(TRUE, FALSE)) {
+    record$available = available
+    record$calls = list()
+    encoded = base64_raw(bytes)
+    calls = record$calls
+    expect(length(calls) == 1L && identical(calls[[1L]]$pkg, "openssl") &&
+             is.character(calls[[1L]]$feature) && nzchar(calls[[1L]]$feature),
+           "Image encoding must check the guarded optional loader once.")
+    expect_identical(jsonlite::base64_dec(encoded), original)
+    expect_false(grepl("[\r\n]", encoded))
+    expect_identical(bytes, original)
+  }
+})
+
+test_that("inline image encoding preserves optional-loader condition identity", {
+  skip_if(!nzchar(system.file(package = "openssl")), "openssl is not installed.")
+  stopifnot(requireNamespace("openssl", quietly = TRUE))
+  record = new.env(parent = emptyenv())
+  local_mocked_bindings(oauth_available = function(pkg, feature) {
+    stop(record$condition)
+  }, .package = "gptr")
+  conditions = list(
+    simpleError("controlled optional-loader failure"),
+    structure(list(message = "controlled optional-loader interrupt", call = NULL),
+              class = c("interrupt", "condition")),
+    structure(list(message = "controlled restoration refusal", call = NULL),
+              class = c("gptr_error_state_restore", "gptr_error", "error", "condition"))
+  )
+  bytes = as.raw(1:5)
+  original = bytes
+  for (condition in conditions) {
+    record$condition = condition
+    seen = tryCatch(base64_raw(bytes), error = identity, interrupt = identity)
+    expect(identical(seen, condition),
+           "Image encoding must propagate the original optional-loader condition.")
+  }
+  expect_identical(bytes, original)
+})
+
+test_that("inline image encoding skips an absent optional dependency before loading", {
+  calls = new.env(parent = emptyenv())
+  calls$loads = 0L
+  calls$guards = 0L
+  scope = new.env(parent = environment(base64_raw))
+  scope$isNamespaceLoaded = function(pkg) FALSE
+  scope$system.file = function(...) ""
+  scope$requireNamespace = function(...) {
+    calls$loads = calls$loads + 1L
+    FALSE
+  }
+  scope$oauth_available = function(...) {
+    calls$guards = calls$guards + 1L
+    stop("An absent optional dependency must not be loaded.")
+  }
+  encode = base64_raw
+  environment(encode) = scope
+  bytes = as.raw(rep(0:255, 2L))
+  encoded = encode(bytes)
+  expect(identical(calls$loads, 0L) && identical(calls$guards, 0L),
+         "Missing optional-package metadata must short-circuit before the loader.")
+  expect_identical(jsonlite::base64_dec(encoded), bytes)
+  expect_false(grepl("[\r\n]", encoded))
+})
+
+# Cold dependency controls exercise the actual read path with a synthetic loader.
+image_magick_probe = function(loader, windows = FALSE, warm = FALSE, extra = list()) {
+  scope = list2env(c(list(requireNamespace = loader, is_windows = function() windows,
+    isNamespaceLoaded = function(pkg) warm,
+    process_image_magick = function(...) list(ok = TRUE, mime = "image/png")), extra),
+    parent = environment(process_image))
+  available = get0("image_magick_available", envir = environment(process_image), inherits = FALSE)
+  if (!is.null(available)) {
+    environment(available) = scope
+    scope$image_magick_available = available
+  }
+  read = process_image
+  environment(read) = scope
+  read
+}
+
+image_magick_fixture = function(value = NA_character_, viewer = NULL, .env = parent.frame()) {
+  keys = c("FONTCONFIG_PATH", "KMP_DUPLICATE_LIB_OK", "MAGICK_TMPDIR")
+  old = Sys.getenv(keys, unset = NA_character_)
+  if (.Platform$OS.type == "windows" && any(!is.na(old) & old == "")) {
+    stop("Synthetic fixture cannot restore an existing empty Windows initialization value")
+  }
+  withr::local_envvar(stats::setNames(rep(value, length(keys)), keys), .local_envir = .env)
+  withr::local_options(list(magick.viewer = viewer), .local_envir = .env)
+  withr::local_preserve_seed(.local_envir = .env)
+}
+
+test_that("image startup preserves its known keys, viewer and absent or existing RNG", {
+  for (seeded in c(FALSE, TRUE)) {
+    for (value in c(NA_character_, "synthetic-custom")) {
+      local({
+        viewer = if (is.na(value)) NULL else function(image) invisible(image)
+        image_magick_fixture(value, viewer)
+        if (seeded) {
+          set.seed(42L)
+        } else if (exists(".Random.seed", globalenv(), inherits = FALSE)) {
+          rm(list = ".Random.seed", envir = globalenv())
+        }
+        before = list(env = Sys.getenv(), options = options(),
+          seed = get0(".Random.seed", globalenv(), inherits = FALSE))
+        calls = new.env(parent = emptyenv())
+        calls$n = 0L
+        read = image_magick_probe(function(pkg, quietly) {
+          expect_identical(pkg, "magick")
+          expect_true(quietly)
+          calls$n = calls$n + 1L
+          Sys.setenv(FONTCONFIG_PATH = "synthetic-loaded",
+            KMP_DUPLICATE_LIB_OK = "synthetic-loaded",
+            MAGICK_TMPDIR = "synthetic-loaded")
+          options(magick.viewer = function(image) NULL)
+          stats::runif(2L)
+          TRUE
+        })
+        expect_true(read(charToRaw("BM"), "image/bmp")$ok)
+        expect_identical(calls$n, 1L)
+        expect(identical(Sys.getenv(), before$env),
+          "image startup must preserve caller environment")
+        expect(identical(options(), before$options), "image startup must preserve caller options")
+        expect(identical(get0(".Random.seed", globalenv(), inherits = FALSE), before$seed),
+          "image startup must preserve caller RNG state")
+      })
+    }
+  }
+})
+
+test_that("unavailable image conversion keeps the omission note and caller state", {
+  image_magick_fixture()
+  before = list(env = Sys.getenv(), options = options(),
+    seed = get0(".Random.seed", globalenv(), inherits = FALSE))
+  read = image_magick_probe(function(...) {
+    Sys.setenv(MAGICK_TMPDIR = "synthetic-loaded")
+    options(magick.viewer = function(image) NULL)
+    stats::runif(1L)
+    FALSE
+  })
+  result = read(charToRaw("BM"), "image/bmp")
+  expect_identical(result$ok, FALSE)
+  expect_match(result$note, "install the 'magick' package", fixed = TRUE)
+  expect(identical(Sys.getenv(), before$env), "unavailable image startup must preserve environment")
+  expect(identical(options(), before$options), "unavailable image startup must preserve options")
+  expect(identical(get0(".Random.seed", globalenv(), inherits = FALSE), before$seed),
+    "unavailable image startup must preserve RNG state")
+})
+
+test_that("image loader errors and interrupts retain original identity and caller state", {
+  for (kind in c("error", "interrupt")) {
+    local({
+      image_magick_fixture()
+      before = list(env = Sys.getenv(), options = options(),
+        seed = get0(".Random.seed", globalenv(), inherits = FALSE))
+      original = structure(list(message = "synthetic image startup", call = NULL),
+        class = c(paste0("synthetic_", kind), kind, "condition"))
+      read = image_magick_probe(function(...) {
+        Sys.setenv(MAGICK_TMPDIR = "synthetic-loaded")
+        options(magick.viewer = function(image) NULL)
+        stats::runif(1L)
+        stop(original)
+      })
+      observed = tryCatch(read(charToRaw("BM"), "image/bmp"),
+        error = identity, interrupt = identity)
+      expect_identical(observed, original)
+      expect(identical(Sys.getenv(), before$env), "failed image startup must preserve environment")
+      expect(identical(options(), before$options), "failed image startup must preserve options")
+      expect(identical(get0(".Random.seed", globalenv(), inherits = FALSE), before$seed),
+        "failed image startup must preserve RNG state")
+    })
+  }
+})
+
+test_that("image restoration uncertainty stays fatal without hiding the original failure", {
+  original = structure(list(message = "synthetic image startup", call = NULL),
+    class = c("synthetic_error", "error", "condition"))
+  read = image_magick_probe(function(...) TRUE,
+    extra = list(env_restore_python = function(...) FALSE))
+  expect_error(read(charToRaw("BM"), "image/bmp"), class = "gptr_error_state_restore")
+  warnings = new.env(parent = emptyenv())
+  warnings$n = 0L
+  read = image_magick_probe(function(...) stop(original), extra = list(
+    env_restore_python = function(...) FALSE,
+    gptr_warn = function(...) {
+      warnings$n = warnings$n + 1L
+      stop("synthetic warning publication failure")
+    }))
+  observed = tryCatch(read(charToRaw("BM"), "image/bmp"), error = identity, interrupt = identity)
+  expect_identical(observed, original)
+  expect_identical(warnings$n, 1L)
+})
+
+test_that("cold Windows image setup refuses empty keys but a warm untouched value is accepted", {
+  calls = new.env(parent = emptyenv())
+  calls$n = 0L
+  loader = function(...) {
+    calls$n = calls$n + 1L
+    TRUE
+  }
+  extra = list(Sys.getenv = function() c(MAGICK_TMPDIR = ""),
+    env_restore_python = function(...) TRUE)
+  read = image_magick_probe(loader, windows = TRUE, extra = extra)
+  expect_error(read(charToRaw("BM"), "image/bmp"), class = "gptr_error_not_available")
+  expect_identical(calls$n, 0L)
+  read = image_magick_probe(loader, windows = TRUE, warm = TRUE, extra = extra)
+  expect_true(read(charToRaw("BM"), "image/bmp")$ok)
+  expect_identical(calls$n, 1L)
+})
+
+test_that("Windows image startup refuses ambiguous case aliases before loading", {
+  calls = new.env(parent = emptyenv())
+  calls$n = 0L
+  read = image_magick_probe(function(...) {
+    calls$n = calls$n + 1L
+    TRUE
+  }, windows = TRUE, extra = list(Sys.getenv = function() {
+    c(MAGICK_TMPDIR = "first", magick_tmpdir = "second")
+  }))
+  expect_error(read(charToRaw("BM"), "image/bmp"), class = "gptr_error_not_available")
+  expect_identical(calls$n, 0L)
+})
+
+test_that("the image startup guard does not reset unrelated state", {
+  image_magick_fixture()
+  withr::local_envvar(c(GPTR_MAGICK_UNRELATED = "synthetic-custom"))
+  withr::local_options(list(gptr.magick.unrelated = "synthetic-custom"))
+  read = image_magick_probe(function(...) {
+    Sys.setenv(GPTR_MAGICK_UNRELATED = "synthetic-loaded")
+    options(gptr.magick.unrelated = "synthetic-loaded")
+    TRUE
+  })
+  expect_true(read(charToRaw("BM"), "image/bmp")$ok)
+  expect_identical(Sys.getenv("GPTR_MAGICK_UNRELATED"), "synthetic-loaded")
+  expect_identical(getOption("gptr.magick.unrelated"), "synthetic-loaded")
+})
+
+test_that("image conversion preserves absent or existing RNG on success, error and interrupt", {
+  for (seeded in c(FALSE, TRUE)) {
+    for (kind in c("success", "error", "interrupt")) {
+      local({
+        image_magick_fixture()
+        if (seeded) {
+          set.seed(42L)
+        } else if (exists(".Random.seed", globalenv(), inherits = FALSE)) {
+          rm(list = ".Random.seed", envir = globalenv())
+        }
+        seed = get0(".Random.seed", globalenv(), inherits = FALSE)
+        original = structure(list(message = "synthetic image conversion", call = NULL),
+          class = c("synthetic_interrupt", "interrupt", "condition"))
+        read = image_magick_probe(function(...) TRUE, extra = list(
+          process_image_magick = function(...) {
+            stats::runif(2L)
+            if (kind == "error") stop("synthetic decode error")
+            if (kind == "interrupt") stop(original)
+            list(ok = TRUE, mime = "image/png")
+          }))
+        result = tryCatch(read(charToRaw("BM"), "image/bmp"),
+          error = identity, interrupt = identity)
+        if (kind == "success") {
+          expect_true(result$ok)
+        } else if (kind == "error") {
+          expect_identical(result$note,
+            "[Image omitted: could not be converted to a supported inline image format.]")
+        } else {
+          expect_identical(result, original)
+        }
+        expect(identical(get0(".Random.seed", globalenv(), inherits = FALSE), seed),
+          "image conversion must preserve caller RNG state on every outcome")
+      })
+    }
+  }
 })

@@ -6,6 +6,316 @@ blob_count = function() {
                     recursive = TRUE))
 }
 
+# Deny file creation only in the freshly owned bucket. The saved Windows Access descriptor
+# stays in an owner-only control directory; no SID or descriptor is returned or printed.
+ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
+  inside = isTRUE(path_inside(path, root))
+  lex = path_lexical(path)
+  if (is_windows() || is_macos()) lex = tolower(lex)
+  direct = !isTRUE(path_is_link(path)) && identical(path_key(path), lex)
+  expect_true(inside)
+  expect_true(direct)
+  if (!inside || !direct) stop("Refusing permission changes outside an owned direct bucket")
+  probe = tempfile("create-probe-", tmpdir = path)
+  expect_true(file.create(probe))
+  expect_true(file.remove(probe))
+  state = new.env(parent = emptyenv())
+  state$restored = FALSE
+  windows = .Platform$OS.type == "windows"
+  old_mode = file.mode(path)
+  invoke = NULL
+  backup = NULL
+  stage = NULL
+  diagnostic = NULL
+  roundtrip = NULL
+  if (windows) {
+    control = tempfile("gptr-owned-acl-", tmpdir = root)
+    created = dir.create(control, mode = "0700")
+    expect_true(created)
+    if (!isTRUE(created)) stop("Refusing an existing ACL control directory")
+    script = file.path(control, "acl.ps1")
+    backup = file.path(control, "access.txt")
+    stage = file.path(control, "stage.txt")
+    diagnostic = file.path(control, "access-diagnostic.txt")
+    roundtrip = file.path(control, "original-roundtrip.txt")
+    writeLines(c(
+      "param([string]$Path, [string]$Control, [string]$Backup,",
+      "  [string]$Stage, [string]$Action)",
+      "$ErrorActionPreference = 'Stop'",
+      "[System.IO.File]::WriteAllText($Stage, 'script-entered')",
+      "$section = [System.Security.AccessControl.AccessControlSections]::Access",
+      "if ($Action -eq 'deny') {",
+      "  $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User",
+      "  [System.IO.File]::WriteAllText($Stage, 'token-read')",
+      "  $attributes = [System.IO.File]::GetAttributes($Control)",
+      "  if (($attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {",
+      "    throw 'Private control must not be a reparse point' }",
+      "  $private = [System.Security.AccessControl.DirectorySecurity]::new()",
+      "  $private.SetOwner($sid)",
+      "  $private.SetAccessRuleProtection($true, $false)",
+      "  $inherit = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit",
+      "  $inherit = $inherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit",
+      "  $allow = [System.Security.AccessControl.FileSystemAccessRule]::new(",
+      "    $sid, 'FullControl', $inherit, 'None', 'Allow')",
+      "  $private.AddAccessRule($allow)",
+      "  [System.IO.File]::WriteAllText($Stage, 'private-acl-built')",
+      "  [System.IO.Directory]::SetAccessControl($Control, $private)",
+      "  [System.IO.File]::WriteAllText($Stage, 'private-acl-applied')",
+      "  $sections = $section -bor [System.Security.AccessControl.AccessControlSections]::Owner",
+      "  $current = [System.IO.Directory]::GetAccessControl($Control, $sections)",
+      "  $owner = $current.GetOwner([System.Security.Principal.SecurityIdentifier])",
+      "  $rules = @($current.GetAccessRules($true, $true,",
+      "    [System.Security.Principal.SecurityIdentifier]))",
+      "  if ($null -eq $owner -or -not $owner.Equals($sid) -or",
+      "      -not $current.AreAccessRulesProtected -or $rules.Count -ne 1) {",
+      "    throw 'Private control owner or DACL differs' }",
+      "  $rule = $rules[0]",
+      "  if (-not $rule.IdentityReference.Equals($sid) -or $rule.IsInherited -or",
+      "      $rule.FileSystemRights -ne",
+      "        [System.Security.AccessControl.FileSystemRights]::FullControl -or",
+      "      $rule.InheritanceFlags -ne $inherit -or",
+      "      $rule.PropagationFlags -ne [System.Security.AccessControl.PropagationFlags]::None -or",
+      "      $rule.AccessControlType -ne",
+      "        [System.Security.AccessControl.AccessControlType]::Allow) {",
+      "    throw 'Private control rule differs' }",
+      "  if ([System.IO.Directory]::GetFileSystemEntries($Path).Length -ne 0) {",
+      "    throw 'Owned bucket must be empty before Access setup' }",
+      "  [System.IO.File]::WriteAllText($Stage, 'private-control-verified')",
+      "  $acl = [System.IO.Directory]::GetAccessControl($Path, $section)",
+      "  [System.IO.File]::WriteAllText($Stage, 'bucket-acl-read')",
+      "  # Only a fresh owned target is converted before its denial baseline is saved.",
+      "  $sections = $section -bor [System.Security.AccessControl.AccessControlSections]::Owner",
+      "  $initial = $acl.GetSecurityDescriptorSddlForm($section)",
+      "  if ($initial.Length -gt 262144) { throw 'Initial Access input bound' }",
+      "  $initialRaw = [System.Security.AccessControl.RawSecurityDescriptor]::new($initial)",
+      "  $a = $initialRaw.DiscretionaryAcl",
+      "  if ($null -eq $a -or $a.Count -lt 1 -or $a.Count -gt 128 -or",
+      "      $a.BinaryLength -gt 65536) { throw 'Initial Access DACL bound' }",
+      "  $initialFlags = [int]$initialRaw.ControlFlags",
+      "  if (($initialFlags -band 4) -eq 0) { throw 'Initial Access DACL missing' }",
+      "  $initialOwner = [System.IO.Directory]::GetAccessControl($Path, $sections).GetOwner(",
+      "    [System.Security.Principal.SecurityIdentifier])",
+      "  if ($null -eq $initialOwner -or $initialOwner.Value.Length -gt 512) {",
+      "    throw 'Initial Access owner bound' }",
+      "  foreach ($name in @('initial-access.txt', 'initial-owner.txt')) {",
+      "    $value = if ($name -eq 'initial-access.txt') { $initial } else { $initialOwner.Value }",
+      "    $saved = [System.IO.Path]::Combine($Control, $name)",
+      "    $stream = [System.IO.File]::Open($saved, 'CreateNew', 'Write', 'None')",
+      "    try {",
+      "      $bytes = [System.Text.Encoding]::UTF8.GetBytes($value)",
+      "      $stream.Write($bytes, 0, $bytes.Length)",
+      "      $stream.Flush()",
+      "    } finally { $stream.Dispose() }",
+      "  }",
+      "  [System.IO.File]::WriteAllText($Stage, 'initial-access-saved')",
+      "  $fresh = [System.Security.AccessControl.DirectorySecurity]::new()",
+      "  $fresh.SetSecurityDescriptorSddlForm($initial, $section)",
+      "  [System.IO.Directory]::SetAccessControl($Path, $fresh)",
+      "  [System.IO.File]::WriteAllText($Stage, 'initial-access-persisted')",
+      "  $actual = [System.IO.Directory]::GetAccessControl($Path, $sections)",
+      "  $actualAccess = $actual.GetSecurityDescriptorSddlForm($section)",
+      "  if ($actualAccess.Length -gt 262144) { throw 'Stable Access input bound' }",
+      "  $actualRaw = [System.Security.AccessControl.RawSecurityDescriptor]::new($actualAccess)",
+      "  $b = $actualRaw.DiscretionaryAcl",
+      "  if ([int]$actualRaw.ControlFlags -ne ($initialFlags -bor 1024) -or",
+      "      $null -eq $b -or $b.Count -ne $a.Count -or",
+      "      $b.BinaryLength -ne $a.BinaryLength -or",
+      "      -not $actual.GetOwner([System.Security.Principal.SecurityIdentifier]).Equals(",
+      "        $initialOwner)) { throw 'Stable Access structure differs' }",
+      "  $ab = [byte[]]::new($a.BinaryLength)",
+      "  $bb = [byte[]]::new($b.BinaryLength)",
+      "  $a.GetBinaryForm($ab, 0)",
+      "  $b.GetBinaryForm($bb, 0)",
+      "  if ([Convert]::ToBase64String($ab) -cne [Convert]::ToBase64String($bb)) {",
+      "    throw 'Stable Access ordered DACL differs' }",
+      "  [System.IO.File]::WriteAllText($Stage, 'stable-access-structure-verified')",
+      "  $fresh = [System.Security.AccessControl.DirectorySecurity]::new()",
+      "  $fresh.SetSecurityDescriptorSddlForm($actualAccess, $section)",
+      "  [System.IO.Directory]::SetAccessControl($Path, $fresh)",
+      "  [System.IO.File]::WriteAllText($Stage, 'stable-access-persisted')",
+      "  $acl = [System.IO.Directory]::GetAccessControl($Path, $sections)",
+      "  if ($acl.GetSecurityDescriptorSddlForm($section) -cne $actualAccess -or",
+      "      -not $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Equals(",
+      "        $initialOwner)) { throw 'Stable Access exact roundtrip differs' }",
+      "  [System.IO.File]::WriteAllText($Stage, 'stable-access-roundtrip-verified')",
+      "  $original = $acl.GetSecurityDescriptorSddlForm($section)",
+      "  [System.IO.File]::WriteAllText($Stage, 'original-roundtrip')",
+      "  $roundtrip = [System.IO.Path]::Combine($Control, 'original-roundtrip.txt')",
+      "  try {",
+      "    if ($original.Length -gt 262144) { throw 'Owned ACL diagnostic input bound' }",
+      "    $raw = [System.Security.AccessControl.RawSecurityDescriptor]::new($original)",
+      "    $rawEqual = ($raw.GetSddlForm($section) -ceq $original)",
+      "    $reconstructed = [System.Security.AccessControl.DirectorySecurity]::new()",
+      "    $reconstructed.SetSecurityDescriptorSddlForm($original, $section)",
+      "    $objectEqual = ($reconstructed.GetSecurityDescriptorSddlForm($section) -ceq $original)",
+      "    $bits = [int[]]@($rawEqual, $objectEqual)",
+      "    [System.IO.File]::WriteAllText($roundtrip, [string]::Join(',', [string[]]$bits))",
+      "  } catch {",
+      "    try { [System.IO.File]::WriteAllText($roundtrip, 'unavailable') } catch {}",
+      "  }",
+      "  $stream = [System.IO.File]::Open($Backup, 'CreateNew', 'Write', 'None')",
+      "  try {",
+      "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($original)",
+      "    $stream.Write($bytes, 0, $bytes.Length)",
+      "    $stream.Flush()",
+      "  } finally { $stream.Dispose() }",
+      "  [System.IO.File]::WriteAllText($Stage, 'backup-saved')",
+      "  $deny = [System.Security.AccessControl.FileSystemAccessRule]::new(",
+      "    $sid, 'CreateFiles', 'Deny')",
+      "  $acl.AddAccessRule($deny)",
+      "  [System.IO.Directory]::SetAccessControl($Path, $acl)",
+      "  [System.IO.File]::WriteAllText($Stage, 'deny-applied')",
+      "} elseif ($Action -eq 'restore') {",
+      "  $original = [System.IO.File]::ReadAllText($Backup, [System.Text.Encoding]::UTF8)",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-read')",
+      "  $acl = [System.Security.AccessControl.DirectorySecurity]::new()",
+      "  $acl.SetSecurityDescriptorSddlForm($original, $section)",
+      "  [System.IO.Directory]::SetAccessControl($Path, $acl)",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-applied')",
+      "  $current = [System.IO.Directory]::GetAccessControl($Path, $section)",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-acl-read')",
+      "  $restored = $current.GetSecurityDescriptorSddlForm($section)",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-sddl-read')",
+      "  if ($restored -cne $original) {",
+      "    [System.IO.File]::WriteAllText($Stage, 'restore-diagnostic')",
+      "    $diag = [System.IO.Path]::Combine($Control, 'access-diagnostic.txt')",
+      "    try {",
+      "      if ($original.Length -gt 262144 -or $restored.Length -gt 262144) {",
+      "        throw 'Owned ACL diagnostic input bound'",
+      "      }",
+      "      $before = [System.Security.AccessControl.RawSecurityDescriptor]::new($original)",
+      "      $after = [System.Security.AccessControl.RawSecurityDescriptor]::new($restored)",
+      "      $af = [int]$before.ControlFlags",
+      "      $bf = [int]$after.ControlFlags",
+      "      $a = $before.DiscretionaryAcl",
+      "      $b = $after.DiscretionaryAcl",
+      "      $nullEqual = (($null -eq $a) -eq ($null -eq $b))",
+      "      $countEqual = $false",
+      "      $lengthEqual = $false",
+      "      $bytesEqual = $false",
+      "      if ($null -eq $a -and $null -eq $b) {",
+      "        $countEqual = $true",
+      "        $lengthEqual = $true",
+      "        $bytesEqual = $true",
+      "      } elseif ($null -ne $a -and $null -ne $b) {",
+      "        if ($a.Count -gt 128 -or $b.Count -gt 128 -or",
+      "            $a.BinaryLength -gt 65536 -or $b.BinaryLength -gt 65536) {",
+      "          throw 'Owned ACL diagnostic binary bound'",
+      "        }",
+      "        $countEqual = ($a.Count -eq $b.Count)",
+      "        $lengthEqual = ($a.BinaryLength -eq $b.BinaryLength)",
+      "        $ab = [byte[]]::new($a.BinaryLength)",
+      "        $bb = [byte[]]::new($b.BinaryLength)",
+      "        $a.GetBinaryForm($ab, 0)",
+      "        $b.GetBinaryForm($bb, 0)",
+      "        $bytesEqual = ([Convert]::ToBase64String($ab) -ceq",
+      "          [Convert]::ToBase64String($bb))",
+      "      }",
+      "      $bits = [int[]]@(($af -eq $bf), (($af -band 4) -eq ($bf -band 4)),",
+      "        (($af -band 4096) -eq ($bf -band 4096)),",
+      "        (($af -band 256) -eq ($bf -band 256)),",
+      "        (($af -band 1024) -eq ($bf -band 1024)),",
+      "        $nullEqual, $countEqual, $lengthEqual, $bytesEqual,",
+      "        (($af -band 1024) -ne 0), (($bf -band 1024) -ne 0))",
+      "      [System.IO.File]::WriteAllText($diag, [string]::Join(',', [string[]]$bits))",
+      "    } catch {",
+      "      try { [System.IO.File]::WriteAllText($diag, 'unavailable') } catch {}",
+      "    }",
+      "    [System.IO.File]::WriteAllText($Stage, 'restore-sddl-mismatch')",
+      "    throw 'Owned bucket Access descriptor restoration did not match'",
+      "  }",
+      "  $ownerPath = [System.IO.Path]::Combine($Control, 'initial-owner.txt')",
+      "  if ([System.IO.FileInfo]::new($ownerPath).Length -gt 512) {",
+      "    throw 'Restored Access owner input bound' }",
+      "  $originalOwner = [System.IO.File]::ReadAllText($ownerPath, [System.Text.Encoding]::UTF8)",
+      "  $sections = $section -bor [System.Security.AccessControl.AccessControlSections]::Owner",
+      "  $owner = [System.IO.Directory]::GetAccessControl($Path, $sections).GetOwner(",
+      "    [System.Security.Principal.SecurityIdentifier])",
+      "  if ($null -eq $owner -or $owner.Value -cne $originalOwner) {",
+      "    throw 'Restored Access owner differs' }",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-verified')",
+      "} else { throw 'Unknown owned ACL action' }"), script)
+    shell = Sys.which("powershell.exe")
+    if (!nzchar(shell)) stop("Owned Windows permission test requires powershell.exe")
+    invoke = function(action) {
+      writeBin(charToRaw("launch"), stage)
+      writeBin(charToRaw("pending"), diagnostic)
+      tryCatch(processx::run(shell, c("-NoProfile", "-NonInteractive", "-File", script,
+        "-Path", path, "-Control", control, "-Backup", backup, "-Stage", stage,
+        "-Action", action), timeout = 5, error_on_status = TRUE, windows_hide_window = TRUE,
+        cleanup_tree = TRUE, env = character()), error = function(error) {
+          phase = tryCatch(rawToChar(readBin(stage, "raw", 128L)),
+                           error = function(error) "unreadable-marker")
+          allowed = c("launch", "script-entered", "token-read", "private-acl-built",
+            "private-acl-applied", "bucket-acl-read", "original-roundtrip",
+            "private-control-verified", "initial-access-saved", "initial-access-persisted",
+            "stable-access-structure-verified", "stable-access-persisted",
+            "stable-access-roundtrip-verified", "backup-saved", "deny-applied",
+            "restore-read", "restore-applied", "restore-acl-read", "restore-sddl-read",
+            "restore-sddl-mismatch", "restore-diagnostic", "restore-verified")
+          if (!(phase %in% allowed)) phase = "invalid-marker"
+          # Emit only fixed stage labels, then rethrow the original condition unchanged.
+          tryCatch(cat("Owned checkpoint ACL action=", action, " stage=", phase, "\n",
+                       sep = "", file = stdout()), error = function(error) NULL)
+          if (phase == "restore-sddl-mismatch") {
+            bits = tryCatch(rawToChar(readBin(diagnostic, "raw", 64L)),
+                            error = function(error) "unavailable")
+            fields = c("flags_equal", "present_equal", "protected_equal",
+              "auto_required_equal", "auto_inherited_equal", "null_equal",
+              "ace_count_equal", "binary_length_equal", "binary_equal",
+              "auto_inherited_before", "auto_inherited_after")
+            if (grepl("^[01](,[01]){10}$", bits)) {
+              bits = strsplit(bits, ",", fixed = TRUE)[[1L]]
+              text = paste(paste0(fields, "=", bits), collapse = " ")
+            } else {
+              text = "unavailable"
+            }
+            original_bits = tryCatch(rawToChar(readBin(roundtrip, "raw", 64L)),
+                                     error = function(error) "unavailable")
+            if (grepl("^[01],[01]$", original_bits)) {
+              values = strsplit(original_bits, ",", fixed = TRUE)[[1L]]
+              labels = c("original_raw_parse_equal", "original_object_roundtrip_equal")
+              text = paste(text, paste(paste0(labels, "=", values), collapse = " "))
+            } else {
+              text = paste(text, "original_roundtrip=unavailable")
+            }
+            tryCatch(cat("Owned checkpoint ACL diagnostic ", text, "\n",
+                         sep = "", file = stdout()), error = function(error) NULL)
+          }
+          stop(error)
+        })
+      invisible(NULL)
+    }
+  }
+  restore = function() {
+    if (state$restored) return(invisible(NULL))
+    if (windows) {
+      if (!file.exists(backup)) return(invisible(NULL))
+      invoke("restore")
+    } else {
+      expect_true(Sys.chmod(path, old_mode, use_umask = FALSE))
+      expect_identical(file.mode(path), old_mode)
+    }
+    restored_probe = tempfile("restored-probe-", tmpdir = path)
+    expect_true(file.create(restored_probe))
+    expect_true(file.remove(restored_probe))
+    state$restored = TRUE
+    invisible(NULL)
+  }
+  # Register before any denial attempt, so an error after changing permissions still restores.
+  withr::defer(restore(), envir = .env)
+  if (windows) {
+    invoke("deny")
+  } else {
+    expect_true(Sys.chmod(path, "0555", use_umask = FALSE))
+    expect_true(file.access(path, 2L) != 0L)
+  }
+  denied_probe = tempfile("denied-probe-", tmpdir = path)
+  expect_false(suppressWarnings(file.create(denied_probe)))
+  expect_false(file.exists(denied_probe))
+  restore
+}
+
 test_that("the blob store deduplicates, compresses small text and restores atomically", {
   proj = local_project()
   f = file.path(proj, "a.R")
@@ -37,14 +347,28 @@ test_that("already-compressed files are stored raw and come back byte for byte",
   out = file.path(proj, "restored", "d.rds")
   expect_true(ckpt_store_get(h, out))
   expect_identical(readBin(out, "raw", 1e4), readBin(f, "raw", 1e4))
+})
+
+test_that("the blob store reports effective create denial and restores its owned bucket", {
+  proj = local_project()
   g = file.path(proj, "e.rds")
   saveRDS(11:20, g)
-  blobs = dirname(ckpt_blob_path(hash_file(g), ""))
-  dir.create(blobs, showWarnings = FALSE)
-  Sys.chmod(blobs, "0555", use_umask = FALSE)
-  withr::defer(Sys.chmod(blobs, "0755", use_umask = FALSE))
-  skip_if(file.access(blobs, 2L) == 0L, "the directory stays writable")
+  hash = hash_file(g)
+  blobs = dirname(ckpt_blob_path(hash, ""))
+  expected = file.path(proj, ".gptr", "checkpoints", "blobs", substr(hash, 1L, 2L))
+  same = identical(path_norm(blobs), path_norm(expected))
+  expect_true(same)
+  if (!same) stop("Refusing an unexpected checkpoint bucket")
+  created = dir.create(blobs, recursive = TRUE, showWarnings = FALSE)
+  expect_true(created)
+  if (!isTRUE(created)) stop("Refusing permission changes on a preexisting bucket")
+  expect_identical(path_norm(blobs), path_norm(expected))
+  restore = ckpt_test_deny_create(blobs, proj)
   expect_error(suppressWarnings(ckpt_store_put(g)), class = "gptr_error_workspace")
+  expect_null(ckpt_blob_find(hash))
+  restore()
+  expect_identical(ckpt_store_put(g), hash)
+  expect_false(is.null(ckpt_blob_find(hash)))
 })
 
 test_that("without a workspace the store lives under tempdir(), never in the project", {
@@ -316,13 +640,15 @@ test_that("a file that cannot be written or read is an item and the undo goes on
   expect_identical(readLines(file.path(proj, "b.R")), "b = 1")
 })
 
-test_that("undo and redo of a case-only rename keep the file", {
+test_that("undo and redo of a case-only rename preserve bytes on the observed filesystem", {
   proj = local_project(files = list("readme.md" = "hello"))
-  skip_if_not(fs_case_insensitive(proj), "the file system is case-sensitive")
+  folded = fs_case_insensitive(proj)
+  expect_identical(file.exists(file.path(proj, "README.md")), folded)
   ck = ckpt_ck_new("s0000000032")
   call = list(id = "c1", name = "r", input = list(code = "file.rename('readme.md', 'README.md')"))
   tok = ckpt_files_before(ck, call, turn = 1L)
-  file.rename(file.path(proj, "readme.md"), file.path(proj, "README.md"))
+  expect_true(file.rename(file.path(proj, "readme.md"), file.path(proj, "README.md")))
+  expect_identical(file.exists(file.path(proj, "readme.md")), folded)
   frag = ckpt_files_after(ck, call, tok)
   expect_true(all(ckpt_files_undo(ck, frag)$ok))
   expect_identical(list.files(proj), "readme.md")
@@ -465,4 +791,298 @@ test_that("a forced turn scan records what a CLI child changed (IC-65)", {
   u = ckpt_files_undo(ck, frag)
   expect_true(u$ok)
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
+})
+
+
+test_that("checkpoint payloads are private before gzip or raw-copy writes", {
+  skip_on_os("windows")
+  proj = local_project()
+  files = file.path(proj, c("private.txt", "public.rds"))
+  bytes = list(charToRaw("synthetic private text"), charToRaw("synthetic raw payload"))
+  for (i in seq_along(files)) writeBin(bytes[[i]], files[i])
+  Sys.chmod(files, c("0600", "0644"), use_umask = FALSE)
+  umask = Sys.umask("0022")
+  withr::defer(Sys.umask(umask))
+  modes = character()
+  original_gzip = base::gzfile
+  original_copy = base::file.copy
+  local_mocked_bindings(gzfile = function(description, ...) {
+    if (grepl("[.]tmp-", basename(description))) {
+      modes <<- c(modes, format(file.info(description)$mode))
+    }
+    original_gzip(description, ...)
+  }, file.copy = function(from, to, ...) {
+    if (identical(from, files[2])) modes <<- c(modes, format(file.info(to)$mode))
+    original_copy(from, to, ...)
+  }, .package = "base")
+  hashes = ckpt_store_put(files)
+  blobs = vapply(hashes, ckpt_blob_find, "")
+  expect_identical(modes, c("600", "600"))
+  expect_identical(format(file.info(blobs)$mode), c("600", "600"))
+  expect_true(endsWith(blobs[1], ".gz"))
+  expect_false(endsWith(blobs[2], ".gz"))
+  for (i in seq_along(files)) {
+    out = file.path(proj, paste0("restored-", i))
+    expect_true(ckpt_store_get(hashes[i], out))
+    expect_identical(readBin(out, "raw", file.size(out)), bytes[[i]])
+  }
+  expect_identical(ckpt_store_put(files), hashes)
+  expect_length(list.files(ckpt_store_root(), recursive = TRUE, pattern = "[.]tmp-"), 0L)
+})
+
+test_that("a failed raw checkpoint copy cannot publish an empty precreated blob", {
+  proj = local_project()
+  f = file.path(proj, "payload.rds")
+  writeBin(charToRaw("synthetic raw payload"), f)
+  hash = hash_file(f)
+  original = base::file.copy
+  local_mocked_bindings(file.copy = function(from, to, ...) {
+    if (identical(from, f)) return(FALSE)
+    original(from, to, ...)
+  }, .package = "base")
+  expect_error(suppressWarnings(ckpt_store_put(f)), class = "gptr_error_workspace")
+  expect_null(ckpt_blob_find(hash))
+  expect_length(list.files(ckpt_store_root(), recursive = TRUE, pattern = "[.]tmp-"), 0L)
+})
+
+test_that("a checkpoint permission failure publishes no blob or private payload", {
+  skip_on_os("windows")
+  proj = local_project()
+  f = file.path(proj, "private.txt")
+  writeBin(charToRaw("synthetic private text"), f)
+  hash = hash_file(f)
+  original = base::Sys.chmod
+  local_mocked_bindings(Sys.chmod = function(paths, mode = "0777", use_umask = TRUE) {
+    if (any(startsWith(basename(paths), ".gptr-write-"))) return(rep(FALSE, length(paths)))
+    original(paths, mode, use_umask)
+  }, .package = "base")
+  expect_error(ckpt_store_put(f), class = "gptr_error_workspace")
+  expect_null(ckpt_blob_find(hash))
+  expect_length(list.files(ckpt_store_root(), recursive = TRUE, pattern = "[.]tmp-"), 0L)
+})
+
+
+test_that("checkpoint baseline excludes owned FIFOs before hashing", {
+  skip_on_os("windows")
+  proj = local_project(files = list("source.R" = "answer = 42", "empty.txt" = character()))
+  pipe = file.path(proj, "supervisor_stdin")
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  original = hash_file
+  hashed = character()
+  local_mocked_bindings(hash_file = function(path) {
+    if (any(path == pipe)) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    hashed <<- c(hashed, path)
+    original(path)
+  })
+  ck = ckpt_ck_new("s0000000090")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  expect_setequal(names(tr$hash), c("source.R", "empty.txt"))
+  expect_setequal(basename(hashed), c("source.R", "empty.txt"))
+  expect_true("supervisor_stdin" %in% tr$stat$path)
+  expect_false(ckpt_capturable(pipe))
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+})
+
+test_that("checkpoint changed FIFOs and links stay listed without capture or restore", {
+  skip_on_os("windows")
+  proj = local_project(files = list("source.R" = "answer = 42"))
+  ck = ckpt_ck_new("s0000000091")
+  call = list(id = "fifo", name = "r", input = list(code = "invisible(NULL)"))
+  token = ckpt_files_before(ck, call, 1L)
+  pipe = file.path(proj, "supervisor_stdout")
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  link = file.path(proj, "source-link")
+  expect_true(file.symlink(file.path(proj, "source.R"), link))
+  original = hash_file
+  local_mocked_bindings(hash_file = function(path) {
+    if (any(path %in% c(pipe, link))) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    original(path)
+  })
+  fragment = ckpt_files_after(ck, call, token)
+  rows = stats::setNames(fragment$files, vapply(fragment$files, function(row) row$path, ""))
+  expect_setequal(names(rows), c("supervisor_stdout", "source-link"))
+  expect_identical(rows$supervisor_stdout$post, "")
+  expect_false(rows$supervisor_stdout$restorable)
+  expect_identical(rows$supervisor_stdout$reason, "not a regular file")
+  expect_false(rows[["source-link"]]$restorable)
+  expect_identical(rows[["source-link"]]$reason, "symbolic link")
+  ckpt_files_undo(ck, fragment)
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  expect_true(ckpt_is_link(link))
+  expect_identical(readLines(file.path(proj, "source.R")), "answer = 42")
+})
+
+test_that("checkpoint racy scans reject a tracked regular file replaced by a FIFO", {
+  skip_on_os("windows")
+  proj = local_project(files = list("empty.txt" = character()))
+  ck = ckpt_ck_new("s0000000092")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  observed = tr$stat
+  tr$walk_time = observed$mtime[1L]
+  pipe = file.path(proj, "empty.txt")
+  expect_true(file.remove(pipe))
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  original = hash_file
+  local_mocked_bindings(ckpt_walk = function(root) observed, hash_file = function(path) {
+    if (any(path == pipe)) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    original(path)
+  })
+  scan = ckpt_files_scan(tr)
+  expect_identical(scan$modified, "empty.txt")
+  rows = ckpt_files_step(tr)
+  expect_length(rows, 1L)
+  expect_identical(rows[[1L]]$status, "modified")
+  expect_identical(rows[[1L]]$post, "")
+  expect_false(rows[[1L]]$restorable)
+  expect_identical(rows[[1L]]$reason, "not a regular file")
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+})
+
+test_that("checkpoint file-type uncertainty preserves original stat conditions", {
+  skip_on_os("windows")
+  proj = local_project(files = list("source.R" = "answer = 42"))
+  path = file.path(proj, "source.R")
+  regular = ckpt_regular
+  for (kind in c("error", "interrupt")) {
+    condition = structure(list(message = "fixed stat condition", call = NULL),
+      class = c("ckpt_stat_condition", kind, "condition"))
+    actual = testthat::with_mocked_bindings(
+      tryCatch(regular(path), error = identity, interrupt = identity),
+      ps_fs_stat = function(paths, follow) stop(condition), .package = "ps")
+    expect_identical(actual, condition)
+  }
+  for (type in list(NA_character_, "unknown", character(), 1L)) {
+    actual = testthat::with_mocked_bindings(regular(path),
+      ps_fs_stat = function(paths, follow) list(type = type), .package = "ps")
+    expect_identical(actual, FALSE)
+  }
+  expect_identical(regular(character()), logical())
+  expect_error(regular(file.path(proj, "absent")), class = "ps_error")
+  expect_identical(regular(c(path, proj)), c(TRUE, FALSE))
+})
+
+test_that("checkpoint Windows fallback keeps existing filesystem and link guards", {
+  proj = local_project(files = list("source.R" = "answer = 42", "empty.txt" = character()))
+  paths = file.path(proj, c("source.R", "empty.txt", "absent"))
+  regular = ckpt_regular
+  local_mocked_bindings(is_windows = function() TRUE)
+  testthat::with_mocked_bindings({
+    expect_identical(regular(c(paths, proj)), c(TRUE, TRUE, FALSE, FALSE))
+    expect_true(ckpt_capturable(paths[1L]))
+    expect_true(ckpt_capturable(paths[2L]))
+    expect_false(ckpt_capturable(paths[3L]))
+    local_mocked_bindings(ckpt_is_link = function(path) rep(TRUE, length(path)))
+    expect_false(regular(paths[1L]))
+  }, ps_fs_stat = function(...) stop("Windows must not call POSIX stat"), .package = "ps")
+})
+
+
+test_that("checkpoint undo refuses a regular post-image replaced by an owned FIFO", {
+  skip_on_os("windows")
+  proj = local_project(files = list("source.R" = "answer = 1"))
+  ck = ckpt_ck_new("s0000000093")
+  call = list(id = "fifo-undo", name = "r", input = list(code = "invisible(NULL)"))
+  token = ckpt_files_before(ck, call, 1L)
+  pipe = file.path(proj, "source.R")
+  writeLines("answer = 2", pipe)
+  fragment = ckpt_files_after(ck, call, token)
+  expect_true(fragment$files[[1L]]$restorable)
+  expect_true(file.remove(pipe))
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  original = hash_file
+  local_mocked_bindings(hash_file = function(path) {
+    if (any(path == pipe)) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    original(path)
+  })
+  for (force in c(FALSE, TRUE)) {
+    result = ckpt_files_undo(ck, fragment, force = force)
+    expect_identical(result$ok, FALSE)
+    expect_identical(result$action, "not restored (not a regular file)")
+    expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  }
+})
+
+
+test_that("checkpoint prediction preserves capture of a newly created regular file", {
+  proj = local_project()
+  path = file.path(proj, "created.R")
+  ck = ckpt_ck_new("s0000000094")
+  call = list(id = "created", name = "write", input = list(path = path, content = "answer = 42"))
+  expect_false(file.exists(path))
+  expect_false(ckpt_capturable(path))
+  token = ckpt_files_before(ck, call, 1L)
+  expect_false(file.exists(path))
+  writeLines("answer = 42", path)
+  fragment = ckpt_files_after(ck, call, token)
+  expect_length(fragment$files, 1L)
+  expect_identical(fragment$files[[1L]]$status, "created")
+  expect_true(fragment$files[[1L]]$restorable)
+  expect_true(nzchar(fragment$files[[1L]]$post))
+  expect_identical(readLines(path), "answer = 42")
+  expect_true(ckpt_files_undo(ck, fragment)$ok)
+  expect_false(file.exists(path))
+})
+
+
+test_that("checkpoint explicit paths reject FIFO and preserve regular size-cap semantics", {
+  skip_on_os("windows")
+  proj = local_project()
+  local_gptr_options(checkpoint_capture_max = 1)
+  ck = ckpt_ck_new("s0000000095")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  tr$per_turn = TRUE
+  pipe = file.path(proj, "supervisor_stdin")
+  call = list(id = "explicit-fifo", name = "write", input = list(path = pipe, content = ""))
+  token = ckpt_files_before(ck, call, 1L)
+  fifo = processx::conn_create_fifo(pipe, read = TRUE, nonblocking = TRUE)
+  withr::defer(close(fifo))
+  original = hash_file
+  local_mocked_bindings(hash_file = function(path) {
+    if (any(path == pipe)) {
+      stop(structure(list(message = "FIFO hash refused", call = NULL),
+        class = c("ckpt_fifo_hash_refused", "error", "condition")))
+    }
+    original(path)
+  })
+  fragment = ckpt_files_after(ck, call, token)
+  expect_length(fragment$files, 1L)
+  row = fragment$files[[1L]]
+  expect_true(row$abs)
+  expect_identical(row$path, pipe)
+  expect_identical(row$status, "created")
+  expect_identical(row$post, "")
+  expect_false(row$restorable)
+  expect_identical(row$reason, "not a regular file")
+  expect_identical(ckpt_files_undo(ck, fragment, force = TRUE)$ok, FALSE)
+  expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
+  path = file.path(proj, "over-cap.R")
+  call = list(id = "explicit-regular", name = "write", input = list(path = path, content = "42"))
+  token = ckpt_files_before(ck, call, 1L)
+  writeLines("answer = 42", path)
+  regular = ckpt_files_after(ck, call, token)$files[[1L]]
+  expect_true(regular$restorable)
+  expect_identical(regular$reason, "")
+  expect_identical(regular$post, "")
+  expect_identical(readLines(path), "answer = 42")
 })

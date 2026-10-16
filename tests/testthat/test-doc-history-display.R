@@ -8,6 +8,19 @@ doc_history_fixture = function(n = 24L) {
             footer = "idle . mock/model . unknown tokens . unknown cost . s1234567890")
 }
 
+# Optional repr initializes its own global options on first load. The tests own
+# that load; keep its defaults inside admission rather than changing the caller.
+doc_history_load_repr = function() {
+  before = options()
+  before = before[startsWith(names(before), "repr.")]
+  on.exit({
+    added = setdiff(grep("^repr\\.", names(options()), value = TRUE), names(before))
+    options(c(before, stats::setNames(rep(list(NULL), length(added)), added)))
+  }, add = TRUE)
+  skip_if_not_installed("repr")
+  requireNamespace("repr", quietly = TRUE)
+}
+
 doc_history_has_hook = function(generic) {
   pieces = strsplit(generic, "::", fixed = TRUE)[[1L]]
   hooks = getHook(packageEvent(pieces[[1L]], "onLoad"))
@@ -31,8 +44,7 @@ test_that("history renderers register lazily for each inherited document format"
 })
 
 test_that("notebook MIME displays share the compact printer without changing full history", {
-  skip_if_not_installed("repr")
-  requireNamespace("repr", quietly = TRUE)
+  doc_history_load_repr()
   testthat::local_reproducible_output(width = 100)
   x = doc_history_fixture()
   before = serialize(x, NULL)
@@ -73,8 +85,7 @@ test_that("notebook MIME displays share the compact printer without changing ful
 })
 
 test_that("rich history displays keep markup inert and redact only a display copy", {
-  skip_if_not_installed("repr")
-  requireNamespace("repr", quietly = TRUE)
+  doc_history_load_repr()
   local_vault()
   canary = paste0("FAKE-doc-history-", "display-canary")
   secret_register(canary, "DOC_HISTORY", "test")

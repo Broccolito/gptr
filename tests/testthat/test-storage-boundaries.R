@@ -1,6 +1,7 @@
 # Disposable storage ownership regressions; no real project or credential content.
 
-storage_test_link = function(target, link) {
+storage_test_link = function(target, link, .env = parent.frame()) {
+  if (.Platform$OS.type == "windows") return(wsec_link(target, link, .env = .env))
   ok = suppressWarnings(file.symlink(target, link))
   skip_if_not(isTRUE(ok), "symbolic links are not available")
 }

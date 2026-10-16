@@ -402,12 +402,30 @@ test_that("INFRA-28: the wire log writes redacted lines open-append-close", {
   expect_null(rec$status)
   expect_setequal(names(rec), c("ts", "request_id", "provider", "model", "url", "bytes",
                                 "seconds", "event"))
-  expect_type(rec$ts, "double")
+  expect_true(is.numeric(rec$ts))
+  expect_length(rec$ts, 1L)
+  expect_true(is.finite(rec$ts))
   expect_lt(abs(rec$ts - as.numeric(Sys.time())), 60)
   expect_false(any(grepl("sk-wire-test-0123456789abcdef", lines, fixed = TRUE)))
   wire_log(tr, "done", 200L)
   last = json_decode(utils::tail(readLines(path, encoding = "UTF-8"), 1L))
   expect_identical(last$status, 200L)
+  # JSON numeric scalars may decode as integer at whole seconds, or double otherwise.
+  clocked_wire_log = wire_log
+  clock = new.env(parent = environment(clocked_wire_log))
+  clock$Sys.time = function() as.POSIXct(epoch, origin = "1970-01-01", tz = "UTC")
+  environment(clocked_wire_log) = clock
+  for (epoch in c(1700000000, 1700000000.125)) {
+    clocked_wire_log(tr, "start")
+    timed = json_decode(utils::tail(readLines(path, encoding = "UTF-8"), 1L))
+    expect_true(is.numeric(timed$ts))
+    expect_length(timed$ts, 1L)
+    expect_true(is.finite(timed$ts))
+    expect_identical(as.numeric(timed$ts), epoch)
+    expect_identical(timed$event, "start")
+    expect_identical(timed$request_id, tr$request_id)
+    expect_null(timed$status)
+  }
 })
 
 test_that("the wire log is off by default and stays inside the workspace or tempdir()", {
@@ -893,4 +911,88 @@ test_that("headers are delivered before a body gap and may cancel the transfer",
   expect_identical(st$heads, 1L)
   expect_identical(st$terminal, 0L)
   expect_false(exists(id, envir = reactor_get()$transfers, inherits = FALSE))
+})
+
+# Model a host event arriving after a short pipe poll, without changing user state.
+reactor_host_io = function(state, yield) {
+  io = reactor_io
+  host = new.env(parent = environment(io))
+  environment(io) = host
+  host$reactor_admit = function(...) NULL
+  host$reactor_wait_ms = function(...) 5
+  host$reactor_active = function(...) character()
+  host$reactor_pollables = function(...) list("owned pipe")
+  host$reactor_read_procs = function(...) state$log = c(state$log, "read")
+  host$reactor_drain_stdin = function(...) state$log = c(state$log, "stdin")
+  host$Sys.sleep = yield
+  io
+}
+
+test_that("short pipe polls service host events before dispatch without running nested tools", {
+  state = new.env()
+  state$log = character()
+  state$waits = numeric()
+  io = reactor_host_io(state, function(time) {
+    state$waits = c(state$waits, time)
+    state$log = c(state$log, "yield")
+    reactor_pump(until = function() {
+      state$depth = reactor_depth()
+      state$allow = reactor_allow_runs()
+      TRUE
+    }, timeout = 1)
+    state$log = c(state$log, "nested-return")
+  })
+  local_mocked_bindings(reactor_io = io)
+  local_mocked_bindings(poll = function(processes, ms) {
+    state$log = c(state$log, "poll")
+  }, .package = "processx")
+  reactor_enqueue_tool("u-host-yield", function() {
+    state$log = c(state$log, "tool")
+    state$done = TRUE
+  })
+  expect_true(reactor_pump(until = function() isTRUE(state$done), timeout = 1))
+  expect_identical(state$log, c("poll", "yield", "nested-return", "read", "stdin", "tool"))
+  expect_identical(state$waits, 0)
+  expect_identical(state$depth, 2L)
+  expect_identical(state$allow, character())
+  expect_identical(reactor_depth(), 0L)
+  expect_length(reactor_get()$allow_stack, 0L)
+})
+
+test_that("an interrupt at the short-poll host yield unwinds before dispatch", {
+  state = new.env()
+  state$log = character()
+  diagnostics = length(registry_env()$diag$rows)
+  io = reactor_host_io(state, function(time) {
+    stop(structure(list(message = "host interrupt", call = NULL),
+      class = c("interrupt", "condition")))
+  })
+  local_mocked_bindings(reactor_io = io)
+  local_mocked_bindings(poll = function(processes, ms) {
+    state$log = c(state$log, "poll")
+  }, .package = "processx")
+  caught = tryCatch(reactor_pump(timeout = 0.01), interrupt = identity)
+  expect_s3_class(caught, "interrupt")
+  expect_identical(state$log, "poll")
+  expect_identical(reactor_depth(), 0L)
+  expect_length(reactor_get()$allow_stack, 0L)
+  expect_identical(length(registry_env()$diag$rows), diagnostics)
+})
+
+test_that("immediately ready polls yield without adding a scheduling delay", {
+  state = new.env()
+  state$log = character()
+  state$waits = numeric()
+  io = reactor_host_io(state, function(time) {
+    state$waits = c(state$waits, time)
+    base::Sys.sleep(time)
+  })
+  local_mocked_bindings(poll = function(processes, ms) NULL, .package = "processx")
+  r = reactor_get()
+  before = reactor_now()
+  for (index in seq_len(500L)) io(r, NULL, 5L, Inf)
+  elapsed = reactor_now() - before
+  expect_identical(state$waits, rep(0, 500L))
+  expect_lt(elapsed, 2)
+  expect_identical(reactor_depth(), 0L)
 })

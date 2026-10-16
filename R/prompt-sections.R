@@ -820,14 +820,14 @@ prompt_frozen_restore = function(s) {
 
 #' The compaction floor check at freeze (IC-71)
 #' A post-compaction floor (static prefix, project, skills, checkpoint ~634) not below the threshold
-#' cuts re-injection to 25% of it, then refuses the model; an unknown window is not checked.
+#' cuts re-injection to 25% of it, then refuses; an unknown window honors a finite compact_at.
 #' @noRd
 prompt_floor_check = function(frozen, project_tokens, skills_budget = 0) {
   m = prompt_model(frozen$model)
   window = as.numeric(m$context %||% NA_real_)
-  if (!length(window) || is.na(window)) return(frozen)
   thr = compact_threshold(window, as.numeric(m$max_output %||% NA_real_),
                           gptr_opt("r_output_tokens"))
+  if ((!length(window) || is.na(window)) && !is.finite(thr)) return(frozen)
   static = prompt_static_tokens(frozen)
   floor = static + project_tokens + skills_budget + 634
   if (floor < thr) return(frozen)
@@ -835,12 +835,20 @@ prompt_floor_check = function(frozen, project_tokens, skills_budget = 0) {
   frozen$reinject = list(project = cut, skills = min(skills_budget, cut))
   floor = static + min(project_tokens, cut) + min(skills_budget, cut) + 634
   if (floor < thr) return(frozen)
+  big = function(x) format(round(x), big.mark = ",", scientific = FALSE)
+  if (!length(window) || is.na(window)) {
+    gptr_abort(paste0("compact_at (", big(thr), " tokens) is too small for the ", frozen$preset,
+                      " preset: after a compaction the context (about ", big(floor),
+                      " tokens) would not be below it. Increase compact_at, or use ",
+                      "preset = \"minimal\" or context = \"names\"."),
+               "invalid_argument", arg = "compact_at",
+               expected = "a compact_at above the estimated post-compaction floor")
+  }
   hint = if (identical(frozen$preset, "minimal")) {
     "Use a model with a larger context window."
   } else {
     "Use preset = \"minimal\" or context = \"names\", or a model with a larger context window."
   }
-  big = function(x) format(round(x), big.mark = ",", scientific = FALSE)
   gptr_abort(paste0("The model ", frozen$model, " has a context window of ", big(window),
                     " tokens, too small for the ", frozen$preset, " preset: after a compaction ",
                     "the context (about ", big(floor), " tokens) would not be below the ",

@@ -21,14 +21,18 @@ any is started, so a refusal starts none. On timeout the sessions keep their \co
 and no condition is raised.
 }
 \details{
+\code{timeout} limits reactor polling; it does not interrupt R code. Request preparation
+and synchronous callbacks finish their current step before the deadline is checked
+again, so a call can return after the specified time.
+
 A timeout is not cancellation. Inspect \verb{$status} and use \code{\link[=gptr_cancel]{gptr_cancel()}} if you want to
 abort active work. In Rscript and rendered reports, a blocking call such as this is how
 experimental background sessions progress when there is no idle console.
 }
 \examples{
 fake = gptr_fake_provider(list("a"))
-runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),
-            b = peter("two", model = fake, .run = FALSE, envir = new.env()))
+runs = list(a = peter("one", model = fake, .run = FALSE),
+            b = peter("two", model = fake, .run = FALSE))
 gptr_wait(runs, timeout = 10)
 vapply(runs, function(x) x$status, "")
 }

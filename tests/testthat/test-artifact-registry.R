@@ -15,7 +15,7 @@ seed_artifact = function(id, n = 1L, kind = "shiny") {
 
 # A sleeping R child with a handle shaped like the launcher's (closures over the process only).
 # R_TESTS is blanked: R CMD check sets it to a relative startup file that R's base profile
-# sources in every R child, which would end the child at once (as callr::rcmd_safe_env() does)
+# sources in every R child, which would end the child at once.
 sleeper_handle = function(.env = parent.frame()) {
   p = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(60)"),
                             env = c("current", R_TESTS = ""), cleanup = TRUE,
@@ -392,4 +392,195 @@ test_that("a broken app returns the child's error to the model", {
   expect_match(seen, "stage launch", fixed = TRUE)
   expect_match(seen, "no_such_object", fixed = TRUE)
   expect_identical(gptr_artifacts("broken")$status, "failed")
+})
+
+test_that("a repaired app relaunches after its failed child has settled", {
+  skip_if_cannot_launch()
+  local_project()
+  withr::defer(artifact_stop("repaired", emit = FALSE))
+  broken = c("library(shiny)", "stop('controlled startup failure')",
+             "shinyApp(fluidPage(), function(input, output, session) {})")
+  write_working("repaired", broken)
+  expect_error(peter$app("repaired", launch = TRUE, check = FALSE),
+               "controlled startup failure", class = "gptr_error_artifact")
+  failed = artifact_proc_get("repaired")
+  expect_length(failed$handle, 0L)
+  expect_identical(artifact_status("repaired"), "failed")
+  expect_false(artifact_handle("repaired")$checks$launch)
+  write_working("repaired", tiny_app)
+  app = peter$app("repaired", launch = TRUE, check = FALSE)
+  expect_identical(app$status, "running")
+  expect_identical(app$version, 2L)
+  expect_true(app$checks$launch && app$checks$http)
+  rec = artifact_proc_get("repaired")
+  expect_true(artifact_stop("repaired", emit = FALSE))
+  expect_false(pid_alive(rec$pid, rec$create_time))
+  expect_null(artifact_proc_get("repaired"))
+  expect_false(file.exists(file.path(artifact_dir("repaired"), "run", "run.json")))
+  expect_false(artifact_job_id("repaired") %in% job_list("artifact")$id)
+})
+
+test_that("builtin failed-launch placeholders settle without signalling unknown processes", {
+  signals = 0L
+  local_mocked_bindings(artifact_kill = function(...) {
+    signals = signals + 1L
+    stop("an unknown process must not be signalled")
+  })
+  type = list(stop = artifact_stop_handle)
+  expect_true(artifact_stop_settled(type, list()))
+  expect_false(artifact_stop_settled(type, list(pid = NA_integer_)))
+  expect_false(artifact_stop_settled(type, list(pid = Sys.getpid())))
+  expect_false(artifact_stop_settled(type, list(stop = function() FALSE)))
+  expect_identical(signals, 0L)
+})
+
+
+test_that("an unsettled artifact stop retains recovery state until a confirmed retry", {
+  local_project()
+  seed_artifact("retry")
+  state = new.env(parent = emptyenv())
+  state$settled = FALSE
+  withr::defer({
+    state$settled = TRUE
+    artifact_stop("retry", emit = FALSE)
+  })
+  raw = withr::local_tempfile(fileext = ".log")
+  writeLines("owned child output", raw)
+  log = file.path(artifact_dir("retry"), "run", "app-v001.log")
+  handle = list(pid = NA_integer_, raw = raw, log = log, alive = function() FALSE,
+                stop = function() state$settled)
+  type = list(stop = function(handle) handle$stop())
+  rec = artifact_record_new("retry", 1L, type, handle)
+  assign("retry", rec, envir = artifact_state$procs)
+  artifact_job_add("retry", "Retry", rec$pid)
+  run = file.path(artifact_dir("retry"), "run", "run.json")
+  stopifnot(dir.create(dirname(run), recursive = TRUE, mode = "0700"))
+  write_utf8(run, "owned recovery record")
+  expect_false(artifact_stop("retry", emit = FALSE))
+  expect_identical(artifact_proc_get("retry"), rec)
+  expect_true(rec$stop_requested)
+  expect_identical(artifact_status("retry"), "stopped")
+  expect_true(file.exists(raw))
+  expect_true(file.exists(run))
+  expect_identical(job_list("artifact")$id, "artifact:retry")
+  state$settled = TRUE
+  expect_true(artifact_stop("retry", emit = FALSE))
+  expect_null(artifact_proc_get("retry"))
+  expect_false(file.exists(raw))
+  expect_false(file.exists(run))
+  expect_identical(readLines(log), "owned child output")
+  expect_identical(nrow(job_list("artifact")), 0L)
+})
+
+test_that("an artifact relaunch cannot replace an unsettled recovery record", {
+  local_project()
+  seed_artifact("blocked")
+  state = new.env(parent = emptyenv())
+  state$launches = 0L
+  handle = list(pid = NA_integer_, alive = function() FALSE, stop = function() FALSE)
+  type = list(stop = function(handle) handle$stop(), launch = function(...) {
+    state$launches = state$launches + 1L
+    list()
+  })
+  rec = artifact_record_new("blocked", 1L, type, handle)
+  assign("blocked", rec, envir = artifact_state$procs)
+  withr::defer({
+    if (!is.null(artifact_proc_get("blocked"))) {
+      rm(list = "blocked", envir = artifact_state$procs)
+    }
+    job_remove(artifact_job_id("blocked"))
+  })
+  expect_error(artifact_start("blocked", 1L, type), class = "gptr_error_artifact")
+  expect_identical(state$launches, 0L)
+  expect_identical(artifact_proc_get("blocked"), rec)
+  expect_true(rec$stop_requested)
+})
+
+
+test_that("custom artifact stops accept a void return only after independent settlement", {
+  local_project()
+  seed_artifact("void")
+  state = new.env(parent = emptyenv())
+  state$alive = FALSE
+  state$result = NULL
+  state$uncertain = FALSE
+  handle = list(pid = NA_integer_, alive = function() {
+    if (state$uncertain) stop("controlled probe failure")
+    state$alive
+  })
+  type = list(stop = function(handle) state$result)
+  raw = withr::local_tempfile(fileext = ".log")
+  writeLines("owned output", raw)
+  rec = artifact_record_new("void", 1L, type, c(handle, list(raw = raw)))
+  assign("void", rec, envir = artifact_state$procs)
+  withr::defer({
+    if (!is.null(artifact_proc_get("void"))) rm(list = "void", envir = artifact_state$procs)
+  })
+  for (value in list(FALSE, NA)) {
+    state$result = value
+    expect_false(artifact_stop("void", emit = FALSE))
+    expect_identical(artifact_proc_get("void"), rec)
+    expect_true(file.exists(raw))
+  }
+  state$result = NULL
+  state$uncertain = TRUE
+  expect_false(artifact_stop("void", emit = FALSE))
+  expect_identical(artifact_proc_get("void"), rec)
+  state$uncertain = FALSE
+  state$alive = TRUE
+  expect_false(artifact_stop("void", emit = FALSE))
+  expect_identical(artifact_proc_get("void"), rec)
+  state$alive = FALSE
+  expect_true(artifact_stop("void", emit = FALSE))
+  expect_null(artifact_proc_get("void"))
+  expect_false(file.exists(raw))
+})
+
+test_that(
+  "a void artifact stop fallback requires the recorded process identity and confirmed death", {
+  local_project()
+  seed_artifact("void_pid")
+  state = new.env(parent = emptyenv())
+  state$alive = TRUE
+  state$wait = 0L
+  state$kill = 0L
+  state$confirm = FALSE
+  local_mocked_bindings(
+    proc_create_time = function(pid) 1,
+    proc_identity = function(pid, create_time) {
+      expect_identical(pid, 123L)
+      expect_identical(create_time, 1)
+      list(handle = "original-identity", alive = state$alive)
+    },
+    artifact_kill = function(pid, create_time) {
+      expect_identical(pid, 123L)
+      expect_identical(create_time, 1)
+      state$kill = state$kill + 1L
+      TRUE
+    },
+    proc_wait_exit = function(handles, seconds) {
+      expect_identical(handles, list("original-identity"))
+      expect_true(seconds >= 0 && seconds <= artifact_stop_grace)
+      state$wait = state$wait + 1L
+      TRUE
+    },
+    proc_handle_alive = function(handle) {
+      expect_identical(handle, "original-identity")
+      if (state$confirm) FALSE else NA
+    })
+  rec = artifact_record_new("void_pid", 1L, list(stop = function(handle) NULL),
+                            list(pid = 123L))
+  assign("void_pid", rec, envir = artifact_state$procs)
+  withr::defer({
+    if (!is.null(artifact_proc_get("void_pid"))) {
+      rm(list = "void_pid", envir = artifact_state$procs)
+    }
+  })
+  expect_false(artifact_stop("void_pid", emit = FALSE))
+  expect_identical(artifact_proc_get("void_pid"), rec)
+  expect_identical(state$kill, 1L)
+  expect_identical(state$wait, 1L)
+  state$confirm = TRUE
+  expect_true(artifact_stop("void_pid", emit = FALSE))
+  expect_null(artifact_proc_get("void_pid"))
 })

@@ -19,7 +19,7 @@ test_that("cran_comments_problems() requires the consent design, precedents and 
             paste("'btw' 1.5.0, 'aisdk' 1.4.12, 'ellmer' 0.5.0, 'mcptools' 1.0.3; ?gptr_security;",
                   "SystemRequirements."),
             "## Examples, tests and vignettes",
-            paste("gptr_fake_provider(); No example uses `\\dontrun{}`; @examplesIf;",
+            paste("gptr_fake_provider(); No example uses `\\dontrun{}`; visible `if` guards;",
                   "gptr_login() gptr_mcp_serve()."),
             "## Test environments", "## R CMD check results", "## Reverse dependencies",
             paste0("`tools::package_dependencies(\"gptr\", reverse = TRUE, which = \"all\")`",
@@ -32,4 +32,12 @@ test_that("cran_comments_problems() requires the consent design, precedents and 
   expect_true(any(grepl("name the day", cran_comments_problems(sub("2026-09-29", "", lines)))))
   no_sysreq = sub("SystemRequirements", "", lines, fixed = TRUE)
   expect_true(any(grepl("must mention SystemRequirements", cran_comments_problems(no_sysreq))))
+})
+
+
+test_that("cran_comments_set_revdeps() refuses an unknown package lookup", {
+  lines = c("## Reverse dependencies", "old")
+  expect_error(cran_comments_set_revdeps(lines, NULL), "status is unknown", fixed = TRUE)
+  expect_match(paste(cran_comments_set_revdeps(lines, character()), collapse = "\n"),
+               "No package depends on, imports, links to or suggests gptr.", fixed = TRUE)
 })

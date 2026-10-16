@@ -33,8 +33,8 @@ test_that("P07's section texts equal architecture 7.3 byte for byte", {
   expect_identical(prompt_text("modes"), j(sec("modes")))
   expect_identical(prompt_text("context"), j(sec("context")))
   rs = sec("r_session")
-  expect_length(rs, 11L)
-  core = j(c(rs[1:4], "{{fragments}}", rs[10:11]))
+  expect_length(rs, 12L)
+  core = j(c(rs[1:5], "{{fragments}}", rs[11:12]))
   expect_identical(prompt_text("r_session"), core)
   tl = sec("tools")
   expect_identical(prompt_text("tools_footer"), tl[length(tl)])
@@ -107,9 +107,27 @@ test_that("texts are ASCII and never mention str( (IC-67)", {
 test_that("the r_session core carries exactly one fragments marker on its own line", {
   lines = strsplit(prompt_text("r_session"), "\n", fixed = TRUE)[[1]]
   expect_identical(sum(lines == "{{fragments}}"), 1L)
+  compose = lines[startsWith(lines, "- Compose:")]
+  expect_length(compose, 1L)
+  expect_match(compose, "Use = for assignment and |> for pipes.", fixed = TRUE)
   expect_identical(lines[length(lines)],
                    paste0("- Never call q(), quit(), readline() or menu(), and do not install, ",
                           "update or remove packages unless the user asked."))
+})
+
+test_that("r_session sources scripts in the calling environment", {
+  expect_match(prompt_text("r_session"), "- Source with source(path, local = TRUE).",
+               fixed = TRUE)
+  home = new.env(parent = baseenv())
+  home$path = withr::local_tempfile(fileext = ".R")
+  home$input = 42L
+  name = basename(tempfile("source_result_"))
+  writeLines(paste0(name, " = input + 1L"), home$path)
+  parent_names = ls(globalenv(), all.names = TRUE)
+  eval(parse(text = "source(path, local = TRUE)"), envir = home)
+  expect_identical(home[[name]], 43L)
+  expect_identical(home$input, 42L)
+  expect_identical(ls(globalenv(), all.names = TRUE), parent_names)
 })
 
 test_that("unknown texts are internal errors", {

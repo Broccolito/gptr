@@ -24,7 +24,10 @@ test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)"
   expect_identical(tools::toTitleCase(d[["Title"]]), unname(d[["Title"]]))
   expect_identical(unname(d[["License"]]), "MIT + file LICENSE")
   expect_identical(unname(d[["Copyright"]]), "file inst/COPYRIGHTS")
-  expect_identical(unname(d[["URL"]]), "https://github.com/Broccolito/gptr")
+  expect_identical(
+    trimws(strsplit(unname(d[["URL"]]), ",", fixed = TRUE)[[1L]]),
+    c("https://broccolito.github.io/gptr/", "https://github.com/Broccolito/gptr")
+  )
   expect_identical(unname(d[["BugReports"]]), "https://github.com/Broccolito/gptr/issues")
   expect_identical(unname(d[["Language"]]), "en-US")
   expect_identical(unname(d[["Encoding"]]), "UTF-8")
@@ -56,7 +59,7 @@ test_that("Authors@R credits the maintainer and the author of pi (IC-72)", {
 
 test_that("Imports and Suggests are the final lists of conventions section 8", {
   expect_setequal(desc_packages("Imports"), c(
-    "callr", "cli", "curl", "graphics", "grDevices", "jsonlite", "methods", "processx", "ps",
+    "cli", "curl", "graphics", "grDevices", "jsonlite", "methods", "processx", "ps",
     "rlang", "stats", "tools", "utils", "yaml"
   ))
   expect_setequal(desc_packages("Suggests"), c(
@@ -171,7 +174,7 @@ test_that("the package loaded without load-time errors", {
 test_that("imports_used() references every Imports package", {
   used = vapply(imports_used(), function(f) is.function(f), logical(1))
   expect_true(all(used))
-  expect_length(used, 14L)
+  expect_length(used, 13L)
 })
 
 test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-72, IC-73)", {
@@ -305,4 +308,77 @@ test_that(".gitattributes turns off line-end conversion for every file (CI-5)", 
   rules = if (is.null(attrs)) character() else readLines(attrs, encoding = "UTF-8", warn = FALSE)
   rules = trimws(rules[!grepl("^\\s*(#|$)", rules)])
   expect_identical(rules, "* -text")
+})
+
+
+test_that(".onLoad removes only its newly installed CLI handler", {
+  key = "callr.condition_handler_cli_message"
+  saved = options(key, "gptr.load_probe")
+  withr::defer(options(saved))
+  options(stats::setNames(list(NULL), key))
+  options(gptr.load_probe = "before")
+  handler = function(...) NULL
+  seen = new.env(parent = emptyenv())
+  seen$calls = character()
+  local_mocked_bindings(on_load_run = function() {
+    options(stats::setNames(list(handler), key))
+    options(gptr.load_probe = "queue")
+    seen$calls = c(seen$calls, "queue")
+  }, ns_fun = function(name) {
+    stopifnot(identical(name, "ext_load_builtins"))
+    function() {
+      options(stats::setNames(list(handler), key))
+      options(gptr.load_probe = "builtins")
+      seen$calls = c(seen$calls, "builtins")
+    }
+  })
+  result = .onLoad("lib", "gptr")
+  after = options(key)
+  expect(is.null(result), ".onLoad must retain its invisible NULL result")
+  expect(identical(seen$calls, c("queue", "builtins")), "load order must remain exact")
+  expect(identical(after, stats::setNames(list(NULL), key)),
+    "a newly installed CLI handler must be absent after .onLoad")
+  expect(identical(getOption("gptr.load_probe"), "builtins"),
+    "unrelated load-hook side effects must not be rolled back")
+})
+
+test_that(".onLoad preserves an existing CLI handler across repeated loads", {
+  key = "callr.condition_handler_cli_message"
+  saved = options(key)
+  withr::defer(options(saved))
+  original = function(...) "caller"
+  replacement = function(...) "dependency"
+  options(stats::setNames(list(original), key))
+  local_mocked_bindings(on_load_run = function() {
+    options(stats::setNames(list(replacement), key))
+  }, ns_fun = function(name) NULL)
+  for (i in seq_len(2L)) {
+    result = .onLoad("lib", "gptr")
+    after = getOption(key)
+    expect(is.null(result), ".onLoad must complete without a built-in factory")
+    expect(identical(after, original), "the caller's exact CLI handler must be restored")
+  }
+})
+
+test_that(".onLoad restores its CLI handler without replacing original conditions", {
+  key = "callr.condition_handler_cli_message"
+  saved = options(key)
+  withr::defer(options(saved))
+  original = function(...) "caller"
+  replacement = function(...) "dependency"
+  seen = new.env(parent = emptyenv())
+  local_mocked_bindings(on_load_run = function() {
+    options(stats::setNames(list(replacement), key))
+    stop(seen$condition)
+  }, ns_fun = function(name) stop("builtins must not run after the queue condition"))
+  for (kind in c("error", "interrupt")) {
+    options(stats::setNames(list(original), key))
+    seen$condition = structure(list(message = "owned load condition", call = NULL),
+      class = c("gptr_owned_load_condition", kind, "condition"))
+    result = tryCatch(.onLoad("lib", "gptr"), error = function(e) e,
+      interrupt = function(e) e)
+    after = getOption(key)
+    expect(identical(result, seen$condition), "the original load condition must retain identity")
+    expect(identical(after, original), "load conditions must restore the exact caller handler")
+  }
 })

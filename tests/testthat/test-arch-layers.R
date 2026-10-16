@@ -6,21 +6,26 @@ local_arch_sources = function() {
   dir
 }
 
-test_that("the layer table lists the 119 files of architecture section 3.2", {
+test_that("the layer table lists the files of architecture section 3.2", {
   table = arch_layer_table()
-  expect_identical(nrow(table), 119L)
+  expect_identical(nrow(table), 121L)
   expect_false(anyDuplicated(table$file) > 0)
   expect_true(all(table$layer %in% c("L0", "L1", "L2", "L3", "L4", "L5", "L6", "-")))
   expect_identical(sum(table$plan == "P01"), 15L)
   expect_identical(sum(table$service), 9L)
   expect_identical(table$plan[table$file == "s1-ollama.R"], "P13")
   expect_identical(table$layer[table$file == "s1-ollama.R"], "L4")
+  expect_identical(table$layer[table$file == "proc-rscript.R"], "L0")
+  expect_identical(table$plan[table$file == "proc-rscript.R"], "P04")
+  expect_identical(table$layer[table$file == "doc-export.R"], "L4")
+  expect_identical(table$plan[table$file == "doc-export.R"], "P15")
 })
 
 test_that("every file under R/ has a layer and every function one home", {
   dir = local_arch_sources()
   files = list.files(dir, pattern = "[.][Rr]$")
   expect_identical(setdiff(files, arch_layer_table()$file), character())
+  expect_identical(setdiff(arch_layer_table()$file, files), character())
   map = arch_fun_map(dir)
   expect_identical(unique(map$fun[duplicated(map$fun)]), character())
 })
@@ -79,4 +84,35 @@ test_that("arch_check() flags calls that cross a boundary (negative controls)", 
     "utils-text.R session_new", "tool-read.R policy_mode", "gptr-gateway.R tool_r_execute",
     "agent-loop.R provider_stream", "tool-read.R session_new", "doc-replay.R code_targets"
   ))
+})
+
+test_that("the retained-source R parser has one L0 home (IC-33, IC-56)", {
+  map = arch_fun_map(local_arch_sources())
+  home = map$file[map$fun == "doc_parse_text"]
+  expect_identical(home, "utils-encoding.R")
+  table = arch_layer_table()
+  expect_identical(table$layer[match(home, table$file)], "L0")
+})
+
+test_that("the shared parser preserves source bytes and options without evaluation (IC-62)", {
+  lines = c('label = "\u00e9";\tfor (i in 1L) gateway()', 'stop("must not be evaluated")')
+  for (keep in c(FALSE, TRUE)) {
+    withr::local_options(keep.parse.data = keep)
+    parsed = doc_parse_text(lines)
+    expect_length(parsed, 3L)
+    expect_identical(charToRaw(as_utf8(parsed[[1L]][[3L]])), charToRaw("\u00e9"))
+    expect_identical(parsed[[2L]][[1L]], as.name("for"))
+    expect_identical(parsed[[3L]][[1L]], as.name("stop"))
+    pd = utils::getParseData(parsed)
+    symbol = pd[pd$token == "SYMBOL_FUNCTION_CALL" & pd$text == "gateway", ]
+    expect_length(symbol$id, 1L)
+    expect_identical(as_utf8(utils::getParseText(pd, symbol$id)), "gateway")
+    expect_identical(getOption("keep.parse.data"), keep)
+    expect_error(doc_parse_text("if ("), class = "simpleError")
+    expect_identical(getOption("keep.parse.data"), keep)
+    no_source = doc_parse_text(lines, keep_source = FALSE)
+    expect_identical(no_source[[2L]], quote(for (i in 1L) gateway()))
+    expect_null(utils::getParseData(no_source))
+    expect_identical(getOption("keep.parse.data"), keep)
+  }
 })

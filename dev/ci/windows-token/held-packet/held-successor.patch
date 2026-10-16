@@ -1,0 +1,320 @@
+--- baseline/helper-proc-writer-runtime.R
++++ amended/helper-proc-writer-runtime.R
+@@ -978,7 +978,32 @@
+     declared_links = list(list(entry = "dangling-file", target = "missing-target")))
+ }
+ 
+-rw_token_case = function(case, root) {
++# Fixed labels observe each original postcondition once without changing its result.
++rw_absence_postcondition = function(key, value, phase) {
++  keys = c("owner-marker", "existing-file", "denied-file", "missing-target", "dangling-entry",
++    "existing-directory", "fresh-entries", "remove-owner", "remove-existing-file",
++    "remove-denied-file", "remove-utilities", "remove-fresh-directory",
++    "remove-existing-directory")
++  if (!is.character(key) || length(key) != 1L || is.na(key) || !key %in% keys) {
++    stop("Invalid absence postcondition diagnostic.")
++  }
++  emit = function(status) {
++    tryCatch(phase(paste0("absence-post-", key, "-", status)),
++      error = function(error) NULL, interrupt = function(error) NULL)
++    invisible(NULL)
++  }
++  result = tryCatch(force(value), error = function(error) {
++    emit("error")
++    stop(error)
++  }, interrupt = function(error) {
++    emit("interrupt")
++    stop(error)
++  })
++  emit(if (isTRUE(result)) "1" else "0")
++  result
++}
++
++rw_held_token_case = function(case, root) {
+   ns = asNamespace("gptr")
+   fun = function(name) get(name, ns, inherits = FALSE)
+   phase = function(text) {
+@@ -1015,6 +1040,42 @@
+   present = function(path) {
+     basename(path) %in% list.files(dirname(path), all.files = TRUE, no.. = TRUE)
+   }
++  remove_empty = function(path, .witness = NULL) {
++    withCallingHandlers({
++      if (!is.character(path) || length(path) != 1L || is.na(path) ||
++          !(path %in% paths[c("fresh", "directory")])) {
++        return(FALSE)
++      }
++      key = if (identical(path, paths[["fresh"]])) "fresh" else "directory"
++      record = function(stage, bits) {
++        if (!is.null(.witness)) {
++          stopifnot(is.function(.witness))
++          .witness(paste0("absence-cleanup-", key, "-", stage, "-",
++            paste(as.integer(bits), collapse = "-")))
++        }
++      }
++      parent = list.files(root, all.files = TRUE, no.. = FALSE)
++      parent_ok = all(c(".", "..", basename(path)) %in% parent)
++      exists = dir.exists(path)
++      empty = identical(sort(list.files(path, all.files = TRUE, no.. = FALSE)), c(".", ".."))
++      record("before", c(identical(dirname(path), root), parent_ok, exists, empty))
++      if (!parent_ok || !exists || !empty) return(FALSE)
++      canonical = c(root = normalizePath(root, winslash = "/", mustWork = TRUE),
++        path = normalizePath(path, winslash = "/", mustWork = TRUE),
++        parent = normalizePath(dirname(path), winslash = "/", mustWork = TRUE))
++      parent_match = identical(canonical[["parent"]], canonical[["root"]])
++      path_match = identical(canonical[["path"]],
++        file.path(canonical[["root"]], basename(path)))
++      record("canonical", c(parent_match, path_match))
++      if (!parent_match || !path_match) return(FALSE)
++      status = unlink(canonical[["path"]], recursive = TRUE, force = FALSE, expand = FALSE)
++      after = list.files(canonical[["root"]], all.files = TRUE, no.. = FALSE)
++      parent_known = all(c(".", "..") %in% after)
++      removed = !(basename(path) %in% after)
++      record("after", c(status, parent_known, removed))
++      identical(status, 0L) && parent_known && removed
++    }, warning = function(w) stop(w))
++  }
+   on.exit({
+     stopifnot(!state$utility_unsettled, !state$settlement_failed)
+     if (present(paths[["armed"]]) && !state$recovered) recover()
+@@ -1028,12 +1089,9 @@
+     owner = file.path(paths[["fresh"]], "owner")
+     if (file.exists(owner) && identical(readBin(owner, "raw", n = 27L), charToRaw(marker)))
+       file.remove(owner)
+-    if (dir.exists(paths[["fresh"]]) &&
+-        !length(list.files(paths[["fresh"]], all.files = TRUE, no.. = TRUE)))
+-      unlink(paths[["fresh"]], recursive = FALSE)
+-    if (dir.exists(paths[["directory"]]) &&
+-        !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE)))
+-      unlink(paths[["directory"]], recursive = FALSE)
++    for (path in paths[c("fresh", "directory")]) {
++      if (present(path)) invisible(remove_empty(path, .witness = phase))
++    }
+   }, add = TRUE)
+   phase("absence-link-create")
+   stopifnot(isTRUE(file.symlink(paths[["missing"]], paths[["link"]])),
+@@ -1116,11 +1174,11 @@
+     "  if ($libraryHash -cne $tokenLibraryExpected) { throw 'Token library digest' }",
+     "} finally { $libraryStream.Dispose() }",
+     "[void][System.Reflection.Assembly]::LoadFile($tokenLibrary)",
+-    "$tokenProductionProbe = {", fun("proc_writer_acl")(paths[["denied"]], marker), "}",
+-    strsplit(token_fragment, "\n", fixed = TRUE)[[1L]])
++    "# Admitted current-process token assembly is now loaded.")
+   script = paste(c(
+     "$ErrorActionPreference = 'Stop'",
+     "trap { [Console]::WriteLine('GPTR_ABSENCE_STAGE 99'); exit 1 }",
++    strsplit(token_fragment, "\n", fixed = TRUE)[[1L]],
+     observations,
+     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 1')",
+     paste0("$link = ", literal(paths[["link"]])),
+@@ -1280,9 +1338,10 @@
+     "    [Console]::WriteLine($value)",
+     "  }",
+     "}",
++    "$parentOriginal = StableOwnedAccess $false",
++    "$fileOriginal = StableOwnedAccess $true", trial,
++    "InvokeHeldToken {",
+     "ObservePrivileges 'PRE'",
+-    "$parentOriginal = StableOwnedAccess $false",
+-    "$fileOriginal = StableOwnedAccess $true",
+     "$attributes = [System.IO.File]::GetAttributes($denied)",
+     "if (($attributes -band [System.IO.FileAttributes]::ReparsePoint) -or",
+     "    ($attributes -band [System.IO.FileAttributes]::Directory)) {",
+@@ -1342,7 +1401,7 @@
+     "$actual = [System.IO.Directory]::GetAccessControl($fresh, $sections)",
+     "AssertDenied $actual 1 3",
+     "[Console]::WriteLine('GPTR_ABSENCE_CONTROL PARENT_ACL 1')",
+-    "ObservePrivileges 'LOOKUP'", trial,
++    "ObservePrivileges 'LOOKUP'",
+     "$fileLookup = 3",
+     "try { $null = [System.IO.File]::GetAttributes($denied); $fileLookup = 2 }",
+     "catch [System.UnauthorizedAccessException] { $fileLookup = 1 }",
+@@ -1370,6 +1429,7 @@
+     "  throw 'Independent native denial not effective' }",
+     "[Console]::WriteLine('GPTR-ABSENCE-DENIED-REFUSED')",
+     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 9')",
++    "}",
+     "} finally {",
+     "  try {",
+     "    if ($null -ne $parentOriginal) {",
+@@ -1469,22 +1529,20 @@
+       phase(sprintf("token-compiler-identity-%d-%.6f", record$pid, record$create_time))
+     }
+     accept_line = function(line) {
+-      if (startsWith(line, "GPTR_TOKEN")) {
+-        stopifnot(identity, identical(seen$last_stage, 7L))
+-        token = token_trial_line(line, seen$token_keys)
+-        stopifnot(is.list(token))
++      if (startsWith(line, "GPTR_HELD")) {
++        stopifnot(identity)
++        token = token_held_line(line, seen$token_keys)
++        stopifnot(is.list(token), identical(seen$last_stage,
++          if (startsWith(token$key, "B ")) 4L else 9L))
+         seen$token_keys = c(seen$token_keys, token$key)
+         seen$tokens = c(seen$tokens, line)
+         phase(line)
+-        if (length(seen$tokens) == 26L) {
+-          diagnostic = token_trial_decode(seen$tokens)
+-          phase(paste0("token-group-contribution-", as.integer(diagnostic$group_contribution)))
+-          phase("token-feature-accepted-0")
+-        }
+         return(invisible(NULL))
+       }
+       control = rw_absence_control(line, seen$controls)
+       if (!is.null(control)) {
++        stopifnot(identical(seen$token_keys,
++          c("B BACKUP", "B RESTORE", "B CHANGE_NOTIFY", "B TOKEN_EXACT")))
+         stopifnot(identity, identical(seen$last_stage,
+           if (startsWith(control$key, "PRE_")) 4L else 7L))
+         seen$controls = c(seen$controls, control$key)
+@@ -1494,6 +1552,8 @@
+       }
+       privilege = rw_absence_privilege(line, seen$privileges)
+       if (!is.null(privilege)) {
++        stopifnot(identical(privilege$value, 1L), identical(seen$token_keys,
++          c("B BACKUP", "B RESTORE", "B CHANGE_NOTIFY", "B TOKEN_EXACT")))
+         stopifnot(identity, identical(seen$last_stage,
+           if (startsWith(privilege$key, "PRE_")) 4L else 7L))
+         seen$privileges = c(seen$privileges, privilege$key)
+@@ -1563,7 +1623,7 @@
+     stopifnot(complete, identical(seen$status, 0L), elapsed <= limit,
+       identical(seen$out, proof), !seen$protocol_failed, !seen$stderr)
+     if (identity) {
+-      stopifnot(length(seen$tokens) == 26L, is.list(token_trial_decode(seen$tokens)))
++      stopifnot(length(seen$tokens) == 7L, is.list(token_held_decode(seen$tokens)))
+       stopifnot(identical(seen$privileges, c("PRE_BACKUP", "PRE_RESTORE",
+         "PRE_CHANGE_NOTIFY", "LOOKUP_BACKUP", "LOOKUP_RESTORE", "LOOKUP_CHANGE_NOTIFY")))
+       stopifnot(identical(seen$control_values, rep(1L, 6L)),
+@@ -1656,18 +1716,25 @@
+   result = run_utility(paths[["script"]], proof, identity = TRUE)
+   recover()
+   owner = file.path(paths[["fresh"]], "owner")
+-  stopifnot(identical(readBin(owner, "raw", n = 27L), charToRaw(marker)),
+-    identical(bytes(paths[["file"]]), sentinel), identical(bytes(paths[["denied"]]), sentinel),
+-    !file.exists(paths[["missing"]]),
+-    !(basename(paths[["link"]]) %in% list.files(root, all.files = TRUE, no.. = TRUE)),
+-    !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE)),
+-    identical(sort(list.files(paths[["fresh"]], all.files = TRUE, no.. = TRUE)),
+-      sort(c("owner", "denied-file"))))
+-  stopifnot(file.remove(owner), file.remove(paths[["file"]]), file.remove(paths[["denied"]]),
+-    all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
+-      "token_source", "token_library", "token_compile")])),
+-    identical(unlink(paths[["fresh"]], recursive = FALSE), 0L),
+-    identical(unlink(paths[["directory"]], recursive = FALSE), 0L))
++  post = function(key, value) rw_absence_postcondition(key, value, phase)
++  stopifnot(post("owner-marker", identical(readBin(owner, "raw", n = 27L), charToRaw(marker))),
++    post("existing-file", identical(bytes(paths[["file"]]), sentinel)),
++    post("denied-file", identical(bytes(paths[["denied"]]), sentinel)),
++    post("missing-target", !file.exists(paths[["missing"]])),
++    post("dangling-entry",
++      !(basename(paths[["link"]]) %in% list.files(root, all.files = TRUE, no.. = TRUE))),
++    post("existing-directory",
++      !length(list.files(paths[["directory"]], all.files = TRUE, no.. = TRUE))),
++    post("fresh-entries", identical(sort(list.files(paths[["fresh"]], all.files = TRUE,
++      no.. = TRUE)), sort(c("owner", "denied-file")))))
++  stopifnot(post("remove-owner", file.remove(owner)),
++    post("remove-existing-file", file.remove(paths[["file"]])),
++    post("remove-denied-file", file.remove(paths[["denied"]])),
++    post("remove-utilities",
++      all(file.remove(paths[c("script", "recovery", "parent_backup", "file_backup", "armed",
++        "token_source", "token_library", "token_compile")]))),
++    post("remove-fresh-directory", remove_empty(paths[["fresh"]], .witness = phase)),
++    post("remove-existing-directory", remove_empty(paths[["directory"]], .witness = phase)))
+   fun("reactor_shutdown")()
+   after = list(env = Sys.getenv(), cwd = getwd(), options = options(), seed = seed(),
+     names = sort(ls(envir = globalenv(), all.names = TRUE)))
+@@ -1679,7 +1746,7 @@
+ 
+ 
+ # Experimental runner only. Not registered/applied to ordinary native package tests.
+-rw_token_run = function(packet) {
++rw_held_token_run = function(packet) {
+   stopifnot(identical(.Platform$OS.type, "windows"),
+     identical(Sys.getenv("GPTR_OPTIONAL_NOFOLLOW_OBSERVER"), "true"))
+   bounded_source = function(name, limit, expected) {
+@@ -1690,22 +1757,23 @@
+   }
+   source = bounded_source("current-token.cs", 32768L,
+     "c8ca069362b0a07a8a16187c9a8d32b60d685a29b0ecf36712d6baf26ebffb88")
+-  fragment = bounded_source("token-trial.ps1", 8192L,
+-    "aae0e9b54331f8dc3a94bc2e8fe49d734bbc74345dbfb69ac803e4d28142e2c6")
++  fragment = bounded_source("token-held.ps1", 8192L,
++    "f66e7892e1157ab2f422075281a72f65638770d08ea0764afbe5b8b4cb8b7851")
+   scope = new.env(parent = environment(bp_run))
+   runner = bp_run
+   environment(runner) = scope
+-  scope$bp_child_case = rw_token_case
++  scope$bp_child_case = rw_held_token_case
+   loader = bp_loader()
+   decoders = c("rw_absence_control", "rw_absence_stage", "rw_absence_status",
+-    "rw_absence_observation", "rw_absence_privilege", "token_trial_line", "token_trial_decode")
++    "rw_absence_observation", "rw_absence_privilege", "token_held_line", "token_held_decode",
++    "rw_absence_postcondition")
+   definitions = vapply(decoders, function(name) {
+-    paste0(name, " = ", paste(deparse(get(name, envir = environment(rw_token_run),
++    paste0(name, " = ", paste(deparse(get(name, envir = environment(rw_held_token_run),
+       inherits = TRUE)), collapse = "\n"))
+   }, character(1))
+   definitions = c(definitions, paste0("token_source = ", paste(deparse(source), collapse = "\n")),
+     paste0("token_fragment = ", paste(deparse(fragment), collapse = "\n")))
+   scope$bp_loader = function() c(loader, definitions)
+-  runner("native-token-experiment",
++  runner("native-held-token",
+     declared_links = list(list(entry = "dangling-file", target = "missing-target")))
+ }
+--- baseline/test-token-native.R
++++ controls/test-held-native.R
+@@ -1,7 +1,7 @@
+ # Nominated on provisioned Windows only. No capability or platform skip is allowed.
+-test_that("owned-token A-B-A retains the strict native absence oracle", {
++test_that("owned held-disabled token proves the strict native absence oracle", {
+   expect_identical(.Platform$OS.type, "windows")
+-  packet = Sys.getenv("GPTR_TOKEN_EXPERIMENT_PACKET")
++  packet = Sys.getenv("GPTR_HELD_TOKEN_PACKET")
+   stopifnot(nzchar(packet), dir.exists(packet),
+     identical(Sys.getenv("GPTR_OPTIONAL_NOFOLLOW_OBSERVER"), "true"))
+   packet = normalizePath(packet, winslash = "/", mustWork = TRUE)
+@@ -10,7 +10,7 @@
+     sys.source(file.path(packet, "baseline", name), envir = scope)
+   }
+   sys.source(file.path(packet, "amended", "helper-proc-writer-runtime.R"), envir = scope)
+-  sys.source(file.path(packet, "token-protocol.R"), envir = scope)
++  sys.source(file.path(packet, "token-held-protocol.R"), envir = scope)
+   observer = get("bp_disk_observer", scope, inherits = FALSE)
+   scanner = file.path(packet, "baseline", "fixtures", "bp-disk-observer.py")
+   scope$bp_disk_observer = function(root, declarations = list()) {
+@@ -23,7 +23,7 @@
+   canary = list(bytes = charToRaw("PUBLIC-TOKEN-INPUT"), data = data.frame(x = 1:4))
+   original = serialize(canary, NULL, version = 2)
+   before = snapshot()
+-  x = scope$rw_token_run(packet)
++  x = scope$rw_held_token_run(packet)
+   after = snapshot()
+   expect_true(identical(before, after))
+   expect_identical(serialize(canary, NULL, version = 2), original)
+@@ -54,16 +54,16 @@
+   expect_true("absence-main-settled-1" %in% x$phases)
+   expect_true("absence-recovery-settled-1" %in% x$phases)
+   expect_false(any(x$phases %in% c("token-protocol-failed", "token-unexpected-stderr")))
+-  tokens = x$phases[startsWith(x$phases, "GPTR_TOKEN ")]
+-  expect_length(tokens, 26L)
+-  if (length(tokens) == 26L) {
+-    diagnostic = scope$token_trial_decode(tokens)
+-    expect_identical(dim(diagnostic$records), c(3L, 8L))
++  tokens = x$phases[startsWith(x$phases, "GPTR_HELD ")]
++  expect_length(tokens, 7L)
++  if (length(tokens) == 7L) {
++    diagnostic = scope$token_held_decode(tokens)
++    expect_true(diagnostic$disabled_exact)
++    expect_true(diagnostic$body_finished)
++    expect_true(diagnostic$restored_exact)
++    expect_true(diagnostic$handle_closed)
+     expect_false(diagnostic$individual_privilege_identified)
+-    expect_false(diagnostic$feature_accepted)
+-    # The fixed phase reports only group contribution, not a package fix.
+-    expect_true(paste0("token-group-contribution-",
+-      as.integer(diagnostic$group_contribution)) %in% x$phases)
++    expect_false(diagnostic$restored_privilege_denial_proved)
+   }
+   # This remains the original positive feature requirement; diagnostics cannot waive it.
+   expect_true(x$complete)

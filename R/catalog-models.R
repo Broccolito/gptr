@@ -357,7 +357,7 @@ catalog_merge_models = function(base, layer, patch_only = FALSE) {
 #' A snapshot (04 section 11.10): seed < models.dev < overrides, models sorted by ref
 #' @noRd
 catalog_snapshot = function(api = NULL, decision = NULL,
-                            generated = format(Sys.Date(), "%Y-%m-%d")) {
+                            generated = with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d"))) {
   models = catalog_merge_models(list(), catalog_seed())
   if (!is.null(api) || !is.null(decision)) {
     models = catalog_merge_models(models, catalog_from_modelsdev(api %||% list(), decision))
@@ -1086,7 +1086,8 @@ catalog_refresh = function() {
     d = catalog_http_request(catalog_decision_url, headers = list(accept = "application/json"))
     if (identical(d$status, 200L)) json_decode(raw_to_utf8(d$body)) else NULL
   }, error = function(e) NULL)
-  snap = tryCatch(catalog_snapshot(api, decision, generated = format(Sys.Date(), "%Y-%m-%d")),
+  snap = tryCatch(catalog_snapshot(api, decision,
+                    generated = with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d"))),
                   gptr_error = function(e) e)
   if (inherits(snap, "error")) {
     refused(paste0("returned data gptr could not convert (", conditionMessage(snap), ")"),
@@ -1680,7 +1681,8 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
               drop = FALSE]
   entries = ctg$models[rows$ref]
   today = lapply(entries, function(e) {
-    tryCatch(price_select(e[["prices"]], 0, Sys.Date()), error = function(err) NULL)
+    tryCatch(price_select(e[["prices"]], 0, with_calendar_preserved(Sys.Date())),
+             error = function(err) NULL)
   })
   rate = function(k) {
     vapply(today, function(r) if (is.null(r)) NA_real_ else as.numeric(r[[k]][[1]]), 0,

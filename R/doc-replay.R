@@ -500,7 +500,7 @@ doc_refresh_headers = function(lines, old_blocks, old_lines) {
       next
     }
     h = b$header[[1L]]
-    h$date = format(Sys.Date(), "%Y-%m-%d")
+    h$date = with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d"))
     h$sha = doc_body_sha(body)
     lines[b$start] = paste0(b$indent, "# >>> gptr:", b$id, " ", doc_format_kv(h))
   }
@@ -596,7 +596,8 @@ doc_edit_service = function(path, edits, session) {
 #' @noRd
 doc_s1_summary = function(x) {
   meta = attr(x, "meta") %||% list()
-  tail = paste0(" (", meta$model %||% "unknown", ", ", meta$date %||% format(Sys.Date()), ")")
+  tail = paste0(" (", meta$model %||% "unknown", ", ",
+                 meta$date %||% with_calendar_preserved(format(Sys.Date())), ")")
   v = unclass(x)
   attributes(v) = NULL
   if (inherits(x, "gptr_decision")) {
@@ -633,7 +634,8 @@ doc_s1_block_service = function(call, summary) {
   }
   txt = if (inherits(summary, "gptr_s1")) doc_s1_summary(summary) else as.character(summary)[1L]
   meta = attr(summary, "meta") %||% list()
-  header = list(model = meta$model %||% "unknown", date = meta$date %||% format(Sys.Date()),
+  header = list(model = meta$model %||% "unknown",
+                date = meta$date %||% with_calendar_preserved(format(Sys.Date())),
                 prompt = site$prompt_hash, args = site$args_hash)
   if (!is.null(site$block)) {
     site$block_id = site$block$id
@@ -860,7 +862,8 @@ doc_console_append = function(lines, session = NULL) {
 #' `gptr.spill_days` (`7`): `gptr_cache("prune")` removes temporary files older than this.
 #' @export
 #' @examples
-#' f = tempfile(fileext = ".R"); writeLines("library(gptr)", f)
+#' f = tempfile(fileext = ".R")
+#' writeLines("library(gptr)", f)
 #' gptr_doc(f)
 #' gptr_doc()
 #' gptr_doc(FALSE)
@@ -1106,7 +1109,7 @@ doc_cache_info = function(kinds) {
     info = file.info(f, extra_cols = FALSE)
     mtime = info$mtime[!is.na(info$mtime)]
     data.frame(kind = k, entries = length(f), bytes = sum(info$size, na.rm = TRUE),
-               oldest = if (length(mtime)) min(mtime) else as.POSIXct(NA),
+               oldest = if (length(mtime)) min(mtime) else with_calendar_preserved(as.POSIXct(NA)),
                path = file.path(cache, if (identical(k, "sidecar")) "tmp" else k),
                stringsAsFactors = FALSE)
   })

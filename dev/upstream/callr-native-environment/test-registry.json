@@ -1,0 +1,76 @@
+{
+  "strict": {
+    "file": "test-callr-parent-environment.R",
+    "titles": [
+      "a native callr worker launch preserves actual-empty parent entries and its r_process contract",
+      "a native callr artifact launch preserves actual-empty parent entries and its r_process contract",
+      "a native callr worker value matrix preserves empty absent Unicode and mixed-case environment states",
+      "a native callr artifact value matrix preserves empty absent Unicode and mixed-case environment states",
+      "a native callr startup failure preserves parent state and error transport",
+      "cancelling a native callr child preserves parent state and settles its exact owner"
+    ]
+  },
+  "admission": {
+    "file": "test-callr-startup-admission.R",
+    "titles": [
+      "a native callr child restores inherited absent states for all seven startup and library variables",
+      "a native callr child restores inherited empty states for all seven startup and library variables",
+      "a native callr child restores inherited nonempty states for all seven startup and library variables",
+      "a native callr PATH removal preserves its owned parent and requests child absence"
+    ]
+  },
+  "upstream": {
+    "file": "test-native-child-env.R",
+    "titles": [
+      "native child environment preserves empty values and explicit removals",
+      "native child environment follows platform name matching",
+      "native child environment retains final prepared startup and trace values",
+      "native child arguments preserve processx extra env semantics",
+      "r_process launches without temporary parent environment mutation",
+      "r_session launches without temporary parent environment mutation",
+      "rcmd_process launches without temporary parent environment mutation",
+      "rscript_process launches without temporary parent environment mutation",
+      "synchronous r launches without temporary parent environment mutation"
+    ]
+  },
+  "compat-r-bg": {
+    "file": "test-r-bg.R",
+    "titles": [
+      "r_bg runs",
+      "r_bg takes arguments",
+      "r_bg can be killed",
+      "r_bg can get the error back",
+      "r_bg exit status is non-zero on error (#291)",
+      "can read standard output",
+      "can read standard error",
+      "can read stdout and stderr",
+      "cleans up temporary files"
+    ]
+  },
+  "compat-hook": {
+    "file": "test-hook.R",
+    "titles": [
+      "set options with hook"
+    ]
+  },
+  "compat-timeout": {
+    "file": "test-timeout.R",
+    "titles": [
+      "r with timeout"
+    ]
+  },
+  "compat-otel": {
+    "file": "test-otel.R",
+    "titles": [
+      "callr::r() produces a span when tracing is enabled",
+      "callr::rscript() produces a span",
+      "callr::rcmd() produces a span",
+      "TRACEPARENT is propagated to subprocess",
+      "subprocess errors generate an exception event",
+      "r_session produces spans for the session lifecycle",
+      "r_session$read sets message and status_code attributes",
+      "r_process produces a span and records the get_result event",
+      "tracing is disabled when no SDK is configured"
+    ]
+  }
+}

@@ -88,22 +88,24 @@ cancellation or manual setup returns without starting a session. Existing sessio
 or configured models and \code{.stdin = TRUE} skip setup. CLI-reported login is not proof of online
 access or subscription billing. See \code{vignette("interactive-console", package = "gptr")}.
 
-The name honors Peter Cathcart Wason, whose work on reasoning framed the dual-process (System 1
-/ System 2) view that gptr unifies, and Peter Naur of the Backus-Naur form, in the spirit of
+The name honors Peter Cathcart Wason, whose research with Jonathan Evans distinguished
+processes underlying reasoning and introspection, and Peter Naur of the Backus-Naur form,
+in the spirit of
 recording sessions as readable, replayable documents. A user object named \code{peter} hides the
 gateway; call \code{gptr::peter()} then.
 }
 \section{The interactive console}{
 
 \code{peter()} without a prompt opens a console when someone can answer (interactive R or
-IRkernel); \code{peter(.stdin = TRUE)} reads its input from standard input, and \code{s |> peter()}
-opens it on \code{s}. With no explicit or configured model, the interactive console first offers
-Codex CLI, Claude Code CLI or API configuration instructions. Choosing an available CLI saves
-its default model at user scope; cancelling returns to R. Piped input skips this setup.
+IRkernel); \code{peter(.stdin = TRUE)} reads its input from standard input, and
+\code{session |> peter()} opens it on \code{session}. With no explicit or configured model, the
+interactive console first offers Codex CLI, Claude Code CLI or API configuration
+instructions. Choosing an available CLI saves its default model at user scope; cancelling
+returns to R. Piped input skips this setup.
 Each input is one of:
 \itemize{
-\item a prompt, sent as \code{s |> peter("...")} with \code{{name}} interpolation; \verb{@file} adds the head of a
-file (at most 40 lines) and \verb{@object} attaches an object by name;
+\item a prompt, sent as \code{session |> peter("...")} with \code{{name}} interpolation; \verb{@file} adds
+the head of a file (at most 40 lines) and \verb{@object} attaches an object by name;
 \item \code{!code}: R code run in the session's environment; the code and its output go with the next
 prompt (at most 300 estimated tokens). \code{!!code} omits that note. Both execute your own R
 immediately, without the model's permission gate or a model request. Workspace changes
@@ -120,8 +122,9 @@ a second Ctrl-C aborts. Backgrounding returns to the chat prompt; use
 \code{!!gptr::gptr_wait(gptr::gptr_last())} there to wait for completion. Returning to the prompt
 does not guarantee progress while the chat waits for input. Under Rscript, background runs
 advance only inside blocking gptr calls.
-Front ends that cannot resume use an abort fallback. \verb{/exit}, Ctrl-C twice at the prompt
-or the end of piped input return the session invisibly, so \code{s = peter()} keeps the conversation.
+Front ends that cannot resume use an abort fallback. \verb{/exit}, two consecutive interrupts at
+the prompt or the end of piped input return the session invisibly, so \code{session = peter()}
+keeps the conversation. Use Ctrl-C in a terminal; RStudio, R.app, RGui and Positron use Esc.
 
 Options: \code{gptr.verbose} (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}
@@ -133,18 +136,18 @@ built-in command table.
 
 \section{Sessions and results}{
 
-A pipe such as \code{s |> peter("Explain the result.")} adds work to the same session and kept
-workspace. Use \code{\link[=gptr_fork]{gptr_fork()}} to branch explicitly. The final answer is \code{s$text}; \code{s$value}
-is the R value selected by \code{\link[=gptr_return]{gptr_return()}} during a tool call. Agent-created objects remain
-in \code{envir}. Give a function a dedicated environment when those objects should stay local.
+A pipe such as \code{session |> peter("Explain the result.")} adds work to the same session
+and kept workspace. Use \code{\link[=gptr_fork]{gptr_fork()}} to branch explicitly. The final answer is
+\code{session$text}; \code{session$value} is the R value selected by \code{\link[=gptr_return]{gptr_return()}} during a tool
+call. Agent-created objects remain in \code{envir}.
 }
 
 \examples{
-fake = gptr_fake_provider(list("The data has 32 rows."))
-s = peter("How many rows does the data have?", mtcars, model = fake, envir = new.env())
-s$text
-s |> peter("And how many columns?")
-identical(gptr_last(), s)
+fake = gptr_fake_provider(list("The data has 32 rows.", "The data has 11 columns."))
+session = peter("How many rows does the data have?", mtcars, model = fake)
+session$text
+session |> peter("And how many columns?")
+identical(gptr_last(), session)
 }
 \seealso{
 \link{gptr_security}, \link{gptr_egress} and \link{gptr_options};

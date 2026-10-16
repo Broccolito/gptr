@@ -47,12 +47,32 @@ proc_time_valid = function(time) {
 }
 
 #' @noRd
-proc_record_valid = function(rec, path) {
+proc_record_shape = function(rec, path) {
   is.list(rec) && proc_marker_valid(rec$marker) &&
     identical(basename(path), paste0(rec$marker, ".json")) &&
     proc_pid_valid(rec$pid) && proc_pid_valid(rec$parent_pid) &&
-    rec$pid != rec$parent_pid && rec$pid != Sys.getpid() &&
+    rec$pid != rec$parent_pid &&
     proc_time_valid(rec$create_time) && proc_time_valid(rec$parent_create)
+}
+
+#' A structurally valid record eligible for ordinary orphan cleanup, never this R process
+#' @noRd
+proc_record_valid = function(rec, path) {
+  proc_record_shape(rec, path) && rec$pid != Sys.getpid()
+}
+
+#' Preserve a self record without making it eligible for signalling or deletion
+#'
+#' TRUE proves the current PID, creation time and carried marker. NA means the same-PID
+#' record's time cannot be verified: preserve recovery, without authorizing cleanup.
+#' @noRd
+proc_record_self = function(rec, path) {
+  if (!proc_record_shape(rec, path) || rec$pid != Sys.getpid()) return(FALSE)
+  if (!identical(Sys.getenv(rec$marker), "YES")) return(FALSE)
+  current = proc_create_time(Sys.getpid())
+  if (!is.numeric(rec$create_time) || is.na(rec$create_time) ||
+      !is.finite(current) || current <= 0) return(NA)
+  abs(rec$create_time - current) < 0.01
 }
 
 #' Recognize process absence without interpreting an arbitrary OS error as death
@@ -161,7 +181,8 @@ proc_mark = function(p, marker, command) {
   rec = list(marker = marker, pid = pid, create_time = proc_create_time(pid),
              parent_pid = self$pid, parent_create = self$create_time,
              command = basename(command),
-             started = format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC"))
+             started = with_calendar_preserved(format(
+               Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC")))
   je = jobs_env()
   assign(marker, rec, envir = je$procs)
   assign(marker, p, envir = je$handles)
@@ -189,6 +210,7 @@ proc_record = function(pid, process = NULL) {
 #' @noRd
 proc_unmark = function(marker) {
   if (!proc_marker_valid(marker)) return(invisible(FALSE))
+  if (is_windows() && !isTRUE(proc_writer_remove(marker))) return(invisible(FALSE))
   je = jobs_env()
   if (exists(marker, envir = je$procs, inherits = FALSE)) rm(list = marker, envir = je$procs)
   if (exists(marker, envir = je$handles, inherits = FALSE)) rm(list = marker, envir = je$handles)
@@ -208,6 +230,7 @@ proc_tree = function(marker) {
 #' Release the marker of a child that exited, once no descendant carries it
 #' @noRd
 proc_release = function(p) {
+  if (!isTRUE(proc_writer_stop(p))) return(invisible(FALSE))
   pid = tryCatch(p$get_pid(), error = function(e) NA_integer_)
   rec = proc_record(pid, process = p)
   if (is.null(rec)) return(invisible(FALSE))
@@ -224,7 +247,8 @@ proc_prune = function() {
     tree = proc_tree(m)
     process = je$handles[[m]]
     dead = !is.null(process) && isFALSE(tryCatch(process$is_alive(), error = function(e) NA))
-    if (dead && !length(tree) && !isTRUE(attr(tree, "unavailable"))) proc_unmark(m)
+    settled = !dead || isTRUE(proc_writer_stop(process))
+    if (dead && settled && !length(tree) && !isTRUE(attr(tree, "unavailable"))) proc_unmark(m)
   }
   invisible(NULL)
 }
@@ -247,6 +271,8 @@ proc_sweep = function() {
   files = list.files(d, pattern = "^GPTR_PROC_[0-9a-f]{16}[.]json$", full.names = TRUE)
   for (path in files) {
     rec = tryCatch(json_decode(read_utf8(path)$text), error = function(e) NULL)
+    # A loading child retains its own recovery record written by its parent; no self signal.
+    if (!isFALSE(proc_record_self(rec, path))) next
     if (!proc_record_valid(rec, path)) {
       unlink(path)
       next
@@ -299,6 +325,9 @@ proc_kill_signalled = function(handles) {
 #' Clean one validated owned tree, retaining its recovery record until cleanup is confirmed
 #' @noRd
 proc_cleanup_record = function(rec) {
+  if (proc_pid_valid(rec$pid) && rec$pid == Sys.getpid()) {
+    return(list(killed = 0L, complete = FALSE))
+  }
   tree = proc_tree(rec$marker)
   signalled = proc_kill_signalled(tree)
   killed = 0L
@@ -323,7 +352,7 @@ proc_cleanup_record = function(rec) {
   clear = !isTRUE(attr(survivors, "unavailable")) &&
     !any(vapply(survivors, function(h) !isFALSE(proc_handle_alive(h)), logical(1)))
   complete = clear && (!known || isFALSE(child$alive))
-  if (complete) proc_unmark(rec$marker)
+  if (complete) complete = isTRUE(proc_unmark(rec$marker))
   list(killed = as.integer(killed), complete = complete)
 }
 
@@ -340,6 +369,7 @@ proc_cleanup_record = function(rec) {
 #' @noRd
 kill_all = function(p, grace = 2) {
   if (is.null(p)) return(invisible(TRUE))
+  writer_settled = isTRUE(proc_writer_stop(p))
   pid = tryCatch(p$get_pid(), error = function(e) NA_integer_)
   if (isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))) {
     try(p$interrupt(), silent = TRUE)
@@ -368,7 +398,8 @@ kill_all = function(p, grace = 2) {
     cleanup = proc_cleanup_record(rec)
     dead = isFALSE(tryCatch(p$is_alive(), error = function(e) NA)) && cleanup$complete
   }
-  invisible(dead)
+  if (!writer_settled) writer_settled = isTRUE(proc_writer_stop(p))
+  invisible(dead && writer_settled)
 }
 
 #' The size of a child-process pool: capped at 2 whenever R CMD check runs (IC-60)
@@ -458,7 +489,7 @@ job_frame = function(recs) {
   if (!length(recs)) {
     return(data.frame(id = character(), kind = character(), name = character(),
                       pid = integer(), status = character(),
-                      started = as.POSIXct(character(), tz = "UTC"),
+                      started = structure(numeric(), class = c("POSIXct", "POSIXt"), tzone = "UTC"),
                       stringsAsFactors = FALSE))
   }
   data.frame(id = vapply(recs, function(r) r$id, ""),

@@ -175,7 +175,7 @@ by `options(gptr.quiet = TRUE)`. Untrusted text reaches the console only through
 ```r
 gptr_abort(message, class, ..., .data = NULL, call = NULL)
 gptr_warn(message, class, ..., .data = NULL, .once = NULL)
-gptr_inform(message, class, ..., .data = NULL, .once = NULL)
+gptr_inform(message, class, ..., .data = NULL, .once = NULL, .stream = NULL)
 ```
 
 | Argument | Type | Meaning |
@@ -189,12 +189,19 @@ gptr_inform(message, class, ..., .data = NULL, .once = NULL)
 Returns: `gptr_abort()` never returns; `gptr_warn()`/`gptr_inform()` return `invisible(NULL)`. `gptr_inform()`
 is a no-op when `getOption("gptr.quiet")` is `TRUE`. Warnings get class
 `c("gptr_warning_<cls>", "gptr_warning", "warning", "condition")`, messages
-`c("gptr_message_<cls>", "gptr_message", "message", "condition")`.
+`c("gptr_message_<cls>", "gptr_message", "message", "condition")`. Ordinary messages display on
+stdout after calling handlers, with the standard `muffleMessage` restart; quiet, once keys,
+redaction and metadata remain intact. Actual failure notices may set `.stream = "stderr"`.
+A private stack-scoped protocol binding reserves stdout for JSONL events without changing
+caller options or suppressing caller handlers. The built-in evaluator records a teed condition
+once and drains only its synchronous display bytes; console controls do not enter tool output.
+Ordinary `cat()` and printed objects remain captured. Base warning semantics, including
+`options(warn = 2)`, are unchanged.
 
 Also in P01: `redactor_set(fun)` [internal] (`aaa-state.R`; P03 installs `redact`; it replaces the earlier
 `condition_redactor_set()`, IC-34),
-`msg_verbatim(x, stream = c("stdout", "stderr"))` [internal] (prints untrusted text with `cli::cli_verbatim()`,
-or `cat()` to `stderr()`), `gptr_deprecated(what, since, instead = NULL)` [internal] (warning class
+`msg_verbatim(x, stream = c("stdout", "stderr"))` [internal] (prints literal text with `cat()` to the selected
+stream; the protocol scope reserves stdout for JSONL), `gptr_deprecated(what, since, instead = NULL)` [internal] (warning class
 `deprecated`, once per session per `what`; an error when `options(gptr.deprecations = "error")`).
 
 ### 2.2 Hierarchy
@@ -269,13 +276,14 @@ names the intermediate class when there is one. Fields are in addition to `messa
 Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02), `two_prompts` (P08;
 two unnamed string literals), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
 `doc_conflict` (P15; md5 conflict after three attempts), `s1_errors` (P13; failed elements in a vectorised call;
-field `errors`), `billing_env` (P03/P20; names of removed billing variables),
+field `errors`),
 `readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
 when `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs in live
 session entries; field `counts`).
 
 Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), `egress_ack` (P08, IC-71), `s1_split` (P13; once per
-session when a data frame is split into several states, naming `I(x)`), `notice`
+session when a data frame is split into several states, naming `I(x)`),
+`billing_env` (P03/P20; names of removed billing variables), `notice`
 (one-time notices: experimental routes, Codex overhead, uncalibrated emulation), `value_rebound` (P06),
 `progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2).
 
@@ -398,13 +406,13 @@ Set by gptr in child processes only (never in the user's session): `NO_COLOR=1`,
 in **every** profile (an Rscript child otherwise re-reads keys from `~/.Renviron`; IC-60); `GPTR_MCP_TOKEN`,
 `GPTR_SUBAGENT_DEPTH`, `GPTR_WORKER` as above. Removed from CLI children (G6 §3.7 verbatim, IC-65): for claude,
 secret-like names, registered values, `^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDE_PID$)` except the kept
-`CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, and with a `billing_env` warning
+`CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, and with a `billing_env` informational notice
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, `ANTHROPIC_BASE_URL`,
 `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`,
 `CLAUDE_CODE_USE_FOUNDRY`; for codex, secret-like names, registered values, `^(CODEX_MANAGED_|CODEX_SANDBOX)`, and
-with the warning `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN`, `OPENAI_BASE_URL` (`CODEX_HOME` kept).
-`child_env()` returns the complete vector without removed names (processx form); callr receives
-`child_env_callr()` (removed names as `NA`).
+with the same notice `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN`, `OPENAI_BASE_URL` (`CODEX_HOME` kept).
+`child_env()` returns the complete vector without removed names directly to processx.
+The retired callr adapter is preserved only in excluded upstream experiments.
 
 Tests set (`tests/testthat/setup.R`, P01): `R_USER_CONFIG_DIR`, `R_USER_DATA_DIR`, `R_USER_CACHE_DIR`, `HOME`,
 `USERPROFILE`, `APPDATA`, `LOCALAPPDATA` and `XDG_CONFIG_HOME` to temporary directories, `GPTR_PROJECT_ROOT` to a
@@ -767,7 +775,7 @@ the valid names):
 | `values` | df `turn`, `mode`, `name`, `class`, `bytes` |
 | `usage` | a `gptr_usage` df (§5.12) of this session and its children |
 | `cost` | num(1) USD |
-| `history` | df `turn`, `role`, `preview` (60 chars), `tools` (chr, comma-joined), `tokens` |
+| `history` | `gptr_session_summary` data frame: `turn`, `role`, `preview` (60 chars), `tools` (chr, comma-joined), `tokens`; all rows retained, unknown assistant token counts stay `NA` |
 | `messages` | list of messages on the active branch (R shape, unprojected) |
 | `model`, `mode`, `status`, `reason`, `id`, `kind`, `file` | chr(1) |
 | `turns` | int(1) |
@@ -786,7 +794,9 @@ the valid names):
 |---|---|
 | `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id`; returns `invisible(x)`; never touches user objects |
 | `format(x, ...)`, `as.character(x, ...)` | `$text` |
-| `summary(object, ...)` | class `gptr_session_summary` (df of `history`) with a `print` method |
+| `summary(object, ...)` | complete `gptr_session_summary` table with a detached character-only metadata snapshot; no model request |
+| `print.gptr_session_summary(x, n = 8L, ...)` | recent messages, omitted count and session metadata at current console width; safe display copy; `n = Inf` shows all rows |
+| `as.data.frame.gptr_session_summary(x, ...)` | every row/column as an ordinary data frame, without display metadata |
 | `str(object, ...)` | one line: `<gptr_session s… \| chat \| idle \| 3 turns \| anthropic/claude-sonnet-5-5>` |
 | `$<-`, `[[<-` | refuse (`gptr_error_readonly`) |
 | `.DollarNames(x, pattern)` | accessor and child names |
@@ -2400,7 +2410,6 @@ ok = ext_load(function(gptr) gptr$register(gptr_command("hi", function(args, ctx
 | `alias_resolve(names, aliases = NULL)` | `auth-dotenv.R` | chr of canonical names | P03 |
 | `auth_store_get(key)`, `auth_store_set(key, record)`, `auth_store_remove(key)` | `auth-store.R` | credential store (`auth.json`, 0600, lock, keyring references; §11.8) | P05, P18 |
 | `child_env(profile, pass = character(), set = character(), provider = NULL)` | `auth-childenv.R` | the **complete** named chr for processx `env` (removed names absent; processx rejects `NA`); `profile` in `mcp`, `worker`, `cli-claude`, `cli-codex`, `helper`, `artifact` or a registered `child_env` spec name; **every** profile sets `R_ENVIRON_USER`/`R_PROFILE_USER` to empty files and drops `R_ENVIRON` unless passed (IC-60); the CLI profiles follow G6 §3.7 verbatim (IC-65) | P04, P18, P19, P20, P22, P23 |
-| `child_env_callr(env)` | `auth-childenv.R` | the callr form of a `child_env()` result: every variable of `Sys.getenv()` absent from `env` added as `NA` | P19, P23 |
 | `secret_scan(code, tainted = character())` | `auth-secrets.R` | `list(findings = df(rule, name, level, guard), level = int(1), guard = lgl(1), assigned = chr)` (G6 §3.8) | P11 |
 | `builtin_secrets(gptr)` | `auth-secrets.R` | registers `secret_source`, `redaction_rule`, `env_alias`, `child_env` specs | P02 load |
 | `gptr_scrub()` | `auth-redact.R` | §6.6 (IC-70); `secret_register()` also scans live sessions' in-memory entries for a new value and warns `secret_late` with counts | users, P24 |
@@ -2498,6 +2507,7 @@ row = usage_row(msg, session = s$id, agent = "main", parent_id = NA_character_, 
 | `session_live(s)` | the live record or `NULL` (detached copy) | P06, P14, P19, P20, P21 |
 | `session_home(s)` | the kept home or `NULL` | P09, P16, P19 |
 | `session_append(s, entry)` | appends an entry (R shape) to `.d$entries` and the store (`persist` redaction at ingress, inside `suspendInterrupts()`), moves the leaf, returns the entry id invisibly | all plans that write entries |
+| `session_record_initial_model(s)` | on an empty session, resolves its already-selected model (including session-only specs; routers remain deferred), refuses decision-only models, and records one typed initial `model_change`; no request, prompt freeze or `model_select` event | P19 |
 | `session_set_model(s, ref, reason = "user")` | resolves `ref`, appends `model_change`, emits `model_select` | P08, P14 |
 | `session_set_mode(s, mode, source = "user")` | appends `gptr.mode_change`; the next user message (idle) or an operator message after the current tool results (running) carries the new `<mode>` block | P08, P11, P14 |
 | `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())` | the queue behind `gptr_steer()`; `source` in `pipe`, `pause_menu`, `repl`, `api_user`, `extension`, `agent`; only user sources become operator relays; a call from model code of the same session tree is refused (IC-55) | P08, P14, P19 |
@@ -2895,7 +2905,7 @@ mcp_close(conn)
 | `builtin_subagents(gptr)` | `subagent-backends.R` | registers `backend` specs `inline`, `worker`, `cli` (the `cli` backend's tests are P20's, IC-36), the routes `team` (order 15) and `fanout` (order 16) (IC-39), and the `r_session` fragment for sub-agents (IC-68) | P02 load |
 | `subagent_backend(agent, model)` | `subagent-backends.R` | `chr(1)`: the `auto` rule (inline, except `cli` for CLI-only models; the agent's `backend` when given) | P19 |
 | `subagent_start(spec, parent_run)` | `subagent-backends.R` | starts a child through the backend: `spec` = `list(agent = <spec:agent>, prompt, context (list of call items), model, mode, depth, export, objects, preset, rng_state, registry)`; returns a handle `list(session = <session>, fds = function() int, poll = function() NULL, cancel = function() NULL)`; enforces the limits of §6.13 of `03` (`max_tasks` only at depth >= 1, IC-39; pools capped at 2 under check, IC-60); budget charged to the root (IC-66) | P19 |
-| `worker_main(spec_path, result_path)` | `subagent-worker.R` | runs inside a callr child (started with `supervise_default()`, `encoding = "UTF-8"` and `child_env_callr(child_env("worker"))`): reads the spec (`readRDS`), re-registers `spec$registry` (IC-69), runs `peter()` with the `jsonl` frontend on stdout and answers on stdin (§11.11), exits on stdin EOF, EPIPE or a dead parent pid (checked every 5 s, IC-60), saves exports with `save_rds()` | P19 (callr) |
+| `worker_main(spec_path, result_path)` | `subagent-worker.R` | runs inside a fixed `Rscript --vanilla` child (started with `supervise_default()`, UTF8 pipes and the complete `child_env("worker")` vector): reads the spec (`readRDS`), re-registers `spec$registry` (IC-69), runs `peter()` with the `jsonl` frontend on stdout and answers on stdin (§11.11), exits on stdin EOF, EPIPE or a dead parent pid (checked every 5 s, IC-60), saves exports with `save_rds()` | P19 (Rscript/processx) |
 
 Example calls:
 
@@ -2957,7 +2967,7 @@ by_cyl = peter$sql("select cyl, avg(mpg) as mpg from mtcars group by cyl", name 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `builtin_artifacts(gptr)` | `artifact-app.R` | registers `artifact_type` specs `shiny` and `html`, the member `app` (§9.4), the `artifacts` prompt section (IC-68) and the `artifacts` checkpointer | P02 load |
-| `artifact_serve(dir, port_file, parent_pid, token)` | `artifact-app.R` | runs inside the callr child: picks a free 127.0.0.1 port from `port_candidates()`, publishes it by atomic rename of `port_file`, starts a parent-PID watchdog, runs the app behind the `gptr_token` check (IC-71); stdout/stderr are read by the parent and appended redacted to `app-vNNN.log` (IC-70) | P23 (callr) |
+| `artifact_serve(dir, port_file, parent_pid, token)` | `artifact-app.R` | runs inside the fixed self-contained Rscript/processx child: picks a free 127.0.0.1 port from `port_candidates()`, publishes it by atomic rename of `port_file`, starts a parent-PID watchdog, runs the app behind the `gptr_token` check (IC-71); stdout/stderr are read by the parent and appended redacted to `app-vNNN.log` (IC-70) | P23 (Rscript/processx) |
 
 
 Example calls (inside an `r` evaluation):
@@ -3129,7 +3139,7 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   `--max-turns <n> --max-budget-usd <x>` when a budget is in force (IC-65, IC-66) (never `--bare`; a CLI whose
   `-p` defaults to bare is handled by the probe of IC-65; the binary is native, never the `claude.cmd` shim); `<file>` for `--mcp-config` contains
   `{"mcpServers":{"gptr":{"type":"sdk","name":"gptr"}}}`; the system-prompt file holds the session's frozen T0 +
-  T1; the child environment is `child_env("cli-claude")` (billing variables removed with a `billing_env` warning).
+  T1; the child environment is `child_env("cli-claude")` (billing variables removed with a `billing_env` informational notice).
   Per turn `send` = one `{"type":"user","message":{"role":"user","content":<blocks>},"parent_tool_use_id":null,
   "session_id":""}` line. The normaliser handles `stream_event` lines with `anthropic_normaliser()` (P12),
   `control_request` lines by subtype: `mcp_message` -> `opts$mcp_dispatch(message)` (P18's
@@ -4222,7 +4232,8 @@ succeeds with a later-collating file calling `on_load()` at top level". DESCRIPT
 functions, by a function-level allowlist (req-13, cons-2, req-32):
 
 - *Kernel SDK* (callable from any layer L3-L6 and from L4 built-ins): `session_data()` (read), `session_live()`,
-  `session_home()`, `session_append()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`,
+  `session_home()`, `session_append()`, `session_record_initial_model()`, `session_set_model()`,
+  `session_set_mode()`, `session_enqueue()`,
   `session_value_set()`, `session_value_get()`, `session_replay_apply()`, `session_replay_new()`,
   `session_replay_bind()`, `replay_lookup()`, `session_run()`, `run_start()`, `run_wait()`, `run_abort()`,
   `run_current()`, `run_eval_env()`, `run_emit()`, `dispatch_nested()`, `perm_check()`,
@@ -4461,9 +4472,28 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
   re-applies unapplied upserts of a dead pid through the normal md5 and re-locate path and reports conflicts
   instead of overwriting. Sidecars are never pruned automatically; `gptr_cache("info")` lists them. Under a
   document lock held by another live pid (array jobs) nothing is recorded and a notice is printed.
+- New sidecars use a versioned, closed plain-data JSON record at
+  `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`. Required scalar/array/null fields,
+  nested anchors and notebook block metadata are validated before recovery. Modern records have
+  a fixed 16 MiB byte limit: readers reject oversize/missing/directory inputs and read at most
+  that limit plus one byte even if the file grows; writers reject oversize encoded records
+  before replacing a prior record. Nested plain metadata and finite numeric tokens are validated.
+  Call identity is
+  stored as text and parsed only for supported call/pipe matching; recovery never evaluates it.
+  PID/create-time liveness, deferred adoption, conflict reporting and open-notebook safety remain.
+  Legacy `pending-*.rds` files remain intact and discoverable. POSIX legacy reads require a
+  positively established effective UID matching the file owner, private mode and record validation;
+  Windows refuses legacy RDS before deserialization and reports
+  pending recovery. A present JSON record, including a dangling link, is authoritative even when
+  invalid; no legacy fallback
+  occurs. Successful legacy recovery retains an empty valid JSON settlement record so old upserts
+  cannot be adopted again. Neither legacy records nor settlement records are pruned automatically.
 - `write_atomic()` retries `file.rename()` 3 times with 100 ms sleeps, then writes in place with `writeBin()`
-  after an md5 re-check. `path_key(p)` (P01) lower-cases normalised paths on Windows and macOS; document bindings,
-  trust keys, locks and site matching use it.
+  after an md5 re-check. Checked document writes additionally compare the original document MD5
+  immediately before every rename and report a conflict if it changed during temporary preparation
+  or a retry; unconditional writes retain intentional replacement semantics. This narrows observed
+  races without promising OS-level atomic compare-and-replace. `path_key(p)` (P01) lower-cases
+  normalised paths on Windows and macOS; document bindings, trust keys, locks and site matching use it.
 
 ### 15.4 Safety
 
@@ -4611,12 +4641,33 @@ keeps its dedicated session. P18/P20 tests cover a fork and a plan-mode parent.
 
 **IC-60 Child processes.** (cran-10, fid-4, fid-5, fid-6, fid-18, cran-11, safe-9, cran-19, fid-20)
 
+**Approved bounded-launch amendment, 2026-10-11.** Replace only `worker_spawn()` and
+`artifact_launch_shiny()` callr launches with two fixed trusted `Rscript --vanilla` entrypoints
+through the existing processx engine. This supersedes their P19/P23 launcher selection after
+living-plan RPX01–06 acceptance; callr Import retirement additionally requires RPX07.
+Historical callr examples and upstream parity results are baseline evidence.
+
+The new entrypoints pass complete `child_env()` directly, without a parent environment setter,
+shared callr hook or empty-value normalization. Capture explicit library paths before launch;
+set them before worker namespace/spec execution. Shiny serving remains self-contained and does
+not load gptr, preserving P23's `package = FALSE` boundary. Trusted bootstrap/spec/function files
+are privately owned; no serialized user value, function body or credential enters argv. Keep
+GPTR public handles, spec/result/JSONL/permission protocols, UTF-8 streams and errors unchanged;
+no general callr or `r_process` API clone is introduced. Failed/uncertain launch, identity or kill
+retains its owning state and private files until exact settlement; watcher cancellation cannot
+convert uncertainty into cleanup permission. All supervision, marker, orphan, stop and bounded
+stdin contracts below still apply. Native macOS/Windows installed-package and devtools tests must
+prove parent objects/options/raw environment/cwd/RNG preservation, child startup/library filtering,
+EOF/cancel/parent death and Shiny ready/failure/watchdog before retirement. No Import is added;
+DESCRIPTION removal waits for the final dependency/metadata/artifact gates.
+
 - `rscript_path()` (P01) = `file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else
   "Rscript")`; every test helper, fixture server and fake CLI uses it (fake CLIs run as `c(rscript_path(),
   fake_cli)` through `options(gptr.cli_path)`); lint rejects a bare `"R"` or `"Rscript"` command in `proc_spawn()`
   and `proc_run()` (R CMD check puts failing dummy R and Rscript scripts first on PATH).
 - `child_env()` returns a **complete** named character vector without the removed names (processx rejects `NA`
-  in `env`); `child_env_callr(env)` converts it for callr (removed names as `NA`). Every profile (mcp, helper,
+  in `env`); the baseline `child_env_callr(env)` adapter converts it for callr (removed names as `NA`)
+  until the two-launch migration passes. Every profile (mcp, helper,
   cli-claude, cli-codex, worker, artifact) points `R_ENVIRON_USER` and `R_PROFILE_USER` at gptr's empty files and
   drops `R_ENVIRON` unless passed explicitly (an Rscript child otherwise re-reads keys from `~/.Renviron`).
 - `proc_spawn()` and every `callr::r_bg()` pass `encoding = "UTF-8"` (processx drops non-ASCII bytes of piped
@@ -4711,7 +4762,7 @@ document are exact.
   `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, `ANTHROPIC_BASE_URL`,
   `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`; keep `CLAUDE_CODE_OAUTH_TOKEN`,
   `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`; `CLAUDE_CODE_USE_BEDROCK`/`VERTEX`/`FOUNDRY` are removed with the
-  `billing_env` warning. A capability probe (`--help`, version) detects a CLI whose `-p` defaults to `--bare`
+  `billing_env` informational notice. A capability probe (`--help`, version) detects a CLI whose `-p` defaults to `--bare`
   (which never reads the subscription login [07]) and passes the documented opt-out or stops with
   `gptr_error_cli_version`. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with
   `gptr_error_billing`. The wire log is per session (`cache/tmp/wire-<session id>.jsonl`).
@@ -4888,7 +4939,7 @@ calls and suggests `GPTR_REPLAY=replay`.
 | OAuth | refuse AS metadata without `code_challenge_methods_supported` or without S256; validate `iss` (RFC 9207) when advertised; own callback reader keeping `iss`; state and redirect checks; negative mock cases in P18 [16 §4 item 8, fact-check] | fid-17 |
 | frontmatter | scalars of the string keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) keep their source text (YAML 1.1 turns `yes`/`on`/`1.0` into logicals and numbers; verified) | fid-19 |
 | describers | methods for classes of packages outside Suggests (Matrix, SeuratObject, SingleCellExperiment, arrow, ggplot2) use only base generics, `methods::slot()`/`slotNames()`, `attr()`, `dim()`, guarded by `isNamespaceLoaded()`; never `pkg::fun()` | cran-21 |
-| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `preset = "minimal"` or `context = "names"`; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window | safe-20 |
+| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `preset = "minimal"` or `context = "names"`; an unknown window still checks a finite `compact_at` floor and reports an insufficient cap as `arg = "compact_at"`; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window, or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence) | safe-20 |
 | concurrent writers | read-modify-write of `auth.json`, settings, trust, MCP and user-level project files (and the OAuth refresh) under one short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms retries); a lock is stale when `pid_alive()` is `FALSE` or it is older than 30 s, never when it has vanished (the taker retries); checkpoint blob GC prunes only blobs unreferenced by every session file of the project and older than `gptr.checkpoint_days`, and skips while another live pid holds a session lock in the project | safe-17 |
 | artifact access | each launch gets a 128-bit token (`openssl::rand_bytes(16)`, else `/dev/urandom` on Unix; on Windows without openssl no token and a notice); the wrapper app rejects sessions whose URL lacks `gptr_token=<hex>`; the handle's URL carries it; static checks flag reads of `secret_file` paths at level 3 | safe-22 |
 | knobs | one knob per limit: options `gptr.subagents.max_depth`, `.max_active`, `.max_workers`, `.max_cli`, `.max_tasks` mirror the settings keys; `gptr.max_active` is HTTP transfers only; `gptr_parallel(max_active = NULL)` defaults to `gptr.subagents.max_active` | cons-20 |

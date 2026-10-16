@@ -59,6 +59,9 @@ run_new = function(s, opts, outer) {
   run$pending_model = NULL
   run$pending_compact = NULL
   run$compact_finish = NULL
+  run$compact_pending = NULL
+  run$compact_recovery = NULL
+  run$compact_defer = NULL
   run$blocked = NULL
   run$condition = NULL
   run$message = NULL
@@ -867,25 +870,34 @@ run_start = function(s, input, opts = list()) {
   run = run_new(s, opts, outer)
   replay_notice(s)
   input = run_initial_input(run, input)
-  live$run = run
-  d$status = "running"
-  d$reason = NULL
-  d$condition = NULL
-  d$budget = run$budget
-  if (is.null(d$parent_id)) last_set(s)
-  reactor_run_add(run)
-  # a failure before the run is wired settles it with status error and re-signals
+  # Startup failures settle the registered run before re-signalling the original condition.
   started = tryCatch({
+    live$run = run
+    d$status = "running"
+    d$reason = NULL
+    d$condition = NULL
+    d$budget = run$budget
+    if (is.null(d$parent_id)) last_set(s)
+    reactor_run_add(run)
     input = run_freeze(run, input)
     run_emit(run, "agent_start")
     run_emit(run, "turn_start")
     if (!is.null(input)) run_append_messages(run, input)
     run_wire(run)
     TRUE
-  }, error = function(e) e)
+  }, error = function(e) e, interrupt = function(e) e)
   if (!isTRUE(started)) {
-    run_fail(run, started)
-    stop(started)
+    if (inherits(started, "interrupt")) {
+      on.exit({
+        signalCondition(started)
+        invokeRestart("abort")
+      }, add = TRUE)
+      suspendInterrupts(tryCatch(run_abort(run, "interrupt"),
+                                 error = function(e) NULL, interrupt = function(e) NULL))
+    } else {
+      run_fail(run, started)
+      stop(started)
+    }
   }
   run
 }
@@ -1006,7 +1018,9 @@ run_append_messages = function(run, msgs) {
 run_drive = function(run) {
   if (isTRUE(run$settled)) return(FALSE)
   if (isTRUE(run$busy)) return(TRUE)
-  tryCatch(run_step(run), error = function(e) run_fail(run, e))
+  tryCatch({
+    if (is.null(run$compact_pending)) run_step(run) else run_compact_resume(run)
+  }, error = function(e) run_fail(run, e))
   !isTRUE(run$settled)
 }
 
@@ -1064,12 +1078,15 @@ run_begin_request = function(run, messages) {
 #' A provider_stream() refusal (the IC-74 preflight reads the run's safety snapshot) ends the run
 #' with status error; a preparation hook that aborts stops it before any transfer starts.
 #' @noRd
-run_request = function(run) {
+run_request = function(run, check_compact = TRUE) {
   s = run$shell
   d = session_data(s)
   live = session_live(s)
   if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
-  if (identical(run$attempt, 0L) && !isTRUE(run$boundary_compacted)) run_compact_check(run)
+  if (check_compact && identical(run$attempt, 0L) && !isTRUE(run$boundary_compacted)) {
+    run_compact_check(run)
+    if (!is.null(run$compact_pending)) return(invisible(NULL))
+  }
   target = run_target(run)
   if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
   req = run_build(run, target)
@@ -1196,11 +1213,11 @@ run_response = function(run, msg) {
                   multiplier = d$estimator$m %||% 1)
   row = usage_conform(row)
   row$request_id = run$request_id
-  usage_add(s, row)
+  row = usage_add_durable(s, row)
   ledger_mark_cached(s, run$request_id, usage_as(msg[["usage"]])[["cache_read"]])
   run_emit(run, "usage", row = row)
   run_estimator_update(run, msg)
-  session_append(s, entry_message(msg))
+  session_append(s, usage_message_entry(msg, row))
   run_emit(run, "message_end", role = "assistant", message = msg)
   run$message = msg
   if (identical(msg$stop_reason, "error")) return(run_response_error(run, msg))
@@ -1237,15 +1254,15 @@ run_response_error = function(run, msg) {
   if (is_context_overflow(msg, run$model$context, err)) {
     if (!isTRUE(run$overflow_used) && ext_service_has("compact.run")) {
       run$overflow_used = TRUE
-      if (run_compact(run, "overflow")) return(run_schedule_request(run, 0))
+      compacted = run_compact(run, "overflow")
+      if (!is.null(run$compact_pending)) {
+        run$compact_recovery = msg
+        run$busy = FALSE
+        return(invisible(NULL))
+      }
+      if (isTRUE(compacted)) return(run_schedule_request(run, 0))
     }
-    run$condition = run_condition(
-      run, msg, c("context_overflow", "provider"),
-      message = paste0("the context is still too large",
-                       if (isTRUE(run$overflow_used)) " after one compaction and retry" else "",
-                       ": ", msg$error_message %||% "context overflow"),
-      tokens = run_overflow_tokens(msg))
-    return(run_response_final(run, msg))
+    return(run_overflow_stop(run, msg))
   }
   if (run_retryable(msg, err) && run$attempt < 2L) {
     run$attempt = run$attempt + 1L
@@ -1255,6 +1272,18 @@ run_response_error = function(run, msg) {
   }
   if (run$attempt > 0L) run_emit(run, "retry_end", attempt = run$attempt, ok = FALSE)
   run$condition = run_condition(run, msg, provider_classes(err))
+  run_response_final(run, msg)
+}
+
+#' Finish overflow recovery without discarding the original failed response
+#' @noRd
+run_overflow_stop = function(run, msg) {
+  run$condition = run_condition(
+    run, msg, c("context_overflow", "provider"),
+    message = paste0("the context is still too large",
+                     if (isTRUE(run$overflow_used)) " after one compaction and retry" else "",
+                     ": ", msg$error_message %||% "context overflow"),
+    tokens = run_overflow_tokens(msg))
   run_response_final(run, msg)
 }
 
@@ -1322,15 +1351,43 @@ run_compact_check = function(run) {
 #' Compact the run's session (`compact.run`): TRUE when it did; a failure is a diagnostic
 #' @noRd
 run_compact = function(run, reason) {
-  ok = tryCatch({
-    ext_service_get("compact.run")(run$shell, reason)
-    TRUE
-  }, error = function(e) {
+  prior = run$compact_defer
+  run$compact_defer = TRUE
+  on.exit({
+    run$compact_defer = prior
+  }, add = TRUE)
+  result = tryCatch(list(ok = TRUE, value = {
+    if (is.null(run$compact_pending)) {
+      ext_service_get("compact.run")(run$shell, reason)
+    } else {
+      run$compact_pending$poll()
+    }
+  }), error = function(e) {
     registry_diagnostic("session", "compaction", "compaction_failed", conditionMessage(e))
-    FALSE
+    list(ok = FALSE, value = NULL)
   })
-  if (ok) run$boundary_compacted = TRUE
-  ok
+  if (inherits(result$value, "gptr_compaction_pending")) {
+    run$compact_pending = result$value
+    return(invisible(FALSE))
+  }
+  run$compact_pending = NULL
+  if (result$ok) run$boundary_compacted = TRUE
+  result$ok
+}
+
+#' Resume the request boundary only after its retained checkpoint completes
+#' @noRd
+run_compact_resume = function(run) {
+  if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
+  ok = run_compact(run, NULL)
+  if (!is.null(run$compact_pending) || run_halted(run)) return(invisible(NULL))
+  original = run$compact_recovery
+  run$compact_recovery = NULL
+  if (!is.null(original)) {
+    if (isTRUE(ok)) return(run_schedule_request(run, 0))
+    return(run_overflow_stop(run, original))
+  }
+  run_request(run, check_compact = FALSE)
 }
 
 #' Ask to extend a reached budget by the same amount (ask_human: the run's UI only)
@@ -1418,13 +1475,21 @@ run_settle = function(run, reason) {
   # A nested checkpoint has no ordinary message_end; charge it before persistence and agent_end.
   finish = run$compact_finish
   run$compact_finish = NULL
+  run$compact_pending = NULL
+  run$compact_recovery = NULL
   if (is.function(finish)) {
-    tryCatch(finish(), error = function(e) {
-      registry_diagnostic("session", "compaction_usage", class(e)[[1L]],
-                          paste0("the checkpoint charge could not be completed: ",
-                                 conditionMessage(e)))
-    })
+    failed = function(e) {
+      run_accounting_error(run, e)
+      tryCatch(
+        registry_diagnostic("session", "compaction_usage", class(e)[[1L]],
+                            paste0("the checkpoint charge could not be completed: ",
+                                   conditionMessage(e))),
+        error = function(e) NULL, interrupt = function(e) NULL)
+    }
+    tryCatch(finish(), error = failed, interrupt = failed)
   }
+  # Cleanup still completes; failed durability reaches the existing gateway error path.
+  if (!is.null(run$accounting_error)) status = "error"
   if (identical(status, "max_turns") && is.null(run$condition)) {
     run$condition = gptr_condition(
       paste0("the run stopped after ", run$max_turns, " turns (max_turns)"), "max_turns", "error",
@@ -1506,6 +1571,22 @@ run_error_condition = function(e) {
                  list(detail = conditionMessage(e)))
 }
 
+#' Retain a durable accounting failure while permitting complete abort settlement
+#' @noRd
+run_accounting_error = function(run, e) {
+  if (is.null(run$accounting_error)) run$accounting_error = e
+  run$signal$accounting_error = run$accounting_error
+  d = session_data(run$shell)
+  d$accounting_error = run$accounting_error
+  if (is.null(run$condition)) {
+    failed = function(e) {
+      gptr_condition("Durable usage accounting failed.", "internal", "error")
+    }
+    run$condition = tryCatch(run_error_condition(e), error = failed, interrupt = failed)
+  }
+  invisible(NULL)
+}
+
 #' Settle a run after an unexpected R error (kept as the stored condition)
 #' @noRd
 run_fail = function(run, e) {
@@ -1536,14 +1617,30 @@ run_abort = function(run, reason = "user") {
     msg = run_partial_message(run)
     msg$stop_reason = "aborted"
     msg$error_message = paste0("aborted (", reason, ")")
-    msg = tryCatch(run_abort_usage(run, msg), error = function(e) {
-      registry_diagnostic("session", "abort_usage", class(e)[[1L]], conditionMessage(e))
+    failed_charge = function(e) {
+      run_accounting_error(run, e)
+      tryCatch(
+        registry_diagnostic("session", "abort_usage", class(e)[[1L]], conditionMessage(e)),
+        error = function(e) NULL, interrupt = function(e) NULL)
       msg
-    })
-    # a store failure must not stop the abort (the session would stay `running`)
-    tryCatch(session_append(s, entry_message(msg)), error = function(e) {
-      registry_diagnostic("session", "abort", class(e)[[1L]], conditionMessage(e))
-    })
+    }
+    msg = tryCatch(run_abort_usage(run, msg), error = failed_charge, interrupt = failed_charge)
+    # A failed durable append is retained without stopping abort settlement.
+    failed_append = function(e) {
+      run_accounting_error(run, e)
+      tryCatch(
+        registry_diagnostic("session", "abort", class(e)[[1L]], conditionMessage(e)),
+        error = function(e) NULL, interrupt = function(e) NULL)
+    }
+    tryCatch({
+      rows = d$usage[d$usage$request_id == run$request_id, , drop = FALSE]
+      entry = if (nrow(rows)) {
+        usage_message_entry(msg, rows[1L, , drop = FALSE])
+      } else {
+        entry_message(msg)
+      }
+      session_append(s, entry)
+    }, error = failed_append, interrupt = failed_append)
     run_emit(run, "message_end", role = "assistant", message = msg)
   }
   d$dropped = c(d$dropped, d$queue$steer, d$queue$follow_up)
@@ -1571,7 +1668,7 @@ run_abort_usage = function(run, msg) {
                   multiplier = d$estimator$m %||% 1)
   row$cost = cost
   row = usage_conform(row)
-  usage_add(s, row)
+  row = usage_add_durable(s, row)
   run_emit(run, "usage", row = row)
   msg
 }

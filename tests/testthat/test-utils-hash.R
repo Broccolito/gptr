@@ -156,3 +156,36 @@ test_that("the copy-safety harness reads CRLF markers and still detects copies",
                   "tracemem[0x01 -> 0x02]:\r\nGPTR-END\r\n")
   expect_failure(expect_no_copy("big = 1", "invisible(NULL)"), "1 copies")
 })
+
+test_that("identifier generation does not format the caller calendar", {
+  scope = new.env(parent = environment(id_new))
+  scope$the = new.env(parent = emptyenv())
+  scope$the$id_count = 0
+  scope$id_salt = function() "fixed-private-salt"
+  scope$Sys.time = function() .POSIXct(1789430400.125, tz = "UTC")
+  scope$Sys.getpid = function() 17L
+  scope$format = function(...) stop("calendar formatting is not allowed in identifiers")
+  make_id = id_new
+  environment(make_id) = scope
+  testthat::expect(identical(formals(make_id), formals(id_new)),
+    "the identifier constructor retains its formals")
+  before = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  first = tryCatch(make_id("s", 10L), error = identity)
+  after = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  testthat::expect(identical(before, after), "identifier generation preserves the caller seed")
+  testthat::expect(!inherits(first, "condition"),
+    "identifiers must be constructed without calendar formatting")
+  if (!inherits(first, "condition")) {
+    expected = function(count) {
+      paste0("s", substr(cli::hash_sha256(paste(
+        "1789430400.125000", 17L, count, "fixed-private-salt")), 1L, 10L))
+    }
+    testthat::expect(identical(first, expected(1)),
+      "the numeric clock is hashed with count and salt")
+    second = make_id("s", 10L)
+    testthat::expect(identical(second, expected(2)),
+      "a second identifier advances only its counter")
+    testthat::expect(grepl("^s[0-9a-f]{10}$", second), "the opaque identifier shape is unchanged")
+    testthat::expect(!identical(first, second), "successive identifiers remain distinct")
+  }
+})

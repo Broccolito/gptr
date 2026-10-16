@@ -112,6 +112,7 @@ store_write_lines = function(path, lines, append = TRUE) {
 #' The connection-owning writer (the connection is closed by on.exit() on every path)
 #' @noRd
 store_write_now = function(path, lines, append) {
+  if (!file.exists(path)) write_atomic(path, raw(), expected_md5 = NA_character_)
   con = file(path, open = if (append) "ab" else "wb")
   on.exit(close(con), add = TRUE)
   writeLines(as_utf8(lines), con, sep = "\n", useBytes = TRUE)
@@ -362,7 +363,8 @@ compaction_gptr_from_json = function(g) {
 #' @noRd
 iso_ms = function(x) {
   if (!rlang::is_string(x)) return(NULL)
-  t = as.numeric(as.POSIXct(sub("Z$", "", x), format = "%Y-%m-%dT%H:%M:%OS", tz = "UTC"))
+  t = as.numeric(with_calendar_preserved(as.POSIXct(
+    sub("Z$", "", x), format = "%Y-%m-%dT%H:%M:%OS", tz = "UTC")))
   if (!is.finite(t)) return(NULL)
   round(t * 1000)
 }
@@ -534,33 +536,58 @@ rebuild_own = function(entries, fork) {
 #' an unrecorded count stays unknown (`NA`, IC-74) and a recorded estimate stays `estimated`
 #' @noRd
 rebuild_usage = function(entries, d) {
-  rows = list(usage_empty())
-  for (e in entries) {
-    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.compaction_usage")) {
+  records = vector("list", length(entries))
+  for (i in seq_along(entries)) {
+    e = entries[[i]]
+    row = NULL
+    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.usage")) {
+      row = usage_ancestor_restore(e$data, d)
+    } else if (identical(e$type, "custom") &&
+               identical(e$custom_type, "gptr.compaction_usage")) {
       check_list(e$data, "compaction usage data", named = TRUE)
-      row = e$data[["row"]]
-      check_list(row, "compaction usage row", named = TRUE)
-      check_string(row[["request_id"]], "compaction usage$request_id")
-      row = lapply(row, function(value) value %||% NA)
-      if (any(lengths(row) != 1L)) {
-        arg_abort(row, "compaction usage row", "one scalar value per field")
+      row = usage_row_restore(e$data[["row"]])
+      usage_own_check(row, d)
+    } else if (identical(e$type, "message") && identical(e$message$role, "assistant")) {
+      if ("usage" %in% names(e$gptr)) {
+        row = usage_row_restore(e$gptr[["usage"]])
+        usage_own_check(row, d)
       }
-      row$session = d$id
-      row$parent_id = d$parent_id %||% NA_character_
-      rows[[length(rows) + 1L]] = usage_rows_check(usage_conform(row), "compaction usage")
+    }
+    records[i] = list(row)
+  }
+  canonical = usage_canonical_unique(Filter(Negate(is.null), records))
+  known = new.env(hash = TRUE, parent = emptyenv())
+  for (id in canonical$request_id) assign(id, TRUE, envir = known)
+  seen = new.env(hash = TRUE, parent = emptyenv())
+  out = list(usage_empty())
+  add = function(row) {
+    if (exists(row$request_id, envir = seen, inherits = FALSE)) return(FALSE)
+    assign(row$request_id, TRUE, envir = seen)
+    TRUE
+  }
+  for (i in seq_along(entries)) {
+    row = records[[i]]
+    if (!is.null(row)) {
+      if (add(row)) out[[length(out) + 1L]] = row
       next
     }
+    e = entries[[i]]
     if (!identical(e$type, "message") || !identical(e$message$role, "assistant")) next
     m = e$message
     if (is.null(m$usage)) next
+    if (rlang::is_string(m$request_id) &&
+        exists(m$request_id, envir = known, inherits = FALSE)) next
     ms = iso_ms(e$timestamp) %||% m$timestamp
     if (!(is.numeric(ms) && length(ms) == 1L && is.finite(ms))) ms = 0
     row = usage_row(m, session = d$id, agent = "main", parent_id = d$parent_id %||% NA_character_,
                     started = .POSIXct(ms / 1000, tz = "UTC"), seconds = NA_real_,
                     multiplier = 1)
-    rows[[length(rows) + 1L]] = usage_conform(row)
+    if (add(row)) out[[length(out) + 1L]] = usage_conform(row)
   }
-  do.call(rbind, rows)
+  out = do.call(rbind, out)
+  out$started = .POSIXct(as.numeric(out$started), tz = "UTC")
+  rownames(out) = NULL
+  out
 }
 
 #' Is a session file foreign to this project (another machine or tracked by git)? (IC-52)
@@ -615,10 +642,10 @@ sessions_dir = function() file.path(workspace_root(create = FALSE), "sessions")
 #'   session of this process, or `NULL` when no session was created in this process.
 #' @order 1
 #' @examples
-#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
-#' identical(gptr_last(), s)
+#' session = peter("hi", model = gptr_fake_provider(list("hello")))
+#' identical(gptr_last(), session)
 #' gptr_sessions()
-#' identical(gptr_resume(s$id), s)
+#' identical(gptr_resume(session$id), session)
 #' @export
 gptr_sessions = function(project = TRUE) {
   check_flag(project, "project")

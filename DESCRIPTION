@@ -27,12 +27,12 @@ Description: Runs large language model agents inside the running 'R'
     Writing files and evaluating model-generated code require the user's
     permission by default.
 License: MIT + file LICENSE
-URL: https://github.com/Broccolito/gptr
+URL: https://broccolito.github.io/gptr/,
+    https://github.com/Broccolito/gptr
 BugReports: https://github.com/Broccolito/gptr/issues
 Depends:
     R (>= 4.2.0)
 Imports:
-    callr (>= 3.7.0),
     cli (>= 3.6.0),
     curl (>= 6.0.0),
     graphics,
@@ -40,7 +40,7 @@ Imports:
     jsonlite (>= 1.8.8),
     methods,
     processx (>= 3.8.0),
-    ps (>= 1.7.0),
+    ps (>= 1.8.0),
     rlang (>= 1.1.0),
     stats,
     tools,

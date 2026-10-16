@@ -7,6 +7,16 @@ on:
         description: Full lowercase commit SHA to build once and check
         required: true
         type: string
+      dependency_profiles:
+        description: After five clean consumers, check restricted dependencies and CRAN inventory
+        required: false
+        type: boolean
+        default: false
+      original_profiles_only:
+        description: Recheck only the audited run38288459266 original archive; do not build
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,6 +42,7 @@ env:
 
 jobs:
   producer:
+    if: ${{ !inputs.original_profiles_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -95,19 +106,50 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          import hashlib, json, os, pathlib, tarfile
+          import hashlib, json, os, pathlib, subprocess, tarfile
           folder = pathlib.Path('artifact')
           archives = list(folder.glob('gptr_*.tar.gz'))
           assert len(archives) == 1, 'Expected exactly one normal gptr tarball'
           archive = archives[0]
+          def source_record(path, data):
+              blob = b'blob ' + str(len(data)).encode() + b'\0' + data
+              return {'path': path, 'git_blob_sha1': hashlib.sha1(blob).hexdigest(),
+                      'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
+          expected = []
+          tree = subprocess.check_output(['git', '-C', 'source', 'ls-tree', '-rz',
+                                          os.environ['SOURCE_SHA'], '--', 'R'])
+          for entry in tree.split(b'\0'):
+              if not entry:
+                  continue
+              header, raw_path = entry.split(b'\t', 1)
+              mode, kind, blob = header.decode('ascii').split()
+              path = raw_path.decode('utf-8')
+              if not path.endswith('.R'):
+                  continue
+              assert path.startswith('R/') and mode in {'100644', '100755'} and kind == 'blob'
+              record = source_record(path, (pathlib.Path('source') / path).read_bytes())
+              assert record['git_blob_sha1'] == blob, 'Checkout R bytes differ from committed blob'
+              expected.append(record)
+          expected.sort(key=lambda record: record['path'])
+          assert expected, 'Expected committed R sources'
+          actual = []
           with tarfile.open(archive) as tar:
               members = tar.getmembers()
+              for item in members:
+                  if item.name.startswith('gptr/R/') and item.name.endswith('.R'):
+                      assert item.isfile(), 'Archive R source is not a regular file'
+                      actual.append(source_record(item.name[5:], tar.extractfile(item).read()))
+          actual.sort(key=lambda record: record['path'])
+          assert actual == expected, 'Normal archive R sources differ from the nominated commit'
+          fingerprint = hashlib.sha256(json.dumps(expected, sort_keys=True,
+              separators=(',', ':')).encode()).hexdigest()
           for item in members:
               parts = pathlib.PurePosixPath(item.name).parts
               assert parts and parts[0] == 'gptr' and '..' not in parts, item.name
               assert len(parts) == 1 or parts[1] not in {'dev', 'docs'}, item.name
               assert not ({'.secrets', '.git', 'node_modules'} & set(parts)), item.name
           names = [item.name for item in members if item.isfile()]
+          assert len(names) == len(set(names)), 'Archive contains duplicate regular members'
           assert {'gptr/DESCRIPTION', 'gptr/NAMESPACE', 'gptr/LICENSE'} <= set(names)
           docs = [name for name in names if name.startswith('gptr/inst/doc/')]
           counts = {ext: sum(name.endswith(ext) for name in docs)
@@ -117,7 +159,8 @@ jobs:
                       'basename': archive.name, 'bytes': archive.stat().st_size,
                       'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
                       'producer_r': (folder / 'producer-r-version.txt').read_text().strip(),
-                      'guide_counts': counts}
+                      'guide_counts': counts, 'r_source_count': len(expected),
+                      'source_fingerprint_sha256': fingerprint}
           (folder / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               for key in ('basename', 'bytes', 'sha256'):
@@ -197,8 +240,24 @@ jobs:
           assert manifest['guide_counts'] == {'.Rmd': 14, '.html': 14}
           folder = pathlib.Path('metadata/gptr')
           folder.mkdir(parents=True)
+          records = []
           with tarfile.open(archive) as tar:
+              for item in tar.getmembers():
+                  if item.name.startswith('gptr/R/') and item.name.endswith('.R'):
+                      assert item.isfile(), 'Archive R source is not a regular file'
+                      data = tar.extractfile(item).read()
+                      blob = b'blob ' + str(len(data)).encode() + b'\0' + data
+                      records.append({'path': item.name[5:],
+                          'git_blob_sha1': hashlib.sha1(blob).hexdigest(),
+                          'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)})
               description = tar.extractfile('gptr/DESCRIPTION').read()
+          records.sort(key=lambda record: record['path'])
+          assert records and len(records) == len({record['path'] for record in records})
+          assert type(manifest['r_source_count']) is int
+          assert len(records) == manifest['r_source_count'], 'Archive R source count differs'
+          fingerprint = hashlib.sha256(json.dumps(records, sort_keys=True,
+              separators=(',', ':')).encode()).hexdigest()
+          assert fingerprint == manifest['source_fingerprint_sha256'], 'Archive R fingerprint differs'
           (folder / 'DESCRIPTION').write_bytes(description)
           pathlib.Path('evidence/verified-tarball.json').write_text(
               json.dumps(manifest, indent=2) + '\n')
@@ -252,13 +311,18 @@ jobs:
         shell: Rscript --vanilla {0}
         run: |
           options(Ncpus = 2L)
+          Sys.unsetenv("NOT_CRAN")
+          stopifnot(is.na(Sys.getenv("NOT_CRAN", unset = NA_character_)))
+          writeLines("NOT_CRAN is unset; manual and incoming checks are enabled.",
+                     "evidence/check-environment.txt")
           archive = normalizePath(file.path("artifact", Sys.getenv("EXPECTED_BASENAME")),
                                   mustWork = TRUE)
           writeLines(R.version.string, "evidence/consumer-r-version.txt")
           writeLines("R CMD check has not returned a final Status line.",
                      "evidence/check-summary.txt")
           result = rcmdcheck::rcmdcheck(path = archive, args = "--as-cran",
-                                      check_dir = "check", error_on = "never")
+                                      check_dir = "check", error_on = "never",
+                                      env = c(NOT_CRAN = NA_character_))
           log = list.files("check", pattern = "^00check[.]log$", recursive = TRUE,
                            full.names = TRUE)
           status = if (length(log) == 1L) {
@@ -270,9 +334,9 @@ jobs:
                       paste("notes", length(result$notes)))
           writeLines(summary, "evidence/check-summary.txt")
           cat(summary, sep = "\n")
-          stopifnot(length(log) == 1L, length(status) == 1L,
-                    !any(grepl("ERROR|WARNING", status)), length(result$errors) == 0L,
-                    length(result$warnings) == 0L)
+          stopifnot(length(log) == 1L, identical(status, "Status: OK"),
+                    length(result$errors) == 0L, length(result$warnings) == 0L,
+                    length(result$notes) == 0L)
       - name: Preserve check logs and provenance even after failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -281,5 +345,172 @@ jobs:
           path: |
             evidence/
             check/
+          if-no-files-found: error
+          retention-days: 14
+
+  dependency-profiles:
+    if: ${{ always() && !cancelled() && (inputs.original_profiles_only || (inputs.dependency_profiles && needs.producer.result == 'success' && needs.check.result == 'success')) }}
+    needs: [producer, check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      actions: read
+    env:
+      EXPECTED_SOURCE: ${{ inputs.original_profiles_only && inputs.source_sha || needs.producer.outputs.source_sha }}
+      EXPECTED_BASENAME: ${{ inputs.original_profiles_only && 'gptr_1.0.0.tar.gz' || needs.producer.outputs.basename }}
+      EXPECTED_SHA256: ${{ inputs.original_profiles_only && '9d900a3e04d8ba38466bce899415bbec1111d17a519016e5e03bd196d63db70f' || needs.producer.outputs.sha256 }}
+      PROFILE_ADMISSION: ${{ inputs.original_profiles_only && 'replay' || 'verify' }}
+      TESTTHAT_CPUS: '1'
+      MAKEFLAGS: '-j1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: controller
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.10'
+      - name: Check pure profile ownership, deadline and sequence controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python controller/dev/ci/test-exact-profile.py \
+            controller/dev/ci/exact-profile.py
+      - name: Read the immutable original run, artifact and five-consumer identities
+        if: ${{ inputs.original_profiles_only }}
+        timeout-minutes: 4
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p profile-evidence
+          timeout 60 gh api "repos/$GITHUB_REPOSITORY/actions/runs/38288459266" \
+            --jq '{id,head_sha,path,event,run_attempt,status,conclusion}' \
+            > profile-evidence/original-run.json
+          timeout 60 gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/11764572361" \
+            --jq '{id,name,expired,digest,workflow_run}' \
+            > profile-evidence/original-artifact.json
+          timeout 60 gh api "repos/$GITHUB_REPOSITORY/actions/runs/38288459266/jobs?filter=latest&per_page=100" \
+            --jq '[.jobs[] | {id,name,run_id,head_sha,run_attempt,status,conclusion}]' \
+            > profile-evidence/original-jobs.json
+      - uses: actions/download-artifact@v5
+        if: ${{ inputs.original_profiles_only }}
+        with:
+          artifact-ids: '11764572361'
+          run-id: '38288459266'
+          github-token: ${{ github.token }}
+          path: artifact
+      - uses: actions/download-artifact@v5
+        if: ${{ !inputs.original_profiles_only }}
+        with:
+          name: exact-source-tarball
+          path: artifact
+      - name: Verify the original producer archive and dependency metadata
+        id: profile_identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p metadata profile-evidence
+          printf '%s\n' "$GITHUB_RUN_ID" > profile-evidence/workflow-run-id.txt
+          actual=$(git -C controller rev-parse HEAD)
+          test "$actual" = "$GITHUB_SHA"
+          printf '%s\n' "$actual" > profile-evidence/controller-source-sha.txt
+          admission=()
+          if [[ "$PROFILE_ADMISSION" == replay ]]; then
+            admission=(--producer-run 38288459266
+              --replay-run profile-evidence/original-run.json
+              --replay-artifact profile-evidence/original-artifact.json
+              --replay-jobs profile-evidence/original-jobs.json)
+          fi
+          python controller/dev/ci/exact-profile.py --mode "$PROFILE_ADMISSION" "${admission[@]}" \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --output metadata/gptr
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          Ncpus: 1
+          use-public-rspm: true
+      - name: Check pure R publication warnings and original conditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          Rscript --vanilla controller/dev/ci/test-profile-publication.R \
+            controller/dev/ci/exact-profile.R
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        id: profile_dependencies
+        with:
+          working-directory: metadata/gptr
+          packages: deps::., any::sessioninfo
+          extra-packages: any::rcmdcheck
+          needs: check
+      - uses: r-lib/actions/setup-tinytex@v2
+        env:
+          TINYTEX_INSTALLER: TinyTeX
+      - name: Install HTML Tidy for complete manual checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes tidy
+      - name: Original archive with Depends and Imports only
+        id: profile_depends
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=0
+          python controller/dev/ci/exact-profile.py --mode depends \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --rscript "$(command -v Rscript)" \
+            --output profile-evidence/depends || status=$?
+          if python controller/dev/ci/exact-profile.py --mode settled --prior-mode depends \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --output profile-evidence/depends; then
+            printf '%s\n' 'settled=true' >> "$GITHUB_OUTPUT"
+          fi
+          exit "$status"
+      - name: Original archive with declared Suggests also admitted
+        id: profile_suggests
+        if: ${{ always() && steps.profile_identity.outcome == 'success' && steps.profile_dependencies.outcome == 'success' && steps.profile_depends.outputs.settled == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=0
+          python controller/dev/ci/exact-profile.py --mode suggests \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --rscript "$(command -v Rscript)" \
+            --output profile-evidence/suggests || status=$?
+          if python controller/dev/ci/exact-profile.py --mode settled --prior-mode suggests \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --output profile-evidence/suggests; then
+            printf '%s\n' 'settled=true' >> "$GITHUB_OUTPUT"
+          fi
+          exit "$status"
+      - name: Current read-only public CRAN reverse-dependency inventory
+        if: ${{ always() && steps.profile_identity.outcome == 'success' && steps.profile_dependencies.outcome == 'success' && steps.profile_depends.outputs.settled == 'true' && steps.profile_suggests.outputs.settled == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python controller/dev/ci/exact-profile.py --mode revdeps \
+            --source-sha "$EXPECTED_SOURCE" --archive "artifact/$EXPECTED_BASENAME" \
+            --archive-sha256 "$EXPECTED_SHA256" --manifest artifact/manifest.json \
+            --repository controller --rscript "$(command -v Rscript)" \
+            --output profile-evidence/revdeps
+      - name: Preserve original-profile logs, public inventory and owned resources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-dependency-profiles
+          path: |
+            profile-evidence/
+            metadata/gptr/verified-producer.json
           if-no-files-found: error
           retention-days: 14

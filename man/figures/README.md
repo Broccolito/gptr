@@ -5,7 +5,7 @@ Brand assets for gptr, the agent harness that computes inside the running R sess
 Default: light (`logo.*`). Dark: `logo-dark.*`.
 
 Files
-- logo.svg / logo-dark.svg: vector, font embedded (IBM Plex Mono 600)
+- logo.svg / logo-dark.svg: vector, IBM Plex Mono 600 with a local monospace fallback
 - logo.png / logo-dark.png: 518 × 600 px, hex sticker standard 4.39 × 5.08 cm at 300 dpi
 - logo-2x.png / logo-dark-2x.png: 1036 × 1200 px
 - logo-small.png / logo-dark-small.png: 120 × 139 px for README headers

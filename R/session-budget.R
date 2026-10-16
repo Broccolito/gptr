@@ -67,6 +67,201 @@ usage_add = function(s, row) {
   invisible(row)
 }
 
+#' A bounded canonical charged row, with normalized epoch metadata
+#' @noRd
+usage_row_canonical = function(row) {
+  row = usage_rows_check(usage_conform(row), "durable usage row")
+  if (nrow(row) != 1L || !session_id_ok(row$session) ||
+      !(is.na(row$parent_id) || session_id_ok(row$parent_id)) ||
+      !rlang::is_string(row$agent) || !nzchar(row$agent)) {
+    usage_invalid("durable usage row", "one charged row with valid session and agent identity")
+  }
+  for (key in usage_chr_columns) {
+    value = row[[key]]
+    if (!is.na(value) && nchar(value, type = "bytes") > 8192L) {
+      usage_invalid("durable usage row", "bounded scalar strings")
+    }
+  }
+  row$started = .POSIXct(as.numeric(row$started), tz = "UTC")
+  row
+}
+
+#' Exact finite IEEE-754 bits for the private durable journal, independent of JSON digits
+#' @noRd
+usage_double_store = function(value) {
+  bytes = writeBin(as.numeric(value), raw(), size = 8L, endian = "big")
+  list(ieee754 = paste(sprintf("%02x", as.integer(bytes)), collapse = ""))
+}
+
+#' Decode only the exact private numeric tag; field policy is checked by usage_row_restore()
+#' @noRd
+usage_double_restore = function(value) {
+  if (!is.list(value) || !identical(names(value), "ieee754") ||
+      !rlang::is_string(value[[1L]]) || is.na(value[[1L]]) ||
+      nchar(value[[1L]], type = "bytes") != 16L ||
+      !grepl("^[0-9a-f]{16}$", value[[1L]])) {
+    usage_invalid("durable usage number", "one exact 16-digit finite IEEE-754 tag")
+  }
+  starts = seq.int(1L, 15L, by = 2L)
+  bytes = as.raw(strtoi(substring(value[[1L]], starts, starts + 1L), base = 16L))
+  number = readBin(bytes, "double", n = 1L, size = 8L, endian = "big")
+  if (!is.finite(number)) {
+    usage_invalid("durable usage number", "one finite IEEE-754 number")
+  }
+  number
+}
+
+#' Persist every canonical column; JSON null represents an unknown value
+#' @noRd
+usage_row_store = function(row) {
+  row = usage_row_canonical(row)
+  stored = as.list(row)
+  stored$started = as.numeric(row$started)
+  stored = lapply(stored, function(value) if (is.na(value)) NULL else value)
+  for (key in c(usage_num_columns, "started")) {
+    if (!is.null(stored[[key]])) stored[key] = list(usage_double_store(stored[[key]]))
+  }
+  if (nchar(json_encode(stored), type = "bytes") > 65536L) {
+    usage_invalid("durable usage row", "at most 65536 serialized bytes")
+  }
+  stored
+}
+
+#' Restore an exact scalar schema without provider lookup or repricing
+#' @noRd
+usage_row_restore = function(stored) {
+  if (!is.list(stored) || !identical(names(stored), usage_columns)) {
+    usage_invalid("durable usage row", "the exact ordered 21-column scalar schema")
+  }
+  row = stored
+  for (key in usage_columns) {
+    value = stored[[key]]
+    if (is.null(value) && key %in% c(usage_chr_columns, usage_num_columns)) {
+      row[key] = list(if (key %in% usage_chr_columns) NA_character_ else NA_real_)
+      next
+    }
+    if (key %in% c(usage_num_columns, "started") && is.list(value)) {
+      value = usage_double_restore(value)
+      row[key] = list(value)
+    }
+    valid = length(value) == 1L &&
+      if (key %in% usage_chr_columns) {
+        is.character(value) && !is.na(value)
+      } else if (key == "estimated") {
+        is.logical(value) && !is.na(value)
+      } else {
+        is.numeric(value) && is.finite(value) && (key == "started" || value >= 0)
+      }
+    if (!isTRUE(valid)) usage_invalid("durable usage row", "typed scalar values or JSON null")
+  }
+  row = usage_row_canonical(usage_conform(row))
+  usage_row_store(row)
+  row
+}
+
+#' Require a canonical own charge to match its receiver's header
+#' @noRd
+usage_own_check = function(row, d) {
+  if (!identical(row$session, d$id) ||
+      !identical(row$parent_id, d$parent_id %||% NA_character_)) {
+    usage_invalid("durable usage identity", "the owning session and its recorded parent")
+  }
+  invisible(row)
+}
+
+#' Recover an ancestor journal row from a bounded origin-to-receiver prefix
+#' @noRd
+usage_ancestor_restore = function(data, d) {
+  if (!is.list(data) || !identical(names(data), c("row", "lineage", "receiver_parent"))) {
+    usage_invalid("durable usage ancestry", "one exact accounting record")
+  }
+  row = usage_row_restore(data$row)
+  ids = data$lineage
+  if (!is.list(ids) || !is.null(names(ids)) || length(ids) < 2L || length(ids) > 32L ||
+      !all(vapply(ids, session_id_ok, NA))) {
+    usage_invalid("durable usage ancestry", "two to 32 scalar session ids")
+  }
+  ids = unlist(ids, use.names = FALSE)
+  if (anyDuplicated(ids) || !identical(ids[[1L]], row$session) ||
+      !identical(ids[[2L]], row$parent_id) || !identical(utils::tail(ids, 1L), d$id) ||
+      !(is.null(data$receiver_parent) || session_id_ok(data$receiver_parent)) ||
+      !identical(data$receiver_parent, d$parent_id)) {
+    usage_invalid("durable usage ancestry",
+                   "a unique origin-to-receiver prefix matching its header")
+  }
+  if (nchar(json_encode(data), type = "bytes") > 65536L) {
+    usage_invalid("durable usage ancestry", "at most 65536 serialized bytes")
+  }
+  row
+}
+
+#' Charge memory and persist originating rows in every already-live ancestor
+#' No child file or registry aggregate is read; a failed append remains fatal.
+#' @noRd
+usage_add_durable = function(s, row) {
+  row = usage_row_canonical(row)
+  usage_own_check(row, session_data(s))
+  chain = list(s)
+  ids = session_data(s)$id
+  cur = s
+  repeat {
+    pid = session_data(cur)$parent_id
+    if (is.null(pid)) break
+    if (pid %in% ids || length(ids) >= 32L) {
+      usage_invalid("durable usage ancestry", "an acyclic chain of at most 32 live sessions")
+    }
+    cur = session_by_id(pid)
+    if (is.null(cur)) break
+    if (!identical(session_data(cur)$id, pid)) {
+      usage_invalid("durable usage ancestry", "the exact live parent")
+    }
+    chain[[length(chain) + 1L]] = cur
+    ids = c(ids, pid)
+  }
+  stored = usage_row_store(row)
+  usage_add(s, row)
+  for (i in seq_along(chain)[-1L]) {
+    receiver = chain[[i]]
+    data = list(row = stored, lineage = as.list(ids[seq_len(i)]),
+                receiver_parent = session_data(receiver)$parent_id)
+    usage_ancestor_restore(data, session_data(receiver))
+    session_append(receiver, entry_custom("gptr.usage", data))
+  }
+  invisible(row)
+}
+
+#' A charged assistant entry keeps accounting outside the projected message
+#' @noRd
+usage_message_entry = function(msg, row) {
+  entry = entry_message(msg)
+  entry$gptr = list(usage = usage_row_store(row))
+  entry
+}
+
+#' Count identical canonical rows once; conflicting request identities fail closed
+#' @noRd
+usage_canonical_unique = function(rows) {
+  seen = new.env(hash = TRUE, parent = emptyenv())
+  out = list(usage_empty())
+  for (row in rows) {
+    row = usage_row_canonical(row)
+    stored = usage_row_store(row)
+    previous = get0(row$request_id, envir = seen, inherits = FALSE)
+    if (!is.null(previous)) {
+      if (!identical(previous, stored)) {
+        usage_invalid("durable usage duplicate", "one identical canonical row per request id")
+      }
+    } else {
+      assign(row$request_id, stored, envir = seen)
+      out[[length(out) + 1L]] = row
+    }
+  }
+  out = do.call(rbind, out)
+  out$started = .POSIXct(as.numeric(out$started), tz = "UTC")
+  rownames(out) = NULL
+  out
+}
+
 #' The usage rows of a session and its children, one per request, as a `gptr_usage` listing with
 #' attribute `totals` (usage_totals())
 #' @noRd
@@ -277,8 +472,8 @@ budget_near = function(run) {
 #' @return A `gptr_usage` or `gptr_ledger` data frame.
 #' @examples
 #' gptr_usage()
-#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
-#' gptr_usage(s)
+#' session = peter("hi", model = gptr_fake_provider(list("hello")))
+#' gptr_usage(session)
 #' @export
 gptr_usage = function(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE) {
   by = check_choice(by, c("session", "agent", "model", "route"), "by")

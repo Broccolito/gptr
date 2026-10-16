@@ -51,7 +51,8 @@ calls in scripts sourced without srcrefs.
 }
 
 \examples{
-f = tempfile(fileext = ".R"); writeLines("library(gptr)", f)
+f = tempfile(fileext = ".R")
+writeLines("library(gptr)", f)
 gptr_doc(f)
 gptr_doc()
 gptr_doc(FALSE)

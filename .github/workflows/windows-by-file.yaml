@@ -7,33 +7,486 @@ name: windows-by-file
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: Optional-mode platform scope
+        type: choice
+        default: all
+        options: [all, windows, linux]
       filter:
         description: Test file name regex
         default: '.'
       minutes:
         description: Time limit per file in minutes
         default: '15'
+      optional:
+        description: Run the strict, provisioned optional-integration packet
+        type: boolean
+        default: false
+      nofollow_observer:
+        description: Enable bounded no-follow sampling; include proc-writer-runtime in the filter
+        type: boolean
+        default: false
+      token_experiment:
+        description: Run the reviewed child-only token diagnostic after successful install
+        type: boolean
+        default: false
+      held_token:
+        description: Run strict83 with the reviewed held-disabled owned-utility fixture
+        type: boolean
+        default: false
+      declared_link_diagnostic:
+        description: Collect owned Windows link metadata separately from strict security results
+        type: boolean
+        default: false
+      startup_diagnostic:
+        description: Diagnose bounded PowerShell startup after verified install (Windows devel)
+        type: boolean
+        default: false
+      supervisor_rss_comparison:
+        description: Diagnose full-suite versus fresh writer supervisor RSS; one test-only GC cell
+        type: boolean
+        default: false
+      source_sha:
+        description: Full lowercase commit SHA required by optional mode
+        type: string
+        default: ''
 
 permissions: read-all
 
 jobs:
   by-file:
-    runs-on: windows-latest
-    timeout-minutes: 300
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ inputs.supervisor_rss_comparison && 300 || inputs.optional && 45 || 300 }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os: ${{ fromJSON(inputs.optional && inputs.platform == 'linux' && '["ubuntu-latest"]' || inputs.optional && inputs.platform == 'windows' && '["windows-latest"]' || inputs.optional && '["windows-latest","ubuntu-latest"]' || '["windows-latest"]') }}
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       NOT_CRAN: 'true'
+      GPTR_LIVE_TESTS: 'false'
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      GPTR_EXPECTED_SOURCE: ${{ inputs.source_sha }}
+      GPTR_OPTIONAL_FILTER: ${{ inputs.filter }}
+      GPTR_LEGACY_FILTER: ${{ inputs.filter }}
+      GPTR_LEGACY_MINUTES: ${{ inputs.minutes }}
     steps:
+      - name: Validate optional source nomination
+        if: inputs.optional || inputs.token_experiment || inputs.startup_diagnostic || inputs.held_token || inputs.declared_link_diagnostic || inputs.supervisor_rss_comparison
+        shell: bash
+        env:
+          EXPERIMENT: ${{ inputs.token_experiment && 'true' || 'false' }}
+          OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          PLATFORM: ${{ inputs.platform }}
+          NOFOLLOW: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          STARTUP: ${{ inputs.startup_diagnostic && 'true' || 'false' }}
+          HELD: ${{ inputs.held_token && 'true' || 'false' }}
+          LINK_DIAGNOSTIC: ${{ inputs.declared_link_diagnostic && 'true' || 'false' }}
+          RSS_COMPARISON: ${{ inputs.supervisor_rss_comparison && 'true' || 'false' }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$EXPERIMENT" == true ]]; then
+            [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$NOFOLLOW" == true ]]
+          fi
+          if [[ "$HELD" == true ]]; then
+            [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$NOFOLLOW" == true ]]
+            [[ "$EXPERIMENT" == false && "$STARTUP" == false ]]
+          fi
+          if [[ "$LINK_DIAGNOSTIC" == true ]]; then
+            [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$HELD" == true ]]
+            [[ "$NOFOLLOW" == true && "$EXPERIMENT" == false && "$STARTUP" == false ]]
+          fi
+          if [[ "$RSS_COMPARISON" == true ]]; then
+            [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$NOFOLLOW" == false ]]
+            [[ "$EXPERIMENT" == false && "$STARTUP" == false && "$HELD" == false ]]
+            [[ "$LINK_DIAGNOSTIC" == false ]]
+          fi
+          if [[ "$STARTUP" == true ]]; then
+            [[ "$OPTIONAL" == true && "$PLATFORM" == windows && "$EXPERIMENT" == false ]]
+          fi
       - uses: actions/checkout@v6
+        if: '!inputs.optional'
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: inputs.optional
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Verify optional source identity and canonical checksum
+        if: inputs.optional
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert actual == os.environ['SOURCE_SHA']
+          folder = pathlib.Path('optional-evidence')
+          folder.mkdir()
+          archive = folder / 'source.tar'
+          with archive.open('wb') as output:
+              subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], stdout=output, check=True)
+          (folder / 'source-identity.json').write_text(json.dumps(
+              {'source_sha': actual, 'source_archive_sha256':
+               hashlib.sha256(archive.read_bytes()).hexdigest()}, indent=2))
+          PY
       - uses: r-lib/actions/setup-r@v2
+        if: '!inputs.optional'
         with:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
+        if: '!inputs.optional'
         with:
           extra-packages: any::pkgload
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        if: inputs.optional
+        with:
+          r-version: ${{ inputs.startup_diagnostic && 'devel' || 'release' }}
+          Ncpus: 1
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        if: inputs.optional
+        with:
+          extra-packages: any::pkgload any::testthat any::repr any::reticulate any::chromote any::lintr
+          needs: check
+      - uses: ./.github/actions/optional-dependencies
+        if: inputs.optional
+      - name: Provision the Windows private numerical Python and admit its native library
+        if: inputs.optional && inputs.supervisor_rss_comparison && runner.os == 'Windows'
+        shell: bash
+        env:
+          GPTR_BASE_PYTHON: ${{ env.RETICULATE_PYTHON }}
+        run: |
+          "$GPTR_BASE_PYTHON" - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, sys
+          assert sys.version_info[:3] == (3, 12, 10)
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'gptr-rscript-python'
+          assert not root.exists(), 'Private Python directory must be fresh'
+          root.mkdir(mode=0o700)
+          subprocess.run([sys.executable, '-m', 'venv', str(root)], check=True, timeout=120)
+          executable = root / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+          assert executable.is_file()
+          subprocess.run([str(executable), '-m', 'pip', 'install', '--only-binary=:all:',
+                          'numpy==2.3.4', 'pandas==2.3.3'], check=True, timeout=180)
+          query = """
+          import hashlib, json, os, pathlib, sys, sysconfig
+          base = pathlib.Path(sys.base_prefix).resolve(strict=True)
+          prefix = pathlib.Path(sys.prefix).resolve(strict=True)
+          assert base != prefix and sys.version_info[:3] == (3, 12, 10)
+          version = f'{sys.version_info.major}.{sys.version_info.minor}'
+          if os.name == 'nt':
+              candidates = [base / f'python{version.replace(".", "")}.dll']
+          else:
+              name = sysconfig.get_config_var('LDLIBRARY')
+              directory = sysconfig.get_config_var('LIBDIR')
+              assert isinstance(name, str) and name and isinstance(directory, str) and directory
+              extension = '.dylib' if sys.platform == 'darwin' else '.so'
+              candidates = [pathlib.Path(directory) / name, base / pathlib.Path(name).name,
+                            base / 'lib' / f'libpython{version}{extension}']
+          libraries = {path.resolve(strict=True) for path in candidates if path.is_file()}
+          assert len(libraries) == 1, 'Exactly one canonical native library must be admitted'
+          library = libraries.pop()
+          assert os.path.normcase(os.path.commonpath([str(library), str(base)])) == \
+              os.path.normcase(str(base)) and library != base
+          size = library.stat().st_size
+          assert 0 < size <= 64 * 1024 * 1024
+          digest = hashlib.sha256()
+          count = 0
+          with library.open('rb') as stream:
+              while True:
+                  chunk = stream.read(1024 * 1024)
+                  if not chunk:
+                      break
+                  count += len(chunk)
+                  assert count <= 64 * 1024 * 1024
+                  digest.update(chunk)
+          assert count == size == library.stat().st_size
+          result = json.dumps(dict(python=os.path.abspath(sys.executable), prefix=str(prefix),
+              base_prefix=str(base), library=str(library), sha256=digest.hexdigest(),
+              library_bytes=count, version='.'.join(map(str, sys.version_info[:3]))))
+          assert len(result.encode('utf-8')) <= 4096
+          print(result)
+          """
+          process = subprocess.run([str(executable), '-I', '-c', query], check=True, timeout=10,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          assert not process.stderr and len(process.stdout) <= 4096
+          witness = json.loads(process.stdout)
+          assert list(witness) == ['python', 'prefix', 'base_prefix', 'library', 'sha256',
+                                   'library_bytes', 'version']
+          assert witness['version'] == '3.12.10'
+          settings = dict(RETICULATE_PYTHON=str(executable), RETICULATE_USE_MANAGED_VENV='false',
+              GPTR_PY_NATIVE_PREFIX=str(root), GPTR_PY_NATIVE_VERSION='3.12.10',
+              GPTR_NP_NATIVE_VERSION='2.3.4', GPTR_PD_NATIVE_VERSION='2.3.3',
+              GPTR_PY_NATIVE_LIBPYTHON=witness['library'], GPTR_PY_NATIVE_LIB_SHA256=witness['sha256'])
+          assert all('\n' not in value and '\r' not in value for value in settings.values())
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              for key, value in settings.items():
+                  output.write(key + '=' + value + '\n')
+          evidence = pathlib.Path(os.environ['RUNNER_TEMP']) / 'gptr-check-python-evidence'
+          evidence.mkdir(exist_ok=True)
+          (evidence / 'python-admission.json').write_text(json.dumps(witness, indent=2),
+                                                         encoding='utf-8')
+          PY
+      - name: Preserve the comparison private-Python admission
+        if: inputs.optional && inputs.supervisor_rss_comparison
+        shell: bash
+        run: cp "$RUNNER_TEMP/gptr-check-python-evidence/python-admission.json" optional-evidence/
+      - name: Test the comparison selection, failure retention and collection gate
+        if: inputs.optional && inputs.supervisor_rss_comparison
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-rss/test-probe.R", reporter = testthat::SummaryReporter$new(show_praise = FALSE), stop_on_failure = TRUE, stop_on_warning = TRUE)'
+          Rscript --vanilla -e 'paths = c(list.files("dev/ci/windows-rss", pattern = "[.]R$", full.names = TRUE), "tests/testthat/helper-proc-backpressure.R"); lints = stats::setNames(lapply(paths, lintr::lint), paths); saveRDS(lints, "optional-evidence/windows-rss-lint.rds"); print(lints); stopifnot(all(vapply(lints, function(lint) length(lint) == 0L, logical(1))))'
+      - name: Test the pinned no-follow observer operations
+        if: inputs.optional
+        timeout-minutes: 1
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: python -I -B dev/ci/bp-disk-observer/run-controls.py
+      - name: Test optional dependency and result gates
+        if: inputs.optional
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          python dev/ci/test-optional-dependencies.py
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/test-optional-integrations.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+      - name: Test and lint the default-off token controller
+        if: inputs.optional && inputs.token_experiment
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-token/test-controller.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+          Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-token/controller.R")) == 0L, length(lintr::lint("dev/ci/windows-token/test-controller.R")) == 0L)'
+      - name: Test and lint the default-off held fixture route
+        if: inputs.optional && inputs.held_token
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-token/test-held-route.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+          Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-token/held-controller.R")) == 0L, length(lintr::lint("dev/ci/windows-token/held-faults.R")) == 0L, length(lintr::lint("dev/ci/windows-token/test-held-route.R")) == 0L)'
+      - name: Test and lint the default-off startup controller
+        if: inputs.optional && inputs.startup_diagnostic
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-startup/test-controller.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+          Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-startup/controller.R")) == 0L, length(lintr::lint("dev/ci/windows-startup/probe.R")) == 0L, length(lintr::lint("dev/ci/windows-startup/test-controller.R")) == 0L)'
+      - name: Lint the reviewed integration runtime, fixtures and result gates
+        if: inputs.optional
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-lint
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/lint-optional.R
       - name: Install the package
+        if: '!inputs.optional'
         shell: bash
         run: R CMD INSTALL .
-      - name: Offline tests file by file
+      - name: Install the optional source for real child fixtures
+        id: optional_install
+        if: inputs.optional
         shell: bash
-        run: Rscript --vanilla dev/ci/test-by-file.R "${{ inputs.filter }}" "${{ inputs.minutes }}"
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: R CMD INSTALL .
+      - name: Verify the installed token runtime and immutable diagnostic packet
+        id: token_install
+        if: inputs.optional && inputs.token_experiment
+        timeout-minutes: 1
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-token-install
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/controller.R verify-install
+      - name: Verify the installed startup environment runtime
+        id: startup_install
+        if: inputs.optional && inputs.startup_diagnostic && runner.os == 'Windows' && steps.optional_install.outcome == 'success'
+        timeout-minutes: 1
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_STARTUP_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_STARTUP_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-startup-install
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-startup/controller.R verify-install
+      - name: Verify installed runtime and held fixture packet
+        id: held_install
+        if: inputs.optional && inputs.held_token && runner.os == 'Windows' && steps.optional_install.outcome == 'success'
+        timeout-minutes: 1
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_HELD_B: 'true'
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-held-install
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/held-controller.R verify-install
+      - name: Collect declared-link metadata under the unchanged owned watchdog
+        if: inputs.optional && inputs.held_token && inputs.declared_link_diagnostic && runner.os == 'Windows' && steps.held_install.outcome == 'success'
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_EXPERIMENT_OPTIONAL: 'true'
+          GPTR_EXPERIMENT_PLATFORM: windows
+          GPTR_HELD_B: 'true'
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: 'true'
+          GPTR_DECLARED_LINK_DIAGNOSTIC: 'true'
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-declared-link-diagnostic
+        run: |
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/windows-token/test-declared-link.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
+          Rscript --vanilla -e 'stopifnot(length(lintr::lint("dev/ci/windows-token/declared-link.R")) == 0L, length(lintr::lint("dev/ci/windows-token/declared-link-probe.R")) == 0L, length(lintr::lint("dev/ci/windows-token/test-declared-link.R")) == 0L)'
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/declared-link.R
+      - name: Run twelve PowerShell fault and two R protocol controls
+        id: held_pure
+        if: inputs.optional && inputs.held_token && steps.held_install.outcome == 'success'
+        timeout-minutes: 6
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_HELD_B: 'true'
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-held-pure
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/held-controller.R pure
+      - name: Offline tests file by file
+        if: '!inputs.optional'
+        shell: bash
+        run: Rscript --vanilla dev/ci/test-by-file.R "$GPTR_LEGACY_FILTER" "$GPTR_LEGACY_MINUTES"
+      - name: Mandatory optional tests with five-minute owned-child bounds
+        if: inputs.optional && !inputs.held_token && !inputs.supervisor_rss_comparison
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-owned
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/optional-integrations.R
+      - name: Four serial complete Windows supervisor RSS comparisons
+        if: inputs.optional && inputs.supervisor_rss_comparison && runner.os == 'Windows' && steps.optional_install.outcome == 'success'
+        timeout-minutes: 255
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_SUPERVISOR_RSS_DIAGNOSTIC: 'true'
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: 'false'
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-supervisor-rss
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-rss/controller.R
+      - name: Original strict cases with the admitted held writer fixture
+        if: inputs.optional && inputs.held_token && steps.held_pure.outcome == 'success'
+        timeout-minutes: 30
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_HELD_B: 'true'
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-held-original
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/optional-integrations.R
+      - name: Run the separate strict held native case
+        if: always() && inputs.optional && inputs.held_token && steps.held_pure.outcome == 'success'
+        timeout-minutes: 6
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_HELD_B: 'true'
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-held-native
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/held-controller.R native
+      - name: Run the strict child-only token diagnostic after verified install
+        if: always() && inputs.optional && inputs.token_experiment && inputs.platform == 'windows' && inputs.nofollow_observer && runner.os == 'Windows' && steps.token_install.outcome == 'success'
+        timeout-minutes: 12
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_EXPERIMENT_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_EXPERIMENT_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-token-experiment
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-token/controller.R run
+      - name: Run the bounded startup diagnostic after verified install
+        if: always() && inputs.optional && inputs.startup_diagnostic && inputs.platform == 'windows' && runner.os == 'Windows' && steps.startup_install.outcome == 'success'
+        timeout-minutes: 2
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_STARTUP_OPTIONAL: ${{ inputs.optional && 'true' || 'false' }}
+          GPTR_STARTUP_PLATFORM: ${{ inputs.platform }}
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-startup-run
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/windows-startup/controller.R run
+      - name: Run serial plan gates even after an optional test failure
+        if: always() && inputs.optional && runner.os == 'Linux'
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          python dev/ci/test-check-plans.py
+          python dev/ci/check-plans.py --out optional-evidence/plan-checks
+      - name: Preserve optional source, preflight and each failed case
+        if: always() && inputs.optional
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: optional-${{ runner.os }}-${{ inputs.source_sha }}
+          path: optional-evidence/
+          if-no-files-found: error
+          retention-days: 14

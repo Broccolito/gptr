@@ -3,7 +3,7 @@
 \name{format.gptr_risk}
 \alias{format.gptr_risk}
 \alias{print.gptr_risk}
-\title{Format a gptr_risk}
+\title{Format a risk classification}
 \usage{
 \method{format}{gptr_risk}(x, ...)
 
@@ -19,7 +19,7 @@
 call (control, bidi and zero-width characters escaped); \code{print()} returns \code{x} invisibly.
 }
 \description{
-Format a gptr_risk
+Format a risk classification
 }
 \examples{
 r = gptr_risk("x = 1; unlink('data', recursive = TRUE)")

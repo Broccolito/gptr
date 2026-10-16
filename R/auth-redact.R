@@ -253,6 +253,8 @@ code_rewrite_literals = function(code) {
   st = secrets_state()
   none = list(code = code, needs = character())
   if (!length(st$lits) || !lits_present(code, st)) return(none)
+  old = options(keep.parse.data = TRUE)
+  on.exit(options(old), add = TRUE)
   exprs = tryCatch(parse(text = code, keep.source = TRUE), error = function(e) NULL)
   pd = if (is.null(exprs)) NULL else utils::getParseData(exprs)
   if (is.null(pd)) return(none)
@@ -714,9 +716,9 @@ scrub_append_entry = function(txt, rows) {
   taken = unlist(lapply(entries, entry_id), use.names = FALSE)
   now = Sys.time()
   entry = list(type = "custom", id = id_entry(taken), parentId = parent,
-               timestamp = format(now, "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC"),
+               timestamp = with_calendar_preserved(format(now, "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC")),
                customType = "gptr.scrub",
-               data = list(date = format(now, "%Y-%m-%d", tz = "UTC"),
+               data = list(date = with_calendar_preserved(format(now, "%Y-%m-%d", tz = "UTC")),
                            secrets = I(redact_literals(sort(unique(rows$secret)), secrets_state())),
                            count = sum(rows$count)))
   paste0(txt, if (!endsWith(txt, "\n")) "\n", json_encode(entry), "\n")

@@ -195,6 +195,11 @@ eval_run = function(st) {
 #' @noRd
 eval_open = function(st) {
   force(st)
+  st$host_width = if (gptr_is_interactive() && identical(front_end(), "rstudio")) {
+    Sys.getenv("RSTUDIO_CONSOLE_WIDTH", unset = "")
+  } else {
+    NULL
+  }
   st$old_opts = options(max.print = 1000L, width = 100L, rlang_interactive = FALSE,
                         cli.dynamic = FALSE, cli.num_colors = 1L, askYesNo = eval_no_ask)
   st$msg_sink = sink.number(type = "message")
@@ -626,7 +631,18 @@ eval_restore = function(st) {
     tryCatch(if (isOpen(st$con)) close(st$con), error = function(e) NULL)
     st$con = NULL
   }
-  if (!is.null(st$old_opts)) options(st$old_opts)
+  if (!is.null(st$old_opts)) {
+    host_width = Sys.getenv("RSTUDIO_CONSOLE_WIDTH", unset = "")
+    if (!is.null(st$host_width) && !identical(host_width, st$host_width) &&
+        grepl("^[0-9]{2,5}$", host_width)) {
+      width = as.integer(host_width)
+      if (width >= 10L && width <= 10000L && identical(getOption("width"), width)) {
+        # Keep a paired host resize delivered while the tool was running.
+        st$old_opts$width = width
+      }
+    }
+    options(st$old_opts)
+  }
   plot_close(st$ps)
   invisible()
 }

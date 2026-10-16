@@ -1518,6 +1518,7 @@ test_that("new sidecars are closed JSON data with explicit line arrays", {
 test_that("Windows leaves legacy sidecars pending without any RDS read", {
   local_project()
   local_gptr_options(quiet = FALSE)
+  testthat::local_mocked_bindings(is_windows = function() TRUE)
   f = file.path(getwd(), "legacy.R")
   writeLines('peter("first")', f)
   rec = doc_pending_new(path_norm(f), "deferred")
@@ -1529,12 +1530,13 @@ test_that("Windows leaves legacy sidecars pending without any RDS read", {
   before = unname(tools::md5sum(side))
   reads = 0L
   original = base::readRDS
-  testthat::local_mocked_bindings(is_windows = function() TRUE)
   testthat::local_mocked_bindings(readRDS = function(file, ...) {
     if (!identical(file, side)) return(original(file, ...))
     reads <<- reads + 1L
     rec
   }, .package = "base")
+  expect_identical(doc_sidecar_legacy_path(f), side)
+  expect_true(doc_sidecar_exists(side))
   expect_message(expect_null(doc_sidecar_read(f)), "legacy.*pending", ignore.case = TRUE)
   expect_identical(reads, 0L)
   expect_identical(unname(tools::md5sum(side)), before)
@@ -1893,6 +1895,10 @@ test_that("unknown or malformed POSIX owner identity never deserializes legacy s
   uid = NA_real_
   expect_null(doc_sidecar_read(f))
   local_mocked_bindings(is_windows = function() TRUE)
+  windows_modern = doc_sidecar_path(f)
+  write_atomic(windows_modern, bytes)
+  expect_true(doc_sidecar_exists(windows_modern))
+  expect_identical(readBin(windows_modern, "raw", n = length(bytes)), bytes)
   expect_identical(doc_sidecar_read(f)$upserts[[1]]$block_id, "aaaaaa")
   expect_identical(reads, 1L)
   expect_identical(unname(tools::md5sum(legacy)), before)
@@ -1925,4 +1931,313 @@ test_that("a differently cased dangling modern entry masks legacy on a POSIX fil
   expect_identical(reads, 0L)
   expect_identical(doc_pending_reconcile(rec)$upserts, rec$upserts)
   expect_identical(unname(tools::md5sum(legacy)), before)
+})
+
+# The pre-fix reader has no aggregate-bound hook. Keep its real decoder path observable in
+# RED, rather than turning the resource regression into a missing-mock-binding error.
+doc_io_resource_bounds = function(value, .env = parent.frame()) {
+  if (exists("doc_sidecar_bounds", mode = "function")) {
+    local_mocked_bindings(doc_sidecar_bounds = value, .env = .env)
+  }
+  invisible(value)
+}
+
+doc_io_default_bounds = function() {
+  list(nodes = 100000L, depth = 64L, upserts = 1024L, lines = 50000L, call = 65536L)
+}
+
+test_that("aggregate JSON tokens and depth are bounded before decoding unknown roots", {
+  local_project()
+  f = file.path(getwd(), "structure.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  side = doc_sidecar_path(f)
+  legacy = doc_io_legacy_path(f)
+  write_atomic(legacy, serialize_leaf(rec))
+  before = unname(tools::md5sum(legacy))
+  bounds = doc_io_default_bounds()
+  doc_io_resource_bounds(function() bounds)
+  decoded = kept = legacy_reads = 0L
+  decode = json_decode
+  keep = nb_keep_numbers
+  reader = base::readRDS
+  local_mocked_bindings(json_decode = function(text) {
+    decoded <<- decoded + 1L
+    decode(text)
+  }, nb_keep_numbers = function(nb, txt) {
+    kept <<- kept + 1L
+    keep(nb, txt)
+  })
+  local_mocked_bindings(readRDS = function(file, ...) {
+    if (!identical(file, legacy)) return(reader(file, ...))
+    legacy_reads <<- legacy_reads + 1L
+    rec
+  }, .package = "base")
+  cases = list(
+    list(text = '{"unknown":{"first":1,"second":2,"third":3}}', nodes = 6L, depth = 64L),
+    list(text = "[1,2,3,4,5]", nodes = 5L, depth = 64L),
+    list(text = '{"unknown":[[[0]]]}', nodes = 100000L, depth = 3L),
+    list(text = "[[[[[]]]]]", nodes = 100000L, depth = 4L)
+  )
+  for (case in cases) {
+    bounds$nodes = case$nodes
+    bounds$depth = case$depth
+    decoded = kept = legacy_reads = 0L
+    write_atomic(side, charToRaw(case$text))
+    expect_null(doc_sidecar_read(f))
+    expect_identical(decoded, 0L)
+    expect_identical(kept, 0L)
+    expect_identical(legacy_reads, 0L)
+    expect_identical(unname(tools::md5sum(legacy)), before)
+    expect_identical(doc_pending_reconcile(rec)$upserts, rec$upserts)
+  }
+})
+
+test_that("upsert and total line bounds precede numeric preservation after bounded decode", {
+  local_project()
+  f = file.path(getwd(), "arrays.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  rec$upserts[[1]]$lines = "x = 1"
+  doc_sidecar_write(rec)
+  side = doc_sidecar_path(f)
+  good = json_decode(read_utf8(side)$text)
+  bounds = doc_io_default_bounds()
+  doc_io_resource_bounds(function() bounds)
+  decoded = kept = 0L
+  decode = json_decode
+  keep = nb_keep_numbers
+  local_mocked_bindings(json_decode = function(text) {
+    decoded <<- decoded + 1L
+    decode(text)
+  }, nb_keep_numbers = function(nb, txt) {
+    kept <<- kept + 1L
+    keep(nb, txt)
+  })
+  many = good
+  many$upserts = rep(good$upserts, 3L)
+  long = good
+  long$upserts[[1]]$lines = as.list(rep("x = 1", 4L))
+  together = good
+  together$upserts = rep(good$upserts, 2L)
+  for (i in seq_along(together$upserts)) {
+    together$upserts[[i]]$lines = list("x = 1", "y = 2")
+  }
+  cases = list(
+    list(data = many, upserts = 2L, lines = 50000L, escape = FALSE),
+    list(data = many, upserts = 2L, lines = 50000L, escape = TRUE),
+    list(data = long, upserts = 1024L, lines = 3L, escape = FALSE),
+    list(data = together, upserts = 1024L, lines = 3L, escape = TRUE)
+  )
+  for (case in cases) {
+    bounds$upserts = case$upserts
+    bounds$lines = case$lines
+    decoded = kept = 0L
+    text = json_encode(case$data)
+    if (case$escape) {
+      text = sub('"upserts":', '"up\\u0073erts":', text, fixed = TRUE)
+      text = gsub('"lines":', '"l\\u0069nes":', text, fixed = TRUE)
+    }
+    write_atomic(side, charToRaw(text))
+    expect_null(doc_sidecar_read(f))
+    expect_identical(decoded, 1L)
+    expect_identical(kept, 0L)
+  }
+})
+
+test_that("aggregate writer bounds refuse conversion and preserve previous sidecar bytes", {
+  local_project()
+  f = file.path(getwd(), "writer-bounds.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  rec$upserts[[1]]$lines = "x = 1"
+  doc_sidecar_write(rec)
+  side = doc_sidecar_path(f)
+  previous = readBin(side, "raw", n = file.size(side))
+  bounds = doc_io_default_bounds()
+  doc_io_resource_bounds(function() bounds)
+  converted = 0L
+  convert = doc_sidecar_data
+  local_mocked_bindings(doc_sidecar_data = function(rec) {
+    converted <<- converted + 1L
+    convert(rec)
+  })
+  many = rec
+  many$upserts = rep(rec$upserts, 3L)
+  long = rec
+  long$upserts[[1]]$lines = rep("x = 1", 4L)
+  together = rec
+  together$upserts = rep(rec$upserts, 2L)
+  for (i in seq_along(together$upserts)) {
+    together$upserts[[i]]$lines = c("x = 1", "y = 2")
+  }
+  cases = list(
+    list(rec = many, upserts = 2L, lines = 50000L),
+    list(rec = long, upserts = 1024L, lines = 3L),
+    list(rec = together, upserts = 1024L, lines = 3L)
+  )
+  for (case in cases) {
+    bounds$upserts = case$upserts
+    bounds$lines = case$lines
+    converted = 0L
+    write_atomic(side, previous)
+    err = expect_error(doc_sidecar_write(case$rec), class = "gptr_error_doc_write")
+    expect_identical(err$reason, "sidecar structure")
+    expect_identical(converted, 0L)
+    expect_identical(readBin(side, "raw", n = file.size(side)), previous)
+  }
+})
+
+test_that("bounded JSON strings keep escaped punctuation and valid writer roundtrips", {
+  local_project()
+  f = file.path(getwd(), "quoted.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  rec$upserts[[1]]$lines = c('x = "{} [ ] \\"quotes\\""', "# caf\u00e9")
+  rec$upserts[[1]]$site$anchor["call0"] = list(NULL)
+  bounds = doc_io_default_bounds()
+  bounds$depth = 16L
+  bounds$upserts = 1L
+  bounds$lines = 2L
+  doc_io_resource_bounds(function() bounds)
+  expect_silent(doc_sidecar_write(rec))
+  restored = doc_sidecar_read(f)
+  expect_identical(restored$upserts[[1]]$lines, rec$upserts[[1]]$lines)
+  expect_identical(restored$upserts[[1]]$site$anchor, rec$upserts[[1]]$site$anchor)
+})
+
+test_that("whole writer metadata is bounded before normalization and JSON allocation", {
+  local_project()
+  nb = file.path(getwd(), "writer-meta-bounds.ipynb")
+  doc_io_nb_write(nb, 'peter("one")')
+  rec = doc_pending_new(path_norm(nb), "pending")
+  extra = stats::setNames(as.list(rep("v", 10L)), paste0("k", seq_len(10L)))
+  rec$upserts = list(list(block_id = "aaaaaa", lines = structure("x = 1", meta = list(
+    id = "aaaaaa", extra = extra)), site = doc_io_site(nb, "one")))
+  bounds = doc_io_default_bounds()
+  bounds$nodes = 100L
+  doc_io_resource_bounds(function() bounds)
+  expect_silent(doc_sidecar_write(rec))
+  side = doc_sidecar_path(nb)
+  previous = readBin(side, "raw", n = file.size(side))
+  together = rec
+  together$upserts = rep(rec$upserts, 2L)
+  deep = rec
+  attr(deep$upserts[[1]]$lines, "meta")$extra = list(a = list(b = list(c = list(d = "v"))))
+  normalized = encoded = 0L
+  normalize = doc_sidecar_decode
+  encode = json_encode
+  local_mocked_bindings(doc_sidecar_decode = function(x, path) {
+    normalized <<- normalized + 1L
+    normalize(x, path)
+  }, json_encode = function(x, pretty = FALSE) {
+    encoded <<- encoded + 1L
+    encode(x, pretty)
+  })
+  cases = list(list(rec = together, nodes = 100L, depth = 64L),
+               list(rec = deep, nodes = 100000L, depth = 6L))
+  for (case in cases) {
+    bounds$nodes = case$nodes
+    bounds$depth = case$depth
+    normalized = encoded = 0L
+    write_atomic(side, previous)
+    err = expect_error(doc_sidecar_write(case$rec), class = "gptr_error_doc_write")
+    expect_identical(err$reason, "sidecar structure")
+    expect_identical(normalized, 0L)
+    expect_identical(encoded, 0L)
+    expect_identical(readBin(side, "raw", n = file.size(side)), previous)
+  }
+})
+
+test_that("chunk-spanning escaped quotes do not become JSON containers or tokens", {
+  local_project()
+  f = file.path(getwd(), "chunk-quotes.R")
+  side = doc_sidecar_path(f)
+  dir.create(dirname(side), recursive = TRUE, showWarnings = FALSE)
+  prefix = '{"k":"'
+  text = c(paste0(prefix, strrep("a", 4089L), '\\" [ ]\\"', '"}'),
+           paste0(prefix, strrep("a", 4088L), "\\\\", '"}'),
+           paste0(prefix, strrep("a", 4089L), '"}'))
+  bounds = doc_io_default_bounds()
+  bounds$nodes = 3L
+  bounds$depth = 1L
+  doc_io_resource_bounds(function() bounds)
+  decoded = kept = 0L
+  decode = json_decode
+  keep = nb_keep_numbers
+  local_mocked_bindings(json_decode = function(text) {
+    decoded <<- decoded + 1L
+    decode(text)
+  }, nb_keep_numbers = function(nb, txt) {
+    kept <<- kept + 1L
+    keep(nb, txt)
+  })
+  for (value in text) {
+    decoded = kept = 0L
+    write_atomic(side, charToRaw(value))
+    expect_null(doc_sidecar_read(f))
+    expect_identical(decoded, 1L)
+    expect_identical(kept, 1L)
+  }
+})
+
+test_that("sidecar call identity bytes are bounded before R parsing", {
+  bounds = doc_io_default_bounds()
+  text = "gptr::peter(q + 1L)"
+  bounds$call = nchar(text, type = "bytes")
+  doc_io_resource_bounds(function() bounds)
+  parsed = 0L
+  parser = doc_parse_text
+  local_mocked_bindings(doc_parse_text = function(lines, keep_source = TRUE) {
+    parsed <<- parsed + 1L
+    parser(lines, keep_source)
+  })
+  expect_identical(doc_sidecar_call(text), quote(gptr::peter(q + 1L)))
+  expect_identical(parsed, 1L)
+  bounds$call = bounds$call - 1L
+  expect_null(doc_sidecar_call(text))
+  expect_identical(parsed, 1L)
+})
+
+test_that("sidecar call AST limits precede normalization and writer deparsing", {
+  local_project()
+  f = file.path(getwd(), "call-bounds.R")
+  writeLines('peter("first")', f)
+  rec = doc_io_dead_sidecar(f, "first")
+  side = doc_sidecar_path(f)
+  previous = readBin(side, "raw", n = file.size(side))
+  call0 = quote(gptr::peter(a(b(c(q)))))
+  rec$upserts[[1]]$site$anchor$call0 = call0
+  bounds = doc_io_default_bounds()
+  bounds$depth = 3L
+  doc_io_resource_bounds(function() bounds)
+  normalized = deparsed = 0L
+  normalize = doc_call_norm
+  deparser = base::deparse
+  local_mocked_bindings(doc_call_norm = function(x) {
+    normalized <<- normalized + 1L
+    normalize(x)
+  })
+  local_mocked_bindings(deparse = function(expr, ...) {
+    if (identical(expr, call0)) deparsed <<- deparsed + 1L
+    deparser(expr, ...)
+  }, .package = "base")
+  expect_null(doc_sidecar_call("gptr::peter(a(b(c(q))))"))
+  expect_identical(normalized, 0L)
+  expect_error(doc_sidecar_write(rec), class = "gptr_error_doc_write")
+  expect_identical(normalized, 0L)
+  expect_identical(deparsed, 0L)
+  expect_identical(readBin(side, "raw", n = file.size(side)), previous)
+  bounds$depth = 64L
+  bounds$nodes = 4L
+  normalized = 0L
+  expect_null(doc_sidecar_call("peter(1L, 2L, 3L)"))
+  expect_identical(normalized, 0L)
+  bounds = doc_io_default_bounds()
+  ordinary = quote(gptr::peter(f = function(x = 1L) x, prompt = q))
+  expected = doc_call_norm(ordinary)
+  expect_identical(doc_sidecar_call("gptr::peter(f = function(x = 1L) x, prompt = q)"), expected)
+  rec$upserts[[1]]$site$anchor$call0 = ordinary
+  expect_silent(doc_sidecar_write(rec))
+  expect_identical(doc_sidecar_read(f)$upserts[[1]]$site$anchor$call0, expected)
 })

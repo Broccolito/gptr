@@ -41,11 +41,30 @@ doc_str_literal = function(x) {
   paste0("\"", x, "\"")
 }
 
-#' The string an R string literal stands for, parsed on its bytes so that it is exact in any
-#' locale (IC-62); NULL when `text` is not one string literal
+#' The string an R string literal stands for; NULL when `text` is not one string literal.
+#' Raw UTF-8 plus Unicode escapes pass through R's native wide-character path in a C locale.
+#' Spell the raw code points as Unicode escapes first, leaving raw and byte-only literals alone.
+#' The R parser still validates the complete input; no expression is evaluated (IC-62).
 #' @noRd
 doc_unquote = function(text) {
-  val = tryCatch(str2lang(os_bytes(text)), error = function(e) NULL)
+  val = tryCatch({
+    text = os_bytes(text)
+    if (!is.character(text) || length(text) != 1L || is.na(text)) return(NULL)
+    quoted = regmatches(trimws(text), regexpr(
+      "(?s)^(\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*')", trimws(text), perl = TRUE))
+    escapes = if (length(quoted)) {
+      regmatches(quoted, gregexpr("\\\\+[uU]", quoted, perl = TRUE))[[1L]]
+    } else {
+      character()
+    }
+    if (any(nchar(escapes, type = "bytes") %% 2L == 0L)) {
+      codes = utf8ToInt(as_utf8(text))
+      text = paste0(vapply(codes, function(code) {
+        if (code > 127L) sprintf("\\U%08x", code) else intToUtf8(code)
+      }, "", USE.NAMES = FALSE), collapse = "")
+    }
+    str2lang(text)
+  }, error = function(e) NULL)
   if (is.character(val)) as_utf8(val) else NULL
 }
 
@@ -235,21 +254,6 @@ doc_state = function() {
 #' @noRd
 doc_setting = function(key, default) {
   tryCatch(setting_get(key, default = default), error = function(e) default) %||% default
-}
-
-#' Parse R text so that parse-data columns and getParseText() (which cuts source lines with
-#' substr()) count the same unit (IC-62). In a UTF-8 locale marked UTF-8 is parsed: nothing is
-#' translated and both count characters. Elsewhere the parser would translate marked text to the
-#' native encoding (in a C locale each non-ASCII character becomes "<U+00E9>" text), so the
-#' unmarked UTF-8 bytes are parsed and both count bytes. Strings read back from the result go
-#' through as_utf8(). Parse data is kept even where the caller turned it off: sys.source() sets
-#' `keep.parse.data = FALSE` while the sourced code runs.
-#' @noRd
-doc_parse_text = function(lines, keep_source = TRUE) {
-  old = options(keep.parse.data = TRUE)
-  on.exit(options(old), add = TRUE)
-  text = if (isTRUE(l10n_info()[["UTF-8"]])) as_utf8(lines) else os_bytes(lines)
-  parse(text = text, keep.source = keep_source)
 }
 
 #' An empty call table (the columns of doc_scan_calls())
@@ -1278,7 +1282,7 @@ doc_session_code = function(session) {
 #' Header facts common to every block
 #' @noRd
 doc_header_common = function(site, call_ordinal, model) {
-  list(model = model, date = format(Sys.Date(), "%Y-%m-%d"),
+  list(model = model, date = with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d")),
        prompt = site$prompt_hash %||% prompt_hash(site$template %||% ""),
        call = if (isTRUE(call_ordinal > 1L)) as.integer(call_ordinal) else NULL,
        args = site$args_hash)

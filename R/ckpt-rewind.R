@@ -535,7 +535,8 @@ ckpt_ext_state = function(s) {
 #' branch (oldest first) and appends one `gptr.rewind` entry parented at the target (the session
 #' file stays append-only and the rewind survives a reload). It hands back the undone prompt in
 #' `s$editor_text` and returns `s` invisibly, so it pipes:
-#' `s |> gptr_rewind() |> peter("Try another way")`. Use [gptr_fork()] for a second session.
+#' `session |> gptr_rewind() |> peter("Try another way")`. Use [gptr_fork()] for a second
+#' session.
 #'
 #' Restores are 3-way: an object or file that changed after the turn (by you or another session)
 #' is kept and reported, unless `force = TRUE`. Reference objects (environments, R6, external
@@ -590,14 +591,14 @@ ckpt_ext_state = function(s) {
 #' fake = gptr_fake_provider(list(
 #'   list(tool = "r", input = list(code = "x = 1")), "Made x.",
 #'   list(tool = "r", input = list(code = "x = x + 1")), "Added one."))
-#' e = new.env()
-#' s = peter("Make x", model = fake, mode = "auto", envir = e)
-#' s |> peter("Add one to x")
-#' e$x
-#' s |> gptr_rewind()
-#' e$x
-#' s$editor_text
-#' gptr_checkpoints(s, all = TRUE)
+#' work = new.env()
+#' session = peter("Make x", model = fake, mode = auto, envir = work)
+#' session |> peter("Add one to x")
+#' work$x
+#' session |> gptr_rewind()
+#' work$x
+#' session$editor_text
+#' gptr_checkpoints(session, all = TRUE)
 #' options(op)
 gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversation", "workspace"),
                        force = FALSE, preview = FALSE) {
@@ -710,8 +711,9 @@ ckpt_turn_rows = function(tree, path, branch, ck, exclude = character()) {
     seg = match(path[starts[j]:ends[j]], tree$ids)
     first = tree$entries[[seg[1L]]]
     data.frame(turn = j, id = path[ends[j]],
-               time = as.POSIXct(sub("Z$", "", first$timestamp %||% NA), tz = "UTC",
-                                 format = "%Y-%m-%dT%H:%M:%OS"),
+               time = with_calendar_preserved(as.POSIXct(
+                 sub("Z$", "", first$timestamp %||% NA), tz = "UTC",
+                 format = "%Y-%m-%dT%H:%M:%OS")),
                prompt = substr(msg_text(first$message), 1L, 60L),
                ckpt_turn_counts(tree$entries[seg[tree$ctype[seg] == "gptr.checkpoint"]], ck),
                branch = branch)

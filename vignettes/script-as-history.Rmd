@@ -1,12 +1,27 @@
 ---
-title: "The script is the history"
+title: "Script as history"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{The script is the history}
+  %\VignetteIndexEntry{Script as history}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
+<!-- gptr-vignette-brand:start -->
+<style>
+html:not([data-bs-theme]) body { background: #fff; color: #1c1e22; }
+.gptr-vignette-brand { float: right; width: 120px; margin: 0 0 1rem 1rem; }
+.gptr-vignette-brand img { display: block; max-width: 100%; height: auto; }
+html[data-bs-theme] .gptr-vignette-brand { display: none; }
+@media (max-width: 600px) {
+  .gptr-vignette-brand { float: none; width: 72px; margin: 0 0 1rem; }
+}
+</style>
+<picture class="gptr-vignette-brand">
+  <source media="(prefers-color-scheme: dark)" srcset="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MzkgNTA4IiB3aWR0aD0iNDM5IiBoZWlnaHQ9IjUwOCIgeG1sbnM6YzJwYT0iaHR0cDovL2MycGEub3JnL21hbmlmZXN0Ij48bWV0YWRhdGE+PGMycGE6bWFuaWZlc3Q+QUFBV2dtcDFiV0lBQUFBZWFuVnRaR015Y0dFQUVRQVFnQUFBcWdBNG0zRURZekp3WVFBQUFCWmNhblZ0WWdBQUFFZHFkVzFrWXpKdFlRQVJBQkNBQUFDcUFEaWJjUU4xY200Nll6SndZVHBpT0RobU9EQmxNeTAwWWpBMkxUUXdORGt0T0dRek1pMHlNekV5TmpnNVltRmlOVEVBQUFBRGwycDFiV0lBQUFBcGFuVnRaR015WVhNQUVRQVFnQUFBcWdBNG0zRURZekp3WVM1aGMzTmxjblJwYjI1ekFBQUFBTHhxZFcxaUFBQUFSR3AxYldSalltOXlBQkVBRUlBQUFLb0FPSnR4RTJNeWNHRXVhVzVuY21Wa2FXVnVkQzUyTXdBQUFBQVlZekp6YU5PK09LY0xQWG1wZ3UzdUtHenNMaFVBQUFCd1kySnZjcU5wWkdNNlptOXliV0YwYldsdFlXZGxMM04yWnl0NGJXeHFhVzV6ZEdGdVkyVkpSSGdzZUcxd09tbHBaRG8wWVRBME16UmpOaTFpTlRkaUxUUmtOakV0WVdVMU1DMDROVEEyTVRSbE1qUXdORGRzY21Wc1lYUnBiMjV6YUdsd2FIQmhjbVZ1ZEU5bUFBQUI0bXAxYldJQUFBQkJhblZ0WkdOaWIzSUFFUUFRZ0FBQXFnQTRtM0VUWXpKd1lTNWhZM1JwYjI1ekxuWXlBQUFBQUJoak1uTm9VdDBhY0dxS01KVmVUSEh6Y1Nmd1hBQUFBWmxqWW05eW9tZGhZM1JwYjI1emdxSm1ZV04wYVc5dWEyTXljR0V1YjNCbGJtVmthbkJoY21GdFpYUmxjbk9oYTJsdVozSmxaR2xsYm5SemdhSmpkWEpzZUMxelpXeG1JMnAxYldKbVBXTXljR0V1WVhOelpYSjBhVzl1Y3k5ak1uQmhMbWx1WjNKbFpHbGxiblF1ZGpOa2FHRnphRmdnV3VyODMvRjlhUmo3UmZYQ3pueWczbGZobUo0eGdGRkZDdjRtZjM5ZjNNcWtabUZqZEdsdmJuZ2RZMjl0TG1GdWRHaHliM0JwWXk1amJHRjFaR1V1Y0hKdmRtbGtaV1JxY0dGeVlXMWxkR1Z5YzZGNEgyTnZiUzVoYm5Sb2NtOXdhV011YjNKcFoybHVMV052Ym1acFpHVnVZMlZuZFc1cmJtOTNibXRrWlhOamNtbHdkR2x2Ym5obVEyeGhkV1JsSUhCeWIzWnBaR1ZrSUhSb2FYTWdabWxzWlNCaGRDQjBhR1VnY21WeGRXVnpkQ0J2WmlCaElIVnpaWElnWVc1a0lHMWhlU0JvWVhabElHTnlaV0YwWldRZ2IzSWdiVzlrYVdacFpXUWdkR2hsSUdacGJHVWdZMjl1ZEdWdWRITXViWE52Wm5SM1lYSmxRV2RsYm5TaFpHNWhiV1ZtUTJ4aGRXUmxjbUZzYkVGamRHbHZibk5KYm1Oc2RXUmxaUFVBQUFESWFuVnRZZ0FBQUVCcWRXMWtZMkp2Y2dBUkFCQ0FBQUNxQURpYmNSTmpNbkJoTG1oaGMyZ3VaR0YwWVFBQUFBQVlZekp6YU1LYk8wemxEa3UvRWpKQkVTVDREeFlBQUFDQVkySnZjcVZqWVd4blpuTm9ZVEkxTm1Od1lXUk5BQUFBQUFBQUFBQUFBQUFBQUdSb1lYTm9XQ0FYak5zOUduYmNoOVUydFlCNG9QbXhPWktZVUIyQnhyWEdwaFRnMHFFSDdXUnVZVzFsYm1wMWJXSm1JRzFoYm1sbVpYTjBhbVY0WTJ4MWMybHZibk9Cb21WemRHRnlkQmlXWm14bGJtZDBhQmtlQkFBQUFqNXFkVzFpQUFBQUoycDFiV1JqTW1Oc0FCRUFFSUFBQUtvQU9KdHhBMk15Y0dFdVkyeGhhVzB1ZGpJQUFBQUNEMk5pYjNLbFkyRnNaMlp6YUdFeU5UWnBjMmxuYm1GMGRYSmxlRTF6Wld4bUkycDFiV0ptUFM5ak1uQmhMM1Z5Ympwak1uQmhPbUk0T0dZNE1HVXpMVFJpTURZdE5EQTBPUzA0WkRNeUxUSXpNVEkyT0RsaVlXSTFNUzlqTW5CaExuTnBaMjVoZEhWeVpXcHBibk4wWVc1alpVbEVlQ3g0YlhBNmFXbGtPbU5tWm1VeU4yUTJMVGhoWXpVdE5HRmhNUzFoWkdFekxXUTRNMkkzWldGbU5tVmpaSEpqY21WaGRHVmtYMkZ6YzJWeWRHbHZibk9Eb21OMWNteDRMWE5sYkdZamFuVnRZbVk5WXpKd1lTNWhjM05sY25ScGIyNXpMMk15Y0dFdWFXNW5jbVZrYVdWdWRDNTJNMlJvWVhOb1dDQmE2dnpmOFgxcEdQdEY5Y0xPZktEZVYrR1luakdBVVVVSy9pWi9mMS9jeXFKamRYSnNlQ3B6Wld4bUkycDFiV0ptUFdNeWNHRXVZWE56WlhKMGFXOXVjeTlqTW5CaExtRmpkR2x2Ym5NdWRqSmthR0Z6YUZnZ2VxQWZkdXc2Z2kvcjdlWldncDhIbkNIM2tWSGZxb21vOXl5Ym0yVWM3dzJpWTNWeWJIZ3BjMlZzWmlOcWRXMWlaajFqTW5CaExtRnpjMlZ5ZEdsdmJuTXZZekp3WVM1b1lYTm9MbVJoZEdGa2FHRnphRmdnUWlYTTk3ekZ6V2JaZ0xNU0drL0VUNXkrNzFuU01pUWIrR3liTUF4Qk50SjBZMnhoYVcxZloyVnVaWEpoZEc5eVgybHVabStqWkc1aGJXVnZRVzUwYUhKdmNHbGpJRVpwYkdWelozWmxjbk5wYjI1bE1TNHdMakJyYzNCbFkxWmxjbk5wYjI1bE1pNDBMakFBQUJBNGFuVnRZZ0FBQUNocWRXMWtZekpqY3dBUkFCQ0FBQUNxQURpYmNRTmpNbkJoTG5OcFoyNWhkSFZ5WlFBQUFCQUlZMkp2Y3RLRVdRSVNvZ0VtR0NGWkFnb3dnZ0lHTUlJQmphQURBZ0VDQWhSQTVhQUs3c0k1MEw2NGcvb0dRZ1U5WjFVVEFEQUtCZ2dxaGtqT1BRUURBekJKTVJjd0ZRWURWUVFLRXc1QmJuUm9jbTl3YVdNc0lGQkNRekV1TUN3R0ExVUVBeE1sUVc1MGFISnZjR2xqSUVOdmJuUmxiblFnUTNKbFpHVnVkR2xoYkhNZ1VtOXZkQ0JEUVRBZUZ3MHlOakE0TURjeE9EUXpOVFphRncweU9EQTRNRFl4T1RRek5UWmFNRVF4RnpBVkJnTlZCQW9URGtGdWRHaHliM0JwWXl3Z1VFSkRNU2t3SndZRFZRUURFeUJCYm5Sb2NtOXdhV01nUTJ4aGRXUmxJRU52Ym5SbGJuUWdVMmxuYm1sdVp6QlpNQk1HQnlxR1NNNDlBZ0VHQ0NxR1NNNDlBd0VIQTBJQUJKaDZDbXZMVUJnRkZOVTB2VUtsT1Z0RTZkamQxN0w1U3V3WDBMZW1GaXNCTTNka2QvM2N5anhGQTNRbzVTNDZmWDAvaWhZMFZaN21mYjlLRjcwM3Q1T2pXREJXTUE0R0ExVWREd0VCL3dRRUF3SUhnREFWQmdOVkhTVUVEakFNQmdvckJnRUVBWVBvWGdJQk1Bd0dBMVVkRXdFQi93UUNNQUF3SHdZRFZSMGpCQmd3Rm9BVXpsSGlCSUZPWkZzaitPUEV6NW8rbk1IWFhNSXdDZ1lJS29aSXpqMEVBd01EWndBd1pBSXdNWE1kRko0QmV0TExWWTdPUnVFOW5vcWJiQVpPWm4vYUFyWHlUd0ZBWmZLclB6eEYydlBvSk5mMStVQ2RnMVhHQWpCd1gxemQ5V0dxWWtxbUw1U0ZxdzFReVNqcjF6SmZwSk05KzFyZER3U1BMTU9QT2pLdWlYam9VL3BVVWVHOVJ3bWhZM0JoWkZrTm5nQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBUFpZUUNTb1lScll1OTRWZHdNbHM5Ri9sZzhrcE83aHRIWm5pU2cvb1NuemU5ZUVFWTZzK2N6ZlQ4R09aRGs2SnpIUW5pV1FOalRock9iN2FvaEY2dUc3VmVBPTwvYzJwYTptYW5pZmVzdD48L21ldGFkYXRhPjxkZWZzPjwvZGVmcz4KICA8cGF0aCBkPSJNMjE5LjUgOSBMNDMwIDEzMC41IEw0MzAgMzc3LjUgTDIxOS41IDQ5OSBMOSAzNzcuNSBMOSAxMzAuNSBaIiBmaWxsPSIjMWMxZTIyIiBzdHJva2U9IiMxYzFlMjIiIHN0eWxlPSJzdHJva2Utd2lkdGg6MTZweDtzdHJva2UtbGluZWpvaW46cm91bmQ7Ij48L3BhdGg+CiAgPHBvbHlsaW5lIHBvaW50cz0iMTI0LDE3NCAxODAsMjI0IDEyNCwyNzQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2VmZWRlNyIgc3R5bGU9InN0cm9rZS13aWR0aDoyNHB4O3N0cm9rZS1saW5lY2FwOnNxdWFyZTtzdHJva2UtbGluZWpvaW46bWl0ZXI7Ij48L3BvbHlsaW5lPgogIDxyZWN0IHg9IjIwOCIgeT0iMjI0IiB3aWR0aD0iMTYiIGhlaWdodD0iNTAiIHJ4PSIwIiBmaWxsPSIjYjg1NDUwIj48L3JlY3Q+CiAgPHJlY3QgeD0iMjQwIiB5PSIxNzQiIHdpZHRoPSI3MiIgaGVpZ2h0PSIxMDAiIHJ4PSIwIiBmaWxsPSIjN2Q5ZGNiIj48L3JlY3Q+CiAgPHRleHQgeD0iMjE5LjUiIHk9IjM4NSIgZmlsbD0iI2VmZWRlNyIgc3R5bGU9ImZvbnQtZmFtaWx5OidJQk0gUGxleCBNb25vJyxtb25vc3BhY2U7Zm9udC1zaXplOjY2cHg7Zm9udC13ZWlnaHQ6NjAwO3RleHQtYW5jaG9yOm1pZGRsZTsiPmdwdHI8L3RleHQ+CiAgPC9zdmc+">
+  <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MzkgNTA4IiB3aWR0aD0iNDM5IiBoZWlnaHQ9IjUwOCIgeG1sbnM6YzJwYT0iaHR0cDovL2MycGEub3JnL21hbmlmZXN0Ij48bWV0YWRhdGE+PGMycGE6bWFuaWZlc3Q+QUFBV2dtcDFiV0lBQUFBZWFuVnRaR015Y0dFQUVRQVFnQUFBcWdBNG0zRURZekp3WVFBQUFCWmNhblZ0WWdBQUFFZHFkVzFrWXpKdFlRQVJBQkNBQUFDcUFEaWJjUU4xY200Nll6SndZVG94WWpBeVlqRTNaQzFtWkdRMkxUUTFaVFV0T0RVd1pTMWlZak16TWpaaE5EWTRPVEFBQUFBRGwycDFiV0lBQUFBcGFuVnRaR015WVhNQUVRQVFnQUFBcWdBNG0zRURZekp3WVM1aGMzTmxjblJwYjI1ekFBQUFBTHhxZFcxaUFBQUFSR3AxYldSalltOXlBQkVBRUlBQUFLb0FPSnR4RTJNeWNHRXVhVzVuY21Wa2FXVnVkQzUyTXdBQUFBQVlZekp6YUhpQS9LR3E2RHJxbWZCeStXWHZGK01BQUFCd1kySnZjcU5wWkdNNlptOXliV0YwYldsdFlXZGxMM04yWnl0NGJXeHFhVzV6ZEdGdVkyVkpSSGdzZUcxd09tbHBaRG95TkRJM1kyVmtOeTAxWW1KaUxUUXlOakV0WWpSaFpTMWpOemczWW1ZNFpqa3laREpzY21Wc1lYUnBiMjV6YUdsd2FIQmhjbVZ1ZEU5bUFBQUI0bXAxYldJQUFBQkJhblZ0WkdOaWIzSUFFUUFRZ0FBQXFnQTRtM0VUWXpKd1lTNWhZM1JwYjI1ekxuWXlBQUFBQUJoak1uTm9zYVZKRVRWc3IrL0tmMEhaektVRGF3QUFBWmxqWW05eW9tZGhZM1JwYjI1emdxSm1ZV04wYVc5dWEyTXljR0V1YjNCbGJtVmthbkJoY21GdFpYUmxjbk9oYTJsdVozSmxaR2xsYm5SemdhSmpkWEpzZUMxelpXeG1JMnAxYldKbVBXTXljR0V1WVhOelpYSjBhVzl1Y3k5ak1uQmhMbWx1WjNKbFpHbGxiblF1ZGpOa2FHRnphRmdnbzQ5dEFubG1Wc0lndXMyaStadnozQitmbTVWZkFHU2NZYVNQdXNZeHBkR2tabUZqZEdsdmJuZ2RZMjl0TG1GdWRHaHliM0JwWXk1amJHRjFaR1V1Y0hKdmRtbGtaV1JxY0dGeVlXMWxkR1Z5YzZGNEgyTnZiUzVoYm5Sb2NtOXdhV011YjNKcFoybHVMV052Ym1acFpHVnVZMlZuZFc1cmJtOTNibXRrWlhOamNtbHdkR2x2Ym5obVEyeGhkV1JsSUhCeWIzWnBaR1ZrSUhSb2FYTWdabWxzWlNCaGRDQjBhR1VnY21WeGRXVnpkQ0J2WmlCaElIVnpaWElnWVc1a0lHMWhlU0JvWVhabElHTnlaV0YwWldRZ2IzSWdiVzlrYVdacFpXUWdkR2hsSUdacGJHVWdZMjl1ZEdWdWRITXViWE52Wm5SM1lYSmxRV2RsYm5TaFpHNWhiV1ZtUTJ4aGRXUmxjbUZzYkVGamRHbHZibk5KYm1Oc2RXUmxaUFVBQUFESWFuVnRZZ0FBQUVCcWRXMWtZMkp2Y2dBUkFCQ0FBQUNxQURpYmNSTmpNbkJoTG1oaGMyZ3VaR0YwWVFBQUFBQVlZekp6YUk0NXUyaTJTdGwrTUdLRmgwYitDc0VBQUFDQVkySnZjcVZqWVd4blpuTm9ZVEkxTm1Od1lXUk5BQUFBQUFBQUFBQUFBQUFBQUdSb1lYTm9XQ0M0a1BmUyt0dFlZRFljN2pSMGxBUG9GSmZyd2F5K3lmOFZEQUNDY0pPbUYyUnVZVzFsYm1wMWJXSm1JRzFoYm1sbVpYTjBhbVY0WTJ4MWMybHZibk9Cb21WemRHRnlkQmlXWm14bGJtZDBhQmtlQkFBQUFqNXFkVzFpQUFBQUoycDFiV1JqTW1Oc0FCRUFFSUFBQUtvQU9KdHhBMk15Y0dFdVkyeGhhVzB1ZGpJQUFBQUNEMk5pYjNLbFkyRnNaMlp6YUdFeU5UWnBjMmxuYm1GMGRYSmxlRTF6Wld4bUkycDFiV0ptUFM5ak1uQmhMM1Z5Ympwak1uQmhPakZpTURKaU1UZGtMV1prWkRZdE5EVmxOUzA0TlRCbExXSmlNek15Tm1FME5qZzVNQzlqTW5CaExuTnBaMjVoZEhWeVpXcHBibk4wWVc1alpVbEVlQ3g0YlhBNmFXbGtPbU5pTkRFNU1HUmlMVEUxWVdVdE5ERmhPQzA0WmpFeExUQXdOVFF5Wm1NNE0yTTVaSEpqY21WaGRHVmtYMkZ6YzJWeWRHbHZibk9Eb21OMWNteDRMWE5sYkdZamFuVnRZbVk5WXpKd1lTNWhjM05sY25ScGIyNXpMMk15Y0dFdWFXNW5jbVZrYVdWdWRDNTJNMlJvWVhOb1dDQ2pqMjBDZVdaV3dpQzZ6YUw1bS9QY0g1K2JsVjhBWkp4aHBJKzZ4akdsMGFKamRYSnNlQ3B6Wld4bUkycDFiV0ptUFdNeWNHRXVZWE56WlhKMGFXOXVjeTlqTW5CaExtRmpkR2x2Ym5NdWRqSmthR0Z6YUZnZzNnK0NtWUNqN2xnT1lpNmhYbHpKVXVQM3VSQ3hDcHM1SzlzaDFLdXlWUTZpWTNWeWJIZ3BjMlZzWmlOcWRXMWlaajFqTW5CaExtRnpjMlZ5ZEdsdmJuTXZZekp3WVM1b1lYTm9MbVJoZEdGa2FHRnphRmdnUVUxN3RISGRnSXcyc21LVTBlc0RsbkkvY1ZWY3F4Mm50WFJaU25pMytDdDBZMnhoYVcxZloyVnVaWEpoZEc5eVgybHVabStqWkc1aGJXVnZRVzUwYUhKdmNHbGpJRVpwYkdWelozWmxjbk5wYjI1bE1TNHdMakJyYzNCbFkxWmxjbk5wYjI1bE1pNDBMakFBQUJBNGFuVnRZZ0FBQUNocWRXMWtZekpqY3dBUkFCQ0FBQUNxQURpYmNRTmpNbkJoTG5OcFoyNWhkSFZ5WlFBQUFCQUlZMkp2Y3RLRVdRSVNvZ0VtR0NGWkFnb3dnZ0lHTUlJQmphQURBZ0VDQWhSQTVhQUs3c0k1MEw2NGcvb0dRZ1U5WjFVVEFEQUtCZ2dxaGtqT1BRUURBekJKTVJjd0ZRWURWUVFLRXc1QmJuUm9jbTl3YVdNc0lGQkNRekV1TUN3R0ExVUVBeE1sUVc1MGFISnZjR2xqSUVOdmJuUmxiblFnUTNKbFpHVnVkR2xoYkhNZ1VtOXZkQ0JEUVRBZUZ3MHlOakE0TURjeE9EUXpOVFphRncweU9EQTRNRFl4T1RRek5UWmFNRVF4RnpBVkJnTlZCQW9URGtGdWRHaHliM0JwWXl3Z1VFSkRNU2t3SndZRFZRUURFeUJCYm5Sb2NtOXdhV01nUTJ4aGRXUmxJRU52Ym5SbGJuUWdVMmxuYm1sdVp6QlpNQk1HQnlxR1NNNDlBZ0VHQ0NxR1NNNDlBd0VIQTBJQUJKaDZDbXZMVUJnRkZOVTB2VUtsT1Z0RTZkamQxN0w1U3V3WDBMZW1GaXNCTTNka2QvM2N5anhGQTNRbzVTNDZmWDAvaWhZMFZaN21mYjlLRjcwM3Q1T2pXREJXTUE0R0ExVWREd0VCL3dRRUF3SUhnREFWQmdOVkhTVUVEakFNQmdvckJnRUVBWVBvWGdJQk1Bd0dBMVVkRXdFQi93UUNNQUF3SHdZRFZSMGpCQmd3Rm9BVXpsSGlCSUZPWkZzaitPUEV6NW8rbk1IWFhNSXdDZ1lJS29aSXpqMEVBd01EWndBd1pBSXdNWE1kRko0QmV0TExWWTdPUnVFOW5vcWJiQVpPWm4vYUFyWHlUd0ZBWmZLclB6eEYydlBvSk5mMStVQ2RnMVhHQWpCd1gxemQ5V0dxWWtxbUw1U0ZxdzFReVNqcjF6SmZwSk05KzFyZER3U1BMTU9QT2pLdWlYam9VL3BVVWVHOVJ3bWhZM0JoWkZrTm5nQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBUFpZUU1rUUp6dlBMTGZBUnhTM1FTM1Q5Yjg1U1AxZ0V0SHIya1NVanVxQW0vVDIrQnVWZU9GQVdsWXVvVHhwWkRpVTBMS2FoMnYydm5FYytUbmVmUXlsdjdzPTwvYzJwYTptYW5pZmVzdD48L21ldGFkYXRhPjxkZWZzPjwvZGVmcz4KICA8cGF0aCBkPSJNMjE5LjUgOSBMNDMwIDEzMC41IEw0MzAgMzc3LjUgTDIxOS41IDQ5OSBMOSAzNzcuNSBMOSAxMzAuNSBaIiBmaWxsPSIjZjNmMWVjIiBzdHJva2U9IiMxYzFlMjIiIHN0eWxlPSJzdHJva2Utd2lkdGg6MTZweDtzdHJva2UtbGluZWpvaW46cm91bmQ7Ij48L3BhdGg+CiAgPHBvbHlsaW5lIHBvaW50cz0iMTI0LDE3NCAxODAsMjI0IDEyNCwyNzQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFjMWUyMiIgc3R5bGU9InN0cm9rZS13aWR0aDoyNHB4O3N0cm9rZS1saW5lY2FwOnNxdWFyZTtzdHJva2UtbGluZWpvaW46bWl0ZXI7Ij48L3BvbHlsaW5lPgogIDxyZWN0IHg9IjIwOCIgeT0iMjI0IiB3aWR0aD0iMTYiIGhlaWdodD0iNTAiIHJ4PSIwIiBmaWxsPSIjYjg1NDUwIj48L3JlY3Q+CiAgPHJlY3QgeD0iMjQwIiB5PSIxNzQiIHdpZHRoPSI3MiIgaGVpZ2h0PSIxMDAiIHJ4PSIwIiBmaWxsPSIjNmM4ZWJmIj48L3JlY3Q+CiAgPHRleHQgeD0iMjE5LjUiIHk9IjM4NSIgZmlsbD0iIzFjMWUyMiIgc3R5bGU9ImZvbnQtZmFtaWx5OidJQk0gUGxleCBNb25vJyxtb25vc3BhY2U7Zm9udC1zaXplOjY2cHg7Zm9udC13ZWlnaHQ6NjAwO3RleHQtYW5jaG9yOm1pZGRsZTsiPmdwdHI8L3RleHQ+CiAgPC9zdmc+" width="120" height="139" alt="gptr logo">
+</picture>
+<!-- gptr-vignette-brand:end -->
 
 
 gptr can keep the code an agent executed beside the prompt that requested it. In a designated
@@ -20,79 +35,58 @@ those objects in the replay environment; working on data already loaded in R doe
 an intermediate dataset file. See [Execution model](execution-model.html) for object lifetimes
 and the separate costs of checkpoints, workers and snapshots.
 
-The executed examples use fake providers and separate work environments. Recording and
-file-writing recipes are shown as code to run deliberately in your own temporary project.
+The examples below are recipes for your configured model. Run recording and file-writing
+steps deliberately in a temporary project.
 
-## Calls in ordinary R scripts and functions
+## Program in natural language, then use ordinary R
 
-`peter()` is an R function. A helper can call it, inspect the returned session, and pass its
-answer to other R code. Give it an environment when results should outlive the helper call.
+Write a prompt for each step. A pipe continues the same session, so the next prompt can use
+the objects created by the previous one. Keep prompts on separate lines and put short notes
+where they help explain the next step.
 
 
 ``` r
 library(gptr)
-work = new.env()
-work$mtcars = mtcars
-fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "top = head(mtcars[order(-mtcars$mpg), c('mpg', 'wt')], 3)")),
-  "The three most fuel-efficient cars are stored in top."
-))
+cars = datasets::mtcars
 
-rank_cars = function(data, model, envir) {
-  peter("Find the three most fuel-efficient cars.", data = force(data), model = model, envir = envir,
-        mode = auto)
-}
-s = rank_cars(work$mtcars, fake, work)
-s$text
-#> [1] "The three most fuel-efficient cars are stored in top."
-work$top
-#>                 mpg    wt
-#> Toyota Corolla 33.9 1.835
-#> Fiat 128       32.4 2.200
-#> Honda Civic    30.4 1.615
-summary(s)
-#>  turn        role                                               preview tools
-#>     1        user              Find the three most fuel-efficient cars.
-#>     1   assistant                                                           r
-#>     1 tool_result                              + top <data.frame 3 x 2>     r
-#>     1   assistant The three most fuel-efficient cars are stored in top.
-#>  tokens
-#>      10
-#>    1638
-#>       6
-#>    1641
+session = peter("Fit mpg ~ wt in cars with stats::lm(); store fit.") |>
+  # Reuse the fitted model.
+  peter("Use fit to predict mpg for every row of cars; store predicted.") |>
+  peter("Summarize observed mpg minus predicted; store residual_summary.")
+
+graphics::plot(cars$mpg, predicted)
+session |> peter("Explain the largest residuals.")
 ```
 
-The named `data = force(data)` supplies the helper's argument as an explicit context value:
-its formal `data` is not a binding in `work`. If you attach an object by name instead, it must
-be visible from the environment where the session evaluates.
+Prompts and ordinary R can alternate. A pipe adds turns to the same mutable session; assigning
+the session to another name does not make a branch. Use `gptr_fork()` for a branch.
 
-`summary(s)` reads a compact table of recorded turns without a model call; it does not
-produce a narrative or an executable workflow.
+### Calls inside functions
 
-This works in an R file, but a call nested inside a function, loop or another expression does
-not own a document block. It may run another model request when the script is executed
-again. Keep calls whose agent code you want recorded as top-level statements; keep reusable
-ordinary R calculations in functions. System 1 cache hits have their own rules and do not
-make an arbitrary loop into a recorded workflow.
-
-## Continuing one session with a pipe
+`peter()` is an R function. Give it an environment when results should outlive a helper call:
 
 
 ``` r
-follow = gptr_fake_provider(list("A first answer.", "An answer incorporating the follow-up."),
-                            name = "follow")
-first = peter("Summarize the analysis.", model = follow, envir = new.env())
-second = first |> peter("Mention the sample size too.")
-identical(first, second)
-#> [1] TRUE
-second$turns
-#> [1] 2
+rank_cars = function(data, envir) {
+  peter("Find the three most fuel-efficient cars in data; store top.",
+        data = force(data), envir = envir)
+}
+work = list2env(list(data = mtcars))
+session = rank_cars(work$data, work)
+work$top
+summary(session)
 ```
 
-A pipe adds turns to the same mutable session. A top-level pipe chain is one statement for
-recording; its executed code follows that chain. `gptr_fork()` explicitly branches a session;
-assigning it to another variable does not branch it.
+`data = force(data)` supplies model context; it does not create an R binding in `work`.
+Here `work$data` is prepared before the call, so the R tool can read it. Objects attached by
+name must be visible from the evaluation environment.
+`summary(session)` reads recorded turns without a model call; it is not a narrative or an
+executable workflow.
+
+A call nested inside a function, loop or another expression does not own a document block.
+Running that code again may make another model request. Keep recordable prompts at top level
+and reusable R calculations in functions. System 1 cache hits do not make an arbitrary loop
+into a recorded workflow.
 
 ## Recording a designated R script
 
@@ -100,18 +94,13 @@ assigning it to another variable does not branch it.
 `gptr_doc()` reports the binding; `gptr_doc(FALSE)` removes it. It does not create a workflow
 from past conversation turns.
 
-For an offline recording exercise, save this as `analysis.R` in a temporary directory:
+Save this as `analysis.R` in a temporary directory:
 
 
 ``` r
 library(gptr)
-fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(
-    code = "top = head(mtcars[order(-mtcars$mpg), c('mpg', 'wt')], 3)",
-    note = "ranked by mpg; ties keep the order of the data")),
-  "The selected rows are in top."
-))
-result = peter("Find the three most fuel-efficient cars.", model = fake, mode = auto)
+cars = datasets::mtcars
+session = peter("Find the three most fuel-efficient cars in cars; store top.")
 top
 ```
 
@@ -126,8 +115,8 @@ gptr_blocks("analysis.R")
 gptr_doc(FALSE)
 ```
 
-The missing block causes a fake model request, and the executed code is recorded below the
-call. The header identifies the block, model, date and prompt hash; the body hash identifies
+A missing block makes a model request, and the executed code is recorded below the call.
+ The header identifies the block, model, date and prompt hash; the body hash identifies
 its recorded code. `## Decision:` retains a model-supplied note, and `#>` retains bounded
 output. A note is a model explanation, not proof that the code is correct.
 
@@ -173,7 +162,8 @@ R Markdown, Quarto and Jupyter formats; pending writes can be recovered before l
 | `"record"` | Regenerate stale blocks; fresh blocks replay. |
 
 A call's `replay =` argument wins over process options, the `GPTR_REPLAY` environment variable
-and settings. For a script intended to run without model calls:
+and settings. In any R front end, use `gptr_source("analysis.R", replay = "replay")` to
+run a recorded script without model calls. From a Unix shell:
 
 ```sh
 GPTR_REPLAY=replay Rscript --vanilla analysis.R
@@ -208,13 +198,9 @@ gptr_blocks("analysis.Rmd")
 gptr_doc(FALSE)
 ```
 
-Use Quarto's renderer for `.qmd`; `gptr_source()` is not a renderer for either format. Arrange
-the document's setup to load gptr, prepare its input data and select a model or replay mode.
-Plain R chunks still execute when the report is rendered.
-
-In IRkernel, session answers render as safe Markdown, with ordinary progress separate from
-error messages. The executed R code of a pending recorded block is shown once in the cell
-output; notebook writes remain queued until you explicitly synchronize them.
+Use `quarto render analysis.qmd` for `.qmd`; `gptr_source()` is not a renderer for either
+format. Arrange the document's setup to load gptr, prepare its input data and select a model
+or replay mode. Plain R chunks still execute when the report is rendered.
 
 For Jupyter, bind the saved `.ipynb` path in the R kernel. Blocks become agent cells. Writes
 are queued while the notebook is open to avoid competing with the notebook editor; after
@@ -223,7 +209,7 @@ closing it, apply the pending blocks:
 
 ``` r
 gptr_doc("analysis.ipynb")
-# Run the notebook's Peter calls in its R kernel, then save and close the notebook.
+# Run the notebook's `peter()` calls in its R kernel, then save and close the notebook.
 gptr_doc("analysis.ipynb", sync = TRUE)
 gptr_blocks("analysis.ipynb")
 gptr_doc(FALSE)
@@ -232,29 +218,96 @@ gptr_doc(FALSE)
 A notebook edited since a pending block was queued may need conflict resolution. Reopening
 or listing a file is not proof that pending blocks were applied successfully.
 
-## Asking Peter to summarize a completed workflow
+## Exporting a recorded script
 
-Choose the deliverable explicitly. A history document, an ordinary executable script and a
-narrative summary have different roles. gptr provides recording and replay APIs; it has no
-one-call export that guarantees an arbitrary conversation becomes a complete executable
-workflow.
+`gptr_export()` reads a synchronized `.R` history and writes a new `.R` file without running
+it or asking a model. Its default `format = "r"` turns `peter()` calls into comments and keeps
+the recorded R executable. With `format = "peter"`, calls remain active and the previous
+recorded code becomes comments, so that code is not executed a second time. Ordinary user
+code and comments retain their source order. Choose a new `.R` destination in an existing
+directory, different from the source; existing paths are never replaced. Export also
+refuses a source that changes during publication.
 
-With your own live-model session `s`, ask for a narrative by making a model request such as:
+For example, save the following as `analysis.R`. With a configured model and the usual
+permission checks, its first three prompts steer one session; the fourth starts another.
+The ordinary plot runs between them, using objects in the same R environment.
 
 
 ``` r
-summary_session = s |> peter(
-  "Summarize the steps actually completed, decisions, inputs, outputs and unresolved issues.\nKeep proposed work separate from completed work; name saved files only if verified.",
-  mode = plan
-)
-summary_session$text
+cars = datasets::mtcars
+
+session = gptr::peter("Fit mpg ~ wt in cars with stats::lm(); store fit.") |>
+  # Reuse the fitted model.
+  gptr::peter("Use fit to predict mpg for every row of cars; store predicted.") |>
+  gptr::peter("Summarize observed mpg minus predicted; store residual_summary.")
+
+# User code and this comment stay in the exported source.
+graphics::plot(cars$mpg, predicted, xlab = "Observed mpg", ylab = "Predicted mpg")
+graphics::abline(a = 0, b = 1)
+
+session = gptr::peter("Check predicted length and finite values; store checks.")
 ```
 
-The answer is **model-generated text** and adds a turn to `s`. Check its claims against the
-workspace, files and history before treating it as a record. `gptr_usage(s)` shows the
-request's usage; a summary request is not free merely because it summarizes existing work.
+Record it deliberately, inspect the code and results, then synchronize before exporting:
 
-For a Peter history document, designate the target before recording top-level prompts,
+
+``` r
+work = new.env(parent = globalenv())
+gptr_doc("analysis.R")
+gptr_source("analysis.R", replay = "record", envir = work)
+work$residual_summary
+work$checks
+gptr_doc("analysis.R", sync = TRUE)
+
+gptr_export("analysis.R", "analysis-raw.R")
+gptr_export("analysis.R", "analysis-peter.R", format = "peter")
+gptr_doc(FALSE)
+```
+
+The export operation creates no model request. Running the `format = "peter"` export can
+create new requests; running the raw export executes its recorded R and ordinary user code.
+Review those effects, then validate the raw result in a fresh environment with the intended
+inputs.
+For this example, input preparation is already in the source. For an analysis that uses a
+large object loaded earlier, supply that object in the new environment; exporting does not
+serialize the dataset or make an intermediate data file.
+
+In the `format = "peter"` output, recorded Decision and Steer notes and bounded `#>` output
+follow each operand of this separate-line pipeline. Other layouts keep feedback after the
+complete statement. Notes and output are comments, not assertions that the analysis is correct.
+Each block keeps at most twelve output lines and eighty characters per output line.
+
+Export requires fresh completed records and no pending sidecar. It refuses computed or nested
+prompts, mixed `peter()`/ordinary pipelines, shared-line statements, interpolated-input hashes,
+missing or edited blocks and secret-marked records. Raw export also refuses later ordinary code
+that depends on a removed session handle, such as `session$value`; put needed results in
+ordinary R objects, or retain the `format = "peter"` output. Earlier unrecorded console input is
+not reconstructed. Preserved user code can still require gptr or other packages, read or write
+files, or call the network. Export is a source transformation, not verified replay.
+
+## Asking Peter to summarize a completed workflow
+
+Choose the deliverable explicitly. A history document, an ordinary executable script and a
+narrative summary have different roles. `gptr_export()` transforms an explicitly recorded
+R document; it cannot recover arbitrary conversation turns into a complete workflow.
+
+With your configured model, continue `session` to request a narrative:
+
+
+``` r
+session |> peter(
+  "Summarize completed steps, decisions, inputs, outputs and open issues.
+Separate proposed work. Name saved files only when verified.",
+  mode = plan
+)
+session$text
+```
+
+The answer is **model-generated text** and adds a turn to `session`. Check its claims against the
+workspace, files and history before treating it as a record. `gptr_usage(session)` shows the
+request's usage.
+
+For a history document, designate the target before recording top-level prompts,
 include ordinary R setup and checks, and inspect the blocks and replay behavior. To assemble
 one from earlier work, ask the model to draft it and review the draft; earlier unrecorded
 turns are not automatically recovered into validated blocks.
@@ -263,17 +316,17 @@ For an ordinary R script, request a separate, explicit implementation:
 
 
 ``` r
-script_session = s |> peter(
-  "Draft an ordinary R script implementing the verified analysis.\nInclude libraries, input paths, parameters, computations and explicit output saves.\nDo not call Peter; identify any missing input or step instead of inventing it.",
+session |> peter(
+  "Write ordinary R for the verified analysis, including inputs and output saves.
+Do not call Peter. Identify missing inputs or steps instead of inventing them.",
   mode = plan
 )
-script_session$text
+session$text
 ```
 
 This returns **model-generated output**, not an exported or validated script. Save only
 reviewed code, then run it in a fresh environment with the intended inputs and verify its
-outputs. A prose summary can accompany either script, but prose alone is not executable
-history.
+outputs.
 
-See `vignette("system-one", package = "gptr")` for typed decisions and
-`vignette("teams-and-background", package = "gptr")` for orchestration and SDK control.
+See [System 1 decisions](system-one.html) for typed decisions and
+[Teams and background work](teams-and-background.html) for orchestration and SDK control.

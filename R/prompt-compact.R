@@ -370,8 +370,9 @@ compact_should = function(s, tokens, idle_s) {
 }
 
 #' The checkpoint compactor's trigger: the threshold (waiting for 20% growth of the window
-#' after a threshold compaction, IC-71) or the cold rule (idle beyond the tail TTL with at
-#' least `gptr.compact_cold_min` tokens); an unknown count or idle time is no evidence (IC-74)
+#' after a threshold compaction, or 20% of the finite cap for an unknown window, IC-71) or the
+#' cold rule (idle beyond the tail TTL with at least `gptr.compact_cold_min` tokens). An unknown
+#' count or idle time is no evidence (IC-74).
 #' @noRd
 compact_checkpoint_should = function(session, ctx) {
   num = function(x) suppressWarnings(as.numeric(x %||% NA_real_))[1]
@@ -386,9 +387,20 @@ compact_checkpoint_should = function(session, ctx) {
   if (tokens >= thr) {
     last = compact_last(session)
     after = num(last$details$tokens_after)
-    if (is.na(after)) after = 0
-    waits = !is.null(last) && identical(last$details$reason, "threshold") && !is.na(window)
-    if (!waits || tokens >= after + 0.2 * window) return(structure(TRUE, reason = "threshold"))
+    waits = !is.null(last) && identical(last$details$reason, "threshold")
+    if (waits && is.na(window) && is.finite(thr)) {
+      multiplier = num(session_data(session)$estimator$m %||% 1)
+      calibrated = after * multiplier
+      if (is.finite(multiplier) && multiplier > 0 && is.finite(tokens) &&
+          is.finite(after) && after >= 0 && is.finite(calibrated) &&
+          tokens >= calibrated + 0.2 * thr) {
+        return(structure(TRUE, reason = "threshold"))
+      }
+    } else {
+      if (is.na(after)) after = 0
+      waits = waits && !is.na(window)
+      if (!waits || tokens >= after + 0.2 * window) return(structure(TRUE, reason = "threshold"))
+    }
   }
   ttl = if (identical(prompt_cache_gap_state(session)$ttl, "1h")) 3600 else 300
   if (!is.na(idle) && idle > ttl && tokens >= gptr_opt("compact_cold_min")) {
@@ -403,7 +415,13 @@ compact_checkpoint_should = function(session, ctx) {
 #' @noRd
 compact_request_text = function(focus = NULL) {
   f = if (rlang::is_string(focus) && nzchar(focus)) paste0("\nFocus: ", focus) else ""
-  sub("{focus}", f, prompt_text("compaction_request"), fixed = TRUE)
+  text = sub("{focus}", f, prompt_text("compaction_request"), fixed = TRUE)
+  sub("\n</compaction_request>$", paste0(
+    "\nUnder Progress, distinguish recorded succeeded, failed and unverified tool execution ",
+    "from reported values. Copy each agent's harness R-result counts with the label ",
+    "`R tool results` and checkpoint scope; agent prose alone is not execution evidence. ",
+    "Put only unfinished work under Next steps.",
+    "\n</compaction_request>"), text)
 }
 
 #' Charge and persist one checkpoint attempt, including an interrupted unknown observation
@@ -431,11 +449,9 @@ compact_charge = function(s, target, context, msg, started, run, aborted = FALSE
     parent_id = d$parent_id %||% NA_character_, started = started,
     seconds = as.numeric(difftime(Sys.time(), started, units = "secs")),
     multiplier = d$estimator$m %||% 1))
-  usage_add(s, row)
+  row = usage_add_durable(s, row)
   ledger_mark_cached(s, context$request_id, row$cache_read)
-  stored = as.list(row)
-  stored$started = as.numeric(row$started)
-  stored = lapply(stored, function(value) if (is.na(value)) NULL else value)
+  stored = usage_row_store(row)
   session_append(s, list(type = "custom", custom_type = "gptr.compaction_usage",
                          data = list(row = stored)))
   event = prompt_event(s, "usage", row = row)
@@ -446,11 +462,44 @@ compact_charge = function(s, target, context, msg, started, run, aborted = FALSE
   invisible(row)
 }
 
+#' Continue one deferred checkpoint result without repeating its completed work
+#' The pending value is private to the owning run; it is not a transport or user option.
+#' @noRd
+compact_then = function(value, fn, failed = NULL) {
+  if (!inherits(value, "gptr_compaction_pending")) return(fn(value))
+  state = new.env(parent = emptyenv())
+  state$value = value
+  state$applied = FALSE
+  pending = structure(list(poll = function() {
+    step = function() {
+      if (!isTRUE(state$applied)) {
+        result = state$value$poll()
+        if (inherits(result, "gptr_compaction_pending")) return(pending)
+        state$applied = TRUE
+        state$value = fn(result)
+      }
+      if (inherits(state$value, "gptr_compaction_pending")) {
+        result = state$value$poll()
+        if (inherits(result, "gptr_compaction_pending")) return(pending)
+        state$value = result
+      }
+      state$value
+    }
+    tryCatch(step(), error = function(error) {
+      if (!is.function(failed)) stop(error)
+      state$applied = TRUE
+      state$value = failed(error)
+      state$value
+    })
+  }), class = "gptr_compaction_pending")
+  pending
+}
+
 #' Send one checkpoint request in-conversation (a cache read); its reply or NULL
 #' Guarded, then the model's stored view is put back; the run's safety record goes along (IC-74);
-#' the nested pump runs no tool (IC-57) and ends on abort or settle, cancelling the transfer.
+#' active runs yield a retained checkpoint; a manual request pumps no tool (IC-57).
 #' @noRd
-compact_ask_once = function(s, target, text, run = session_live(s)$run) {
+compact_ask_once = function(s, target, text, run = session_live(s)$run, defer = FALSE) {
   live = session_live(s)
   req = request_build(s, target, extra = msg_user(text, source = "prompt"))
   memo = live$memo
@@ -486,6 +535,7 @@ compact_ask_once = function(s, target, text, run = session_live(s)$run) {
   box$started = FALSE
   box$charged = FALSE
   box$cancelled = FALSE
+  box$released = FALSE
   box$usage = NULL
   signal = new.env(parent = emptyenv())
   signal$aborted = FALSE
@@ -520,19 +570,34 @@ compact_ask_once = function(s, target, text, run = session_live(s)$run) {
     if (isTRUE(box$charged) || !isTRUE(box$started)) return(invisible(NULL))
     box$charged = TRUE
     msg = box$msg %||% list(usage = box$usage)
-    compact_charge(s, target, context, msg, started, run,
-                    aborted = isTRUE(signal$aborted) || compact_run_halted(run))
+    failed = function(error) {
+      if (active) {
+        run_accounting_error(run, error)
+        tryCatch(run_fail(run, error), error = function(e) NULL, interrupt = function(e) NULL)
+      }
+      stop(error)
+    }
+    tryCatch(compact_charge(s, target, context, msg, started, run,
+                            aborted = isTRUE(signal$aborted) || compact_run_halted(run)),
+             error = failed, interrupt = failed)
     invisible(NULL)
   }
   previous_finish = if (active) run$compact_finish
-  if (active) run$compact_finish = finish
-  on.exit({
-    if (active && identical(run$compact_finish, finish)) {
-      run$compact_finish = if (!isTRUE(run$settled)) previous_finish
-    }
+  release = function() {
     tryCatch(finish(), finally = {
-      live$compacting = prior
+      if (!isTRUE(box$released)) {
+        box$released = TRUE
+        live$compacting = prior
+        if (active && identical(run$compact_finish, release)) {
+          run$compact_finish = if (!isTRUE(run$settled)) previous_finish
+        }
+      }
     })
+  }
+  retained = FALSE
+  if (active) run$compact_finish = release
+  on.exit({
+    if (!retained) release()
   }, add = TRUE)
   id = tryCatch(provider_stream(target, context, opts, emit = function(ev) {
                                   if (identical(ev$type, "start")) mark_started()
@@ -553,6 +618,15 @@ compact_ask_once = function(s, target, text, run = session_live(s)$run) {
                 })
   if (isTRUE(box$refused)) return(NULL)
   if (rlang::is_string(id) && !is.na(id)) mark_started()
+  if (active && defer && !isTRUE(box$done) && !compact_run_halted(run)) {
+    pending = structure(list(poll = function() {
+      if (!isTRUE(box$done) && !compact_run_halted(run)) return(pending)
+      on.exit(release(), add = TRUE)
+      box$msg
+    }), class = "gptr_compaction_pending")
+    retained = TRUE
+    return(pending)
+  }
   reactor_pump(until = function() isTRUE(box$done) || compact_run_halted(run),
                allow_runs = character())
   box$msg
@@ -561,21 +635,28 @@ compact_ask_once = function(s, target, text, run = session_live(s)$run) {
 #' The checkpoint reply, `list(msg, usage)`: a tool call, a length stop or no text is asked
 #' again once, an error reply or a halted run is not; `usage` sums every reply received
 #' @noRd
-compact_ask = function(s, target, text, run = session_live(s)$run) {
-  usages = list()
-  for (i in seq_len(2L)) {
-    msg = compact_ask_once(s, target, text, run)
-    # `[<-` with list(): a reply without usage stays in the list as NULL (unknown, IC-74)
-    if (!is.null(msg)) usages[length(usages) + 1L] = list(msg$usage)
-    if (is.null(msg) || isTRUE(msg$stop_reason %in% c("error", "aborted", "refusal")) ||
-        compact_run_halted(run)) {
-      return(list(msg = NULL, usage = compact_usage_sum(usages)))
-    }
-    calls = any(vapply(msg$content, function(b) identical(b$type, "tool_call"), NA))
-    usable = !calls && !identical(msg$stop_reason, "length") && nzchar(trimws(msg_text(msg)))
-    if (usable) return(list(msg = msg, usage = compact_usage_sum(usages)))
+compact_ask = function(s, target, text, run = session_live(s)$run, defer = FALSE) {
+  state = new.env(parent = emptyenv())
+  state$usages = list()
+  state$attempt = 0L
+  attempt = function() {
+    state$attempt = state$attempt + 1L
+    msg = compact_ask_once(s, target, text, run, defer = defer)
+    compact_then(msg, function(msg) {
+      # `[<-` with list(): unreported metering stays unknown rather than becoming zero.
+      if (!is.null(msg)) state$usages[length(state$usages) + 1L] = list(msg$usage)
+      if (is.null(msg) || isTRUE(msg$stop_reason %in% c("error", "aborted", "refusal")) ||
+          compact_run_halted(run)) {
+        return(list(msg = NULL, usage = compact_usage_sum(state$usages)))
+      }
+      calls = any(vapply(msg$content, function(b) identical(b$type, "tool_call"), NA))
+      usable = !calls && !identical(msg$stop_reason, "length") && nzchar(trimws(msg_text(msg)))
+      if (usable) return(list(msg = msg, usage = compact_usage_sum(state$usages)))
+      if (state$attempt < 2L) return(attempt())
+      list(msg = NULL, usage = compact_usage_sum(state$usages))
+    })
   }
-  list(msg = NULL, usage = compact_usage_sum(usages))
+  attempt()
 }
 
 #' The sum of usage records (contract 4.3), field by field; an NA or a missing record makes the
@@ -677,62 +758,66 @@ compact_checkpoint = function(session, ctx) {
     gptr_abort("Compaction needs a resolvable model.", "internal", detail = "no target")
   }
   run0 = session_live(session)$run
-  ask = compact_ask(session, target, compact_request_text(inp$focus), run0)
-  if (compact_run_halted(run0)) return(NULL)
-  reply = ask$msg
-  summary = if (is.null(reply)) {
-    registry_diagnostic("builtin:compaction", "compact", "no_summary",
-                        "The checkpoint request returned no usable reply; harness state only.")
-    prompt_text("checkpoint_no_summary")
-  } else {
-    msg_text(reply)
-  }
-  d = session_data(session)
-  path = prompt_path(session)
-  st = extract_state(path)
-  n = sum(vapply(path, function(e) identical(e$type, "compaction"), NA)) + 1L
-  turns = sum(vapply(path, function(e) {
-    identical(e$type, "message") && identical(e$message$role, "user") &&
-      isTRUE((e$message$source %||% "prompt") %in% c("prompt", "pipe", "repl", "replay"))
-  }, NA))
-  tok = suppressWarnings(as.numeric(inp$tokens %||% NA_real_))
-  if (length(tok) != 1L || is.na(tok)) {
-    tok = prompt_request_estimate(prompt_request_context(session, target), target[["api"]],
-                                  d$id)$total
-  }
-  tb = format(round(tok), big.mark = ",", scientific = FALSE)
-  cp = block_context("checkpoint", compact_checkpoint_body(summary, st, compact_shapes(session)),
-                     attrs = list(n = as.character(n), turns = paste0("1-", max(1L, turns)),
-                                  tokens_before = tb))
-  reinject = d$frozen$reinject %||% list()
-  budget_project = as.numeric(reinject$project %||% Inf)
-  budget_skills = as.numeric(reinject$skills %||% 10000)
-  hdr = list()
-  used = 0
-  # dropped project blocks (IC-71) keep their stored hash: re-announced only when the file changes
-  dropped = compact_last(session)$details$dropped %||% list()
-  for (b in compact_header(path)) {
-    if (identical(b$kind, "project_instructions")) {
-      k = prompt_est(b$text)
-      if (used + k > budget_project) {
-        dropped[[b$attrs$path %||% "project"]] = context_text_hash(b$text)
-        next
-      }
-      used = used + k
+  defer = isTRUE(run0$compact_defer) && !identical(inp$reason, "manual")
+  ask = compact_ask(session, target, compact_request_text(inp$focus), run0, defer = defer)
+  complete = function(ask) {
+    if (compact_run_halted(run0)) return(NULL)
+    reply = ask$msg
+    summary = if (is.null(reply)) {
+      registry_diagnostic("builtin:compaction", "compact", "no_summary",
+                          "The checkpoint request returned no usable reply; harness state only.")
+      prompt_text("checkpoint_no_summary")
+    } else {
+      msg_text(reply)
     }
-    hdr[[length(hdr) + 1L]] = b
+    d = session_data(session)
+    path = prompt_path(session)
+    st = extract_state(path)
+    n = sum(vapply(path, function(e) identical(e$type, "compaction"), NA)) + 1L
+    turns = sum(vapply(path, function(e) {
+      identical(e$type, "message") && identical(e$message$role, "user") &&
+        isTRUE((e$message$source %||% "prompt") %in% c("prompt", "pipe", "repl", "replay"))
+    }, NA))
+    tok = suppressWarnings(as.numeric(inp$tokens %||% NA_real_))
+    if (length(tok) != 1L || is.na(tok)) {
+      tok = prompt_request_estimate(prompt_request_context(session, target), target[["api"]],
+                                    d$id)$total
+    }
+    tb = format(round(tok), big.mark = ",", scientific = FALSE)
+    cp = block_context("checkpoint", compact_checkpoint_body(summary, st, compact_shapes(session)),
+                       attrs = list(n = as.character(n), turns = paste0("1-", max(1L, turns)),
+                                    tokens_before = tb))
+    reinject = d$frozen$reinject %||% list()
+    budget_project = as.numeric(reinject$project %||% Inf)
+    budget_skills = as.numeric(reinject$skills %||% 10000)
+    hdr = list()
+    used = 0
+    # dropped project blocks (IC-71) keep their stored hash: re-announced only when the file changes
+    dropped = compact_last(session)$details$dropped %||% list()
+    for (b in compact_header(path)) {
+      if (identical(b$kind, "project_instructions")) {
+        k = prompt_est(b$text)
+        if (used + k > budget_project) {
+          dropped[[b$attrs$path %||% "project"]] = context_text_hash(b$text)
+          next
+        }
+        used = used + k
+      }
+      hdr[[length(hdr) + 1L]] = b
+    }
+    ws = context_block_by_name(session, "workspace", list(placement = "first"))
+    skills = compact_skills(path, budget_total = budget_skills)
+    # keep_recent = 0: the latest request (often unanswered) is repeated whole, images included
+    last_user = if (length(st$user)) st$user[length(st$user)] else "(none)"
+    cont = block_text(paste0(prompt_text("checkpoint_continue"), last_user))
+    imgs = compact_request_images(path)
+    list(blocks = c(hdr, list(cp), compact_mode_block(session), ws, skills, imgs, list(cont)),
+         summary = summary, state = st, first_kept_entry_id = NULL,
+         usage = ask$usage,
+         details = list(request_id = reply$request_id,
+                        dropped = if (length(dropped)) dropped))
   }
-  ws = context_block_by_name(session, "workspace", list(placement = "first"))
-  skills = compact_skills(path, budget_total = budget_skills)
-  # keep_recent = 0: the latest request (often unanswered) is repeated whole, images included
-  last_user = if (length(st$user)) st$user[length(st$user)] else "(none)"
-  cont = block_text(paste0(prompt_text("checkpoint_continue"), last_user))
-  imgs = compact_request_images(path)
-  list(blocks = c(hdr, list(cp), compact_mode_block(session), ws, skills, imgs, list(cont)),
-       summary = summary, state = st, first_kept_entry_id = NULL,
-       usage = ask$usage,
-       details = list(request_id = reply$request_id,
-                      dropped = if (length(dropped)) dropped))
+  compact_then(ask, complete)
 }
 
 #' The section name of a `section_patch` operator text, or NA
@@ -802,6 +887,7 @@ compact_result_ok = function(res) {
 compact_run = function(s, reason, focus = NULL) {
   reason = check_choice(reason, c("threshold", "cold", "overflow", "manual"), "reason")
   check_string(focus, "focus", null = TRUE, empty = TRUE)
+  if (isTRUE(session_live(s)$compacting)) return(invisible(s))
   run0 = session_live(s)$run
   d = session_data(s)
   ctx = prompt_ctx(s)
@@ -825,11 +911,12 @@ compact_run = function(s, reason, focus = NULL) {
   if (isTRUE(dec$cancel)) return(invisible(s))
   notice = identical(reason, "manual") && !is.environment(run0) &&
     is.null(session_live(s)$background) && is.null(run_current()) && verbosity() >= 1L
-  completed = FALSE
+  notice_state = new.env(parent = emptyenv())
+  notice_state$completed = FALSE
   if (notice) {
     gptr_inform("Compacting conversation...", "progress")
     on.exit({
-      if (!completed) gptr_inform("Compaction did not finish.", "progress")
+      if (!isTRUE(notice_state$completed)) gptr_inform("Compaction did not finish.", "progress")
     }, add = TRUE)
   }
   res = dec$result
@@ -850,77 +937,95 @@ compact_run = function(s, reason, focus = NULL) {
                             conditionMessage(e))
         NULL
       })
-      if (!is.null(out) && !compact_result_ok(out)) {
-        registry_diagnostic(paste0("compactor:", name), "compact", "malformed_result",
-                            "The compactor returned no content blocks.")
-        out = NULL
-      }
-      out
+      compact_then(out, function(out) {
+        if (!is.null(out) && !compact_result_ok(out)) {
+          registry_diagnostic(paste0("compactor:", name), "compact", "malformed_result",
+                              "The compactor returned no content blocks.")
+          out = NULL
+        }
+        out
+      }, failed = function(error) {
+        registry_diagnostic(paste0("compactor:", name), "compact", class(error)[1L],
+                            conditionMessage(error))
+        NULL
+      })
     }
     res = run(comp$compact, strategy)
-    if (is.null(res) && !compact_run_halted(run0) &&
-        !identical(comp$compact, compact_checkpoint)) {
-      strategy = "checkpoint"
-      res = run(compact_checkpoint, strategy)
+    choice = new.env(parent = emptyenv())
+    choice$strategy = strategy
+    res = compact_then(res, function(res) {
+      if (is.null(res) && !compact_run_halted(run0) &&
+          !identical(comp$compact, compact_checkpoint)) {
+        choice$strategy = "checkpoint"
+        return(run(compact_checkpoint, choice$strategy))
+      }
+      res
+    })
+  } else {
+    choice = new.env(parent = emptyenv())
+    choice$strategy = strategy
+  }
+  complete = function(res) {
+    if (compact_run_halted(run0)) return(invisible(s))
+    if (!compact_result_ok(res)) {
+      gptr_abort(paste0("Compaction failed: no compactor produced a checkpoint ",
+                        "(see gptr_registry(diagnostics = TRUE))."), "internal",
+                 detail = "compaction")
     }
+    summary = if (is.character(res$summary)) {
+      paste(res$summary[!is.na(res$summary)], collapse = "\n")
+    } else {
+      ""
+    }
+    # the path now holds what the checkpoint request flushed from the queue (request_build())
+    path = prompt_path(s)
+    state = res$state
+    if (!is.null(state) && !is.list(state)) {
+      src = if (identical(choice$strategy, "hook")) "session_before_compact" else
+        paste0("compactor:", choice$strategy)
+      registry_diagnostic(src, "result", "malformed_state",
+                          "The compaction result's state is not a list; the harness state is kept.")
+      state = extract_state(path)
+    }
+    ids = vapply(path, function(e) as.character(e$id %||% NA_character_), "")
+    first = res$first_kept_entry_id
+    keep = if (rlang::is_string(first)) match(first, ids) else NA_integer_
+    ops = compact_operator_state(path, keep)
+    op_tokens = function(m) {
+      prompt_est(msg_text(m), "prose", d$id) +
+        if (length(m$tool_add)) prompt_est(json_encode(m$tool_add), "json", d$id) else 0
+    }
+    # images (the latest request's, or a result's own) count as P07's request estimate counts them
+    imgs = Filter(function(b) identical(b$type, "image"), res$blocks)
+    img_tokens = if (length(imgs)) {
+      prompt_request_estimate(list(tools_json = "",
+                                   messages = list(list(role = "user", content = imgs))),
+                              target[["api"]], d$id)$components[["images"]]
+    } else {
+      0
+    }
+    after = sum(vapply(res$blocks, function(b) prompt_est(b$text %||% "", "prose", d$id), 0)) +
+      img_tokens + prompt_static_tokens(d$frozen, d$id) + sum(vapply(ops, op_tokens, 0))
+    n = sum(vapply(path, function(e) identical(e$type, "compaction"), NA)) + 1L
+    details = if (is.list(res$details)) Filter(Negate(is.null), res$details) else list()
+    details$reason = reason
+    details$strategy = choice$strategy
+    details$tokens_after = after
+    session_append(s, list(type = "compaction", summary = summary,
+                           first_kept_entry_id = res$first_kept_entry_id,
+                           tokens_before = if (!is.na(tokens)) tokens, details = details,
+                           usage = if (is.list(res$usage)) res$usage else NULL,
+                           gptr = list(blocks = res$blocks, state = state, n = n)))
+    for (m in ops) session_append(s, prompt_operator_entry(m))
+    ev_dispatch("session_compact",
+                prompt_event(s, "session_compact", strategy = choice$strategy,
+                             tokens_before = tokens,
+                             summary_tokens = prompt_est(summary, "prose", d$id)),
+                session = s, ctx = ctx)
+    notice_state$completed = TRUE
+    invisible(s)
   }
-  if (compact_run_halted(run0)) return(invisible(s))
-  if (!compact_result_ok(res)) {
-    gptr_abort(paste0("Compaction failed: no compactor produced a checkpoint ",
-                      "(see gptr_registry(diagnostics = TRUE))."), "internal",
-               detail = "compaction")
-  }
-  summary = if (is.character(res$summary)) {
-    paste(res$summary[!is.na(res$summary)], collapse = "\n")
-  } else {
-    ""
-  }
-  # the path now holds what the checkpoint request flushed from the queue (request_build())
-  path = prompt_path(s)
-  state = res$state
-  if (!is.null(state) && !is.list(state)) {
-    src = if (identical(strategy, "hook")) "session_before_compact" else
-      paste0("compactor:", strategy)
-    registry_diagnostic(src, "result", "malformed_state",
-                        "The compaction result's state is not a list; the harness state is kept.")
-    state = extract_state(path)
-  }
-  ids = vapply(path, function(e) as.character(e$id %||% NA_character_), "")
-  first = res$first_kept_entry_id
-  keep = if (rlang::is_string(first)) match(first, ids) else NA_integer_
-  ops = compact_operator_state(path, keep)
-  op_tokens = function(m) {
-    prompt_est(msg_text(m), "prose", d$id) +
-      if (length(m$tool_add)) prompt_est(json_encode(m$tool_add), "json", d$id) else 0
-  }
-  # images (the latest request's, or a result's own) count as P07's request estimate counts them
-  imgs = Filter(function(b) identical(b$type, "image"), res$blocks)
-  img_tokens = if (length(imgs)) {
-    prompt_request_estimate(list(tools_json = "",
-                                 messages = list(list(role = "user", content = imgs))),
-                            target[["api"]], d$id)$components[["images"]]
-  } else {
-    0
-  }
-  after = sum(vapply(res$blocks, function(b) prompt_est(b$text %||% "", "prose", d$id), 0)) +
-    img_tokens + prompt_static_tokens(d$frozen, d$id) + sum(vapply(ops, op_tokens, 0))
-  n = sum(vapply(path, function(e) identical(e$type, "compaction"), NA)) + 1L
-  details = if (is.list(res$details)) Filter(Negate(is.null), res$details) else list()
-  details$reason = reason
-  details$strategy = strategy
-  details$tokens_after = after
-  session_append(s, list(type = "compaction", summary = summary,
-                         first_kept_entry_id = res$first_kept_entry_id,
-                         tokens_before = if (!is.na(tokens)) tokens, details = details,
-                         usage = if (is.list(res$usage)) res$usage else NULL,
-                         gptr = list(blocks = res$blocks, state = state, n = n)))
-  for (m in ops) session_append(s, prompt_operator_entry(m))
-  ev_dispatch("session_compact",
-              prompt_event(s, "session_compact", strategy = strategy, tokens_before = tokens,
-                           summary_tokens = prompt_est(summary, "prose", d$id)),
-              session = s, ctx = ctx)
-  completed = TRUE
-  invisible(s)
+  compact_then(res, complete)
 }
 
 #' The built-in `compaction` extension (contract section 10.3)

@@ -214,6 +214,98 @@ test_that("unknown usage prints as unknown, never as zero (IC-74)", {
   expect_match(session_footer(test_session()), " . 0 turns . 0 tokens . $0.0000 . ", fixed = TRUE)
 })
 
+test_that("print escapes answer controls without truncating or rewriting session data", {
+  testthat::local_reproducible_output(width = 80)
+  plain = paste0("caf", intToUtf8(0xE9), " ", intToUtf8(0x3B2), " ", intToUtf8(0x2192),
+                 " {literal}")
+  answer = paste0(plain, "\n", strrep("x", 450L), "\n",
+    "\033[31mred\033[0m \033]0;title\a CR\rback\b C1", intToUtf8(0x9B),
+    " bidi", intToUtf8(0x202E), " hidden", intToUtf8(0x200B))
+  session = answered_session(answer)
+  before = list(text = session$text, messages = session$messages, history = session$history,
+                footer = session_footer(session))
+  out = utils::capture.output({
+    err = utils::capture.output({
+      shown = withVisible(print(session))
+    }, type = "message")
+  })
+  # cat() uses the console's native encoding for printable Unicode.
+  printed_plain = if (isTRUE(l10n_info()[["UTF-8"]])) plain else enc2native(plain)
+  expected = c(printed_plain, strrep("x", 450L),
+    paste0("<U+001B>[31mred<U+001B>[0m <U+001B>]0;title<U+0007> CR<U+000D>back<U+0008> C1",
+      "<U+009B> bidi<U+202E> hidden<U+200B>"), session_footer(session))
+  expect_identical(console_escape(plain), plain)
+  expect_identical(out, expected)
+  expect_identical(err, character())
+  expect_false(shown$visible)
+  expect_identical(shown$value, session)
+  expect_identical(format(session), answer)
+  expect_identical(as.character(session), answer)
+  expect_identical(list(text = session$text, messages = session$messages, history = session$history,
+                        footer = session_footer(session)), before)
+})
+
+test_that("print preserves trailing newlines and displays invalid UTF-8 as inert bytes", {
+  testthat::local_reproducible_output(width = 80)
+  answer = rawToChar(as.raw(c(0x61, 0xFF, 0x09, 0x0A, 0x62, 0x0A)))
+  Encoding(answer) = "UTF-8"
+  session = answered_session(answer)
+  before = session$text
+  out = utils::capture.output(print(session))
+  expect_identical(out, c("a<ff>\t", "b", "", session_footer(session)))
+  expect_identical(session$text, before)
+  expect_identical(format(session), before)
+  expect_identical(as.character(session), before)
+})
+
+test_that("session footer and structure escape metadata before applying trusted styles", {
+  testthat::local_reproducible_output(width = 80)
+  session = answered_session()
+  data = session_data(session)
+  data$last_text = NA_character_
+  data$status = "\033[31midle\033[0m"
+  data$model = "fake/\033]0;model\a\nsecond"
+  data$id = "session\rforged"
+  data$kind = "chat\b"
+  before = list(status = data$status, model = data$model, id = data$id, kind = data$kind,
+                text = session$text, messages = session$messages, history = session$history)
+  dot = if (cli::is_utf8_output()) " \u00b7 " else " . "
+  footer = paste(c("<U+001B>[31midle<U+001B>[0m",
+    "fake/<U+001B>]0;model<U+0007><U+000A>second", "1 turn", "1.2k tokens", "$0.0123",
+    "session<U+000D>forged"), collapse = dot)
+  withr::local_options(cli.num_colors = 256L)
+  printed = utils::capture.output(print(session))
+  expect_identical(printed, as.character(cli::col_grey(footer)))
+  expect_identical(cli::ansi_strip(printed), footer)
+  structure = utils::capture.output(utils::str(session))
+  expect_identical(structure, paste0("<gptr_session session<U+000D>forged | chat<U+0008> | ",
+    "<U+001B>[31midle<U+001B>[0m | 1 turns | ",
+    "fake/<U+001B>]0;model<U+0007><U+000A>second>"))
+  expect_identical(list(status = data$status, model = data$model, id = data$id, kind = data$kind,
+                        text = session$text, messages = session$messages,
+                        history = session$history), before)
+})
+
+test_that("session display leaves actual error classes and explicit stderr routing intact", {
+  testthat::local_reproducible_output(width = 80)
+  session = answered_session()
+  failure = tryCatch(gptr_abort("actual failure", "session_display_fixture"), error = identity)
+  expect_s3_class(failure, "gptr_error_session_display_fixture")
+  expect_s3_class(failure, "error")
+  out = utils::capture.output({
+    err = utils::capture.output({
+      print(session)
+      utils::str(session)
+      msg_verbatim(conditionMessage(failure), stream = "stderr")
+    }, type = "message")
+  })
+  expect_identical(err, "actual failure")
+  expect_length(out, 3L)
+  expect_identical(out[[1L]], session$text)
+  expect_identical(out[[2L]], session_footer(session))
+  expect_match(out[[3L]], "<gptr_session ", fixed = TRUE)
+})
+
 # ---------------------------------------------------------------- the value policy (03 section 5.1)
 
 test_that("a small bound value is copied, a large one held by name, an anonymous one boxed", {
@@ -1269,4 +1361,61 @@ test_that("NAMESPACE exports the session API and registers the session methods",
               "S3method(print,gptr_session_summary)", "S3method(summary,gptr_session)",
               "S3method(utils::.DollarNames,gptr_session)", "S3method(utils::str,gptr_session)")
   expect_identical(setdiff(c(exports, methods), ns), character())
+})
+
+test_that("initial model recording is idempotent without a request or selection event", {
+  local_fake_provider(list("x"))
+  events = local_events("model_select")
+  s = test_session()
+  session_set_model(s, "fake/fake-1")
+  expect_length(session_data(s)$entries, 0L)
+  expect_identical(session_record_initial_model(s), s)
+  entries = session_data(s)$entries
+  expect_length(entries, 1L)
+  if (length(entries) == 1L) {
+    expect_identical(entries[[1L]]$type, "model_change")
+    expect_identical(entries[[1L]]$gptr, list(ref = "fake/fake-1", reason = "initial"))
+  }
+  session_record_initial_model(s)
+  session_set_model(s, "fake/fake-1")
+  expect_length(session_data(s)$entries, 1L)
+  expect_length(events(s), 0L)
+  expect_null(session_data(s)$frozen)
+  expect_identical(nrow(s$usage), 0L)
+  started = test_session()
+  session_append(started, entry_message(msg_user("Already started.")))
+  session_record_initial_model(started)
+  expect_length(session_data(started)$entries, 1L)
+  expect_identical(session_data(started)$entries[[1L]]$type, "message")
+  router = test_session(model = "router:cheapest")
+  session_record_initial_model(router)
+  expect_identical(session_data(router)$entries[[1L]]$provider, "router")
+  expect_identical(entry_model_ref(session_data(router)$entries[[1L]]), "router:cheapest")
+  expect_error(session_record_initial_model(list()), class = "gptr_error_invalid_argument")
+})
+
+test_that("initial model recording resolves private providers and refuses decisions", {
+  spec = gptr_provider("initial-private", api = "fake", models = list(list(id = "m1")),
+                        offline = TRUE)
+  s = test_session(model = "initial-private/m1", opts = list(thinking = "high"))
+  id = registry_add(spec, source = "session", rank = 0L, session = s$id)
+  withr::defer(registry_remove(id))
+  expect_null(model_resolve("initial-private/m1", strict = FALSE))
+  session_record_initial_model(s)
+  expect_length(session_data(s)$entries, 1L)
+  expect_identical(session_data(s)$entries[[1L]]$gptr,
+                     list(ref = "initial-private/m1", thinking = "high", reason = "initial"))
+  expect_null(registry_get("provider", "initial-private"))
+  expect_null(model_resolve("initial-private/m1", strict = FALSE))
+  decision = gptr_provider("initial-decision", api = "fake-classifier", type = "classifier",
+                            models = list(list(id = "judge")), offline = TRUE)
+  ds = test_session(model = "initial-decision/judge")
+  did = registry_add(decision, source = "session", rank = 0L, session = ds$id)
+  withr::defer(registry_remove(did))
+  events = local_events("model_select")
+  expect_error(session_record_initial_model(ds), class = "gptr_error_not_available")
+  expect_length(session_data(ds)$entries, 0L)
+  expect_length(events(ds), 0L)
+  expect_null(session_data(ds)$frozen)
+  expect_identical(nrow(ds$usage), 0L)
 })

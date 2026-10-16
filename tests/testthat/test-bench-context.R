@@ -72,7 +72,21 @@ test_that("the composed T0 and skills equal the text block of architecture 7.3",
   sp = a[(s + 1L):(e - 1L)]
   t0_end = which(sp == "</context>")
   sk = c(which(sp == "<skills>"), which(sp == "</skills>"))
-  fr = compose_case("standard_interactive")
+  # The token baselines retain P07's original three R rules. Add the current
+  # rules as independent literals only for this comparison with the specification.
+  pb = prefix_fixture()
+  cs = pb$cases$standard_interactive
+  fx = pb$standins
+  r_index = match("r", vapply(fx$tools, function(tool) tool$name, ""))
+  fx$tools[[r_index]]$guidelines = c(unlist(fx$tools[[r_index]]$guidelines),
+    paste("R recycles matrix/vector arithmetic down columns; use sweep(x, 2L, values, \"-\")",
+          "for feature-wise centering or distances"),
+    "Keep object names/arguments; replace inputs on request")
+  session = p07_session(cs$mode, cs$preset)
+  prompt_standins_register(fx, session_data(session)$id, sections = unlist(cs$sections),
+                           exclusive = TRUE)
+  doc = if (isTRUE(cs$document)) list(path = file.path(project_root(), "analysis.R"), format = "R")
+  fr = prompt_compose(session, list(interactive = cs$human, doc = doc))
   jev = function(x) gsub("{s1}", "jev", x, fixed = TRUE)
   expect_identical(fr$t0, jev(paste(sp[1:t0_end], collapse = "\n")))
   expect_true(startsWith(fr$t1, paste(sp[sk[1]:sk[2]], collapse = "\n")))

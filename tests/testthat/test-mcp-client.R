@@ -249,8 +249,18 @@ test_that("a stale cached era is probed again once, in both directions, over bot
 })
 
 test_that("progress re-arms the idle timer; without progress a call times out and is cancelled", {
+  local_user_dirs()
   fx = local_mcp_fixture("modern", "stdio")
+  # This test measures call progress, not cold-start protocol discovery (covered above).
+  mcp_era_put(fx$spec, "modern", mcp_versions()$modern)
   conn = mcp_connect(fx$spec)
+  expect_true(conn$era_from_cache)
+  expect_identical(conn$era, "modern")
+  ready = mcp_request(conn, "ping")
+  expect_type(ready, "list")
+  expect_length(ready, 0L)
+  expect_identical(fx$log()$method[1L], "ping")
+  expect_false("initialize" %in% fx$log()$method)
   seen = new.env()
   seen$n = 0L
   res = mcp_call(conn, "slow", list(steps = 4L, step_ms = 600L), timeout = 1,

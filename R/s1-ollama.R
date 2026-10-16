@@ -293,7 +293,7 @@ s1_ollama_pin = function(pin_key, key, model) {
        identity = list(adapter = model[["api"]], digest = model[["digest"]],
                        server_version = model[["server_version"]],
                        locality = model[["locality"]] %||% "unknown"),
-       date = format(Sys.Date()))
+       date = with_calendar_preserved(format(Sys.Date())))
 }
 
 #' Refuse a recorded answer under replay (gptr_error_not_recorded, contract IC-47)

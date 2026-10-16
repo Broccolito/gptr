@@ -1,0 +1,115 @@
+{
+  "source_sha": "02ceac9c4a662cffe16188a592f7bdd3e2555280",
+  "baseline_actual_run": 38290862852,
+  "baseline_actual_job": 114950342213,
+  "retained_baseline": "/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011/current-windows-security-02ceac9-38290862852-triage",
+  "retained_baseline_sha256": {
+    "manifest.json": "a1a9e01a108547e27899f2071a5f99af04a24c7947c7b3e76d32d0dbabaf4677",
+    "AUDIT.json": "3a5478982e0a35d83fbc30512f3413544bcf8a934b9614d351e96bfcc5d8ff34",
+    "REPORT.md": "d8dc9aecb31a0152c51ebc52b5a67fbe2f8dcad8d81214c0cdff57fb4c8840ce"
+  },
+  "files": {
+    "README.md": {
+      "bytes": 6201,
+      "sha256": "e0d87e8b4a50c702843d78f67dc6d758f31738ef6b002657af859e135aba9f98"
+    },
+    "amended/helper-proc-writer-runtime.R": {
+      "bytes": 91830,
+      "sha256": "432724450b7cfa31a0c389de2cac9c29bff727947427b18776c38ca53d6b7095"
+    },
+    "baseline/fixtures/bp-disk-observer.py": {
+      "bytes": 13195,
+      "sha256": "18347a8f18677e1ec17efe0d345e797393202b6a50ec3dd1321b888da3314451"
+    },
+    "baseline/helper-bp-disk-observer.R": {
+      "bytes": 5680,
+      "sha256": "2124533f1a8c31e1778b50ca5b3224c21317021648b09e05fed676d1a8a2e682"
+    },
+    "baseline/helper-proc-backpressure.R": {
+      "bytes": 18600,
+      "sha256": "766798d6bd8e69044f81d6dec332d8f79804cdeb3c737f5284ad0b1890baf5c7"
+    },
+    "baseline/helper-proc-writer-runtime.R": {
+      "bytes": 91738,
+      "sha256": "2acd08d324155ee2fac743d2e5ef1a84d06bde0d677849a546bff6e47863f1a5"
+    },
+    "baseline/owner-manifest.json": {
+      "bytes": 4423,
+      "sha256": "c874e9eb49204a990bd3d3a8183c059bf01fc558d58ca6fd30ab9af783ae34aa"
+    },
+    "baseline/test-token-native.R": {
+      "bytes": 3737,
+      "sha256": "e4e23f3ebd7d624c1158e70a55422996951c21c33eb1b40292e02df6255ad9a1"
+    },
+    "baseline/token-protocol.R": {
+      "bytes": 3379,
+      "sha256": "85620345d0756a8a50f6fe08a5efb1c1355ff67202a4e4b9b7da58d35036c921"
+    },
+    "baseline/token-trial.ps1": {
+      "bytes": 4454,
+      "sha256": "aae0e9b54331f8dc3a94bc2e8fe49d734bbc74345dbfb69ac803e4d28142e2c6"
+    },
+    "controls/test-held-faults.ps1": {
+      "bytes": 5878,
+      "sha256": "2f463ba827f9fa22fda0a89c00f77475156026c110322812b0e7c5f2eefddce8"
+    },
+    "controls/test-held-native.R": {
+      "bytes": 3683,
+      "sha256": "8f88c8333f986c2db8a4c349a0147a5263a8f8a6a9232a94cc072c29f902515d"
+    },
+    "controls/test-held-protocol.R": {
+      "bytes": 1867,
+      "sha256": "9c50271cf67d7a21044cb343a3cb576d3f532f04b10eb7965382bd1ac4443fe0"
+    },
+    "current-token.cs": {
+      "bytes": 13340,
+      "sha256": "c8ca069362b0a07a8a16187c9a8d32b60d685a29b0ecf36712d6baf26ebffb88"
+    },
+    "forward-inverse.json": {
+      "bytes": 590,
+      "sha256": "60e6bcb545848de70803bd22067fd80eb77094ad4afd0d6eb95c0a110b23c55a"
+    },
+    "held-successor.patch": {
+      "bytes": 9682,
+      "sha256": "89845f2e3b8626138cdf9676e8aa72fce70d9a4e1b1ba47d07c0278b0819beee"
+    },
+    "prepare-source.py": {
+      "bytes": 8401,
+      "sha256": "7292c00384e0416f09c8be6e3c4dbbef221b805161cb9fa2e64391cb2c67bb1e"
+    },
+    "prior-frozen-85814a4b/manifest.json": {
+      "bytes": 3861,
+      "sha256": "85814a4bdf405285f2adf30e94ad1460fcf9457aa4e3fb3cee736305e3f3787f"
+    },
+    "prior-frozen-85814a4b/prepare-source.py": {
+      "bytes": 8289,
+      "sha256": "ee7ed138a177c818f7ef127cf1952441d5d24ed3e82f3297f07f51462f6205e2"
+    },
+    "prior-frozen-85814a4b/source-proof.json": {
+      "bytes": 785,
+      "sha256": "fea41e99ec6cc3e87c58f8fe7909106fa6cc16dfbe4da220fc46713216c357f0"
+    },
+    "source-proof.json": {
+      "bytes": 827,
+      "sha256": "582214b7877cebf39118480adbb69bfea3f71255a8aa6ac7feb140c9873f93bf"
+    },
+    "token-held-protocol.R": {
+      "bytes": 1466,
+      "sha256": "dc508cbd90c6c8083d6a4421799e87235bb5fc27c1ff42d12fd3955216e89c03"
+    },
+    "token-held.ps1": {
+      "bytes": 2070,
+      "sha256": "f66e7892e1157ab2f422075281a72f65638770d08ea0764afbe5b8b4cb8b7851"
+    },
+    "verify-source.py": {
+      "bytes": 5288,
+      "sha256": "253dc87735cd9c9584348e38e51d1b44cddd8812151a3c55a1ac38dcbefe09d2"
+    }
+  },
+  "prepared_only": true,
+  "production_changed": false,
+  "native_run": false,
+  "r_or_powershell_parsing_or_execution": false,
+  "ordinary_fixture_adoption": false,
+  "restored_privilege_acceptance": false
+}

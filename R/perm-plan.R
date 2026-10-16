@@ -53,7 +53,7 @@ plan_slug = function(text) {
 #' A new path <workspace root>/plans/<YYYY-MM-DD>-<slug>.md, or <slug>-<n>.md when taken
 #' @noRd
 plan_path = function(slug) {
-  base = paste0(format(Sys.Date(), "%Y-%m-%d"), "-", slug)
+  base = paste0(with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d")), "-", slug)
   path = ws_path("plans", paste0(base, ".md"))
   n = 1L
   while (file.exists(path)) {
@@ -100,8 +100,8 @@ plan_discard = function(addr, why) {
 }
 
 #' Is the innermost peter() call inside a loop body? Read from the parse data of the first
-#' srcref at or below its frame (kept by RStudio, knitr and source(keep.source = TRUE)); FALSE
-#' without one, where the one-call rule still discards the plan at the second iteration
+#' srcref at or below its frame, reparsing a retained source copy if parse data was disabled;
+#' FALSE without source, where the one-call rule still discards it at the second iteration
 #' @noRd
 plan_in_loop = function() {
   gw = Find(function(k) inherits(sys.function(k), "gptr_gateway"), rev(seq_len(sys.nframe())))
@@ -112,6 +112,14 @@ plan_in_loop = function() {
     if (inherits(sr, "srcref")) break
   }
   pd = if (inherits(sr, "srcref")) utils::getParseData(attr(sr, "srcfile"))
+  if (!NROW(pd) && inherits(sr, "srcref")) {
+    sf = attr(sr, "srcfile")
+    if (inherits(sf, "srcfilealias")) sf = sf$original
+    if (inherits(sf, "srcfilecopy")) {
+      pd = tryCatch(utils::getParseData(doc_parse_text(
+        getSrcLines(sf, 1L, .Machine$integer.max))), error = function(e) NULL)
+    }
+  }
   if (!NROW(pd)) return(FALSE)
   id = pd$id[!pd$terminal & pd$line1 == sr[7L] & pd$col1 == sr[5L] & pd$line2 == sr[8L] &
                pd$col2 == sr[6L]][1L]

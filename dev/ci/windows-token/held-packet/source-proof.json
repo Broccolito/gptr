@@ -1,0 +1,46 @@
+{
+  "unchanged_ordinary_prefix_bytes": 51608,
+  "copied_delimited_prefix_bytes": 51609,
+  "original_six_control_lines": [
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL PRE_FILE 1')\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL PRE_PARENT 1')\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL FILE_ACL 1')\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL PARENT_ACL 1')\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL FILE_LOOKUP ' + $fileLookup)\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL PARENT_LOOKUP ' + $parentLookup)\","
+  ],
+  "strict_control_values": "all six equal1",
+  "production_probe": "PROBE1 unchanged",
+  "old_aba_removed_only_from_successor": true,
+  "baseline_native_source": "02ceac9c4a662cffe16188a592f7bdd3e2555280",
+  "execution": false,
+  "ordinary_prefix_file": "baseline/ordinary-helper-proc-writer-runtime.R",
+  "ordinary_prefix_sha256": "56a0abb8eb595fbd103c8f423c4b5dba9438a5644c3dce19126ff1d70915f482",
+  "ordinary_prefix_retained_source": "source/dev/ci/windows-token/packet/baseline/helper-proc-writer-runtime.R",
+  "experimental_baseline_file": "baseline/helper-proc-writer-runtime.R",
+  "experimental_baseline_bytes": 91738,
+  "postcondition_keys": 13,
+  "postcondition_leaf_source": "c37550e35c9d8d9c723a3d27656183f5adfd8b552e37641afd512984856d89aa",
+  "postcondition_predicates_and_order_unchanged": false,
+  "postcondition_keys_and_order_unchanged": true,
+  "directory_cleanup_successor": {
+    "baseline_source": "784522f5a47657270dad80f7fcd8842bcb1a0273",
+    "predicates_corrected": 2,
+    "ordinary_prefix_changed": false,
+    "direct_parent_and_dot_entries_required": true,
+    "recursive": true,
+    "force": false,
+    "expand": false,
+    "native_execution": false,
+    "canonical_existing_paths": true,
+    "winslash": "/",
+    "mustWork": true,
+    "alias_canonical_target_refused": true,
+    "metadata_warning_error_interrupt_before_delete": true,
+    "fixed_cleanup_witnesses": [
+      "before",
+      "canonical",
+      "after"
+    ]
+  }
+}

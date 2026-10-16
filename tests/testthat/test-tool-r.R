@@ -37,8 +37,37 @@ test_that("the r schema is frozen in one of four variants (IC-68)", {
   expect_identical(spec$exposure, "direct")
   expect_identical(spec$snippet, paste("Run R code in the user's live session (objects persist;",
                                        "plots come back as images)"))
-  expect_identical(length(spec$guidelines), 3L)
+  expect(identical(length(spec$guidelines), 5L), "The r tool has five guidance rules.")
   expect_error(ns_resolve("r"), class = "gptr_error_unknown_member")
+})
+
+test_that("specified R input guidance reaches every preset and both CLI transports", {
+  rule = "Keep object names/arguments; replace inputs on request"
+  instruction = paste("Use only the R tool. Fit stats::lm(mpg ~ wt + hp, data = analysis_input),",
+                      "save it as fit, then call gptr::gptr_return(fit).")
+  created = character()
+  withr::defer(unlink(created))
+  for (preset in c("minimal", "standard", "readonly", "extended")) {
+    session = p07_session(preset = preset)
+    frozen = prompt_compose(session, list(interactive = FALSE, preset = preset))
+    expect_match(frozen$t0, paste0("- ", rule), fixed = TRUE, label = preset)
+    occurrences = gregexpr(rule, frozen$t0, fixed = TRUE)[[1L]]
+    expect_identical(as.integer(sum(occurrences > 0L)), 1L, label = preset)
+    context = list(system = frozen[c("t0", "t1")], messages = list(msg_user(instruction)))
+    state = new.env(parent = emptyenv())
+    files = pcli_claude_files(state, context, session$id)
+    created = c(created, unlist(files, use.names = FALSE))
+    expect_match(read_utf8(files$system)$text, rule, fixed = TRUE, label = preset)
+    expect_identical(pcli_claude_content(context$messages)[[1L]]$text, instruction)
+    codex = pcli_codex_prompt(context, fresh = TRUE)
+    expect_match(codex, rule, fixed = TRUE, label = preset)
+    expect_true(endsWith(codex, instruction), label = preset)
+    expect_identical(pcli_codex_prompt(context, fresh = FALSE), instruction)
+  }
+  session = p07_session(preset = "minimal")
+  without_r = prompt_compose(session, list(interactive = FALSE, tools = "-r"))
+  expect_false("r" %in% without_r$tool_names)
+  expect_false(grepl(rule, without_r$t0, fixed = TRUE))
 })
 
 test_that("the r spec reproduces P07's stand-in in each of its four variants (IC-68)", {
@@ -48,7 +77,9 @@ test_that("the r spec reproduces P07's stand-in in each of its four variants (IC
   spec = registry_get("tool", "r")
   expect_identical(spec$description, t$description)
   expect_identical(spec$snippet, t$snippet)
-  expect_identical(as.character(spec$guidelines), as.character(unlist(t$guidelines)))
+  # Keep the original three guidelines byte-exact to the historical P07 benchmark.
+  expect_identical(as.character(spec$guidelines)[seq_along(t$guidelines)],
+                   as.character(unlist(t$guidelines)))
   for (doc in c(TRUE, FALSE)) {
     for (human in c(TRUE, FALSE)) {
       want = t$input_schema
@@ -211,8 +242,10 @@ test_that("model code peter$grep() runs through the shim; the recorded code keep
 test_that("gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value boxed", {
   local_gptr_options(unsafe_no_permissions = TRUE)
   e = new.env()
-  e$big = stats::runif(1.5e6)
-  e$small = stats::runif(25000)
+  with_seed_preserved({
+    e$big = stats::runif(1.5e6)
+    e$small = stats::runif(25000)
+  })
   fake = local_fake_provider(list(
     fake_tool("r", code = "gptr_return(big)"), "Returned big.",
     fake_tool("r", code = "gptr_return(small)"), "Returned small.",
@@ -273,15 +306,24 @@ test_that("images from peter$plot() count against gptr.r_output_tokens too (IC-6
   withr::local_pdf(NULL)
   grDevices::dev.control(displaylist = "enable")
   graphics::plot(1:3)
+  previous = grDevices::recordPlot()
   e = new.env()
   out = "cat(sprintf(\"line %03d of the printed output\", 1:70), sep = \"\\n\")"
   plain = r_tool_execute(list(code = out), list(envir = e, session = NULL))
   expect_identical(plain$details$plots, 0L)
   expect_false(plain$truncated)
+  expect_identical(grDevices::recordPlot()[[1L]], previous[[1L]])
   code = paste0(out, "\nns_resolve(\"plot\")(width = 800L, height = 600L)")
   res = r_tool_execute(list(code = code), list(envir = e, session = NULL))
   expect_identical(res$details$plots, 1L)
   expect_true(res$truncated)
   expect_match(format(res), "peter$out(", fixed = TRUE)
   expect_identical(res$details$out_id, res$out_id)
+  expect_false(res$is_error)
+  expect_length(res$details$warnings, 0L)
+  images = Filter(function(block) identical(block$type, "image"), res$content)
+  expect_length(images, 1L)
+  expect_identical(images[[1L]]$mime, "image/png")
+  expect_match(images[[1L]]$data, "^iVBORw0KGgo")
+  expect_identical(grDevices::recordPlot()[[1L]], previous[[1L]])
 })

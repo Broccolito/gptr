@@ -1,9 +1,7 @@
 # Child-process environments (G6 sections 3.7 and 5.3; IC-60, IC-65). child_env() returns the
-# COMPLETE environment for processx (removed names are absent: processx rejects NA);
-# child_env_callr() converts it for callr, whose `env` only adds variables (removed names become
-# NA, which unsets them). Every profile points R_ENVIRON_USER and R_PROFILE_USER at empty files
-# and drops R_ENVIRON unless passed: an Rscript child otherwise re-reads keys from ~/.Renviron,
-# and callr copies that file into tempdir() (G6 verification log, item 7). Allowlists follow the
+# COMPLETE environment for processx (removed names are absent: processx rejects NA).
+# Every profile points R_ENVIRON_USER and R_PROFILE_USER at empty files and drops R_ENVIRON
+# unless passed: an Rscript child otherwise re-reads keys from ~/.Renviron. Allowlists follow the
 # MCP TypeScript SDK and mcptools (MIT). House style: "=" and "|>" (S-9).
 
 #' Variables every allowlist profile keeps (the MCP SDK defaults per platform)
@@ -28,10 +26,14 @@ env_allow_common = c("TZ", "LANG", "LANGUAGE", "LC_ALL", "LC_COLLATE", "LC_CTYPE
                      "XDG_DATA_HOME", "XDG_RUNTIME_DIR")
 # What an R worker additionally needs. Only gptr variables that 04 section 3.2 defines; the
 # others a worker needs (GPTR_WORKER, GPTR_PROJECT_ROOT) are passed by P19 through `set =`.
-# R_ARCH: callr sets the child's variables in the parent while it starts the child, when processx
-# may look up its supervisor under bin/R_ARCH (WIN-1).
+# R_ARCH is retained for architecture-specific R executable and processx lookups (WIN-1).
+# Preserve explicit nonsecret check and numerical-thread policy in R worker descendants.
+# Missing, blank and unfamiliar values are passed unchanged; no core count is inferred.
 env_allow_r = c("R_HOME", "R_ARCH", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE", "R_USER",
-                "R_USER_CONFIG_DIR", "R_USER_DATA_DIR", "R_USER_CACHE_DIR", "GPTR_SUBAGENT_DEPTH")
+                "R_USER_CONFIG_DIR", "R_USER_DATA_DIR", "R_USER_CACHE_DIR", "GPTR_SUBAGENT_DEPTH",
+                "_R_CHECK_PACKAGE_NAME_", "_R_CHECK_LIMIT_CORES_", "OMP_THREAD_LIMIT",
+                "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+                "VECLIB_MAXIMUM_THREADS")
 
 #' The six built-in profiles as child_env spec fields (base, keep, drop, set, billing)
 #' @noRd
@@ -199,7 +201,7 @@ child_env = function(profile, pass = character(), set = character(), provider = 
   billing = up %in% billing_up & !(up %in% c(pass_up, explicit))
   gone = sort(nm[billing & nzchar(env)])
   if (length(gone)) {
-    gptr_warn(paste0("Removed ", paste(gone, collapse = ", "), " from the environment of the ",
+    gptr_inform(paste0("Removed ", paste(gone, collapse = ", "), " from the environment of the ",
                      profile, " child: these variables switch the CLI to API billing or to ",
                      "another account."),
               "billing_env", variables = gone,
@@ -220,18 +222,4 @@ child_env = function(profile, pass = character(), set = character(), provider = 
   out = child_env_put(out, list(R_ENVIRON_USER = child_env_empty_file("empty.Renviron"),
                                 R_PROFILE_USER = child_env_empty_file("empty.Rprofile")))
   out
-}
-
-#' The callr form of a child_env() result: every other inherited variable set to NA (unset)
-#' @noRd
-child_env_callr = function(env) {
-  check_strings(env, "env")
-  child_env_names(names(env), "env")
-  current = names(Sys.getenv())
-  # callr merges into the parent environment. POSIX names are case-sensitive, so an
-  # omitted variant must be explicitly unset even when an upper-case replacement exists.
-  key = if (.Platform$OS.type == "windows") toupper else identity
-  current = current[!duplicated(key(current))]
-  drop = current[!(key(current) %in% key(names(env)))]
-  c(env, stats::setNames(rep(NA_character_, length(drop)), drop))
 }

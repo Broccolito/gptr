@@ -1,8 +1,8 @@
 ---
-title: "Configure models, permissions and resource limits"
+title: "Configuration"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Configure models, permissions and resource limits}
+  %\VignetteIndexEntry{Configuration}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -46,7 +46,8 @@ names are errors; plugins can add registered settings. A setter replaces the sup
 stored override at that scope, so include entries you want to retain in the same named object.
 
 ```{r}
-previous = gptr_config(mode = plan, budget = list(cost = 1, turns = 10), .scope = "session")
+previous = gptr_config(mode = plan, budget = list(cost = 1, turns = 10),
+                       .scope = "session")
 gptr_config()$mode
 gptr_config()$budget
 gptr_config(mode = previous$mode, budget = previous$budget, .scope = "session")
@@ -69,8 +70,7 @@ marked for tightening. Changes to trust-gated files require renewed trust. Proje
 endpoint overrides also require a separate confirmation.
 
 `gptr_permissions(scope = "project")` stores personal project rules in the user configuration
-directory, not the shared project tree. A legacy `.gptr/settings.local.json` contributes only
-ask/deny permission rules when trusted; it is not another general settings file.
+directory, not the shared project tree.
 
 ## Settings by purpose
 
@@ -80,7 +80,7 @@ layers when settings are resolved. The file's `version` field is format metadata
 
 | Model and execution setting | Default and purpose |
 |---|---|
-| `model` | `NULL`: try configured Anthropic, OpenAI, Google, Claude CLI, then Codex routes in that order. Set a canonical reference for other routes or reproducible routing. |
+| `model` | `NULL`: try configured Anthropic, OpenAI, Google, Claude Code CLI, then Codex CLI routes in that order. Set a canonical reference for other routes or reproducible routing. |
 | `small_model` | `NULL`: the main model's small sibling when available, otherwise the main model. |
 | `system1` | `NULL`: hosted Jev when its key exists, otherwise a verified local decision model already discovered. Set an explicit typed model or opt-in `"emulate:<model>"` route. |
 | `mode` | `"manual"`; also `"plan"`, `"edits"`, `"auto"`. |
@@ -100,8 +100,15 @@ gptr_config(
 ```
 
 Use a call's `budget` to limit total work, and review `gptr_usage()` for actual or unknown
-usage. A cost limit uses the route's available prices; unknown prices or usage are not a
-guarantee of free execution. Disabling a direct tool does not make in-process R a sandbox.
+usage:
+
+```{r, eval = FALSE}
+session = peter("Summarize mtcars in three sentences.")
+gptr_usage(session)
+```
+
+A cost limit uses the route's available prices; unknown prices or usage are not a guarantee
+of free execution. Disabling a direct tool does not make in-process R a sandbox.
 
 | Context and history setting | Default and purpose |
 |---|---|
@@ -120,15 +127,11 @@ guarantee of free execution. Disabling a direct tool does not make in-process R 
 The `context` setting controls built-in generative-model descriptions, rather than R object
 availability. Prompt text, tool results, images and other context blocks can still be sent.
 System 1 decisions encode their supplied input states separately; `context = "none"` is not a
-way to omit those states. See [Execution and memory](execution-model.html),
-[Token efficiency](token-efficiency.html) and [System 1](system-one.html).
+way to omit those states. See [Execution model](execution-model.html),
+[Token efficiency](token-efficiency.html) and [System 1 decisions](system-one.html).
 
-Recording and replay are separate controls. `record = "off"` prevents automatic recording;
-an explicit `gptr_doc(path)` binding supplies consent. To suppress recording for one call,
-even when bound, use `.opts = list(record = FALSE)`; repeat it for each call in a pipe chain.
-`.opts = list(record = TRUE)` does not grant consent. `replay = "replay"` refuses uncached model calls.
-See [script as history](script-as-history.html)
-for each replay mode and [token efficiency](token-efficiency.html) for compaction and budgets.
+Recording and replay are separate controls; see [Script as history](script-as-history.html) and
+[Token efficiency](token-efficiency.html).
 
 | Extension and interaction setting | Default and purpose |
 |---|---|
@@ -141,7 +144,7 @@ for each replay mode and [token efficiency](token-efficiency.html) for compactio
 | `ui`, `frontend` | `NULL` selects by context; set the name of a registered UI or front end. |
 | `store`, `evaluator` | `"jsonl"` and `"r"`; extension selection for session storage and R evaluation. |
 
-The [extension guide](extending-gptr.html) explains registered components. MCP tools are
+[Extending gptr](extending-gptr.html) explains registered components. MCP tools are
 R members by default; imported configuration discovery does not authorize a project server.
 Read `?gptr_mcp_add` and `?gptr_security` before enabling executable project resources.
 
@@ -160,40 +163,22 @@ gptr_permissions(allow = "r(fn:summary)", scope = "session")
 Ollama local-only inference defaults to `TRUE`. Only an explicit human setting at user or
 session scope can relax it; project files, ordinary R options, model code and per-call
 switches cannot do so. A local endpoint still needs verified local execution metadata.
-See [language models](language-models.html) for the supported connection routes.
+See [Language models](language-models.html) for the supported connection routes.
 
 ## R options
 
-The [complete option reference](../reference/gptr_options.html) gives types, defaults and
-units for every option. The index below groups every documented `gptr.*` option; names are
-shown after the common `gptr.` prefix. Use `options()` for these controls, not an unregistered
-key in `gptr_config()`. Settings-backed options participate in the precedence described above.
+`?gptr_options` documents every `gptr.*` option with its type, default and units; use
+`options()` for these controls.
 
-| Purpose | Option suffixes |
-|---|---|
-| Console and output | `quiet`, `interactive`, `verbose`, `ui`, `history`, `deprecations` |
-| Defaults and replay | `model`, `mode`, `preset`, `system1`, `small_model`, `project_root`, `replay`, `record`, `interpolate` |
-| Turns, values and result retention | `max_turns`, `max_turns_console`, `max_nested_calls`, `value_copy_max`, `values_max_bytes`, `background_tools`, `out_keep`, `spill_days` |
-| Concurrent work | `max_active`, `subagents.max_active`, `subagents.max_cli`, `subagents.max_workers`, `subagents.max_tasks`, `subagents.max_depth`, `child_text_max` |
-| HTTP and child processes | `connect_timeout`, `first_byte_timeout`, `idle_timeout`, `max_retry_delay`, `max_attempts`, `wire_log`, `supervise`, `stdin_timeout`, `cli_path`, `cli_turn_timeout` |
-| R evaluation and printed results | `r_timeout`, `r_output_tokens`, `r_max_images`, `helper_output_tokens`, `read_max_tokens`, `plot_width`, `plot_height`, `plot_res` |
-| Permissions | `noninteractive_ask`, `critical_guard`, `secret_guard`, `protect_size`, `plan_handoff`, `unsafe_no_permissions` |
-| Context and prompt caching | `compact_at`, `compact_cold_min`, `cache_ttl`, `cache_gap`, `check_prefix`, `skills_budget`, `mcp_budget` |
-| Object undo | `undo_capture_max`, `undo_max_bytes`, `undo_spill_max`, `undo_turns` |
-| Checkpoint storage | `checkpoint`, `checkpoint_disk_bytes`, `checkpoint_days`, `checkpoint_turns`, `checkpoint_track_file_max`, `checkpoint_track_total`, `checkpoint_capture_max`, `checkpoint_scan_budget`, `checkpoint_rng`, `checkpoint_close_devices` |
-| Redaction and key loading | `redact_min_chars`, `redact_patterns`, `stream_hold_max`, `env_export`, `prompt_secrets` |
-| System 1 | `s1_max_active`, `s1_rounds`, `s1_state_max`, `s1_max_elements` |
-| Documents, MCP and artifacts | `doc_output_lines`, `doc_source_frames`, `mcp_timeout`, `mcp_probe_timeout`, `mcp_debug`, `artifact_max_bytes` |
-
-For example, a function can temporarily reduce the size of model-visible R output and restore
-the caller's option on exit:
+A function can temporarily limit model-visible R output and restore the caller's option on
+exit. This example uses a fake provider so it runs offline:
 
 ```{r}
 short_run = function() {
   previous = options(gptr.r_output_tokens = 1000L)
   on.exit(options(previous), add = TRUE)
   fake = gptr_fake_provider(list("A compact answer."))
-  peter("Give a compact answer.", model = fake, envir = new.env())$text
+  peter("Give a compact answer.", model = fake)$text
 }
 short_run()
 ```
@@ -212,11 +197,6 @@ option. Provider keys include `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API
 `GOOGLE_API_KEY`, and `TYPESAFE_API_KEY`; other routes name their keys in `gptr_providers()`.
 Load a private file explicitly with `gptr_env(path)`, or use interactive `gptr_login()` for
 supported API/MCP credentials. Sign in to subscription CLIs using their own tools.
-
-`GPTR_LIVE_TESTS=true` enables developer live tests; ordinary inference does not require it.
-`GPTR_WORKER`, `GPTR_SUBAGENT_DEPTH` and `GPTR_MCP_TOKEN` belong to gptr's own child processes;
-users do not need to set them. Under `R CMD check`, examples replay recorded calls and child
-pools are limited to two. The option reference lists all documented environment controls.
 
 ```{r cleanup, include = FALSE}
 options(old_options)

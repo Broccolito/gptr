@@ -9067,3 +9067,8 @@ Notes for the related plans (not edited here):
 - P23 (ambiguity 16, review row 14): `expect_no_copy()` children start cleanly under `R CMD check`, because testthat blanks `R_TESTS`.
 - P25 Task 5 may add `VignetteBuilder: knitr` together with `vignettes/*.Rmd`, and P01's DESCRIPTION test stays green.
 - P15's `tests/testthat/fixtures/docs/` documents are excluded from lintr.
+
+
+## Live validation amendment, 2026-10-10: concise ordinary display
+
+Ordinary informational conditions and literal print output use stdout. Conditions retain calling handlers, standard message suppression, quiet/once behavior and redaction; actual failures can select stderr. JSONL reserves stdout through a private call-frame marker. Literal display uses cat(), never cli message output or format interpolation. This supersedes older stderr/cli_verbatim display sketches for the latest user requirement.

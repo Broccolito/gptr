@@ -24,6 +24,12 @@ contract's signatures govern. The local Ollama amendment of 2026-10-03,
 `07-local-ollama.md` (contract IC-74), extends these sections and takes precedence
 where older Jev-only assumptions conflict.
 
+The approved 2026-10-11 Rscript/processx amendment (IC-60; living-plan RPX01–07)
+replaces only the P19 worker and P23 Shiny launch mechanism after native acceptance.
+Older callr examples describe the baseline. The dependency exception in §9 is
+adopted after source and installed native gates passed on Mac, Windows and Linux.
+Final changed-source and exact-archive acceptance remains required.
+
 ---
 
 ## 0. How this design was synthesised
@@ -288,7 +294,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (119 files after IC-74)
+### 3.2 `R/` files (120 files after the Rscript launcher amendment)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -321,8 +327,9 @@ declares, if any.
 | `auth-redact.R` | L0 | one redactor with sink profiles; streaming hold-back; `gptr_redact()`; `gptr_scrub()` [IC-70] | - | P03 |
 | `auth-dotenv.R` | L0 | own `.env` parser, alias table (`jev-key` -> `TYPESAFE_API_KEY`), `gptr_env()` | - | P03 |
 | `auth-store.R` | L0 | `auth.json` credential store (0600, lock, keyring references) | - | P03 |
-| `auth-childenv.R` | L0 | child-environment profiles (mcp, worker, cli-claude, cli-codex, helper, artifact) as complete vectors, `child_env_callr()`; empty `R_ENVIRON_USER`/`R_PROFILE_USER` files for every profile [IC-60] | - | P03 |
+| `auth-childenv.R` | L0 | child-environment profiles (mcp, worker, cli-claude, cli-codex, helper, artifact) as complete vectors; empty `R_ENVIRON_USER`/`R_PROFILE_USER` files for every profile [IC-60] | - | P03 |
 | `proc-spawn.R` | L0 | G5 process engine: `processx::process$new` with `encoding = "UTF-8"` and file redirection, argv via `os_bytes()`, `.cmd`/`.bat` via `cmd.exe /d /c call` with metacharacter refusal, PowerShell `-EncodedCommand`, non-blocking `write_all()`, line reader, UTF-8 decode with code-page fallback | - | P04 |
+| `proc-rscript.R` | L0 | Fixed private `Rscript --vanilla` worker/artifact entries through processx; complete child environment, explicit libraries and retained owned startup files | - | P04 |
 | `proc-supervise.R` | L0 | `kill_all()` (kill_tree, then Windows `taskkill /F /T`, then group kill), grace periods, process tables, tree markers and the orphan sweep, `pid_alive()` (ps) [IC-59], `gptr_jobs()` [IC-36] | - | P04 |
 | `http-reactor.R` | L0 | the process reactor: curl multi pool, `processx::poll()` over curl fds and pipes, timers, tool FIFO, admission, pump depth and `allow_runs` defaults, `later::run_now(0)` in the outermost pump [IC-57], non-blocking stdin buffers | - | P04 |
 | `http-request.R` | L0 | request spec to curl handle (`pipewait = 0L`, `followlocation = 0L` [IC-64], connect/first-byte/idle timeouts, header handles materialised here only) | - | P04 |
@@ -403,16 +410,16 @@ declares, if any.
 | `mcp-namespace.R` | L4 | `peter$mcp$<server>$<tool>()`, budgeted signature catalog, lazy connect | mcp | P18 |
 | `mcp-server.R` | L4 | MCP dispatcher over the session's tools; claude `sdk` transport; loopback HTTP; `gptr_mcp_serve()` | - | P18 |
 | `auth-oauth.R` | L0 | PKCE S256, loopback or paste callback, locked refresh; `gptr_login()`, `gptr_logout()` | - | P18 |
-| `subagent-backends.R` | L4 | backends `inline`, `worker` (callr), `cli`; limits; `auto` rule | subagents | P19 |
+| `subagent-backends.R` | L4 | backends `inline`, `worker` (Rscript/processx), `cli`; limits; `auto` rule | subagents | P19 |
 | `subagent-team.R` | L4 | teams (`agents =`), fan-out (`parallel =`, through the internal `gptr_map()`), `gptr_parallel()` | - | P19 |
-| `subagent-worker.R` | L4 | `worker_main()` run inside callr children (JSONL events out, answers in) | - | P19 |
+| `subagent-worker.R` | L4 | `worker_main()` run inside fixed Rscript/processx children (JSONL events out, answers in) | - | P19 |
 | `cli-common.R` | L1 | CLI discovery (native binaries preferred), minimum-version probe, one-time notice, billing-switch scrub | cli | P20 |
 | `cli-claude.R` | L1 | `cli-claude` adapter: stream-json, control protocol, in-process `sdk` MCP, `can_use_tool` | - | P20 |
 | `cli-codex.R` | L1 | `cli-codex` adapter: `codex exec --json --ignore-user-config -`, sandbox mapping, MCP via `-c` | - | P20 |
 | `agent-background.R` | L3 | experimental background runs serviced by `later`; session rows of the job table | - | P21 |
 | `bridge-sh.R` | L4 | `peter$sh/script/bg/jobs()` (`peter$out()` is P10's); the `interpreter` kind and built-in interpreters | bridges | P22 |
 | `bridge-lang.R` | L4 | `peter$py()`, `peter$sql()`, `peter$knit()` | lang | P22 |
-| `artifact-app.R` | L4 | `peter$app()`: working copy, immutable snapshots, callr child, validation ladder, screenshot | artifacts | P23 |
+| `artifact-app.R` | L4 | `peter$app()`: working copy, immutable snapshots, Rscript/processx child, validation ladder, screenshot | artifacts | P23 |
 | `artifact-registry.R` | L4 | `gptr_artifacts()`, stop, relaunch, lazy orphan sweep | - | P23 |
 
 ### 3.3 `inst/` and shipped data
@@ -1367,9 +1374,14 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
   `codex.exe` are preferred; WindowsApps Python stubs skipped (UNCERTAIN).
 - Child environment adds `NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`,
   `PYTHONIOENCODING=utf-8`, `PYTHONUNBUFFERED=1` to the `helper` profile.
-- R children are started through callr (Rscript path, libpaths and `_R_CHECK_R_ON_PATH_` handled [13 §1 item
-  14]); every other R child (test helpers, fixture servers, fake CLIs) uses `rscript_path()`, never a PATH lookup,
-  because R CMD check puts failing dummy `R`/`Rscript` scripts first on PATH [13 §2.10; IC-60]. `supervise` is
+- Baseline worker and Shiny R children use callr. The approved IC-60 amendment replaces only those
+  launches with fixed trusted `Rscript --vanilla` scripts through `proc_spawn()`, after RPX01–06 proof.
+  Explicit library setup precedes worker namespace load; Shiny serving remains self-contained without
+  loading gptr (P23's `package = FALSE` boundary). All R children use absolute `rscript_path()`, never
+  a PATH lookup: R CMD check puts failing dummy `R`/`Rscript` scripts first on PATH [13 §2.10; IC-60].
+  Complete filtered child environments go directly to processx, without temporarily setting parent
+  variables. Serialization, streams, failures and cleanup retain their existing GPTR contracts.
+  `supervise` is
   `supervise_default()`: `TRUE` except under `check_running()` (supervisor fifos are a fatal check error
   [13 §2.10]); every long-lived child exits when the parent dies (workers on stdin EOF, EPIPE or a dead parent pid;
   artifacts through their watchdog; CLI children through supervision); tree markers under
@@ -1929,7 +1941,7 @@ tier, order and budget, replaceable by plugins and by `.gptr/SYSTEM.md` or `.opt
 `preamble`, `tools` and `rules`, Pi's rule) [G4 §3.1-3.2]. T0 ends after `<context>`; T1 starts at `<skills>`.
 Strings in R sources are ASCII. `{s1}` is the configured System 1 alias (`jev`). Each capability's text is
 contributed by the built-in that owns it [IC-68]: `<rules>` is the `guidelines` of the active direct tools in
-array order (read: line 1; r: lines 2-4; edit: lines 5-8; write: line 9) followed by P07's three closing lines,
+array order (read: line 1; r: five lines 2-6; edit: lines 7-10; write: line 11) followed by P07's three closing lines,
 so the `readonly` preset has no edit or write lines; `<r_session>` is P07's core with fragments (`parent =
 "r_session"`) from `builtin:tools` (helpers, `out`), `builtin:bridges` (shell), `builtin:lang` (languages) and
 `builtin:subagents`; `<documents>`, `<artifacts>` and `<system1>` are registered by P15, P23 and P13. Disabling a
@@ -1953,6 +1965,8 @@ In addition to the tools above, you may have access to other custom tools depend
 - Use r to inspect and compute on objects in the live session; never reload or recompute data that is already in memory
 - In r, assign results to names and print compact summaries (dim(), head(), peter$describe(x)) rather than whole objects
 - Use = for assignment and |> for pipes in all R code you write
+- R recycles matrix/vector arithmetic down columns; use sweep(x, 2L, values, "-") for feature-wise centering or distances
+- Keep object names/arguments; replace inputs on request
 - Use edit for precise changes (edits[].oldText must match exactly)
 - When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls
 - Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.
@@ -1967,7 +1981,8 @@ In addition to the tools above, you may have access to other custom tools depend
 The r tool runs code in the environment peter() was called from. Objects you create or change are the user's objects; R code the user runs between requests is reported in <workspace_changes>.
 - Work in small steps (up to about 50 lines per call). Execution stops at the first error: read it and fix it; after two failed attempts at the same error, stop and report.
 - Do not overwrite or rm() existing user objects unless asked; create new names instead. Use tempfile() for scratch files.
-- Compose: one r call can loop, branch and combine many operations and helpers. Prefer one call that computes the whole answer and prints a small result over many tool calls.
+- Compose: combine loops, branches and helpers in one r call, then print a small result. Use = for assignment and |> for pipes.
+- Source with source(path, local = TRUE).
 - Helpers are R functions on the peter object and return R values: peter$grep(pattern, path), peter$find(pattern, path, sort), peter$ls(path), peter$describe(x). peter$search("words") and peter$help(name) find more.
 - Long output is cut to its head and tail; the notice names peter$out(id) for the rest. Use peter$out(), peter$help(), peter$search() and peter$plot() only with record = false.
 - There is no shell tool. Run programs from R: peter$sh(c("git", "status")) (argv, no shell) or peter$sh("cmd | filter"); peter$script(path); peter$bg(cmd) for long jobs. Assign results and print only what you need.
@@ -2257,23 +2272,31 @@ API [07]). Documents record quoted canonical ids.
 `Depends: R (>= 4.2.0)` (UTF-8 native encoding on current Windows, the `_` pipe placeholder; oldrel-4 today;
 proven by an oldrel-4 CI job) [13 §2.7]. `NeedsCompilation: no`. `License: MIT + file LICENSE`.
 
-### 9.1 Imports (8 non-base; dependency closure 9 packages, 10 with callr 3.8.0's otel)
+**Approved dependency exception, 2026-10-11.** The maintainer authorized retiring callr after
+RPX01–07 acceptance for the two fixed Rscript/processx entrypoints. This narrowly amends the
+original fixed dependency decision and P19/P23 launcher choice; it adds no dependency or compiled
+code. Native source and installed gates passed on Mac, Windows and Linux; callr and its
+unused adapter are now removed. The other seven non-base Imports and their floors remain.
+Repeat metadata, native and exact-archive gates on the changed source and measure its closure.
+Archived upstream callr experiments are historical evidence and excluded from package builds.
+
+### 9.1 Imports (7 non-base; resulting installed closure measured at final acceptance)
 
 | Package | Floor (raised by P01 to what CI proves) | Load-bearing use | Why not base R or another package |
 |---|---|---|---|
 | jsonlite | 1.8.8 | every wire body, JSONL, settings, schemas | no JSON in base |
 | curl | 6.0.0 | the reactor: multi handles, `multi_fdset()`, `multi_cancel()`, `pipewait = 0L`; one transport for streams, System 1, MCP HTTP, OAuth and catalog refresh | only curl multi streams interruptibly [02, 10a INFRA-01]; httr2 blocks on headers and batches output [10a E1/E2] |
 | processx | 3.8.0 | `poll()` over curl fds and pipes; MCP stdio, CLI providers, bridges; `kill_tree()` | `system2()` cannot poll or stream |
-| callr | 3.7.0 | worker sub-agents and artifact children running package functions (Rscript path, libpaths, `_R_CHECK_R_ON_PATH_`) | a hand-written worker re-opens solved Windows problems [J-cran, J-impl] |
 | rlang | 1.1.0 | `new_weakref()` (live index), `obj_address()`, `env_binding_are_lazy()/_active()`, `hash()`/`hash_file()` (XXH128), `duplicate()`, `check_installed()` | no weak references or addresses in base R; rlang is required anyway when cli condition helpers are used [13 §2.6]; **quosures are not used in the gateway** (§6.4 R3) |
 | cli | 3.6.0 | console rendering and capability detection, `hash_sha256()` for ids and cache keys | front-end quirks are encoded there [18 §2.1.5] |
 | yaml | 2.3.0 | SKILL.md, agent and template frontmatter (string keys keep their source text against YAML 1.1 coercion [05 fact-check; IC-71]) | a hand parser lost 4 of 37 real skills to folded scalars [05] |
-| ps | 1.7.0 | `pid_alive()`: session and document locks, orphan sweep, watchdogs, the no-leftover-process tests, with a creation-time check against pid reuse [IC-59] | already in the closure through processx, so the closure does not grow; the base substitute `tools::pskill(pid, 0)` terminates the process on Windows; an undeclared `ps::` call is a check WARNING (reproduced) |
+| ps | 1.8.0 | `pid_alive()`: session and document locks, orphan sweep, watchdogs, the no-leftover-process tests, with a creation-time check against pid reuse [IC-59] | already in the closure through processx, so the closure does not grow; the base substitute `tools::pskill(pid, 0)` terminates the process on Windows; an undeclared `ps::` call is a check WARNING (reproduced) |
 
 Base packages imported: `methods` (G7 pre-image defusing of S4), `stats`, `tools`, `utils`, `grDevices`,
 `graphics`; `parallel` is not needed (per-agent L'Ecuyer streams are seeded from hash bits and swapped by
-`rng_swap()` [IC-61]). The closure (these plus R6 via processx and callr) was verified with
-`tools::package_dependencies()` by J-cran and J-impl; it is far below the 20-Import NOTE [13 §2.6]. No httr2
+`rng_swap()` [IC-61]). The original closure was verified with `tools::package_dependencies()` by J-cran and J-impl.
+The final artifact must verify the seven-Import closure after callr retirement; retain the
+20-Import NOTE check [13 §2.6]. No httr2
 (its closure adds 7 packages; its parallel path retries without bound), no openssl in Imports (only opt-in
 OAuth and the MCP server need it).
 

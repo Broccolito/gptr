@@ -3302,6 +3302,9 @@ git commit -m "feat(prompt): compaction threshold"
 
 `prompt_freeze()` stores `.d$frozen` once. On a resumed session (`.d$frozen` empty, a `gptr.frozen` entry on the path) it restores the byte-identical prompt from the entry instead of recomposing; `opts$refreeze = TRUE` forces a fresh freeze (IC-52: a resumed foreign file). The session kernel calls it at the first run before appending the first user message, so `gptr.frozen` is the session's first entry (04 §11.4). The floor check (IC-71) compares the post-compaction floor with the threshold and cuts the re-injection budgets (`frozen$reinject`, read by the checkpoint compactor of Task 13) or refuses the model with `gptr_error_invalid_argument` before anything is stored.
 
+An unknown model window still permits a finite `compact_at` floor check: compare the same static/project/skill estimate with the effective threshold, retain the existing 25% re-injection cut, and report an insufficient finite cap as `arg = "compact_at"` with an actionable cap message. An unknown window and disabled/infinite cap remains unchecked. This pre-user freeze estimate does not include arbitrary later user text.
+
+
 - [ ] **Step 1: Write the failing test**
 
 Append to `tests/testthat/test-prompt-sections.R`:
@@ -3451,9 +3454,9 @@ prompt_frozen_restore = function(s) {
 prompt_floor_check = function(frozen, project_tokens, skills_budget = 0) {
   m = prompt_model(frozen$model)
   window = as.numeric(m$context %||% NA_real_)
-  if (!length(window) || is.na(window)) return(frozen)
   thr = compact_threshold(window, as.numeric(m$max_output %||% NA_real_),
                           gptr_opt("r_output_tokens"))
+  if ((!length(window) || is.na(window)) && !is.finite(thr)) return(frozen)
   static = prompt_static_tokens(frozen)
   floor = static + project_tokens + skills_budget + 634
   if (floor < thr) return(frozen)
@@ -3461,12 +3464,20 @@ prompt_floor_check = function(frozen, project_tokens, skills_budget = 0) {
   frozen$reinject = list(project = cut, skills = min(skills_budget, cut))
   floor = static + min(project_tokens, cut) + min(skills_budget, cut) + 634
   if (floor < thr) return(frozen)
+  big = function(x) format(round(x), big.mark = ",", scientific = FALSE)
+  if (!length(window) || is.na(window)) {
+    gptr_abort(paste0("compact_at (", big(thr), " tokens) is too small for the ", frozen$preset,
+                      " preset: after a compaction the context (about ", big(floor),
+                      " tokens) would not be below it. Increase compact_at, or use ",
+                      "preset = \"minimal\" or context = \"names\"."),
+               "invalid_argument", arg = "compact_at",
+               expected = "a compact_at above the estimated post-compaction floor")
+  }
   hint = if (identical(frozen$preset, "minimal")) {
     "Use a model with a larger context window."
   } else {
     "Use preset = \"minimal\" or context = \"names\", or a model with a larger context window."
   }
-  big = function(x) format(round(x), big.mark = ",", scientific = FALSE)
   gptr_abort(paste0("The model ", frozen$model, " has a context window of ", big(window),
                     " tokens, too small for the ", frozen$preset, " preset: after a compaction ",
                     "the context (about ", big(floor), " tokens) would not be below the ",
@@ -5034,6 +5045,9 @@ git commit -m "feat(prompt): harness state extraction for checkpoints"
 
 The trigger (03 §6.11, IC-71): the threshold of Task 6 for the session's model (a router model asks `router.call` with reason `"compaction"`), except that after a threshold compaction the next threshold compaction waits until the context grew by 20% of the window beyond `details$tokens_after`; the cold rule fires when the idle time exceeds the tail TTL (300 s, or 3,600 s once the tail is `"1h"`) and the context is at least `gptr.compact_cold_min`. The compactor's `should()` and `compact()` receive their inputs through `ctx$input` (`tokens`, `idle_s`; `reason`, `focus`, `tokens`, `target`). The checkpoint request is the unchanged transcript plus one `<compaction_request>` user message with the frozen tools and `max_tokens = 2048`, sent in-conversation through `provider_stream()` and waited for with a nested `reactor_pump(allow_runs = character())` (IC-57: it never runs a sibling's queued tool); a reply that calls a tool or stops on `length` is asked again once, an error reply is not retried and the checkpoint then carries the harness state alone. The new first message is: the project and environment blocks of the current first message reused byte for byte (the project blocks within `frozen$reinject$project`; a dropped block is recorded in `details$dropped` as file label -> sha256 of the block, carried over from the previous compaction, so Task 5's update block re-announces it only when the file changes), the `<checkpoint>`, the current `<mode>`, a fresh `<workspace>` (P09's block when registered), the newest `<skill_content>` per skill within 5,000 each and `frozen$reinject$skills` in all, and `Continue from the checkpoint. The latest request was: <text>`. A failing plugin compactor falls back to the built-in with a diagnostic; `session_before_compact` handlers can cancel or supply the result. The checkpoint request never carries the running call's `returns =` schema (the reply is free text), and it is guarded like any request but leaves the model's stored view as it was (the next request extends the request before it, so a cancelled or failed compaction is not a false `cache_break`). The session kernel calls `compact.run(s, "threshold")` for every `TRUE` of `compact.should` (P06 `run_compact_check()`; the service returns `lgl(1)`), so `compact_should()` remembers its reason in the session memo and `compact_run()` records a cold compaction as `"cold"`.
 
+When the model window is unknown but the effective cap is finite, a prior threshold checkpoint waits for 20% growth of that cap. Both its stored `tokens_after` and the current count must be finite, and the prior count must be nonnegative. Compare the stored estimate after applying the same current session estimator multiplier used by `context_tokens()`; a calibration change alone is not growth. A missing multiplier defaults to 1 as in `context_tokens()`, while a nonfinite/nonpositive multiplier or nonfinite product supplies no growth evidence; missing/invalid counts do not invent a zero baseline. Known-window waiting, the initial threshold decision, cold/manual/overflow paths and budgets retain their meanings.
+
+
 - [ ] **Step 1: Write the failing test**
 
 Append to `tests/testthat/test-prompt-compact.R`:
@@ -5328,10 +5342,21 @@ compact_checkpoint_should = function(session, ctx) {
                           gptr_opt("r_output_tokens"))
   if (tokens >= thr) {
     last = compact_last(session)
-    after = as.numeric(last$details$tokens_after %||% 0)
-    grown = is.null(last) || !identical(last$details$reason, "threshold") || is.na(window) ||
-      tokens >= after + 0.2 * window
-    if (grown) return(structure(TRUE, reason = "threshold"))
+    after = as.numeric(last$details$tokens_after %||% NA_real_)
+    waits = !is.null(last) && identical(last$details$reason, "threshold")
+    if (waits && is.na(window) && is.finite(thr)) {
+      multiplier = as.numeric(session_data(session)$estimator$m %||% 1)
+      calibrated = after * multiplier
+      if (is.finite(multiplier) && multiplier > 0 && is.finite(tokens) &&
+          is.finite(after) && after >= 0 && is.finite(calibrated) &&
+          tokens >= calibrated + 0.2 * thr) {
+        return(structure(TRUE, reason = "threshold"))
+      }
+    } else {
+      if (is.na(after)) after = 0
+      grown = !waits || is.na(window) || tokens >= after + 0.2 * window
+      if (grown) return(structure(TRUE, reason = "threshold"))
+    }
   }
   ttl = if (identical(prompt_cache_gap_state(session)$ttl, "1h")) 3600 else 300
   if (idle > ttl && tokens >= gptr_opt("compact_cold_min")) {

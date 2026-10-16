@@ -1,6 +1,7 @@
 test_that("the contract constants have the documented sizes", {
-  expect_length(rel_exports(), 63L)
+  expect_length(rel_exports(), 64L)
   expect_false(anyDuplicated(rel_exports()) > 0L)
+  expect_true("gptr_export" %in% rel_export_groups()[["Documents and artifacts"]])
   expect_length(rel_options(), 90L)
   expect_false(anyDuplicated(rel_options()) > 0L)
   expect_true(all(unlist(rel_rd_groups()) %in% rel_exports()))

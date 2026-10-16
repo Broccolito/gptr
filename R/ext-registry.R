@@ -10,6 +10,7 @@
 registry_new = function() {
   reg = new.env(parent = emptyenv())
   reg$recs = new.env(parent = emptyenv())
+  reg$collected = new.env(parent = emptyenv())
   reg$by_kind = new.env(parent = emptyenv())
   reg$by_key = new.env(parent = emptyenv())
   reg$hooks = new.env(parent = emptyenv())
@@ -108,6 +109,14 @@ ext_session_id = function(session) {
   if (rlang::is_string(id)) id else NULL
 }
 
+#' Install the upper layer's weak session lookup; NULL removes it
+#' @noRd
+registry_session_owner_set = function(fun) {
+  check_function(fun, "fun", null = TRUE)
+  the$registry_session_owner = fun
+  invisible(NULL)
+}
+
 # ---- records (contract 5.5, 7.2, 10.1) ----------------------------------------------------------
 
 #' Append an id to an index entry
@@ -127,11 +136,34 @@ registry_index_drop = function(env, key, id) {
   invisible(NULL)
 }
 
+#' Preserve a collected scoped spec until deferred shutdown removes its record (D-085)
+#' @noRd
+registry_spec_finalizer = function(spec, id, records, collected) {
+  force(spec)
+  force(id)
+  force(records)
+  force(collected)
+  function(key) {
+    if (exists(id, envir = records, inherits = FALSE)) assign(id, spec, envir = collected)
+    invisible(NULL)
+  }
+}
+
 #' Records for a snapshot of ids, skipping records removed since (D-085)
 #' @noRd
 registry_recs = function(reg, ids) {
   if (!length(ids)) return(list())
   recs = mget(ids, envir = reg$recs, mode = "list", ifnotfound = list(NULL), inherits = FALSE)
+  recs = lapply(recs, function(rec) {
+    if (is.null(rec) || is.null(rec$spec_ref)) return(rec)
+    spec = rlang::wref_value(rec$spec_ref) %||%
+      get0(rec$id, envir = reg$collected, inherits = FALSE)
+    if (is.null(spec)) return(NULL)
+    rec$spec = spec
+    rec$spec_ref = NULL
+    rec$hook_event = NULL
+    rec
+  })
   unname(recs[!vapply(recs, is.null, NA)])
 }
 
@@ -308,6 +340,16 @@ registry_add = function(spec, source, rank, session = NULL, state = "active") {
   rec = list(id = id, kind = spec$kind, name = key, spec = spec, rank = rank, source = source,
              state = state, generation = reg$generation, tokens = spec_tokens(spec),
              session = sid, order = reg$seq, ext = reg$current_ext)
+  lookup = the$registry_session_owner
+  owner = if (!is.null(sid) && !is.null(lookup)) lookup(sid) else NULL
+  if (is.environment(owner)) {
+    # The spec may close over its own session. An ephemeron keeps it only while that session
+    # is reachable independently, like session-live.R's key = shell, value = live record.
+    rec$spec_ref = rlang::new_weakref(key = owner, value = spec,
+      finalizer = registry_spec_finalizer(spec, id, reg$recs, reg$collected))
+    if (identical(spec$kind, "hook")) rec$hook_event = spec[["event"]] %||% key
+    rec["spec"] = list(NULL)
+  }
   assign(id, rec, envir = reg$recs)
   registry_index_push(reg$by_kind, spec$kind, id)
   registry_index_push(reg$by_key, paste(spec$kind, key, sep = "\r"), id)
@@ -322,14 +364,15 @@ registry_add = function(spec, source, rank, session = NULL, state = "active") {
 registry_remove = function(id) {
   reg = registry_env()
   rec = get0(id, envir = reg$recs, inherits = FALSE)
+  if (!is.null(rec)) rm(list = id, envir = reg$recs)
+  if (exists(id, envir = reg$collected, inherits = FALSE)) rm(list = id, envir = reg$collected)
   if (is.null(rec)) return(invisible(FALSE))
-  rm(list = id, envir = reg$recs)
   registry_index_drop(reg$by_kind, rec$kind, id)
   registry_index_drop(reg$by_key, paste(rec$kind, rec$name, sep = "\r"), id)
   if (identical(rec$kind, "hook")) {
-    registry_index_drop(reg$hooks, rec$spec[["event"]] %||% rec$name, id)
+    registry_index_drop(reg$hooks, rec$hook_event %||% rec$spec[["event"]] %||% rec$name, id)
   }
-  if (identical(rec$kind, "kind")) kind_undefine(rec$spec[["name"]], id)
+  if (identical(rec$kind, "kind")) kind_undefine(rec$name, id)
   registry_touch(reg)
   invisible(TRUE)
 }
@@ -506,11 +549,11 @@ ext_control_grant = function(run, what) {
 registry_unregister_fn = function(id) {
   force(id)
   reg = registry_env()
-  function() {
+  utils::removeSource(function() {
     ext_control_guard("gptr_register")
     if (!identical(registry_env(), reg)) return(invisible(FALSE))
     invisible(registry_remove(id))
-  }
+  })
 }
 
 #' Register a capability spec

@@ -1,4 +1,4 @@
-# subagent-worker.R -- worker sub-agents: the callr child, worker_main(), and the parent's proxy
+# subagent-worker.R -- worker sub-agents: the Rscript child, worker_main(), and the parent's proxy
 # (plan P19, layer L4, area `subagent`; architecture 6.13; contract 7.19, 8.1, 11.11, IC-53,
 # IC-60, IC-69).
 #
@@ -249,8 +249,9 @@ worker_exports_save = function(export, envir, result_path, status) {
 #' @noRd
 worker_outcome = function(s) {
   d = session_data(s)
+  usage = lapply(subagent_usage_sums(d$usage), function(x) if (is.na(x)) NULL else x)
   list(status = d$status, text = if (is.na(d$last_text)) "" else d$last_text,
-       usage = subagent_usage_sums(d$usage), turns = d$turns)
+       usage = usage, turns = d$turns)
 }
 
 #' The watchdog (a reactor task every 0.5 s): a `cancel` line or end of input aborts the run; a
@@ -356,7 +357,7 @@ worker_unserialisable = function(x, seen = new.env(parent = emptyenv()), depth =
 #' @noRd
 worker_registry = function(sids) {
   reg = registry_env()
-  recs = lapply(ls(reg$recs), get, envir = reg$recs)
+  recs = registry_recs(reg, ls(reg$recs))
   specs = list()
   for (rec in recs[order(vapply(recs, function(r) as.numeric(r$order), 0))]) {
     scoped = isTRUE(rec$session %in% sids) && identical(rec$rank, 0L)
@@ -438,6 +439,7 @@ worker_reply = function(st, obj) {
 #' UI, cancelled without one), the `result` is kept; events and other lines are ignored
 #' @noRd
 worker_on_line = function(st, line) {
+  if (isTRUE(st$stopped) || isTRUE(st$exited)) return(invisible(NULL))
   obj = tryCatch(json_decode(line), error = function(e) NULL)
   type = if (is.list(obj) && rlang::is_string(obj$type)) obj$type else ""
   if (type == "permission_request" && is.list(obj$request)) {
@@ -498,7 +500,9 @@ worker_events = function(st, text = "", usage = NULL, error = NULL, reason = "er
 #' worker's summed usage; an unknown count stays unknown (IC-74).
 #' @noRd
 worker_on_exit = function(st, status) {
+  if (isTRUE(st$stopped) || isTRUE(st$exited)) return(invisible(NULL))
   st$exited = TRUE
+  st$watch = NULL # the reactor removes the watcher before invoking its exit callback
   r = st$result
   res = if (file.exists(st$result_path %||% "")) {
     tryCatch(readRDS(st$result_path), error = function(e) NULL)
@@ -521,25 +525,40 @@ worker_on_exit = function(st, status) {
   worker_cleanup(st)
 }
 
-#' Remove the worker's job row and temporary files
+#' Remove the worker's job row and temporary files only after its tree has settled
 #' @noRd
 worker_cleanup = function(st) {
-  if (!is.null(st$job)) job_remove(st$job)
-  if (!is.null(st$dir)) unlink(st$dir, recursive = TRUE)
+  if (isTRUE(st$cleaned)) return(invisible(TRUE))
+  settled = tryCatch(isTRUE(kill_all(st$p, grace = 0)),
+                    error = function(e) FALSE, interrupt = function(e) FALSE)
+  if (!settled || !is.null(st$watch)) return(invisible(FALSE))
+  removed = tryCatch({
+    if (!is.null(st$dir) && unlink(st$dir, recursive = TRUE) != 0L) return(FALSE)
+    if (!is.null(st$job)) job_remove(st$job)
+    TRUE
+  }, error = function(e) FALSE, interrupt = function(e) FALSE)
+  if (!removed) return(invisible(FALSE))
   st$job = NULL
   st$dir = NULL
-  invisible(NULL)
+  st$cleaned = TRUE
+  invisible(TRUE)
 }
 
 #' Kill the worker's process tree and stop watching it (P04); a request still open (a job
 #' stopped with gptr_jobs(kill = TRUE)) ends aborted, never with an error (IC-60)
 #' @noRd
 worker_kill = function(st) {
-  if (isTRUE(st$exited)) return(invisible(NULL))
+  if (isTRUE(st$cleaned)) return(invisible(TRUE))
+  st$stopped = TRUE
   st$exited = TRUE
-  kill_all(st$p, grace = 0)
-  if (!is.null(st$watch)) reactor_cancel(st$watch)
   st$final = st$final %||% worker_events(st, error = "the worker was stopped", reason = "aborted")
+  if (!is.null(st$watch)) {
+    cancelled = tryCatch({
+      reactor_cancel(st$watch)
+      TRUE
+    }, error = function(e) FALSE, interrupt = function(e) FALSE)
+    if (cancelled) st$watch = NULL
+  }
   worker_cleanup(st)
 }
 
@@ -549,24 +568,26 @@ worker_kill = function(st) {
 #' proxy run is aborted (P06's run_abort() cancels the stream task itself).
 #' @noRd
 worker_spawn = function(st) {
+  started = FALSE
+  on.exit(if (!started) {
+    tryCatch(worker_kill(st), error = function(e) NULL, interrupt = function(e) NULL)
+  }, add = TRUE)
   w = st$spec
   st$dir = tempfile("gptr-worker-")
-  dir.create(st$dir)
+  dir.create(st$dir, mode = "0700")
   spec_path = file.path(st$dir, "spec.rds")
   st$result_path = file.path(st$dir, "result.rds")
   save_rds(c(w, list(objects = worker_ship_objects(w$object_names, st$home))), spec_path,
            refhook = worker_refhook)
   marker = proc_marker_new()
   set = c(GPTR_WORKER = "1", GPTR_SUBAGENT_DEPTH = as.character(w$depth),
-          GPTR_PROJECT_ROOT = w$settings$project_root, stats::setNames("YES", marker))
-  # the child environment holds the provider's key: not bound in this frame, which callbacks keep;
-  # callr keeps the source files of a function's body (see worker_refhook())
-  st$p = callr::r_bg(utils::removeSource(worker_main), args = list(spec_path, st$result_path),
-                     package = TRUE, supervise = supervise_default(), cleanup_tree = TRUE,
-                     user_profile = FALSE, encoding = "UTF-8", stdin = "|",
-                     env = child_env_callr(child_env("worker", set = set,
-                                                     provider = w$key_provider)))
-  proc_mark(st$p, marker, "Rscript")
+          GPTR_PROJECT_ROOT = w$settings$project_root)
+  # The provider's key stays only in the child environment. The installed entry point is
+  # selected by the launcher, so no worker function or source environment is serialised.
+  st$p = proc_rscript("worker", args = list(spec_path, st$result_path), dir = st$dir,
+                       stdin = "|", env = child_env("worker", set = set,
+                                                    provider = w$key_provider),
+                       .marker = marker, .on_spawn = function(p) st$p = p)
   st$watch = reactor_proc(st$p, on_line = function(line) worker_on_line(st, line),
                           on_exit = function(status) worker_on_exit(st, status),
                           on_stderr = function(line) {
@@ -581,6 +602,7 @@ worker_spawn = function(st) {
     worker_kill(st)
     FALSE
   })
+  started = TRUE
   invisible(st)
 }
 

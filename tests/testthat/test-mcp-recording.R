@@ -24,7 +24,8 @@ test_that("native HTTP MCP code records once and replays a callable result witho
   skip_on_cran()
   skip_if_not_installed("httpuv")
   skip_if_not_installed("later")
-  skip_if_not_installed("openssl")
+  skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
+    "openssl is not installed")
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", mode = "auto")
   withr::defer(gptr_mcp_serve(stop = TRUE))

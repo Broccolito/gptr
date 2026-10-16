@@ -160,12 +160,48 @@ oauth_parse_redirect = function(input, redirect_uri, state, issuer, iss_supporte
 
 # ---- Suggests, randomness, PKCE ------------------------------------------------------------
 
-#' Abort with gptr_error_missing_package unless a Suggests package loads; loading never moves
-#' the user's .Random.seed (IC-61)
+#' Check a Suggests package without changing the caller's RNG or known initialization keys
+#' @noRd
+oauth_available = function(pkg, feature) {
+  keys = c("PATH", "GIT_ASKPASS", "SSH_ASKPASS")
+  windows = is_windows()
+  key = if (windows) toupper else identity
+  before = Sys.getenv()
+  before = before[key(names(before)) %in% keys]
+  if (anyDuplicated(key(names(before)))) {
+    gptr_abort("Dependency setup cannot preserve ambiguous initialization environment names.",
+               "not_available", package = pkg, feature = feature)
+  }
+  if (windows && identical(pkg, "openssl") && !isNamespaceLoaded(pkg) &&
+      !isNamespaceLoaded("askpass") && any(before == "")) {
+    gptr_abort("Dependency setup cannot restore existing empty Windows initialization values.",
+               "not_available", package = pkg, feature = feature)
+  }
+  restore = function() {
+    isTRUE(tryCatch(env_restore_python(before, keys, windows), error = function(error) FALSE,
+                   interrupt = function(interrupt) FALSE))
+  }
+  failed = function(condition) {
+    if (!restore()) {
+      tryCatch(gptr_warn("Dependency setup failed and its environment could not be restored.",
+                         "state_restore", package = pkg, env_restored = FALSE),
+               error = function(error) NULL, interrupt = function(interrupt) NULL)
+    }
+    stop(condition)
+  }
+  ok = tryCatch(with_seed_preserved(requireNamespace(pkg, quietly = TRUE)),
+                error = failed, interrupt = failed)
+  if (!restore()) {
+    gptr_abort("Dependency setup could not restore its initialization environment state.",
+               "state_restore", package = pkg, env_restored = FALSE)
+  }
+  isTRUE(ok)
+}
+
+#' Require an optional dependency after preserving its initialization state
 #' @noRd
 oauth_need = function(pkg, feature) {
-  ok = with_seed_preserved(requireNamespace(pkg, quietly = TRUE))
-  if (!isTRUE(ok)) {
+  if (!oauth_available(pkg, feature)) {
     gptr_abort(paste0(feature, " needs the '", pkg, "' package; install it with ",
                       "install.packages(\"", pkg, "\")."), "missing_package", package = pkg,
                feature = feature)
@@ -610,9 +646,11 @@ oauth_ask = function(what) {
 #' @return `gptr_login()` returns `TRUE` invisibly; `gptr_logout()` removes the stored
 #'   credential and forgets the access token held in memory, and returns `TRUE` invisibly when
 #'   it removed something, else `FALSE`.
-#' @examplesIf interactive()
-#' gptr_login("openrouter")
-#' gptr_logout("openrouter")
+#' @examples
+#' if (interactive()) {
+#'   gptr_login("openrouter")
+#'   gptr_logout("openrouter")
+#' }
 #' @export
 gptr_login = function(provider, method = c("auto", "oauth", "key")) {
   provider = check_string(provider, "provider")

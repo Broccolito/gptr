@@ -311,8 +311,50 @@ image_dims = function(b, mime) {
 #' base64 without line breaks (openssl when installed; jsonlite wraps every 72 characters)
 #' @noRd
 base64_raw = function(b) {
-  if (requireNamespace("openssl", quietly = TRUE)) return(as.character(openssl::base64_encode(b)))
+  if ((isNamespaceLoaded("openssl") || nzchar(system.file(package = "openssl"))) &&
+      oauth_available("openssl", "Image base64 encoding")) {
+    return(as.character(openssl::base64_encode(b)))
+  }
   gsub("[\r\n]", "", jsonlite::base64_enc(b))
+}
+
+#' Load magick without changing the caller's initialization state
+#' @noRd
+image_magick_available = function() {
+  old_options = options("magick.viewer")
+  on.exit(options(old_options), add = TRUE)
+  keys = c("FONTCONFIG_PATH", "KMP_DUPLICATE_LIB_OK", "MAGICK_TMPDIR")
+  windows = is_windows()
+  key = if (windows) toupper else identity
+  before = Sys.getenv()
+  before = before[key(names(before)) %in% keys]
+  if (anyDuplicated(key(names(before)))) {
+    gptr_abort("Image setup cannot preserve ambiguous initialization environment names.",
+               "not_available", package = "magick")
+  }
+  if (windows && !isNamespaceLoaded("magick") && any(before == "")) {
+    gptr_abort("Image setup cannot restore existing empty Windows initialization values.",
+               "not_available", package = "magick")
+  }
+  restore = function() {
+    isTRUE(tryCatch(env_restore_python(before, keys, windows), error = function(error) FALSE,
+                   interrupt = function(interrupt) FALSE))
+  }
+  failed = function(condition) {
+    if (!restore()) {
+      tryCatch(gptr_warn("Image setup failed and its environment could not be restored.",
+                         "state_restore", package = "magick", env_restored = FALSE),
+               error = function(error) NULL, interrupt = function(interrupt) NULL)
+    }
+    stop(condition)
+  }
+  ok = tryCatch(with_seed_preserved(requireNamespace("magick", quietly = TRUE)),
+                error = failed, interrupt = failed)
+  if (!restore()) {
+    gptr_abort("Image setup could not restore its initialization environment state.",
+               "state_restore", package = "magick", env_restored = FALSE)
+  }
+  isTRUE(ok)
 }
 
 #' Image bytes to an inline payload: unchanged when a provider-native format within 2000 px and 4.5
@@ -326,17 +368,17 @@ process_image = function(b, mime) {
   if (native && !is.null(dims) && all(dims <= image_max_edge) && b64_size < image_max_b64) {
     return(list(ok = TRUE, data = base64_raw(b), mime = mime, note = NULL, dims = dims))
   }
-  if (!requireNamespace("magick", quietly = TRUE)) {
+  if (!image_magick_available()) {
     shape = if (is.null(dims)) "" else sprintf(", %dx%d px", as.integer(dims[1]),
                                                as.integer(dims[2]))
     note = paste0("[Image omitted: ", mime, " is ", format_size(length(b)), shape,
                   "; install the 'magick' package to let gptr resize or convert it.]")
     return(list(ok = FALSE, note = note))
   }
-  tryCatch(process_image_magick(b, mime), error = function(e) {
+  with_seed_preserved(tryCatch(process_image_magick(b, mime), error = function(e) {
     list(ok = FALSE,
          note = "[Image omitted: could not be converted to a supported inline image format.]")
-  })
+  }))
 }
 
 #' Resize and convert image bytes with magick: the smaller of PNG and JPEG q85 -> q40 within 2000

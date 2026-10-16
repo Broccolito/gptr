@@ -2,7 +2,7 @@
 # proposal P-B section 2.4). The layer table is architecture section 3.2; the function map is
 # built by parsing the files under R/, never from srcrefs (installed packages carry none).
 
-# The layer of every file of architecture section 3.2 (119 files after IC-74).
+# The layer of every file of architecture section 3.2, including the Rscript launcher.
 # "L4 svc" files are declared services other built-ins may call (eval-*, env-*, tool-walk).
 arch_layer_table = function() {
   rows = c(
@@ -34,6 +34,7 @@ arch_layer_table = function() {
     "auth-store.R", "L0", "P03",
     "auth-childenv.R", "L0", "P03",
     "proc-spawn.R", "L0", "P04",
+    "proc-rscript.R", "L0", "P04",
     "proc-supervise.R", "L0", "P04",
     "http-reactor.R", "L0", "P04",
     "http-request.R", "L0", "P04",
@@ -101,6 +102,7 @@ arch_layer_table = function() {
     "doc-io.R", "L4", "P15",
     "doc-formats.R", "L4", "P15",
     "doc-replay.R", "L4", "P15",
+    "doc-export.R", "L4", "P15",
     "doc-knitr.R", "L5", "P15",
     "ckpt-objects.R", "L4", "P16",
     "ckpt-files.R", "L4", "P16",
@@ -136,7 +138,8 @@ arch_layer_table = function() {
 # The kernel SDK of IC-33: functions any L3-L6 file and any built-in may call directly
 arch_kernel_sdk = function() {
   c(
-    "session_data", "session_live", "session_home", "session_append", "session_set_model",
+    "session_data", "session_live", "session_home", "session_append",
+    "session_record_initial_model", "session_set_model",
     "session_set_mode", "session_enqueue", "session_value_set", "session_value_get",
     "session_replay_apply", "session_replay_new", "session_replay_bind", "replay_lookup",
     "session_run", "run_start", "run_wait", "run_abort", "run_current", "run_eval_env",
@@ -226,8 +229,10 @@ arch_fun_map = function(dir = arch_source_dir()) {
 
 # Every function call of a file, from the parse data: df(file, line, fun, pkg, text)
 pd_calls = function(path) {
+  old = options(keep.parse.data = TRUE)
+  on.exit(options(old), add = TRUE)
   exprs = parse(path, keep.source = TRUE, encoding = "UTF-8")
-  pd = utils::getParseData(exprs, includeText = TRUE)
+  pd = utils::getParseData(exprs, includeText = NA)
   empty = data.frame(file = character(), line = integer(), fun = character(),
                      pkg = character(), text = character())
   if (is.null(pd)) return(empty)

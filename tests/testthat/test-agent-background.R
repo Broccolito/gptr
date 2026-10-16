@@ -280,7 +280,7 @@ test_that("gptr_jobs(kill = TRUE) and bg_shutdown() stop background sessions", {
 bg_pump_until = function(cond, timeout = 20) {
   t0 = Sys.time()
   while (!isTRUE(cond()) && as.numeric(difftime(Sys.time(), t0, units = "secs")) < timeout) {
-    later::run_now(0.05)
+    with_seed_preserved(later::run_now(0.05))
   }
   isTRUE(cond())
 }
@@ -417,7 +417,7 @@ test_that("an ask at an idle tick parks the run as waiting until a blocking pump
   expect_null(e$z)
   jobs = gptr_jobs()
   expect_identical(jobs$status[jobs$id == s$id], "waiting")
-  for (i in 1:5) later::run_now(0.06)
+  with_seed_preserved(for (i in 1:5) later::run_now(0.06))
   expect_identical(s$status, "waiting")
   reactor_pump(until = function() !(s$status %in% c("running", "waiting")), slice_ms = 50L,
                timeout = 20)
@@ -558,4 +558,52 @@ test_that("a settled background run leaves the caller's object editable in place
                  sep = "\n")
   expect_no_copy(setup = "big = runif(5e6)", action = action,
                  label = "background run with context, then settled")
+})
+
+test_that("the test-owned later pump retains absent and configured caller seeds", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::local_preserve_seed()
+  raw_loop = NULL
+  later::with_temp_loop({
+    raw_loop = later::current_loop()
+    callback = new.env(parent = emptyenv())
+    callback$n = 0L
+    later::later(function() callback$n = callback$n + 1L)
+    if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
+      rm(list = ".Random.seed", envir = globalenv())
+    }
+    before_present = exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+    later::run_now(0)
+    after_present = exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+    expect_false(before_present)
+    expect_true(after_present)
+    expect_identical(callback$n, 1L)
+    expect_true(later::loop_empty())
+  })
+  expect_false(later::exists_loop(raw_loop))
+  for (present in c(FALSE, TRUE)) {
+    loop = NULL
+    later::with_temp_loop({
+      loop = later::current_loop()
+      callback = new.env(parent = emptyenv())
+      callback$ran = FALSE
+      later::later(function() callback$ran = TRUE)
+      if (present) {
+        set.seed(101)
+      } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
+        rm(list = ".Random.seed", envir = globalenv())
+      }
+      before = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+      expect_identical(exists(".Random.seed", envir = globalenv(), inherits = FALSE), present)
+      expect_true(bg_pump_until(function() isTRUE(callback$ran), timeout = 1))
+      expect_identical(exists(".Random.seed", envir = globalenv(), inherits = FALSE), present)
+      expect_true(callback$ran)
+      testthat::expect(
+        identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), before),
+        "the test-owned later pump preserves the caller seed")
+      expect_true(later::loop_empty())
+    })
+    expect_false(later::exists_loop(loop))
+  }
 })

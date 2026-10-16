@@ -26,10 +26,12 @@ tool_path_physical = function(q) {
   q
 }
 
-#' The file a symbolic link names, resolved by the OS (realpath; a no-op on Windows and for a path
-#' that is no link); a link to no file (dangling, or a loop) is refused, never replaced
+#' The file a symbolic link names, resolved by the OS. Windows has no readlink target, so an
+#' existing destination is canonicalised before rename. A detected dangling link or loop is
+#' refused, never replaced; missing Windows targets cannot be detected by readlink alone.
 #' @noRd
 resolve_link_target = function(p) {
+  if (is_windows() && file.exists(fs_path(p))) return(path_norm(p))
   l = Sys.readlink(fs_path(p))
   if (is.na(l) || !nzchar(l)) return(p)
   if (!file.exists(fs_path(p))) {

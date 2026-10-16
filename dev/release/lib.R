@@ -2,22 +2,22 @@
 # source this file from the repository root; every *_problems() finder returns the problems
 # found (empty = pass). Self-tests: Rscript --vanilla -e 'testthat::test_dir("dev/release/tests")'
 
-# 03 section 4.4: the 63 exports in eight groups.
+# Public exports in eight groups; gptr_export adds recorded-script export.
 rel_export_groups = function() {
   list(
-    "The gateway" = "peter",
+    "Ask Peter" = "peter",
     "Setup and status" = c("gptr_init", "gptr_config", "gptr_env", "gptr_trust", "gptr_login",
                            "gptr_logout", "gptr_providers", "gptr_models", "gptr_permissions",
                            "gptr_scrub"),
     "Discovery and MCP" = c("gptr_skills", "gptr_agents", "gptr_plugins", "gptr_mcp",
                             "gptr_mcp_add", "gptr_mcp_remove", "gptr_mcp_serve"),
-    "Documents and artifacts" = c("gptr_doc", "gptr_source", "gptr_blocks", "gptr_cache",
-                                  "gptr_artifacts"),
+    "Documents and artifacts" = c("gptr_doc", "gptr_source", "gptr_blocks", "gptr_export",
+                                  "gptr_cache", "gptr_artifacts"),
     "Session SDK" = c("gptr_step", "gptr_wait", "gptr_steer", "gptr_cancel", "gptr_fork",
                       "gptr_on", "gptr_parallel", "gptr_sessions", "gptr_resume", "gptr_last",
                       "gptr_jobs", "gptr_usage", "gptr_rewind", "gptr_checkpoints"),
-    "Agent-side and introspection" = c("gptr_return", "gptr_describe", "gptr_prob", "gptr_risk",
-                                       "gptr_prompt", "gptr_redact", "gptr_preimage"),
+    "Results and inspection" = c("gptr_return", "gptr_describe", "gptr_prob", "gptr_risk",
+                                 "gptr_prompt", "gptr_redact", "gptr_preimage"),
     "Extension API" = c("gptr_api", "gptr_register", "gptr_registry", "gptr_reload",
                         "gptr_check", "gptr_fake_provider", "gptr_tool_result", "gptr_spec"),
     "Spec constructors" = c("gptr_tool", "gptr_provider", "gptr_adapter", "gptr_router",
@@ -89,9 +89,9 @@ rel_topics = function() {
 rel_article_groups = function() {
   list(
     "Get started" = c("getting-started", "why-peter"),
-    "Use Peter" = c("language-models", "system-one", "interactive-console", "configuration"),
+    "Ask Peter" = c("language-models", "system-one", "interactive-console", "configuration"),
     "Build workflows" = c("script-as-history", "teams-and-background", "tools-and-artifacts"),
-    "Extend Peter" = c("skills-and-plugins", "mcp", "extending-gptr"),
+    "Extend gptr" = c("skills-and-plugins", "mcp", "extending-gptr"),
     "Understand execution" = c("execution-model", "token-efficiency")
   )
 }
@@ -440,12 +440,80 @@ rel_code_lines = function(blocks) {
   x[nzchar(x)]
 }
 
+# Normalize rendered padding without removing blank lines inside Markdown code fences.
+md_normalize = function(lines) {
+  lines = sub("[ \t]+$", "", lines)
+  keep = rep(TRUE, length(lines))
+  fence = ""
+  blanks = 0L
+  for (i in seq_along(lines)) {
+    if (!nzchar(fence)) {
+      mark = regmatches(lines[[i]], regexpr("^ {0,3}(`{3,}|~{3,})", lines[[i]]))
+      if (length(mark)) fence = sub("^ +", "", mark)
+    } else if (grepl(paste0("^ {0,3}", substr(fence, 1L, 1L), "{", nchar(fence),
+                           ",}[ \t]*$"), lines[[i]])) {
+      fence = ""
+    }
+    if (nzchar(fence)) next
+    blanks = if (nzchar(lines[[i]])) 0L else blanks + 1L
+    keep[[i]] = blanks <= 2L
+  }
+  lines = lines[keep]
+  if (nzchar(fence)) return(lines)
+  lines[seq_len(max(c(0L, which(nzchar(lines)))))]
+}
+
 # A knitted file is stale when its code differs from the code of its source.
 stale_problems = function(source_lines, knitted_lines, where) {
   same = identical(rel_code_lines(rmd_chunks(source_lines)),
                    rel_code_lines(md_code_blocks(knitted_lines)))
   if (same) return(character())
   sprintf("%s: code differs from its source; re-run dev/release/precompute.R", where)
+}
+
+# The exact canonical light/dark vectors, embedded so source and installed guides need no assets.
+vig_brand_block = function(root) {
+  encode = function(name) {
+    path = file.path(root, "man", "figures", name)
+    size = file.info(path)$size
+    if (length(size) != 1L || !is.finite(size) || size < 1 || size > 65536 || dir.exists(path)) {
+      stop("canonical vignette logo is missing or exceeds 65536 bytes", call. = FALSE)
+    }
+    bytes = readBin(path, "raw", n = size + 1L)
+    if (length(bytes) != size) stop("canonical vignette logo changed while read", call. = FALSE)
+    paste0("data:image/svg+xml;base64,", gsub("[\r\n]", "", jsonlite::base64_enc(bytes)))
+  }
+  light = encode("logo.svg")
+  dark = encode("logo-dark.svg")
+  c("<!-- gptr-vignette-brand:start -->", "<style>",
+    "html:not([data-bs-theme]) body { background: #fff; color: #1c1e22; }",
+    ".gptr-vignette-brand { float: right; width: 120px; margin: 0 0 1rem 1rem; }",
+    ".gptr-vignette-brand img { display: block; max-width: 100%; height: auto; }",
+    "html[data-bs-theme] .gptr-vignette-brand { display: none; }",
+    "@media (max-width: 600px) {",
+    "  .gptr-vignette-brand { float: none; width: 72px; margin: 0 0 1rem; }",
+    "}", "</style>", '<picture class="gptr-vignette-brand">',
+    paste0('  <source media="(prefers-color-scheme: dark)" srcset="', dark, '">'),
+    paste0('  <img src="', light, '" width="120" height="139" alt="gptr logo">'),
+    "</picture>", "<!-- gptr-vignette-brand:end -->")
+}
+
+# Preserve the YAML/body and replace exactly one owned block, rather than stacking copies.
+vig_brand_insert = function(lines, block) {
+  edges = which(lines == "---")
+  if (length(edges) < 2L || edges[[1L]] != 1L) {
+    stop("vignette branding needs an initial YAML header", call. = FALSE)
+  }
+  begin = which(lines == "<!-- gptr-vignette-brand:start -->")
+  end = which(lines == "<!-- gptr-vignette-brand:end -->")
+  if (length(begin) || length(end)) {
+    if (length(begin) != 1L || length(end) != 1L || begin <= edges[[2L]] || end < begin ||
+        begin == 1L || end == length(lines) || lines[begin - 1L] != "" || lines[end + 1L] != "") {
+      stop("vignette branding has an incomplete or duplicate owned block", call. = FALSE)
+    }
+    lines = lines[-seq.int(begin - 1L, end + 1L)]
+  }
+  append(lines, c("", block, ""), after = edges[[2L]])
 }
 
 # Knits the vignettes (write = TRUE: into vignettes/; FALSE: into a scratch copy, which proves
@@ -459,6 +527,8 @@ vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, rea
   if (!all(file.exists(origs))) {
     return(sprintf("vignettes/%s.Rmd.orig is missing", names[!file.exists(origs)]))
   }
+  brand = if (length(names)) tryCatch(vig_brand_block(root), error = function(e) NULL)
+  if (length(names) && is.null(brand)) return("vignettes: canonical light/dark logos unavailable")
   dirs = rel_dirs(work)
   env = rel_child_env(dirs[["home"]], dirs[["tmp"]], dirs[["proj"]], lib = dirs[["lib"]])
   rel_install(root, dirs[["lib"]], env)
@@ -475,17 +545,40 @@ vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, rea
   for (nm in names) {
     knit = sprintf("knitr::knit('%1$s.Rmd.orig', '%1$s.Rmd', quiet = TRUE)", nm)
     failed = sprintf("vignettes/%s.Rmd.orig: knitting failed:", nm)
-    problems = c(problems, run(knit, out_dir, failed))
+    result = run(knit, out_dir, failed)
+    problems = c(problems, result)
+    if (!length(result)) {
+      out = file.path(out_dir, paste0(nm, ".Rmd"))
+      lines = readLines(out, encoding = "UTF-8", warn = FALSE)
+      writeLines(md_normalize(vig_brand_insert(lines, brand)), out, useBytes = TRUE)
+    }
   }
   seconds = proc.time()[["elapsed"]] - t0
   if (seconds >= limit) {
     problems = c(problems, sprintf("vignettes: knitting took %.1f s (limit %g s)", seconds, limit))
   }
   if (readme) {
+    readme_root = root
+    if (!write) {
+      readme_root = dirs[["wd"]]
+      stopifnot(file.copy(file.path(root, "README.Rmd"), readme_root, overwrite = TRUE))
+      figures = file.path(root, "man", "figures")
+      if (dir.exists(figures)) {
+        scratch_man = file.path(readme_root, "man")
+        dir.create(scratch_man, showWarnings = FALSE)
+        stopifnot(file.copy(figures, scratch_man, recursive = TRUE, overwrite = TRUE))
+      }
+    }
     # -smart: pandoc would turn ASCII quotes into curly ones, and README.md must stay ASCII.
     render = paste("rmarkdown::render('README.Rmd', quiet = TRUE, output_format =",
                    "rmarkdown::github_document(html_preview = FALSE, md_extensions = '-smart'))")
-    problems = c(problems, run(render, root, "README.Rmd: rendering failed:"))
+    result = run(render, readme_root, "README.Rmd: rendering failed:")
+    problems = c(problems, result)
+    if (!length(result)) {
+      out = file.path(readme_root, "README.md")
+      lines = readLines(out, encoding = "UTF-8", warn = FALSE)
+      writeLines(md_normalize(lines), out, useBytes = TRUE)
+    }
   }
   left = setdiff(rel_files(dirs[c("home", "tmp", "proj")]), before)
   if (length(left)) {
@@ -510,6 +603,11 @@ vig_committed_problems = function(root, name) {
            "%\\VignetteEngine{knitr::rmarkdown}", "%\\VignetteEncoding{UTF-8}")
   found = vapply(need, function(n) any(grepl(n, rmd_lines, fixed = TRUE)), NA)
   out = sprintf("%s: header lacks %s", where, need[!found])
+  branded = tryCatch(vig_brand_insert(rmd_lines, vig_brand_block(root)),
+                     error = function(e) NULL)
+  if (!identical(branded, rmd_lines)) {
+    out = c(out, paste0(where, ": canonical embedded logos are missing or stale; run precompute.R"))
+  }
   if (any(grepl("^```+\\s*\\{", rmd_lines))) {
     out = c(out, sprintf("%s: has executable chunks; ship precomputed Markdown only", where))
   }
@@ -642,7 +740,8 @@ files_news = function(root, args) {
 # (pkgdown lists a page once), then the help topics.
 pkgdown_sections = function() {
   secondary = unlist(lapply(rel_rd_groups(), `[`, -1L), use.names = FALSE)
-  c(lapply(rel_export_groups(), setdiff, secondary), list("Help topics" = names(rel_topics())))
+  c(lapply(rel_export_groups(), setdiff, secondary),
+    list("Help topics" = c(names(rel_topics()), "gptr-background")))
 }
 
 # Generated from the export groups so that _pkgdown.yml never drifts from the manual; `extra`
@@ -652,9 +751,11 @@ pkgdown_yaml = function(extra = character()) {
     c(sprintf("- title: \"%s\"", title), "  contents:", paste0("  - ", items))
   }
   ref = pkgdown_sections()
-  if (length(extra)) ref[["Methods and other topics"]] = sort(extra, method = "radix")
+  if (length(extra)) ref[["Methods"]] = sort(extra, method = "radix")
   articles = rel_article_groups()
   c("# Generated by dev/release/check-files.R pkgdown --write; do not edit by hand.",
+    "url: https://broccolito.github.io/gptr/", "",
+    "repo:", "  branch: main", "",
     "template:", "  bootstrap: 5", "  light-switch: true",
     "  theme: a11y-light", "  theme-dark: a11y-dark", "  bslib:",
     '    bg: "#ffffff"', '    fg: "#1c1e22"', '    primary: "#40628f"',
@@ -665,7 +766,7 @@ pkgdown_yaml = function(extra = character()) {
     unlist(Map(section, names(articles), articles), use.names = FALSE))
 }
 
-# Public Rd pages that are neither an export's page nor a help topic (methods, gptr-background).
+# Public Rd pages that are neither an export's page nor a help topic (the methods).
 pkgdown_extra = function(db) {
   setdiff(names(db)[!vapply(db, rd_internal, NA)], unlist(pkgdown_sections(), use.names = FALSE))
 }
@@ -685,18 +786,217 @@ files_pkgdown = function(root, args) {
   pkgdown_problems(lines, db)
 }
 
+# Copies only public package inputs and the site overlay to a fresh preview source.
+# This is not an archive certificate. A failed copy leaves its owned stage for inspection.
+site_stage = function(root, dest) {
+  scalar = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+  if (!scalar(root) || !scalar(dest) || !dir.exists(root)) {
+    stop("Site staging needs an existing source and a fresh destination", call. = FALSE)
+  }
+  if (is.na(Sys.readlink(root)) || nzchar(Sys.readlink(root))) {
+    stop("Site staging refuses an aliased public input", call. = FALSE)
+  }
+  root = normalizePath(root, winslash = "/", mustWork = TRUE)
+  parent = normalizePath(dirname(dest), winslash = "/", mustWork = TRUE)
+  name = basename(dest)
+  if (name %in% c("", ".", "..")) {
+    stop("Site staging destination must be fresh", call. = FALSE)
+  }
+  dest = file.path(parent, name)
+  compare = if (.Platform$OS.type == "windows") tolower else identity
+  if (identical(compare(root), compare(dest)) ||
+      startsWith(compare(dest), paste0(compare(root), "/"))) {
+    stop("Site staging destination must be outside the source", call. = FALSE)
+  }
+  if (compare(name) %in% compare(list.files(parent, all.files = TRUE, no.. = TRUE))) {
+    stop("Site staging destination must be fresh", call. = FALSE)
+  }
+  dirs = c("R", "man", "inst", "vignettes", "pkgdown")
+  required = c("DESCRIPTION", "NAMESPACE", "README.md", "_pkgdown.yml", dirs)
+  if (!all(file.exists(file.path(root, required)))) {
+    stop("Site staging is missing required public input", call. = FALSE)
+  }
+  if (!all(dir.exists(file.path(root, dirs)))) {
+    stop("Site staging public directories have the wrong type", call. = FALSE)
+  }
+  collect = function(rel) {
+    path = file.path(root, rel)
+    link = Sys.readlink(path)
+    actual = normalizePath(path, winslash = "/", mustWork = TRUE)
+    if (is.na(link) || nzchar(link) || !identical(compare(actual), compare(path))) {
+      stop("Site staging refuses an aliased public input", call. = FALSE)
+    }
+    info = file.info(path)
+    if (is.na(info$isdir)) stop("Site staging public input is unavailable", call. = FALSE)
+    if (info$isdir) {
+      children = list.files(path, all.files = FALSE, no.. = TRUE)
+      private = c("dev", "agents.md", "claude.md")
+      children = children[!tolower(children) %in% private]
+      items = lapply(sort(children, method = "radix"), function(child) {
+        collect(file.path(rel, child))
+      })
+      list(files = unlist(lapply(items, `[[`, "files"), use.names = FALSE),
+           dirs = c(rel, unlist(lapply(items, `[[`, "dirs"), use.names = FALSE)))
+    } else {
+      list(files = rel, dirs = character())
+    }
+  }
+  public = c("DESCRIPTION", "NAMESPACE", "README.md", "NEWS.md", "LICENSE", "LICENSE.md",
+             "_pkgdown.yml", dirs)
+  public = public[file.exists(file.path(root, public))]
+  if (any(file.info(file.path(root, setdiff(public, dirs)))$isdir)) {
+    stop("Site staging public files have the wrong type", call. = FALSE)
+  }
+  items = lapply(public, collect)
+  files = unlist(lapply(items, `[[`, "files"), use.names = FALSE)
+  directories = unlist(lapply(items, `[[`, "dirs"), use.names = FALSE)
+  before = unname(tools::md5sum(file.path(root, files)))
+  if (anyNA(before)) stop("Site staging cannot read a public input", call. = FALSE)
+  if (!dir.create(dest, mode = "0700")) stop("Site staging could not create its destination")
+  for (rel in directories) {
+    if (!dir.create(file.path(dest, rel), mode = "0700")) {
+      stop("Site staging could not create a public directory", call. = FALSE)
+    }
+  }
+  for (rel in files) {
+    if (!file.copy(file.path(root, rel), file.path(dest, rel), overwrite = FALSE)) {
+      stop("Site staging could not copy a public file", call. = FALSE)
+    }
+  }
+  source = unname(tools::md5sum(file.path(root, files)))
+  staged = unname(tools::md5sum(file.path(dest, files)))
+  if (!identical(before, source) || !identical(before, staged)) {
+    stop("Site staging public bytes changed during copying", call. = FALSE)
+  }
+  dest
+}
+
 # Builds the site into `dest`, outside the repository, without keys: pkgdown runs every example.
 # Not offline: pkgdown looks the package up on CRAN for the home page's links.
-site_build = function(root, dest) {
+site_build = function(root, dest, pandoc = NULL) {
+  caller_root = root
+  root = normalizePath(root, winslash = "/", mustWork = TRUE)
+  absolute = startsWith(dest, "/") ||
+    (.Platform$OS.type == "windows" &&
+       (startsWith(dest, "\\") ||
+          (nchar(dest) >= 3L && substr(dest, 2L, 2L) == ":" &&
+             substr(dest, 3L, 3L) %in% c("/", "\\"))))
+  if (!absolute) dest = file.path(root, dest)
   dirs = rel_dirs(tempfile("rel-site-"))
+  stage = site_stage(caller_root, file.path(dirs[["proj"]], "source"))
   env = rel_child_env(dirs[["home"]], dirs[["tmp"]], dirs[["proj"]], offline = FALSE)
-  code = sprintf(paste("pkgdown::build_site(%s, preview = FALSE, new_process = FALSE,",
-                       "override = list(destination = %s))"),
-                 deparse(normalizePath(root, winslash = "/")), deparse(dest))
+  proof = file.path(dirs[["scripts"]], "site-result.rds")
+  if (!file.create(proof, showWarnings = FALSE) ||
+      !isTRUE(Sys.chmod(proof, "0600", use_umask = FALSE))) {
+    stop("Site building could not create its private child proof", call. = FALSE)
+  }
+  literal = function(x) paste(deparse(x), collapse = "\n")
+  code = paste0("site_render = ", paste(deparse(site_render), collapse = "\n"),
+                "\nsite_render(", literal(stage), ", ", literal(dest), ", ",
+                literal(pandoc), ", ", literal(proof), ")")
   res = processx::run(rel_exe("Rscript"), c("--vanilla", "-e", code), env = env,
                       error_on_status = FALSE, timeout = 1800)
-  if (res$status == 0L) return(character())
-  sprintf("pkgdown::build_site() failed: %s", rel_tail(c(res$stdout, res$stderr)))
+  if (nzchar(res$stdout)) cat(res$stdout, file = stdout())
+  if (nzchar(res$stderr)) cat(res$stderr, file = stderr())
+  if (res$status != 0L) {
+    return(sprintf("pkgdown::build_site() failed: %s", rel_tail(c(res$stdout, res$stderr))))
+  }
+  raw = paste(c(res$stdout, res$stderr), collapse = "\n")
+  native_warning = "(^|[\\r\\n])[ \\t]*(\\[WARNING\\]|Warning:|Warning in |Deprecated:)"
+  if (grepl(native_warning, raw, perl = TRUE)) {
+    return("pkgdown::build_site() emitted native warnings; see retained child output")
+  }
+  report = tryCatch({
+    size = file.info(proof, extra_cols = FALSE)$size
+    if (!is.finite(size) || size <= 0 || size > 65536) stop("invalid child proof size")
+    readRDS(proof)
+  }, error = function(e) NULL)
+  scalar = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+  valid = is.list(report) && identical(report$status, 0L) && identical(report$warnings, 0L) &&
+    is.list(report$pandoc) && identical(report$pandoc$version, "3.10") &&
+    scalar(report$pandoc$directory) && scalar(report$pandoc$executable) &&
+    scalar(report$pandoc$md5)
+  if (valid) {
+    id = report$pandoc
+    valid = isTRUE(file.exists(id$executable)) && !isTRUE(dir.exists(id$executable)) &&
+      identical(normalizePath(dirname(id$executable), winslash = "/", mustWork = TRUE),
+                id$directory) &&
+      identical(normalizePath(id$executable, winslash = "/", mustWork = TRUE), id$executable) &&
+      identical(unname(tools::md5sum(id$executable)), id$md5)
+    if (!is.null(pandoc)) {
+      valid = valid && identical(normalizePath(pandoc, winslash = "/", mustWork = TRUE),
+                                 id$directory)
+    }
+  }
+  if (!isTRUE(valid)) return("pkgdown::build_site() returned invalid or changed child proof")
+  character()
+}
+
+# Fixed disposable-child body. Public rmarkdown discovery changes only this child's cache.
+site_render = function(stage, dest, pandoc, proof) {
+  state = new.env(parent = emptyenv())
+  state$warnings = 0L
+  state$pandoc = NULL
+  withCallingHandlers({
+    original = tryCatch({
+      if (!is.null(pandoc) &&
+          (!is.character(pandoc) || length(pandoc) != 1L || is.na(pandoc) || !nzchar(pandoc))) {
+        stop("Pandoc directory must be one nonempty string", call. = FALSE)
+      }
+      identity = function(found) {
+        if (!identical(as.character(found$version), "3.10")) {
+          stop("Site rendering requires compatible Pandoc 3.10", call. = FALSE)
+        }
+        directory = normalizePath(found$dir, winslash = "/", mustWork = TRUE)
+        executable = file.path(directory,
+                               if (.Platform$OS.type == "windows") "pandoc.exe" else "pandoc")
+        info = file.info(executable, extra_cols = FALSE)
+        if (nrow(info) != 1L || is.na(info$isdir) || info$isdir ||
+            is.na(info$size) || info$size <= 0 || file.access(executable, 1L) != 0L) {
+          stop("Site rendering cannot admit its Pandoc executable", call. = FALSE)
+        }
+        executable = normalizePath(executable, winslash = "/", mustWork = TRUE)
+        md5 = unname(tools::md5sum(executable))
+        if (is.na(md5)) stop("Site rendering cannot read its Pandoc executable", call. = FALSE)
+        list(version = "3.10", directory = directory, executable = executable, md5 = md5)
+      }
+      before = identity(rmarkdown::find_pandoc(cache = FALSE, dir = pandoc, version = "3.10"))
+      if (!is.null(pandoc) &&
+          !identical(before$directory, normalizePath(pandoc, winslash = "/", mustWork = TRUE))) {
+        stop("Site rendering selected a different Pandoc directory", call. = FALSE)
+      }
+      state$pandoc = before
+      pkgdown::build_site(stage, preview = FALSE, new_process = FALSE,
+                          override = list(destination = dest))
+      after = identity(rmarkdown::find_pandoc(cache = TRUE))
+      if (!identical(before, after)) stop("Site renderer changed during rendering", call. = FALSE)
+      NULL
+    }, error = function(e) e, interrupt = function(e) e)
+    report = list(status = if (is.null(original)) 0L else 1L,
+                  warnings = state$warnings, pandoc = state$pandoc)
+    publication = tryCatch(saveRDS(report, proof), error = function(e) e, interrupt = function(e) e)
+    if (!is.null(original)) stop(original)
+    if (!is.null(publication)) stop(publication)
+    if (state$warnings > 0L) stop("Site rendering emitted R warnings", call. = FALSE)
+    invisible(report)
+  }, warning = function(w) {
+    state$warnings = state$warnings + 1L
+  })
+}
+
+# Destination remains positional; renderer selection is explicit and optional.
+site_build_args = function(args, default = file.path(dirname(tempdir()), "gptr-site")) {
+  usage = function() stop("Usage: build-site.R [destination] [--pandoc DIRECTORY]", call. = FALSE)
+  pandoc = NULL
+  flag = which(args == "--pandoc")
+  if (length(flag)) {
+    if (length(flag) != 1L || flag == length(args)) usage()
+    pandoc = args[flag + 1L]
+    if (is.na(pandoc) || !nzchar(pandoc) || startsWith(pandoc, "--")) usage()
+    args = args[-c(flag, flag + 1L)]
+  }
+  if (length(args) > 1L || anyNA(args) || any(!nzchar(args)) || any(startsWith(args, "--"))) usage()
+  list(dest = if (length(args)) args[1L] else default, pandoc = pandoc)
 }
 
 # ---- cran-comments.md (Task 13) ----------------------------------------------------------------
@@ -708,8 +1008,8 @@ cran_comments_problems = function(lines) {
   text = paste(lines, collapse = "\n")
   phrases = c("0.7.0 -> 1.0.0", "get_response()", "dataframe_to_text()", "'btw' 1.5.0",
               "'aisdk' 1.4.12", "'ellmer' 0.5.0", "'mcptools' 1.0.3", "gptr_login()",
-              "gptr_mcp_serve()", "gptr_fake_provider()", "@examplesIf", "SystemRequirements",
-              "?gptr_security", "No example uses `\\dontrun{}`",
+              "gptr_mcp_serve()", "gptr_fake_provider()", "visible `if` guards",
+              "SystemRequirements", "?gptr_security", "No example uses `\\dontrun{}`",
               "tools::package_dependencies(\"gptr\", reverse = TRUE, which = \"all\")")
   hit = vapply(phrases, grepl, NA, x = text, fixed = TRUE)
   out = c(out, sprintf("cran-comments.md: must mention %s", phrases[!hit]))
@@ -721,6 +1021,9 @@ cran_comments_problems = function(lines) {
 
 # Rewrites the "## Reverse dependencies" section with the result of the submission-day run.
 cran_comments_set_revdeps = function(lines, revdeps, date = Sys.Date()) {
+  if (is.null(revdeps)) {
+    stop("Reverse-dependency query did not find gptr; status is unknown", call. = FALSE)
+  }
   start = which(lines == "## Reverse dependencies")
   if (length(start) != 1L) {
     stop("cran-comments.md needs exactly one `## Reverse dependencies` section", call. = FALSE)
@@ -730,8 +1033,12 @@ cran_comments_set_revdeps = function(lines, revdeps, date = Sys.Date()) {
   call = "`tools::package_dependencies(\"gptr\", reverse = TRUE, which = \"all\")`"
   body = c("", sprintf("%s run on %s:", call, format(date, "%Y-%m-%d")),
            sprintf("%s.", if (length(revdeps)) paste(sort(revdeps), collapse = ", ") else "none"),
-           if (length(revdeps)) "Their maintainers were told at least two weeks before submission."
-           else "No package depends on, imports, links to or suggests gptr.",
+           if (length(revdeps)) {
+             paste("Any required reverse-dependency checks and maintainer",
+                   "notifications remain to be documented before submission.")
+           } else {
+             "No package depends on, imports, links to or suggests gptr."
+           },
            if (length(nxt)) "")
   c(lines[seq_len(start)], body, if (length(nxt)) lines[nxt[1L]:length(lines)])
 }

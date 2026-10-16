@@ -1075,3 +1075,25 @@ test_that("a provider's static rate of 40 requests per second caps System 1 admi
   expect_true(all(t - t[1] >= (k - 40) / 40 - 0.25))
   expect_gte(t[100] - t[1], 1.25)
 })
+
+test_that("static Jev pricing dates do not parse the caller calendar", {
+  scope = new.env(parent = environment(s1_jev_model))
+  scope$as.Date = function(...) stop("calendar parsing is not allowed in static pricing")
+  model = s1_jev_model
+  environment(model) = scope
+  testthat::expect(identical(formals(model), formals(s1_jev_model)),
+    "the pricing constructor retains its formals")
+  value = tryCatch(model("jev-latest", "Jev"), error = identity)
+  testthat::expect(!inherits(value, "condition"),
+    "static pricing must be constructed without calendar parsing")
+  if (!inherits(value, "condition")) {
+    expected = list(id = "jev-latest", name = "Jev", family = "jev", type = "classifier",
+      release_date = "2026-09-15", context = 64000, max_output = 0, reasoning = FALSE,
+      thinking_levels = "off", input = "text", tool_call = FALSE, structured_output = TRUE,
+      prices = data.frame(from = structure(20711, class = "Date"), tier = "default",
+        input = 0.042, output = 0, cache_read = 0, stringsAsFactors = FALSE), status = "active")
+    testthat::expect(identical(value, expected), "all static model metadata is unchanged")
+    testthat::expect(identical(typeof(value$prices$from), "double"),
+      "the epoch day retains double Date storage")
+  }
+})

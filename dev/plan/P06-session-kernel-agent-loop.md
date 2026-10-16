@@ -3385,9 +3385,14 @@ Consumes:
 
 - P01: `block_context()`, `msg_operator()`, `as_utf8()`; P02: `registry_get()`; P03: `redact(x, profile = "persist")`.
 - Tasks 3-5: `model_canonical()`, `entry_model_change()`, `entry_custom()`, `session_append()`, `session_emit()`, `session_live()`, `run_current()`.
+- Initial recording for P19: P01 `check_class()`; P05 `stream_chat_model()`; Task 9
+  `run_model_resolve(ref, sid)` (available before P19 uses the completed kernel).
 
 Produces:
 
+- `session_record_initial_model(s)` records one typed initial `model_change` on an empty session,
+  resolves session-only models, refuses decision-only models and leaves routers deferred; no request,
+  prompt freeze or `model_select` event. It leaves a started session unchanged.
 - `session_set_model(s, ref, reason = "user")` (resolves, appends `model_change`, emits `model_select`), `session_set_mode(s, mode, source = "user")` (appends `gptr.mode_change`; a running run gets an operator `mode` message after the current tool results), `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())` (FIFO items `list(text, blocks, source, t)`, `queue_update`; refused with `gptr_error_permission` from model code of the same session tree, IC-55), `session_root_id(s)`, `mode_block_text(s, mode)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -3483,6 +3488,17 @@ Append to `R/session-object.R`:
 
 ```r
 # ---------------------------------------------------------------------------- verbs
+
+#' Record an empty container's already-selected model once, without a selection event
+#' @noRd
+session_record_initial_model = function(s) {
+  check_class(s, "gptr_session", "s")
+  d = session_data(s)
+  if (length(d$entries)) return(invisible(s))
+  if (!startsWith(d$model, "router:")) stream_chat_model(run_model_resolve(d$model, d$id))
+  session_append(s, entry_model_change(d$model, d$thinking, reason = "initial"))
+  invisible(s)
+}
 
 #' Switch the session's model: resolve, append `model_change`, emit `model_select`
 #' @noRd
@@ -10494,3 +10510,10 @@ Consolidation of 2026-10-01 against 04 (with §15), 03, 05 and the plans P01-P23
 Counts changed by this round (measured): `test-agent-dispatch.R` 116 -> 130, `test-agent-run.R` 283 -> 291, `test-session-budget.R` 74 -> 86, `test-session-live.R` 33 -> 35; the suite 938 -> 974; acceptance rows 2, 3, 6 and 7 give 533, 130, 481 and 225. The red and green lines of Tasks 3, 5, 7, 9, 10, 11, 13 and 15 and Task 16 Step 4 were updated to the measured values.
 
 Finalize pass (2026-10-01, rows F1-F7): every row of `dev/research/assets/consolidation-lint-results.csv` for P06 except `indentation_linter` (now off) was fixed; no lint was silenced with `# nolint`. Verification: the 52 `r` blocks were re-extracted with the consolidation harness and linted with P01's `.lintr` linters (`indentation_linter = NULL`; `object_usage_linter` off for single blocks): no lints. Every block parses with `Rscript --vanilla`, has no `<-` or `%>%`, is ASCII and has no line over 100 characters. P01-P05 plus this plan were assembled again and the P06 suite was run before and after the pass: `PASS 974` both times with the same per-file counts (`test-agent-dispatch.R` 130, `test-agent-loop.R` 86, `test-agent-run.R` 291, `test-session-budget.R` 86, `test-session-live.R` 35, `test-session-object.R` 190, `test-session-store.R` 156), so no Step 2 or Step 4 line and no acceptance count changes. Linting the seven assembled `R/` files after `pkgload::load_all()` with `object_usage_linter` on also gives no lints. In the five test files, `object_usage_linter` reports "no visible global function definition" for the harness helpers (`test_session()`, `run_text()`, `local_store()`, `local_tool()` and others) wherever a top-level test helper function calls them, because the harness is sourced by each file rather than loaded as a `helper-*.R` file. This pass leaves those reports as they are: they come from the harness layout, not from a P06 code defect.
+
+
+## Live validation amendment, 2026-10-10: concise ordinary display
+
+The public history accessor and summary() retain the complete history as the existing gptr_session_summary data-frame class. Printing defaults to eight recent messages, an omitted count and detached session metadata at current console width. print(x, n = Inf) and as.data.frame(x) expose the complete table. Display sanitization affects only a temporary copy and never retains the session home; unknown assistant accounting stays unknown.
+
+The contract also names `as.data.frame.gptr_session_summary(x, ...)` to strip only display metadata while retaining every row. Its implementation is in `R/session-object.R`; the historical literal plan sketch is intentionally not duplicated here. The cross-index warning that this amended S3 method has no plan-body definition is a recorded documentation exception, not a missing runtime function.

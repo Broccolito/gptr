@@ -125,6 +125,7 @@ parallel_team = function(members, caller, cur) {
   if (!is.null(pr) && is.null(registry_get("provider", pid))) {
     registry_add(pr, source = "session", rank = 0L, session = td$id)
   }
+  session_record_initial_model(team)
   kids = td$children
   for (nm in names(members)) {
     d = session_data(members[[nm]])
@@ -190,9 +191,9 @@ parallel_start = function(m, nm, backend, team, cur, caller) {
 #' @return A team session (`kind = "team"`).
 #' @examples
 #' fake = gptr_fake_provider(list("ok"))
-#' team = gptr_parallel(planner = peter("Plan it", model = fake, envir = new.env()),
-#'                      lit = peter("Summarise it", model = fake, envir = new.env()))
-#' names(team$children)
+#' session = gptr_parallel(planner = peter("Plan it", model = fake),
+#'                         review = peter("Review it", model = fake))
+#' names(session$children)
 #' @export
 gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("return", "stop")) {
   caller = parent.frame()
@@ -211,6 +212,7 @@ gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("ret
          start = function() parallel_start(m, nm, backend, team, cur, caller))
   })
   subagent_schedule(items, max_active, function(i, h) subagent_record_end(team, h))
+  subagent_record_reports(team)
   if (identical(on_error, "stop")) {
     for (ch in session_data(team)$children) {
       cnd = session_data(ch)$condition
@@ -263,6 +265,9 @@ subagent_container = function(call, kind, cur, fallback = NULL) {
   if (!is.null(info$spec)) {
     registry_add(info$spec, source = "session", rank = 0L, session = session_data(s)$id)
   }
+  session_record_initial_model(s)
+  session_append(s, list(type = "message", message = msg_user(
+    redact(call$prompt, "context"), source = if (is.null(cur)) "prompt" else "parent")))
   s
 }
 
@@ -287,6 +292,7 @@ subagent_run_children = function(container, items, max_total, call) {
   })
   taken = character()
   for (h in handles) taken = subagent_export(h, call$envir, taken)
+  subagent_record_reports(container)
   idle = vapply(handles, function(h) identical(session_data(h$session)$status, "idle"), NA)
   d = session_data(container)
   subagent_emit(container, "agent_end", status = if (all(idle)) "idle" else "error",
@@ -298,6 +304,66 @@ subagent_run_children = function(container, items, max_total, call) {
 #' @noRd
 subagent_value = function(s) {
   if (verbosity() >= 2L) invisible(s) else s
+}
+
+#' Bounded facts from matched R results of the settled child's current task, not its prose
+#' No code, output, arguments or private values leave the child's transcript.
+#' @noRd
+subagent_r_progress = function(child) {
+  d = session_data(child)
+  live = session_live(child)
+  if (!identical(d$status, "idle") ||
+      (!is.null(live$run) && !isTRUE(live$run$settled))) return(NULL)
+  messages = list()
+  checkpoint = FALSE
+  id = d$leaf
+  remaining = length(d$entries)
+  while (!is.null(id) && remaining > 0L) {
+    i = get0(id, envir = d$index, inherits = FALSE)
+    if (is.null(i)) return(NULL)
+    e = d$entries[[i]]
+    if (identical(e$type, "compaction")) {
+      checkpoint = TRUE
+      break
+    }
+    m = if (identical(e$type, "message")) e$message else NULL
+    if (identical(m$role, "user") && (m$source %||% "prompt") %in% c("prompt", "parent")) break
+    if (!is.null(m)) messages[[length(messages) + 1L]] = m
+    id = e$parent_id
+    remaining = remaining - 1L
+  }
+  if (remaining == 0L && !is.null(id)) return(NULL)
+  calls = character()
+  outcomes = character()
+  for (m in rev(messages)) {
+    if (identical(m$role, "assistant")) {
+      for (block in m$content) {
+        if (identical(block$type, "tool_call") && identical(block$name, "r")) {
+          if (block$id %in% calls) outcomes[block$id] = "unverified"
+          calls = c(calls, block$id)
+        }
+      }
+    } else if (identical(m$role, "tool_result") && identical(m$tool_name, "r") &&
+               m$tool_call_id %in% calls) {
+      key = m$tool_call_id
+      if (key %in% names(outcomes) || sum(calls == key) != 1L) {
+        outcomes[key] = "unverified"
+      } else {
+        details = m$details
+        complete = identical(m$is_error, FALSE) && identical(details$status, "ok") &&
+          is.numeric(details$n_done) && isTRUE(is.finite(details$n_done)) &&
+          isTRUE(details$n_done > 0) && identical(details$n_done, details$n_total)
+        outcomes[key] = if (complete) "succeeded" else
+          if (isTRUE(m$is_error)) "failed" else "unverified"
+      }
+    }
+  }
+  outcomes[setdiff(unique(calls), names(outcomes))] = "unverified"
+  if (!any(outcomes %in% c("succeeded", "failed"))) return(NULL)
+  paste0("(R tool results", if (checkpoint) " since child checkpoint", ": ",
+         sum(outcomes == "succeeded"), " succeeded; ", sum(outcomes == "failed"),
+         " failed; ", sum(outcomes == "unverified"), " unverified.",
+         if (checkpoint) " Earlier tool details unavailable.", ")")
 }
 
 #' `provide()` of the `agent_reports` context block: one `<agent_report from="<name>">` element
@@ -314,6 +380,8 @@ subagent_reports_block = function(ctx, budget) {
   parts = vapply(names(d$children), function(nm) {
     cd = session_data(d$children[[nm]])
     txt = if (is.na(cd$last_text)) "(no report)" else subagent_text_cut(cd$last_text, max_bytes)
+    progress = subagent_r_progress(d$children[[nm]])
+    if (!is.null(progress)) txt = subagent_text_cut(paste0(progress, "\n", txt), max_bytes)
     if (!identical(cd$status, "idle")) txt = paste0("(ended with status ", cd$status, ")\n", txt)
     n = nchar(txt)
     el = function(k) {
@@ -330,6 +398,17 @@ subagent_reports_block = function(ctx, budget) {
     el(lo)
   }, "")
   paste(parts, collapse = "\n")
+}
+
+#' Persist bounded, typed child reports as agent data for checkpoints and resume
+#' @noRd
+subagent_record_reports = function(s) {
+  text = subagent_reports_block(list(session = s), 20000L)
+  if (!is.null(text)) {
+    session_append(s, list(type = "message", message = msg_user(
+      block_context("agent_reports", text), source = "agent")))
+  }
+  invisible(s)
 }
 
 # ---- the `team` route (order 15) ----------------------------------------------------------------

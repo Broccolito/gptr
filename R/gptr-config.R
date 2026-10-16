@@ -214,21 +214,41 @@ json_simplify = function(x) {
   lapply(x, json_simplify)
 }
 
-#' Reads a JSON settings file through a cache keyed by path, mtime, ctime and size; a file changed
-#' within the last 2 s is not cached, as a rewrite in the same clock tick can keep its stamp (git's
-#' racy-clean rule). A malformed file is a diagnostic and reads as empty.
+#' Windows ctime is creation time: verify contents before accepting a metadata cache hit
+#' @noRd
+settings_content_hash = function(paths) {
+  if (.Platform$OS.type != "windows") return(NULL)
+  vapply(paths, trust_file_hash, "", USE.NAMES = FALSE)
+}
+
+#' Settings cache stamp and age; an unavailable content hash never permits a hit or insertion
+#' @noRd
+settings_file_stamp = function(path, info = file.info(path, extra_cols = FALSE)) {
+  time = as.numeric(c(info$mtime, info$ctime))
+  hashes = settings_content_hash(path)
+  stamp = paste(c(format(time, digits = 15), info$size), collapse = " ")
+  if (!is.null(hashes)) stamp = paste(stamp, paste(hashes, collapse = "|"))
+  list(stamp = stamp, time = time, hashes = hashes,
+       readable = is.null(hashes) || all(grepl("^[0-9a-f]{64}$", hashes)))
+}
+
+#' Reads a JSON settings file through a metadata cache, with a Windows content digest. A file
+#' changed within the last 2 s is not cached (git's racy-clean rule). Windows insertions also
+#' verify the stamp after decoding; a changed post-decode stamp is not cached. A malformed
+#' file is a diagnostic and reads as empty.
 #' @noRd
 settings_file_read = function(path) {
   if (!file.exists(path)) return(list())
   st = gateway_state()
-  info = file.info(path, extra_cols = FALSE)
-  time = as.numeric(c(info$mtime, info$ctime))
-  stamp = paste(c(format(time, digits = 15), info$size), collapse = " ")
+  before = settings_file_stamp(path)
   hit = get0(path, envir = st$files, inherits = FALSE)
-  if (!is.null(hit) && identical(hit$stamp, stamp)) return(hit$value)
+  if (before$readable && !is.null(hit) && identical(hit$stamp, before$stamp)) return(hit$value)
+  if (!is.null(hit)) rm(list = path, envir = st$files)
   value = json_simplify(settings_decode(path))
-  if (as.numeric(Sys.time()) - max(time) > 2) {
-    assign(path, list(stamp = stamp, value = value), envir = st$files)
+  after = if (is.null(before$hashes)) before else settings_file_stamp(path)
+  if (after$readable && identical(before$stamp, after$stamp) &&
+      all(is.finite(after$time)) && as.numeric(Sys.time()) - max(after$time) > 2) {
+    assign(path, list(stamp = after$stamp, value = value), envir = st$files)
   }
   value
 }
@@ -405,25 +425,28 @@ trust_resources_present = function(root) {
 #' hashes as "unreadable", so its fingerprint changes once it can be read
 #' @noRd
 trust_file_hash = function(path) {
-  tryCatch(hash_sha256(readBin(path, "raw", n = max(1, file.size(path)))),
-           warning = function(w) "unreadable", error = function(e) "unreadable")
+  hash = tryCatch(unname(cli::hash_file_sha256(path)),
+                  warning = function(w) "unreadable", error = function(e) "unreadable")
+  if (length(hash) == 1L && !is.na(hash) && grepl("^[0-9a-f]{64}$", hash)) hash else "unreadable"
 }
 
 #' Trust fingerprint (IC-52): list(fp, files), fp the sha256 of the canonical JSON of the gated
-#' files' relative paths and hashes. Cached by path, mtime, ctime and size (ctime catches a
-#' same-size rewrite that restores mtime).
+#' files' relative paths and hashes. Cached by path, mtime, ctime and size; Windows additionally
+#' verifies content hashes because its ctime does not change on an in-place rewrite.
 #' @noRd
 trust_fingerprint = function(root) {
   paths = trust_gated_paths(root)
   info = file.info(paths, extra_cols = FALSE)
   stamp = paste(paths, format(as.numeric(info$mtime), digits = 15),
                 format(as.numeric(info$ctime), digits = 15), info$size, collapse = "|")
+  hashes = settings_content_hash(paths)
+  if (!is.null(hashes)) stamp = paste(stamp, paste(hashes, collapse = "|"), sep = "|")
   st = gateway_state()
   key = path_key(root)
   hit = get0(key, envir = st$fingerprints, inherits = FALSE)
   if (!is.null(hit) && identical(hit$stamp, stamp)) return(hit$value)
   rel = path_rel(paths, root = root)
-  hashes = vapply(paths, trust_file_hash, "", USE.NAMES = FALSE)
+  if (is.null(hashes)) hashes = vapply(paths, trust_file_hash, "", USE.NAMES = FALSE)
   names(hashes) = rel
   hashes = hashes[order(rel, method = "radix")]
   fp = hash_sha256(canonical_json(if (length(hashes)) as.list(hashes) else json_obj()))
@@ -443,7 +466,7 @@ trust_store = function(root, trusted, fp = NULL) {
     rec = x[["projects"]][[key]]
     if (!settings_is_object(rec)) rec = list()
     rec$trusted = isTRUE(trusted)
-    rec$date = format(Sys.Date())
+    rec$date = with_calendar_preserved(format(Sys.Date()))
     rec$fingerprint = fp$fp
     rec$files = if (length(fp$files)) as.list(fp$files) else json_obj()
     x$version = x[["version"]] %||% 1L

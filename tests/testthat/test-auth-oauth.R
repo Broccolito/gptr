@@ -25,7 +25,8 @@ test_that("form and query encoding round-trip", {
 })
 
 test_that("PKCE follows the RFC 7636 appendix B vector; tokens never touch the RNG", {
-  skip_if_not_installed("openssl")
+  skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
+    "openssl is not installed")
   p = pkce_new("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
   expect_identical(p$challenge, "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
   expect_identical(p$method, "S256")
@@ -291,7 +292,8 @@ test_that("the OpenRouter-style PKCE key exchange stores the returned key", {
 })
 
 test_that("without httpuv and later the redirect is pasted, iss included", {
-  skip_if_not_installed("openssl")
+  skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
+    "openssl is not installed")
   local_mocked_bindings(oauth_loopback_ok = function() FALSE)
   ui = local_scripted_ui(list("http://127.0.0.1:1/x"))
   cb = oauth_redirect_setup(port = 50111L)

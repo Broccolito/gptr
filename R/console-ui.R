@@ -5,24 +5,6 @@
 # or select.list(). A front-end file (L5): it calls no perm-* function, so a remembered answer
 # reaches builtin:permissions as the channel event `permissions:remember`.
 
-#' Escape control (except TAB), bidi and zero-width characters for display as <U+XXXX>
-#'
-#' The rule of perm-classify.R's risk_escape(); a front-end file may not call a capability file
-#' (architecture section 2.2).
-#' @noRd
-ui_escape = function(x) {
-  vapply(console_utf8(x), function(s) {
-    if (is.na(s)) return(s)
-    cp = utf8ToInt(s)
-    bad = (cp <= 0x1F & cp != 0x09) | (cp >= 0x7F & cp <= 0x9F) | cp == 0x061C |
-      (cp >= 0x200B & cp <= 0x200F) | (cp >= 0x202A & cp <= 0x202E) |
-      (cp >= 0x2060 & cp <= 0x2069) | cp == 0xFEFF
-    out = vapply(cp, intToUtf8, character(1))
-    out[bad] = sprintf("<U+%04X>", cp[bad])
-    paste(out, collapse = "")
-  }, character(1), USE.NAMES = FALSE)
-}
-
 #' The safety snapshot (IC-53 item 2) of the run executing on this call stack when it belongs to
 #' `session`, else of the session's current run; NULL outside a run
 #' @noRd

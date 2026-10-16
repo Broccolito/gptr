@@ -114,10 +114,10 @@ sdk_sessions = function(x, arg = "x") {
 #' @return `s`, invisibly. A run that settles in status `error`, `blocked`, `budget` or
 #'   `max_turns` signals the condition documented in [peter()].
 #' @examples
-#' s = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
-#'          envir = new.env())
-#' gptr_step(s)
-#' s$turns
+#' session = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")),
+#'   .run = FALSE)
+#' gptr_step(session)
+#' session$turns
 #' @export
 gptr_step = function(s, turns = 1L) {
   check_class(s, "gptr_session", "s")
@@ -142,6 +142,10 @@ gptr_step = function(s, turns = 1L) {
 #' any is started, so a refusal starts none. On timeout the sessions keep their `running` status
 #' and no condition is raised.
 #'
+#' `timeout` limits reactor polling; it does not interrupt R code. Request preparation
+#' and synchronous callbacks finish their current step before the deadline is checked
+#' again, so a call can return after the specified time.
+#'
 #' A timeout is not cancellation. Inspect `$status` and use [gptr_cancel()] if you want to
 #' abort active work. In Rscript and rendered reports, a blocking call such as this is how
 #' experimental background sessions progress when there is no idle console.
@@ -151,8 +155,8 @@ gptr_step = function(s, turns = 1L) {
 #' @return `x`, invisibly. For a single session, a terminal status signals its condition.
 #' @examples
 #' fake = gptr_fake_provider(list("a"))
-#' runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),
-#'             b = peter("two", model = fake, .run = FALSE, envir = new.env()))
+#' runs = list(a = peter("one", model = fake, .run = FALSE),
+#'             b = peter("two", model = fake, .run = FALSE))
 #' gptr_wait(runs, timeout = 10)
 #' vapply(runs, function(x) x$status, "")
 #' @export
@@ -195,9 +199,9 @@ gptr_wait = function(x, timeout = Inf) {
 #' @param as `"steer"` or `"follow_up"`.
 #' @return `s`, invisibly, at once.
 #' @examples
-#' s = peter("Summarise mtcars", model = gptr_fake_provider(list("ok")), .run = FALSE,
-#'          envir = new.env())
-#' gptr_steer(s, "Use only the mpg column", as = "follow_up")
+#' session = peter("Summarize mtcars", model = gptr_fake_provider(list("ok")),
+#'   .run = FALSE)
+#' gptr_steer(session, "Use only the mpg column", as = "follow_up")
 #' @export
 gptr_steer = function(s, text, as = c("steer", "follow_up")) {
   check_class(s, "gptr_session", "s")
@@ -217,9 +221,9 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
 #' @param x A session or a list of sessions.
 #' @return `x`, invisibly.
 #' @examples
-#' s = peter("long task", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
-#'          envir = new.env())
-#' gptr_cancel(s)
+#' session = peter("long task", model = gptr_fake_provider(list(list(hang = TRUE))),
+#'   .run = FALSE)
+#' gptr_cancel(session)
 #' @export
 gptr_cancel = function(x) {
   ss = sdk_sessions(x)
@@ -246,16 +250,16 @@ gptr_cancel = function(x) {
 #' @param matcher `NULL`, a tool-name glob for tool events, or `function(event)` returning a flag.
 #' @return A function of no arguments that removes the hook, invisibly.
 #' @examples
-#' s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
-#' log = new.env()
-#' log$roles = character()
-#' off = gptr_on(s, "message_end", function(event, ctx) {
-#'   log$roles = c(log$roles, event$message$role)
+#' session = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE)
+#' seen = new.env()
+#' seen$roles = character()
+#' off = gptr_on(session, "message_end", function(event, ctx) {
+#'   seen$roles = c(seen$roles, event$message$role)
 #'   NULL
 #' })
-#' gptr_step(s)
+#' gptr_step(session)
 #' off()
-#' log$roles
+#' seen$roles
 #' @export
 gptr_on = function(s, event, handler, matcher = NULL) {
   check_class(s, "gptr_session", "s")

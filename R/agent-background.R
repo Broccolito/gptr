@@ -11,8 +11,8 @@
 #' \code{peter(..., background = TRUE)} returns the session at once while its run keeps going.
 #' A timer from the \pkg{later} package advances the run every 50 ms while the R console is
 #' idle, so you can keep working. Piping into the running session,
-#' \code{s |> peter("...")}, queues a steer that the agent receives after its current tool
-#' result; \code{\link{gptr_wait}()} waits for the session, \code{\link{gptr_cancel}()}
+#' \code{session |> peter("...")}, queues a steer that the agent receives after its current
+#' tool result; \code{\link{gptr_wait}()} waits for the session, \code{\link{gptr_cancel}()}
 #' aborts its run and \code{\link{gptr_jobs}()} lists it. Background sessions are
 #' \strong{experimental}: they need the \pkg{later} package, and they are never used in
 #' examples or in CRAN tests.

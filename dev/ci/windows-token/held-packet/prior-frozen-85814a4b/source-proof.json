@@ -1,0 +1,16 @@
+{
+  "unchanged_ordinary_prefix_bytes": 51609,
+  "original_six_control_lines": [
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL PRE_FILE 1')\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL PRE_PARENT 1')\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL FILE_ACL 1')\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL PARENT_ACL 1')\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL FILE_LOOKUP ' + $fileLookup)\",",
+    "    \"[Console]::WriteLine('GPTR_ABSENCE_CONTROL PARENT_LOOKUP ' + $parentLookup)\","
+  ],
+  "strict_control_values": "all six equal1",
+  "production_probe": "PROBE1 unchanged",
+  "old_aba_removed_only_from_successor": true,
+  "baseline_native_source": "02ceac9c4a662cffe16188a592f7bdd3e2555280",
+  "execution": false
+}

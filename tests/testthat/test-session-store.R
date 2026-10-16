@@ -824,16 +824,36 @@ test_that("a rebuilt fork gets a fresh overlay of envir (IC-46)", {
 
 test_that("a file from another project gets a fresh prompt and imported turns (IC-52)", {
   s = stored_run()
-  lines = readLines(s$file, encoding = "UTF-8")
+  id = s$id
+  file = s$file
+  expected = session_data(s)$usage
+  expect_identical(nrow(expected), 2L)
+  lines = readLines(file, encoding = "UTF-8")
   hdr = json_decode(lines[[1L]])
   hdr$cwd = "/nonexistent/elsewhere"
-  hdr$id = "s00000000aa"
   lines[[1L]] = json_encode(hdr)
-  foreign = file.path(dirname(s$file), "20260101T000000_s00000000aa.jsonl")
+  foreign = file.path(dirname(file), paste0("20260101T000000_", id, ".jsonl"))
   writeLines(lines, foreign, useBytes = TRUE)
+  lock_release(lock_path(file))
+  live_forget(s)
+  expect_null(session_by_id(id))
   r = gptr_resume(foreign, envir = new.env())
   expect_identical(length(session_data(r)$frozen), 0L)
   expect_identical(r$messages[[1L]]$source, "imported")
+  expect_identical(r$id, id)
+  expect_null(session_data(r)$parent_id)
+  expect_identical(session_data(r)$usage, expected)
+
+  hdr$id = if (identical(id, "s00000000aa")) "s00000000bb" else "s00000000aa"
+  expect_true(session_id_ok(hdr$id))
+  expect_false(identical(hdr$id, id))
+  expect_null(session_by_id(hdr$id))
+  lines[[1L]] = json_encode(hdr)
+  tampered = file.path(dirname(file), paste0("20260101T000001_", hdr$id, ".jsonl"))
+  writeLines(lines, tampered, useBytes = TRUE)
+  expect_error(gptr_resume(tampered, envir = new.env()), "Invalid durable usage identity",
+               class = "gptr_error_invalid_argument")
+  expect_null(session_by_id(hdr$id))
 })
 
 test_that("gptr_resume() validates x", {
@@ -844,6 +864,9 @@ test_that("gptr_resume() validates x", {
 })
 
 test_that("gptr_resume(block =) returns the session replay bound to the block, never a fallback", {
+  old = the$replay_blocks
+  the$replay_blocks = new.env(parent = emptyenv())
+  withr::defer(assign("replay_blocks", old, envir = the))
   s = test_session()
   session_replay_bind("6413d0", s)
   expect_identical(replay_lookup("6413d0"), s)
@@ -1104,4 +1127,47 @@ test_that("an entry or header time that is not ISO 8601 never blocks a resume", 
   expect_true(is.finite(session_data(r)$created))
   listed = gptr_sessions()
   expect_true(is.finite(as.numeric(listed$created[listed$id == id])))
+})
+
+
+test_that("new JSONL bytes are private before writing and existing modes are preserved", {
+  skip_on_os("windows")
+  dir = withr::local_tempdir()
+  path = file.path(dir, "private.jsonl")
+  umask = Sys.umask("0022")
+  withr::defer(Sys.umask(umask))
+  modes = character()
+  original = base::file
+  local_mocked_bindings(file = function(description = "", open = "", ...) {
+    if (identical(description, path) && open %in% c("wb", "ab")) {
+      modes <<- c(modes, format(file.info(path)$mode))
+    }
+    original(description, open, ...)
+  }, .package = "base")
+  store_write_lines(path, '{"private":"first"}', append = FALSE)
+  expect_identical(modes, "600")
+  expect_identical(format(file.info(path)$mode), "600")
+  Sys.chmod(path, "0640", use_umask = FALSE)
+  store_write_lines(path, '{"private":"second"}', append = TRUE)
+  expect_identical(format(file.info(path)$mode), "640")
+  expect_identical(readLines(path), c('{"private":"first"}', '{"private":"second"}'))
+  store_write_lines(path, '{"private":"replacement"}', append = FALSE)
+  expect_identical(format(file.info(path)$mode), "640")
+  expect_identical(readLines(path), '{"private":"replacement"}')
+  expect_identical(modes, c("600", "640", "640"))
+})
+
+test_that("a JSONL permission failure writes no private bytes or target file", {
+  skip_on_os("windows")
+  dir = withr::local_tempdir()
+  path = file.path(dir, "private.jsonl")
+  original = base::Sys.chmod
+  local_mocked_bindings(Sys.chmod = function(paths, mode = "0777", use_umask = TRUE) {
+    if (any(startsWith(basename(paths), ".gptr-write-"))) return(rep(FALSE, length(paths)))
+    original(paths, mode, use_umask)
+  }, .package = "base")
+  expect_error(store_write_lines(path, "synthetic private text", append = FALSE),
+               class = "gptr_error_doc_write")
+  expect_false(file.exists(path))
+  expect_length(list.files(dir, all.files = TRUE, no.. = TRUE), 0L)
 })

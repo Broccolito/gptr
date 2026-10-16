@@ -195,7 +195,6 @@ test_that("a redirect to a second origin receives no key and the wire log holds 
 
 test_that("worker spec and result files and worker output carry no key (IC-70)", {
   skip_on_cran()
-  skip_if_not_installed("callr")
   local_worker_lib()
   root = local_project()
   env_file = e2e_register()
@@ -204,11 +203,20 @@ test_that("worker spec and result files and worker output carry no key (IC-70)",
   # The worker's spec and result files are removed when it exits: they are scanned just before.
   seen = integer()
   spec_size = NA
+  size_diagnostics = new.env(parent = emptyenv())
+  size_diagnostics$reports = list()
   cleanup = worker_cleanup
   local_mocked_bindings(worker_cleanup = function(st) {
     if (!is.null(st$dir)) {
       seen <<- c(seen, e2e_scan_dir(st$dir, keys))
       spec_size <<- file.size(file.path(st$dir, "spec.rds"))
+      size_diagnostic = worker_size_capture(function() {
+        worker_size_report(file.path(st$dir, "spec.rds"), worker_refhook)
+      }, function(report) {
+        cat("GPTR_WORKER_SIZE_DIAGNOSTIC ", jsonlite::toJSON(report,
+          auto_unbox = TRUE, null = "null"), "\n", sep = "")
+      })
+      size_diagnostics$reports = c(size_diagnostics$reports, list(size_diagnostic))
     }
     cleanup(st)
   })
@@ -235,6 +243,8 @@ test_that("worker spec and result files and worker output carry no key (IC-70)",
   expect_identical(e2e_count_text(team$text, keys), 0L)
   expect_true(all(c("spec.rds", "result.rds") %in% basename(names(seen))))
   expect_lt(spec_size, 4e6)
+  expect_length(size_diagnostics$reports, 1L)
+  expect_true(all(vapply(size_diagnostics$reports, function(x) isTRUE(x$complete), FALSE)))
   # tempfile() and list.files() separate a Windows path differently
   recent = setdiff(normalizePath(e2e_recent_files(c(tempdir(), root), started), "/", FALSE),
                    normalizePath(env_file, "/", FALSE))

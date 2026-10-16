@@ -533,8 +533,7 @@ test_that("an oldText of only whitespace never matches between every two charact
   expect_identical(rd(g), "a b\n")
 })
 
-test_that("two operations on one file through a directory link or a folded name are refused", {
-  skip_on_os("windows")
+test_that("two operations on one file through a directory link are refused", {
   td = withr::local_tempdir()
   u = function(name) fs_path(file.path(td, name))
   env = function(...) paste(c("*** Begin Patch", ..., "*** End Patch"), collapse = "\n")
@@ -543,11 +542,48 @@ test_that("two operations on one file through a directory link or a folded name 
         paste0("*** Update File: ", p2), "@@", paste0("-", l2), paste0("+", l2, "0"))
   }
   put_file(td, "D/a.R", "a = 1\nb = 2\n")
-  file.symlink(file.path(td, "D"), file.path(td, "L"))
+  if (.Platform$OS.type == "windows") {
+    wsec_link(file.path(td, "D"), file.path(td, "L"), .env = environment())
+  } else {
+    expect_true(file.symlink(file.path(td, "D"), file.path(td, "L")))
+  }
   expect_error(patch_apply(upd2("L/a.R", "D/a.R", "a = 1", "b = 2"), root = td),
                "more than one operation names D/a.R", fixed = TRUE,
                class = "gptr_error_invalid_argument")
   expect_identical(rd(u("D/a.R")), "a = 1\nb = 2\n")
+})
+
+test_that("patch additions respect the observed case-folding of the filesystem", {
+  td = withr::local_tempdir()
+  u = function(name) fs_path(file.path(td, name))
+  env = function(...) paste(c("*** Begin Patch", ..., "*** End Patch"), collapse = "\n")
+  put_file(td, "case-probe.R", "probe\n")
+  folded = fs_case_insensitive(td)
+  expect_identical(file.exists(u("CASE-PROBE.R")), folded)
+  adds = env("*** Add File: new.R", "+1", "*** Add File: NEW.R", "+2")
+  if (folded) {
+    expect_error(patch_apply(adds, root = td), "more than one operation names", fixed = TRUE)
+    expect_false(file.exists(u("new.R")))
+  } else {
+    patch_apply(adds, root = td)
+    expect_identical(rd(u("new.R")), "1\n")
+    expect_identical(rd(u("NEW.R")), "2\n")
+    expect_true(all(c("new.R", "NEW.R") %in% list.files(td)))
+  }
+})
+
+test_that("Unicode patch additions respect filesystem case-folding with stringi", {
+  skip_if_not_installed("stringi")
+  td = withr::local_tempdir()
+  u = function(name) fs_path(file.path(td, name))
+  env = function(...) paste(c("*** Begin Patch", ..., "*** End Patch"), collapse = "\n")
+  upd2 = function(p1, p2, l1, l2) {
+    env(paste0("*** Update File: ", p1), "@@", paste0("-", l1), paste0("+", l1, "0"),
+        paste0("*** Update File: ", p2), "@@", paste0("-", l2), paste0("+", l2, "0"))
+  }
+  put_file(td, "case-probe.R", "probe\n")
+  folded = fs_case_insensitive(td)
+  expect_identical(file.exists(u("CASE-PROBE.R")), folded)
   put_file(td, fs_path("\u00e9t\u00e9.R"), "e = 1\nf = 2\n")
   if (file.exists(u("\u00c9T\u00c9.R"))) {
     expect_error(patch_apply(upd2("\u00e9t\u00e9.R", "\u00c9T\u00c9.R", "e = 1", "f = 2"),
@@ -560,9 +596,20 @@ test_that("two operations on one file through a directory link or a folded name 
                  "more than one operation names", fixed = TRUE)
     expect_identical(rd(u("caf\u00e9.R")), "c = 1\nd = 2\n")
   }
-  skip_if_not_installed("stringi")
-  skip_if_not(fs_case_insensitive(td), "a case-sensitive file system")
   adds = env("*** Add File: n\u00e9w.R", "+1", "*** Add File: N\u00c9W.R", "+2")
-  expect_error(patch_apply(adds, root = td), "more than one operation names", fixed = TRUE)
-  expect_false(file.exists(u("n\u00e9w.R")))
+  if (folded) {
+    expect_error(patch_apply(adds, root = td), "more than one operation names", fixed = TRUE)
+    expect_false(file.exists(u("n\u00e9w.R")))
+  } else {
+    patch_apply(adds, root = td)
+    expect_identical(rd(u("n\u00e9w.R")), "1\n")
+    expect_identical(rd(u("N\u00c9W.R")), "2\n")
+    entries = as_utf8(list.files(fs_path(td)))
+    expect_true(all(c("n\u00e9w.R", "N\u00c9W.R") %in% entries))
+    expect_false(any(c("n<U+00E9>w.R", "N<U+00C9>W.R") %in% entries))
+    expect_identical(charToRaw(entries[match("n\u00e9w.R", entries)]),
+                     as.raw(c(0x6e, 0xc3, 0xa9, 0x77, 0x2e, 0x52)))
+    expect_identical(charToRaw(entries[match("N\u00c9W.R", entries)]),
+                     as.raw(c(0x4e, 0xc3, 0x89, 0x57, 0x2e, 0x52)))
+  }
 })

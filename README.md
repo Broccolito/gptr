@@ -4,33 +4,27 @@
 # gptr <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo-dark.png"/><img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo.png" align="right" width="120" height="139" alt="gptr logo"/></picture>
 
 gptr runs language model agents inside your live R session, using
-**in-memory compute**. They work with objects you already loaded,
-including datasets around **4 GB or larger**, and reuse your variables
-and intermediate results across turns. Load a dataset once, analyze it
-by name, and rerun the step you want to change. One function, `peter()`,
-is an interactive chat in the console and a programmable call that you
-put in scripts, loops and `if` statements.
+**in-memory compute**. They work with objects you already loaded and
+reuse your variables and intermediate results across turns. With enough
+available memory, this includes datasets around **4 GB or larger**. Load
+a dataset once, analyze it by name, and rerun the step you want to
+change. One function, `peter()`, is an interactive chat in the console
+and a programmable call that you put in scripts, loops and `if`
+statements.
 
-The model receives bounded object descriptions, previews and tool
-output; the R tool computes on the full object in your session. You
-choose what results to print or plot. Model requests still have latency,
-and R code can allocate copies or run expensive calculations. See
+The model receives bounded descriptions, previews and tool output; the R
+tool computes on the full object in your session. See
 `vignette("execution-model", package = "gptr")` for memory and
 data-sharing details.
 
-Peter's name honors Peter Naur and Peter Cathcart Wason: readable
-programs and careful reasoning. See [Why Peter?](#why-peter) and
-`vignette("why-peter", package = "gptr")`.
-
-- **One gateway.** `peter()` with no prompt opens a chat at the console;
-  with a prompt it runs the agent and returns the session, which the
-  pipe steers: `peter("...") |> peter("...")`.
-- **System 1 and System 2.** Generative models (Anthropic, OpenAI,
-  Google Gemini, any OpenAI-compatible endpoint, local Ollama models,
-  and the Claude and ChatGPT plans through the `claude` and `codex`
-  command-line tools) work next to typed decision models such as
-  TypeSafe AI's Jev and Clef on a local Ollama server, whose yes/no,
-  choice and score answers go straight into `if` and `for`.
+- **One function.** `peter()` with no prompt opens a chat at the
+  console; with a prompt it runs the agent and returns the session,
+  which the pipe steers: `peter("...") |> peter("...")`.
+- **System 1 and System 2.** Conversational models (Anthropic, OpenAI,
+  Google Gemini, OpenAI-compatible endpoints, Ollama, and the Claude
+  Code and Codex CLIs) run agents; typed decision models such as
+  TypeSafe AI's Jev and Clef return yes/no, choice and score answers
+  that go straight into `if` and `for`.
 - **The script is the history.** gptr can record executed agent code
   into your `.R`, `.Rmd`, `.qmd` or `.ipynb` document. Fresh recorded
   blocks replay without model calls; supply their required input data
@@ -38,146 +32,168 @@ programs and careful reasoning. See [Why Peter?](#why-peter) and
 - **Everything is R.** Tools are R functions; artifacts are Shiny apps;
   skills, MCP servers, sub-agents, hooks and plugins use one documented
   extension API.
-- **Safe defaults.** In the default `manual` mode only actions known to
-  be read-only run without asking; changes ask unless an applicable
-  allow rule permits them. The permission gate is not a sandbox: see
+- **Safe defaults.** The default `manual` mode runs read-only actions
+  and asks before changes. The permission gate is not a sandbox; see
   `?gptr_security`.
+
+Read the [guides and function
+reference](https://broccolito.github.io/gptr/) online.
 
 ## Installation
 
-These guides describe the 1.0 development version. Install it from
-GitHub with R 4.2 or later:
+Install gptr from GitHub's `main` branch with R 4.2 or later:
 
 ``` r
 install.packages("pak")  # if pak is not installed
-pak::pak("Broccolito/gptr")
+pak::pak("Broccolito/gptr@main")
 ```
+
+This README documents gptr 1.0. CRAN submission is being prepared.
 
 `install.packages("gptr")` installs the CRAN version, which may still
 expose the older 0.7 API. Check `packageVersion("gptr")` before
 following these examples. No model server or CLI is required for the
 offline examples below.
 
-For an interactive first session, install and sign in to Codex CLI or
-Claude Code outside gptr, then call `peter()`. When no default model is
-configured, Peter offers the two CLI routes or manual API/Ollama setup.
-Selecting an available CLI saves its default model in your user
-settings. CLI-reported sign-in does not verify online access or
-subscription billing; an API-key login can also appear signed in. See
+## Connect a model
+
+For an interactive first session, sign in to the Claude Code CLI or the
+Codex CLI outside R, then call `peter()`; with no default model it
+offers to save one. See
 `vignette("interactive-console", package = "gptr")`.
-
-## A first session
-
-The example below uses `gptr_fake_provider()`, a scripted model that
-ships with the package, so it runs without a key. With a real model only
-the `model` argument changes.
-
-``` r
-library(gptr)
-
-fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "fit = lm(mpg ~ wt, data = cars)\ncoef(fit)")),
-  "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon.",
-  list(tool = "r", input = list(code = "predicted = predict(fit)\nhead(predicted)")),
-  "The predictions are stored in predicted."
-))
-work = new.env()
-work$cars = mtcars
-s = peter("How does fuel economy depend on weight?", cars = work$cars,
-          model = fake, envir = work, mode = auto)
-s$text
-#> [1] "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon."
-ls(work)
-#> [1] "cars" "fit"
-
-s |> peter("Reuse fit to predict mpg for the same cars.")
-#> The predictions are stored in predicted.
-#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . s56d828fb07
-head(work$predicted)
-#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
-#>          23.28261          21.91977          24.88595          20.10265
-#> Hornet Sportabout           Valiant
-#>          18.90014          18.79325
-s$turns
-#> [1] 2
-```
-
-The second turn uses the existing `fit` and `cars`. The same pattern
-works with a large object already in your workspace; this illustrative
-recipe does not allocate or load a 4 GB dataset:
-
-``` r
-# counts is a numeric matrix, around 4 GB, already loaded in this R session.
-s = peter("Compute colSums(counts) as totals and return the six largest totals.", counts)
-s |> peter("Reuse totals to plot their distribution.")
-```
-
-These calls use your configured model and the usual permission checks.
-The dataset stays available to R between turns; descriptions and
-requested results can contain data values and reach the provider. R
-memory pressure, object types and the requested calculation still
-matter. File-backed objects may read from disk through their own
-packages. A history document records the reusable code and decisions; it
-does not automatically save the input dataset.
-
-A System 1 question returns a typed R vector with the probabilities
-attached:
-
-``` r
-judge = gptr_fake_provider(function(state, question) {
-  if (grepl("randomized", paste(unlist(state), collapse = " "))) 0.93 else 0.08
-}, name = "judge", type = "classifier")
-abstracts = c(a = "We randomized 200 adults to drug or placebo.",
-              b = "We followed a cohort of nurses for 20 years.")
-is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge)
-is_rct
-#>              a              b
-#>  TRUE (p=0.93) FALSE (p=0.08)
-#> judge-s1-1.0 . calibration unknown . 2026-10-10
-gptr_prob(is_rct)
-#>    a    b
-#> 0.93 0.08
-```
-
-## With a real model
 
 Choose a provider explicitly before your first real call. API
 credentials and CLI sign-in are separate routes; see
 `vignette("language-models")`.
 
 ``` r
-gptr_env("~/keys/.env")          # ANTHROPIC_API_KEY, OPENAI_API_KEY, TYPESAFE_API_KEY, ...
+gptr_env("~/keys/.env")          # provider keys, e.g. OPENAI_API_KEY
 gptr_providers()                 # what is configured
 gptr_config(model = "openai/gpt-6-sol", .scope = "session")
 peter()                          # chat in the console
-
-res = peter("Fit a mixed model of weight on diet with a random intercept per mouse.", mice)
-res$value                        # the object the agent designated as its result
-
-if (peter("Is this abstract about a randomized controlled trial?", abstract, model = jev)) {
-  included = c(included, id)
-}
 ```
+
+## A first session
+
+With a configured model, tell Peter what to do:
+
+``` r
+library(gptr)
+session = peter("Fit mpg from wt in mtcars. Save the model as fit.", mtcars)
+session |> peter("Plot fit's residuals and explain what they show.")
+```
+
+The pipe continues the same session. The usual permission checks apply.
+
+<details>
+
+<summary>
+
+Run this pattern offline
+</summary>
+
+This scripted model needs no key or server. It supplies the tool code
+rather than generating it.
+
+``` r
+library(gptr)
+
+fake = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = "fit = lm(mpg ~ wt, data = mtcars)\ncoef(fit)")),
+  "Each 1000 lb of weight lowers mpg by about 5.3.",
+  list(tool = "r", input = list(code = "predicted = predict(fit)\nhead(predicted)")),
+  "The predictions are stored in predicted."
+))
+work = new.env()
+session = peter("Fit mpg from wt in mtcars. Save the model as fit.", mtcars,
+  model = fake, envir = work, mode = auto)
+session$text
+#> [1] "Each 1000 lb of weight lowers mpg by about 5.3."
+ls(work)
+#> [1] "fit"
+
+session |> peter("Reuse fit to predict mpg for the same cars.")
+#> The predictions are stored in predicted.
+#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . s188d555d79
+head(work$predicted)
+#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
+#>          23.28261          21.91977          24.88595          20.10265
+#> Hornet Sportabout           Valiant
+#>          18.90014          18.79325
+session$turns
+#> [1] 2
+```
+
+The second turn reuses `fit`.
+
+</details>
+
+The same pattern works with a large object already in your workspace.
+This recipe does not allocate or load a 4 GB dataset:
+
+``` r
+# counts is a numeric matrix, around 4 GB, already loaded in this R session.
+session = peter(
+  "Compute colSums(counts) as totals and return the six largest totals.",
+  counts
+)
+session |> peter("Reuse totals to plot their distribution.")
+```
+
+A System 1 question returns a typed R vector with the probabilities
+attached:
+
+<details>
+
+<summary>
+
+Offline typed-decision example
+</summary>
+
+``` r
+judge = gptr_fake_provider(list(0.93, 0.08), name = "judge", type = "classifier")
+abstracts = c(a = "We randomized 200 adults to drug or placebo.",
+              b = "We followed a cohort of nurses for 20 years.")
+is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts,
+  model = judge)
+as.logical(is_rct)
+#>     a     b
+#>  TRUE FALSE
+gptr_prob(is_rct)
+#>    a    b
+#> 0.93 0.08
+```
+
+</details>
 
 ## Local models with Ollama
 
-Ollama is a first-class optional provider with two roles:
+Installed Ollama chat models run agents, for example
+`model = "ollama/qwen3:1.7b"`. Clef and Clef Flash (Ollama 0.35.1 or
+later) return typed decisions, for example
+`model = "ollama/clef-flash"`. gptr never installs Ollama or downloads
+models, and by default never falls back to a cloud model; a workflow
+stays local only if every model and tool it uses is local.
 
-| Role | Support |
-|----|----|
-| Conversation and agent execution | Installed conversational models, with tools, images and other features enabled only when supported |
-| Native typed decisions | Clef and Clef Flash through Ollama's native decision API, alongside hosted Jev decisions |
+## Exporting recorded R
 
-Select them with `model = "ollama/<name>"`, for example
-`"ollama/qwen3:1.7b"` or `"ollama/clef-flash"`. Clef and Clef Flash
-require Ollama 0.35.1 or later and return decisions, not a
-conversational agent loop. Ollama and model weights are optional
-external requirements; gptr never installs them or downloads models.
+A synchronized `.R` history can become an ordinary R script or a script
+of `peter()` calls:
 
-The default Ollama policy is local-only, with explicit checks for
-inference locality and no automatic cloud fallback. A local model does
-not make a workflow local if another step sends data to a cloud model or
-network tool.
+``` r
+gptr_doc("analysis.R", sync = TRUE)
+gptr_export("analysis.R", "analysis-raw.R")
+gptr_export("analysis.R", "analysis-peter.R", format = "peter")
+```
+
+The default keeps recorded R executable and turns `peter()` calls into
+comments. The `format = "peter"` output keeps calls active and recorded
+code inert, with bounded output and notes beside the turns. Both
+preserve ordinary source and refuse stale or ambiguous records. Export
+does not run or verify the result, recover unrecorded console work, or
+save your input objects. See
+`vignette("script-as-history", package = "gptr")` for interleaved R and
+a second session.
 
 ## Learn more
 
@@ -201,11 +217,11 @@ MCP server or external program are shown without running them.
 | Understand execution, environments and result objects | `vignette("execution-model")` |
 | Inspect usage, budgets, caching and compaction | `vignette("token-efficiency")` |
 
-The function reference documents all 63 exports. In R, use
-`help(package = "gptr")`, `?peter`, `?gptr_options`, `?gptr_security`
-and `?gptr_egress`.
+The function reference documents the exported APIs. In R, use
+`help(package = "gptr")`, `?peter`, `?gptr_export`, `?gptr_options`,
+`?gptr_security` and `?gptr_egress`.
 
-## Why `peter()`?
+## Why Peter?
 
 The package is `gptr`; you talk to its agent through `peter()`. The name
 honors two Peters:
@@ -242,7 +258,3 @@ gitleaks (MIT license); see `inst/COPYRIGHTS`. Ideas were borrowed from
 on. Anthropic, OpenAI, Google, TypeSafe AI, Ollama and the vendors of
 the command-line tools are third-party services; gptr is not affiliated
 with or endorsed by them.
-
-## License
-
-MIT (c) Wanjun Gu.

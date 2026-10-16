@@ -261,19 +261,29 @@ build_version = function(id, lines, data = character(), envir = new.env()) {
   vdir
 }
 
-# Run artifact_serve() in a callr child as the launcher does; the child is killed when the
-# calling test ends
+# Run artifact_serve() in the native Rscript child as the launcher does; the child is killed
+# and its bootstrap removed when the calling test ends
 serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.frame()) {
   port_file = file.path(withr::local_tempdir(.local_envir = .env), "port")
   raw = withr::local_tempfile(fileext = ".log", .local_envir = .env)
-  p = callr::r_bg(artifact_serve,
-                  args = list(dir = vdir, port_file = port_file, parent_pid = parent_pid,
-                              token = token),
-                  stdout = raw, stderr = "2>&1", supervise = supervise_default(), package = FALSE,
-                  user_profile = FALSE, system_profile = FALSE,
-                  env = artifact_child_env(port_candidates(5L)), cleanup = TRUE,
-                  cleanup_tree = TRUE, encoding = "UTF-8", wd = vdir)
-  withr::defer(kill_all(p, grace = 0), envir = .env)
+  dir = tempfile("gptr-artifact-test-launch-")
+  stopifnot(dir.create(dir, mode = "0700"))
+  owner = new.env(parent = emptyenv())
+  owner$p = NULL
+  withr::defer({
+    if (is.null(owner$p) || isTRUE(kill_all(owner$p, grace = 0))) {
+      unlink(dir, recursive = TRUE)
+    } else {
+      stop("The artifact test child did not settle.")
+    }
+  }, envir = .env)
+  p = proc_rscript("artifact", args = list(dir = vdir, port_file = port_file,
+                                           parent_pid = parent_pid, token = token),
+                   dir = dir, env = artifact_child_env(port_candidates(5L)),
+                   stdout = raw, stderr = "2>&1", wd = vdir, .fun = artifact_serve,
+                   .on_spawn = function(p) {
+                     owner$p = p
+                   })
   deadline = Sys.time() + 30
   while (!file.exists(port_file) && p$is_alive() && Sys.time() < deadline) Sys.sleep(0.05)
   list(proc = p, port_file = port_file, raw = raw)
@@ -327,7 +337,8 @@ test_that("artifact_serve() publishes a loopback port and serves only requests w
   local_project()
   e = new.env()
   e$markers = data.frame(gene = c("CD14", "LYZ"))
-  vdir = build_version("served", ok_app, "markers", e)
+  vdir = build_version("served", c("stopifnot(!isNamespaceLoaded('gptr'))", ok_app),
+                        "markers", e)
   tok = artifact_token()
   ch = serve_child(vdir, tok)
   expect_true(file.exists(ch$port_file))
@@ -592,13 +603,18 @@ test_that("artifact_start() runs the ladder, records the run and keeps the port 
 test_that("an app whose page fails stops at the http stage with status failed", {
   skip_if_cannot_launch()
   local_project()
-  bad_page = c("library(shiny)", "ui = function(req) stop('the page failed')",
+  bad_page = c("library(shiny)",
+               "fail = function(n) if (n > 0L) fail(n - 1L) else stop('the page failed')",
+               "ui = function(req) fail(50L)",
                "server = function(input, output, session) {}", "shinyApp(ui, server)")
   version_one("page", bad_page)
   withr::defer(artifact_stop("page", emit = FALSE))
   cnd = expect_error(artifact_start("page", 1L, shiny_type()), class = "gptr_error_artifact")
   expect_identical(cnd$stage, "http")
   expect_match(conditionMessage(cnd), "HTTP 500", fixed = TRUE)
+  expect_match(conditionMessage(cnd), "the page failed", fixed = TRUE)
+  expect_true(any(grepl("the page failed", cnd$log, fixed = TRUE)))
+  expect_lte(length(cnd$log), 50L)
   expect_identical(artifact_status("page"), "failed")
   expect_false(artifact_meta_read("page")$versions[[1]]$checks$http)
 })
@@ -635,17 +651,22 @@ test_that("missing shiny is a missing_package error naming the feature", {
   expect_identical(cnd$feature, "artifacts")
 })
 
-test_that("artifact_serve() goes to callr without its source references (IC-70)", {
+test_that("the artifact launcher selects its standalone Rscript entry (IC-70)", {
   local_project()
-  fun = NULL
-  local_mocked_bindings(artifact_shiny_available = function() TRUE)
-  local_mocked_bindings(r_bg = function(func, ...) {
-    fun <<- func
+  seen = new.env(parent = emptyenv())
+  local_mocked_bindings(artifact_shiny_available = function() TRUE,
+                       proc_rscript = function(entry, args, dir, env, ..., .fun) {
+    seen$entry = entry
+    seen$fun = .fun
+    seen$dir = dir
+    seen$env = env
     stop("not started")
-  }, .package = "callr")
+  })
   expect_error(artifact_launch_shiny(artifact_version_dir("x", 1L), NULL), "not started")
-  # callr keeps the source files of nested functions, which can reach the package's state
-  expect_length(grepRaw("srcfile", serialize(fun, NULL), fixed = TRUE), 0L)
+  expect_identical(seen$entry, "artifact")
+  expect_identical(seen$fun, artifact_serve)
+  expect_false(anyNA(seen$env))
+  expect_false(dir.exists(seen$dir))
 })
 
 test_that("the viewer opens only when a human is present (13 C-42)", {
@@ -734,9 +755,16 @@ test_that("the shiny-bslib skill has its catalog line, house style and a valid e
   expect_match(txt, "peter$app(\"<id>\", data = c(\"obj\"))", fixed = TRUE)
   open = which(lines == "```r")
   expect_length(open, 1L)
+  expect_match(paste(lines[seq_len(open - 1L)], collapse = "\n"),
+               "sidebar = sidebar(...)", fixed = TRUE)
   close = which(lines == "```")
   code = lines[(open + 1L):(close[close > open][1L] - 1L)]
   expect_no_error(parse(text = code, keep.source = FALSE))
+  ui = Filter(function(x) {
+    is.call(x) && identical(x[[1L]], quote(`=`)) && identical(x[[2L]], quote(ui))
+  }, as.list(parse(text = code, keep.source = FALSE)))
+  expect_length(ui, 1L)
+  expect_identical(as.list(ui[[1L]][[3L]])[["fillable"]], FALSE)
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
   expect_true(artifact_static_check(code)$ok)
@@ -940,4 +968,283 @@ test_that("undo relaunches the version that was running, on the same port", {
   expect_identical(artifact_proc_get("rew")$version, 1L)
   expect_identical(artifact_proc_get("rew")$port, port)
   expect_identical(artifact_status("rew"), "running")
+})
+
+
+test_that("artifact bootstrap files survive unsettled cleanup and disappear after retry", {
+  dir = withr::local_tempdir()
+  writeLines("owned bootstrap", file.path(dir, "bootstrap.R"))
+  state = new.env(parent = emptyenv())
+  state$alive = TRUE
+  state$settled = FALSE
+  proc = list(is_alive = function() state$alive)
+  local_mocked_bindings(kill_all = function(p, grace) {
+    expect_identical(p, proc)
+    expect_true(grace %in% c(0, artifact_stop_grace))
+    state$settled
+  })
+  fns = artifact_proc_fns(proc, dir)
+  expect_false(fns$stop())
+  expect_true(dir.exists(dir))
+  state$alive = FALSE
+  expect_false(fns$alive())
+  expect_true(dir.exists(dir))
+  state$settled = TRUE
+  expect_true(fns$stop())
+  expect_false(dir.exists(dir))
+  expect_true(fns$stop())
+})
+
+test_that("an artifact constructor failure retains its captured child for cleanup retry", {
+  local_project()
+  seed_artifact("recover")
+  state = new.env(parent = emptyenv())
+  state$settled = FALSE
+  state$dir = NULL
+  withr::defer({
+    state$settled = TRUE
+    artifact_stop("recover", emit = FALSE)
+    if (!is.null(state$dir)) unlink(state$dir, recursive = TRUE)
+  })
+  proc = list(is_alive = function() FALSE, get_pid = function() 123L)
+  local_mocked_bindings(
+    artifact_shiny_available = function() TRUE,
+    proc_create_time = function(pid) 1,
+    kill_all = function(p, grace) state$settled,
+    proc_rscript = function(entry, args, dir, env, ..., .on_spawn) {
+      expect_identical(entry, "artifact")
+      expect_false(anyNA(env))
+      expect_true(dir.exists(dir))
+      state$dir = dir
+      .on_spawn(proc)
+      stop("controlled constructor failure")
+    }
+  )
+  expect_error(artifact_launch_shiny(artifact_version_dir("recover", 1L), NULL),
+               "controlled constructor failure")
+  rec = artifact_proc_get("recover")
+  expect_false(is.null(rec))
+  expect_identical(rec$pid, 123L)
+  expect_true(dir.exists(state$dir))
+  expect_identical(job_list("artifact")$id, "artifact:recover")
+  expect_false(artifact_stop("recover", emit = FALSE))
+  expect_identical(artifact_proc_get("recover"), rec)
+  state$settled = TRUE
+  expect_true(artifact_stop("recover", emit = FALSE))
+  expect_null(artifact_proc_get("recover"))
+  expect_false(dir.exists(state$dir))
+  expect_identical(nrow(job_list("artifact")), 0L)
+})
+
+
+test_that("artifact constructor cleanup cannot replace its original error or interrupt", {
+  local_project()
+  seed_artifact("original")
+  original_error = structure(list(message = "controlled constructor failure", call = NULL),
+                             class = c("artifact_launch_test", "error", "condition"))
+  original_interrupt = structure(list(message = "controlled launch interrupt", call = NULL),
+                                 class = c("interrupt", "condition"))
+  cleanup_interrupt = structure(list(message = "controlled cleanup interrupt", call = NULL),
+                                class = c("interrupt", "condition"))
+  state = new.env(parent = emptyenv())
+  state$dirs = character()
+  withr::defer({
+    unlink(state$dirs, recursive = TRUE)
+    if (!is.null(artifact_proc_get("original"))) {
+      rm(list = "original", envir = artifact_state$procs)
+    }
+    job_remove(artifact_job_id("original"))
+  })
+  proc = list(is_alive = function() FALSE, get_pid = function() 123L)
+  for (original in list(original_error, original_interrupt)) {
+    for (stage in c("kill", "log", "job")) {
+      local_mocked_bindings(
+        artifact_shiny_available = function() TRUE,
+        proc_create_time = function(pid) 1,
+        proc_rscript = function(..., dir, .on_spawn) {
+          state$dirs = c(state$dirs, dir)
+          .on_spawn(proc)
+          stop(original)
+        },
+        kill_all = function(...) {
+          if (stage == "kill") stop(cleanup_interrupt)
+          FALSE
+        },
+        artifact_log_sync = function(...) {
+          if (stage == "log") stop(cleanup_interrupt)
+          NULL
+        },
+        artifact_job_add = function(...) {
+          if (stage == "job") stop(cleanup_interrupt)
+          NULL
+        })
+      caught = tryCatch(artifact_launch_shiny(artifact_version_dir("original", 1L), NULL),
+                        error = identity, interrupt = identity)
+      expect_identical(caught, original)
+      expect_false(is.null(artifact_proc_get("original")))
+      expect_true(dir.exists(tail(state$dirs, 1L)))
+      rm(list = "original", envir = artifact_state$procs)
+    }
+  }
+})
+
+test_that("post-launch artifact cleanup cannot replace a registration condition", {
+  local_project()
+  seed_artifact("register")
+  original = structure(list(message = "controlled job registration failure", call = NULL),
+                       class = c("artifact_registration_test", "error", "condition"))
+  cleanup_interrupt = structure(list(message = "controlled cleanup interrupt", call = NULL),
+                                class = c("interrupt", "condition"))
+  handle = list(url = "http://127.0.0.1:50000/", pid = NA_integer_, port = 50000L,
+                alive = function() TRUE)
+  type = list(launch = function(...) handle, stop = function(handle) stop(cleanup_interrupt))
+  local_mocked_bindings(
+    artifact_wait_http = function(...) list(ok = TRUE),
+    artifact_job_add = function(...) stop(original),
+    artifact_log_sync = function(...) stop(cleanup_interrupt))
+  withr::defer({
+    if (!is.null(artifact_proc_get("register"))) {
+      rm(list = "register", envir = artifact_state$procs)
+    }
+  })
+  caught = tryCatch(artifact_start("register", 1L, type), error = identity, interrupt = identity)
+  expect_identical(caught, original)
+  rec = artifact_proc_get("register")
+  expect_false(is.null(rec))
+  expect_identical(rec$handle, handle)
+})
+
+
+test_that("a private artifact stop request exits before forced cleanup", {
+  dir = withr::local_tempdir()
+  request = file.path(path_norm(dir), "stop")
+  state = new.env(parent = emptyenv())
+  state$alive = TRUE
+  state$time = 10
+  state$waits = 0L
+  state$kills = 0L
+  proc = list(is_alive = function() state$alive, wait = function(milliseconds) {
+    state$waits = state$waits + 1L
+    expect_true(dir.exists(request))
+    expect_identical(milliseconds, 3000L)
+    state$time = 11
+    state$alive = FALSE
+  })
+  local_mocked_bindings(reactor_now = function() state$time,
+    kill_all = function(p, grace) {
+      state$kills = state$kills + 1L
+      expect_identical(p, proc)
+      expect_false(state$alive)
+      expect_identical(grace, 2)
+      TRUE
+    })
+  expect_true(dir.exists(dir))
+  fns = artifact_proc_fns(proc, dir, request)
+  expect_true(fns$stop())
+  expect_true(fns$settled())
+  expect_false(dir.exists(dir))
+  expect_identical(state$waits, 1L)
+  expect_identical(state$kills, 1L)
+  expect_true(fns$stop())
+  expect_identical(state$kills, 1L)
+})
+
+test_that("artifact cooperative wait and kill share one grace deadline", {
+  dir = withr::local_tempdir()
+  request = file.path(path_norm(dir), "stop")
+  state = new.env(parent = emptyenv())
+  state$time = 10
+  state$alive = TRUE
+  proc = list(is_alive = function() state$alive, wait = function(milliseconds) {
+    expect_true(dir.exists(request))
+    expect_identical(milliseconds, 3000L)
+    state$time = 13
+  })
+  local_mocked_bindings(reactor_now = function() state$time,
+    kill_all = function(p, grace) {
+      expect_identical(p, proc)
+      expect_identical(grace, 0)
+      expect_true(state$alive)
+      state$alive = FALSE
+      TRUE
+    })
+  expect_identical(artifact_stop_grace, 3)
+  expect_true(artifact_proc_fns(proc, dir, request)$stop())
+  expect_false(dir.exists(dir))
+})
+
+test_that("artifact stop keeps the request condition before fallback cleanup conditions", {
+  original = list(
+    structure(list(message = "fixed stop wait error", call = NULL),
+      class = c("artifact_stop_wait_test", "error", "condition")),
+    structure(list(message = "fixed stop wait interrupt", call = NULL),
+      class = c("interrupt", "condition")))
+  secondary = simpleError("fixed fallback cleanup error")
+  for (condition in original) {
+    dir = withr::local_tempdir()
+    request = file.path(path_norm(dir), "stop")
+    state = new.env(parent = emptyenv())
+    state$called = FALSE
+    proc = list(is_alive = function() TRUE, wait = function(milliseconds) stop(condition))
+    local_mocked_bindings(reactor_now = function() 10, kill_all = function(p, grace) {
+      expect_identical(p, proc)
+      expect_identical(grace, 3)
+      state$called = TRUE
+      stop(secondary)
+    })
+    expect_true(dir.exists(dir))
+    fns = artifact_proc_fns(proc, dir, request)
+    caught = tryCatch(fns$stop(), error = base::identity, interrupt = base::identity)
+    expect_identical(caught, condition)
+    expect_true(state$called)
+    expect_false(fns$settled())
+    expect_true(dir.exists(dir))
+    expect_true(dir.exists(request))
+  }
+  for (condition in original) {
+    for (stage in c("initial", "after_wait", "after_error")) {
+      dir = withr::local_tempdir()
+      request = file.path(path_norm(dir), "stop")
+      state = new.env(parent = emptyenv())
+      state$clock_calls = 0L
+      state$called = FALSE
+      proc = list(is_alive = function() TRUE, wait = function(milliseconds) {
+        if (stage == "after_error") stop(condition)
+        invisible(NULL)
+      })
+      local_mocked_bindings(reactor_now = function() {
+        state$clock_calls = state$clock_calls + 1L
+        if (stage == "initial" || state$clock_calls == 3L) {
+          if (stage == "after_error") stop(secondary)
+          stop(condition)
+        }
+        10
+      }, kill_all = function(p, grace) {
+        expect_identical(p, proc)
+        expect_identical(grace, 0)
+        state$called = TRUE
+        stop(secondary)
+      })
+      fns = artifact_proc_fns(proc, dir, request)
+      caught = tryCatch(fns$stop(), error = base::identity, interrupt = base::identity)
+      expect_identical(caught, condition)
+      expect_true(state$called)
+      expect_false(fns$settled())
+      expect_true(dir.exists(dir))
+    }
+  }
+})
+
+test_that("an artifact stop request cannot write outside its private bootstrap", {
+  dir = withr::local_tempdir()
+  foreign = withr::local_tempdir()
+  request = file.path(path_norm(foreign), "stop")
+  proc = list(is_alive = function() stop("must not probe a foreign stop request"))
+  expect_true(dir.exists(dir))
+  expect_true(dir.exists(foreign))
+  expect_error(artifact_proc_fns(proc, dir, request),
+    "The artifact stop request must stay inside its private launch directory.", fixed = TRUE)
+  expect_false(dir.exists(request))
+  expect_true(dir.exists(dir))
+  expect_true(dir.exists(foreign))
 })

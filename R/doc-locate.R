@@ -317,7 +317,8 @@ doc_new_transcript = function() {
   ws = workspace_dir()
   if (is.null(ws)) return(NULL)
   target = path_norm(file.path(ws, "transcripts",
-                               paste0("gptr-session-", format(Sys.time(), "%Y%m%d-%H%M%S"), ".R")))
+                               paste0("gptr-session-", with_calendar_preserved(
+                                 format(Sys.time(), "%Y%m%d-%H%M%S")), ".R")))
   doc_project_transcript(doc_rel(target))
   target
 }

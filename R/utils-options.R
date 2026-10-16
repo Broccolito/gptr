@@ -120,7 +120,7 @@ platform_gui = function() {
 #' `.Platform$GUI` identifies the IDE's own R process. The IDE environment variables (`RSTUDIO`,
 #' `POSITRON`, `TERM_PROGRAM`) are inherited by every child process started from the IDE, so they
 #' count only in an interactive session; a non-interactive child (an Rscript started from the
-#' IDE's terminal, a callr worker) is "rscript".
+#' IDE's terminal, an Rscript worker) is "rscript".
 #' @noRd
 front_end = function() {
   env = function(name) Sys.getenv(name, unset = "")
@@ -362,7 +362,7 @@ s3_register = function(generic, class, method = NULL) {
 #'   processes only.
 #' - `GPTR_LIVE_TESTS`: `"true"` enables the package's live tests; not used at run time.
 #' - `_R_CHECK_PACKAGE_NAME_`: set by `R CMD check`; outside the package's own tests gptr then
-#'   replays recorded document blocks only and runs at most two child processes at a time.
+#'   replays recorded document blocks only and caps each child-process pool at two.
 #'
 #' @seealso [gptr_config()] for settings stored in files, [gptr_security] and [gptr_egress];
 #'   `vignette("configuration", package = "gptr")` for scope, precedence and grouped examples.

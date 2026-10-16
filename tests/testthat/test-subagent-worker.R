@@ -229,14 +229,16 @@ local_active = function(.env = parent.frame()) {
   box = new.env(parent = emptyenv())
   box$active = 0L
   box$peak = 0L
-  ids = c(hook_add("subagent_start", function(event, ctx) {
+  callback = new.env(parent = baseenv())
+  callback$box = box
+  ids = c(hook_add("subagent_start", local(function(event, ctx) {
     box$active = box$active + 1L
     box$peak = max(box$peak, box$active)
     NULL
-  }), hook_add("subagent_end", function(event, ctx) {
+  }, envir = callback)), hook_add("subagent_end", local(function(event, ctx) {
     box$active = box$active - 1L
     NULL
-  }))
+  }, envir = callback)))
   withr::defer(for (id in ids) hook_remove(id), envir = .env)
   box
 }
@@ -437,19 +439,25 @@ test_that("a lazily loaded source file is a reference, a user's ships its lines 
   expect_match(gptr_describe(back$user), "x + 1", fixed = TRUE, all = FALSE)
 })
 
-test_that("worker_main() goes to callr without its source references (IC-70)", {
-  fun = NULL
-  local_mocked_bindings(r_bg = function(func, ...) {
-    fun <<- func
+test_that("a worker selects the installed Rscript entry without shipping its function (IC-70)", {
+  seen = new.env(parent = emptyenv())
+  local_mocked_bindings(proc_rscript = function(entry, args, ...) {
+    seen$entry = entry
+    seen$args = args
     stop("not started")
-  }, .package = "callr")
+  })
   st = new.env()
   st$spec = list(depth = 1L, settings = list(project_root = tempdir()))
   st$home = new.env()
+  st$home$unshipped = "p19-not-in-the-worker-bootstrap"
   withr::defer(unlink(st$dir, recursive = TRUE))
   expect_error(worker_spawn(st), "not started")
-  # callr drops a function's srcref but keeps the source files of its body, as above a promise
-  expect_length(grepRaw("srcfile", serialize(fun, NULL), fixed = TRUE), 0L)
+  expect_identical(seen$entry, "worker")
+  expect_identical(seen$args, list(file.path(st$dir, "spec.rds"),
+                                  st$result_path))
+  raw = serialize(seen$args, NULL)
+  expect_length(grepRaw("srcfile", raw, fixed = TRUE), 0L)
+  expect_length(grepRaw("p19-not-in-the-worker-bootstrap", raw, fixed = TRUE), 0L)
 })
 
 test_that("objects are shipped by name from the caller's environment", {
@@ -484,7 +492,7 @@ test_that("an explicit worker for a remote model is refused in replay mode befor
                class = "gptr_error_not_recorded")
 })
 
-# ---- real worker processes (skipped on CRAN; gptr must be installed for callr children) ------
+# ---- real worker processes (skipped on CRAN; gptr must be installed for Rscript children) ------
 
 # Worker children load gptr with library(): under R CMD check the installed package is on the
 # library path; from a source tree (devtools::test()) the tree is installed once per R session
@@ -663,4 +671,119 @@ test_that("builtin:subagents registers the worker backend, its provider and its 
   pr = registry_get("provider", "worker")
   expect_true(isTRUE(pr$offline) && isTRUE(pr$local))
   expect_identical(registry_get("adapter", "subagent-worker")$transport, "inprocess")
+})
+
+# A distinct native Windows witness; the existing Unix acceptance and its guard are unchanged.
+test_that(
+  "a Windows worker exits within 10 s after its acknowledged parent dies (IC-60)", {
+  skip_on_cran()
+  skip_if(.Platform$OS.type != "windows", "requires actual Windows worker parent-death runtime")
+  local_worker_lib()
+  x = wpd_run()
+  expect_true(x$owned_family_stopped)
+  expect_identical(x$sampling_errors, 0L)
+  expect_gte(x$samples, 1L)
+  expect_lte(x$peak_rss, 1024^3)
+  expect_lte(x$peak_disk, 64 * 1024^2)
+  expect_lte(x$elapsed, 60)
+  expect_identical(x$case_deadline, 30)
+  expect_identical(x$outer_deadline, 60)
+  expect_true(x$complete)
+  if (!x$complete) return(invisible(NULL))
+  expect_true(x$result$request_started)
+  expect_true(x$result$source_matches)
+  expect_true(x$result$unsupervised)
+  expect_true(x$result$worker_live_before_kill)
+  expect_true(x$result$parent_only_signal)
+  expect_true(x$result$parent_dead_before_cleanup)
+  expect_true(x$result$worker_exit_before_cleanup)
+  expect_lte(x$result$worker_exit_elapsed, 10)
+  expect_true(x$result$parent_settled)
+  expect_true(x$result$worker_settled)
+  expect_true(x$result$parent_marker_removed)
+  expect_true(x$result$worker_marker_removed)
+  expect_true(x$result$parent_record_removed)
+  expect_true(x$result$worker_dead_after_cleanup)
+  expect_true(x$result$environment_unchanged)
+  expect_true(x$result$options_unchanged)
+  expect_true(x$result$wd_unchanged)
+  expect_true(x$result$globals_unchanged)
+  expect_true(x$result$seed_unchanged)
+})
+
+
+test_that("unknown worker cost stays unknown through the result wire without warnings", {
+  local_project()
+  session = session_new("fake/fake-1", "auto", home = new.env())
+  data = session_data(session)
+  data$last_text = "done"
+  data$turns = 2L
+  data$usage = data.frame(request_id = c("qa", "qa", "qb"), input = c(3, 3, 10),
+    output = c(2, 2, 3), cache_read = 0, cache_write_5m = 0, cache_write_1h = 0,
+    reasoning = 0, cost = NA_real_)
+  io = local_worker_io()
+  worker_send(io$io, c(list(type = "result"), worker_outcome(session)))
+  wire = textConnectionValue(io$io$out)
+  expect_length(wire, 1L)
+  result = io$sent()[[1L]]
+  expect("cost" %in% names(result$usage) && is.null(result$usage$cost),
+         "Unknown worker cost must be JSON null.")
+  expect_identical(result$usage$input, 13L)
+  expect_identical(result$usage$output, 5L)
+  state = stub_worker_state()
+  state$result_path = tempfile()
+  local_mocked_bindings(worker_cleanup = function(st) invisible(TRUE))
+  worker_on_line(state, wire)
+  observed = new.env(parent = emptyenv())
+  observed$warnings = list()
+  withCallingHandlers(worker_on_exit(state, 0L), warning = function(e) {
+    observed$warnings[[length(observed$warnings) + 1L]] =
+      list(classes = class(e), message = conditionMessage(e))
+    invokeRestart("muffleWarning")
+  })
+  expect(identical(observed$warnings, list()), "Unknown worker usage must not warn.")
+  usage = state$final[[length(state$final)]]$message$usage
+  expect_identical(usage$input, 13)
+  expect_identical(usage$output, 5)
+  expect_identical(usage$cache_read, 0)
+  expect_identical(usage$cost$total, NA_real_)
+  expect_true(state$exited)
+})
+
+test_that("unknown worker counters preserve known zeros and cost through the result wire", {
+  local_project()
+  session = session_new("fake/fake-1", "auto", home = new.env())
+  data = session_data(session)
+  data$usage = data.frame(request_id = c("qa", "qb"), input = c(NA_real_, 3),
+    output = c(2, 3), cache_read = 0, cache_write_5m = c(4, 6), cache_write_1h = 0,
+    reasoning = c(NA_real_, 0), cost = c(0.01, 0.02))
+  io = local_worker_io()
+  worker_send(io$io, c(list(type = "result"), worker_outcome(session)))
+  wire = textConnectionValue(io$io$out)
+  expect_length(wire, 1L)
+  result = io$sent()[[1L]]
+  expect(is.null(result$usage$input) && is.null(result$usage$reasoning),
+         "Unknown worker counters must be JSON null.")
+  expect_identical(result$usage$cache_read, 0L)
+  expect_identical(result$usage$cost, 0.01 + 0.02)
+  state = stub_worker_state()
+  state$result_path = tempfile()
+  local_mocked_bindings(worker_cleanup = function(st) invisible(TRUE))
+  worker_on_line(state, wire)
+  observed = new.env(parent = emptyenv())
+  observed$warnings = list()
+  withCallingHandlers(worker_on_exit(state, 0L), warning = function(e) {
+    observed$warnings[[length(observed$warnings) + 1L]] =
+      list(classes = class(e), message = conditionMessage(e))
+    invokeRestart("muffleWarning")
+  })
+  expect(identical(observed$warnings, list()), "Unknown worker usage must not warn.")
+  usage = state$final[[length(state$final)]]$message$usage
+  expect_identical(usage$input, NA_real_)
+  expect_identical(usage$reasoning, NA_real_)
+  expect_identical(usage$output, 5)
+  expect_identical(usage$cache_read, 0)
+  expect_identical(usage$cache_write_5m, 10)
+  expect_identical(usage$cache_write_1h, 0)
+  expect_identical(usage$cost$total, 0.01 + 0.02)
 })

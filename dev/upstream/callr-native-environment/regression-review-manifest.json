@@ -1,0 +1,97 @@
+{
+  "status": "prepared-source-only-followup-26cab",
+  "local_execution": false,
+  "runtime_changes": false,
+  "upstream_source": {
+    "repo": "r-lib/callr",
+    "tag": "v3.8.0",
+    "commit": "6a7dd7a51dbf16b3a28819264aa2db04c960399f",
+    "r_process_sha256": "dccd0094968c0ab7be6e75695ab7d0bc6182449ac32c18e1c253f58fb0888f50",
+    "hook_sha256": "314a7d7d303726aacb9cf96fad1430d7cb4989f37027ef0b87f7eed42df3d8a9",
+    "setup_sha256": "0645d37997eb47ab3e3cb607ac353b405a0f45c5ac6d57326c4a2b7a4e211451"
+  },
+  "baseline": {
+    "helper": "12bb42e6108e227710f808d58a50a7e5bdc9625ee51ac59f9ebe2563cc8eda30",
+    "strict_test": "6bf59d2698a827a2520a2f1238e8a6376c75c66d925f7da38fccc13b12c450b9",
+    "watchdog": "dac94346dcec3c3058595ce073951ece5645035841398c1ca424b9106198f27f",
+    "existing_ci_runner": "a642f29715a13e493531663f8c0b857bdd185e4f332f1439327c51ab24ab2974",
+    "existing_ci_units": "d574f42e659392c23ebda9db7ba2877edeebcb82060e8a1ee4937eb39eea7f19",
+    "existing_lint": "0d3ed62fb1e4c32fc302508fa6b9038817a3a0d0f547838d5159f8fb15b4436c",
+    "retained_windows_source": "d53b313df5e2d384657e8c8ae7bcaa2b0879e9ca",
+    "retained_windows_pass": 48,
+    "retained_windows_fail": 8
+  },
+  "amended": {
+    "tests/testthat/helper-callr-parent-environment.R": "e7a46864b246d6de2f4788afdb2ae524da9f96b27ac46dc6a61beca52cb67f14",
+    "tests/testthat/test-callr-parent-environment.R": "d1ca48d88c0378f7a4b628202301d9c52ff9bbdf0c707e61cf6e61bd90aeb459",
+    "tests/testthat/test-callr-startup-admission.R": "82d9ed1d825a54d53fd286ecbc4285dae72c57700d1d8aede20071b0d4921654",
+    "tests/testthat/helper-proc-backpressure.R": "e6f579c08acd9ebfe66b238da803f532dbf9adafa8bef572051a8235ddd75bba"
+  },
+  "patches": {
+    "strict-regressions.patch": "f405437808e43f1f709add915646e5b3902f55fb53c12161023b79707da0c542",
+    "startup-admission.patch": "b509914b417fc592c0f7754a853d785aaf99f6efd741445137bd2a9b5797bd97"
+  },
+  "strict": {
+    "file": "test-callr-parent-environment.R",
+    "original_cases": 2,
+    "added_cases": 4,
+    "titles": [
+      "a native callr worker launch preserves actual-empty parent entries and its r_process contract",
+      "a native callr artifact launch preserves actual-empty parent entries and its r_process contract",
+      "a native callr worker value matrix preserves empty absent Unicode and mixed-case environment states",
+      "a native callr artifact value matrix preserves empty absent Unicode and mixed-case environment states",
+      "a native callr startup failure preserves parent state and error transport",
+      "cancelling a native callr child preserves parent state and settles its exact owner"
+    ]
+  },
+  "admission": {
+    "file": "test-callr-startup-admission.R",
+    "separate_status_required": true,
+    "titles": [
+      "a native callr child restores inherited absent states for all seven startup and library variables",
+      "a native callr child restores inherited empty states for all seven startup and library variables",
+      "a native callr child restores inherited nonempty states for all seven startup and library variables",
+      "a native callr PATH removal preserves its owned parent and requests child absence"
+    ],
+    "possible_known_red": [
+      "R startup removes native-empty library seeds",
+      "common_hook cannot restore native-empty entries",
+      "processx reinserts missing essential PATH"
+    ]
+  },
+  "limits": {
+    "case_seconds": 30,
+    "outer_seconds": 60,
+    "rss_bytes": 1073741824,
+    "owned_output_bytes": 67108864,
+    "file_supervisor_seconds": 300
+  },
+  "preservation": {
+    "original_helper_prefix": true,
+    "original_test_prefix": true,
+    "no_new_skip_allowance": true,
+    "no_parent_environment_normalization": true,
+    "no_downstream_whole_environment_equivalence_claim": true,
+    "selected_unix_alias_requires_old_and_new_exact_values": true,
+    "selected_windows_alias_requires_one_folded_entry": true,
+    "startup_admission_can_be_red_on_both_hosts": true
+  },
+  "followup": {
+    "source_sha": "e733a7bc2f9719007885f17a37641a0526fa3d38",
+    "actual_run_id": 38180103676,
+    "fixture_io_patch_sha256": "88935e494a4f323869d472e6bcf0fb7b3e242885a7383e21249b3107b0a9d261",
+    "observer_metadata_patch_sha256": "cad97030b2aaba6138f780ac1fef397b2d08f2f52668863e4f7911b12d96ece9",
+    "original_helper_prefix_5896_bytes_preserved": true,
+    "original_strict_cases_unchanged": true,
+    "assertion_count_or_limits_changed": false,
+    "new_execution": "PENDING"
+  },
+  "followup_26cab": {
+    "source_sha": "26cab5af1d593bc51a57a6149c76ffd88c89358e",
+    "actual_run_id": 38181009987,
+    "hook_fixture_sha256": "e7a46864b246d6de2f4788afdb2ae524da9f96b27ac46dc6a61beca52cb67f14",
+    "custom_hook_appended_once_after_default_vector": true,
+    "strict_and_admission_assertions_or_limits_changed": false,
+    "native_execution": "PENDING"
+  }
+}

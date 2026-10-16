@@ -243,23 +243,61 @@ bridge_py_source = c(
 #' (its discovery ends in a uv-managed download; G5 item 21)
 #' @noRd
 bridge_py_main = function() {
-  if (!requireNamespace("reticulate", quietly = TRUE)) {
-    gptr_abort("peter$py() needs the 'reticulate' package.", "missing_package",
-               package = "reticulate", feature = "peter$py()")
+  with_seed_preserved({
+  setup_options = options("reticulate.uv_binary", "ambiguousMethodSelection")
+  on.exit(options(setup_options), add = TRUE)
+  keys = c("PATH", "VIRTUAL_ENV", "R_SESSION_INITIALIZED", "LD_LIBRARY_PATH",
+           "PYTHONPATH", "PYTHONIOENCODING")
+  windows = is_windows()
+  key = if (windows) toupper else identity
+  before = Sys.getenv()
+  before = before[key(names(before)) %in% keys]
+  if (anyDuplicated(key(names(before)))) {
+    gptr_abort("Python setup cannot preserve ambiguous environment names.", "not_available",
+               member = "py", provided_by = "reticulate")
   }
-  vars = c("RETICULATE_PYTHON", "RETICULATE_PYTHON_ENV", "VIRTUAL_ENV")
-  if (!reticulate::py_available(initialize = FALSE) && !any(nzchar(Sys.getenv(vars)))) {
-    gptr_abort(c("Python is not configured for peter$py().",
-                 paste("Set RETICULATE_PYTHON (or RETICULATE_PYTHON_ENV), activate a virtual",
-                       "environment, or initialise Python yourself (reticulate::py_config());",
-                       "gptr never lets reticulate download a managed Python.")),
-               "not_available", member = "py", provided_by = "reticulate")
+  restore = function() {
+    isTRUE(tryCatch(env_restore_python(before, keys, windows), error = function(error) FALSE,
+                   interrupt = function(interrupt) FALSE))
   }
-  main = reticulate::import_main(convert = FALSE)
-  if (!reticulate::py_has_attr(main, "_gptr_run")) {
-    reticulate::py_run_string(paste(bridge_py_source, collapse = "\n"), convert = FALSE)
+  failed = function(condition) {
+    if (!restore()) {
+      tryCatch(gptr_warn("Python setup failed and its environment could not be restored.",
+                         "state_restore", member = "py", env_restored = FALSE),
+               error = function(error) NULL, interrupt = function(interrupt) NULL)
+    }
+    stop(condition)
+  }
+  main = tryCatch({
+    if (!requireNamespace("reticulate", quietly = TRUE)) {
+      gptr_abort("peter$py() needs the 'reticulate' package.", "missing_package",
+                 package = "reticulate", feature = "peter$py()")
+    }
+    initialized = reticulate::py_available(initialize = FALSE)
+    if (!initialized && windows && any(before == "")) {
+      gptr_abort("Python setup cannot restore existing empty Windows environment values.",
+                 "not_available", member = "py", provided_by = "reticulate")
+    }
+    vars = c("RETICULATE_PYTHON", "RETICULATE_PYTHON_ENV", "VIRTUAL_ENV")
+    if (!initialized && !any(nzchar(Sys.getenv(vars)))) {
+      gptr_abort(c("Python is not configured for peter$py().",
+                   paste("Set RETICULATE_PYTHON (or RETICULATE_PYTHON_ENV), activate a virtual",
+                         "environment, or initialise Python yourself (reticulate::py_config());",
+                         "gptr never lets reticulate download a managed Python.")),
+                 "not_available", member = "py", provided_by = "reticulate")
+    }
+    main = reticulate::import_main(convert = FALSE)
+    if (!reticulate::py_has_attr(main, "_gptr_run")) {
+      reticulate::py_run_string(paste(bridge_py_source, collapse = "\n"), convert = FALSE)
+    }
+    main
+  }, error = failed, interrupt = failed)
+  if (!restore()) {
+    gptr_abort("Python setup could not restore its environment.", "not_available",
+               member = "py", provided_by = "reticulate", env_restored = FALSE)
   }
   main
+  })
 }
 
 #' All display lines of a gptr_py: output, then the repr of the last value, then the error
@@ -275,6 +313,7 @@ bridge_py_lines = function(x) {
 #' are attributes (P22 self-review 3).
 #' @noRd
 bridge_py = function(code, name = NULL, max_rows = 10L) {
+  with_seed_preserved({
   src_lines = bridge_chr(code)
   check_strings(src_lines, "code")
   rows = check_number(max_rows %||% 10L, "max_rows", min = 1, int = TRUE)
@@ -302,6 +341,7 @@ bridge_py = function(code, name = NULL, max_rows = 10L) {
                    seconds = reactor_now() - t0, bytes_out = nchar(text, type = "bytes"),
                    bytes_err = nchar(r$err, type = "bytes"), spill = NULL, digest = digest))
   x
+  })
 }
 
 #' Fields of a Python result: `$value` converts the last Python value to R through reticulate;
@@ -312,7 +352,9 @@ bridge_py = function(code, name = NULL, max_rows = 10L) {
 #' @export
 #' @noRd
 `$.gptr_py` = function(x, name) {
-  if (identical(name, "value")) return(reticulate::py_to_r(attr(x, "py", exact = TRUE)))
+  if (identical(name, "value")) {
+    return(with_seed_preserved(reticulate::py_to_r(attr(x, "py", exact = TRUE))))
+  }
   if (name %in% c("error", "kind", "id")) return(attr(x, name, exact = TRUE))
   .subset2(x, name)
 }
@@ -411,7 +453,7 @@ bridge_knit = function(engine, code) {
                       timeout = bridge_knit_timeout(), bridge = "knit", label = engine, level = 3L)
     return(bridge_text(bridge_cmd_lines(res), out_id = res$id))
   }
-  if (!requireNamespace("knitr", quietly = TRUE)) {
+  if (!with_seed_preserved(requireNamespace("knitr", quietly = TRUE))) {
     gptr_abort("peter$knit() needs the 'knitr' package for this engine.", "missing_package",
                package = "knitr", feature = "peter$knit()")
   }

@@ -690,7 +690,7 @@ s1_summary = function(out, meta) {
     paste("mean", format(round(mean(v, na.rm = TRUE), 2)))
   }
   paste0(class(out)[1L], ": ", body, " (", meta$model %||% "unknown", ", ",
-         meta$date %||% format(Sys.Date()), ")")
+         meta$date %||% with_calendar_preserved(format(Sys.Date())), ")")
 }
 
 #' JSON-able copies of at most 50 values (NA becomes JSON null)
@@ -796,7 +796,7 @@ s1_meta = function(prompt, target, got) {
   }
   list(model = got$version %||% target$alias, alias = target$alias,
        engine = res[["engine"]] %||% target$engine, calibrated = calibrated,
-       question = prompt, date = format(Sys.Date()), cached = got$cached,
+       question = prompt, date = with_calendar_preserved(format(Sys.Date())), cached = got$cached,
        errors = s1_errors_df(got$conditions), usage = usage,
        request_ids = res[["request_ids"]] %||% character(),
        provider = prov[["provider"]], api = prov[["api"]], execution = prov[["execution"]],

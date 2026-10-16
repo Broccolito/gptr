@@ -47,7 +47,8 @@ records of the turns being left (newest first), redoes the records of a target o
 branch (oldest first) and appends one \code{gptr.rewind} entry parented at the target (the session
 file stays append-only and the rewind survives a reload). It hands back the undone prompt in
 \code{s$editor_text} and returns \code{s} invisibly, so it pipes:
-\code{s |> gptr_rewind() |> peter("Try another way")}. Use \code{\link[=gptr_fork]{gptr_fork()}} for a second session.
+\code{session |> gptr_rewind() |> peter("Try another way")}. Use \code{\link[=gptr_fork]{gptr_fork()}} for a second
+session.
 
 \code{gptr_checkpoints()} lists one row per turn of the active path (\code{all = TRUE} adds the turns of
 abandoned branches): \code{turn}; \code{id}, the last entry of the turn (pass it as \code{to} to
@@ -97,13 +98,13 @@ op = options(gptr.project_root = d)
 fake = gptr_fake_provider(list(
   list(tool = "r", input = list(code = "x = 1")), "Made x.",
   list(tool = "r", input = list(code = "x = x + 1")), "Added one."))
-e = new.env()
-s = peter("Make x", model = fake, mode = "auto", envir = e)
-s |> peter("Add one to x")
-e$x
-s |> gptr_rewind()
-e$x
-s$editor_text
-gptr_checkpoints(s, all = TRUE)
+work = new.env()
+session = peter("Make x", model = fake, mode = auto, envir = work)
+session |> peter("Add one to x")
+work$x
+session |> gptr_rewind()
+work$x
+session$editor_text
+gptr_checkpoints(session, all = TRUE)
 options(op)
 }

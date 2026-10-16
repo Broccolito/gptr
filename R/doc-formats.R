@@ -463,7 +463,8 @@ doc_console_statement = function(text, site) {
 doc_transcript_header = function(text, site) {
   id = site[["session_id"]] %||% "unknown"
   if (any(startsWith(text, paste0("# gptr session ", id, " ")))) return(character())
-  head = c(paste0("# gptr session ", id, " -- started ", format(Sys.time(), "%Y-%m-%d %H:%M:%S")),
+  head = c(paste0("# gptr session ", id, " -- started ",
+                 with_calendar_preserved(format(Sys.time(), "%Y-%m-%d %H:%M:%S"))),
            paste0("# machine log: ", site[["session_file"]] %||% "(none)"))
   if (!length(text)) {
     head = c(head, "# source() this file to replay the recorded code without calling a model;",

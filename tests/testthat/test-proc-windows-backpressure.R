@@ -1,0 +1,330 @@
+# Real Windows coverage of D-019; Unix executes the same control cases. The only skip is
+# the repository-required CRAN process-test gate. A separate parent bounds native hangs.
+test_that("real child duplex backpressure preserves every 4 MB stdout and stderr line", {
+  skip_on_cran()
+  x = bp_run("duplex")
+  if (!bp_expect_bounded(x)) return(invisible(NULL))
+  expect_true(x$result$complete)
+  expect_identical(x$result$output_lines, 40000L)
+  expect_identical(x$result$error_lines, 40000L)
+  expect_true(x$result$exact_stdout)
+  expect_true(x$result$exact_stderr)
+  expect_identical(x$result$status, 0L)
+  expect_identical(x$result$exit_callbacks, 1L)
+})
+
+test_that("a real no-reader child returns the typed stdin timeout under external bounds", {
+  skip_on_cran()
+  x = bp_run("timeout")
+  if (!bp_expect_bounded(x)) return(invisible(NULL))
+  expect_true(x$result$timeout_class)
+  expect_identical(x$result$what, "stdin")
+  expect_identical(x$result$seconds, 2)
+  if (.Platform$OS.type == "windows") {
+    failure = x$result$case_failure
+    expect_identical(failure$stage, "delivery")
+    accepted = failure$accepted_bytes
+    expect_true(is.numeric(accepted) && length(accepted) == 1L &&
+      is.finite(accepted) && accepted >= 0)
+    expect_identical(names(failure$writer_phases),
+      c("decode", "identity", "acl_start", "acl_wait", "acl_done", "validated", "ready"))
+    expect_identical(names(failure$writer_acl_phases),
+      c("enter", "absent", "created", "readback", "verified", "owner", "exit_ok"))
+  }
+  expect_identical(x$result$exit_callbacks, 0L)
+})
+
+test_that("a real queued 4 MB write leaves reactor cancellation responsive with no late exit", {
+  skip_on_cran()
+  x = bp_run("cancel")
+  if (!bp_expect_bounded(x)) return(invisible(NULL))
+  expect_true(x$result$queued)
+  expect_true(x$result$complete)
+  expect_true(x$result$cancelled)
+  expect_identical(x$result$exit_callbacks, 0L)
+})
+
+# These deterministic controls reuse the real drain/diagnostic/ACK code without a child.
+test_that("Windows writer startup progress cannot extend the stdin deadline", {
+  x = rw_local_state()
+  x$st$private = FALSE
+  x$st$pending = NULL
+  x$st$startup_t0 = 0
+  x$st$expression_bytes = 100L
+  x$b$busy = FALSE
+  x$b$waited = TRUE
+  x$b$failed = FALSE
+  x$b$error = NULL
+  x$b$p$get_pid = function() 42L
+  class(x$b$p) = "process"
+  r = new.env(parent = emptyenv())
+  r$stdin = new.env(parent = emptyenv())
+  r$stdin[["42"]] = x$b
+  seen = new.env(parent = emptyenv())
+  seen$now = 1.99
+  seen$stops = 0L
+  seen$closes = 0L
+  seen$diagnostics = paste0("GPTR_STDIN_STAGE ",
+    c("decode 0.100000", "identity 0.200000", "acl_start 0.300000", "acl_wait 0.400000"),
+    "\n", collapse = "")
+  x$st$p$read_error = function(n) {
+    text = seen$diagnostics
+    seen$diagnostics = ""
+    text
+  }
+  x$b$p$get_input_connection = function() {
+    seen$closes = seen$closes + 1L
+    NULL
+  }
+  testthat::local_mocked_bindings(is_windows = function() TRUE,
+    reactor_now = function() seen$now, proc_writer_start = function(...) x$st,
+    proc_writer_get = function(p) if (identical(p, x$b$p)) x$st else NULL,
+    proc_writer_stop = function(p) {
+      expect_identical(p, x$b$p)
+      seen$stops = seen$stops + 1L
+      TRUE
+    })
+  reactor_drain_child(r, "42", x$b)
+  expect_false(x$b$failed)
+  expect_identical(x$b$last, 0)
+  expect_identical(x$b$pos, 0L)
+  expect_identical(names(x$st$phases), c("decode", "identity", "acl_start", "acl_wait"))
+  expect_false(any(startsWith(list.files(x$st$dir), "in-")))
+  seen$now = 2
+  reactor_drain_child(r, "42", x$b)
+  expect_s3_class(x$b$error, "gptr_error_timeout")
+  expect_identical(x$b$error$seconds, 2)
+  expect_identical(x$b$error$writer_stage, "startup")
+  expect_identical(x$b$error$accepted_bytes, 0L)
+  expect_false(any(startsWith(list.files(x$st$dir), "in-")))
+  expect_length(ls(r$stdin), 0L)
+  expect_identical(seen$stops, 1L)
+  expect_identical(seen$closes, 1L)
+})
+
+test_that("Windows writer delivery deadline advances only on acknowledged bytes", {
+  x = rw_local_state()
+  x$st$startup_t0 = 0
+  x$st$startup_elapsed = 0.6
+  x$st$expression_bytes = 100L
+  x$st$phases = c(decode = 0.1, identity = 0.2, acl_start = 0.3,
+    acl_wait = 0.4, acl_done = 0.5, validated = 0.5, ready = 0.6)
+  x$st$acl_phases = c(enter = 0.4, absent = 0.4, created = 0.4,
+    readback = 0.4, verified = 0.4, owner = 0.4, exit_ok = 0.5)
+  x$b$busy = FALSE
+  x$b$waited = TRUE
+  x$b$failed = FALSE
+  x$b$error = NULL
+  x$b$p$get_pid = function() 42L
+  class(x$b$p) = "process"
+  file.create(file.path(x$st$dir, "ready"))
+  file.create(file.path(x$st$dir, "ack-000000000001-000003"))
+  r = new.env(parent = emptyenv())
+  r$stdin = new.env(parent = emptyenv())
+  r$stdin[["42"]] = x$b
+  seen = new.env(parent = emptyenv())
+  seen$now = 1
+  seen$stops = 0L
+  seen$closes = 0L
+  x$b$p$get_input_connection = function() {
+    seen$closes = seen$closes + 1L
+    NULL
+  }
+  testthat::local_mocked_bindings(is_windows = function() TRUE,
+    reactor_now = function() seen$now, proc_writer_start = function(...) x$st,
+    proc_writer_get = function(p) if (identical(p, x$b$p)) x$st else NULL,
+    proc_writer_stop = function(p) {
+      expect_identical(p, x$b$p)
+      seen$stops = seen$stops + 1L
+      TRUE
+    })
+  reactor_drain_child(r, "42", x$b)
+  expect_identical(x$b$pos, 3)
+  expect_identical(x$b$last, 1)
+  expect_false(x$b$failed)
+  seen$now = 2.99
+  reactor_drain_child(r, "42", x$b)
+  expect_false(x$b$failed)
+  expect_identical(x$b$last, 1)
+  seen$now = 3
+  reactor_drain_child(r, "42", x$b)
+  expect_s3_class(x$b$error, "gptr_error_timeout")
+  expect_identical(x$b$error$seconds, 2)
+  expect_identical(x$b$error$writer_stage, "delivery")
+  expect_identical(x$b$error$accepted_bytes, 3)
+  expect_identical(x$b$last, 1)
+  expect_length(ls(r$stdin), 0L)
+  expect_identical(seen$stops, 1L)
+  expect_identical(seen$closes, 1L)
+})
+
+# Cold standalone actor controls: only the platform-specific ACL creator is a fixed fixture.
+# The original actor body, ownership validator, parser, drain and byte acknowledgements run.
+writer_cold_control = function(case) {
+  root = withr::local_tempdir()
+  old = options(gptr.stdin_timeout = 2, gptr.supervise = FALSE)
+  on.exit(options(old), add = TRUE)
+  rscript = rscript_path()
+  p = NULL
+  on.exit({
+    if (!is.null(p)) kill_all(p, grace = 0)
+    reactor_shutdown()
+  }, add = TRUE, after = FALSE)
+  target = file.path(root, "target.R")
+  target_code = if (case == "numeric") {
+    c("cat('READY\\n'); flush(stdout())", "con = file('stdin', 'rb')",
+      "x = readBin(con, 'raw', n = 4L)",
+      "cat('SUM ', sum(as.integer(x)), '\\n', sep = ''); flush(stdout())")
+  } else if (case == "echo") {
+    c("cat('READY\\n'); flush(stdout())", "con = file('stdin', 'rb')",
+      "repeat { x = readLines(con, n = 1L, warn = FALSE)",
+      "if (!length(x)) break; cat(x, '\\n', sep = ''); flush(stdout()) }")
+  } else {
+    c("cat('READY\\n'); flush(stdout())", "con = file('stdin', 'rb')",
+      "received = 0L; while (received < 65536L) {",
+      "x = readBin(con, 'raw', n = 65536L - received)",
+      "stopifnot(length(x) > 0L, all(x == as.raw(65L)))",
+      "received = received + length(x) }",
+      "cat('PREFIX ', received, '\\n', sep = ''); flush(stdout()); Sys.sleep(30)")
+  }
+  writeLines(target_code, target)
+  p = proc_spawn(rscript, c("--vanilla", "--default-packages=NULL", target),
+    env = child_env("worker"), stdin = "|", supervise = FALSE)
+  seen = new.env(parent = emptyenv())
+  seen$out = character()
+  seen$exits = 0L
+  seen$status = NULL
+  seen$args = NULL
+  reactor_proc(p, function(line) seen$out = c(seen$out, line), function(status) {
+    seen$exits = seen$exits + 1L
+    seen$status = status
+  })
+  stopifnot(reactor_pump(until = function() "READY" %in% seen$out, timeout = 10))
+  acl = file.path(root, "acl.R")
+  writeLines(c("args = commandArgs(TRUE); dir = args[[1L]]; marker = args[[2L]]",
+    "stopifnot(!file.exists(dir), !dir.exists(dir))",
+    "cat('GPTR_STDIN_ACL enter\\nGPTR_STDIN_ACL absent\\n'); flush(stdout())",
+    "stopifnot(dir.create(dir, mode = '0700'))",
+    "cat('GPTR_STDIN_ACL created\\nGPTR_STDIN_ACL readback\\n'); flush(stdout())",
+    "stopifnot(dir.exists(dir), !nzchar(Sys.readlink(dir)))",
+    "cat('GPTR_STDIN_ACL verified\\n'); flush(stdout())",
+    "writeBin(charToRaw(marker), file.path(dir, 'owner'))",
+    "cat('GPTR_STDIN_ACL owner\\n'); flush(stdout())"), acl)
+  home = new.env(parent = environment(proc_writer_start))
+  start = proc_writer_start
+  environment(start) = home
+  shell = file.path(Sys.getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0",
+    "powershell.exe")
+  home$file.exists = function(path) identical(path, shell) || file.exists(path)
+  main = proc_writer_main
+  original_body = as.list(body(main))[-1L]
+  body(main) = as.call(c(list(as.name("{"), quote(saveRDS(search(), meta$probe))), original_body))
+  encoder = proc_writer_source
+  encoded_home = new.env(parent = environment(encoder))
+  encoded_home$proc_writer_main = main
+  environment(encoder) = encoded_home
+  code_home = new.env(parent = environment(proc_writer_code))
+  code_home$proc_writer_source = encoder
+  code = proc_writer_code
+  environment(code) = code_home
+  home$proc_writer_code = function(meta) {
+    meta$shell = rscript
+    meta$args = c("--vanilla", "--default-packages=NULL", acl, meta$dir, meta$marker)
+    meta$probe = file.path(root, "actor-search.rds")
+    code(meta)
+  }
+  home$proc_spawn = function(command, args, ...) {
+    seen$args = args
+    proc_spawn(command, args, ...)
+  }
+  drain_home = new.env(parent = environment(proc_writer_drain))
+  drain_home$proc_writer_start = start
+  drain_home$is_windows = function() TRUE
+  writer_drain = proc_writer_drain
+  environment(writer_drain) = drain_home
+  drain_home$proc_writer_drain = writer_drain
+  drain = reactor_drain_child
+  environment(drain) = drain_home
+  fail = reactor_stdin_fail
+  environment(fail) = drain_home
+  drain_home$reactor_stdin_fail = fail
+  r = reactor_get()
+  key = as.character(p$get_pid())
+  lines = paste0("row-", seq_len(500L), "-", strrep("x", 390L))
+  bytes = if (case == "numeric") as.raw(c(0, 1, 2, 255)) else if (case == "echo") {
+    charToRaw(paste0(paste(lines, collapse = "\n"), "\n"))
+  } else {
+    as.raw(rep(65L, 4L * 1024L * 1024L))
+  }
+  depth = r$depth
+  r$depth = depth + 1L
+  tryCatch(write_all(p, bytes), finally = {
+    r$depth = depth
+  })
+  b = r$stdin[[key]]
+  t0 = reactor_now()
+  deadline = t0 + 10
+  state = NULL
+  repeat {
+    drain(r, key, b)
+    if (is.null(state)) state = proc_writer_get(p)
+    reactor_read_procs(r)
+    if (!identical(r$stdin[[key]], b)) break
+    stopifnot(reactor_now() < deadline)
+    p$poll_io(10L)
+  }
+  elapsed = reactor_now() - t0
+  startup = if (!is.null(b$error)) b$error$startup_elapsed else state$startup_elapsed
+  search = readRDS(file.path(root, "actor-search.rds"))
+  expect_identical(seen$args[[2L]], "--default-packages=NULL")
+  expect_identical(search, c(".GlobalEnv", "Autoloads", "package:base"))
+  expect_identical(b$limit, 2)
+  if (case == "blocked") {
+    expect_s3_class(b$error, "gptr_error_timeout")
+    expect_identical(b$error$seconds, 2)
+    expect_identical(b$error$writer_stage, "delivery")
+    expect_gt(b$error$accepted_bytes, 0)
+    expect_gte(b$error$accepted_bytes, 65536)
+    expect_identical(seen$out, c("READY", "PREFIX 65536"))
+    expect_identical(names(b$error$writer_phases),
+      c("decode", "identity", "acl_start", "acl_wait", "acl_done", "validated", "ready"))
+    expect_identical(names(b$error$writer_acl_phases),
+      c("enter", "absent", "created", "readback", "verified", "owner", "exit_ok"))
+    expect_identical(seen$exits, 0L)
+  } else {
+    expect_null(b$error)
+    expect_equal(b$pos, length(bytes))
+    write_close(p)
+    repeat {
+      pending = r$stdin[[key]]
+      if (!is.null(pending)) drain(r, key, pending)
+      reactor_read_procs(r)
+      if (seen$exits == 1L) break
+      stopifnot(reactor_now() < deadline)
+      p$poll_io(10L)
+    }
+    expect_identical(seen$status, 0L)
+    expect_identical(seen$exits, 1L)
+    expect_identical(seen$out, c("READY", if (case == "numeric") "SUM 258" else lines))
+  }
+  cat(json_encode(list(case = paste0("cold-writer-", case), startup_elapsed = startup,
+    drain_elapsed = elapsed, accepted_bytes = b$pos, default_packages_absent =
+      identical(search, c(".GlobalEnv", "Autoloads", "package:base")),
+    windows_acl_verified = FALSE)), "\n")
+  invisible(NULL)
+}
+
+test_that("a cold base-only writer preserves real numeric pipe bytes", {
+  skip_on_cran()
+  writer_cold_control("numeric")
+})
+
+test_that("a cold base-only writer drains real bidirectional echo", {
+  skip_on_cran()
+  writer_cold_control("echo")
+})
+
+test_that("a cold base-only writer times out only after real pipe acceptance", {
+  skip_on_cran()
+  writer_cold_control("blocked")
+})

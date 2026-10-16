@@ -419,7 +419,7 @@ session_history = function(s) {
 
 # ---------------------------------------------------------------------------- printing
 
-#' Print a session: the last answer, then a dim footer
+#' Print a session
 #'
 #' The footer is `status . model . turns . tokens . cost . id`. A token count or cost that a
 #' provider did not report is printed as unknown, never as zero.
@@ -431,8 +431,8 @@ session_history = function(s) {
 print.gptr_session = function(x, ...) {
   txt = session_text(x)
   txt = txt[!is.na(txt) & nzchar(txt)]
-  if (length(txt)) msg_verbatim(txt)
-  msg_verbatim(cli::col_grey(session_footer(x)))
+  if (length(txt)) msg_verbatim(console_escape(txt))
+  msg_verbatim(cli::col_grey(console_escape(session_footer(x), newlines = FALSE)))
   invisible(x)
 }
 
@@ -481,10 +481,10 @@ as.character.gptr_session = function(x, ...) session_text(x)
 #' Reads a table of recorded turns without a model request. It does not generate a narrative
 #' workflow summary or export an executable script. To request prose, continue the session
 #' with [peter()] and verify the model-generated answer against the recorded work.
-#' Both `summary(s)` and `s$history` retain every recorded message. Printing shows the latest
-#' eight messages and a snapshot of session metadata. Notebook, R Markdown and Quarto displays
-#' use the same compact preview by default. Use `print(x, n = Inf)` to display every row, or
-#' `as.data.frame(x)` for an ordinary data frame without the display metadata.
+#' Both `summary(session)` and `session$history` retain every recorded message. Printing shows
+#' the latest eight messages and a snapshot of session metadata. Notebook, R Markdown and
+#' Quarto displays use the same compact preview by default. Use `print(x, n = Inf)` to display
+#' every row, or `as.data.frame(x)` for an ordinary data frame without the display metadata.
 #'
 #' @param object A `gptr_session`.
 #' @param ... Unused.
@@ -586,7 +586,7 @@ doc_history_repr_markdown = function(x, ...) {
 #' @noRd
 doc_history_repr_latex = function(x, ...) NULL
 
-#' Strip display metadata while retaining every history row and column
+#' Convert a session summary to a data frame
 #'
 #' @param x A `gptr_session_summary`.
 #' @param ... Further arguments, such as `row.names` and `optional`, passed to the ordinary
@@ -617,7 +617,7 @@ session_history_display_text = function(text) {
   redact_hook(normalized, "persist")
 }
 
-#' Show the structure of a session in one line (never touches user objects)
+#' Show a session's structure
 #'
 #' @param object A `gptr_session`.
 #' @param ... Unused.
@@ -625,8 +625,9 @@ session_history_display_text = function(text) {
 #' @exportS3Method utils::str
 str.gptr_session = function(object, ...) {
   d = session_data(object)
-  msg_verbatim(paste0("<gptr_session ", d$id, " | ", d$kind, " | ", d$status, " | ", d$turns,
-                      " turns | ", d$model, ">"))
+  text = paste0("<gptr_session ", d$id, " | ", d$kind, " | ", d$status, " | ", d$turns,
+                " turns | ", d$model, ">")
+  msg_verbatim(console_escape(text, newlines = FALSE))
   invisible(NULL)
 }
 
@@ -757,6 +758,19 @@ session_values_df = function(s) {
 }
 
 # ---------------------------------------------------------------------------- verbs
+
+#' Record the already-selected model once before a container's first entry, without a request
+#' or a model_select event. Resolve session-only specs and refuse decision-only models before
+#' recording; routers retain their selection for resolution at the next request.
+#' @noRd
+session_record_initial_model = function(s) {
+  check_class(s, "gptr_session", "s")
+  d = session_data(s)
+  if (length(d$entries)) return(invisible(s))
+  if (!startsWith(d$model, "router:")) stream_chat_model(run_model_resolve(d$model, d$id))
+  session_append(s, entry_model_change(d$model, d$thinking, reason = "initial"))
+  invisible(s)
+}
 
 #' Switch the session's model: resolve, append `model_change`, emit `model_select`
 #' Pure resolution (IC-74; the preflight runs at the next request); a decision-only model is
@@ -927,10 +941,10 @@ session_root_id = function(s) {
 #' @return A new idle `gptr_session`.
 #' @examples
 #' fake = gptr_fake_provider(list("A", "B"))
-#' s = peter("first", model = fake, envir = new.env())
-#' f = gptr_fork(s)
-#' f |> peter("branch")
-#' c(s$turns, f$turns)
+#' session = peter("first", model = fake)
+#' branch = gptr_fork(session)
+#' branch |> peter("branch")
+#' c(session$turns, branch$turns)
 #' @export
 gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
   check_class(s, "gptr_session", "s")

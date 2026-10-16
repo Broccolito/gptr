@@ -161,6 +161,66 @@ pcli_codex_prompt = function(context, fresh, provider = NULL) {
   paste0(pre, pcli_history_text(parts$prior), input)
 }
 
+#' Direct Windows directory entries, with readable-parent proof for fixed control names
+#'
+#' A missing directory is absent only when its readable parent does not list the entry.
+#' R silently skips unreadable directories; both dot entries distinguish them from an empty
+#' readable directory. Warnings are settled after the listing closes its native handle.
+#' @noRd
+pcli_control_entries = function(dir) {
+  refuse = function() {
+    gptr_abort("Could not inspect a control-file directory.", "io", operation = "list", path = dir)
+  }
+  dir = gsub("\\", "/", dir, fixed = TRUE)
+  missing = NULL
+  while (!dir.exists(dir)) {
+    missing = basename(dir)
+    parent = dirname(dir)
+    if (identical(parent, dir) || !grepl("^([A-Za-z]:/|//)", parent)) refuse()
+    dir = parent
+  }
+  seen = new.env(parent = emptyenv())
+  seen$warning = FALSE
+  entries = withCallingHandlers(tryCatch(list.files(dir, all.files = TRUE, no.. = FALSE),
+    error = function(e) NULL), warning = function(w) {
+      seen$warning = TRUE
+      invokeRestart("muffleWarning")
+    })
+  if (seen$warning || !is.character(entries) || anyNA(entries) ||
+      !all(c(".", "..") %in% entries)) refuse()
+  if (!is.null(missing)) {
+    if (tolower(missing) %in% tolower(entries)) refuse()
+    return(character())
+  }
+  entries[!(entries %in% c(".", ".."))]
+}
+
+#' A Windows reparse marker when neither content nor followed-target metadata is observable
+#'
+#' The native query uses only the absolute system executable and the stripped helper profile.
+#' Native reparse data is at most 16 KiB; reject undecidable or oversized decoded output and
+#' retain only its SHA-256. proc_run owns the child and its redirected output files.
+#' @noRd
+pcli_control_reparse = function(path) {
+  refuse = function() {
+    gptr_abort("Could not inspect a Windows control-file reparse point.", "io",
+               operation = "read", path = path)
+  }
+  root = gsub("\\", "/", Sys.getenv("SystemRoot", unset = ""), fixed = TRUE)
+  root = sub("/+$", "", root)
+  if (!grepl("^[A-Za-z]:/", root) || grepl("[[:cntrl:]]|(^|/)[.][.]?(/|$)", root) ||
+      !dir.exists(root)) refuse()
+  command = file.path(root, "System32", "fsutil.exe")
+  if (!file.exists(command) || dir.exists(command)) refuse()
+  res = tryCatch(proc_run(command, c("reparsepoint", "query", path), timeout = 5,
+                          env = child_env("helper")), error = function(e) NULL)
+  if (!is.list(res) || !identical(res$status, 0L) || !identical(res$timed_out, FALSE) ||
+      !rlang::is_string(res$stdout) || !nzchar(res$stdout) ||
+      nchar(res$stdout, type = "bytes") > 128L * 1024L ||
+      !grepl("0x[[:xdigit:]]{8}\\b", res$stdout, perl = TRUE)) refuse()
+  paste0("unreadable:reparse:", hash_sha256(res$stdout))
+}
+
 #' gptr's control files inside a project (IC-54), hashed around a workspace-write exec
 #'
 #' The listed directories' entries and the fixed files that exist, including symbolic links
@@ -168,16 +228,32 @@ pcli_codex_prompt = function(context, fresh, provider = NULL) {
 #' @noRd
 pcli_control_paths = function(root) {
   g = file.path(root, ".gptr")
-  fixed = c(list.files(g, pattern = "^settings.*[.]json$", full.names = TRUE),
-            file.path(g, c("mcp.json", "SYSTEM.md", "APPEND_SYSTEM.md")),
+  windows = is_windows()
+  entries = if (windows) pcli_control_entries(g) else NULL
+  settings = if (windows) {
+    file.path(g, entries[grepl("^settings.*[.]json$", entries)])
+  } else {
+    list.files(g, pattern = "^settings.*[.]json$", full.names = TRUE)
+  }
+  fixed = c(settings, file.path(g, c("mcp.json", "SYSTEM.md", "APPEND_SYSTEM.md")),
             file.path(root, c(".Rprofile", "Rprofile.site", "Renviron.site")),
             file.path(root, ".git", "config"))
+  listed = rep(FALSE, length(fixed))
+  if (windows) {
+    parents = unique(dirname(fixed))
+    direct = lapply(parents, function(dir) {
+      if (identical(dir, g)) entries else pcli_control_entries(dir)
+    })
+    listed = vapply(fixed, function(path) {
+      tolower(basename(path)) %in% tolower(direct[[match(dirname(path), parents)]])
+    }, logical(1))
+  }
   dirs = c(file.path(g, c("extensions", "plugins", "agents")), file.path(root, ".git", "hooks"))
   dirs = dirs[dir.exists(dirs)]
   inside = unlist(lapply(dirs, list.files, recursive = TRUE, full.names = TRUE,
                          all.files = TRUE, no.. = TRUE), use.names = FALSE)
   link = nzchar(pcli_control_link(fixed))
-  paths = unique(c(fixed[!dir.exists(fixed) & (file.exists(fixed) | link)], inside))
+  paths = unique(c(fixed[!dir.exists(fixed) & (file.exists(fixed) | link | listed)], inside))
   sort(path_norm(paths), method = "radix")
 }
 
@@ -190,9 +266,10 @@ pcli_control_link = function(paths) {
 }
 
 #' The content hash of one control file; one gptr cannot read gets a marker instead, so that
-#' hashing never fails and a change to the entry still shows: `link:<target>` for a link whose
-#' target is gone, else `unreadable:<size> <modification time>` (D-106). R reads no link target
-#' on Windows, where `file.info()` of a dangling link also warns; the marker says it already.
+#' a change to the entry still shows: `link:<target>` for a gone link target, otherwise
+#' `unreadable:<size> <modification time>` (D-106). When Windows exposes neither a target nor
+#' finite followed-target metadata, query the native reparse data and retain only its digest.
+#' An undecidable native query fails closed instead of treating two unknown entries as equal.
 #' @noRd
 pcli_control_digest = function(path) {
   tryCatch(as.character(hash_file(path)), error = function(e) {
@@ -200,6 +277,8 @@ pcli_control_digest = function(path) {
     if (nzchar(target)) return(paste0("link:", target))
     info = tryCatch(suppressWarnings(file.info(path, extra_cols = FALSE)),
                     error = function(e2) NULL)
+    if (is_windows() && (is.null(info) || nrow(info) != 1L || !is.finite(info$size) ||
+        !is.finite(as.numeric(info$mtime)))) return(pcli_control_reparse(path))
     if (is.null(info) || nrow(info) != 1L) return("unreadable")
     paste0("unreadable:", info$size, " ", format(as.numeric(info$mtime), digits = 15))
   })

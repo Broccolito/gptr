@@ -354,6 +354,134 @@ doc_sidecar_legacy_path = function(path) sub("[.]json$", ".rds", doc_sidecar_pat
 #' @noRd
 doc_sidecar_limit = function() 16L * 1024L * 1024L
 
+#' Fixed private recovery structure limits, separate from the encoded-byte limit
+#' @noRd
+doc_sidecar_bounds = function() {
+  list(nodes = 100000L, depth = 64L, upserts = 1024L, lines = 50000L, call = 65536L)
+}
+
+#' Bound whole JSON keys, scalar values and containers before any JSON parser or tree copy.
+#' Strings and escaped quotes are skipped with bounded chunk-local index vectors. Grammar and
+#' schema validation remain the existing decoder's job.
+#' @noRd
+doc_sidecar_lexical_ok = function(bytes, bounds = doc_sidecar_bounds()) {
+  if (!length(bytes)) return(FALSE)
+  nodes = depth = trailing = 0L
+  state = "normal"
+  stack = raw(bounds$depth)
+  white = as.raw(c(9L, 10L, 13L, 32L))
+  delimiters = as.raw(c(9L, 10L, 13L, 32L, 34L, 44L, 58L, 91L, 92L, 93L, 123L, 125L))
+  next_at = function(pos, positions) {
+    i = findInterval(pos - 1L, positions) + 1L
+    if (i <= length(positions)) positions[i] else Inf
+  }
+  for (start in seq.int(1L, length(bytes), by = 4096L)) {
+    chunk = bytes[seq.int(start, min(start + 4095L, length(bytes)))]
+    n = length(chunk)
+    non_slash = which(chunk != as.raw(92L))
+    quotes = which(chunk == as.raw(34L))
+    if (length(quotes)) {
+      previous = findInterval(quotes - 1L, non_slash)
+      before = ifelse(previous > 0L, non_slash[pmax(previous, 1L)], -trailing)
+      quotes = quotes[(quotes - 1L - before) %% 2L == 0L]
+    }
+    trailing = if (length(non_slash)) n - non_slash[length(non_slash)] else trailing + n
+    ends = which(chunk %in% delimiters)
+    nonwhite = which(!chunk %in% white)
+    pos = 1L
+    while (pos <= n) {
+      if (identical(state, "string")) {
+        hit = next_at(pos, quotes)
+        if (!is.finite(hit)) break
+        state = "normal"
+        pos = hit + 1L
+      } else if (identical(state, "primitive")) {
+        hit = next_at(pos, ends)
+        if (!is.finite(hit)) break
+        state = "normal"
+        pos = hit
+      } else {
+        hit = next_at(pos, nonwhite)
+        if (!is.finite(hit)) break
+        byte = as.integer(chunk[hit])
+        pos = hit + 1L
+        if (byte %in% c(91L, 123L)) {
+          depth = depth + 1L
+          if (depth > bounds$depth) return(FALSE)
+          stack[depth] = as.raw(byte)
+          nodes = nodes + 1L
+        } else if (byte %in% c(93L, 125L)) {
+          if (!depth || as.integer(stack[depth]) != byte - 2L) return(FALSE)
+          depth = depth - 1L
+        } else if (byte == 34L) {
+          state = "string"
+          nodes = nodes + 1L
+        } else if (byte %in% c(44L, 58L)) {
+          next
+        } else if (byte == 92L) {
+          return(FALSE)
+        } else {
+          state = "primitive"
+          nodes = nodes + 1L
+        }
+        if (nodes > bounds$nodes) return(FALSE)
+      }
+    }
+  }
+  depth == 0L && !identical(state, "string")
+}
+
+#' Bound cardinality before numeric preservation or writer conversion. Malformed types
+#' remain the closed schema validator's responsibility.
+#' @noRd
+doc_sidecar_shape_ok = function(x, bounds = doc_sidecar_bounds()) {
+  if (!is.list(x) || !is.list(x$upserts)) return(TRUE)
+  if (length(x$upserts) > bounds$upserts) return(FALSE)
+  lines = 0L
+  for (u in x$upserts) {
+    if (is.list(u)) lines = lines + length(u$lines)
+    if (lines > bounds$lines) return(FALSE)
+  }
+  TRUE
+}
+
+#' Bound narrowed writer data and call identities before recursive copying or deparsing.
+#' Every object key, scalar value and container is counted; traversal stops at the bound.
+#' @noRd
+doc_sidecar_value_ok = function(x, bounds = doc_sidecar_bounds(), call = FALSE) {
+  st = new.env(parent = emptyenv())
+  st$nodes = 0L
+  st$size = 0
+  visit = function(value, depth) {
+    st$nodes = st$nodes + max(1L, if (is.atomic(value)) length(value) else 1L) +
+      length(names(value))
+    if (st$nodes > bounds$nodes) return(FALSE)
+    if (call) {
+      if (!is.null(value) && !is.symbol(value) && !is.atomic(value) &&
+          !is.call(value) && !is.pairlist(value)) return(FALSE)
+      strings = c(names(value), if (is.character(value)) value,
+                  if (is.symbol(value)) as.character(value))
+      if (anyNA(strings)) return(FALSE)
+      st$size = st$size + sum(nchar(strings, type = "bytes"))
+      if (st$size > bounds$call) return(FALSE)
+    }
+    if (is.list(value) || is.call(value) || is.pairlist(value)) {
+      depth = depth + 1L
+      if (depth > bounds$depth) return(FALSE)
+      for (i in seq_along(value)) if (!visit(value[[i]], depth)) return(FALSE)
+    }
+    TRUE
+  }
+  visit(x, 0L)
+}
+
+#' The explicit writer resource condition, with no source content in the diagnostic
+#' @noRd
+doc_sidecar_too_complex = function(path) {
+  gptr_abort("The pending document record exceeds its recovery structure limits.", "doc_write",
+             path = path, reason = "sidecar structure")
+}
+
 #' A sidecar pathname is present even when its symlink target is missing: invalid modern
 #' records still prevent legacy fallback and must not clear an in-memory pending queue.
 #' @noRd
@@ -485,9 +613,11 @@ doc_sidecar_meta_ok = function(meta) {
 #' Nested calls and computed arguments are kept for notebook identity matching.
 #' @noRd
 doc_sidecar_call = function(text) {
-  if (!rlang::is_string(text)) return(NULL)
+  if (!rlang::is_string(text) ||
+      nchar(text, type = "bytes") > doc_sidecar_bounds()$call) return(NULL)
   expr = tryCatch(doc_parse_text(text, keep_source = FALSE), error = function(e) NULL)
-  if (length(expr) != 1L || !is.call(expr[[1L]])) return(NULL)
+  if (length(expr) != 1L || !is.call(expr[[1L]]) ||
+      !doc_sidecar_value_ok(expr[[1L]], call = TRUE)) return(NULL)
   call = doc_call_norm(expr[[1L]])
   head = call[[1L]]
   qualified = is.call(head) && length(head) == 3L &&
@@ -508,6 +638,9 @@ doc_sidecar_data = function(rec) {
     a = s$anchor
     if (!is.null(a)) {
       call0 = a$call0
+      if (!is.null(call0) && !doc_sidecar_value_ok(call0, call = TRUE)) {
+        stop("Unsupported call identity structure")
+      }
       text = if (!is.null(call0)) paste(deparse(doc_call_norm(call0)), collapse = "\n")
       if (!is.null(call0) && !identical(doc_sidecar_call(text), doc_call_norm(call0))) {
         stop("Unsupported call identity")
@@ -524,9 +657,12 @@ doc_sidecar_data = function(rec) {
                      prompt_hash = nullable(s$prompt_hash), args_hash = nullable(s$args_hash)),
          mark = u$mark, adopted = u$adopted)
   })
-  list(version = 1L, doc = rec$doc, base_md5 = nullable(rec$base_md5), upserts = upserts,
-       session = rec$session, pid = rec$pid, create_time = nullable(rec$create_time),
-       time = nullable(as.numeric(rec$time)), kind = rec$kind)
+  data = list(version = 1L, doc = rec$doc, base_md5 = nullable(rec$base_md5),
+              upserts = upserts, session = rec$session, pid = rec$pid,
+              create_time = nullable(rec$create_time),
+              time = nullable(as.numeric(rec$time)), kind = rec$kind)
+  if (!doc_sidecar_value_ok(data)) doc_sidecar_too_complex(rec$doc)
+  data
 }
 
 #' Validate and normalize a closed JSON recovery record before any recovery operation
@@ -593,7 +729,8 @@ doc_sidecar_decode = function(x, path) {
   list(doc = path_norm(x$doc), base_md5 = x$base_md5 %||% NA_character_, upserts = ups,
        session = x$session, pid = as.integer(x$pid),
        create_time = as.numeric(x$create_time %||% NA_real_),
-       time = as.POSIXct(as.numeric(x$time %||% NA_real_), origin = "1970-01-01", tz = "UTC"),
+       time = with_calendar_preserved(as.POSIXct(
+         as.numeric(x$time %||% NA_real_), origin = "1970-01-01", tz = "UTC")),
        kind = x$kind)
 }
 
@@ -631,8 +768,12 @@ doc_sidecar_read = function(path) {
     bytes = readBin(f, "raw", n = limit + 1L)
     if (length(bytes) > limit || any(bytes == as.raw(0L)) ||
         !validUTF8(rawToChar(bytes))) return(NULL)
+    bounds = doc_sidecar_bounds()
+    if (!doc_sidecar_lexical_ok(bytes, bounds)) return(NULL)
     text = raw_to_utf8(bytes)
-    doc_sidecar_decode(nb_keep_numbers(json_decode(text), text), path)
+    data = json_decode(text)
+    if (!doc_sidecar_shape_ok(data, bounds)) return(NULL)
+    doc_sidecar_decode(nb_keep_numbers(data, text), path)
   }, error = function(e) NULL)
 }
 
@@ -646,6 +787,7 @@ doc_sidecar_read = function(path) {
 #' @noRd
 doc_sidecar_write = function(rec) {
   f = doc_sidecar_path(rec$doc)
+  if (!doc_sidecar_shape_ok(rec)) doc_sidecar_too_complex(rec$doc)
   if (!length(rec$upserts) && !doc_sidecar_exists(doc_sidecar_legacy_path(rec$doc))) {
     if (doc_sidecar_exists(f)) unlink(f)
     return(invisible(NULL))
@@ -656,6 +798,7 @@ doc_sidecar_write = function(rec) {
     if (is.null(doc_sidecar_decode(data, rec$doc))) stop("Unsupported recovery record")
     data
   }, error = function(e) {
+    if (inherits(e, "gptr_error_doc_write")) stop(e)
     gptr_abort("The pending document record cannot be stored as plain JSON data.", "doc_write",
                path = rec$doc, reason = "invalid sidecar")
   })
@@ -680,6 +823,7 @@ doc_sidecar_write = function(rec) {
   text = json_encode(data)
   if (nchar(text, type = "bytes") > limit) too_large()
   bytes = charToRaw(text)
+  if (!doc_sidecar_lexical_ok(bytes)) doc_sidecar_too_complex(rec$doc)
   dir.create(dirname(f), recursive = TRUE, showWarnings = FALSE)
   if (!is_windows() && doc_sidecar_exists(f) && !doc_sidecar_trusted(f)) unlink(f)
   write_atomic(f, bytes)
