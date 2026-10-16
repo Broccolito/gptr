@@ -1,0 +1,110 @@
+{
+  "paused_at_utc": "2026-10-16T00:28:31.364138+00:00",
+  "reason": "explicit user request to pause for token-budget handoff",
+  "final_objective": "finish all Mac integration, live frontends, final-head CI/review/merge/main/install/publication, then final live Windows last",
+  "handoff": "/Users/wgu/Desktop/gptr/dev/PAUSED_HANDOFF_2026-10-15.md",
+  "resume_prompt": "/Users/wgu/Desktop/gptr/dev/RESUME_PROMPT_2026-10-15.md",
+  "primary": {
+    "path": "/Users/wgu/Desktop/gptr",
+    "head": "718e81e4bf54f1d265cac19112ff71cea26511bf",
+    "dirty_preserve": true
+  },
+  "coordinator": {
+    "path": "/Users/wgu/.codex/worktrees/release-validation-notes/gptr",
+    "head": "138350979ca5acdbec4f9fe4aa465241b80b8d23",
+    "clean_at_pause": true
+  },
+  "accepted_package": {
+    "path": "/Users/wgu/.codex/worktrees/mac-final-integration/gptr",
+    "head": "2bf18595f65030ed8d253ef5cbd4ccc173d95205",
+    "frozen": true,
+    "normal_archive_sha256": "21a4338bccb56044b38dda356c4a46bd6cf433fbd9cc81213f52b00c4ac4139f",
+    "all667_public_inputs_equal_coordinator": true
+  },
+  "writer_investigation": {
+    "path": "/Users/wgu/.codex/worktrees/windows-writer-delivery/gptr",
+    "head": "138350979ca5acdbec4f9fe4aa465241b80b8d23",
+    "clean": true,
+    "proposal_only_no_edits_tests_or_bindings": true
+  },
+  "local_runs": {
+    "14930": {
+      "scope": "138fourplan",
+      "natural_exit": 0,
+      "independently_accepted": true,
+      "receipt_sha256": "4845771b079c26db978d63c910e0d61850082cfe9e6d611cb21b4c1a1f9b5206"
+    },
+    "98385": {
+      "scope": "KJupyterbrowser",
+      "natural_exit": 1,
+      "reason": "original890s child deadline; no fresh human sign-in, all7cell countsNULL",
+      "owned_server_identity_absent": true,
+      "owned_tab_closed": true,
+      "receipt": "B/native-jupyter-r461-final-K-all-routes-bound-prepared/ACTUAL-NONPASS.json",
+      "receipt_sha256": "7cbcd2d942bd74adadee6531dff898b8f85b6a13d428aea38a815597d4640bdf",
+      "elapsed_s": 891.181,
+      "peak_sampled_family_rss_mib": 160.65625
+    }
+  },
+  "ci_last_snapshot": {
+    "as_of_utc": "2026-10-16T00:22:36Z",
+    "head": "138350979ca5acdbec4f9fe4aa465241b80b8d23",
+    "required_run": 38829027677,
+    "required_state": "13allocated; Windows release running, oldrel4queued; current status must refresh",
+    "plan_run": 38829019907,
+    "plan_state": "running at snapshot",
+    "pages_run": 38829019706,
+    "pages_state": "skipped; not publication",
+    "github_jobs_preserved": true,
+    "local_observers_final_pause_receipt": "B/current-1383509-delivery/PAUSE-LOCAL-WATCHERS-SETTLEMENT.json",
+    "local_observers_stopped": true,
+    "local_observers_receipt_sha256": "1a16f5c194fdf1b5989f4b0188df4336b1469f96e88a5fb1eef094ac8c8eab07"
+  },
+  "remaining": [
+    "Windows writer first binary write timeout source/contract review and RED/GREEN/hosted validation",
+    "Fresh authenticated Jupyter7cells/all13/raw/state/cleanup",
+    "CodeAX terminal actual Rbody and editor actual LSP/completion/signature",
+    "Any justified narrow fix integration/rebuild/relevant checks",
+    "All13finalHEADCI plus both Windows artifact readbacks",
+    "PR6review/merge and safe clean-main sync",
+    "Final default-user install and actual public Pages verification",
+    "Final liveWindows last"
+  ],
+  "qualified": [
+    "installed5MBgoalunmet",
+    "Quarto external serialization/options drift reproduces withoutgptr",
+    "priorQwencontextnoneinputfidelityfailed; separatecontextnamescomparisonpassed",
+    "CodeexternalinstallerDEP0169warning",
+    "historicalclock/network/rawwarningfailuresretained"
+  ],
+  "resume_requires_new_user_authorization": true,
+  "no_new_runtime_should_be_started_while_paused": true,
+  "handoff_git_policy": "local new files in dirty primary only; no extra push/CI dispatch during explicit pause; implementation last pushed138",
+  "all_local_work_paused": true,
+  "local_owned_runtime_or_watchers_remaining": [],
+  "unowned_processes_preserved": true,
+  "gui_baseline_23_tabs_preserved": true,
+  "predecessor_bc13": {
+    "required_run": 38822519350,
+    "final": "11success2failure",
+    "failures": [
+      "tokenbudget116726253397",
+      "Windowsrelease116726253175_binarywriterdeliverytimeout"
+    ],
+    "oldrel4_job": 116726253342,
+    "oldrel4": "success_all32witnesses",
+    "failure_observations": "B/current-bc13aba-delivery/WINDOWS-RELEASE-BC13ABA-FAILURE-OBSERVATIONS.json",
+    "failure_observations_sha256": "374fbf2ceee82700b9fc8f4d0c77700cd1c7c20648eaed3f43aece895a6350cd"
+  },
+  "handoff_sha256": "6d7c6c0f6462250883045fbfc4b61d4f74f7e29b0493a878ceaadaaed135d1a3",
+  "resume_prompt_sha256": "c6e63098e93be5e05c090c736afc93280174eb1e7079a7d67bc2c731c856c58d",
+  "handoff_validation": {
+    "handoff_hash_matches": true,
+    "prompt_hash_matches": true,
+    "three_pause_receipts_hash_match": true,
+    "coordinator_and_writer_and_frozen_source_clean": true,
+    "primary_existing_paths": 70,
+    "primary_new_local_handoff_paths": 3,
+    "all_subagents_completed_at_pause": true
+  }
+}

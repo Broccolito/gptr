@@ -1,4 +1,19 @@
-## Current checkpoint — K Mac validation, 2026-10-15
+## Current checkpoint — final integration, 2026-10-15
+
+Resumed from `dev/PAUSED_HANDOFF_2026-10-15.md`; the coordinator is
+`/Users/wgu/.codex/worktrees/release-validation-notes/gptr`. Evidence:
+`dev/.validation/readiness-20261011/resume-20261015-claude/` (ignored).
+
+| Status | Result |
+| --- | --- |
+| Fixed, test only | `ubuntu-latest (release, LC_ALL=C)` failed on 138 because the wrapped-raw export test sourced a UTF-8 file with `encoding = "UTF-8"`, which stops at the first non-ASCII comment in a C locale. The test now sources in the native encoding; RED 3 failures, GREEN 211/0 in C and UTF-8 locales. |
+| Fixed, test only | The bc13 Windows release binary-writer case timed out because a 1.93 s cold start used the 2 s no-progress window that IC-60 starts before lazy startup. The case now admits the production writer under its own 2 s deadline, then runs both timed writes unchanged. No production file changed; cold-start coverage stays in native04/native09. Two hosted Windows optional runs at `35536d4` pass it (22/0); both retain the optional-only absence-probe failure seen in every optional by-file run since 2026-10-12. |
+| PASS, authenticated Jupyter | Fresh K run `k-4`: human local token sign-in, seven cells 1..7 with no errors, Idle, all 13 GUI predicates, widths 1440/320/768/1440, saved MIME/state/cleanup gates and authenticated shutdown; raw log has zero warnings (no heartbeat warning). 166.9 s, 779 MiB peak. `k-2` (DevTools 404) and `k-3` (stale-token 401) remain strict NONPASS. |
+| NONPASS, VS Code terminal | Exact owned Code window and private R terminal started, but VS Code migrated `extensions.autoUpdate` to `"off"` and rewrote the private settings, so the packet's bind-time re-admission refused; the width body never ran. The agent's computer-use access is click-only in IDEs, so keyboard input must come from the maintainer. Editor LSP probe not run. |
+| Unchanged | K build/install, as-CRAN, user install, Shiny, models/workflows, RStudio, R.app, PTY, Rscript/R Markdown results keep their scopes; Quarto closure serialization stays an external NONPASS. Installed size above 5 MB remains unmet. |
+| Remaining | Final-head 13 required checks, PR6 merge, clean main install, public Pages verification. Final live Windows verification is the maintainer's separate last step. |
+
+## Historical checkpoint — K Mac validation, 2026-10-15
 
 Current evidence and exact source boundaries are recorded in
 [Mac validation checkpoint](progress/mac-validation-20261015.md).
