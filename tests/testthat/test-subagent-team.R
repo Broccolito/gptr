@@ -386,7 +386,8 @@ test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks s
 })
 
 test_that("each report fits min(2000, budget / n) tokens in a closed element (03 section 12.2)", {
-  local_team_fake(function(request) report)
+  # This exercises report budgets, not thousands of tiny streaming deltas.
+  local_team_fake(function(request) list(text = report, chunk = 65536L))
   e = new.env()
   e$two = list(`a"b` = 1, c = 2)
   e$many = as.list(1:20)
@@ -406,6 +407,24 @@ test_that("each report fits min(2000, budget / n) tokens in a closed element (03
   fan = gptr_map(team_call("x", parallel = 4L, envir = e, context = list(sym_item("two", e$two))))
   expect_true(startsWith(subagent_reports_block(list(session = fan), 20000L),
                          "<agent_report from=\"a&quot;b\">\nword word"))
+})
+
+test_that("report budgets agree for small and large fake deltas", {
+  text = strrep("word ", 200L)
+  chunk = 16L
+  local_team_fake(function(request) list(text = text, chunk = chunk))
+  e = new.env()
+  e$two = list(a = 1, b = 2)
+  outputs = character()
+  for (chunk in c(16L, 65536L)) {
+    fan = gptr_map(team_call("x", parallel = 2L, envir = e,
+                            context = list(sym_item("two", e$two))))
+    txt = subagent_reports_block(list(session = fan), 100L)
+    expect_lte(est_tokens(txt), 100)
+    expect_true(grepl("[... truncated; full report in $text]", txt, fixed = TRUE))
+    outputs = c(outputs, txt)
+  }
+  expect_identical(outputs[[1L]], outputs[[2L]])
 })
 
 # ---- Task 6: teams and fan-outs through peter() --------------------------------------------------

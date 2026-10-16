@@ -148,7 +148,11 @@ jobs:
           printf 'GPTR_TEST_ROOT_EVIDENCE=%s\nGPTR_TEST_ROOT_READER=%s\nGPTR_TEST_ROOT_PYTHON=%s\n' \
             "$gptr_root_evidence" "$GITHUB_WORKSPACE/dev/ci/test-root-teardown-readback.py" \
             /usr/bin/python3 >> "$GITHUB_ENV"
+      - name: R CMD check (Linux, two CPUs)
+        if: runner.os == 'Linux'
+        run: Rscript --vanilla dev/ci/check-linux.R --compact-vignettes=gs+qpdf
       - uses: r-lib/actions/check-r-package@v2
+        if: runner.os != 'Linux'
         with:
           upload-snapshots: true
           build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
@@ -171,6 +175,17 @@ jobs:
       - name: Fail unless R CMD check wrote its status
         shell: bash
         run: grep '^Status:' check/gptr.Rcheck/00check.log
+      - name: Retain Linux check logs and snapshots
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-check-${{ matrix.config.r }}
+          path: |
+            check/gptr.Rcheck/00check.log
+            check/gptr.Rcheck/tests/*.Rout*
+            check/gptr.Rcheck/tests/testthat/_snaps
+          if-no-files-found: error
+          retention-days: 5
       - name: Retain the Windows numerical Python admission
         if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
