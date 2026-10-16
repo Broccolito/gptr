@@ -436,7 +436,7 @@ test_that("raw prompt comments wrap losslessly while source and executable code 
   expected = parse(text = c("hits = 0L", body, "after = hits"), keep.source = FALSE)
   expect_identical(parse(target, keep.source = FALSE), expected)
   plain = new.env(parent = baseenv())
-  source(target, local = plain, encoding = "UTF-8")
+  source(target, local = plain)
   expect_identical(plain$hits, 1L)
   expect_identical(plain$answer, 42L)
   expect_identical(plain$after, 1L)
