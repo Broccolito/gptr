@@ -43,8 +43,8 @@ view$total_tokens
 `gptr_prompt()` inspects the system sections and tool definitions with estimated token counts;
 printing it shows their text. It does not query a provider. The `standard` preset describes
 most capabilities as functions in `peter$`, with the core model-visible `r`, `read`, `edit`
-and `write` tools and `ask` when applicable. The first user message, project instructions and
-object descriptions add to `view$total_tokens`.
+and `write` tools and `ask` when applicable. `view$total_tokens` already counts the tool array
+and a preview of the first message; your prompt and the objects you attach add to it.
 
 ## Object descriptions and result size
 

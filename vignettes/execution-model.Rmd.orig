@@ -165,7 +165,8 @@ pauses event-loop callbacks until evaluation returns. A worker is a separate R p
 receives serializable context; it does not share the parent workspace. See
 [Teams and background work](teams-and-background.html).
 
-Agent code draws from its own random-number stream, so your `.Random.seed` is preserved.
+Agent code draws from its own random-number stream, so your `.Random.seed` is preserved,
+except after a deliberate `RNGkind()` change or a callback R runs while idle.
 
 ```{r cleanup, include = FALSE}
 options(old_options)

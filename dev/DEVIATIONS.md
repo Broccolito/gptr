@@ -2230,3 +2230,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   caller/source/cleanup predicates pass. Fresh native production widening remains pending.
   Evidence: eval-host-width-1f9c189-source-only-v2/ACTUAL-ACCEPTANCE.json (9be1b1ed) and the
   actual14-row native eval_open/eval_restore trace; coordinator records remain in dev/TESTING_PLAN.md.
+
+## D-182 - Exported examples omit envir = new.env() when no agent code runs (2026-10-15)
+- Rule (contract section 6): examples still use `gptr_fake_provider()` and `tempfile()`, but drop
+  `envir = new.env()` where the fake only returns text or a typed decision, so no R tool runs.
+  Examples whose fake runs R code keep a private environment.
+- Contract-visible: no API change; shorter examples. Section 6 is not amended.
+- Tests: `R CMD check --as-cran` runs all 59 example pages offline with 0 problems and no global
+  objects; dev/release check-examples and check-docs report 0 problems. Evidence: TESTING_PLAN.md
+  current checkpoint.

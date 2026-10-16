@@ -183,8 +183,8 @@ These calls run a child process. The built-in `claude-cli` route uses the Claude
 signed-in plan/OAuth authentication and refuses API-key billing. For API-key use, explicitly
 choose the direct `anthropic` provider. The Codex route uses the CLI's active authentication and
 billing. Live R access goes through gptr's MCP permission gate; the Codex route needs the
-suggested packages `httpuv`, `later` and `openssl`. First use asks for an acknowledgment. gptr checks required CLI flags and rejects
-incompatible versions. The Claude plan route is experimental and opt-in; review `?gptr_security`
+suggested packages `httpuv`, `later` and `openssl`. First use asks for an acknowledgment. gptr
+checks required CLI flags and rejects incompatible versions. The Claude plan route is experimental and opt-in; review `?gptr_security`
 and the provider's terms before choosing it.
 
 ### Local Ollama models
