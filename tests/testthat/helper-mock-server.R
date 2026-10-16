@@ -165,9 +165,10 @@ local_mock_server = function(scenario, ..., .env = parent.frame()) {
   deadline = Sys.time() + 30
   repeat {
     # the server renames a complete file into place, but Windows can briefly refuse to open it
-    # ("Permission denied"): a failed read is retried like a missing file
-    ready = tryCatch(json_decode(readLines(config$ready, encoding = "UTF-8")),
-                     warning = function(w) NULL, error = function(e) NULL)
+    # ("Permission denied"): a failed read is retried like a missing file. The warning is muffled,
+    # not caught, so file() still destroys its unopened connection before the error.
+    ready = tryCatch(suppressWarnings(json_decode(readLines(config$ready, encoding = "UTF-8"))),
+                     error = function(e) NULL)
     if (!is.null(ready)) break
     if (!proc$is_alive()) {
       errors = readLines(file.path(dir, "stderr.txt"), encoding = "UTF-8", warn = FALSE)
