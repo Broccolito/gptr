@@ -1,44 +1,34 @@
 # gptr 1.0.0
 
-gptr 1.0.0 is a complete rewrite. gptr is now an agent harness that runs inside the live R
-session: `peter()` is an interactive chat at the console and a programmable function in
-scripts, loops and `if` statements, and the agent works on the objects already in memory.
+gptr 1.0.0 is a complete rewrite: an agent harness that runs inside the live R session and
+works on the objects already in memory.
 
 ## Breaking changes
 
-* Successful removal of CLI billing variables emits an informational
-  `gptr_message_billing_env` condition with the removed names, never their values. Handlers
-  use `muffleMessage`; the notice respects `gptr.quiet`. Actual billing refusals remain errors.
-* The whole interface of gptr 0.7.0 is removed: its only two exported functions,
-  `get_response()` and `dataframe_to_text()`, are gone, and no 0.x name is kept as a shim or an
-  alias. Code written for 0.7.0 is rewritten as follows.
-* `get_response()` has been removed. Use
-  `s = peter("your prompt", model = "openai/gpt-6-sol")`, which returns a session object; its
-  answer is `s$text`, and `s |> peter("next prompt")` continues the conversation. The key comes
-  from `OPENAI_API_KEY` (or a `.env` file read with `gptr_env()`) instead of the `api_key`
-  argument, instructions that went into `system_specification` go into the prompt or the
-  project instructions file `.gptr/vignette.Rmd`, and answers stream to the console when a
+* The 0.7.0 interface, `get_response()` and `dataframe_to_text()`, is removed with no aliases.
+* Instead of `get_response()`, use
+  `session = peter("your prompt", model = "openai/gpt-6-sol")`, which returns a session object;
+  its answer is `session$text`, and `session |> peter("next prompt")` continues the conversation.
+  The key comes from `OPENAI_API_KEY` (or a `.env` file read with `gptr_env()`) instead of the
+  `api_key` argument, instructions that went into `system_specification` go into the prompt or
+  the project instructions file `.gptr/vignette.Rmd`, and answers stream to the console when a
   person is present instead of through `print_response`.
-* `dataframe_to_text()` has been removed. Pass the data frame to
-  `peter()` as context, for example `peter("Which variables are correlated?", mtcars)`: gptr
-  describes the object compactly and the model computes on it in your session.
+* Instead of `dataframe_to_text()`, pass the data frame to `peter()` as context, for example
+  `peter("Which variables are correlated?", mtcars)`: gptr describes the object compactly and
+  the model computes on it in your session.
 * Providers and models are chosen with the `model` argument or with `gptr_config()`.
 * 'RCurl' is no longer used; HTTP is handled by 'curl'.
 * R 4.2.0 or later is required.
 
 ## New features
 
-* The interactive `peter()` console offers first-use setup when no default model is
-  configured: choose Codex CLI or Claude Code CLI and save the choice at user scope, or get
-  API configuration instructions. Explicit models, existing sessions and piped input skip it.
-  Setup also shows CLI-reported login status (`signed in`, `not signed in`, or `unknown`)
-  without a model request; `gptr_providers(check_login = TRUE)` exposes the same check.
-  Same-name provider overrides must use the expected CLI adapter to be selected as CLI defaults.
 * `peter()` is the single entry point. Without a prompt it opens a chat in the console; with a
   prompt it runs the agent loop and returns the session. The pipe steers one session:
   `peter("...") |> peter("...")` adds turns to the same object. `gptr_fork()` is the only way to
   branch. Sessions are saved in the project and resumed with `gptr_sessions()`,
   `gptr_resume()` and `gptr_last()`.
+* With no default model, the interactive console offers Claude Code CLI or Codex CLI setup, or
+  API instructions; `gptr_providers(check_login = TRUE)` shows CLI sign-in status.
 * The agent evaluates R code in the environment you pass (by default the caller's frame), so
   objects it creates stay in your workspace. It reads, writes and edits files, and searches
   them with `peter$grep()`, `peter$find()` and `peter$ls()`; shell, Python, SQL and knitr engines
@@ -78,23 +68,9 @@ scripts, loops and `if` statements, and the agent works on the objects already i
 * Background sessions (`background = TRUE`) are experimental.
 * See `?gptr_security` and `?gptr_egress` for what gptr does on your behalf and what it sends to
   model providers, and `?gptr_options` for every option.
-
-## Fixes
-
-* The gptr event pump preserves the caller's random seed while retaining callback results
-  and the advancement of agents' independent streams.
-* Failed MCP shutdown revokes access and retains the listener for an explicit stop retry.
-  New serving requests are refused until shutdown is confirmed.
-* `.opts = list(record = FALSE)` suppresses console recording questions and recorded
-  System 1/System 2 blocks, including in explicitly bound documents. `TRUE` retains the
-  existing recording consent checks.
-* IRkernel sessions display safe Markdown answers and ordinary progress without error
-  styling. Pending recorded R code is shown once while notebook writes remain queued for
-  explicit synchronization.
-* Console listings keep descriptions and paths within the available width while preserving
-  their full returned data. Tool elapsed time excludes time spent reviewing permission.
-* Interrupted streams label any final received text after the pause menu and retain unknown
-  usage when the provider has not reported it. Resumable pauses preserve secret redaction.
+* Successful removal of CLI billing variables emits an informational
+  `gptr_message_billing_env` condition with the removed names, never their values. Handlers
+  use `muffleMessage`; the notice respects `gptr.quiet`. Actual billing refusals remain errors.
 
 # gptr 0.7.0
 

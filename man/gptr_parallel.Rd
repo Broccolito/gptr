@@ -45,7 +45,7 @@ workspace results before continuing the team with a synthesis prompt.
 }
 \examples{
 fake = gptr_fake_provider(list("ok"))
-team = gptr_parallel(planner = peter("Plan it", model = fake, envir = new.env()),
-                     lit = peter("Summarise it", model = fake, envir = new.env()))
-names(team$children)
+session = gptr_parallel(planner = peter("Plan it", model = fake),
+                        review = peter("Review it", model = fake))
+names(session$children)
 }

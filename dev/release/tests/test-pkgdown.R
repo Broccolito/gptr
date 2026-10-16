@@ -6,7 +6,7 @@ test_that("pkgdown_yaml() lists every page once, secondary group members never",
   expect_false(anyDuplicated(listed) > 0L)
   expect_false(any(c("gptr_logout", "gptr_agents", "gptr_mcp_remove", "gptr_resume",
                      "gptr_last", "gptr_checkpoints") %in% listed))
-  expect_length(listed, 64L - 6L + 3L)
+  expect_length(listed, 64L - 6L + 4L)
   expect_true(all(c("peter", "gptr_login", "gptr_sessions", "gptr_export",
                     "gptr_security") %in% listed))
   expect_setequal(unlist(lapply(parsed$articles, `[[`, "contents")), rel_vignettes())

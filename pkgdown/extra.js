@@ -21,17 +21,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (region.scrollWidth > region.clientWidth) region.setAttribute("tabindex", "0");
       else region.removeAttribute("tabindex");
     };
-    update();
     new ResizeObserver(update).observe(region);
   };
   document.querySelectorAll("#main table").forEach((table, index) => {
-    const wrapped = table.parentElement.classList.contains("table-responsive");
-    const region = wrapped ? table.parentElement : document.createElement("div");
-    if (!wrapped) {
-      region.className = "table-responsive";
-      table.before(region);
-      region.append(table);
-    }
+    const region = document.createElement("div");
+    region.className = "table-responsive";
+    table.before(region);
+    region.append(table);
     region.setAttribute("role", "region");
     const caption = table.querySelector("caption");
     region.setAttribute("aria-label", caption ? caption.textContent : `Table ${index + 1}`);

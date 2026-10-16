@@ -535,7 +535,8 @@ ckpt_ext_state = function(s) {
 #' branch (oldest first) and appends one `gptr.rewind` entry parented at the target (the session
 #' file stays append-only and the rewind survives a reload). It hands back the undone prompt in
 #' `s$editor_text` and returns `s` invisibly, so it pipes:
-#' `s |> gptr_rewind() |> peter("Try another way")`. Use [gptr_fork()] for a second session.
+#' `session |> gptr_rewind() |> peter("Try another way")`. Use [gptr_fork()] for a second
+#' session.
 #'
 #' Restores are 3-way: an object or file that changed after the turn (by you or another session)
 #' is kept and reported, unless `force = TRUE`. Reference objects (environments, R6, external
@@ -590,12 +591,12 @@ ckpt_ext_state = function(s) {
 #' fake = gptr_fake_provider(list(
 #'   list(tool = "r", input = list(code = "x = 1")), "Made x.",
 #'   list(tool = "r", input = list(code = "x = x + 1")), "Added one."))
-#' e = new.env()
-#' session = peter("Make x", model = fake, mode = "auto", envir = e)
+#' work = new.env()
+#' session = peter("Make x", model = fake, mode = auto, envir = work)
 #' session |> peter("Add one to x")
-#' e$x
+#' work$x
 #' session |> gptr_rewind()
-#' e$x
+#' work$x
 #' session$editor_text
 #' gptr_checkpoints(session, all = TRUE)
 #' options(op)

@@ -19,7 +19,7 @@ template:
     link-hover-color-dark: "#efede7"
 
 reference:
-- title: "The gateway"
+- title: "Ask Peter"
   contents:
   - peter
 - title: "Setup and status"
@@ -61,7 +61,7 @@ reference:
   - gptr_jobs
   - gptr_usage
   - gptr_rewind
-- title: "Agent-side and introspection"
+- title: "Results and inspection"
   contents:
   - gptr_return
   - gptr_describe
@@ -98,12 +98,12 @@ reference:
   - gptr_security
   - gptr_egress
   - gptr_options
-- title: "Methods and other topics"
+  - gptr-background
+- title: "Methods"
   contents:
   - as.data.frame.gptr_session_summary
   - format.gptr_risk
   - format.gptr_session
-  - gptr-background
   - print.gptr_session
   - print.gptr_session_summary
   - str.gptr_session

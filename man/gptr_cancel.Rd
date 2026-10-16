@@ -19,6 +19,6 @@ the status set to \code{aborted}. Idle sessions are left alone.
 }
 \examples{
 session = peter("long task", model = gptr_fake_provider(list(list(hang = TRUE))),
-  .run = FALSE, envir = new.env())
+  .run = FALSE)
 gptr_cancel(session)
 }

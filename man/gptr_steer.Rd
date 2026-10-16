@@ -23,7 +23,7 @@ message while you were working: ..."; a follow-up when the agent would otherwise
 idle session the item is taken when the next run starts.
 }
 \examples{
-session = peter("Summarise mtcars", model = gptr_fake_provider(list("ok")),
-  .run = FALSE, envir = new.env())
+session = peter("Summarize mtcars", model = gptr_fake_provider(list("ok")),
+  .run = FALSE)
 gptr_steer(session, "Use only the mpg column", as = "follow_up")
 }

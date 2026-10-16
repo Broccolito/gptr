@@ -9,10 +9,9 @@ if (!root || process.argv.length !== 3) throw new Error("Supply the nominated so
 const script = fs.readFileSync(path.join(root, "pkgdown", "extra.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "pkgdown", "extra.css"), "utf8");
 
-function node(width, client, name = "") {
+function node(width, client) {
   return {
-    scrollWidth: width, clientWidth: client, className: name, attributes: {}, children: [],
-    classList: { contains(value) { return name.split(" ").includes(value); } },
+    scrollWidth: width, clientWidth: client, attributes: {}, children: [],
     setAttribute(key, value) { this.attributes[key] = value; },
     removeAttribute(key) { delete this.attributes[key]; },
     append(child) { this.children.push(child); child.parentElement = this; }
@@ -47,7 +46,7 @@ function run(tables, pre = [], blockedStorage = false) {
     document, localStorage,
     ResizeObserver: class {
       constructor(update) { this.update = update; }
-      observe(region) { observed.push({ region, update: this.update }); }
+      observe(region) { observed.push({ region, update: this.update }); this.update(); }
     }
   });
   vm.runInContext(script, context, { timeout: 1000 });
@@ -64,30 +63,19 @@ function table(parent, caption) {
   return value;
 }
 
-const existing = node(240, 100, "table-responsive");
-const wrapped = table(existing, "Measured results");
-const fitted = node(100, 100, "table-responsive");
-fitted.attributes.tabindex = "0";
-const alreadyFitted = table(fitted, null);
-const code = node(260, 100);
-const ready = run([wrapped, alreadyFitted], [code]);
-assert.equal(ready.created.length, 0, "Existing wrappers must be reused");
-assert.equal(existing.attributes.role, "region");
-assert.equal(existing.attributes["aria-label"], "Measured results");
-assert.equal(existing.attributes.tabindex, "0", "Focus must reach the wrapper scrollport");
-assert.equal(fitted.attributes["aria-label"], "Table 2");
-assert.equal(fitted.attributes.tabindex, undefined, "Fitting wrappers must not add tab stops");
-assert.equal(code.attributes.tabindex, "0");
-existing.scrollWidth = existing.clientWidth;
-invoke(ready.context, ready.observed.find((item) => item.region === existing).update);
-assert.equal(existing.attributes.tabindex, undefined, "Resize must update wrapper focusability");
-
 const bare = table(node(100, 100), null);
-const newlyWrapped = run([bare], [], true);
-assert.equal(newlyWrapped.created.length, 1);
-assert.equal(bare.parentElement, newlyWrapped.created[0]);
-assert.equal(bare.parentElement.attributes["aria-label"], "Table 1");
-assert.equal(bare.parentElement.attributes.tabindex, "0");
+const code = node(260, 100);
+const ready = run([bare], [code], true);
+assert.equal(ready.created.length, 1);
+const region = ready.created[0];
+assert.equal(bare.parentElement, region);
+assert.equal(region.attributes.role, "region");
+assert.equal(region.attributes["aria-label"], "Table 1");
+assert.equal(region.attributes.tabindex, "0", "Focus must reach the wrapper scrollport");
+assert.equal(code.attributes.tabindex, "0");
+region.scrollWidth = region.clientWidth;
+invoke(ready.context, ready.observed.find((item) => item.region === region).update);
+assert.equal(region.attributes.tabindex, undefined, "Resize must update wrapper focusability");
 
 assert.match(css, /\.template-article \.gptr-vignette-brand\s*\{\s*display:\s*none;\s*\}/);
 assert.match(css, /#main \.table-responsive > table\s*\{\s*display:\s*table;\s*overflow:\s*visible;\s*\}/);

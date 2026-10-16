@@ -53,7 +53,7 @@ Ask Peter to use it:
 
 ```{r, eval = FALSE}
 session = peter("Add 40 and 2 with the demo tool.")
-session
+session$text
 ```
 
 ```{r tool-preview, echo = FALSE}
@@ -107,7 +107,7 @@ off_policy = gptr_register(keep_data)
 
 ```{r, eval = FALSE}
 session = peter("Remove the session's objects.", envir = new.env(), mode = auto)
-session
+session$text
 ```
 
 The offline example requests `rm(list = ls())`, which this policy denies:
@@ -121,8 +121,6 @@ session = peter(
   "Remove the session's objects.",
   model = fake, envir = new.env(), mode = auto
 )
-result = fake$log$requests[[2]]$last_results[[1]]
-result$is_error
 session$text
 ```
 
@@ -143,7 +141,7 @@ This example uses an offline provider so the event sequence is reproducible:
 
 ```{r}
 fake = gptr_fake_provider(list("hello"))
-session = peter("Say hello.", model = fake, .run = FALSE, envir = new.env())
+session = peter("Say hello.", model = fake, .run = FALSE)
 seen = new.env()
 seen$roles = character()
 off_hook = gptr_on(session, "message_end", function(event, ctx) {

@@ -44,27 +44,6 @@ img.logo {
   display: flow-root;
 }
 
-#main, .row > aside {
-  min-width: 0;
-}
-
-#main {
-  overflow-wrap: anywhere;
-}
-
-#main pre, #main pre code {
-  overflow-wrap: normal;
-  word-break: normal;
-}
-
-#main pre, #main .sourceCode {
-  max-width: 100%;
-}
-
-#main pre {
-  overflow-x: auto;
-}
-
 .table-responsive:focus-visible, #main pre:focus-visible {
   outline: 2px solid var(--bs-link-color);
   outline-offset: 2px;

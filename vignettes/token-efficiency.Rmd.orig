@@ -43,12 +43,8 @@ view$total_tokens
 `gptr_prompt()` inspects the system sections and tool definitions with estimated token counts;
 printing it shows their text. It does not query a provider. The `standard` preset describes
 most capabilities as functions in `peter$`, with the core model-visible `r`, `read`, `edit`
-and `write` tools and `ask` when applicable.
-
-The source benchmark's recorded o200k static-prefix counts are 1,262 for `minimal`, 2,335 for
-`standard` without optional sections, 2,813 with every section, and 2,956 with `ask` as well.
-These are measured fixture counts, not a promise about every runtime context or tokenizer.
-The first user message, project instructions and object descriptions add to them.
+and `write` tools and `ask` when applicable. The first user message, project instructions and
+object descriptions add to `view$total_tokens`.
 
 ## Object descriptions and result size
 
@@ -60,7 +56,7 @@ writeLines(gptr_describe(iris, budget = 60))
 `gptr_describe()` summarizes class, shape and values within a budget (150 tokens by default).
 Packages can register methods for their own classes. Generative-model context normally uses
 these descriptions and names; **System 1 questions send their input states**, so their egress
-and size rules differ. See the system-one vignette.
+and size rules differ. See [System 1 decisions](system-one.html).
 
 ```{r fake-regression, include = FALSE}
 code = paste(
@@ -76,7 +72,6 @@ fake = gptr_fake_provider(list(
 
 ```{r}
 work = new.env()
-work$mtcars = mtcars
 
 session = peter("Compare mpg and weight by cylinder count.", mtcars,
                 model = fake, envir = work, mode = auto)
@@ -115,7 +110,7 @@ small = gptr_fake_provider(list("Done."))
 
 ```{r}
 budget_error = tryCatch(
-  peter("Summarize mpg.", model = small, envir = new.env(), budget = list(tokens = 500)),
+  peter("Summarize mpg.", model = small, budget = list(tokens = 500)),
   gptr_error_budget = function(e) e
 )
 class(budget_error)[1]
@@ -143,14 +138,14 @@ Teams and fan-outs share the root call's budget; launching more children does no
 one a fresh root allowance. With `gptr_parallel()`, member `budget =`, `tools =` and per-run
 `.opts` are not applied. Set the intended limits through the governing settings or enclosing
 run, cap concurrency and inspect the returned children's statuses. See
-`vignette("teams-and-background", package = "gptr")`.
+[Teams and background work](teams-and-background.html).
 
 ## Compaction
 
 At the chat prompt, `/compact` replaces older model context with a summary. Add a focus when
 particular details must survive, for example `/compact retain the model comparison and next
 steps`. Automatic compaction follows the configured context and cold-cache thresholds; see
-the [configuration guide](configuration.html).
+[Configuration](configuration.html).
 
 Compaction can make a model request and add usage. It keeps the R objects already in your
 session, while the model no longer sees every older turn verbatim. Preserve important decisions
@@ -183,7 +178,7 @@ peter("Compute the mean.", x, .opts = list(preset = "minimal"))
 `"none"` omits both built-in workspace and attached-object descriptions; the R bindings still
 exist and can be used by tool code, as `x` is in the second example. Prompt text, tool results,
 images and other context blocks can still reach the model. System 1 input states use a separate
-encoding route. [Execution and memory](execution-model.html) explains these boundaries.
+encoding route. [Execution model](execution-model.html) explains these boundaries.
 `preset = "minimal"` reduces the tool/prompt surface; it does not authorize actions or remove
 required safety checks.
 
@@ -191,19 +186,6 @@ required safety checks.
 For a long workflow, continue one session, keep intermediate data in R and request concise
 reports between stages. Use a new session or an explicit fork when a separate analysis is
 intended.
-
-## The source benchmark
-
-The source repository contains offline golden transcripts, component counts and ratchets for
-prompt growth and extra requests:
-
-```sh
-Rscript --vanilla dev/bench/tokens/run.R --check
-```
-
-These fixture measurements support regression checks. They do not prove universal token
-savings or calibration against every provider. Live calibration is a separate, explicitly
-enabled release check; implementation or offline acceptance alone does not establish it.
 
 ```{r cleanup, include = FALSE}
 options(old_options)

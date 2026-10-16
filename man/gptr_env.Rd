@@ -44,7 +44,6 @@ secrets. It never prints, logs or returns a value.
 \examples{
 f = tempfile(fileext = ".env")
 writeLines("jev-key=example-not-a-real-key-123", f)
-rep = gptr_env(f, set_env = FALSE)
-rep$variable
+gptr_env(f, set_env = FALSE)$variable
 unlink(f)
 }

@@ -14,8 +14,8 @@ old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1
 
 A skill teaches a workflow; a prompt template turns a repeated request into a slash command;
 an agent definition describes a specialist. A plugin distributes these resources and can add R
-tools or MCP servers. Start with Markdown when instructions are enough. Use the
-[extension API](extending-gptr.html) when you need executable behavior.
+tools or MCP servers. Start with Markdown when instructions are enough. See
+[Extending gptr](extending-gptr.html) when you need executable behavior.
 
 ## Find and use skills
 
@@ -23,7 +23,7 @@ List resources without running plugin code:
 
 ```{r, eval = FALSE}
 library(gptr)
-gptr_skills(scope = "all")
+gptr_skills()
 gptr_agents(scope = "project")
 gptr_plugins(installed = TRUE)
 ```
@@ -124,11 +124,11 @@ max_turns: 8
 Inspect the supplied objects and files. Give evidence for each issue and suggest a fix.
 ```
 
-Load a definition by name or file; pass it to `agents =` to make the specialist available:
+Load a definition by name (or with `file =`); pass it to `agents =` to make the specialist
+available:
 
 ```{r, eval = FALSE}
 reviewer = gptr_agent("reviewer")
-reviewer = gptr_agent(file = ".gptr/agents/reviewer.md")
 peter("Have the reviewer check this analysis.", agents = list(reviewer))
 ```
 
@@ -237,17 +237,6 @@ units = function(gptr) {
 ```{r, eval = FALSE}
 session = peter("Report a distance of 3 metres.", extensions = units)
 session
-```
-
-The output below uses a fixed offline reply:
-
-```{r extension-preview, echo = FALSE}
-fake = gptr_fake_provider(list("The distance is 3 m."))
-session = peter(
-  "Report a distance of 3 metres.",
-  extensions = units, model = fake, envir = new.env()
-)
-session$text
 ```
 
 For recorded workflows that others can replay, see [Script as history](script-as-history.html).

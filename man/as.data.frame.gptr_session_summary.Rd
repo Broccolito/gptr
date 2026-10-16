@@ -2,7 +2,7 @@
 % Please edit documentation in R/session-object.R
 \name{as.data.frame.gptr_session_summary}
 \alias{as.data.frame.gptr_session_summary}
-\title{Strip display metadata while retaining every history row and column}
+\title{Convert a session summary to a data frame}
 \usage{
 \method{as.data.frame}{gptr_session_summary}(x, ...)
 }
@@ -16,5 +16,5 @@ data frame method.}
 An ordinary \code{data.frame} containing the complete history.
 }
 \description{
-Strip display metadata while retaining every history row and column
+Convert a session summary to a data frame
 }

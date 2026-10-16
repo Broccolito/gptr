@@ -139,14 +139,12 @@ built-in command table.
 A pipe such as \code{session |> peter("Explain the result.")} adds work to the same session
 and kept workspace. Use \code{\link[=gptr_fork]{gptr_fork()}} to branch explicitly. The final answer is
 \code{session$text}; \code{session$value} is the R value selected by \code{\link[=gptr_return]{gptr_return()}} during a tool
-call. Agent-created objects remain in \code{envir}. Give a function a dedicated environment when
-those objects should stay local.
+call. Agent-created objects remain in \code{envir}.
 }
 
 \examples{
 fake = gptr_fake_provider(list("The data has 32 rows.", "The data has 11 columns."))
-session = peter("How many rows does the data have?", mtcars,
-  model = fake, envir = new.env())
+session = peter("How many rows does the data have?", mtcars, model = fake)
 session$text
 session |> peter("And how many columns?")
 identical(gptr_last(), session)

@@ -1,8 +1,8 @@
 ---
-title: "Getting started with gptr"
+title: "Getting started"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Getting started with gptr}
+  %\VignetteIndexEntry{Getting started}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -31,17 +31,9 @@ can revise one analysis step without exporting and reloading the dataset for eac
 The same function, `peter()`, is an interactive chat at the console and a programmable call in
 scripts, loops and `if` statements.
 
-Names, shapes, previews, printed results and plots can reach the provider. R memory, copies and
-calculation time still matter, as does each model request's latency. The
-[execution guide](execution-model.html) explains those boundaries; the examples here use only
-small objects.
-
-Peter's name commemorates Peter Naur and Peter Cathcart Wason. The
-[Why Peter? guide](why-peter.html) connects their work on programs and reasoning to gptr.
-
-Choose a model through the [language-model guide](language-models.html), then ask Peter for
-the work you want. Live examples are shown without running them. The executable examples use
-scripted fake providers, so this guide builds without a key or network request.
+The [Execution model](execution-model.html) explains what reaches the provider and what still
+costs memory and time. Choose a model in [Language models](language-models.html); the examples
+below run offline with a scripted fake provider.
 
 ## A first call
 
@@ -53,7 +45,7 @@ session |> peter("Use fit to predict mpg and plot the predictions.")
 ```
 
 Peter writes and runs R through its tools. The pipe adds work to the same session, so the next
-turn can reuse `fit`. The default permission mode asks before changes unless a rule allows them.
+turn can reuse `fit`.
 
 ### Try it offline
 
@@ -65,10 +57,10 @@ from the prompt.
 library(gptr)
 
 fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = paste(
-    "fit = lm(mpg ~ wt, data = cars)", "gptr_return(coef(fit))", sep = "\n"
-  ))),
-  "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon.",
+  list(tool = "r", input = list(
+    code = "fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(coef(fit))"
+  )),
+  "Each 1000 lb of weight lowers mpg by about 5.3.",
   list(tool = "r", input = list(
     code = "predicted = predict(fit)\ngptr_return(head(predicted))"
   )),
@@ -76,13 +68,10 @@ fake = gptr_fake_provider(list(
 ))
 
 work = new.env()
-work$cars = mtcars
-session = peter(
-  "Fit mpg on wt in cars and return the coefficients.",
-  cars = work$cars, model = fake, envir = work, mode = auto
-)
+session = peter("Fit mpg on wt in mtcars and return the coefficients.", mtcars,
+  model = fake, envir = work, mode = auto)
 session$text
-#> [1] "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon."
+#> [1] "Each 1000 lb of weight lowers mpg by about 5.3."
 session$value
 #> (Intercept)          wt
 #>   37.285126   -5.344472
@@ -91,9 +80,8 @@ session$value
 Prompts are always quoted strings. Identifiers such as the mode can be bare names, the way
 `library(gptr)` needs no quotes: `mode = auto` and `mode = "auto"` are the same. The `auto` mode
 lets ordinary agent actions run without asking, while retaining the critical and secret guards.
-This vignette needs it because nobody is there to answer. At the console the default mode,
-`manual`, asks before changes unless a permission rule already allows them. The fake provider
-supplies the tool code explicitly; a real model chooses its own code from the prompt.
+This guide needs it because nobody is there to answer. At the console the default mode,
+`manual`, asks before changes unless a permission rule already allows them.
 
 `session$text` is the final answer, and `session$value` is the value the tool selected with
 `gptr_return()`.
@@ -102,7 +90,7 @@ The object the agent created is in `work`, like any object you created yourself:
 
 ``` r
 ls(work)
-#> [1] "cars" "fit"
+#> [1] "fit"
 coef(work$fit)
 #> (Intercept)          wt
 #>   37.285126   -5.344472
@@ -114,7 +102,7 @@ Reuse that fitted object in the next turn. No data file or repeated fit is neede
 ``` r
 session |> peter("Reuse fit to predict mpg and return the first six predictions.")
 #> The first six predictions are ready.
-#> idle . fake/fake-1 . 2 turns . 6.6k tokens . $0.0000 . se05e4dbf57
+#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . s83b855e07c
 session$value
 #>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
 #>          23.28261          21.91977          24.88595          20.10265
@@ -138,7 +126,7 @@ session$turns
 #> [1] 2
 gptr_usage(session, by = "model")
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 fake/fake-1  4         6571   60      0           0            0
+#> 1 fake/fake-1  4         6613   51      0           0            0
 #>
 #> # 1 row
 #> 4 requests, 6.6k tokens in, $0.0000
@@ -153,22 +141,22 @@ code can still allocate copies when it modifies objects or computes new results.
 
 ``` r
 fake2 = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "cyl_mpg = tapply(cars$mpg, cars$cyl, mean)")),
+  list(tool = "r", input = list(
+    code = "cyl_mpg = tapply(mtcars$mpg, mtcars$cyl, mean)"
+  )),
   "The mean fuel economy per number of cylinders is stored in `cyl_mpg`.",
   "Four-cylinder cars are the most economical, at about 26.7 miles per gallon.",
   "Four."
 ))
 
-group_session = peter(
-  "Compute the mean mpg for each number of cylinders.",
-  model = fake2, envir = work, mode = auto
-)
-continued_session = group_session |> peter("Which group is the most economical?")
-identical(group_session, continued_session)
-#> [1] TRUE
-group_session$turns
+session = peter("Compute the mean mpg for each number of cylinders.",
+  model = fake2, envir = work, mode = auto)
+session |> peter("Which group is the most economical?")
+#> Four-cylinder cars are the most economical, at about 26.7 miles per gallon.
+#> idle . fake/fake-1 . 2 turns . 5.0k tokens . $0.0000 . s7d512ac107
+session$turns
 #> [1] 2
-group_session$text
+session$text
 #> [1] "Four-cylinder cars are the most economical, at about 26.7 miles per gallon."
 ```
 
@@ -177,17 +165,18 @@ workspace looks up objects in the parent environment and keeps ordinary assignme
 
 
 ``` r
-branch_session = gptr_fork(group_session)
-branch_session |> peter("Answer in one word.")
+branch = gptr_fork(session)
+branch |> peter("Answer in one word.")
 #> Four.
-#> idle . fake/fake-1 . 3 turns . 1.7k tokens . $0.0000 . se743427e0e
-c(original = group_session$turns, branch = branch_session$turns)
+#> idle . fake/fake-1 . 3 turns . 1.7k tokens . $0.0000 . sdc891944b4
+c(original = session$turns, branch = branch$turns)
 #> original   branch
 #>        2        3
 ```
 
 The overlay separates ordinary bindings, rather than making a full data snapshot. Reference
-objects and arbitrary side effects require their usual care; see the execution guide.
+objects and arbitrary side effects require their usual care; see
+[Execution model](execution-model.html).
 
 ## Stopping instead of guessing
 
@@ -202,8 +191,8 @@ careful = gptr_fake_provider(list(
   "Added the column kpl."
 ))
 res = tryCatch(
-  peter("Add fuel economy in km per liter to mtcars.", model = careful, envir = new.env(),
-       mode = manual),
+  peter("Add fuel economy in km per liter to mtcars.", model = careful,
+        envir = new.env(), mode = manual),
   gptr_error_permission = function(e) e
 )
 class(res)[1]
@@ -221,8 +210,9 @@ low-risk code without a question.
 
 Called without a prompt in an interactive console, `peter()` opens a chat. Piping a session
 into it continues that session, and `/exit` returns the session. Inside chat, `/help` lists
-commands, `@name` attaches an object and `!code` runs your own R immediately. The
-[console guide](interactive-console.html) explains input syntax, permissions and interrupts.
+commands, `@name` attaches an object and `!code` runs your own R immediately.
+[Interactive console](interactive-console.html) explains input syntax, permissions and
+interrupts.
 
 
 ``` r
@@ -234,8 +224,8 @@ session |> peter()
 
 Choose a route explicitly. API providers use their named environment variables, which you can
 load from a private file with `gptr_env()`. Subscription CLI routes use the executable's own
-sign-in; Ollama uses an already-running local server and an installed model. The
-[language-model guide](language-models.html) gives setup examples for each route.
+sign-in; Ollama uses an already-running local server and an installed model.
+[Language models](language-models.html) gives setup examples for each route.
 
 
 ``` r
@@ -252,15 +242,15 @@ The first time a provider is used interactively, gptr shows what is sent to it a
 acknowledgment; `?gptr_egress` lists what a request contains. For persistent storage, call
 `gptr_init("/path/to/project")` to create a `.gptr/` workspace and review its separate trust
 decision. Without a project workspace, session storage is temporary. Defaults and storage
-policy are covered in the [configuration guide](configuration.html).
+policy are covered in [Configuration](configuration.html).
 
 ## Where to go next
 
 - [Language models](language-models.html): connect a route and use sessions in functions and scripts.
 - [Interactive console](interactive-console.html): all built-in commands and inline R.
 - [Configuration](configuration.html): scopes, settings, options and credentials.
-- [System 1](system-one.html): typed decisions inside `if`, `for` and `while`.
+- [System 1 decisions](system-one.html): typed decisions inside `if`, `for` and `while`.
 - [Script as history](script-as-history.html): documents that record and replay agent work.
-- [Extensions](extending-gptr.html): tools, policies, hooks and plugins.
+- [Extending gptr](extending-gptr.html): tools, policies, hooks and plugins.
 - [Token efficiency](token-efficiency.html): costs, budgets and compact context.
 - `?gptr_security`, `?gptr_egress` and `?gptr_options`.

@@ -72,10 +72,8 @@ member with only \code{execute} gets a generated \code{fun}.
 }
 \examples{
 gptr_tool("nrow_of", "Number of rows of a data frame in the session",
-          parameters = list(type = "object", required = I("name"),
-                            properties = list(name = list(type = "string"))),
-          fun = function(name) nrow(get(name, envir = globalenv())), exposure = "r",
-          namespace = "demo")
+          fun = function(name) nrow(get(name, envir = globalenv())),
+          exposure = "r", namespace = "demo")
 }
 \seealso{
 \link{gptr_register}, \link{gptr_check};

@@ -1958,7 +1958,7 @@ risk_norm = function(risk, tool = NULL) {
   out
 }
 
-#' Format a gptr_risk
+#' Format a risk classification
 #'
 #' @param x A `gptr_risk` object.
 #' @param ... Unused.

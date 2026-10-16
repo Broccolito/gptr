@@ -642,7 +642,7 @@ sessions_dir = function() file.path(workspace_root(create = FALSE), "sessions")
 #'   session of this process, or `NULL` when no session was created in this process.
 #' @order 1
 #' @examples
-#' session = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' session = peter("hi", model = gptr_fake_provider(list("hello")))
 #' identical(gptr_last(), session)
 #' gptr_sessions()
 #' identical(gptr_resume(session$id), session)

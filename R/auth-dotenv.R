@@ -186,8 +186,7 @@ dotenv_bad_key_value = function(variable, value) {
 #' @examples
 #' f = tempfile(fileext = ".env")
 #' writeLines("jev-key=example-not-a-real-key-123", f)
-#' rep = gptr_env(f, set_env = FALSE)
-#' rep$variable
+#' gptr_env(f, set_env = FALSE)$variable
 #' unlink(f)
 gptr_env = function(path = ".env", aliases = NULL, set_env = getOption("gptr.env_export", TRUE),
                     override = FALSE, quiet = FALSE) {

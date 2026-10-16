@@ -977,10 +977,8 @@ spec_missing = function(kind, name, field) {
 #'   `vignette("extending-gptr", package = "gptr")` for complete tool and policy examples.
 #' @examples
 #' gptr_tool("nrow_of", "Number of rows of a data frame in the session",
-#'           parameters = list(type = "object", required = I("name"),
-#'                             properties = list(name = list(type = "string"))),
-#'           fun = function(name) nrow(get(name, envir = globalenv())), exposure = "r",
-#'           namespace = "demo")
+#'           fun = function(name) nrow(get(name, envir = globalenv())),
+#'           exposure = "r", namespace = "demo")
 #' @export
 gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun = NULL,
                      exposure = c("direct", "r", "deferred", "hidden"), namespace = NULL,

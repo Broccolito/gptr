@@ -1,8 +1,8 @@
 ---
-title: "The interactive Peter console"
+title: "Interactive console"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{The interactive Peter console}
+  %\VignetteIndexEntry{Interactive console}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -26,15 +26,15 @@ html[data-bs-theme] .gptr-vignette-brand { display: none; }
 
 Call `peter()` without a prompt from an interactive R console to chat. It uses your current
 environment and the configured model. Choose a route explicitly with
-`peter(model = "openai/gpt-6-sol")`. The [language-model guide](language-models.html) covers
-API, CLI and local setup.
+`peter(model = "openai/gpt-6-sol")`. [Language models](language-models.html) covers API, CLI
+and local setup.
 
-On a new console with no explicit or configured model, Peter first offers Codex CLI, Claude Code
-CLI and manual API/Ollama setup. Selecting an installed CLI that reports `Signed in` saves its
-default model in your user settings and opens the console. `Unknown` permits your explicit
-choice with a notice; `Not signed in` returns to R with terminal sign-in instructions.
-CLI-reported login does not verify online access or subscription billing; an API-key login can
-also count as signed in. Context-sharing acknowledgment remains separate.
+On a new console with no explicit or configured model, Peter first offers the Codex CLI, the
+Claude Code CLI and manual API/Ollama setup. Selecting an installed CLI that reports
+`Signed in` saves its default model in your user settings and opens the console. `Unknown`
+permits your explicit choice with a notice; `Not signed in` returns to R with terminal sign-in
+instructions. CLI-reported login does not verify online access or subscription billing; an
+API-key login can also count as signed in. Context-sharing acknowledgment remains separate.
 
 Manual setup prints API and local Ollama commands and returns to R; cancellation, a missing CLI
 or a non-CLI replacement of a shortcut also returns without saving a default. Configure a model
@@ -59,16 +59,13 @@ The default prompt is `peter> `; other permission modes appear as `peter[plan]> 
 Objects created by the agent remain in the environment where the console runs.
 R tools compute on those in-memory objects across turns; you can inspect or reuse them at the
 R prompt without exporting and reloading a dataset. Model context is a separate, bounded
-description of that workspace; see [Execution](execution-model.html) for copying and storage.
+description of that workspace; see [Execution model](execution-model.html) for copying and
+storage.
 
 For input piped to an R process, `peter(.stdin = TRUE)` explicitly reads standard input using
 the same syntax; end of input returns the session. The console UI can consume permission
 answers from that input too. Configure the model, credentials and permissions before
 unattended work.
-
-Ordinary responses, progress, setup and steering use normal console output. Actual failures
-use the error stream; handled guidance keeps a clear label without alarming error coloring.
-Reply and history formatting use the current console width; the client controls font size and zoom.
 
 For programmatic event streams, select `.opts = list(frontend = "jsonl")`. With `.stdin = TRUE`,
 that frontend treats every input line as a literal model prompt (or a JSON prompt record);
@@ -113,13 +110,8 @@ still part of the workspace that later calls can inspect or describe. Neither pr
 through the model's permission gate: you are explicitly running your own R code. Do not paste
 unreviewed code merely because the agent suggested it.
 
-In a native Unix R terminal with readline enabled, Tab retains R's completion after `!` and
-`!!`, including objects on R's search path, namespaces and quoted file paths. Peter restores
-the terminal's completion setting when you leave and respects an existing custom completer.
-Objects kept only in a private agent environment are not added to R's completion search path.
-RStudio, R.app, notebooks and other editors own their input and completion UI; completion
-inside their `readline()` prompt depends on the client. You can always run ordinary R at the
-client's R prompt, then return to Peter with the same workspace.
+In a terminal R with readline, Tab completes R names and file paths after `!` and `!!`; other
+front ends keep their own completion.
 
 ```text
 peter> !fit = lm(mpg ~ wt, data = mtcars)
@@ -150,10 +142,6 @@ peter> ```r
 These input forms apply inside Peter's chat; at the ordinary R prompt, use normal R syntax.
 Console inputs may enter R's history (`gptr.history`), and an enabled transcript can record
 user-run code. `!!` is a control over the next prompt note, not a privacy boundary.
-
-Streamed prose follows the available console width for newly received text. Previously printed
-scrollback, code blocks and long unbroken tokens keep their layout. Window resizing, font
-scaling and scrollback reflow are controlled by the terminal or editor.
 
 ## Commands
 
@@ -200,8 +188,8 @@ covering the flagged calls, `n` to deny, and `?` for details. `edits` allows pro
 while still asking about R changes unless an allow rule applies; `auto` allows ordinary actions
 while retaining critical and secret guards. `plan` offers read-only tools and level-1 R
 exploration in a scratch environment, where intermediate bindings can change while the user
-workspace is preserved. Settings and policies are described in the
-[configuration guide](configuration.html) and `?gptr_security`.
+workspace is preserved. Settings and policies are described in
+[Configuration](configuration.html) and `?gptr_security`.
 
 While an answer or tool runs in a supported terminal, Ctrl-C opens a pause menu:
 
@@ -234,20 +222,6 @@ gptr_cancel(session)
 
 For persistent conversation storage, initialize a project with `gptr_init(path)` and review its
 trust decision. `gptr_sessions()` lists stored sessions, and `gptr_resume(id)` recovers one.
-The [script-as-history guide](script-as-history.html) covers document recording, replay and
-transcripts; the [language-model guide](language-models.html) covers scripted calls that need
-no interactive console.
-
-## Try an offline turn
-
-This scripted example uses a fake provider with a fixed reply; it needs no key or network.
-
-
-``` r
-library(gptr)
-work = list2env(list(x = 1:5))
-fake = gptr_fake_provider(list("The vector has five values."))
-session = peter("Describe x.", x = work$x, model = fake, envir = work)
-session$text
-#> [1] "The vector has five values."
-```
+[Script as history](script-as-history.html) covers document recording, replay and
+transcripts; [Language models](language-models.html) covers scripted calls that need no
+interactive console.

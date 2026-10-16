@@ -862,7 +862,8 @@ doc_console_append = function(lines, session = NULL) {
 #' `gptr.spill_days` (`7`): `gptr_cache("prune")` removes temporary files older than this.
 #' @export
 #' @examples
-#' f = tempfile(fileext = ".R"); writeLines("library(gptr)", f)
+#' f = tempfile(fileext = ".R")
+#' writeLines("library(gptr)", f)
 #' gptr_doc(f)
 #' gptr_doc()
 #' gptr_doc(FALSE)

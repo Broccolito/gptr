@@ -31,8 +31,8 @@ experimental background sessions progress when there is no idle console.
 }
 \examples{
 fake = gptr_fake_provider(list("a"))
-runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),
-            b = peter("two", model = fake, .run = FALSE, envir = new.env()))
+runs = list(a = peter("one", model = fake, .run = FALSE),
+            b = peter("two", model = fake, .run = FALSE))
 gptr_wait(runs, timeout = 10)
 vapply(runs, function(x) x$status, "")
 }

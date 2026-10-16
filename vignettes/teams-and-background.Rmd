@@ -1,8 +1,8 @@
 ---
-title: "Teams, fan-outs and background sessions"
+title: "Teams and background work"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Teams, fan-outs and background sessions}
+  %\VignetteIndexEntry{Teams and background work}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -26,12 +26,10 @@ html[data-bs-theme] .gptr-vignette-brand { display: none; }
 
 Use a team for several roles working on one task, a fan-out for the same task over several
 inputs, or `gptr_parallel()` for independently specified calls. Each returns a session whose
-children can be inspected. The reactor overlaps model I/O; ordinary inline R code still
+children can be inspected. Model requests run concurrently; ordinary inline R code still
 executes in the one R process.
 
-The recipes below use your configured model. The separate offline examples used to build
-this guide use fake providers and the inline backend, with no network, worker or CLI calls.
-Background and rewind recipes are not executed.
+The examples below need a configured model and are shown without running them.
 
 ## A team of named roles
 
@@ -64,7 +62,7 @@ Continuing a team without `agents =` asks the container's model to synthesize th
 
 
 ``` r
-session = session |> peter("Reconcile the reviews into one prioritized list of fixes.")
+session |> peter("Reconcile the reviews into one prioritized list of fixes.")
 ```
 
 This adds a model request. `agents =` starts new children; it cannot be used to continue a
@@ -109,16 +107,16 @@ not collide with session accessors such as `text` or `status`. A member must be 
 queued input, rather than an already completed call passed by variable.
 
 Each member retains its own model and workspace, but member `tools =`, `budget =` and
-per-run `.opts` (including `max_turns`) are not applied. The team shares the governing root
-budget. Set applicable defaults before launch or run under an enclosing budget; see the
-token-efficiency vignette. `on_error = "return"` keeps failed members for inspection;
-`"stop"` signals the first failed member's condition after all members settle.
+per-run `.opts` (including `max_turns`) are not applied. Members share the call's budget. Set
+applicable defaults before launch or run under an enclosing budget; see
+[Token efficiency](token-efficiency.html). `on_error = "return"` keeps failed members for
+inspection; `"stop"` signals the first failed member's condition after all members settle.
 
 ## Deferred sessions and SDK control
 
 `.run = FALSE` constructs an idle session with queued input without requesting a model yet.
-`gptr_step()` advances it by model turns; `gptr_wait()` starts queued work and pumps until
-settlement or timeout. Returned sessions can be inspected at each stage.
+`gptr_step()` advances it by model turns; `gptr_wait()` runs queued work until it finishes or
+times out. Returned sessions can be inspected at each stage.
 
 
 ``` r
@@ -144,15 +142,15 @@ workspace and remove listeners when finished:
 
 
 ``` r
-observed = new.env()
-observed$roles = character()
+seen = new.env()
+seen$roles = character()
 off = gptr_on(session, "message_end", function(event, ctx) {
-  observed$roles = c(observed$roles, event$message$role)
+  seen$roles = c(seen$roles, event$message$role)
   NULL
 })
-session = session |> peter("Check the plan's assumptions.")
+session |> peter("Check the plan's assumptions.")
 off()
-observed$roles
+seen$roles
 ```
 
 ## Experimental background work
@@ -165,11 +163,11 @@ a short task and an explicit workspace:
 ``` r
 work = new.env()
 work$fit = fit
-session = peter("Inspect fit and propose follow-up checks.", fit = work$fit, envir = work,
-                background = TRUE)
+session = peter("Inspect fit and propose follow-up checks.", fit = work$fit,
+                envir = work, background = TRUE)
 session$status
 gptr_jobs()
-session = session |> peter("Prioritize residual diagnostics.")
+session |> peter("Prioritize residual diagnostics.")
 gptr_wait(session, timeout = 30)
 # Cancel only if the run is still active and you want to stop it.
 gptr_cancel(session)
@@ -193,8 +191,8 @@ After a modifying run, inspect checkpoints and preview a rewind before restoring
 
 ``` r
 gptr_checkpoints(session)
-gptr_rewind(session, turn = -1, restore = "all", preview = TRUE)
-gptr_rewind(session, turn = -1, restore = "all")
+gptr_rewind(session, preview = TRUE)
+gptr_rewind(session)
 gptr_usage(session, by = "agent")
 ```
 
@@ -207,11 +205,5 @@ Assigning a session to another name keeps the same object; use `gptr_fork()` for
 For a top-level team or fan-out call in a designated history document, child code is recorded
 under that statement and replay can reconstruct the children. Recording, answer caches and
 usable blocks must be present; a narrative team report alone is not a replayable workflow.
-See `vignette("script-as-history", package = "gptr")` for recording and summary recipes,
-and `vignette("token-efficiency", package = "gptr")` for shared budgets and usage.
-
-## Offline examples used to build this guide
-
-The documentation build runs the following examples with fake providers in separate work
-environments. They need no credentials or network and do not start workers or external CLIs.
-The setup is hidden in the rendered guide to keep the main recipes focused on your analysis.
+See [Script as history](script-as-history.html) for recording and summary recipes, and
+[Token efficiency](token-efficiency.html) for shared budgets and usage.

@@ -1,8 +1,8 @@
 ---
-title: "System 1 decisions in R control flow"
+title: "System 1 decisions"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{System 1 decisions in R control flow}
+  %\VignetteIndexEntry{System 1 decisions}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -53,8 +53,7 @@ abstracts = c(
   cohort = "We followed 5000 nurses for 20 years and recorded incident diabetes.",
   pilot = "A pilot study of 30 patients; the allocation method is not reported."
 )
-is_rct = peter("Is this a randomized trial?", abstracts, model = judge,
-               envir = new.env())
+is_rct = peter("Is this a randomized trial?", abstracts, model = judge)
 
 is_rct
 gptr_prob(is_rct)
@@ -79,12 +78,12 @@ studies = data.frame(
   sample_size = c(200L, 5000L, 30L),
   row.names = names(abstracts)
 )
-peter("Was allocation randomized?", studies, model = judge, envir = new.env())
+peter("Was allocation randomized?", studies, model = judge)
 
 record = list(abstract = abstracts[["trial"]], sample_size = 200L,
               allocation = "randomized")
 
-length(peter("Was allocation randomized?", record, model = judge, envir = new.env()))
+length(peter("Was allocation randomized?", record, model = judge))
 ```
 
 System 1 sends the input states to the selected provider, rather than only an object name.
@@ -102,7 +101,7 @@ confidence is also uncertain when the minimum is positive. For yes/no decisions,
 
 ```{r}
 screened = peter("Is this a randomized trial?", abstracts, model = judge,
-                 min_confidence = 0.8, envir = new.env())
+                 min_confidence = 0.8)
 
 screened
 names(abstracts)[!is.na(screened) & screened]
@@ -115,8 +114,7 @@ choice, not a negative model answer.
 
 ```{r}
 is_trial = function(text) {
-  peter("Is this a randomized trial?", text = force(text),
-        model = judge, min_confidence = 0.8, envir = new.env())
+  peter("Is this a randomized trial?", text, model = judge, min_confidence = 0.8)
 }
 
 included = character()
@@ -130,11 +128,9 @@ for (id in names(abstracts)) {
 list(included = included, review = review)
 ```
 
-`text = force(text)` passes the function argument as context even though `envir` is a different
-environment from the function frame.
 The same function can live in an ordinary R file. A call inside a function or loop does not
 own a recorded document block. A matching System 1 cache entry can avoid another request;
-that is distinct from document replay. See the script-as-history vignette.
+that is distinct from document replay. See [Script as history](script-as-history.html).
 
 `uncertain = "stop"` signals `gptr_error_s1_uncertain`. `TRUE` or `FALSE` supply a yes/no
 fallback; a function `function(state, answer)` can return one replacement of the answer's
@@ -148,7 +144,7 @@ samples = c(s1 = "Biopsy of the right lower lobe",
             s2 = "Hepatocytes from a resected liver segment",
             s3 = "Cortex from an epilepsy resection")
 tissue = peter("Which tissue is this?", samples, model = judge,
-               choices = c("liver", "lung", "brain", "other"), envir = new.env())
+               choices = c("liver", "lung", "brain", "other"))
 
 tissue
 gptr_prob(tissue)
@@ -156,7 +152,7 @@ gptr_prob(tissue, "probabilities")
 
 severity = peter("Rate this event's severity.",
                  c(a = "Mild headache", b = "Anaphylaxis requiring adrenaline"),
-                 model = judge, levels = c("mild", "moderate", "severe"), envir = new.env())
+                 model = judge, levels = c("mild", "moderate", "severe"))
 
 severity
 gptr_prob(severity, "probabilities")
@@ -172,7 +168,8 @@ established probabilities that the answer is correct.
 ## Provenance and caching
 
 ```{r}
-attr(is_rct, "meta")[c("model", "engine", "calibrated", "execution", "locality", "cached")]
+meta = attr(is_rct, "meta")
+meta[c("model", "engine", "calibrated", "execution", "locality", "cached")]
 ```
 
 The metadata also includes usage, request IDs and, when available, a model digest, server
@@ -197,14 +194,12 @@ summary_model = gptr_fake_provider(list("The summary succeeded: 32 cars, 11 vari
 ```{r}
 tasks = c("Rename a column.", "Choose a mixed model for repeated measurements.")
 for (task in tasks) {
-  hard = peter("Does this task need the stronger model?", task, model = judge,
-                envir = new.env())
-  session = peter(task, model = if (isTRUE(hard)) strong else fast, envir = new.env())
+  hard = peter("Does this task need the stronger model?", task, model = judge)
+  session = peter(task, model = if (isTRUE(hard)) strong else fast)
   print(session$text)
 }
 
-session = peter("Summarize mtcars in one sentence.", model = summary_model,
-                envir = new.env())
+session = peter("Summarize mtcars in one sentence.", model = summary_model)
 
 session |> peter("Did the analysis succeed?", model = judge)
 session$turns

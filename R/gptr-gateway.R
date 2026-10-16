@@ -46,8 +46,7 @@
 #' A pipe such as `session |> peter("Explain the result.")` adds work to the same session
 #' and kept workspace. Use [gptr_fork()] to branch explicitly. The final answer is
 #' `session$text`; `session$value` is the R value selected by [gptr_return()] during a tool
-#' call. Agent-created objects remain in `envir`. Give a function a dedicated environment when
-#' those objects should stay local.
+#' call. Agent-created objects remain in `envir`.
 #'
 #' @usage
 #' peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
@@ -82,8 +81,7 @@
 #'   console), or a typed System 1 vector for classifier models.
 #' @examples
 #' fake = gptr_fake_provider(list("The data has 32 rows.", "The data has 11 columns."))
-#' session = peter("How many rows does the data have?", mtcars,
-#'   model = fake, envir = new.env())
+#' session = peter("How many rows does the data have?", mtcars, model = fake)
 #' session$text
 #' session |> peter("And how many columns?")
 #' identical(gptr_last(), session)

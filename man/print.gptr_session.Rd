@@ -2,7 +2,7 @@
 % Please edit documentation in R/session-object.R
 \name{print.gptr_session}
 \alias{print.gptr_session}
-\title{Print a session: the last answer, then a dim footer}
+\title{Print a session}
 \usage{
 \method{print}{gptr_session}(x, ...)
 }

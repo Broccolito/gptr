@@ -1,8 +1,8 @@
 ---
-title: "The script is the history"
+title: "Script as history"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{The script is the history}
+  %\VignetteIndexEntry{Script as history}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -25,8 +25,7 @@ an intermediate dataset file. See [Execution model](execution-model.html) for ob
 and the separate costs of checkpoints, workers and snapshots.
 
 The examples below are recipes for your configured model. Run recording and file-writing
-steps deliberately in a temporary project. The offline examples used to build this guide
-are kept separately at the end; they use fake providers and make no network requests.
+steps deliberately in a temporary project.
 
 ## Program in natural language, then use ordinary R
 
@@ -44,15 +43,11 @@ session = peter("Fit mpg ~ wt in cars with stats::lm(); store fit.") |>
   peter("Summarize observed mpg minus predicted; store residual_summary.")
 
 graphics::plot(cars$mpg, predicted)
-session = session |> peter("Explain the largest residuals.")
+session |> peter("Explain the largest residuals.")
 ```
 
 Prompts and ordinary R can alternate. A pipe adds turns to the same mutable session; assigning
 the session to another name does not make a branch. Use `gptr_fork()` for a branch.
-
-Each Peter call in a top-level pipe owns a block after the complete statement. A later
-continuation that uses `session` still needs that handle. Raw export refuses such a dependency
-when it would remove the handle; the export recipe below uses a new top-level call instead.
 
 ### Calls inside functions
 
@@ -190,17 +185,13 @@ Use `quarto render analysis.qmd` for `.qmd`; `gptr_source()` is not a renderer f
 format. Arrange the document's setup to load gptr, prepare its input data and select a model
 or replay mode. Plain R chunks still execute when the report is rendered.
 
-In IRkernel, session answers render as safe Markdown, with ordinary progress separate from
-error messages. The executed R code of a pending recorded block is shown once in the cell
-output; notebook writes remain queued until you explicitly synchronize them.
-
 For Jupyter, bind the saved `.ipynb` path in the R kernel. Blocks become agent cells. Writes
 are queued while the notebook is open to avoid competing with the notebook editor; after
 closing it, apply the pending blocks:
 
 ```{r, eval = FALSE}
 gptr_doc("analysis.ipynb")
-# Run the notebook's Peter calls in its R kernel, then save and close the notebook.
+# Run the notebook's `peter()` calls in its R kernel, then save and close the notebook.
 gptr_doc("analysis.ipynb", sync = TRUE)
 gptr_blocks("analysis.ipynb")
 gptr_doc(FALSE)
@@ -212,7 +203,7 @@ or listing a file is not proof that pending blocks were applied successfully.
 ## Exporting a recorded script
 
 `gptr_export()` reads a synchronized `.R` history and writes a new `.R` file without running
-it or asking a model. Its default `format = "r"` turns Peter calls into comments and keeps
+it or asking a model. Its default `format = "r"` turns `peter()` calls into comments and keeps
 the recorded R executable. With `format = "peter"`, calls remain active and the previous
 recorded code becomes comments, so that code is not executed a second time. Ordinary user
 code and comments retain their source order. Choose a new `.R` destination in an existing
@@ -253,25 +244,26 @@ gptr_export("analysis.R", "analysis-peter.R", format = "peter")
 gptr_doc(FALSE)
 ```
 
-The export operation creates no model request. Running the Peter export can create new
-requests; running the raw export executes its recorded R and ordinary user code. Review
-those effects, then validate the raw result in a fresh environment with the intended inputs.
+The export operation creates no model request. Running the `format = "peter"` export can
+create new requests; running the raw export executes its recorded R and ordinary user code.
+Review those effects, then validate the raw result in a fresh environment with the intended
+inputs.
 For this example, input preparation is already in the source. For an analysis that uses a
 large object loaded earlier, supply that object in the new environment; exporting does not
 serialize the dataset or make an intermediate data file.
 
-In the Peter format, recorded Decision and Steer notes and bounded `#>` output follow each
-operand of this separate-line pipeline. Other layouts keep feedback after the complete
-statement. Notes and output are comments, not assertions that the analysis is correct. Each
-block keeps at most twelve output lines and eighty characters per output line.
+In the `format = "peter"` output, recorded Decision and Steer notes and bounded `#>` output
+follow each operand of this separate-line pipeline. Other layouts keep feedback after the
+complete statement. Notes and output are comments, not assertions that the analysis is correct.
+Each block keeps at most twelve output lines and eighty characters per output line.
 
-Export requires fresh completed records and no pending sidecar. It refuses computed or
-nested prompts, mixed Peter/ordinary pipelines, shared-line statements, interpolated-input
-hashes, missing or edited blocks and secret-marked records. Raw export also refuses later
-ordinary code that depends on a removed session handle, such as `session$value`; put needed
-results in ordinary R objects, or retain the Peter format. Earlier unrecorded console input
-is not reconstructed. Preserved user code can still require gptr or other packages, read or
-write files, or call the network. Export is a source transformation, not verified replay.
+Export requires fresh completed records and no pending sidecar. It refuses computed or nested
+prompts, mixed `peter()`/ordinary pipelines, shared-line statements, interpolated-input hashes,
+missing or edited blocks and secret-marked records. Raw export also refuses later ordinary code
+that depends on a removed session handle, such as `session$value`; put needed results in
+ordinary R objects, or retain the `format = "peter"` output. Earlier unrecorded console input is
+not reconstructed. Preserved user code can still require gptr or other packages, read or write
+files, or call the network. Export is a source transformation, not verified replay.
 
 ## Asking Peter to summarize a completed workflow
 
@@ -282,7 +274,7 @@ R document; it cannot recover arbitrary conversation turns into a complete workf
 With your configured model, continue `session` to request a narrative:
 
 ```{r, eval = FALSE}
-session = session |> peter(
+session |> peter(
   "Summarize completed steps, decisions, inputs, outputs and open issues.
 Separate proposed work. Name saved files only when verified.",
   mode = plan
@@ -292,9 +284,9 @@ session$text
 
 The answer is **model-generated text** and adds a turn to `session`. Check its claims against the
 workspace, files and history before treating it as a record. `gptr_usage(session)` shows the
-request's usage; a summary request is not free merely because it summarizes existing work.
+request's usage.
 
-For a Peter history document, designate the target before recording top-level prompts,
+For a history document, designate the target before recording top-level prompts,
 include ordinary R setup and checks, and inspect the blocks and replay behavior. To assemble
 one from earlier work, ask the model to draft it and review the draft; earlier unrecorded
 turns are not automatically recovered into validated blocks.
@@ -302,7 +294,7 @@ turns are not automatically recovered into validated blocks.
 For an ordinary R script, request a separate, explicit implementation:
 
 ```{r, eval = FALSE}
-session = session |> peter(
+session |> peter(
   "Write ordinary R for the verified analysis, including inputs and output saves.
 Do not call Peter. Identify missing inputs or steps instead of inventing them.",
   mode = plan
@@ -312,17 +304,10 @@ session$text
 
 This returns **model-generated output**, not an exported or validated script. Save only
 reviewed code, then run it in a fresh environment with the intended inputs and verify its
-outputs. A prose summary can accompany either script, but prose alone is not executable
-history.
+outputs.
 
-See `vignette("system-one", package = "gptr")` for typed decisions and
-`vignette("teams-and-background", package = "gptr")` for orchestration and SDK control.
-
-## Offline examples used to build this guide
-
-The documentation build runs the following examples with fake providers in separate work
-environments. They need no credentials or network and do not start workers or external CLIs.
-The setup is hidden in the rendered guide to keep the main recipes focused on your analysis.
+See [System 1 decisions](system-one.html) for typed decisions and
+[Teams and background work](teams-and-background.html) for orchestration and SDK control.
 
 ```{r offline-history-functions, include = FALSE}
 library(gptr)
@@ -348,7 +333,7 @@ summary(session)
 follow = gptr_fake_provider(list("A first answer.", "An answer incorporating the follow-up."),
                             name = "follow")
 session = peter("Summarize the analysis.", model = follow, envir = new.env())
-session = session |> peter("Mention the sample size too.")
+session |> peter("Mention the sample size too.")
 session$turns
 ```
 

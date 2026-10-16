@@ -1,8 +1,8 @@
 ---
-title: "System 1 decisions in R control flow"
+title: "System 1 decisions"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{System 1 decisions in R control flow}
+  %\VignetteIndexEntry{System 1 decisions}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -48,13 +48,12 @@ abstracts = c(
   cohort = "We followed 5000 nurses for 20 years and recorded incident diabetes.",
   pilot = "A pilot study of 30 patients; the allocation method is not reported."
 )
-is_rct = peter("Is this a randomized trial?", abstracts, model = judge,
-               envir = new.env())
+is_rct = peter("Is this a randomized trial?", abstracts, model = judge)
 
 is_rct
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-12
+#> judge-s1-1.0 . calibration unknown . 2026-10-15
 gptr_prob(is_rct)
 #>  trial cohort  pilot
 #>   0.94   0.07   0.55
@@ -84,15 +83,15 @@ studies = data.frame(
   sample_size = c(200L, 5000L, 30L),
   row.names = names(abstracts)
 )
-peter("Was allocation randomized?", studies, model = judge, envir = new.env())
+peter("Was allocation randomized?", studies, model = judge)
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)  TRUE (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-12
+#> judge-s1-1.0 . calibration unknown . 2026-10-15
 
 record = list(abstract = abstracts[["trial"]], sample_size = 200L,
               allocation = "randomized")
 
-length(peter("Was allocation randomized?", record, model = judge, envir = new.env()))
+length(peter("Was allocation randomized?", record, model = judge))
 #> [1] 1
 ```
 
@@ -112,12 +111,12 @@ confidence is also uncertain when the minimum is positive. For yes/no decisions,
 
 ``` r
 screened = peter("Is this a randomized trial?", abstracts, model = judge,
-                 min_confidence = 0.8, envir = new.env())
+                 min_confidence = 0.8)
 
 screened
 #>          trial         cohort          pilot
 #>  TRUE (p=0.94) FALSE (p=0.07)    NA (p=0.55)
-#> judge-s1-1.0 . calibration unknown . 2026-10-12
+#> judge-s1-1.0 . calibration unknown . 2026-10-15
 names(abstracts)[!is.na(screened) & screened]
 #> [1] "trial"
 names(abstracts)[is.na(screened)]
@@ -131,8 +130,7 @@ choice, not a negative model answer.
 
 ``` r
 is_trial = function(text) {
-  peter("Is this a randomized trial?", text = force(text),
-        model = judge, min_confidence = 0.8, envir = new.env())
+  peter("Is this a randomized trial?", text, model = judge, min_confidence = 0.8)
 }
 
 included = character()
@@ -151,11 +149,9 @@ list(included = included, review = review)
 #> [1] "pilot"
 ```
 
-`text = force(text)` passes the function argument as context even though `envir` is a different
-environment from the function frame.
 The same function can live in an ordinary R file. A call inside a function or loop does not
 own a recorded document block. A matching System 1 cache entry can avoid another request;
-that is distinct from document replay. See the script-as-history vignette.
+that is distinct from document replay. See [Script as history](script-as-history.html).
 
 `uncertain = "stop"` signals `gptr_error_s1_uncertain`. `TRUE` or `FALSE` supply a yes/no
 fallback; a function `function(state, answer)` can return one replacement of the answer's
@@ -170,12 +166,12 @@ samples = c(s1 = "Biopsy of the right lower lobe",
             s2 = "Hepatocytes from a resected liver segment",
             s3 = "Cortex from an epilepsy resection")
 tissue = peter("Which tissue is this?", samples, model = judge,
-               choices = c("liver", "lung", "brain", "other"), envir = new.env())
+               choices = c("liver", "lung", "brain", "other"))
 
 tissue
 #>             s1             s2             s3
 #>  lung (p=0.91) liver (p=0.88) brain (p=0.80)
-#> judge-s1-1.0 . calibration unknown . 2026-10-12
+#> judge-s1-1.0 . calibration unknown . 2026-10-15
 gptr_prob(tissue)
 #>   s1   s2   s3
 #> 0.91 0.88 0.80
@@ -187,12 +183,12 @@ gptr_prob(tissue, "probabilities")
 
 severity = peter("Rate this event's severity.",
                  c(a = "Mild headache", b = "Anaphylaxis requiring adrenaline"),
-                 model = judge, levels = c("mild", "moderate", "severe"), envir = new.env())
+                 model = judge, levels = c("mild", "moderate", "severe"))
 
 severity
 #>                a                b
 #> 0.20 (conf 0.85) 1.88 (conf 0.90)
-#> judge-s1-1.0 . calibration unknown . 2026-10-12
+#> judge-s1-1.0 . calibration unknown . 2026-10-15
 gptr_prob(severity, "probabilities")
 #>   mild moderate severe
 #> a 0.85     0.10   0.05
@@ -210,7 +206,8 @@ established probabilities that the answer is correct.
 
 
 ``` r
-attr(is_rct, "meta")[c("model", "engine", "calibrated", "execution", "locality", "cached")]
+meta = attr(is_rct, "meta")
+meta[c("model", "engine", "calibrated", "execution", "locality", "cached")]
 #> $model
 #> [1] "judge-s1-1.0"
 #>
@@ -247,20 +244,18 @@ identity cannot promise durable reuse. Use `gptr_cache()` to inspect the cache.
 ``` r
 tasks = c("Rename a column.", "Choose a mixed model for repeated measurements.")
 for (task in tasks) {
-  hard = peter("Does this task need the stronger model?", task, model = judge,
-                envir = new.env())
-  session = peter(task, model = if (isTRUE(hard)) strong else fast, envir = new.env())
+  hard = peter("Does this task need the stronger model?", task, model = judge)
+  session = peter(task, model = if (isTRUE(hard)) strong else fast)
   print(session$text)
 }
 #> [1] "A quick answer from the fast model."
 #> [1] "A careful answer from the strong model."
 
-session = peter("Summarize mtcars in one sentence.", model = summary_model,
-                envir = new.env())
+session = peter("Summarize mtcars in one sentence.", model = summary_model)
 
 session |> peter("Did the analysis succeed?", model = judge)
 #> [1] TRUE (p=0.94)
-#> judge-s1-1.0 . calibration unknown . 2026-10-12
+#> judge-s1-1.0 . calibration unknown . 2026-10-15
 session$turns
 #> [1] 1
 ```

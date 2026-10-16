@@ -191,9 +191,9 @@ parallel_start = function(m, nm, backend, team, cur, caller) {
 #' @return A team session (`kind = "team"`).
 #' @examples
 #' fake = gptr_fake_provider(list("ok"))
-#' team = gptr_parallel(planner = peter("Plan it", model = fake, envir = new.env()),
-#'                      lit = peter("Summarise it", model = fake, envir = new.env()))
-#' names(team$children)
+#' session = gptr_parallel(planner = peter("Plan it", model = fake),
+#'                         review = peter("Review it", model = fake))
+#' names(session$children)
 #' @export
 gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("return", "stop")) {
   caller = parent.frame()

@@ -419,7 +419,7 @@ session_history = function(s) {
 
 # ---------------------------------------------------------------------------- printing
 
-#' Print a session: the last answer, then a dim footer
+#' Print a session
 #'
 #' The footer is `status . model . turns . tokens . cost . id`. A token count or cost that a
 #' provider did not report is printed as unknown, never as zero.
@@ -586,7 +586,7 @@ doc_history_repr_markdown = function(x, ...) {
 #' @noRd
 doc_history_repr_latex = function(x, ...) NULL
 
-#' Strip display metadata while retaining every history row and column
+#' Convert a session summary to a data frame
 #'
 #' @param x A `gptr_session_summary`.
 #' @param ... Further arguments, such as `row.names` and `optional`, passed to the ordinary
@@ -617,7 +617,7 @@ session_history_display_text = function(text) {
   redact_hook(normalized, "persist")
 }
 
-#' Show the structure of a session in one line (never touches user objects)
+#' Show a session's structure
 #'
 #' @param object A `gptr_session`.
 #' @param ... Unused.
@@ -941,10 +941,10 @@ session_root_id = function(s) {
 #' @return A new idle `gptr_session`.
 #' @examples
 #' fake = gptr_fake_provider(list("A", "B"))
-#' session = peter("first", model = fake, envir = new.env())
-#' branch_session = gptr_fork(session)
-#' branch_session |> peter("branch")
-#' c(session$turns, branch_session$turns)
+#' session = peter("first", model = fake)
+#' branch = gptr_fork(session)
+#' branch |> peter("branch")
+#' c(session$turns, branch$turns)
 #' @export
 gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
   check_class(s, "gptr_session", "s")

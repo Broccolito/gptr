@@ -33,20 +33,11 @@ session = peter("Describe the first six rows of mtcars.")
 session
 ```
 
-The output below is scripted for an offline build. It calls
-`peter$describe(head(mtcars), budget = 60L)` without contacting a real model.
+This is the helper the model calls:
 
-```{r object-preview, echo = FALSE}
+```{r}
 library(gptr)
-fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "peter$describe(head(mtcars), budget = 60L)")),
-  "The preview contains six rows of mtcars."
-))
-session = peter(
-  "Describe the first six rows of mtcars.",
-  model = fake, envir = new.env(), mode = auto
-)
-session$text
+peter$describe(head(mtcars), budget = 60L)
 ```
 
 These are the object and output helper signatures:
@@ -169,7 +160,7 @@ when the original R object is already loaded.
 ```{r, eval = FALSE}
 py = peter$py("float(mtcars['mpg'].mean())", name = mtcars)
 py$value
-rows = peter$sql("SELECT cyl, AVG(mpg) AS mpg FROM mtcars GROUP BY cyl", name = mtcars)
+peter$sql("SELECT cyl, AVG(mpg) AS mpg FROM mtcars GROUP BY cyl", name = mtcars)
 peter$sql("SELECT * FROM measurements", con = con, n = 5L)
 peter$knit("bash", "printf 'hello\n'")
 ```
@@ -211,8 +202,8 @@ complete example writes files and needs Shiny, so it is not run while building t
 ```{r, eval = FALSE}
 gptr_init(".")
 survey = data.frame(group = c("A", "B"), value = c(2, 5))
-dir = file.path(".gptr", "artifacts", "survey-view")
-dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+app_dir = file.path(".gptr", "artifacts", "survey-view")
+dir.create(app_dir, recursive = TRUE, showWarnings = FALSE)
 writeLines(c(
   "library(shiny)",
   "ui = fluidPage(tableOutput('table'))",
@@ -220,7 +211,7 @@ writeLines(c(
   "  output$table = renderTable(survey)",
   "}",
   "shinyApp(ui, server)"
-), file.path(dir, "app.R"))
+), file.path(app_dir, "app.R"))
 artifact = peter$app("survey-view", data = "survey", title = "Survey", launch = FALSE)
 artifact$version
 artifact$checks
@@ -245,7 +236,6 @@ the page exists and is nonempty; it does not certify its JavaScript or external 
 ## Inspect, reopen and stop artifacts
 
 ```{r, eval = FALSE}
-gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)
 gptr_artifacts("survey-view")
 gptr_artifacts("survey-view", version = 1L, open = TRUE)
 gptr_artifacts("survey-view", stop = TRUE)
