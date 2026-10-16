@@ -765,8 +765,9 @@ test_that("manual compaction on an active session completes without an orphan co
   if (admission_ready) {
     admission_guard_released = identical(reactor_cancel(x$guard), 1L)
     if (admission_guard_released) {
-      # Admission and the timed wait/manual work each retain an explicit 0.8-second guard.
-      x$guard_at = reactor_now() + 0.8
+      # Admission retains its 0.8-second guard; the timed wait and manual work get 2 seconds
+      # (the manual compaction alone took 0.8 s on a slow hosted Windows runner).
+      x$guard_at = reactor_now() + 2
       x$guard = reactor_timer(x$guard_at, function() run_abort(x$run, "fixture-guard"))
       withr::defer(reactor_cancel(x$guard))
     }

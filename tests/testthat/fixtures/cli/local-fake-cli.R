@@ -33,11 +33,20 @@ local_fake_cli_path = function(cli, case = "text", .env = parent.frame()) {
   list(path = path, log = log, cli = cli)
 }
 
-# Rows of a fake CLI's log (JSON lines), optionally of one kind
+# Rows of a fake CLI's log, optionally of one kind: the JSON lines of every <log>.<pid> file in
+# time order, without a last line still being written (no newline yet)
 fake_log = function(fake, kind = NULL) {
-  if (!file.exists(fake$log)) return(list())
-  lines = readLines(fake$log, encoding = "UTF-8", warn = FALSE)
+  files = list.files(dirname(fake$log), paste0("^", basename(fake$log), "[.][0-9]+$"),
+                     full.names = TRUE)
+  lines = character()
+  for (file in files) {
+    bytes = readBin(file, "raw", file.size(file))
+    text = rawToChar(bytes[seq_len(max(0L, which(bytes == as.raw(10L))))])
+    lines = c(lines, strsplit(text, "\n", fixed = TRUE)[[1L]])
+  }
+  Encoding(lines) = "UTF-8"
   rows = lapply(lines[nzchar(lines)], json_decode)
+  rows = rows[order(vapply(rows, function(r) as.numeric(r[["t"]]), 0))]
   if (is.null(kind)) return(rows)
   Filter(function(r) identical(r[["kind"]], kind), rows)
 }
@@ -196,11 +205,12 @@ local_mcp_stub = function(handle = stub_mcp_handle(), .env = parent.frame()) {
   invisible(handle)
 }
 
-# Stop a session's CLI child and forget it when the calling test ends (claude children live as
-# long as their session)
+# Settle a session's run, stop its CLI child and forget it when the calling test ends (claude
+# children live as long as their session; a run left by a failed test would reach later tests)
 local_cli_cleanup = function(s, .env = parent.frame()) {
   id = s$id
   withr::defer({
+    gptr_cancel(s)
     st = pcli_tracked(id)
     if (!is.null(st)) pcli_stop_child(st, wait_ack = FALSE)
     pcli_untrack(id)

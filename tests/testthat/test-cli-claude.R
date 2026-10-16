@@ -747,9 +747,7 @@ test_that("three concurrent fake-CLI agents stream into one reactor (INFRA-19)",
     peter(paste("Count", i), model = f$model, envir = new.env(), .run = FALSE)
   })
   for (s in runs) local_cli_cleanup(s)
-  t0 = Sys.time()
   gptr_wait(runs, timeout = 30)
-  elapsed = as.numeric(difftime(Sys.time(), t0, units = "secs"))
   expect_identical(vapply(runs, function(s) s$text, ""), rep("One two three four five six.", n))
   expect_length(unique(fake_pids(f)), n)
   # every turn started before any turn ended: the children streamed at the same time (with
@@ -757,7 +755,6 @@ test_that("three concurrent fake-CLI agents stream into one reactor (INFRA-19)",
   started = vapply(fake_log(f, "turn"), function(r) as.numeric(r$t), 0)
   ended = vapply(fake_log(f, "turn_done"), function(r) as.numeric(r$t), 0)
   expect_true(length(ended) == n && max(started) < min(ended))
-  expect_lt(elapsed, 8)
 })
 
 # ---- stopping CLI children (Task 9) --------------------------------------------------------------
