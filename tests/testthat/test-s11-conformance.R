@@ -491,5 +491,7 @@ test_that("every registry kind was used at run time (IC-73)", {
   skip_on_cran()
   kinds = setdiff(kind_names(), "s11kind")
   expect_length(kinds, 38L)
+  # the artifact type test above skips without shiny
+  if (!requireNamespace("shiny", quietly = TRUE)) kinds = setdiff(kinds, "artifact_type")
   expect_setequal(ls(s11$used), kinds)
 })

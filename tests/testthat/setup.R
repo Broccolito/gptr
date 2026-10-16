@@ -114,6 +114,9 @@ local({
   )
 })
 
+# Cache this process's real identity before any test mocks proc_create_time() (children check it)
+proc_self()
+
 # chromote always starts processx's supervisor; when gptr does not supervise (IC-60), end it
 # with the run, after the tests have closed the browser
 withr::defer(if (!supervise_default()) processx::supervisor_kill(),
