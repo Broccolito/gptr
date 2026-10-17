@@ -55,6 +55,9 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
           rtools-version: none
+      - name: Admit qpdf for PDF checks
+        shell: pwsh
+        run: ./dev/ci/windows/setup-qpdf.ps1
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         id: windows_python
         if: runner.os == 'Windows'

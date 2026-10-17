@@ -7,6 +7,13 @@ test_that("required Windows checks aggregate every serial shard without weakenin
                    c("release", "oldrel-4"))
   expect_identical(shards$env$TESTTHAT_PARALLEL, "false")
   expect_false(any(grepl("runner[.]", unlist(shards$env))))
+  qpdf = which(vapply(shards$steps, function(x) {
+    identical(x$name, "Admit qpdf for PDF checks")
+  }, logical(1)))
+  check = which(vapply(shards$steps, function(x) {
+    identical(x$uses, "r-lib/actions/check-r-package@v2")
+  }, logical(1)))
+  expect_true(length(qpdf) == 1L && qpdf < check)
   gate = workflow$jobs$verify
   expect_identical(gate$name, "windows-latest (${{ matrix.r }})")
   expect_identical(gate$needs, "shards")

@@ -13,13 +13,14 @@ results cannot produce a green required status. The existing serial Linux
 
 Rtools is not additionally installed: gptr has no compilation and a cold-cache oldrel
 dependency/source-install probe passed (42 assertions), run `39002216479`. The hosted
-image's preinstalled tools remain. Every full check still uses the standard check
+image's preinstalled tools remain; qpdf is admitted explicitly for old R's PDF checks.
+Every full check still uses the standard check
 action, `--as-cran --no-manual`, warning failure and the completed Status-line guard.
 No package runtime dependency, test body, resource limit or deadline is relaxed.
 
 Local regressions:
 `Rscript --vanilla -e 'testthat::test_dir("dev/ci/windows", stop_on_failure = TRUE)'`.
-Expected: 45 pass, 0 failures/warnings/skips.
+Expected: 46 pass, 0 failures/warnings/skips.
 
 Baseline passing run `38993976551`: release 46m24s, oldrel-4 51m27s. A newer main
 release run took 33m29s; hosted-runner variation matters. Two file workers alone
