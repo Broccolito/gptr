@@ -91,7 +91,8 @@ Decisions (skeptic-corrected):
   poll, reading with `processx::conn_read_chars()` only (`conn_read_lines()` blocks forever on a
   chunk without newline) and splitting on `\r\n|\r|\n`. Waiting lines join the input; a dim
   `(pasted: Enter sends it as one message)` hint and one `... ` read follow, where Enter alone
-  sends and typed text is appended. `"""` blocks and fences never poll. Piped `.stdin = TRUE`
+  sends and typed text is appended. `"""` blocks and fences never poll. Long prompts (over
+  200 bytes; R keeps 255) are printed whole and read after `> ` (moved here from Task 6). Piped `.stdin = TRUE`
   stays line-based. Linux and other front ends are documented ("use `\"\"\"`"); no inputrc tip.
 - Stale answers, every front end: `gptr_readline()` records the duration of its `readline()` in
   `the$readline_secs` (timed with `proc.time()[["elapsed"]]`); `readline_answer(prompt)` re-reads
@@ -225,13 +226,15 @@ Decisions:
 - Invalid answers: `a`/`p` where nothing can be remembered explains why; other text says
   `Not an answer: '<text>'` with the allowed letters; after 5 invalid answers the console says
   so and the deny feedback is `no valid answer was given at the approval prompt`.
-- Long prompts: `gptr_readline()` prints a prompt over 200 bytes whole and reads after `> `.
-- Fan-out status: service `console.status` (P14, `console_status(text = NULL)`): on a dynamic
-  console one line redrawn in place within the margin
-  (`⠙ sub-agents 3/12 done, 2 running, 7 queued (40s, Ctrl-C to stop)`), elsewhere one plain
-  `gptr: sub-agents ...` line per change unless quiet, nothing at verbosity 0; cleared by
-  `NULL` and by `console_before_message()`. `subagent_schedule()` updates it from its pump
-  (rate-limited) and clears it on exit; covers teams, fan-outs, `gptr_parallel` and every backend.
+- Long prompts are Task 2's (it owns `gptr_readline()`).
+- Fan-out progress (skeptic-corrected, no new service): the existing `agent_start`/`agent_end`
+  console hooks print one line per child run (depth >= 1: nested `peter()` loops, fan-outs,
+  teams, `gptr_parallel`, worker and cli proxies) whose root session is in the foreground, at
+  verbosity >= 1 and not quiet: `  sub-agent <label> started (<model>)` and
+  `  sub-agent <label> done (k/N) · <turns> turns · <secs> s` or `... failed: <status>`; `(k/N)`
+  only for a scheduled group. Every console-renderer write goes through
+  `gptr_message_write()`, and anything drawn mid-line first ends partial lines. Unnamed nested
+  children are labelled by a 30-character preview of their first prompt.
 - `r_tool_execute()` tees only for depth-0 runs: children's raw output no longer reaches the
   parent's tool result or the console.
 - Nested calls: a `peter()` from model code (also `gptr_parallel()` members created in a run)
@@ -242,9 +245,9 @@ Decisions:
 Tests (`test-console-message-stream.R`, `test-console-ui.R`, `test-agent-dispatch.R`,
 `test-subagent-team.R`, `test-cli-claude.R` with a fan-out fixture, `test-console-render.R`,
 `test-utils-options.R`, `test-gptr-gateway.R`, `test-copy-gateway.R`, `test-tool-r.R`,
-`test-aaa-state.R` service count), RED first, including the end-to-end fan-out whose console shows
+), RED first, including the end-to-end fan-out whose console shows
 `sub-agent a > r  cm = 1; pp = 2` and the status line while the parent tool result contains none
-of it. Spec: 04 sections 7.0, 7.9, 7.11, 6.1 `envir` row, IC-77; 03 sections 5.8, 6.8.3, 6.13,
+of it. Spec: 04 sections 7.9, 7.11, 6.1 `envir` row, IC-77; 03 sections 5.8, 6.8.3, 6.13,
 6.17, 7.3. Commit: `fix(console): sub-agent prompts reach the person and fan-outs show progress`.
 
 ### Task 7: Object sizes and agent-made object bloat (#16, D-189)
