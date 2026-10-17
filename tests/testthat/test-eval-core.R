@@ -245,6 +245,19 @@ test_that("CR LF line ends parse, and query calls print like the console", {
   expect_equal(res$outputs, list(c("$digits", "[1] 7"), "[1] 2"))
 })
 
+test_that("functions the code defines keep their source lines but no parse data (D-189)", {
+  for (keep in c(FALSE, TRUE)) {
+    withr::local_options(keep.parse.data = keep)
+    e = new.env()
+    expect_equal(eval_r("x = 1\nf = function(y) y + 1", e, tee = FALSE)$status, "ok")
+    sf = attr(attr(e$f, "srcref"), "srcfile")
+    expect_identical(sf$filename, "<gptr>")
+    expect_identical(sf$lines, c("x = 1", "f = function(y) y + 1"))
+    expect_false(exists("parseData", envir = sf, inherits = FALSE))
+    expect_identical(getOption("keep.parse.data"), keep)
+  }
+})
+
 test_that("an infinite recursion becomes an error result instead of escaping", {
   e = new.env()
   res = eval_r("f = function(n) f(n + 1)\nf(1)\nafter = 1", e)

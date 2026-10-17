@@ -63,6 +63,17 @@ test_that("a served r call evaluates in the session's environment with its mode 
   expect_true(rd$isError)
 })
 
+test_that("objects made through peter() and a served r call capture the session home (D-189)", {
+  fake = local_fake_provider(list(fake_tool("r", code = "f = y ~ x"), fake_text("ok")))
+  e = new.env()
+  s = peter("make f", model = fake, envir = e, mode = "auto")
+  expect_identical(environment(e$f), e)
+  res = mcp_dispatch_local(r_call("g = y ~ x\nh = function() 1"), s)$result
+  expect_false(res$isError)
+  expect_identical(environment(e$g), e)
+  expect_identical(environment(e$h), e)
+})
+
 test_that("a served call asks a person only while a pump runs (IC-57)", {
   seen = new.env()
   seen$perm = 0L

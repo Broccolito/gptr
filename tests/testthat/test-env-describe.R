@@ -186,7 +186,14 @@ test_that("ALTREP 1:1e9 is described without materialising", {
   t0 = proc.time()[["elapsed"]]
   d = gptr_describe(x)
   expect_lt(proc.time()[["elapsed"]] - t0, 5)
-  expect_match(d[1], "<integer> length 1,000,000,000, <= 3.7 GB (compact sequence)", fixed = TRUE)
+  expect_identical(d[1], "<integer> length 1,000,000,000 (compact sequence)")
+})
+
+test_that("an S7 object is described without a size (D-189)", {
+  x = structure(list(), class = c("pkg::plot", "S7_object"),
+                S7_class = structure(function() NULL, pad = numeric(1e5)))
+  expect_true(is.na(dsc_leaf_core(x)$size))
+  expect_identical(gptr_describe(x)[1], "<pkg::plot/S7_object> length 0")
 })
 
 test_that("levels: a small budget gives the header, a large one more detail", {

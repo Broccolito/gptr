@@ -2271,9 +2271,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: TBD. Evidence: progress/P26.md Task 6.
 
 ## D-189 - P26 Honest object sizes; console-sized agent exports (2026-10-16)
-- Rule: TBD by P26 Task 7.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 7.
+- Rule: one size rule, `env_snap_size()` (NA for environments, functions, external pointers, compact
+  sequences and S7 objects), reused by `dsc_leaf_core()` and `risk_binding_leaf()`: overwrite notes
+  say `size unknown`, protect_size skips NA, checkpoint capture counts NA as 0 bytes.
+- Rule: `workspace_lines()` ranks an unsized value other than a function or environment at the median
+  known size, ties by name (the plan's "by name rather than last"); functions, environments,
+  promises and active bindings stay last, so helpers never hide data.
+- Rule: `eval_parse()` parses under `keep.parse.data = FALSE`; worker results use the refhook pair;
+  a settled idle fan-out child keeps only its values held by name (`subagent_export(clear =)`).
+- Contract-visible: 04 §6.6 gptr_risk, §7.9 eval_r/env_snapshot/workspace_lines, §7.19 worker_main,
+  §9.3 r_performance; 03 §6.4 R4, §6.13, §7.5; `?peter`, `?gptr_agent`, `?gptr_risk`, vignette.
+- Tests: env-snapshot, env-describe, perm-classify, eval-core, subagent-worker, subagent-team,
+  prompt-text, mcp-server (guard). Evidence: progress/P26.md Task 7.
 
 ## D-190 - P26 The yolo permission mode (2026-10-16)
 - Rule: TBD by P26 Task 8.

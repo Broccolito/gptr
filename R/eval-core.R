@@ -154,6 +154,9 @@ eval_parse = function(code) {
   }
   code = gsub("\r\n?", "\n", code)
   lines = strsplit(code, "\n", fixed = TRUE)[[1L]]
+  # functions the code defines keep their source lines but not the whole call's parse table
+  old = options(keep.parse.data = FALSE)
+  on.exit(options(old), add = TRUE)
   tryCatch(parse(text = code, keep.source = TRUE, srcfile = srcfilecopy("<gptr>", lines)),
            error = function(e) e)
 }

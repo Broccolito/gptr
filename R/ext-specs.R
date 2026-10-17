@@ -1158,7 +1158,9 @@ gptr_policy = function(name, check, description = NULL) {
 #' @param max_turns Turn limit, or `NULL`.
 #' @param mode Permission mode (`"plan"`, `"manual"`, `"edits"`, `"auto"`), or `NULL` to inherit.
 #' @param objects Names of objects the agent may see.
-#' @param export Names of objects the agent returns.
+#' @param export Names of objects the agent returns. Keep them self-contained: a `worker` agent
+#'   sends back only these objects, so an exported function or plot finds the caller's objects
+#'   but none of the agent's others.
 #' @param returns JSON Schema of a structured answer, or `NULL`.
 #' @param file Path of an agent definition file.
 #' @return A spec of class `c("gptr_agent", "gptr_spec")`.

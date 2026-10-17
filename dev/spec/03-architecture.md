@@ -1272,7 +1272,7 @@ frame makes the user's next in-place edit copy the whole object. Rules:
 | R1 | Never hold a user object in a list, closure, attribute or environment gptr keeps. Designated values follow the value policy of §5.1 (large bound objects by name). | judge check `session_holds_value` -> COPY, `session_holds_name` -> in place |
 | R2 | Never hold a user function frame beyond the active run, and never in a list, closure, attribute or weak reference (key or value). The home frame lives only in an environment binding of the run environment, reset to `NULL` at settlement before the run is dropped. Keep address strings, not frames (e.g. the pending-plan key). | [final/frame_hold_check.R]: weakref key COPY, list-then-drop COPY, address string and reset binding in place; G3 p2 and fact-check adv4/adv5 |
 | R3 | Gateway capture is base R: no rlang quosures in any frame that sees user frames; a plain-symbol dot is read by name through a `get0()` leaf and its promise is never forced (a forced promise keeps the value referenced by the gateway frame for the whole run, so an in-run edit copies [IC-41]); other dots reach only leaf functions through `...elt(i)` in `while` loops; no closures, `tryCatch`, `withCallingHandlers` or `match.arg` in a frame that holds `...` or the home; never assign to a formal (use new locals); helpers force their arguments on entry; adapters are called through `do.call()` with forced values; frames walked with `sys.frame(k)`, never `sys.frames()`; alias masks get `parent.env<-` `emptyenv()` after use. | [final/capture_check.R]: `enquos` COPY, `...elt` leaf in place; G3 p5b, p5i, p5n, p5o |
-| R4 | Introspection through leaf functions returning primitives only (class, dim, length, typeof, address, `object.size()` cached by address); gptr never calls `str()` on user objects (sticky [12 §2.C]) and no shipped prompt or skill tells the model to (a P07 test checks the texts [IC-67]); describers follow the same discipline. | 12 §2.C, §3.9; `str(big)` re-verified to copy on the next edit |
+| R4 | Introspection through leaf functions returning primitives only (class, dim, length, typeof, address, `object.size()` cached by address; no size for environments, functions, external pointers, compact sequences and S7 objects, which it overstates [D-189]); gptr never calls `str()` on user objects (sticky [12 §2.C]) and no shipped prompt or skill tells the model to (a P07 test checks the texts [IC-67]); describers follow the same discipline. | 12 §2.C, §3.9; `str(big)` re-verified to copy on the next edit |
 | R5 | No binding locks anywhere (`lockBinding()`/`unlockBinding()` makes the next edit copy). | judge `lock` case, PB-E1, P-A exp |
 | R6 | No `mget()` or list snapshots of user objects. Checkpoint pre-images are bindings in a private environment released with `rm()`; list and S4 pre-images are defused before dropping; a finalizer does the same for dropped sessions. | G7 §1.1 (c03) |
 | R7 | Every `serialize()`/`saveRDS()` of user data passes `ascii = FALSE` explicitly (the default path leaves a sticky reference) through one leaf wrapper. | G7 §1.5 |
@@ -1742,6 +1742,10 @@ per task [15 §3.7]. Inline children run the
 v1.x. Five inline agents with an R tool on a shared 381 MB vector took 5.2 s concurrently vs 14.0 s
 sequentially, every agent seeing the same address [15 §2.3].
 
+Workers and fan-out children return no scratch objects [D-189]: a worker writes its home as a reference that the
+parent reads back as the proxy's overlay, and a fan-out child that succeeds keeps only its values held by name, so
+their exports and returned values must be self-contained; an inline team member keeps its overlay.
+
 ### 6.14 MCP (D-14) [16 §4, G1 §2.5]
 
 - **Client** (`mcp-client.R`): speaks 2025-11-25 and 2026-07-28: `server/discover` probe (5 s), else legacy
@@ -2124,9 +2128,10 @@ anchor. The compaction request and checkpoint block are G4 §3.6's verbatim text
 
 ### 7.5 How the live environment is described
 
-- `<workspace>`: one line per object from `env_snapshot()` (name, class, shape, size), largest first, at most
-  12 lines and 600 tokens; sizes from an address-keyed `object.size()` cache; never forces promises or active
-  bindings (reported as `<promise>`/`<active>`).
+- `<workspace>`: one line per object from `env_snapshot()` (name, class, shape, size), largest first (an unknown
+  size other than a function's or environment's ranks at the median), at most 12 lines and 600 tokens; sizes from
+  an address-keyed `object.size()` cache; never forces promises or active bindings (reported as
+  `<promise>`/`<active>`).
 - `<attached>`: `gptr_describe(x, budget = 150)` per context object (at most 300): level-based methods return
   successively richer descriptions and the harness picks the richest that fits `est_tokens(, "describe")`
   [G2 (c)]. Built-in methods: default, data.frame (column types and 3 rows), matrix, list (nested names), Date,
@@ -2134,7 +2139,7 @@ anchor. The compaction request and checkpoint block are G4 §3.6's verbatim text
   datasets, DBI connections (tables), Seurat (cells, features, assays, reductions, meta.data columns),
   SingleCellExperiment (methods for classes of packages outside Suggests use only base generics, `slot()`,
   `attr()` and `dim()` guarded by `isNamespaceLoaded()`, never `pkg::fun()` [IC-71]); ALTREP compact sequences are
-  reported without materialising (size caveat).
+  reported without materialising and without a size [D-189].
   Packages add methods with delayed `S3method(gptr::gptr_describe, cls)`.
 - `<r_env>`: installed fast packages by category, packages that are installed but not loadable, and missing
   recommended packages, probed without loading [19 §3.2].

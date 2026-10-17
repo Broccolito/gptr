@@ -1812,8 +1812,9 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #'
 #' @param code R code: a character vector, a call or an expression.
 #' @param envir `NULL` or the environment the code would run in. When given, assignments to
-#'   existing bindings are reported as overwrites with their size (`object.size()` in a leaf;
-#'   promises and active bindings are never forced) and user-defined functions called by the
+#'   existing bindings are reported as overwrites with their size (`object.size()` in a leaf,
+#'   unknown where it overstates, as for functions and S7 objects; promises and active bindings
+#'   are never forced) and user-defined functions called by the
 #'   code are classified through their bodies.
 #' @param root The project root used for path classes; `NULL` means the current project root.
 #' @return A `gptr_risk` object: a list with `level` (integer 0-4), `label`, `categories`,
@@ -2061,10 +2062,10 @@ risk_binding_info = function(name, envir) {
   NULL
 }
 
-#' Class and bytes of an object (the closure-free leaf)
+#' Class and bytes of an object (the closure-free leaf; the workspace's size rule)
 #' @noRd
 risk_binding_leaf = function(obj) {
-  list(class = class(obj)[1L], bytes = as.numeric(utils::object.size(obj)))
+  list(class = class(obj)[1L], bytes = env_snap_size(obj))
 }
 
 #' risk_binding_info() with errors caught one frame up

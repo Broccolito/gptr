@@ -112,6 +112,21 @@ test_that("workspace_lines aligns columns, sorts largest first and caps at 12 li
   expect_match(tight[length(tight)], "smaller objects: use ls\\(\\)")
 })
 
+test_that("an S7 object has no size and ranks at the median size; functions stay last (D-189)", {
+  # object.size() counts the class object of every S7 object in full (a ggplot2 4.x plot: 16 MB)
+  e = new.env()
+  e$plt = structure(list(), class = c("pkg::plot", "S7_object"),
+                    S7_class = structure(function() NULL, pad = numeric(1e5)))
+  e$fn = function() 1
+  for (i in 1:20) assign(sprintf("obj%02d", i), seq_len(i * 100) + 0, envir = e)
+  s = env_snapshot(e)
+  expect_true(is.na(s$bytes[s$name == "plt"]))
+  lines = workspace_lines(s)
+  expect_match(lines[11], "^plt +pkg::plot +length 0$")
+  expect_match(lines[12], "^obj10 ")
+  expect_false(any(grepl("^fn ", lines)))
+})
+
 test_that("six objects cost at most 600 tokens and promises stay unforced", {
   e = new.env()
   e$a = mtcars

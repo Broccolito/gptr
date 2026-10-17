@@ -658,6 +658,19 @@ test_that("an overwrite above gptr.protect_size is level 3 and reports the size"
   expect_identical(gptr_risk("new_obj = 1", envir = e, root = root)$assigned, "new_obj")
 })
 
+test_that("an S7 object's size is unknown, so overwriting it never trips protect_size (D-189)", {
+  root = local_project()
+  e = new.env()
+  e$plt = structure(list(), class = c("pkg::plot", "S7_object"),
+                    S7_class = structure(function() NULL, pad = numeric(2e5)))
+  local_gptr_options(protect_size = 1e6)
+  r = gptr_risk("plt = 1", envir = e, root = root)
+  expect_identical(r$level, 2L)
+  expect_true(is.na(r$sizes[["plt"]]))
+  expect_match(r$flagged$call, "overwrites `plt` <pkg::plot, size unknown>", fixed = TRUE,
+               all = FALSE)
+})
+
 test_that("secret rules come from P03's secret_scan() (G6 section 3.8)", {
   root = local_project()
   r = gptr_risk("k = Sys.getenv('OPENAI_API_KEY')", root = root)
