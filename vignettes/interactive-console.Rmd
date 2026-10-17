@@ -110,8 +110,9 @@ still part of the workspace that later calls can inspect or describe. Neither pr
 through the model's permission gate: you are explicitly running your own R code. Do not paste
 unreviewed code merely because the agent suggested it.
 
-In a terminal R with readline, Tab completes R names and file paths after `!` and `!!`; other
-front ends keep their own completion.
+In terminal R with readline, R in an IDE's Terminal tab included, Tab completes R names and
+file paths after `!` and `!!`. RStudio's console completes R code at `peter>` too; radian and
+Positron's console offer no completion there.
 
 ```text
 peter> !fit = lm(mpg ~ wt, data = mtcars)
@@ -206,9 +207,10 @@ progress while it waits for input. Under Rscript, background runs advance only i
 gptr calls. Inline R tools still occupy the same R process while they execute.
 
 At the chat prompt, one interrupt prints a hint; two consecutive interrupts leave the chat.
-Use Ctrl-C in a terminal and the front end's interrupt key in an IDE: Esc in RStudio, R.app,
-RGui and Positron. IDEs that cannot resume an interrupted evaluation use an abort fallback;
-pause/resume behavior is not uniformly verified across front ends.
+Use Ctrl-C in a terminal, an IDE's Terminal tab included, and the front end's interrupt key in
+an IDE console: Esc in RStudio, R.app, RGui and Positron. IDEs that cannot resume an
+interrupted evaluation use an abort fallback; pause/resume behavior is not uniformly verified
+across front ends.
 
 The equivalent session verbs work from R:
 

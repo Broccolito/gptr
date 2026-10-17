@@ -58,10 +58,17 @@ gptr_is_interactive = function() {
   interactive()
 }
 
-#' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62)
+#' Mockable: does R read its console from a terminal (not an IDE console or a pipe)?
 #' @noRd
-gptr_readline = function(prompt = "") {
-  as_utf8(readline(prompt))
+stdin_tty = function() {
+  isatty(stdin())
+}
+
+#' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its
+#' own copy of readline() as `read` (console_reader())
+#' @noRd
+gptr_readline = function(prompt = "", read = readline) {
+  as_utf8(read(prompt))
 }
 
 #' @noRd
@@ -120,7 +127,8 @@ platform_gui = function() {
 #' `.Platform$GUI` identifies the IDE's own R process. The IDE environment variables (`RSTUDIO`,
 #' `POSITRON`, `TERM_PROGRAM`) are inherited by every child process started from the IDE, so they
 #' count only in an interactive session; a non-interactive child (an Rscript started from the
-#' IDE's terminal, an Rscript worker) is "rscript".
+#' IDE's terminal, an Rscript worker) is "rscript", and R reading a tty (the IDE's terminal tab)
+#' is "terminal" ("vscode" with `TERM_PROGRAM=vscode`).
 #' @noRd
 front_end = function() {
   env = function(name) Sys.getenv(name, unset = "")
@@ -133,10 +141,11 @@ front_end = function() {
   if (is_knitting()) return("knitr")
   gui = platform_gui()
   human = gptr_is_interactive()
-  if (identical(gui, "Positron") || (human && identical(env("POSITRON"), "1"))) {
+  ide = human && !stdin_tty()
+  if (identical(gui, "Positron") || (ide && identical(env("POSITRON"), "1"))) {
     return("positron")
   }
-  if (identical(gui, "RStudio") || (human && identical(env("RSTUDIO"), "1"))) return("rstudio")
+  if (identical(gui, "RStudio") || (ide && identical(env("RSTUDIO"), "1"))) return("rstudio")
   if (!human) return("rscript")
   if (identical(env("TERM_PROGRAM"), "vscode")) return("vscode")
   if (gui %in% c("Rgui", "AQUA")) return("rgui")

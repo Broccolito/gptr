@@ -117,7 +117,8 @@ test_that("front_end() recognises the documented environments", {
   # IDE variables are inherited by child processes: a non-interactive child is an Rscript
   withr::local_envvar(TERM_PROGRAM = "vscode", RSTUDIO = "1", POSITRON = "1")
   expect_identical(front_end(), "rscript")
-  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  # an IDE console reads no tty
+  local_mocked_bindings(gptr_is_interactive = function() TRUE, stdin_tty = function() FALSE)
   expect_identical(front_end(), "positron")
   withr::local_envvar(POSITRON = NA)
   expect_identical(front_end(), "rstudio")
@@ -136,6 +137,19 @@ test_that("front_end() recognises the documented environments", {
   expect_identical(front_end(), "quarto")
   withr::local_options(jupyter.in_kernel = TRUE)
   expect_identical(front_end(), "jupyter")
+})
+
+test_that("an IDE's terminal tab is a terminal: inherited IDE variables count only without a tty", {
+  withr::local_options(jupyter.in_kernel = NULL, knitr.in.progress = NULL)
+  withr::local_envvar(
+    JPY_SESSION_NAME = NA, QUARTO_DOCUMENT_PATH = NA, QUARTO_DOCUMENT_FILE = NA,
+    POSITRON = NA, RSTUDIO = "1", TERM_PROGRAM = NA, TERM = "xterm-256color"
+  )
+  local_mocked_bindings(gptr_is_interactive = function() TRUE, platform_gui = function() "X11",
+                        stdin_tty = function() TRUE)
+  expect_identical(front_end(), "terminal")
+  withr::local_envvar(RSTUDIO = NA, POSITRON = "1", TERM_PROGRAM = "vscode")
+  expect_identical(front_end(), "vscode")
 })
 
 test_that("verbosity() follows the option, then the context", {

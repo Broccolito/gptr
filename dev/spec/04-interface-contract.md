@@ -2211,9 +2211,9 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_opt(name)` | the option value or the §3.1 default (`NULL` for settings-backed options) | all |
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
-| `gptr_is_interactive()`, `gptr_readline(prompt = "")` | wrappers of `interactive()` and `readline()` (mockable with `testthat::local_mocked_bindings()`) | P11, P14 |
+| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183) and `isatty(stdin())` (mockable with `testthat::local_mocked_bindings()`) | P11, P14, P26 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()` | P08, P15 |
-| `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown` | P07, P14, P15 |
+| `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183) | P07, P14, P15 |
 | `verbosity()` | `int(1)` 0-3 (§3.1 `gptr.verbose`) | P14, P06 |
 | `check_running()` | `lgl(1)`: `_R_CHECK_PACKAGE_NAME_` is set | P04, P15, P19 |
 | `on_load(expr)` (`aaa-state.R`, IC-32) | stores `substitute(expr)` and `parent.frame()`; `.onLoad` evaluates them in registration order after the namespace is loaded | all built-in declarations |

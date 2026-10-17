@@ -115,8 +115,10 @@ console_reader = function(stdin = FALSE, echo = stdin) {
       x
     }
   } else {
+    # RStudio's console completes nothing in a frame identical() to base::readline (D-183)
+    rl = structure(readline, gptr = TRUE)
     rd$read = function(prompt = "", stream = "stdout") {
-      x = gptr_readline(prompt)
+      x = gptr_readline(prompt, rl)
       if (length(x) != 1L || is.na(x)) return(NA_character_)
       n = nchar(x, type = "bytes")
       if (n >= readline_limit()) {
@@ -605,11 +607,10 @@ repl_main = function(rs) {
   piped = rs$session
   on.exit(repl_close(rs), add = TRUE)
   rs$reader = console_reader(rs$stdin)
-  # Native Unix readline keeps ! in its completion token by default. Let it complete the R
-  # expression after !/!! without changing a caller-owned completer or an editor's input engine.
+  # R's own Unix readline on a tty (an IDE's terminal tab too) keeps ! in its completion token.
+  # Let it complete the R expression after !/!! without changing a caller-owned completer.
   if (!rs$stdin && identical(.Platform$OS.type, "unix") && gptr_is_interactive() &&
-      isTRUE(capabilities("cledit")[["cledit"]]) && isatty(stdin()) &&
-      front_end() %in% c("terminal", "vscode", "unknown") &&
+      isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty() &&
       !identical(Sys.getenv("R_COMPLETION"), "FALSE") &&
       !is.function(utils::rc.getOption("custom.completer"))) {
     breaks = getOption("rl_word_breaks", " \t\n\"\\'`><=%;,|&{()}")
@@ -816,6 +817,10 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'   and a trailing backslash continues a line;
 #' * a slash command such as `/model`, `/mode`, `/cost` or `/exit`; `/help` lists them all.
 #'
+#' Tab completes R names and file paths after `!` in terminal R, R in an IDE's Terminal tab
+#' included; RStudio's console completes R code at the prompt too; radian and Positron's console
+#' offer no completion there.
+#'
 #' Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
 #' `[s]teer` (delivered after the current tool results), `[f]ollow-up`, `[c]ontinue`, `[a]bort`
 #' and, for a foreground call (including a chat turn) when available, `[b]ackground`;
@@ -825,7 +830,8 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' advance only inside blocking gptr calls.
 #' Front ends that cannot resume use an abort fallback. `/exit`, two consecutive interrupts at
 #' the prompt or the end of piped input return the session invisibly, so `session = peter()`
-#' keeps the conversation. Use Ctrl-C in a terminal; RStudio, R.app, RGui and Positron use Esc.
+#' keeps the conversation. Use Ctrl-C in a terminal, an IDE's Terminal tab included; the RStudio,
+#' R.app, RGui and Positron consoles use Esc.
 #'
 #' Options: `gptr.verbose` (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 #' knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`

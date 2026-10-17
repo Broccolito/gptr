@@ -2241,9 +2241,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   current checkpoint.
 
 ## D-183 - P26 IDE terminal tabs are terminals; !code completion everywhere (2026-10-16)
-- Rule: TBD by P26 Task 1.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 1.
+- Rule: `front_end()` counts inherited `RSTUDIO=1`/`POSITRON=1` only for an interactive R whose
+  stdin is not a tty (`stdin_tty()`); `.Platform$GUI` checks are unchanged. The REPL's `!`
+  word-break gate drops its `front_end()` term (cledit + tty suffice).
+- Rule: the REPL reader calls `gptr_readline(prompt, rl)` with `rl = structure(readline, gptr =
+  TRUE)` built at run time (not a namespace object: R CMD check flags namespace closures whose
+  body calls `.Internal`; run-time also keeps IRkernel's `readline`). Other prompts keep
+  `readline()`. Mocks of `gptr_readline` that feed the REPL take `...`.
+- Contract-visible: 04 section 7.1 rows (`gptr_readline(prompt, read)`, `stdin_tty()`,
+  `front_end()`); 03 sections 6.2 and 6.17 (REPL completion bullet); `?peter`, console vignette.
+- Tests: test-console-completion.R (IDE terminal tab bang; reader readline copy; IDE consoles as
+  tty = FALSE); test-utils-options.R (IDE terminal tab front end). Evidence: progress/P26.md Task 1.
 
 ## D-184 - P26 Pasted blocks are one message; stale input never answers a question (2026-10-16)
 - Rule: TBD by P26 Task 2.

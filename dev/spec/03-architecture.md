@@ -1214,7 +1214,9 @@ channel in core (J-cran K-16); a front end that needs one is a plugin calling `g
 only, experimental); a second Ctrl-C aborts. Menu output goes to stderr (the handler may run inside a tool's
 stdout capture) and tools record interruption with `on.exit()`, never with an exiting `tryCatch(interrupt =)`
 that would pre-empt the menu (G3 menu fixes). Where the resume restart is unavailable or unverified (Rgui,
-IDE consoles), the policy falls back to abort-only. Abort: `curl::multi_cancel()`, interrupt then `kill_all()`
+IDE consoles), the policy falls back to abort-only. R in an IDE's terminal tab reads a tty and is terminal R
+(`front_end()` counts the inherited `RSTUDIO=1`/`POSITRON=1` only without one), so it has the pause menu and
+Ctrl-C [D-183]. Abort: `curl::multi_cancel()`, interrupt then `kill_all()`
 child trees after a grace period, record the partial with `stop_reason = "aborted"`; the REPL returns to its
 prompt; programmatic calls re-signal the interrupt. While the menu waits streams are not polled, so
 `continue` retries a request the provider dropped [18 risk].
@@ -1834,6 +1836,12 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   trailing backslash, `@file` and `@object` mentions; a warning near the readline line limit (4,095 bytes on
   R < 4.5, 8,190 on R >= 4.5 [18 fact-check]); optional history through `utils::timestamp()`
   (`gptr.history`). Banner: `gptr 1.0.0 | model ... | mode ... | .gptr/ found` plus the workspace summary.
+- **REPL completion** [D-183]: wherever R's own Unix readline reads a tty (terminal R, an IDE's terminal tab)
+  the REPL adds `!` to `rl_word_breaks` for its duration (restored on exit; a caller's `custom.completer`
+  keeps its policy), so R completes the code after `!`/`!!`. The REPL reads its lines with a copy of
+  `base::readline` carrying one attribute: RStudio's console completes nothing inside a frame `identical()` to
+  `base::readline`, so it completes R code at `peter>`, while approval and menu prompts keep `readline()` and
+  RStudio's choice completion. radian and Positron's console offer no completion at the prompt.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.

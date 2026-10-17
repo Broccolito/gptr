@@ -98,7 +98,7 @@ test_that("console command output and documents keep payloads literal", {
   withr::defer(off())
   inputs = c("/injcmd", "/exit")
   i = 0L
-  local_mocked_bindings(gptr_readline = function(prompt = "") {
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
     i <<- i + 1L
     inputs[[i]]
   })

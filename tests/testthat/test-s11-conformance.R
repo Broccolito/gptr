@@ -369,7 +369,7 @@ test_that("the console dispatches the command and the prompt template", {
   local_scripted_ui()
   inputs = c("/s11cmd", "/s11tmpl hello", "/exit")
   i = 0L
-  local_mocked_bindings(gptr_readline = function(prompt = "") {
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
     i <<- i + 1L
     if (i > length(inputs)) "/exit" else inputs[[i]]
   })

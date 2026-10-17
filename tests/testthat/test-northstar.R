@@ -6,7 +6,7 @@
 
 ns_inputs = function(inputs, .env = parent.frame()) {
   i = 0L
-  testthat::local_mocked_bindings(gptr_readline = function(prompt = "") {
+  testthat::local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
     i <<- i + 1L
     if (i > length(inputs)) "/exit" else inputs[[i]]
   }, .env = .env)

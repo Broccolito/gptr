@@ -115,6 +115,10 @@ and a trailing backslash continues a line;
 \item a slash command such as \verb{/model}, \verb{/mode}, \verb{/cost} or \verb{/exit}; \verb{/help} lists them all.
 }
 
+Tab completes R names and file paths after \code{!} in terminal R, R in an IDE's Terminal tab
+included; RStudio's console completes R code at the prompt too; radian and Positron's console
+offer no completion there.
+
 Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
 \verb{[s]teer} (delivered after the current tool results), \verb{[f]ollow-up}, \verb{[c]ontinue}, \verb{[a]bort}
 and, for a foreground call (including a chat turn) when available, \verb{[b]ackground};
@@ -124,7 +128,8 @@ does not guarantee progress while the chat waits for input. Under Rscript, backg
 advance only inside blocking gptr calls.
 Front ends that cannot resume use an abort fallback. \verb{/exit}, two consecutive interrupts at
 the prompt or the end of piped input return the session invisibly, so \code{session = peter()}
-keeps the conversation. Use Ctrl-C in a terminal; RStudio, R.app, RGui and Positron use Esc.
+keeps the conversation. Use Ctrl-C in a terminal, an IDE's Terminal tab included; the RStudio,
+R.app, RGui and Positron consoles use Esc.
 
 Options: \code{gptr.verbose} (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}

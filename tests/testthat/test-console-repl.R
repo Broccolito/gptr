@@ -79,7 +79,7 @@ test_that("r_incomplete() recognises incomplete code in any locale", {
 
 test_that("a line at the readline limit is warned about and dropped", {
   long = strrep("a", readline_limit())
-  local_mocked_bindings(gptr_readline = function(prompt = "") long)
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) long)
   rd = console_reader(stdin = FALSE)
   out = NULL
   expect_warning({
@@ -451,7 +451,7 @@ test_that("in IRkernel peter() without a prompt starts the console on gptr_readl
   local_mocked_bindings(
     gptr_is_interactive = function() FALSE, is_testthat = function() FALSE,
     check_running = function() FALSE, is_knitting = function() FALSE,
-    gptr_readline = function(prompt = "") {
+    gptr_readline = function(prompt = "", ...) {
       a = box$answers[[1L]]
       box$answers = box$answers[-1L]
       a
@@ -469,7 +469,7 @@ test_that("in IRkernel peter() without a prompt starts the console on gptr_readl
 
 test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
   local_console_test()
-  ctrl_c = function(prompt = "") {
+  ctrl_c = function(prompt = "", ...) {
     signalCondition(structure(class = c("interrupt", "condition"),
                               list(message = "", call = NULL)))
     ""
@@ -487,7 +487,7 @@ test_that("a line at the readline limit is reported at once and not sent", {
   local_console_test()
   box = new.env(parent = emptyenv())
   box$answers = c(strrep("a", readline_limit()), "/exit")
-  local_mocked_bindings(gptr_readline = function(prompt = "") {
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
     a = box$answers[[1L]]
     box$answers = box$answers[-1L]
     a
