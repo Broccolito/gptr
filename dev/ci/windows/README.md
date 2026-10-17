@@ -29,5 +29,7 @@ of redundant native execution are measured separately. The exact production work
 passed all eight checks and both required-context coverage audits in 23m00s, including
 setup and aggregation, in run `39004439821` at `ee38b22`. Validation-only callers are
 excluded from the clean branch. This meets the <30m floor; <20m is not yet stable.
-The unmodified serial CRAN-mode check is still running in `39002733279`; its package
-inputs are identical (only excluded CI files changed after that run started).
+The unmodified serial devel CRAN-mode job `117308886093` in run `39002733279` also
+passed (56m55s with cold dependency compilation). Its package inputs are identical:
+only excluded CI files changed after that run started. This is independent of the
+23m Windows workflow's waiting time.
