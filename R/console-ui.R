@@ -91,25 +91,30 @@ ui_flagged = function(risk) {
   if (is.data.frame(fl)) fl[fl$level >= 1L, , drop = FALSE]
 }
 
-#' The lines of the one-line prompt: the first line (+N more lines) and every flagged call (IC-53)
+#' The lines of the one-line prompt: the first line, fitted to the console (D-187), (+N more
+#' lines) and every flagged call (IC-53)
 #' @noRd
 ui_permission_lines = function(request) {
   lines = ui_request_lines(request)
   lines = lines[nzchar(trimws(lines))]
-  more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)")
+  more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)") else ""
+  first = paste0("  ", ui_escape(request$tool %||% "tool"), "  ", c(lines, "")[1L])
+  width = max(20L, cli::console_width() - nchar(console_pad()) - nchar(more))
   fl = ui_flagged(request$risk)
-  c(paste0("  ", ui_escape(request$tool %||% "tool"), "  ", cap_lines(c(lines, "")[1L], 72L), more),
+  c(paste0(cli::ansi_strtrim(first, width), more),
     if (NROW(fl)) {
       paste0("     flagged: ", paste0(ui_escape(fl$call), " [", fl$level, " ", fl$category, "]",
                                      collapse = "; "))
     })
 }
 
-#' The detail view shown for `?`
+#' The detail view shown for `?`: the code as a plain fence (it also feeds the RStudio dialog)
 #' @noRd
 ui_permission_detail = function(request) {
   risk = request$risk
   lines = ui_request_lines(request)
+  shown = utils::head(lines, 40L)
+  fence = doc_rmd_fence("```", shown)
   out = c(paste0("  gptr wants to use ", ui_escape(request$tool %||% "a tool"),
                  if (!is.null(risk$level)) {
                    paste0(" (level ", risk$level, ": ", ui_escape(risk$label %||% ""), ")")
@@ -118,8 +123,9 @@ ui_permission_detail = function(request) {
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
             paste0("  reason: ", ui_escape(request$reason))
           },
-          paste0("    > ", utils::head(lines, 40L)),
-          if (length(lines) > 40L) paste0("    > ... (+", length(lines) - 40L, " more lines)"))
+          paste0("  ", c(paste0(fence, if (grepl("(^|__)r$", request$tool %||% "")) "r"), shown,
+                         fence)),
+          if (length(lines) > 40L) paste0("  (+", length(lines) - 40L, " more lines)"))
   fl = ui_flagged(risk)
   if (NROW(fl)) {
     where = ifelse(is.na(fl$path), "",

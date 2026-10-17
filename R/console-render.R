@@ -9,13 +9,11 @@
 #' @noRd
 console_symbols = function() {
   if (cli::is_utf8_output()) {
-    list(bullet = "\u2022 ", nested = "\u25e6 ", tool = "\u25cf ", bar = "\u2502 ",
-         top = "\u250c\u2500 ", bottom = "\u2514\u2500", result = "\u23bf ", sep = " \u00b7 ",
+    list(bullet = "\u2022 ", nested = "\u25e6 ", tool = "\u25cf ", sep = " \u00b7 ",
          frames = c("\u280b", "\u2819", "\u2839", "\u2838", "\u283c", "\u2834", "\u2826",
                     "\u2827", "\u2807", "\u280f"))
   } else {
-    list(bullet = "- ", nested = "- ", tool = "* ", bar = "| ", top = "+- ", bottom = "+-",
-         result = "-> ", sep = " | ", frames = c("-", "\\", "|", "/"))
+    list(bullet = "- ", nested = "- ", tool = "* ", sep = " | ", frames = c("-", "\\", "|", "/"))
   }
 }
 
@@ -62,13 +60,15 @@ console_notice = function(..., .error = FALSE) {
 #' Returns an environment with `write(delta)`, `finish()` and `reset_line()`, writing to stdout.
 #' Styling (bold, italic at token edges, inline code, dim link URLs, headings, bullets, dim
 #' quotes and rules, highlighted fenced code) is used when `cli::num_ansi_colors() > 1` at
-#' creation; without it the markdown characters are kept. Where console_pad() gives a margin
-#' (D-186) lines get two columns on both sides, nested list indentation is kept, pipe tables are
-#' aligned and blank lines collapse to one between blocks (none before or after a reply);
-#' elsewhere the plain mode only wraps at `width` display columns. A word is held until the
-#' next blank or line end, so the output does not depend on how the text was chunked at a fixed
-#' width. When width is omitted, each write and final flush sample the current console width; an
-#' explicit width stays fixed.
+#' creation; without it the markdown characters are kept. Fenced code stays Markdown: fence lines
+#' as written (dim), the body unwrapped and de-indented by the opener's indentation (D-187).
+#' Where console_pad() gives a margin (D-186) lines get two columns on both sides, nested list
+#' indentation is kept, pipe tables are aligned, blank lines collapse to one between blocks (none
+#' before or after a reply) and code characters appear as they arrive, a line that fits one row
+#' redrawn highlighted; elsewhere the plain mode only wraps at `width` display columns. A word is
+#' held until the next blank or line end, so the output does not depend on how the text was
+#' chunked at a fixed width. When width is omitted, each write and final flush sample the current
+#' console width; an explicit width stays fixed.
 #' @noRd
 render_markdown_stream = function(width = cli::console_width(), before_output = NULL) {
   auto_width = missing(width)
@@ -86,11 +86,13 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   st$out = FALSE
   st$blank = FALSE
   st$line_start = TRUE
-  st$lead = 0L
+  st$ws = 0L
   st$indent = 0L
   st$fence = FALSE
   st$fence_n = 0L
   st$fence_lang = ""
+  st$fence_indent = 0L
+  st$shown = 0L
   st$table = character()
   st$space = FALSE
   codes = c(h1 = "1;4", h = "1", bold = "1", italic = "3", code = "36", url = "2")
@@ -124,7 +126,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     }
     st$col = 0L
     st$line_start = TRUE
-    st$lead = 0L
+    st$ws = 0L
     st$indent = 0L
     st$on[] = FALSE
     st$space = FALSE
@@ -134,8 +136,9 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     if (length(st$table)) table_flush()
     if (!st$bol) {
       newline()
-      # a held inter-word blank of the ended line would read as indentation of the next one
-      st$buf = sub("^[ \t]+$", "", st$buf)
+      # a held inter-word blank of the ended line would read as indentation of the next one;
+      # a broken fenced line is shown whole again
+      if (st$fence) st$shown = 0L else st$buf = sub("^[ \t]+$", "", st$buf)
     }
     st$blank = FALSE
     st$out = FALSE
@@ -175,7 +178,8 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     list(text = paste(out, collapse = ""), width = w)
   }
   line_prefix = function(tok, after) {
-    lead = strrep(" ", st$lead)
+    n = if (lay) min(st$ws, st$width %/% 2L) else 0L
+    lead = strrep(" ", n)
     if (grepl("^#{1,6}$", tok)) {
       st$on[[if (nchar(tok) == 1L) "h1" else "h"]] = TRUE
       return(list(text = if (style) restyle() else paste0(tok, " "),
@@ -185,39 +189,54 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
       return(list(text = paste0(sgr("2"), strrep("-", st$width), sgr("22")), width = st$width))
     }
     if (tok %in% c("-", "*", "+")) {
-      st$indent = st$lead + 2L
-      mark = if (!style) "- " else if (st$lead > 0L) sym$nested else sym$bullet
+      st$indent = n + 2L
+      mark = if (!style) "- " else if (n > 0L) sym$nested else sym$bullet
       return(list(text = paste0(lead, mark), width = st$indent))
     }
     if (grepl("^[0-9]+[.)]$", tok)) {
-      st$indent = st$lead + nchar(tok) + 1L
+      st$indent = n + nchar(tok) + 1L
       return(list(text = paste0(lead, tok, " "), width = st$indent))
     }
     if (identical(tok, ">")) {
-      st$indent = st$lead + 2L
+      st$indent = n + 2L
       return(list(text = paste0(lead, if (style) paste0(sgr("2"), "> ", sgr("22")) else "> "),
                   width = st$indent))
     }
-    if (st$lead > 0L) {
-      st$indent = st$lead
-      return(list(text = lead, width = st$lead, keep = TRUE))
+    if (n > 0L) {
+      st$indent = n
+      return(list(text = lead, width = n, keep = TRUE))
     }
     NULL
   }
-  fence_line = function(line) {
-    code = if (nzchar(trimws(line))) console_code(line, st$fence_lang) else line
-    emit(paste0(sgr("2"), sym$bar, sgr("22"), code, "\n"))
+  # In the margin a fenced line's characters appear as they arrive
+  fence_stream = function(line) {
+    add = substring(line, st$shown + 1L)
+    if (!lay || !nzchar(add)) return(invisible())
+    emit(add)
+    st$shown = nchar(line)
+    st$col = st$col + vis_width(add)
+    st$line_start = FALSE
+  }
+  # An ended fenced line in its style `out`: a streamed one is redrawn when it filled one row
+  # (a TAB has no width in nchar(), so a line with one is never redrawn)
+  fence_end = function(line, out) {
+    streamed = st$shown > 0L
+    st$shown = 0L
+    if (!streamed) {
+      emit(paste0(out, "\n"))
+    } else {
+      fit = style && st$col <= st$width && !grepl("\t", line, fixed = TRUE)
+      emit(if (fit) paste0("\r", pad, out, "\n") else "\n")
+    }
   }
   fence_marker = function(line) {
-    if (!st$fence) {
-      st$fence = TRUE
+    st$fence = !st$fence
+    if (st$fence) {
       st$fence_n = attr(regexpr("^`{3,}", line), "match.length")
       st$fence_lang = trimws(substring(line, st$fence_n + 1L))
-      emit(paste0(if (style) paste0(sgr("2"), sym$top, st$fence_lang, sgr("22")) else line, "\n"))
-    } else {
-      st$fence = FALSE
-      emit(paste0(if (style) paste0(sgr("2"), sym$bottom, sgr("22")) else line, "\n"))
+      st$fence_indent = st$ws
     }
+    fence_end(line, paste0(sgr("2"), line, sgr("22")))
   }
   # A block of pipe-table rows, aligned when it has a delimiter row, one cell count and fits;
   # either way it stays a valid pipe table
@@ -257,6 +276,11 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
       table_row = lay && st$line_start && !st$fence && startsWith(text, "|")
       if (st$fence || table_row || (st$line_start && startsWith(text, "```"))) {
         nl = regexpr("\n", text, fixed = TRUE)
+        line = if (nl < 0L) text else substr(text, 1L, nl - 1L)
+        if (st$fence) {
+          line = sub(paste0("^ {0,", st$fence_indent, "}"), "", line)
+          fence_stream(line)
+        }
         if (nl < 0L) {
           if (final) {
             text = paste0(text, "\n")
@@ -265,7 +289,6 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
           st$buf = text
           return(invisible())
         }
-        line = substr(text, 1L, nl - 1L)
         text = substr(text, nl + 1L, nchar(text))
         opening = !st$fence && startsWith(line, "```")
         closing = st$fence && grepl("^ {0,3}`{3,}[ \t]*$", line) &&
@@ -274,13 +297,12 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
           st$table = c(st$table, line)
         } else if (opening || closing) {
           fence_marker(line)
-        } else if (style) {
-          fence_line(line)
         } else {
-          emit(paste0(line, "\n"))
+          code = style && nzchar(trimws(line))
+          fence_end(line, if (code) console_code(line, st$fence_lang) else line)
         }
         st$col = 0L
-        st$lead = 0L
+        st$ws = 0L
         st$line_start = TRUE
         next
       }
@@ -297,9 +319,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
         next
       }
       if (grepl("^[ \t]+$", tok)) {
-        if (st$line_start && lay) {
-          st$lead = min(st$lead + nchar(gsub("\t", "    ", tok)), st$width %/% 2L)
-        }
+        if (st$line_start) st$ws = st$ws + nchar(gsub("\t", "    ", tok))
         if (!st$line_start && st$col != st$indent) st$space = TRUE
         next
       }
@@ -696,25 +716,36 @@ console_preview = function(input) {
   strsplit(text, "\n", fixed = TRUE)[[1L]]
 }
 
-#' The default start line of a tool call: "  * r  first line  (+N more lines)" (NS-1)
+#' The default start of a tool call: "  * r  x = 1" when it fits `width`; code that does not
+#' follows as a Markdown fence of at most 20 lines that are never cut, `r` for the r tool (D-187)
 #' @noRd
-console_call_line = function(call) {
-  lines = console_preview(call$input)
-  more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)") else ""
-  paste0("  ", console_symbols()$tool, console_escape(call$name %||% "?", FALSE), "  ",
-         console_escape(c(lines, "")[[1L]], FALSE), more)
+console_call_line = function(call, width) {
+  lines = console_escape(console_preview(call$input), FALSE)
+  head = paste0("  ", console_symbols()$tool, console_escape(call$name %||% "?", FALSE))
+  one = paste0(head, "  ", c(lines, "")[[1L]])
+  if (!is.character(call$input$code) ||
+      (length(lines) < 2L && cli::ansi_nchar(one, type = "width") <= width)) {
+    return(as.character(cli::ansi_strtrim(one, width)))
+  }
+  code = utils::head(lines, 20L)
+  fence = doc_rmd_fence("```", code)
+  more = length(lines) - length(code)
+  lang = if (grepl("(^|__)r$", call$name %||% "")) "r" else ""
+  body = c(cli::style_dim(paste0(fence, lang)), console_code(code, lang), cli::style_dim(fence),
+           if (more > 0L) cli::style_dim(paste0("(+", more, " more lines)")))
+  c(head, paste0(console_pad(), body))
 }
 
 #' The default result lines of a tool call: errors, object changes of `r`, the diff of `edit`,
 #' the path of `write`, else the elapsed time when it took a second or more
 #' @noRd
 console_result_lines = function(call, result) {
-  pad = paste0("    ", console_symbols()$result)
+  pad = "    "
   el = result$elapsed
   secs = if (isTRUE(el >= 1)) sprintf(" (%.1f s)", el) else ""
   d = result$details %||% list()
   if (isTRUE(result$is_error)) {
-    first = c(strsplit(console_msg_text(result), "\n", fixed = TRUE)[[1L]], "failed")[[1L]]
+    first = c(text_lines(d$error %||% console_msg_text(result)), "failed")[[1L]]
     return(cli::col_red(paste0(pad, "error: ", console_escape(first, FALSE), secs)))
   }
   if (identical(call$name, "r")) {
@@ -743,7 +774,8 @@ console_result_lines = function(call, result) {
   if (nzchar(secs)) paste0(pad, "done", secs) else character()
 }
 
-#' The console lines of a tool call (`result = NULL`) or of its result, fitted to `width`
+#' The console lines of a tool call (`result = NULL`) or of its result, fitted to `width` (a
+#' call's code fence excepted)
 #'
 #' A tool spec's `render(call, result, width)` wins (IC-69), escaped like any untrusted text;
 #' `call` is `list(id, name, input)`, `result` the tool-result message plus `elapsed`.
@@ -753,14 +785,10 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
     spec = registry_get("tool", call$name, session = session)
     if (is.function(spec$render)) spec$render(call, result, width)
   }, error = function(e) NULL)
-  out = if (is.character(out)) {
-    console_escape(out, FALSE)
-  } else if (is.null(result)) {
-    console_call_line(call)
-  } else {
-    console_result_lines(call, result)
-  }
-  as.character(cli::ansi_strtrim(out, max(20L, as.integer(width) - nchar(console_pad()))))
+  width = max(20L, as.integer(width) - nchar(console_pad()))
+  if (!is.character(out) && is.null(result)) return(console_call_line(call, width))
+  out = if (is.character(out)) console_escape(out, FALSE) else console_result_lines(call, result)
+  as.character(cli::ansi_strtrim(out, width))
 }
 
 #' The status line of a run's end: `  done | 2 turns | 1.2k tokens | $0.0042`; the status and
@@ -894,7 +922,7 @@ console_on_message_end = function(event, ctx) {
   NULL
 }
 
-#' tool_execution_start: one line per call (verbosity 2) or a progress message (verbosity 1)
+#' tool_execution_start: the call's lines (verbosity 2) or a progress message (verbosity 1)
 #' @noRd
 console_on_tool_start = function(event, ctx) {
   rec = console_record(event)

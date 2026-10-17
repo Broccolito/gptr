@@ -2264,9 +2264,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-console-render.R (4-mode invariance, plain guard at verbosity 0 and 1, margin incl. NO_COLOR, blank lines, continuation after reset_line, tables, styles, highlighting, UI partial line, block spacing incl. rgui), -wait (5), -process-launch (LF only rgui; 4 oracles), -spinner-width (ANSI), -spinner-gui (rgui CR-only frames; 1 oracle removed), -notice (wrap keeping indentation, NO_COLOR, plain contexts; 2 oracles). Evidence: progress/P26.md Task 4.
 
 ## D-187 - P26 Code blocks and tool calls as Markdown fences (2026-10-16)
-- Rule: TBD by P26 Task 5.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 5.
+- Rule (03 section 6.17; 04 section 7.14 unchanged; deviates from P14's `console_symbols()`, fence code and NS-1 tool line): `console_symbols()` loses `bar`, `top`, `bottom`, `result`; console output draws no U+2500-U+257F or U+23BF character.
+- Fences, every mode: fence lines as written (dim when styled), body verbatim and unwrapped, every fenced line de-indented by the opener's indentation (CommonMark; before, a fence indented 4+ spaces under a list item never closed and swallowed the reply). In the margin (D-186) fenced characters print as they arrive; a line without a TAB (nchar() gives it no width) that filled one content row is redrawn styled (`\r` + margin); a line broken by other output is printed whole again; elsewhere lines print when complete.
+- Tool calls: `  * r  <code>` when the line fits; else `  * r` and a `doc_rmd_fence()` fence (moved to `utils-text.R`, L0; callers keep the name) of at most 20 code lines highlighted as one block, never cut, then a dim `(+N more lines)`; info string `r` only for `r` and `*__r` (also in `?`); inputs without `code` stay one trimmed line. Result lines: four spaces; an error shows `details$error` before the result text.
+- Approval: the plan's "first line names the tool only" is not applied: IC-53 item 8 (04 ranks above the plan) keeps the first line and `+N more lines`, and MCP-served and nested calls print no tool line above the prompt (verbosity 1 only a one-line one). The first line is cut to the console width (minus the margin) before `+N more lines` instead of at 72 characters, so it no longer wraps. `?` shows the request lines as a plain fence (no SGR, also the RStudio dialog), at most 40 lines, the cap line outside.
+- Contract-visible: console display only; IC-53 and 03 section 6.8.3 unchanged.
+- Tests: test-console-fences.R (frame oracles of 12 blocks to Markdown; UTF-8 copy and parse, list-indented fences per split, tool fences and info string, error line), -render (4-mode invariance incl. a list-indented fence, streaming redraw, TAB line, broken line; 7 oracles incl. margin screen model), -ui (prompt fit, `?` fence). Evidence: progress/P26.md Task 5.
 
 ## D-188 - P26 Prompts reach the person and name the asker; fan-out status; nested overlays (2026-10-16)
 - Rule: TBD by P26 Task 6.

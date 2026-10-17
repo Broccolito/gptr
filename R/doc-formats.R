@@ -279,16 +279,6 @@ doc_rmd_append_chunk = function(text, code) {
   c(text, "", "```{r}", code, "```")
 }
 
-#' The fence of an agent chunk: `fence`, made one backtick longer than the longest backtick run
-#' that starts a line of the chunk's body when that run is at least as long (such a line would end
-#' the chunk, or start another, under knitr's or pandoc's rules)
-#' @noRd
-doc_rmd_fence = function(fence, lines) {
-  runs = regmatches(lines, regexpr("^[\t >]*`{3,}", lines))
-  n = if (length(runs)) max(nchar(gsub("[^`]", "", runs))) else 0L
-  if (n >= nchar(fence)) strrep("`", n + 1L) else fence
-}
-
 #' Lengthen the fences of an agent chunk (row `chunk` of doc_rmd_chunks()) that would no longer
 #' hold its body once `lines` are written into it
 #' @noRd

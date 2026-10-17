@@ -31,10 +31,32 @@ random_chunks = function(x, maxlen) {
   out
 }
 
-# Every construct of the renderer, nested lists, a table, a rule and two languages (D-186)
+# The rows a terminal shows for `bytes`: CR returns to the first column, LF ends a row
+screen_rows = function(bytes) {
+  rows = character()
+  row = character()
+  col = 1L
+  for (ch in strsplit(bytes, "", fixed = TRUE)[[1L]]) {
+    if (identical(ch, "\n")) {
+      rows = c(rows, sub(" +$", "", paste(row, collapse = "")))
+      row = character()
+    }
+    if (ch %in% c("\r", "\n")) {
+      col = 1L
+      next
+    }
+    row[[col]] = ch
+    col = col + 1L
+  }
+  rows
+}
+
+# Every construct of the renderer, nested lists, a fence indented under an item (D-187), a
+# table, a rule and two languages (D-186)
 render_rich = paste0(
   "# Title\n\n\nSome **bold** and `code` text that is long enough to wrap at forty columns.\r\n",
   "\r\n- outer *italic* item\n  - nested [a link](https://e.org/x)\n    - deeper\n1. numbered\n\n",
+  "    ```r\n    x = 1\n      y\n    ```\n\n",
   "> a quote\n\n| term | estimate |\n|------|---------:|\n| (Intercept) | 37.29 |\n",
   "| wt | -5.34 |\n\n---\n\n```r\np = ggplot(mtcars, aes(wt, mpg)) +\n  geom_point()  # pts\n",
   "```\n```python\nx = 'a'  # comment 1\n```\nWide \u4e2d\u6587 chars.\n\n")
@@ -83,7 +105,8 @@ test_that("an interactive console keeps a two-column margin at 40 columns (D-186
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "display widths need a UTF-8 locale (report 18)")
   for (colours in c(1L, 256L)) {
     withr::local_options(cli.num_colors = colours, cli.dynamic = TRUE, gptr.verbose = 2L)
-    out = cli::ansi_strip(render_chunks(render_rich, width = 40L))
+    out = screen_rows(paste0(cli::ansi_strip(render_chunks(render_rich, width = 40L)), "\n",
+                             collapse = ""))
     expect_true(all(startsWith(out[nzchar(out)], "  ")))
     expect_true(all(nchar(out, type = "width") <= 38L))
     expect_false(any(grepl("^ +$", out)))
@@ -168,10 +191,56 @@ test_that("complete R lines use cli's highlighter and other code a light one (D-
   py = render_chunks("```python\nx = 'a'  # c 1\n```", 80L)[[2L]]
   expect_match(py, "\033\\[[0-9;]+m'a'")
   expect_match(py, "\033\\[[0-9;]+m# c 1")
-  expect_identical(cli::ansi_strip(py), "| x = 'a'  # c 1")
+  expect_identical(cli::ansi_strip(py), "x = 'a'  # c 1")
   expect_match(render_chunks("```json\n{\"a\": 1}\n```", 80L)[[2L]],
                "\033\\[[0-9;]+m\"a\".*\033\\[[0-9;]+m1")
-  expect_identical(render_chunks("```text\n'a' 1\n```", 80L)[[2L]], "\033[2m| \033[22m'a' 1")
+  expect_identical(render_chunks("```text\n'a' 1\n```", 80L)[[2L]], "'a' 1")
+})
+
+test_that("fenced lines stream as they arrive and a line that fits is redrawn (D-187)", {
+  withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)
+  long = "zz = c('a line too long to be redrawn')"
+  for (colours in c(1L, 256L)) {
+    withr::local_options(cli.num_colors = colours)
+    con = rawConnection(raw(), "w")
+    sink(con)
+    tryCatch({
+      r = render_markdown_stream(40L)
+      r$write("```r\nx = mean(")
+      partial = rawToChar(rawConnectionValue(con))
+      r$write(paste0("y)\n", long, "\n\tif (a) b\n```\n"))
+      r$finish()
+    }, finally = sink())
+    bytes = rawToChar(rawConnectionValue(con))
+    close(con)
+    expect_identical(cli::ansi_strip(partial), "  ```r\n  x = mean(")
+    expect_identical(screen_rows(cli::ansi_strip(bytes)),
+                     c("  ```r", "  x = mean(y)", paste0("  ", long), "  \tif (a) b", "  ```"))
+    expect_false(grepl(paste0("\r  ", long), bytes, fixed = TRUE))
+    # a TAB has no display width in nchar(), so a line holding one is never redrawn
+    expect_false(grepl("\tif (a) b\r", bytes, fixed = TRUE))
+    if (colours == 1L) {
+      expect_false(grepl("\r", bytes, fixed = TRUE))
+    } else {
+      expect_match(bytes, paste0("x = mean(y)\r  ", cli::code_highlight("x = mean(y)"), "\n"),
+                   fixed = TRUE)
+    }
+  }
+})
+
+test_that("a fenced line broken by other output is shown whole after it (D-187)", {
+  withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L, cli.num_colors = 256L)
+  out = utils::capture.output({
+    r = render_markdown_stream(60L)
+    r$write("```python\nif x:\n    y = foo(")
+    r$reset_line()
+    cat("  (a notice)\n")
+    r$write("bar)\n```\n")
+    r$finish()
+  })
+  expect_identical(screen_rows(paste0(cli::ansi_strip(out), "\n", collapse = "")),
+                   c("  ```python", "  if x:", "      y = foo(", "  (a notice)",
+                     "      y = foo(bar)", "  ```"))
 })
 
 test_that("prose lines respect the width and bullets hang (UTF-8 locale)", {
@@ -413,8 +482,8 @@ test_that("tool lines escape the preview and summarise the result (acceptance 7)
     hook_event("tool_execution_end", s, tool_call_id = "c1", tool_name = "r", is_error = FALSE,
                elapsed = 2.5, details = list()),
     hook_event("message_end", s, role = "tool_result", message = result)))
-  expect_identical(out, c("  * r  x = 1 # <U+001B>[31mred  (+1 more lines)",
-                          "    -> + x, y (2.5 s)"))
+  expect_identical(out, c("  * r", "```r", "x = 1 # <U+001B>[31mred", "y = 2", "```",
+                          "    + x, y (2.5 s)"))
   expect_false(any(grepl("\033", out, fixed = TRUE)))
 })
 
@@ -428,7 +497,7 @@ test_that("an error result shows its first line", {
     hook_event("tool_execution_start", s, tool_call_id = "c2", tool_name = "r",
                input = list(code = "z + 1")),
     hook_event("message_end", s, role = "tool_result", message = bad)))
-  expect_identical(out[[2L]], "    -> error: Error: object 'z' not found")
+  expect_identical(out[[2L]], "    error: Error: object 'z' not found")
 })
 
 test_that("a tool's render() function replaces the default lines (IC-69)", {
@@ -612,26 +681,6 @@ test_that("the console UI ends a partial answer line before it prompts (D-186)",
   expect_false("permission_request" %in% vapply(console_hooks(), function(h) h$event, ""))
 })
 
-# The rows a terminal shows for `bytes`: CR returns to the first column, LF ends a row
-screen_rows = function(bytes) {
-  rows = character()
-  row = character()
-  col = 1L
-  for (ch in strsplit(bytes, "", fixed = TRUE)[[1L]]) {
-    if (identical(ch, "\n")) {
-      rows = c(rows, sub(" +$", "", paste(row, collapse = "")))
-      row = character()
-    }
-    if (ch %in% c("\r", "\n")) {
-      col = 1L
-      next
-    }
-    row[[col]] = ch
-    col = col + 1L
-  }
-  rows
-}
-
 test_that("a foreground run separates text, tool and status blocks once (D-186)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
@@ -676,7 +725,7 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
     expect_match(bytes, "thinking", fixed = TRUE)
     expect_false(grepl("\r +\r\n", bytes))
     expect_identical(screen_rows(bytes), c("", "  First tail", "", "  * r  1 + 1",
-                                           "    -> + value", "", "  Second ending", "",
+                                           "    + value", "", "  Second ending", "",
                                            "  done | 1 turn | 0 tokens | $0.0000", ""),
                      info = fe)
   }
@@ -718,7 +767,7 @@ test_that("tool calls of a run show escaped previews and results (acceptance 7)"
   out = utils::capture.output(peter("go", model = fake, envir = e, mode = auto))
   expect_true("  * r  z = 1 # <U+001B>[31mred" %in% out)
   # the elapsed time follows when the call took a second or more (a first call on a slow runner)
-  expect_match(out, "^    -> \\+ z( \\([0-9.]+ s\\))?$", all = FALSE)
+  expect_match(out, "^    \\+ z( \\([0-9.]+ s\\))?$", all = FALSE)
   expect_false(any(grepl("\033", out, fixed = TRUE)))
   expect_identical(e$z, 1)
 })

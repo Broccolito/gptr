@@ -363,6 +363,16 @@ listing_cell = function(text, width) {
   text
 }
 
+#' The fence of a code block (an agent chunk, a console fence): `fence`, made one backtick longer
+#' than the longest backtick run that starts a line of `lines` when that run is at least as long
+#' (such a line would end the block, or start another, under knitr's or pandoc's rules)
+#' @noRd
+doc_rmd_fence = function(fence, lines) {
+  runs = regmatches(lines, regexpr("^[\t >]*`{3,}", lines))
+  n = if (length(runs)) max(nchar(gsub("[^`]", "", runs))) else 0L
+  if (n >= nchar(fence)) strrep("`", n + 1L) else fence
+}
+
 #' Safe notebook Markdown: keep fenced code and matched backtick spans literal, while prose
 #' HTML and link/image markup remain text. This is a display copy, never the canonical message.
 #' @noRd

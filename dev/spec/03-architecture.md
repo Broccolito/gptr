@@ -1852,6 +1852,15 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   that parse are highlighted by `cli::code_highlight()`, other R lines and known languages by a
   light highlighter (strings, numbers, comments). The console UI itself ends partial lines and
   clears waiting rows, keeping their task, before it prompts (D-186).
+  Fenced code stays Markdown in every mode: fence lines as written (dim when styled), the body
+  verbatim, unwrapped and de-indented by the opener's indentation (CommonMark: a fence indented
+  under a list item closes), so a copied block is Markdown whose body runs; in the margin code
+  characters appear as they stream and a line without a TAB that fit one row is redrawn
+  highlighted. A tool call shows its code on its line when it fits, else as a fence of at most
+  20 lines (then `(+N more lines)`; info string `r` only for the r tool); result lines are
+  indented four spaces and an `r` error shows its error message; the one-line approval prompt
+  (6.8.3) is cut to the console width before its `+N more lines`, and the `?` detail shows the
+  code as a plain fence of at most 40 lines. Console output draws no box characters (D-187).
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
   `/compact [focus]`, `/cost`, `/context` (token ledger), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
