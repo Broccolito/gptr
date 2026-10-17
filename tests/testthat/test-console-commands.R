@@ -133,7 +133,7 @@ test_that("/help lists the commands and the input syntax", {
   expect_true(any(grepl("^  /mode", out)))
   expect_true(any(grepl("!!code", out, fixed = TRUE)))
   expect_identical(run_command(repl_state(NULL, new.env()), "/help mode")$out,
-                   "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto]")
+                   "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
 })
 
 test_that("/exit, /quit and /q end the REPL", {
@@ -154,7 +154,13 @@ test_that("/model and /mode before the first prompt set the first prompt's argum
   run_command(rs, "/plan")
   expect_identical(rs$mode, "plan")
   expect_identical(run_command(rs, "/mode")$out, "Mode: plan")
-  expect_match(run_command(rs, "/mode turbo")$out, "Unknown mode 'turbo'", fixed = TRUE)
+  expect_identical(run_command(rs, "/mode turbo")$out,
+                   "Unknown mode 'turbo': use plan, manual, edits, auto or yolo.")
+  local_gptr_options(quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  expect_message(run_command(rs, "/mode yolo"), "not a sandbox", class = "gptr_message_notice")
+  expect_identical(rs$mode, "yolo")
 })
 
 test_that("/mode on a session appends the mode change for the next turn", {
@@ -163,6 +169,8 @@ test_that("/mode on a session appends the mode change for the next turn", {
   rs = repl_state(s, new.env())
   expect_identical(run_command(rs, "/mode auto")$out, "Mode: auto (from the next turn)")
   expect_identical(s$mode, "auto")
+  expect_identical(run_command(rs, "/mode yolo")$out, "Mode: yolo (from the next turn)")
+  expect_identical(s$mode, "yolo")
   types = vapply(session_data(s)$entries, function(e) e$custom_type %||% "", "")
   expect_true("gptr.mode_change" %in% types)
 })

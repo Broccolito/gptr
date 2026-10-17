@@ -113,6 +113,17 @@ test_that("repl_state() takes the console call's identifiers, options and object
   expect_error(repl_state(NULL, "not an env"), class = "gptr_error_invalid_argument")
 })
 
+test_that("a console opened in yolo shows the yolo notice with its banner (IC-78)", {
+  local_gptr_options(quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  rs = repl_state(NULL, new.env())
+  rs$mode = "yolo"
+  expect_identical(repl_prompt(rs), "peter[yolo]> ")
+  expect_message(utils::capture.output(repl_banner(rs)), "not a sandbox",
+                 class = "gptr_message_notice")
+})
+
 test_that("console_history_add() never fails", {
   expect_null(console_history_add("a prompt"))
 })

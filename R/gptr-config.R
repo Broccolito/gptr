@@ -740,8 +740,9 @@ settings_project_value = function(key, spec, current, new, trusted, root) {
   tighten = spec$tighten
   if (!is.null(tighten)) {
     if (!is.character(new) || length(new) != 1L || !(new %in% tighten)) return(current)
-    now = match(if (is.character(current)) current[1L] else tighten[length(tighten)], tighten)
-    if (is.na(now) || match(new, tighten) <= now) return(new)
+    now = match(if (is.character(current)) current[1L] else NA, tighten)
+    if (is.na(now)) now = match(spec$default, tighten)
+    if (match(new, tighten) <= now) return(new)
     return(current)
   }
   if (!trusted) return(current)
@@ -1523,8 +1524,14 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' classifier knows to be read-only run without asking; every other action, including any change
 #' to a file or an object, asks first with a one-line prompt. `edits` also allows file edits
 #' inside the project and still asks before R code that is not known to be read-only; `auto`
-#' asks only for level-4 actions (for example deleting the project directory, or changing gptr's
-#' own configuration) and for reads of registered secrets; `plan` changes nothing. When nobody
+#' asks only for level-4 actions (for example deleting the project directory or a file outside the
+#' project, where a system temporary directory such as `/tmp` counts as outside, or changing gptr's
+#' own configuration) and for reads of registered secrets; `yolo`, which only you can select (a
+#' project setting or model code in another mode cannot), also runs gptr's own configuration
+#' functions, writes to R startup files such as `~/.Rprofile` (which can change gptr's options in
+#' the next R process) and secret reads without asking, and still asks before deleting protected
+#' files, files outside the project or the project itself, `rm(list = ls())`, quitting R,
+#' `options(gptr.*)` and sending a secret over the network; `plan` changes nothing. When nobody
 #' can answer a question (Rscript, knitr, a scheduled job) the run stops with status `blocked`
 #' and a `gptr_error_permission` condition that says how to allow the action, unless you set
 #' `options(gptr.noninteractive_ask = "deny")`. Model code cannot switch the gate off or loosen
@@ -1536,8 +1543,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' The risk levels come from a static classifier ([gptr_risk()]). It is advisory and it is not a
 #' security boundary: R code can compute function names, call compiled code or load packages
 #' whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
-#' session. In `auto` mode a model can delete or overwrite files and objects. Use `auto` only
-#' in projects you can restore (version control, backups, [gptr_rewind()] for recent turns),
+#' session. In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them
+#' only in projects you can restore (version control, backups, [gptr_rewind()] for recent turns),
 #' and run untrusted prompts or untrusted projects in a disposable container or virtual machine.
 #'
 #' @section Sub-agents, workers and child processes:
@@ -1545,9 +1552,11 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' sub-agent in a separate R process that starts from gptr's reduced child environment (it does
 #' not read your `~/.Renviron`), but that process runs under your user account with your file
 #' permissions: the worker backend is not an isolation boundary. Its permission requests are
-#' sent to your session and classified again there. MCP servers, the `claude` and `codex`
-#' command-line tools, shell commands started with `peter$sh()` and Shiny artifacts are ordinary
-#' processes of your account as well; artifacts start without any registered secret and listen
+#' sent to your session and classified again there. On the `codex` route in `auto` and `yolo`
+#' mode, Codex's own shell changes and deletes files inside the project within Codex's sandbox,
+#' without passing gptr's gate. MCP servers, the `claude` and `codex` command-line tools, shell
+#' commands started with `peter$sh()` and Shiny artifacts are ordinary processes of your account
+#' as well; artifacts start without any registered secret and listen
 #' on the loopback interface, and each launch gets an access token in its address (on Windows
 #' only when 'openssl' is installed; otherwise gptr says that the artifact has no token).
 #'

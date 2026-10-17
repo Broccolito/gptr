@@ -6,10 +6,9 @@
 #' @noRd
 subagent_mode_tighten = function(inherited, requested = NULL) {
   if (is.null(requested)) return(inherited)
-  modes = c("plan", "manual", "edits", "auto")
-  check_choice(requested, modes, "mode")
+  check_choice(requested, session_modes, "mode")
   if (is.null(inherited)) return(requested)
-  modes[[min(match(c(inherited, requested), modes))]]
+  session_modes[[min(match(c(inherited, requested), session_modes))]]
 }
 
 #' The limit of one pool: options gptr.subagents.* and settings subagents.* (IC-71)

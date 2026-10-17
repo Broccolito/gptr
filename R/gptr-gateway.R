@@ -59,7 +59,7 @@
 #' @param ... A session to continue, the prompt, and context objects.
 #' @param model A model name (`sonnet`, `"anthropic/claude-sonnet-5-5"`), a provider or router spec
 #'   such as [gptr_fake_provider()], or `NULL` for the configured default.
-#' @param mode One of `plan`, `manual`, `edits`, `auto`; `NULL` for the configured default.
+#' @param mode One of `plan`, `manual`, `edits`, `auto`, `yolo`; `NULL` for the configured default.
 #' @param skills,plugins,extensions Names (bare or quoted) of skills to preload, plugins and
 #'   extensions to enable for this session; `extensions` also takes `function(gptr)` factories and
 #'   file paths.

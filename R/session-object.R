@@ -6,7 +6,7 @@
 session_accessors = c("text", "value", "values", "usage", "cost", "history", "messages", "model",
                       "mode", "status", "reason", "id", "kind", "file", "turns", "envir",
                       "children", "ext", "plan", "last_rewind", "editor_text")
-session_modes = c("plan", "manual", "edits", "auto")
+session_modes = c("plan", "manual", "edits", "auto", "yolo")
 session_kinds = c("chat", "team", "fanout", "child", "replayed")
 
 #' Create a new idle session; the prompt is frozen lazily at the first run (`prompt.freeze`)
@@ -93,6 +93,7 @@ session_new = function(model, mode, home = NULL, kind = "chat", parent = NULL, p
   }
   secret_discover_env()
   if (is.null(parent)) last_set(s)
+  mode_notice(mode)
   s
 }
 
@@ -804,6 +805,7 @@ session_set_mode = function(s, mode, source = "user") {
   if (identical(from, mode)) return(invisible(s))
   session_append(s, entry_custom("gptr.mode_change", list(from = from, to = mode, source = source)))
   d$mode = mode
+  mode_notice(mode)
   live = session_live(s)
   run = if (is.null(live)) NULL else live$run
   if (!is.null(run)) mode_apply_run(s, run, mode)
@@ -1120,7 +1122,7 @@ fork_boundaries = function(path) {
 }
 
 #' Model code may call a control export (configuration, or a session other than its own) only
-#' with the one-shot token of an approved `ask_human` call (IC-53 item 3; perm_grant_control())
+#' with the one-shot token of an allowed call (IC-53 item 3; perm_grant_control())
 #' @param s The target session, or NULL when there is none or it is unknown (always checked).
 #' @noRd
 session_control_check = function(what, s = NULL) {

@@ -542,6 +542,19 @@ test_that("gptr's own configuration is the control category, level 4 (IC-53, IC-
   expect_identical(gptr_risk("writeLines('x', 'AGENTS.md')", root = root)$level, 3L)
 })
 
+test_that("a delete keeps file_delete, a control target shows in path_class (IC-78)", {
+  root = local_project()
+  r = gptr_risk("unlink('.git', recursive = TRUE)", root = root)
+  f = r$flagged
+  expect_identical(list(f$category, f$path_class, f$level), list("file_delete", "control", 4L))
+  expect_true(perm_is_control(list(name = "r"), r))
+  f = risk_command("rm -rf .git/hooks", root)
+  expect_identical(list(f$category, f$path_class, f$level), list("file_delete", "control", 4L))
+  expect_identical(gptr_risk("unlink('/etc/gptr-old.csv')", root = root)$level, 4L)
+  expect_identical(flags_level(risk_command("rm -rf /etc/gptr-docs", root)), 4L)
+  expect_identical(gptr_risk("unlink(f)", root = root)$level, 3L)
+})
+
 test_that("gptr_artifacts() that relaunches or stops an app is level 3 process (04 9.4)", {
   root = local_project()
   launch = c("gptr_artifacts('a', version = 2)", "gptr_artifacts('a', open = TRUE)",

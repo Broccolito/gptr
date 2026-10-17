@@ -162,7 +162,7 @@ test_that("the core setting specs cover contract 11.2 and validate their values 
   expect_true(all(vapply(specs, inherits, NA, what = "gptr_setting")))
   by_name = stats::setNames(specs, names)
   expect_identical(by_name$mode$validate("plan"), "plan")
-  expect_identical(by_name$mode$tighten, c("plan", "manual", "edits", "auto"))
+  expect_identical(by_name$mode$tighten, c("plan", "manual", "edits", "auto", "yolo"))
   expect_error(by_name$mode$validate("fast"), class = "gptr_error_invalid_argument")
   expect_error(by_name$budget$validate(3), class = "gptr_error_invalid_argument")
   expect_identical(by_name$plugins$validate(c("a", "b")), c("a", "b"))
@@ -474,12 +474,29 @@ test_that("an untrusted project only tightens (IC-52)", {
 
 test_that("a trusted project applies every key, but tighten-type keys only tighten", {
   proj = local_gw()
-  writeLines('{"mode": "auto", "preset": "extended", "permissions": {"allow": ["write(**)"]}}',
+  writeLines('{"mode": "yolo", "preset": "extended", "permissions": {"allow": ["write(**)"]}}',
              file.path(proj, ".gptr", "settings.json"))
   gptr_trust(proj, TRUE)
   expect_identical(settings_get("preset"), "extended")
   expect_identical(settings_get("mode"), "manual")
+  settings_write("user", list(mode = "auto"))
+  expect_identical(settings_get("mode"), "auto")
   expect_identical(settings_get("permissions")$allow, "write(**)")
+})
+
+test_that("an invalid user mode does not let a project loosen past the default", {
+  proj = local_gw()
+  writeLines('{"mode": "yolo", "record": "auto"}', file.path(proj, ".gptr", "settings.json"))
+  up = settings_path("user")
+  dir.create(dirname(up), recursive = TRUE, showWarnings = FALSE)
+  for (u in c('{"mode": "Auto", "record": 3}', '{"mode": null}')) {
+    writeLines(u, up)
+    expect_false(identical(settings_get("mode"), "yolo"))
+    expect_false(identical(settings_get("record"), "auto"))
+  }
+  writeLines('{"mode": "Auto"}', up)
+  writeLines('{"mode": "plan"}', file.path(proj, ".gptr", "settings.json"))
+  expect_identical(settings_get("mode"), "plan")
 })
 
 test_that("the user-level project file adds rules; egress comes from the user file only", {

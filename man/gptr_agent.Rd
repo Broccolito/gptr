@@ -40,7 +40,8 @@ gptr_agent(
 
 \item{max_turns}{Turn limit, or \code{NULL}.}
 
-\item{mode}{Permission mode (\code{"plan"}, \code{"manual"}, \code{"edits"}, \code{"auto"}), or \code{NULL} to inherit.}
+\item{mode}{Permission mode (\code{"plan"}, \code{"manual"}, \code{"edits"}, \code{"auto"}, \code{"yolo"}), or \code{NULL} to
+inherit; a sub-agent never runs looser than its caller.}
 
 \item{objects}{Names of objects the agent may see.}
 

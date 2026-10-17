@@ -31,12 +31,13 @@ test_that("the codex argv follows IC-65, and the resume form uses -c sandbox_mod
                      "gpt-6-sol", "-C", "/w", "--sandbox", "read-only", "-"))
 })
 
-test_that("plan, manual and edits run read-only; auto workspace-write; Windows falls back", {
+test_that("plan, manual and edits run read-only; auto and yolo write; Windows falls back", {
   local_mocked_bindings(pcli_is_windows = function() FALSE)
   for (mode in c("plan", "manual", "edits")) {
     expect_identical(pcli_codex_sandbox(mode, "codex"), "read-only")
   }
   expect_identical(pcli_codex_sandbox("auto", "codex"), "workspace-write")
+  expect_identical(pcli_codex_sandbox("yolo", "codex"), "workspace-write")
   local_mocked_bindings(pcli_is_windows = function() TRUE,
                         pcli_codex_windows_ready = function(path) FALSE)
   w = expect_warning(pcli_codex_sandbox("auto", "codex"), class = "gptr_warning_cli_sandbox")

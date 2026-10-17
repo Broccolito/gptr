@@ -681,7 +681,7 @@ pcli_num = function(x) {
 pcli_params = function(context) {
   p = context[["params"]] %||% list()
   mode = p[["cli_mode"]]
-  ok = rlang::is_string(mode) && mode %in% c("plan", "manual", "edits", "auto")
+  ok = rlang::is_string(mode) && mode %in% c("plan", "manual", "edits", "auto", "yolo")
   b = p[["cli_budget"]] %||% list()
   list(mode = if (ok) mode else "manual", turns = pcli_scalar_num(b[["turns"]]),
        cost = pcli_scalar_num(b[["cost"]]))

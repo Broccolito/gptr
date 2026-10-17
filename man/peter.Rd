@@ -18,7 +18,7 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 \item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}), a provider or router spec
 such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default.}
 
-\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}; \code{NULL} for the configured default.}
+\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.}
 
 \item{skills, plugins, extensions}{Names (bare or quoted) of skills to preload, plugins and
 extensions to enable for this session; \code{extensions} also takes \verb{function(gptr)} factories and

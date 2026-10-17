@@ -58,11 +58,11 @@ pcli_codex_windows_ready = function(path) {
 }
 
 #' The sandbox of a permission mode: plan, manual and edits -> read-only (file changes go through
-#' gptr's gated write/edit over MCP), auto -> workspace-write; on native Windows read-only with a
-#' warning while the sandbox is not ready (IC-65)
+#' gptr's gated write/edit over MCP), auto and yolo -> workspace-write; on native Windows read-only
+#' with a warning while the sandbox is not ready (IC-65)
 #' @noRd
 pcli_codex_sandbox = function(mode, path) {
-  if (!identical(mode, "auto")) return("read-only")
+  if (!mode %in% c("auto", "yolo")) return("read-only")
   if (pcli_is_windows() && !pcli_codex_windows_ready(path)) {
     gptr_warn(paste0("Codex's Windows sandbox is not ready, so the codex route runs read-only. ",
                      "Set the sandbox up with the Codex CLI to let Codex edit files itself."),

@@ -286,14 +286,14 @@ context_cap_64k = function(text) {
 }
 
 #' The instruction items (text and attrs per file; the user-level file is always sent)
-#' An untrusted project's files render `trusted="false"`; a non-interactive `auto` or `edits` run
-#' withholds them with a notice (IC-52) and the result carries `withheld = TRUE`.
+#' An untrusted project's files render `trusted="false"`; a non-interactive `auto`, `edits` or
+#' `yolo` run withholds them with a notice (IC-52) and the result carries `withheld = TRUE`.
 #' @noRd
 context_instruction_items = function(inp, notify = TRUE) {
   root = project_root()
   files = context_instruction_files(root, getwd())
   trusted = prompt_trusted(root)
-  withhold = !trusted && !isTRUE(inp$human) && isTRUE(inp$mode %in% c("auto", "edits"))
+  withhold = !trusted && !isTRUE(inp$human) && isTRUE(inp$mode %in% c("auto", "edits", "yolo"))
   if (withhold && any(!vapply(files, function(f) isTRUE(f$user), NA))) {
     if (notify) {
       gptr_inform(paste0("Project instructions were not sent: the project is not trusted and ",
@@ -435,10 +435,11 @@ context_provide_environment = function(ctx, budget) {
 
 # ---- mode and plan ------------------------------------------------------------------------------
 
-#' The body of a <mode> block (architecture section 7.4; contract section 9.3 suffixes)
+#' The body of a <mode> block (architecture section 7.4; contract section 9.3 suffixes); yolo
+#' tells the model what auto does (IC-78)
 #' @noRd
 context_mode_body = function(mode, human, deny = FALSE) {
-  body = prompt_text(paste0("mode_", mode))
+  body = prompt_text(paste0("mode_", if (identical(mode, "yolo")) "auto" else mode))
   if (isTRUE(human)) return(body)
   suffix = if (identical(mode, "manual")) {
     prompt_text("noninteractive_manual")

@@ -514,10 +514,19 @@ nested_record = function(run, outer_id, name, res, level) {
 # ---------------------------------------------------------------------------- permissions
 
 #' The permission combination (IC-04, IC-53): policies, `permission_request` hooks (`ask`), the
-#' UI, the non-interactive stop; the risk is recomputed from the raw input
+#' UI, the non-interactive stop; the risk is recomputed from the raw input. An allowed call gets
+#' the one-shot tokens of its control exports (IC-53 item 3).
 #' @return `list(decision, reason, input, risk, rule, how)`; the dispatcher executes only "allow".
 #' @noRd
 perm_check = function(call, run) {
+  res = perm_decide(call, run)
+  if (identical(res$decision, "allow")) perm_grant_control(run, res$risk)
+  res
+}
+
+#' perm_check() before the token grant
+#' @noRd
+perm_decide = function(call, run) {
   ctx = run_ctx(run)
   snap = run$opts$safety %||% list()
   risk = call_risk(call, ctx, run)
@@ -609,7 +618,6 @@ perm_ask = function(call, run, out, risk) {
     if (!rlang::is_string(fb) || !nzchar(fb)) ans$feedback = NULL
     if (identical(ans[["decision"]], "allow")) {
       # a `remember` answer is stored by P11's builtin:permissions, not here
-      if (identical(tier, "ask_human")) perm_grant_control(run, risk)
       return(perm_result("allow", "approved by the user", call$input, risk, "user"))
     }
     if (identical(ans[["decision"]], "abort")) {
@@ -658,7 +666,7 @@ perm_ask_questions = function(input) {
   }, "", USE.NAMES = FALSE)
 }
 
-#' Grant the one-shot tokens of an approved `ask_human` call (IC-53 item 3)
+#' Grant the one-shot tokens of an allowed call (IC-53 item 3)
 #' One per flagged `control` export, in `run$signal$control` and P02's `ext_control_grant()`;
 #' cleared when the call ends (tool_execute_frame()).
 #' @noRd

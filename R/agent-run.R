@@ -82,7 +82,7 @@ safety_snapshot = function() {
        can_prompt = gptr_can_prompt(), has_human = gptr_has_human())
 }
 
-#' The stricter of two modes (plan < manual < edits < auto)
+#' The stricter of two modes (plan < manual < edits < auto < yolo)
 #' @noRd
 run_mode_tighter = function(a, b) session_modes[min(match(c(a, b), session_modes))]
 

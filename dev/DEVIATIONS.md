@@ -2285,9 +2285,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   prompt-text, mcp-server (guard). Evidence: progress/P26.md Task 7.
 
 ## D-190 - P26 The yolo permission mode (2026-10-16)
-- Rule: TBD by P26 Task 8.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 8.
+- Rule: `session_modes` ends in `yolo`; every mode list uses it (`pcli_params()` names it at L1). Only the
+  person selects it; projects (against the default when the user's mode is invalid), nested calls and children
+  only tighten. Codex runs workspace-write; its shell edits and deletes in the project ungated, as in auto.
+- Rule: yolo = auto plus control exports and control-path writes, secret reads, no protect_size; `critical_guard`
+  ignores control rows except `options(gptr.*)` (namespace patches and `~/.Rprofile` writes run, accepted risks);
+  secret-to-network flows and deny/ask rules still apply. Any final allow grants the control tokens.
+- Rule (every mode): deleting an `outside` path (`/tmp` too; only `tempdir()` is temp) is level 4; a delete
+  keeps `file_delete` with the control target in `path_class` (plan denies such deletes instead of asking); the
+  edit tool's Delete File is level 4 where `unlink()` of the path is, typed `file_delete` so a control path in
+  the same patch cannot hide it. `<mode name="yolo">` reuses auto's text; a one-time notice on entry.
+- Contract-visible: 03 §6.8.1-6.8.2, §8.3; 04 mode lists, IC-53 items 1/3/6, IC-65, IC-78; 05 P11, P20;
+  `?peter`, `?gptr_agent`, `?gptr_security`; configuration, interactive-console, execution-model vignettes.
+- Tests: perm-gate, perm-classify, perm-plan, tool-namespace, session-object, console-*, prompt-context,
+  gptr-config, subagent-*, cli-*, ext-*, injection-e2e. Evidence: progress/P26.md Task 8.
 
 ## D-191 - P26 Codex stdio relay; CLI routes serve the session's tools; model references (2026-10-16)
 - Rule: TBD by P26 Task 9.

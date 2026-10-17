@@ -749,7 +749,8 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      an ESC or bidi payload in code is escaped in the prompt; a cloned fixture with `settings.local.json` allow
      rules and an AGENTS.md instruction still asks; the pending plan is not handed to a call inside a loop or to a
      call after an intervening `peter()`; with `jupyter.in_kernel = TRUE` mocked and a mocked `gptr_readline()`, an
-     ask is answered.
+     ask is answered. (P26, IC-78: in `yolo` only the `options(gptr.*)` case still needs a human; a plan-mode
+     delete of a control file is denied, not asked.)
 
 ### P12 Native provider adapters
 
@@ -1118,7 +1119,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   `opts$gate` for other `can_use_tool` requests; the `--bare` probe; the `apiKeySource` check and
   `gptr_error_billing`; G6 §3.7 environment lists; codex argv with `--skip-git-repo-check`, `-m`, `-C`,
   `default_tools_approval_mode="approve"`, `required=true`, resume with `-c sandbox_mode=`; sandbox mapping
-  plan/manual/edits -> read-only, auto -> workspace-write with control-file hashing and a checkpointer walk; the
+  plan/manual/edits -> read-only, auto/yolo -> workspace-write with control-file hashing and a checkpointer walk; the
   Windows sandbox probe; the turn counter and `gptr.cli_turn_timeout`; per-session wire logs; per-session MCP tokens
   (IC-58, IC-65, IC-66); fake CLIs run through `rscript_path()` with `offline = TRUE` records (IC-60, IC-45); the
   CLI leg of INFRA-16 (IC-36).

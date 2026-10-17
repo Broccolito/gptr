@@ -104,7 +104,7 @@ test_that("children only tighten the inherited mode", {
   expect_identical(subagent_mode_tighten("plan", "auto"), "plan")
   expect_identical(subagent_mode_tighten("edits", NULL), "edits")
   expect_identical(subagent_mode_tighten(NULL, "edits"), "edits")
-  expect_error(subagent_mode_tighten("auto", "yolo"), class = "gptr_error_invalid_argument")
+  expect_error(subagent_mode_tighten("auto", "fast"), class = "gptr_error_invalid_argument")
 })
 
 test_that("pool limits follow the gptr.subagents.* options (IC-71)", {

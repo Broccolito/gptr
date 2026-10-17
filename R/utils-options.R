@@ -52,6 +52,18 @@ setting_get = function(key, session = NULL, default = NULL) {
   value %||% default
 }
 
+#' Say once per R process what yolo still asks for (IC-78)
+#' @noRd
+mode_notice = function(mode) {
+  if (!identical(mode, "yolo")) return(invisible(NULL))
+  gptr_inform(paste0("Mode yolo: actions run without approval, including package installs, ",
+                     "writes anywhere and gptr's own configuration functions. A person is still ",
+                     "asked before deleting files outside the project or protected files (.git, ",
+                     ".env, keys), the project or home directory, rm(list = ls()), quitting R, ",
+                     "options(gptr.*) and sending a secret over the network. The classifier ",
+                     "reads code; it is not a sandbox."), "notice", .once = "mode_yolo")
+}
+
 #' Mockable wrapper of interactive()
 #' @noRd
 gptr_is_interactive = function() {

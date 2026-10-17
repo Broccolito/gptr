@@ -1025,7 +1025,7 @@ exact name.
 |---|---|---|
 | `...` | any | at most one leading unnamed `<session>` (continuation target), the prompt (below), context objects (unnamed: labelled by their deparsed expression, e.g. `mice`; named: by name). A named `<session>` is context, not a target. |
 | `model` | identifier, `<spec:provider>`, `<spec:router>` or `NULL` | resolved by §6.1.3; `NULL` = settings default (§8.4 of `03`) |
-| `mode` | identifier or `NULL` | one of `plan`, `manual`, `edits`, `auto`; a continuation may only keep or change it explicitly; children only tighten |
+| `mode` | identifier or `NULL` | one of `plan`, `manual`, `edits`, `auto`, `yolo` (IC-78); a continuation may only keep or change it explicitly; children only tighten |
 | `skills`, `plugins`, `extensions` | identifiers (`c(a, b)`) or `NULL` | names resolved by §6.1.3 (normalised, IC-42); `extensions` also accepts `function(gptr)` factories (loaded with `ext_load(rank = 0L, session = <id>)`, visible to this session only, IC-69) and file paths; plugins and named extensions are enabled for the session through P17's `plugin.enable` service (`gptr_error_not_available` before P17); skills are preloaded as `<skill_content>` through `skill.body` |
 | `tools` | chr, identifiers, `<spec:tool>` list, or `NULL` | tool names; `"+grep"`/`"-write"` modifiers; a preset name (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`); tool specs are registered at rank 0 for this session |
 | `agents` | named list or `NULL` | evaluated in a mask where `agent` is `gptr_agent`; names must be unique syntactic names that are not accessor names (IC-71) |
@@ -3162,7 +3162,7 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   (`agent_message` -> text, `reasoning` -> thinking, `mcp_tool_call`/`command_execution` -> informational
   `tool_execution_*` events), `turn.completed{usage}`, `turn.failed{error}`, `error` [08 §2.E]; gptr counts turns
   and cancels at the cap, with `gptr.cli_turn_timeout` per exec. Sandbox mapping (IC-65): `plan`, `manual` and
-  `edits` -> `read-only` (file changes go through gptr's gated `write`/`edit` over MCP); `auto` ->
+  `edits` -> `read-only` (file changes go through gptr's gated `write`/`edit` over MCP); `auto` and `yolo` ->
   `workspace-write`, with control files hashed before and a files-checkpointer walk after each exec; native
   Windows falls back to `read-only` with a warning when the sandbox probe fails.
 
@@ -3692,7 +3692,7 @@ snapshotted per run (IC-53).
 | `model` | chr\|null | `null` (first available route, §8.4 of `03`) | | P08 |
 | `small_model` | chr\|null | `null` (the catalog's small sibling of `model`) | | P08 |
 | `system1` | chr\|null | `null` (= `typesafe/jev-latest` when a key is found); `"emulate:<ref>"` opts into emulation | | P13 |
-| `mode` | chr | `"manual"` | `plan`, `manual`, `edits`, `auto` | P08/P11 |
+| `mode` | chr | `"manual"` | `plan`, `manual`, `edits`, `auto`, `yolo` (project files only tighten) | P08/P11 |
 | `preset` | chr | `"standard"` | | P07 |
 | `tools` | `{enable: [chr], disable: [chr], presets: {<model glob>: <preset>}}` | `{}` | | P07 |
 | `permissions` | `{allow: [rule], ask: [rule], deny: [rule]}` | `{}` | deny/ask additions tighten | P11 |
@@ -4528,7 +4528,9 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    human). `builtin:permissions`, `builtin:plan` and the `critical_guard` and `secret_guard` policies cannot be
    disabled by filters from any source; filters that would remove `policy` or `hook` records are refused inside a
    run. The only escape is `options(gptr.unsafe_no_permissions = TRUE)` set outside a run (documented for
-   sandboxed CI).
+   sandboxed CI). The `yolo` mode (IC-78) is a partial opt-out that only the person selects: project settings,
+   nested calls and children only tighten, and from model code in another mode `gptr_config(mode =)` and
+   `options(gptr.mode)` are control actions.
 2. `run_start()` snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`,
    `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode` and `gptr.unsafe_no_permissions`; the run's gate
    reads only the snapshot.
@@ -4539,7 +4541,9 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` of
    `GPTR_*` or provider key names, `setHook()`, `assignInNamespace()`. These exports also check `run_current()`:
    called from model code during a run they signal `gptr_error_permission` unless the dispatcher approved
-   exactly that call through an `ask_human` (a one-shot token on the run).
+   exactly that call through an `ask_human` (a one-shot token on the run). `perm_check()` grants the token on
+   any final allow (IC-78); outside yolo only a person's approval or `gptr.unsafe_no_permissions` allows a
+   control call.
 4. Every gateway call made while `run_current()` is non-NULL (any route) inherits the running mode (only
    tightened) and filters; model code continuing an idle user session runs it in the stricter of the two modes.
 5. The parent re-classifies the raw input carried in every forwarded worker `permission_request`; the worker
@@ -4547,7 +4551,8 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
 6. Two ask tiers: `ask` (levels 1-3 without a guard) may be answered by `permission_request` hooks;
    `ask_human` (level 4, the secret guard, the `control` category and path class, first use of a CLI route, the
    egress acknowledgement) only by a UI backend whose `has_ui()` is `TRUE` in the run's snapshot. A hook
-   returning allow for an `ask_human` is ignored with a diagnostic.
+   returning allow for an `ask_human` is ignored with a diagnostic. In yolo (IC-78) control rows other than
+   `options(gptr.*)` and secret reads do not reach `ask_human`.
 7. A `modify` decision is re-classified and re-checked once; a second `modify` denies. Only `r(secret:NAME)`
    rules pre-approve the secret guard.
 8. Approval displays (console, rstudio dialogs, worker-forwarded requests) escape C0/C1 controls except TAB and
@@ -4555,7 +4560,7 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    lines`.
 
 P24's `test-injection-e2e.R` adds an injected model trying each path above; every attempt ends in a human ask
-(interactive) or `blocked`.
+(interactive) or `blocked` in every mode but yolo, which runs gptr's own exports by design (IC-78).
 
 **IC-54 Classifier defaults and protected paths.** (safe-4, safe-5)
 
@@ -4776,7 +4781,9 @@ document are exact.
   the in-session HTTP MCP route was verified through app-server listing and calls without a model; the verified
   model-driven MCP call used `default_tools_approval_mode = "approve"` and `required = true` [08 §2.G].
 - **Sandbox mapping**: `plan`, `manual` and `edits` -> `read-only` (file changes go through gptr's gated
-  `write`/`edit` over MCP, so edits-mode approval and checkpoints apply); `auto` -> `workspace-write`. Before a
+  `write`/`edit` over MCP, so edits-mode approval and checkpoints apply); `auto` and `yolo` (IC-78) ->
+  `workspace-write`, never `danger-full-access`, so Codex's own shell writes only in the workspace and the
+  temporary directories, where it changes and deletes files without gptr's gate (IC-78). Before a
   `workspace-write` exec gptr hashes the `control` files (IC-54) and refuses to load changed ones until the user
   confirms; the files checkpointer walks after each exec so `/undo` covers Codex's edits. On native Windows the
   sandbox is probed and the route falls back to `read-only` with a warning when it is not ready [08 line 2796].
@@ -5030,6 +5037,31 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
 
 **IC-77 Console controls and the asking agent** (P26 Task 6). TBD by P26 Task 6.
 
-**IC-78 The yolo mode** (P26 Task 8). TBD by P26 Task 8.
+**IC-78 The yolo mode** (P26 Task 8).
+
+- `session_modes` is `plan < manual < edits < auto < yolo`; every literal mode list uses it (the L1 CLI adapters
+  name `"yolo"` explicitly). `peter(mode =)`, `/mode`, user and session settings, `options(gptr.mode)` and agent
+  specs accept it; project settings, nested calls and children only tighten (IC-52, IC-53 item 4). A project
+  value is compared with the default when the user's value is not a valid mode.
+- Gate: the `mode` policy allows every call; `critical_guard` takes the level of the flagged rows that are not
+  `control`, except `options(gptr.*)`, which could switch the guard off, and asks a person at level 4 while the
+  guard is on; `secret_guard` asks only for secret-to-network flows; `protect_size` is skipped as in auto; deny
+  and ask rules still apply; allow rules never pre-approve level 4 (6.8.2).
+- Level 4 in every mode: deleting a path whose class is `outside` (beyond the project and R's session
+  `tempdir()`; system temporary roots such as `/tmp` count as outside, so a run nobody can answer stops
+  `blocked` there), `protected`, `control` or `critical`. A delete keeps the category `file_delete`; a control
+  target shows in `path_class`. The edit tool's `*** Delete File:` is level 4 where an `unlink()` of the same
+  path is, with the category `file_delete`, so in yolo a control path written by the same patch does not hide
+  it. Computed paths stay level 3.
+- `perm_check()` grants the one-shot control tokens on any final allow (IC-53 item 3).
+- The model's `<mode name="yolo">` block reuses auto's text. Entering yolo (a session, `/mode`, a console start)
+  shows a one-time `gptr_message_notice` that lists what still asks and says the classifier is not a sandbox.
+- CLI routes: Codex runs `workspace-write` (IC-65); the claude route is unchanged, every call already passes
+  gptr's gate. On the codex route Codex's own shell changes and deletes files inside the project (`.env`
+  included) within its sandbox, outside gptr's gate, in auto as in yolo. Model code in a yolo run may change
+  gptr's configuration (for example `gptr_config(mode = "yolo")` at user scope), an accepted risk of the mode.
+  Only `options(gptr.*)` is held back: a namespace patch (`assignInNamespace()`, `:::`) runs and can switch the
+  gate off for the rest of the R process, and a control-file write (for example a line in `~/.Rprofile` that
+  sets `gptr.*` options) runs and can switch it off for later R processes, accepted risks like computed paths.
 
 **IC-79 Codex stdio relay and the CLI tool set** (P26 Task 9). TBD by P26 Task 9.

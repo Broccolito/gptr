@@ -128,6 +128,7 @@ test_that("in plan mode blind spots are denied and control calls need a person (
   expect_identical(decide("gptr_permissions(allow = 'r(level<=3)')"), "ask_human")
   expect_identical(decide("options(gptr.critical_guard = FALSE)"), "ask_human")
   expect_identical(decide("writeLines('x', '.gptr/extensions/x.R')"), "ask_human")
+  expect_identical(decide("unlink('.git/hooks/x')"), "deny")
   expect_identical(decide("gptr_trust('.', TRUE); unlink('data', recursive = TRUE)"), "deny")
 })
 
