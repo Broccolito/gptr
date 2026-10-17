@@ -5019,3 +5019,17 @@ The canonical answer contract, image option and cache identity, unknown
 calibration state, local-only protection, model discovery, usage accounting,
 and plan ownership/acceptance are specified there. Hosted Jev remains supported;
 Ollama requires no Jev key and is not a structured-chat emulation fallback.
+
+### 15.9 Console and agent amendments (IC-75..IC-79, 2026-10-16)
+
+Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier sections.
+
+**IC-75 Console input: paste joining and stale answers** (P26 Task 2). TBD by P26 Task 2.
+
+**IC-76 Typed lines steer a running console call** (P26 Task 3). TBD by P26 Task 3.
+
+**IC-77 Console controls and the asking agent** (P26 Task 6). TBD by P26 Task 6.
+
+**IC-78 The yolo mode** (P26 Task 8). TBD by P26 Task 8.
+
+**IC-79 Codex stdio relay and the CLI tool set** (P26 Task 9). TBD by P26 Task 9.

@@ -2239,3 +2239,53 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: `R CMD check --as-cran` runs all 59 example pages offline with 0 problems and no global
   objects; dev/release check-examples and check-docs report 0 problems. Evidence: TESTING_PLAN.md
   current checkpoint.
+
+## D-183 - P26 IDE terminal tabs are terminals; !code completion everywhere (2026-10-16)
+- Rule: TBD by P26 Task 1.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 1.
+
+## D-184 - P26 Pasted blocks are one message; stale input never answers a question (2026-10-16)
+- Rule: TBD by P26 Task 2.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 2.
+
+## D-185 - P26 Typed lines steer the running agent (type_ahead setting) (2026-10-16)
+- Rule: TBD by P26 Task 3.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 3.
+
+## D-186 - P26 Console margin, block spacing, waiting row, Markdown and highlighting (2026-10-16)
+- Rule: TBD by P26 Task 4.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 4.
+
+## D-187 - P26 Code blocks and tool calls as Markdown fences (2026-10-16)
+- Rule: TBD by P26 Task 5.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 5.
+
+## D-188 - P26 Prompts reach the person and name the asker; fan-out status; nested overlays (2026-10-16)
+- Rule: TBD by P26 Task 6.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 6.
+
+## D-189 - P26 Honest object sizes; console-sized agent exports (2026-10-16)
+- Rule: TBD by P26 Task 7.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 7.
+
+## D-190 - P26 The yolo permission mode (2026-10-16)
+- Rule: TBD by P26 Task 8.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 8.
+
+## D-191 - P26 Codex stdio relay; CLI routes serve the session's tools; model references (2026-10-16)
+- Rule: TBD by P26 Task 9.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 9.
+
+## D-192 - P26 Codex progress and claude-cli tool calls while they run (2026-10-16)
+- Rule: TBD by P26 Task 10.
+- Contract-visible: TBD.
+- Tests: TBD. Evidence: progress/P26.md Task 10.
