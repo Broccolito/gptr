@@ -97,7 +97,7 @@ console_repl_find = function() {
   NULL
 }
 
-#' Read one menu answer: from a `.stdin` REPL's connection, else gptr_readline(); a Ctrl-C while
+#' Read one menu answer: from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while
 #' waiting (no resume restart there) gives NA
 #' @noRd
 console_ask = function(prompt) {
@@ -106,7 +106,7 @@ console_ask = function(prompt) {
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
     } else {
-      gptr_readline(prompt)
+      readline_answer(prompt)
     }
     if (length(x) != 1L || is.na(x)) NA_character_ else as_utf8(x)
   }, interrupt = function(e) NA_character_)

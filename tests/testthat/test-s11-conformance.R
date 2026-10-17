@@ -373,6 +373,7 @@ test_that("the console dispatches the command and the prompt template", {
     i <<- i + 1L
     if (i > length(inputs)) "/exit" else inputs[[i]]
   })
+  local_no_fd0()
   out = s11_capture(peter(model = "s11prov/s11-model", envir = new.env()))
   expect_true(s11_used("command"))
   expect_true(any(grepl("s11 command ran", out, fixed = TRUE)))

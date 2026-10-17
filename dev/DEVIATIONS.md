@@ -2254,9 +2254,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   tty = FALSE); test-utils-options.R (IDE terminal tab front end). Evidence: progress/P26.md Task 1.
 
 ## D-184 - P26 Pasted blocks are one message; stale input never answers a question (2026-10-16)
-- Rule: TBD by P26 Task 2.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 2.
+- Rule: on a macOS terminal (`is_macos()` and `console_readline_tty()`, the Task 1 gate, now
+  shared) the lines waiting on fd 0 join a prompt, slash or `!code` line, then one `... ` read.
+  The fd-0 reader `console_typed_lines(rd)` (shared with Task 3) does one `conn_read_chars()` per
+  50 ms poll; `rd$fd` is reopened after an end of input and never closed; an error reads nothing.
+- Rule: `readline_answer()` re-reads an answer that arrived within 0.1 s (at most 100 reads) for
+  `ui_console_read()`, `console_ask()` and `gptr_confirm()`, so scripted drivers answer >= 0.1 s
+  after a prompt. `gptr_readline()` times reads in `the$readline_secs` and prints a prompt over
+  200 bytes whole before `> ` (moved from Task 6). A fence is R only for an `r`, `R`, `{r...}` or
+  empty info string.
+- Contract-visible: 04 section 7.1 (`gptr_readline`, `readline_answer`, `gptr_confirm`), IC-75;
+  03 section 2.2 rule 5, section 6.17; `?peter`, console vignette.
+- Tests: test-console-repl.R (paste, fences, fd-0 reader, acceptance, macOS pty child),
+  test-utils-options.R, test-console-ui.R, test-console-interrupt.R. Evidence: progress/P26.md Task 2.
 
 ## D-185 - P26 Typed lines steer the running agent (type_ahead setting) (2026-10-16)
 - Rule: TBD by P26 Task 3.

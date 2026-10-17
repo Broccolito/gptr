@@ -102,6 +102,7 @@ test_that("console command output and documents keep payloads literal", {
     i <<- i + 1L
     inputs[[i]]
   })
+  local_no_fd0()
   fake = local_fake_provider(list("unused"))
   out = inj_capture(peter(model = fake, envir = new.env()))
   expect_not_injected(out)

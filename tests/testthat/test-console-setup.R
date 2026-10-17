@@ -112,6 +112,7 @@ test_that("peter opens with the chosen default and skips setup on its next openi
   local_setup_providers()
   ui = local_scripted_ui(list(1L))
   local_mocked_bindings(gptr_readline = function(prompt = "", ...) "/exit")
+  local_no_fd0()
   out = utils::capture.output(peter())
   expect_match(paste(out, collapse = "\n"), "model codex/default", fixed = TRUE)
   expect_identical(settings_read("user")$model, "codex/default")
@@ -139,6 +140,7 @@ test_that("the console menu consumes a CLI choice before normal chat input", {
     box$answers = box$answers[-1L]
     a
   })
+  local_no_fd0()
   out = NULL
   err = utils::capture.output({
     out = utils::capture.output(peter())

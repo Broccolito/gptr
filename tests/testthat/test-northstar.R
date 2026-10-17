@@ -10,6 +10,7 @@ ns_inputs = function(inputs, .env = parent.frame()) {
     i <<- i + 1L
     if (i > length(inputs)) "/exit" else inputs[[i]]
   }, .env = .env)
+  local_no_fd0(.env = .env)
 }
 
 # Everything printed: stdout, messages (cli output arrives as messages under testthat) and

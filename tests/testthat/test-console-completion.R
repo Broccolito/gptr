@@ -27,7 +27,7 @@ completion_repl_state = function(stdin = FALSE) {
 
 local_completion_repl = function(setup, .env = parent.frame()) {
   testthat::local_mocked_bindings(
-    console_reader = function(...) list(read = function(...) "/exit"),
+    console_reader = function(...) list(read = function(...) "/exit", waiting = character),
     repl_setup = setup, repl_close = function(...) invisible(NULL),
     repl_banner = function(...) invisible(NULL),
     repl_waiting_notice = function(...) invisible(NULL),

@@ -110,10 +110,18 @@ the head of a file (at most 40 lines) and \verb{@object} attaches an object by n
 prompt (at most 300 estimated tokens). \code{!!code} omits that note. Both execute your own R
 immediately, without the model's permission gate or a model request. Workspace changes
 remain visible to later calls, and enabled transcripts can record the code; \verb{!!} is not a
-privacy boundary. A fenced R block works like \code{!code}, a \verb{"""} block is a multi-line prompt,
-and a trailing backslash continues a line;
+privacy boundary. A fenced block marked \code{r}, \code{R}, \code{{r}} or unmarked works like \code{!code}
+(other fences are prompt text), a \verb{"""} block is a multi-line prompt, and a trailing
+backslash continues a line;
 \item a slash command such as \verb{/model}, \verb{/mode}, \verb{/cost} or \verb{/exit}; \verb{/help} lists them all.
 }
+
+In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
+and \code{... } waits for Enter (text typed there is added). Elsewhere (Homebrew or conda R, Linux
+terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a time; wrap a
+multi-line paste in \verb{"""}. Lines typed, pasted or run from a script before a question (an
+approval, a choice, the pause menu) appeared are discarded and never answer it: answer after
+the prompt.
 
 Tab completes R names and file paths after \code{!} in terminal R, R in an IDE's Terminal tab
 included; RStudio's console completes R code at the prompt too; radian and Positron's console

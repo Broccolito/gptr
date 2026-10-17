@@ -90,7 +90,8 @@ readline_limit = function() {
 #' A line reader: gptr_readline() or the persistent stdin connection (closed by `close()`, IC-59)
 #'
 #' Returns an environment with `read(prompt = "", stream = "stdout", secret = FALSE)` -> chr(1), NA
-#' at the end of piped input; `close()`; `flag` (TRUE when a line reached the readline limit). With
+#' at the end of piped input; `waiting()` -> the lines a paste left on a macOS terminal (none
+#' elsewhere, IC-75); `close()`; `flag` (TRUE when a line reached the readline limit). With
 #' `echo` the stdin reader writes the prompt and the escaped line (never a `secret` one) on
 #' `stream`, so a piped session reads like a terminal session.
 #' @noRd
@@ -98,6 +99,10 @@ console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())
   rd$flag = FALSE
   rd$con = NULL
+  rd$fd = NULL
+  # only a macOS terminal (BSD tty driver) hands a waiting paste over as complete lines
+  paste_tty = !isTRUE(stdin) && is_macos() && console_readline_tty()
+  rd$waiting = function() if (paste_tty) console_typed_lines(rd) else character()
   echo = isTRUE(echo)
   if (isTRUE(stdin)) {
     rd$con = console_stdin_open()
@@ -135,10 +140,51 @@ console_reader = function(stdin = FALSE, echo = stdin) {
   rd$close = function() {
     con = rd$con
     rd$con = NULL
+    rd$fd = NULL
     if (!is.null(con)) close(con)
     invisible(NULL)
   }
   rd
+}
+
+#' Does R's own Unix readline read this console from a tty (terminal R, an IDE's terminal tab)?
+#' @noRd
+console_readline_tty = function() {
+  identical(.Platform$OS.type, "unix") && gptr_is_interactive() &&
+    isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty()
+}
+
+#' The lines typed or pasted on fd 0 that wait to be read, without blocking: one
+#' conn_read_chars() per ready 50 ms poll, as a line read waits for a newline a partial line
+#' never sends. `rd$fd` is reopened after an end of input and dropped, never closed: closing it
+#' closes fd 0 (IC-75). An error reads nothing, as it would end the REPL.
+#' @noRd
+console_typed_lines = function(rd) {
+  txt = tryCatch({
+    if (is.null(rd$fd) || !processx::conn_is_incomplete(rd$fd)) {
+      rd$fd = processx::conn_create_fd(0L, close = FALSE)
+    }
+    txt = ""
+    while (identical(processx::poll(list(rd$fd), 50L)[[1L]], "ready")) {
+      x = processx::conn_read_chars(rd$fd)
+      if (!nzchar(x)) break
+      txt = paste0(txt, x)
+    }
+    txt
+  }, error = function(e) "")
+  if (nzchar(txt)) as_utf8(strsplit(txt, "\r\n|\r|\n")[[1L]]) else character()
+}
+
+#' Lines waiting after an input line (a paste) join it, then one more line is read at "... ":
+#' Enter sends, typed text is appended (it ends a paste whose last line had no newline). After a
+#' line at the readline limit the waiting lines are dropped with it.
+#' @noRd
+repl_paste_more = function(rd, text) {
+  more = rd$waiting()
+  if (!length(more) || rd$flag) return(text)
+  console_notice(cli::col_grey("  (pasted: Enter sends it as one message)"))
+  x = rd$read("... ")
+  paste(c(text, more, if (!is.na(x) && nzchar(x)) x), collapse = "\n")
 }
 
 #' Is R code incomplete? Locale-independent (the messages are translated): the parse error of an
@@ -155,10 +201,13 @@ r_incomplete = function(code) {
 
 #' Read one logical input (report 18 A.7, architecture 6.17)
 #'
-#' A `"""` block is one multi-line prompt; a fenced block is R code (returned as `!code`); `!code`
-#' and `!!code` continue while the code is incomplete; a trailing backslash continues a line; the
-#' end of piped input ends every block. Returns NA at the end of input, "" when a line hit the
-#' readline limit (the whole input is dropped rather than sent half).
+#' A `"""` block is one multi-line prompt; a fence with an `r`, `R`, `{r...}` or empty info string
+#' is R code (returned as `!code`), any other fence prompt text (CommonMark: closed by a fence at
+#' least as long, the body loses the opener's indentation); `!code` and `!!code` continue while
+#' the code is incomplete; a trailing backslash continues a line; lines a paste left waiting join
+#' a prompt, slash or `!code` line (IC-75); the end of piped input ends every block. Returns NA at
+#' the end of input, "" when a line hit the readline limit (the whole input is dropped rather than
+#' sent half).
 #' @noRd
 repl_read_logical = function(rd, prompt) {
   rd$flag = FALSE
@@ -174,16 +223,21 @@ repl_read_logical = function(rd, prompt) {
     }
     out = trimws(sub('"""\\s*$', "", body))
   } else if (grepl("^\\s*```", line)) {
+    m = regmatches(line, regexec("^(\\s*)(`+)(.*)$", line))[[1L]]
     body = character()
     repeat {
       x = rd$read("... ")
-      if (is.na(x) || grepl("^\\s*```\\s*$", x)) break
-      body = c(body, x)
+      if (is.na(x) || grepl(paste0("^\\s*", m[[3L]], "`*\\s*$"), x)) break
+      body = c(body, sub(paste0("^ {0,", nchar(m[[2L]]), "}"), "", x))
     }
-    out = paste0("!", paste(body, collapse = "\n"))
+    out = if (grepl("^([rR]|\\{r\\b.*)?$", trimws(m[[4L]]), perl = TRUE)) {
+      paste0("!", paste(body, collapse = "\n"))
+    } else {
+      paste(c(trimws(line), body, m[[3L]]), collapse = "\n")
+    }
   } else if (startsWith(line, "!")) {
     bang = if (startsWith(line, "!!")) "!!" else "!"
-    code = substring(line, nchar(bang) + 1L)
+    code = repl_paste_more(rd, substring(line, nchar(bang) + 1L))
     while (r_incomplete(code)) {
       x = rd$read("+ ")
       if (is.na(x)) break
@@ -191,6 +245,7 @@ repl_read_logical = function(rd, prompt) {
     }
     out = paste0(bang, code)
   } else {
+    out = repl_paste_more(rd, line)
     while (endsWith(out, "\\")) {
       out = substr(out, 1L, nchar(out) - 1L)
       x = rd$read("... ")
@@ -609,9 +664,7 @@ repl_main = function(rs) {
   rs$reader = console_reader(rs$stdin)
   # R's own Unix readline on a tty (an IDE's terminal tab too) keeps ! in its completion token.
   # Let it complete the R expression after !/!! without changing a caller-owned completer.
-  if (!rs$stdin && identical(.Platform$OS.type, "unix") && gptr_is_interactive() &&
-      isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty() &&
-      !identical(Sys.getenv("R_COMPLETION"), "FALSE") &&
+  if (!rs$stdin && console_readline_tty() && !identical(Sys.getenv("R_COMPLETION"), "FALSE") &&
       !is.function(utils::rc.getOption("custom.completer"))) {
     breaks = getOption("rl_word_breaks", " \t\n\"\\'`><=%;,|&{()}")
     if (!grepl("!", breaks, fixed = TRUE)) {
@@ -813,9 +866,17 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'   prompt (at most 300 estimated tokens). `!!code` omits that note. Both execute your own R
 #'   immediately, without the model's permission gate or a model request. Workspace changes
 #'   remain visible to later calls, and enabled transcripts can record the code; `!!` is not a
-#'   privacy boundary. A fenced R block works like `!code`, a `"""` block is a multi-line prompt,
-#'   and a trailing backslash continues a line;
+#'   privacy boundary. A fenced block marked `r`, `R`, `{r}` or unmarked works like `!code`
+#'   (other fences are prompt text), a `"""` block is a multi-line prompt, and a trailing
+#'   backslash continues a line;
 #' * a slash command such as `/model`, `/mode`, `/cost` or `/exit`; `/help` lists them all.
+#'
+#' In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
+#' and `... ` waits for Enter (text typed there is added). Elsewhere (Homebrew or conda R, Linux
+#' terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a time; wrap a
+#' multi-line paste in `"""`. Lines typed, pasted or run from a script before a question (an
+#' approval, a choice, the pause menu) appeared are discarded and never answer it: answer after
+#' the prompt.
 #'
 #' Tab completes R names and file paths after `!` in terminal R, R in an IDE's Terminal tab
 #' included; RStudio's console completes R code at the prompt too; radian and Positron's console

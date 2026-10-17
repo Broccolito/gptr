@@ -109,9 +109,16 @@ peter> !!local_note = "Check the measurement units later"
 ```
 
 For multiple lines, use a triple-quoted prompt, a trailing backslash to continue a prompt, or
-a fenced R block. The fenced block behaves like `!code`. Incomplete `!`/`!!` R expressions
+a fenced R block. A fence marked `r`, `R`, `{r}` or unmarked behaves like `!code`; any other
+fence, such as one marked `python`, is sent as prompt text. Incomplete `!`/`!!` R expressions
 continue at the `+ ` prompt until they parse. Very long single lines can exceed R's console
 input limit; use an `@file` or a multiline prompt instead.
+
+In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
+and `... ` waits for Enter, where text you type is added. Homebrew or conda R, Linux terminals,
+RStudio, R.app, Positron and Windows deliver pasted lines one at a time, so wrap a multi-line
+paste in `"""` there. Lines typed, pasted or run from a script before a question appears (an
+approval, a choice, the pause menu) are discarded and never answer it; answer after the prompt.
 
 ```text
 peter> """

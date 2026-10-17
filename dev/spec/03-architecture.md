@@ -245,6 +245,8 @@ Rules that keep this honest:
    children on unload), the weak live-session index, the most recent session for `gptr_last()` (held strongly: a
    shell holds no frames or user objects [IC-71]) and the replay-block table [IC-46]. Usage, queues, abort flags,
    the `peter$out()` store and every in-flight cache live in sessions and runs; `gptr_usage()` aggregates [G3 (2)].
+   The console input layer also keeps the seconds its last `readline()` waited (`readline_secs`: process-level
+   input timing, not run state [IC-75]).
 
 ### 2.3 Execution model
 
@@ -1842,6 +1844,18 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `base::readline` carrying one attribute: RStudio's console completes nothing inside a frame `identical()` to
   `base::readline`, so it completes R code at `peter>`, while approval and menu prompts keep `readline()` and
   RStudio's choice completion. radian and Positron's console offer no completion at the prompt.
+- **Pasted and typed-ahead input** [IC-75, D-184]: on a macOS terminal (R's own readline on a tty, where the
+  BSD tty driver hands waiting input over as complete lines), the lines already waiting on fd 0 after a prompt,
+  slash or `!code` line is read (a paste) join it, a dim `(pasted: Enter sends it as one message)` hint follows
+  and one `... ` line is read: Enter sends, typed text is appended. `"""` blocks, fences and piped `.stdin`
+  input never look. Elsewhere (Linux and other terminals, IDE consoles, Windows, and R linked to readline >= 8.1
+  such as Homebrew or conda R on macOS, whose bracketed paste keeps the rest of a paste in R's console buffer
+  rather than on fd 0) pasted lines arrive one per read: use `"""`. Every console question (approvals, choices,
+  input, the pause menu, `gptr_confirm()`) reads again while an interactive answer arrived within 0.1 s of its
+  prompt (at most 100 reads): a line typed, pasted or queued from a script (an IDE's run selection) before the
+  question is discarded and never answers it. A fence runs as R only for an `r`, `R`, `{r...}` or empty
+  info string; other fences are prompt text; the body loses the opener's indentation and closes on a fence at
+  least as long (CommonMark).
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.

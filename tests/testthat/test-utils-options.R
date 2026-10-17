@@ -106,6 +106,47 @@ test_that("gptr_confirm() never asks without a human and parses answers", {
   expect_true(gptr_confirm("Proceed?"))
 })
 
+test_that("gptr_readline() records how long it waited; a long prompt is printed whole", {
+  withr::defer(assign("readline_secs", NULL, envir = the))
+  read = function(prompt) {
+    Sys.sleep(0.15)
+    prompt
+  }
+  expect_identical(gptr_readline("ok? ", read), "ok? ")
+  expect_gte(the$readline_secs, 0.1)
+  # readline() keeps only 255 bytes of its prompt: the question's [y/N] was cut off
+  long = paste0(strrep("x", 201L), " [y/N] ")
+  got = NULL
+  out = utils::capture.output({
+    got = gptr_readline(long, read)
+  })
+  expect_identical(out, long)
+  expect_identical(got, "> ")
+})
+
+test_that("readline_answer() asks again while answers arrive within 0.1 s, at most 100 times", {
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  rl = local_readline(c("y", "", "n"), secs = c(0.001, 0.002, 2))
+  expect_identical(readline_answer("allow? "), "n")
+  expect_identical(rl$i, 3L)
+  # an interactive R reading a pipe gets "" at once at its end
+  rl = local_readline(rep("", 101L), secs = 0)
+  expect_identical(readline_answer("allow? "), "")
+  expect_identical(rl$i, 100L)
+  local_mocked_bindings(gptr_is_interactive = function() FALSE)
+  rl = local_readline("y", secs = 0)
+  expect_identical(readline_answer("allow? "), "y")
+  expect_identical(rl$i, 1L)
+})
+
+test_that("gptr_confirm() never takes a line typed before its question (IC-75)", {
+  withr::local_options(gptr.interactive = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  rl = local_readline(c("y", "n"), secs = c(0.01, 1))
+  expect_false(gptr_confirm("Proceed?"))
+  expect_identical(rl$i, 2L)
+})
+
 test_that("front_end() recognises the documented environments", {
   withr::local_options(jupyter.in_kernel = NULL, knitr.in.progress = NULL)
   withr::local_envvar(
