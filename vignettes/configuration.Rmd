@@ -190,6 +190,7 @@ Recording and replay are separate controls; see [Script as history](script-as-hi
 | `mcp` | `exposure = "r"`, `budget = 1500`, and an `import` list of supported harness configuration names. |
 | `subagents` | `max_depth = 1`, `max_active = 8`, `max_workers = NULL`, `max_cli = 4`, `max_tasks = 8`; workers default to at most four. |
 | `ui`, `frontend` | `NULL` selects by context; set the name of a registered UI or front end. |
+| `type_ahead` | `"steer"`: a line typed in a terminal console while an answer runs steers it; `"follow_up"` queues it for when the agent would stop. |
 | `store`, `evaluator` | `"jsonl"` and `"r"`; extension selection for session storage and R evaluation. |
 
 [Extending gptr](extending-gptr.html) explains registered components. MCP tools are

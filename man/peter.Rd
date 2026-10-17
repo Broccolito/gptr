@@ -123,6 +123,14 @@ multi-line paste in \verb{"""}. Lines typed, pasted or run from a script before 
 approval, a choice, the pause menu) appeared are discarded and never answer it: answer after
 the prompt.
 
+In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
+runs steers it: the agent reads it at its next step, after the current tool results, and
+lines typed or pasted together are one message. \code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}})
+queues them for when the agent would stop instead. \verb{/command} and \code{!code} lines typed then
+run at the next prompt; an interrupt drops them. On the CLI routes a steer reaches the model
+after the CLI's current response. The RStudio, Positron and R.app consoles, and type-ahead at
+R's own prompt during \code{peter("...")}, keep typed lines for the next input.
+
 Tab completes R names and file paths after \code{!} in terminal R, R in an IDE's Terminal tab
 included; RStudio's console completes R code at the prompt too; radian and Positron's console
 offer no completion there.

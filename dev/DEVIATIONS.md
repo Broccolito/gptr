@@ -2269,9 +2269,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-utils-options.R, test-console-ui.R, test-console-interrupt.R. Evidence: progress/P26.md Task 2.
 
 ## D-185 - P26 Typed lines steer the running agent (type_ahead setting) (2026-10-16)
-- Rule: TBD by P26 Task 3.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 3.
+- Rule: `console_send()` runs the reactor task `console_typed()` when `repl_terminal(rs)` (not
+  `.stdin`, not Windows, interactive, `stdin_tty()`; no `front_end()` term). It reads only while
+  a run of the call has a session, with the IC-75 reader `console_typed_lines(rd, 0L)` (new
+  `wait`: the first poll's, default 50). `/`/`!` lines wait in `rd$typed` for the next prompt (an
+  interrupt drops and lists them); the rest of a batch is one `policy_enqueue(..., source =
+  "repl")` as the new setting `type_ahead` says. Notices show the text.
+- Plan correction: IDE consoles are abort-only (`console_menu_available()`), so `?peter` and
+  `/help` say typed lines there wait for the next input, not that the pause menu steers.
+- Contract-visible: 04 sections 10.4 (`input`), 11.2 (`type_ahead`), IC-49, IC-76; 03 sections
+  6.2, 6.17; report 18 Verification log row 50; `?peter`, `/help`, both vignettes.
+- Tests: test-console-typing.R (10 blocks, pty child), test-gptr-config.R (key set),
+  test-console-repl.R (macOS pty: typed-ahead lines now steer). Evidence: progress/P26.md Task 3.
 
 ## D-186 - P26 Console margin, block spacing, waiting row, Markdown and highlighting (2026-10-16)
 - Rule: TBD by P26 Task 4.

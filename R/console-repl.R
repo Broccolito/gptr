@@ -91,15 +91,17 @@ readline_limit = function() {
 #'
 #' Returns an environment with `read(prompt = "", stream = "stdout", secret = FALSE)` -> chr(1), NA
 #' at the end of piped input; `waiting()` -> the lines a paste left on a macOS terminal (none
-#' elsewhere, IC-75); `close()`; `flag` (TRUE when a line reached the readline limit). With
-#' `echo` the stdin reader writes the prompt and the escaped line (never a `secret` one) on
-#' `stream`, so a piped session reads like a terminal session.
+#' elsewhere, IC-75); `close()`; `flag` (TRUE when a line reached the readline limit); `typed`,
+#' the /command and !code lines typed during an answer, which the terminal reader returns first,
+#' echoed after the prompt (IC-76). With `echo` the stdin reader writes the prompt and the escaped
+#' line (never a `secret` one) on `stream`, so a piped session reads like a terminal session.
 #' @noRd
 console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())
   rd$flag = FALSE
   rd$con = NULL
   rd$fd = NULL
+  rd$typed = character()
   # only a macOS terminal (BSD tty driver) hands a waiting paste over as complete lines
   paste_tty = !isTRUE(stdin) && is_macos() && console_readline_tty()
   rd$waiting = function() if (paste_tty) console_typed_lines(rd) else character()
@@ -123,6 +125,12 @@ console_reader = function(stdin = FALSE, echo = stdin) {
     # RStudio's console completes nothing in a frame identical() to base::readline (D-183)
     rl = structure(readline, gptr = TRUE)
     rd$read = function(prompt = "", stream = "stdout") {
+      if (length(rd$typed)) {
+        x = rd$typed[[1L]]
+        rd$typed = rd$typed[-1L]
+        console_write(paste0(prompt, console_escape(x, FALSE)))
+        return(x)
+      }
       x = gptr_readline(prompt, rl)
       if (length(x) != 1L || is.na(x)) return(NA_character_)
       n = nchar(x, type = "bytes")
@@ -154,21 +162,30 @@ console_readline_tty = function() {
     isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty()
 }
 
-#' The lines typed or pasted on fd 0 that wait to be read, without blocking: one
-#' conn_read_chars() per ready 50 ms poll, as a line read waits for a newline a partial line
-#' never sends. `rd$fd` is reopened after an end of input and dropped, never closed: closing it
-#' closes fd 0 (IC-75). An error reads nothing, as it would end the REPL.
+#' Does this REPL read a terminal, whose typed lines wait on fd 0 while an answer runs (IC-76)?
+#' Not on Windows: processx cannot poll a console handle
 #' @noRd
-console_typed_lines = function(rd) {
+repl_terminal = function(rs) {
+  !isTRUE(rs$stdin) && !is_windows() && gptr_is_interactive() && stdin_tty()
+}
+
+#' The lines typed or pasted on fd 0 that wait to be read, without blocking: one
+#' conn_read_chars() per ready poll (the first waits `wait` ms, later ones 50 ms), as a line read
+#' waits for a newline a partial line never sends. `rd$fd` is reopened after an end of input and
+#' dropped, never closed: closing it closes fd 0 (IC-75). An error reads nothing, as it would end
+#' the REPL.
+#' @noRd
+console_typed_lines = function(rd, wait = 50L) {
   txt = tryCatch({
     if (is.null(rd$fd) || !processx::conn_is_incomplete(rd$fd)) {
       rd$fd = processx::conn_create_fd(0L, close = FALSE)
     }
     txt = ""
-    while (identical(processx::poll(list(rd$fd), 50L)[[1L]], "ready")) {
+    while (identical(processx::poll(list(rd$fd), wait)[[1L]], "ready")) {
       x = processx::conn_read_chars(rd$fd)
       if (!nzchar(x)) break
       txt = paste0(txt, x)
+      wait = 50L
     }
     txt
   }, error = function(e) "")
@@ -535,12 +552,42 @@ console_call_release = function(rs) {
   invisible(NULL)
 }
 
+#' The reactor task of a terminal prompt (IC-76): every 0.1 s, the lines typed while a session
+#' of this call runs. /command and !code lines wait in the reader for the next prompt; the others
+#' become one message queued on the session as the `type_ahead` setting says. Nothing is read
+#' while no session runs (the next prompt reads it).
+#' @noRd
+console_typed = function() {
+  rd = console_repl_find()$reader
+  if (is.null(rd)) return(FALSE)
+  pol = policy_find()
+  target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
+  if (is.null(target)) return(0.1)
+  lines = console_typed_lines(rd, 0L)
+  later = grepl("^\\s*[/!]", lines)
+  text = paste(lines[!later], collapse = "\n")
+  if (!any(later) && !nzchar(trimws(text))) return(0.1)
+  console_render_pause()
+  if (any(later)) {
+    rd$typed = c(rd$typed, lines[later])
+    console_notice("[gptr] after this answer: ",
+                   paste(console_escape(paste0("'", lines[later], "'"), FALSE), collapse = ", "))
+  }
+  if (nzchar(trimws(text))) {
+    policy_enqueue(target$session, text, setting_get("type_ahead", target$session),
+                   source = "repl")
+  }
+  console_render_resume(pol$runs)
+  0.1
+}
+
 #' One prompt as an ordinary gateway call (console_call())
 #'
 #' The frame binds the REPL state (`.gptr_repl`, found by the context blocks) and
 #' `.gptr_interrupt_barrier`, so the policy of this call's run is the outermost one and its
 #' re-signalled interrupt ends here. A failed call keeps its session (the condition's `$session`,
-#' else a new gptr_last()); a stray run left by an early interrupt is aborted.
+#' else a new gptr_last()); a stray run left by an early interrupt is aborted. On a terminal the
+#' call's console_typed() task reads typed lines; an interrupt drops the lines it held.
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
 console_send = function(rs, text) {
@@ -549,6 +596,8 @@ console_send = function(rs, text) {
   force(.gptr_repl)
   force(.gptr_interrupt_barrier)
   on.exit(console_call_release(rs), add = TRUE)
+  task = if (repl_terminal(rs)) reactor_task(console_typed)
+  on.exit(if (!is.null(task)) reactor_cancel(task), add = TRUE)
   cl = console_call(rs, text)
   rs$sending = cl
   before = gptr::gptr_last()
@@ -566,6 +615,12 @@ console_send = function(rs, text) {
   }
   if (!is.null(s)) rs$session = s
   if (identical(res$status, "interrupt") && !is.null(rs$session)) console_abort_stray(rs$session)
+  typed = rs$reader$typed
+  if (identical(res$status, "interrupt") && length(typed)) {
+    rs$reader$typed = character()
+    console_notice("[gptr] dropped typed lines: ",
+                   paste(console_escape(paste0("'", typed, "'"), FALSE), collapse = ", "))
+  }
   res
 }
 
@@ -877,6 +932,14 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' multi-line paste in `"""`. Lines typed, pasted or run from a script before a question (an
 #' approval, a choice, the pause menu) appeared are discarded and never answer it: answer after
 #' the prompt.
+#'
+#' In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
+#' runs steers it: the agent reads it at its next step, after the current tool results, and
+#' lines typed or pasted together are one message. `type_ahead = "follow_up"` ([gptr_config()])
+#' queues them for when the agent would stop instead. `/command` and `!code` lines typed then
+#' run at the next prompt; an interrupt drops them. On the CLI routes a steer reaches the model
+#' after the CLI's current response. The RStudio, Positron and R.app consoles, and type-ahead at
+#' R's own prompt during `peter("...")`, keep typed lines for the next input.
 #'
 #' Tab completes R names and file paths after `!` in terminal R, R in an IDE's Terminal tab
 #' included; RStudio's console completes R code at the prompt too; radian and Positron's console

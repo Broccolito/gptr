@@ -3486,7 +3486,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `session_start` | pi | collect (before the prompt freezes) | `reason` (`new`, `fork`, `resume`, `replay`, `child`) | `list(sections = named list (chr or NULL to remove), blocks = list of context blocks for the first message)` | P06 |
 | `session_before_fork` | pi | first decision | `source`, `at` | `list(cancel = TRUE, reason)` | P06 |
 | `session_shutdown` | pi | notify | `reason` (`exit`, `gc`, `unload`) | - | P06, P14 |
-| `input` | pi | transform chain | `text`, `source` (`prompt`, `pipe`, `repl`, `passthrough`, `steer`; `steer` = pause-menu input) | `list(action = "continue" \| "transform" \| "handled", text)` | P08, P14 |
+| `input` | pi | transform chain | `text`, `source` (`prompt`, `pipe`, `repl`, `passthrough`, `steer`; `steer` = pause-menu input or a line typed while a console answer runs, IC-76) | `list(action = "continue" \| "transform" \| "handled", text)` | P08, P14 |
 | `agent_start`, `agent_end` | pi | notify | `agent_end`: `status`, `reason`, `usage` (the run's rows), `doc` (site or NULL), `turns` | - | P06 |
 | `turn_start`, `turn_end` | pi | notify | `turn_end`: `message` (assistant), `results` (tool results) | - | P06 |
 | `before_request` | gptr | notify, read-only | `provider`, `model`, `request_id`, `view`, `tokens_est` | - (a handler that changes the frozen prefix triggers `cache_break`) | P06 |
@@ -3717,6 +3717,7 @@ snapshotted per run (IC-53).
 | `cache_commit` | `{s1: lgl, s2: lgl}` | `{s1: true, s2: false}` (C-31) | | P13/P15 |
 | `ui` | chr\|null | `null` | | P11 |
 | `frontend` | chr\|null | `null` (`console`) | | P14 |
+| `type_ahead` | chr | `"steer"` (`"follow_up"`): what a line typed in a terminal console while an answer runs becomes (IC-76) | | P26 |
 | `store`, `evaluator` | chr | `"jsonl"`, `"r"` (registered `store` and `evaluator` records, IC-69) | | P06, P09 |
 | `providers` | `{<id>: {base_url, models, headers, enabled}}` | `{}` (a project `base_url` needs trust and a one-time confirmation) | | P05 |
 | `egress` | `{<provider>: "ack"}` | `{}` (user file only) | | P05 |
@@ -4454,7 +4455,8 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 
 **IC-49 Console transcripts and steering in documents.** (req-8) The first REPL prompt of a session is recorded
 as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |> peter("...")`. Steers and
-follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session) are recorded
+follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session, a line typed
+in a terminal console [IC-76]) are recorded
 inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`.
 P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
 session.
@@ -5049,7 +5051,28 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   fences are prompt text; the body loses up to the opener's indentation and closes on a fence of at least the
   opener's length (CommonMark).
 
-**IC-76 Typed lines steer a running console call** (P26 Task 3). TBD by P26 Task 3.
+**IC-76 Typed lines steer a running console call** (P26 Task 3, D-185).
+- Scope: `repl_terminal(rs)`: not `.stdin`, not Windows (processx cannot poll a console handle),
+  `gptr_is_interactive()` and `stdin_tty()`; no `front_end()` term, so an IDE's Terminal tab qualifies while IDE
+  consoles, R.app, RGui and Jupyter (no tty) do not. `console_send()` registers the package function
+  `console_typed()` as a reactor task of the prompt call (rule R3) and cancels it on exit; plain `peter("...")`,
+  `.stdin` and the jsonl frontend never read fd 0.
+- `console_typed()` reads only while a run of the call has a session (`policy_targets()`; otherwise the lines stay
+  for the next prompt): every 0.1 s one `console_typed_lines(rd, 0L)` (IC-75's reader; the first poll does not
+  wait, later polls of a batch wait 50 ms). A canonical tty hands over complete lines only (a partial line is
+  read after Ctrl-D, an empty Ctrl-D reads nothing). Lines matching `^\s*[/!]` are held in `rd$typed`, listed in
+  one `[gptr] after this answer: ...` notice and returned first by the terminal reader, echoed after the prompt;
+  an interrupted call drops and lists them (`[gptr] dropped typed lines: ...`). The other lines of a batch are
+  one message, queued with `policy_enqueue(session, text, <type_ahead>, source = "repl")`. A batch's notices and
+  its enqueue run between one `console_render_pause()` and `console_render_resume()`, so each notice starts its own
+  line; `policy_enqueue()` and `policy_flush()` take `source` (default `"pause_menu"`), so the item has the IC-55
+  source `repl` and a steer becomes the operator relay.
+- Notices, pause menu included: `[gptr] steering: '<text>'; it reaches the agent at its next step` and
+  `[gptr] follow-up queued: '<text>'; it is sent when the agent would stop`.
+- The setting `type_ahead` (§11.2): `"steer"` (default) or `"follow_up"`; not a tighten key.
+- Limits: the terminal still echoes typed text into the stream; a front end that keeps the tty non-canonical
+  during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the model after the
+  CLI's current response.
 
 **IC-77 Console controls and the asking agent** (P26 Task 6). TBD by P26 Task 6.
 

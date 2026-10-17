@@ -2,12 +2,6 @@
 # Task 4: REPL state and the input layer; Task 5: `!expr`, notes, mentions and console_send();
 # Task 7: scripted console sessions.
 
-# The REPL's persistent stdin connection replaced by a text connection over `lines`
-local_console_stdin = function(lines, .env = parent.frame()) {
-  testthat::local_mocked_bindings(console_stdin_open = function() textConnection(lines),
-                                  .env = .env)
-}
-
 # A reader over `lines` (piped input, no echo unless asked)
 stdin_reader = function(lines, echo = FALSE, .env = parent.frame()) {
   local_console_stdin(lines, .env = .env)
@@ -477,13 +471,6 @@ test_that("console_send() passes max_turns from gptr.max_turns_console", {
 
 # ---------------------------------------------------------------- Task 7: console sessions
 
-# A console test: a temporary project, no history, no document recording questions, no fd 0
-local_console_test = function(.env = parent.frame()) {
-  local_project(.env = .env)
-  local_gptr_options(history = FALSE, record = "off", .env = .env)
-  local_no_fd0(.env = .env)
-}
-
 test_that("builtin:console registers its frontend, route, commands, blocks and service", {
   routes = registry_all("route")
   console = Filter(function(r) identical(r$name, "console"), routes)
@@ -699,15 +686,15 @@ test_that("a macOS terminal sends a real paste as one turn; Ctrl-D after typed t
   p$write_input("\r")
   expect_true(wait_for("GOT a/b/c END"))
   expect_identical(seen("GOT "), 1L)
-  # typed while the agent works, the last line ended by Ctrl-D instead of Enter
+  # typed while the agent works, the last line ended by Ctrl-D instead of Enter: it steers the
+  # same run (IC-76), whose second answer follows the relay
   expect_true(wait_for("peter> ", n = 2L))
   p$write_input("SLOW\r")
   Sys.sleep(1)
   p$write_input("x\rhalf\004")
-  expect_true(wait_for("GOT SLOW END"))
-  expect_true(wait_for("Enter sends it as one message", n = 2L))
-  p$write_input("\r")
-  expect_true(wait_for("GOT x/half END"))
+  expect_true(wait_for("[gptr] steering: 'x"))
+  expect_true(wait_for("GOT SLOW END", n = 2L))
+  expect_true(wait_for("peter> ", n = 3L))
   p$write_input("/exit\r")
   expect_true(wait_for("CHILD DONE"))
 })

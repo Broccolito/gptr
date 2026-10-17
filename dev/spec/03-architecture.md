@@ -1200,7 +1200,8 @@ which drop out at settlement; run state lives in sessions (INFRA-15). Nested run
 ### 6.2 Streaming, interrupts and steering (S-8, INFRA-03/12)
 
 **One queue per session** with `steer` and `follow_up` FIFOs [G1 §4.6, G3 (4)]. Producers: the pipe into a
-running session (gateway route f), the console pause menu, `gptr_steer()` (SDK and front ends), `ctx$send()`
+running session (gateway route f), the console pause menu, a line typed in a terminal console while an answer
+runs [IC-76], `gptr_steer()` (SDK and front ends), `ctx$send()`
 (plugins, hooks and sibling agents). Consumer: the loop polls at run start, after `turn_end` and after tool
 preflight; a steer is delivered only after the **complete** tool-result message. Only user sources (the pipe, the
 pause menu, the REPL, `gptr_steer()` called outside a run) become the operator relay "The user sent this message
@@ -1856,6 +1857,12 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   question is discarded and never answers it. A fence runs as R only for an `r`, `R`, `{r...}` or empty
   info string; other fences are prompt text; the body loses the opener's indentation and closes on a fence at
   least as long (CommonMark).
+- **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
+  stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
+  session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`, or `"follow_up"`); one batch (a
+  paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. IDE
+  consoles, R.app and `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer
+  after the CLI's current response.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.

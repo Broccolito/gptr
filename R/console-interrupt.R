@@ -162,13 +162,13 @@ policy_menu = function(cnd, pol) {
   }
 }
 
-#' Queue pause-menu text on the session (IC-49, IC-55: source "pause_menu") after the `input`
-#' event (source "steer")
+#' Queue pause-menu or typed text on the session (IC-49, IC-55: source "pause_menu" or "repl",
+#' IC-76) after the `input` event (source "steer"); the notice shows the text
 #'
 #' P06 refuses an enqueue from the session's own tool frames, which are on the stack when the
 #' interrupt hit a tool; the item then waits in the console state for policy_flush().
 #' @noRd
-policy_enqueue = function(s, text, as) {
+policy_enqueue = function(s, text, as, source = "pause_menu") {
   text = as_utf8(text)
   if (!nzchar(trimws(text))) {
     console_notice("[gptr] nothing queued; continuing")
@@ -176,19 +176,21 @@ policy_enqueue = function(s, text, as) {
   }
   ev = ev_dispatch("input", ev_new("input", text = text, source = "steer"), session = s)
   if (identical(ev$action, "handled")) return(invisible(FALSE))
-  console_notice(if (identical(as, "steer")) {
-    "[gptr] steering message queued; it is delivered after the current tool results"
+  shown = console_escape(paste0("'", ev$text, "'"))
+  if (identical(as, "steer")) {
+    console_notice("[gptr] steering: ", shown, "; it reaches the agent at its next step")
   } else {
-    "[gptr] follow-up queued; it is sent when the agent would stop"
-  })
+    console_notice("[gptr] follow-up queued: ", shown, "; it is sent when the agent would stop")
+  }
   st = console_state()
-  st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, run = session_live(s)$run)))
+  st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, source = source,
+                                       run = session_live(s)$run)))
   policy_flush()
   if (length(st$pending)) reactor_timer(at = reactor_now(), fn = policy_flush)
   invisible(TRUE)
 }
 
-#' Queue the pending pause-menu items once no tool executes on the stack: at the next reactor
+#' Queue the pending console items once no tool executes on the stack: at the next reactor
 #' step or when the tool ends (the tool_execution_end hook), so before the next request
 #' (INFRA-12); an item whose run settled first is listed as dropped (03 section 6.2)
 #' @noRd
@@ -202,7 +204,7 @@ policy_flush = function() {
       console_notice("[gptr] dropped queued messages: ",
                      console_escape(paste0("'", it$text, "'"), FALSE))
     } else {
-      tryCatch(session_enqueue(it$s, it$text, as = it$as, source = "pause_menu"),
+      tryCatch(session_enqueue(it$s, it$text, as = it$as, source = it$source),
                error = function(e) {
                  console_notice("[gptr] the queued message could not be delivered: ",
                                 console_escape(conditionMessage(e), FALSE), .error = TRUE)

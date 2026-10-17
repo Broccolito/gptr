@@ -199,6 +199,16 @@ exploration in a scratch environment, where intermediate bindings can change whi
 workspace is preserved. Settings and policies are described in
 [Configuration](configuration.html) and `?gptr_security`.
 
+In a terminal (terminal R or an IDE's Terminal tab; not Windows), a line you type while an
+answer runs steers it: the agent reads it at its next step, after the current tool results, and
+gptr confirms with `[gptr] steering: '<text>'`. Lines typed or pasted together are one message.
+`gptr_config(type_ahead = "follow_up", .scope = "user")` queues them for when the agent would
+otherwise stop instead. `/commands` and `!code` typed during an answer run at the next prompt;
+an interrupt drops them. On the CLI routes (`claude-cli`, `codex`) a steer reaches the model
+after the CLI's current response. The RStudio, Positron and R.app consoles hold typed input
+until R reads again, so there a line typed during an answer becomes the next prompt;
+type-ahead during `peter("...")` at R's prompt stays R's next input.
+
 While an answer or tool runs in a supported terminal, Ctrl-C opens a pause menu:
 
 - **Steer** delivers a new instruction after the current tool results.
