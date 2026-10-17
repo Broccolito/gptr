@@ -150,11 +150,13 @@ complete typed lines during a run"). Commit: `feat(console): typed lines steer t
 ### Task 4: Console layout: margin, block spacing, waiting row, Markdown, highlighting (#13, D-186)
 
 Decisions (skeptic-corrected):
-- Margin: on a dynamic console (`cli::is_dynamic_tty()`) every line printed for a foreground run
+- Margin: when the console renderer is active (`verbosity() >= 2L && cli::is_dynamic_tty()`)
+  every line printed for a foreground run
   starts with two spaces: text, list items, quotes, tables, fences and code, tool lines, notices
   (`console_notice()` and gptr condition display word-wrapped inside the margin), approval
-  prompts and the status line; content width `width - 4`. Plain contexts (pipes, sinks, Rscript,
-  Jupyter, knitr, jsonl, `NO_COLOR`) are byte-identical to today.
+  prompts and the status line; content width `width - 4`. Rscript (verbosity 1), Jupyter, knitr
+  and jsonl are byte-identical to today; `NO_COLOR` removes colours and styles only, so the layout
+  stays; `capture.output()` of an interactive call captures the layout.
 - Blocks: answer text, tool group (call and result lines), notice group, prompt, status line.
   Exactly one blank line between neighbouring blocks, one after the user's input line and one
   after the status line before the next prompt; a reply's leading and trailing blank lines are
