@@ -192,55 +192,19 @@ pcli_claude_ack = function(obj, state) {
   invisible(NULL)
 }
 
-#' mcp_message: one JSON-RPC message for gptr's tools, answered through opts$mcp_dispatch (P18's
-#' mcp_dispatch_local, the single gate of the claude route, IC-65)
-#'
-#' `tools/call` runs from the reactor's tool FIFO of the run, so the R tools of other agents
-#' never overlap with it (IC-57); the handshake and notifications are answered at once. A
-#' notification (no id) gets the ack `{"jsonrpc":"2.0","result":{}}` (07 3.10). A queued
-#' `tools/call` whose turn ended before the FIFO reached it (the wall clock stopped the child, or
-#' P05 let go of the turn and the session started another, pcli_turn_current()) is refused,
-#' never evaluated (D-104).
-#'
-#' Every answer is built before pcli_send() is called: an argument forced only inside the
-#' transport's send() would turn an error into a silent no-answer, and the CLI would wait for it
-#' until the wall clock fires (D-104).
+#' mcp_message: one JSON-RPC message for gptr's tools, answered through pcli_mcp() as a
+#' control_response (IC-65)
 #' @noRd
 pcli_claude_mcp = function(req, id, s) {
-  opts = s$opts
   msg = req[["message"]] %||% list()
   answer = function(resp) {
     out = pcli_control_ok(id, list(mcp_response = resp))
-    pcli_send(opts, out)
+    pcli_send(s$opts, out)
   }
   if (!identical(req[["server_name"]], "gptr")) {
     return(answer(mcp_rpc_err(msg[["id"]], -32601L, "Server not found")))
   }
-  dispatch = opts[["mcp_dispatch"]]
-  if (!is.function(dispatch)) {
-    return(answer(mcp_rpc_err(msg[["id"]], -32603L, "gptr's MCP dispatcher is not available")))
-  }
-  run_it = function() {
-    if (pcli_aborted(s)) {
-      return(answer(mcp_rpc_err(msg[["id"]], -32603L, "The gptr run was aborted.")))
-    }
-    if (s$done || !pcli_turn_current(s)) {
-      return(answer(mcp_rpc_err(msg[["id"]], -32603L, "The gptr turn is over.")))
-    }
-    resp = tryCatch(dispatch(msg), error = function(e) {
-      mcp_rpc_err(msg[["id"]], -32603L, redact(conditionMessage(e), "context"))
-    })
-    if (is.null(resp)) resp = list(jsonrpc = "2.0", result = json_obj())
-    answer(resp)
-  }
-  run = opts[["run"]]
-  queue = identical(msg[["method"]], "tools/call") && rlang::is_string(run)
-  if (queue && !s$done && !pcli_aborted(s)) {
-    reactor_enqueue_tool(run, run_it)
-  } else {
-    run_it()
-  }
-  invisible(NULL)
+  pcli_mcp(msg, s, answer)
 }
 
 #' can_use_tool: gptr's own tools are pre-allowed by --allowedTools mcp__gptr__* and gated once,

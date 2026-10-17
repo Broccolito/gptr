@@ -969,6 +969,8 @@ backend_inline_start = function(spec, ctx) {
 #' `start()` of the `cli` backend: a child whose model is a subscription CLI. The CLI adapter of
 #' P20 owns the process; the Codex route gets the MCP server bound to this child's session
 #' first (the mcp.serve_ensure service, P18; contract 7.0)
+#' (P26 IC-79: the service is gone; the codex adapter's stdio relay reaches the child's session
+#' itself, so this start needs no MCP step.)
 #' @noRd
 backend_cli_start = function(spec, ctx) {
   child = subagent_child_new(spec, "cli")

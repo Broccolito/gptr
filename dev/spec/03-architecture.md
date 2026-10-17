@@ -137,7 +137,7 @@ ecosystem is `peter$...`, Shiny artifacts and runnable documents (P3, P11).
 | Tools | `r`, `read`, `edit` (accepts a pasted `*** Begin Patch` envelope), `write`, `ask`; namespace members `read/write/edit/grep/find/ls/help/search/describe/plot/out/sh/script/bg/jobs/py/sql/knit/app/mcp` |
 | Safety | Modes plan/manual/edits/auto; advisory classifier (R, shell, SQL, Python); rules; critical and secret guards; checkpoints with `/undo`, `/redo`, `/rewind`; vault, handles, redaction at every sink |
 | Documents | `.R`, `.Rmd`, `.qmd`, `.ipynb` blocks; replay modes; S1 and S2 caches; console transcripts; deferred Rscript writes |
-| Ecosystem | Skills, prompt templates, slash commands, agent files (`.gptr`, `.claude`, `.codex`, `.pi`), plugin packages and directories, `.claude-plugin` bundles (skills, commands, agents, MCP); MCP client (both protocol eras, stdio and Streamable HTTP, OAuth); gptr as MCP server (in-process `sdk` transport for the claude CLI; loopback HTTP for Codex and external agents) |
+| Ecosystem | Skills, prompt templates, slash commands, agent files (`.gptr`, `.claude`, `.codex`, `.pi`), plugin packages and directories, `.claude-plugin` bundles (skills, commands, agents, MCP); MCP client (both protocol eras, stdio and Streamable HTTP, OAuth); gptr as MCP server (in-process `sdk` transport for the claude CLI; a base-R stdio relay for Codex; loopback HTTP for external agents) |
 | Agents | Inline, worker (callr) and CLI sub-agent backends; teams (`agents =`), fan-out (`parallel =`), `gptr_parallel()` |
 | Artifacts | Shiny apps in supervised background R processes with snapshots and a validation ladder |
 | Front ends | Console REPL with pause menu; knitr `knit_print`; JSONL event sink; scripted UI for tests |
@@ -260,9 +260,8 @@ MCP tools over HTTP. The nested call re-enters `reactor_pump(until, allow_runs =
 same pool: it advances all transfers but executes queued R tools **only** of the runs in `allow_runs` (which
 defaults to none inside a run), so sibling agents' R tools never run inside another tool's evaluation [J-impl,
 P-B §6.2, P-C §6.2]. The reactor tracks its depth: `later::run_now(0)` (httpuv servers, background timers) runs
-only in the outermost pump, or in a nested pump that waits for a CLI child served by gptr's MCP server, whose
-handler then refuses other sessions' requests with a retryable error; the background pump is a no-op while the
-reactor is on the stack [IC-57]. Nested runs are children of the running session (depth + 1, mode inherited and
+only in the outermost pump (CLI children reach gptr through the run's tool FIFO, never through `later`, IC-79);
+the background pump is a no-op while the reactor is on the stack [IC-57]. Nested runs are children of the running session (depth + 1, mode inherited and
 only tightened, usage and budget rolled up to the root, no document block).
 
 ### 2.4 One request, end to end
@@ -1156,8 +1155,8 @@ reactor_cancel(ids)                                     # multi_cancel; interrup
 One iteration: admit queued transfers while global (`max_active`, default 8) and per-provider slots allow;
 `processx::poll(c(processx::curl_fds(curl::multi_fdset(pool)), <live pipes>), ms = min(next timer, slice))`;
 `curl::multi_run(timeout = 0)`; read ready pipes (at most 512 chunks each; lines reassembled up to 16 MiB) and
-drain pending stdin buffers; fire due timers; if `later` is loaded and the pump is the outermost one (or waits for
-a CLI child served by gptr's MCP server), `later::run_now(0)` (services httpuv servers such as `gptr_mcp_serve()`
+drain pending stdin buffers; fire due timers; if `later` is loaded and the pump is the outermost one,
+`later::run_now(0)` (services httpuv servers such as `gptr_mcp_serve()`
 and OAuth callbacks; never `httpuv::service()` [16]); run at most one queued R tool whose run is in
 `allow_runs` (all runs only when no run is on the stack [IC-57]); loop. The reactor is the only blocking wait in
 gptr [15 §4.1-4.2].
@@ -1778,9 +1777,11 @@ their exports and returned values must be self-contained; an inline team member 
   subset), Cursor, VS Code and Pi configs listed read-only and imported on request, found under `user_home()` and
   `app_config_dir()` (on Windows R's `~` is the Documents folder [13 C-56; IC-63]); secrets in `env`/`headers`
   registered in the vault.
-- **Server** (`mcp-server.R`): a dispatcher exposing the session's `r`, `read`, `edit` and `write` through the
-  permission gate. Transports: the claude CLI's in-process `sdk` type over the control protocol
-  (`mcp_message`; no port, no token), and loopback Streamable HTTP (`gptr_mcp_serve()`: 127.0.0.1, an RNG-free
+- **Server** (`mcp-server.R`): a dispatcher exposing the session's tools through the permission gate: to the CLI
+  routes the session's frozen tool array, the one an API provider gets (IC-79), to `gptr_mcp_serve()` its subset of
+  `r`, `read`, `edit` and `write`. Transports: the claude CLI's in-process `sdk` type over the control protocol
+  (`mcp_message`; no port, no token), Codex's stdio relay (`inst/gptr/mcp_relay.R`, base R, a private file mailbox
+  per exec; no port, no token, IC-79), and loopback Streamable HTTP (`gptr_mcp_serve()`: 127.0.0.1, an RNG-free
   free port, one listening socket with a separate 192-bit bearer token per client, each token bound to its
   session so a request evaluates in that session's environment with its mode, rules and budget [IC-58], Origin
   validation, httpuv + later + openssl in Suggests; client configs set a tool timeout of at least 3,600 s because
@@ -2237,10 +2238,11 @@ Anthropic before advertising the route (policy status UNCERTAIN) [07, J-cran].
 
 ```text
 codex exec --json --ignore-user-config --skip-git-repo-check -m <full id> -C <wd>
-      -c mcp_servers.gptr.url=http://127.0.0.1:<port>/mcp
-      -c mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN
+      -c mcp_servers.gptr.command="<Rscript>"
+      -c mcp_servers.gptr.args=["--vanilla","<mcp_relay.R>","<mailbox>","<seconds>"]
       -c mcp_servers.gptr.default_tools_approval_mode="approve"
       -c mcp_servers.gptr.required=true
+      -c mcp_servers.gptr.startup_timeout_sec=60
       -c mcp_servers.gptr.tool_timeout_sec=3600
       --sandbox <read-only | workspace-write> -
 codex exec resume <thread> --json ... -c sandbox_mode=<mode> -       (resume rejects -s and -C)
@@ -2252,14 +2254,15 @@ and fact-check 13, 16; IC-65]; gptr's gate stays the approval authority.)
 
 Authentication is the user's own Codex login; gptr never reads `~/.codex/auth.json`; `CODEX_API_KEY`,
 `CODEX_ACCESS_TOKEN`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` and the enclosing-agent variables `CODEX_MANAGED_*` and
-`CODEX_SANDBOX*` are removed from the child environment with a warning [08, G6 §3.7]. Live R: `gptr_mcp_serve()`
-starts automatically (loopback, an RNG-free free port, a 192-bit token bound to this session and passed only in
-the child's environment [IC-58]) so Codex evaluates R in the live session through the permission gate, which can
-prompt at the console because the call arrives in R. (Evidence level: the in-session HTTP MCP route was verified
-through app-server listing and calls without a model; the verified model-driven MCP call used
+`CODEX_SANDBOX*` are removed from the child environment with a warning [08, G6 §3.7]. Live R: Codex starts gptr's
+stdio relay `inst/gptr/mcp_relay.R` (base R, so in every installation), which passes each JSON-RPC line through a
+private mailbox under `tempdir()` to a reactor task of the turn's run; the session's frozen tools answer through
+the claude route's dispatcher, `tools/call` on the run's tool FIFO, so Codex evaluates R in the live session through
+the permission gate, which can prompt at the console because the call arrives in R [IC-79]. Each exec starts a
+relay (an Rscript start-up of about 0.3-1 s; each message adds about 30 ms). (Evidence level: the verified
+model-driven MCP call used an Rscript stdio server under `--sandbox read-only`,
 `default_tools_approval_mode = "approve"` and `required = true` [08 §2.G]; a `GPTR_LIVE_TESTS` test runs Codex in a
-non-git temporary directory and requires it to call the gptr `r` tool.) Without httpuv/later/openssl
-the route works on files only, with a notice. Permission mapping (headless exec cannot prompt) [IC-65]: `plan`,
+non-git temporary directory and requires it to call the gptr `r` tool.) Permission mapping (headless exec cannot prompt) [IC-65]: `plan`,
 `manual` and `edits` -> `--sandbox read-only`, so every file change goes through gptr's gated `write`/`edit` over
 MCP (edits-mode approval and checkpoints apply); `auto` and `yolo` -> `workspace-write`, control files hashed before
 each exec (changed ones are not loaded until the user confirms) and a files-checkpointer walk after it so `/undo`
@@ -2275,7 +2278,9 @@ behind a schema probe and a maintainer's live end-to-end test respectively (§1.
 
 References are `provider/id[:thinking]` strings or aliases resolved dynamically from family and release date
 (`sonnet`, `opus`, `haiku`, `gemini`, `flash`, `gpt`, `jev`, `claude_code`, `codex`), with Pi's last-colon
-thinking-suffix rule, `.`/`-`/`_` normalisation and `adist()` suggestions [09 §4]. Thinking levels are clamped
+thinking-suffix rule, `.`/`-`/`_` normalisation and `adist()` suggestions [09 §4]. A registered provider named
+alone means its first declared model in every resolver (`claude-cli`, `codex`, `codex-cli`), alias names normalise
+like ids (`claude-code` is `claude_code`), and `/model` checks a reference before the first prompt [IC-19, IC-79]. Thinking levels are clamped
 to the model's map. The default chat model is taken from the first available route: an Anthropic key ->
 `anthropic/claude-sonnet-5-5` (the north-star banner; $2/$10 vs $4/$20 for Opus 5.5); OpenAI ->
 `openai/gpt-6-sol`; Gemini -> `google/gemini-3.8-flash`; otherwise a detected CLI. `small_model` serves
@@ -2323,7 +2328,7 @@ OAuth and the MCP server need it).
 |---|---|
 | testthat (>= 3.2.0), withr | tests |
 | knitr, rmarkdown | `knit_print`, stale-chunk hooks, vignettes |
-| later, httpuv, openssl | `gptr_mcp_serve()` and the Codex live-R route; OAuth loopback (paste fallback without them); experimental background sessions (later) |
+| later, httpuv, openssl | `gptr_mcp_serve()`; OAuth loopback (paste fallback without them); experimental background sessions (later) |
 | shiny, bslib, chromote, ragg | artifacts; headless session check and screenshot (HTTP-only check without chromote); faster headless PNG plots (fallback `grDevices::png()`) |
 | rstudioapi | IDE document backend |
 | reticulate, DBI, duckdb, RSQLite | `peter$py()`, `peter$sql()` |
@@ -2456,15 +2461,14 @@ prompt per request [07].
    agent(model = gemini, skills = single_cell))` is evaluated in the mask binding `agent` to `gptr_agent`;
    identifiers resolve by the gateway rule. Route d: a team session `reviews` (kind `team`).
 2. Backends by `auto`: `stats` and `biology` inline (minimal preset, about 1,300 static tokens each instead
-   of about 2,900, with the skill preloaded as `<skill_content>`); `code` is `cli` (`codex`). Before spawning
-   `codex exec --json`, `gptr_mcp_serve()` starts on 127.0.0.1 with a random port and a bearer token in the
-   child's environment (a token bound to the `code` child's session [IC-58]), so Codex can evaluate R in the live
+   of about 2,900, with the skill preloaded as `<skill_content>`); `code` is `cli` (`codex`). `codex exec --json`
+   starts gptr's stdio relay, which reaches the `code` child's session [IC-79], so Codex can evaluate R in the live
    session through gptr's gate; the review runs in Codex's read-only sandbox (every non-`auto` mode maps to
    read-only [IC-65]).
 3. One reactor: two HTTP streams and one pipe in one `processx::poll()`; inline R tools go through the FIFO,
    each in its overlay `new.env(parent = envir)` with its own RNG stream and **no binding guard**, so
    `analysis.R` objects are read at their addresses without copying (NS-6's promise); Codex's MCP calls into R
-   are serviced by `later::run_now(0)` in the outermost pump [IC-57]. The statement owns one team block listing the
+   run from the run's tool FIFO [IC-57, IC-79]. The statement owns one team block listing the
    three children, so re-sourcing replays the reviews with zero requests [IC-47].
 4. `reviews$stats`, `reviews$code`, `reviews$biology` are child sessions; `reviews$text` joins the three
    reviews under `### <name> (<model>)` headings; `gptr_usage(reviews)` sums children with routes `api`,
@@ -2812,7 +2816,7 @@ static prefix is read from cache at 0.025-0.1x the input price.
 | Router switches | one System 1 call (about 280 tokens) and one cache miss per switch [IC-69] | cheap models for easy steps |
 | Tool additions mid-session (plan -> auto, `ctx$add_tools()`, `tools =` on a continuation) | the added schemas once as a `tool_addition` (edit and write: about 480) | the frozen array never changes [IC-69] |
 | The Claude-CLI route | the CLI's own framing beyond gptr's frozen prompt (UNCERTAIN until the live suite measures it) | the Claude plan |
-| gptr's MCP schemas inside Codex | about 700 per turn (four tools) inside Codex's 19-38K | live R for the ChatGPT plan |
+| gptr's MCP schemas inside Codex | about 700 per turn (four tools; the session's whole frozen array since IC-79) inside Codex's 19-38K | live R for the ChatGPT plan |
 | Images attached by `.opts$images` | 532 per image at 768x512 | the user asked for it [IC-44] |
 | Compaction checkpoint | about 1,100 post-compaction first message + up to 2,048 output | keeps long sessions inside the window |
 

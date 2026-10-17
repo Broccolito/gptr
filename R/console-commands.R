@@ -139,7 +139,8 @@ cmd_exit = function(args, ctx) {
   NULL
 }
 
-#' `/model [ref]`: on a session from the next request; before the first prompt for that prompt
+#' `/model [ref]`: on a session from the next request; before the first prompt for that prompt,
+#' checked now (IC-79) and kept as typed
 #' @noRd
 cmd_model = function(args, ctx) {
   rs = console_repl_find()
@@ -155,6 +156,7 @@ cmd_model = function(args, ctx) {
     return(paste0("Model: ", s$model, " (from the next request)"))
   }
   if (is.null(rs)) return("There is no session to switch.")
+  if (is.null(registry_get("router", args))) model_canonical(args, strict = TRUE)
   rs$model = args
   paste0("Model: ", args, " (used from the first prompt)")
 }

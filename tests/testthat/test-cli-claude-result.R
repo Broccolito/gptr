@@ -155,7 +155,6 @@ cli_terminal_wait = function(case, failed) {
   expect_false(file.exists(file.path(proc_dir(create = FALSE),
     paste0(seen$record$marker, ".json"))))
   expect_false(seen$job %in% gptr_jobs()$id)
-  expect_false(seen$run$id %in% reactor$served)
   expect_false(exists(seen$run$id, envir = reactor$runs, inherits = FALSE))
   expect_true(isTRUE(seen$state$stream_turn$finished))
   expect_identical(nrow(seen$session$usage), 1L)

@@ -1,27 +1,32 @@
 # The cli-codex adapter (P20): one `codex exec --json --ignore-user-config ... -` per turn with the
-# prompt on stdin, gptr's live R session through gptr_mcp_serve() (the mcp.serve_ensure service
-# of P18, a token bound to this session, IC-58), the sandbox mapping with control-file hashing,
-# the turn counter and the per-exec wall clock (architecture 8.3; contract 8.5, IC-65). L1: L0
-# helpers, the shared helpers of cli-common.R, P05's usage_new(), the injected opts and declared
-# services only (IC-33). Adapted from the verified exec driver of report 08 section 5.1 (prompt
-# on stdin through a looping writer, JSONL events of section 3.9) with the fixes of its
-# verification log (items 14, 16, 54).
+# prompt on stdin, gptr's live R session through the stdio relay inst/gptr/mcp_relay.R (IC-79),
+# the sandbox mapping with control-file hashing, the turn counter and the per-exec wall clock
+# (architecture 8.3; contract 8.5, IC-65). L1: L0 helpers, the shared helpers of cli-common.R,
+# P05's usage_new(), the injected opts and declared services only (IC-33). Adapted from the
+# verified exec driver of report 08 section 5.1 (prompt on stdin through a looping writer, JSONL
+# events of section 3.9) with the fixes of its verification log (items 14, 16, 54).
 
-#' The `-c` overrides pointing Codex at gptr's MCP server (contract 8.5, verbatim)
+#' The `-c` overrides that make gptr's stdio relay Codex's `gptr` MCP server (IC-65, IC-79):
+#' `Rscript --vanilla <mcp_relay.R> <mailbox> <seconds>`, the paths as TOML basic strings; the
+#' relay waits for an answer no longer than the turn's wall clock
 #' @noRd
-pcli_codex_mcp_args = function(port) {
-  c("-c", paste0("mcp_servers.gptr.url=http://127.0.0.1:", as.integer(port), "/mcp"),
-    "-c", "mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN",
+pcli_codex_mcp_args = function(dir) {
+  toml = function(x) paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x), "\"")
+  relay = system.file("gptr", "mcp_relay.R", package = "gptr", mustWork = TRUE)
+  argv = toml(c("--vanilla", relay, dir, as.character(pcli_turn_seconds())))
+  c("-c", paste0("mcp_servers.gptr.command=", toml(rscript_path())),
+    "-c", paste0("mcp_servers.gptr.args=[", paste(argv, collapse = ","), "]"),
     "-c", "mcp_servers.gptr.default_tools_approval_mode=\"approve\"",
     "-c", "mcp_servers.gptr.required=true",
+    "-c", "mcp_servers.gptr.startup_timeout_sec=60",
     "-c", "mcp_servers.gptr.tool_timeout_sec=3600")
 }
 
 #' The codex argv of IC-65: a new exec, or `exec resume` (which rejects -s and -C, so the sandbox
-#' travels as `-c sandbox_mode=`)
+#' travels as `-c sandbox_mode=`); `relay` is the exec's mailbox directory
 #' @noRd
-pcli_codex_args = function(model_id, wd, sandbox, port = NULL, resume = NULL) {
-  mcp = if (is.null(port)) character() else pcli_codex_mcp_args(port)
+pcli_codex_args = function(model_id, wd, sandbox, relay, resume = NULL) {
+  mcp = pcli_codex_mcp_args(relay)
   if (is.null(resume)) {
     return(c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m", model_id,
              "-C", wd, mcp, "--sandbox", sandbox, "-"))
@@ -70,82 +75,6 @@ pcli_codex_sandbox = function(mode, path) {
     return("read-only")
   }
   "workspace-write"
-}
-
-#' Say once that Codex works on files only (no MCP server: httpuv, later or openssl missing)
-#' @noRd
-pcli_codex_files_only = function(why) {
-  gptr_inform(paste0("Codex cannot evaluate R in this session (", why, "); the codex route ",
-                     "works on files only. Install httpuv, later and openssl for live R access."),
-              "notice", .once = "cli_codex_files_only")
-  NULL
-}
-
-#' The child-environment addition of the handle: GPTR_MCP_TOKEN, taken from its Codex client
-#' snippet (`$config$codex$env`, 04 5.11: the token lives only in child environments and in
-#' snippets); empty when the handle has none
-#' @noRd
-pcli_codex_env = function(h) {
-  if (is.null(h)) return(character())
-  name = h$token_env %||% "GPTR_MCP_TOKEN"
-  env = h$config$codex$env
-  tok = if (is.null(env)) NULL else env[[name]]
-  if (rlang::is_string(tok) && nzchar(tok)) c(GPTR_MCP_TOKEN = tok) else character()
-}
-
-#' Ensure gptr's MCP server for a session and keep what its next codex exec needs:
-#' list(url, port, env = c(GPTR_MCP_TOKEN = <this session's token>)) (mcp.serve_ensure, IC-58),
-#' or list(error) when there is no server or no token
-#'
-#' Called by builtin:cli's `request_params` hook with the session object, which the service
-#' takes (P18 checks its class) while the adapter holds only ids (contract 8.1). Only strings
-#' are kept, per session id, never the handle (its stop() would keep the session alive);
-#' session_shutdown forgets them (pcli_codex_forget()).
-#' @param session a gptr_session (anything with an `$id`).
-#' @return invisible(the record kept), or invisible(NULL) without a session id.
-#' @noRd
-pcli_codex_ensure = function(session) {
-  id = pcli_sid(tryCatch(session$id, error = function(e) NULL))
-  if (is.null(id)) return(invisible(NULL))
-  rec = if (!ext_service_has("mcp.serve_ensure")) {
-    list(error = "gptr's MCP server is not loaded")
-  } else {
-    tryCatch({
-      h = ext_service_get("mcp.serve_ensure")(session)
-      env = pcli_codex_env(h)
-      if (length(env)) {
-        list(url = h$url, port = h$port, env = env)
-      } else {
-        list(error = "the MCP server gave no token for this session")
-      }
-    }, error = function(e) list(error = conditionMessage(e)))
-  }
-  tab = pcli_cache$mcp %||% list()
-  tab[[id]] = rec
-  pcli_cache$mcp = tab
-  invisible(rec)
-}
-
-#' Forget the MCP record of a session (its session_shutdown)
-#' @noRd
-pcli_codex_forget = function(session) {
-  tab = pcli_cache$mcp %||% list()
-  if (!is.null(pcli_sid(session))) tab[[session]] = NULL
-  pcli_cache$mcp = tab
-  invisible(NULL)
-}
-
-#' The MCP record of this request's session (pcli_codex_ensure()), or NULL with the one-time
-#' files-only notice
-#' @noRd
-pcli_codex_mcp = function(opts) {
-  sid = pcli_sid(opts[["session"]])
-  rec = if (is.null(sid)) NULL else (pcli_cache$mcp %||% list())[[sid]]
-  if (is.null(rec)) {
-    return(pcli_codex_files_only("gptr's MCP server was not started for this session"))
-  }
-  if (!is.null(rec$error)) return(pcli_codex_files_only(rec$error))
-  rec
 }
 
 #' The stdin prompt: gptr's frozen instructions and the history on a fresh thread; on a resumed
@@ -321,8 +250,9 @@ pcli_codex_cap = function(par) {
 
 #' build(): one codex exec per turn, the prompt on stdin, then stdin closed (contract 8.1, 8.5)
 #'
-#' A workspace-write exec hashes the control files of the project root (`codex_control`, and
-#' the root as `codex_root`); the session's earlier exec, if it ended unchecked, is checked first
+#' Each exec gets a fresh private mailbox for its relay (`codex_relay`, IC-79). A workspace-write
+#' exec hashes the control files of the project root (`codex_control`, and the root as
+#' `codex_root`); the session's earlier exec, if it ended unchecked, is checked first
 #' (pcli_codex_settle()). P05's transport writes the prompt with write_all() and then closes
 #' stdin. A fresh thread's prompt carries the instructions and the earlier conversation, so it
 #' is not bounded: on Windows the write blocks until Codex has read it, which Codex does at
@@ -338,11 +268,12 @@ pcli_codex_build = function(model, context, opts) {
   pcli_notice("codex")
   par = pcli_params(context)
   sandbox = pcli_codex_sandbox(par$mode, path)
-  h = pcli_codex_mcp(opts)
-  port = h$port
+  relay = tempfile("gptr-codex-")
+  dir.create(relay, mode = "0700")
+  state$codex_relay = path_norm(relay)
   resume = if (isTRUE(probe$resume)) state$codex_thread else NULL
   wd = path_norm(getwd())
-  args = pcli_codex_args(pcli_model_id(model), wd, sandbox, port = port, resume = resume)
+  args = pcli_codex_args(pcli_model_id(model), wd, sandbox, state$codex_relay, resume = resume)
   state$cli_api = "cli-codex"
   state$codex_sandbox = sandbox
   state$codex_cap = pcli_codex_cap(par)
@@ -353,13 +284,8 @@ pcli_codex_build = function(model, context, opts) {
     state$codex_control = pcli_control_hash(root)
     state$codex_root = root
   }
-  run = opts[["run"]]
-  if (!is.null(port) && rlang::is_string(run)) {
-    reactor_served(run, TRUE)
-    state$served_run = run
-  }
   list(start = list(command = path[[1L]], args = c(as.character(path[-1L]), args),
-                    env_profile = "cli-codex", env = h$env %||% character(), wd = wd),
+                    env_profile = "cli-codex", env = character(), wd = wd),
        send = list(json_verbatim(pcli_codex_prompt(context, fresh = is.null(resume),
                                                   provider = model$provider))),
        close_stdin = TRUE)
@@ -597,9 +523,38 @@ pcli_codex_timeout = function(s) {
                                        " s (option gptr.cli_turn_timeout)."), kill = TRUE)
 }
 
-#' parse(): the normaliser of one codex exec (contract 8.1, 8.5; pcli_normaliser()). Every end
-#' checks the control files of a workspace-write exec (pcli_codex_end()); an exec P05 ends
-#' without the normaliser is checked by the session's next build() (pcli_codex_settle()).
+#' The session side of the exec's stdio relay (IC-79): a reactor task of the run that answers each
+#' request the relay leaves in the mailbox `dir` (`req`) through pcli_mcp() with `resp`, an empty
+#' line for a notification. Once the turn is over it removes the mailbox, which ends the relay,
+#' and itself.
+#' @noRd
+pcli_codex_relay = function(s, dir) {
+  req = file.path(dir, "req")
+  reactor_task(function() {
+    if (s$done || !pcli_turn_current(s)) {
+      unlink(dir, recursive = TRUE)
+      return(FALSE)
+    }
+    # a file just renamed can be locked for a moment on Windows: it is read at the next poll
+    line = if (file.exists(req)) {
+      tryCatch(read_utf8(req)$text, error = function(e) NULL, warning = function(w) NULL)
+    }
+    if (is.null(line)) return(0.02)
+    unlink(req)
+    msg = tryCatch(json_decode(line), error = function(e) NULL)
+    if (!is.list(msg)) msg = list()
+    pcli_mcp(msg, s, function(resp) {
+      out = if (is.null(msg[["id"]])) "" else json_encode(resp)
+      if (dir.exists(dir)) write_utf8(file.path(dir, "resp"), out)
+    })
+    0.02
+  }, run = s$opts[["run"]])
+}
+
+#' parse(): the normaliser of one codex exec (contract 8.1, 8.5; pcli_normaliser()) and its relay
+#' (pcli_codex_relay()). Every end checks the control files of a workspace-write exec
+#' (pcli_codex_end()); an exec P05 ends without the normaliser is checked by the session's next
+#' build() (pcli_codex_settle()).
 #' @noRd
 pcli_codex_parse = function(model, opts) {
   s = pcli_turn_new(model, opts)
@@ -622,5 +577,7 @@ pcli_codex_parse = function(model, opts) {
     paste0("codex exec exited before completing the turn.",
            if (!is.null(s$last_error)) paste0(" Its last error: ", s$last_error))
   }
-  pcli_normaliser(s, "codex", push, pcli_codex_error, exited, function() pcli_codex_timeout(s))
+  n = pcli_normaliser(s, "codex", push, pcli_codex_error, exited, function() pcli_codex_timeout(s))
+  if (!is.null(s$state$codex_relay)) pcli_codex_relay(s, s$state$codex_relay)
+  n
 }

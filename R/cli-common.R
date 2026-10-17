@@ -14,19 +14,16 @@
 #                          ...), IC-60).
 #   gptr.cli_turn_timeout  num(1) (default 3600): wall-clock seconds of one CLI turn.
 
-#' Process-level data of P20: discovery results, versions, capability probes, plan status, the
+#' Process-level data of P20: discovery results, versions, capability probes, plan status and the
 #' weak table of live CLI children by session id (a process table like P04's job table,
-#' architecture 2.2 rule 5; never run state) and, from Task 7, the per-session MCP records of
-#' the codex route
+#' architecture 2.2 rule 5; never run state)
 #' @noRd
 pcli_cache = new.env(parent = emptyenv())
 
-#' Forget every cached discovery, version, probe and plan status (the child table and the MCP
-#' records stay)
+#' Forget every cached discovery, version, probe and plan status (the child table stays)
 #' @noRd
 pcli_cache_clear = function() {
-  keep = c("children", "mcp")
-  rm(list = setdiff(ls(pcli_cache, all.names = TRUE), keep), envir = pcli_cache)
+  rm(list = setdiff(ls(pcli_cache, all.names = TRUE), "children"), envir = pcli_cache)
   invisible(NULL)
 }
 
@@ -770,6 +767,48 @@ pcli_send = function(opts, obj) {
   invisible(NULL)
 }
 
+#' Answer one JSON-RPC message for gptr's tools through opts$mcp_dispatch (P18's
+#' mcp_dispatch_local, the single gate of both CLI routes, IC-65) with `answer(response)`: the
+#' claude route's control_response, the codex relay's mailbox (IC-79)
+#'
+#' `tools/call` runs from the reactor's tool FIFO of the run, so the R tools of other agents
+#' never overlap with it (IC-57); the handshake and notifications are answered at once (a
+#' notification gets `{"jsonrpc":"2.0","result":{}}`, 07 3.10). A queued `tools/call` whose turn
+#' ended before the FIFO reached it (the wall clock stopped the child, or P05 let go of the turn
+#' and the session started another, pcli_turn_current()) is refused, never evaluated (D-104).
+#'
+#' Every answer is built before `answer()` is called: an argument forced only inside the
+#' transport's send() would turn an error into a silent no-answer, and the CLI would wait for it
+#' until the wall clock fires (D-104).
+#' @noRd
+pcli_mcp = function(msg, s, answer) {
+  dispatch = s$opts[["mcp_dispatch"]]
+  if (!is.function(dispatch)) {
+    return(answer(mcp_rpc_err(msg[["id"]], -32603L, "gptr's MCP dispatcher is not available")))
+  }
+  run_it = function() {
+    if (pcli_aborted(s)) {
+      return(answer(mcp_rpc_err(msg[["id"]], -32603L, "The gptr run was aborted.")))
+    }
+    if (s$done || !pcli_turn_current(s)) {
+      return(answer(mcp_rpc_err(msg[["id"]], -32603L, "The gptr turn is over.")))
+    }
+    resp = tryCatch(dispatch(msg), error = function(e) {
+      mcp_rpc_err(msg[["id"]], -32603L, redact(conditionMessage(e), "context"))
+    })
+    if (is.null(resp)) resp = list(jsonrpc = "2.0", result = json_obj())
+    answer(resp)
+  }
+  run = s$opts[["run"]]
+  queue = identical(msg[["method"]], "tools/call") && rlang::is_string(run)
+  if (queue && !s$done && !pcli_aborted(s)) {
+    reactor_enqueue_tool(run, run_it)
+  } else {
+    run_it()
+  }
+  invisible(NULL)
+}
+
 #' Stop the CLI child of a session (03 8.3; 07 3.9-3.10; 15 2.9)
 #'
 #' A claude child in the middle of a turn first gets the control-protocol interrupt; with
@@ -921,8 +960,7 @@ pcli_message = function(s, stop_reason = "stop", usage = NULL, error_message = N
                 route = "plan-cli", request_id = s$state$pcli_request_id)
 }
 
-#' End the turn: remember the message, cancel the wall-clock timer, release the served mark of a
-#' codex exec, log the terminal event
+#' End the turn: remember the message, cancel the wall-clock timer, log the terminal event
 #' @noRd
 pcli_finish = function(s, msg, event) {
   s$done = TRUE
@@ -932,11 +970,6 @@ pcli_finish = function(s, msg, event) {
     tryCatch(reactor_cancel(s$timer), error = function(e) NULL)
     s$timer = NULL
     s$state$turn_timer = NULL
-  }
-  served = s$state$served_run
-  if (rlang::is_string(served)) {
-    tryCatch(reactor_served(served, FALSE), error = function(e) NULL)
-    s$state$served_run = NULL
   }
   pcli_wire_log(s, event)
   invisible(msg)
@@ -1113,14 +1146,12 @@ pcli_hook_usage = function(event, ctx) {
 }
 
 #' `request_params` hook: the run's mode and the settings budget less this run's requests for the
-#' plan routes (IC-65; per-call and root budgets do not reach it, D-149), and gptr's MCP server for
-#' a codex session (mcp.serve_ensure takes the session object, IC-58)
+#' plan routes (IC-65; per-call and root budgets do not reach it, D-149)
 #' @noRd
 pcli_hook_params = function(event, ctx) {
   p = tryCatch(ctx$get("provider", event[["provider"]]), error = function(e) NULL)
   api = p[["api"]] %||% ""
   if (!(api %in% c("cli-claude", "cli-codex"))) return(NULL)
-  if (identical(api, "cli-codex")) pcli_codex_ensure(ctx$session)
   lim = setting_get("budget", session = ctx$session,
                     default = list(tokens = 2e6, cost = 5, turns = NULL))
   u = pcli_used(ctx)
@@ -1152,14 +1183,13 @@ pcli_hook_end = function(event, ctx) {
   invisible(NULL)
 }
 
-#' `session_shutdown` hook: stop the session's CLI child, check a codex exec's control files,
-#' remove the claude files and forget the MCP record
+#' `session_shutdown` hook: stop the session's CLI child, check a codex exec's control files and
+#' remove the claude files
 #' @noRd
 pcli_hook_shutdown = function(event, ctx) {
   id = pcli_ctx_session(ctx)
   state = pcli_tracked(id)
   pcli_untrack(id)
-  pcli_codex_forget(id)
   if (is.null(state)) return(invisible(NULL))
   pcli_stop_child(state, wait_ack = FALSE)
   pcli_codex_settle(state)
@@ -1177,7 +1207,7 @@ builtin_cli = function(gptr) {
   gptr$register(gptr_provider("codex", api = "cli-codex", type = "cli",
                               models = pcli_models("codex"),
                               status = pcli_status("codex", "codex", "cli-codex"),
-                              aliases = "codex"))
+                              aliases = c("codex", "codex-cli")))
   gptr$register(gptr_adapter("cli-claude", transport = "process_jsonl", build = pcli_claude_build,
                              parse = pcli_claude_parse, capabilities = pcli_capabilities()))
   gptr$register(gptr_adapter("cli-codex", transport = "process_jsonl", build = pcli_codex_build,

@@ -24,11 +24,11 @@ test_that("the dispatcher answers both eras and never throws", {
   expect_identical(disc$resultType, "complete")
   expect_identical(disc[["_meta"]][["io.modelcontextprotocol/serverInfo"]]$name, "gptr")
   tl = mcp_dispatch_local(mcp_test_msg("tools/list"), s)$result
-  expect_identical(vapply(tl$tools, `[[`, "", "name"), c("r", "read", "edit", "write"))
+  expect_identical(vapply(tl$tools, `[[`, "", "name"), c("read", "r", "edit", "write"))
   expect_identical(tl$cacheScope, "private")
   # adapters hold session ids (contract 8.1): the id of a session builtin:mcp saw start works too
   by_id = mcp_dispatch_local(mcp_test_msg("tools/list"), session_data(s)$id)$result
-  expect_identical(vapply(by_id$tools, `[[`, "", "name"), c("r", "read", "edit", "write"))
+  expect_identical(vapply(by_id$tools, `[[`, "", "name"), c("read", "r", "edit", "write"))
   expect_identical(mcp_dispatch_local(mcp_test_msg("tools/list"), "nobody")$error$code, -32603L)
   expect_identical(mcp_dispatch_local(list(jsonrpc = "2.0", method = "notifications/initialized"),
                                       s)$result, json_obj())
@@ -72,6 +72,84 @@ test_that("objects made through peter() and a served r call capture the session 
   expect_false(res$isError)
   expect_identical(environment(e$g), e)
   expect_identical(environment(e$h), e)
+})
+
+test_that("the CLI routes are served the session's frozen tool array (IC-79)", {
+  rows = gptr_tool("nrow_of", "Rows of a data frame in the session.",
+                   parameters = list(type = "object", required = I("name"),
+                                     properties = list(name = list(type = "string"))),
+                   execute = function(input, ctx) {
+                     gptr_tool_result(paste("rows:", nrow(get(input$name, envir = ctx$envir))))
+                   })
+  names_of = function(s) {
+    vapply(mcp_dispatch_local(mcp_test_msg("tools/list"), s)$result$tools, `[[`, "", "name")
+  }
+  fake = local_fake_provider(list("ok", "ok", "ok"))
+  e = new.env()
+  e$d = mtcars
+  # a session-scoped (rank-0) direct tool and the extended preset, as an API provider gets them
+  s = peter("hello", model = fake, envir = e, mode = "auto", tools = list(rows),
+            .opts = list(preset = "extended"))
+  frozen = session_data(s)$frozen
+  expect_true(all(c("grep", "find", "ls", "nrow_of") %in% frozen$tool_names))
+  expect_identical(names_of(s), frozen$tool_names)
+  served = mcp_dispatch_local(mcp_test_msg("tools/list"), s)$result$tools
+  expect_identical(served[[match("r", names_of(s))]]$inputSchema, mcp_r_schema)
+  call = function(args) {
+    mcp_dispatch_local(mcp_test_msg("tools/call", list(name = "nrow_of", arguments = args)),
+                       s)$result
+  }
+  expect_match(call(list(name = "d"))$content[[1L]]$text, "rows: 32", fixed = TRUE)
+  bad = call(json_obj())
+  expect_true(bad$isError)
+  expect_match(bad$content[[1L]]$text, "Invalid arguments for nrow_of", fixed = TRUE)
+  # the readonly preset declares neither edit nor write, so neither is served
+  ro = peter("hello", model = fake, envir = new.env(), mode = "auto", tools = "readonly")
+  expect_false(any(c("edit", "write") %in% names_of(ro)))
+  wr = mcp_test_msg("tools/call", list(name = "write", arguments = list(path = "x", content = "")))
+  expect_identical(mcp_dispatch_local(wr, ro)$error$code, -32602L)
+  expect_false(file.exists("x"))
+})
+
+test_that("a served call inside a run passes the run's tool_call hooks (IC-79)", {
+  probe = gptr_tool("hookprobe", "Calls the MCP dispatcher the way the CLI adapters do.",
+                    parameters = list(type = "object",
+                                      properties = list(code = list(type = "string"))),
+                    execute = function(input, ctx) {
+                      res = mcp_dispatch_local(r_call(input$code), ctx$session)$result
+                      paste(isTRUE(res$isError), res$content[[1L]]$text)
+                    })
+  off = gptr_register(probe)
+  withr::defer(off())
+  hook = gptr_register(gptr_hook("tool_call", function(event, ctx) {
+    if (identical(event$tool_name, "r")) list(decision = "block", reason = "served r is held")
+  }))
+  withr::defer(hook())
+  fake = local_fake_provider(list(fake_tool("hookprobe", code = "b = 2"), "done"),
+                             name = "hookfake")
+  e = new.env()
+  peter("Use the probe", model = fake, envir = e, mode = "auto")
+  out = fake_requests(fake)[[2L]]$last_results[[1L]]$content[[1L]]$text
+  expect_match(out, "^TRUE Tool execution was blocked: served r is held")
+  expect_false(exists("b", envir = e, inherits = FALSE))
+})
+
+test_that("a fork's served calls evaluate in its overlay; a plan-mode parent stays in plan", {
+  x = local_served_session("auto")
+  f = gptr_fork(x$session)
+  res = mcp_dispatch_local(r_call("y_child = 42"), f)$result
+  expect_false(res$isError)
+  expect_identical(get("y_child", envir = session_home(f), inherits = FALSE), 42)
+  expect_false(exists("y_child", envir = x$envir, inherits = FALSE))
+  # at an idle console a plan-mode session has no run, hence no scratch overlay (IC-15): P11's
+  # plan policy refuses every r call then
+  p = local_served_session("plan")
+  for (code in c("saveRDS(d, 'd.rds')", "nrow(d)")) {
+    res = mcp_dispatch_local(r_call(code), session_data(p$session)$id)$result
+    expect_true(res$isError)
+    expect_match(res$content[[1L]]$text, "plan mode", fixed = TRUE)
+  }
+  expect_false(file.exists("d.rds"))
 })
 
 test_that("a served call asks a person only while a pump runs (IC-57)", {
@@ -275,97 +353,24 @@ test_that("both client eras work against gptr's own server, legacy sessions incl
   expect_identical(ls(the$mcp_server$legacy), character())
 })
 
-test_that("a CLI child's token evaluates in its fork's overlay (IC-58)", {
+test_that("the token of gptr_mcp_serve()'s session is revoked when that session shuts down", {
   skip_without_server()
-  x = local_served_session("auto")
-  f = gptr_fork(x$session)
-  h = ext_service_get("mcp.serve_ensure")(f)
-  withr::defer(gptr_mcp_serve(stop = TRUE))
-  expect_s3_class(h, "gptr_mcp_handle")
-  expect_identical(session_live(f)$mcp_token, h$token)
-  # P20's request_params hook calls the service with the session object before every codex
-  # request (pcli_codex_ensure(ctx$session)) and puts the value of the Codex snippet's env into
-  # the child's environment; an id (contract 8.1) resolves to the same session: every call gives
-  # the same usable token
-  again = ext_service_get("mcp.serve_ensure")(f)
-  by_id = ext_service_get("mcp.serve_ensure")(session_data(f)$id)
-  expect_identical(list(again$token, by_id$token), list(h$token, h$token))
-  expect_error(ext_service_get("mcp.serve_ensure")("no-such-session"),
-               class = "gptr_error_invalid_argument")
-  value = again$config$codex$env[[again$token_env]]
-  expect_identical(value, secret_value(h$token, h$url))
-  out = mcp_cli_child(h$url, value, list(r_call("y_child = 42", id = 1L),
-                                         r_call("exists('d')", id = 2L)))
-  expect_identical(vapply(out, function(o) o$status, 0L), c(200L, 200L))
-  expect_false(jsonlite::fromJSON(out[[1L]]$body, simplifyVector = FALSE)$result$isError)
-  expect_identical(get("y_child", envir = session_home(f), inherits = FALSE), 42)
-  expect_false(exists("y_child", envir = x$envir, inherits = FALSE))
-  h$stop()
-  expect_identical(mcp_test_post(h$url, r_call("1"), token = h$token)$status, 401L)
-})
-
-test_that("a session's token is revoked when the session shuts down (IC-58)", {
-  skip_without_server()
-  x = local_served_session("auto")
-  h = ext_service_get("mcp.serve_ensure")(x$session)
+  h = gptr_mcp_serve(envir = new.env())
   withr::defer(gptr_mcp_serve(stop = TRUE))
   bearer = paste("Bearer", secret_value(h$token, h$url))
   expect_false(is.null(mcp_token_lookup(bearer)))
-  id = session_data(x$session)$id
+  id = session_data(the$mcp_server$user$session)$id
   ev_dispatch("session_shutdown", ev_new("session_shutdown", session = id), session = id)
   expect_null(mcp_token_lookup(bearer))
 })
 
-test_that("gptr_mcp_serve() refuses a port other than the shared socket's", {
+test_that("gptr_mcp_serve() refuses a port other than the running socket's", {
   skip_without_server()
-  x = local_served_session("auto")
-  h = ext_service_get("mcp.serve_ensure")(x$session)
+  st = mcp_serve_start()
   withr::defer(gptr_mcp_serve(stop = TRUE))
-  expect_error(gptr_mcp_serve(envir = new.env(), port = h$port %% 65535L + 1L),
+  expect_error(gptr_mcp_serve(envir = new.env(), port = st$port %% 65535L + 1L),
                class = "gptr_error_invalid_argument")
-  expect_identical(gptr_mcp_serve(envir = new.env(), port = h$port)$port, h$port)
-})
-
-test_that("a CLI child of a plan-mode parent is gated in plan mode", {
-  skip_without_server()
-  x = local_served_session("plan")
-  # by id (contract 8.1 gives L1 adapters only ids; P18 accepts one beside the session object
-  # that P20's request_params hook and P19's cli backend pass)
-  h = ext_service_get("mcp.serve_ensure")(session_data(x$session)$id)
-  withr::defer(gptr_mcp_serve(stop = TRUE))
-  out = mcp_cli_child(h$url, h$token, list(r_call("saveRDS(d, 'd.rds')", id = 1L),
-                                           r_call("nrow(d)", id = 2L),
-                                           r_call("z = 1", id = 3L)))
-  body = lapply(out, function(o) jsonlite::fromJSON(o$body, simplifyVector = FALSE)$result)
-  expect_true(all(vapply(body, function(b) isTRUE(b$isError), NA)))
-  expect_match(body[[1L]]$content[[1L]]$text, "plan mode", fixed = TRUE)
-  expect_false(file.exists("d.rds"))
-  # at an idle console a plan-mode session has no run, hence no scratch overlay (IC-15): P11's
-  # plan policy refuses every r call then
-  expect_match(body[[2L]]$content[[1L]]$text, "plan mode needs a scratch environment",
-               fixed = TRUE)
-  expect_false(exists("z", envir = x$envir, inherits = FALSE))
-})
-
-test_that("in a nested pump only the runs it serves are answered; others get -32002 (IC-57)", {
-  skip_without_server()
-  x = local_served_session("auto")
-  h = ext_service_get("mcp.serve_ensure")(x$session)
-  user = gptr_mcp_serve(envir = new.env())
-  withr::defer(gptr_mcp_serve(stop = TRUE))
-  rec_user = mcp_token_lookup(paste("Bearer", secret_value(user$token, user$url)))
-  rec_s = mcp_token_lookup(paste("Bearer", secret_value(h$token, h$url)))
-  expect_false(mcp_serve_busy(rec_user))
-  local_mocked_bindings(reactor_allow_runs = function() "u00000000")
-  expect_true(mcp_serve_busy(rec_user))
-  expect_true(mcp_serve_busy(rec_s))
-  req = list(PATH_INFO = "/mcp", REQUEST_METHOD = "POST",
-             HTTP_AUTHORIZATION = paste("Bearer", secret_value(h$token, h$url)),
-             HTTP_MCP_PROTOCOL_VERSION = "2026-07-28", HTTP_MCP_METHOD = "tools/call",
-             rook.input = list(read = function() charToRaw(json_encode(r_call("1")))))
-  res = mcp_http_handle(the$mcp_server, req)
-  expect_identical(res$status, 200L)
-  expect_identical(json_decode(res$body)$error$code, -32002L)
+  expect_identical(gptr_mcp_serve(envir = new.env(), port = st$port)$port, st$port)
 })
 
 test_that("client snippets carry a 3,600 s tool timeout and print without the token", {

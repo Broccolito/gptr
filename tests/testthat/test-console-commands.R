@@ -163,6 +163,28 @@ test_that("/model and /mode before the first prompt set the first prompt's argum
   expect_identical(rs$mode, "yolo")
 })
 
+test_that("/model checks a reference before the first prompt; provider names resolve", {
+  local_console_commands()
+  rs = repl_state(NULL, new.env())
+  bad = run_command(rs, "/model codex-clu")
+  expect_match(paste(bad$err, collapse = "\n"), "Unknown model reference 'codex-clu'",
+               fixed = TRUE)
+  expect_null(rs$model)
+  expect_identical(run_command(rs, "/model claude-cli")$out,
+                   "Model: claude-cli (used from the first prompt)")
+  expect_identical(rs$model, "claude-cli")
+  off = gptr_register(gptr_router("cheapest", route = function(request, ctx) "fake/fake-1"))
+  withr::defer(off())
+  expect_identical(run_command(rs, "/model cheapest")$out,
+                   "Model: cheapest (used from the first prompt)")
+  s = idle_session()
+  rs2 = repl_state(s, new.env())
+  expect_identical(run_command(rs2, "/model claude-code")$out,
+                   "Model: claude-cli/default (from the next request)")
+  expect_identical(run_command(rs2, "/model codex-cli")$out,
+                   "Model: codex/default (from the next request)")
+})
+
 test_that("/mode on a session appends the mode change for the next turn", {
   local_console_commands()
   s = idle_session()

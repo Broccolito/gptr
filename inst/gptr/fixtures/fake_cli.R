@@ -17,11 +17,13 @@
 #   {"fake":"exit","status":1}                           exit with a status
 #   {"fake":"mcp","method":"tools/call","params":{}}     claude: ask the host over mcp_message
 #   {"fake":"can_use_tool","tool_name":"..","input":{}}  claude: ask the host for permission
-#   {"fake":"mcp_call","tool":"r","arguments":{}}        codex: call gptr's HTTP MCP server
+#   {"fake":"mcp_call","tool":"r","arguments":{}}        codex: start mcp_servers.gptr.command
+#                                                        with its args (gptr's stdio relay) and
+#                                                        call the tool over stdio MCP
 #   {"fake":"write_file","path":"x.txt","text":".."}     codex: write a file in its directory
 # Other lines are printed verbatim after replacing $TOOL_TEXT (text of the last MCP result,
 # JSON-escaped), $THREAD (the codex thread id) and $PROMPT_BYTES (bytes codex read on stdin).
-# Base R, jsonlite and (for mcp_call only) curl. It never reads credentials or calls a model.
+# Base R, jsonlite and (for mcp_call only) processx. It never reads credentials or calls a model.
 
 # `b` when `a` is NULL: gptr's internal infix is not visible in this script, base R has one only
 # from 4.4.0, and a snake_case name needs no lint exception
@@ -280,53 +282,51 @@ if (nzchar(prompt_file)) writeBin(prompt, prompt_file)
 log_line("prompt", bytes = length(prompt), file = prompt_file)
 if (length(argv) >= 3L && identical(argv[[2L]], "resume")) state$thread = argv[[3L]]
 
-mcp_url = function() {
-  hit = grep("^mcp_servers[.]gptr[.]url=", argv, value = TRUE)
-  if (length(hit)) sub("^mcp_servers[.]gptr[.]url=", "", hit[[1L]]) else ""
-}
-mcp_post = function(url, token, body, sid = NULL) {
-  h = curl::new_handle()
-  hdr = list(`Content-Type` = "application/json", Accept = "application/json, text/event-stream",
-             Authorization = paste("Bearer", token), `MCP-Protocol-Version` = "2025-11-25")
-  if (!is.null(sid)) hdr[["Mcp-Session-Id"]] = sid
-  do.call(curl::handle_setheaders, c(list(h), hdr))
-  curl::handle_setopt(h, postfields = to_json(body), followlocation = 0L, timeout = 120L)
-  curl::curl_fetch_memory(url, handle = h)
-}
-mcp_body = function(res) {
-  txt = rawToChar(res$content)
-  Encoding(txt) = "UTF-8"
-  if (!grepl("^[[:space:]]*[{[]", txt)) {
-    lines = strsplit(txt, "\r?\n")[[1L]]
-    txt = paste(sub("^data: ?", "", grep("^data:", lines, value = TRUE)), collapse = "\n")
-  }
-  if_null(from_json(txt), list())
+# The value of a `-c mcp_servers.gptr.<key>=<TOML>` override ("" when absent); the TOML
+# strings and string arrays gptr writes are valid JSON
+mcp_cfg = function(key) {
+  hit = grep(paste0("^mcp_servers[.]gptr[.]", key, "="), argv, value = TRUE)
+  if (length(hit)) sub("^[^=]*=", "", hit[[1L]]) else ""
 }
 mcp_call = function(d) {
-  url = mcp_url()
-  token = Sys.getenv("GPTR_MCP_TOKEN")
-  if (!nzchar(url) || !nzchar(token)) {
+  cmd = mcp_cfg("command")
+  if (!nzchar(cmd)) {
     state$tool_text = "no gptr MCP server"
     log_line("mcp", status = NA, text = state$tool_text)
     return(invisible(NULL))
   }
+  p = processx::process$new(from_json(cmd), as.character(unlist(from_json(mcp_cfg("args")))),
+                            stdin = "|", stdout = "|", stderr = "|", encoding = "UTF-8")
+  ask = function(body) {
+    p$write_input(paste0(to_json(body), "\n"))
+    if (is.null(body$id)) return(NULL)
+    repeat {
+      processx::poll(list(p), 1000L)
+      ln = p$read_output_lines(1L)
+      if (length(ln)) return(if_null(from_json(ln), list()))
+      if (!p$is_alive()) return(list())
+    }
+  }
   params = list(protocolVersion = "2025-11-25",
                 capabilities = structure(list(), names = character()),
                 clientInfo = list(name = "fake-codex", version = "0.0.1"))
-  init = mcp_post(url, token,
-                  list(jsonrpc = "2.0", id = 1L, method = "initialize", params = params))
-  sid = curl::parse_headers_list(init$headers)[["mcp-session-id"]]
-  mcp_post(url, token, list(jsonrpc = "2.0", method = "notifications/initialized"), sid)
-  res = mcp_post(url, token, list(jsonrpc = "2.0", id = 2L, method = "tools/call",
-                                  params = list(name = d$tool, arguments = d$arguments)), sid)
-  body = mcp_body(res)
+  ask(list(jsonrpc = "2.0", id = 1L, method = "initialize", params = params))
+  ask(list(jsonrpc = "2.0", method = "notifications/initialized"))
+  tools = ask(list(jsonrpc = "2.0", id = 2L, method = "tools/list"))$result$tools
+  body = ask(list(jsonrpc = "2.0", id = 3L, method = "tools/call",
+                  params = list(name = d$tool, arguments = d$arguments)))
   content = body$result$content
   state$tool_text = if (length(content)) {
     if_null(content[[1L]]$text, "")
   } else {
     if_null(body$error$message, "")
   }
-  log_line("mcp", status = res$status_code, text = state$tool_text)
+  # Codex closes the server's stdin when it is done; the relay then exits
+  close(p$get_input_connection())
+  p$wait(10000L)
+  if (p$is_alive()) p$kill()
+  log_line("mcp", status = p$get_exit_status(), text = state$tool_text,
+           tools = I(vapply(tools, function(t) if_null(t$name, ""), "")))
   invisible(NULL)
 }
 

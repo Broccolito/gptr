@@ -709,7 +709,6 @@ test_that("tests find no installed CLI: setup.R points gptr.cli_path at no file"
 })
 
 test_that("request_params gives CLI routes the mode and the remaining budget", {
-  withr::defer(pcli_codex_forget("s00000000cc"))
   local_mocked_bindings(setting_get = function(key, session = NULL, default = NULL) {
     if (identical(key, "budget")) list(tokens = 2e6, cost = 5, turns = 10) else default
   })
@@ -732,18 +731,6 @@ test_that("request_params gives CLI routes the mode and the remaining budget", {
   b = pcli_hook_params(list(provider = "codex"), ctx)$params$cli_budget
   expect_null(b$turns)
   expect_null(b$cost)
-})
-
-test_that("request_params ensures gptr's MCP server for a codex session, not for claude", {
-  withr::defer(pcli_codex_forget("s00000000cc"))
-  local_mocked_bindings(setting_get = function(key, session = NULL, default = NULL) default)
-  local_mcp_stub(stub_mcp_handle(port = 54777L))
-  pcli_hook_params(list(provider = "claude-cli"), stub_ctx(api = "cli-claude"))
-  expect_null(pcli_codex_mcp(list(session = "s00000000cc")))
-  pcli_hook_params(list(provider = "codex"), stub_ctx())
-  h = pcli_codex_mcp(list(session = "s00000000cc"))
-  expect_identical(h$port, 54777L)
-  expect_identical(h$env, c(GPTR_MCP_TOKEN = "tok-test-0123456789"))
 })
 
 # ---- stopping CLI children (Task 9) --------------------------------------------------------------
@@ -774,15 +761,11 @@ test_that("agent_end stops a child whose turn is open; session_shutdown always",
   pcli_hook_end(list(status = "idle"), ctx)
   expect_identical(calls$n, 2L)
   st$claude_mcp_file = withr::local_tempfile(lines = "{}")
-  tab = pcli_cache$mcp %||% list()
-  tab$s00000000dd = list(port = 54321L)
-  pcli_cache$mcp = tab
   pcli_hook_shutdown(list(reason = "exit"), ctx)
   expect_identical(calls$n, 3L)
   expect_identical(calls$wait, c(TRUE, FALSE, FALSE))
   expect_false(file.exists(st$claude_mcp_file))
   expect_null(pcli_tracked("s00000000dd"))
-  expect_null(pcli_cache$mcp$s00000000dd)
   pcli_hook_shutdown(list(reason = "gc"), list(session = NULL))
   expect_identical(calls$n, 3L)
 })
@@ -818,7 +801,7 @@ test_that("builtin:cli registers the codex route and its adapter", {
   codex = registry_get("provider", "codex")
   expect_identical(codex$api, "cli-codex")
   expect_identical(codex$type, "cli")
-  expect_true("codex" %in% codex$aliases)
+  expect_true(all(c("codex", "codex-cli") %in% codex$aliases))
   expect_identical(vapply(codex$models, function(m) m$id, ""),
                    c("default", "gpt-6-sol", "gpt-6-luna"))
   a = registry_get("adapter", "cli-codex")

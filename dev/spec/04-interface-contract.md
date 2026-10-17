@@ -67,7 +67,7 @@ made to `03` and `05` so that the three documents agree.
 | IC-16 | `inprocess` adapters return a **generator** pumped by `reactor_task()`, so fake agents interleave deterministically on the reactor (INFRA-16 tests). | `03` §6.1, INFRA-16. |
 | IC-17 | The `minimal` preset texts and the `extended` preset's direct `grep`/`find`/`ls` schemas are fixed verbatim in §9 (minimal texts measured in `final/prompt/`; the three schemas are Pi's, MIT [01 §3.6-3.8]). | `03` §7 gave only the standard texts. |
 | IC-18 | `.gptr/extensions/` (trust-gated `function(gptr)` files) and `.gptr/locks/` are part of the workspace tree. | D-16 extensions; 14 §4.3 document locks. |
-| IC-19 | Model references for the plan routes: provider ids `claude-cli` (alias `claude_code`) and `codex` (alias `codex`); System 1 emulation references are `"emulate:<provider>/<id>"`. | D-15, `03` §8.2-8.4. |
+| IC-19 | Model references for the plan routes: provider ids `claude-cli` (alias `claude_code`) and `codex` (aliases `codex`, `codex-cli`); System 1 emulation references are `"emulate:<provider>/<id>"`. Every resolver (`model_match()`: `peter()`, `/model`, sub-agents, plugin switches) reads a registered provider named alone as its first declared model, after the exact-id and alias steps and before fuzzy matching; a provider that declares no model stays unknown. Alias names compare with `.`, `_` and `-` equivalent, as ids do (P26 IC-79). | D-15, `03` §8.2-8.4. |
 | IC-20 | Session ids `s` + 10 lower hex; entry ids 8 lower hex; block ids 6-16 lower hex with at least one letter; request ids `q` + 12 hex; run ids `u` + 8 hex; transfer/task/timer ids `t<integer>`. | `03` §5.1, 02 §3.1, 14 §3.1. |
 | IC-21 | `gptr_fake_provider()` gains `type = c("chat", "classifier")` so System 1 examples and tests run offline (§12.1). | every export's example must run offline (conventions §4); NS-4 examples need a classifier. |
 | IC-22 | `gptr_context_block()` gains `order = 650L`: `all`-resolving kinds must not order user blocks (rank 3) before the built-in first-message blocks (rank 6). | §7.4 of `03` fixes the first-message order. |
@@ -391,7 +391,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `GPTR_REPLAY` | P08 `replay_mode()` | replay mode below the option (`replay`, `auto`, `live`, `record`) |
 | `GPTR_LIVE_TESTS` | tests | `"true"` enables `test-live-*.R` |
 | `GPTR_SUBAGENT_DEPTH`, `GPTR_WORKER` | P19 | set in worker children; `GPTR_WORKER = "1"` marks a worker process |
-| `GPTR_MCP_TOKEN` | P18/P20 | set only in a child's environment: the bearer token of `gptr_mcp_serve()` |
+| `GPTR_MCP_TOKEN` | P18 | the variable `gptr_mcp_serve()`'s Codex snippet reads its bearer token from; gptr sets it in no process (IC-79) |
 | Provider keys | P05 (vault discovery, P03) | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `XAI_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY`, `VLLM_API_KEY`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` (not secret), `AWS_BEARER_TOKEN_BEDROCK`, `TYPESAFE_API_KEY` (aliases `jev-key`, `JEV_KEY`, `JEV_API_KEY`, `TYPESAFE_KEY` through `gptr_env()`) |
 | `_R_CHECK_PACKAGE_NAME_`, `_R_CHECK_LIMIT_CORES_` | P01 `check_running()` | forced replay outside testthat (examples; IC-45), child pools capped at 2, no supervision |
 | `GPTR_PROJECT_ROOT` | P01 `project_root()` | overrides the project root (tests; IC-63) |
@@ -403,8 +403,8 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 Set by gptr in child processes only (never in the user's session): `NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`,
 `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`, `PYTHONIOENCODING=utf-8`, `PYTHONUNBUFFERED=1` (`helper` profile);
 `R_ENVIRON_USER` and `R_PROFILE_USER` pointing at empty files, and `R_ENVIRON` dropped unless passed explicitly,
-in **every** profile (an Rscript child otherwise re-reads keys from `~/.Renviron`; IC-60); `GPTR_MCP_TOKEN`,
-`GPTR_SUBAGENT_DEPTH`, `GPTR_WORKER` as above. Removed from CLI children (G6 §3.7 verbatim, IC-65): for claude,
+in **every** profile (an Rscript child otherwise re-reads keys from `~/.Renviron`; IC-60); `GPTR_SUBAGENT_DEPTH`,
+`GPTR_WORKER` as above. Removed from CLI children (G6 §3.7 verbatim, IC-65): for claude,
 secret-like names, registered values, `^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDE_PID$)` except the kept
 `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, and with a `billing_env` informational notice
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, `ANTHROPIC_BASE_URL`,
@@ -1423,10 +1423,10 @@ gptr_mcp_serve(tools = c("r", "read", "edit", "write"), envir = parent.frame(), 
 Serves the live session over loopback Streamable HTTP (both MCP eras): binds `127.0.0.1` on `port` (`NULL` = a
 free port from `port_candidates()`, never `httpuv::randomPort()`, IC-61), requires a 192-bit bearer token
 (`openssl::rand_bytes(24)`, hex), validates `Origin`, and runs every call through the permission gate as a nested
-call of a dedicated session (`kind = "chat"`, label `mcp`) whose home is `envir`. The listening socket is shared:
-CLI children get their own tokens bound to their sessions through `mcp.serve_ensure(session)` (IC-58). Needs httpuv, later and openssl (`gptr_error_missing_package`). Returns a
+call of a dedicated session (`kind = "chat"`, label `mcp`) whose home is `envir`. gptr's own CLI routes do not use
+it (IC-79). Needs httpuv, later and openssl (`gptr_error_missing_package`). Returns a
 `gptr_mcp_handle` (§5.11): `$url`, `$port`, `$token_env` (the name `GPTR_MCP_TOKEN`; the token itself is only
-placed in child environments and in `$config` snippets marked as secret), `$config` (client snippets for Codex,
+placed in `$config` snippets marked as secret), `$config` (client snippets for Codex,
 Claude Code, Claude Desktop, Cursor with a tool timeout of at least 3,600 s), `$stop()`. One server per process:
 calling again returns the running handle; `stop = TRUE` stops it and returns `invisible(NULL)`. Requests are served
 while the outermost reactor pump runs (`later::run_now(0)` at depth 1, IC-57) or at an idle console, where a
@@ -1438,7 +1438,7 @@ only while the server runs, in an environment binding reset by `$stop()`). Emits
 # starts a server (roxygen wraps it in \dontrun{})
 if (interactive()) {
   h = gptr_mcp_serve(envir = globalenv())
-  h$config$codex                      # a client snippet (the token comes from the child's environment)
+  h$config$codex                      # a client snippet: `$args`, and `$env` to start Codex with
   gptr_mcp_serve(stop = TRUE)
 }
 ```
@@ -2181,8 +2181,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `skill.catalog`, `skill.body` | P17 | `skills =` preloads (P08/P07), `peter$search()` (P10) | `function(session, budget) chr(1)`; `function(name) list(text, dir)` |
 | `plugin.enable` | P17 | `peter(plugins =, extensions =)` (P08) | `function(name, rank, session = NULL) invisible(lgl(1))` |
 | `mcp.catalog` | P18 | `peter$search()` (P10) | `function(session, budget) chr(1) or NULL` |
-| `mcp.dispatch_local` | P18 | `cli-claude` (P20) | `function(message, session) list` (JSON-RPC response) |
-| `mcp.serve_ensure` | P18 | `cli-codex` (P20), `cli` backend (P19) | `function(session) <gptr_mcp_handle>` |
+| `mcp.dispatch_local` | P18 | `cli-claude`, `cli-codex` (P20) | `function(message, session) list` (JSON-RPC response) |
 | `bg.register` | P21 | `peter(background = TRUE)` (P08), the pause menu (P14) | `function(session) invisible(session)` |
 | `check.adapter` | P12 | `gptr_check()` (P02) | `function(adapter, fixtures = NULL) <gptr_check>` |
 | `trust.get` | P08 | P03 (`.env` discovery), P07 (SYSTEM.md, instruction authority), P17, P18 (IC-33) | `function(path = getwd()) lgl(1)`; fallback `FALSE` |
@@ -2879,14 +2878,14 @@ plugin_resolve("gptrpanel")
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `builtin_mcp(gptr)` | `mcp-namespace.R` | registers the `mcp` namespace provider, the `mcp` section (T1, order 840), per-tool `direct` tool specs at session freeze, `mcp_server` specs from configs, the services `mcp.catalog`, `mcp.dispatch_local`, `mcp.serve_ensure` | P02 load |
+| `builtin_mcp(gptr)` | `mcp-namespace.R` | registers the `mcp` namespace provider, the `mcp` section (T1, order 840), per-tool `direct` tool specs at session freeze, `mcp_server` specs from configs, the services `mcp.catalog`, `mcp.dispatch_local` | P02 load |
 | `mcp_config_all(project = project_root())` | `mcp-config.R` | list of server specs (§11.7 shape) with `source`, `trusted`, `also_in` | P18 |
 | `mcp_connect(spec)` | `mcp-client.R` | a `gptr_mcp_conn` (era probe with `gptr.mcp_probe_timeout`, cached per spec hash for 7 days; stdio through `proc_spawn()` with `child_env("mcp")` + the spec's expanded `env`, stderr read by gptr and appended redacted to `tempdir()/gptr/mcp-logs/` unless `gptr.mcp_debug`, IC-70; HTTP on the reactor with `followlocation = 0L`) | P18 |
 | `mcp_tools(conn, refresh = FALSE)` | `mcp-client.R` | list of `list(name, title, description, input_schema, annotations)` (paginated; disk cache `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json`) | P18 |
 | `mcp_call(conn, tool, args, timeout = NULL, on_progress = NULL)` | `mcp-client.R` | `list(content, structured, is_error, text, images, elapsed)`; progress re-arms the idle timer; timeouts and interrupts send `notifications/cancelled`; MRTR at most 5 rounds (elicitation through `ui$questions()`, roots = the project directory, sampling refused) | P18 |
 | `mcp_close(conn)` | `mcp-client.R` | stdin closed, 2 s grace, `kill_all()` | P18 |
-| `mcp_dispatch_local(message, session)` (service) | `mcp-server.R` | answers one JSON-RPC message (both eras) with the session's `r`, `read`, `edit`, `write` through `dispatch_nested()`-equivalent gating, evaluating in the session's run evaluation environment with its mode and rules; the single gate for the claude route (IC-65); returns the response list | P20 (through `opts$mcp_dispatch`, IC-33) |
-| `mcp_serve_token(session)` | `mcp-server.R` | issues a bearer token bound to `session` on the shared server and revokes it when the session's child exits (behind `mcp.serve_ensure`, IC-58) | P18 |
+| `mcp_dispatch_local(message, session)` (service) | `mcp-server.R` | answers one JSON-RPC message (both eras) with the session's frozen tool declarations (`session_data(s)$frozen$tools_json`, session-scoped lookups, `r` with its MCP schema; `r`, `read`, `edit`, `write` only before a freeze, IC-79), validating calls against the served schema and running a live run's `tool_call` hooks before `dispatch_nested()`-equivalent gating, evaluating in the session's run evaluation environment with its mode and rules; the single gate for both CLI routes (IC-65); returns the response list | P20 (through `opts$mcp_dispatch`, IC-33) |
+| `mcp_serve_token(session)` | `mcp-server.R` | issues the bearer token of `gptr_mcp_serve()`'s dedicated session, revoked at its shutdown (IC-58) | P18 |
 | `oauth_flow(issuer_or_provider, scopes, client)` | `auth-oauth.R` | PKCE S256, loopback (port from `port_candidates()`) or paste callback, locked refresh; refuses authorization-server metadata without `code_challenge_methods_supported` or without S256; validates `iss` (RFC 9207) when advertised with gptr's own callback reader; state and redirect checks (IC-71); tokens registered as secrets | P18 |
 
 Example calls:
@@ -3079,7 +3078,7 @@ reactor_run_remove(run)
 | `reactor_timer(at, fn)` | calls `fn()` once at `reactor_now() >= at`; returns an id |
 | `reactor_task(fn)` | calls `fn()` once per iteration until it returns `FALSE` (used by `inprocess` adapters and the background pump) |
 | `reactor_enqueue_tool(run, fn)` | appends `fn` (a zero-argument function executing one R-evaluating tool) to the FIFO; at most one runs per iteration, only for runs in `allow_runs` of the innermost pump |
-| `reactor_pump(...)` | the only blocking wait in gptr; it tracks its depth (IC-57). One iteration: admit queued transfers; `processx::poll(c(processx::curl_fds(curl::multi_fdset(pool)), <pipes>), ms = min(next timer, slice_ms))`; `curl::multi_run(timeout = 0)`; read ready pipes and drain pending stdin buffers (IC-60); fire due timers; run tasks; `later::run_now(0)` only at depth 1, or at depth > 1 when `allow_runs` holds a CLI child served by the MCP server (whose handler then refuses requests of runs outside `allow_runs` with the retryable JSON-RPC error `-32002`); run at most one FIFO tool whose run is in `allow_runs`. `allow_runs` defaults to `NULL` (all runs) only when `run_current()` is `NULL`, else to `character()`; a nested pump (a sub-agent, System 1 or MCP call made inside an `r` evaluation) passes the ids it waits for. Loops until `until()` is `TRUE` (returns `TRUE`) or `timeout` seconds (returns `FALSE`). R interrupts propagate out of the pump to the caller's interrupt policy |
+| `reactor_pump(...)` | the only blocking wait in gptr; it tracks its depth (IC-57). One iteration: admit queued transfers; `processx::poll(c(processx::curl_fds(curl::multi_fdset(pool)), <pipes>), ms = min(next timer, slice_ms))`; `curl::multi_run(timeout = 0)`; read ready pipes and drain pending stdin buffers (IC-60); fire due timers; run tasks; `later::run_now(0)` only at depth 1 (IC-79); run at most one FIFO tool whose run is in `allow_runs`. `allow_runs` defaults to `NULL` (all runs) only when `run_current()` is `NULL`, else to `character()`; a nested pump (a sub-agent, System 1 or MCP call made inside an `r` evaluation) passes the ids it waits for. Loops until `until()` is `TRUE` (returns `TRUE`) or `timeout` seconds (returns `FALSE`). R interrupts propagate out of the pump to the caller's interrupt policy |
 | `reactor_cancel(ids)` | `curl::multi_cancel()` for transfers, removal of timers/tasks/FIFO items; for process watchers: interrupt, grace, `kill_all()`; `invisible(<n cancelled>)` |
 | `reactor_run_add(run)`, `reactor_run_remove(run)` | strong references to active runs (INFRA-15: the only run state the reactor holds) |
 
@@ -3151,14 +3150,14 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   from `usage` and `total_cost_usd` as an estimate, route `plan-cli`); `rate_limit_event` updates the provider's
   plan status. Interrupt: `{"type":"control_request","request_id":…,"request":{"subtype":"interrupt"}}`, then
   `kill_all()` after the grace period [07 §3.9-3.10].
-- **`cli-codex`** (provider `codex`, alias `codex`). One `codex exec --json --ignore-user-config
-  --skip-git-repo-check -m <full id> -C <wd> -c mcp_servers.gptr.url=http://127.0.0.1:<port>/mcp -c
-  mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN -c mcp_servers.gptr.default_tools_approval_mode="approve" -c
-  mcp_servers.gptr.required=true -c mcp_servers.gptr.tool_timeout_sec=3600 --sandbox <read-only | workspace-write>
-  -` per turn (resume: `codex exec resume <thread> --json ... -c sandbox_mode=<mode> -`, IC-65), the prompt on
-  stdin (`write_all()`), `GPTR_MCP_TOKEN` (a token bound to this session, IC-58) only in the child's environment
-  (`child_env("cli-codex", set =)`); the MCP server comes from the `mcp.serve_ensure` service (P18); without httpuv/later/openssl the route runs on files
-  only with a `notice`. Events `thread.started`, `turn.started`, `item.started|updated|completed`
+- **`cli-codex`** (provider `codex`, aliases `codex`, `codex-cli`). One `codex exec --json --ignore-user-config
+  --skip-git-repo-check -m <full id> -C <wd> -c mcp_servers.gptr.command="<Rscript>" -c
+  mcp_servers.gptr.args=["--vanilla","<mcp_relay.R>","<mailbox>","<seconds>"] -c
+  mcp_servers.gptr.default_tools_approval_mode="approve" -c mcp_servers.gptr.required=true -c
+  mcp_servers.gptr.startup_timeout_sec=60 -c mcp_servers.gptr.tool_timeout_sec=3600 --sandbox <read-only |
+  workspace-write> -` per turn (resume: `codex exec resume <thread> --json ... -c sandbox_mode=<mode> -`, IC-65), the
+  prompt on stdin (`write_all()`), the child environment `child_env("cli-codex")` with no token; gptr's tools come
+  through the stdio relay of IC-79, in every installation. Events `thread.started`, `turn.started`, `item.started|updated|completed`
   (`agent_message` -> text, `reasoning` -> thinking, `mcp_tool_call`/`command_execution` -> informational
   `tool_execution_*` events), `turn.completed{usage}`, `turn.failed{error}`, `error` [08 §2.E]; gptr counts turns
   and cancels at the cap, with `gptr.cli_turn_timeout` per exec. Sandbox mapping (IC-65): `plan`, `manual` and
@@ -4603,9 +4602,9 @@ step list before its first action.
 - The reactor tracks its pump depth. A nested pump (depth > 1) runs FIFO tools only of the runs it was given in
   `allow_runs`; its default is `if (is.null(run_current())) NULL else character()`, so System 1 and MCP HTTP calls
   made from inside an `r` evaluation never run a sibling's R tool.
-- `later::run_now(0)` is called only at depth 1, or at depth > 1 when `allow_runs` contains a CLI child served by
-  the MCP server; in that case the MCP handler answers a request whose token is bound to a run outside
-  `allow_runs` with a retryable JSON-RPC error (`-32002`, "gptr is busy; retry") instead of evaluating.
+- `later::run_now(0)` is called only at depth 1, so an HTTP request to `gptr_mcp_serve()` is answered only by the
+  outermost pump or at an idle console. (P26 IC-79: the served-run mark, the `-32002` busy error and the reader of
+  the innermost `allow_runs` are gone; both CLI routes queue served `tools/call`s on the run's tool FIFO.)
 - The background pump is a no-op while the reactor is on the stack (depth > 0).
 - Asks raised outside a blocking gptr call (background runs, `gptr_mcp_serve()` at an idle console) never
   prompt from a `later` callback: a background run moves to status `waiting` (a notice; `gptr_jobs()` shows it)
@@ -4616,11 +4615,11 @@ step list before its first action.
   only after the first evaluation returns.
 
 **IC-58 One MCP server, one token per client.** (req-18) `gptr_mcp_serve()` keeps one listening socket per
-process but issues a separate 192-bit bearer token per client: `mcp.serve_ensure(session)` returns a handle whose
-token is bound to that session (the CLI child's session). The server maps token -> session and evaluates each
-request in that session's run evaluation environment (so a fork's CLI child evaluates in the fork overlay) with
-its mode, rules, budget and usage roll-up; tokens are revoked when the child exits. The explicit user handle
-keeps its dedicated session. P18/P20 tests cover a fork and a plan-mode parent.
+process and a 192-bit bearer token bound to its dedicated session; the server maps token -> session and evaluates
+each request in that session's run evaluation environment with its mode, rules, budget and usage roll-up; the
+token is revoked at that session's shutdown. CLI children get no tokens (P26 IC-79): the claude route's `sdk`
+transport and the codex route's stdio relay reach `mcp_dispatch_local()` with the child's session, so a fork's
+CLI child evaluates in the fork overlay and a plan-mode parent gates in plan mode (P18/P20 tests).
 
 **IC-59 Session store.** (cran-1, fid-3, safe-10, req-3, cran-2)
 
@@ -4772,14 +4771,16 @@ document are exact.
   `gptr_error_cli_version`. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with
   `gptr_error_billing`. The wire log is per session (`cache/tmp/wire-<session id>.jsonl`).
 - **codex** argv per turn: `codex exec --json --ignore-user-config --skip-git-repo-check -m <full id> -C <wd>
-  -c mcp_servers.gptr.url=http://127.0.0.1:<port>/mcp -c mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN
+  -c mcp_servers.gptr.command="<Rscript>" -c mcp_servers.gptr.args=["--vanilla","<mcp_relay.R>","<mailbox>","<seconds>"]
   -c mcp_servers.gptr.default_tools_approval_mode="approve" -c mcp_servers.gptr.required=true
-  -c mcp_servers.gptr.tool_timeout_sec=3600 --sandbox <mode> -`; resume: `codex exec resume <thread> --json ...
+  -c mcp_servers.gptr.startup_timeout_sec=60 -c mcp_servers.gptr.tool_timeout_sec=3600 --sandbox <mode> -` (P26
+  IC-79: the stdio relay replaced `mcp_servers.gptr.url`, `bearer_token_env_var` and `GPTR_MCP_TOKEN`); resume: `codex exec resume <thread> --json ...
   -c sandbox_mode=<mode> -` (resume rejects `-s` and `-C`) [08 §2.E, line 594-600, fact-check 16]. gptr's gate
   stays the approval authority. The child environment removes `^(CODEX_MANAGED_|CODEX_SANDBOX)`, `CODEX_API_KEY`,
   `CODEX_ACCESS_TOKEN`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` and keeps `CODEX_HOME`. The evidence note is corrected:
   the in-session HTTP MCP route was verified through app-server listing and calls without a model; the verified
-  model-driven MCP call used `default_tools_approval_mode = "approve"` and `required = true` [08 §2.G].
+  model-driven MCP call used an Rscript stdio server, `default_tools_approval_mode = "approve"` and
+  `required = true` [08 §2.G].
 - **Sandbox mapping**: `plan`, `manual` and `edits` -> `read-only` (file changes go through gptr's gated
   `write`/`edit` over MCP, so edits-mode approval and checkpoints apply); `auto` and `yolo` (IC-78) ->
   `workspace-write`, never `danger-full-access`, so Codex's own shell writes only in the workspace and the
@@ -4791,7 +4792,7 @@ document are exact.
 - Codex has no turn cap flag: gptr counts `turn.completed`/`item.completed` events and cancels at the cap; each
   exec has a wall-clock limit (`gptr.cli_turn_timeout`, 3600 s).
 - Live tests (`GPTR_LIVE_TESTS=true`) run Codex in a non-git temporary directory and require it to call the gptr
-  MCP `r` tool.
+  MCP `r` tool; the test needs no optional package (IC-79).
 
 ### 15.7 Budgets, evaluation and tokens
 
@@ -5064,4 +5065,31 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   gate off for the rest of the R process, and a control-file write (for example a line in `~/.Rprofile` that
   sets `gptr.*` options) runs and can switch it off for later R processes, accepted risks like computed paths.
 
-**IC-79 Codex stdio relay and the CLI tool set** (P26 Task 9). TBD by P26 Task 9.
+**IC-79 Codex stdio relay and the CLI tool set** (P26 Task 9).
+
+- Codex reaches gptr only through `inst/gptr/mcp_relay.R` (base R): Codex starts `Rscript --vanilla <relay>
+  <mailbox> <seconds>` (IC-65 argv; paths as TOML basic strings with `\` and `"` escaped; `<seconds>` is
+  `gptr.cli_turn_timeout`). Each exec gets a fresh 0700 mailbox under `tempdir()`. The relay copies one stdin line
+  to `<mailbox>/req` and waits for `<mailbox>/resp` (both appear by a rename; an empty line answers a notification
+  and prints nothing); it is sequential and exits at stdin EOF, when the mailbox is gone, or when an answer takes
+  longer than `<seconds>`, and it reads an answer a Windows lock held back at the next poll. No socket, token or
+  optional package is involved; `gptr_mcp_serve()` for external clients is unchanged.
+- In the session a reactor task of the exec's run (`pcli_codex_relay`, polled every 20 ms) answers each request
+  through the helper the claude route shares (`pcli_mcp`): a missing dispatcher, an aborted run
+  and a turn that is over are refused; `tools/call` waits on the run's tool FIFO (IC-57) and a call whose turn
+  ended there is never evaluated (D-104). When the turn is over the task removes the mailbox and itself.
+- `mcp_dispatch_local()` serves and validates the session's frozen tool declarations (the array an API provider
+  gets: the preset, `tools.enable`/`tools.disable`, `ask` when a person can answer, extension and MCP-client
+  direct tools, session-scoped specs; `r` with `mcp_r_schema`), and the four defaults only before a freeze. A
+  served call made while a run is live runs that run's `tool_call` hooks (P06's `tool_call_hook`), then the gate.
+  A long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a
+  refreeze is refused at `tools/call`.
+- The OpenAI-compatible, Responses and Google adapters decide tools with one helper (`adp_tools_on`): a model
+  whose `tool_call` is `FALSE` gets no tools (IC-74 unchanged), and when that drops a non-empty array gptr gives one
+  `gptr_message_notice` per model naming `tool_call = TRUE` and the `gptr_config(providers = ...)` declaration.
+- Model references: `model_match()` applies IC-19's provider-alone rule; `/model` before the first prompt checks
+  the reference with `model_canonical()` (a registered router name passes, as at the first prompt) and keeps the
+  text as typed; `codex-cli` is an alias of `codex`. The two
+  console and MCP edges (`cmd_model()` -> `model_canonical()`, `mcp_serve_call()` -> `tool_call_hook`) are
+  contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
+  the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).

@@ -2301,9 +2301,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   gptr-config, subagent-*, cli-*, ext-*, injection-e2e. Evidence: progress/P26.md Task 8.
 
 ## D-191 - P26 Codex stdio relay; CLI routes serve the session's tools; model references (2026-10-16)
-- Rule: TBD by P26 Task 9.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 9.
+- Rule: Codex always reaches gptr through `inst/gptr/mcp_relay.R` (base R): each line passes a fresh 0700 mailbox
+  (`req`/`resp` by rename) to a reactor task of the run that answers through `pcli_mcp()`, shared with the claude
+  route (FIFO, D-104 refusals). No socket, token or Suggests; gone: the files-only fallback, `mcp.serve_ensure`,
+  CLI tokens, the served-run mark, `reactor_allow_runs()` and the `-32002` busy rule. `gptr_mcp_serve()` unchanged.
+- Rule: both CLI routes are served and validated against the session's frozen tool array (four defaults before a
+  freeze); a live run's `tool_call` hooks run first. `adp_tools_on()` gives one notice per model whose tools are
+  dropped (IC-74 unchanged). A registered provider alone is its first model in `model_match()` (before fuzzy),
+  alias names normalise like ids, `/model` checks before the first prompt; alias `codex-cli`.
+- Contract-visible: 03 §1.3, §2.3, §6.1, §6.14, §8.3, §8.4, §9.2, §10.4, §12.4; 04 §3.2, §6.3, §7.0, §7.18, §8.2,
+  §8.5, IC-19, IC-57, IC-58, IC-65, IC-79; 05 P18, P20; P19, P20 notes; `?gptr_mcp_serve`, `?gptr_options`;
+  language-models vignette; layering edges console -> `model_canonical()`, mcp -> `tool_call_hook()`.
+- Tests: cli-*, mcp-*, http-reactor, catalog-models, console-commands, provider-openai-completions, aaa-state.
 
 ## D-192 - P26 Codex progress and claude-cli tool calls while they run (2026-10-16)
 - Rule: TBD by P26 Task 10.
