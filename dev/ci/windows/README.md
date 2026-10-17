@@ -25,5 +25,9 @@ Expected: 46 pass, 0 failures/warnings/skips.
 Baseline passing run `38993976551`: release 46m24s, oldrel-4 51m27s. A newer main
 release run took 33m29s; hosted-runner variation matters. Two file workers alone
 passed release in 31m54s and missed the target. Independent serial shards and removal
-of redundant native execution are measured separately; complete production-workflow
-timing and aggregate coverage are still pending validation. Target: <30m, preferably <20m.
+of redundant native execution are measured separately. The exact production workflow
+passed all eight checks and both required-context coverage audits in 23m00s, including
+setup and aggregation, in run `39004439821` at `ee38b22`. Validation-only callers are
+excluded from the clean branch. This meets the <30m floor; <20m is not yet stable.
+The unmodified serial CRAN-mode check is still running in `39002733279`; its package
+inputs are identical (only excluded CI files changed after that run started).
