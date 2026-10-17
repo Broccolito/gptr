@@ -1034,8 +1034,8 @@ their files in `dev/.validation/scratch/lanes-current.txt` (empty now).
   declarations sent; D-075).
 - D-019 item 5: processx's stdin write blocks on Windows (a pause, not a deadlock, where children read
   first; WIN-1 shows workers are safe, D-179). Decide before large stdin payloads go to Windows children.
-- CRAN check time: under CRAN conditions (`NOT_CRAN` unset) the tests took 284 s on this Mac after PERF-2; the
-  slowest is the report-budget test of `test-subagent-team.R` (about 48 s). win-builder shows CRAN's real time.
+- CRAN check time: under CRAN conditions (`NOT_CRAN` unset) the tests took 284 s on this Mac after PERF-2;
+  the `cran-mode` job runs them serially on R-devel. win-builder shows CRAN's real time.
 - Windows open item (WIN-2): concurrent fake CLIs append to one log file (INFRA-19 race, once).
 - Hosted timing and flake watch (D-011: never loosen silently): `progress/infra.md` "Open hosted
   items" (INFRA-01, INFRA-23, `test-proc-supervise.R:89`, Chrome and Windows detritus NOTEs). Hosted

@@ -185,7 +185,7 @@ test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-
   jobs = yaml::read_yaml(path)$jobs
   expect_setequal(
     names(jobs),
-    c("R-CMD-check", "no-suggests", "c-locale", "copy-safety", "connections", "bench")
+    c("R-CMD-check", "no-suggests", "c-locale", "cran-mode", "copy-safety", "connections", "bench")
   )
   combos = vapply(jobs[["R-CMD-check"]]$strategy$matrix$config, function(x) {
     paste(x$os, x$r)
@@ -196,6 +196,7 @@ test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-
   ) %in% combos))
   expect_false(jobs[["no-suggests"]]$env[["_R_CHECK_FORCE_SUGGESTS_"]])
   expect_identical(jobs[["c-locale"]]$env[["LC_ALL"]], "C")
+  expect_false(jobs[["cran-mode"]]$env[["NOT_CRAN"]])
   expect_setequal(unlist(jobs[["copy-safety"]]$strategy$matrix$r), c("release", "devel"))
   copy_steps = vapply(jobs[["copy-safety"]]$steps, function(s) s$run %||% "", "")
   expect_true(any(grepl("filter = \"copy\"", copy_steps, fixed = TRUE)))
@@ -215,7 +216,7 @@ test_that("hosted CI jobs are bounded and a crashed R CMD check cannot pass", {
     expect_false(is.null(jobs[[name]][["timeout-minutes"]]), label = name)
   }
   # rcmdcheck reported success when R CMD check aborted before writing a status line
-  for (name in c("R-CMD-check", "no-suggests", "c-locale")) {
+  for (name in c("R-CMD-check", "no-suggests", "c-locale", "cran-mode")) {
     steps = jobs[[name]]$steps
     uses = vapply(steps, function(s) s$uses %||% "", "")
     runs = vapply(steps, function(s) s$run %||% "", "")
