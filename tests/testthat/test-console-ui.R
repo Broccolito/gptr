@@ -41,6 +41,14 @@ test_that("console select preserves title line feeds but escapes other controls 
   expect_false(grepl("\033", text, fixed = TRUE))
 })
 
+test_that("a console select outside a run opens its own block in the margin (D-186)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  out = console_try(function() ui_console_select("Rewind to", c("a", "b")), "1")
+  expect_identical(out$shown, c("", "  Rewind to", "", "  1: a", "  2: b", ""))
+})
+
 test_that("the one-line prompt shows the first line, +N more lines and every flagged call", {
   root = local_project()
   # R's parser refuses bidi controls inside string literals in UTF-8 locales, so the payload

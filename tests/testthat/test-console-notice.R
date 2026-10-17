@@ -51,9 +51,11 @@ test_that("a CLI notice clears before delivery and the pending spinner resumes",
     }, type = "message")
   })
   expect_false(observed$shown)
-  expect_length(out, 1L)
-  expect_true(startsWith(out,
-    paste0("\r", strrep(" ", 79L), "\rThe claude-cli route is experimental:")))
+  expect_true(startsWith(out[[1L]],
+    paste0("\r", strrep(" ", 79L), "\r  The claude-cli route is experimental:")))
+  out[[1L]] = sub("^\r +\r", "", out[[1L]])
+  expect_true(all(startsWith(out, "  ")))
+  expect_true(all(nchar(out, type = "width") <= 78L))
   expect_identical(err, character())
   expect_s3_class(observed$condition, "gptr_message_notice")
   expect_identical(observed$value, 17L)
@@ -108,8 +110,10 @@ test_that("native R GUI notices close the redraw row before ordinary message del
       observed$shown = sp$shown
     }), type = "message")
   })
-  expect_identical(out, c(paste0("\r", strrep(" ", 39L), "\r"),
-                          strrep("long notice ", 12L)))
+  expect_identical(out[[1L]], paste0("\r", strrep(" ", 39L), "\r"))
+  expect_true(all(startsWith(out[-1L], "  ")))
+  expect_true(all(nchar(out[-1L]) <= 38L))
+  expect_identical(paste(trimws(out[-1L]), collapse = " "), trimws(strrep("long notice ", 12L)))
   expect_identical(err, character())
   expect_s3_class(observed$condition, "gptr_message_notice")
   expect_false(observed$shown)
@@ -123,6 +127,34 @@ test_that("native R GUI notices close the redraw row before ordinary message del
   tryCatch(console_before_message(list(w$run)), finally = sink())
   expect_identical(tail(rawConnectionValue(bytes), 2L), charToRaw("\r\n"))
   expect_identical(utils::capture.output(console_before_message(list(w$run))), character())
+})
+
+test_that("notices on an interactive console wrap inside the two-column margin (D-186)", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(quiet = FALSE, verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  text = trimws(strrep("word ", 30L))
+  observed = new.env(parent = emptyenv())
+  out = utils::capture.output(withCallingHandlers(gptr_inform(text, "notice"),
+    gptr_message_notice = function(cnd) observed$message = conditionMessage(cnd)))
+  expect_identical(observed$message, paste0(text, "\n"))
+  expect_gt(length(out), 1L)
+  expect_true(all(startsWith(out, "  ")))
+  expect_true(all(nchar(out) <= 38L))
+  expect_identical(paste(trimws(out), collapse = " "), text)
+  nested = utils::capture.output(gptr_inform(paste0("    - ", text), "notice"))
+  expect_gt(length(nested), 1L)
+  expect_true(all(startsWith(nested, "      ")))
+  expect_true(all(nchar(nested) <= 38L))
+  expect_identical(utils::capture.output(console_notice("[gptr] a  b")), "  [gptr] a  b")
+  # NO_COLOR keeps the layout; Rscript (verbosity 1, a terminal stderr) and a non-dynamic
+  # console print as before
+  withr::with_envvar(c(NO_COLOR = "1"),
+                     expect_identical(utils::capture.output(gptr_inform(text, "notice")), out))
+  withr::with_options(list(gptr.verbose = 1L),
+                      expect_identical(utils::capture.output(gptr_inform(text, "notice")), text))
+  withr::local_options(cli.dynamic = FALSE)
+  expect_identical(utils::capture.output(gptr_inform(text, "notice")), text)
 })
 
 test_that("messages keep redaction, metadata and caller handlers", {

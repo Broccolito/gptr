@@ -1837,6 +1837,21 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.
+  Where the renderer is active (verbosity 2 on a dynamic TTY; `capture.output()` of an
+  interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
+  lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
+  width - 4; one blank line separates text, tool, notice, prompt and status blocks (and two
+  prompts) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
+  the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; only in R GUIs an LF
+  follows a cleared row). There nested lists keep their indentation, pipe tables are aligned
+  (verbatim when malformed or too wide) and a reply's leading, trailing and repeated blank lines
+  collapse; `NO_COLOR` removes colours and styles only. Rscript (verbosity 1), knitr, jsonl and
+  tests (verbosity 0) and non-dynamic outputs (pipes, Jupyter) keep the plain layout (no margin,
+  block gaps, table alignment or notice wrapping). Styling adds
+  italics at token edges, dim link URLs, quotes and rules, bold headings (H1 underlined); R lines
+  that parse are highlighted by `cli::code_highlight()`, other R lines and known languages by a
+  light highlighter (strings, numbers, comments). The console UI itself ends partial lines and
+  clears waiting rows, keeping their task, before it prompts (D-186).
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
   `/compact [focus]`, `/cost`, `/context` (token ledger), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt

@@ -171,15 +171,19 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
                              allow_other = FALSE, read = ui_console_read) {
+  # in a run in the console margin console_before_message() writes the block's separator
+  run = console_before_message(kind = "prompt")
+  pad = console_pad()
   labels = as.character(unlist(choices))
-  msg_verbatim(c("", console_escape(title),
+  msg_verbatim(c(if (!run || !nzchar(pad)) "",
+                  gsub("(^|\n)", paste0("\\1", pad), console_escape(title)),
                   ui_escape(if (length(details)) paste0("  | ", details)), "",
                   ui_escape(sprintf("  %d: %s", seq_along(labels), labels)), ""))
   hint = c(if (multiple) "numbers separated by commas" else "a number",
            if (allow_other) "or type your own answer",
            if (length(default)) paste0("Enter = ", paste(labels[default], collapse = ", ")))
   for (attempt in seq_len(5L)) {
-    ans = read(ui_escape(paste0("Choose (", paste(hint, collapse = "; "), "): ")))
+    ans = read(ui_escape(paste0(pad, "Choose (", paste(hint, collapse = "; "), "): ")))
     if (is.na(ans)) return(NA_integer_)
     if (!nzchar(trimws(ans)) && length(default)) return(as.integer(default))
     idx = ui_parse_choice(ans, labels, multiple)
@@ -193,18 +197,22 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
 #' Console input(); NA = cancelled; a secret is asked through RStudio's masked dialog there
 #' @noRd
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
+  console_before_message(kind = "prompt")
   if (isTRUE(secret) && ui_rstudio()) {
     ans = tryCatch(rstudioapi::askForPassword(prompt), error = function(e) NULL)
     return(if (rlang::is_string(ans)) as_utf8(ans) else NA_character_)
   }
-  ans = read(ui_escape(paste0(prompt, if (nzchar(default)) paste0(" [", default, "]"), ": ")),
+  ans = read(ui_escape(paste0(console_pad(), prompt,
+                              if (nzchar(default)) paste0(" [", default, "]"), ": ")),
              secret = isTRUE(secret))
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
 
-#' Console permission(): the one-line prompt of NS-1, `?` for the detail view
+#' Console permission(): the one-line prompt of NS-1, `?` for the detail view; every console
+#' prompt first ends partial answer lines and clears waiting rows (D-186)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
+  console_before_message(kind = "prompt")
   can = ui_can_remember(request)
   opts = if (can) "[y]es / [a]lways / [n]o / [?]" else "[y]es / [n]o / [?]"
   msg_verbatim(ui_permission_lines(request))

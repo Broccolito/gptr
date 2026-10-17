@@ -98,7 +98,7 @@ test_that("a foreground launch closes the thinking row before stderr and resumes
         17L
       }, list(w$run))
     }, type = "message")
-    expect_identical(observed$before_stderr, paste0("\r", strrep(" ", 39L), "\r\n"))
+    expect_identical(observed$before_stderr, paste0("\r", strrep(" ", 39L), "\r"))
     expect_false(observed$shown)
     expect_identical(err, "SYNTHETIC-NATIVE-DIAGNOSTIC")
     expect_identical(observed$value, 17L)
@@ -132,8 +132,26 @@ test_that("launch observation preserves genuine stderr and the original conditio
     expect_identical(err, "SYNTHETIC-GENUINE-STDERR")
     expect_identical(observed$error, original)
     expect_false(w$rec$spinner$shown)
-    expect_identical(tail(rawConnectionValue(bytes), 2L), charToRaw("\r\n"))
+    expect_identical(rawToChar(rawConnectionValue(bytes)), paste0("\r", strrep(" ", 39L), "\r"))
   })
+})
+
+test_that("a launch boundary ends the waiting row with a line feed only in R GUIs (D-186)", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L, quiet = FALSE)
+  withr::local_options(cli.dynamic = TRUE)
+  for (frontend in c("terminal", "rgui")) {
+    local_mocked_bindings(front_end = function() frontend)
+    w = launch_record()
+    utils::capture.output(launch_request(w))
+    launch_capture(function(bytes) {
+      with_interrupt_policy(function() signalCondition(launch_condition()), list(w$run))
+      expect_identical(rawToChar(rawConnectionValue(bytes)),
+                       paste0("\r", strrep(" ", 39L), "\r", if (frontend == "rgui") "\n"),
+                       info = frontend)
+    })
+    console_drop(w$run$id)
+  }
 })
 
 test_that("nested and background launches do not inject foreground display bytes", {
@@ -195,7 +213,7 @@ test_that("nested policies clear once and inactive policies emit no boundary out
       signalCondition(launch_condition())
     }, list(w$run))
     expect_identical(rawToChar(rawConnectionValue(bytes)),
-      paste0("\r", strrep(" ", 39L), "\r\n"))
+      paste0("\r", strrep(" ", 39L), "\r"))
   })
   expect_identical(utils::capture.output(invisible(signalCondition(launch_condition()))),
     character())
@@ -250,7 +268,7 @@ test_that("bare command lookup closes the thinking row before its native diagnos
     }, type = "message")
     expect_identical(observed$order, c("boundary", "lookup", "constructor", "owned"))
     expect_identical(observed$command, "gptr-synthetic-bare")
-    expect_identical(observed$before_stderr, paste0("\r", strrep(" ", 39L), "\r\n"))
+    expect_identical(observed$before_stderr, paste0("\r", strrep(" ", 39L), "\r"))
     expect_false(observed$shown)
     expect_identical(err, "SYNTHETIC-LOOKUP-DIAGNOSTIC")
     expect_identical(observed$value, p)

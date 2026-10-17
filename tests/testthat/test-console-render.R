@@ -31,16 +31,147 @@ random_chunks = function(x, maxlen) {
   out
 }
 
-test_that("the output does not depend on chunking, plain and styled (acceptance 3)", {
+# Every construct of the renderer, nested lists, a table, a rule and two languages (D-186)
+render_rich = paste0(
+  "# Title\n\n\nSome **bold** and `code` text that is long enough to wrap at forty columns.\r\n",
+  "\r\n- outer *italic* item\n  - nested [a link](https://e.org/x)\n    - deeper\n1. numbered\n\n",
+  "> a quote\n\n| term | estimate |\n|------|---------:|\n| (Intercept) | 37.29 |\n",
+  "| wt | -5.34 |\n\n---\n\n```r\np = ggplot(mtcars, aes(wt, mpg)) +\n  geom_point()  # pts\n",
+  "```\n```python\nx = 'a'  # comment 1\n```\nWide \u4e2d\u6587 chars.\n\n")
+
+test_that("the output does not depend on chunking in the four console modes (acceptance 3)", {
   withr::local_seed(42)
+  # highlighting decides per complete line; cli's parser is slow for 800 renders
+  local_mocked_bindings(code_highlight = function(code) code, .package = "cli")
+  for (dynamic in c(FALSE, TRUE)) {
+    for (colours in c(1L, 256L)) {
+      withr::local_options(cli.num_colors = colours, cli.dynamic = dynamic, gptr.verbose = 2L)
+      ref = render_chunks(render_rich)
+      same = vapply(seq_len(200L), function(i) {
+        identical(render_chunks(random_chunks(render_rich, sample.int(9L, 1L))), ref)
+      }, NA)
+      expect_true(all(same))
+    }
+  }
+})
+
+test_that("plain contexts print exactly what they printed before the console layout (D-186)", {
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "display widths need a UTF-8 locale (report 18)")
+  withr::local_options(cli.num_colors = 1L, gptr.verbose = 2L)
+  before = c(
+    "# Model summary", "", "The **linear model** explains most of",
+    "the variance in `mpg`; the coefficient", "on `wt` is strongly negative, which",
+    "means heavier cars travel fewer miles", "per gallon on average.", "",
+    "- first bullet that is long enough to", "  need wrapping onto a second line at",
+    "  forty columns", "- second bullet with **bold text**", "  inside", "1. numbered item", "",
+    "> a quoted remark from the user", "", "```r", "fit = lm(mpg ~ wt, data = mtcars)",
+    "summary(fit)$r.squared", "```", "Done: R\u00b2 = 0.75 \u2014 averaging wide chars",
+    "\u4e2d\u6587\u5b57\u7b26 too.")
+  # pipes and Jupyter; knitr, jsonl and tests (verbosity 0) and Rscript (verbosity 1)
+  withr::with_options(list(cli.dynamic = FALSE),
+                      expect_identical(render_chunks(render_sample), before))
+  withr::local_options(cli.dynamic = TRUE, gptr.verbose = 0L)
+  expect_identical(render_chunks(render_sample), before)
+  withr::local_options(gptr.verbose = 1L)
+  expect_identical(render_chunks(render_sample), before)
+  expect_identical(render_chunks("\n\n# T\n\n- a\n  - b\n| a | bb |\n|---|---:|\n\n\nend\n\n"),
+                   c("", "", "# T", "", "- a", "- b", "| a | bb |", "|---|---:|", "", "", "end",
+                     ""))
+})
+
+test_that("an interactive console keeps a two-column margin at 40 columns (D-186)", {
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "display widths need a UTF-8 locale (report 18)")
+  for (colours in c(1L, 256L)) {
+    withr::local_options(cli.num_colors = colours, cli.dynamic = TRUE, gptr.verbose = 2L)
+    out = cli::ansi_strip(render_chunks(render_rich, width = 40L))
+    expect_true(all(startsWith(out[nzchar(out)], "  ")))
+    expect_true(all(nchar(out, type = "width") <= 38L))
+    expect_false(any(grepl("^ +$", out)))
+  }
+  # NO_COLOR removes colours and styles only
+  withr::local_envvar(NO_COLOR = "1")
+  withr::local_options(cli.num_colors = NULL)
+  out = render_chunks(render_rich, width = 40L)
+  expect_identical(cli::ansi_strip(out), out)
+  expect_true(all(startsWith(out[nzchar(out)], "  ")))
+})
+
+test_that("blank lines collapse and nested lists keep their indentation (D-186)", {
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
+  text = "\n\n# T\n\n\n- a\n  - b\n    - c\n1. x\n   - y\n\nend\n\n"
+  expect_identical(render_chunks(text), c("  # T", "", "  - a", "    - b", "      - c",
+                                          "  1. x", "     - y", "", "  end"))
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "symbols need a UTF-8 locale")
+  withr::local_options(cli.num_colors = 256L, cli.unicode = TRUE)
+  expect_identical(cli::ansi_strip(render_chunks(text)),
+                   c("  T", "", "  \u2022 a", "    \u25e6 b", "      \u25e6 c", "  1. x",
+                     "     \u25e6 y", "", "  end"))
+})
+
+test_that("a line ended by other output continues at the margin, nesting kept (D-186)", {
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
+  out = utils::capture.output({
+    r = render_markdown_stream(40L)
+    r$write("keeps streaming ")
+    r$reset_line()
+    r$write("slowly on.\n- a\n  ")
+    r$reset_line()
+    r$write("- b")
+    r$finish()
+  })
+  expect_identical(out, c("  keeps streaming", "  slowly on.", "  - a", "    - b"))
+})
+
+test_that("pipe tables are aligned on an interactive console and stay valid Markdown (D-186)", {
+  withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)
   for (colours in c(1L, 256L)) {
     withr::local_options(cli.num_colors = colours)
-    ref = render_chunks(render_sample)
-    same = vapply(seq_len(200L), function(i) {
-      identical(render_chunks(random_chunks(render_sample, sample.int(9L, 1L))), ref)
-    }, NA)
-    expect_true(all(same))
+    out = render_chunks("| a | bb |\n|---|---:|\n| 1 | 2 |\n| 333 | 4 |\nafter")
+    expect_identical(cli::ansi_strip(out), c("  | a   |  bb |", "  |-----|----:|",
+                                             "  | 1   |   2 |", "  | 333 |   4 |", "  after"))
+    for (bad in c("| a | b |\n| 1 | 2 |", "| a | b |\n|---|---|\n| 1 |",
+                  "| aaaaaaaaaa | bbbbbbbbbb |\n|---|---|")) {
+      expect_identical(cli::ansi_strip(render_chunks(bad, width = 24L)),
+                       paste0("  ", strsplit(bad, "\n", fixed = TRUE)[[1L]]))
+    }
   }
+})
+
+test_that("italics, link URLs, quotes, rules and headings are styled only with colours", {
+  withr::local_options(cli.num_colors = 256L, cli.dynamic = FALSE)
+  text = "An *it* and [d](http://x.y) a * b 2*3"
+  out = render_chunks(text, 80L)
+  expect_identical(cli::ansi_strip(out), "An it and [d](http://x.y) a * b 2*3")
+  expect_match(out, "An \033[0;3mit\033[0m and", fixed = TRUE)
+  expect_match(out, "[d]\033[0;2m(http://x.y)\033[0m a * b 2*3", fixed = TRUE)
+  expect_identical(render_chunks("> q"), "\033[2m> \033[22mq")
+  expect_identical(cli::ansi_strip(render_chunks("a\n\n---\n\nb")),
+                   c("a", "", strrep("-", 40L), "", "b"))
+  expect_identical(render_chunks("# One\n## Two"),
+                   c("\033[0;1;4mOne\033[0m", "\033[0;1mTwo\033[0m"))
+  withr::local_options(cli.num_colors = 1L)
+  for (plain in c(text, "> q", "a\n\n---\n\nb", "# One\n## Two")) {
+    expect_identical(render_chunks(plain, 80L), strsplit(plain, "\n", fixed = TRUE)[[1L]])
+  }
+})
+
+test_that("complete R lines use cli's highlighter and other code a light one (D-186)", {
+  withr::local_options(cli.num_colors = 256L, cli.dynamic = FALSE)
+  whole = "x = f(1, 'a')"
+  expect_false(identical(as.character(cli::code_highlight(whole)), whole))
+  for (lang in c("r", "R", "{r, echo=FALSE}", "r title")) {
+    out = render_chunks(paste0("```", lang, "\n", whole, "\np = g('b',\n```"), 80L)
+    expect_match(out[[2L]], cli::code_highlight(whole), fixed = TRUE)
+    expect_match(out[[3L]], code_light("p = g('b',", "r"), fixed = TRUE)
+    expect_match(out[[3L]], "\033\\[[0-9;]+m'b'")
+  }
+  py = render_chunks("```python\nx = 'a'  # c 1\n```", 80L)[[2L]]
+  expect_match(py, "\033\\[[0-9;]+m'a'")
+  expect_match(py, "\033\\[[0-9;]+m# c 1")
+  expect_identical(cli::ansi_strip(py), "| x = 'a'  # c 1")
+  expect_match(render_chunks("```json\n{\"a\": 1}\n```", 80L)[[2L]],
+               "\033\\[[0-9;]+m\"a\".*\033\\[[0-9;]+m1")
+  expect_identical(render_chunks("```text\n'a' 1\n```", 80L)[[2L]], "\033[2m| \033[22m'a' 1")
 })
 
 test_that("prose lines respect the width and bullets hang (UTF-8 locale)", {
@@ -463,20 +594,92 @@ test_that("the spinner runs as a reactor task until the first rendered text", {
   console_drop("u0000test")
 })
 
-test_that("permission_request ends partial lines and never decides", {
+test_that("the console UI ends a partial answer line before it prompts (D-186)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
   ctx = session_live(s)$ctx
+  withr::defer(console_drop("u0000test"))
+  req = list(tool = "r", input = list(code = "x = 1"), risk = list(level = 1L), tier = "ask")
   out = utils::capture.output({
     console_on_agent_start(hook_event("agent_start", s), ctx)
     console_on_message_update(hook_event("message_update", s, index = 1L, kind = "text",
                                          delta = "partial "), ctx)
-    expect_null(console_on_permission(hook_event("permission_request", s), ctx))
-    cat("allow? ")
+    ans = ui_console_permission(req, read = function(...) "y")
   })
-  expect_identical(out, c("partial", "allow? "))
-  console_drop("u0000test")
+  expect_identical(out, c("partial", "  r  x = 1"))
+  expect_identical(ans$decision, "allow")
+  expect_false("permission_request" %in% vapply(console_hooks(), function(h) h$event, ""))
+})
+
+# The rows a terminal shows for `bytes`: CR returns to the first column, LF ends a row
+screen_rows = function(bytes) {
+  rows = character()
+  row = character()
+  col = 1L
+  for (ch in strsplit(bytes, "", fixed = TRUE)[[1L]]) {
+    if (identical(ch, "\n")) {
+      rows = c(rows, sub(" +$", "", paste(row, collapse = "")))
+      row = character()
+    }
+    if (ch %in% c("\r", "\n")) {
+      col = 1L
+      next
+    }
+    row[[col]] = ch
+    col = col + 1L
+  }
+  rows
+}
+
+test_that("a foreground run separates text, tool and status blocks once (D-186)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  fe = "terminal"
+  local_mocked_bindings(front_end = function() fe)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  hooks = console_hooks()
+  types = vapply(hooks, function(h) h$event, "")
+  request = function(id) {
+    hook_event("before_request", s, provider = "fake", model = "fake/fake-1", request_id = id,
+               tokens_est = 10)
+  }
+  result = msg_tool_result("c1", "r", "ok", details = list(
+    objects = list(added = "value", modified = character(), removed = character()), plots = 0L))
+  events = list(
+    hook_event("agent_start", s), request("q1"),
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "\n\nFirst "),
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "tail\n\n"),
+    hook_event("message_end", s, role = "assistant", message = assistant_msg("First tail")),
+    hook_event("tool_execution_start", s, tool_call_id = "c1", tool_name = "r",
+               input = list(code = "1 + 1")),
+    hook_event("tool_execution_end", s, tool_call_id = "c1", tool_name = "r", is_error = FALSE,
+               elapsed = 0.1, details = list()),
+    hook_event("message_end", s, role = "tool_result", message = result), request("q2"),
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "Second ending\n\n"),
+    hook_event("message_end", s, role = "assistant", message = assistant_msg("Second ending")),
+    hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
+               turns = 1L))
+  # an R GUI spaces the blocks exactly as a terminal does
+  for (fe in c("terminal", "rgui")) {
+    con = rawConnection(raw(), "w")
+    sink(con)
+    tryCatch({
+      for (ev in events) {
+        for (h in hooks[types == ev$type]) h$handler(ev, session_live(s)$ctx)
+      }
+    }, finally = sink())
+    bytes = rawToChar(rawConnectionValue(con))
+    close(con)
+    expect_match(bytes, "thinking", fixed = TRUE)
+    expect_false(grepl("\r +\r\n", bytes))
+    expect_identical(screen_rows(bytes), c("", "  First tail", "", "  * r  1 + 1",
+                                           "    -> + value", "", "  Second ending", "",
+                                           "  done | 1 turn | 0 tokens | $0.0000", ""),
+                     info = fe)
+  }
 })
 
 # ---------------------------------------------------------------- Task 7: end-to-end rendering

@@ -61,7 +61,7 @@ gptr_inform = function(message, class, ..., .data = NULL, .once = NULL, .stream 
   stream = gptr_message_stream(.stream)
   withRestarts({
     signalCondition(cnd)
-    gptr_message_write(conditionMessage(cnd), stream)
+    gptr_message_write(conditionMessage(cnd), stream, margin = TRUE)
   }, muffleMessage = function() NULL)
   invisible(NULL)
 }
@@ -79,18 +79,41 @@ gptr_message_stream = function(stream = NULL) {
 }
 
 #' Display a condition or console control through a scoped evaluator writer when present
-#' The evaluator records conditions separately and excludes control text from tool output.
+#' The evaluator records conditions separately and excludes control text from tool output; a
+#' notice's own display (`margin`) keeps the console margin.
 #' @noRd
-gptr_message_write = function(text, stream) {
+gptr_message_write = function(text, stream, margin = FALSE) {
   k = sys.nframe() - 1L
   while (k >= 1L) {
     write = get0(".gptr_message_write", envir = sys.frame(k), inherits = FALSE)
     if (is.function(write)) return(invisible(write(text, stream)))
     k = k - 1L
   }
+  if (margin) text = gptr_message_margin(text)
   cat(text, file = if (stream == "stderr") stderr() else stdout(), sep = "")
   utils::flush.console()
   invisible(NULL)
+}
+
+#' The left margin of console output (D-186): two columns where the console renderer is active
+#' (verbosity 2+ on a dynamic console, so also in capture.output() of an interactive call), else
+#' none, so Rscript, knitr, jsonl and tests keep the plain layout
+#' @noRd
+console_pad = function() if (verbosity() >= 2L && cli::is_dynamic_tty()) "  " else ""
+
+#' Notice lines inside the console margin; a line that does not fit is word-wrapped at the
+#' content width and keeps its indentation (D-186); unchanged without a margin
+#' @noRd
+gptr_message_margin = function(text) {
+  pad = console_pad()
+  if (!nzchar(pad) || !nzchar(text)) return(text)
+  width = max(20L, cli::console_width() - 4L)
+  lines = unlist(lapply(strsplit(text, "\n", fixed = TRUE)[[1L]], function(line) {
+    if (cli::ansi_nchar(line, type = "width") <= width) return(line)
+    lead = attr(regexpr("^ *", line), "match.length")
+    cli::ansi_strwrap(line, width, indent = lead, exdent = lead)
+  }))
+  paste0(ifelse(nzchar(lines), pad, ""), lines, "\n", collapse = "")
 }
 
 #' TRUE the first time a once-key is seen in this process (always TRUE for NULL keys)
