@@ -788,6 +788,41 @@ test_that("a peter() call made during a run becomes a child session (route neste
   expect_identical(child$text, "child answer")
 })
 
+test_that("a peter() call from model code without model = runs on the session's model", {
+  local_gw()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  # the default route would be the subscription CLI
+  local_mocked_bindings(model_cli_available = function(id) TRUE)
+  kid = local_fake_provider(function(request) {
+    if (identical(request$last_user, "x")) return("child answer")
+    if (length(request$last_results)) return("parent done")
+    fake_tool("r", code = "res = tryCatch(peter('x')$model, error = conditionMessage)")
+  }, name = "kid")
+  e = new.env()
+  s = peter("delegate", model = kid, envir = e)
+  expect_identical(s$text, "parent done")
+  expect_identical(e$res, "kid/kid-1")
+})
+
+test_that("a nested peter() without model = reaches the provider or router spec of its session", {
+  local_gw()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  reply = function(request) {
+    if (identical(request$last_user, "x")) return("child answer")
+    if (length(request$last_results)) return("parent done")
+    fake_tool("r", code = paste("res = tryCatch({k = peter('x'); c(k$model, k$text)},",
+                                "error = conditionMessage)"))
+  }
+  # both specs are registered for the parent session only
+  e = new.env()
+  peter("delegate", model = gptr_fake_provider(reply, name = "kid"), envir = e)
+  expect_identical(e$res, c("kid/kid-1", "child answer"))
+  local_fake_provider(reply, name = "kid2")
+  peter("delegate", model = gptr_router("rt", route = function(request, ctx) "kid2/kid2-1"),
+        envir = e)
+  expect_identical(e$res, c("router:rt", "child answer"))
+})
+
 test_that("peter() from model code writes to an overlay and shows its prompt as label (D-188)", {
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE, verbose = 1L, quiet = FALSE)

@@ -828,6 +828,37 @@ test_that("an interactive yes records the acknowledgement at user scope", {
   expect_identical(settings_read("user")$egress$corp, "ack")
 })
 
+test_that("the egress question asked inside a run names the sub-agent and its model", {
+  local_gw()
+  local_gptr_options(interactive = TRUE)
+  corp = gptr_fake_provider(list("x"), name = "corp")
+  corp$offline = FALSE
+  off = gptr_register(corp)
+  withr::defer(off())
+  box = new.env(parent = emptyenv())
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    box$q = question
+    FALSE
+  })
+  asked = function(expr) {
+    box$q = NULL
+    expect_error(expr, class = "gptr_error_egress")
+    box$q
+  }
+  expect_match(asked(egress_check("corp", asker = "corp/corp-1")),
+               "^gptr sends your prompts to corp together with automatic context: ")
+  run = fake_run()
+  run$opts = list(safety = list(can_prompt = TRUE))
+  local_mocked_bindings(run_current = function() run)
+  lead = paste0("^The agent's code starts a sub-agent on corp/corp-1, which sends its prompt to ",
+                "corp together with automatic context: ")
+  expect_match(asked(egress_check("corp", asker = "corp/corp-1")), lead)
+  # the nested peter() and the team or fan-out child guards name the session's model
+  s = session_new("corp/corp-1", "manual", home = new.env())
+  expect_match(asked(gateway_guards(list(), s, egress_safety())), lead)
+  expect_match(asked(subagent_guards(s)), lead)
+})
+
 test_that("egress_check() follows a local provider's effective endpoint (IC-74)", {
   local_gw()
   # the shipped loopback servers need no acknowledgement

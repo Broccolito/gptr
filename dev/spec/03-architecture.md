@@ -1768,7 +1768,10 @@ v1.x. Five inline agents with an R tool on a shared 381 MB vector took 5.2 s con
 sequentially, every agent seeing the same address [15 §2.3].
 Only a depth-0 run tees its `r` output: a child's printed output stays in the child's tool result, never in the
 parent's or on the console, and its prompts name it (§6.8.3). A plain `peter()` from model code without `envir =`
-gets an overlay as an inline child does (§5.8) [D-188].
+gets an overlay as an inline child does (§5.8) [D-188]. A `peter()`, team or fan-out started by model code inherits
+the mode (only tightened) and, without `model =`, the running session's model, never the settings default, with that
+session's own spec of the model's provider or router (one passed as `model =`); an egress question it raises names the
+sub-agent and that model [D-210].
 
 Workers and fan-out children return no scratch objects [D-189]: a worker writes its home as a reference that the
 parent reads back as the proxy's overlay, and a fan-out child that succeeds keeps only its values held by name, so

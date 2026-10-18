@@ -16,7 +16,8 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 \item{...}{A session to continue, the prompt, and context objects.}
 
 \item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}), a provider or router spec
-such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default.}
+such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default. A call made by the
+agent's own R code, and a team or fan-out it starts, uses the running session's model instead.}
 
 \item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.}
 

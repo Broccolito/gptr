@@ -402,6 +402,18 @@ registry_get = function(kind, name, session = NULL) {
   NULL
 }
 
+#' The spec of the provider or router of model reference `ref` (`provider/id[:thinking]` or
+#' `router:<name>`) that session `sid` sees in place of the global one: a spec passed as
+#' `model =`, which a child session on that model registers as well; else NULL
+#' @noRd
+registry_model_spec = function(ref, sid) {
+  router = startsWith(ref, "router:")
+  kind = if (router) "router" else "provider"
+  name = if (router) sub("^router:", "", ref) else sub("[/:].*$", "", ref)
+  spec = registry_get(kind, name, session = sid)
+  if (identical(spec, registry_get(kind, name))) NULL else spec
+}
+
 #' Records of a kind: every record of an `all` kind, ordered; the winner per name otherwise. Lazy
 #' records are activated first, except `tool` placeholders (their declarations feed catalogs; 10.8)
 #' @noRd

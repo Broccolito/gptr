@@ -58,7 +58,8 @@
 #'       .stdin = FALSE)
 #' @param ... A session to continue, the prompt, and context objects.
 #' @param model A model name (`sonnet`, `"anthropic/claude-sonnet-5-5"`), a provider or router spec
-#'   such as [gptr_fake_provider()], or `NULL` for the configured default.
+#'   such as [gptr_fake_provider()], or `NULL` for the configured default. A call made by the
+#'   agent's own R code, and a team or fan-out it starts, uses the running session's model instead.
 #' @param mode One of `plan`, `manual`, `edits`, `auto`, `yolo`; `NULL` for the configured default.
 #' @param skills,plugins,extensions Names (bare or quoted) of skills to preload, plugins and
 #'   extensions to enable for this session; `extensions` also takes `function(gptr)` factories and
@@ -570,13 +571,16 @@ gateway_register = function(call, s) {
 }
 
 #' Creates the session of a new call: resolved model and mode, the evaluation environment as home;
-#' inside a run, the mode tightened, kind `child` and the running session as parent. A call from
-#' model code without `envir =` evaluates in an overlay of its caller (D-188): it reads the
-#' caller's objects and keeps its own in `res$envir`; a function-frame caller is unchanged (R2).
+#' inside a run, the running session's model unless `model =` is given, resolved as that session
+#' sees it and with its own spec of the model's provider or router (D-210), the mode tightened,
+#' kind `child` and the running session as parent. A call from model code without `envir =`
+#' evaluates in an overlay of its caller (D-188): it reads the caller's objects and keeps its own
+#' in `res$envir`; a function-frame caller is unchanged (R2).
 #' @noRd
 gateway_new_session = function(call, cur) {
   nested = !is.null(cur)
-  ref = gateway_model_ref(call$ids$model, call$args$opts$thinking)
+  model = call$ids$model %||% (if (nested) session_data(cur$shell)$model)
+  ref = gateway_model_ref(model, call$args$opts$thinking, session = cur$session)
   mode = call$ids$mode %||% setting_get("mode", default = "manual")
   if (nested) mode = run_mode_tighter(mode, cur$mode)
   if (nested) gateway_child_depth(cur)
@@ -588,6 +592,8 @@ gateway_new_session = function(call, cur) {
   s = session_new(ref, mode, home = call$envir, kind = if (nested) "child" else "chat",
                   parent = parent, preset = gateway_preset(call),
                   opts = list(thinking = call$args$opts$thinking))
+  spec = if (nested) registry_model_spec(ref, cur$session)
+  if (!is.null(spec)) gateway_register_spec(spec, session_data(s)$id)
   gateway_register(call, s)
   ev_dispatch("model_select", ev_new("model_select", from = NULL, to = ref, reason = "gateway"),
               session = s)
@@ -667,7 +673,8 @@ gateway_check_visible = function(call) {
 #' Egress acknowledgment (unless the context of `call` is "none") under `safety` and the replay
 #' guard under `call`'s `replay =` (contract 3.1, IC-45), on the session's own record of the
 #' provider: of the session's model, or of `m`, a router's choice (a router session's own model is
-#' checked per request by router_call(); IC-29, IC-74; D-099, D-114)
+#' checked per request by router_call(); IC-29, IC-74; D-099, D-114); the question names the model
+#' when model code asks
 #' @noRd
 gateway_guards = function(call, s, safety, m = NULL) {
   d = session_data(s)
@@ -675,7 +682,7 @@ gateway_guards = function(call, s, safety, m = NULL) {
   pid = m$provider %||% gateway_provider_id(d$model)
   pr = gateway_provider(s, pid)
   context = call$args$opts$context %||% setting_get("context", default = "summary")
-  if (!identical(context, "none")) egress_check(pid, pr, safety)
+  if (!identical(context, "none")) egress_check(pid, pr, safety, asker = m$ref %||% d$model)
   replay_guard(pr %||% m %||% d$model, mode = replay_mode(call$args$replay))
 }
 

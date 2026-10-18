@@ -516,6 +516,25 @@ test_that("teams and fan-outs started in an r evaluation are children of the run
   expect_identical(nrow(s$usage), 5L)
 })
 
+test_that("teams and fan-outs from model code without model = run on the session's model", {
+  local_project()
+  local_gptr_options(mode = "auto", model = "other/other-1")
+  other = local_fake_provider(list("other"), name = "other")
+  # a spec registered for the outer session only
+  kid = gptr_fake_provider(function(request) {
+    if (request$last_user %in% c("check", "each")) return("inner")
+    if (length(request$last_results)) return("done")
+    fake_tool("r", code = paste0("rev = peter('check', agents = list(a = agent(system = 'Do.')))\n",
+                                 "fan = peter('each', list(p = 1), parallel = 1)"))
+  }, name = "kid")
+  e = new.env()
+  s = peter("outer", model = kid, envir = e)
+  expect_identical(s$text, "done")
+  for (x in list(e$rev, e$rev$a, e$fan, e$fan$p)) expect_identical(x$model, "kid/kid-1")
+  expect_identical(c(e$rev$a$text, e$fan$p$text), c("inner", "inner"))
+  expect_length(fake_requests(other), 0L)
+})
+
 test_that("sub-agent prompts name the asker and reach only the console (D-188)", {
   local_team_fake(function(request) {
     if (identical(request$last_user, "S")) {

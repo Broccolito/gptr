@@ -1026,7 +1026,7 @@ exact name.
 | Argument | Type / default | Meaning and validation |
 |---|---|---|
 | `...` | any | at most one leading unnamed `<session>` (continuation target), the prompt (below), context objects (unnamed: labelled by their deparsed expression, e.g. `mice`; named: by name). A named `<session>` is context, not a target. |
-| `model` | identifier, `<spec:provider>`, `<spec:router>` or `NULL` | resolved by §6.1.3; `NULL` = settings default (§8.4 of `03`) |
+| `model` | identifier, `<spec:provider>`, `<spec:router>` or `NULL` | resolved by §6.1.3; `NULL` = settings default (§8.4 of `03`); from model code (a call, team or fan-out started inside a run) `NULL` = the running session's model, and a child gets that session's own spec of its model's provider or router (D-210) |
 | `mode` | identifier or `NULL` | one of `plan`, `manual`, `edits`, `auto`, `yolo` (IC-78); a continuation may only keep or change it explicitly; children only tighten |
 | `skills`, `plugins`, `extensions` | identifiers (`c(a, b)`) or `NULL` | names resolved by §6.1.3 (normalised, IC-42); `extensions` also accepts `function(gptr)` factories (loaded with `ext_load(rank = 0L, session = <id>)`, visible to this session only, IC-69) and file paths; plugins and named extensions are enabled for the session through P17's `plugin.enable` service (`gptr_error_not_available` before P17); skills are preloaded as `<skill_content>` through `skill.body` |
 | `tools` | chr, identifiers, `<spec:tool>` list, or `NULL` | tool names; `"+grep"`/`"-write"` modifiers; a preset name (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`); tool specs are registered at rank 0 for this session |
@@ -2338,6 +2338,7 @@ save_rds(mtcars, ws_path("cache", "tmp", "mt.rds"))
 | `registry_get(kind, name, session = NULL)` | the winning **spec** for `(kind, name)` (lowest rank among enabled records; ties: first registered, with a `collision` diagnostic), after filters, including the session's rank-0 records; `NULL` if none. A lower-rank record shadows only the record with the same `(kind, name)` (IC-69). Lazy records trigger `ext_activate()` of their source first |
 | `registry_all(kind, session = NULL)` | list of specs of an `all`-resolving kind (hook, policy, context_block, prompt_section, route, checkpointer, secret_source, redaction_rule, env_alias, risk_rule) ordered by the kind's `order` field when it has one, else by rank then registration; for `first`-resolving kinds, the winning spec of each name |
 | `registry_names(kind, session = NULL)` | chr of names with an enabled record |
+| `registry_model_spec(ref, sid)` | the provider or router spec of model reference `ref` (`provider/id[:thinking]`, `router:<name>`) that session `sid` sees in place of the global winner (a spec passed as `model =`), else `NULL`; a child session on that model registers it at rank 0 too (D-210) |
 | `registry_generation()` | `int(1)` |
 | `registry_filters_set(filters, scope = c("session", "user", "project"))` | applies `-builtin:<name>`, `-plugin:<pkg>`, `-<kind>:<name>`, `+...`; project filters that would disable user or built-in `policy`/`hook` records are ignored with a diagnostic; no filter from any source disables `builtin:permissions`, `builtin:plan`, `critical_guard` or `secret_guard`, and inside a run filters that remove `policy`/`hook` records are refused (IC-53) |
 | `registry_diagnostic(source, event, class, message)` | appends to `the$diagnostics` (redacted) |
@@ -2640,7 +2641,7 @@ Functions (P08):
 | `call_value(call, i)` [leaf] | the value of context item `i` (by name from `envir` for symbols, from `values` otherwise) | P09 (`attached` block), P13 (states), P19 (fan-out elements) |
 | `route_pass()` | the sentinel a route's `run()` returns to continue routing | P13, P14, P15, P19 |
 | `gateway_defer(expr_fun)` | evaluates `expr_fun()` with deferral on: every `peter()` call made meanwhile behaves as `.run = FALSE` and returns its unstarted session | P19 (`gptr_parallel()` forces its `...` promises inside it) |
-| `gateway_run(call, s = NULL)` | the default System 2 runner used by the `continue`/`new` routes and by other routes: creates the session when `s` is `NULL` (`session_new()` with the resolved model, mode and home; a router model is stored as `router:<name>`, IC-69), chooses the evaluation environment by the IC-40 precedence and checks that context symbols are visible there, applies model/mode changes and `session_add_tools()` for `tools =`/`plugins =`/`extensions =` on a continuation, tightens the mode to the running one when `run_current()` is non-NULL (IC-53), runs `egress_check()`, calls `replay_guard()`, builds the input (first message or turn blocks, the prompt, `skills =` preloads, the pending plan once), then `session_run()`/`run_start()`/queue per `.run` and `background`; writes nothing to documents itself | P13 (escalation), P14, P15, P19 |
+| `gateway_run(call, s = NULL)` | the default System 2 runner used by the `continue`/`new` routes and by other routes: creates the session when `s` is `NULL` (`session_new()` with the resolved model, mode and home; a router model is stored as `router:<name>`, IC-69; without `model =` inside a run, the running session's model; inside a run the model is resolved as the running session sees it and that session's own spec of it is registered for the child, D-210), chooses the evaluation environment by the IC-40 precedence and checks that context symbols are visible there, applies model/mode changes and `session_add_tools()` for `tools =`/`plugins =`/`extensions =` on a continuation, tightens the mode to the running one when `run_current()` is non-NULL (IC-53), runs `egress_check()`, calls `replay_guard()`, builds the input (first message or turn blocks, the prompt, `skills =` preloads, the pending plan once), then `session_run()`/`run_start()`/queue per `.run` and `background`; writes nothing to documents itself | P13 (escalation), P14, P15, P19 |
 | `dot_facts(x)` [leaf] | `list(class, is_session, is_chr1, length, dim, bytes, text)` (`text` = a `paste0()` copy of character values up to 64 KiB, else `NULL`) | P08 |
 | `resolve_identifier(expr, arg, envir)` (service `identifier.resolve`) | §6.1.3; returns chr or a spec | P08, P17 (`agents` mask); P02 stores raw expressions and never calls it (IC-34) |
 | `identifier_known(name, arg)` | `lgl(1)`: catalog aliases, registered provider/model/router ids, modes, presets, skill/plugin/extension/agent names (by `arg`) | P08 |
@@ -2652,7 +2653,7 @@ Functions (P08):
 | `home_address(envir)` | chr(1) `rlang::obj_address(envir)` for the pending-plan key (an address string, never a reference) [R2] | P11 |
 | `replay_mode(arg = NULL)` | `chr(1)`: `arg` > `gptr.replay` > `GPTR_REPLAY` > settings > `"auto"`; `"replay"` is forced when `check_running()` and `Sys.getenv("TESTTHAT") != "true"` (examples), unless `arg` is given (IC-45) | P08, P13, P15, P19 |
 | `replay_guard(model, what = "model call")` | in replay mode, signals `gptr_error_not_recorded` before any request to a provider whose record is not `offline = TRUE` (`offline` = no remote model is called: the fake provider and the mock-server and fake-CLI test providers, so tests and examples still run); `invisible(TRUE)` otherwise | P08 (`gateway_run()`), P13 (cache misses), P19 (team and fan-out children) |
-| `egress_check(provider_id)` | `invisible(TRUE)` if acknowledged (user settings `egress`), local or offline, or `.opts$context = "none"`; when `gptr_can_prompt()`: shows what automatic context is sent and records the acknowledgement at user scope (an `ask_human`, IC-53); otherwise `gptr_error_egress` | P08 (`gateway_run()`), P13, P19 |
+| `egress_check(provider_id, provider, safety, asker = NULL)` | `invisible(TRUE)` if acknowledged (user settings `egress`), local or offline, or `.opts$context = "none"`; when `gptr_can_prompt()`: shows what automatic context is sent and records the acknowledgement at user scope (an `ask_human`, IC-53); otherwise `gptr_error_egress`. Inside a run (`run_current()` non-`NULL`), when `asker` is given (`gateway_guards()`, `subagent_guards()`), the question starts "The agent's code starts a sub-agent on `<asker>`, which sends its prompt to `<id>`", `asker` being the model of the session that model code starts (D-210) | P08 (`gateway_run()`), P13, P19 |
 
 
 Example calls:
@@ -4337,8 +4338,9 @@ text.
 
 **IC-39 Route order and nesting.** (cons-11, req-19) Route orders are: `classifier` 10, `team` 15, `fanout` 16,
 `nested` 20, `console` 30, `document` 50, `continue` 60, `new` 70. `team` and `fanout` calls made while a run is
-active create children of the running session (depth + 1, mode only tightened, usage rolled up, budget charged
-to the root, IC-66). `gptr.subagents.max_tasks` (8) applies only to team and fan-out calls made at depth >= 1
+active create children of the running session (depth + 1, mode only tightened, without `model =` the running
+session's model as for a plain `peter()` from model code (D-210), usage rolled up, budget charged to the root,
+IC-66). `gptr.subagents.max_tasks` (8) applies only to team and fan-out calls made at depth >= 1
 (model code), with the classed error `gptr_error_invalid_argument` naming the limit; user-level fan-outs queue
 every element and run `parallel`/`max_active` at a time (P19 acceptance: 20 elements, `parallel = 4`).
 

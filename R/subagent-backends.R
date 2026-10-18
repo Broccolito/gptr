@@ -174,7 +174,8 @@ subagent_overlay_release = function(child, base_is_frame) {
 #' What is known of a model before its session exists (L4 may not call P05's model_resolve()):
 #' the reference and, from the provider registry, the provider's type (the auto rule needs only
 #' that). A provider spec stands for its first model, as in peter(model = <spec>), and is kept
-#' in `spec` for the child's rank-0 registry.
+#' in `spec` for the child's rank-0 registry, as is session `sid`'s own spec of the provider or
+#' router of a reference (D-210).
 #' @noRd
 subagent_model_info = function(model, sid = NULL) {
   if (inherits(model, "gptr_provider")) {
@@ -190,7 +191,8 @@ subagent_model_info = function(model, sid = NULL) {
   check_string(ref, "model")
   pid = sub("[/:].*$", "", ref)
   list(ref = ref, provider = pid,
-       type = registry_get("provider", pid, session = sid)$type %||% "chat", spec = NULL)
+       type = registry_get("provider", pid, session = sid)$type %||% "chat",
+       spec = if (!is.null(sid)) registry_model_spec(ref, sid))
 }
 
 #' The egress acknowledgment and the replay guard on the child's own record of the provider of
@@ -203,7 +205,7 @@ subagent_guards = function(child, opts = list(), model = session_data(child)$mod
   pid = sub("[/:].*$", "", model)
   pr = registry_get("provider", pid, session = session_data(child)$id)
   if (!identical(opts$context %||% setting_get("context", default = "summary"), "none")) {
-    egress_check(pid, pr)
+    egress_check(pid, pr, asker = model)
   }
   replay_guard(pr %||% model)
 }

@@ -2375,3 +2375,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: TBD by P26 Task 11.
 - Contract-visible: TBD.
 - Tests: TBD. Evidence: progress/P26.md Task 11.
+
+## D-210 - P26 sub-agents from model code keep the session's model; the egress question names them (2026-10-18)
+- Rule: a `peter()`, team or fan-out started inside a run without `model =` runs on the running session's model,
+  before the `model` setting and `model_default()` (P19 note 8 and the container order superseded); a team member
+  takes the agent's model, else the call's, else the team's.
+- Rule: a child session resolves its model as the running session (or its team or fan-out) sees it and registers
+  that session's own spec of the model's provider or router at rank 0 (`registry_model_spec()`, also used by
+  `gptr_parallel()`'s team), so a session started with `model = <spec>` passes it on.
+- Rule: `egress_check(asker =)`; inside a run (`run_current()` non-NULL), when `gateway_guards()` or
+  `subagent_guards()` pass the model as `asker`, the question starts "The agent's code starts a sub-agent on <ref>,
+  which sends its prompt to <id>"; System 1 passes none.
+- Contract-visible: 03 §6.13; 04 §6.1 `model` row, §7.2 `registry_model_spec()`, §7.8 `gateway_run()` and
+  `egress_check()` rows, IC-39; `?peter`.
+- Tests: gptr-gateway (model code without `model =`; on a provider or router spec), subagent-team (team and fan-out
+  on a provider spec), gptr-config (egress question inside a run).
+  Evidence: progress/P26.md Task 13.
