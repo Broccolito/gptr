@@ -115,16 +115,19 @@ cmd_help = function(args, ctx) {
     return(paste0("/", nm, "  ", spec$description %||% ""))
   }
   nms = sort(registry_names("command", session = s), method = "radix")
-  lines = vapply(nms, function(nm) {
-    sprintf("  /%-12s %s", nm, registry_get("command", nm, session = s)$description %||% "")
-  }, "", USE.NAMES = FALSE)
-  c("Commands:", lines,
+  desc = vapply(nms, function(nm) registry_get("command", nm, session = s)$description %||% "",
+                "", USE.NAMES = FALSE)
+  # the descriptions wrap under their column at the content width (D-225)
+  width = cli::console_width() - 2L * nchar(console_pad())
+  c("Commands:", formatDL(paste0("  /", nms), desc, width = width, indent = 17L),
     "Input:",
-    "  text             a prompt; @file adds a file, @object attaches an object",
-    "  !code            run R code here; the code and its output go with the next prompt",
-    "  !!code           run R code here; omit the code/output note for the next prompt",
-    "  ```r ... ```     a block of R code (like !)",
-    "  \"\"\" ... \"\"\"      a multi-line prompt; a trailing \\ also continues a line",
+    formatDL(c("  text", "  !code", "  !!code", "  ```r ... ```", "  \"\"\" ... \"\"\""),
+             c("a prompt; @file adds a file, @object attaches an object",
+               "run R code here; the code and its output go with the next prompt",
+               "run R code here; omit the code/output note for the next prompt",
+               "a block of R code (like !)",
+               "a multi-line prompt; a trailing \\ also continues a line"),
+             width = width, indent = 19L),
     paste0("Keys: ", console_interrupt_key(), " pauses a running answer in supported terminals ",
            "(steer, follow-up, continue, abort; background when available); ",
            "twice at the prompt leaves. Other front ends may abort without a pause menu. ",
@@ -142,6 +145,18 @@ cmd_exit = function(args, ctx) {
   NULL
 }
 
+#' A model reference as /model and /status show it: a built-in CLI's `default` with the full id
+#' the CLI gets (`claude-cli/default (claude-sonnet-5-5)`, contract 11.10); another CLI adapter
+#' decides what its `default` runs
+#' @noRd
+cmd_model_label = function(ref) {
+  m = model_canonical(ref)
+  if (!identical(m$type, "cli") || !endsWith(m$ref, "/default")) return(ref)
+  api = registry_get("provider", sub("/.*$", "", m$ref))[["api"]]
+  if (!isTRUE(api %in% c("cli-claude", "cli-codex"))) return(ref)
+  paste0(ref, " (", pcli_default_model(api), ")")
+}
+
 #' `/model [ref]`: on a session from the next request; before the first prompt for that prompt,
 #' checked now (IC-79) and kept as typed
 #' @noRd
@@ -150,7 +165,7 @@ cmd_model = function(args, ctx) {
   s = ctx$session
   if (!nzchar(args)) {
     model = if (!is.null(rs)) repl_model(rs) else s$model
-    return(paste0("Model: ", model %||% "the default model"))
+    return(paste0("Model: ", cmd_model_label(model %||% "the default model")))
   }
   if (!is.null(s)) {
     session_set_model(s, args, reason = "user")
@@ -214,9 +229,9 @@ console_env_lines = function(env, pattern = "", n = 30L) {
   nms = sort(ls(env), method = "radix")
   nms = nms[grepl(pattern, nms, fixed = TRUE)]
   lines = vapply(utils::head(nms, n), function(nm) {
-    paste0("  ", describe_binding(nm, env, budget = 40L)[[1L]])
+    describe_binding(nm, env, budget = 40L)[[1L]]
   }, "", USE.NAMES = FALSE)
-  c(lines, if (length(nms) > n) paste0("  (+ ", length(nms) - n, " more)"))
+  c(lines, if (length(nms) > n) paste0("(+ ", length(nms) - n, " more)"))
 }
 
 #' /env [pattern]
@@ -293,12 +308,14 @@ cmd_status = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) {
     return(c("session   (none yet: the first prompt starts one)",
-             paste0("model     ", if (!is.null(rs)) repl_model(rs) else "the default model"),
+             paste0("model     ",
+                    cmd_model_label(if (!is.null(rs)) repl_model(rs) else "the default model")),
              paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual")))
   }
   d = session_data(s)
-  c(paste0("session   ", d$id, "  (", d$status, ", ", d$turns, " turns)"),
-    paste0("model     ", d$model),
+  c(paste0("session   ", d$id, "  (", d$status, ", ", d$turns,
+           if (d$turns == 1L) " turn)" else " turns)"),
+    paste0("model     ", cmd_model_label(d$model)),
     paste0("mode      ", d$mode),
     paste0("document  ", cmd_doc_site(s)$path %||% "(none)"),
     paste0("queue     ", length(d$queue$steer), " steer, ", length(d$queue$follow_up),
@@ -326,14 +343,14 @@ cmd_clear = function(args, ctx) {
 
 #' @noRd
 cmd_resume = function(args, ctx) {
-  if (!nzchar(args)) return(utils::capture.output(print(gptr::gptr_sessions())))
+  if (!nzchar(args)) return(print_lines(gptr::gptr_sessions()))
   rs = console_repl_find()
   if (is.null(rs)) return("Use gptr_resume() outside the console.")
   s = gptr::gptr_resume(args, envir = rs$envir)
   rs$session = s
   # the resumed session's kept home now decides where prompts and !code evaluate (IC-40)
   rs$envir_given = FALSE
-  paste0("Resumed ", s$id, " (", s$turns, " turns).")
+  paste0("Resumed ", s$id, " (", s$turns, if (s$turns == 1L) " turn)." else " turns).")
 }
 
 #' @noRd
@@ -367,7 +384,7 @@ cmd_doc = function(args, ctx) {
 cmd_skills = function(args, ctx) {
   f = ns_fun("gptr_skills")
   if (is.null(f)) return("Skills are not available.")
-  utils::capture.output(print(f()))
+  print_lines(f())
 }
 
 #' `/skill:<name> [request]`: the skill goes to the next prompt's `skills =`; the request is sent
@@ -387,14 +404,14 @@ cmd_skill = function(args, ctx) {
 cmd_mcp = function(args, ctx) {
   f = ns_fun("gptr_mcp")
   if (is.null(f)) return("MCP is not available.")
-  utils::capture.output(print(f()))
+  print_lines(f())
 }
 
 #' `/permissions [allow|ask|deny|remove <rule>]`: the rules, or a change for this R session
 #' (gptr_permissions() validates the rule)
 #' @noRd
 cmd_permissions = function(args, ctx) {
-  if (!nzchar(args)) return(utils::capture.output(print(gptr::gptr_permissions())))
+  if (!nzchar(args)) return(print_lines(gptr::gptr_permissions()))
   verb = sub("[[:space:]].*$", "", args)
   rule = trimws(substring(args, nchar(verb) + 1L))
   if (!verb %in% c("allow", "ask", "deny", "remove") || !nzchar(rule)) {

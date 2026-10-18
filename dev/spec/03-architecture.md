@@ -247,7 +247,8 @@ Rules that keep this honest:
    shell holds no frames or user objects [IC-71]) and the replay-block table [IC-46]. Usage, queues, abort flags,
    the `peter$out()` store and every in-flight cache live in sessions and runs; `gptr_usage()` aggregates [G3 (2)].
    The console input layer also keeps the seconds its last `readline()` waited (`readline_secs`: process-level
-   input timing, not run state [IC-75]).
+   input timing, not run state [IC-75]) and the terminal modes a console call saved before it turned the echo off
+   (`tty_modes`, cleared when the call ends [IC-76]).
 
 ### 2.3 Execution model
 
@@ -1466,13 +1467,15 @@ arguments the tool sees and is recorded.
 #### 6.8.3 The prompt
 
 One line (NS-1): the tool and the call's first line, cut to the console width (less the margin) before `(+N more
-lines)`, every flagged call, then `allow? [y]es / [a]lways / [n]o / [?]`, with C0/C1 controls, bidi and zero-width
-characters escaped as `<U+XXXX>` [IC-53; D-187]. `a` adds a session rule covering exactly the
-flagged calls (`r(fn:FindNeighbors,FindClusters)`); `?` opens the detail view (code, flagged calls with levels,
+lines)`, the flagged calls one per line (highest level first, each cut to the width, at most 5, then `(+N more; ?
+shows all)`), then `allow? [y]es / [a]lways / [n]o / [?]`, with C0/C1 controls, bidi and zero-width
+characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. `a` adds a session rule covering exactly the
+flagged calls (`r(fn:FindNeighbors,FindClusters)`), offered only when the request suggests one; `?`
+opens the detail view (code, flagged calls with levels,
 paths, "cannot be undone" when no checkpoint is possible, and "always in this project", written to the user-level
 project file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; Ctrl-C aborts
 the run. Never `askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1].
-A sub-agent's prompt names it (`  sub-agent alpha > r  cm = 1`; a nested `peter()` by its quoted prompt) and an
+A sub-agent's prompt names it (`  sub-agent alpha > r  cm = 1`; a nested `peter()` by its quoted prompt and number) and an
 `ask_human` prompt adds `asks in every mode: <reason>`. Every console prompt first ends partial lines and clears the
 waiting row, and its lines reach the console even from inside the parent's `r` evaluation (never its tool result).
 An invalid answer is explained (`a` where nothing can be remembered says why); five (`?` is none) end in a refusal
@@ -1892,21 +1895,24 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **Pasted and typed-ahead input** [IC-75, D-184]: on a macOS terminal (R's own readline on a tty, where the
   BSD tty driver hands waiting input over as complete lines), the lines already waiting on fd 0 after a prompt,
   slash or `!code` line is read (a paste) join it, a dim `(pasted: Enter sends it as one message)` hint follows
-  and one `... ` line is read: Enter sends, typed text is appended. `"""` blocks, fences and piped `.stdin`
-  input never look. Elsewhere (Linux and other terminals, IDE consoles, Windows, and R linked to readline >= 8.1
+  and one `... ` line is read: Enter sends, typed text is appended. A `"""` block or fence reads its lines
+  from the waiting ones before `... ` (the lines after its closer are the next paste, D-220); piped `.stdin`
+  input never looks. Elsewhere (Linux and other terminals, IDE consoles, Windows, and R linked to readline >= 8.1
   such as Homebrew or conda R on macOS, whose bracketed paste keeps the rest of a paste in R's console buffer
   rather than on fd 0) pasted lines arrive one per read: use `"""`. Every console question (approvals, choices,
   input, the pause menu, `gptr_confirm()`) reads again while an interactive answer arrived within 0.1 s of its
   prompt (at most 100 reads): a line typed, pasted or queued from a script (an IDE's run selection) before the
-  question is discarded and never answers it. A fence runs as R only for an `r`, `R`, `{r...}` or empty
-  info string; other fences are prompt text; the body loses the opener's indentation and closes on a fence at
-  least as long (CommonMark).
+  question is discarded and never answers it. On a macOS terminal an approval, choice or input answer with lines
+  waiting after it (a paste) is dropped with them and the question asked again (D-220). A fence runs as R only
+  for an `r`, `R`, `{r...}` or empty info string; other fences are prompt text; the body loses the opener's
+  indentation and closes on a fence at least as long (CommonMark).
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
   stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
   session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`, or `"follow_up"`); one batch (a
-  paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. IDE
-  consoles, R.app and `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer
-  after the CLI's current response.
+  paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. The
+  terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only in its
+  notice; console questions read with the echo restored (D-221). IDE consoles, R.app and `peter("...")` at R's
+  prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current response.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.
@@ -1916,9 +1922,12 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   width - 4; one blank line separates text, tool, notice, prompt and status blocks (and two
   prompts, and two text blocks in a row [D-208]) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
   the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
-  row, R GUIs included); the margin is that of the console an evaluation started from, also for
-  prompts and notices drawn inside it. There nested lists keep their indentation, pipe tables are aligned
-  (verbatim when malformed or too wide) and a reply's leading, trailing and repeated blank lines
+  row, R GUIs included; the pause-menu notice excepted, D-225); the margin is that of the console an
+  evaluation started from, also for prompts and notices drawn inside it. There nested lists keep their
+  indentation, pipe tables are aligned
+  (when malformed or too wide, verbatim and unwrapped like fenced code so a copied table stays valid,
+  each row printed as it ends once the rows so far rule alignment out)
+  and a reply's leading, trailing and repeated blank lines
   collapse; `NO_COLOR` removes colours and styles only. Rscript (verbosity 1), knitr, jsonl and
   tests (verbosity 0) and non-dynamic outputs (pipes, Jupyter) keep the plain layout (no margin,
   block gaps, table alignment or notice wrapping). Styling adds
@@ -1931,26 +1940,33 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   under a list item closes), so a copied block is Markdown whose body runs; in the margin code
   characters appear as they stream and a line without a TAB that fit one row is redrawn
   highlighted. A tool call shows its code on its line when it fits, else as a fence of at most
-  20 lines (info string `r` only for the r tool); result lines are indented four spaces and an
-  `r` error shows its error message; the one-line approval prompt (6.8.3) is cut to the console
-  width before its `+N more lines`, and the `?` detail shows the code as a plain fence of at most
-  40 lines. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied block
-  shows the cut (D-207). Console output draws no box characters (D-187).
+  20 lines (info string `r` only for the r tool); result lines are indented four spaces and wrap
+  at the width, also indented (a word wider than it is cut); an error shows its message in at most
+  6 rows, then an ellipsis, an `r` error then its object changes; `write` shows the path relative
+  to the project and the byte count (D-223); the one-line approval prompt (6.8.3) is cut to the
+  console width before its `+N more lines`, and the `?` detail shows the code as a plain fence of
+  at most 40 lines. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied
+  block shows the cut (D-207). Console output draws no box characters (D-187).
   Every renderer write and console control (prompts, notices, the pause menu) goes through
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
   whatever `tee` is; prompts and sub-agent lines first end partial lines, also while a tool
   executes (conditions raised inside a tool leave the waiting row alone). Children never render;
   a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
   (`  sub-agent a started (kid/kid-1)`, `  sub-agent a done (1/2) · 2 turns · 12 s` or
-  `failed: <status>`; `(k/N)` for a team, fan-out or `gptr_parallel()` group; a nested `peter()`
-  by its quoted prompt). Model code that wraps such calls in `capture.output()` or `sink()` still
-  captures prompts and lines (D-188). A run's status line counts its own requests and adds what its
+  `failed (1/2): <first line of the reason>`, cut to the console width; `(k/N)` for a team, fan-out or
+  `gptr_parallel()` group; a nested `peter()` by its quoted prompt and its number among the parent run's
+  children, `'Summarise ...' #2`, D-224). Model code that wraps such calls in `capture.output()` or `sink()`
+  still captures prompts and lines (D-188). A run's status line counts its own requests and adds what its
   sub-agents cost (`done · 2 requests · 156.7k tokens · $0.2125 · sub-agents $0.8500`, D-206).
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
   `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger; on a CLI route also the
   CLI's reported turn input, D-206), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
-  templates as `/<name> args`. Commands are recorded as comments in transcripts.
+  templates as `/<name> args`. Commands are recorded as comments in transcripts. Their output, like a
+  prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings
+  they print are formatted at width - 4 (`print_lines()`), so they are not wrapped again, and `/help` wraps
+  each description under its column (`formatDL()`). The Ctrl-C notices at the prompt and of the pause menu
+  start with a line end (D-225).
 - **UI backends** (`ui` specs): `console`, `none`, `scripted` (tests), `rstudio` (dialogs; a timed-out dialog
   is a denial with a notice). The UI abstraction is how Shiny or RPC front ends replace the console. Whether anyone
   can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works
@@ -2386,9 +2402,11 @@ behind a schema probe and a maintainer's live end-to-end test respectively (§1.
 
 References are `provider/id[:thinking]` strings or aliases resolved dynamically from family and release date
 (`sonnet`, `opus`, `haiku`, `gemini`, `flash`, `gpt`, `jev`, `claude_code`, `codex`), with Pi's last-colon
-thinking-suffix rule, `.`/`-`/`_` normalisation and `adist()` suggestions [09 §4]. A registered provider named
+thinking-suffix rule, `.`/`-`/`_` normalisation and `adist()` suggestions (only the named provider's references
+after a known `provider/`) [09 §4]. A registered provider named
 alone means its first declared model in every resolver (`claude-cli`, `codex`, `codex-cli`), alias names normalise
-like ids (`claude-code` is `claude_code`), and `/model` checks a reference before the first prompt [IC-19, IC-79]. Thinking levels are clamped
+like ids (`claude-code` is `claude_code`), `/model` checks a reference before the first prompt, and `/model` and `/status` show a built-in CLI's `default` with
+the full id it runs (`claude-cli/default (claude-sonnet-5-5)`) [IC-19, IC-79]. Thinking levels are clamped
 to the model's map. The default chat model is taken from the first available route: an Anthropic key ->
 `anthropic/claude-sonnet-5-5` (the north-star banner; $2/$10 vs $4/$20 for Opus 5.5); OpenAI ->
 `openai/gpt-6-sol`; Gemini -> `google/gemini-3.8-flash`; otherwise a detected CLI. `small_model` serves

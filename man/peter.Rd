@@ -127,15 +127,20 @@ backslash continues a line;
 }
 
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
-and \code{... } waits for Enter (text typed there is added). Elsewhere (Homebrew or conda R, Linux
-terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a time; wrap a
-multi-line paste in \verb{"""}. Lines typed, pasted or run from a script before a question (an
-approval, a choice, the pause menu) appeared are discarded and never answer it: answer after
-the prompt.
+and \code{... } waits for Enter (text typed there is added); a pasted fence or \verb{"""} block is read
+up to its closer at once, and a block pasted at an approval or a choice is dropped and the
+question asked again. A last pasted line without a newline waits for Enter at the next prompt,
+so a two-line paste without a final newline answers with its first line. Elsewhere (Homebrew
+or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a
+time; wrap a multi-line paste in \verb{"""}. Lines typed, pasted or run from a script before a
+question (an approval, a choice, the pause menu) appeared are discarded and never answer it:
+answer after the prompt.
 
 In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
 runs steers it: the agent reads it at its next step, after the current tool results, and
-lines typed or pasted together are one message. \code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}})
+lines typed or pasted together are one message. The terminal does not echo while an answer
+runs: a line shows once you press Enter, in its notice, so it never mixes into the answer.
+\code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}})
 queues them for when the agent would stop instead. \verb{/command} and \code{!code} lines typed then
 run at the next prompt; an interrupt drops them. On the CLI routes a steer reaches the model
 after the CLI's current response. The RStudio, Positron and R.app consoles, and type-ahead at

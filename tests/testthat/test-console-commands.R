@@ -139,6 +139,32 @@ test_that("/help lists the commands and the input syntax", {
                    "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
 })
 
+test_that("in the console margin command output wraps inside it; listings fit its width", {
+  local_console_commands()
+  local_project()
+  peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+  testthat::local_reproducible_output(width = 60)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  rs = repl_state(NULL, list2env(list(alpha = 1:10)))
+  out = run_command(rs, "/help")$out
+  expect_true(all(startsWith(out[nzchar(out)], "  ")))
+  expect_true(all(nchar(out, type = "width") <= 60L))
+  words = function(x) strsplit(trimws(paste(x, collapse = " ")), "[[:space:]]+")[[1L]]
+  expect_identical(words(out), words(cmd_help("", list())))
+  # a description wraps under its own column, so no row looks like another command
+  cmds = out[seq(2L, match("  Input:", out) - 1L)]
+  expect_true(all(grepl("^.{16} {3}\\S", cmds)))
+  expect_identical(run_command(rs, "/mode")$out, "  Mode: manual")
+  expect_match(run_command(rs, "/env")$out, "^  alpha: <integer>")
+  # a listing is printed at the content width (60 - 4), not wrapped again
+  listing = withr::with_options(list(width = 56L, cli.width = 56L),
+                                utils::capture.output(print(gptr::gptr_sessions())))
+  expect_identical(run_command(rs, "/resume")$out,
+                   ifelse(nzchar(listing), paste0("  ", listing), ""))
+  expect_equal(c(getOption("width"), getOption("cli.width")), c(60, 60))
+})
+
 test_that("/exit, /quit and /q end the REPL", {
   local_console_commands()
   for (cmd in c("/exit", "/quit", "/q")) {
@@ -188,6 +214,30 @@ test_that("/model checks a reference before the first prompt; provider names res
                    "Model: codex/default (from the next request)")
 })
 
+test_that("/model and /status name the model a CLI's default runs (#44)", {
+  local_console_commands()
+  off = gptr_register(pcli_fake_provider("claude"))
+  withr::defer(off())
+  local_mocked_bindings(pcli_default_model = function(api) paste0(api, "-id"))
+  shown = "fakeclaude/default (cli-claude-id)"
+  rs = repl_state(NULL, new.env())
+  run_command(rs, "/model fakeclaude/default")
+  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
+  rs$session = idle_session()
+  run_command(rs, "/model fakeclaude/default")
+  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
+  run_command(rs, "/model fakeclaude/claude-sonnet-5-5")
+  expect_identical(run_command(rs, "/model")$out, "Model: fakeclaude/claude-sonnet-5-5")
+  # another CLI adapter decides what its `default` runs
+  off2 = gptr_register(gptr_provider("mycli", api = "mycli-api", type = "cli",
+                                     models = list(list(id = "default"))))
+  withr::defer(off2())
+  run_command(rs, "/model mycli/default")
+  expect_identical(run_command(rs, "/model")$out, "Model: mycli/default")
+})
+
 test_that("/mode on a session appends the mode change for the next turn", {
   local_console_commands()
   s = idle_session()
@@ -208,12 +258,16 @@ test_that("/status, /tools and /env describe the console", {
   expect_match(run_command(rs, "/status")$out[[1L]], "session   (none yet", fixed = TRUE)
   expect_match(run_command(rs, "/tools")$out[[1L]], "Direct tools:", fixed = TRUE)
   env_out = run_command(rs, "/env count")$out
-  expect_match(env_out, "^  counts: ")
+  expect_match(env_out, "^counts: ")
   s = idle_session()
   rs$session = s
   status = run_command(rs, "/status")$out
   expect_identical(status[[1L]], paste0("session   ", s$id, "  (idle, 0 turns)"))
   expect_true(any(grepl("^queue     0 steer, 1 follow-up$", status)))
+  d = session_data(s)
+  d$turns = 1L
+  expect_identical(run_command(rs, "/status")$out[[1L]],
+                   paste0("session   ", s$id, "  (idle, 1 turn)"))
 })
 
 test_that("/clear starts a new conversation and keeps model and mode", {

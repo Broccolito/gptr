@@ -2643,3 +2643,110 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   one re-baseline at integration; `?peter`.
 - Tests: prompt-text (the line), northstar and bench-context/prompt-sections (composition byte for byte);
   `dev/bench/tokens/run.R --check` (the prefix gate). Evidence: progress/P26.md Task 37.
+
+## D-220 - P26 A pasted block never answers a question; pasted fences are read at once (2026-10-18)
+- Rule: `ui_console_read()` (approvals, choices, input) asks again when the REPL's reader finds lines waiting
+  after an answer: the answer and the lines (a paste) are dropped with one `A pasted block is not an answer (N
+  lines dropped).` line; this is no invalid answer (D-188). Amends D-184/IC-75 ("fences never poll"): a `"""`
+  block or fence takes each line from the lines waiting on fd 0 before a `... ` read (none while `rd$held` or
+  `rd$typed` holds lines); the waiting lines after its closer stay in `rd$held`, read first and unechoed, so
+  the next input joins them like any paste (hint, `... `), never one turn per line. A paste's last line without
+  a newline is never waiting (the tty holds it until Enter; pure R cannot peek at it), so a two-line paste
+  without a final newline still answers with its first line. The pause menu (`console_ask()`) and
+  `gptr_confirm()` are unchanged.
+- Contract-visible: IC-75; 03 section 6.17; P26 Task 2; `?peter`, console vignette.
+- Tests: test-console-ui.R (paste at an approval through the REPL), test-console-repl.R (blocks, macOS pty child).
+  Evidence: progress/P26.md Task 19.
+
+## D-221 - P26 The terminal does not echo type-ahead while a console call runs (2026-10-18)
+- Rule: in a terminal REPL (IC-76 scope) `console_send()` saves the tty modes (`tty_modes()`, `stty -g` on fd 0),
+  sets `-echo` for the call and restores them on exit, error and interrupt included; canonical mode stays, so typed
+  lines still arrive whole. A typed line shows once, in its steering or held-lines notice; a partial line shows at
+  the next prompt. Amends P26 Task 4 ("typing stays visible") and IC-76's echo limit.
+- Triage correction: R's readline (CRAN macOS, readline 5.2) shows nothing typed when the tty's echo is off at its
+  start (pty check), so `gptr_readline()` reads with the saved modes while `the$tty_modes` is set and sets `-echo`
+  again after the read: approvals, choices, the pause menu and `gptr_confirm()` echo as before. R code a tool runs
+  that reads the console (`readline()`, `menu()`, `browser()`) reads without echo.
+- Not changed: a notice still ends the streamed row (the answer goes on in the next row), so the pty test compares
+  the answer's text, not its rows, with an undisturbed render. R ending during a call (`q()`, a crash, a kill) runs
+  no restore, so the terminal keeps `-echo` (IC-76 Limits).
+- Contract-visible: IC-76; 04 section 7.1 wrapper row; 03 sections 2.2 rule 5 and 6.17; P26 Task 4; `?peter`,
+  console vignette.
+- Tests: test-console-typing.R (mocked stty around console_send(), gptr_readline(), pty child). Evidence:
+  progress/P26.md Task 21.
+
+## D-222 - P26 The approval prompt shows at most five flagged calls, one per line; [a] needs a rule (2026-10-18)
+- Rule: amends IC-53 item 8 and D-187 ("lists every flagged call", joined by `; `): the one-line prompt shows the
+  flagged calls one per line, highest level first, each line (`[level category] call`) cut to the console width,
+  at most 5, then `(+N more; ? shows all)`; the detail view lists them all, highest level first. A request path
+  that is absolute shows normalised, relative to the project inside it. `[a]`/`[p]` are offered only when the
+  request carries a `suggested_rule`; else `a`/`p` say `no rule covers these calls` (IC-77 item 3), so an
+  object overwrite (no rule) no longer offers `(a rule for these calls)` and records nothing. A risk without a
+  label shows `(level N)`, not `(level N: )`.
+- Triage correction: normalising the request's risk in `perm_decide()` (`risk_norm()`) breaks the layering
+  (L2 `agent-dispatch.R` may not call L4 `perm-classify.R`; test-arch-layers), so a tool's own risk record still
+  reaches the UI without `label` (04 section 7.11 says `<gptr_risk>`); the `reason` line names the label.
+- Contract-visible: IC-53 item 8, IC-77 item 3, 04 `builtin_ui` row, 03 section 6.8.3; console vignette.
+- Tests: test-console-ui.R (40-column fit and cap, project-relative path, no empty label, no [a] without a rule),
+  test-console-repl.R (stdin prompt). Evidence: progress/P26.md Task 24.
+
+## D-223 - P26 Result lines wrap; a failed r call lists its objects; write paths are project-relative (2026-10-18)
+- Rule: amends D-187 ("Result lines: four spaces; an error shows `details$error`") and P26 Task 5: a result line
+  that does not fit wraps at the content width, continuation rows keep its indentation (a word wider than the
+  width is still cut; a wrapped line loses its runs of spaces, as in an `edit` diff line or between object-change
+  groups). An error shows its message wrapped to at most 6 rows, then an ellipsis row (the triage's "3 lines"
+  cannot show a 200-character error at 60 columns, 4 rows, in full); an `r` error, in the loop or served to a CLI
+  route, then shows its object changes (`+ res`), so a failed call says what it left behind. `write` shows
+  `path_rel(details$path)` and the byte count. A tool's own `render()` lines wrap the same way.
+- Contract-visible: console display only; 03 section 6.17.
+- Tests: test-console-render.R (error then `+ res` in the loop and served to a CLI route, `wrote analysis.R
+  (5,123 bytes)`, a 200-character error at 60 columns in full, 8 error lines and a 2,600-character one cut to 6
+  rows, another tool's `details$objects` ignored). Evidence: progress/P26.md Task 26.
+
+## D-224 - P26 Sub-agent failure lines give the reason and (k/N); nested calls are numbered (2026-10-18)
+- Rule: amends IC-77 item 4 and D-188 (`failed: <status>`; a nested call's label is its quoted prompt): a shown
+  sub-agent's end reads `  sub-agent <agent> failed (k/N): <reason>`, the first line of the `agent_end` reason
+  (the run's condition message), else its status; `(k/N)` as for `done`. Every sub-agent line is cut to the
+  console width with an ellipsis. A nested `peter()` call's label ends ` #k`, its place among the parent run's
+  children (`run$children`, fan-out and team children included; a continued child keeps its number), so loop
+  iterations with one prompt differ in prompts, questions and progress lines; without a parent run, no number.
+- Contract-visible: IC-77 item 4, 04 section 7.11 `agent`, 03 sections 6.8.3 and 6.17; teams vignette.
+- Tests: test-console-render.R (a fan-out whose children fail with `no_key`; no reason), test-console-ui.R (two
+  sequential nested calls with one prompt), test-gptr-gateway.R (loop labels). Evidence: progress/P26.md Task 27.
+
+## D-225 - P26 Command output and long prompts keep the console margin; interrupt notices start a line (2026-10-18)
+- Rule: amends D-186 and IC-75 ("a prompt over 200 bytes is printed whole"): `console_out()` (slash-command
+  results, a printed console value, the manual-setup lines) and the long-prompt branch of `gptr_readline()` write
+  through `gptr_message_write(margin = TRUE)`, so their lines get the margin and a line that does not fit is
+  word-wrapped at width - 4 with its indentation (the prompt's own leading blanks are dropped first, so a padded
+  question is not indented twice). In the margin that branch also takes a prompt wider than the content row
+  (a `gptr_confirm()` question under 200 bytes), and the answer is read after `  > `; without a margin nothing
+  changes. `/env` lines lose their own two blanks (the banner adds them), so in the margin they sit at column 2. Listings that commands print (`/cost`,
+  `/checkpoints`, `/resume`, `/skills`, `/mcp`, `/permissions`) go through `print_lines()`, which formats at the
+  content width (`width` and `cli.width`), so rows are not wrapped again. `/help` lays out commands and input
+  forms with `formatDL()` at the content width (the console width without a margin): a description wraps under
+  its column (commands' at column 17, was 16). The idle-prompt Ctrl-C notice and the pause-menu notice start
+  with a line end (a pause after a cleared waiting row shows one more blank row; accepted so that an echoed `^C`
+  or the prompt never joins the notice). `/status` and `/resume` say `1 turn`; the banner's sentence ends with
+  a period.
+- Contract-visible: console display only; IC-75, the `gptr_readline()` row of 04 section 7.1, 03 section 6.17.
+- Tests: test-console-commands.R (/help at width 60 in the margin: every line indented, none wider, no split
+  word, descriptions in one column; `/mode`; `/env` at column 2; `/cost` formatted at 56; `1 turn`),
+  test-utils-options.R (a padded 300-byte prompt wrapped once in the margin and an 83-byte one at width 60, both
+  read after `  > `; a fitting prompt read with it), test-console-repl.R (the idle notice follows a line end;
+  banner period; banner objects at column 2), test-console-interrupt.R (the pause notice follows a line end).
+  Evidence: progress/P26.md Task 30.
+
+## D-226 - P26 /model and /status name a CLI default's model; suggestions keep the typed provider (2026-10-18)
+- Rule: `/model` (no argument) and `/status` show a built-in CLI's (claude, codex) `default` with the full id the
+  CLI gets (`claude-cli/default (claude-sonnet-5-5)`, 04 section 11.10), through P20's `pcli_default_model()`, a
+  new console contract edge of the layering test (`cmd_model_label()`); another CLI adapter's `default` is shown
+  as typed. An unknown reference that starts with a known `provider/` (a provider id or alias) gets its `adist()`
+  suggestions from that provider's references only (`versa/gpt-9` suggests `versa/...`); other references are
+  compared with the whole catalog as before.
+- Contract-visible: console display and `gptr_error_unknown_model$suggestions`; 03 section 8.4, the
+  `model_resolve()` row of 04 section 7.5, IC-79 in 04 section 15.9.
+- Tests: test-console-commands.R (`/model` and `/status` before and after the first prompt on the fake CLI's
+  `default`; a full id and another CLI adapter's `default` unchanged), test-catalog-models.R
+  (`versa/gpt-9-nonexistent`, `versa/`, `versa/gpt-9:high` suggest the three versa models). Evidence:
+  progress/P26.md Task 35.

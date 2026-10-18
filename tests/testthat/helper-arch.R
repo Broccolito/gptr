@@ -158,13 +158,16 @@ arch_kernel_sdk = function() {
 # consumers) and the dedicated session of P18's gptr_mcp_serve() (section 6.3) create sessions
 # with P06's session_new(); a served MCP call runs P06's tool_call_hook(), its tool and the
 # checkpointers as the loop does (tool_run(), tool_execute_frame(), checkpoint_before(),
-# checkpoint_after()), and the console's /model checks a reference with P06's model_canonical()
-# (IC-79)
+# checkpoint_after()), the console's /model checks a reference with P06's model_canonical()
+# (IC-79), and /model and /status name the full id behind a CLI's `default` with P20's
+# pcli_default_model() (section 11.10, D-226)
 arch_contract_edges = function() {
   data.frame(
-    caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "console"),
+    caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "console",
+                    "console"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
-               "tool_execute_frame", "checkpoint_before", "checkpoint_after", "model_canonical")
+               "tool_execute_frame", "checkpoint_before", "checkpoint_after", "model_canonical",
+               "pcli_default_model")
   )
 }
 

@@ -91,7 +91,8 @@ Decisions (skeptic-corrected):
   poll, reading with `processx::conn_read_chars()` only (`conn_read_lines()` blocks forever on a
   chunk without newline) and splitting on `\r\n|\r|\n`. Waiting lines join the input; a dim
   `(pasted: Enter sends it as one message)` hint and one `... ` read follow, where Enter alone
-  sends and typed text is appended. `"""` blocks and fences never poll. Long prompts (over
+  sends and typed text is appended. `"""` blocks and fences take their lines from the waiting
+  lines before `... ` (Task 19, D-220). Long prompts (over
   200 bytes; R keeps 255) are printed whole and read after `> ` (moved here from Task 6). Piped `.stdin = TRUE`
   stays line-based. Linux and other front ends are documented ("use `\"\"\"`"); no inputrc tip.
 - Stale answers, every front end: `gptr_readline()` records the duration of its `readline()` in
@@ -107,9 +108,9 @@ Decisions (skeptic-corrected):
 Tests (`test-console-repl.R`, `test-console-ui.R`, `test-utils-options.R`,
 `test-console-completion.R` mock gains `waiting`), RED first: joined paste with blank and indented
 lines; paste without final newline completed at `... `; `!x = 1` plus waiting `y = 2`; `"""` and
-fences never poll; stdin reader never polls; readline-limit line drops the waiting lines; stale
-`h$config$codex` and `y` skipped then `n` denies; `readline_answer()` bounded; acceptance: 3
-pasted lines give 1 fake request; a `skip_on_cran()` macOS pty child: paste is one turn, Ctrl-D
+fences take the waiting lines (Task 19); stdin reader never polls; readline-limit line drops the
+waiting lines; stale `h$config$codex` and `y` skipped then `n` denies; `readline_answer()`
+bounded; acceptance: 3 pasted lines give 1 fake request; a `skip_on_cran()` macOS pty child: paste is one turn, Ctrl-D
 after a partial typed line does not hang. Spec: 03 section 6.17 grammar bullet ("on a macOS
 terminal ..."), 04 section 7.1 wrapper row, IC-75 (paste joining scope, stale-answer rule, the
 fd-0 connection is not an R connection and is never closed; read with `conn_read_chars()` only).
@@ -165,7 +166,8 @@ Decisions (skeptic-corrected):
   `cli::is_ansi_tty()`, spaces otherwise; a cleared row is never followed by an LF except on
   `rgui` (the launch-boundary `newline` argument goes away). Separators are written on finished
   lines, so the next block overwrites the cleared row. The spinner leaves the cursor at the end of
-  its text (typing stays visible).
+  its text; the terminal does not echo during a console call, so type-ahead shows in its notice
+  only (Task 21, D-221).
 - One "other output is about to appear" path: `console_before_message(runs = NULL)` ends partial
   Markdown lines of every foreground record and clears waiting rows but keeps their tasks. It is
   the first statement of `ui_console_permission()`, `ui_console_select()` and

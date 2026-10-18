@@ -11,13 +11,18 @@ text_lines = function(text) {
 }
 
 #' Who a run is to the person (D-188): "main", a sub-agent's name, or for a nested peter() call
-#' the first line of its prompt, quoted and cut to 30 characters, so loop iterations differ
+#' the first line of its prompt, quoted and cut to 30 characters, then ` #k`, its place among the
+#' children of the parent run, so loop iterations differ (D-224)
 #' @noRd
 agent_label = function(run) {
   agent = run$opts$agent %||% "main"
+  if (!identical(agent, "nested")) return(agent)
   p = trimws(c(text_lines(run$opts$call$prompt), "")[[1L]])
-  if (!identical(agent, "nested") || !nzchar(p)) return(agent)
-  paste0("'", if (nchar(p) > 30L) paste0(trimws(substr(p, 1L, 30L)), "...") else p, "'")
+  if (nzchar(p)) {
+    agent = paste0("'", if (nchar(p) > 30L) paste0(trimws(substr(p, 1L, 30L)), "...") else p, "'")
+  }
+  k = match(run$session, run$outer$children)
+  if (is.na(k)) agent else paste0(agent, " #", k)
 }
 
 #' Keep the first `head` and last `1 - head` share of lines within a token budget

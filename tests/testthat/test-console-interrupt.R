@@ -115,7 +115,9 @@ test_that("in the console margin the menu's prompts keep it, as its notices do (
   withr::local_options(cli.dynamic = TRUE)
   log = local_menu_answers(c("s", "use only mpg"))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
-  expect_true(any(startsWith(err, "  [gptr] paused")))
+  # the notice starts on a line of its own (a terminal may have echoed ^C)
+  expect_identical(err[[1L]], "")
+  expect_true(startsWith(err[[2L]], "  [gptr] paused"))
   expect_identical(log$prompts, c("  ? ", "  steer> "))
 })
 

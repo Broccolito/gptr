@@ -124,6 +124,39 @@ test_that("gptr_readline() records how long it waited; a long prompt is printed 
   expect_identical(got, "> ")
 })
 
+test_that("in the console margin a prompt wider than a row is printed wrapped inside it (IC-75)", {
+  withr::defer(assign("readline_secs", NULL, envir = the))
+  testthat::local_reproducible_output(width = 60)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  read = function(prompt) prompt
+  words = function(x) strsplit(trimws(paste(x, collapse = " ")), " +")[[1L]]
+  # a caller's own margin (console_pad()) is not doubled
+  long = paste0("  ", paste(rep("word", 60L), collapse = " "), " [y/N] ")
+  got = NULL
+  out = utils::capture.output({
+    got = gptr_readline(long, read)
+  })
+  expect_identical(got, "  > ")
+  expect_true(all(startsWith(out, "  ") & !startsWith(out, "   ")))
+  expect_true(all(nchar(out) <= 60L))
+  expect_identical(words(out), words(long))
+  # under 200 bytes but wider than the content row (56 columns), as gptr_confirm() asks
+  q = "The prompt contains a secret-looking value. Send it with the value replaced? [Y/n] "
+  out = utils::capture.output({
+    got = gptr_readline(q, read)
+  })
+  expect_identical(got, "  > ")
+  expect_true(all(startsWith(out, "  ") & nchar(out) <= 60L))
+  expect_identical(words(out), words(q))
+  # a prompt that fits is read with it
+  out = utils::capture.output({
+    got = gptr_readline("  allow? [y]es / [n]o / [?]: ", read)
+  })
+  expect_identical(out, character())
+  expect_identical(got, "  allow? [y]es / [n]o / [?]: ")
+})
+
 test_that("readline_answer() asks again while answers arrive within 0.1 s, at most 100 times", {
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   rl = local_readline(c("y", "", "n"), secs = c(0.001, 0.002, 2))

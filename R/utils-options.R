@@ -76,15 +76,33 @@ stdin_tty = function() {
   isatty(stdin())
 }
 
+#' Mockable: the modes of the terminal R reads (`stty -g`), or set `modes` (such as "-echo"); NULL
+#' when stty fails (IC-76)
+#' @noRd
+tty_modes = function(modes = "-g") {
+  out = tryCatch(suppressWarnings(system2("stty", modes, stdout = TRUE, stderr = FALSE)),
+                 error = function(e) NULL)
+  if (is.null(attr(out, "status"))) out
+}
+
 #' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its
 #' own copy of readline() as `read` (console_reader()). The seconds it waited go to
 #' `the$readline_secs` (readline_answer()); readline() keeps only 255 bytes of a prompt, so one
-#' over 200 bytes is printed whole and read after "> " (IC-75)
+#' over 200 bytes, or in the console margin (D-186) one wider than its content row, is printed
+#' whole (word-wrapped in the margin) and read after "> " (in the margin too) (IC-75)
 #' @noRd
 gptr_readline = function(prompt = "", read = readline) {
-  if (nchar(prompt, type = "bytes") > 200L) {
-    gptr_message_write(paste0(prompt, "\n"), "stdout")
-    prompt = "> "
+  pad = console_pad()
+  text = trimws(prompt, "left")
+  if (nchar(prompt, type = "bytes") > 200L || (nzchar(pad) &&
+      cli::ansi_nchar(text, type = "width") > max(20L, cli::console_width() - 4L))) {
+    gptr_message_write(paste0(text, "\n"), "stdout", margin = TRUE)
+    prompt = paste0(pad, "> ")
+  }
+  # readline() shows what is typed only while the terminal echoes, which a console call turned off
+  if (!is.null(the$tty_modes)) {
+    tty_modes(the$tty_modes)
+    on.exit(tty_modes("-echo"), add = TRUE)
   }
   start = proc.time()[["elapsed"]]
   x = as_utf8(read(prompt))

@@ -33,10 +33,12 @@ console_lines = function(x) {
   ui_escape(strsplit(paste(x, collapse = "\n"), "\r\n|\r|\n", perl = TRUE)[[1L]])
 }
 
-#' Print untrusted text on stdout, one escaped line each
+#' Print untrusted text on stdout, one escaped line each, inside the console margin (D-186)
 #' @noRd
 console_out = function(x) {
-  console_write(console_lines(x))
+  lines = console_lines(x)
+  if (length(lines)) console_notice(paste(lines, collapse = "\n"))
+  invisible(NULL)
 }
 
 #' Print lines that are already safe (built from escaped parts) on stdout
@@ -98,6 +100,8 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   st$fence_indent = 0L
   st$shown = 0L
   st$table = character()
+  st$cells = list()
+  st$table_raw = FALSE
   st$space = FALSE
   codes = c(h1 = "1;4", h = "1", bold = "1", italic = "3", code = "36", url = "2")
   st$on = logical(length(codes))
@@ -242,23 +246,41 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     }
     fence_end(line, paste0(sgr("2"), line, sgr("22")))
   }
-  # A block of pipe-table rows, aligned when it has a delimiter row, one cell count and fits;
-  # either way it stays a valid pipe table
-  table_flush = function() {
-    rows = st$table
-    st$table = character()
-    cells = lapply(rows, function(r) {
-      trimws(strsplit(sub("^\\|", "", sub("\\|[ \t]*$", "", r)), "|", fixed = TRUE)[[1L]])
-    })
+  # A block of pipe-table rows is held while it can be aligned: a delimiter second row, one cell
+  # count and a fitting width. From the row that rules this out the block prints verbatim as
+  # each row ends, so a table too wide to align streams (#43); either way it stays a valid pipe
+  # table.
+  table_widths = function() {
+    cells = st$cells
     k = length(cells[[1L]])
-    ok = length(rows) >= 2L && k > 0L && all(lengths(cells) == k) &&
-      all(grepl("^:?-+:?$", cells[[2L]]))
-    body = cells[-2L]
-    widths = if (ok) do.call(pmax, c(lapply(body, nchar, type = "width"), 3L))
-    if (!ok || sum(widths) + 3L * k + 1L > st$width) {
+    if (length(cells) < 2L || k == 0L || any(lengths(cells) != k) ||
+        !all(grepl("^:?-+:?$", cells[[2L]]))) return(NULL)
+    widths = do.call(pmax, c(lapply(cells[-2L], nchar, type = "width"), 3L))
+    if (sum(widths) + 3L * k + 1L <= st$width) widths
+  }
+  table_add = function(line) {
+    st$table = c(st$table, line)
+    if (!st$table_raw) {
+      cl = strsplit(sub("^\\|", "", sub("\\|[ \t]*$", "", line)), "|", fixed = TRUE)[[1L]]
+      st$cells = c(st$cells, list(trimws(cl)))
+      if (length(st$cells) < 2L || !is.null(table_widths())) return(invisible())
+      st$table_raw = TRUE
+      line = st$table
+    }
+    for (r in line) emit(paste0(r, "\n"))
+  }
+  table_flush = function() {
+    widths = if (!st$table_raw) table_widths()
+    rows = if (!st$table_raw) st$table
+    cells = st$cells
+    st$table = character()
+    st$cells = list()
+    st$table_raw = FALSE
+    if (is.null(widths)) {
       for (r in rows) emit(paste0(r, "\n"))
       return(invisible())
     }
+    body = cells[-2L]
     d = cells[[2L]]
     align = ifelse(endsWith(d, ":"), ifelse(startsWith(d, ":"), "c", "r"), "l")
     row = function(cl) {
@@ -298,7 +320,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
         closing = st$fence && grepl("^ {0,3}`{3,}[ \t]*$", line) &&
           nchar(trimws(line)) >= st$fence_n
         if (table_row) {
-          st$table = c(st$table, line)
+          table_add(line)
         } else if (opening || closing) {
           fence_marker(line)
         } else {
@@ -589,11 +611,13 @@ console_child_shown = function(run) {
     !isTRUE(top$opts$background) && verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
 }
 
-#' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188)
+#' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), cut to
+#' the console width (D-224)
 #' @noRd
 console_child_line = function(rec, text) {
   console_before_message(tools = TRUE)
-  console_write(paste0("  sub-agent ", rec$child$label, " ", text))
+  console_write(cli::ansi_strtrim(paste0("  sub-agent ", rec$child$label, " ", text),
+                                  cli::console_width()))
 }
 
 #' Render this record on stdout now?
@@ -798,30 +822,32 @@ console_call_line = function(call, width) {
   c(head, paste0(console_pad(), body))
 }
 
-#' The default result lines of a tool call: errors, object changes of `r`, the diff of `edit`,
-#' the path of `write`, else the elapsed time when it took a second or more
+#' The default result lines of a tool call: an error's message, wrapped to at most 6 rows, then
+#' the object changes of `r` (also after an error), the diff of `edit`, the project-relative path
+#' of `write`, else the elapsed time when it took a second or more
 #' @noRd
-console_result_lines = function(call, result) {
+console_result_lines = function(call, result, width) {
   pad = "    "
   el = result$elapsed
   secs = if (isTRUE(el >= 1)) sprintf(" (%.1f s)", el) else ""
   d = result$details %||% list()
+  obj = d$objects
+  parts = if (identical(call$name, "r")) c(
+    if (length(obj$added)) paste0("+ ", paste(obj$added, collapse = ", ")),
+    if (length(obj$modified)) paste0("~ ", paste(obj$modified, collapse = ", ")),
+    if (length(obj$removed)) paste0("- ", paste(obj$removed, collapse = ", ")),
+    if (isTRUE(d$plots >= 1L)) paste0("[", d$plots, if (d$plots == 1L) " plot]" else " plots]")
+  )
+  changes = if (length(parts)) paste0(pad, console_escape(paste(parts, collapse = "  "), FALSE))
   if (isTRUE(result$is_error)) {
-    first = c(text_lines(d$error %||% console_msg_text(result)), "failed")[[1L]]
-    return(cli::col_red(paste0(pad, "error: ", console_escape(first, FALSE), secs)))
+    err = console_escape(text_lines(d$error %||% console_msg_text(result)), FALSE)
+    if (!length(err)) err = "failed"
+    err[[1L]] = paste0("error: ", err[[1L]], secs)
+    rows = console_wrap(paste0(pad, err), width)
+    more = if (length(rows) > 6L) paste0(pad, cli::symbol$ellipsis)
+    return(c(cli::col_red(c(utils::head(rows, 6L), more)), changes))
   }
-  if (identical(call$name, "r")) {
-    obj = d$objects
-    parts = c(
-      if (length(obj$added)) paste0("+ ", paste(obj$added, collapse = ", ")),
-      if (length(obj$modified)) paste0("~ ", paste(obj$modified, collapse = ", ")),
-      if (length(obj$removed)) paste0("- ", paste(obj$removed, collapse = ", ")),
-      if (isTRUE(d$plots >= 1L)) paste0("[", d$plots, if (d$plots == 1L) " plot]" else " plots]")
-    )
-    if (length(parts)) {
-      return(paste0(pad, console_escape(paste(parts, collapse = "  "), FALSE), secs))
-    }
-  }
+  if (!is.null(changes)) return(paste0(changes, secs))
   if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
     shown = utils::head(d$diff, 12L)
     lines = paste0("    ", console_escape(shown, FALSE))
@@ -831,13 +857,24 @@ console_result_lines = function(call, result) {
   }
   if (identical(call$name, "write") && rlang::is_string(d$path)) {
     bytes = if (is.numeric(d$bytes)) paste0(" (", format(d$bytes, big.mark = ","), " bytes)")
-    return(paste0(pad, "wrote ", console_escape(d$path, FALSE), bytes, secs))
+    return(paste0(pad, "wrote ", console_escape(path_rel(d$path), FALSE), bytes, secs))
   }
   if (nzchar(secs)) paste0(pad, "done", secs) else character()
 }
 
-#' The console lines of a tool call (`result = NULL`) or of its result, fitted to `width` (a
-#' call's code fence excepted)
+#' Lines wrapped at `width`, continuation rows indented like their line (a wider word stays whole)
+#' @noRd
+console_wrap = function(lines, width) {
+  as.character(unlist(lapply(lines, function(line) {
+    if (cli::ansi_nchar(line, type = "width") <= width) return(line)
+    lead = attr(regexpr("^ *", cli::ansi_strip(line)), "match.length")
+    cli::ansi_strwrap(line, width, indent = lead, exdent = lead)
+  })))
+}
+
+#' The console lines of a tool call (`result = NULL`) or of its result, fitted to `width`: the
+#' default call line is cut (its code fence never), other lines wrap and keep their indentation
+#' (a word wider than `width` is cut)
 #'
 #' A tool spec's `render(call, result, width)` wins (IC-69), escaped like any untrusted text;
 #' `call` is `list(id, name, input)`, `result` the tool-result message plus `elapsed`.
@@ -849,8 +886,9 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
   }, error = function(e) NULL)
   width = max(20L, as.integer(width) - nchar(console_pad()))
   if (!is.character(out) && is.null(result)) return(console_call_line(call, width))
-  out = if (is.character(out)) console_escape(out, FALSE) else console_result_lines(call, result)
-  as.character(cli::ansi_strtrim(out, width))
+  out = if (is.character(out)) console_escape(out, FALSE) else
+    console_result_lines(call, result, width)
+  as.character(cli::ansi_strtrim(console_wrap(out, width), width))
 }
 
 #' The status line of a run's end: `  done | 2 requests | 1.2k tokens | $0.0042`, the run's own
@@ -1093,7 +1131,8 @@ console_on_compact = function(event, ctx) {
 
 #' agent_end: close the streams, show custom entries and the status line, forget the run; queued
 #' artifact lines (an interrupted tool) print last; a shown sub-agent says how it ended, `(k/N)`
-#' counting the settled children of its scheduled group (D-188)
+#' counting the settled children of its scheduled group (D-188), a failure with the first line of
+#' its reason, else its status (D-224)
 #' @noRd
 console_on_agent_end = function(event, ctx) {
   on.exit(console_artifact_flush(), add = TRUE)
@@ -1113,7 +1152,8 @@ console_on_agent_end = function(event, ctx) {
       paste0("done", k, sep, n, if (n == 1L) " turn" else " turns", sep,
              sprintf("%.0f s", as.numeric(Sys.time()) - as.numeric(run$started)))
     } else {
-      paste0("failed: ", console_escape(event$status %||% "?", FALSE))
+      why = c(text_lines(event$reason), event$status, "?")[[1L]]
+      paste0("failed", k, ": ", console_escape(why, FALSE))
     })
   }
   if (!console_foreground(rec)) return(NULL)

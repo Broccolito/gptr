@@ -761,13 +761,20 @@ model_lookup = function(text, ctg) {
   hit
 }
 
-#' Up to three suggestions for an unresolved reference (utils::adist(), report 09)
+#' Up to three suggestions for an unresolved reference (utils::adist(), report 09); a reference
+#' that starts with a known `provider/` is compared with that provider's references only
 #' @noRd
 model_suggestions = function(text, ctg, candidates = NULL) {
   if (length(candidates)) return(utils::head(candidates, 3L))
-  known = unique(c(ctg$index$ref, ctg$index$id, names(ctg$aliases)))
+  text = sub(":.*$", "", text)
+  pv = if (grepl("/", text, fixed = TRUE)) model_provider_id(sub("/.*$", "", text), ctg) else NA
+  known = if (is.na(pv)) {
+    unique(c(ctg$index$ref, ctg$index$id, names(ctg$aliases)))
+  } else {
+    ctg$index$ref[ctg$index$provider %in% pv]
+  }
   if (!length(known)) return(character())
-  d = utils::adist(tolower(sub(":.*$", "", text)), tolower(known))[1, ]
+  d = utils::adist(tolower(text), tolower(known))[1, ]
   known[order(d, known, method = "radix")][seq_len(min(3L, length(known)))]
 }
 

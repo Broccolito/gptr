@@ -36,6 +36,17 @@ typing_console = function(fake, answers, tools = NULL, envir = new.env()) {
   list(out = out, s = s)
 }
 
+# stty on fd 0 recorded in `log`; the saved modes are "SAVED"
+local_stty = function(.env = parent.frame()) {
+  box = new.env(parent = emptyenv())
+  box$log = character()
+  testthat::local_mocked_bindings(tty_modes = function(modes = "-g") {
+    box$log = c(box$log, modes)
+    if (identical(modes, "-g")) "SAVED" else character()
+  }, .env = .env)
+  box
+}
+
 last_message = function(req) req$messages[[length(req$messages)]]
 
 relay = function(text) paste0("The user sent this message while you were working: ", text)
@@ -289,6 +300,7 @@ test_that("a held !code line keeps the lines that complete it, also from a later
 test_that("no fd-0 reads outside a terminal REPL (.stdin, jsonl, peter() with a prompt)", {
   local_console_test()
   local_scripted_ui()
+  tty = local_stty()
   box = new.env(parent = emptyenv())
   box$calls = 0L
   local_mocked_bindings(console_typed_lines = function(rd, ...) {
@@ -302,8 +314,72 @@ test_that("no fd-0 reads outside a terminal REPL (.stdin, jsonl, peter() with a 
   utils::capture.output(peter(.stdin = TRUE, model = fake, envir = new.env(),
                               .opts = list(frontend = "jsonl")))
   utils::capture.output(peter("hello", model = fake, envir = new.env()))
-  expect_length(fake_requests(fake), 3L)
+  local_mocked_bindings(stdin_tty = function() FALSE)
+  typing_console(fake, c("hello", "/exit"))
+  expect_length(fake_requests(fake), 4L)
   expect_identical(box$calls, 0L)
+  expect_identical(tty$log, character())
+})
+
+test_that("a terminal call runs without echo; its modes return after it, an error or interrupt", {
+  local_console_test()
+  tty = local_stty()
+  during = list()
+  fake = gptr_fake_provider(function(req) {
+    during[[length(during) + 1L]] <<- list(log = tty$log, saved = the$tty_modes)
+    if (identical(req$last_user, "fail")) list(error = "bad key", status = 401L) else "ok"
+  })
+  local_typed(function() character())
+  err = utils::capture.output(invisible(typing_console(fake, c("go", "fail", "/exit"))),
+                             type = "message")
+  expect_identical(during[[1L]], list(log = c("-g", "-echo"), saved = "SAVED"))
+  expect_identical(during[[2L]]$log, c("-g", "-echo", "SAVED", "-g", "-echo"))
+  expect_true(any(startsWith(err, "Error: ")))
+  expect_identical(tty$log, rep(c("-g", "-echo", "SAVED"), 2L))
+  expect_null(the$tty_modes)
+  tty$log = character()
+  slow = gptr_fake_provider(list(list(text = "first", delay = 5)))
+  local_typed(function() {
+    if (length(fake_requests(slow))) {
+      signalCondition(structure(class = c("interrupt", "condition"),
+                                list(message = "", call = NULL)))
+    }
+    character()
+  })
+  res = typing_console(slow, c("go", "/exit"))
+  expect_true(any(grepl("[gptr] aborted", res$out, fixed = TRUE)))
+  expect_identical(tty$log, c("-g", "-echo", "SAVED"))
+  expect_null(the$tty_modes)
+  # an interrupt while stty turns the echo off
+  tty$log = character()
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    tty$log = c(tty$log, modes)
+    if (identical(modes, "-echo")) {
+      signalCondition(structure(class = c("interrupt", "condition"),
+                                list(message = "", call = NULL)))
+    }
+    if (identical(modes, "-g")) "SAVED"
+  })
+  res = typing_console(fake, c("go", "/exit"))
+  expect_true(any(grepl("[gptr] interrupted", res$out, fixed = TRUE)))
+  expect_identical(tty$log, c("-g", "-echo", "SAVED"))
+  expect_null(the$tty_modes)
+})
+
+test_that("a question during a terminal call reads with the saved modes (readline echoes then)", {
+  tty = local_stty()
+  withr::defer(assign("tty_modes", NULL, envir = the))
+  read = function(prompt) {
+    tty$log = c(tty$log, paste0("read ", prompt))
+    "y"
+  }
+  the$tty_modes = "SAVED"
+  expect_identical(gptr_readline("allow? ", read), "y")
+  expect_identical(tty$log, c("SAVED", "read allow? ", "-echo"))
+  the$tty_modes = NULL
+  tty$log = character()
+  expect_identical(gptr_readline("peter> ", read), "y")
+  expect_identical(tty$log, "read peter> ")
 })
 
 test_that("repl_terminal() needs an interactive tty REPL and ignores the front end", {
@@ -386,4 +462,78 @@ test_that("the fd-0 reader returns complete lines, survives Ctrl-D and a /dev/nu
   got = regmatches(q$stdout, gregexpr("DEVNULL 0 in [0-9.]+ s", q$stdout))[[1L]]
   expect_length(got, 2L)
   expect_true(all(as.numeric(sub(".* in ([0-9.]+) s", "\\1", got)) < 0.5))
+})
+
+test_that("a terminal: typed text shows once, in its notice; questions and the next prompt echo", {
+  skip_on_cran()
+  skip_on_os("windows")
+  dir = withr::local_tempdir("gptr-echo-")
+  child = file.path(dir, "child.R")
+  writeLines(c(
+    tracemem_loader(),
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
+    "long = paste(c('BEGIN', sprintf('w%02dabc', 1:60), 'END'), collapse = ' ')",
+    "fake = gptr_fake_provider(function(req) switch(as.character(req$n),",
+    "  '2' = list(tool = 'r', input = list(code = 'zz = 1')), '3' = 'STEERED',",
+    "  list(text = long, chunk = 8L, gap = 0.04)))",
+    "invisible(peter(model = fake, envir = new.env()))",
+    "cat('CHILD DONE\\n')"
+  ), child)
+  # the terminal echoes, as a terminal does (a processx pty does not by default)
+  p = processx::process$new(
+    file.path(R.home("bin"), "R"), c("--vanilla", "--quiet"), pty = TRUE,
+    pty_options = list(echo = TRUE), wd = dir,
+    env = c("current", R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
+            TERM = "xterm"),
+    cleanup = TRUE
+  )
+  st = new.env(parent = emptyenv())
+  st$out = ""
+  # a pty child exits only once its output is read: p$kill() would wait for it forever
+  withr::defer({
+    if (p$is_alive()) p$signal(tools::SIGKILL)
+    deadline = Sys.time() + 10
+    while (p$is_alive() && Sys.time() < deadline) {
+      p$poll_io(100L)
+      p$read_output()
+    }
+  })
+  seen = function(x) sum(gregexpr(x, st$out, fixed = TRUE, useBytes = TRUE)[[1L]] > 0L)
+  wait_for = function(x, n = 1L, timeout = 30) {
+    deadline = Sys.time() + timeout
+    while (seen(x) < n && p$is_alive() && Sys.time() < deadline) {
+      p$poll_io(100L)
+      st$out = paste0(st$out, p$read_output())
+    }
+    seen(x) >= n
+  }
+  expect_true(wait_for("> "))
+  p$write_input(sprintf("source(%s)\r", deparse(child)))
+  expect_true(wait_for("peter> ", timeout = 120))
+  p$write_input("ONE\r")
+  expect_true(wait_for("BEGIN"))
+  p$write_input("steer me\r")
+  expect_true(wait_for("allow?"))
+  Sys.sleep(0.5)
+  p$write_input("y\r")
+  expect_true(wait_for("STEERED"))
+  expect_true(wait_for("peter> ", n = 2L))
+  p$write_input("TWO\r")
+  expect_true(wait_for("END", n = 2L))
+  expect_true(wait_for("peter> ", n = 3L))
+  p$write_input("/exit\r")
+  expect_true(wait_for("CHILD DONE"))
+  expect_identical(seen("steer me"), 1L)
+  expect_identical(seen("[gptr] steering: 'steer me'"), 1L)
+  # the answer to approve and the next prompt are shown: readline echoes with the modes restored
+  expect_identical(c(seen("[?]: y"), seen("peter> TWO")), c(1L, 1L))
+  # the screen's rows (escapes dropped, a row redrawn after "\r" kept as redrawn) without the
+  # notice: the streamed answer reads as the undisturbed one of the second prompt
+  rows = strsplit(gsub("\033\\[[0-9;?]*[A-Za-z]", "", st$out), "\n", fixed = TRUE)[[1L]]
+  text = paste(sub("^.*\r", "", sub("\r$", "", rows)), collapse = " ")
+  text = gsub("\\[gptr\\] steering:.*?next step", "", gsub("\\s+", " ", text), perl = TRUE)
+  answers = gsub(" ", "", regmatches(text, gregexpr("BEGIN.*?END", text, perl = TRUE))[[1L]])
+  expect_length(answers, 2L)
+  expect_identical(answers[[1L]], answers[[2L]])
 })

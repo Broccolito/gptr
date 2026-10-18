@@ -2222,7 +2222,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_opt(name)` | the option value or the §3.1 default (`NULL` for settings-backed options) | all |
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
-| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183) and `isatty(stdin())` (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs` and prints a prompt over 200 bytes whole, then reads after `> ` (IC-75) | P11, P14, P26 |
+| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with `the$tty_modes` while a console call holds the echo off (IC-76) | P11, P14, P26 |
 | `readline_answer(prompt)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer arrived within 0.1 s (typed or pasted before the question), at most 100 reads, then the last answer; used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
 | `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183) | P07, P14, P15 |
@@ -2491,7 +2491,7 @@ reactor_pump(until = function() done, slice_ms = 100L)
 | `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` | `provider-usage.R` | §4.3 records; cost from the dated price tier in force on `when`; TTL-split cache writes (1 h at 2x input, 5 min at 1.25x) | P06, P12, P13, P20 |
 | `usage_log_append(row)`, `usage_log()` | `provider-usage.R` | the process System 1 accounting log (append-only) | P13, P06 |
 | `catalog_get()` | `catalog-models.R` | the merged catalog (§11.10) | P05, P07 |
-| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions; local providers accept unknown ids | P06, P08, P13, P17, P19 |
+| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions (only the named provider's references after a known `provider/`); local providers accept unknown ids | P06, P08, P13, P17, P19 |
 | `model_prepare(ref, safety = NULL)` | `catalog-models.R` | explicit selected-model preparation: discovers missing/stale Ollama evidence, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P08, P13 |
 | `provider_preflight(model, provider, safety = NULL)` | `catalog-models.R` | pure no-I/O check before payload/state/image serialization and credential lookup; private discovery evidence binds endpoint/path/model/server/lifecycle; missing protected safety means local-only TRUE (IC-74; `07-local-ollama.md` section 2.1) | P05, P08, P13 |
 | `catalog_aliases()` | `catalog-models.R` | chr of alias names (for `identifier_known()`) | P08 |
@@ -2748,7 +2748,7 @@ diff_lines(c("a", "b"), c("a", "c"))
 | `rule_suggest(call)` | `perm-rules.R` | chr(1) rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`), or `NULL` (never for level 4) | P11, P14 |
 | `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
 | `builtin_plan(gptr)` | `perm-plan.R` | registers the `plan` policy (writes denied, level-1 R allowed only because the run evaluates in the scratch overlay), the plan-mode `agent_end` hook (captures the last `<proposed_plan>...</proposed_plan>`, saves `<root>/plans/<YYYY-MM-DD>-<slug>.md`, sets `.d$plan`, stores the pending plan under `home_address(home)` with the time, appends `gptr.plan`, offers the execute menu interactively), the plan-mode allowlist check (only calls known to be read-only run, IC-54), and the `plan.pending` service (returns the plan once, only to the next top-level `peter()` call of the same process and environment within one hour; any other call in between discards it; IC-56) | P02 load |
-| `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt shows the call's first line cut to the console width, `(+N more lines)` and every flagged call (IC-53, D-187) | P02 load |
+| `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt shows the call's first line cut to the console width, `(+N more lines)` and at most 5 flagged calls, one per line (IC-53, D-187, D-222) | P02 load |
 | `builtin_ask(gptr)` | `tool-ask.R` | registers the `ask` direct tool (schema §9.2) with `available = function(ctx) ctx$has_ui()`; result text as 18 §3.6 (`The user answered:` lines; cancellation and non-interactive texts) | P02 load |
 
 Console `select()` deliberately preserves title line feeds for setup and `ask` questions.
@@ -2760,8 +2760,9 @@ retained. Permission approval displays keep the separate IC-53 escaping rules.
 <gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, undo_note = chr(1) | NULL (from the
 `checkpoint.note` service), session = chr(1), turn = int(1), nested = lgl(1), tier = "ask" | "ask_human")`
 (IC-53). IC-77 adds `agent = chr(1)`, who asks: `"main"`, a sub-agent's name, or for a nested
-`peter()` call the first line of its prompt quoted and cut to 30 characters; the
-`permission_request` event carries the event's own `agent` label instead.
+`peter()` call the first line of its prompt quoted and cut to 30 characters, then ` #k`, its place among the
+parent run's children (`run$children`), so loop iterations differ (D-224); the `permission_request` event carries
+the event's own `agent` label instead.
 
 Example calls:
 
@@ -4586,7 +4587,9 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    rules pre-approve the secret guard.
 8. Approval displays (console, rstudio dialogs, worker-forwarded requests) escape C0/C1 controls except TAB and
    bidi and zero-width characters as `<U+XXXX>`; the one-line prompt names who asks (IC-77), the tool and the
-   call's first line, cut to the console width before `(+N more lines)`, and lists every flagged call (D-187).
+   call's first line, cut to the console width before `(+N more lines)` (an absolute path inside the project
+   relative to it), then the flagged calls one per line, highest level first, each cut to the console width, at
+   most 5, then `(+N more; ? shows all)`; `[a]`/`[p]` are offered only with a `suggested_rule` (D-187, D-222).
 
 P24's `test-injection-e2e.R` adds an injected model trying each path above; every attempt ends in a human ask
 (interactive) or `blocked` in every mode but yolo, which runs gptr's own exports by design (IC-78).
@@ -5066,14 +5069,18 @@ Ollama requires no Jev key and is not a structured-chat emulation fallback.
 
 Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier sections.
 
-**IC-75 Console input: paste joining and stale answers** (P26 Task 2, D-184).
+**IC-75 Console input: paste joining and stale answers** (P26 Task 2, D-184; Task 19, D-220).
 - Paste joining, macOS terminal only (`is_macos()` and R's own readline reading a tty: Unix, interactive,
   `cledit`, `stdin_tty()`): after a prompt, slash or `!code` line is read, the lines waiting on fd 0 join it,
   a dim `(pasted: Enter sends it as one message)` hint follows and one `... ` line is read (Enter sends, typed
-  text is appended; after a line at the readline limit the waiting lines are dropped with it). `"""` blocks
-  and fences never look; piped `.stdin = TRUE` input stays line-based. Other platforms and front ends get
-  pasted lines one per read and document `"""`, as does R linked to readline >= 8.1 (Homebrew or conda R on
-  macOS): its bracketed paste keeps the rest of a paste in R's console buffer, so fd 0 holds none of it.
+  text is appended; after a line at the readline limit the waiting lines are dropped with it). A `"""` block
+  or fence takes each line from the waiting lines and reads at `... ` only when none wait (and `rd$held` and
+  `rd$typed` are empty); the waiting lines after its closer stay in `rd$held`, which the reader returns first
+  and unechoed (the terminal showed them): the next input reads them as waiting lines that joined its first
+  one (hint and `... ` when two or more). Piped `.stdin = TRUE` input stays line-based. Other platforms and
+  front ends get pasted lines one per read and document `"""`, as does R linked to readline >= 8.1 (Homebrew
+  or conda R on macOS): its bracketed paste keeps the rest of a paste in R's console buffer, so fd 0 holds
+  none of it.
 - The fd-0 reader `console_typed_lines(rd)` (shared with IC-76) keeps `processx::conn_create_fd(0L, close =
   FALSE)` in `rd$fd`, created inside its `tryCatch` (an error reads nothing) and reopened after an end of
   input. It is not an R connection: it is dropped with the reader and never `close()`d, as closing it closes
@@ -5084,8 +5091,14 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   interactive answer arrived in under 0.1 s, at most 100 reads (an interactive R at the end of a pipe gets ""
   at once), then returns the last; the lines it skipped (typed, pasted or queued from a script) are discarded.
   `ui_console_read()`, the terminal branch of `console_ask()` and `gptr_confirm()` use it; the REPL prompt
-  keeps `gptr_readline()`. A prompt over 200 bytes is printed whole and read after `> ` (`readline()` keeps
-  255 bytes of a prompt).
+  keeps `gptr_readline()`. When the REPL's reader (`console_repl_find()$reader`) finds lines waiting after an
+  answer, `ui_console_read()` drops the answer and those lines (a paste), writes one
+  `  A pasted block is not an answer (N lines dropped).` line and asks again; this is no invalid answer
+  (D-188). A paste's last line without a newline is never waiting (the tty driver holds it until Enter) and
+  shows typed at the next read, so a two-line paste without a final newline answers with its first line.
+  A prompt over 200 bytes (`readline()` keeps 255 bytes of a prompt), or in the console margin one wider than
+  its content row, is printed whole without its own leading blanks, word-wrapped in the margin, and read after
+  `> ` (in the margin too) (D-225).
 - Fenced input: a fence runs as the user's R only for an info string of `r`, `R`, `{r...}` or none; other
   fences are prompt text; the body loses up to the opener's indentation and closes on a fence of at least the
   opener's length (CommonMark).
@@ -5112,12 +5125,18 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
 - Notices, pause menu included: `[gptr] steering: '<text>'; it reaches the agent at its next step` (while the
   run's model has type `"cli"`: `; it is sent after the CLI's current response`, D-205) and
   `[gptr] follow-up queued: '<text>'; it is sent when the agent would stop`.
+- No echo (D-221): while the call runs the terminal does not echo, so typed text never lands in the answer or the
+  waiting row; a typed line shows once, in its notice, and a partial line at the next prompt. `console_send()`
+  saves the modes (`tty_modes()`: `stty -g` on fd 0; NULL when stty fails, which changes nothing), sets `-echo`
+  (canonical mode stays) and restores the modes on exit, an error or interrupt included; `the$tty_modes` holds
+  them meanwhile. R's readline shows a line only while the terminal echoes, so `gptr_readline()` (approvals,
+  choices, the pause menu, `gptr_confirm()`) reads with the saved modes and sets `-echo` again after the read.
 - The setting `type_ahead` (§11.2): `"steer"` (default) or `"follow_up"`; not a tighten key.
-- Limits: the terminal still echoes typed text into the stream (on an ANSI terminal the waiting row's redraw
-  overwrites the echo of a partial typed line, and Enter leaves that row with the typed fragment above the
-  next block; the steering or held-lines notice repeats the text); a front end that keeps the tty non-canonical
-  during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the model after the
-  CLI's current response.
+- Limits: R code that a tool runs and that reads the console (`readline()`, `menu()`, `browser()`) reads without
+  echo; R ending during a call (`q()`, a crash or a kill) leaves the terminal without echo (`stty echo` or `reset`
+  restores it); a notice ends the streamed row, so the answer goes on in the row after it; a front end that keeps
+  the tty non-canonical during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the
+  model after the CLI's current response.
 
 **IC-77 Console controls and the asking agent** (P26 Task 6).
 1. Console writer: an evaluation's `.gptr_message_write(text, stream, margin, k)` lifts its own
@@ -5133,7 +5152,8 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
    `  sub-agent <agent> > <tool>  <code>`, the detail view `  sub-agent <agent> wants to use`;
    an `ask_human` request adds `     asks in every mode: <reason>`; a sub-agent's `ask` question
    starts `sub-agent <agent> asks: ` and its budget question `sub-agent <agent>: `.
-3. Invalid answers: `a`/`p` where nothing can be remembered say why; other text gives
+3. Invalid answers: `a`/`p` where nothing can be remembered (level 4, control, the `ask` tool, no
+   `suggested_rule`) say why; other text gives
    `Not an answer: '<text>'` and the letters allowed (`?` shows the detail view and is not
    counted); after 5, `No valid answer after 5 tries; refused.` and a denial with feedback
    `no valid answer was given at the approval prompt`.
@@ -5141,9 +5161,10 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
    verbosity 1+ unless `gptr.quiet`, `  sub-agent <agent> started (<model>)` (the model the child
    calls, for a worker not its proxy's `worker/worker`) at `agent_start` and
    `  sub-agent <agent> done (k/N) · <turns> turns · <secs> s` or
-   `  sub-agent <agent> failed: <status>` at `agent_end` through `console_write()`, two columns
-   in as the prompts; `(k/N)` counts the settled runs of a `subagent_schedule()` group
-   (`run$group`: `n`, `runs`).
+   `  sub-agent <agent> failed (k/N): <reason>` (the first line of the end's `reason`, else its
+   status) at `agent_end` through `console_write()`, two columns in as the prompts, each line cut
+   to the console width; `(k/N)` counts the settled runs of a `subagent_schedule()` group
+   (`run$group`: `n`, `runs`) (D-224).
 5. The `r` tool tees only for a depth-0 run (§7.9); nested calls evaluate in an overlay (§6.1
    `envir`).
 6. Run totals (D-206): a foreground run's status line reads `done · <n> requests · <tokens> tokens ·
@@ -5216,9 +5237,12 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   `gptr_message_notice` per model naming `tool_call = TRUE` and the `gptr_config(providers = ...)` declaration.
 - Model references: `model_match()` applies IC-19's provider-alone rule; `/model` before the first prompt checks
   the reference with `model_canonical()` (a registered router name passes, as at the first prompt) and keeps the
-  text as typed; `codex-cli` is an alias of `codex`. The two
-  console and MCP edges (`cmd_model()` -> `model_canonical()`, `mcp_serve_exec()` -> `tool_call_hook`,
-  `tool_run`, `tool_execute_frame`, `checkpoint_before`, `checkpoint_after`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
+  text as typed; `codex-cli` is an alias of `codex`. `/model` and `/status` show a built-in CLI's (claude,
+  codex) `default` with the full id it runs (`claude-cli/default (claude-sonnet-5-5)`, 11.10); an unknown
+  reference that starts with a known `provider/` gets suggestions from that provider's references only (D-226). The
+  console and MCP edges (`cmd_model()` -> `model_canonical()`, `cmd_model_label()` -> `pcli_default_model()`,
+  `mcp_serve_exec()` -> `tool_call_hook`, `tool_run`, `tool_execute_frame`, `checkpoint_before`,
+  `checkpoint_after`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
 
 **IC-80 Bedrock Converse with SigV4** (P26 Task 11, D-193).

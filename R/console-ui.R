@@ -1,6 +1,6 @@
 # console-ui.R -- the UI backends console, none, scripted and rstudio (builtin:ui, P11) and the
 # ui.get service. Adapted from report 18 Appendix A.3 (c1_ui.R) and A.4 (permission_prompt()):
-# the one-line prompt of architecture 6.8.3 / NS-1 with IC-53's display rules (every flagged call,
+# the one-line prompt of architecture 6.8.3 / NS-1 with IC-53's display rules (the flagged calls,
 # "+N more lines", controls, bidi and zero-width characters as <U+XXXX>). Never askYesNo(), menu()
 # or select.list(). A front-end file (L5): it calls no perm-* function, so a remembered answer
 # reaches builtin:permissions as the channel event `permissions:remember`.
@@ -64,31 +64,40 @@ ui_answer_norm = function(ans, request) {
   }
   rem = ans[["remember"]]
   keep = identical(ans[["decision"]], "allow") && isTRUE(rem %in% c("session", "project")) &&
-    ui_can_remember(request)
+    is.null(ui_no_rule(request))
   fb = ans[["feedback"]]
   ui_answer(ans[["decision"]], if (keep) rem, if (rlang::is_string(fb) && nzchar(fb)) fb)
 }
 
-#' May an approval of this request become a rule? Never for level 4, control or the ask tool
+#' Why an approval of this request cannot become a rule (IC-77 item 3), else NULL: never for
+#' level 4, control or the ask tool, nor without a suggested rule
 #' @noRd
-ui_can_remember = function(request) {
+ui_no_rule = function(request) {
   risk = request$risk
-  !identical(request$tool, "ask") && isTRUE(risk$level < 4L) &&
-    !"control" %in% c(risk$categories, risk$flagged$category)
+  if (identical(request$tool, "ask") || !isTRUE(risk$level < 4L) ||
+        "control" %in% c(risk$categories, risk$flagged$category)) {
+    return("level-4 and control actions are approved one call at a time")
+  }
+  if (!rlang::is_string(request$suggested_rule)) "no rule covers these calls"
 }
 
-#' The escaped lines a request shows: its code, else its path, else P06's summary
+#' The escaped lines a request shows: its code, else its path (an absolute one normalised, relative
+#' inside the project), else P06's summary
 #' @noRd
 ui_request_lines = function(request) {
   input = request$input
-  ui_escape(text_lines(input[["code"]] %||% input[["path"]] %||% request$summary))
+  path = input[["path"]]
+  if (rlang::is_string(path) && is_abs_path(path)) path = path_rel(path)
+  ui_escape(text_lines(input[["code"]] %||% path %||% request$summary))
 }
 
-#' The flagged calls (level >= 1) of a risk record, or NULL
+#' The flagged calls (level >= 1) of a risk record, highest level first, or NULL
 #' @noRd
 ui_flagged = function(risk) {
   fl = risk$flagged
-  if (is.data.frame(fl)) fl[fl$level >= 1L, , drop = FALSE]
+  if (!is.data.frame(fl)) return(NULL)
+  fl = fl[fl$level >= 1L, , drop = FALSE]
+  fl[order(-fl$level), , drop = FALSE]
 }
 
 #' Who asks (D-188): "sub-agent <label>" for a sub-agent's request, else ""
@@ -99,7 +108,8 @@ ui_who = function(request) {
 }
 
 #' The lines of the one-line prompt: who asks and the first line, fitted to the console (D-187),
-#' (+N more lines), every flagged call (IC-53) and why an `ask_human` request asks in every mode
+#' (+N more lines), the flagged calls one per line, fitted, at most 5 (D-222), and why an
+#' `ask_human` request asks in every mode
 #' @noRd
 ui_permission_lines = function(request) {
   lines = ui_request_lines(request)
@@ -108,13 +118,18 @@ ui_permission_lines = function(request) {
   who = ui_who(request)
   first = paste0("  ", if (nzchar(who)) paste0(who, " > "), ui_escape(request$tool %||% "tool"),
                  "  ", c(lines, "")[1L])
-  width = max(20L, cli::console_width() - nchar(console_pad()) - nchar(more))
+  width = max(20L, cli::console_width() - nchar(console_pad()))
   fl = ui_flagged(request$risk)
+  n = NROW(fl)
   why = request$reason
-  c(paste0(cli::ansi_strtrim(first, width), more),
-    if (NROW(fl)) {
-      paste0("     flagged: ", paste0(ui_escape(fl$call), " [", fl$level, " ", fl$category, "]",
-                                     collapse = "; "))
+  c(paste0(cli::ansi_strtrim(first, max(20L, width - nchar(more))), more),
+    if (n) {
+      k = seq_len(min(n, 5L))
+      rows = paste0(c("     flagged: ", rep(strrep(" ", 14L), 4L))[k], "[", fl$level[k], " ",
+                    fl$category[k], "] ", ui_escape(fl$call[k]))
+      cli::ansi_strtrim(c(rows, if (n > 5L) {
+        paste0(strrep(" ", 14L), "(+", n - 5L, " more; ? shows all)")
+      }), width)
     },
     if (identical(request$tier, "ask_human") && rlang::is_string(why) && nzchar(why)) {
       paste0("     asks in every mode: ", ui_escape(why))
@@ -133,7 +148,9 @@ ui_permission_detail = function(request) {
   out = c(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
                  ui_escape(request$tool %||% "a tool"),
                  if (!is.null(risk$level)) {
-                   paste0(" (level ", risk$level, ": ", ui_escape(risk$label %||% ""), ")")
+                   paste0(" (level ", risk$level,
+                          if (rlang::is_string(risk$label)) paste0(": ", ui_escape(risk$label)),
+                          ")")
                  },
                  if (identical(request$tier, "ask_human")) ", which needs your decision"),
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
@@ -154,11 +171,10 @@ ui_permission_detail = function(request) {
   }
   note = request$undo_note %||% ui_undo_note(request)
   if (rlang::is_string(note) && nzchar(note)) out = c(out, paste0("  ", ui_escape(note)))
-  rule = request$suggested_rule
-  rule = if (rlang::is_string(rule)) paste0(": ", ui_escape(rule)) else " (a rule for these calls)"
   c(out, "  [y] yes",
-    if (ui_can_remember(request)) {
-      paste0(c("  [a] always in this session", "  [p] always in this project"), rule)
+    if (is.null(ui_no_rule(request))) {
+      paste0(c("  [a] always in this session: ", "  [p] always in this project: "),
+             ui_escape(request$suggested_rule))
     },
     "  [n] no (type n <what to do instead> to tell gptr)", "  Ctrl-C: abort the run")
 }
@@ -172,12 +188,21 @@ ui_undo_note = function(request) {
   tryCatch(ext_service_get("checkpoint.note")(call, NULL), error = function(e) NULL)
 }
 
-#' Read one console answer, never a line typed before the question (IC-75); Ctrl-C or EOF gives
+#' Read one console answer, never a line typed before the question; when the REPL's reader finds
+#' lines waiting after the answer (a paste; a last line without a newline is not waiting), the
+#' answer and the lines are dropped and the question is asked again (IC-75); Ctrl-C or EOF gives
 #' NA (a terminal echoes even a `secret` itself)
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
-  ans = tryCatch(readline_answer(prompt), interrupt = function(e) NA_character_)
-  if (rlang::is_string(ans)) ans else NA_character_
+  rd = console_repl_find()$reader
+  repeat {
+    ans = tryCatch(readline_answer(prompt), interrupt = function(e) NA_character_)
+    if (!rlang::is_string(ans)) return(NA_character_)
+    more = if (!is.null(rd)) rd$waiting()
+    if (!length(more)) return(ans)
+    console_write(paste0("  A pasted block is not an answer (", length(more) + 1L,
+                         " lines dropped)."))
+  }
 }
 
 #' Parse a choice: numbers, or case-insensitive label prefixes (report 18 parse_choice()); NA
@@ -240,7 +265,8 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
   console_before_message(kind = "prompt", tools = TRUE)
-  can = ui_can_remember(request)
+  why = ui_no_rule(request)
+  can = is.null(why)
   opts = if (can) "[y]es / [a]lways / [n]o / [?]" else "[y]es / [n]o / [?]"
   console_write(ui_permission_lines(request))
   bad = 0L
@@ -261,8 +287,7 @@ ui_console_permission = function(request, read = ui_console_read) {
     }
     bad = bad + 1L
     console_write(if (low %in% c("a", "always", "p", "project")) {
-      paste0("  [a]lways is not offered: level-4 and control actions are approved one call at a ",
-             "time; answer y, n or ?.")
+      paste0("  [a]lways is not offered: ", why, "; answer y, n or ?.")
     } else {
       paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'. Type ",
              if (can) "y, a, n" else "y, n", " (n <text> says what to do instead) or ? ",

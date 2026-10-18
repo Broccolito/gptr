@@ -132,7 +132,7 @@ policy_menu = function(cnd, pol) {
   }
   who = if (is.null(s)) "" else paste0(" ", session_data(s)$id)
   repeat {
-    console_notice("[gptr] paused", who, ": ", choices)
+    console_notice("\n[gptr] paused", who, ": ", choices)
     ans = console_ask("? ")
     key = if (is.na(ans)) "a" else tolower(substr(trimws(ans), 1L, 1L))
     if (key %in% c("", "c")) {

@@ -45,7 +45,7 @@ test_that("successful edit removals stay plain while actual tool errors are mark
   expect_identical(cli::ansi_strip(lines[[2L]]), "    +new")
   result$is_error = TRUE
   result$content = list(block_text("failed"))
-  expect_match(cli::ansi_strip(console_result_lines(list(name = "edit"), result)),
+  expect_match(cli::ansi_strip(console_result_lines(list(name = "edit"), result, 80L)),
                "error: failed", fixed = TRUE)
 })
 

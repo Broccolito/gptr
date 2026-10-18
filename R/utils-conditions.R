@@ -127,6 +127,18 @@ gptr_message_margin = function(text) {
   paste0(ifelse(nzchar(lines), pad, ""), lines, "\n", collapse = "")
 }
 
+#' The lines print(x) shows; in the console margin at its content width, so that
+#' gptr_message_margin() does not wrap them again (D-186)
+#' @noRd
+print_lines = function(x) {
+  if (nzchar(console_pad())) {
+    width = max(20L, cli::console_width() - 4L)
+    old = options(width = width, cli.width = width)
+    on.exit(options(old))
+  }
+  utils::capture.output(print(x))
+}
+
 #' TRUE the first time a once-key is seen in this process (always TRUE for NULL keys)
 #' @noRd
 once_first = function(key, kind) {

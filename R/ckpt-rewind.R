@@ -855,5 +855,5 @@ ckpt_cmd_checkpoints = function(args, ctx) {
   if (is.null(s)) return("There is no session.")
   cp = gptr_checkpoints(s, all = identical(trimws(args), "all"))
   attr(cp, "footer") = "Undo with /undo, or /rewind <turn>."
-  utils::capture.output(print(cp))
+  print_lines(cp)
 }
