@@ -4761,6 +4761,7 @@ macOS arm64; web and source claims were re-fetched independently. Verdicts: **co
 | 47 | 4.10 "Imports already in D-20 ... `processx`/`curl` already planned" (as Suggests) | **corrected**: `processx` is a D-20 Import; direct `curl::` calls need `curl` in Imports (not in D-20; D-13 open) | `dev/spec/01-decision-register.md` D-13, D-20 |
 | 48 | REQ-03/16/22/24/25/36/37/38 and D-03/D-05/D-11/D-26 references | confirmed | `dev/spec/00-vision-brief.md`, `01-decision-register.md` |
 | 49 | Appendix listings are the exact prototype files | confirmed for every listing (`a10.out` differs only by ESC shown as `^[`) | line-by-line comparison script |
+| 50 | 2.1.4, 2.2.4: type-ahead during a run can only become the next prompt (a free follow-up queue) | **corrected** (P26 Task 3, 2026-10-17): terminal R can read complete typed lines during a run. Poll fd 0 and read what it holds (`processx::conn_create_fd(0L, close = FALSE)`, `conn_read_chars()`); a canonical tty releases complete lines only (a partial line after Ctrl-D). gptr now steers with them (IC-76); IDE consoles still hold input until R reads again | tmux pty runs on CRAN macOS R 4.6.1 (the line release also with `readLines()` in rocker R 4.5.0 on Linux); `test-console-typing.R` pty child |
 
 Unverifiable here (kept or marked UNCERTAIN): runtime behaviour on Windows, Linux, RStudio, Positron, VS
 Code and Jupyter (including Esc during `readline()`, resumable interrupts, `timestamp()` history); the

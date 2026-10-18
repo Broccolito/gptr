@@ -58,10 +58,39 @@ gptr_is_interactive = function() {
   interactive()
 }
 
-#' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62)
+#' Mockable: does R read its console from a terminal (not an IDE console or a pipe)?
 #' @noRd
-gptr_readline = function(prompt = "") {
-  as_utf8(readline(prompt))
+stdin_tty = function() {
+  isatty(stdin())
+}
+
+#' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its
+#' own copy of readline() as `read` (console_reader()). The seconds it waited go to
+#' `the$readline_secs` (readline_answer()); readline() keeps only 255 bytes of a prompt, so one
+#' over 200 bytes is printed whole and read after "> " (IC-75)
+#' @noRd
+gptr_readline = function(prompt = "", read = readline) {
+  if (nchar(prompt, type = "bytes") > 200L) {
+    gptr_message_write(paste0(prompt, "\n"), "stdout")
+    prompt = "> "
+  }
+  start = proc.time()[["elapsed"]]
+  x = as_utf8(read(prompt))
+  the$readline_secs = proc.time()[["elapsed"]] - start
+  x
+}
+
+#' The answer to a question: in an interactive session a line readline() returns within 0.1 s
+#' was typed or pasted before the question was shown, so it is asked again; at most 100 times,
+#' as readline() returns at once at the end of a pipe (IC-75)
+#' @noRd
+readline_answer = function(prompt) {
+  for (i in seq_len(100L)) {
+    the$readline_secs = NULL
+    x = gptr_readline(prompt)
+    if (!gptr_is_interactive() || !isTRUE(the$readline_secs < 0.1)) break
+  }
+  x
 }
 
 #' @noRd
@@ -104,7 +133,7 @@ gptr_confirm = function(question, default = FALSE) {
   check_flag(default, "default")
   if (!gptr_can_prompt()) return(default)
   hint = if (default) " [Y/n] " else " [y/N] "
-  answer = tolower(trimws(gptr_readline(paste0(question, hint))))
+  answer = tolower(trimws(readline_answer(paste0(question, hint))))
   if (!nzchar(answer)) return(default)
   answer %in% c("y", "yes")
 }
@@ -120,7 +149,8 @@ platform_gui = function() {
 #' `.Platform$GUI` identifies the IDE's own R process. The IDE environment variables (`RSTUDIO`,
 #' `POSITRON`, `TERM_PROGRAM`) are inherited by every child process started from the IDE, so they
 #' count only in an interactive session; a non-interactive child (an Rscript started from the
-#' IDE's terminal, an Rscript worker) is "rscript".
+#' IDE's terminal, an Rscript worker) is "rscript", and R reading a tty (the IDE's terminal tab)
+#' is "terminal" ("vscode" with `TERM_PROGRAM=vscode`).
 #' @noRd
 front_end = function() {
   env = function(name) Sys.getenv(name, unset = "")
@@ -133,10 +163,11 @@ front_end = function() {
   if (is_knitting()) return("knitr")
   gui = platform_gui()
   human = gptr_is_interactive()
-  if (identical(gui, "Positron") || (human && identical(env("POSITRON"), "1"))) {
+  ide = human && !stdin_tty()
+  if (identical(gui, "Positron") || (ide && identical(env("POSITRON"), "1"))) {
     return("positron")
   }
-  if (identical(gui, "RStudio") || (human && identical(env("RSTUDIO"), "1"))) return("rstudio")
+  if (identical(gui, "RStudio") || (ide && identical(env("RSTUDIO"), "1"))) return("rstudio")
   if (!human) return("rscript")
   if (identical(env("TERM_PROGRAM"), "vscode")) return("vscode")
   if (gui %in% c("Rgui", "AQUA")) return("rgui")

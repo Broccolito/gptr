@@ -2241,19 +2241,46 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   current checkpoint.
 
 ## D-183 - P26 IDE terminal tabs are terminals; !code completion everywhere (2026-10-16)
-- Rule: TBD by P26 Task 1.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 1.
+- Rule: `front_end()` counts inherited `RSTUDIO=1`/`POSITRON=1` only for an interactive R whose
+  stdin is not a tty (`stdin_tty()`); `.Platform$GUI` checks are unchanged. The REPL's `!`
+  word-break gate drops its `front_end()` term (cledit + tty suffice).
+- Rule: the REPL reader calls `gptr_readline(prompt, rl)` with `rl = structure(readline, gptr =
+  TRUE)` built at run time (not a namespace object: R CMD check flags namespace closures whose
+  body calls `.Internal`; run-time also keeps IRkernel's `readline`). Other prompts keep
+  `readline()`. Mocks of `gptr_readline` that feed the REPL take `...`.
+- Contract-visible: 04 section 7.1 rows (`gptr_readline(prompt, read)`, `stdin_tty()`,
+  `front_end()`); 03 sections 6.2 and 6.17 (REPL completion bullet); `?peter`, console vignette.
+- Tests: test-console-completion.R (IDE terminal tab bang; reader readline copy; IDE consoles as
+  tty = FALSE); test-utils-options.R (IDE terminal tab front end). Evidence: progress/P26.md Task 1.
 
 ## D-184 - P26 Pasted blocks are one message; stale input never answers a question (2026-10-16)
-- Rule: TBD by P26 Task 2.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 2.
+- Rule: on a macOS terminal (`is_macos()` and `console_readline_tty()`, the Task 1 gate, now
+  shared) the lines waiting on fd 0 join a prompt, slash or `!code` line, then one `... ` read.
+  The fd-0 reader `console_typed_lines(rd)` (shared with Task 3) does one `conn_read_chars()` per
+  50 ms poll; `rd$fd` is reopened after an end of input and never closed; an error reads nothing.
+- Rule: `readline_answer()` re-reads an answer that arrived within 0.1 s (at most 100 reads) for
+  `ui_console_read()`, `console_ask()` and `gptr_confirm()`, so scripted drivers answer >= 0.1 s
+  after a prompt. `gptr_readline()` times reads in `the$readline_secs` and prints a prompt over
+  200 bytes whole before `> ` (moved from Task 6). A fence is R only for an `r`, `R`, `{r...}` or
+  empty info string.
+- Contract-visible: 04 section 7.1 (`gptr_readline`, `readline_answer`, `gptr_confirm`), IC-75;
+  03 section 2.2 rule 5, section 6.17; `?peter`, console vignette.
+- Tests: test-console-repl.R (paste, fences, fd-0 reader, acceptance, macOS pty child),
+  test-utils-options.R, test-console-ui.R, test-console-interrupt.R. Evidence: progress/P26.md Task 2.
 
 ## D-185 - P26 Typed lines steer the running agent (type_ahead setting) (2026-10-16)
-- Rule: TBD by P26 Task 3.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 3.
+- Rule: `console_send()` runs the reactor task `console_typed()` when `repl_terminal(rs)` (not
+  `.stdin`, not Windows, interactive, `stdin_tty()`; no `front_end()` term). It reads only while
+  a run of the call has a session, with the IC-75 reader `console_typed_lines(rd, 0L)` (new
+  `wait`: the first poll's, default 50). `/`/`!` lines wait in `rd$typed` for the next prompt (an
+  interrupt drops and lists them); the rest of a batch is one `policy_enqueue(..., source =
+  "repl")` as the new setting `type_ahead` says. Notices show the text.
+- Plan correction: IDE consoles are abort-only (`console_menu_available()`), so `?peter` and
+  `/help` say typed lines there wait for the next input, not that the pause menu steers.
+- Contract-visible: 04 sections 10.4 (`input`), 11.2 (`type_ahead`), IC-49, IC-76; 03 sections
+  6.2, 6.17; report 18 Verification log row 50; `?peter`, `/help`, both vignettes.
+- Tests: test-console-typing.R (10 blocks, pty child), test-gptr-config.R (key set),
+  test-console-repl.R (macOS pty: typed-ahead lines now steer). Evidence: progress/P26.md Task 3.
 
 ## D-186 - P26 Console margin, block spacing, waiting row, Markdown and highlighting (2026-10-16)
 - Rule: TBD by P26 Task 4.

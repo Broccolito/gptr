@@ -85,6 +85,18 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
   expect_identical(out$asked, 2L)
 })
 
+test_that("lines typed or pasted before the approval prompt never answer it (IC-75)", {
+  root = local_project()
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  rl = local_readline(c("h$config$codex", "y", "n"), secs = c(0.001, 0.001, 1.5))
+  res = NULL
+  utils::capture.output({
+    res = ui_console_permission(ui_request("zz = 1"))
+  })
+  expect_identical(res$decision, "deny")
+  expect_identical(rl$i, 3L)
+})
+
 test_that("the detail view shows the checkpoint.note service's undo note", {
   root = local_project()
   local_mocked_bindings(

@@ -245,6 +245,8 @@ Rules that keep this honest:
    children on unload), the weak live-session index, the most recent session for `gptr_last()` (held strongly: a
    shell holds no frames or user objects [IC-71]) and the replay-block table [IC-46]. Usage, queues, abort flags,
    the `peter$out()` store and every in-flight cache live in sessions and runs; `gptr_usage()` aggregates [G3 (2)].
+   The console input layer also keeps the seconds its last `readline()` waited (`readline_secs`: process-level
+   input timing, not run state [IC-75]).
 
 ### 2.3 Execution model
 
@@ -1198,7 +1200,8 @@ which drop out at settlement; run state lives in sessions (INFRA-15). Nested run
 ### 6.2 Streaming, interrupts and steering (S-8, INFRA-03/12)
 
 **One queue per session** with `steer` and `follow_up` FIFOs [G1 §4.6, G3 (4)]. Producers: the pipe into a
-running session (gateway route f), the console pause menu, `gptr_steer()` (SDK and front ends), `ctx$send()`
+running session (gateway route f), the console pause menu, a line typed in a terminal console while an answer
+runs [IC-76], `gptr_steer()` (SDK and front ends), `ctx$send()`
 (plugins, hooks and sibling agents). Consumer: the loop polls at run start, after `turn_end` and after tool
 preflight; a steer is delivered only after the **complete** tool-result message. Only user sources (the pipe, the
 pause menu, the REPL, `gptr_steer()` called outside a run) become the operator relay "The user sent this message
@@ -1214,7 +1217,9 @@ channel in core (J-cran K-16); a front end that needs one is a plugin calling `g
 only, experimental); a second Ctrl-C aborts. Menu output goes to stderr (the handler may run inside a tool's
 stdout capture) and tools record interruption with `on.exit()`, never with an exiting `tryCatch(interrupt =)`
 that would pre-empt the menu (G3 menu fixes). Where the resume restart is unavailable or unverified (Rgui,
-IDE consoles), the policy falls back to abort-only. Abort: `curl::multi_cancel()`, interrupt then `kill_all()`
+IDE consoles), the policy falls back to abort-only. R in an IDE's terminal tab reads a tty and is terminal R
+(`front_end()` counts the inherited `RSTUDIO=1`/`POSITRON=1` only without one), so it has the pause menu and
+Ctrl-C [D-183]. Abort: `curl::multi_cancel()`, interrupt then `kill_all()`
 child trees after a grace period, record the partial with `stop_reason = "aborted"`; the REPL returns to its
 prompt; programmatic calls re-signal the interrupt. While the menu waits streams are not polled, so
 `continue` retries a request the provider dropped [18 risk].
@@ -1834,6 +1839,30 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   trailing backslash, `@file` and `@object` mentions; a warning near the readline line limit (4,095 bytes on
   R < 4.5, 8,190 on R >= 4.5 [18 fact-check]); optional history through `utils::timestamp()`
   (`gptr.history`). Banner: `gptr 1.0.0 | model ... | mode ... | .gptr/ found` plus the workspace summary.
+- **REPL completion** [D-183]: wherever R's own Unix readline reads a tty (terminal R, an IDE's terminal tab)
+  the REPL adds `!` to `rl_word_breaks` for its duration (restored on exit; a caller's `custom.completer`
+  keeps its policy), so R completes the code after `!`/`!!`. The REPL reads its lines with a copy of
+  `base::readline` carrying one attribute: RStudio's console completes nothing inside a frame `identical()` to
+  `base::readline`, so it completes R code at `peter>`, while approval and menu prompts keep `readline()` and
+  RStudio's choice completion. radian and Positron's console offer no completion at the prompt.
+- **Pasted and typed-ahead input** [IC-75, D-184]: on a macOS terminal (R's own readline on a tty, where the
+  BSD tty driver hands waiting input over as complete lines), the lines already waiting on fd 0 after a prompt,
+  slash or `!code` line is read (a paste) join it, a dim `(pasted: Enter sends it as one message)` hint follows
+  and one `... ` line is read: Enter sends, typed text is appended. `"""` blocks, fences and piped `.stdin`
+  input never look. Elsewhere (Linux and other terminals, IDE consoles, Windows, and R linked to readline >= 8.1
+  such as Homebrew or conda R on macOS, whose bracketed paste keeps the rest of a paste in R's console buffer
+  rather than on fd 0) pasted lines arrive one per read: use `"""`. Every console question (approvals, choices,
+  input, the pause menu, `gptr_confirm()`) reads again while an interactive answer arrived within 0.1 s of its
+  prompt (at most 100 reads): a line typed, pasted or queued from a script (an IDE's run selection) before the
+  question is discarded and never answers it. A fence runs as R only for an `r`, `R`, `{r...}` or empty
+  info string; other fences are prompt text; the body loses the opener's indentation and closes on a fence at
+  least as long (CommonMark).
+- **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
+  stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
+  session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`, or `"follow_up"`); one batch (a
+  paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. IDE
+  consoles, R.app and `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer
+  after the CLI's current response.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.

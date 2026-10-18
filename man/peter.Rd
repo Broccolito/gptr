@@ -110,10 +110,30 @@ the head of a file (at most 40 lines) and \verb{@object} attaches an object by n
 prompt (at most 300 estimated tokens). \code{!!code} omits that note. Both execute your own R
 immediately, without the model's permission gate or a model request. Workspace changes
 remain visible to later calls, and enabled transcripts can record the code; \verb{!!} is not a
-privacy boundary. A fenced R block works like \code{!code}, a \verb{"""} block is a multi-line prompt,
-and a trailing backslash continues a line;
+privacy boundary. A fenced block marked \code{r}, \code{R}, \code{{r}} or unmarked works like \code{!code}
+(other fences are prompt text), a \verb{"""} block is a multi-line prompt, and a trailing
+backslash continues a line;
 \item a slash command such as \verb{/model}, \verb{/mode}, \verb{/cost} or \verb{/exit}; \verb{/help} lists them all.
 }
+
+In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
+and \code{... } waits for Enter (text typed there is added). Elsewhere (Homebrew or conda R, Linux
+terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a time; wrap a
+multi-line paste in \verb{"""}. Lines typed, pasted or run from a script before a question (an
+approval, a choice, the pause menu) appeared are discarded and never answer it: answer after
+the prompt.
+
+In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
+runs steers it: the agent reads it at its next step, after the current tool results, and
+lines typed or pasted together are one message. \code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}})
+queues them for when the agent would stop instead. \verb{/command} and \code{!code} lines typed then
+run at the next prompt; an interrupt drops them. On the CLI routes a steer reaches the model
+after the CLI's current response. The RStudio, Positron and R.app consoles, and type-ahead at
+R's own prompt during \code{peter("...")}, keep typed lines for the next input.
+
+Tab completes R names and file paths after \code{!} in terminal R, R in an IDE's Terminal tab
+included; RStudio's console completes R code at the prompt too; radian and Positron's console
+offer no completion there.
 
 Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
 \verb{[s]teer} (delivered after the current tool results), \verb{[f]ollow-up}, \verb{[c]ontinue}, \verb{[a]bort}
@@ -124,7 +144,8 @@ does not guarantee progress while the chat waits for input. Under Rscript, backg
 advance only inside blocking gptr calls.
 Front ends that cannot resume use an abort fallback. \verb{/exit}, two consecutive interrupts at
 the prompt or the end of piped input return the session invisibly, so \code{session = peter()}
-keeps the conversation. Use Ctrl-C in a terminal; RStudio, R.app, RGui and Positron use Esc.
+keeps the conversation. Use Ctrl-C in a terminal, an IDE's Terminal tab included; the RStudio,
+R.app, RGui and Positron consoles use Esc.
 
 Options: \code{gptr.verbose} (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}

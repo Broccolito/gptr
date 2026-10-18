@@ -98,10 +98,11 @@ test_that("console command output and documents keep payloads literal", {
   withr::defer(off())
   inputs = c("/injcmd", "/exit")
   i = 0L
-  local_mocked_bindings(gptr_readline = function(prompt = "") {
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
     i <<- i + 1L
     inputs[[i]]
   })
+  local_no_fd0()
   fake = local_fake_provider(list("unused"))
   out = inj_capture(peter(model = fake, envir = new.env()))
   expect_not_injected(out)

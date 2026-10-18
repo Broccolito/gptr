@@ -2211,9 +2211,10 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_opt(name)` | the option value or the §3.1 default (`NULL` for settings-backed options) | all |
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
-| `gptr_is_interactive()`, `gptr_readline(prompt = "")` | wrappers of `interactive()` and `readline()` (mockable with `testthat::local_mocked_bindings()`) | P11, P14 |
-| `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()` | P08, P15 |
-| `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown` | P07, P14, P15 |
+| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183) and `isatty(stdin())` (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs` and prints a prompt over 200 bytes whole, then reads after `> ` (IC-75) | P11, P14, P26 |
+| `readline_answer(prompt)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer arrived within 0.1 s (typed or pasted before the question), at most 100 reads, then the last answer; used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26 |
+| `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
+| `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183) | P07, P14, P15 |
 | `verbosity()` | `int(1)` 0-3 (§3.1 `gptr.verbose`) | P14, P06 |
 | `check_running()` | `lgl(1)`: `_R_CHECK_PACKAGE_NAME_` is set | P04, P15, P19 |
 | `on_load(expr)` (`aaa-state.R`, IC-32) | stores `substitute(expr)` and `parent.frame()`; `.onLoad` evaluates them in registration order after the namespace is loaded | all built-in declarations |
@@ -3485,7 +3486,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `session_start` | pi | collect (before the prompt freezes) | `reason` (`new`, `fork`, `resume`, `replay`, `child`) | `list(sections = named list (chr or NULL to remove), blocks = list of context blocks for the first message)` | P06 |
 | `session_before_fork` | pi | first decision | `source`, `at` | `list(cancel = TRUE, reason)` | P06 |
 | `session_shutdown` | pi | notify | `reason` (`exit`, `gc`, `unload`) | - | P06, P14 |
-| `input` | pi | transform chain | `text`, `source` (`prompt`, `pipe`, `repl`, `passthrough`, `steer`; `steer` = pause-menu input) | `list(action = "continue" \| "transform" \| "handled", text)` | P08, P14 |
+| `input` | pi | transform chain | `text`, `source` (`prompt`, `pipe`, `repl`, `passthrough`, `steer`; `steer` = pause-menu input or a line typed while a console answer runs, IC-76) | `list(action = "continue" \| "transform" \| "handled", text)` | P08, P14 |
 | `agent_start`, `agent_end` | pi | notify | `agent_end`: `status`, `reason`, `usage` (the run's rows), `doc` (site or NULL), `turns` | - | P06 |
 | `turn_start`, `turn_end` | pi | notify | `turn_end`: `message` (assistant), `results` (tool results) | - | P06 |
 | `before_request` | gptr | notify, read-only | `provider`, `model`, `request_id`, `view`, `tokens_est` | - (a handler that changes the frozen prefix triggers `cache_break`) | P06 |
@@ -3716,6 +3717,7 @@ snapshotted per run (IC-53).
 | `cache_commit` | `{s1: lgl, s2: lgl}` | `{s1: true, s2: false}` (C-31) | | P13/P15 |
 | `ui` | chr\|null | `null` | | P11 |
 | `frontend` | chr\|null | `null` (`console`) | | P14 |
+| `type_ahead` | chr | `"steer"` (`"follow_up"`): what a line typed in a terminal console while an answer runs becomes (IC-76) | | P26 |
 | `store`, `evaluator` | chr | `"jsonl"`, `"r"` (registered `store` and `evaluator` records, IC-69) | | P06, P09 |
 | `providers` | `{<id>: {base_url, models, headers, enabled}}` | `{}` (a project `base_url` needs trust and a one-time confirmation) | | P05 |
 | `egress` | `{<provider>: "ack"}` | `{}` (user file only) | | P05 |
@@ -4453,7 +4455,8 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 
 **IC-49 Console transcripts and steering in documents.** (req-8) The first REPL prompt of a session is recorded
 as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |> peter("...")`. Steers and
-follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session) are recorded
+follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session, a line typed
+in a terminal console [IC-76]) are recorded
 inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`.
 P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
 session.
@@ -5024,9 +5027,52 @@ Ollama requires no Jev key and is not a structured-chat emulation fallback.
 
 Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier sections.
 
-**IC-75 Console input: paste joining and stale answers** (P26 Task 2). TBD by P26 Task 2.
+**IC-75 Console input: paste joining and stale answers** (P26 Task 2, D-184).
+- Paste joining, macOS terminal only (`is_macos()` and R's own readline reading a tty: Unix, interactive,
+  `cledit`, `stdin_tty()`): after a prompt, slash or `!code` line is read, the lines waiting on fd 0 join it,
+  a dim `(pasted: Enter sends it as one message)` hint follows and one `... ` line is read (Enter sends, typed
+  text is appended; after a line at the readline limit the waiting lines are dropped with it). `"""` blocks
+  and fences never look; piped `.stdin = TRUE` input stays line-based. Other platforms and front ends get
+  pasted lines one per read and document `"""`, as does R linked to readline >= 8.1 (Homebrew or conda R on
+  macOS): its bracketed paste keeps the rest of a paste in R's console buffer, so fd 0 holds none of it.
+- The fd-0 reader `console_typed_lines(rd)` (shared with IC-76) keeps `processx::conn_create_fd(0L, close =
+  FALSE)` in `rd$fd`, created inside its `tryCatch` (an error reads nothing) and reopened after an end of
+  input. It is not an R connection: it is dropped with the reader and never `close()`d, as closing it closes
+  fd 0. Each poll waits at most 50 ms; it reads with `processx::conn_read_chars()` only
+  (`conn_read_lines()` blocks on a chunk without a newline) and splits on `\r\n|\r|\n`.
+- Stale answers, every front end: `gptr_readline()` records the seconds its `readline()` waited (timed with
+  `proc.time()[["elapsed"]]`) in `the$readline_secs`; `readline_answer(prompt)` re-reads while an
+  interactive answer arrived in under 0.1 s, at most 100 reads (an interactive R at the end of a pipe gets ""
+  at once), then returns the last; the lines it skipped (typed, pasted or queued from a script) are discarded.
+  `ui_console_read()`, the terminal branch of `console_ask()` and `gptr_confirm()` use it; the REPL prompt
+  keeps `gptr_readline()`. A prompt over 200 bytes is printed whole and read after `> ` (`readline()` keeps
+  255 bytes of a prompt).
+- Fenced input: a fence runs as the user's R only for an info string of `r`, `R`, `{r...}` or none; other
+  fences are prompt text; the body loses up to the opener's indentation and closes on a fence of at least the
+  opener's length (CommonMark).
 
-**IC-76 Typed lines steer a running console call** (P26 Task 3). TBD by P26 Task 3.
+**IC-76 Typed lines steer a running console call** (P26 Task 3, D-185).
+- Scope: `repl_terminal(rs)`: not `.stdin`, not Windows (processx cannot poll a console handle),
+  `gptr_is_interactive()` and `stdin_tty()`; no `front_end()` term, so an IDE's Terminal tab qualifies while IDE
+  consoles, R.app, RGui and Jupyter (no tty) do not. `console_send()` registers the package function
+  `console_typed()` as a reactor task of the prompt call (rule R3) and cancels it on exit; plain `peter("...")`,
+  `.stdin` and the jsonl frontend never read fd 0.
+- `console_typed()` reads only while a run of the call has a session (`policy_targets()`; otherwise the lines stay
+  for the next prompt): every 0.1 s one `console_typed_lines(rd, 0L)` (IC-75's reader; the first poll does not
+  wait, later polls of a batch wait 50 ms). A canonical tty hands over complete lines only (a partial line is
+  read after Ctrl-D, an empty Ctrl-D reads nothing). Lines matching `^\s*[/!]` are held in `rd$typed`, listed in
+  one `[gptr] after this answer: ...` notice and returned first by the terminal reader, echoed after the prompt;
+  an interrupted call drops and lists them (`[gptr] dropped typed lines: ...`). The other lines of a batch are
+  one message, queued with `policy_enqueue(session, text, <type_ahead>, source = "repl")`. A batch's notices and
+  its enqueue run between one `console_render_pause()` and `console_render_resume()`, so each notice starts its own
+  line; `policy_enqueue()` and `policy_flush()` take `source` (default `"pause_menu"`), so the item has the IC-55
+  source `repl` and a steer becomes the operator relay.
+- Notices, pause menu included: `[gptr] steering: '<text>'; it reaches the agent at its next step` and
+  `[gptr] follow-up queued: '<text>'; it is sent when the agent would stop`.
+- The setting `type_ahead` (§11.2): `"steer"` (default) or `"follow_up"`; not a tighten key.
+- Limits: the terminal still echoes typed text into the stream; a front end that keeps the tty non-canonical
+  during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the model after the
+  CLI's current response.
 
 **IC-77 Console controls and the asking agent** (P26 Task 6). TBD by P26 Task 6.
 

@@ -171,6 +171,13 @@ test_that("a second Ctrl-C while the menu waits aborts", {
   expect_identical(aborted$aborted, "u0000run1")
 })
 
+test_that("a line typed before the pause menu appeared never answers it (IC-75)", {
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  rl = local_readline(c("a", "c"), secs = c(0.01, 1))
+  expect_identical(console_ask("[c]ontinue, [a]bort: "), "c")
+  expect_identical(rl$i, 2L)
+})
+
 test_that("the policy is abort-only where resuming is unverified (RStudio, Rgui, Jupyter)", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)

@@ -157,10 +157,13 @@ test_that("the core setting specs cover contract 11.2 and validate their values 
     "version", "model", "small_model", "system1", "mode", "preset", "tools", "permissions",
     "context", "record", "replay", "transcript", "plugins", "filters", "skills", "mcp",
     "subagents", "output_tokens", "plot", "budget", "cache", "compactor", "compact_at",
-    "checkpoint", "doc", "cache_commit", "ui", "frontend", "store", "evaluator", "providers",
-    "egress"))
+    "checkpoint", "doc", "cache_commit", "ui", "frontend", "type_ahead", "store", "evaluator",
+    "providers", "egress"))
   expect_true(all(vapply(specs, inherits, NA, what = "gptr_setting")))
   by_name = stats::setNames(specs, names)
+  expect_identical(by_name$type_ahead$default, "steer")
+  expect_identical(by_name$type_ahead$validate("follow_up"), "follow_up")
+  expect_error(by_name$type_ahead$validate("off"), class = "gptr_error_invalid_argument")
   expect_identical(by_name$mode$validate("plan"), "plan")
   expect_identical(by_name$mode$tighten, c("plan", "manual", "edits", "auto"))
   expect_error(by_name$mode$validate("fast"), class = "gptr_error_invalid_argument")

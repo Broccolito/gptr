@@ -1,19 +1,18 @@
 # tests/testthat/test-console-completion.R -- native Unix readline prefix scope and restoration.
 
-local_completion_console = function(frontend = "terminal", human = TRUE, cledit = TRUE,
-                                    tty = TRUE, unix = TRUE, .env = parent.frame()) {
-  force(frontend)
+local_completion_console = function(human = TRUE, cledit = TRUE, tty = TRUE, unix = TRUE,
+                                    .env = parent.frame()) {
   force(human)
   force(cledit)
   force(tty)
   platform = .Platform
   platform$OS.type = if (unix) "unix" else "windows"
   testthat::local_mocked_bindings(
-    .Platform = platform, capabilities = function(...) c(cledit = cledit),
-    isatty = function(...) tty, .package = "base", .env = .env
+    .Platform = platform, capabilities = function(...) c(cledit = cledit), .package = "base",
+    .env = .env
   )
   testthat::local_mocked_bindings(gptr_is_interactive = function() human,
-                                  front_end = function() frontend, .env = .env)
+                                  stdin_tty = function() tty, .env = .env)
   withr::local_envvar(R_COMPLETION = NA, .local_envir = .env)
 }
 
@@ -28,7 +27,7 @@ completion_repl_state = function(stdin = FALSE) {
 
 local_completion_repl = function(setup, .env = parent.frame()) {
   testthat::local_mocked_bindings(
-    console_reader = function(...) list(read = function(...) "/exit"),
+    console_reader = function(...) list(read = function(...) "/exit", waiting = character),
     repl_setup = setup, repl_close = function(...) invisible(NULL),
     repl_banner = function(...) invisible(NULL),
     repl_waiting_notice = function(...) invisible(NULL),
@@ -48,6 +47,36 @@ test_that("native readline gets one bang separator and caller separators return 
   expect_null(repl_main(completion_repl_state()))
   expect_identical(seen$breaks, " ,;!")
   expect_identical(getOption("rl_word_breaks"), " ,;")
+})
+
+test_that("R's readline in an IDE terminal tab gets the bang separator", {
+  skip_on_os("windows")
+  local_completion_console()
+  # a terminal tab inherits the IDE's variables
+  withr::local_envvar(RSTUDIO = "1", POSITRON = "1")
+  withr::local_options(rl_word_breaks = " ,;")
+  seen = new.env(parent = emptyenv())
+  local_completion_repl(function(rs) {
+    seen$breaks = getOption("rl_word_breaks")
+    FALSE
+  })
+  expect_null(repl_main(completion_repl_state()))
+  expect_identical(seen$breaks, " ,;!")
+  expect_identical(getOption("rl_word_breaks"), " ,;")
+})
+
+test_that("the REPL reads with a copy of base::readline() that RStudio's console completes in", {
+  seen = new.env(parent = emptyenv())
+  local_mocked_bindings(gptr_readline = function(prompt = "", read = readline) {
+    seen$read = read
+    "/exit"
+  })
+  expect_identical(console_reader()$read("peter> "), "/exit")
+  # RStudio's .rs.readlineCompletions() completes nothing in a frame identical() to readline
+  expect_false(identical(seen$read, base::readline))
+  expect_identical(formals(seen$read), formals(base::readline))
+  expect_identical(body(seen$read), body(base::readline))
+  expect_identical(environment(seen$read), environment(base::readline))
 })
 
 test_that("an existing bang is preserved without duplication", {
@@ -151,11 +180,10 @@ test_that("native prefix integration preserves argument and quote completers", {
   expect_identical(utils::rc.getOption("custom.quote.completer"), quote)
 })
 
-test_that("unsupported input modes and frontends keep completion options unchanged", {
-  cases = c(lapply(c("rstudio", "rgui", "positron", "jupyter", "knitr", "quarto", "rscript"),
-                    function(x) list(frontend = x)),
-             list(list(human = FALSE), list(cledit = FALSE), list(tty = FALSE),
-                  list(unix = FALSE), list(stdin = TRUE), list(disabled = TRUE)))
+test_that("unsupported input modes and IDE consoles keep completion options unchanged", {
+  # an IDE console (RStudio, Positron, R.app, Jupyter) reads no tty
+  cases = list(list(human = FALSE), list(cledit = FALSE), list(tty = FALSE),
+               list(unix = FALSE), list(stdin = TRUE), list(disabled = TRUE))
   for (case in cases) (function(case) {
     original = getOption("rl_word_breaks")
     input = isTRUE(case$stdin)
