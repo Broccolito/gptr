@@ -128,10 +128,14 @@ continue at the `+ ` prompt until they parse. Very long single lines can exceed 
 input limit; use an `@file` or a multiline prompt instead.
 
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
-and `... ` waits for Enter, where text you type is added. Homebrew or conda R, Linux terminals,
-RStudio, R.app, Positron and Windows deliver pasted lines one at a time, so wrap a multi-line
-paste in `"""` there. Lines typed, pasted or run from a script before a question appears (an
-approval, a choice, the pause menu) are discarded and never answer it; answer after the prompt.
+and `... ` waits for Enter, where text you type is added. A pasted fence or `"""` block is read up
+to its closer at once, and a block pasted at an approval or a choice is dropped and the question
+asked again. A last pasted line without a newline waits for Enter at the next prompt, so a
+two-line paste without a final newline answers with its first line. Homebrew or conda R, Linux
+terminals, RStudio, R.app, Positron and Windows deliver pasted lines one at a time, so wrap a
+multi-line paste in `"""` there. Lines typed, pasted or run from a script before a question
+appears (an approval, a choice, the pause menu) are discarded and never answer it; answer after
+the prompt.
 
 ```text
 peter> """

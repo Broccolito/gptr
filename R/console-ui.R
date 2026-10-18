@@ -168,12 +168,21 @@ ui_undo_note = function(request) {
   tryCatch(ext_service_get("checkpoint.note")(call, NULL), error = function(e) NULL)
 }
 
-#' Read one console answer, never a line typed before the question (IC-75); Ctrl-C or EOF gives
+#' Read one console answer, never a line typed before the question; when the REPL's reader finds
+#' lines waiting after the answer (a paste; a last line without a newline is not waiting), the
+#' answer and the lines are dropped and the question is asked again (IC-75); Ctrl-C or EOF gives
 #' NA (a terminal echoes even a `secret` itself)
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
-  ans = tryCatch(readline_answer(prompt), interrupt = function(e) NA_character_)
-  if (rlang::is_string(ans)) ans else NA_character_
+  rd = console_repl_find()$reader
+  repeat {
+    ans = tryCatch(readline_answer(prompt), interrupt = function(e) NA_character_)
+    if (!rlang::is_string(ans)) return(NA_character_)
+    more = if (!is.null(rd)) rd$waiting()
+    if (!length(more)) return(ans)
+    console_write(paste0("  A pasted block is not an answer (", length(more) + 1L,
+                         " lines dropped)."))
+  }
 }
 
 #' Parse a choice: numbers, or case-insensitive label prefixes (report 18 parse_choice()); NA

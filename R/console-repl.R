@@ -91,16 +91,19 @@ readline_limit = function() {
 #'
 #' Returns an environment with `read(prompt = "", stream = "stdout", secret = FALSE)` -> chr(1), NA
 #' at the end of piped input; `waiting()` -> the lines a paste left on a macOS terminal (none
-#' elsewhere, IC-75); `close()`; `flag` (TRUE when a line reached the readline limit); `typed`,
-#' the /command and !code lines typed during an answer, which the terminal reader returns first,
-#' echoed after the prompt (IC-76). With `echo` the stdin reader writes the prompt and the escaped
-#' line (never a `secret` one) on `stream`, so a piped session reads like a terminal session.
+#' elsewhere, IC-75); `close()`; `flag` (TRUE when a line reached the readline limit); `held`,
+#' the lines a paste left after a block's closer, which the terminal reader returns first,
+#' unechoed (the terminal showed them); `typed`, the /command and !code lines typed during an
+#' answer, which it returns next, echoed after the prompt (IC-76). With `echo` the stdin reader
+#' writes the prompt and the escaped line (never a `secret` one) on `stream`, so a piped session
+#' reads like a terminal session.
 #' @noRd
 console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())
   rd$flag = FALSE
   rd$con = NULL
   rd$fd = NULL
+  rd$held = character()
   rd$typed = character()
   # only a macOS terminal (BSD tty driver) hands a waiting paste over as complete lines
   paste_tty = !isTRUE(stdin) && is_macos() && console_readline_tty()
@@ -125,6 +128,11 @@ console_reader = function(stdin = FALSE, echo = stdin) {
     # RStudio's console completes nothing in a frame identical() to base::readline (D-183)
     rl = structure(readline, gptr = TRUE)
     rd$read = function(prompt = "", stream = "stdout") {
+      if (length(rd$held)) {
+        x = rd$held[[1L]]
+        rd$held = rd$held[-1L]
+        return(x)
+      }
       if (length(rd$typed)) {
         x = rd$typed[[1L]]
         rd$typed = rd$typed[-1L]
@@ -192,12 +200,13 @@ console_typed_lines = function(rd, wait = 50L) {
   if (nzchar(txt)) as_utf8(strsplit(txt, "\r\n|\r|\n")[[1L]]) else character()
 }
 
-#' Lines waiting after an input line (a paste) join it, then one more line is read at "... ":
-#' Enter sends, typed text is appended (it ends a paste whose last line had no newline). After a
-#' line at the readline limit the waiting lines are dropped with it.
+#' Lines held or waiting after an input line (a paste) join it, then one more line is read at
+#' "... ": Enter sends, typed text is appended (it ends a paste whose last line had no newline).
+#' After a line at the readline limit the waiting lines are dropped with it.
 #' @noRd
 repl_paste_more = function(rd, text) {
-  more = rd$waiting()
+  more = c(rd$held, rd$waiting())
+  rd$held = character()
   if (!length(more) || rd$flag) return(text)
   console_notice(cli::col_grey("  (pasted: Enter sends it as one message)"))
   x = rd$read("... ")
@@ -222,19 +231,24 @@ r_incomplete = function(code) {
 #' is R code (returned as `!code`), any other fence prompt text (CommonMark: closed by a fence at
 #' least as long, the body loses the opener's indentation); `!code` and `!!code` continue while
 #' the code is incomplete; a trailing backslash continues a line; lines a paste left waiting join
-#' a prompt, slash or `!code` line (IC-75); the end of piped input ends every block. Returns NA at
-#' the end of input, "" when a line hit the readline limit (the whole input is dropped rather than
-#' sent half).
+#' a prompt, slash or `!code` line, and a block takes its lines from them before reading at "... "
+#' (the lines after its closer stay held as the next input, IC-75); the end of piped input ends
+#' every block. Returns NA at the end of input, "" when a line hit the readline limit (the whole
+#' input is dropped rather than sent half).
 #' @noRd
 repl_read_logical = function(rd, prompt) {
   rd$flag = FALSE
   line = rd$read(prompt)
   if (is.na(line)) return(NA_character_)
   out = line
+  block_line = function() {
+    if (!length(rd$held) && !length(rd$typed)) rd$held = rd$waiting()
+    rd$read("... ")
+  }
   if (grepl('^\\s*"""', line)) {
     body = sub('^\\s*"""', "", line)
     while (!grepl('"""\\s*$', body)) {
-      x = rd$read("... ")
+      x = block_line()
       if (is.na(x)) break
       body = paste0(body, "\n", x)
     }
@@ -243,7 +257,7 @@ repl_read_logical = function(rd, prompt) {
     m = regmatches(line, regexec("^(\\s*)(`+)(.*)$", line))[[1L]]
     body = character()
     repeat {
-      x = rd$read("... ")
+      x = block_line()
       if (is.na(x) || grepl(paste0("^\\s*", m[[3L]], "`*\\s*$"), x)) break
       body = c(body, sub(paste0("^ {0,", nchar(m[[2L]]), "}"), "", x))
     }
@@ -948,11 +962,14 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' * a slash command such as `/model`, `/mode`, `/cost` or `/exit`; `/help` lists them all.
 #'
 #' In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
-#' and `... ` waits for Enter (text typed there is added). Elsewhere (Homebrew or conda R, Linux
-#' terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a time; wrap a
-#' multi-line paste in `"""`. Lines typed, pasted or run from a script before a question (an
-#' approval, a choice, the pause menu) appeared are discarded and never answer it: answer after
-#' the prompt.
+#' and `... ` waits for Enter (text typed there is added); a pasted fence or `"""` block is read
+#' up to its closer at once, and a block pasted at an approval or a choice is dropped and the
+#' question asked again. A last pasted line without a newline waits for Enter at the next prompt,
+#' so a two-line paste without a final newline answers with its first line. Elsewhere (Homebrew
+#' or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a
+#' time; wrap a multi-line paste in `"""`. Lines typed, pasted or run from a script before a
+#' question (an approval, a choice, the pause menu) appeared are discarded and never answer it:
+#' answer after the prompt.
 #'
 #' In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
 #' runs steers it: the agent reads it at its next step, after the current tool results, and

@@ -5043,14 +5043,18 @@ Ollama requires no Jev key and is not a structured-chat emulation fallback.
 
 Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier sections.
 
-**IC-75 Console input: paste joining and stale answers** (P26 Task 2, D-184).
+**IC-75 Console input: paste joining and stale answers** (P26 Task 2, D-184; Task 19, D-220).
 - Paste joining, macOS terminal only (`is_macos()` and R's own readline reading a tty: Unix, interactive,
   `cledit`, `stdin_tty()`): after a prompt, slash or `!code` line is read, the lines waiting on fd 0 join it,
   a dim `(pasted: Enter sends it as one message)` hint follows and one `... ` line is read (Enter sends, typed
-  text is appended; after a line at the readline limit the waiting lines are dropped with it). `"""` blocks
-  and fences never look; piped `.stdin = TRUE` input stays line-based. Other platforms and front ends get
-  pasted lines one per read and document `"""`, as does R linked to readline >= 8.1 (Homebrew or conda R on
-  macOS): its bracketed paste keeps the rest of a paste in R's console buffer, so fd 0 holds none of it.
+  text is appended; after a line at the readline limit the waiting lines are dropped with it). A `"""` block
+  or fence takes each line from the waiting lines and reads at `... ` only when none wait (and `rd$held` and
+  `rd$typed` are empty); the waiting lines after its closer stay in `rd$held`, which the reader returns first
+  and unechoed (the terminal showed them): the next input reads them as waiting lines that joined its first
+  one (hint and `... ` when two or more). Piped `.stdin = TRUE` input stays line-based. Other platforms and
+  front ends get pasted lines one per read and document `"""`, as does R linked to readline >= 8.1 (Homebrew
+  or conda R on macOS): its bracketed paste keeps the rest of a paste in R's console buffer, so fd 0 holds
+  none of it.
 - The fd-0 reader `console_typed_lines(rd)` (shared with IC-76) keeps `processx::conn_create_fd(0L, close =
   FALSE)` in `rd$fd`, created inside its `tryCatch` (an error reads nothing) and reopened after an end of
   input. It is not an R connection: it is dropped with the reader and never `close()`d, as closing it closes
@@ -5061,8 +5065,12 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   interactive answer arrived in under 0.1 s, at most 100 reads (an interactive R at the end of a pipe gets ""
   at once), then returns the last; the lines it skipped (typed, pasted or queued from a script) are discarded.
   `ui_console_read()`, the terminal branch of `console_ask()` and `gptr_confirm()` use it; the REPL prompt
-  keeps `gptr_readline()`. A prompt over 200 bytes is printed whole and read after `> ` (`readline()` keeps
-  255 bytes of a prompt).
+  keeps `gptr_readline()`. When the REPL's reader (`console_repl_find()$reader`) finds lines waiting after an
+  answer, `ui_console_read()` drops the answer and those lines (a paste), writes one
+  `  A pasted block is not an answer (N lines dropped).` line and asks again; this is no invalid answer
+  (D-188). A paste's last line without a newline is never waiting (the tty driver holds it until Enter) and
+  shows typed at the next read, so a two-line paste without a final newline answers with its first line.
+  A prompt over 200 bytes is printed whole and read after `> ` (`readline()` keeps 255 bytes of a prompt).
 - Fenced input: a fence runs as the user's R only for an info string of `r`, `R`, `{r...}` or none; other
   fences are prompt text; the body loses up to the opener's indentation and closes on a fence of at least the
   opener's length (CommonMark).

@@ -151,17 +151,47 @@ test_that("a pasted !code block is one R input; the next typed line is read alon
   expect_identical(w$calls, 2L)
 })
 
-test_that("block openers and piped input never look for waiting lines", {
+test_that("a pasted fence or \"\"\" block is read from the waiting lines, never at '... '", {
+  rl = local_readline(c("```r", '"""', ""))
+  w = local_waiting(list(c("b1 = 1", "b2 = 2", "b1 + b2", "```", "next"), character(),
+                         c("q one", "", "q two", '"""', "after", "more")))
+  rd = console_reader(stdin = FALSE)
+  expect_identical(repl_read_logical(rd, "peter> "), "!b1 = 1\nb2 = 2\nb1 + b2")
+  # the lines after the closer are the next input, unechoed (the terminal showed them)
+  expect_silent(expect_identical(repl_read_logical(rd, "peter> "), "next"))
+  expect_identical(repl_read_logical(rd, "peter> "), "q one\n\nq two")
+  out = NULL
+  shown = utils::capture.output({
+    out = repl_read_logical(rd, "peter> ")
+  })
+  expect_identical(out, "after\nmore")
+  expect_identical(shown, "  (pasted: Enter sends it as one message)")
+  expect_identical(rl$prompts, c("peter> ", "peter> ", "... "))
+  expect_identical(w$calls, 4L)
+  expect_length(rd$typed, 0L)
+})
+
+test_that("a block typed by hand reads line by line; a paste without its closer goes on", {
+  rl = local_readline(c("```r", "x = 1", "```", '"""', '"""', "```", "typed", "```"))
+  w = local_waiting(list(character(), character(), "pasted", character(), "a = 1"))
+  rd = console_reader(stdin = FALSE)
+  expect_identical(repl_read_logical(rd, "peter> "), "!x = 1")
+  expect_identical(repl_read_logical(rd, "peter> "), "pasted")
+  expect_identical(repl_read_logical(rd, "peter> "), "!a = 1\ntyped")
+  expect_identical(rl$prompts, c("peter> ", "... ", "... ", "peter> ", "... ", "peter> ",
+                                 "... ", "... "))
+  expect_identical(w$calls, 7L)
+  expect_length(rd$typed, 0L)
+})
+
+test_that("piped input never looks for waiting lines", {
   local_mocked_bindings(console_typed_lines = function(rd) stop("polled"),
                         console_readline_tty = function() TRUE)
-  local_readline(c('"""', "a", '"""', "```r", "x = 1", "```"))
-  rd = console_reader(stdin = FALSE)
-  rd$waiting = function() stop("polled")
-  expect_identical(repl_read_logical(rd, "peter> "), "a")
-  expect_identical(repl_read_logical(rd, "peter> "), "!x = 1")
-  rd = stdin_reader(c("a", "b"))
+  rd = stdin_reader(c("a", "b", '"""', "c", '"""', "```r", "x = 1", "```"))
   expect_identical(repl_read_logical(rd, "peter> "), "a")
   expect_identical(repl_read_logical(rd, "peter> "), "b")
+  expect_identical(repl_read_logical(rd, "peter> "), "c")
+  expect_identical(repl_read_logical(rd, "peter> "), "!x = 1")
 })
 
 test_that("a pasted block whose first line hit the readline limit is dropped whole", {
@@ -662,7 +692,22 @@ test_that("a pasted three-line block is one console turn (acceptance)", {
   expect_identical(reqs[[1L]]$last_user, "line1\nline2\nline3")
 })
 
-test_that("a macOS terminal sends a real paste as one turn; Ctrl-D after typed text never hangs", {
+test_that("the lines pasted after a fence are one console turn after the code (acceptance)", {
+  local_console_test()
+  withr::local_options(gptr.interactive = TRUE)
+  fake = gptr_fake_provider(list("one answer"))
+  rl = local_readline(c("```r", "", "/exit"))
+  local_waiting(list(c("x = 1", "```", "line a", "line b")))
+  e = new.env()
+  utils::capture.output(peter(model = fake, envir = e))
+  expect_identical(e$x, 1)
+  reqs = fake_requests(fake)
+  expect_length(reqs, 1L)
+  expect_identical(reqs[[1L]]$last_user, "line a\nline b")
+  expect_identical(rl$prompts, c("peter> ", "... ", "peter> "))
+})
+
+test_that("a macOS terminal: a paste is one turn, a fence echoes once, Ctrl-D never hangs", {
   skip_on_cran()
   skip_if_not(is_macos(), "paste joining reads a macOS terminal")
   dir = withr::local_tempdir("gptr-paste-")
@@ -721,6 +766,20 @@ test_that("a macOS terminal sends a real paste as one turn; Ctrl-D after typed t
   expect_true(wait_for("[gptr] steering: 'x"))
   expect_true(wait_for("GOT SLOW END", n = 2L))
   expect_true(wait_for("peter> ", n = 3L))
+  # with echo on, as in a terminal, the tty echoes the rest of a paste once, when it is read; a
+  # '... ' read would echo it again. The lines after the closer are one message.
+  p$write_input("!invisible(system('stty echo'))\r")
+  expect_true(wait_for("peter> ", n = 4L))
+  st$out = ""
+  code = c(sprintf("fz%02d = %d", 1:13, 1:13), "fz01 + fz13 + 1000")
+  p$write_input(paste0(paste(c("```r", code, "```", "line aa", "line bb"), collapse = "\r"), "\r"))
+  expect_true(wait_for("Enter sends it as one message"))
+  p$write_input("\r")
+  expect_true(wait_for("GOT line aa/line bb END"))
+  expect_true(wait_for("peter> "))
+  expect_identical(seen("[1] 1014"), 1L)
+  expect_identical(vapply(code, seen, 1L, USE.NAMES = FALSE), rep(1L, 14L))
+  expect_identical(c(seen("line aa"), seen("GOT "), seen("... ")), c(2L, 1L, 1L))
   p$write_input("/exit\r")
   expect_true(wait_for("CHILD DONE"))
 })

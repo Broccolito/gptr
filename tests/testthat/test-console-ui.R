@@ -127,6 +127,53 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
   expect_identical(rl$i, 3L)
 })
 
+test_that("a block pasted at the approval prompt never answers it nor steers (IC-75)", {
+  local_console_test()
+  local_gptr_options(interactive = TRUE)
+  # fd 0 as one buffer: the rest of a paste whose first line answers the question waits there
+  fd0 = new.env(parent = emptyenv())
+  fd0$lines = character()
+  fd0$answers = c("go", "y", "n", "/exit")
+  fd0$prompts = character()
+  reader = console_reader
+  local_mocked_bindings(
+    repl_terminal = function(rs) TRUE,
+    console_typed_lines = function(rd, ...) {
+      x = fd0$lines
+      fd0$lines = character()
+      x
+    },
+    console_reader = function(...) {
+      rd = reader(...)
+      rd$waiting = function() console_typed_lines(rd)
+      rd
+    },
+    gptr_readline = function(prompt = "", ...) {
+      x = fd0$answers[[1L]]
+      fd0$answers = fd0$answers[-1L]
+      fd0$prompts = c(fd0$prompts, prompt)
+      if (identical(x, "y")) fd0$lines = c("pasted line two", "pasted line three")
+      the$readline_secs = 1
+      x
+    })
+  withr::defer(assign("readline_secs", NULL, envir = the))
+  e = new.env()
+  fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2", .text = "hmm"), "after"))
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  rs$mode = "manual"
+  out = utils::capture.output(repl_main(rs))
+  expect_null(e$zz)
+  expect_identical(sum(startsWith(fd0$prompts, "  allow?")), 2L)
+  expect_identical(sum(out == "  A pasted block is not an answer (3 lines dropped)."), 1L)
+  expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  texts = vapply(reqs[[2L]]$messages, msg_text, "")
+  expect_false(any(grepl("pasted line", texts, fixed = TRUE)))
+  expect_length(rs$reader$typed, 0L)
+})
+
 test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-188)", {
   root = local_project()
   req = ui_request("x = 1")

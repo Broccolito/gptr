@@ -1877,15 +1877,17 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **Pasted and typed-ahead input** [IC-75, D-184]: on a macOS terminal (R's own readline on a tty, where the
   BSD tty driver hands waiting input over as complete lines), the lines already waiting on fd 0 after a prompt,
   slash or `!code` line is read (a paste) join it, a dim `(pasted: Enter sends it as one message)` hint follows
-  and one `... ` line is read: Enter sends, typed text is appended. `"""` blocks, fences and piped `.stdin`
-  input never look. Elsewhere (Linux and other terminals, IDE consoles, Windows, and R linked to readline >= 8.1
+  and one `... ` line is read: Enter sends, typed text is appended. A `"""` block or fence reads its lines
+  from the waiting ones before `... ` (the lines after its closer are the next paste, D-220); piped `.stdin`
+  input never looks. Elsewhere (Linux and other terminals, IDE consoles, Windows, and R linked to readline >= 8.1
   such as Homebrew or conda R on macOS, whose bracketed paste keeps the rest of a paste in R's console buffer
   rather than on fd 0) pasted lines arrive one per read: use `"""`. Every console question (approvals, choices,
   input, the pause menu, `gptr_confirm()`) reads again while an interactive answer arrived within 0.1 s of its
   prompt (at most 100 reads): a line typed, pasted or queued from a script (an IDE's run selection) before the
-  question is discarded and never answers it. A fence runs as R only for an `r`, `R`, `{r...}` or empty
-  info string; other fences are prompt text; the body loses the opener's indentation and closes on a fence at
-  least as long (CommonMark).
+  question is discarded and never answers it. On a macOS terminal an approval, choice or input answer with lines
+  waiting after it (a paste) is dropped with them and the question asked again (D-220). A fence runs as R only
+  for an `r`, `R`, `{r...}` or empty info string; other fences are prompt text; the body loses the opener's
+  indentation and closes on a fence at least as long (CommonMark).
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
   stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
   session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`, or `"follow_up"`); one batch (a

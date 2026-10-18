@@ -121,11 +121,14 @@ backslash continues a line;
 }
 
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
-and \code{... } waits for Enter (text typed there is added). Elsewhere (Homebrew or conda R, Linux
-terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a time; wrap a
-multi-line paste in \verb{"""}. Lines typed, pasted or run from a script before a question (an
-approval, a choice, the pause menu) appeared are discarded and never answer it: answer after
-the prompt.
+and \code{... } waits for Enter (text typed there is added); a pasted fence or \verb{"""} block is read
+up to its closer at once, and a block pasted at an approval or a choice is dropped and the
+question asked again. A last pasted line without a newline waits for Enter at the next prompt,
+so a two-line paste without a final newline answers with its first line. Elsewhere (Homebrew
+or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a
+time; wrap a multi-line paste in \verb{"""}. Lines typed, pasted or run from a script before a
+question (an approval, a choice, the pause menu) appeared are discarded and never answer it:
+answer after the prompt.
 
 In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
 runs steers it: the agent reads it at its next step, after the current tool results, and

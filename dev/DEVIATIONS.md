@@ -2375,3 +2375,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: TBD by P26 Task 11.
 - Contract-visible: TBD.
 - Tests: TBD. Evidence: progress/P26.md Task 11.
+
+## D-220 - P26 A pasted block never answers a question; pasted fences are read at once (2026-10-18)
+- Rule: `ui_console_read()` (approvals, choices, input) asks again when the REPL's reader finds lines waiting
+  after an answer: the answer and the lines (a paste) are dropped with one `A pasted block is not an answer (N
+  lines dropped).` line; this is no invalid answer (D-188). Amends D-184/IC-75 ("fences never poll"): a `"""`
+  block or fence takes each line from the lines waiting on fd 0 before a `... ` read (none while `rd$held` or
+  `rd$typed` holds lines); the waiting lines after its closer stay in `rd$held`, read first and unechoed, so
+  the next input joins them like any paste (hint, `... `), never one turn per line. A paste's last line without
+  a newline is never waiting (the tty holds it until Enter; pure R cannot peek at it), so a two-line paste
+  without a final newline still answers with its first line. The pause menu (`console_ask()`) and
+  `gptr_confirm()` are unchanged.
+- Contract-visible: IC-75; 03 section 6.17; P26 Task 2; `?peter`, console vignette.
+- Tests: test-console-ui.R (paste at an approval through the REPL), test-console-repl.R (blocks, macOS pty child).
+  Evidence: progress/P26.md Task 19.
