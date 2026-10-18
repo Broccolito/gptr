@@ -380,8 +380,23 @@ test_that("the stdin UI answers selections and approvals from the reader", {
   expect_identical(pick, 2L)
   expect_identical(a1$decision, "allow")
   expect_identical(a2, list(decision = "deny", remember = NULL, feedback = "use base R"))
-  expect_true(any(grepl("Answer [y]es", out, fixed = TRUE)))
+  expect_true(any(grepl("Not an answer: 'maybe'", out, fixed = TRUE)))
   expect_s3_class(ui, "gptr_ui")
+})
+
+test_that("piped .stdin: a nested prompt and its echo reach stdout from an untee'd eval (D-188)", {
+  rd = stdin_reader("y", echo = TRUE)
+  home = new.env()
+  home$ui = ui_console_spec(rd$read, "console_stdin")
+  res = NULL
+  out = utils::capture.output({
+    res = eval_r(paste0("ans = ui$permission(list(tool = 'r', input = list(code = 'x = 1'), ",
+                        "risk = list(level = 1L), agent = 'a'))"), home, plots = "none",
+                 tee = FALSE)
+  })
+  expect_identical(out, c("  sub-agent a > r  x = 1", "  allow? [y]es / [a]lways / [n]o / [?]: y"))
+  expect_identical(home$ans$decision, "allow")
+  expect_false(any(grepl("allow", vapply(res$events, function(e) e$text %||% "", ""))))
 })
 
 test_that("the stdin UI never echoes a secret answer", {

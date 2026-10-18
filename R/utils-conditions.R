@@ -80,13 +80,14 @@ gptr_message_stream = function(stream = NULL) {
 
 #' Display a condition or console control through a scoped evaluator writer when present
 #' The evaluator records conditions separately and excludes control text from tool output; a
-#' notice's own display (`margin`) keeps the console margin.
+#' writer hands the text to the next one below frame `from` (D-188); a notice's own display
+#' (`margin`) keeps the console margin.
 #' @noRd
-gptr_message_write = function(text, stream, margin = FALSE) {
-  k = sys.nframe() - 1L
+gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() - 1L) {
+  k = from
   while (k >= 1L) {
     write = get0(".gptr_message_write", envir = sys.frame(k), inherits = FALSE)
-    if (is.function(write)) return(invisible(write(text, stream)))
+    if (is.function(write)) return(invisible(write(text, stream, margin, k)))
     k = k - 1L
   }
   if (margin) text = gptr_message_margin(text)

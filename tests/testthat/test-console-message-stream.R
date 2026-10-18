@@ -113,6 +113,25 @@ test_that("console controls stay out of R-tool results while normal prints remai
   expect_true(grepl("printed", captured, fixed = TRUE))
 })
 
+test_that("console controls reach the person when the capture is not teed, also nested (D-188)", {
+  home = new.env()
+  home$notice = console_notice
+  home$inner = function() {
+    eval_r('notice("deep"); cat("y\\n")', home, plots = "none", tee = FALSE)$events
+  }
+  out = utils::capture.output({
+    res = eval_r('notice("ctl"); cat("x\\n"); ev = inner(); cat("z\\n")', home, plots = "none",
+                 tee = FALSE)
+  })
+  expect_identical(out, c("ctl", "deep"))
+  captured = function(events) {
+    paste(vapply(Filter(function(e) e$type == "output", events), function(e) e$text, ""),
+          collapse = "")
+  }
+  expect_identical(captured(res$events), "x\nz\n")
+  expect_identical(captured(home$ev), "y\n")
+})
+
 test_that("informational display preserves user-created output sinks", {
   local_gptr_options(quiet = FALSE)
   for (split in c(FALSE, TRUE)) {
@@ -137,6 +156,30 @@ test_that("informational display preserves user-created output sinks", {
                           function(e) e$text, ""), collapse = "")
     expect_false(grepl("notice", output, fixed = TRUE))
     expect_true(grepl("restored", output, fixed = TRUE))
+  }
+})
+
+test_that("a console control in an untee'd evaluation keeps user-created sinks (D-188)", {
+  for (split in c(FALSE, TRUE)) {
+    path = withr::local_tempfile()
+    home = new.env()
+    home$notice = console_notice
+    home$path = path
+    home$split = split
+    out = utils::capture.output({
+      result = eval_r(paste0('con = file(path, "w"); sink(con, split = split); ',
+        'depth = sink.number(); notice("control"); ',
+        'same_depth = identical(depth, sink.number()); cat("user output\\n"); ',
+        'sink(); close(con); cat("restored\\n")'), home, plots = "none", tee = FALSE)
+    })
+    # a user's sink on top receives the control (documented: it hides prompts too)
+    expect_true(home$same_depth)
+    expect_identical(readLines(path), c("control", "user output"))
+    expect_identical(out, character())
+    output = paste(vapply(Filter(function(e) e$type == "output", result$events),
+                          function(e) e$text, ""), collapse = "")
+    expect_false(grepl("control", output, fixed = TRUE))
+    expect_identical(output, paste0(if (split) "user output\n", "restored\n"))
   }
 })
 

@@ -94,7 +94,12 @@ copy_rows = list(
   "in-run edit: s |> peter('x', big) (IC-41)" =
     list(c(no_ckpt, "fake0 = gptr_fake_provider(list('ok'), name = 'fake0')",
            "s = peter('a', model = fake0, tools = list(r_tool))"),
-         "s |> peter('x', big, model = fake)", TRUE))
+         "s |> peter('x', big, model = fake)", TRUE),
+  "a peter() from model code reads big through its overlay (D-188)" =
+    list(c(no_ckpt, paste0("fake_nest = gptr_fake_provider(list(list(tool = 'r', input = list(",
+                           "code = \"kid = peter('y', big, model = fake)\")), 'done'), ",
+                           "name = 'nest')")),
+         "s = peter('x', big, model = fake_nest, tools = list(r_tool))", FALSE))
 
 for (label in names(copy_rows)) {
   row = copy_rows[[label]]

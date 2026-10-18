@@ -141,6 +141,17 @@ test_that("the agent-area accessors reach the run's session for the L2 dispatche
   expect_identical(e$data$kind, "cost")
 })
 
+test_that("the budget question of a sub-agent says who asks (D-188)", {
+  st = local_scripted_ui(list(2L, 2L))
+  s = test_session()
+  for (agent in c("alpha", "main")) {
+    expect_false(run_budget_extend(test_run(s, list(agent = agent)),
+                                   list(kind = "cost", budget = 1)))
+  }
+  expect_identical(st$log$prompt, c("sub-agent alpha: The cost budget of this call (1) is reached.",
+                                    "The cost budget of this call (1) is reached."))
+})
+
 # ---------------------------------------------------------------- report 02 section 5.3 (26 checks)
 
 recovery_recs = oracle("recovery")

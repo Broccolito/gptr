@@ -681,6 +681,78 @@ test_that("the console UI ends a partial answer line before it prompts (D-186)",
   expect_false("permission_request" %in% vapply(console_hooks(), function(h) h$event, ""))
 })
 
+test_that("a prompt or pause in a tool's evaluation ends partial lines on the console (D-188)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  withr::defer(console_drop("u0000test"))
+  home = new.env()
+  # a sub-agent asks while the parent's r code runs (claude-cli: no tool line ended the text)
+  home$tool = function(f) {
+    .gptr_tool_run = structure(new.env(), class = "gptr_run")
+    f()
+  }
+  home$ask = function() {
+    ui_console_permission(list(tool = "r", input = list(code = "x = 1"), risk = list(level = 1L),
+                               tier = "ask", agent = "a"), read = function(...) "y")
+  }
+  home$pause = console_render_pause
+  text = function(res) paste(vapply(res$events, function(e) e$text %||% "", ""), collapse = "")
+  res = NULL
+  out = utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    console_on_message_update(hook_event("message_update", s, index = 1L, kind = "text",
+                                         delta = "Fanning out HELDWORD"), ctx)
+    res = eval_r("ans = tool(ask)", home, plots = "none", tee = FALSE)
+  })
+  # the held word continues after the prompt (D-186), never in the tool result
+  expect_identical(out, c("Fanning out", "  sub-agent a > r  x = 1"))
+  expect_identical(home$ans$decision, "allow")
+  expect_false(grepl("HELDWORD|x = 1", text(res)))
+  withr::local_options(cli.dynamic = TRUE)
+  rec = console_record(list(run = "u0000test"))
+  bytes = paste(utils::capture.output({
+    rec$spinner = console_spinner()
+    rec$spinner$tick()
+    res = eval_r("tool(pause)", home, plots = "none", tee = FALSE)
+  }), collapse = "\n")
+  expect_match(bytes, "thinking", fixed = TRUE)
+  expect_match(bytes, "\r +\rHELDWORD$")
+  expect_null(rec$spinner)
+  expect_false(grepl("\r|HELDWORD", text(res)))
+})
+
+test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no quiet (D-188)", {
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  s = render_session()
+  root = structure(new.env(), class = "gptr_run")
+  root$shell = s
+  root$depth = 0L
+  kid = structure(new.env(), class = "gptr_run")
+  kid$depth = 1L
+  kid$outer = root
+  expect_true(console_child_shown(kid))
+  expect_false(console_child_shown(root))
+  expect_false(console_child_shown(NULL))
+  live = session_live(s)
+  live$background = list(id = "s-in-the-background")
+  withr::defer({
+    live$background = NULL
+  })
+  expect_false(console_child_shown(kid))
+  live$background = NULL
+  local_gptr_options(verbose = 0L)
+  expect_false(console_child_shown(kid))
+  local_gptr_options(verbose = 1L, quiet = TRUE)
+  expect_false(console_child_shown(kid))
+  # two columns, as the prompts, with or without the console margin
+  withr::local_options(cli.dynamic = TRUE)
+  local_gptr_options(verbose = 2L)
+  expect_identical(utils::capture.output(console_child_line(list(child = list(label = "a")), "x")),
+                   "  sub-agent a x")
+})
+
 test_that("a foreground run separates text, tool and status blocks once (D-186)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)

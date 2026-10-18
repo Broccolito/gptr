@@ -42,10 +42,14 @@ console_out = function(x) {
 #' Print lines that are already safe (built from escaped parts) on stdout
 #' @noRd
 console_write = function(lines) {
-  if (length(lines)) cat(paste0(lines, "\n"), sep = "")
-  utils::flush.console()
+  if (length(lines)) console_cat(paste0(lines, "\n", collapse = ""))
   invisible(NULL)
 }
+
+#' Every console write: through gptr_message_write(), so it is plain stdout outside an evaluation
+#' and reaches the console, never the captured output, inside one (D-188)
+#' @noRd
+console_cat = function(text) gptr_message_write(text, gptr_message_stream("stdout"))
 
 #' Ordinary console notices on stdout; actual errors on stderr. The scoped evaluator writer
 #' keeps pause-menu controls out of tool output. Callers escape parts with console_escape().
@@ -114,7 +118,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     st$bol = endsWith(x, "\n")
     st$out = TRUE
     if (is.function(before_output)) before_output(x)
-    cat(x, sep = "")
+    console_cat(x)
     invisible()
   }
   vis_width = function(x) sum(nchar(x, type = "width"))
@@ -462,16 +466,14 @@ console_spinner = function(label = "thinking") {
       ellipsis = if (utf8) cli::symbol$ellipsis else "...") else ""
     # Reserve the last column to avoid wrapping; padding erases the tail of a shorter frame.
     padding = strrep(" ", max(0L, width - cli::ansi_nchar(text, type = "width")))
-    cat("\r", text, if (sp$ansi) "\033[K" else padding, sep = "")
-    utils::flush.console()
+    console_cat(paste0("\r", text, if (sp$ansi) "\033[K" else padding))
     sp$shown = TRUE
     invisible()
   }
   sp$clear = function() {
     if (sp$shown) {
       blank = strrep(" ", max(0L, cli::console_width() - 1L))
-      cat(if (sp$ansi) "\r\033[K" else c("\r", blank, "\r"), sep = "")
-      utils::flush.console()
+      console_cat(if (sp$ansi) "\r\033[K" else paste0("\r", blank, "\r"))
       sp$shown = FALSE
     }
     invisible()
@@ -529,13 +531,33 @@ console_drop = function(run_id) {
   invisible(NULL)
 }
 
-#' A foreground session: depth 0, live, not handed to P21's background pump; never while a tool
-#' executes on the stack, whose output P09 captures for the model (nested calls: `details$nested`)
+#' A foreground session: depth 0, live, not handed to P21's background pump; unless `tools`,
+#' never while a tool executes on the stack, whose events (nested calls: `details$nested`) are
+#' the model's, not the person's
 #' @noRd
-console_foreground = function(rec) {
+console_foreground = function(rec, tools = FALSE) {
   live = session_live(rec$session)
   !is.null(live) && is.null(live$background) &&
-    identical(session_data(rec$session)$depth, 0L) && is.null(run_current())
+    identical(session_data(rec$session)$depth, 0L) && (tools || is.null(run_current()))
+}
+
+#' Show a sub-agent's start and end (D-188): a child run (depth 1+) whose outermost run is in the
+#' foreground (a top-level team or fan-out has none above its children), at verbosity 1+, not
+#' quiet
+#' @noRd
+console_child_shown = function(run) {
+  top = run
+  while (!is.null(top$outer)) top = top$outer
+  live = if (inherits(top$shell, "gptr_session")) session_live(top$shell)
+  isTRUE(run$depth >= 1L) && !is.null(live) && is.null(live$background) &&
+    !isTRUE(top$opts$background) && verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
+}
+
+#' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188)
+#' @noRd
+console_child_line = function(rec, text) {
+  console_before_message(tools = TRUE)
+  console_write(paste0("  sub-agent ", rec$child$label, " ", text))
 }
 
 #' Render this record on stdout now?
@@ -578,10 +600,11 @@ console_spinner_stop = function(rec) {
 #' NULL). TRUE when a foreground record was found
 #'
 #' Called by the outer blocking policy without handling or changing the condition, by a launch
-#' boundary (`kind = NULL`) and by the console UI before it prompts. Tool frames are excluded
-#' by console_foreground(), so clear bytes never enter their captured output.
+#' boundary (`kind = NULL`), and with `tools` by the console UI before it prompts and by the
+#' sub-agent lines, which also end the lines of a run whose tool executes (a sub-agent asking
+#' during the parent's `r` code; its writes never enter captured output, D-188).
 #' @noRd
-console_before_message = function(runs = NULL, kind = "notice") {
+console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
   recs = if (is.null(runs)) {
     as.list(console_state()$active)
   } else {
@@ -589,7 +612,7 @@ console_before_message = function(runs = NULL, kind = "notice") {
   }
   found = FALSE
   for (rec in recs) {
-    if (is.null(rec) || !console_foreground(rec)) next
+    if (is.null(rec) || !console_foreground(rec, tools)) next
     found = TRUE
     if (!is.null(rec$think)) rec$think$reset_line()
     if (!is.null(rec$md)) rec$md$reset_line()
@@ -597,10 +620,7 @@ console_before_message = function(runs = NULL, kind = "notice") {
       shown = isTRUE(rec$spinner$shown)
       rec$spinner$clear()
       # R GUIs keep a cleared row's overwrite range, so they continue on a fresh line
-      if (shown && identical(front_end(), "rgui")) {
-        cat("\n")
-        utils::flush.console()
-      }
+      if (shown && identical(front_end(), "rgui")) console_cat("\n")
     }
     if (!is.null(kind)) console_gap(rec, kind)
   }
@@ -613,7 +633,7 @@ console_before_message = function(runs = NULL, kind = "notice") {
 #' @noRd
 console_gap = function(rec, kind) {
   same = identical(rec$last, kind) && !identical(kind, "prompt")
-  if (!same && !identical(rec$last, "wait") && nzchar(console_pad())) cat("\n")
+  if (!same && !identical(rec$last, "wait") && nzchar(console_pad())) console_cat("\n")
   rec$last = kind
   invisible(NULL)
 }
@@ -825,11 +845,20 @@ console_render_custom = function(s, n0) {
   invisible(NULL)
 }
 
-#' agent_start: track the run
+#' agent_start: track the run; a sub-agent of a foreground call says that it started with the
+#' model it calls (a worker proxy's session model is `worker/worker`, D-188)
 #' @noRd
 console_on_agent_start = function(event, ctx) {
   s = ctx$session
-  if (inherits(s, "gptr_session") && rlang::is_string(event$run)) console_track(event$run, s)
+  if (!inherits(s, "gptr_session") || !rlang::is_string(event$run)) return(NULL)
+  rec = console_track(event$run, s)
+  live = session_live(s)
+  run = live$run
+  if (console_child_shown(run)) {
+    rec$child = list(label = console_escape(agent_label(run), FALSE), run = run)
+    model = live$adapter$worker_spec$model %||% session_data(s)$model
+    console_child_line(rec, paste0("started (", console_escape(model, FALSE), ")"))
+  }
   NULL
 }
 
@@ -978,7 +1007,8 @@ console_on_retry = function(event, ctx) {
 }
 
 #' agent_end: close the streams, show custom entries and the status line, forget the run; queued
-#' artifact lines (an interrupted tool) print last
+#' artifact lines (an interrupted tool) print last; a shown sub-agent says how it ended, `(k/N)`
+#' counting the settled children of its scheduled group (D-188)
 #' @noRd
 console_on_agent_end = function(event, ctx) {
   on.exit(console_artifact_flush(), add = TRUE)
@@ -986,6 +1016,21 @@ console_on_agent_end = function(event, ctx) {
   if (is.null(rec)) return(NULL)
   on.exit(console_drop(event$run), add = TRUE)
   console_spinner_stop(rec)
+  run = rec$child$run
+  if (!is.null(run)) {
+    g = run$group
+    k = if (is.environment(g)) {
+      sprintf(" (%d/%d)", sum(vapply(g$runs, function(r) isTRUE(r$settled), NA)), g$n)
+    }
+    n = event$turns %||% 0L
+    sep = console_symbols()$sep
+    console_child_line(rec, if (identical(event$status, "idle")) {
+      paste0("done", k, sep, n, if (n == 1L) " turn" else " turns", sep,
+             sprintf("%.0f s", as.numeric(Sys.time()) - as.numeric(run$started)))
+    } else {
+      paste0("failed: ", console_escape(event$status %||% "?", FALSE))
+    })
+  }
   if (!console_foreground(rec)) return(NULL)
   line = console_status_line(event$status, event$reason, event$usage, event$turns)
   v = verbosity()

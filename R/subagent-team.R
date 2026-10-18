@@ -10,7 +10,8 @@
 #' whose pool is full waits without holding back the others. `on_settle(i, handle)` is called
 #' once per child, in settlement order. At top level the pump runs under the console interrupt
 #' policy when P14 provides it, with no child run to steer or background (architecture 6.2); any
-#' exit other than a normal finish cancels the running children.
+#' exit other than a normal finish cancels the running children. Each child run gets `group`, the
+#' size and started runs of the group, so the console can count settled siblings (D-188).
 #' @return The handles in item order.
 #' @noRd
 subagent_schedule = function(items, max_total, on_settle = NULL) {
@@ -22,6 +23,9 @@ subagent_schedule = function(items, max_total, on_settle = NULL) {
   settled = function() any(vapply(handles[running], subagent_settled, NA))
   top = is.null(run_current())
   done = FALSE
+  group = new.env(parent = emptyenv())
+  group$n = length(items)
+  group$runs = list()
   on.exit(if (!done) {
     for (h in handles[running]) tryCatch(h$cancel(), error = function(e) NULL)
   }, add = TRUE)
@@ -30,6 +34,11 @@ subagent_schedule = function(items, max_total, on_settle = NULL) {
       if (length(running) >= max_total) break
       if (sum(pools[running] == pools[[i]]) >= caps[[pools[[i]]]]) next
       handles[i] = list(items[[i]]$start())
+      run = handles[[i]]$run
+      if (is.environment(run)) {
+        run$group = group
+        group$runs = c(group$runs, list(run))
+      }
       pending = setdiff(pending, i)
       running = c(running, i)
     }

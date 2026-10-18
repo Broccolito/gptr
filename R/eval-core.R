@@ -318,23 +318,20 @@ eval_one = function(st, expr, i, sref) {
   force(expr)
   force(i)
   force(sref)
-  # Ordinary informational conditions are already recorded by eval_on_message(). Keep their
-  # teed display (and pause-menu controls) out of captured output without popping any sink.
-  .gptr_message_write = function(text, stream) {
+  # Ordinary informational conditions are already recorded by eval_on_message(). Their teed
+  # display and console controls (prompts, the pause menu, the renderer) reach the console
+  # whatever `tee` is (D-188): this evaluation's own sink is lifted only when it is on top (a
+  # user's sink is never popped), the next writer below displays, and what a user's split sink
+  # passed into the capture is dropped.
+  .gptr_message_write = function(text, stream, margin, k) {
     eval_flush(st)
-    if (identical(stream, "stderr")) {
-      cat(text, file = stderr(), sep = "")
-    } else {
-      failed = tryCatch({
-        cat(text, sep = "")
-        NULL
-      }, error = identity, finally = {
-        tryCatch(eval_read_sink(st), error = function(e) invisible(NULL))
-      })
-      if (inherits(failed, "condition")) stop(failed)
-    }
-    utils::flush.console()
-    invisible(NULL)
+    own = identical(stream, "stdout") && sink.number() == st$sink_n
+    if (own) sink()
+    on.exit({
+      if (own) sink(st$con, split = st$tee)
+      tryCatch(eval_read_sink(st), error = function(e) invisible(NULL))
+    }, add = TRUE)
+    gptr_message_write(text, stream, margin, from = k - 1L)
   }
   force(.gptr_message_write)
   st$line = if (is.null(sref)) NA_integer_ else as.integer(sref[1L])

@@ -115,6 +115,45 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
   expect_identical(out$asked, 2L)
 })
 
+test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-188)", {
+  root = local_project()
+  req = ui_request("x = 1")
+  expect_identical(ui_permission_lines(req)[1L], "  r  x = 1")
+  expect_identical(ui_permission_lines(c(req, agent = "main"))[1L], "  r  x = 1")
+  expect_identical(ui_permission_lines(c(req, agent = "alpha"))[1L], "  sub-agent alpha > r  x = 1")
+  expect_identical(ui_permission_lines(c(req, agent = "'Sum\033...'"))[1L],
+                   "  sub-agent 'Sum<U+001B>...' > r  x = 1")
+  expect_match(ui_permission_detail(c(req, agent = "alpha"))[1L],
+               "^  sub-agent alpha wants to use r \\(level")
+  expect_match(ui_permission_detail(req)[1L], "^  gptr wants to use r")
+  crit = ui_request("q('no')", tier = "ask_human")
+  expect_identical(utils::tail(ui_permission_lines(crit), 1L),
+                   paste0("     asks in every mode: ", crit$reason))
+  expect_false(any(grepl("every mode", ui_permission_lines(req), fixed = TRUE)))
+})
+
+test_that("invalid answers are explained; five end in a refusal the model is told (D-188)", {
+  root = local_project()
+  crit = ui_request("q('no')", tier = "ask_human")
+  out = console_try(function() ui_console_permission(crit), c("a", "p", "y"))
+  expect_identical(out$result$decision, "allow")
+  expect_identical(sum(grepl("[a]lways is not offered: level-4 and control actions",
+                             out$shown, fixed = TRUE)), 2L)
+  req = ui_request("write.csv(df, 'out.csv')")
+  out = console_try(function() ui_console_permission(req), rep("zz", 5L))
+  expect_identical(out$result, list(decision = "deny", remember = NULL,
+                                    feedback = "no valid answer was given at the approval prompt"))
+  expect_identical(sum(out$shown == paste0("  Not an answer: 'zz'. Type y, a, n (n <text> says ",
+                                           "what to do instead) or ? for details.")), 5L)
+  expect_identical(utils::tail(out$shown, 1L), "  No valid answer after 5 tries; refused.")
+  # asking for details is not an invalid answer
+  out = console_try(function() ui_console_permission(req), c("?", "?", "zz", "?", "zz", "?", "y"))
+  expect_identical(out$result$decision, "allow")
+  out = console_try(function() ui_console_permission(crit), c("maybe \033", "n"))
+  expect_true(any(grepl("Not an answer: 'maybe <U+001B>'. Type y, n (n <text>", out$shown,
+                        fixed = TRUE)))
+})
+
 test_that("the detail view shows the checkpoint.note service's undo note", {
   root = local_project()
   local_mocked_bindings(
