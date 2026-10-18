@@ -435,9 +435,11 @@ ckpt_rewind_each = function(tree, ops, fun) {
   out
 }
 
-#' Undo and redo the records through their checkpointers (plugins included): the report lines
+#' Undo and redo the records through their checkpointers (plugins included): the report lines,
+#' each of the plan's `items` once, by its last line ("<item>: ..."; the longest such item): its
+#' outcome after the whole rewind (a line of no plan item is its own key)
 #' @noRd
-ckpt_rewind_apply = function(tree, ops, specs, ctx, force) {
+ckpt_rewind_apply = function(tree, ops, specs, ctx, force, items) {
   report = ckpt_rewind_each(tree, ops, function(direction, id, nm, fr) {
     sp = specs[[nm]]
     if (is.null(sp)) return(paste0("checkpointer ", nm, ": not restored (it is not registered)"))
@@ -445,12 +447,16 @@ ckpt_rewind_apply = function(tree, ops, specs, ctx, force) {
       paste0("checkpointer ", nm, ": failed (", conditionMessage(e), ")")
     })
   })
-  c(unlist(report), paste0("checkpoint ", ops$foreign, ": not restored (made before the fork; ",
-                           "the source session owns it)", recycle0 = TRUE))
+  report = key = as.character(unlist(report))
+  for (it in items[order(nchar(items, "bytes"))]) key[startsWith(report, paste0(it, ": "))] = it
+  c(report[!duplicated(key, fromLast = TRUE)],
+    paste0("checkpoint ", ops$foreign, ": not restored (made before the fork; ",
+           "the source session owns it)", recycle0 = TRUE))
 }
 
-#' The rewind plan: one row per item and whether it would be restored (the built-ins dry-run
-#' their preview(); other checkpointers list their describe() lines with an unknown outcome)
+#' The rewind plan: one row per item, its last in the rewind, and whether it would be restored
+#' (the built-ins dry-run their preview(); other checkpointers list their describe() lines with
+#' an unknown outcome)
 #' @noRd
 ckpt_rewind_plan = function(tree, ops, specs, ctx, force) {
   rows = ckpt_rewind_each(tree, ops, function(direction, id, nm, fr) {
@@ -476,7 +482,10 @@ ckpt_rewind_plan = function(tree, ops, specs, ctx, force) {
   empty = data.frame(record = character(), turn = integer(), action = character(),
                      checkpointer = character(), item = character(), restore = logical(),
                      reason = character())
-  ckpt_plan_chain(do.call(rbind, c(list(empty), rows)))
+  plan = ckpt_plan_chain(do.call(rbind, c(list(empty), rows)))
+  plan = plan[!duplicated(plan$item, fromLast = TRUE), , drop = FALSE]
+  row.names(plan) = NULL
+  plan
 }
 
 #' A dry run checks each record against the current workspace, so an item that an earlier record
@@ -542,12 +551,13 @@ ckpt_ext_state = function(s) {
 #' is kept and reported, unless `force = TRUE`. Reference objects (environments, R6, external
 #' pointers), objects over the undo budget, environment variables, loaded namespaces, the
 #' random-number state and effects outside R (network, databases, processes) are not restored.
-#' Items that were not restored are listed in `s$last_rewind$report` and raise the warning
-#' `gptr_warning_rewind_partial`. Files outside the project and `tempdir()` are restored only
-#' after you confirm each path. After a full restore the model is told nothing (the next
-#' request's prefix is byte-identical to the earlier request at the target); after a partial one
-#' the next prompt carries a short `<rewind>` block listing what was not restored. Model code may
-#' rewind another session only when you approve that call.
+#' `s$last_rewind$report` lists each object, file and state item once, by its outcome after the
+#' whole rewind; items that were not restored raise the warning `gptr_warning_rewind_partial`.
+#' Files outside the project and `tempdir()` are restored only after you confirm each path. After
+#' a full restore the model is told nothing (the next request's prefix is byte-identical to the
+#' earlier request at the target); after a partial one the next prompt carries a short `<rewind>`
+#' block listing what was not restored. Model code may rewind another session only when you
+#' approve that call.
 #'
 #' @param s A `gptr_session`.
 #' @param turn Integer. Negative counts back from the last turn (`-1` undoes the last turn); `0`
@@ -629,7 +639,7 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
                        dec$reason %||% "no reason given"), "notice")
     return(invisible(s))
   }
-  report = ckpt_rewind_apply(tree, ops, specs, ctx, force)
+  report = ckpt_rewind_apply(tree, ops, specs, ctx, force, plan$item)
   bad = report[grepl("not restored|not redone|conflict|failed", report)]
   entry = list(type = "custom", custom_type = "gptr.rewind",
                data = list(from = from, to = tgt$target, keep = tgt$keep, restore = restore,

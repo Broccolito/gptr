@@ -1773,7 +1773,9 @@ gptr_checkpoints(s, all = FALSE)
 `turn`; any node, including abandoned branches, which is how redo works); `restore = "all"` restores objects, files,
 state and the conversation leaf, `"conversation"` only the leaf, `"workspace"` only objects/files/state;
 `force = TRUE` also restores items changed since (3-way conflicts); `preview = TRUE` returns the plan (a data frame of
-items and whether each would be restored) and changes nothing. Appends one `gptr.rewind` entry (the JSONL stays
+items and whether each would be restored) and changes nothing. The plan lists each item once, by its last row in
+application order, and the report each plan item once, by its last line `<item>: ...`: the item's outcome after the
+whole rewind; other lines are kept (D-214). Appends one `gptr.rewind` entry (the JSONL stays
 byte-append-only). Returns `invisible(s)` (so it pipes), with `s$last_rewind` and `s$editor_text` set. Warns
 `gptr_warning_rewind_partial` when some items were not restored. Conditions: `busy` (running), `rewind_range`,
 `invalid_argument`. Emits `session_before_tree` (first decision; a handler may cancel) and `session_tree`

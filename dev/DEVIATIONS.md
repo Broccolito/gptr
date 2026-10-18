@@ -2439,3 +2439,23 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: perm-classify (an overlay's plain assignment; `<<-`, `assign()`, `with()`, `local()`, a replacement and a
   binding of `envir` itself still flag), subagent-team (a manual-mode fan-out asks nothing and its children's calls
   run). Evidence: progress/P26.md Task 23.
+
+## D-214 - P26 a rewind reports each item once, by its outcome after the whole rewind (2026-10-18)
+- Rule: `gptr_rewind()`'s plan (`preview = TRUE`, the `session_before_tree` payload) keeps one row per item and
+  its report (`s$last_rewind$report`, the `gptr.rewind` entry, `session_tree`) one line per plan item: its last
+  row or line in application order (for an undo, its oldest record), after the chain rule that credits a conflict
+  following an earlier success. `/undo` therefore asks only about items whose final outcome is not restored; an
+  object a turn creates and later changes (an environment modified in place) is removed without a question.
+- Rule: a report line belongs to the longest plan item it starts with (`<item>: `, lengths in bytes, so a name not
+  valid UTF-8 never stops a rewind partway); a line of no plan item (a checkpointer without `preview()`, such as
+  artifacts or a plugin) is its own key, so a not-restored line is never dropped for another item (`k: a` and
+  `k: b` stay apart).
+- Rule: known limits: a reference object the turn reaches through a new binding (`e = g`, then `e$v = 1` in a
+  later call) keeps its in-place change while the report shows only the binding removed (silent in one call
+  already); when a newer record fails and the older one then conflicts, the item reads as a conflict, not the
+  newer record's reason (it still counts as not restored).
+- Contract-visible: 04 §6.5 `gptr_rewind()`; `?gptr_rewind`.
+- Tests: ckpt-rewind (a turn creating `e` and `a.txt` in one call and changing both in a later call: a preview of
+  two rows, `/undo` asks nothing, the report is `file a.txt: removed` and `object e: removed (created by the
+  turn)`; objects `k: a` and `k: b`, one changed after the turn: two lines and the partial warning; an object
+  whose name is not valid UTF-8: rewound in full). Evidence: progress/P26.md Task 28.
