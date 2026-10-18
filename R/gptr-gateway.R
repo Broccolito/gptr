@@ -68,7 +68,9 @@
 #' @param parallel Fan one list-like context object out over this many concurrent sub-agents.
 #' @param choices,levels,threshold,min_confidence,uncertain System 1 answer shape and abstention.
 #' @param prompt An explicit prompt; wins over positional selection.
-#' @param envir Where the agent evaluates R code and creates objects.
+#' @param envir Where the agent evaluates R code and creates objects. A call made by the agent's
+#'   own R code without `envir` evaluates in a new environment whose parent is the caller's,
+#'   `res$envir`: it reads the caller's objects and keeps the ones it creates there.
 #' @param background Experimental: return the running session at once (needs later).
 #' @param budget `list(tokens =, cost =, turns =)` limits for this call.
 #' @param replay Document replay mode: `"auto"`, `"replay"`, `"live"` or `"record"`.
@@ -566,7 +568,9 @@ gateway_register = function(call, s) {
 }
 
 #' Creates the session of a new call: resolved model and mode, the evaluation environment as home;
-#' inside a run, the mode tightened, kind `child` and the running session as parent
+#' inside a run, the mode tightened, kind `child` and the running session as parent. A call from
+#' model code without `envir =` evaluates in an overlay of its caller (D-188): it reads the
+#' caller's objects and keeps its own in `res$envir`; a function-frame caller is unchanged (R2).
 #' @noRd
 gateway_new_session = function(call, cur) {
   nested = !is.null(cur)
@@ -575,6 +579,9 @@ gateway_new_session = function(call, cur) {
   if (nested) mode = run_mode_tighter(mode, cur$mode)
   if (nested) gateway_child_depth(cur)
   parent = if (nested) session_by_id(cur$session) else NULL
+  if (nested && !isTRUE(call$args$envir_given) && home_keep(call$envir)) {
+    call$envir = overlay_new(call$envir, cur$session)
+  }
   # session_new() derives the depth from `parent`; gateway_child_depth() only enforces the limit
   s = session_new(ref, mode, home = call$envir, kind = if (nested) "child" else "chat",
                   parent = parent, preset = gateway_preset(call),

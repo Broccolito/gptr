@@ -695,6 +695,35 @@ test_that("an mcp_message round trip evaluates R in the live session and is gate
   expect_match(s$text, "The tool said:", fixed = TRUE)
 })
 
+test_that("a sub-agent asking in a served r call ends the streamed line, not the result (D-188)", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "fantext")
+  local_fake_provider(function(request) {
+    if (length(request$last_results)) "child done" else
+      fake_tool("r", code = "gptr_mcp_serve(tools = 'r')")
+  }, name = "kid")
+  local_gptr_options(interactive = TRUE, verbose = 2L, quiet = FALSE,
+                     ui = ui_console_spec(function(prompt, ...) "n"))
+  e = new.env()
+  e$topics = c(a = "alpha", b = "beta")
+  s = NULL
+  out = utils::capture.output({
+    s = peter("Fan out", model = f$model, envir = e, mode = "auto")
+  })
+  local_cli_cleanup(s)
+  # the streamed line ends before the prompts; its held word continues after them (D-186)
+  asks = grep("^  sub-agent [ab] > r  gptr_mcp_serve", out)
+  expect_length(asks, 2L)
+  expect_true(all(asks > match("Fanning out", out)))
+  expect_gt(match("HELDWORD", out), max(asks))
+  expect_true(any(grepl("^  sub-agent [ab] done ", out)))
+  text = fake_log(f, "mcp")[[1]]$text
+  expect_match(text, "child done", fixed = TRUE)
+  for (bit in c("HELDWORD", "flagged", "sub-agent", "every mode")) {
+    expect_false(grepl(bit, text, fixed = TRUE), info = bit)
+  }
+})
+
 test_that("an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr_error_billing", {
   skip_on_cran()
   f = local_fake_cli("claude", "apikey")

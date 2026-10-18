@@ -91,26 +91,46 @@ ui_flagged = function(risk) {
   if (is.data.frame(fl)) fl[fl$level >= 1L, , drop = FALSE]
 }
 
-#' The lines of the one-line prompt: the first line (+N more lines) and every flagged call (IC-53)
+#' Who asks (D-188): "sub-agent <label>" for a sub-agent's request, else ""
+#' @noRd
+ui_who = function(request) {
+  a = request$agent
+  if (!rlang::is_string(a) || identical(a, "main")) "" else paste0("sub-agent ", ui_escape(a))
+}
+
+#' The lines of the one-line prompt: who asks and the first line, fitted to the console (D-187),
+#' (+N more lines), every flagged call (IC-53) and why an `ask_human` request asks in every mode
 #' @noRd
 ui_permission_lines = function(request) {
   lines = ui_request_lines(request)
   lines = lines[nzchar(trimws(lines))]
-  more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)")
+  more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)") else ""
+  who = ui_who(request)
+  first = paste0("  ", if (nzchar(who)) paste0(who, " > "), ui_escape(request$tool %||% "tool"),
+                 "  ", c(lines, "")[1L])
+  width = max(20L, cli::console_width() - nchar(console_pad()) - nchar(more))
   fl = ui_flagged(request$risk)
-  c(paste0("  ", ui_escape(request$tool %||% "tool"), "  ", cap_lines(c(lines, "")[1L], 72L), more),
+  why = request$reason
+  c(paste0(cli::ansi_strtrim(first, width), more),
     if (NROW(fl)) {
       paste0("     flagged: ", paste0(ui_escape(fl$call), " [", fl$level, " ", fl$category, "]",
                                      collapse = "; "))
+    },
+    if (identical(request$tier, "ask_human") && rlang::is_string(why) && nzchar(why)) {
+      paste0("     asks in every mode: ", ui_escape(why))
     })
 }
 
-#' The detail view shown for `?`
+#' The detail view shown for `?`: the code as a plain fence (it also feeds the RStudio dialog)
 #' @noRd
 ui_permission_detail = function(request) {
   risk = request$risk
   lines = ui_request_lines(request)
-  out = c(paste0("  gptr wants to use ", ui_escape(request$tool %||% "a tool"),
+  shown = utils::head(lines, 40L)
+  fence = doc_rmd_fence("```", shown)
+  who = ui_who(request)
+  out = c(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
+                 ui_escape(request$tool %||% "a tool"),
                  if (!is.null(risk$level)) {
                    paste0(" (level ", risk$level, ": ", ui_escape(risk$label %||% ""), ")")
                  },
@@ -118,8 +138,9 @@ ui_permission_detail = function(request) {
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
             paste0("  reason: ", ui_escape(request$reason))
           },
-          paste0("    > ", utils::head(lines, 40L)),
-          if (length(lines) > 40L) paste0("    > ... (+", length(lines) - 40L, " more lines)"))
+          paste0("  ", c(paste0(fence, if (grepl("(^|__)r$", request$tool %||% "")) "r"), shown,
+                         fence)),
+          if (length(lines) > 40L) paste0("  (+", length(lines) - 40L, " more lines)"))
   fl = ui_flagged(risk)
   if (NROW(fl)) {
     where = ifelse(is.na(fl$path), "",
@@ -172,21 +193,25 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
                              allow_other = FALSE, read = ui_console_read) {
+  # in a run in the console margin console_before_message() writes the block's separator
+  run = console_before_message(kind = "prompt", tools = TRUE)
+  pad = console_pad()
   labels = as.character(unlist(choices))
-  msg_verbatim(c("", console_escape(title),
-                  ui_escape(if (length(details)) paste0("  | ", details)), "",
-                  ui_escape(sprintf("  %d: %s", seq_along(labels), labels)), ""))
+  console_write(c(if (!run || !nzchar(pad)) "",
+                   gsub("(^|\n)", paste0("\\1", pad), console_escape(title)),
+                   ui_escape(if (length(details)) paste0("  | ", details)), "",
+                   ui_escape(sprintf("  %d: %s", seq_along(labels), labels)), ""))
   hint = c(if (multiple) "numbers separated by commas" else "a number",
            if (allow_other) "or type your own answer",
            if (length(default)) paste0("Enter = ", paste(labels[default], collapse = ", ")))
   for (attempt in seq_len(5L)) {
-    ans = read(ui_escape(paste0("Choose (", paste(hint, collapse = "; "), "): ")))
+    ans = read(ui_escape(paste0(pad, "Choose (", paste(hint, collapse = "; "), "): ")))
     if (is.na(ans)) return(NA_integer_)
     if (!nzchar(trimws(ans)) && length(default)) return(as.integer(default))
     idx = ui_parse_choice(ans, labels, multiple)
     if (!anyNA(idx)) return(idx)
     if (allow_other && nzchar(trimws(ans))) return(structure(NA_integer_, other = trimws(ans)))
-    msg_verbatim("  Please enter one of the numbers shown.")
+    console_write("  Please enter one of the numbers shown.")
   }
   NA_integer_
 }
@@ -194,22 +219,28 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
 #' Console input(); NA = cancelled; a secret is asked through RStudio's masked dialog there
 #' @noRd
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
+  console_before_message(kind = "prompt", tools = TRUE)
   if (isTRUE(secret) && ui_rstudio()) {
     ans = tryCatch(rstudioapi::askForPassword(prompt), error = function(e) NULL)
     return(if (rlang::is_string(ans)) as_utf8(ans) else NA_character_)
   }
-  ans = read(ui_escape(paste0(prompt, if (nzchar(default)) paste0(" [", default, "]"), ": ")),
+  ans = read(ui_escape(paste0(console_pad(), prompt,
+                              if (nzchar(default)) paste0(" [", default, "]"), ": ")),
              secret = isTRUE(secret))
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
 
-#' Console permission(): the one-line prompt of NS-1, `?` for the detail view
+#' Console permission(): the one-line prompt of NS-1, `?` for the detail view; every console
+#' prompt first ends partial answer lines and clears waiting rows (D-186); an invalid answer is
+#' explained, five (`?` is none) end in a refusal whose feedback says so (D-188)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
+  console_before_message(kind = "prompt", tools = TRUE)
   can = ui_can_remember(request)
   opts = if (can) "[y]es / [a]lways / [n]o / [?]" else "[y]es / [n]o / [?]"
-  msg_verbatim(ui_permission_lines(request))
-  for (attempt in seq_len(5L)) {
+  console_write(ui_permission_lines(request))
+  bad = 0L
+  while (bad < 5L) {
     a = trimws(read(paste0("  allow? ", opts, ": ")))
     if (is.na(a)) return(ui_answer("abort"))
     low = tolower(a)
@@ -220,9 +251,22 @@ ui_console_permission = function(request, read = ui_console_read) {
       fb = trimws(sub("^no?", "", a, ignore.case = TRUE))
       return(ui_answer("deny", feedback = if (nzchar(fb)) fb))
     }
-    msg_verbatim(if (low == "?") ui_permission_detail(request) else paste0("  Answer ", opts, "."))
+    if (low == "?") {
+      console_write(ui_permission_detail(request))
+      next
+    }
+    bad = bad + 1L
+    console_write(if (low %in% c("a", "always", "p", "project")) {
+      paste0("  [a]lways is not offered: level-4 and control actions are approved one call at a ",
+             "time; answer y, n or ?.")
+    } else {
+      paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'. Type ",
+             if (can) "y, a, n" else "y, n", " (n <text> says what to do instead) or ? ",
+             "for details.")
+    })
   }
-  ui_answer("deny")
+  console_write("  No valid answer after 5 tries; refused.")
+  ui_answer("deny", feedback = "no valid answer was given at the approval prompt")
 }
 
 #' questions() through select() and input() (report 18 ui_questions_via()); every choice
@@ -267,8 +311,7 @@ ui_console_spec = function(read = ui_console_read, name = "console") {
             input = input,
             questions = function(qs) ui_questions_via(select, input, qs),
             notify = function(text, level = "info") {
-              msg_verbatim(paste0("[", level, "] ", ui_escape(text)),
-                           if (identical(level, "error")) "stderr" else "stdout")
+              console_notice("[", level, "] ", ui_escape(text), .error = identical(level, "error"))
             },
             permission = function(request) ui_console_permission(request, read))
 }

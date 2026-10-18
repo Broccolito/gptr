@@ -152,7 +152,8 @@ r_tool_result = function(code, record, note, res, fmt, rc, session, n_values) {
   out
 }
 
-#' The r tool's execute: evaluate `code` in the run's evaluation environment
+#' The r tool's execute: evaluate `code` in the run's evaluation environment; only a depth-0 run
+#' tees its output to the person (a sub-agent's stays in its result, D-188)
 #' Copy safety R2, R3, R8: the environment is bound only while the call runs, no closure or
 #' tryCatch(), the value is never kept; `gptr_r_call` holds the ctx and collectors only.
 #' @noRd
@@ -184,7 +185,7 @@ r_tool_execute = function(input, ctx) {
   budget = as.integer(gptr_opt("r_output_tokens"))
   evaluate = r_evaluator(session)
   res = evaluate(code, envir, timeout = timeout, budget_tokens = budget, rng = opts$rng_state,
-                 record = record)
+                 record = record, tee = gptr_has_human() && !isTRUE(run$depth > 0L))
   envir = NULL
   # images attached by peter$plot() and peter$read() count against the budget too (IC-67)
   res$images = c(res$images, gptr_r_call$images)

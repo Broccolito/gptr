@@ -1396,7 +1396,9 @@ run_budget_extend = function(run, hit) {
   if (!isTRUE(run$opts$safety$can_prompt)) return(FALSE)
   ui = run_ui(run)
   if (is.null(ui) || !isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) return(FALSE)
-  title = paste0("The ", hit$kind, " budget of this call (", format(hit$budget), ") is reached.")
+  who = agent_label(run)
+  title = paste0(if (!identical(who, "main")) paste0("sub-agent ", who, ": "), "The ", hit$kind,
+                 " budget of this call (", format(hit$budget), ") is reached.")
   ans = tryCatch(ui$select(title, c("Extend it by the same amount", "Stop the run"), default = 2L),
                  error = function(e) NA_integer_)
   if (!identical(suppressWarnings(as.integer(ans)), 1L)) return(FALSE)

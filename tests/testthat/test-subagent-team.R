@@ -502,6 +502,72 @@ test_that("teams and fan-outs started in an r evaluation are children of the run
   expect_identical(nrow(s$usage), 5L)
 })
 
+test_that("sub-agent prompts name the asker and reach only the console (D-188)", {
+  local_team_fake(function(request) {
+    if (identical(request$last_user, "S")) {
+      if (length(request$last_results)) return("child done")
+      return(fake_tool("r", code = "cm = 1; pp = 2; cm + pp"))
+    }
+    if (length(request$last_results)) return("parent done")
+    fake_tool("r", code = "fan = peter(\"S\", list(a = 1, b = 2), parallel = 2)")
+  })
+  local_gptr_options(mode = "manual", interactive = TRUE, verbose = 2L, quiet = FALSE,
+                     ui = ui_console_spec(function(prompt, ...) "y"))
+  e = new.env()
+  s = NULL
+  out = utils::capture.output({
+    s = peter("fan out", envir = e)
+  })
+  expect_identical(s$text, "parent done")
+  for (k in c("a", "b")) {
+    expect_true(paste0("  sub-agent ", k, " > r  cm = 1; pp = 2; cm + pp") %in% out)
+    expect_true(paste0("  sub-agent ", k, " started (fake/fake-1)") %in% out)
+  }
+  done = grep("^  sub-agent [ab] done \\([12]/2\\) . [0-9]+ turns? . [0-9]+ s$", out, value = TRUE)
+  expect_identical(sort(sub("^.*done \\(([0-9/]+)\\).*$", "\\1", done)), c("1/2", "2/2"))
+  # neither the prompts, the lines nor the children's own output reach the parent model
+  res = Filter(function(x) {
+    identical(x$type, "message") && identical(x$message$role, "tool_result")
+  }, session_data(s)$entries)
+  text = msg_text(res[[1L]]$message)
+  for (bit in c("cm = 1", "sub-agent", "[1] 3", "allow?")) {
+    expect_false(grepl(bit, text, fixed = TRUE), info = bit)
+  }
+  expect_false(any(c("cm", "pp") %in% ls(e)))
+})
+
+test_that("a foreground fan-out, team or gptr_parallel shows a line per sub-agent (D-188)", {
+  local_team_fake(function(request) paste("reply to", request$last_user))
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  run_all = function() {
+    utils::capture.output({
+      peter("each", list(p = 1, q = 2), parallel = 2)
+      peter("check", agents = list(a = agent(model = "fake/fake-1")))
+      gptr_parallel(x = peter("one", envir = new.env()), y = peter("two", envir = new.env()))
+    })
+  }
+  out = run_all()
+  for (k in c("p", "q", "a", "x", "y")) {
+    expect_true(paste0("  sub-agent ", k, " started (fake/fake-1)") %in% out, info = k)
+  }
+  done = grep("^  sub-agent [pqaxy] done \\([12]/[12]\\) . 1 turn . [0-9]+ s$", out, value = TRUE)
+  expect_identical(sort(sub("^.*done \\(([0-9/]+)\\).*$", "\\1", done)),
+                   c("1/1", "1/2", "1/2", "2/2", "2/2"))
+  # a worker child names the model its worker calls, not its proxy's worker/worker
+  local_mocked_bindings(worker_spawn = function(st) {
+    st$result = list(type = "result", status = "idle", text = "w done", turns = 1L)
+    worker_on_exit(st, 0L)
+  })
+  out = utils::capture.output(peter("each", list(w = 1), parallel = 1,
+                                    .opts = list(backend = "worker")))
+  expect_true("  sub-agent w started (fake/fake-1)" %in% out)
+  expect_true(any(grepl("^  sub-agent w done \\(1/1\\)", out)))
+  local_gptr_options(verbose = 0L)
+  expect_false(any(grepl("sub-agent", run_all(), fixed = TRUE)))
+  local_gptr_options(verbose = 1L, quiet = TRUE)
+  expect_false(any(grepl("sub-agent", run_all(), fixed = TRUE)))
+})
+
 test_that("model-issued teams above gptr.subagents.max_tasks fail in the tool result", {
   local_team_fake(function(request) {
     if (length(request$last_results)) return("done")

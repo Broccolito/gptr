@@ -41,6 +41,14 @@ test_that("console select preserves title line feeds but escapes other controls 
   expect_false(grepl("\033", text, fixed = TRUE))
 })
 
+test_that("a console select outside a run opens its own block in the margin (D-186)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  out = console_try(function() ui_console_select("Rewind to", c("a", "b")), "1")
+  expect_identical(out$shown, c("", "  Rewind to", "", "  1: a", "  2: b", ""))
+})
+
 test_that("the one-line prompt shows the first line, +N more lines and every flagged call", {
   root = local_project()
   # R's parser refuses bidi controls inside string literals in UTF-8 locales, so the payload
@@ -58,6 +66,28 @@ test_that("the one-line prompt shows the first line, +N more lines and every fla
   expect_true(any(grepl("[3] file_delete", detail, fixed = TRUE)))
   w = list(tool = "write", input = list(path = "notes.md"), risk = list(level = 2L))
   expect_identical(ui_permission_lines(w), "  write  notes.md")
+})
+
+test_that("the prompt's first line fits the console, keeping +N more lines (D-187)", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  req = ui_request(paste0("x = c(", strrep("1, ", 30L), "1)\ny = 2"))
+  first = ui_permission_lines(req)[1L]
+  expect_identical(first, "  r  x = c(1, 1, 1, ...  (+1 more lines)")
+  withr::local_options(cli.dynamic = TRUE)
+  local_gptr_options(verbose = 2L)
+  expect_identical(nchar(ui_permission_lines(req)[1L]), 38L)
+})
+
+test_that("the detail view shows the code as a plain fence of at most 40 lines (D-187)", {
+  root = local_project()
+  code = sprintf("x%d = %d", 1:45, 1:45)
+  detail = ui_permission_detail(ui_request(paste(code, collapse = "\n")))
+  at = match("  ```r", detail)
+  expect_identical(detail[at + 1:42], c(paste0("  ", code[1:40]), "  ```", "  (+5 more lines)"))
+  expect_false(any(grepl("\033", detail, fixed = TRUE)))
+  expect_true("  ````r" %in% ui_permission_detail(ui_request("x = '\n```\n'")))
+  py = list(tool = "py", input = list(code = "a = 1"), risk = list(level = 2L))
+  expect_identical(ui_permission_detail(py)[2:4], c("  ```", "  a = 1", "  ```"))
 })
 
 test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3)", {
@@ -95,6 +125,45 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
   })
   expect_identical(res$decision, "deny")
   expect_identical(rl$i, 3L)
+})
+
+test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-188)", {
+  root = local_project()
+  req = ui_request("x = 1")
+  expect_identical(ui_permission_lines(req)[1L], "  r  x = 1")
+  expect_identical(ui_permission_lines(c(req, agent = "main"))[1L], "  r  x = 1")
+  expect_identical(ui_permission_lines(c(req, agent = "alpha"))[1L], "  sub-agent alpha > r  x = 1")
+  expect_identical(ui_permission_lines(c(req, agent = "'Sum\033...'"))[1L],
+                   "  sub-agent 'Sum<U+001B>...' > r  x = 1")
+  expect_match(ui_permission_detail(c(req, agent = "alpha"))[1L],
+               "^  sub-agent alpha wants to use r \\(level")
+  expect_match(ui_permission_detail(req)[1L], "^  gptr wants to use r")
+  crit = ui_request("q('no')", tier = "ask_human")
+  expect_identical(utils::tail(ui_permission_lines(crit), 1L),
+                   paste0("     asks in every mode: ", crit$reason))
+  expect_false(any(grepl("every mode", ui_permission_lines(req), fixed = TRUE)))
+})
+
+test_that("invalid answers are explained; five end in a refusal the model is told (D-188)", {
+  root = local_project()
+  crit = ui_request("q('no')", tier = "ask_human")
+  out = console_try(function() ui_console_permission(crit), c("a", "p", "y"))
+  expect_identical(out$result$decision, "allow")
+  expect_identical(sum(grepl("[a]lways is not offered: level-4 and control actions",
+                             out$shown, fixed = TRUE)), 2L)
+  req = ui_request("write.csv(df, 'out.csv')")
+  out = console_try(function() ui_console_permission(req), rep("zz", 5L))
+  expect_identical(out$result, list(decision = "deny", remember = NULL,
+                                    feedback = "no valid answer was given at the approval prompt"))
+  expect_identical(sum(out$shown == paste0("  Not an answer: 'zz'. Type y, a, n (n <text> says ",
+                                           "what to do instead) or ? for details.")), 5L)
+  expect_identical(utils::tail(out$shown, 1L), "  No valid answer after 5 tries; refused.")
+  # asking for details is not an invalid answer
+  out = console_try(function() ui_console_permission(req), c("?", "?", "zz", "?", "zz", "?", "y"))
+  expect_identical(out$result$decision, "allow")
+  out = console_try(function() ui_console_permission(crit), c("maybe \033", "n"))
+  expect_true(any(grepl("Not an answer: 'maybe <U+001B>'. Type y, n (n <text>", out$shown,
+                        fixed = TRUE)))
 })
 
 test_that("the detail view shows the checkpoint.note service's undo note", {

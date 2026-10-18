@@ -618,6 +618,31 @@ test_that("a policy reason that is not one string denies; the request record car
   expect_null(ui$request$suggested_rule)
 })
 
+test_that("the request record names the asking agent; a nested call by its prompt (D-188)", {
+  local_gptr_options(interactive = TRUE)
+  ui = new.env()
+  local_service("ui.get", function(session = NULL) {
+    list(has_ui = function() TRUE, permission = function(request) {
+      ui$agents = c(ui$agents, request$agent)
+      list(decision = "deny")
+    })
+  })
+  seen = new.env()
+  local_hook("permission_request", function(event, ctx) {
+    seen$agents = c(seen$agents, event$agent)
+    NULL
+  })
+  local_policy("mode", function(call, ctx) list(decision = "ask", reason = "level 2"))
+  s = test_session()
+  call = new.env()
+  call$prompt = "  Summarise topic 3 of the long list, please\nand more"
+  for (opts in list(list(), list(agent = "alpha"), list(agent = "nested", call = call))) {
+    expect_identical(perm_check(a_call(), test_run(s, opts))$decision, "deny")
+  }
+  expect_identical(ui$agents, c("main", "alpha", "'Summarise topic 3 of the long...'"))
+  expect_identical(seen$agents, c("main", "alpha", "nested"))
+})
+
 test_that("a UI answer that is not a list is not an approval", {
   local_gptr_options(interactive = TRUE)
   ui = new.env()

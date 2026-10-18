@@ -34,7 +34,9 @@ file paths.}
 
 \item{prompt}{An explicit prompt; wins over positional selection.}
 
-\item{envir}{Where the agent evaluates R code and creates objects.}
+\item{envir}{Where the agent evaluates R code and creates objects. A call made by the agent's
+own R code without \code{envir} evaluates in a new environment whose parent is the caller's,
+\code{res$envir}: it reads the caller's objects and keeps the ones it creates there.}
 
 \item{background}{Experimental: return the running session at once (needs later).}
 

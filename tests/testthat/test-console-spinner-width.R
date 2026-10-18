@@ -43,6 +43,16 @@ test_that("wide spinner text and its stop hint retain the original appearance", 
   expect_identical(out, expected)
 })
 
+test_that("an ANSI terminal erases to the line end and keeps the cursor after the text (D-186)", {
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE, cli.unicode = FALSE,
+    cli.num_colors = 1L, cli.width = 80L, gptr.verbose = 2L)
+  local_mocked_bindings(front_end = function() "terminal")
+  sp = console_spinner()
+  out = spinner_tick_output(sp)
+  expect_match(out, "^\r  [-\\\\|/] thinking \\([0-9]+s, Ctrl-C to [a-z ]+\\)\033\\[K$")
+  expect_identical(utils::capture.output(invisible(sp$clear())), "\r\033[K")
+})
+
 test_that("spinner fits a one-column row without wrapping or introducing escape codes", {
   withr::local_options(cli.dynamic = TRUE, cli.unicode = FALSE, cli.num_colors = 1L,
     cli.width = 1L)

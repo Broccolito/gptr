@@ -132,6 +132,24 @@ test_that("an error stops the evaluation and is reported; plan mode never record
                class = "gptr_error_internal")
 })
 
+test_that("only depth-0 runs tee r output; a sub-agent's output stays in its result (D-188)", {
+  local_gptr_options(interactive = TRUE)
+  run = structure(new.env(), class = "gptr_run")
+  run$opts = list()
+  run$home = new.env()
+  local_mocked_bindings(run_current = function() run)
+  shown = character()
+  for (depth in c(0L, 1L)) {
+    run$depth = depth
+    res = NULL
+    shown = c(shown, utils::capture.output({
+      res = r_tool_execute(list(code = "cat('kid\\n')"), NULL)
+    }))
+    expect_match(res$content[[1L]]$text, "kid", fixed = TRUE)
+  }
+  expect_identical(shown, "kid")
+})
+
 test_that("images attached by peter$plot() during the evaluation are added to the result", {
   local_nested_dispatch()
   e = new.env()

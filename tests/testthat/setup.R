@@ -110,6 +110,8 @@ local({
     gptr.replay = "replay",
     gptr.interactive = FALSE,
     gptr.quiet = TRUE,
+    # waiting rows clear with spaces whether or not the runner's stderr is a terminal
+    cli.ansi = FALSE,
     .local_envir = testthat::teardown_env()
   )
 })

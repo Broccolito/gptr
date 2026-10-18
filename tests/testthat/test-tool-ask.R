@@ -72,6 +72,21 @@ test_that("answers come back as 18's result text and in details (18 section 3.6)
   expect_identical(st$log$method, "questions")
 })
 
+test_that("a sub-agent's questions say who asks; the answers keep their ids (D-188)", {
+  st = local_scripted_ui(list(list(fmt = "Table"), list(fmt = "Plot")))
+  run = structure(new.env(), class = "gptr_run")
+  local_mocked_bindings(run_current = function() run)
+  input = ask_input(list(id = "fmt", question = "Format?", options = list("Plot", "Table")),
+                    list(id = "n", question = "How many?", type = "text"))
+  for (agent in c("alpha", "main")) {
+    run$opts = list(agent = agent)
+    res = ask_execute(input, ask_ctx())
+  }
+  expect_identical(st$log$prompt, c("sub-agent alpha asks: Format? How many?",
+                                    "Format? How many?"))
+  expect_match(res$content[[1]]$text, "- fmt: Plot", fixed = TRUE)
+})
+
 test_that("a cancelled or failing dialog returns the cancellation text", {
   st = local_scripted_ui(list())
   res = ask_execute(ask_input(list(id = "a", question = "Go?")), ask_ctx())

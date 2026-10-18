@@ -195,6 +195,8 @@ redaction and metadata remain intact. Actual failure notices may set `.stream = 
 A private stack-scoped protocol binding reserves stdout for JSONL events without changing
 caller options or suppressing caller handlers. The built-in evaluator records a teed condition
 once and drains only its synchronous display bytes; console controls do not enter tool output.
+Console controls (prompts, the pause menu, the console renderer) reach the console whatever
+`tee` is: the evaluator lifts its own capture sink while one is written, never a user's (IC-77).
 Ordinary `cat()` and printed objects remain captured. Base warning semantics, including
 `options(warn = 2)`, are unchanged.
 
@@ -513,7 +515,7 @@ Per request (one row of `.d$usage`, a `data.frame`; §5.5 of `03`):
 | Column | Type | Meaning |
 |---|---|---|
 | `request_id` | chr | `q` + 12 hex |
-| `session`, `agent`, `parent_id` | chr | session id; agent label (`"main"`, a team member name, `"s1"`); parent session id or `NA` |
+| `session`, `agent`, `parent_id` | chr | session id; agent label (`"main"`, a team member name, `"nested"`, `"s1"`); parent session id or `NA` |
 | `provider`, `model` | chr | canonical provider id and model id |
 | `route` | chr | `api`, `plan-cli`, `system-one`, `emulated` |
 | `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h`, `reasoning`, `images` | num | tokens |
@@ -1036,7 +1038,7 @@ exact name.
 | `min_confidence` | `num(1)` in [0, 1] or `NULL` | System 1 uncertain band: `abs(2 * p - 1) < min_confidence` (decisions); `confidence < min_confidence` (choices, scores) |
 | `uncertain` | `NA`, `TRUE`, `FALSE`, `"stop"`, `function(state, answer)` or `NULL` | what an uncertain element becomes; `NULL` with `min_confidence` given means `NA` |
 | `prompt` | `chr(1)` or `NULL` | explicit prompt; wins over positional selection |
-| `envir` | `env` | where `r` evaluates and objects persist (D-04); a magrittr mask is replaced by its parent [12 §2.B4]; for a continuation an explicit `envir` (tested with `missing(envir)`) beats the session's kept home, which beats the caller frame (IC-40) |
+| `envir` | `env` | where `r` evaluates and objects persist (D-04); a magrittr mask is replaced by its parent [12 §2.B4]; for a continuation an explicit `envir` (tested with `missing(envir)`) beats the session's kept home, which beats the caller frame (IC-40); a new call made inside a run without `envir` evaluates in `overlay_new(<caller>, <running session id>)`, so it reads the caller's objects and keeps its own in `res$envir`, unless the caller is a function frame [R2] (IC-77) |
 | `background` | `lgl(1)` | [experimental] return the running session at once (needs later; P21) |
 | `budget` | `list(tokens =, cost =, turns =)` or `NULL` | per-call limits; each element `num(1)` or `NULL` |
 | `replay` | `chr(1)` or `NULL` | `"auto"`, `"replay"`, `"live"`, `"record"` (document replay mode, P15) |
@@ -2668,7 +2670,7 @@ v = call_value(call, 1L)
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))` | `eval-core.R` | the built-in `evaluator` record `r` (IC-69); parses with `srcfilecopy("<gptr>", code)`; `eval_guard()`; evaluates top-level expressions one by one in `envir` with sink capture (cleaned up in `suspendInterrupts()`), calling handlers created in a frame that does not hold `envir` [R2][R3], per-expression `setTimeLimit(elapsed = timeout, transient = TRUE)` (`timeout = NULL`: none with a human present, else `gptr.r_timeout`), symbols printed with `print(<sym>)` in `envir` and every `withVisible()` result cleared in place (`res[1L] = list(NULL)`) before the frame returns [R8, IC-67], plots captured (on `pdf(NULL)` with the display list enabled when no device is open and no human sees one; the prior device restored) and replayed to PNG, at most `max_images` attached (the rest kept in the session's out store), interruptions recorded with `on.exit()`, the agent's L'Ecuyer state swapped in and out by `rng_swap()` (IC-61); stops at the first error; returns a `gptr_eval_result` (§5.8); never keeps the value | P10 (`r`), P14 (`!expr`), P18 (server `r`) |
+| `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))` | `eval-core.R` | the built-in `evaluator` record `r` (IC-69); parses with `srcfilecopy("<gptr>", code)`; `eval_guard()`; evaluates top-level expressions one by one in `envir` with sink capture (cleaned up in `suspendInterrupts()`), calling handlers created in a frame that does not hold `envir` [R2][R3], per-expression `setTimeLimit(elapsed = timeout, transient = TRUE)` (`timeout = NULL`: none with a human present, else `gptr.r_timeout`), symbols printed with `print(<sym>)` in `envir` and every `withVisible()` result cleared in place (`res[1L] = list(NULL)`) before the frame returns [R8, IC-67], plots captured (on `pdf(NULL)` with the display list enabled when no device is open and no human sees one; the prior device restored) and replayed to PNG, at most `max_images` attached (the rest kept in the session's out store), interruptions recorded with `on.exit()`, the agent's L'Ecuyer state swapped in and out by `rng_swap()` (IC-61); text written through `gptr_message_write()` (console controls, the console renderer) reaches the console whatever `tee` is and is never captured (IC-77); the `r` tool tees only for a depth-0 run; stops at the first error; returns a `gptr_eval_result` (§5.8); never keeps the value | P10 (`r`), P14 (`!expr`), P18 (server `r`) |
 | `rng_swap(state, expr)` [leaf] | `eval-core.R` | saves `.Random.seed` of the global environment (or its absence), assigns the agent's `c(10407L, <6 seeds>)`, evaluates, stores the advanced vector back in `state`, restores or removes the user's; with `with_seed_preserved()` the only code that assigns `.Random.seed` (IC-61) | P09, P19 |
 | `format_eval_result(res, budget_tokens)` | `eval-format.R` | `list(text = chr(1), images = list, truncated = lgl(1), out_id, spill)`: output, messages, warnings, error + trimmed traceback, `[plot N attached]`, state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status line, head 40% / tail 60% truncation with the `peter$out(<id>)` notice; halves the budget when the session's context exceeds half the compaction threshold | P10 |
 | `eval_guard(exprs)` | `eval-guard.R` | `list(blocked = chr, reason = chr(1) \| NULL)` for `q`, `quit`, `readline`, `menu`, `browser`, ... [12 §3.6]; the symbols `q` and `quit` are flagged in any position (a value, a `FUN` argument, `match.fun`, `get`, `do.call`, `base::`; IC-67); a literal `[secret:` marker is blocked with the `Sys.getenv()` hint | P09, P18 |
@@ -2747,7 +2749,9 @@ retained. Permission approval displays keep the separate IC-53 escaping rules.
 `list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths), risk =
 <gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, undo_note = chr(1) | NULL (from the
 `checkpoint.note` service), session = chr(1), turn = int(1), nested = lgl(1), tier = "ask" | "ask_human")`
-(IC-53).
+(IC-53). IC-77 adds `agent = chr(1)`, who asks: `"main"`, a sub-agent's name, or for a nested
+`peter()` call the first line of its prompt quoted and cut to 30 characters; the
+`permission_request` event carries the event's own `agent` label instead.
 
 Example calls:
 
@@ -5074,7 +5078,33 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the model after the
   CLI's current response.
 
-**IC-77 Console controls and the asking agent** (P26 Task 6). TBD by P26 Task 6.
+**IC-77 Console controls and the asking agent** (P26 Task 6).
+1. Console writer: an evaluation's `.gptr_message_write(text, stream, margin, k)` lifts its own
+   capture sink when it is on top (never a user's), hands the text to
+   `gptr_message_write(text, stream, margin, from = k - 1L)` (the next writer below, else the
+   console), restores the sink and drops what a user's split sink passed into the capture.
+   `console_notice()`, every console-renderer write and the console UI (`permission`, `select`,
+   `input`, `notify`) write through it, so console controls reach the console whatever `tee` is
+   and never a tool result; a user's `sink()` or `capture.output()` around model code still
+   receives them. Every console prompt and sub-agent line first ends partial lines, also while a
+   tool executes (`console_before_message(tools = TRUE)`).
+2. Who asks: the request record's `agent` (§7.11). The one-line prompt starts
+   `  sub-agent <agent> > <tool>  <code>`, the detail view `  sub-agent <agent> wants to use`;
+   an `ask_human` request adds `     asks in every mode: <reason>`; a sub-agent's `ask` question
+   starts `sub-agent <agent> asks: ` and its budget question `sub-agent <agent>: `.
+3. Invalid answers: `a`/`p` where nothing can be remembered say why; other text gives
+   `Not an answer: '<text>'` and the letters allowed (`?` shows the detail view and is not
+   counted); after 5, `No valid answer after 5 tries; refused.` and a denial with feedback
+   `no valid answer was given at the approval prompt`.
+4. Progress: a child run (depth 1+) whose outermost run is in the foreground prints, at
+   verbosity 1+ unless `gptr.quiet`, `  sub-agent <agent> started (<model>)` (the model the child
+   calls, for a worker not its proxy's `worker/worker`) at `agent_start` and
+   `  sub-agent <agent> done (k/N) · <turns> turns · <secs> s` or
+   `  sub-agent <agent> failed: <status>` at `agent_end` through `console_write()`, two columns
+   in as the prompts; `(k/N)` counts the settled runs of a `subagent_schedule()` group
+   (`run$group`: `n`, `runs`).
+5. The `r` tool tees only for a depth-0 run (§7.9); nested calls evaluate in an overlay (§6.1
+   `envir`).
 
 **IC-78 The yolo mode** (P26 Task 8). TBD by P26 Task 8.
 
