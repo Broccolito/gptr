@@ -362,6 +362,29 @@ test_that("each rewind replaces the note: a later full rewind tells the model no
   expect_false(any(startsWith(texts, "<rewind ")))
 })
 
+test_that("after an undo the next request does not report the undone turn's objects", {
+  local_project()
+  fake = local_fake_provider(list("hi", fake_tool("r", code = "probe = 1:5"), "made", "next",
+                                  fake_tool("r", code = "probe = 1"), "made", "after"))
+  e = new.env()
+  s = peter("hello", model = "fake/fake-1", mode = "auto", envir = e)
+  s |> peter("make it")
+  gptr_rewind(s)
+  expect_false(exists("probe", envir = e, inherits = FALSE))
+  s |> peter("anything?")
+  turn_texts = function() {
+    req = fake_requests(fake)
+    last = req[[length(req)]]$messages
+    vapply(last[[length(last)]]$content, function(b) b$text %||% "", "")
+  }
+  expect_false(any(startsWith(turn_texts(), "<workspace_changes")))
+  # a workspace-only rewind keeps the turn the model saw, so the removal is still reported
+  s |> peter("make it again")
+  gptr_rewind(s, restore = "workspace")
+  s |> peter("and now?")
+  expect_true(any(grepl("- probe", turn_texts(), fixed = TRUE)))
+})
+
 test_that("gptr_rewind() refuses a running session and bad arguments", {
   local_project()
   local_fake_provider(list("hello", fake_tool("r", code = "z = 1"), "done"))

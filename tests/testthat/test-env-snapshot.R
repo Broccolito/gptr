@@ -399,7 +399,7 @@ test_that("builtin_workspace registers the blocks, the section, the evaluator an
   expect_equal(c(section$name, section$tier), c("r_env", "T1"))
   expect_equal(as.integer(c(section$order, section$budget)), c(900L, 450L))
   expect_identical(got$specs[[which(kinds == "evaluator")]]$eval, eval_r)
-  expect_equal(got$events, c("agent_end", "session_shutdown"))
+  expect_equal(got$events, c("agent_end", "session_tree", "session_shutdown"))
 })
 
 test_that("the eval.r and describe services are registered by builtin:workspace", {
