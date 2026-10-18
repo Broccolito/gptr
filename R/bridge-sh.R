@@ -714,35 +714,9 @@ bridge_block_hook = function(names) {
   }
 }
 
-#' Re-check a nested call with its actual arguments (05 P22 acceptance 3, architecture 6.8.4)
-#' P06's dispatch_nested() runs a member without perm_check() when the outer `r` call's analysis
-#' listed it at or below the approved level, and P11 lists a command computed at run time at 3.
-#' @return The input to run: a policy's `modify` replaces it (IC-53 item 7).
-#' @noRd
-bridge_recheck = function(name, input, ctx, run) {
-  outer = run$tool_call
-  fl = outer$risk$flagged
-  approved = as.integer(outer$approved_level %||% 0L)
-  listed = if (is.data.frame(fl)) as.integer(fl$level[fl$fn %in% c(name, paste0("peter$", name))])
-  # not listed, or listed above the approved level: dispatch_nested() has run perm_check()
-  if (!length(listed) || !isTRUE(max(listed) <= approved)) return(input)
-  spec = registry_get("tool", name, session = run$session)
-  level = tryCatch(as.integer(spec$risk(input, ctx)$level), error = function(e) NA_integer_)
-  if (isTRUE(level <= approved)) return(input)
-  dec = perm_check(list(id = paste0(outer$id, "/", name), name = name, input = input, raw = NULL,
-                        tool = spec, nested = TRUE, parent_id = outer$id, outer_level = approved,
-                        risk = NULL), run)
-  if (identical(dec$decision, "allow")) return(dec$input %||% input)
-  gptr_abort(paste0("Permission denied: ", dec$reason, ". peter$", name, "() was re-checked with ",
-                    "its arguments computed at run time."),
-             "permission", action = paste0("peter$", name, "()"), tool = name, risk = level,
-             how_to_allow = "write the arguments literally so that the call is reviewed",
-             session = run$session)
-}
-
 #' The `execute` of a bridge member, which P06's dispatch_nested() runs for model code (contract
-#' 7.6): refuses a top-level tool call (P06 binds it as `run$tool_call`; second line behind
-#' bridge_block_hook()), re-checks computed arguments, returns the R value
+#' 7.6) after gating it at the risk of its actual arguments: refuses a top-level tool call (P06
+#' binds it as `run$tool_call`; second line behind bridge_block_hook()), returns the R value
 #' @noRd
 bridge_execute = function(fun, name) {
   force(fun)
@@ -753,7 +727,6 @@ bridge_execute = function(fun, name) {
       gptr_abort(bridge_not_a_tool(name), "not_available", member = name,
                  provided_by = "the r tool")
     }
-    input = bridge_recheck(name, input, ctx, run)
     value = do.call(fun, as.list(input))
     gptr_tool_result(paste0(name, ": <", class(value)[[1L]], ">"), value = value)
   }

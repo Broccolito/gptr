@@ -395,8 +395,10 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 # ---------------------------------------------------------------------------- nested calls
 
 #' Nested `peter$...` calls made while an `r` evaluation runs (04 section 7.6)
-#' A member listed by the outer call's analysis at or below its approved level runs without a
-#' second prompt; others pass perm_check(). Recorded in `details$nested` (at most 20).
+#' A member listed by the outer call's analysis at or below its approved level, whose own risk of
+#' its actual input (call_risk(): a patch's Delete File, a computed command) is not above that
+#' level either, runs without a second prompt; others pass perm_check(). Recorded in
+#' `details$nested` (at most 20).
 #' @noRd
 dispatch_nested = function(name, input, ctx) {
   check_string(name, "name")
@@ -426,7 +428,8 @@ dispatch_nested = function(name, input, ctx) {
     gptr_abort(call$blocked, "tool", tool = name, status = "blocked")
   }
   level = nested_listed_level(outer, name)
-  if (is.null(level) || level > call$outer_level) {
+  own = risk_level(call_risk(call, ctx, run))
+  if (is.null(level) || max(level, own) > call$outer_level) {
     dec = perm_check(call, run)
     level = risk_level(dec$risk)
     if (!identical(dec$decision, "allow")) {

@@ -1474,8 +1474,8 @@ whose feedback tells the model that no valid answer was given [IC-77; D-188].
 
 A `peter$...` call made while an `r` evaluation runs enters `dispatch_nested()`: if the static analysis of the
 outer code listed the same function at a level no higher than the level the user approved for the outer call,
-it runs without a second prompt; otherwise it passes the gate. Computed commands are level 3 and re-checked at
-run time. Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
+and the member's own classification of its actual input (`call_risk()`: a patch's Delete File, a command computed
+at run time) is no higher either, it runs without a second prompt; otherwise it passes the gate [IC-78]. Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)
 

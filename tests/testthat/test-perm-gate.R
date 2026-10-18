@@ -257,6 +257,37 @@ test_that("a nested auto run started by yolo model code asks before a protected 
   expect_identical(sum(ui$log$method == "permission"), 1L)
 })
 
+test_that("a nested member is gated at its own risk of its actual input (IC-78, 03 6.8.4)", {
+  root = local_project(files = list("R/a.R" = "x = 1", ".env" = "KEY=1"), trust = TRUE)
+  ui = local_scripted_ui(list("n", "n", "n", "n", "n"))
+  del = "*** Begin Patch\n*** Delete File: .env\n*** End Patch"
+  for (path in c("R/a.R", ".env")) {
+    code = paste0("peter$edit(", deparse(path), ", edits = ", deparse(del), ")")
+    for (mode in c("auto", "yolo")) {
+      fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                                 name = paste0("f", nchar(path), mode))
+      peter("Tidy.", model = fake, mode = mode, envir = new.env())
+      expect_true(file.exists(file.path(root, ".env")), label = paste(path, mode))
+    }
+  }
+  # a file beyond the project and the session's tempdir() is outside
+  out = file.path(withr::local_tempdir(tmpdir = dirname(tempdir())), "keep.csv")
+  writeLines("a", out)
+  code = paste0("peter$edit('R/a.R', edits = ",
+                deparse(paste0("*** Begin Patch\n*** Delete File: ", out, "\n*** End Patch")), ")")
+  fake = local_fake_provider(list(fake_tool("r", code = code), "Done."), name = "outside")
+  peter("Tidy.", model = fake, mode = "auto", envir = new.env())
+  expect_true(file.exists(out))
+  expect_identical(sum(ui$log$method == "permission"), 5L)
+  # nobody can answer: the run stops blocked and the file stays
+  withr::local_options(gptr.interactive = FALSE)
+  fake = local_fake_provider(list(fake_tool("r", code = paste0(
+    "peter$edit('R/a.R', edits = ", deparse(del), ")")), "Done."), name = "nobody")
+  expect_error(peter("Tidy.", model = fake, mode = "auto", envir = new.env()),
+               class = "gptr_error_permission")
+  expect_true(file.exists(file.path(root, ".env")))
+})
+
 test_that("the protect_size policy reads the run's snapshot, not the live option (IC-53)", {
   root = local_project()
   e = new.env()
