@@ -89,7 +89,8 @@ local_browser = function(.env = parent.frame()) {
       env = c("current", R_LIBS = mcp_fixture_libs()), cleanup_tree = TRUE)
     invisible(NULL)
   }, .env = .env)
-  withr::defer(for (p in seen$procs) p$kill_tree(), envir = .env)
+  # a stand-in that exits on its own can be gone between ps listing its tree and the signal
+  withr::defer(for (p in seen$procs) try(p$kill_tree(), silent = TRUE), envir = .env)
   invisible(seen)
 }
 

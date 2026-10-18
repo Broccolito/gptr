@@ -223,7 +223,7 @@ test_that("a styled block copies as Markdown whose body runs: no frame character
       r$finish()
     })
     expect_identical(cli::ansi_strip(out), source, info = lang)
-    expect_false(any(grepl("[─-╿⎿]", out, perl = TRUE)), info = lang)
+    expect_false(any(grepl("[\u2500-\u257f\u23bf]", out, perl = TRUE)), info = lang)
     shown = cli::ansi_strip(out)
     expect_no_error(parse(text = shown[seq(4L, 3L + length(body))]))
   }
