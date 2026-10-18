@@ -33,10 +33,12 @@ console_lines = function(x) {
   ui_escape(strsplit(paste(x, collapse = "\n"), "\r\n|\r|\n", perl = TRUE)[[1L]])
 }
 
-#' Print untrusted text on stdout, one escaped line each
+#' Print untrusted text on stdout, one escaped line each, inside the console margin (D-186)
 #' @noRd
 console_out = function(x) {
-  console_write(console_lines(x))
+  lines = console_lines(x)
+  if (length(lines)) console_notice(paste(lines, collapse = "\n"))
+  invisible(NULL)
 }
 
 #' Print lines that are already safe (built from escaped parts) on stdout

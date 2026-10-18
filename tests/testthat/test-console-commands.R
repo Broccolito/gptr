@@ -138,6 +138,33 @@ test_that("/help lists the commands and the input syntax", {
                    "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
 })
 
+test_that("in the console margin command output wraps inside it; listings fit its width", {
+  local_console_commands()
+  local_project()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+  testthat::local_reproducible_output(width = 60)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  rs = repl_state(NULL, list2env(list(alpha = 1:10)))
+  out = run_command(rs, "/help")$out
+  expect_true(all(startsWith(out[nzchar(out)], "  ")))
+  expect_true(all(nchar(out, type = "width") <= 60L))
+  words = function(x) strsplit(trimws(paste(x, collapse = " ")), "[[:space:]]+")[[1L]]
+  expect_identical(words(out), words(cmd_help("", list())))
+  # a description wraps under its own column, so no row looks like another command
+  cmds = out[seq(2L, match("  Input:", out) - 1L)]
+  expect_true(all(grepl("^.{16} {3}\\S", cmds)))
+  expect_identical(run_command(rs, "/mode")$out, "  Mode: manual")
+  expect_match(run_command(rs, "/env")$out, "^  alpha: <integer>")
+  # a listing is printed at the content width (60 - 4), not wrapped again
+  rs$session = s
+  listing = withr::with_options(list(width = 56L, cli.width = 56L),
+                                utils::capture.output(print(gptr::gptr_usage(s))))
+  cost = run_command(rs, "/cost")$out
+  expect_identical(utils::head(cost, -1L), ifelse(nzchar(listing), paste0("  ", listing), ""))
+  expect_equal(c(getOption("width"), getOption("cli.width")), c(60, 60))
+})
+
 test_that("/exit, /quit and /q end the REPL", {
   local_console_commands()
   for (cmd in c("/exit", "/quit", "/q")) {
@@ -207,12 +234,16 @@ test_that("/status, /tools and /env describe the console", {
   expect_match(run_command(rs, "/status")$out[[1L]], "session   (none yet", fixed = TRUE)
   expect_match(run_command(rs, "/tools")$out[[1L]], "Direct tools:", fixed = TRUE)
   env_out = run_command(rs, "/env count")$out
-  expect_match(env_out, "^  counts: ")
+  expect_match(env_out, "^counts: ")
   s = idle_session()
   rs$session = s
   status = run_command(rs, "/status")$out
   expect_identical(status[[1L]], paste0("session   ", s$id, "  (idle, 0 turns)"))
   expect_true(any(grepl("^queue     0 steer, 1 follow-up$", status)))
+  d = session_data(s)
+  d$turns = 1L
+  expect_identical(run_command(rs, "/status")$out[[1L]],
+                   paste0("session   ", s$id, "  (idle, 1 turn)"))
 })
 
 test_that("/clear starts a new conversation and keeps model and mode", {

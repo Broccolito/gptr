@@ -683,9 +683,9 @@ repl_banner = function(rs) {
     paste0("gptr ", utils::packageVersion("gptr"), " | model ",
            console_escape(repl_model(rs), FALSE), " | mode ",
            console_escape(repl_mode(rs), FALSE), " | ", ws),
-    console_escape(console_env_lines(repl_eval_env(rs), n = 6L), FALSE),
+    console_escape(paste0("  ", console_env_lines(repl_eval_env(rs), n = 6L)), FALSE),
     paste0("/help lists commands; ", console_interrupt_key(),
-           " pauses an answer, twice at the prompt leaves")))
+           " pauses an answer, twice at the prompt leaves.")))
   mode_notice(repl_mode(rs))
 }
 
@@ -717,7 +717,7 @@ repl_turn = function(rs, text) {
   if (!identical(res$status, "ok")) return(invisible(NULL))
   value = res$value
   if (!inherits(value, "gptr_session")) {
-    console_out(utils::capture.output(print(value)))
+    console_out(print_lines(value))
   } else if (verbosity() < 2L) {
     console_print_text(value$text)
   }
@@ -796,7 +796,7 @@ repl_main = function(rs) {
     if (isFALSE(line)) {
       rs$interrupts = rs$interrupts + 1L
       if (rs$interrupts >= 2L) break
-      console_notice("[gptr] press ", console_interrupt_key(),
+      console_notice("\n[gptr] press ", console_interrupt_key(),
                      " again to leave gptr, or type /exit")
       next
     }

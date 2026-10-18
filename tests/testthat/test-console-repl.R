@@ -277,11 +277,15 @@ test_that("a console opened in yolo shows the yolo notice with its banner (IC-78
   local_gptr_options(quiet = FALSE)
   rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
   withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
-  rs = repl_state(NULL, new.env())
+  rs = repl_state(NULL, list2env(list(alpha = 1:10)))
   rs$mode = "yolo"
   expect_identical(repl_prompt(rs), "peter[yolo]> ")
-  expect_message(utils::capture.output(repl_banner(rs)), "not a sandbox",
-                 class = "gptr_message_notice")
+  out = NULL
+  expect_message({
+    out = utils::capture.output(repl_banner(rs))
+  }, "not a sandbox", class = "gptr_message_notice")
+  # the banner lists the objects indented under its first line
+  expect_match(out[[2L]], "^  alpha: <integer>")
 })
 
 test_that("console_history_add() never fails", {
@@ -660,7 +664,11 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
     res = console_run(NULL, new.env())
   })
   expect_null(res)
-  expect_length(grep("again to leave gptr", out, fixed = TRUE), 1L)
+  i = grep("again to leave gptr", out, fixed = TRUE)
+  expect_length(i, 1L)
+  # the notice ends the prompt line first; the banner's keys sentence ends with a period
+  expect_identical(out[[i - 1L]], "")
+  expect_match(out[[i - 2L]], "twice at the prompt leaves.", fixed = TRUE)
 })
 
 test_that("a line at the readline limit is reported at once and not sent", {

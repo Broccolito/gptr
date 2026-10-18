@@ -842,5 +842,5 @@ ckpt_cmd_rewind = function(args, ctx) {
 ckpt_cmd_checkpoints = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no session.")
-  utils::capture.output(print(gptr_checkpoints(s, all = identical(trimws(args), "all"))))
+  print_lines(gptr_checkpoints(s, all = identical(trimws(args), "all")))
 }

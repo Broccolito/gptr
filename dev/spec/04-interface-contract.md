@@ -2212,7 +2212,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_opt(name)` | the option value or the §3.1 default (`NULL` for settings-backed options) | all |
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
-| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes whole, then reads after `> ` (IC-75), and reads with `the$tty_modes` while a console call holds the echo off (IC-76) | P11, P14, P26 |
+| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with `the$tty_modes` while a console call holds the echo off (IC-76) | P11, P14, P26 |
 | `readline_answer(prompt)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer arrived within 0.1 s (typed or pasted before the question), at most 100 reads, then the last answer; used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
 | `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183) | P07, P14, P15 |
@@ -5073,7 +5073,9 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   `  A pasted block is not an answer (N lines dropped).` line and asks again; this is no invalid answer
   (D-188). A paste's last line without a newline is never waiting (the tty driver holds it until Enter) and
   shows typed at the next read, so a two-line paste without a final newline answers with its first line.
-  A prompt over 200 bytes is printed whole and read after `> ` (`readline()` keeps 255 bytes of a prompt).
+  A prompt over 200 bytes (`readline()` keeps 255 bytes of a prompt), or in the console margin one wider than
+  its content row, is printed whole without its own leading blanks, word-wrapped in the margin, and read after
+  `> ` (in the margin too) (D-225).
 - Fenced input: a fence runs as the user's R only for an info string of `r`, `R`, `{r...}` or none; other
   fences are prompt text; the body loses up to the opener's indentation and closes on a fence of at least the
   opener's length (CommonMark).

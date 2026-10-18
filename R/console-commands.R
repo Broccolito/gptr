@@ -115,16 +115,19 @@ cmd_help = function(args, ctx) {
     return(paste0("/", nm, "  ", spec$description %||% ""))
   }
   nms = sort(registry_names("command", session = s), method = "radix")
-  lines = vapply(nms, function(nm) {
-    sprintf("  /%-12s %s", nm, registry_get("command", nm, session = s)$description %||% "")
-  }, "", USE.NAMES = FALSE)
-  c("Commands:", lines,
+  desc = vapply(nms, function(nm) registry_get("command", nm, session = s)$description %||% "",
+                "", USE.NAMES = FALSE)
+  # the descriptions wrap under their column at the content width (D-225)
+  width = cli::console_width() - 2L * nchar(console_pad())
+  c("Commands:", formatDL(paste0("  /", nms), desc, width = width, indent = 17L),
     "Input:",
-    "  text             a prompt; @file adds a file, @object attaches an object",
-    "  !code            run R code here; the code and its output go with the next prompt",
-    "  !!code           run R code here; omit the code/output note for the next prompt",
-    "  ```r ... ```     a block of R code (like !)",
-    "  \"\"\" ... \"\"\"      a multi-line prompt; a trailing \\ also continues a line",
+    formatDL(c("  text", "  !code", "  !!code", "  ```r ... ```", "  \"\"\" ... \"\"\""),
+             c("a prompt; @file adds a file, @object attaches an object",
+               "run R code here; the code and its output go with the next prompt",
+               "run R code here; omit the code/output note for the next prompt",
+               "a block of R code (like !)",
+               "a multi-line prompt; a trailing \\ also continues a line"),
+             width = width, indent = 19L),
     paste0("Keys: ", console_interrupt_key(), " pauses a running answer in supported terminals ",
            "(steer, follow-up, continue, abort; background when available); ",
            "twice at the prompt leaves. Other front ends may abort without a pause menu. ",
@@ -214,9 +217,9 @@ console_env_lines = function(env, pattern = "", n = 30L) {
   nms = sort(ls(env), method = "radix")
   nms = nms[grepl(pattern, nms, fixed = TRUE)]
   lines = vapply(utils::head(nms, n), function(nm) {
-    paste0("  ", describe_binding(nm, env, budget = 40L)[[1L]])
+    describe_binding(nm, env, budget = 40L)[[1L]]
   }, "", USE.NAMES = FALSE)
-  c(lines, if (length(nms) > n) paste0("  (+ ", length(nms) - n, " more)"))
+  c(lines, if (length(nms) > n) paste0("(+ ", length(nms) - n, " more)"))
 }
 
 #' /env [pattern]
@@ -255,7 +258,7 @@ cmd_compact = function(args, ctx) {
 cmd_cost = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("No session yet.")
-  c(utils::capture.output(print(gptr::gptr_usage(s))), paste0("Total: ", format_cost(s$cost)))
+  c(print_lines(gptr::gptr_usage(s)), paste0("Total: ", format_cost(s$cost)))
 }
 
 #' /context: the token ledger of the last request
@@ -282,7 +285,8 @@ cmd_status = function(args, ctx) {
              paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual")))
   }
   d = session_data(s)
-  c(paste0("session   ", d$id, "  (", d$status, ", ", d$turns, " turns)"),
+  c(paste0("session   ", d$id, "  (", d$status, ", ", d$turns,
+           if (d$turns == 1L) " turn)" else " turns)"),
     paste0("model     ", d$model),
     paste0("mode      ", d$mode),
     paste0("document  ", cmd_doc_site(s)$path %||% "(none)"),
@@ -311,14 +315,14 @@ cmd_clear = function(args, ctx) {
 
 #' @noRd
 cmd_resume = function(args, ctx) {
-  if (!nzchar(args)) return(utils::capture.output(print(gptr::gptr_sessions())))
+  if (!nzchar(args)) return(print_lines(gptr::gptr_sessions()))
   rs = console_repl_find()
   if (is.null(rs)) return("Use gptr_resume() outside the console.")
   s = gptr::gptr_resume(args, envir = rs$envir)
   rs$session = s
   # the resumed session's kept home now decides where prompts and !code evaluate (IC-40)
   rs$envir_given = FALSE
-  paste0("Resumed ", s$id, " (", s$turns, " turns).")
+  paste0("Resumed ", s$id, " (", s$turns, if (s$turns == 1L) " turn)." else " turns).")
 }
 
 #' @noRd
@@ -352,7 +356,7 @@ cmd_doc = function(args, ctx) {
 cmd_skills = function(args, ctx) {
   f = ns_fun("gptr_skills")
   if (is.null(f)) return("Skills are not available.")
-  utils::capture.output(print(f()))
+  print_lines(f())
 }
 
 #' `/skill:<name> [request]`: the skill goes to the next prompt's `skills =`; the request is sent
@@ -372,14 +376,14 @@ cmd_skill = function(args, ctx) {
 cmd_mcp = function(args, ctx) {
   f = ns_fun("gptr_mcp")
   if (is.null(f)) return("MCP is not available.")
-  utils::capture.output(print(f()))
+  print_lines(f())
 }
 
 #' `/permissions [allow|ask|deny|remove <rule>]`: the rules, or a change for this R session
 #' (gptr_permissions() validates the rule)
 #' @noRd
 cmd_permissions = function(args, ctx) {
-  if (!nzchar(args)) return(utils::capture.output(print(gptr::gptr_permissions())))
+  if (!nzchar(args)) return(print_lines(gptr::gptr_permissions()))
   verb = sub("[[:space:]].*$", "", args)
   rule = trimws(substring(args, nchar(verb) + 1L))
   if (!verb %in% c("allow", "ask", "deny", "remove") || !nzchar(rule)) {

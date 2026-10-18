@@ -2445,3 +2445,26 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: IC-77 item 4, 04 section 7.11 `agent`, 03 sections 6.8.3 and 6.17; teams vignette.
 - Tests: test-console-render.R (a fan-out whose children fail with `no_key`; no reason), test-console-ui.R (two
   sequential nested calls with one prompt), test-gptr-gateway.R (loop labels). Evidence: progress/P26.md Task 27.
+
+## D-225 - P26 Command output and long prompts keep the console margin; interrupt notices start a line (2026-10-18)
+- Rule: amends D-186 and IC-75 ("a prompt over 200 bytes is printed whole"): `console_out()` (slash-command
+  results, a printed console value, the manual-setup lines) and the long-prompt branch of `gptr_readline()` write
+  through `gptr_message_write(margin = TRUE)`, so their lines get the margin and a line that does not fit is
+  word-wrapped at width - 4 with its indentation (the prompt's own leading blanks are dropped first, so a padded
+  question is not indented twice). In the margin that branch also takes a prompt wider than the content row
+  (a `gptr_confirm()` question under 200 bytes), and the answer is read after `  > `; without a margin nothing
+  changes. `/env` lines lose their own two blanks (the banner adds them), so in the margin they sit at column 2. Listings that commands print (`/cost`,
+  `/checkpoints`, `/resume`, `/skills`, `/mcp`, `/permissions`) go through `print_lines()`, which formats at the
+  content width (`width` and `cli.width`), so rows are not wrapped again. `/help` lays out commands and input
+  forms with `formatDL()` at the content width (the console width without a margin): a description wraps under
+  its column (commands' at column 17, was 16). The idle-prompt Ctrl-C notice and the pause-menu notice start
+  with a line end (a pause after a cleared waiting row shows one more blank row; accepted so that an echoed `^C`
+  or the prompt never joins the notice). `/status` and `/resume` say `1 turn`; the banner's sentence ends with
+  a period.
+- Contract-visible: console display only; IC-75, the `gptr_readline()` row of 04 section 7.1, 03 section 6.17.
+- Tests: test-console-commands.R (/help at width 60 in the margin: every line indented, none wider, no split
+  word, descriptions in one column; `/mode`; `/env` at column 2; `/cost` formatted at 56; `1 turn`),
+  test-utils-options.R (a padded 300-byte prompt wrapped once in the margin and an 83-byte one at width 60, both
+  read after `  > `; a fitting prompt read with it), test-console-repl.R (the idle notice follows a line end;
+  banner period; banner objects at column 2), test-console-interrupt.R (the pause notice follows a line end).
+  Evidence: progress/P26.md Task 30.

@@ -1907,8 +1907,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   width - 4; one blank line separates text, tool, notice, prompt and status blocks (and two
   prompts) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
   the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
-  row, R GUIs included); the margin is that of the console an evaluation started from, also for
-  prompts and notices drawn inside it. There nested lists keep their indentation, pipe tables are aligned
+  row, R GUIs included; the pause-menu notice excepted, D-225); the margin is that of the console an
+  evaluation started from, also for prompts and notices drawn inside it. There nested lists keep their
+  indentation, pipe tables are aligned
   (verbatim when malformed or too wide) and a reply's leading, trailing and repeated blank lines
   collapse; `NO_COLOR` removes colours and styles only. Rscript (verbosity 1), knitr, jsonl and
   tests (verbosity 0) and non-dynamic outputs (pipes, Jupyter) keep the plain layout (no margin,
@@ -1942,7 +1943,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
   `/compact [focus]`, `/cost`, `/context` (token ledger), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
-  templates as `/<name> args`. Commands are recorded as comments in transcripts.
+  templates as `/<name> args`. Commands are recorded as comments in transcripts. Their output, like a
+  prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings
+  they print are formatted at width - 4 (`print_lines()`), so they are not wrapped again, and `/help` wraps
+  each description under its column (`formatDL()`). The Ctrl-C notices at the prompt and of the pause menu
+  start with a line end (D-225).
 - **UI backends** (`ui` specs): `console`, `none`, `scripted` (tests), `rstudio` (dialogs; a timed-out dialog
   is a denial with a notice). The UI abstraction is how Shiny or RPC front ends replace the console. Whether anyone
   can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works
