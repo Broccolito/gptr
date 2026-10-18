@@ -52,9 +52,10 @@ session.
 
 \code{gptr_checkpoints()} lists one row per turn of the active path (\code{all = TRUE} adds the turns of
 abandoned branches): \code{turn}; \code{id}, the last entry of the turn (pass it as \code{to} to
-\code{gptr_rewind()}); \code{time}, when the prompt was sent; \code{prompt} (its first 60 characters);
-\code{objects} and \code{files}, \code{"changed/restorable"} counts; \code{held_mb} and \code{disk_mb}, megabytes of
-object pre-images held in memory and on disk; and \code{branch} (\code{"active"} or \code{"abandoned"}).
+\code{gptr_rewind()}); \code{time}, when the prompt was sent (local time); \code{prompt} (its first 60
+characters); \code{objects} and \code{files}, \code{"changed/restorable"} counts; \code{held_mb} and \code{disk_mb},
+megabytes of object pre-images held in memory and on disk; and \code{branch} (\code{"active"} or
+\code{"abandoned"}).
 }
 \details{
 Restores are 3-way: an object or file that changed after the turn (by you or another session)

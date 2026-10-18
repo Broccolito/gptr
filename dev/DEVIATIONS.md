@@ -2459,3 +2459,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   two rows, `/undo` asks nothing, the report is `file a.txt: removed` and `object e: removed (created by the
   turn)`; objects `k: a` and `k: b`, one changed after the turn: two lines and the partial warning; an object
   whose name is not valid UTF-8: rewound in full). Evidence: progress/P26.md Task 28.
+
+## D-215 - P26 /env and /checkpoints wording: counts, patchworks, sessions, local times (2026-10-18)
+- Rule: `gptr_describe()` counts agree with their noun ("1 layer", "1 binding", "1 unevaluated promise"); a
+  `patchwork` (through the `ggplot` method) is `<patchwork> of <n> plots`: its own plot unless that is patchwork's
+  empty filler, and each of its `patches$plots` (in `meta` under S7 ggplot2), a nested patchwork counting its plots.
+- Rule: new method `gptr_describe.gptr_session()`: `<gptr_session> <kind>, model <ref>, <status>, <n> turn(s),
+  <cost>`; level 2 adds `children: <names>`. /env, `<attached>` and `peter$describe()` no longer list its `.d`.
+- Rule: `gptr_checkpoints()$time` is local time (`tzone ""`; parsed from the UTC entry timestamp); the console's
+  `/checkpoints` prints the footer `Undo with /undo, or /rewind <turn>.` (`gptr_checkpoints()` keeps its R footer).
+- Contract-visible: 04 §6.5 `gptr_checkpoints()`, §6.6 `gptr_describe()` built-in methods; `?gptr_describe`,
+  `?gptr_rewind`.
+- Tests: env-describe (a one-layer ggplot; flat, filler, nested and S7 (`meta`) patchworks; a session and its
+  children; an environment with one promise; 16 registered methods), ckpt-rewind (`tzone ""`; the /checkpoints
+  footer). Evidence: progress/P26.md Task 36.

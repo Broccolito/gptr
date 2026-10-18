@@ -685,9 +685,10 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
 #' @description
 #' `gptr_checkpoints()` lists one row per turn of the active path (`all = TRUE` adds the turns of
 #' abandoned branches): `turn`; `id`, the last entry of the turn (pass it as `to` to
-#' `gptr_rewind()`); `time`, when the prompt was sent; `prompt` (its first 60 characters);
-#' `objects` and `files`, `"changed/restorable"` counts; `held_mb` and `disk_mb`, megabytes of
-#' object pre-images held in memory and on disk; and `branch` (`"active"` or `"abandoned"`).
+#' `gptr_rewind()`); `time`, when the prompt was sent (local time); `prompt` (its first 60
+#' characters); `objects` and `files`, `"changed/restorable"` counts; `held_mb` and `disk_mb`,
+#' megabytes of object pre-images held in memory and on disk; and `branch` (`"active"` or
+#' `"abandoned"`).
 #' @param all Also list the turns of abandoned branches.
 #' @rdname gptr_rewind
 #' @order 2
@@ -721,14 +722,14 @@ ckpt_turn_rows = function(tree, path, branch, ck, exclude = character()) {
     seg = match(path[starts[j]:ends[j]], tree$ids)
     first = tree$entries[[seg[1L]]]
     data.frame(turn = j, id = path[ends[j]],
-               time = with_calendar_preserved(as.POSIXct(
+               time = structure(with_calendar_preserved(as.POSIXct(
                  sub("Z$", "", first$timestamp %||% NA), tz = "UTC",
-                 format = "%Y-%m-%dT%H:%M:%OS")),
+                 format = "%Y-%m-%dT%H:%M:%OS")), tzone = ""),
                prompt = substr(msg_text(first$message), 1L, 60L),
                ckpt_turn_counts(tree$entries[seg[tree$ctype[seg] == "gptr.checkpoint"]], ck),
                branch = branch)
   })
-  empty = data.frame(turn = integer(), id = character(), time = .POSIXct(numeric(), tz = "UTC"),
+  empty = data.frame(turn = integer(), id = character(), time = .POSIXct(numeric(), tz = ""),
                      prompt = character(), objects = character(), files = character(),
                      held_mb = numeric(), disk_mb = numeric(), branch = character())
   do.call(rbind, c(list(empty), rows))
@@ -847,10 +848,12 @@ ckpt_cmd_rewind = function(args, ctx) {
   ckpt_cmd_run(s, turn = k - 1L, restore = c("all", "conversation", "workspace")[act])
 }
 
-#' /checkpoints, /checkpoints all: the listing
+#' /checkpoints, /checkpoints all: the listing, its footer naming the console commands
 #' @noRd
 ckpt_cmd_checkpoints = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no session.")
-  utils::capture.output(print(gptr_checkpoints(s, all = identical(trimws(args), "all"))))
+  cp = gptr_checkpoints(s, all = identical(trimws(args), "all"))
+  attr(cp, "footer") = "Undo with /undo, or /rewind <turn>."
+  utils::capture.output(print(cp))
 }

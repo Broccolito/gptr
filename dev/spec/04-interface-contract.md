@@ -1781,7 +1781,9 @@ byte-append-only). Returns `invisible(s)` (so it pipes), with `s$last_rewind` an
 `invalid_argument`. Emits `session_before_tree` (first decision; a handler may cancel) and `session_tree`
 (notify). Copy-safety: [R1][R6] (pre-images are released or swapped by reference, never copied).
 
-`gptr_checkpoints()`: a `gptr_checkpoints` data frame of the active path (`all = TRUE`: all branches).
+`gptr_checkpoints()`: a `gptr_checkpoints` data frame of the active path (`all = TRUE`: all branches); `time` is
+local time (`tzone ""`). The console's `/checkpoints` prints it with the footer `Undo with /undo, or /rewind <turn>.`
+(D-215).
 
 ```r
 fake = gptr_fake_provider(list("done"))
@@ -1817,12 +1819,13 @@ Returns a character vector of lines, the first a header `<class> shape, size`, a
 tokens (the harness truncates longer method output). Methods MUST follow [R4][leaf]: no promise forcing, no I/O
 (no `dbListTables()`, no `collect()`), no `str()` on the object. Built-in methods: `default`, `data.frame`,
 `matrix`, `list`, `formula`, `lm`, `environment`, `function`, `dgCMatrix`, `ArrowTabular`, `Dataset`,
-`DBIConnection`, `Seurat`, `SingleCellExperiment`, `ggplot`; `factor`, `Date`, `POSIXct` and `S4` (`isS4()`)
-dispatch through `default`, `data.table` through `data.frame` and `glm` through `lm` (D-142). Level-based: a method
-may accept `level = 1:4` in `...` and return successively richer descriptions; the harness picks the richest that
-fits. Methods for classes of packages outside Suggests (`dgCMatrix`, `ArrowTabular`, `Dataset`, `Seurat`,
-`SingleCellExperiment`, `ggplot`) use only base generics, `methods::slot()`/`slotNames()`, `attr()` and `dim()`
-guarded by `isNamespaceLoaded()`, never `pkg::fun()` (IC-71). Packages add methods with delayed
+`DBIConnection`, `Seurat`, `SingleCellExperiment`, `ggplot`, `gptr_session` (kind, model, status, turns and cost;
+level 2 its children); `factor`, `Date`, `POSIXct` and `S4` (`isS4()`) dispatch through `default`, `data.table`
+through `data.frame`, `glm` through `lm` (D-142) and `patchwork` through `ggplot` (`<patchwork> of <n> plots`,
+D-215). Level-based: a method may accept `level = 1:4` in `...` and return successively richer descriptions; the
+harness picks the richest that fits. Methods for classes of packages outside Suggests (`dgCMatrix`, `ArrowTabular`,
+`Dataset`, `Seurat`, `SingleCellExperiment`, `ggplot`) use only base generics, `methods::slot()`/`slotNames()`,
+`attr()` and `dim()` guarded by `isNamespaceLoaded()`, never `pkg::fun()` (IC-71). Packages add methods with delayed
 `S3method(gptr::gptr_describe, cls)`. Copy-safety: [R4].
 
 ```r
