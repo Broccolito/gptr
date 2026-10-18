@@ -125,6 +125,7 @@ plot_begin = function(mode, human, width = gptr_opt("plot_width"),
   ps$inches = c(width, height) / res
   ps$our_dev = NULL
   ps$our_devs = integer()
+  ps$enabled = integer()
   ps$old_device = NULL
   ps$last_dl = list()
   ps$last_k = list()
@@ -149,12 +150,14 @@ plot_begin = function(mode, human, width = gptr_opt("plot_width"),
   ps
 }
 
-#' Enable the display list on a device the evaluated code opened itself
+#' Enable the display list once on a device the evaluated code opened itself (enabling clears the
+#' list, so doing it again mid-page would drop the earlier panels)
 #' @noRd
 plot_enable_new = function(ps) {
   d = grDevices::dev.cur()
-  fresh = d > 1L && !(d %in% c(ps$devs0, ps$our_devs)) && is.null(ps$last_dl[[as.character(d)]])
-  if (fresh) try(grDevices::dev.control(displaylist = "enable"), silent = TRUE)
+  if (d == 1L || d %in% c(ps$devs0, ps$our_devs, ps$enabled)) return(invisible())
+  try(grDevices::dev.control(displaylist = "enable"), silent = TRUE)
+  ps$enabled = c(ps$enabled, d)
   invisible()
 }
 
