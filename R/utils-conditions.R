@@ -118,13 +118,19 @@ console_pad = function() {
 gptr_message_margin = function(text) {
   pad = console_pad()
   if (!nzchar(pad) || !nzchar(text)) return(text)
-  width = max(20L, cli::console_width() - 4L)
-  lines = unlist(lapply(strsplit(text, "\n", fixed = TRUE)[[1L]], function(line) {
-    if (cli::ansi_nchar(line, type = "width") <= width) return(line)
-    lead = attr(regexpr("^ *", line), "match.length")
-    cli::ansi_strwrap(line, width, indent = lead, exdent = lead)
-  }))
+  lines = console_wrap(strsplit(text, "\n", fixed = TRUE)[[1L]],
+                       max(20L, cli::console_width() - 4L))
   paste0(ifelse(nzchar(lines), pad, ""), lines, "\n", collapse = "")
+}
+
+#' Lines wrapped at `width`, continuation rows indented like their line (a wider word stays whole)
+#' @noRd
+console_wrap = function(lines, width) {
+  as.character(unlist(lapply(lines, function(line) {
+    if (cli::ansi_nchar(line, type = "width") <= width) return(line)
+    lead = attr(regexpr("^ *", cli::ansi_strip(line)), "match.length")
+    cli::ansi_strwrap(line, width, indent = lead, exdent = lead)
+  })))
 }
 
 #' The lines print(x) shows; in the console margin at its content width, so that

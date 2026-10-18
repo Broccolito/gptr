@@ -148,6 +148,9 @@ test_that("notices on an interactive console wrap inside the two-column margin (
   expect_gt(length(nested), 1L)
   expect_true(all(startsWith(nested, "      ")))
   expect_true(all(nchar(nested) <= 38L))
+  coloured = withr::with_options(list(cli.num_colors = 256L), utils::capture.output(
+    gptr_inform(cli::col_grey(paste0("    - ", text)), "notice")))
+  expect_identical(cli::ansi_strip(coloured), nested)
   expect_identical(utils::capture.output(console_notice("[gptr] a  b")), "  [gptr] a  b")
   # NO_COLOR keeps the layout; Rscript (verbosity 1, a terminal stderr) and a non-dynamic
   # console print as before

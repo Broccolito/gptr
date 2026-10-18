@@ -862,16 +862,6 @@ console_result_lines = function(call, result, width) {
   if (nzchar(secs)) paste0(pad, "done", secs) else character()
 }
 
-#' Lines wrapped at `width`, continuation rows indented like their line (a wider word stays whole)
-#' @noRd
-console_wrap = function(lines, width) {
-  as.character(unlist(lapply(lines, function(line) {
-    if (cli::ansi_nchar(line, type = "width") <= width) return(line)
-    lead = attr(regexpr("^ *", cli::ansi_strip(line)), "match.length")
-    cli::ansi_strwrap(line, width, indent = lead, exdent = lead)
-  })))
-}
-
 #' The console lines of a tool call (`result = NULL`) or of its result, fitted to `width`: the
 #' default call line is cut (its code fence never), other lines wrap and keep their indentation
 #' (a word wider than `width` is cut)

@@ -683,7 +683,8 @@ repl_banner = function(rs) {
     paste0("gptr ", utils::packageVersion("gptr"), " | model ",
            console_escape(repl_model(rs), FALSE), " | mode ",
            console_escape(repl_mode(rs), FALSE), " | ", ws),
-    console_escape(paste0("  ", console_env_lines(repl_eval_env(rs), n = 6L)), FALSE),
+    console_escape(paste0("  ", console_env_lines(repl_eval_env(rs), n = 6L), recycle0 = TRUE),
+                   FALSE),
     paste0("/help lists commands; ", console_interrupt_key(),
            " pauses an answer, twice at the prompt leaves.")))
   mode_notice(repl_mode(rs))

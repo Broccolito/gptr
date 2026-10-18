@@ -284,8 +284,9 @@ test_that("a console opened in yolo shows the yolo notice with its banner (IC-78
   expect_message({
     out = utils::capture.output(repl_banner(rs))
   }, "not a sandbox", class = "gptr_message_notice")
-  # the banner lists the objects indented under its first line
+  # the banner lists the objects indented under its first line; an empty workspace adds no line
   expect_match(out[[2L]], "^  alpha: <integer>")
+  expect_length(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 2L)
 })
 
 test_that("console_history_add() never fails", {
@@ -414,6 +415,7 @@ test_that("!code is announced on the console:direct channel", {
 
 test_that("console_send() makes an ordinary gateway call and continues the session", {
   local_project()
+  local_no_fd0()
   local_console_blocks()
   fake = gptr_fake_provider(list("first answer", "second answer"))
   e = new.env()
@@ -440,6 +442,7 @@ test_that("console_send() makes an ordinary gateway call and continues the sessi
 
 test_that("console_send() attaches @objects by name and @files as a block", {
   local_project(files = list("a.R" = "fit = lm(mpg ~ wt, data = mtcars)"))
+  local_no_fd0()
   local_console_blocks()
   fake = gptr_fake_provider(list("ok"))
   e = new.env(parent = globalenv())
@@ -456,6 +459,7 @@ test_that("console_send() attaches @objects by name and @files as a block", {
 
 test_that("console_send() keeps the session of a failed call and reports the error", {
   local_project()
+  local_no_fd0()
   fake = gptr_fake_provider(list(list(error = "bad key", status = 401L, after = 0L)))
   rs = repl_state(NULL, new.env())
   rs$model = fake
@@ -500,6 +504,7 @@ test_that("the console call's arguments reach the first prompt, also on a piped 
 
 test_that("console_send() passes max_turns from gptr.max_turns_console", {
   local_project()
+  local_no_fd0()
   fake = gptr_fake_provider(list("ok"))
   rs = repl_state(NULL, new.env())
   rs$model = fake
