@@ -625,8 +625,8 @@ ident_check_chr = function(x, arg) {
                arg = arg, expected = "non-empty names")
   }
   if (identical(arg, "mode") && (length(x) != 1L || !(x %in% session_modes))) {
-    gptr_abort("`mode` must be one of plan, manual, edits or auto.", "invalid_argument",
-               arg = "mode", expected = "plan, manual, edits or auto")
+    gptr_abort("`mode` must be one of plan, manual, edits, auto or yolo.", "invalid_argument",
+               arg = "mode", expected = "plan, manual, edits, auto or yolo")
   }
   x
 }

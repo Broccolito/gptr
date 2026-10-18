@@ -1373,12 +1373,23 @@ tool_paths_risk = function(paths, write = FALSE) {
 #' @noRd
 tool_risk_read = function(input, ctx) tool_paths_risk(input$path, write = FALSE)
 
+#' Risk of write and edit; a patch's Delete File is level 4 where unlink() of its path is (IC-78)
 #' @noRd
 tool_risk_write = function(input, ctx) {
   paths = input$path
   env = edit_envelope_of(tool_edit_input_edits(input))
   if (!is.null(env)) paths = unique(c(paths, patch_paths(env)))
-  tool_paths_risk(paths, write = TRUE)
+  r = tool_paths_risk(paths, write = TRUE)
+  ops = if (is.null(env)) list() else tryCatch(patch_parse(env), error = function(e) list())
+  for (o in Filter(function(o) identical(o$op, "delete"), ops)) {
+    abs = tryCatch(resolve_tool_path(o$path), error = function(e) NA_character_)
+    # the classes whose delete is level 4 (03 section 6.8.1)
+    if (!is.na(abs) && path_class(abs) %in% c("critical", "control", "protected", "outside")) {
+      r$level = 4L
+      r$categories = union(r$categories, "file_delete")
+    }
+  }
+  r
 }
 
 #' @noRd

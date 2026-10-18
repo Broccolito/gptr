@@ -361,7 +361,8 @@ test_that("gptr_map() runs one child per element and returns a fan-out session",
 
 test_that("a fan-out over a value binds .x in each overlay only while the child runs", {
   local_team_fake(function(request) {
-    if (length(request$last_results)) "ok" else fake_tool("r", code = "n = length(.x[[1]])")
+    if (length(request$last_results)) return("ok")
+    fake_tool("r", code = "n = length(.x[[1]])\ngptr::gptr_return(n)")
   })
   e = new.env()
   call = team_call("x", parallel = 3L, envir = e, values = new.env(),
@@ -371,8 +372,21 @@ test_that("a fan-out over a value binds .x in each overlay only while the child 
   assign(".v2", list(1:2, 1:5), envir = call$values)
   fan = gptr_map(call)
   expect_identical(attached_names(fan[["1"]]), ".x[[1]]")
-  expect_identical(fan[["1"]]$envir$n, 2L)
+  expect_identical(fan[["1"]]$value, 2L)
   expect_false(exists(".x", envir = fan[["1"]]$envir, inherits = FALSE))
+})
+
+test_that("a fan-out child that succeeds keeps only its values held by name (D-189)", {
+  local_team_fake(function(request) {
+    if (length(request$last_results)) return("ok")
+    fake_tool("r", code = "scratch = numeric(1e5)\nbig = numeric(2e5)\ngptr::gptr_return(big)")
+  })
+  e = new.env()
+  e$cohorts = list(A = 1, B = 2)
+  fan = gptr_map(team_call("x", parallel = 2L, envir = e,
+                           context = list(sym_item("cohorts", e$cohorts))))
+  expect_identical(names(fan$A$envir), "big")
+  expect_identical(fan$value$A, numeric(2e5))
 })
 
 test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks says (IC-39)", {

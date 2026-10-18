@@ -113,25 +113,6 @@ test_that("a nested pump runs the tools of the runs it names in allow_runs", {
   expect_identical(st$log, c("d", "c-end"))
 })
 
-test_that("a nested pump waiting for a served CLI run keeps servicing later", {
-  st = new.env()
-  st$later = integer()
-  local_mocked_bindings(later_run_now = function() {
-    st$later = c(st$later, reactor_depth())
-    invisible(FALSE)
-  })
-  reactor_served("u-cli")
-  withr::defer(reactor_served("u-cli", FALSE))
-  reactor_enqueue_tool("u-e", function() {
-    st$go = FALSE
-    reactor_timer(reactor_now() + 0.2, function() st$go = TRUE)
-    reactor_pump(until = function() st$go, allow_runs = "u-cli", timeout = 5)
-    st$done = TRUE
-  })
-  expect_true(reactor_pump(until = function() isTRUE(st$done), timeout = 10))
-  expect_true(2L %in% st$later)
-})
-
 test_that("reactor_cancel() removes timers, tasks and FIFO items", {
   st = new.env()
   st$fired = FALSE
@@ -182,10 +163,8 @@ test_that("runs are held strongly until removed", {
   run$id = "u-hold"
   reactor_run_add(run)
   expect_true(exists("u-hold", envir = reactor_get()$runs, inherits = FALSE))
-  reactor_served(run)
   reactor_run_remove(run)
   expect_false(exists("u-hold", envir = reactor_get()$runs, inherits = FALSE))
-  expect_false("u-hold" %in% reactor_get()$served)
   expect_identical(reactor_run_id(list(id = "u-1")), "u-1")
   expect_identical(reactor_run_id("u-2"), "u-2")
   expect_true(is.na(reactor_run_id(NULL)))
@@ -195,7 +174,6 @@ test_that("an error in until() leaves the pump depth balanced", {
   expect_error(reactor_pump(until = function() stop("until failed"), timeout = 1),
                "until failed")
   expect_identical(reactor_depth(), 0L)
-  expect_length(reactor_get()$allow_stack, 0L)
 })
 
 test_that("a pump nested in a reactor callback runs no FIFO tool unless allow_runs names it", {
@@ -208,24 +186,6 @@ test_that("a pump nested in a reactor callback runs no FIFO tool unless allow_ru
   })
   expect_true(reactor_pump(until = function() "h" %in% st$log, timeout = 10))
   expect_identical(st$log, c("timer-end", "h"))
-})
-
-test_that("reactor_allow_runs() is NULL in the outermost pump and the nested runs inside", {
-  expect_null(reactor_allow_runs())
-  st = new.env()
-  st$seen = FALSE
-  reactor_enqueue_tool("u-g", function() {
-    st$outer = reactor_allow_runs()
-    reactor_timer(reactor_now(), function() {
-      st$inner = reactor_allow_runs()
-      st$seen = TRUE
-    })
-    reactor_pump(until = function() st$seen, allow_runs = "u-cli2", timeout = 5)
-  })
-  expect_true(reactor_pump(until = function() st$seen, timeout = 10))
-  expect_null(st$outer)
-  expect_identical(st$inner, "u-cli2")
-  expect_null(reactor_allow_runs())
 })
 
 test_that("callbacks may cancel pending work without resurrecting it", {
@@ -258,13 +218,11 @@ test_that("interrupts unwind callback marks and pump stacks without diagnostics"
   expect_s3_class(caught, "interrupt")
   expect_false(r$tasks[[task]]$busy)
   expect_identical(reactor_depth(), 0L)
-  expect_length(r$allow_stack, 0L)
   reactor_cancel(task)
   reactor_enqueue_tool("u-interrupt", interrupt)
   caught = tryCatch(reactor_pump(timeout = 5), interrupt = identity)
   expect_s3_class(caught, "interrupt")
   expect_identical(reactor_depth(), 0L)
-  expect_length(r$allow_stack, 0L)
 })
 
 test_that("callback failures reach the real registry diagnostics", {
@@ -937,7 +895,6 @@ test_that("short pipe polls service host events before dispatch without running 
     state$log = c(state$log, "yield")
     reactor_pump(until = function() {
       state$depth = reactor_depth()
-      state$allow = reactor_allow_runs()
       TRUE
     }, timeout = 1)
     state$log = c(state$log, "nested-return")
@@ -954,9 +911,7 @@ test_that("short pipe polls service host events before dispatch without running 
   expect_identical(state$log, c("poll", "yield", "nested-return", "read", "stdin", "tool"))
   expect_identical(state$waits, 0)
   expect_identical(state$depth, 2L)
-  expect_identical(state$allow, character())
   expect_identical(reactor_depth(), 0L)
-  expect_length(reactor_get()$allow_stack, 0L)
 })
 
 test_that("an interrupt at the short-poll host yield unwinds before dispatch", {
@@ -975,7 +930,6 @@ test_that("an interrupt at the short-poll host yield unwinds before dispatch", {
   expect_s3_class(caught, "interrupt")
   expect_identical(state$log, "poll")
   expect_identical(reactor_depth(), 0L)
-  expect_length(reactor_get()$allow_stack, 0L)
   expect_identical(length(registry_env()$diag$rows), diagnostics)
 })
 

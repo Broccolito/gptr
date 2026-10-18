@@ -161,7 +161,7 @@ commands available in the current session, including any supplied by plugins or 
 | `/help [command]` | List input syntax and commands, or describe one command. |
 | `/exit`, `/quit`, `/q` | Leave the chat and return its session. |
 | `/model [provider/model or alias]` | Show the model or switch it from the next request; keeps the conversation. |
-| `/mode [plan|manual|edits|auto]` | Show the mode or switch it from the next turn. |
+| `/mode [plan|manual|edits|auto|yolo]` | Show the mode or switch it from the next turn. |
 | `/plan` | Switch to plan mode for read-only exploration and a proposed plan. |
 | `/tools` | List direct tools and `peter$` members. |
 | `/env [pattern]` | Describe workspace objects whose names contain the pattern. |

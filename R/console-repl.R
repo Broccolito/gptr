@@ -642,6 +642,7 @@ repl_banner = function(rs) {
     console_escape(console_env_lines(repl_eval_env(rs), n = 6L), FALSE),
     paste0("/help lists commands; ", console_interrupt_key(),
            " pauses an answer, twice at the prompt leaves")))
+  mode_notice(repl_mode(rs))
 }
 
 #' A notice when background sessions wait for approval; P21 asks at the next blocking call

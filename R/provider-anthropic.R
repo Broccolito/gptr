@@ -898,6 +898,24 @@ adp_msg_key = function(msg) {
   hash_xxh128(msg[intersect(keep, names(msg))])
 }
 
+#' Does the model take the frozen tools? Not when its record says `tool_call = FALSE` (IC-74); when
+#' that drops a non-empty array, gptr says once per model how to declare `tool_call` (IC-79)
+#' @noRd
+adp_tools_on = function(model, context) {
+  if (!isFALSE(model[["tool_call"]])) return(TRUE)
+  tools = as.character(context[["tools_json"]] %||% "")
+  if (!tools %in% c("", "[]")) {
+    ref = paste0(model$provider, "/", model$id)
+    gptr_inform(paste0(ref, " is not declared to support tool calls, so gptr sends it no tools ",
+                       "(no r, read, edit or write). If it supports them, declare it with ",
+                       "tool_call = TRUE: gptr_config(providers = list(`", model$provider,
+                       "` = list(models = list(list(id = \"", model$id,
+                       "\", tool_call = TRUE)))))."),
+                "notice", .once = paste0("tools_dropped:", ref))
+  }
+  FALSE
+}
+
 #' The frozen tool array converted once per session for an api; NULL when there are no tools
 #' @noRd
 adp_tools_json = function(opts, api, tools_json, convert) {

@@ -156,7 +156,7 @@ test_that("service_builtin_active() reads the registry listing once P02 exists",
 })
 
 test_that("service_plans lists every service of contract section 7.0", {
-  expect_length(service_plans, 39L)
+  expect_length(service_plans, 38L)
   expect_false(anyDuplicated(names(service_plans)) > 0)
   expect_true(all(grepl("^P[0-9]{2}$", service_plans)))
 })

@@ -129,7 +129,7 @@ layers when settings are resolved. The file's `version` field is format metadata
 | `model` | `NULL`: try configured Anthropic, OpenAI, Google, Claude Code CLI, then Codex CLI routes in that order. Set a canonical reference for other routes or reproducible routing. |
 | `small_model` | `NULL`: the main model's small sibling when available, otherwise the main model. |
 | `system1` | `NULL`: hosted Jev when its key exists, otherwise a verified local decision model already discovered. Set an explicit typed model or opt-in `"emulate:<model>"` route. |
-| `mode` | `"manual"`; also `"plan"`, `"edits"`, `"auto"`. |
+| `mode` | `"manual"`; also `"plan"`, `"edits"`, `"auto"`, `"yolo"`. A project file can only tighten it. |
 | `preset` | `"standard"`; built-in alternatives are `"minimal"`, `"readonly"`, `"extended"`. |
 | `tools` | Enable/disable lists and model-glob preset mappings: `list(enable = ..., disable = ..., presets = ...)`. |
 | `budget` | `list(tokens = 2000000, cost = 5, turns = NULL)` per top-level call; `NULL` entries remove individual limits. |

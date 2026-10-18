@@ -52,6 +52,18 @@ setting_get = function(key, session = NULL, default = NULL) {
   value %||% default
 }
 
+#' Say once per R process what yolo still asks for (IC-78)
+#' @noRd
+mode_notice = function(mode) {
+  if (!identical(mode, "yolo")) return(invisible(NULL))
+  gptr_inform(paste0("Mode yolo: actions run without approval, including package installs, ",
+                     "writes anywhere and gptr's own configuration functions. A person is still ",
+                     "asked before deleting files outside the project or protected files (.git, ",
+                     ".env, keys), the project or home directory, rm(list = ls()), quitting R, ",
+                     "options(gptr.*) and sending a secret over the network. The classifier ",
+                     "reads code; it is not a sandbox."), "notice", .once = "mode_yolo")
+}
+
 #' Mockable wrapper of interactive()
 #' @noRd
 gptr_is_interactive = function() {
@@ -389,8 +401,7 @@ s3_register = function(generic, class, method = NULL) {
 #' - `GPTR_PROJECT_ROOT`: overrides the project root, like `gptr.project_root`.
 #' - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `TYPESAFE_API_KEY` and the other
 #'   provider keys: read at the first use of a provider; see [gptr_env()] for `.env` files.
-#' - `GPTR_WORKER`, `GPTR_SUBAGENT_DEPTH` and `GPTR_MCP_TOKEN`: set by gptr in its own child
-#'   processes only.
+#' - `GPTR_WORKER` and `GPTR_SUBAGENT_DEPTH`: set by gptr in its own child processes only.
 #' - `GPTR_LIVE_TESTS`: `"true"` enables the package's live tests; not used at run time.
 #' - `_R_CHECK_PACKAGE_NAME_`: set by `R CMD check`; outside the package's own tests gptr then
 #'   replays recorded document blocks only and caps each child-process pool at two.

@@ -724,6 +724,25 @@ test_that("a sub-agent asking in a served r call ends the streamed line, not the
   }
 })
 
+test_that("a claude-cli r call shows its tool line and result line at the console (D-192)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 200, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("claude", "tool")
+  s = NULL
+  out = utils::capture.output({
+    s = peter("Compute twice the mean of big_vector", model = f$model, envir = new.env(),
+              mode = "auto")
+  })
+  local_cli_cleanup(s)
+  call = match("  * r  answer = mean(big_vector) * 2; answer", out)
+  result = grep("^    -> error: Error: object 'big_vector' not found", out)
+  answer = grep("^The tool said:", out)
+  expect_false(is.na(call))
+  expect_identical(result, call + 1L)
+  expect_true(length(answer) == 1L && answer > result)
+})
+
 test_that("an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr_error_billing", {
   skip_on_cran()
   f = local_fake_cli("claude", "apikey")

@@ -28,8 +28,14 @@ Every tool call passes a permission gate. The default mode is \code{manual}: onl
 classifier knows to be read-only run without asking; every other action, including any change
 to a file or an object, asks first with a one-line prompt. \code{edits} also allows file edits
 inside the project and still asks before R code that is not known to be read-only; \code{auto}
-asks only for level-4 actions (for example deleting the project directory, or changing gptr's
-own configuration) and for reads of registered secrets; \code{plan} changes nothing. When nobody
+asks only for level-4 actions (for example deleting the project directory or a file outside the
+project, where a system temporary directory such as \verb{/tmp} counts as outside, or changing gptr's
+own configuration) and for reads of registered secrets; \code{yolo}, which only you can select (a
+project setting or model code in another mode cannot), also runs gptr's own configuration
+functions, writes to R startup files such as \verb{~/.Rprofile} (which can change gptr's options in
+the next R process) and secret reads without asking, and still asks before deleting protected
+files, files outside the project or the project itself, \code{rm(list = ls())}, quitting R,
+\verb{options(gptr.*)} and sending a secret over the network; \code{plan} changes nothing. When nobody
 can answer a question (Rscript, knitr, a scheduled job) the run stops with status \code{blocked}
 and a \code{gptr_error_permission} condition that says how to allow the action, unless you set
 \code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate off or loosen
@@ -43,8 +49,8 @@ disposable sandboxes.
 The risk levels come from a static classifier (\code{\link[=gptr_risk]{gptr_risk()}}). It is advisory and it is not a
 security boundary: R code can compute function names, call compiled code or load packages
 whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
-session. In \code{auto} mode a model can delete or overwrite files and objects. Use \code{auto} only
-in projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns),
+session. In \code{auto} and \code{yolo} mode a model can delete or overwrite files and objects. Use them
+only in projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns),
 and run untrusted prompts or untrusted projects in a disposable container or virtual machine.
 }
 
@@ -54,9 +60,11 @@ Inline sub-agents run in your session and see its objects. The worker backend ru
 sub-agent in a separate R process that starts from gptr's reduced child environment (it does
 not read your \verb{~/.Renviron}), but that process runs under your user account with your file
 permissions: the worker backend is not an isolation boundary. Its permission requests are
-sent to your session and classified again there. MCP servers, the \code{claude} and \code{codex}
-command-line tools, shell commands started with \code{peter$sh()} and Shiny artifacts are ordinary
-processes of your account as well; artifacts start without any registered secret and listen
+sent to your session and classified again there. On the \code{codex} route in \code{auto} and \code{yolo}
+mode, Codex's own shell changes and deletes files inside the project within Codex's sandbox,
+without passing gptr's gate. MCP servers, the \code{claude} and \code{codex} command-line tools, shell
+commands started with \code{peter$sh()} and Shiny artifacts are ordinary processes of your account
+as well; artifacts start without any registered secret and listen
 on the loopback interface, and each launch gets an access token in its address (on Windows
 only when 'openssl' is installed; otherwise gptr says that the artifact has no token).
 }

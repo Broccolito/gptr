@@ -57,20 +57,21 @@ test_that("the 11-row mode x risk matrix holds (03 section 6.8.1; 18 section 4.7
   e$big = numeric(2e5)
   local_gptr_options(protect_size = 1e6)
   rows = list(
-    list(gate_tool("read", "R/a.R", 0L), c("allow", "allow", "allow", "allow")),
-    list(gate_tool("read", "/etc/hosts", 1L), c("deny", "ask", "ask", "allow")),
-    list(gate_tool("read", ".env", 2L), c("deny", "ask", "ask", "allow")),
-    list(gate_tool("write", "results/t.csv", 2L), c("deny", "ask", "allow", "allow")),
-    list(gate_tool("write", "/etc/out.csv", 3L), c("deny", "ask", "ask", "allow")),
-    list(gate_r("summary(df)", e), c("allow", "allow", "allow", "allow")),
-    list(gate_r("fit = lm(a ~ 1, df)", e), c("allow", "ask", "ask", "allow")),
+    list(gate_tool("read", "R/a.R", 0L), c("allow", "allow", "allow", "allow", "allow")),
+    list(gate_tool("read", "/etc/hosts", 1L), c("deny", "ask", "ask", "allow", "allow")),
+    list(gate_tool("read", ".env", 2L), c("deny", "ask", "ask", "allow", "allow")),
+    list(gate_tool("write", "results/t.csv", 2L), c("deny", "ask", "allow", "allow", "allow")),
+    list(gate_tool("write", "/etc/out.csv", 3L), c("deny", "ask", "ask", "allow", "allow")),
+    list(gate_r("summary(df)", e), c("allow", "allow", "allow", "allow", "allow")),
+    list(gate_r("fit = lm(a ~ 1, df)", e), c("allow", "ask", "ask", "allow", "allow")),
     list(gate_r("df = head(df, 2); write.csv(df, 'out.csv')", e),
-         c("deny", "ask", "ask", "allow")),
-    list(gate_r("unlink('data', recursive = TRUE)", e), c("deny", "ask", "ask", "allow")),
-    list(gate_r("rm(list = ls())", e), c("deny", "ask_human", "ask_human", "ask_human")),
-    list(gate_r("big = big + 1", e), c("deny", "ask", "ask", "allow"))
+         c("deny", "ask", "ask", "allow", "allow")),
+    list(gate_r("unlink('data', recursive = TRUE)", e), c("deny", "ask", "ask", "allow", "allow")),
+    list(gate_r("rm(list = ls())", e),
+         c("deny", "ask_human", "ask_human", "ask_human", "ask_human")),
+    list(gate_r("big = big + 1", e), c("deny", "ask", "ask", "allow", "allow"))
   )
-  modes = c("plan", "manual", "edits", "auto")
+  modes = session_modes
   for (row in rows) {
     got = vapply(modes, function(m) gate_decide(row[[1]], gate_ctx(m, envir = e)), "")
     expect_identical(unname(got), row[[2]], label = paste(row[[1]]$name, row[[1]]$input))
@@ -112,6 +113,47 @@ test_that("control actions need a person in every mode, plan included (IC-53, IC
   }
   w = gate_tool("write", ".gptr/settings.json", 2L)
   expect_identical(gate_decide(w, gate_ctx("auto")), "ask_human")
+})
+
+test_that("yolo runs control, installs, writes anywhere and secret reads; level 4 asks (IC-78)", {
+  root = local_project()
+  local_permission_rules()
+  yolo = gate_ctx("yolo")
+  allow = c("gptr_mcp_serve(tools = c('r', 'read'), envir = globalenv())",
+            "gptr_config(mode = 'auto')", "gptr_permissions(allow = 'r(level<=3)')",
+            "writeLines('{}', '.gptr/settings.json')", "install.packages('x')",
+            "writeLines('x', '/etc/gptr-out.txt')", "Sys.getenv()",
+            "unlink('data', recursive = TRUE)", "tmp = tempfile(); unlink(tmp)")
+  for (code in allow) expect_identical(gate_decide(gate_r(code), yolo), "allow", label = code)
+  expect_identical(gate_decide(gate_tool("write", ".gptr/settings.json", 2L), yolo), "allow")
+  human = c("unlink('/etc/gptr-old.csv')", "system('rm -rf /etc/gptr-docs')",
+            "unlink('.git', recursive = TRUE)", "unlink('.env')", "file.remove('~/.ssh/id_rsa')",
+            "unlink('.', recursive = TRUE)", "system('git clean -fdx')", "q('no')",
+            "options(gptr.critical_guard = FALSE)", "options(gptr.unsafe_no_permissions = TRUE)")
+  for (code in human) expect_identical(gate_decide(gate_r(code), yolo), "ask_human", label = code)
+  for (m in c("manual", "auto")) {
+    expect_identical(gate_decide(gate_r("unlink('/etc/gptr-old.csv')"), gate_ctx(m)),
+                     "ask_human", label = m)
+  }
+  env = "*** Begin Patch\n*** Delete File: .env\n*** End Patch"
+  del = list(id = "c4", name = "edit", input = list(edits = env), nested = FALSE,
+             risk = tool_risk_write(list(edits = env), NULL))
+  expect_identical(gate_decide(del, yolo), "ask_human")
+  for (p in c(".Renviron\n+KEY=1\n*** Delete File: .env",
+              ".gptr/settings.json\n+{}\n*** Delete File: /etc/gptr-x.csv")) {
+    env = paste0("*** Begin Patch\n*** Add File: ", p, "\n*** End Patch")
+    del = list(id = "c4", name = "edit", input = list(edits = env), nested = FALSE,
+               risk = tool_risk_write(list(edits = env), NULL))
+    expect_identical(gate_decide(del, yolo), "ask_human", label = sub(".*: ", "", p))
+  }
+  perm_on_tool_result(list(input = list(code = "tok = Sys.getenv('OPENAI_API_KEY')")), yolo)
+  send = gate_r("httr2::req_perform(httr2::req_headers(httr2::request(u), x = tok))")
+  expect_identical(gate_decide(send, yolo), "ask_human")
+  gptr_permissions(deny = "r(fn:install.packages)", ask = "r(fn:gptr_config)")
+  expect_identical(gate_decide(gate_r("install.packages('x')"), yolo), "deny")
+  expect_identical(gate_decide(gate_r("gptr_config(mode = 'auto')"), yolo), "ask")
+  local_gptr_options(critical_guard = FALSE)
+  expect_identical(gate_decide(gate_r("unlink('.env')"), yolo), "allow")
 })
 
 test_that("the ask tool needs a person; without one it is ask_human (IC-68)", {
@@ -187,6 +229,32 @@ test_that("in a run the taint of a secret read reaches the secret guard (G6, FIX
   expect_true(exists("tok", envir = e, inherits = FALSE))
   expect_match(cnd$action, "req_perform", fixed = TRUE)
   expect_match(cnd$how_to_allow, "always needs a person", fixed = TRUE)
+})
+
+test_that("in yolo a control export runs without a person; options(gptr.*) asks (IC-78)", {
+  root = local_project(trust = TRUE)
+  local_permission_rules()
+  ui = local_scripted_ui(list("n"))
+  fake = local_fake_provider(list(
+    fake_tool("r", code = "gptr_permissions(allow = 'r(fn:summary)', scope = 'session')"),
+    fake_tool("r", code = "options(gptr.critical_guard = FALSE)"), "Done."))
+  peter("Configure.", model = fake, mode = "yolo", envir = new.env())
+  expect_true("r(fn:summary)" %in% perm_store()$allow)
+  expect_identical(sum(ui$log$method == "permission"), 1L)
+  expect_false(isFALSE(getOption("gptr.critical_guard")))
+})
+
+test_that("a nested auto run started by yolo model code asks before a protected delete", {
+  root = local_project(files = list(".ssh/id_rsa" = "KEY"), trust = TRUE)
+  ui = local_scripted_ui(list("n"))
+  local_fake_provider(list(fake_tool("r", code = "unlink('.ssh', recursive = TRUE)"), "Done."),
+                      name = "inner")
+  outer = local_fake_provider(list(
+    fake_tool("r", code = "x = peter('Clean up.', model = 'inner', mode = 'auto')"), "Done."),
+    name = "outer")
+  peter("Tidy.", model = outer, mode = "yolo", envir = new.env())
+  expect_true(file.exists(file.path(root, ".ssh", "id_rsa")))
+  expect_identical(sum(ui$log$method == "permission"), 1L)
 })
 
 test_that("the protect_size policy reads the run's snapshot, not the live option (IC-53)", {

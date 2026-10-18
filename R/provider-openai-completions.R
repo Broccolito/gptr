@@ -593,7 +593,7 @@ completions_build = function(model, context, opts) {
   cc = cc_ok && "project" %in% anchors
   msgs = context$messages %||% list()
   anchor_at = adp_anchor_index(msgs)
-  tools_on = !isFALSE(model[["tool_call"]])
+  tools_on = adp_tools_on(model, context)
   tj = if (tools_on) {
     adp_tools_json(opts, paste("openai-completions", compat$supports_strict_mode),
                    context$tools_json, function(tools) completions_tools(tools, compat))

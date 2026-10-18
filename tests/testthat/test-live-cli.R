@@ -47,10 +47,6 @@ test_that("the claude plan route evaluates R in the live session", {
 
 test_that("Codex in a non-git temporary directory calls the gptr r tool", {
   skip_live_cli("codex")
-  skip_if_not_installed("httpuv")
-  skip_if_not_installed("later")
-  skip_if_not_installed("openssl")
-  withr::defer(gptr_mcp_serve(stop = TRUE))
   dir = withr::local_tempdir()
   withr::local_dir(dir)
   expect_false(dir.exists(file.path(dir, ".git")))

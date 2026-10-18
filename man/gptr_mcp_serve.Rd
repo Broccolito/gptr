@@ -35,8 +35,8 @@ starts (stop and start the server to change it); like any new session, it become
 that needs your approval is refused with a note on how to allow it, because gptr never asks
 from a background callback. The token appears only in the snippets of \verb{$config} (printed
 redacted; \code{as.character()} gives the text to paste; \verb{$config$codex} holds the \code{codex} options
-in \verb{$args} and the environment to start Codex with in \verb{$env}) and in the environment of
-children gptr starts. One server runs per R process. Needs 'httpuv', 'later' and 'openssl'.
+in \verb{$args} and the environment to start Codex with in \verb{$env}). One server runs per R process.
+Needs 'httpuv', 'later' and 'openssl'; gptr's own codex route does not use this server.
 }
 \details{
 If shutdown cannot be confirmed, access is revoked and the server is retained for retry.

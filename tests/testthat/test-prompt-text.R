@@ -76,6 +76,8 @@ test_that("minimal variants and the extended r_performance equal contract 9.3", 
   full = sub("; str() makes the next in-place edit of a large object copy it.", ".", full,
              fixed = TRUE)
   expect_identical(prompt_text("r_performance_full"), paste(full, collapse = "\n"))
+  expect_match(prompt_text("r_performance_full"),
+               "object.size(), which overstates S7 objects such as ggplot2 plots", fixed = TRUE)
   flat = gsub("\\s+", " ", paste(c4, collapse = " "))
   upd = sprintf(prompt_text("section_updated"), "<name>", "<section>")
   expect_identical(upd, "Updated system prompt section \"<name>\":\n\n<section>")

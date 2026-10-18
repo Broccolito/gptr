@@ -267,6 +267,21 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
   expect_error(model_resolve("claude_code"), "claude-cli", class = "gptr_error_unknown_model")
 })
 
+test_that("a provider named alone means its first model; alias separators match (IC-19)", {
+  for (ref in c("claude-cli", "claude_code", "claude-code", "Claude-Code")) {
+    expect_identical(model_resolve(ref)$ref, "claude-cli/default", label = ref)
+  }
+  expect_identical(model_resolve("codex")$ref, "codex/default")
+  expect_identical(model_resolve("codex-cli")$ref, "codex/default")
+  # the rule comes before the fuzzy step: the provider's own first model, not a similar id
+  expect_identical(model_resolve("typesafe")$ref, "typesafe/jev-latest")
+  # sub-agents and plugin model switches resolve the same way
+  expect_identical(run_model_resolve("claude-cli", NULL)$ref, "claude-cli/default")
+  expect_identical(kernel_model_ref("codex-cli", "high"), "codex/default:high")
+  # a registered provider that declares no model stays unknown
+  expect_error(model_resolve("openai"), class = "gptr_error_unknown_model")
+})
+
 test_that("local providers accept unknown ids; a provider added by data resolves (INFRA-17)", {
   local_catalog()
   qwen = model_resolve("ollama/qwen3.5:9b:high")

@@ -1,7 +1,7 @@
 # gptr as an MCP server for the live session (contract 6.3, 7.18; architecture 6.14; IC-57,
-# IC-58, IC-65): one JSON-RPC dispatcher (both eras) over the session's r, read, edit and write,
-# gated like any tool call. The claude CLI's in-process "sdk" transport reaches it through P20's
-# opts$mcp_dispatch (the mcp.dispatch_local service, the single gate of the claude route).
+# IC-58, IC-65, IC-79): one JSON-RPC dispatcher (both eras) over the session's tools, gated like
+# any tool call. The claude CLI's in-process "sdk" transport and the codex route's stdio relay
+# reach it through P20's opts$mcp_dispatch (the mcp.dispatch_local service, their single gate).
 # Adapted from dev/research/07-anthropic-api-claude-plan.md 5.5-5.6 (the transport-agnostic
 # dispatcher, verified live) and dev/research/16-mcp-skills-plugins.md 5.9 (dual-era answers).
 
@@ -22,17 +22,30 @@ mcp_r_schema = list(type = "object", required = I("code"), properties = list(
               description = "R code to evaluate. May contain several expressions."),
   timeout = list(type = "number", description = "Seconds; best effort. Default 3600.")))
 
-#' tools/list entries of the served tools (descriptions and schemas of the registered specs)
+#' tools/list entries of the served tools: the session's frozen tool array, the declarations an
+#' API provider gets (IC-79), when `target$tools` is NULL and the session froze one; else the
+#' registered specs of `target$tools` (gptr_mcp_serve()) or of the four defaults. `r` offers
+#' mcp_r_schema.
 #' @noRd
-mcp_served_tools = function(tools) {
+mcp_served_tools = function(target) {
+  d = session_data(target$session)
+  frozen = if (is.null(target$tools)) d$frozen$tools_json
+  decls = if (is.null(frozen)) {
+    lapply(target$tools %||% mcp_default_tools(), function(nm) {
+      spec = registry_get("tool", nm, session = d$id)
+      list(name = nm, description = spec$description, input_schema = spec$parameters)
+    })
+  } else {
+    json_decode(frozen)
+  }
   out = list()
-  for (nm in tools) {
-    spec = registry_get("tool", nm)
-    if (is.null(spec)) next
-    schema = if (identical(nm, "r")) mcp_r_schema else spec$parameters
-    if (!is.list(schema)) next
+  for (decl in decls) {
+    spec = registry_get("tool", decl$name, session = d$id)
+    schema = if (identical(decl$name, "r")) mcp_r_schema else decl$input_schema
+    if (is.null(spec) || !is.list(schema)) next
     ro = isTRUE(spec$annotations$read_only)
-    out[[length(out) + 1L]] = list(name = nm, description = spec$description, inputSchema = schema,
+    out[[length(out) + 1L]] = list(name = decl$name, description = decl$description,
+                                   inputSchema = schema,
                                    annotations = list(readOnlyHint = ro, destructiveHint = !ro,
                                                       openWorldHint = FALSE))
   }
@@ -55,10 +68,10 @@ mcp_tool_content = function(res) {
 }
 
 #' Answer one JSON-RPC message (both eras) for `session` (a gptr_session or the id of one
-#' builtin:mcp saw start) with the four served tools: the `mcp.dispatch_local` service
+#' builtin:mcp saw start) with the session's tools: the `mcp.dispatch_local` service
 #' @noRd
 mcp_dispatch_local = function(message, session) {
-  mcp_dispatch(message, list(session = session, tools = mcp_default_tools()))
+  mcp_dispatch(message, list(session = session))
 }
 
 #' The dispatcher; never throws. `target` is list(session, tools, envir). A notification gets an
@@ -100,13 +113,16 @@ mcp_dispatch_impl = function(msg, target) {
     ping = json_obj(),
     "server/discover" = list(supportedVersions = I(v$modern), capabilities = caps,
                              instructions = mcp_server_instructions),
-    "tools/list" = list(tools = mcp_served_tools(target$tools)),
+    "tools/list" = list(tools = mcp_served_tools(target)),
     "tools/call" = {
       name = params$name
-      if (!rlang::is_string(name) || !name %in% target$tools) {
+      served = mcp_served_tools(target)
+      names = vapply(served, function(t) t$name, "")
+      if (!rlang::is_string(name) || !name %in% names) {
         return(mcp_rpc_err(id, -32602L, paste("Unknown tool:", toString(name))))
       }
-      mcp_tool_content(mcp_serve_call(target, name, params$arguments, id))
+      schema = served[[match(name, names)]]$inputSchema
+      mcp_tool_content(mcp_serve_call(target, name, params$arguments, id, schema))
     },
     return(mcp_rpc_err(id, -32601L, paste("Method not found:", method)))
   )
@@ -166,9 +182,37 @@ mcp_serve_gate = function(call, run, ctx, sid = NULL) {
   mcp_gate_idle(call, ctx, sid)
 }
 
-#' Run one served tool call through mcp_serve_gate(); returns a gptr_tool_result
+#' Run one served tool call (mcp_serve_exec()). In a live run, outside a tool call on the stack
+#' (the CLI routes, an MCP client during a run), it is reported as `tool_execution_start`/`_end`
+#' under its gate's call id, the end with the result's `content` and `details` and the execution
+#' time, and its approval's control tokens end with it, as for a call of the agent loop (IC-53,
+#' D-192)
 #' @noRd
-mcp_serve_call = function(target, name, args, id) {
+mcp_serve_call = function(target, name, args, id, schema) {
+  run = session_live(target$session)$run
+  if (is.null(run) || !is.null(run_current())) {
+    return(mcp_serve_exec(target, name, args, id, schema))
+  }
+  st = new.env(parent = emptyenv())
+  cid = paste0("mcp_", id)
+  run_emit(run, "tool_execution_start", tool_call_id = cid, tool_name = name,
+           input = if (is.list(args)) args else json_obj())
+  on.exit({
+    run$signal$control = character()
+    run_emit(run, "tool_execution_end", tool_call_id = cid, tool_name = name,
+             is_error = !isFALSE(st$res$is_error),
+             elapsed = if (is.null(st$t0)) 0 else reactor_now() - st$t0,
+             details = st$res$details %||% list(), content = st$res$content %||% list())
+  }, add = TRUE)
+  st$res = mcp_serve_exec(target, name, args, id, schema, st)
+  st$res
+}
+
+#' Run one served tool call, validated against its served `schema`, through the tool_call hooks of
+#' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result. `st$t0` marks the start of
+#' its execution.
+#' @noRd
+mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   s = target$session
   live = session_live(s)
   if (is.null(live)) return(gptr_tool_result("This session is not live.", is_error = TRUE))
@@ -183,8 +227,7 @@ mcp_serve_call = function(target, name, args, id) {
   if (is.null(spec) || !is.function(spec$execute)) {
     return(gptr_tool_result(paste("Tool", name, "not found"), is_error = TRUE))
   }
-  v = schema_validate(if (identical(name, "r")) mcp_r_schema else spec$parameters,
-                      if (length(args)) args else json_obj())
+  v = schema_validate(schema, if (length(args)) args else json_obj())
   if (!isTRUE(v$ok)) {
     return(gptr_tool_result(paste0("Invalid arguments for ", name, ": ",
                                    paste(v$errors, collapse = "; ")), is_error = TRUE))
@@ -202,6 +245,9 @@ mcp_serve_call = function(target, name, args, id) {
   }
   call = list(id = paste0("mcp_", id), name = name, input = input, tool = spec, nested = FALSE,
               risk = risk)
+  if (!is.null(run)) call = tool_call_hook(run, call, risk)
+  if (!is.null(call$blocked)) return(gptr_tool_result(call$blocked, is_error = TRUE))
+  input = call$input
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
     return(gptr_tool_result(paste0("Permission denied: ", d$reason %||% "not allowed",
@@ -209,6 +255,7 @@ mcp_serve_call = function(target, name, args, id) {
                                    "rule with gptr_permissions(allow = ...)."), is_error = TRUE))
   }
   if (is.list(d$input)) input = d$input
+  if (!is.null(st)) st$t0 = reactor_now()
   if (identical(name, "r")) return(mcp_serve_r(input, env, run, s))
   tryCatch(as_tool_result(spec$execute(input, ctx)), error = function(e) {
     gptr_tool_result(paste("Error:", conditionMessage(e)), is_error = TRUE)
@@ -234,7 +281,10 @@ mcp_serve_r = function(input, env, run, session = NULL) {
                   outputs = r_doc_outputs(res))))
   }
   out = format_eval_result(res, budget)
-  gptr_tool_result(out$text, images = out$images, is_error = !identical(res$status, "ok"))
+  err = Filter(function(e) identical(e$type, "error"), res$events %||% list())
+  gptr_tool_result(out$text, images = out$images, is_error = !identical(res$status, "ok"),
+                   details = list(objects = res$changes$objects, plots = length(out$images),
+                                  error = if (length(err)) err[[1L]]$message))
 }
 
 #' Only the exact active token-owned run's document receives native R history. Standalone MCP
@@ -275,9 +325,8 @@ mcp_token_lookup = function(authorization) {
 #' The bearer token bound to `session` on the running server (contract 7.18): `the$mcp_tokens`
 #' maps its sha256 to list(id, ref (a weak reference to the session), handle, tools), never its
 #' value. The value (openssl::rand_bytes(24), hex) is a secret bound to the server's origin and
-#' the session's live record holds its handle (`mcp_token`). A session keeps one token, its value
-#' read back from the vault, because P20 calls mcp.serve_ensure before every codex request;
-#' builtin:mcp revokes it at the session's shutdown.
+#' the session's live record holds its handle (`mcp_token`); builtin:mcp revokes it at the
+#' session's shutdown.
 #' @noRd
 mcp_serve_token = function(session, tools = mcp_default_tools()) {
   if (isTRUE(the$mcp_server$stopping)) {
@@ -286,17 +335,11 @@ mcp_serve_token = function(session, tools = mcp_default_tools()) {
   }
   url = the$mcp_server$url
   sid = session_data(session)$id
-  env = the$mcp_tokens
-  for (k in ls(env)) {
-    if (identical(env[[k]]$id, sid)) {
-      return(list(handle = env[[k]]$handle, key = k, value = secret_value(env[[k]]$handle, url)))
-    }
-  }
   value = rand_hex(24L)
   handle = secret_register(value, "GPTR_MCP_TOKEN", source = "mcp_serve", origin = url)
   key = hash_sha256(value)
   assign(key, list(id = sid, ref = rlang::new_weakref(session), handle = handle, tools = tools),
-         envir = env)
+         envir = the$mcp_tokens)
   live = session_live(session)
   if (!is.null(live)) live$mcp_token = handle
   list(handle = handle, key = key, value = value)
@@ -398,18 +441,6 @@ mcp_http_resp = function(status, body = "", headers = list()) {
        headers = c(list(`Content-Type` = "application/json"), headers), body = body)
 }
 
-#' The busy rule of IC-57: inside a nested pump only requests of the runs it serves are
-#' answered; others, and requests on the user's token (its dedicated session never runs), get
-#' the retryable JSON-RPC error -32002
-#' @noRd
-mcp_serve_busy = function(rec) {
-  allow = reactor_allow_runs()
-  if (is.null(allow)) return(FALSE)
-  s = rlang::wref_key(rec$ref)
-  run = if (!is.null(s)) session_live(s)$run
-  is.null(run) || !(run$id %in% allow)
-}
-
 #' The httpuv handler; never throws into httpuv
 #' @noRd
 mcp_http_handle = function(st, req) {
@@ -422,7 +453,7 @@ mcp_http_handle = function(st, req) {
 }
 
 #' Route one HTTP request: path (404), Origin (403), bearer token (401), method (405), the era
-#' headers, legacy sessions (no state beyond their ids), the busy rule, then the dispatcher
+#' headers, legacy sessions (no state beyond their ids), then the dispatcher
 #' @noRd
 mcp_http_route = function(st, req) {
   h = function(name) req[[paste0("HTTP_", toupper(gsub("-", "_", name)))]]
@@ -468,9 +499,6 @@ mcp_http_route = function(st, req) {
     return(mcp_http_resp(404L))
   }
   if (is.null(msg$id)) return(mcp_http_resp(202L))
-  if (identical(msg$method, "tools/call") && mcp_serve_busy(rec)) {
-    return(mcp_http_resp(200L, mcp_json(mcp_rpc_err(msg$id, -32002L, "gptr is busy; retry"))))
-  }
   # the user's token falls back to the environment gptr_mcp_serve() holds (R2)
   target = list(session = rlang::wref_key(rec$ref), tools = rec$tools,
                 envir = if (identical(rec$key, st$user$key)) st$envir)
@@ -482,8 +510,8 @@ mcp_http_route = function(st, req) {
 #' Client snippets for Codex, Claude Code, Claude Desktop and Cursor, each with a tool timeout of
 #' 3,600 s (HTTP MCP clients time a request out after 60 s by default). They carry the token, so
 #' they print redacted. The Codex snippet is a list: `args` (the `-c` overrides, which read the
-#' token from GPTR_MCP_TOKEN) and `env` (the child's environment, which P20's pcli_codex_env()
-#' reads); the others are JSON text (contract 6.3)
+#' token from GPTR_MCP_TOKEN) and `env` (the environment to start Codex with); the others are JSON
+#' text (contract 6.3)
 #' @noRd
 mcp_client_snippets = function(url, token) {
   bearer = paste("Bearer", token)
@@ -532,8 +560,8 @@ mcp_handle_new = function(st, tok, stop) {
 #' that needs your approval is refused with a note on how to allow it, because gptr never asks
 #' from a background callback. The token appears only in the snippets of `$config` (printed
 #' redacted; `as.character()` gives the text to paste; `$config$codex` holds the `codex` options
-#' in `$args` and the environment to start Codex with in `$env`) and in the environment of
-#' children gptr starts. One server runs per R process. Needs 'httpuv', 'later' and 'openssl'.
+#' in `$args` and the environment to start Codex with in `$env`). One server runs per R process.
+#' Needs 'httpuv', 'later' and 'openssl'; gptr's own codex route does not use this server.
 #'
 #' If shutdown cannot be confirmed, access is revoked and the server is retained for retry.
 #' Call `gptr_mcp_serve(stop = TRUE)` again; new requests are refused until shutdown completes.
@@ -581,17 +609,6 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   st$handle
 }
 
-#' The `mcp.serve_ensure` service (contract 7.0, IC-58): the shared socket plus the token bound
-#' to `session` (a CLI child's session, P19/P20); the handle's stop() revokes that token only
-#' @noRd
-mcp_serve_ensure = function(session) {
-  session = mcp_session_resolve(session)
-  mcp_session_remember(session)
-  st = mcp_serve_start()
-  sid = session_data(session)$id
-  mcp_handle_new(st, mcp_serve_token(session), function() mcp_token_revoke(sid))
-}
-
 #' Print a server handle (never the token)
 #'
 #' @param x A `gptr_mcp_handle`.
@@ -602,7 +619,7 @@ mcp_serve_ensure = function(session) {
 print.gptr_mcp_handle = function(x, ...) {
   msg_verbatim(c(paste0("<gptr MCP server> ", x$url),
                  paste0("token: in the environment variable ", x$token_env,
-                        " of children gptr starts"),
+                        " of the client, as $config shows"),
                  paste0("config: ", paste(names(x$config), collapse = ", ")),
                  "stop: $stop() or gptr_mcp_serve(stop = TRUE)"))
   invisible(x)
@@ -630,6 +647,4 @@ print.gptr_mcp_snippet = function(x, ...) {
 on_load({
   the$mcp_tokens = new.env(parent = emptyenv())
 })
-on_load(ext_service_set("mcp.serve_ensure", mcp_serve_ensure, provided_by = "P18",
-                        builtin = "mcp"))
 on_load(on_unload(mcp_serve_stop))

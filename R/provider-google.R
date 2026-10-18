@@ -365,7 +365,7 @@ google_build = function(model, context, opts) {
   params = context$params %||% list()
   msgs = context$messages %||% list()
   images = adp_images_ok(model)
-  tools_on = !isFALSE(model[["tool_call"]])
+  tools_on = adp_tools_on(model, context)
   head = json_obj()
   sys = list()
   for (k in c("t0", "t1")) {

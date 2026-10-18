@@ -1716,7 +1716,7 @@ test_that("gptr_agent() stores the raw captured expressions (IC-34)", {
   expect_equal(b$model, "anthropic/claude-opus-5-5")
   expect_identical(b$max_turns, 5L)
   expect_error(gptr_agent(description = "no name"), class = "gptr_error_invalid_spec")
-  expect_error(gptr_agent("rev", description = "d", mode = "yolo"),
+  expect_error(gptr_agent("rev", description = "d", mode = "fast"),
                class = "gptr_error_invalid_spec")
   err = expect_error(gptr_agent("text", description = "d"), class = "gptr_error_invalid_spec")
   expect_equal(err$field, "name")

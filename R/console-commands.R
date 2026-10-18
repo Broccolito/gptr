@@ -14,7 +14,7 @@ console_commands = function() {
     gptr_command("q", cmd_exit, "Leave the console (same as /exit)"),
     gptr_command("model", cmd_model, "Show or switch the model: /model [provider/model or alias]"),
     gptr_command("mode", cmd_mode,
-                 "Show or switch the permission mode: /mode [plan|manual|edits|auto]"),
+                 "Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]"),
     gptr_command("plan", cmd_plan, "Switch to plan mode (read-only exploration, then a plan)"),
     gptr_command("tools", cmd_tools, "List the direct tools and the peter$ members"),
     gptr_command("env", cmd_env, "List objects of the console environment: /env [pattern]"),
@@ -142,7 +142,8 @@ cmd_exit = function(args, ctx) {
   NULL
 }
 
-#' `/model [ref]`: on a session from the next request; before the first prompt for that prompt
+#' `/model [ref]`: on a session from the next request; before the first prompt for that prompt,
+#' checked now (IC-79) and kept as typed
 #' @noRd
 cmd_model = function(args, ctx) {
   rs = console_repl_find()
@@ -158,6 +159,7 @@ cmd_model = function(args, ctx) {
     return(paste0("Model: ", s$model, " (from the next request)"))
   }
   if (is.null(rs)) return("There is no session to switch.")
+  if (is.null(registry_get("router", args))) model_canonical(args, strict = TRUE)
   rs$model = args
   paste0("Model: ", args, " (used from the first prompt)")
 }
@@ -170,8 +172,8 @@ cmd_mode = function(args, ctx) {
   if (!nzchar(args)) {
     return(paste0("Mode: ", if (!is.null(rs)) repl_mode(rs) else s$mode %||% "manual"))
   }
-  if (!args %in% c("plan", "manual", "edits", "auto")) {
-    return(paste0("Unknown mode '", args, "': use plan, manual, edits or auto."))
+  if (!args %in% session_modes) {
+    return(paste0("Unknown mode '", args, "': use plan, manual, edits, auto or yolo."))
   }
   if (!is.null(s)) {
     session_set_mode(s, args, source = "user")
@@ -180,6 +182,7 @@ cmd_mode = function(args, ctx) {
   }
   if (is.null(rs)) return("There is no session to switch.")
   rs$mode = args
+  mode_notice(args)
   paste0("Mode: ", args, " (used from the first prompt)")
 }
 

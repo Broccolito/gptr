@@ -241,12 +241,14 @@ risk_guard_names = c(".gptr", ".git", ".Rprofile", ".Renviron", ".env", ".netrc"
 # A directory written or deleted as a whole is control when P01 guards one of these children.
 risk_guard_children = c("settings.json", "config", "hooks", "Makevars", "x")
 
-#' Level of reading, writing or deleting a path of class `pc`
+#' Level of reading, writing or deleting a path of class `pc`; tool_risk_write() copies the
+#' delete row
 #' @noRd
 risk_op_level = function(pc, op) {
   switch(op,
          read = switch(pc, url = , protected = 2L, outside = , critical = 1L, 0L),
-         delete = switch(pc, critical = , control = , protected = 4L, temp = 1L, console = 0L, 3L),
+         delete = switch(pc, critical = , control = , protected = , outside = 4L, temp = 1L,
+                         console = 0L, 3L),
          switch(pc, critical = , control = 4L, workspace = 2L, temp = 1L, console = 0L, 3L))
 }
 
@@ -1053,7 +1055,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
     tg = risk_target(t, op, root, dirs)
     if (identical(tg$pc, "console")) return(invisible())
     add(if (identical(op, "delete")) max(3L, tg$level) else tg$level,
-        if (identical(tg$pc, "control")) "control" else if (op == "delete") "file_delete" else
+        if (op == "delete") "file_delete" else if (identical(tg$pc, "control")) "control" else
           "file_write", t, tg$pc)
   }
   operands = function(op) {
@@ -1229,7 +1231,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       tg_ = tgs[[best]]
       if (identical(tg_$pc, "console")) next
       add(max(if (op == "delete") 3L else row$level %||% 2L, tg_$level),
-          if (identical(tg_$pc, "control")) "control" else if (op == "delete") "file_delete" else
+          if (op == "delete") "file_delete" else if (identical(tg_$pc, "control")) "control" else
             "file_write", d[best], tg_$pc)
     }
     if (!length(dests)) add(row$level %||% 2L, "file_write")
@@ -1545,8 +1547,8 @@ risk_literal_rows = function(lits, f, fn, root, call, write = TRUE) {
     }
     tg = if (top >= 2L) risk_target(t, op, root) else list(level = 0L)
     if (tg$level > 2L) {
-      f = risk_flags_bind(f, risk_flags_row(call, fn, tg$level, if (tg$pc == "control") "control"
-                                            else if (op == "delete") "file_delete" else
+      f = risk_flags_bind(f, risk_flags_row(call, fn, tg$level, if (op == "delete") "file_delete"
+                                            else if (tg$pc == "control") "control" else
                                               "file_write", t, tg$pc))
     }
   }
@@ -1812,8 +1814,9 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #'
 #' @param code R code: a character vector, a call or an expression.
 #' @param envir `NULL` or the environment the code would run in. When given, assignments to
-#'   existing bindings are reported as overwrites with their size (`object.size()` in a leaf;
-#'   promises and active bindings are never forced) and user-defined functions called by the
+#'   existing bindings are reported as overwrites with their size (`object.size()` in a leaf,
+#'   unknown where it overstates, as for functions and S7 objects; promises and active bindings
+#'   are never forced) and user-defined functions called by the
 #'   code are classified through their bodies.
 #' @param root The project root used for path classes; `NULL` means the current project root.
 #' @return A `gptr_risk` object: a list with `level` (integer 0-4), `label`, `categories`,
@@ -2061,10 +2064,10 @@ risk_binding_info = function(name, envir) {
   NULL
 }
 
-#' Class and bytes of an object (the closure-free leaf)
+#' Class and bytes of an object (the closure-free leaf; the workspace's size rule)
 #' @noRd
 risk_binding_leaf = function(obj) {
-  list(class = class(obj)[1L], bytes = as.numeric(utils::object.size(obj)))
+  list(class = class(obj)[1L], bytes = env_snap_size(obj))
 }
 
 #' risk_binding_info() with errors caught one frame up
@@ -2357,8 +2360,9 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       }
     }
     if (best$level < 0L) best = list(level = row$level, path = NA_character_, pc = NA_character_)
+    ctl = identical(best$pc, "control") && !row$category %in% c("read", "file_delete")
     add(ctx, label, name, best$level, if (isTRUE(best$sec)) "secret" else
-      if (identical(best$pc, "control") && row$category != "read") "control" else row$category,
+      if (ctl) "control" else row$category,
         best$path, best$pc)
   }
 

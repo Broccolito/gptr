@@ -59,13 +59,15 @@
 #' @param ... A session to continue, the prompt, and context objects.
 #' @param model A model name (`sonnet`, `"anthropic/claude-sonnet-5-5"`), a provider or router spec
 #'   such as [gptr_fake_provider()], or `NULL` for the configured default.
-#' @param mode One of `plan`, `manual`, `edits`, `auto`; `NULL` for the configured default.
+#' @param mode One of `plan`, `manual`, `edits`, `auto`, `yolo`; `NULL` for the configured default.
 #' @param skills,plugins,extensions Names (bare or quoted) of skills to preload, plugins and
 #'   extensions to enable for this session; `extensions` also takes `function(gptr)` factories and
 #'   file paths.
 #' @param tools Tool names, `"+name"`/`"-name"` modifiers, a preset name, or [gptr_tool()] specs.
 #' @param agents A named list of agent definitions for a team (`agent()` means [gptr_agent()]).
 #' @param parallel Fan one list-like context object out over this many concurrent sub-agents.
+#'   A child that succeeds keeps only the values it returned with [gptr_return()], so they must
+#'   be self-contained.
 #' @param choices,levels,threshold,min_confidence,uncertain System 1 answer shape and abstention.
 #' @param prompt An explicit prompt; wins over positional selection.
 #' @param envir Where the agent evaluates R code and creates objects. A call made by the agent's

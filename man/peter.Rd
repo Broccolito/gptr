@@ -18,7 +18,7 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 \item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}), a provider or router spec
 such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default.}
 
-\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}; \code{NULL} for the configured default.}
+\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.}
 
 \item{skills, plugins, extensions}{Names (bare or quoted) of skills to preload, plugins and
 extensions to enable for this session; \code{extensions} also takes \verb{function(gptr)} factories and
@@ -28,7 +28,9 @@ file paths.}
 
 \item{agents}{A named list of agent definitions for a team (\code{agent()} means \code{\link[=gptr_agent]{gptr_agent()}}).}
 
-\item{parallel}{Fan one list-like context object out over this many concurrent sub-agents.}
+\item{parallel}{Fan one list-like context object out over this many concurrent sub-agents.
+A child that succeeds keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}, so they must
+be self-contained.}
 
 \item{choices, levels, threshold, min_confidence, uncertain}{System 1 answer shape and abstention.}
 

@@ -542,6 +542,19 @@ test_that("gptr's own configuration is the control category, level 4 (IC-53, IC-
   expect_identical(gptr_risk("writeLines('x', 'AGENTS.md')", root = root)$level, 3L)
 })
 
+test_that("a delete keeps file_delete, a control target shows in path_class (IC-78)", {
+  root = local_project()
+  r = gptr_risk("unlink('.git', recursive = TRUE)", root = root)
+  f = r$flagged
+  expect_identical(list(f$category, f$path_class, f$level), list("file_delete", "control", 4L))
+  expect_true(perm_is_control(list(name = "r"), r))
+  f = risk_command("rm -rf .git/hooks", root)
+  expect_identical(list(f$category, f$path_class, f$level), list("file_delete", "control", 4L))
+  expect_identical(gptr_risk("unlink('/etc/gptr-old.csv')", root = root)$level, 4L)
+  expect_identical(flags_level(risk_command("rm -rf /etc/gptr-docs", root)), 4L)
+  expect_identical(gptr_risk("unlink(f)", root = root)$level, 3L)
+})
+
 test_that("gptr_artifacts() that relaunches or stops an app is level 3 process (04 9.4)", {
   root = local_project()
   launch = c("gptr_artifacts('a', version = 2)", "gptr_artifacts('a', open = TRUE)",
@@ -656,6 +669,19 @@ test_that("an overwrite above gptr.protect_size is level 3 and reports the size"
   expect_identical(r$level, 3L)
   expect_gt(r$sizes[["big"]], 1e6)
   expect_identical(gptr_risk("new_obj = 1", envir = e, root = root)$assigned, "new_obj")
+})
+
+test_that("an S7 object's size is unknown, so overwriting it never trips protect_size (D-189)", {
+  root = local_project()
+  e = new.env()
+  e$plt = structure(list(), class = c("pkg::plot", "S7_object"),
+                    S7_class = structure(function() NULL, pad = numeric(2e5)))
+  local_gptr_options(protect_size = 1e6)
+  r = gptr_risk("plt = 1", envir = e, root = root)
+  expect_identical(r$level, 2L)
+  expect_true(is.na(r$sizes[["plt"]]))
+  expect_match(r$flagged$call, "overwrites `plt` <pkg::plot, size unknown>", fixed = TRUE,
+               all = FALSE)
 })
 
 test_that("secret rules come from P03's secret_scan() (G6 section 3.8)", {

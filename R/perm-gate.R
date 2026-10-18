@@ -59,8 +59,8 @@ perm_edits_ok = function(call, risk) {
           fl$category == "file_write" & fl$path_class %in% c("workspace", "temp"))
 }
 
-#' Policy `mode`: the mode x level table with allow rules folded in; control is the critical
-#' guard's, which asks a person in every mode
+#' Policy `mode`: the mode x level table with allow rules folded in; yolo allows everything;
+#' control is the critical guard's, which asks a person in every other mode
 #' @noRd
 perm_policy_mode = function(call, ctx) {
   call$risk = risk_norm(call$risk, call$tool)
@@ -72,6 +72,7 @@ perm_policy_mode = function(call, ctx) {
     return(perm_decision("ask_human", paste0("the ask tool needs a person to answer: ",
                                              paste(q, collapse = " | ")), call))
   }
+  if (identical(mode, "yolo")) return(perm_decision("allow", "mode yolo", call))
   if (perm_is_control(call, call$risk)) return(NULL)
   if (lvl == 0L) return(perm_decision("allow", "read-only", call))
   if (identical(mode, "plan")) {
@@ -107,14 +108,25 @@ perm_policy_rules = function(call, ctx) {
   NULL
 }
 
-#' Policy `critical_guard`: control actions always need a person; level 4 while the guard is on
+#' Policy `critical_guard`: control actions need a person; level 4 while the guard is on. In
+#' yolo control rows do not count, except options(gptr.*), which could switch the guard off;
+#' a tool's control path does not hide its level-4 delete.
 #' @noRd
 perm_policy_critical = function(call, ctx) {
   risk = risk_norm(call$risk, call$tool)
-  if (perm_is_control(call, risk)) {
+  control = perm_is_control(call, risk)
+  yolo = identical(ctx$mode(), "yolo")
+  if (control && !yolo) {
     return(perm_decision("ask_human", "changes gptr's own configuration (control)", call))
   }
-  if (risk$level >= 4L && isTRUE(perm_safety(ctx, "critical_guard"))) {
+  lvl = risk$level
+  if (yolo) {
+    fl = risk$flagged
+    keep = !fl$category %in% "control" | fl$fn %in% "options"
+    lvl = if (nrow(fl)) max(0L, fl$level[keep]) else
+      if (control && !"file_delete" %in% risk$categories) 0L else lvl
+  }
+  if (lvl >= 4L && isTRUE(perm_safety(ctx, "critical_guard"))) {
     return(perm_decision("ask_human", "a critical action (level 4)", call))
   }
   NULL
@@ -123,7 +135,7 @@ perm_policy_critical = function(call, ctx) {
 #' Policy `secret_guard`: guarded secret reads and secret-to-network flows need a person (G6)
 #'
 #' Only an `r(secret:NAME)` allow rule pre-approves, and only reads of registered secrets by
-#' name; an environment dump or vault access always asks (IC-53 item 7).
+#' name; an environment dump or vault access always asks (IC-53 item 7). Yolo asks only for flows.
 #' @noRd
 perm_policy_secret = function(call, ctx) {
   if (!isTRUE(perm_safety(ctx, "secret_guard"))) return(NULL)
@@ -132,18 +144,21 @@ perm_policy_secret = function(call, ctx) {
         any(flows %in% risk_secret_scan(call$input$code, ctx$state()$taint)$findings$rule)) {
     return(perm_decision("ask_human", "sends a value read from a secret over the network", call))
   }
-  if (!isTRUE(risk_norm(call$risk, call$tool)$secret_guard)) return(NULL)
+  if (identical(ctx$mode(), "yolo") || !isTRUE(risk_norm(call$risk, call$tool)$secret_guard)) {
+    return(NULL)
+  }
   hit = rule_match(perm_rules_effective(), call)$allow
   if (any(vapply(hit, function(r) rule_parse(r)$kind == "secret", NA))) return(NULL)
   perm_decision("ask_human", "reads a registered secret or dumps the environment", call)
 }
 
-#' Policy `protect_size`: overwriting an object above gptr.protect_size asks, except in auto
+#' Policy `protect_size`: overwriting an object above gptr.protect_size asks, except in auto and
+#' yolo
 #' @noRd
 perm_policy_protect = function(call, ctx) {
   sizes = risk_norm(call$risk, call$tool)$sizes
   big = names(which(sizes > perm_safety(ctx, "protect_size")))
-  if (!length(big) || identical(ctx$mode(), "auto")) return(NULL)
+  if (!length(big) || ctx$mode() %in% c("auto", "yolo")) return(NULL)
   perm_decision("ask", paste0("overwrites ", paste(big, collapse = ", "),
                               " (larger than gptr.protect_size)"), call)
 }

@@ -2309,21 +2309,59 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-console-message-stream.R (untee'd and nested controls; user sinks with tee FALSE), -render (prompt and pause in a tool frame; child predicate), -ui (who asks, ask_human, invalid answers), -repl (piped .stdin; 1 oracle), test-agent-dispatch.R, -agent-run (budget), -tool-ask, -tool-r (tee), -subagent-team (API fan-out end to end; fan-out, team, gptr_parallel lines), -gptr-gateway (overlay, loop labels), -copy-gateway (overlay row), -cli-claude (fixture claude-fantext), -subagent-backends, -northstar and fixtures/bench/prefix-baseline.json (fragment text). Evidence: progress/P26.md Task 6.
 
 ## D-189 - P26 Honest object sizes; console-sized agent exports (2026-10-16)
-- Rule: TBD by P26 Task 7.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 7.
+- Rule: one size rule, `env_snap_size()` (NA for environments, functions, external pointers, compact
+  sequences and S7 objects), reused by `dsc_leaf_core()` and `risk_binding_leaf()`: overwrite notes
+  say `size unknown`, protect_size skips NA, checkpoint capture counts NA as 0 bytes.
+- Rule: `workspace_lines()` ranks an unsized value other than a function or environment at the median
+  known size, ties by name (the plan's "by name rather than last"); functions, environments,
+  promises and active bindings stay last, so helpers never hide data.
+- Rule: `eval_parse()` parses under `keep.parse.data = FALSE`; worker results use the refhook pair;
+  a settled idle fan-out child keeps only its values held by name (`subagent_export(clear =)`).
+- Contract-visible: 04 §6.6 gptr_risk, §7.9 eval_r/env_snapshot/workspace_lines, §7.19 worker_main,
+  §9.3 r_performance; 03 §6.4 R4, §6.13, §7.5; `?peter`, `?gptr_agent`, `?gptr_risk`, vignette.
+- Tests: env-snapshot, env-describe, perm-classify, eval-core, subagent-worker, subagent-team,
+  prompt-text, mcp-server (guard). Evidence: progress/P26.md Task 7.
 
 ## D-190 - P26 The yolo permission mode (2026-10-16)
-- Rule: TBD by P26 Task 8.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 8.
+- Rule: `session_modes` ends in `yolo`; every mode list uses it (`pcli_params()` names it at L1). Only the
+  person selects it; projects (against the default when the user's mode is invalid), nested calls and children
+  only tighten. Codex runs workspace-write; its shell edits and deletes in the project ungated, as in auto.
+- Rule: yolo = auto plus control exports and control-path writes, secret reads, no protect_size; `critical_guard`
+  ignores control rows except `options(gptr.*)` (namespace patches and `~/.Rprofile` writes run, accepted risks);
+  secret-to-network flows and deny/ask rules still apply. Any final allow grants the control tokens.
+- Rule (every mode): deleting an `outside` path (`/tmp` too; only `tempdir()` is temp) is level 4; a delete
+  keeps `file_delete` with the control target in `path_class` (plan denies such deletes instead of asking); the
+  edit tool's Delete File is level 4 where `unlink()` of the path is, typed `file_delete` so a control path in
+  the same patch cannot hide it. `<mode name="yolo">` reuses auto's text; a one-time notice on entry.
+- Contract-visible: 03 §6.8.1-6.8.2, §8.3; 04 mode lists, IC-53 items 1/3/6, IC-65, IC-78; 05 P11, P20;
+  `?peter`, `?gptr_agent`, `?gptr_security`; configuration, interactive-console, execution-model vignettes.
+- Tests: perm-gate, perm-classify, perm-plan, tool-namespace, session-object, console-*, prompt-context,
+  gptr-config, subagent-*, cli-*, ext-*, injection-e2e. Evidence: progress/P26.md Task 8.
 
 ## D-191 - P26 Codex stdio relay; CLI routes serve the session's tools; model references (2026-10-16)
-- Rule: TBD by P26 Task 9.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 9.
+- Rule: Codex always reaches gptr through `inst/gptr/mcp_relay.R` (base R): each line passes a fresh 0700 mailbox
+  (`req`/`resp` by rename) to a reactor task of the run that answers through `pcli_mcp()`, shared with the claude
+  route (FIFO, D-104 refusals). No socket, token or Suggests; gone: the files-only fallback, `mcp.serve_ensure`,
+  CLI tokens, the served-run mark, `reactor_allow_runs()` and the `-32002` busy rule. `gptr_mcp_serve()` unchanged.
+- Rule: both CLI routes are served and validated against the session's frozen tool array (four defaults before a
+  freeze); a live run's `tool_call` hooks run first. `adp_tools_on()` gives one notice per model whose tools are
+  dropped (IC-74 unchanged). A registered provider alone is its first model in `model_match()` (before fuzzy),
+  alias names normalise like ids, `/model` checks before the first prompt; alias `codex-cli`.
+- Contract-visible: 03 §1.3, §2.3, §6.1, §6.14, §8.3, §8.4, §9.2, §10.4, §12.4; 04 §3.2, §6.3, §7.0, §7.18, §8.2,
+  §8.5, IC-19, IC-57, IC-58, IC-65, IC-79; 05 P18, P20; P19, P20 notes; `?gptr_mcp_serve`, `?gptr_options`;
+  language-models vignette; layering edges console -> `model_canonical()`, mcp -> `tool_call_hook()`.
+- Tests: cli-*, mcp-*, http-reactor, catalog-models, console-commands, provider-openai-completions, aaa-state.
 
 ## D-192 - P26 Codex progress and claude-cli tool calls while they run (2026-10-16)
-- Rule: TBD by P26 Task 10.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 10.
+- Rule: `run_on_event()` passes a provider's informational `tool_execution_start`/`_end` to the session's hooks (the
+  plan's "as today" was wrong: the run dropped them); Codex marks them `informational = TRUE` and `ev_track()` skips
+  them, since its steps run outside R. `mcp_serve_call()` reports a call served in a live run outside a tool call (both
+  CLI routes; an MCP client during a run) under its gate's call id `mcp_<id>`, the end with the result's `content`,
+  `details` (served r adds `objects`, `plots`, `error`) and execution time; Codex's `mcp_tool_call` items for gptr are
+  skipped. Gate unchanged; IC-53's guard, grant expiry and control tokens cover the served calls as loop calls.
+- Rule: on a CLI route (model `type = "cli"`) verbosity 2 prints each thinking block's first line dim, without a bold
+  title's `**`, once its line end or the width completes it, after clearing the waiting row, whose clock runs on; Codex
+  ends a reasoning item with a line end. Other routes unchanged. builtin:cli's `agent_start` hook probes the CLI first.
+- Open: Codex token streaming needs the app-server driver (v1.x); the row after a tool line is Task 4's.
+- Contract-visible: 03 §1.3, §8.3; 04 §8.5, §10.4; P20 note; vignette. Out of lane: agent-run.R, ext-events.R.
+- Tests: console-render, cli-claude, cli-codex (`codex-progress.jsonl`), mcp-server. Evidence: progress/P26.md Task 10.

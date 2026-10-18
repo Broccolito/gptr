@@ -6,10 +6,9 @@
 #' @noRd
 subagent_mode_tighten = function(inherited, requested = NULL) {
   if (is.null(requested)) return(inherited)
-  modes = c("plan", "manual", "edits", "auto")
-  check_choice(requested, modes, "mode")
+  check_choice(requested, session_modes, "mode")
   if (is.null(inherited)) return(requested)
-  modes[[min(match(c(inherited, requested), modes))]]
+  session_modes[[min(match(c(inherited, requested), session_modes))]]
 }
 
 #' The limit of one pool: options gptr.subagents.* and settings subagents.* (IC-71)
@@ -424,9 +423,11 @@ subagent_record_end = function(parent, h) {
 
 #' Move a settled idle child's `export =` bindings from its overlay into `target` (architecture
 #' 6.13: on success only, in task order), so each object keeps one reference; a name in `taken`
-#' keeps the earlier value (a notice names the later child). Returns the names exported so far.
+#' keeps the earlier value (a notice names the later child). `clear` (a one-shot fan-out child)
+#' then removes the rest but its values held by name, so nothing it returns keeps its scratch
+#' objects alive. Returns the names exported so far.
 #' @noRd
-subagent_export = function(h, target, taken = character()) {
+subagent_export = function(h, target, taken = character(), clear = FALSE) {
   d = session_data(h$session)
   home = session_home(h$session)
   if (!identical(d$status, "idle") || !is.environment(home)) return(taken)
@@ -439,6 +440,10 @@ subagent_export = function(h, target, taken = character()) {
     assign(nm, get(nm, envir = home, inherits = FALSE), envir = target)
     rm(list = nm, envir = home)
     taken = c(taken, nm)
+  }
+  if (clear) {
+    held = vapply(d$values, function(v) if (identical(v$mode, "name")) v$name else "", "")
+    rm(list = setdiff(names(home), held), envir = home)
   }
   taken
 }
