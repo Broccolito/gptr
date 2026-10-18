@@ -2757,3 +2757,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `default`; a full id and another CLI adapter's `default` unchanged), test-catalog-models.R
   (`versa/gpt-9-nonexistent`, `versa/`, `versa/gpt-9:high` suggest the three versa models). Evidence:
   progress/P26.md Task 35.
+
+## D-227 - P26 Live smoke: tokens in count cache writes; a rewind rebases workspace_changes (2026-10-18)
+- Rule: `format_usage()` (`/cost`, the `gptr_usage()` and `print()` footers) counts input, cache reads and cache
+  writes as tokens in, as `usage_prompt_tokens()` does. It left out cache writes, so a request whose prompt was
+  written to the cache read `2 tokens in` (a fresh claude-cli child) or `3 tokens in` (a Versa sub-agent).
+- Rule: builtin:workspace handles `session_tree`. After a rewind that moves the conversation (`restore` `all` or
+  `conversation`), the next `<workspace_changes>` is measured from the restored workspace, and the expressions the
+  user ran are still reported. Before, `/undo` sent `- undo_probe` for an object the rewound conversation never
+  saw, and the claude-cli agent read it as a listed object. A workspace-only rewind keeps the conversation, so its
+  removals are still reported. An object the user changed between the undone turn and the rewind is reported only
+  through `user ran:`.
+- Contract-visible: `/cost` and usage footers; `<workspace_changes>` after a rewind (04 section 7.9).
+- Tests: test-console-commands.R (`/cost` with cache writes), test-ckpt-rewind.R (no `<workspace_changes>` after an
+  undo; `- probe` after a workspace-only rewind), test-env-snapshot.R (the hooks). Evidence: progress/P26.md
+  Live smoke.
