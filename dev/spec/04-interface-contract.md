@@ -3151,8 +3151,8 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   `{"type":"control_response","response":{"subtype":"success","request_id":…,"response":{"mcp_response":…}}}`;
   `can_use_tool` (not sent for the pre-allowed `mcp__gptr__*` tools) -> `opts$gate(call)` answered
   `{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":…}`; unknown subtypes -> an error
-  response. A `tools/call` served in a live run, outside a tool call (either route, or an MCP client during a run),
-  is reported by `mcp_serve_call()` as `tool_execution_start`/`_end` under its gate's call id `mcp_<id>`, the end
+  response. A `tools/call` served in a live run that has no tool of its own on the stack (either route, also a nested
+  CLI run inside its parent's tool, or an MCP client during a run), is reported by `mcp_serve_call()` as `tool_execution_start`/`_end` under its gate's call id `mcp_<id>`, the end
   with the result's `content`, `details` and execution time; its approval's control tokens end with it [D-192]. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with `gptr_error_billing`. `result` lines end the turn (usage
   from `usage` and `total_cost_usd` as an estimate, route `plan-cli`); `rate_limit_event` updates the provider's
   plan status. Interrupt: `{"type":"control_request","request_id":…,"request":{"subtype":"interrupt"}}`, then
@@ -5167,8 +5167,9 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
 - `mcp_dispatch_local()` serves and validates the session's frozen tool declarations (the array an API provider
   gets: the preset, `tools.enable`/`tools.disable`, `ask` when a person can answer, extension and MCP-client
   direct tools, session-scoped specs; `r` with `mcp_r_schema`), and the four defaults only before a freeze. A
-  served call made while a run is live runs that run's `tool_call` hooks (P06's `tool_call_hook`), then the gate.
-  A long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a
+  served call made while a run is live runs that run's `tool_call` hooks (P06's `tool_call_hook`), then the gate;
+  a tool other than `r` then runs as the agent loop runs it (`tool_run()`: its record's source, the result check),
+  in the run's tool frame (`tool_execute_frame()`) when the call is reported (D-192). A long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a
   refreeze is refused at `tools/call`.
 - The OpenAI-compatible, Responses and Google adapters decide tools with one helper (`adp_tools_on`): a model
   whose `tool_call` is `FALSE` gets no tools (IC-74 unchanged), and when that drops a non-empty array gptr gives one
@@ -5176,6 +5177,6 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
 - Model references: `model_match()` applies IC-19's provider-alone rule; `/model` before the first prompt checks
   the reference with `model_canonical()` (a registered router name passes, as at the first prompt) and keeps the
   text as typed; `codex-cli` is an alias of `codex`. The two
-  console and MCP edges (`cmd_model()` -> `model_canonical()`, `mcp_serve_call()` -> `tool_call_hook`) are
-  contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
+  console and MCP edges (`cmd_model()` -> `model_canonical()`, `mcp_serve_exec()` -> `tool_call_hook`,
+  `tool_run`, `tool_execute_frame`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).

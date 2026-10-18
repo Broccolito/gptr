@@ -182,15 +182,15 @@ mcp_serve_gate = function(call, run, ctx, sid = NULL) {
   mcp_gate_idle(call, ctx, sid)
 }
 
-#' Run one served tool call (mcp_serve_exec()). In a live run, outside a tool call on the stack
-#' (the CLI routes, an MCP client during a run), it is reported as `tool_execution_start`/`_end`
-#' under its gate's call id, the end with the result's `content` and `details` and the execution
-#' time, and its approval's control tokens end with it, as for a call of the agent loop (IC-53,
-#' D-192)
+#' Run one served tool call (mcp_serve_exec()). In a live run without a tool of its own on the
+#' stack (the CLI routes, also a nested CLI run inside its parent's tool; an MCP client during a
+#' run), it is reported as `tool_execution_start`/`_end` under its gate's call id, the end with
+#' the result's `content` and `details` and the execution time, and its approval's control tokens
+#' end with it, as for a call of the agent loop (IC-53, D-192)
 #' @noRd
 mcp_serve_call = function(target, name, args, id, schema) {
   run = session_live(target$session)$run
-  if (is.null(run) || !is.null(run_current())) {
+  if (is.null(run) || identical(run_current(), run)) {
     return(mcp_serve_exec(target, name, args, id, schema))
   }
   st = new.env(parent = emptyenv())
@@ -209,8 +209,9 @@ mcp_serve_call = function(target, name, args, id, schema) {
 }
 
 #' Run one served tool call, validated against its served `schema`, through the tool_call hooks of
-#' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result. `st$t0` marks the start of
-#' its execution.
+#' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result. A tool other than `r` runs
+#' as the agent loop runs it (tool_run(): its record's source, the result check), a reported one
+#' (`st`, which marks the start of its execution) in the run's tool frame (tool_execute_frame()).
 #' @noRd
 mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   s = target$session
@@ -257,9 +258,9 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   if (is.list(d$input)) input = d$input
   if (!is.null(st)) st$t0 = reactor_now()
   if (identical(name, "r")) return(mcp_serve_r(input, env, run, s))
-  tryCatch(as_tool_result(spec$execute(input, ctx)), error = function(e) {
-    gptr_tool_result(paste("Error:", conditionMessage(e)), is_error = TRUE)
-  })
+  if (is.null(st)) return(tool_run(spec, input, ctx, name))
+  call$input = input
+  tool_execute_frame(run, call, ctx)
 }
 
 #' Evaluate served R code in `env` through the eval.r service (the evaluator kind, IC-69).

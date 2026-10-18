@@ -208,6 +208,69 @@ test_that("IC-53 covers a call served to a CLI route: control guard and one-shot
   expect_identical(seen$out, c("refused", "passed", "refused", "refused", "0"))
 })
 
+test_that("a nested run's served calls are its tool calls; a yolo control export runs (D-192)", {
+  seen = new.env()
+  seen$events = list()
+  keep = function(event, ctx) {
+    seen$events[[length(seen$events) + 1L]] = event
+    NULL
+  }
+  # the child pumps inside the parent's r tool, as a CLI sub-agent or a nested CLI peter() does
+  offs = list(
+    gptr_register(gptr_hook("before_request", function(event, ctx) {
+      if (!is.null(run_current()) && is.null(seen$kid)) {
+        seen$kid = event$run
+        code = paste0("kid_answer = 6 * 7; off_hook = gptr_register(gptr_hook('agent_end', ",
+                      "function(event, ctx) NULL)); 'registered'")
+        seen$out = mcp_dispatch_local(r_call(code, id = 9L), ctx$session)$result
+      }
+      NULL
+    })),
+    gptr_register(gptr_hook("tool_execution_start", keep)),
+    gptr_register(gptr_hook("tool_execution_end", keep)))
+  withr::defer(for (off in offs) off())
+  local_fake_provider(list("kid ok"), name = "kid")
+  outer = local_fake_provider(list(fake_tool("r", code = paste0(
+    "k = peter('Help.', model = 'kid', envir = w, mode = 'yolo')")), "done"), name = "outer")
+  e = new.env()
+  e$w = new.env()
+  withr::defer(if (is.function(e$w$off_hook)) e$w$off_hook())
+  peter("go", model = outer, envir = e, mode = "yolo")
+  expect_identical(e$w$kid_answer, 42)
+  expect_match(seen$out$content[[1L]]$text, "registered", fixed = TRUE)
+  expect_false(seen$out$isError)
+  ev = Filter(function(x) identical(x$tool_call_id, "mcp_9"), seen$events)
+  expect_identical(vapply(ev, function(x) x$type, ""),
+                   c("tool_execution_start", "tool_execution_end"))
+  expect_identical(ev[[1L]]$run, seen$kid)
+})
+
+test_that("a served tool runs as the loop runs it: frame, source and its state (IC-79)", {
+  counter = gptr_tool("counter", "Counts.",
+                      parameters = list(type = "object", properties = json_obj()),
+                      annotations = list(read_only = TRUE),
+                      execute = function(input, ctx) {
+                        st = ctx$state()
+                        st$n = (st$n %||% 0) + 1
+                        paste0("n=", st$n, " src=", toString(ctx_source(ctx)),
+                               " run=", !is.null(run_current()))
+                      })
+  seen = new.env()
+  off = gptr_register(gptr_hook("before_request", function(event, ctx) {
+    if (is.null(seen$out)) {
+      msg = mcp_test_msg("tools/call", list(name = "counter", arguments = json_obj()), id = 7L)
+      seen$out = mcp_dispatch_local(msg, ctx$session)$result$content[[1L]]$text
+    }
+    NULL
+  }))
+  withr::defer(off())
+  fake = local_fake_provider(list(fake_tool("counter"), "ok"), name = "counting")
+  peter("hello", model = fake, envir = new.env(), mode = "auto", tools = list(counter))
+  expect_identical(seen$out, "n=1 src=session run=TRUE")
+  expect_identical(fake_requests(fake)[[2L]]$last_results[[1L]]$content[[1L]]$text,
+                   "n=2 src=session run=TRUE")
+})
+
 test_that("a fork's served calls evaluate in its overlay; a plan-mode parent stays in plan", {
   x = local_served_session("auto")
   f = gptr_fork(x$session)
