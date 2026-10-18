@@ -380,6 +380,25 @@ test_that("turn.completed usage Codex left out stays unknown, and its cost is un
   }
 })
 
+test_that("a resumed thread's turn.completed counts its increase; a new thread counts whole", {
+  opts = stub_opts()
+  exec = function(thread, input, cached, output) {
+    n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+    push_obj(n, list(type = "thread.started", thread_id = thread))
+    push_obj(n, list(type = "turn.completed",
+                     usage = list(input_tokens = input, cached_input_tokens = cached,
+                                  cache_write_input_tokens = 0L, output_tokens = output,
+                                  reasoning_output_tokens = 0L)))
+    u = n$message()$usage
+    c(u$input, u$cache_read, u$cache_write_5m, u$output, u$reasoning)
+  }
+  expect_equal(exec("thread-a", 17106L, 12160L, 5L), c(4946, 12160, 0, 5, 0))
+  expect_equal(exec("thread-a", 34231L, 29056L, 10L), c(229, 16896, 0, 5, 0))
+  expect_equal(exec("thread-b", 17106L, 12160L, 5L), c(4946, 12160, 0, 5, 0))
+  # a running total that went down gives an unknown increase, never a negative count (IC-74)
+  expect_equal(exec("thread-b", 17106L, 12000L, 9L), c(NA, NA, 0, 4, 0))
+})
+
 test_that("a turn budget that is not finite or very large still gives a whole-number cap", {
   expect_identical(pcli_codex_cap(list(turns = Inf)), 50L)
   expect_identical(pcli_codex_cap(list(turns = 3e9)), .Machine$integer.max)

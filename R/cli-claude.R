@@ -1,6 +1,7 @@
 # The cli-claude adapter (P20): the user's own claude CLI in stream-json mode, one long-lived
-# child per session (per run while it carries budget flags), gptr's tools through the
-# in-process `sdk` MCP server over the control protocol (architecture 8.3; contract 8.5,
+# child per session (per run while it carries budget flags, as under the default cost budget;
+# a new child resumes the CLI session), gptr's tools through the in-process `sdk` MCP server
+# over the control protocol (architecture 8.3; contract 8.5,
 # IC-65). L1: besides L0 helpers, the shared helpers of cli-common.R and P05's usage_new() it
 # calls only the injected opts$send, opts$gate and opts$mcp_dispatch and P12's
 # anthropic_normaliser() (IC-33).
@@ -115,11 +116,12 @@ pcli_claude_budgeted = function(flags) {
 #' 8.5)
 #'
 #' A child is reused for the same model while it lives, but a child with budget flags only
-#' within the run that started it: the flags are fixed at launch and the CLI counts cost for its
-#' whole process, while gptr's budgets restart with every top-level call (IC-66). A replaced
-#' child is retired here through pcli_stop_child() (stdin closed, then P05's
-#' stream_process_kill()), and the new one resumes the CLI session. A reused child or a resumed
-#' session gets the turns it has not seen (another model may have answered them,
+#' within the run that started it: the flags are fixed at launch and `--max-budget-usd` counts
+#' the cost of the whole process, while gptr's budgets restart with every top-level call
+#' (IC-66). A replaced child is retired here through pcli_stop_child() (stdin closed, then P05's
+#' stream_process_kill()), and the new one resumes the CLI session, whose reported
+#' `total_cost_usd` goes on from the session's running total (D-200). A reused child or a
+#' resumed session gets the turns it has not seen (another model may have answered them,
 #' pcli_unseen()); a fresh child gets the whole earlier conversation.
 #'
 #' The turn's lines are written by P05's transport with write_all(); a fresh child's first user
@@ -156,8 +158,8 @@ pcli_claude_build = function(model, context, opts) {
     state$claude_model = model_id
     state$claude_run = opts[["run"]]
     state$claude_flags = flags
-    # the new process's own cumulative total_cost_usd starts here (Task 6 records increases)
-    state$claude_cost_seen = 0
+    # a fresh CLI session's running total_cost_usd starts here; a resumed one goes on (D-200)
+    if (is.null(resume)) state$claude_cost_seen = 0
     state$n_req = 0L
     send = list(pcli_control_request(state, list(subtype = "initialize", hooks = NULL)))
   }
@@ -323,11 +325,12 @@ pcli_claude_system = function(obj, s) {
   invisible(NULL)
 }
 
-#' The plan-cost estimate of one turn from a `result` line (contract 8.5). `total_cost_usd`
-#' covers the whole CLI process (07 3.14: it equals `modelUsage.costUSD`, which also counts the
-#' CLI's auxiliary calls), so the turn costs its increase since the child's previous result;
-#' a smaller value (a new process) counts whole. NULL when the line carries no cost or a value
-#' that is not one finite nonnegative number (unknown, IC-74; the child's baseline is kept).
+#' The plan-cost estimate of one turn from a `result` line (contract 8.5). `total_cost_usd` is
+#' the running total of the CLI session, across the children that resume it (07 3.14: it
+#' equals `modelUsage.costUSD`, which also counts the CLI's auxiliary calls; D-200), so the turn
+#' costs its increase since the session's previous result; a smaller value (a session the CLI
+#' could not resume) counts whole. NULL when the line carries no cost or a value that is not
+#' one finite nonnegative number (unknown, IC-74; the baseline is kept).
 #' @noRd
 pcli_claude_cost = function(obj, state = NULL) {
   total = pcli_num(obj[["total_cost_usd"]])

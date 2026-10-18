@@ -345,6 +345,8 @@ test_that("a token budget stops the run before the next request with status budg
   expect_s3_class(cnd, "gptr_error_budget_tokens")
   expect_s3_class(cnd, "gptr_error_budget")
   expect_identical(cnd$kind, "tokens")
+  expect_identical(conditionMessage(cnd),
+                   "the tokens budget of this call (1.0k) is reached (used 1.0k)")
   types = vapply(ev(s), function(e) e$type, "")
   expect_identical(types, c("budget_near", "budget_exceeded"))
   d = session_data(s)

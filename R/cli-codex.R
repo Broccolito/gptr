@@ -309,14 +309,27 @@ pcli_codex_why = function(obj) {
 #' Usage of turn.completed: input_tokens includes the cached ones (OpenAI semantics, 08 3.9), so
 #' the record keeps the uncached part as `input`
 #'
+#' The counts are the thread's running totals, also in `codex exec resume`: with the adapter
+#' `state`, an exec on the thread of the previous turn.completed (`codex_seen`) records the
+#' increase of each count, an exec on another thread the whole (D-200).
 #' IC-74 (07-local-ollama.md section 5; D-015 point 3): Codex reports no cost, so the cost is
 #' unknown (NA), never a zero; a count Codex left out or reported malformed is unknown, and so is
-#' the uncached input when one of its parts is unknown or the parts exceed the total. A reported
-#' cache-write count is all 5-minute writes (no 1-hour writes, as a bare
-#' `cache_creation_input_tokens` of the claude CLI); without one both are unknown (D-106).
+#' an increase below zero and the uncached input when one of its parts is unknown or the parts
+#' exceed the total. A reported cache-write count is all 5-minute writes (no 1-hour writes, as a
+#' bare `cache_creation_input_tokens` of the claude CLI); without one both are unknown (D-106).
 #' @noRd
-pcli_codex_usage = function(u) {
+pcli_codex_usage = function(u, state = NULL) {
   if (!is.list(u)) u = list()
+  if (is.environment(state)) {
+    seen = state$codex_seen
+    state$codex_seen = list(thread = state$codex_thread, usage = u)
+    if (!is.null(seen$thread) && identical(seen$thread, state$codex_thread)) {
+      keys = c("input_tokens", "cached_input_tokens", "cache_write_input_tokens",
+               "output_tokens", "reasoning_output_tokens")
+      u = lapply(stats::setNames(nm = keys),
+                 function(k) pcli_num(u[[k]]) - pcli_num(seen$usage[[k]]))
+    }
+  }
   cached = pcli_num(u[["cached_input_tokens"]])
   write = pcli_num(u[["cache_write_input_tokens"]])
   input = pcli_num(u[["input_tokens"]]) - cached - write
@@ -507,7 +520,7 @@ pcli_codex_event = function(obj, s) {
     pcli_start(s)
     pcli_codex_item(s, item)
   } else if (identical(type, "turn.completed")) {
-    usage = pcli_codex_usage(obj[["usage"]])
+    usage = pcli_codex_usage(obj[["usage"]], s$state)
     pcli_codex_end(s, function() pcli_done(s, usage, "stop", "completed"))
   } else if (identical(type, "turn.failed")) {
     why = pcli_codex_why(obj) %||% s$last_error %||% "unknown error"

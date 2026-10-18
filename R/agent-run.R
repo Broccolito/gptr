@@ -1392,6 +1392,13 @@ run_compact_resume = function(run) {
   run_request(run, check_compact = FALSE)
 }
 
+#' A budget amount as the run's messages show it: tokens as format_count() (2.0M), a cost as
+#' format_cost(), turns as they are
+#' @noRd
+run_budget_amount = function(kind, x) {
+  switch(kind, tokens = format_count(x), cost = format_cost(x), format(x))
+}
+
 #' Ask to extend a reached budget by the same amount (ask_human: the run's UI only)
 #' @noRd
 run_budget_extend = function(run, hit) {
@@ -1400,7 +1407,8 @@ run_budget_extend = function(run, hit) {
   if (is.null(ui) || !isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) return(FALSE)
   who = agent_label(run)
   title = paste0(if (!identical(who, "main")) paste0("sub-agent ", who, ": "), "The ", hit$kind,
-                 " budget of this call (", format(hit$budget), ") is reached.")
+                 " budget of this call (", run_budget_amount(hit$kind, hit$budget),
+                 ") is reached.")
   ans = tryCatch(ui$select(title, c("Extend it by the same amount", "Stop the run"), default = 2L),
                  error = function(e) NA_integer_)
   if (!identical(suppressWarnings(as.integer(ans)), 1L)) return(FALSE)
@@ -1424,8 +1432,8 @@ run_stop_budget = function(run, hit) {
                                                      used = hit$used)))
   run_emit(run, "budget_exceeded", kind = hit$kind, budget = hit$budget, used = hit$used)
   run$condition = gptr_condition(
-    paste0("the ", hit$kind, " budget of this call (", format(hit$budget), ") is reached (used ",
-           format(hit$used), ")"),
+    paste0("the ", hit$kind, " budget of this call (", run_budget_amount(hit$kind, hit$budget),
+           ") is reached (used ", run_budget_amount(hit$kind, hit$used), ")"),
     c(paste0("budget_", hit$kind), "budget"), "error",
     list(kind = hit$kind, budget = hit$budget, used = hit$used, session = d$id))
   run_settle(run, "budget")

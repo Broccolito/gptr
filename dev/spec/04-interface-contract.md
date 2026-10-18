@@ -3154,7 +3154,8 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   response. A `tools/call` served in a live run that has no tool of its own on the stack (either route, also a nested
   CLI run inside its parent's tool, or an MCP client during a run), is reported by `mcp_serve_call()` as `tool_execution_start`/`_end` under its gate's call id `mcp_<id>`, the end
   with the result's `content`, `details` and execution time; its approval's control tokens end with it [D-192]. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with `gptr_error_billing`. `result` lines end the turn (usage
-  from `usage` and `total_cost_usd` as an estimate, route `plan-cli`); `rate_limit_event` updates the provider's
+  from `usage`, route `plan-cli`; the cost estimate is the increase of `total_cost_usd`, the running total of the CLI
+  session, which a resumed child goes on from; a smaller total counts whole [D-200]); `rate_limit_event` updates the provider's
   plan status. Interrupt: `{"type":"control_request","request_id":…,"request":{"subtype":"interrupt"}}`, then
   `kill_all()` after the grace period [07 §3.9-3.10].
 - **`cli-codex`** (provider `codex`, aliases `codex`, `codex-cli`). One `codex exec --json --ignore-user-config
@@ -3168,7 +3169,10 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   (`agent_message` -> text, `reasoning` -> thinking, `mcp_tool_call`/`command_execution` -> informational
   `tool_execution_*` events with `informational = TRUE`, which IC-53 does not track since they run outside R,
   except gptr's own `mcp_tool_call` items, which `mcp_serve_call()` reports; a
-  reasoning item's text ends with a line end), `turn.completed{usage}`, `turn.failed{error}`, `error` [08 §2.E]; gptr counts turns
+  reasoning item's text ends with a line end), `turn.completed{usage}` (the thread's
+  running totals, also on `exec resume`: an exec on the thread of the previous `turn.completed` records each count's
+  increase, an exec on a new thread the whole; an increase below zero is unknown [D-200]), `turn.failed{error}`,
+  `error` [08 §2.E]; gptr counts turns
   and cancels at the cap, with `gptr.cli_turn_timeout` per exec. Sandbox mapping (IC-65): `plan`, `manual` and
   `edits` -> `read-only` (file changes go through gptr's gated `write`/`edit` over MCP); `auto` and `yolo` ->
   `workspace-write`, with control files hashed before and a files-checkpointer walk after each exec; native

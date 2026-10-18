@@ -59,6 +59,39 @@ test_that("a successful result remains a successful turn", {
   expect_identical(msg_text(ev$message), "Synthetic answer.")
 })
 
+test_that("a resumed CLI session's total_cost_usd costs its increase; a fresh one counts whole", {
+  local_fake_cli_path("claude", "text")
+  local_mocked_bindings(pcli_probe = function(path) list(bare_optout = NULL),
+                        pcli_notice = function(cli) invisible(NULL),
+                        pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
+                          state$process = NULL
+                          invisible(TRUE)
+                        })
+  ctx = list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Hello")),
+             params = list(cli_budget = list(cost = 5)))
+  opts = stub_opts(run = "r0000000001")
+  build = function(run) {
+    opts$run = run
+    "--resume" %in% pcli_claude_build(stub_model("claude"), ctx, opts)$start$args
+  }
+  cost = function(total) {
+    n = local_normaliser(pcli_claude_parse, stub_model("claude"), opts)
+    push_obj(n, list(type = "result", subtype = "success", result = "ok",
+                     total_cost_usd = total))
+    n$message()$usage$cost$total
+  }
+  expect_false(build("r0000000001"))
+  opts$state$claude_session = "11111111-1111-4111-8111-111111111111"
+  expect_equal(cost(0.20), 0.20)
+  opts$state$process = stub_process()
+  expect_true(build("r0000000002"))
+  expect_equal(cost(0.30), 0.10)
+  opts$state$claude_session = NULL
+  expect_false(build("r0000000003"))
+  expect_equal(cost(0.45), 0.45)
+  pcli_untrack("s0123456789")
+})
+
 
 # Real fake-CLI children emit a terminal result, then await another stdin request.
 # Capture ownership at message_end, before the built-in agent_end retirement hook.

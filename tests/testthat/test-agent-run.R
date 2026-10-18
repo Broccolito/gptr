@@ -148,8 +148,17 @@ test_that("the budget question of a sub-agent says who asks (D-188)", {
     expect_false(run_budget_extend(test_run(s, list(agent = agent)),
                                    list(kind = "cost", budget = 1)))
   }
-  expect_identical(st$log$prompt, c("sub-agent alpha: The cost budget of this call (1) is reached.",
-                                    "The cost budget of this call (1) is reached."))
+  expect_identical(st$log$prompt,
+                   c("sub-agent alpha: The cost budget of this call ($1.0000) is reached.",
+                     "The cost budget of this call ($1.0000) is reached."))
+})
+
+test_that("a reached token budget reads as a token count, never 2e+06", {
+  st = local_scripted_ui(list(2L))
+  s = test_session()
+  expect_false(run_budget_extend(test_run(s, list(agent = "main")),
+                                 list(kind = "tokens", budget = 2e6)))
+  expect_identical(st$log$prompt, "The tokens budget of this call (2.0M) is reached.")
 })
 
 # ---------------------------------------------------------------- report 02 section 5.3 (26 checks)

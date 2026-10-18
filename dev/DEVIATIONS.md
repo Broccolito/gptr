@@ -2375,3 +2375,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: TBD by P26 Task 11.
 - Contract-visible: TBD.
 - Tests: TBD. Evidence: progress/P26.md Task 11.
+
+## D-200 - P26 CLI usage is the increase of the CLIs' running totals (2026-10-18)
+- Rule: claude-cli's `total_cost_usd` is the CLI session's running total, also after `--resume` (seurat-claude: each
+  run's first result was the previous total plus its cost); the baseline resets only for a child that starts a fresh
+  CLI session, a turn costs the increase, a smaller total (a session not resumed) counts whole (04 §8.5).
+- Rule: Codex's `turn.completed` usage is the thread's running total, also on `exec resume` (probe: 17106/12160/5, then
+  34231/29056/10); an exec on the thread of the previous `turn.completed` records each count's increase, one on a new
+  thread the whole; an increase below zero or of an unknown count is unknown (IC-74).
+- Rule: budget question and stop message print tokens with `format_count()` (`2.0M`), cost with `format_cost()`.
+- `--max-budget-usd` unchanged, not probed live (no real CLI in this lane): in kdps-claude captures/32 a resumed
+  session already at $6.20 ran a turn of several tool calls under `--max-budget-usd 5` unstopped, so the flag counts
+  the process's own spend. Open: a direct live probe.
+- Contract-visible: 04 §8.5 (both routes); 03 §5.5, §8.3; the budget message text.
+- Tests: cli-claude-result, cli-codex, agent-run, session-budget. Evidence: progress/P26.md Task 12.

@@ -1064,7 +1064,8 @@ cache_write_1h reasoning images cost tier stop_reason started seconds estimated 
 `route` is `api`, `plan-cli`, `system-one` or `emulated`. `estimated` is TRUE when the provider reported
 nothing (aborted before usage); the calibrated estimator fills the row. Cost uses dated price tiers (1 h cache
 writes at 2x input, 5 min at 1.25x, reads at the model's own rate, 0.025-0.1x) [07 §1, G2 fact-check]; CLI plan
-runs record `total_cost_usd` as an estimate. System 1 calls outside a session append to a process accounting
+runs record the increase of the CLI's running `total_cost_usd` as an estimate, and Codex usage is the increase of the
+thread's running totals [D-200]. System 1 calls outside a session append to a process accounting
 log (append-only, not run state). The **token ledger** (`gptr_usage(s, detail = TRUE)`, `/context`) splits each
 request into components: T0 sections, T1 sections, tools array, project block, environment, workspace, attached,
 transcript, tool results, images, marking cache reads [P-C §14.6, G2 est_* fields].
@@ -2306,8 +2307,8 @@ evaluates R in the live session; because `--allowedTools mcp__gptr__*` pre-allow
 `control_request` interrupt, then `kill_all()`. gptr's own tool calls are reported where they run (`mcp_serve_call()`)
 as `tool_execution_*` events, the end with the result's `content` and `details`, so the console shows them as tool
 and result lines while they run and IC-53 tracks them as calls of the agent loop; the gate is unchanged [D-192]. Stream events reuse the Anthropic normaliser; continuity uses
-the CLI's session id (`--resume` with the same system-prompt file); usage records `total_cost_usd` as a plan
-estimate and the rate-limit event as plan status. Concurrency: one `claude-cli` child per session by default.
+the CLI's session id (`--resume` with the same system-prompt file); usage records the increase of `total_cost_usd`, the
+CLI session's running total that a resumed child goes on from, as a plan estimate [D-200], and the rate-limit event as plan status. Concurrency: one `claude-cli` child per session by default.
 The provider id avoids the Claude Code product name; `claude_code` is only an alias; the maintainer asks
 Anthropic before advertising the route (policy status UNCERTAIN) [07, J-cran].
 
