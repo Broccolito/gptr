@@ -2406,3 +2406,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   console vignette.
 - Tests: test-console-typing.R (mocked stty around console_send(), gptr_readline(), pty child). Evidence:
   progress/P26.md Task 21.
+
+## D-222 - P26 The approval prompt shows at most five flagged calls, one per line; [a] needs a rule (2026-10-18)
+- Rule: amends IC-53 item 8 and D-187 ("lists every flagged call", joined by `; `): the one-line prompt shows the
+  flagged calls one per line, highest level first, each line (`[level category] call`) cut to the console width,
+  at most 5, then `(+N more; ? shows all)`; the detail view lists them all, highest level first. A request path
+  that is absolute shows normalised, relative to the project inside it. `[a]`/`[p]` are offered only when the
+  request carries a `suggested_rule`; else `a`/`p` say `no rule covers these calls` (IC-77 item 3), so an
+  object overwrite (no rule) no longer offers `(a rule for these calls)` and records nothing. A risk without a
+  label shows `(level N)`, not `(level N: )`.
+- Triage correction: normalising the request's risk in `perm_decide()` (`risk_norm()`) breaks the layering
+  (L2 `agent-dispatch.R` may not call L4 `perm-classify.R`; test-arch-layers), so a tool's own risk record still
+  reaches the UI without `label` (04 section 7.11 says `<gptr_risk>`); the `reason` line names the label.
+- Contract-visible: IC-53 item 8, IC-77 item 3, 04 `builtin_ui` row, 03 section 6.8.3; console vignette.
+- Tests: test-console-ui.R (40-column fit and cap, project-relative path, no empty label, no [a] without a rule),
+  test-console-repl.R (stdin prompt). Evidence: progress/P26.md Task 24.

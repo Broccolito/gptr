@@ -49,7 +49,7 @@ test_that("a console select outside a run opens its own block in the margin (D-1
   expect_identical(out$shown, c("", "  Rewind to", "", "  1: a", "  2: b", ""))
 })
 
-test_that("the one-line prompt shows the first line, +N more lines and every flagged call", {
+test_that("the one-line prompt shows the first line, +N more lines and the flagged calls", {
   root = local_project()
   # R's parser refuses bidi controls inside string literals in UTF-8 locales, so the payload
   # sits in comments, where it parses everywhere
@@ -57,8 +57,8 @@ test_that("the one-line prompt shows the first line, +N more lines and every fla
                           "# \u001b[2J clear\nunlink('data', recursive = TRUE)"))
   lines = ui_permission_lines(req)
   expect_identical(lines[1L], "  r  note = 1 # <U+001B>[2J<U+202E>  (+3 more lines)")
-  expect_match(lines[2L], "write.csv(df, \"out.csv\") [2 file_write]", fixed = TRUE)
-  expect_match(lines[2L], "unlink(\"data\", recursive = TRUE) [3 file_delete]", fixed = TRUE)
+  expect_identical(lines[2:3], c("     flagged: [3 file_delete] unlink(\"data\", recursive = TRUE)",
+                                 "              [2 file_write] write.csv(df, \"out.csv\")"))
   expect_false(any(grepl("[\u0001-\u0008\u000b-\u001f\u007f\u202e]", lines, perl = TRUE)))
   detail = ui_permission_detail(req)
   expect_true(any(grepl("<U+001B>[2J clear", detail, fixed = TRUE)))
@@ -76,6 +76,45 @@ test_that("the prompt's first line fits the console, keeping +N more lines (D-18
   withr::local_options(cli.dynamic = TRUE)
   local_gptr_options(verbose = 2L)
   expect_identical(nchar(ui_permission_lines(req)[1L]), 38L)
+})
+
+test_that("flagged calls fit one per line, highest level first, at most 5 (#33)", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  root = local_project()
+  code = c(sprintf("writeLines('%s', 'f%d.txt')", strrep("x", 30L), 1:7), "unlink('data')")
+  lines = ui_permission_lines(ui_request(paste(code, collapse = "\n")))
+  expect_length(lines, 7L)
+  expect_true(all(nchar(lines) <= 40L))
+  expect_identical(lines[2L], "     flagged: [3 file_delete] unlink(...")
+  expect_identical(lines[3L], "              [2 file_write] writeLin...")
+  expect_identical(lines[7L], "              (+3 more; ? shows all)")
+})
+
+test_that("a path tool's prompt shows the path relative to the project; no empty label (#33)", {
+  root = local_project()
+  # a tool's own risk record, as the dispatcher passes it: no label
+  w = list(tool = "write", input = list(path = file.path(root, "R", "io.R")),
+           risk = list(level = 2L, categories = "write", paths = "R/io.R"))
+  expect_identical(ui_permission_lines(w), "  write  R/io.R")
+  detail = ui_permission_detail(w)
+  expect_identical(detail[1:4], c("  gptr wants to use write (level 2)", "  ```", "  R/io.R",
+                                  "  ```"))
+  expect_match(ui_permission_detail(ui_request("x = 1"))[1L], "(level 1: local)", fixed = TRUE)
+})
+
+test_that("[a]lways is offered only with a suggested rule; a and p say why not (#33)", {
+  root = local_project()
+  e = new.env()
+  e$x = 1
+  req = ui_request("x = 2")
+  req$risk = gptr_risk("x = 2", envir = e)
+  expect_null(rule_suggest(list(name = "r", risk = req$risk)))
+  out = console_try(function() ui_console_permission(req), c("?", "a", "p", "y"))
+  expect_identical(out$result, list(decision = "allow", remember = NULL, feedback = NULL))
+  expect_false(any(grepl("[a] always", out$shown, fixed = TRUE)))
+  expect_identical(sum(out$shown == paste0("  [a]lways is not offered: no rule covers these ",
+                                           "calls; answer y, n or ?.")), 2L)
+  expect_null(ui_answer_norm(list(decision = "allow", remember = "session"), req)$remember)
 })
 
 test_that("the detail view shows the code as a plain fence of at most 40 lines (D-187)", {
@@ -198,7 +237,7 @@ test_that("invalid answers are explained; five end in a refusal the model is tol
   expect_identical(out$result$decision, "allow")
   expect_identical(sum(grepl("[a]lways is not offered: level-4 and control actions",
                              out$shown, fixed = TRUE)), 2L)
-  req = ui_request("write.csv(df, 'out.csv')")
+  req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
   out = console_try(function() ui_console_permission(req), rep("zz", 5L))
   expect_identical(out$result, list(decision = "deny", remember = NULL,
                                     feedback = "no valid answer was given at the approval prompt"))

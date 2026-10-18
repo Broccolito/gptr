@@ -556,8 +556,8 @@ test_that("piped .stdin: a nested prompt and its echo reach stdout from an untee
   res = NULL
   out = utils::capture.output({
     res = eval_r(paste0("ans = ui$permission(list(tool = 'r', input = list(code = 'x = 1'), ",
-                        "risk = list(level = 1L), agent = 'a'))"), home, plots = "none",
-                 tee = FALSE)
+                        "risk = list(level = 1L), suggested_rule = 'r(level<=1)', agent = 'a'))"),
+                 home, plots = "none", tee = FALSE)
   })
   expect_identical(out, c("  sub-agent a > r  x = 1", "  allow? [y]es / [a]lways / [n]o / [?]: y"))
   expect_identical(home$ans$decision, "allow")

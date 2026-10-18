@@ -1459,9 +1459,11 @@ arguments the tool sees and is recorded.
 #### 6.8.3 The prompt
 
 One line (NS-1): the tool and the call's first line, cut to the console width (less the margin) before `(+N more
-lines)`, every flagged call, then `allow? [y]es / [a]lways / [n]o / [?]`, with C0/C1 controls, bidi and zero-width
-characters escaped as `<U+XXXX>` [IC-53; D-187]. `a` adds a session rule covering exactly the
-flagged calls (`r(fn:FindNeighbors,FindClusters)`); `?` opens the detail view (code, flagged calls with levels,
+lines)`, the flagged calls one per line (highest level first, each cut to the width, at most 5, then `(+N more; ?
+shows all)`), then `allow? [y]es / [a]lways / [n]o / [?]`, with C0/C1 controls, bidi and zero-width
+characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. `a` adds a session rule covering exactly the
+flagged calls (`r(fn:FindNeighbors,FindClusters)`), offered only when the request suggests one; `?`
+opens the detail view (code, flagged calls with levels,
 paths, "cannot be undone" when no checkpoint is possible, and "always in this project", written to the user-level
 project file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; Ctrl-C aborts
 the run. Never `askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1].
