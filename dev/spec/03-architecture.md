@@ -2379,9 +2379,11 @@ behind a schema probe and a maintainer's live end-to-end test respectively (§1.
 
 References are `provider/id[:thinking]` strings or aliases resolved dynamically from family and release date
 (`sonnet`, `opus`, `haiku`, `gemini`, `flash`, `gpt`, `jev`, `claude_code`, `codex`), with Pi's last-colon
-thinking-suffix rule, `.`/`-`/`_` normalisation and `adist()` suggestions [09 §4]. A registered provider named
+thinking-suffix rule, `.`/`-`/`_` normalisation and `adist()` suggestions (only the named provider's references
+after a known `provider/`) [09 §4]. A registered provider named
 alone means its first declared model in every resolver (`claude-cli`, `codex`, `codex-cli`), alias names normalise
-like ids (`claude-code` is `claude_code`), and `/model` checks a reference before the first prompt [IC-19, IC-79]. Thinking levels are clamped
+like ids (`claude-code` is `claude_code`), `/model` checks a reference before the first prompt, and `/model` and `/status` show a built-in CLI's `default` with
+the full id it runs (`claude-cli/default (claude-sonnet-5-5)`) [IC-19, IC-79]. Thinking levels are clamped
 to the model's map. The default chat model is taken from the first available route: an Anthropic key ->
 `anthropic/claude-sonnet-5-5` (the north-star banner; $2/$10 vs $4/$20 for Opus 5.5); OpenAI ->
 `openai/gpt-6-sol`; Gemini -> `google/gemini-3.8-flash`; otherwise a detected CLI. `small_model` serves

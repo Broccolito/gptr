@@ -214,6 +214,30 @@ test_that("/model checks a reference before the first prompt; provider names res
                    "Model: codex/default (from the next request)")
 })
 
+test_that("/model and /status name the model a CLI's default runs (#44)", {
+  local_console_commands()
+  off = gptr_register(pcli_fake_provider("claude"))
+  withr::defer(off())
+  local_mocked_bindings(pcli_default_model = function(api) paste0(api, "-id"))
+  shown = "fakeclaude/default (cli-claude-id)"
+  rs = repl_state(NULL, new.env())
+  run_command(rs, "/model fakeclaude/default")
+  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
+  rs$session = idle_session()
+  run_command(rs, "/model fakeclaude/default")
+  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
+  run_command(rs, "/model fakeclaude/claude-sonnet-5-5")
+  expect_identical(run_command(rs, "/model")$out, "Model: fakeclaude/claude-sonnet-5-5")
+  # another CLI adapter decides what its `default` runs
+  off2 = gptr_register(gptr_provider("mycli", api = "mycli-api", type = "cli",
+                                     models = list(list(id = "default"))))
+  withr::defer(off2())
+  run_command(rs, "/model mycli/default")
+  expect_identical(run_command(rs, "/model")$out, "Model: mycli/default")
+})
+
 test_that("/mode on a session appends the mode change for the next turn", {
   local_console_commands()
   s = idle_session()

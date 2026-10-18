@@ -145,6 +145,18 @@ cmd_exit = function(args, ctx) {
   NULL
 }
 
+#' A model reference as /model and /status show it: a built-in CLI's `default` with the full id
+#' the CLI gets (`claude-cli/default (claude-sonnet-5-5)`, contract 11.10); another CLI adapter
+#' decides what its `default` runs
+#' @noRd
+cmd_model_label = function(ref) {
+  m = model_canonical(ref)
+  if (!identical(m$type, "cli") || !endsWith(m$ref, "/default")) return(ref)
+  api = registry_get("provider", sub("/.*$", "", m$ref))[["api"]]
+  if (!isTRUE(api %in% c("cli-claude", "cli-codex"))) return(ref)
+  paste0(ref, " (", pcli_default_model(api), ")")
+}
+
 #' `/model [ref]`: on a session from the next request; before the first prompt for that prompt,
 #' checked now (IC-79) and kept as typed
 #' @noRd
@@ -153,7 +165,7 @@ cmd_model = function(args, ctx) {
   s = ctx$session
   if (!nzchar(args)) {
     model = if (!is.null(rs)) repl_model(rs) else s$model
-    return(paste0("Model: ", model %||% "the default model"))
+    return(paste0("Model: ", cmd_model_label(model %||% "the default model")))
   }
   if (!is.null(s)) {
     session_set_model(s, args, reason = "user")
@@ -281,13 +293,14 @@ cmd_status = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) {
     return(c("session   (none yet: the first prompt starts one)",
-             paste0("model     ", if (!is.null(rs)) repl_model(rs) else "the default model"),
+             paste0("model     ",
+                    cmd_model_label(if (!is.null(rs)) repl_model(rs) else "the default model")),
              paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual")))
   }
   d = session_data(s)
   c(paste0("session   ", d$id, "  (", d$status, ", ", d$turns,
            if (d$turns == 1L) " turn)" else " turns)"),
-    paste0("model     ", d$model),
+    paste0("model     ", cmd_model_label(d$model)),
     paste0("mode      ", d$mode),
     paste0("document  ", cmd_doc_site(s)$path %||% "(none)"),
     paste0("queue     ", length(d$queue$steer), " steer, ", length(d$queue$follow_up),

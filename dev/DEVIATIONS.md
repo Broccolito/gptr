@@ -2468,3 +2468,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   read after `  > `; a fitting prompt read with it), test-console-repl.R (the idle notice follows a line end;
   banner period; banner objects at column 2), test-console-interrupt.R (the pause notice follows a line end).
   Evidence: progress/P26.md Task 30.
+
+## D-226 - P26 /model and /status name a CLI default's model; suggestions keep the typed provider (2026-10-18)
+- Rule: `/model` (no argument) and `/status` show a built-in CLI's (claude, codex) `default` with the full id the
+  CLI gets (`claude-cli/default (claude-sonnet-5-5)`, 04 section 11.10), through P20's `pcli_default_model()`, a
+  new console contract edge of the layering test (`cmd_model_label()`); another CLI adapter's `default` is shown
+  as typed. An unknown reference that starts with a known `provider/` (a provider id or alias) gets its `adist()`
+  suggestions from that provider's references only (`versa/gpt-9` suggests `versa/...`); other references are
+  compared with the whole catalog as before.
+- Contract-visible: console display and `gptr_error_unknown_model$suggestions`; 03 section 8.4, the
+  `model_resolve()` row of 04 section 7.5, IC-79 in 04 section 15.9.
+- Tests: test-console-commands.R (`/model` and `/status` before and after the first prompt on the fake CLI's
+  `default`; a full id and another CLI adapter's `default` unchanged), test-catalog-models.R
+  (`versa/gpt-9-nonexistent`, `versa/`, `versa/gpt-9:high` suggest the three versa models). Evidence:
+  progress/P26.md Task 35.

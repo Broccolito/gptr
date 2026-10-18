@@ -2480,7 +2480,7 @@ reactor_pump(until = function() done, slice_ms = 100L)
 | `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` | `provider-usage.R` | §4.3 records; cost from the dated price tier in force on `when`; TTL-split cache writes (1 h at 2x input, 5 min at 1.25x) | P06, P12, P13, P20 |
 | `usage_log_append(row)`, `usage_log()` | `provider-usage.R` | the process System 1 accounting log (append-only) | P13, P06 |
 | `catalog_get()` | `catalog-models.R` | the merged catalog (§11.10) | P05, P07 |
-| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions; local providers accept unknown ids | P06, P08, P13, P17, P19 |
+| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions (only the named provider's references after a known `provider/`); local providers accept unknown ids | P06, P08, P13, P17, P19 |
 | `model_prepare(ref, safety = NULL)` | `catalog-models.R` | explicit selected-model preparation: discovers missing/stale Ollama evidence, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P08, P13 |
 | `provider_preflight(model, provider, safety = NULL)` | `catalog-models.R` | pure no-I/O check before payload/state/image serialization and credential lookup; private discovery evidence binds endpoint/path/model/server/lifecycle; missing protected safety means local-only TRUE (IC-74; `07-local-ollama.md` section 2.1) | P05, P08, P13 |
 | `catalog_aliases()` | `catalog-models.R` | chr of alias names (for `identifier_known()`) | P08 |
@@ -5197,8 +5197,11 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   `gptr_message_notice` per model naming `tool_call = TRUE` and the `gptr_config(providers = ...)` declaration.
 - Model references: `model_match()` applies IC-19's provider-alone rule; `/model` before the first prompt checks
   the reference with `model_canonical()` (a registered router name passes, as at the first prompt) and keeps the
-  text as typed; `codex-cli` is an alias of `codex`. The two
-  console and MCP edges (`cmd_model()` -> `model_canonical()`, `mcp_serve_exec()` -> `tool_call_hook`,
+  text as typed; `codex-cli` is an alias of `codex`. `/model` and `/status` show a built-in CLI's (claude,
+  codex) `default` with the full id it runs (`claude-cli/default (claude-sonnet-5-5)`, 11.10); an unknown
+  reference that starts with a known `provider/` gets suggestions from that provider's references only (D-226). The
+  console and MCP edges (`cmd_model()` -> `model_canonical()`, `cmd_model_label()` -> `pcli_default_model()`,
+  `mcp_serve_exec()` -> `tool_call_hook`,
   `tool_run`, `tool_execute_frame`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
 
