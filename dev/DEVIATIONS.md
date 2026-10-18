@@ -2421,11 +2421,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   objects, every turn `objects 0/0`). A call served inside its run's own tool stays covered by that tool's checkpoint.
 - Rule: on a CLI route the files checkpointer's `before()` does not sync: `ckpt_on_cli()` syncs at `agent_start`,
   and a sync there absorbed the edits the child made before its served call (the triage fix alone: files `1/1`, the
-  child's edit not restored). Each change is recorded once, in the served call's fragment or in the turn scan. An
-  untracked file is captured only while it is as the last walk saw it, so a child's edit never becomes a pre-image
+  child's edit not restored). Each change is recorded once, in the served call's fragment or in the turn scan; an
+  aborted run has no `turn_end`, so on a CLI route `agent_end` scans too, after builtin:cli has stopped the child
+  (builtin:checkpoints loads after builtin:cli; review: a cancelled Codex turn's own edits were absorbed by the
+  next sync, files `0/0`). An untracked file is captured only while it is as the last walk saw it, so a child's edit never becomes a pre-image
   (its row says no pre-image, and `/undo` does not claim to restore it).
 - Contract-visible: 04 IC-79 (served calls are checkpointed; contract edges `checkpoint_before`, `checkpoint_after`).
-- Tests: mcp-server, cli-claude, cli-codex, ckpt-files, arch-layers. Evidence: progress/P26.md Task 15.
+- Tests: mcp-server, cli-claude, cli-codex, ckpt-files, ckpt-rewind (an aborted turn), arch-layers. Evidence:
+  progress/P26.md Task 15.
 
 ## D-202 - P26 No automatic compaction on the CLI routes; plan-cli usage is no context size (2026-10-18)
 - Rule: a `plan-cli` reply's usage sums the CLI's model calls of one turn (codex: 10 threshold compactions in 13
@@ -2556,11 +2559,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: a rebinding the walk does not see keeps the earlier value and can lower a level (accepted: the classifier is
   advisory): `p = tempfile(); with(list(p = '~'), unlink(p, recursive = TRUE))` is 1 (was 3); likewise `within()`,
   `bquote(.())`, `assign()` in a loop, a function or with a computed name, `list2env()`, `load()`, `rm()`,
-  `delayedAssign()`, `makeActiveBinding()` and a function from an earlier turn.
+  `delayedAssign()`, `makeActiveBinding()`, a replacement through an environment alias (`e = environment();
+  e$p = ...`), `replicate()` and a function from an earlier turn. A name's new value is stored after its right
+  side is walked, so `p = tempfile(fileext = file.remove(p))` checks the earlier `p`, and `assign()` takes the
+  name its `x` argument matches (review: both lowered a level).
 - Contract-visible: `gptr_risk()` levels, `path` and `path_class` of such calls (03 §6.8.1); checkpoint `files`
   targets.
-- Tests: perm-classify (a name assigned outside a function body; a straight-line reassignment; computed,
-  branch-default, loop and `<<-` forms stay 3), perm-gate (auto asks a person). Evidence: progress/P26.md Task 14.
+- Tests: perm-classify (a name assigned outside a function body; a straight-line reassignment; a value that uses
+  the name; computed, branch-default, loop, `<<-` and named `assign()` forms stay 3), perm-gate (auto asks a person). Evidence: progress/P26.md Task 14.
 
 ## D-212 - P26 a fan-out child gets its element alone as `.x`; context "none" is refused (2026-10-18)
 - Rule: for every backend a fan-out child's element is bound alone in its overlay as `.x = list(<key> = <element>)`
@@ -2718,8 +2724,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: amends D-186 and IC-75 ("a prompt over 200 bytes is printed whole"): `console_out()` (slash-command
   results, a printed console value, the manual-setup lines) and the long-prompt branch of `gptr_readline()` write
   through `gptr_message_write(margin = TRUE)`, so their lines get the margin and a line that does not fit is
-  word-wrapped at width - 4 with its indentation (the prompt's own leading blanks are dropped first, so a padded
-  question is not indented twice). In the margin that branch also takes a prompt wider than the content row
+  word-wrapped at width - 4 with its indentation, measured without colour codes as for D-223's result lines (one
+  helper, `console_wrap()`; the prompt's own leading blanks are dropped first, so a padded question is not
+  indented twice). In the margin that branch also takes a prompt wider than the content row
   (a `gptr_confirm()` question under 200 bytes), and the answer is read after `  > `; without a margin nothing
   changes. `/env` lines lose their own two blanks (the banner adds them), so in the margin they sit at column 2. Listings that commands print
   (`/checkpoints`, `/resume`, `/skills`, `/mcp`, `/permissions`; `/cost` prints D-206's lines) go through `print_lines()`, which formats at the
