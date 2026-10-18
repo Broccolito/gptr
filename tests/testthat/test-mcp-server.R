@@ -179,6 +179,34 @@ test_that("a call served in a live run is reported as a tool call of the run (D-
   expect_identical(failed$details$error, "no answer")
 })
 
+test_that("a plot served in a live run is drawn on the person's device, without a run on none", {
+  shown = new.env()
+  shown$n = 0L
+  screen = function(...) {
+    shown$n = shown$n + 1L
+    grDevices::pdf(NULL)
+  }
+  devs = grDevices::dev.list()
+  withr::defer(for (d in setdiff(grDevices::dev.list(), devs)) grDevices::dev.off(d))
+  images = function(res) Filter(function(b) identical(b$type, "image"), res$content)
+  seen = serve_in_run(function(event, ctx) {
+    withr::local_options(gptr.interactive = TRUE, device = screen)
+    mcp_dispatch_local(r_call("plot(1:3)"), ctx$session)$result
+  })
+  expect_false(seen$out$isError)
+  expect_length(images(seen$out), 1L)
+  expect_identical(shown$n, 1L)
+  drawn = setdiff(grDevices::dev.list(), devs)
+  expect_length(drawn, 1L)
+  grDevices::dev.off(drawn)
+  x = local_served_session()
+  withr::local_options(gptr.interactive = TRUE, device = screen)
+  res = mcp_dispatch_local(r_call("plot(1:3)"), x$session)$result
+  expect_length(images(res), 1L)
+  expect_identical(shown$n, 1L)
+  expect_identical(grDevices::dev.list(), devs)
+})
+
 test_that("a call served to a CLI route is checkpointed; each change is undone once (#24)", {
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)

@@ -5192,8 +5192,11 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   runs between the checkpointers' `before` and `after` (`checkpoint_before()`, `checkpoint_after()`), as a call of
   the loop does, so `/undo` restores what it changed (#24); on a CLI route the files checkpointer then records the
   edits the child made since the turn's start rather than absorbing them, and captures an untracked file only while
-  it is as the last walk saw it (else its row has no pre-image). A long-lived claude child keeps the list it read at
-  its start (`listChanged = FALSE`); a tool removed by a refreeze is refused at `tools/call`.
+  it is as the last walk saw it (else its row has no pre-image). A served `r` call made while a run is live draws
+  its plots as the loop's `r` tool does (`plots = "auto"`: on the person's device when one is open or a human is
+  present), so a CLI route's plots reach the screen (#42); without a run they stay offscreen (`"capture"`). A
+  long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a refreeze
+  is refused at `tools/call`.
 - The OpenAI-compatible, Responses and Google adapters decide tools with one helper (`adp_tools_on`): a model
   whose `tool_call` is `FALSE` gets no tools (IC-74 unchanged), and when that drops a non-empty array gptr gives one
   `gptr_message_notice` per model naming `tool_call = TRUE` and the `gptr_config(providers = ...)` declaration.

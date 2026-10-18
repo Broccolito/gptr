@@ -2494,3 +2494,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   own block, one blank line between them (three Codex messages printed on adjacent lines). All routes.
 - Contract-visible: 03 §6.17, §8.3; 04 §8.5. Out of lane: console-render.R. Tests: cli-codex
   (`codex-messages.jsonl`). Evidence: progress/P26.md Task 32.
+
+## D-209 - P26 Plots of calls served during a run reach the person's device (2026-10-18)
+- Rule (#42): `mcp_serve_r()` evaluates with `plots = "auto"` while the session has a live run, as the loop's `r`
+  tool does: on the person's open device, or on a new one when a human is present (kdps-claude: the console showed
+  `[1 plot]`, `dev.list()` was NULL). Without a run (`gptr_mcp_serve()` between runs) it keeps `"capture"`, offscreen.
+  The model still gets the image either way.
+- Contract-visible: 04 IC-79 (served calls bullet). Tests: mcp-server. Evidence: progress/P26.md Task 33.
