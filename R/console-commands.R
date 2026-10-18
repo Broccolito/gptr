@@ -251,14 +251,22 @@ cmd_compact = function(args, ctx) {
   }
 }
 
+#' /cost: the requests, input tokens and cost of the session and its children by agent, then
+#' their total
 #' @noRd
 cmd_cost = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("No session yet.")
-  c(utils::capture.output(print(gptr::gptr_usage(s))), paste0("Total: ", format_cost(s$cost)))
+  u = s$usage
+  agents = unique(u$agent)
+  label = format(agents)
+  c(vapply(seq_along(agents), function(i) {
+    paste0("  ", label[[i]], "  ", format_usage(u[u$agent %in% agents[[i]], , drop = FALSE]))
+  }, ""), paste0("Total: ", format_usage(u)))
 }
 
-#' /context: the token ledger of the last request
+#' /context: the token ledger of the last request; on a CLI route (`plan-cli`) also what the CLI
+#' reported for its turn, since it keeps its own transcript
 #' @noRd
 cmd_context = function(args, ctx) {
   s = ctx$session
@@ -266,10 +274,17 @@ cmd_context = function(args, ctx) {
   led = gptr::gptr_usage(s, detail = TRUE)
   if (!nrow(led)) return("No request yet.")
   last = led[led$request_id == led$request_id[[nrow(led)]], , drop = FALSE]
+  u = session_data(s)$usage
+  u = u[match(last$request_id[[1L]], u$request_id), , drop = FALSE]
   c(paste0("Last request ", last$request_id[[1L]], ":"),
     sprintf("  %-14s %9s%s", last$component, format(round(last$tokens), big.mark = ","),
             ifelse(is.na(last$cached), "  (cache unknown)", ifelse(last$cached, "  (cached)", ""))),
-    sprintf("  %-14s %9s", "total", format(round(sum(last$tokens)), big.mark = ",")))
+    sprintf("  %-14s %9s", "total", format(round(sum(last$tokens)), big.mark = ",")),
+    if (identical(u$route, "plan-cli")) {
+      paste0("  The CLI keeps its own transcript; its last turn reported ",
+             format_count(c(u$input, u$cache_read, u$cache_write_5m, u$cache_write_1h)),
+             " input tokens over all its model calls.")
+    })
 }
 
 #' @noRd

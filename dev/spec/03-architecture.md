@@ -1933,9 +1933,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   (`  sub-agent a started (kid/kid-1)`, `  sub-agent a done (1/2) · 2 turns · 12 s` or
   `failed: <status>`; `(k/N)` for a team, fan-out or `gptr_parallel()` group; a nested `peter()`
   by its quoted prompt). Model code that wraps such calls in `capture.output()` or `sink()` still
-  captures prompts and lines (D-188).
+  captures prompts and lines (D-188). A run's status line counts its own requests and adds what its
+  sub-agents cost (`done · 2 requests · 156.7k tokens · $0.2125 · sub-agents $0.8500`, D-206).
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
-  `/compact [focus]`, `/cost`, `/context` (token ledger), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
+  `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger; on a CLI route also the
+  CLI's reported turn input, D-206), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
   templates as `/<name> args`. Commands are recorded as comments in transcripts.
 - **UI backends** (`ui` specs): `console`, `none`, `scripted` (tests), `rstudio` (dialogs; a timed-out dialog

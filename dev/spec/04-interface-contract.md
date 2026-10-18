@@ -5131,6 +5131,15 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
    (`run$group`: `n`, `runs`).
 5. The `r` tool tees only for a depth-0 run (§7.9); nested calls evaluate in an overlay (§6.1
    `envir`).
+6. Run totals (D-206): a foreground run's status line reads `done · <n> requests · <tokens> tokens ·
+   <cost>` from `agent_end`'s `usage` (the run's own rows; the payload's `turns` stays the session's
+   count), then `sub-agents <cost>` for the rows other sessions charged to the session during the run
+   (IC-66). A cost over requests (`format_cost()`: this line, the `print()` and `gptr_usage()`
+   footers, `/cost`) is the known sum plus a count of the requests of unknown cost
+   (`$9.5100 + 1 request of unknown cost`), `unknown cost` when none is known; IC-74's `NA` values
+   are unchanged. `/cost` prints `<agent>  <n> requests, <tokens> tokens in, <cost>` per agent name
+   and one `Total:` line; `/context` on a `plan-cli` request adds `The CLI keeps its own transcript;
+   its last turn reported <n> input tokens over all its model calls.`
 
 **IC-78 The yolo mode** (P26 Task 8).
 

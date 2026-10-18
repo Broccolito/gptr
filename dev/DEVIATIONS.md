@@ -2450,3 +2450,22 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   flight (a router can pick a CLI model), as console-render.R's CLI thinking rule does. Before a run's first request
   it is unset, and the steer then joins that request, so the default wording holds.
 - Contract-visible: 04 IC-76 (notices). Tests: console-typing. Evidence: progress/P26.md Task 25.
+
+## D-206 - P26 Run lines, /cost and /context describe the run, its sub-agents and the CLI (2026-10-18)
+- Rule: the status line counts the run's own requests (`agent_end`'s `usage` rows) instead of the session's turns,
+  which the payload keeps (kdps-claude: `1 turn`, `2 turns`, ... `12 turns` over one-turn runs), and adds
+  `sub-agents <cost>` from the rows other sessions charged to the session during the run (IC-66: a fan-out child's
+  rows reach the root through its container; `done · 2 turns · 156.7k tokens · $0.2125` left out $0.85).
+- Rule: `format_cost()` of request costs is the known sum plus a count of the requests of unknown cost (`$9.5100 + 1
+  request of unknown cost`), `unknown cost` when none is known, wherever a cost prints (the status line, the
+  `print()` and `gptr_usage()` footers, `/cost`): one aborted claude-cli request hid the session's known $9.51.
+  `NA` values in the data are unchanged (IC-74).
+- Rule: `/cost` prints `<agent>  <n> requests, <tokens> tokens in, <cost>` per agent name and one `Total:` line (it
+  printed a data frame by session id, cut at 20 rows, and two totals). `/context` on a request whose usage row has
+  route `plan-cli` adds `The CLI keeps its own transcript; its last turn reported <n> input tokens over all its
+  model calls.` (that row's input and cache tokens: a sum over the turn, no context size, D-202).
+- The triage's `+ $0.85 sub-agents` is its own part, `sub-agents $0.8500`: joined to an own cost with unknown requests
+  it read `$0.0010 + 1 request of unknown cost + $0.5000 ... sub-agents`.
+- Contract-visible: 04 IC-77 item 6; 03 §6.17 (status line, `/cost`, `/context`); `?gptr_usage` (footer).
+- Tests: console-render, console-commands, session-budget, session-object, console-jupyter-progress, console-fences.
+  Evidence: progress/P26.md Task 29.

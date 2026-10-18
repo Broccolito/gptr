@@ -31,9 +31,11 @@ Aggregates the usage rows of sessions (children included, each request counted o
 }
 \details{
 Unknown usage stays unknown: a token count or cost that a provider did not report is \code{NA},
-never zero, so a group or total that includes it is \code{NA} and the footer prints it as
-\code{unknown}. A known zero, such as the metered charge of a local model, stays zero. Rows without
-a session, agent, model or route (process-level System 1 calls) form the \code{NA} group.
+never zero, so a group or total that includes it is \code{NA}. The footer prints such tokens as
+\code{unknown} and adds the known cost to a count of the requests of unknown cost
+(\verb{$1.2000 + 1 request of unknown cost}). A known zero, such as the metered charge of a local
+model, stays zero. Rows without a session, agent, model or route (process-level System 1
+calls) form the \code{NA} group.
 
 The detailed component ledger contains estimates; its sum can differ from provider-reported
 usage. A run's token budget checks estimated next-input tokens and recorded usage before

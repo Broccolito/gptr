@@ -143,10 +143,21 @@ format_count = function(n) {
   paste0(sprintf("%.1f", n / 1e6), "M")
 }
 
-#' A short cost in USD: "$0.0123"; "unknown cost" when any cost is unknown (IC-74)
+#' A short cost in USD of request costs: "$0.0123"; unknown (NA) costs are counted beside the
+#' known sum, "$0.0123 + 1 request of unknown cost", and "unknown cost" when none is known (IC-74)
 #' @noRd
 format_cost = function(x) {
-  x = sum(x)
-  if (is.na(x)) return("unknown cost")
-  sprintf("$%.4f", x)
+  k = sum(is.na(x))
+  if (k > 0L && k == length(x)) return("unknown cost")
+  out = sprintf("$%.4f", sum(x, na.rm = TRUE))
+  if (k == 0L) return(out)
+  paste0(out, " + ", k, if (k == 1L) " request" else " requests", " of unknown cost")
+}
+
+#' Requests, input tokens and cost of usage rows: "2 requests, 1.2k tokens in, $0.0042"
+#' @noRd
+format_usage = function(u) {
+  n = nrow(u)
+  paste0(n, if (n == 1L) " request, " else " requests, ",
+         format_count(c(u$input, u$cache_read)), " tokens in, ", format_cost(u$cost))
 }

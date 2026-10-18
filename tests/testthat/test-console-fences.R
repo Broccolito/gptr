@@ -201,7 +201,7 @@ test_that("a real fake-provider text stream closes its fence before later prose"
     s = peter("show literal text only", model = fake, envir = work)
   }))
   expect_identical(head(out, 6L), c("lead", "```r", "value", "  ```", "Heading", "- item"))
-  expect_match(tail(out, 1L), "^  done \\| 1 turn \\| ")
+  expect_match(tail(out, 1L), "^  done \\| 1 request \\| ")
   expect_identical(s$text, text)
   expect_identical(s$status, "idle")
   expect_identical(length(fake$log$requests), 1L)

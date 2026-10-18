@@ -532,13 +532,15 @@ console_state = function() {
   the$console
 }
 
-#' Start tracking a run of a session: a record with its session, tool calls and entry count
+#' Start tracking a run of a session: a record with its session, tool calls, entry count and
+#' usage row count
 #' @noRd
 console_track = function(run_id, session) {
   rec = new.env(parent = emptyenv())
   rec$session = session
   rec$tools = new.env(parent = emptyenv())
   rec$n0 = length(session_data(session)$entries)
+  rec$u0 = nrow(session_data(session)$usage)
   rec$request_pending = FALSE
   rec$paused = FALSE
   assign(run_id, rec, envir = console_state()$active)
@@ -843,21 +845,21 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
   as.character(cli::ansi_strtrim(out, width))
 }
 
-#' The status line of a run's end: `  done | 2 turns | 1.2k tokens | $0.0042`; the status and
-#' reason when it did not end idle; an unknown (NA) usage value is unknown (IC-74)
+#' The status line of a run's end: `  done | 2 requests | 1.2k tokens | $0.0042`, the run's own
+#' requests (its usage rows), then `sub-agents $0.8500` when `kids` holds the costs of its
+#' sub-agents' requests; the status and reason when it did not end idle; an unknown (NA) usage
+#' value is unknown (IC-74)
 #' @noRd
-console_status_line = function(status, reason = NULL, usage = NULL, turns = NULL) {
+console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL) {
   word = if (identical(status, "idle")) "done" else console_escape(status %||% "?", FALSE)
   if (!identical(status, "idle") && rlang::is_string(reason) && nzchar(reason)) {
     word = paste0(word, ": ", console_escape(reason, FALSE))
   }
   cols = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h")
-  parts = c(word,
-            if (length(turns) == 1L && !is.na(turns)) {
-              paste0(turns, if (turns == 1L) " turn" else " turns")
-            },
+  n = NROW(usage)
+  parts = c(word, paste0(n, if (n == 1L) " request" else " requests"),
             paste(format_count(unlist(usage[intersect(cols, names(usage))])), "tokens"),
-            format_cost(usage$cost))
+            format_cost(usage$cost), if (length(kids)) paste("sub-agents", format_cost(kids)))
   paste0("  ", paste(parts, collapse = console_symbols()$sep))
 }
 
@@ -1105,7 +1107,11 @@ console_on_agent_end = function(event, ctx) {
     })
   }
   if (!console_foreground(rec)) return(NULL)
-  line = console_status_line(event$status, event$reason, event$usage, event$turns)
+  # the rows charged to the session during the run by other sessions: its sub-agents' (IC-66)
+  d = session_data(rec$session)
+  u = d$usage
+  kids = u$cost[seq_len(nrow(u)) > rec$u0 & !(u$session %in% d$id) & !duplicated(u$request_id)]
+  line = console_status_line(event$status, event$reason, event$usage, kids)
   v = verbosity()
   if (v == 1L) {
     text = paste0("gptr:", sub("^ +", " ", line))

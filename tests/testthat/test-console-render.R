@@ -408,7 +408,7 @@ test_that("a foreground run streams its answer and ends with a status line (verb
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Hello")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L)))
-  expect_identical(out, c("Hello **world** {x}", "  done | 1 turn | 0 tokens | $0.0000"))
+  expect_identical(out, c("Hello **world** {x}", "  done | 0 requests | 0 tokens | $0.0000"))
   expect_null(console_record(list(run = "u0000test")))
 })
 
@@ -724,23 +724,57 @@ test_that("verbosity 1 reports tool calls and the end as progress messages", {
   expect_message(
     console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = NULL, turns = 2L),
                          ctx),
-    "gptr: done | 2 turns", fixed = TRUE)
+    "gptr: done | 0 requests", fixed = TRUE)
 })
 
 test_that("the status line names an unusual end and sums the usage rows", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   usage = data.frame(input = c(1000, 200), output = c(50, 10), cache_read = c(0, 900),
                      cost = c(0.001, 0.0005))
-  expect_identical(console_status_line("idle", NULL, usage, 3L),
-                   "  done | 3 turns | 2.2k tokens | $0.0015")
-  expect_identical(console_status_line("aborted", "aborted (user)", NULL, 1L),
-                   "  aborted: aborted (user) | 1 turn | 0 tokens | $0.0000")
-  expect_identical(console_status_line("idle", NULL, data.frame(input = 999950), 1L),
-                   "  done | 1 turn | 1.0M tokens | $0.0000")
+  expect_identical(console_status_line("idle", NULL, usage),
+                   "  done | 2 requests | 2.2k tokens | $0.0015")
+  expect_identical(console_status_line("aborted", "aborted (user)", NULL),
+                   "  aborted: aborted (user) | 0 requests | 0 tokens | $0.0000")
+  expect_identical(console_status_line("idle", NULL, data.frame(input = 999950)),
+                   "  done | 1 request | 1.0M tokens | $0.0000")
   usage$cost[[2L]] = NA
   usage$output[[1L]] = NA
-  expect_identical(console_status_line("idle", NULL, usage, 3L),
-                   "  done | 3 turns | unknown tokens | unknown cost")
+  expect_identical(console_status_line("idle", NULL, usage, c(0.5, NA)), paste(
+    "  done | 2 requests | unknown tokens | $0.0010 + 1 request of unknown cost | sub-agents",
+    "$0.5000 + 1 request of unknown cost"))
+  usage$cost[[1L]] = NA
+  expect_identical(console_status_line("idle", NULL, usage, NA_real_),
+                   "  done | 2 requests | unknown tokens | unknown cost | sub-agents unknown cost")
+})
+
+test_that("the status line counts the run's requests and adds its sub-agents' cost (#38)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  s = render_session()
+  d = session_data(s)
+  d$turns = 5L
+  ctx = session_live(s)$ctx
+  row = function(id, sid, cost) {
+    usage_conform(data.frame(request_id = id, session = sid, agent = "main", input = 100,
+                             output = 10, cache_read = 0, cache_write_5m = 0,
+                             cache_write_1h = 0, cost = cost, stringsAsFactors = FALSE))
+  }
+  end = function(own) {
+    console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = own, turns = 5L),
+                         ctx)
+  }
+  # an earlier run's sub-agent is not this run's
+  usage_add(s, row("q-earlier", "s0000000001", 9))
+  console_on_agent_start(hook_event("agent_start", s), ctx)
+  fan = session_new(d$model, "auto", kind = "fanout", parent = s)
+  kid = session_new(d$model, "auto", kind = "child", parent = fan)
+  usage_add(kid, row("q-kid", session_data(kid)$id, 0.5))
+  own = rbind(row("q1", d$id, 0.001), row("q2", d$id, 0.002))
+  for (i in 1:2) usage_add(s, own[i, ])
+  expect_message(end(own), "gptr: done | 2 requests | 220 tokens | $0.0030 | sub-agents $0.5000",
+                 fixed = TRUE)
+  console_on_agent_start(hook_event("agent_start", s), ctx)
+  expect_message(end(own[1L, ]), "^gptr: done \\| 1 request \\| 110 tokens \\| \\$0\\.0010\\s*$")
 })
 
 test_that("custom entries of a run are shown through renderer records (IC-69)", {
@@ -949,9 +983,9 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L))
   rows = list(c("", "  First tail", "", "  * r  1 + 1", "    + value", "", "  Second ending", "",
-                "  done | 1 turn | 0 tokens | $0.0000", ""),
+                "  done | 0 requests | 0 tokens | $0.0000", ""),
               c("", "  [gptr] a notice", "", "  Answer", "",
-                "  done | 1 turn | 0 tokens | $0.0000", ""))
+                "  done | 0 requests | 0 tokens | $0.0000", ""))
   # an R GUI spaces the blocks exactly as a terminal does
   for (fe in c("terminal", "rgui")) {
     for (i in 1:2) {
@@ -990,7 +1024,7 @@ test_that("a streamed reply is printed verbatim and never evaluated (acceptance 
   expect_true("Use {Sys.setenv(GPTR_PWNED = \"1\")} with care." %in% out)
   expect_identical(Sys.getenv("GPTR_PWNED"), "")
   expect_false(res$visible)
-  expect_match(out[[length(out)]], "^  done \\| 1 turn \\| ")
+  expect_match(out[[length(out)]], "^  done \\| 1 request \\| ")
 })
 
 test_that("nothing is rendered at verbosity 0 (knitr, testthat)", {
