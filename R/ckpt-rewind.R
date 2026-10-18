@@ -75,7 +75,7 @@ ckpt_cp_before = function(st, name, call, ctx) {
         ckpt_objects_before(ck, call, home, turn)
       }
     },
-    files = ckpt_files_before(ck, call, turn),
+    files = ckpt_files_before(ck, call, turn, sync = !ckpt_cli_session(s)),
     state = ckpt_state_before(ck, call, turn))
 }
 

@@ -594,6 +594,27 @@ test_that("files over the capture cap and symbolic links are not restorable", {
   expect_true(nzchar(Sys.readlink(file.path(proj, "link.md"))))
 })
 
+test_that("without a sync, an unhashed file changed since the last walk has no pre-image (#24)", {
+  local_gptr_options(checkpoint_track_file_max = 10)
+  proj = local_project(files = list("edited.csv" = strrep("o", 20), "kept.csv" = strrep("o", 20)))
+  ck = ckpt_ck_new("s0000000034")
+  ckpt_files_sync(ckpt_files_tr(ck))
+  writeLines(strrep("c", 30), file.path(proj, "edited.csv"))
+  code = "writeLines('served', 'edited.csv'); writeLines('served', 'kept.csv')"
+  call = list(id = "c1", name = "r", input = list(code = code))
+  tok = ckpt_files_before(ck, call, turn = 1L, sync = FALSE)
+  for (f in c("edited.csv", "kept.csv")) writeLines("served", file.path(proj, f))
+  frag = ckpt_files_after(ck, call, tok)
+  rows = stats::setNames(frag$files, vapply(frag$files, function(r) r$path, ""))
+  expect_false(rows[["edited.csv"]]$restorable)
+  expect_match(rows[["edited.csv"]]$reason, "no pre-image")
+  expect_true(rows[["kept.csv"]]$restorable)
+  u = ckpt_files_undo(ck, frag)
+  expect_identical(u$ok[u$item == "file edited.csv"], FALSE)
+  expect_identical(readLines(file.path(proj, "edited.csv")), "served")
+  expect_identical(readLines(file.path(proj, "kept.csv")), strrep("o", 20))
+})
+
 test_that("undo restores mode bits; old rows, later edits and missing copies are not written", {
   skip_on_os("windows")
   local_gptr_options(checkpoint_capture_max = 10)

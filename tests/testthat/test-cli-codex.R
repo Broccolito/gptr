@@ -230,6 +230,37 @@ test_that("the call-1 capture: informational tool events, the answer and the usa
   expect_identical(opts$state$codex_thread, "<UUID>")
 })
 
+test_that("a Codex shell step shows its command without the shell's -lc wrapper", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  opts = stub_opts()
+  n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+  shell = function(id, command) {
+    push_obj(n, list(type = "item.started",
+                     item = list(id = id, type = "command_execution", command = command,
+                                 status = "in_progress")))
+    ev = opts$log$events[[length(opts$log$events)]]
+    console_tool_line(list(id = ev$tool_call_id, name = ev$tool_name, input = ev$input))
+  }
+  expect_identical(shell("i1", "/bin/zsh -lc 'wc -l mtcars_by_cyl.csv'"),
+                   "  \u25cf codex_shell  wc -l mtcars_by_cyl.csv")
+  expect_identical(shell("i2", "/bin/sh -lc ls"), "  \u25cf codex_shell  ls")
+  expect_identical(shell("i6", "/bin/zsh -lc 'rg -n \"foo\" R/'"),
+                   "  \u25cf codex_shell  rg -n \"foo\" R/")
+  # a double-quoted script keeps its wrapper
+  expect_identical(shell("i3", "/bin/bash -lc \"echo 'hi'\""),
+                   "  \u25cf codex_shell  /bin/bash -lc \"echo 'hi'\"")
+  expect_identical(shell("i7", "/bin/zsh -lc \"rg -n foo\\\\( R/\""),
+                   "  \u25cf codex_shell  /bin/zsh -lc \"rg -n foo\\\\( R/\"")
+  expect_identical(shell("i8", "/bin/zsh -lc \"ls -la\""),
+                   "  \u25cf codex_shell  /bin/zsh -lc \"ls -la\"")
+  # a command of several lines stays one JSON line, so no line is hidden
+  expect_identical(shell("i4", "/bin/zsh -lc \"python - <<'PY'\nprint(1)\nPY\""),
+                   paste0("  \u25cf codex_shell  ",
+                          "{\"command\":\"/bin/zsh -lc \\\"python - <<'PY'\\nprint(1)\\nPY\\\"\"}"))
+  expect_identical(shell("i5", "/bin/zsh -lc 'set -e\nmake check'"),
+                   "  \u25cf codex_shell  {\"command\":\"set -e\\nmake check\"}")
+})
+
 test_that("Codex reports other servers' MCP calls, not gptr's own; reasoning is thinking", {
   opts = stub_opts()
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
@@ -378,6 +409,25 @@ test_that("turn.completed usage Codex left out stays unknown, and its cost is un
     expect_identical(event_types(o), c("start", "done"))
     expect_true(all(is.na(c(u$input, u$output, u$total, u$cost$total))))
   }
+})
+
+test_that("a resumed thread's turn.completed counts its increase; a new thread counts whole", {
+  opts = stub_opts()
+  exec = function(thread, input, cached, output) {
+    n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+    push_obj(n, list(type = "thread.started", thread_id = thread))
+    push_obj(n, list(type = "turn.completed",
+                     usage = list(input_tokens = input, cached_input_tokens = cached,
+                                  cache_write_input_tokens = 0L, output_tokens = output,
+                                  reasoning_output_tokens = 0L)))
+    u = n$message()$usage
+    c(u$input, u$cache_read, u$cache_write_5m, u$output, u$reasoning)
+  }
+  expect_equal(exec("thread-a", 17106L, 12160L, 5L), c(4946, 12160, 0, 5, 0))
+  expect_equal(exec("thread-a", 34231L, 29056L, 10L), c(229, 16896, 0, 5, 0))
+  expect_equal(exec("thread-b", 17106L, 12160L, 5L), c(4946, 12160, 0, 5, 0))
+  # a running total that went down gives an unknown increase, never a negative count (IC-74)
+  expect_equal(exec("thread-b", 17106L, 12000L, 9L), c(NA, NA, 0, 4, 0))
 })
 
 test_that("a turn budget that is not finite or very large still gives a whole-number cap", {
@@ -925,6 +975,25 @@ test_that("the next turn resumes the Codex thread with -c sandbox_mode=", {
   expect_match(second, "Second\n$")
 })
 
+test_that("after a rewind the next turn starts a fresh Codex thread with the remaining path", {
+  skip_on_cran()
+  f = local_fake_cli("codex", "text")
+  s = peter("First", model = f$model, envir = new.env(), mode = "auto")
+  s |> peter("Quick one: add a logical column flag = TRUE to top5")
+  gptr_rewind(s)
+  s |> peter("Again")
+  argv = fake_argv(f)
+  expect_length(argv, 3L)
+  expect_identical(argv[[2]][1:2], c("exec", "resume"))
+  expect_false("resume" %in% argv[[3]])
+  third = rawToChar(fake_prompts(f)[[3]])
+  expect_match(third, "^<gptr_instructions>\n")
+  expect_match(third, "First", fixed = TRUE)
+  expect_false(grepl("flag = TRUE", third, fixed = TRUE))
+  expect_match(third, "Again\n$")
+  expect_equal(s$messages[[length(s$messages)]]$usage$cache_read, 24448)
+})
+
 test_that("without httpuv, later and openssl a fake codex evaluates R in the live session", {
   skip_on_cran()
   local_gptr_options(quiet = FALSE)
@@ -953,6 +1022,10 @@ test_that("without httpuv, later and openssl a fake codex evaluates R in the liv
   expect_identical(mcp$status, 0L)
   dir = codex_argv_relay(fake_argv(f)[[1L]])
   expect_true(reactor_pump(until = function() !dir.exists(dir), timeout = 5))
+  # the relayed call is checkpointed, so a rewind removes what it made (#24)
+  expect_identical(gptr_checkpoints(s)$objects, "1/1")
+  gptr_rewind(s, 0)
+  expect_false(exists("live_answer", envir = e, inherits = FALSE))
 })
 
 test_that("a fake codex returns a function's numeric result through the stdio relay", {
@@ -982,13 +1055,43 @@ test_that("a codex turn shows its reasoning and tool steps at the console as the
   e = new.env()
   out = utils::capture.output(peter("How many files are there?", model = f$model, envir = e,
                                     mode = "auto"))
-  at = match(c("  Listing the files", "  * codex_shell  {\"command\":\"/bin/sh -lc ls\"}",
+  at = match(c("  Listing the files", "  * codex_shell  ls",
                "  * r  n_files = 1L", "There is one file."), out)
   expect_false(anyNA(at))
   expect_false(is.unsorted(at))
   expect_false(any(grepl("directory listing", out, fixed = TRUE)))
   expect_identical(sum(grepl("n_files = 1L", out, fixed = TRUE)), 1L)
   expect_identical(e$n_files, 1L)
+})
+
+test_that("a Codex message shows whole once it completes, a blank line from the next (#41)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("codex", "messages")
+  seen = new.env()
+  seen$log = character()
+  event = pcli_codex_event
+  write = console_cat
+  local_mocked_bindings(
+    console_pad = function() "  ",
+    pcli_codex_event = function(obj, s) {
+      seen$log = c(seen$log, paste0("<", obj[["type"]], ">"))
+      event(obj, s)
+    },
+    console_cat = function(text) {
+      seen$log = c(seen$log, text)
+      write(text)
+    })
+  out = utils::capture.output({
+    s = peter("How many files are there?", model = f$model, envir = new.env())
+  })
+  # the last word is on screen before Codex's next event, not held until it
+  expect_lt(which(grepl("files.", seen$log, fixed = TRUE))[[1L]],
+            match("<item.started>", seen$log))
+  at = match("  * codex_shell  ls", out)
+  expect_identical(out[at + 1:4], c("", "  There is one file.", "", "  It is a.txt."))
+  expect_identical(s$text, "I will list the files.\nThere is one file.\nIt is a.txt.")
 })
 
 test_that("a Codex step leaves the control exports to the user; a served call does not (IC-53)", {

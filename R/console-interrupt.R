@@ -179,7 +179,12 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
   if (identical(ev$action, "handled")) return(invisible(FALSE))
   shown = console_escape(paste0("'", ev$text, "'"))
   if (identical(as, "steer")) {
-    console_notice("[gptr] steering: ", shown, "; it reaches the agent at its next step")
+    console_notice("[gptr] steering: ", shown,
+                   if (identical(session_live(s)$run$model[["type"]], "cli")) {
+                     "; it is sent after the CLI's current response"
+                   } else {
+                     "; it reaches the agent at its next step"
+                   })
   } else {
     console_notice("[gptr] follow-up queued: ", shown, "; it is sent when the agent would stop")
   }

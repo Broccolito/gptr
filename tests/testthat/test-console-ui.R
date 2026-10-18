@@ -83,7 +83,8 @@ test_that("the detail view shows the code as a plain fence of at most 40 lines (
   code = sprintf("x%d = %d", 1:45, 1:45)
   detail = ui_permission_detail(ui_request(paste(code, collapse = "\n")))
   at = match("  ```r", detail)
-  expect_identical(detail[at + 1:42], c(paste0("  ", code[1:40]), "  ```", "  (+5 more lines)"))
+  expect_identical(detail[at + 1:42],
+                   c(paste0("  ", code[1:40]), "  # ... +5 more lines", "  ```"))
   expect_false(any(grepl("\033", detail, fixed = TRUE)))
   expect_true("  ````r" %in% ui_permission_detail(ui_request("x = '\n```\n'")))
   py = list(tool = "py", input = list(code = "a = 1"), risk = list(level = 2L))

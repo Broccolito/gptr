@@ -1,4 +1,5 @@
 # tests/testthat/test-console-commands.R -- the slash commands (plan P14, Task 6).
+source(testthat::test_path("fixtures", "cli", "local-fake-cli.R"), local = TRUE)
 
 # The console's command specs for this test unless builtin:console registered them already
 local_console_commands = function(.env = parent.frame()) {
@@ -232,9 +233,10 @@ test_that("/cost, /context, /fork and /resume work on a session that ran", {
   s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
   rs = repl_state(s, new.env())
   cost = run_command(rs, "/cost")$out
-  expect_match(cost[[length(cost)]], "^Total: \\$")
+  expect_match(cost[[length(cost)]], "^Total: 1 request, ")
   ctx_out = run_command(rs, "/context")$out
   expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+:$")
+  expect_match(ctx_out[[length(ctx_out)]], "^  total ")
   # an unknown cache read is shown as unknown (IC-74)
   d = session_data(s)
   d$ledger$cached = NA
@@ -243,6 +245,37 @@ test_that("/cost, /context, /fork and /resume work on a session that ran", {
   expect_false(identical(rs$session$id, s$id))
   listing = run_command(rs, "/resume")$out
   expect_true(any(grepl(s$id, listing, fixed = TRUE)))
+})
+
+test_that("/cost lists the agents and one total that keeps the known cost (#38)", {
+  local_console_commands()
+  local_project()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+  rs = repl_state(s, new.env())
+  row = function(id, agent, cost) {
+    usage_conform(data.frame(request_id = id, session = s$id, agent = agent, input = 1000,
+                             output = 10, cache_read = 200, cache_write_5m = 0,
+                             cache_write_1h = 0, cost = cost, stringsAsFactors = FALSE))
+  }
+  d = session_data(s)
+  d$usage = rbind(row("q1", "main", 1.2), row("q2", "stats", NA), row("q3", "main", 0.3))
+  expect_identical(run_command(rs, "/cost")$out, c(
+    "  main   2 requests, 2.4k tokens in, $1.5000",
+    "  stats  1 request, 1.2k tokens in, unknown cost",
+    "Total: 3 requests, 3.6k tokens in, $1.5000 + 1 request of unknown cost"))
+})
+
+test_that("/context on a CLI route says the CLI keeps its own transcript (#38)", {
+  skip_on_cran()
+  local_console_commands()
+  f = local_fake_cli("claude", "text")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  out = run_command(repl_state(s, new.env()), "/context")$out
+  expect_match(out[[length(out) - 1L]], "^  total ")
+  expect_identical(out[[length(out)]], paste0("  The CLI keeps its own transcript; its last ",
+                                              "turn reported 12 input tokens over all its ",
+                                              "model calls."))
 })
 
 test_that("commands of later plans answer when their plan is absent", {

@@ -2598,7 +2598,7 @@ session_enqueue(s, "use TPM", as = "steer", source = "pipe")
 | `request_build(s, target, extra = NULL)` | `prompt-cache.R` | `list(context, view, tokens_est, components)`: `context` is the adapter context of §8.1 for `target` (a model record): `system`, `tools_json`, `tools`, `messages` (`project_messages()` + the `extra` tail, e.g. the compaction request), `cache_plan` (the `cache_policy` spec's plan for the api), `params`, ids; `view` is the element summary for the prefix guard; `tokens_est` and `components` feed the budget check and the ledger | P06 (through the §7.0 services) |
 | `prefix_guard(s, target, view)` | `prompt-cache.R` | compares with the previous request to the same (provider, model); on a break emits `cache_break`, appends `gptr.cache_break` and acts per `gptr.check_prefix`; resets on `session_tree` | P06 (through the §7.0 services) |
 | `compact_threshold(window, max_output, r_cap = 4000)` | `prompt-compact.R` | `min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output + 2 * r_cap), gptr.compact_at)` | P07 (behind `compact.should`) |
-| `compact_should(s, tokens, idle_s)` | `prompt-compact.R` | `lgl(1)`: threshold or cold rule (the `compact.should` service) | P06 (through the service) |
+| `compact_should(s, tokens, idle_s)` | `prompt-compact.R` | `lgl(1)`: threshold or cold rule (the `compact.should` service); the checkpoint compactor's rules never trigger for a CLI model (`type = "cli"`), which compacts its own conversation [D-202] | P06 (through the service) |
 | `extract_state(entries)` | `prompt-compact.R` | harness state for the checkpoint (user messages incl. steering, objects with creating code, decisions, files, skills, plan) | P07, P16 |
 | `builtin_prompt(gptr)`, `builtin_context(gptr)`, `builtin_compaction(gptr)` | | register P07's sections (`preamble`, `tools`, the closing lines of `rules`, the core of `r_session`, `r_performance`, `modes`, `context`, `addendum`; IC-68), the four `preset` records, the gap `cache_policy`, the default `estimator`, the context blocks `project_instructions` (rendered `trusted="false"` in an untrusted project, IC-52), `environment`, `mode`, `plan`, and the checkpoint `compactor` (with the post-compaction floor check, IC-71) | P02 load |
 
@@ -2671,7 +2671,7 @@ v = call_value(call, 1L)
 |---|---|---|---|
 | `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))` | `eval-core.R` | the built-in `evaluator` record `r` (IC-69); parses with `srcfilecopy("<gptr>", code)` under `keep.parse.data = FALSE` (restored), so functions the code defines keep their source lines but no parse table (D-189); `eval_guard()`; evaluates top-level expressions one by one in `envir` with sink capture (cleaned up in `suspendInterrupts()`), calling handlers created in a frame that does not hold `envir` [R2][R3], per-expression `setTimeLimit(elapsed = timeout, transient = TRUE)` (`timeout = NULL`: none with a human present, else `gptr.r_timeout`), symbols printed with `print(<sym>)` in `envir` and every `withVisible()` result cleared in place (`res[1L] = list(NULL)`) before the frame returns [R8, IC-67], plots captured (on `pdf(NULL)` with the display list enabled when no device is open and no human sees one; the prior device restored) and replayed to PNG, at most `max_images` attached (the rest kept in the session's out store), interruptions recorded with `on.exit()`, the agent's L'Ecuyer state swapped in and out by `rng_swap()` (IC-61); text written through `gptr_message_write()` (console controls, the console renderer) reaches the console whatever `tee` is and is never captured (IC-77); the `r` tool tees only for a depth-0 run; stops at the first error; returns a `gptr_eval_result` (§5.8); never keeps the value | P10 (`r`), P14 (`!expr`), P18 (server `r`) |
 | `rng_swap(state, expr)` [leaf] | `eval-core.R` | saves `.Random.seed` of the global environment (or its absence), assigns the agent's `c(10407L, <6 seeds>)`, evaluates, stores the advanced vector back in `state`, restores or removes the user's; with `with_seed_preserved()` the only code that assigns `.Random.seed` (IC-61) | P09, P19 |
-| `format_eval_result(res, budget_tokens)` | `eval-format.R` | `list(text = chr(1), images = list, truncated = lgl(1), out_id, spill)`: output, messages, warnings, error + trimmed traceback, `[plot N attached]`, state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status line, head 40% / tail 60% truncation with the `peter$out(<id>)` notice; halves the budget when the session's context exceeds half the compaction threshold | P10 |
+| `format_eval_result(res, budget_tokens)` | `eval-format.R` | `list(text = chr(1), images = list, truncated = lgl(1), out_id, spill)`: output, messages, warnings, error + trimmed traceback, `[plot N attached]`, state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status line, head 40% / tail 60% truncation with the `peter$out(<id>)` notice; halves the budget when the session's context exceeds half the compaction threshold (never on a CLI route, D-202) | P10 |
 | `eval_guard(exprs)` | `eval-guard.R` | `list(blocked = chr, reason = chr(1) \| NULL)` for `q`, `quit`, `readline`, `menu`, `browser`, ... [12 §3.6]; the symbols `q` and `quit` are flagged in any position (a value, a `FUN` argument, `match.fun`, `get`, `do.call`, `base::`; IC-67); a literal `[secret:` marker is blocked with the `Sys.getenv()` hint | P09, P18 |
 | `gptr_shim(exprs, envir)` | `eval-guard.R` | rewrites calls headed by `peter`, `gptr_return` to `gptr::` when the symbol `peter` is not visible from `envir`, without binding anything; the recorded code keeps the original text | P09 |
 | `plot_png(recorded, width = gptr.plot_width, height = gptr.plot_height, res = gptr.plot_res)` | `eval-plots.R` | an image block (ragg when installed, else `grDevices::png()`) | P09, P10 (`peter$plot()`) |
@@ -3155,7 +3155,8 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   response. A `tools/call` served in a live run that has no tool of its own on the stack (either route, also a nested
   CLI run inside its parent's tool, or an MCP client during a run), is reported by `mcp_serve_call()` as `tool_execution_start`/`_end` under its gate's call id `mcp_<id>`, the end
   with the result's `content`, `details` and execution time; its approval's control tokens end with it [D-192]. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with `gptr_error_billing`. `result` lines end the turn (usage
-  from `usage` and `total_cost_usd` as an estimate, route `plan-cli`); `rate_limit_event` updates the provider's
+  from `usage`, route `plan-cli`; the cost estimate is the increase of `total_cost_usd`, the running total of the CLI
+  session, which a resumed child goes on from; a smaller total counts whole [D-200]); `rate_limit_event` updates the provider's
   plan status. Interrupt: `{"type":"control_request","request_id":…,"request":{"subtype":"interrupt"}}`, then
   `kill_all()` after the grace period [07 §3.9-3.10].
 - **`cli-codex`** (provider `codex`, aliases `codex`, `codex-cli`). One `codex exec --json --ignore-user-config
@@ -3168,8 +3169,12 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   through the stdio relay of IC-79, in every installation. Events `thread.started`, `turn.started`, `item.started|updated|completed`
   (`agent_message` -> text, `reasoning` -> thinking, `mcp_tool_call`/`command_execution` -> informational
   `tool_execution_*` events with `informational = TRUE`, which IC-53 does not track since they run outside R,
-  except gptr's own `mcp_tool_call` items, which `mcp_serve_call()` reports; a
-  reasoning item's text ends with a line end), `turn.completed{usage}`, `turn.failed{error}`, `error` [08 §2.E]; gptr counts turns
+  except gptr's own `mcp_tool_call` items, which `mcp_serve_call()` reports; a command's `input$command` drops the
+  shell's `-lc` wrapper of a single-quoted script without a single quote of its own, or a bare word [D-207]; an
+  item's block is one delta ending with a line end [D-208]), `turn.completed{usage}` (the thread's
+  running totals, also on `exec resume`: an exec on the thread of the previous `turn.completed` records each count's
+  increase, an exec on a new thread the whole; an increase below zero is unknown [D-200]), `turn.failed{error}`,
+  `error` [08 §2.E]; gptr counts turns
   and cancels at the cap, with `gptr.cli_turn_timeout` per exec. Sandbox mapping (IC-65): `plan`, `manual` and
   `edits` -> `read-only` (file changes go through gptr's gated `write`/`edit` over MCP); `auto` and `yolo` ->
   `workspace-write`, with control files hashed before and a files-checkpointer walk after each exec; native
@@ -4804,6 +4809,10 @@ document are exact.
   The one-time notice says Codex runs its own shell inside its sandbox.
 - Codex has no turn cap flag: gptr counts `turn.completed`/`item.completed` events and cancels at the cap; each
   exec has a wall-clock limit (`gptr.cli_turn_timeout`, 3600 s).
+- **Continuity**: a claude child resumes the CLI session (`--resume`), a Codex exec its thread (`exec resume`), and
+  a reused or resumed conversation gets only the turns it has not seen. A rewind or a compaction (`session_tree`,
+  `session_compact`) stops the session's child and forgets the claude session, the Codex thread and its usage
+  baseline, so the next turn starts a fresh CLI conversation carrying the remaining path as history [D-203].
 - Live tests (`GPTR_LIVE_TESTS=true`) run Codex in a non-git temporary directory and require it to call the gptr
   MCP `r` tool; the test needs no optional package (IC-79).
 
@@ -4960,7 +4969,7 @@ calls and suggests `GPTR_REPLAY=replay`.
 | OAuth | refuse AS metadata without `code_challenge_methods_supported` or without S256; validate `iss` (RFC 9207) when advertised; own callback reader keeping `iss`; state and redirect checks; negative mock cases in P18 [16 §4 item 8, fact-check] | fid-17 |
 | frontmatter | scalars of the string keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) keep their source text (YAML 1.1 turns `yes`/`on`/`1.0` into logicals and numbers; verified) | fid-19 |
 | describers | methods for classes of packages outside Suggests (Matrix, SeuratObject, SingleCellExperiment, arrow, ggplot2) use only base generics, `methods::slot()`/`slotNames()`, `attr()`, `dim()`, guarded by `isNamespaceLoaded()`; never `pkg::fun()` | cran-21 |
-| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `preset = "minimal"` or `context = "names"`; an unknown window still checks a finite `compact_at` floor and reports an insufficient cap as `arg = "compact_at"`; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window, or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence) | safe-20 |
+| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `preset = "minimal"` or `context = "names"`; an unknown window still checks a finite `compact_at` floor and reports an insufficient cap as `arg = "compact_at"`; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window, or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence); a `plan-cli` reply's usage (a turn's sum over the CLI's model calls) anchors no projection and updates no multiplier, and a CLI model triggers neither rule [D-202] | safe-20 |
 | concurrent writers | read-modify-write of `auth.json`, settings, trust, MCP and user-level project files (and the OAuth refresh) under one short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms retries); a lock is stale when `pid_alive()` is `FALSE` or it is older than 30 s, never when it has vanished (the taker retries); checkpoint blob GC prunes only blobs unreferenced by every session file of the project and older than `gptr.checkpoint_days`, and skips while another live pid holds a session lock in the project | safe-17 |
 | artifact access | each launch gets a 128-bit token (`openssl::rand_bytes(16)`, else `/dev/urandom` on Unix; on Windows without openssl no token and a notice); the wrapper app rejects sessions whose URL lacks `gptr_token=<hex>`; the handle's URL carries it; static checks flag reads of `secret_file` paths at level 3 | safe-22 |
 | knobs | one knob per limit: options `gptr.subagents.max_depth`, `.max_active`, `.max_workers`, `.max_cli`, `.max_tasks` mirror the settings keys; `gptr.max_active` is HTTP transfers only; `gptr_parallel(max_active = NULL)` defaults to `gptr.subagents.max_active` | cons-20 |
@@ -5088,7 +5097,8 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   its enqueue run between one `console_render_pause()` and `console_render_resume()`, so each notice starts its own
   line; `policy_enqueue()` and `policy_flush()` take `source` (default `"pause_menu"`), so the item has the IC-55
   source `repl` and a steer becomes the operator relay.
-- Notices, pause menu included: `[gptr] steering: '<text>'; it reaches the agent at its next step` and
+- Notices, pause menu included: `[gptr] steering: '<text>'; it reaches the agent at its next step` (while the
+  run's model has type `"cli"`: `; it is sent after the CLI's current response`, D-205) and
   `[gptr] follow-up queued: '<text>'; it is sent when the agent would stop`.
 - The setting `type_ahead` (§11.2): `"steer"` (default) or `"follow_up"`; not a tighten key.
 - Limits: the terminal still echoes typed text into the stream (on an ANSI terminal the waiting row's redraw
@@ -5124,6 +5134,15 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
    (`run$group`: `n`, `runs`).
 5. The `r` tool tees only for a depth-0 run (§7.9); nested calls evaluate in an overlay (§6.1
    `envir`).
+6. Run totals (D-206): a foreground run's status line reads `done · <n> requests · <tokens> tokens ·
+   <cost>` from `agent_end`'s `usage` (the run's own rows; the payload's `turns` stays the session's
+   count), then `sub-agents <cost>` for the rows other sessions charged to the session during the run
+   (IC-66). A cost over requests (`format_cost()`: this line, the `print()` and `gptr_usage()`
+   footers, `/cost`) is the known sum plus a count of the requests of unknown cost
+   (`$9.5100 + 1 request of unknown cost`), `unknown cost` when none is known; IC-74's `NA` values
+   are unchanged. `/cost` prints `<agent>  <n> requests, <tokens> tokens in, <cost>` per agent name
+   and one `Total:` line; `/context` on a `plan-cli` request adds `The CLI keeps its own transcript;
+   its last turn reported <n> input tokens over all its model calls.`
 
 **IC-78 The yolo mode** (P26 Task 8).
 
@@ -5171,8 +5190,15 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   direct tools, session-scoped specs; `r` with `mcp_r_schema`), and the four defaults only before a freeze. A
   served call made while a run is live runs that run's `tool_call` hooks (P06's `tool_call_hook`), then the gate;
   a tool other than `r` then runs as the agent loop runs it (`tool_run()`: its record's source, the result check),
-  in the run's tool frame (`tool_execute_frame()`) when the call is reported (D-192). A long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a
-  refreeze is refused at `tools/call`.
+  in the run's tool frame (`tool_execute_frame()`) when the call is reported (D-192). A reported call, `r` included,
+  runs between the checkpointers' `before` and `after` (`checkpoint_before()`, `checkpoint_after()`), as a call of
+  the loop does, so `/undo` restores what it changed (#24); on a CLI route the files checkpointer then records the
+  edits the child made since the turn's start rather than absorbing them, and captures an untracked file only while
+  it is as the last walk saw it (else its row has no pre-image). A served `r` call made while a run is live draws
+  its plots as the loop's `r` tool does (`plots = "auto"`: on the person's device when one is open or a human is
+  present), so a CLI route's plots reach the screen (#42); without a run they stay offscreen (`"capture"`). A
+  long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a refreeze
+  is refused at `tools/call`.
 - The OpenAI-compatible, Responses and Google adapters decide tools with one helper (`adp_tools_on`): a model
   whose `tool_call` is `FALSE` gets no tools (IC-74 unchanged), and when that drops a non-empty array gptr gives one
   `gptr_message_notice` per model naming `tool_call = TRUE` and the `gptr_config(providers = ...)` declaration.
@@ -5180,7 +5206,7 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   the reference with `model_canonical()` (a registered router name passes, as at the first prompt) and keeps the
   text as typed; `codex-cli` is an alias of `codex`. The two
   console and MCP edges (`cmd_model()` -> `model_canonical()`, `mcp_serve_exec()` -> `tool_call_hook`,
-  `tool_run`, `tool_execute_frame`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
+  `tool_run`, `tool_execute_frame`, `checkpoint_before`, `checkpoint_after`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
 
 **IC-80 Bedrock Converse with SigV4** (P26 Task 11, D-193).

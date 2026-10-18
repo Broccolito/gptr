@@ -433,10 +433,11 @@ console_print_text = function(text, before_output = NULL) {
 }
 
 #' Verbosity 2's view of a thinking block of a record on a CLI route: its first line without a
-#' bold title's markers, dim and cut to the width within the margin (D-186), printed as a block
-#' once its line end or the width completes it, or by finish(), after clearing the waiting row,
-#' which keeps its clock; Codex's reasoning items so show as progress lines (D-192). Nothing is
-#' on screen before that, so reset_line() has no partial line to end.
+#' bold title's markers, dim and cut with an ellipsis to the width within the margin (D-186,
+#' D-207), printed as a block once its line end comes or it passes the width, or by finish(),
+#' after clearing the waiting row, which keeps its clock; Codex's reasoning items so show as
+#' progress lines (D-192). Nothing is on screen before that, so reset_line() has no partial line
+#' to end.
 #' @noRd
 console_think_line = function(rec, width = cli::console_width()) {
   width = width - nchar(console_pad())
@@ -448,7 +449,7 @@ console_think_line = function(rec, width = cli::console_width()) {
       line = sub("^\\*\\*(.+)\\*\\*$", "\\1", console_lines(st$text)[[1L]])
       if (!is.null(rec$spinner)) rec$spinner$clear()
       console_gap(rec, "think")
-      console_write(cli::col_grey(cli::ansi_strtrim(paste0("  ", line), width, ellipsis = "")))
+      console_write(cli::col_grey(cli::ansi_strtrim(paste0("  ", line), width)))
     }
     st$open = FALSE
     invisible(NULL)
@@ -459,7 +460,7 @@ console_think_line = function(rec, width = cli::console_width()) {
     st$text = sub("^[[:space:]]+", "", paste0(st$text, paste(delta, collapse = "")))
     if (!nzchar(st$text)) return(invisible(NULL))
     first = console_lines(st$text)[[1L]]
-    if (grepl("[\r\n]", st$text) || cli::ansi_nchar(first) + 2L >= width) st$finish()
+    if (grepl("[\r\n]", st$text) || cli::ansi_nchar(first) + 2L > width) st$finish()
     invisible(NULL)
   }
   st
@@ -532,13 +533,15 @@ console_state = function() {
   the$console
 }
 
-#' Start tracking a run of a session: a record with its session, tool calls and entry count
+#' Start tracking a run of a session: a record with its session, tool calls, entry count and
+#' usage row count
 #' @noRd
 console_track = function(run_id, session) {
   rec = new.env(parent = emptyenv())
   rec$session = session
   rec$tools = new.env(parent = emptyenv())
   rec$n0 = length(session_data(session)$entries)
+  rec$u0 = nrow(session_data(session)$usage)
   rec$request_pending = FALSE
   rec$paused = FALSE
   assign(run_id, rec, envir = console_state()$active)
@@ -751,11 +754,14 @@ console_msg_text = function(msg) {
   paste(text[!is.na(text)], collapse = "\n")
 }
 
-#' The preview lines of a tool input: its code, its path, its questions, else compact JSON
+#' The preview lines of a tool input: its code, its one-line command, its path, its questions,
+#' else compact JSON
 #' @noRd
 console_preview = function(input) {
   text = if (is.character(input$code) && length(input$code)) {
     paste(input$code, collapse = "\n")
+  } else if (rlang::is_string(input$command) && !grepl("\n", input$command, fixed = TRUE)) {
+    input$command
   } else if (is.character(input$path) && length(input$path)) {
     input$path[[1L]]
   } else if (is.list(input$questions)) {
@@ -769,7 +775,8 @@ console_preview = function(input) {
 }
 
 #' The default start of a tool call: "  * r  x = 1" when it fits `width`; code that does not
-#' follows as a Markdown fence of at most 20 lines that are never cut, `r` for the r tool (D-187)
+#' follows as a Markdown fence of at most 20 lines that are never cut, `r` for the r tool (D-187),
+#' a cut one ending in a `# ... +N more lines` line inside the fence (D-207)
 #' @noRd
 console_call_line = function(call, width) {
   lines = console_escape(console_preview(call$input), FALSE)
@@ -783,8 +790,11 @@ console_call_line = function(call, width) {
   fence = doc_rmd_fence("```", code)
   more = length(lines) - length(code)
   lang = if (grepl("(^|__)r$", call$name %||% "")) "r" else ""
-  body = c(cli::style_dim(paste0(fence, lang)), console_code(code, lang), cli::style_dim(fence),
-           if (more > 0L) cli::style_dim(paste0("(+", more, " more lines)")))
+  body = c(cli::style_dim(paste0(fence, lang)), console_code(code, lang),
+           if (more > 0L) {
+             cli::style_dim(paste0("# ", cli::symbol$ellipsis, " +", more, " more lines"))
+           },
+           cli::style_dim(fence))
   c(head, paste0(console_pad(), body))
 }
 
@@ -843,21 +853,21 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
   as.character(cli::ansi_strtrim(out, width))
 }
 
-#' The status line of a run's end: `  done | 2 turns | 1.2k tokens | $0.0042`; the status and
-#' reason when it did not end idle; an unknown (NA) usage value is unknown (IC-74)
+#' The status line of a run's end: `  done | 2 requests | 1.2k tokens | $0.0042`, the run's own
+#' requests (its usage rows), then `sub-agents $0.8500` when `kids` holds the costs of its
+#' sub-agents' requests; the status and reason when it did not end idle; an unknown (NA) usage
+#' value is unknown (IC-74)
 #' @noRd
-console_status_line = function(status, reason = NULL, usage = NULL, turns = NULL) {
+console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL) {
   word = if (identical(status, "idle")) "done" else console_escape(status %||% "?", FALSE)
   if (!identical(status, "idle") && rlang::is_string(reason) && nzchar(reason)) {
     word = paste0(word, ": ", console_escape(reason, FALSE))
   }
   cols = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h")
-  parts = c(word,
-            if (length(turns) == 1L && !is.na(turns)) {
-              paste0(turns, if (turns == 1L) " turn" else " turns")
-            },
+  n = NROW(usage)
+  parts = c(word, paste0(n, if (n == 1L) " request" else " requests"),
             paste(format_count(unlist(usage[intersect(cols, names(usage))])), "tokens"),
-            format_cost(usage$cost))
+            format_cost(usage$cost), if (length(kids)) paste("sub-agents", format_cost(kids)))
   paste0("  ", paste(parts, collapse = console_symbols()$sep))
 }
 
@@ -935,6 +945,8 @@ console_on_message_update = function(event, ctx) {
     if (!is.null(rec$md) && !identical(rec$md_index, event$index)) {
       rec$md$finish()
       rec$md = NULL
+      # a new text block right after one opens its own block, a blank line between (#41)
+      if (identical(rec$last, "text")) rec$last = NULL
     }
     if (is.null(rec$md)) {
       rec$md = render_markdown_stream(before_output = console_stream_output(rec))
@@ -1063,6 +1075,22 @@ console_on_retry = function(event, ctx) {
   NULL
 }
 
+#' session_compact: a compaction during a foreground run (an automatic one; `/compact` reports
+#' itself) prints one dim line with the token counts of its entry (D-202)
+#' @noRd
+console_on_compact = function(event, ctx) {
+  rec = console_record(event)
+  if (is.null(rec) || !console_render_on(rec)) return(NULL)
+  e = Find(function(e) identical(e$type, "compaction"), session_data(rec$session)$entries,
+           right = TRUE)
+  console_pause_one(rec)
+  console_gap(rec, "notice")
+  console_write(cli::col_grey(paste0(
+    "  conversation compacted: ", format_count(e$tokens_before %||% NA_real_), " -> ",
+    format_count(e$details$tokens_after %||% NA_real_), " tokens")))
+  NULL
+}
+
 #' agent_end: close the streams, show custom entries and the status line, forget the run; queued
 #' artifact lines (an interrupted tool) print last; a shown sub-agent says how it ended, `(k/N)`
 #' counting the settled children of its scheduled group (D-188)
@@ -1089,7 +1117,11 @@ console_on_agent_end = function(event, ctx) {
     })
   }
   if (!console_foreground(rec)) return(NULL)
-  line = console_status_line(event$status, event$reason, event$usage, event$turns)
+  # the rows charged to the session during the run by other sessions: its sub-agents' (IC-66)
+  d = session_data(rec$session)
+  u = d$usage
+  kids = u$cost[seq_len(nrow(u)) > rec$u0 & !(u$session %in% d$id) & !duplicated(u$request_id)]
+  line = console_status_line(event$status, event$reason, event$usage, kids)
   v = verbosity()
   if (v == 1L) {
     text = paste0("gptr:", sub("^ +", " ", line))
@@ -1168,6 +1200,7 @@ console_hooks = function() {
     gptr_hook("tool_execution_start", console_on_tool_start),
     gptr_hook("tool_execution_end", console_on_tool_end),
     gptr_hook("retry_start", console_on_retry),
+    gptr_hook("session_compact", console_on_compact),
     gptr_hook("agent_end", console_on_agent_end),
     gptr_hook("artifact_start", console_on_artifact_start),
     gptr_hook("session_shutdown", console_on_shutdown)

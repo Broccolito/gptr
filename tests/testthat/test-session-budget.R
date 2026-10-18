@@ -181,13 +181,15 @@ test_that("ledger_mark_cached() leaves the cache unknown when the cache read is 
   expect_null(ledger_mark_cached(s, "q-none", cache_read = 100))
 })
 
-test_that("format_cost() prints dollars, and an unknown cost as unknown (IC-74)", {
+test_that("format_cost() prints dollars and counts the requests of unknown cost (IC-74)", {
   expect_identical(format_cost(0.0123), "$0.0123")
   expect_identical(format_cost(c(0.25, 0.5)), "$0.7500")
   expect_identical(format_cost(numeric()), "$0.0000")
   expect_identical(format_cost(0), "$0.0000")
   expect_identical(format_cost(NA_real_), "unknown cost")
-  expect_identical(format_cost(c(0.25, NA)), "unknown cost")
+  expect_identical(format_cost(c(0.25, NA)), "$0.2500 + 1 request of unknown cost")
+  expect_identical(format_cost(c(NA, 0.25, NA)), "$0.2500 + 2 requests of unknown cost")
+  expect_identical(format_cost(c(NA_real_, NA_real_)), "unknown cost")
 })
 
 test_that("the default budget is 2e6 tokens and 5 USD per top-level call; NULL disables (IC-66)", {
@@ -345,6 +347,8 @@ test_that("a token budget stops the run before the next request with status budg
   expect_s3_class(cnd, "gptr_error_budget_tokens")
   expect_s3_class(cnd, "gptr_error_budget")
   expect_identical(cnd$kind, "tokens")
+  expect_identical(conditionMessage(cnd),
+                   "the tokens budget of this call (1.0k) is reached (used 1.0k)")
   types = vapply(ev(s), function(e) e$type, "")
   expect_identical(types, c("budget_near", "budget_exceeded"))
   d = session_data(s)
@@ -455,7 +459,8 @@ test_that("gptr_usage() keeps unknown usage unknown in groups, totals and the fo
   tot = attr(u, "totals")
   expect_identical(tot[["cost"]], NA_real_)
   expect_identical(tot[["requests"]], 2)
-  expect_identical(attr(u, "footer"), "2 requests, 200 tokens in, unknown cost")
+  expect_identical(attr(u, "footer"),
+                   "2 requests, 200 tokens in, $0.2500 + 1 request of unknown cost")
   printed = paste(utils::capture.output(print(u)), collapse = "\n")
   expect_true(grepl("unknown cost", printed, fixed = TRUE))
   expect_false(grepl("$NA", printed, fixed = TRUE))
@@ -468,7 +473,8 @@ test_that("gptr_usage() keeps unknown usage unknown in groups, totals and the fo
   expect_identical(u$cache_read, NA_real_)
   expect_identical(u$input, 300)
   expect_identical(attr(u, "totals")[["cache_read"]], NA_real_)
-  expect_identical(attr(u, "footer"), "3 requests, unknown tokens in, unknown cost")
+  expect_identical(attr(u, "footer"),
+                   "3 requests, unknown tokens in, $0.2500 + 1 request of unknown cost")
 })
 
 test_that("gptr_usage() keeps known zeros and prints an empty view as zero requests", {

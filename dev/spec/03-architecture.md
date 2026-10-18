@@ -1067,7 +1067,8 @@ cache_write_1h reasoning images cost tier stop_reason started seconds estimated 
 `route` is `api`, `plan-cli`, `system-one` or `emulated`. `estimated` is TRUE when the provider reported
 nothing (aborted before usage); the calibrated estimator fills the row. Cost uses dated price tiers (1 h cache
 writes at 2x input, 5 min at 1.25x, reads at the model's own rate, 0.025-0.1x) [07 §1, G2 fact-check]; CLI plan
-runs record `total_cost_usd` as an estimate. System 1 calls outside a session append to a process accounting
+runs record the increase of the CLI's running `total_cost_usd` as an estimate, and Codex usage is the increase of the
+thread's running totals [D-200]. System 1 calls outside a session append to a process accounting
 log (append-only, not run state). The **token ledger** (`gptr_usage(s, detail = TRUE)`, `/context`) splits each
 request into components: T0 sections, T1 sections, tools array, project block, environment, workspace, attached,
 transcript, tool results, images, marking cache reads [P-C §14.6, G2 est_* fields].
@@ -1714,6 +1715,10 @@ entry, with half the budget once the context exceeds half the threshold. For sma
 floor (static prefix + project instructions + re-injection + checkpoint) is checked at freeze: re-injection
 budgets shrink to 25% of the threshold, and a model whose floor still reaches the threshold is refused for that
 preset; after a threshold compaction the next one waits until the context grew by 20% of the window [IC-71].
+On a CLI route (a model of `type = "cli"`) neither rule triggers, nor the halved tool-output budget: the CLI
+compacts its own conversation; `/compact` still runs, and the next turn starts a fresh CLI conversation from its
+checkpoint [D-203]. A compaction during a foreground run prints one dim line
+with its before and after token counts [D-202].
 
 ### 6.12 Evaluator [12 §3-4]
 
@@ -1902,7 +1907,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
   lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
   width - 4; one blank line separates text, tool, notice, prompt and status blocks (and two
-  prompts) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
+  prompts, and two text blocks in a row [D-208]) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
   the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
   row, R GUIs included); the margin is that of the console an evaluation started from, also for
   prompts and notices drawn inside it. There nested lists keep their indentation, pipe tables are aligned
@@ -1919,10 +1924,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   under a list item closes), so a copied block is Markdown whose body runs; in the margin code
   characters appear as they stream and a line without a TAB that fit one row is redrawn
   highlighted. A tool call shows its code on its line when it fits, else as a fence of at most
-  20 lines (then `(+N more lines)`; info string `r` only for the r tool); result lines are
-  indented four spaces and an `r` error shows its error message; the one-line approval prompt
-  (6.8.3) is cut to the console width before its `+N more lines`, and the `?` detail shows the
-  code as a plain fence of at most 40 lines. Console output draws no box characters (D-187).
+  20 lines (info string `r` only for the r tool); result lines are indented four spaces and an
+  `r` error shows its error message; the one-line approval prompt (6.8.3) is cut to the console
+  width before its `+N more lines`, and the `?` detail shows the code as a plain fence of at most
+  40 lines. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied block
+  shows the cut (D-207). Console output draws no box characters (D-187).
   Every renderer write and console control (prompts, notices, the pause menu) goes through
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
   whatever `tee` is; prompts and sub-agent lines first end partial lines, also while a tool
@@ -1931,9 +1937,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   (`  sub-agent a started (kid/kid-1)`, `  sub-agent a done (1/2) · 2 turns · 12 s` or
   `failed: <status>`; `(k/N)` for a team, fan-out or `gptr_parallel()` group; a nested `peter()`
   by its quoted prompt). Model code that wraps such calls in `capture.output()` or `sink()` still
-  captures prompts and lines (D-188).
+  captures prompts and lines (D-188). A run's status line counts its own requests and adds what its
+  sub-agents cost (`done · 2 requests · 156.7k tokens · $0.2125 · sub-agents $0.8500`, D-206).
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
-  `/compact [focus]`, `/cost`, `/context` (token ledger), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
+  `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger; on a CLI route also the
+  CLI's reported turn input, D-206), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
   templates as `/<name> args`. Commands are recorded as comments in transcripts.
 - **UI backends** (`ui` specs): `console`, `none`, `scripted` (tests), `rstudio` (dialogs; a timed-out dialog
@@ -2309,9 +2317,11 @@ evaluates R in the live session; because `--allowedTools mcp__gptr__*` pre-allow
 `mcp_message` dispatch (a `can_use_tool` for anything else goes through the injected `opts$gate` and is denied); Ctrl-C sends a
 `control_request` interrupt, then `kill_all()`. gptr's own tool calls are reported where they run (`mcp_serve_call()`)
 as `tool_execution_*` events, the end with the result's `content` and `details`, so the console shows them as tool
-and result lines while they run and IC-53 tracks them as calls of the agent loop; the gate is unchanged [D-192]. Stream events reuse the Anthropic normaliser; continuity uses
-the CLI's session id (`--resume` with the same system-prompt file); usage records `total_cost_usd` as a plan
-estimate and the rate-limit event as plan status. Concurrency: one `claude-cli` child per session by default.
+and result lines while they run and IC-53 tracks them as calls of the agent loop; the gate is unchanged [D-192]. Stream events reuse the Anthropic normaliser and print as
+they arrive; an answer that follows a served call usually arrives in one burst when the CLI completes it [D-204]. Continuity uses
+the CLI's session id (`--resume` with the same system-prompt file) until a rewind or a compaction, after which the child is stopped and
+the next turn starts a fresh CLI session that carries the remaining path as history [D-203]; usage records the increase of `total_cost_usd`, the
+CLI session's running total that a resumed child goes on from, as a plan estimate [D-200], and the rate-limit event as plan status. Concurrency: one `claude-cli` child per session by default.
 The provider id avoids the Claude Code product name; `claude_code` is only an alias; the maintainer asks
 Anthropic before advertising the route (policy status UNCERTAIN) [07, J-cran].
 
@@ -2350,14 +2360,16 @@ each exec (changed ones are not loaded until the user confirms) and a files-chec
 covers Codex's edits; on native Windows the sandbox is probed and the route falls back to `read-only` with a warning
 when it is not ready [08 line 2796]; never bypass the sandbox. The one-time notice says Codex runs its own shell
 inside its sandbox. gptr counts Codex's turn events and cancels at the turn cap, with a wall-clock limit per exec.
-Codex's own steps (commands, file changes, web searches) become informational tool events and its calls of gptr's
-tools are reported where they run, so each shows once; a reasoning item is a thinking block ending with a line end.
+Codex's own steps (commands, without the shell's `-lc` wrapper [D-207], file changes, web searches) become
+informational tool events and its calls of gptr's tools are reported where they run, so each shows once; a reasoning
+item is a thinking block. Each whole block of a CLI route streams as one delta ending with a line end, so the console
+shows its last word at once [D-208].
 The informational events run outside R, so IC-53 does not track them and the user's own control exports still work.
 On both CLI routes, whose one request runs a whole agent turn, the console shows each thinking block's first line dim
-at verbosity 2 above the waiting row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
+(cut at the width with an ellipsis [D-207]) at verbosity 2 above the waiting row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
 carries no text deltas, so the answer arrives whole; token streaming needs the app-server driver (open item). Both
 routes probe their CLI when a run starts, before its waiting row [D-192]. Continuity: `codex exec resume <thread>` when supported
-(UNCERTAIN), else a new thread with a synthetic history. The console states Codex's 19-38K extra input tokens
+(UNCERTAIN), else, and after a rewind or a compaction [D-203], a new thread with a synthetic history. The console states Codex's 19-38K extra input tokens
 per turn [08]. The Codex app-server driver (dynamic tools calling back into R, token streaming, steer, interrupt) and Sign in
 with ChatGPT (the native `openai` provider with `auth = "chatgpt"`, avoiding Codex's overhead) are v1.x plugins
 behind a schema probe and a maintainer's live end-to-end test respectively (§1.3).
@@ -2840,7 +2852,7 @@ static prefix is read from cache at 0.025-0.1x the input price.
 | `<workspace_changes>` | about 70 | 300; only when non-empty |
 | `<attached>` per object | 60-150 | 150 default, 300 maximum; level-based describers keep 90.8% of 98 facts at 150 [G2 (c)] |
 | `<skill_content>` | skill body | 5,000 per skill, 10,000 re-injected after compaction [G4 §3.8] |
-| `r` result | 30-300 | about 4,000 estimated tokens, head 40% / tail 60% by lines, spill file, `peter$out(id)`; half the budget once the context passes half the compaction threshold [G2 (g), G4 §4.4.5] |
+| `r` result | 30-300 | about 4,000 estimated tokens, head 40% / tail 60% by lines, spill file, `peter$out(id)`; half the budget once the context passes half the compaction threshold, not on a CLI route [G2 (g), G4 §4.4.5, D-202] |
 | namespace helper print (`sh`, `grep`, `sql`, `py`, `out`) | 100-300 | 1,500, and at most 0.6 x the remaining `r` budget; stderr at most 25% with 200/100-token floors [G5 + fact-check] |
 | `read` | file slice | 2,000 lines, 50 KB and 12,000 tokens; line numbers off |
 | `edit` result | about 20 | message only; a diff of at most 400 tokens only when something deviated |
@@ -2920,7 +2932,9 @@ ceil(h/28)`; OpenAI and Gemini per their documented formulas (dated in the catal
 Context projection = the last provider-reported input total + output + `m * est(new entries)`, where the
 per-session multiplier `m` starts at a provider prior (OpenAI 1.00, Claude 4.7+ 1.35, Gemini 1.10) and is
 updated by an EWMA of the log ratio whenever new content is at least 150 estimated tokens (15-19% error on new
-content; 0.3% on the usage-anchored whole). Provider-reported usage is authoritative. No tokenizer ships;
+content; 0.3% on the usage-anchored whole). Provider-reported usage is authoritative. A `plan-cli` reply's usage
+sums the CLI's model calls of a turn, no context size: it neither anchors the projection nor updates `m`
+[D-202]. No tokenizer ships;
 rtiktoken is dev-only. The estimator is an `estimator` spec (replaceable). Producers must mark text UTF-8 at
 the source (in a C locale unmarked text is over-counted, which is conservative [G2 fact-check]).
 

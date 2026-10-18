@@ -2399,3 +2399,129 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: provider-bedrock (new), live-bedrock (opt-in), arch-layers (122 files), auth-secrets (the key id is a
   secret name); `setup.R` clears the key-pair variables; the scripted wire of `replay_helpers.R` takes raw
   bodies; `fixtures/sse/bedrock-converse/` (tool_use, throttled). Evidence: progress/P26.md Task 11.
+
+## D-200 - P26 CLI usage is the increase of the CLIs' running totals (2026-10-18)
+- Rule: claude-cli's `total_cost_usd` is the CLI session's running total, also after `--resume` (seurat-claude: each
+  run's first result was the previous total plus its cost); the baseline resets only for a child that starts a fresh
+  CLI session, a turn costs the increase, a smaller total (a session not resumed) counts whole (04 §8.5).
+- Rule: Codex's `turn.completed` usage is the thread's running total, also on `exec resume` (probe: 17106/12160/5, then
+  34231/29056/10); an exec on the thread of the previous `turn.completed` records each count's increase, one on a new
+  thread the whole; an increase below zero or of an unknown count is unknown (IC-74).
+- Rule: budget question and stop message print tokens with `format_count()` (`2.0M`), cost with `format_cost()`.
+- `--max-budget-usd` unchanged, not probed live (no real CLI in this lane): in kdps-claude captures/32 a resumed
+  session already at $6.20 ran a turn of several tool calls under `--max-budget-usd 5` unstopped, so the flag counts
+  the process's own spend. Open: a direct live probe.
+- Contract-visible: 04 §8.5 (both routes); 03 §5.5, §8.3; the budget message text.
+- Tests: cli-claude-result, cli-codex, agent-run, session-budget. Evidence: progress/P26.md Task 12.
+
+## D-201 - P26 Calls served to a CLI route pass the checkpointers (2026-10-18)
+- Rule: a reported served call (a live run with no tool of its own on the stack: both CLI routes, an MCP client
+  during a run) runs between `checkpoint_before()` and `checkpoint_after()` as `dispatch_steps()` runs a call, so
+  `/undo` restores its objects, files and state (#24: seurat-claude, kdps-claude and codex kept the undone turn's
+  objects, every turn `objects 0/0`). A call served inside its run's own tool stays covered by that tool's checkpoint.
+- Rule: on a CLI route the files checkpointer's `before()` does not sync: `ckpt_on_cli()` syncs at `agent_start`,
+  and a sync there absorbed the edits the child made before its served call (the triage fix alone: files `1/1`, the
+  child's edit not restored). Each change is recorded once, in the served call's fragment or in the turn scan. An
+  untracked file is captured only while it is as the last walk saw it, so a child's edit never becomes a pre-image
+  (its row says no pre-image, and `/undo` does not claim to restore it).
+- Contract-visible: 04 IC-79 (served calls are checkpointed; contract edges `checkpoint_before`, `checkpoint_after`).
+- Tests: mcp-server, cli-claude, cli-codex, ckpt-files, arch-layers. Evidence: progress/P26.md Task 15.
+
+## D-202 - P26 No automatic compaction on the CLI routes; plan-cli usage is no context size (2026-10-18)
+- Rule: a `plan-cli` reply's usage sums the CLI's model calls of one turn (codex: 10 threshold compactions in 13
+  prompts at ~4.2k estimated tokens), so `reported_total()` is NA for it: the projection anchors on an earlier API
+  reply or the estimate, also after a `/model` switch to an API route. It does not update the estimator multiplier
+  either (an addition to the triage fix: clamped at 3, a CLI turn's ratio would triple the next API projection).
+- Rule: the checkpoint compactor's threshold and cold rules never trigger for a CLI model (`type = "cli"`), nor
+  the halved `r` result budget (it asks `compact.should`): the CLI compacts its own conversation, and a checkpoint
+  is one more turn on it. `/compact` still runs (Task 17 is to start a fresh CLI conversation from its summary).
+- Rule: a `session_compact` of a foreground run prints one dim line, `conversation compacted: <before> -> <after>
+  tokens`, from the compaction entry (out of lane: console-render.R, one hook).
+- Contract-visible: 03 §6.11 (incl. its tool-output sentence), the `r` result budget row, §12.5; 04
+  `compact_should` and `format_eval_result` rows, IC-71 compaction row; the console notice.
+- Tests: prompt-compact, agent-run, console-render. Evidence: progress/P26.md Task 16.
+
+## D-203 - P26 A rewind or a compaction starts a fresh CLI conversation (2026-10-18)
+- Rule: builtin:cli handles `session_tree` and `session_compact`: the session's child is stopped (no interrupt wait)
+  and its claude session id, Codex thread and Codex usage baseline are forgotten, so the next build starts a fresh
+  CLI conversation whose first message carries the remaining path or the compaction checkpoint (#26: seurat-claude,
+  after `/undo` claude-cli quoted the undone prompt word for word). Before, the next turn resumed the same CLI
+  conversation, which `pcli_unseen()` can only extend.
+- Every rewind resets, a workspace-only one too (one rule: at worst a needless fresh conversation, never a stale one).
+  The claude cost baseline restarts in build() with the fresh session (D-200); the Codex one is cleared, so a reused
+  thread id never turns a whole count into an increase.
+- Contract-visible: 04 IC-65 (continuity bullet); 03 §6.11, §8.3 (both routes).
+- Tests: cli-claude, cli-codex. Evidence: progress/P26.md Task 17.
+
+## D-204 - P26 A claude-cli answer that follows a served call usually arrives whole (2026-10-18)
+- Finding (#31): the hold is upstream of gptr, in what the claude CLI emits (the CLI or the model stream it
+  receives). The CLI's transcript (`~/.claude/projects/<cwd>/<session>.jsonl`) stamps each content block when the CLI
+  completes it. Aligned with the ts.py recordings, 13 of 16 kdps-claude and 11 of 12 seurat-claude answers after a
+  served call printed half their text within 0.25 s of that stamp, in one burst; the others began seconds earlier and
+  the rest streamed. A message's thinking and text blocks complete milliseconds apart (kdps 06:50:55.655/.666 and
+  07:37:00.938/.941 UTC); answers after a user line have spread stamps and streamed live.
+- gptr forwards and renders each delta as it arrives, also after a served call (fake CLI: deltas 0.4 s apart print
+  0.8 s apart). Ruled out: pcli_claude_result() printing the result (seurat turn 1 had earlier text, so the answer came
+  as deltas) and console_render_on() FALSE (the waiting row, which needs it, redrew during the hold). No gptr change.
+- Open: telling the CLI apart from its model stream needs a live probe of the CLI's API stream (not in this lane).
+- Contract-visible: 03 §8.3 (one sentence). Tests: cli-claude. Evidence: progress/P26.md Task 22.
+
+## D-205 - P26 The steering notice on a CLI route says when the steer is sent (2026-10-18)
+- Rule: while the run's model has type `"cli"`, the steering notice (typed line or pause menu) ends `; it is sent after
+  the CLI's current response` (#34: kdps-claude and seurat-claude steers arrived after the CLI's whole answer while the
+  notice said `it reaches the agent at its next step`). Delivery and the follow-up notice are unchanged (P26 Task 3).
+- The triage asked for the session's provider type; the notice reads the run's model instead, whose response is in
+  flight (a router can pick a CLI model), as console-render.R's CLI thinking rule does. Before a run's first request
+  it is unset, and the steer then joins that request, so the default wording holds.
+- Contract-visible: 04 IC-76 (notices). Tests: console-typing. Evidence: progress/P26.md Task 25.
+
+## D-206 - P26 Run lines, /cost and /context describe the run, its sub-agents and the CLI (2026-10-18)
+- Rule: the status line counts the run's own requests (`agent_end`'s `usage` rows) instead of the session's turns,
+  which the payload keeps (kdps-claude: `1 turn`, `2 turns`, ... `12 turns` over one-turn runs), and adds
+  `sub-agents <cost>` from the rows other sessions charged to the session during the run (IC-66: a fan-out child's
+  rows reach the root through its container; `done · 2 turns · 156.7k tokens · $0.2125` left out $0.85).
+- Rule: `format_cost()` of request costs is the known sum plus a count of the requests of unknown cost (`$9.5100 + 1
+  request of unknown cost`), `unknown cost` when none is known, wherever a cost prints (the status line, the
+  `print()` and `gptr_usage()` footers, `/cost`): one aborted claude-cli request hid the session's known $9.51.
+  `NA` values in the data are unchanged (IC-74).
+- Rule: `/cost` prints `<agent>  <n> requests, <tokens> tokens in, <cost>` per agent name and one `Total:` line (it
+  printed a data frame by session id, cut at 20 rows, and two totals). `/context` on a request whose usage row has
+  route `plan-cli` adds `The CLI keeps its own transcript; its last turn reported <n> input tokens over all its
+  model calls.` (that row's input and cache tokens: a sum over the turn, no context size, D-202).
+- The triage's `+ $0.85 sub-agents` is its own part, `sub-agents $0.8500`: joined to an own cost with unknown requests
+  it read `$0.0010 + 1 request of unknown cost + $0.5000 ... sub-agents`.
+- Contract-visible: 04 IC-77 item 6; 03 §6.17 (status line, `/cost`, `/context`); `?gptr_usage` (footer).
+- Tests: console-render, console-commands, session-budget, session-object, console-jupyter-progress, console-fences.
+  Evidence: progress/P26.md Task 29.
+
+## D-207 - P26 Cut fences say so inside the fence; Codex commands without their shell; cut thinking lines (2026-10-18)
+- Rule (#40; amends D-187 and P26 Task 5's cap lines): a tool-call fence cut at 20 lines (dim) and the `?` detail's
+  plain one cut at 40 end with a `# … +N more lines` line before the closing fence (it followed the fence as
+  `(+N more lines)`, so a copied block looked whole: seurat-versa, codex). The one-line prompt keeps `(+N more lines)`
+  (IC-53 item 8).
+- Rule (amends D-192): a Codex `command_execution` event's `input$command` drops the `<shell> -lc` wrapper of a
+  single-quoted script without a single quote of its own, or a bare word (`/bin/zsh -lc 'wc -l x.csv'` ->
+  `wc -l x.csv`); other commands, such as a double-quoted script, stay whole.
+  `console_preview()` shows an input's one-line `command` after its `code`, so the call reads
+  `● codex_shell  wc -l x.csv`; a command of several lines keeps the one-line JSON preview, so no line is hidden.
+- Rule (amends D-192): a CLI route's thinking line is cut once it passes the width, with cli's ellipsis (it was cut on
+  reaching the width with none, so the rest of a line exactly that long was dropped unmarked).
+- Contract-visible: 04 §8.5; 03 §6.17, §8.3. Tests: cli-codex, console-fences, console-ui, console-render. Evidence:
+  progress/P26.md Task 31.
+
+## D-208 - P26 A CLI route's whole blocks end their line; text blocks in a row are separated (2026-10-18)
+- Rule (#41; amends D-192): `pcli_text_block()` streams a whole block as one delta ending with a line end, so the
+  console shows a Codex message's last word when the item completes (it was held until the next event, 1.5-9.5 s
+  live). The kept block is unchanged: the triage's `paste0(text, "\n")` on the block would have added a line end to
+  the answer (`$text`, `msg_text()`). A Codex reasoning item's thinking block no longer keeps its own line end.
+- Rule (amends D-186): on the console, a text block that directly follows another text block of the run opens its
+  own block, one blank line between them (three Codex messages printed on adjacent lines). All routes.
+- Contract-visible: 03 §6.17, §8.3; 04 §8.5. Out of lane: console-render.R. Tests: cli-codex
+  (`codex-messages.jsonl`). Evidence: progress/P26.md Task 32.
+
+## D-209 - P26 Plots of calls served during a run reach the person's device (2026-10-18)
+- Rule (#42): `mcp_serve_r()` evaluates with `plots = "auto"` while the session has a live run, as the loop's `r`
+  tool does: on the person's open device, or on a new one when a human is present (kdps-claude: the console showed
+  `[1 plot]`, `dev.list()` was NULL). Without a run (`gptr_mcp_serve()` between runs) it keeps `"capture"`, offscreen.
+  The model still gets the image either way.
+- Contract-visible: 04 IC-79 (served calls bullet). Tests: mcp-server. Evidence: progress/P26.md Task 33.

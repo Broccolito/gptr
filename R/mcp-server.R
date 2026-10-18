@@ -212,6 +212,7 @@ mcp_serve_call = function(target, name, args, id, schema) {
 #' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result. A tool other than `r` runs
 #' as the agent loop runs it (tool_run(): its record's source, the result check), a reported one
 #' (`st`, which marks the start of its execution) in the run's tool frame (tool_execute_frame()).
+#' A reported call runs between the checkpointers' before and after, as dispatch_steps() runs one.
 #' @noRd
 mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   s = target$session
@@ -248,24 +249,32 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
               risk = risk)
   if (!is.null(run)) call = tool_call_hook(run, call, risk)
   if (!is.null(call$blocked)) return(gptr_tool_result(call$blocked, is_error = TRUE))
-  input = call$input
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
     return(gptr_tool_result(paste0("Permission denied: ", d$reason %||% "not allowed",
                                    ". To allow it, run it yourself at the R prompt or add a ",
                                    "rule with gptr_permissions(allow = ...)."), is_error = TRUE))
   }
-  if (is.list(d$input)) input = d$input
-  if (!is.null(st)) st$t0 = reactor_now()
-  if (identical(name, "r")) return(mcp_serve_r(input, env, run, s))
-  if (is.null(st)) return(tool_run(spec, input, ctx, name))
-  call$input = input
-  tool_execute_frame(run, call, ctx)
+  if (is.list(d$input)) call$input = d$input
+  tokens = NULL
+  if (!is.null(st)) {
+    tokens = checkpoint_before(run, call, ctx)
+    st$t0 = reactor_now()
+  }
+  res = if (identical(name, "r")) {
+    mcp_serve_r(call$input, env, run, s)
+  } else if (is.null(st)) {
+    tool_run(spec, call$input, ctx, name)
+  } else {
+    tool_execute_frame(run, call, ctx)
+  }
+  checkpoint_after(run, call, ctx, tokens, res)
 }
 
 #' Evaluate served R code in `env` through the eval.r service (the evaluator kind, IC-69).
 #' Mark the running tool on this call stack, as tool_execute_frame() does, so gptr_return()
-#' and nested calls belong to the session whose MCP token authorized this evaluation.
+#' and nested calls belong to the session whose MCP token authorized this evaluation. During a
+#' run its plots are drawn as the loop's `r` tool draws them ("auto"), else offscreen (#42).
 #' @noRd
 mcp_serve_r = function(input, env, run, session = NULL) {
   .gptr_tool_run = run
@@ -273,7 +282,8 @@ mcp_serve_r = function(input, env, run, session = NULL) {
   record = mcp_r_recording(run, session)
   budget = as.integer(gptr_opt("r_output_tokens"))
   timeout = input$timeout %||% (if (gptr_has_human()) NULL else gptr_opt("r_timeout"))
-  res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = "capture",
+  plots = if (is.null(run)) "capture" else "auto"
+  res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = plots,
                                   tee = FALSE, budget_tokens = budget, rng = run$opts$rng_state,
                                   record = record)
   if (record && identical(res$status, "ok") && mcp_r_recording(run, session)) {
