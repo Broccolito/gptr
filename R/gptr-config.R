@@ -1117,14 +1117,19 @@ egress_can_ask = function(safety = egress_safety()) {
 }
 
 #' The question shown before the first automatic context goes to a provider (gptr_confirm()
-#' appends the ` [y/N] ` hint itself); it names the effective endpoint when there is one
+#' appends the ` [y/N] ` hint itself); it names the effective endpoint when there is one, and the
+#' model `asker` of a sub-agent that model code starts
 #' @noRd
-egress_question = function(id, origin = NULL) {
+egress_question = function(id, origin = NULL, asker = NULL) {
   to = if (is.null(origin)) id else paste0(id, " (", origin, ")")
-  paste0("gptr sends your prompts to ", to, " together with automatic context: the workspace ",
-         "listing (object names, classes and sizes), a description of the R environment, project ",
-         "instructions and descriptions of the objects you attach. Allow this for ", id,
-         " from now on?")
+  lead = if (is.null(asker)) {
+    paste0("gptr sends your prompts to ", to)
+  } else {
+    paste0("The agent's code starts a sub-agent on ", asker, ", which sends its prompt to ", to)
+  }
+  paste0(lead, " together with automatic context: the workspace listing (object names, classes ",
+         "and sizes), a description of the R environment, project instructions and descriptions ",
+         "of the objects you attach. Allow this for ", id, " from now on?")
 }
 
 #' Records `egress.<id> = "ack"` in the user settings file by one read-modify-write under its
@@ -1145,10 +1150,11 @@ egress_record = function(id) {
 #' `invisible(TRUE)` when automatic context may go to `provider_id` (acknowledged, offline or a
 #' local endpoint), judged on `provider`, the record the request uses (IC-29, IC-74; D-099,
 #' D-114); else asks once when `safety` allows (IC-53) and records the answer, or
-#' gptr_error_egress (13 C-34)
+#' gptr_error_egress (13 C-34). Inside a run the question names `asker`, the model of the session
+#' that model code starts.
 #' @noRd
 egress_check = function(provider_id, provider = provider_get(provider_id),
-                        safety = egress_safety()) {
+                        safety = egress_safety(), asker = NULL) {
   check_string(provider_id, "provider_id")
   pid = provider[["id"]] %||% provider[["name"]] %||% provider_id
   # the id is pasted into the hint the user is told to run, so it must be a plain provider id
@@ -1163,7 +1169,8 @@ egress_check = function(provider_id, provider = provider_get(provider_id),
   # gptr_config() merges top-level keys only, so the hint keeps the acknowledgements already given
   how = paste0("gptr_config(egress = utils::modifyList(gptr_config()$egress, list(`", pid,
                "` = \"ack\")), .scope = \"user\")")
-  if (egress_can_ask(safety) && isTRUE(gptr_confirm(egress_question(pid, st$origin)))) {
+  if (is.null(run_current())) asker = NULL
+  if (egress_can_ask(safety) && isTRUE(gptr_confirm(egress_question(pid, st$origin, asker)))) {
     path = egress_record(pid)
     gptr_inform(paste0("Recorded that automatic context may go to ", pid, " (", path, ")."),
                 "egress_ack")

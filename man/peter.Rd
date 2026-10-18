@@ -16,7 +16,8 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 \item{...}{A session to continue, the prompt, and context objects.}
 
 \item{model}{A model name (\code{sonnet}, \code{"anthropic/claude-sonnet-5-5"}), a provider or router spec
-such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default.}
+such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default. A call made by the
+agent's own R code, and a team or fan-out it starts, uses the running session's model instead.}
 
 \item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.}
 
@@ -29,8 +30,9 @@ file paths.}
 \item{agents}{A named list of agent definitions for a team (\code{agent()} means \code{\link[=gptr_agent]{gptr_agent()}}).}
 
 \item{parallel}{Fan one list-like context object out over this many concurrent sub-agents.
-A child that succeeds keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}, so they must
-be self-contained.}
+Each child gets its element alone as \code{.x}, a named list of one attached as \code{.x[["A"]]};
+\code{.opts = list(context = "none")}, which would drop it, is refused. A child that succeeds
+keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}, so they must be self-contained.}
 
 \item{choices, levels, threshold, min_confidence, uncertain}{System 1 answer shape and abstention.}
 
@@ -71,6 +73,10 @@ reloading the dataset. Model context contains bounded descriptions and requested
 R computes on the full local object. Ordinary R allocations, file-backed inputs, checkpoints
 and worker transfers still have their usual costs. See
 \code{vignette("execution-model", package = "gptr")} for these boundaries.
+
+Agent code runs in this R process: a program it starts with \code{system()} or \code{system2()} reads
+standard input from your terminal, so the agent is told, except under the \code{"minimal"} preset
+that sub-agents run, to use \code{system2(..., stdin = nullfile())} instead of \code{system()}.
 
 The dots take, in order: at most one leading session to continue, the prompt (the first
 unnamed string literal, else the first unnamed length-1 character value), and context objects

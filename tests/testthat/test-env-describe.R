@@ -241,7 +241,7 @@ test_that("ggplot, DBI, Arrow and SingleCellExperiment describers need no packag
   gg = structure(list(data = mtcars, layers = list(list(geom = geom)),
                       mapping = list(x = quote(wt), y = quote(mpg))), class = c("gg", "ggplot"))
   expect_equal(gptr_describe(gg, budget = 300L),
-               c("<ggplot> 1 layers (GeomPoint)", "  data: 32 x 11; mapping: x, y"))
+               c("<ggplot> 1 layer (GeomPoint)", "  data: 32 x 11; mapping: x, y"))
   tbl = structure(new.env(), class = c("Table", "ArrowTabular", "ArrowObject", "R6"))
   if (!isNamespaceLoaded("arrow")) {
     expect_equal(gptr_describe(tbl), "<Table/ArrowTabular> (arrow is not loaded)")
@@ -250,6 +250,33 @@ test_that("ggplot, DBI, Arrow and SingleCellExperiment describers need no packag
   con = DBI::dbConnect(RSQLite::SQLite(), ":memory:")
   withr::defer(DBI::dbDisconnect(con))
   expect_match(gptr_describe(con), "^<SQLiteConnection> DBI connection; tables are not listed")
+})
+
+test_that("a patchwork is described by its plots (#45)", {
+  geom = structure(list(), class = c("GeomPoint", "Geom"))
+  gg = structure(list(data = mtcars, layers = list(list(geom = geom))), class = c("gg", "ggplot"))
+  pw = function(base, plots) {
+    base$patches = list(plots = plots)
+    structure(base, class = c("patchwork", class(base)))
+  }
+  expect_equal(gptr_describe(pw(gg, list(gg, gg))), "<patchwork> of 3 plots")
+  filler = structure(list(layers = list()), class = c("plot_filler", "gg", "ggplot"))
+  expect_equal(gptr_describe(pw(filler, list(gg))), "<patchwork> of 1 plot")
+  expect_equal(gptr_describe(pw(gg, list(gg, pw(filler, list(gg, gg))))), "<patchwork> of 4 plots")
+  s7 = structure(1L, meta = list(patches = list(plots = list(gg, gg))),
+                 class = c("patchwork", "gg", "ggplot"))
+  expect_equal(gptr_describe(s7), "<patchwork> of 3 plots")
+})
+
+test_that("a session is described by kind, model, status, turns and cost (#45)", {
+  local_project()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  d = session_data(s)
+  d$turns = 1L
+  expect_equal(describe_binding("s", environment()),
+               "s: <gptr_session> chat, model fake/fake-1, idle, 1 turn, $0.0000")
+  session_new("fake/fake-1", "auto", kind = "child", parent = s, opts = list(name = "io"))
+  expect_equal(gptr_describe(s, level = 2L)[2L], "  children: io")
 })
 
 test_that("describer methods call no package outside Imports (IC-71)", {
@@ -325,7 +352,7 @@ test_that("describe_binding reports a missing argument and empty dots without ge
 test_that("environments with missing arguments and reference class objects are described", {
   frame = (function(x, y) environment())(1)
   expect_equal(describe_value(frame, 150L),
-               c("<environment> with 2 bindings (0 functions, 0 active, 1 unevaluated promises)",
+               c("<environment> with 2 bindings (0 functions, 0 active, 1 unevaluated promise)",
                  "  fields: x, y"))
   e = s4_where()
   gen = methods::setRefClass("P09Counter", fields = list(n = "numeric"), where = e)
@@ -397,14 +424,14 @@ test_that("an overrunning method whose forced levels are NA is cut, not replaced
   expect_lte(est_tokens(out, "describe"), 60)
 })
 
-test_that("NAMESPACE exports gptr_describe() and registers its 15 methods", {
+test_that("NAMESPACE exports gptr_describe() and registers its 16 methods", {
   nsfile = testthat::test_path("..", "..", "NAMESPACE")
   skip_if_not(file.exists(nsfile), "the source NAMESPACE is not reachable from here")
   ns = readLines(nsfile, encoding = "UTF-8")
   expect_true("export(gptr_describe)" %in% ns)
   classes = c("\"function\"", "ArrowTabular", "DBIConnection", "Dataset", "Seurat",
               "SingleCellExperiment", "data.frame", "default", "dgCMatrix", "environment",
-              "formula", "ggplot", "list", "lm", "matrix")
+              "formula", "ggplot", "gptr_session", "list", "lm", "matrix")
   registered = grep("^S3method\\(gptr_describe,", ns, value = TRUE)
   expect_setequal(sub("^S3method\\(gptr_describe,(.*)\\)$", "\\1", registered), classes)
 })

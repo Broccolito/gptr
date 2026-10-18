@@ -256,7 +256,7 @@ test_that("the preview lists a fragment whose checkpointer is not registered", {
   expect_identical(plan$restore, FALSE)
   expect_identical(plan$turn, NA_integer_)
   expect_identical(paste0(plan$item, ": ", plan$reason),
-                   ckpt_rewind_apply(tr, ops, list(), NULL, FALSE))
+                   ckpt_rewind_apply(tr, ops, list(), NULL, FALSE, plan$item))
 })
 
 test_that("report lines become the rewind block lines", {
@@ -542,6 +542,7 @@ test_that("gptr_checkpoints() lists the turns of the active path (contract 5.12)
   expect_identical(cp$files, c("1/1", "0/0"))
   expect_identical(cp$branch, c("active", "active"))
   expect_s3_class(cp$time, "POSIXct")
+  expect_identical(attr(cp$time, "tzone"), "")
   expect_true(all(cp$held_mb >= 0))
   expect_identical(cp$id[2L], session_data(s)$leaf)
   expect_output(print(cp), "Rewind with gptr_rewind")
@@ -578,6 +579,7 @@ test_that("/undo, /redo, /rewind k and /checkpoints drive gptr_rewind()", {
   expect_match(ckpt_cmd_rewind("9", ctx), "Cannot rewind to turn 9")
   lines = ckpt_cmd_checkpoints("all", ctx)
   expect_true(any(grepl("abandoned", lines, fixed = TRUE)))
+  expect_identical(lines[length(lines)], "Undo with /undo, or /rewind <turn>.")
   expect_identical(ckpt_cmd_undo("", list(session = NULL)), "There is no session to undo.")
 })
 
@@ -592,6 +594,54 @@ test_that("/undo asks first when the preview finds items it cannot restore", {
   expect_identical(ckpt_cmd_undo("", ctx), "Undo cancelled.")
   expect_identical(s$turns, 2L)
   expect_identical(ui$remaining(), 0L)
+})
+
+test_that("/undo lists each item once, by its outcome after the whole undo (#37)", {
+  local_project()
+  local_fake_provider(list(fake_tool("r", code = "e = new.env(); writeLines('a', 'a.txt')"),
+                           fake_tool("r", code = "e$v = 1; writeLines('b', 'a.txt')"), "done"))
+  w = new.env()
+  s = peter("make e", model = "fake/fake-1", mode = "auto", envir = w)
+  ui = local_scripted_ui()
+  ctx = list(session = s, has_ui = function() TRUE,
+             ui = function() ext_service_get("ui.get")(s))
+  plan = gptr_rewind(s, preview = TRUE)
+  expect_identical(plan$item, c("file a.txt", "object e"))
+  expect_identical(plan$restore, c(TRUE, TRUE))
+  out = ckpt_cmd_undo("", ctx)
+  expect_identical(nrow(ui$log), 0L)
+  expect_identical(out[1:3], c("Rewound (all).", "file a.txt: removed",
+                               "object e: removed (created by the turn)"))
+  expect_identical(s$last_rewind$report, out[2:3])
+  expect_false(exists("e", envir = w, inherits = FALSE))
+  expect_false(file.exists("a.txt"))
+})
+
+test_that("report lines are keyed by the plan's items, so names holding ': ' stay apart (#37)", {
+  local_project()
+  local_fake_provider(list(fake_tool("r", code = "`k: a` = 1; `k: b` = 1"), "done"))
+  w = new.env()
+  s = peter("make k", model = "fake/fake-1", mode = "auto", envir = w)
+  w[["k: b"]] = 2
+  expect_warning(gptr_rewind(s), class = "gptr_warning_rewind_partial")
+  expect_true(s$last_rewind$partial)
+  expect_identical(sort(s$last_rewind$report),
+                   c("object k: a: removed (created by the turn)",
+                     "object k: b: conflict: changed after the checkpoint (kept current)"))
+  expect_false(exists("k: a", envir = w, inherits = FALSE))
+  expect_identical(w[["k: b"]], 2)
+})
+
+test_that("an item name that is not valid UTF-8 does not stop the rewind partway (#37)", {
+  local_project()
+  local_fake_provider(list(fake_tool("r", code = "assign(rawToChar(as.raw(c(0x6b, 0xe9))), 1)"),
+                           "done"))
+  w = new.env()
+  s = peter("make it", model = "fake/fake-1", mode = "auto", envir = w)
+  suppressWarnings(gptr_rewind(s))
+  expect_identical(s$turns, 0L)
+  expect_length(s$last_rewind$report, 1L)
+  expect_identical(ls(w, all.names = TRUE), character())
 })
 
 test_that("/rewind without a turn offers a menu through the UI", {

@@ -1026,12 +1026,12 @@ exact name.
 | Argument | Type / default | Meaning and validation |
 |---|---|---|
 | `...` | any | at most one leading unnamed `<session>` (continuation target), the prompt (below), context objects (unnamed: labelled by their deparsed expression, e.g. `mice`; named: by name). A named `<session>` is context, not a target. |
-| `model` | identifier, `<spec:provider>`, `<spec:router>` or `NULL` | resolved by §6.1.3; `NULL` = settings default (§8.4 of `03`) |
+| `model` | identifier, `<spec:provider>`, `<spec:router>` or `NULL` | resolved by §6.1.3; `NULL` = settings default (§8.4 of `03`); from model code (a call, team or fan-out started inside a run) `NULL` = the running session's model, and a child gets that session's own spec of its model's provider or router (D-210) |
 | `mode` | identifier or `NULL` | one of `plan`, `manual`, `edits`, `auto`, `yolo` (IC-78); a continuation may only keep or change it explicitly; children only tighten |
 | `skills`, `plugins`, `extensions` | identifiers (`c(a, b)`) or `NULL` | names resolved by §6.1.3 (normalised, IC-42); `extensions` also accepts `function(gptr)` factories (loaded with `ext_load(rank = 0L, session = <id>)`, visible to this session only, IC-69) and file paths; plugins and named extensions are enabled for the session through P17's `plugin.enable` service (`gptr_error_not_available` before P17); skills are preloaded as `<skill_content>` through `skill.body` |
 | `tools` | chr, identifiers, `<spec:tool>` list, or `NULL` | tool names; `"+grep"`/`"-write"` modifiers; a preset name (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`); tool specs are registered at rank 0 for this session |
 | `agents` | named list or `NULL` | evaluated in a mask where `agent` is `gptr_agent`; names must be unique syntactic names that are not accessor names (IC-71) |
-| `parallel` | `int(1)` >= 1 or `NULL` | fan out one list-like context object over at most `parallel` concurrent children |
+| `parallel` | `int(1)` >= 1 or `NULL` | fan out one list-like context object over at most `parallel` concurrent children; with `.opts$context = "none"` (which would drop each child's element) `gptr_error_invalid_argument` before any child starts (D-212) |
 | `choices` | chr (>= 2, unique, no logical-looking labels) or factor or `NULL` | System 1 choice question |
 | `levels` | chr (>= 2) or `NULL` | System 1 score question (level descriptions, 0-based) |
 | `threshold` | `num(1)` in (0, 1) | System 1: P(yes) at or above it is `TRUE` |
@@ -1685,9 +1685,12 @@ children settled; `"return"` leaves failed children with status `error`.
 
 `gptr_map()` is **internal** (IC-36; S-1 keeps one gateway): the function behind `parallel =`, one inline (or
 `backend`) child per element of `.x` (a list, atomic vector or data frame rows), each receiving the prompt and its
-element as context (read in place by name, `.x[[i]]`); it returns a **fan-out session** (`kind = "fanout"`;
+element alone, for every backend: bound in the child's overlay as `.x`, a named list of one (`list(A = <element>)`),
+and attached as `.x[["A"]]` (D-212); it returns a **fan-out session** (`kind = "fanout"`;
 `$text` a named chr, `[[i]]`/`$name` child sessions). Users write `peter("Summarise this", cohorts, parallel = 4)`.
-Copy-safety: [R1][R3] (elements are read in place; `test-copy-subagent.R`).
+Copy-safety: [R1][R3] (an inline or cli child does not copy the element; the bound list is removed and defused when
+the child settles, as checkpoint images are [R6]; `test-copy-subagent.R`; after a worker fan-out the caller's next edit
+still copies it once, D-212).
 
 ```r
 fake = gptr_fake_provider(list("ok"))
@@ -1770,13 +1773,17 @@ gptr_checkpoints(s, all = FALSE)
 `turn`; any node, including abandoned branches, which is how redo works); `restore = "all"` restores objects, files,
 state and the conversation leaf, `"conversation"` only the leaf, `"workspace"` only objects/files/state;
 `force = TRUE` also restores items changed since (3-way conflicts); `preview = TRUE` returns the plan (a data frame of
-items and whether each would be restored) and changes nothing. Appends one `gptr.rewind` entry (the JSONL stays
+items and whether each would be restored) and changes nothing. The plan lists each item once, by its last row in
+application order, and the report each plan item once, by its last line `<item>: ...`: the item's outcome after the
+whole rewind; other lines are kept (D-214). Appends one `gptr.rewind` entry (the JSONL stays
 byte-append-only). Returns `invisible(s)` (so it pipes), with `s$last_rewind` and `s$editor_text` set. Warns
 `gptr_warning_rewind_partial` when some items were not restored. Conditions: `busy` (running), `rewind_range`,
 `invalid_argument`. Emits `session_before_tree` (first decision; a handler may cancel) and `session_tree`
 (notify). Copy-safety: [R1][R6] (pre-images are released or swapped by reference, never copied).
 
-`gptr_checkpoints()`: a `gptr_checkpoints` data frame of the active path (`all = TRUE`: all branches).
+`gptr_checkpoints()`: a `gptr_checkpoints` data frame of the active path (`all = TRUE`: all branches); `time` is
+local time (`tzone ""`). The console's `/checkpoints` prints it with the footer `Undo with /undo, or /rewind <turn>.`
+(D-215).
 
 ```r
 fake = gptr_fake_provider(list("done"))
@@ -1812,12 +1819,13 @@ Returns a character vector of lines, the first a header `<class> shape, size`, a
 tokens (the harness truncates longer method output). Methods MUST follow [R4][leaf]: no promise forcing, no I/O
 (no `dbListTables()`, no `collect()`), no `str()` on the object. Built-in methods: `default`, `data.frame`,
 `matrix`, `list`, `formula`, `lm`, `environment`, `function`, `dgCMatrix`, `ArrowTabular`, `Dataset`,
-`DBIConnection`, `Seurat`, `SingleCellExperiment`, `ggplot`; `factor`, `Date`, `POSIXct` and `S4` (`isS4()`)
-dispatch through `default`, `data.table` through `data.frame` and `glm` through `lm` (D-142). Level-based: a method
-may accept `level = 1:4` in `...` and return successively richer descriptions; the harness picks the richest that
-fits. Methods for classes of packages outside Suggests (`dgCMatrix`, `ArrowTabular`, `Dataset`, `Seurat`,
-`SingleCellExperiment`, `ggplot`) use only base generics, `methods::slot()`/`slotNames()`, `attr()` and `dim()`
-guarded by `isNamespaceLoaded()`, never `pkg::fun()` (IC-71). Packages add methods with delayed
+`DBIConnection`, `Seurat`, `SingleCellExperiment`, `ggplot`, `gptr_session` (kind, model, status, turns and cost;
+level 2 its children); `factor`, `Date`, `POSIXct` and `S4` (`isS4()`) dispatch through `default`, `data.table`
+through `data.frame`, `glm` through `lm` (D-142) and `patchwork` through `ggplot` (`<patchwork> of <n> plots`,
+D-215). Level-based: a method may accept `level = 1:4` in `...` and return successively richer descriptions; the
+harness picks the richest that fits. Methods for classes of packages outside Suggests (`dgCMatrix`, `ArrowTabular`,
+`Dataset`, `Seurat`, `SingleCellExperiment`, `ggplot`) use only base generics, `methods::slot()`/`slotNames()`,
+`attr()` and `dim()` guarded by `isNamespaceLoaded()`, never `pkg::fun()` (IC-71). Packages add methods with delayed
 `S3method(gptr::gptr_describe, cls)`. Copy-safety: [R4].
 
 ```r
@@ -1848,9 +1856,11 @@ gptr_risk(code, envir = NULL, root = NULL)
 
 The advisory static classifier (not a security boundary). `code`: chr (R code) or a call/expression; `envir`:
 optional environment the code would run in (enables overwrite-size detection of bound names by `env_snapshot()`'s
-size rule, D-189; read-only lookups, never forcing promises); `root`: project root (default `project_root()`). Never
-evaluates `code`. Returns a `gptr_risk` (§5.11). Commands passed to `peter$sh()` are classified with the command
-table, `peter$sql()`/`peter$py()` with keyword classifiers (P11 registers them for P22). Copy-safety: [R4].
+size rule, D-189: a plain assignment evaluated in `envir` is looked up there only; a `<<-`, `assign()` or replacement
+target, or one inside `local()`, `with()` or `within()`, also in the enclosing environments up to the global one,
+D-213; read-only lookups, never forcing promises); `root`: project root (default `project_root()`). Never evaluates
+`code`. Returns a `gptr_risk` (§5.11). Commands passed to `peter$sh()` are classified with the command table,
+`peter$sql()`/`peter$py()` with keyword classifiers (P11 registers them for P22). Copy-safety: [R4].
 
 ```r
 gptr_risk("unlink('data', recursive = TRUE)")$level
@@ -2338,6 +2348,7 @@ save_rds(mtcars, ws_path("cache", "tmp", "mt.rds"))
 | `registry_get(kind, name, session = NULL)` | the winning **spec** for `(kind, name)` (lowest rank among enabled records; ties: first registered, with a `collision` diagnostic), after filters, including the session's rank-0 records; `NULL` if none. A lower-rank record shadows only the record with the same `(kind, name)` (IC-69). Lazy records trigger `ext_activate()` of their source first |
 | `registry_all(kind, session = NULL)` | list of specs of an `all`-resolving kind (hook, policy, context_block, prompt_section, route, checkpointer, secret_source, redaction_rule, env_alias, risk_rule) ordered by the kind's `order` field when it has one, else by rank then registration; for `first`-resolving kinds, the winning spec of each name |
 | `registry_names(kind, session = NULL)` | chr of names with an enabled record |
+| `registry_model_spec(ref, sid)` | the provider or router spec of model reference `ref` (`provider/id[:thinking]`, `router:<name>`) that session `sid` sees in place of the global winner (a spec passed as `model =`), else `NULL`; a child session on that model registers it at rank 0 too (D-210) |
 | `registry_generation()` | `int(1)` |
 | `registry_filters_set(filters, scope = c("session", "user", "project"))` | applies `-builtin:<name>`, `-plugin:<pkg>`, `-<kind>:<name>`, `+...`; project filters that would disable user or built-in `policy`/`hook` records are ignored with a diagnostic; no filter from any source disables `builtin:permissions`, `builtin:plan`, `critical_guard` or `secret_guard`, and inside a run filters that remove `policy`/`hook` records are refused (IC-53) |
 | `registry_diagnostic(source, event, class, message)` | appends to `the$diagnostics` (redacted) |
@@ -2640,7 +2651,7 @@ Functions (P08):
 | `call_value(call, i)` [leaf] | the value of context item `i` (by name from `envir` for symbols, from `values` otherwise) | P09 (`attached` block), P13 (states), P19 (fan-out elements) |
 | `route_pass()` | the sentinel a route's `run()` returns to continue routing | P13, P14, P15, P19 |
 | `gateway_defer(expr_fun)` | evaluates `expr_fun()` with deferral on: every `peter()` call made meanwhile behaves as `.run = FALSE` and returns its unstarted session | P19 (`gptr_parallel()` forces its `...` promises inside it) |
-| `gateway_run(call, s = NULL)` | the default System 2 runner used by the `continue`/`new` routes and by other routes: creates the session when `s` is `NULL` (`session_new()` with the resolved model, mode and home; a router model is stored as `router:<name>`, IC-69), chooses the evaluation environment by the IC-40 precedence and checks that context symbols are visible there, applies model/mode changes and `session_add_tools()` for `tools =`/`plugins =`/`extensions =` on a continuation, tightens the mode to the running one when `run_current()` is non-NULL (IC-53), runs `egress_check()`, calls `replay_guard()`, builds the input (first message or turn blocks, the prompt, `skills =` preloads, the pending plan once), then `session_run()`/`run_start()`/queue per `.run` and `background`; writes nothing to documents itself | P13 (escalation), P14, P15, P19 |
+| `gateway_run(call, s = NULL)` | the default System 2 runner used by the `continue`/`new` routes and by other routes: creates the session when `s` is `NULL` (`session_new()` with the resolved model, mode and home; a router model is stored as `router:<name>`, IC-69; without `model =` inside a run, the running session's model; inside a run the model is resolved as the running session sees it and that session's own spec of it is registered for the child, D-210), chooses the evaluation environment by the IC-40 precedence and checks that context symbols are visible there, applies model/mode changes and `session_add_tools()` for `tools =`/`plugins =`/`extensions =` on a continuation, tightens the mode to the running one when `run_current()` is non-NULL (IC-53), runs `egress_check()`, calls `replay_guard()`, builds the input (first message or turn blocks, the prompt, `skills =` preloads, the pending plan once), then `session_run()`/`run_start()`/queue per `.run` and `background`; writes nothing to documents itself | P13 (escalation), P14, P15, P19 |
 | `dot_facts(x)` [leaf] | `list(class, is_session, is_chr1, length, dim, bytes, text)` (`text` = a `paste0()` copy of character values up to 64 KiB, else `NULL`) | P08 |
 | `resolve_identifier(expr, arg, envir)` (service `identifier.resolve`) | §6.1.3; returns chr or a spec | P08, P17 (`agents` mask); P02 stores raw expressions and never calls it (IC-34) |
 | `identifier_known(name, arg)` | `lgl(1)`: catalog aliases, registered provider/model/router ids, modes, presets, skill/plugin/extension/agent names (by `arg`) | P08 |
@@ -2652,7 +2663,7 @@ Functions (P08):
 | `home_address(envir)` | chr(1) `rlang::obj_address(envir)` for the pending-plan key (an address string, never a reference) [R2] | P11 |
 | `replay_mode(arg = NULL)` | `chr(1)`: `arg` > `gptr.replay` > `GPTR_REPLAY` > settings > `"auto"`; `"replay"` is forced when `check_running()` and `Sys.getenv("TESTTHAT") != "true"` (examples), unless `arg` is given (IC-45) | P08, P13, P15, P19 |
 | `replay_guard(model, what = "model call")` | in replay mode, signals `gptr_error_not_recorded` before any request to a provider whose record is not `offline = TRUE` (`offline` = no remote model is called: the fake provider and the mock-server and fake-CLI test providers, so tests and examples still run); `invisible(TRUE)` otherwise | P08 (`gateway_run()`), P13 (cache misses), P19 (team and fan-out children) |
-| `egress_check(provider_id)` | `invisible(TRUE)` if acknowledged (user settings `egress`), local or offline, or `.opts$context = "none"`; when `gptr_can_prompt()`: shows what automatic context is sent and records the acknowledgement at user scope (an `ask_human`, IC-53); otherwise `gptr_error_egress` | P08 (`gateway_run()`), P13, P19 |
+| `egress_check(provider_id, provider, safety, asker = NULL)` | `invisible(TRUE)` if acknowledged (user settings `egress`), local or offline, or `.opts$context = "none"`; when `gptr_can_prompt()`: shows what automatic context is sent and records the acknowledgement at user scope (an `ask_human`, IC-53); otherwise `gptr_error_egress`. Inside a run (`run_current()` non-`NULL`), when `asker` is given (`gateway_guards()`, `subagent_guards()`), the question starts "The agent's code starts a sub-agent on `<asker>`, which sends its prompt to `<id>`", `asker` being the model of the session that model code starts (D-210) | P08 (`gateway_run()`), P13, P19 |
 
 
 Example calls:
@@ -4344,8 +4355,9 @@ text.
 
 **IC-39 Route order and nesting.** (cons-11, req-19) Route orders are: `classifier` 10, `team` 15, `fanout` 16,
 `nested` 20, `console` 30, `document` 50, `continue` 60, `new` 70. `team` and `fanout` calls made while a run is
-active create children of the running session (depth + 1, mode only tightened, usage rolled up, budget charged
-to the root, IC-66). `gptr.subagents.max_tasks` (8) applies only to team and fan-out calls made at depth >= 1
+active create children of the running session (depth + 1, mode only tightened, without `model =` the running
+session's model as for a plain `peter()` from model code (D-210), usage rolled up, budget charged to the root,
+IC-66). `gptr.subagents.max_tasks` (8) applies only to team and fan-out calls made at depth >= 1
 (model code), with the classed error `gptr_error_invalid_argument` naming the limit; user-level fan-outs queue
 every element and run `parallel`/`max_active` at a time (P19 acceptance: 20 elements, `parallel = 4`).
 

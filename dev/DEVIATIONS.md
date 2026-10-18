@@ -2525,3 +2525,121 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `[1 plot]`, `dev.list()` was NULL). Without a run (`gptr_mcp_serve()` between runs) it keeps `"capture"`, offscreen.
   The model still gets the image either way.
 - Contract-visible: 04 IC-79 (served calls bullet). Tests: mcp-server. Evidence: progress/P26.md Task 33.
+
+## D-210 - P26 sub-agents from model code keep the session's model; the egress question names them (2026-10-18)
+- Rule: a `peter()`, team or fan-out started inside a run without `model =` runs on the running session's model,
+  before the `model` setting and `model_default()` (P19 note 8 and the container order superseded); a team member
+  takes the agent's model, else the call's, else the team's.
+- Rule: a child session resolves its model as the running session (or its team or fan-out) sees it and registers
+  that session's own spec of the model's provider or router at rank 0 (`registry_model_spec()`, also used by
+  `gptr_parallel()`'s team), so a session started with `model = <spec>` passes it on.
+- Rule: `egress_check(asker =)`; inside a run (`run_current()` non-NULL), when `gateway_guards()` or
+  `subagent_guards()` pass the model as `asker`, the question starts "The agent's code starts a sub-agent on <ref>,
+  which sends its prompt to <id>"; System 1 passes none.
+- Contract-visible: 03 §6.13; 04 §6.1 `model` row, §7.2 `registry_model_spec()`, §7.8 `gateway_run()` and
+  `egress_check()` rows, IC-39; `?peter`.
+- Tests: gptr-gateway (model code without `model =`; on a provider or router spec), subagent-team (team and fan-out
+  on a provider spec), gptr-config (egress question inside a run).
+  Evidence: progress/P26.md Task 13.
+
+## D-211 - P26 a path held in a name assigned from literals is that path (2026-10-18)
+- Rule: `risk_scan()` keeps, for each name assigned outside a function body, the values it may hold, folded by
+  `risk_fold()` (which also resolves such names), NA for one the code computes (an assignment that does not fold, a
+  replacement call, a `for` variable, `assign()`). A straight-line assignment replaces them (the `r` tool stops at
+  the first error) unless the code assigns the name with `<<-` (a function may do so later); one in a branch, loop
+  or call adds its value, and the binding before the code when it comes first; a loop that assigns the name, by a
+  replacement call too, makes it computed. Outside function bodies the path arguments of risk rows,
+  `file(open = "w")` and the `peter$` file members fold with it and report the path of the worst class, so
+  `p = '~'; unlink(p, recursive = TRUE)` is 4 (D-132's "4 only for a direct literal target" amended for paths; a
+  command, SQL or Python held in a name stays 3).
+- Rule: `normalizePath()` and `path.expand()` fold their `path` argument only (`mustWork = FALSE` no longer hides it).
+- Rule: a rebinding the walk does not see keeps the earlier value and can lower a level (accepted: the classifier is
+  advisory): `p = tempfile(); with(list(p = '~'), unlink(p, recursive = TRUE))` is 1 (was 3); likewise `within()`,
+  `bquote(.())`, `assign()` in a loop, a function or with a computed name, `list2env()`, `load()`, `rm()`,
+  `delayedAssign()`, `makeActiveBinding()` and a function from an earlier turn.
+- Contract-visible: `gptr_risk()` levels, `path` and `path_class` of such calls (03 §6.8.1); checkpoint `files`
+  targets.
+- Tests: perm-classify (a name assigned outside a function body; a straight-line reassignment; computed,
+  branch-default, loop and `<<-` forms stay 3), perm-gate (auto asks a person). Evidence: progress/P26.md Task 14.
+
+## D-212 - P26 a fan-out child gets its element alone as `.x`; context "none" is refused (2026-10-18)
+- Rule: for every backend a fan-out child's element is bound alone in its overlay as `.x = list(<key> = <element>)`
+  and attached as `.x[["<key>"]]` (P19 Task 5's in-place `cohorts[["A"]]` label and whole-list `.x` superseded;
+  `subagent_element_label()` removed). The list is a binding of the child's private values environment
+  (`spec$bind` now names such bindings), and `subagent_unbind()` removes and defuses it when the child settles
+  (rule R6), so after an inline or cli fan-out the caller's next edit stays in place. A worker's parent keeps its
+  values environment and shipped objects, so that edit still copies the element once (as before; Open in P26.md).
+- Rule: `parallel =` with `.opts$context = "none"` (which dropped every child's element without a warning) is
+  `gptr_error_invalid_argument` naming `.opts = list(context = "names")`, before replay or any child starts.
+- Deviation from the triage design: its `bind = list(.x = ...)` made `test-copy-subagent.R` copy `cohorts$A` once
+  (a list freed by the collector keeps its elements referenced), hence the values binding and the defuse.
+- Contract-visible: 04 §6.1 `parallel` row, §6.5 `gptr_map()` (IC-36); 03 §4.1.6 and §10.4 item 5; `?peter`.
+- Tests: subagent-team (a symbol and a call input bound alone; context "none" refused with no request),
+  copy-subagent (a child returning `length(.x[[1]])` leaves `cohorts$A` editable in place). Evidence: progress/P26.md
+  Task 18.
+
+## D-213 - P26 a plain assignment overwrites a binding of the evaluation environment only (2026-10-18)
+- Rule: `gptr_risk(envir =)` reports "overwrites `x`" (level 2, 3 above `gptr.protect_size`) for a plain `=`/`<-`
+  or a `for` variable evaluated in `envir` only when `x` is bound in `envir` itself, where R creates the binding;
+  `<<-`, `assign()`, replacement calls (an environment changes by reference) and an assignment inside a call that
+  may evaluate it elsewhere (`local()`, `with()`, `within()`, `evalq()` and the other unknown-effect calls of IC-31)
+  still look up the enclosing environments to the global one. A sub-agent overlay's `x = ...` over a caller's `x` is
+  level 1 (new object), as is one in plan mode's scratch overlay over the home (it runs there and is discarded).
+- Contract-visible: `gptr_risk()` levels and `sizes` for code in a child environment (04 `gptr_risk()`, `?gptr_risk`).
+- Tests: perm-classify (an overlay's plain assignment; `<<-`, `assign()`, `with()`, `local()`, a replacement and a
+  binding of `envir` itself still flag), subagent-team (a manual-mode fan-out asks nothing and its children's calls
+  run). Evidence: progress/P26.md Task 23.
+
+## D-214 - P26 a rewind reports each item once, by its outcome after the whole rewind (2026-10-18)
+- Rule: `gptr_rewind()`'s plan (`preview = TRUE`, the `session_before_tree` payload) keeps one row per item and
+  its report (`s$last_rewind$report`, the `gptr.rewind` entry, `session_tree`) one line per plan item: its last
+  row or line in application order (for an undo, its oldest record), after the chain rule that credits a conflict
+  following an earlier success. `/undo` therefore asks only about items whose final outcome is not restored; an
+  object a turn creates and later changes (an environment modified in place) is removed without a question.
+- Rule: a report line belongs to the longest plan item it starts with (`<item>: `, lengths in bytes, so a name not
+  valid UTF-8 never stops a rewind partway); a line of no plan item (a checkpointer without `preview()`, such as
+  artifacts or a plugin) is its own key, so a not-restored line is never dropped for another item (`k: a` and
+  `k: b` stay apart).
+- Rule: known limits: a reference object the turn reaches through a new binding (`e = g`, then `e$v = 1` in a
+  later call) keeps its in-place change while the report shows only the binding removed (silent in one call
+  already); when a newer record fails and the older one then conflicts, the item reads as a conflict, not the
+  newer record's reason (it still counts as not restored).
+- Contract-visible: 04 §6.5 `gptr_rewind()`; `?gptr_rewind`.
+- Tests: ckpt-rewind (a turn creating `e` and `a.txt` in one call and changing both in a later call: a preview of
+  two rows, `/undo` asks nothing, the report is `file a.txt: removed` and `object e: removed (created by the
+  turn)`; objects `k: a` and `k: b`, one changed after the turn: two lines and the partial warning; an object
+  whose name is not valid UTF-8: rewound in full). Evidence: progress/P26.md Task 28.
+
+## D-215 - P26 /env and /checkpoints wording: counts, patchworks, sessions, local times (2026-10-18)
+- Rule: `gptr_describe()` counts agree with their noun ("1 layer", "1 binding", "1 unevaluated promise"); a
+  `patchwork` (through the `ggplot` method) is `<patchwork> of <n> plots`: its own plot unless that is patchwork's
+  empty filler, and each of its `patches$plots` (in `meta` under S7 ggplot2), a nested patchwork counting its plots.
+- Rule: new method `gptr_describe.gptr_session()`: `<gptr_session> <kind>, model <ref>, <status>, <n> turn(s),
+  <cost>`; level 2 adds `children: <names>`. /env, `<attached>` and `peter$describe()` no longer list its `.d`.
+- Rule: `gptr_checkpoints()$time` is local time (`tzone ""`; parsed from the UTC entry timestamp); the console's
+  `/checkpoints` prints the footer `Undo with /undo, or /rewind <turn>.` (`gptr_checkpoints()` keeps its R footer).
+- Contract-visible: 04 §6.5 `gptr_checkpoints()`, §6.6 `gptr_describe()` built-in methods; `?gptr_describe`,
+  `?gptr_rewind`.
+- Tests: env-describe (a one-layer ggplot; flat, filler, nested and S7 (`meta`) patchworks; a session and its
+  children; an environment with one promise; 16 registered methods), ckpt-rewind (`tzone ""`; the /checkpoints
+  footer). Evidence: progress/P26.md Task 36.
+
+## D-216 - P26 programs run with system() or system2() share the console's terminal: a prompt rule, not a fix (2026-10-18)
+- Rule: agent code is evaluated in the R process, so a child of `system()` or `system2()` inherits R's stdin, the
+  console's terminal; one that reads stdin blocks the reactor and consumes typed lines. Without compiled code (v1)
+  gptr cannot point fd 0 elsewhere, so the `<r_session>` core gains the line `- system() and system2() children
+  read the user's terminal: use system2(..., stdin = nullfile()) instead of system().` before its closing line
+  (03 §7.3), and `?peter` says the same. `system(input = )` is not offered: R prefixes `< file` to
+  the command, so only the first command of a compound line (`cd dir && pandoc ...`) is redirected; `system2()`
+  appends it, so with shell operators in `args` only the last command is, and a compound line needs
+  `system2("sh", c("-c", shQuote(cmd)), stdin = nullfile())` or `peter$sh()`. `peter$sh()`/`peter$bg()` children
+  already read the null device (processx).
+- Gap: the minimal preset (the default for defined agents, fan-out and team children) renders no `<r_session>`, so
+  its agents are told neither this line nor the `readline()`/`q()` line beside it; the minimal static prefix
+  (1,262, 03 §12.1) is unchanged.
+- Contract-visible: 03 §7.3 `<r_session>` (13 lines) and §12.4 (27 more o200k tokens, within its 500 budget and
+  the 12.7 static-prefix gate: standard_core 2,378 of 2,381); the 11 golden rows already over their prefix gate at
+  base grow by 27 and ns10-mcp-catalog newly exceeds its own (2,895 at base, 2,922 > 2,896), so baseline.csv needs
+  one re-baseline at integration; `?peter`.
+- Tests: prompt-text (the line), northstar and bench-context/prompt-sections (composition byte for byte);
+  `dev/bench/tokens/run.R --check` (the prefix gate). Evidence: progress/P26.md Task 37.

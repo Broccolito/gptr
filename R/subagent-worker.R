@@ -417,7 +417,7 @@ backend_worker_start = function(spec, ctx) {
   state$worker_home = session_home(child)
   state$worker_spec = list(
     prompt = spec$prompt, model = spec$info$ref, mode = spec$mode, depth = spec$depth,
-    agent = spec$agent, name = spec$name, object_names = c(spec$objects, names(spec$bind)),
+    agent = spec$agent, name = spec$name, object_names = c(spec$objects, spec$bind),
     export = spec$export, preset = spec$preset, rng_state = opts$rng_state,
     settings = list(replay = replay_mode(), project_root = project_root(), opts = spec$opts,
                     budget = spec$budget, max_turns = spec$agent$max_turns %||% spec$max_turns),
