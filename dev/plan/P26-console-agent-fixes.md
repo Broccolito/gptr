@@ -3,8 +3,8 @@
 **Goal:** Fix the ten defects a maintainer found while using `peter()` interactively: pasted
 blocks, steering by typing, `!code` completion, the console layout and code blocks, bare
 sub-agent approval prompts and fan-out progress, misleading object sizes, a `yolo` mode, the
-CLI routes' tools and their streaming. Issues
-[#10](https://github.com/Broccolito/gptr/issues/10)-[#19](https://github.com/Broccolito/gptr/issues/19).
+CLI routes' tools and their streaming, and Bedrock with access keys (Task 11). Issues
+[#10](https://github.com/Broccolito/gptr/issues/10)-[#20](https://github.com/Broccolito/gptr/issues/20).
 
 **Evidence:** every defect was reproduced in a real pty (CRAN macOS R 4.6.1, GNU readline 5.2)
 or with the fake provider and checked by an independent skeptic before this plan was written.
@@ -21,9 +21,9 @@ tests; never `.GlobalEnv` by name; restore every option). Plan-specific rules:
 
 - Authority: 04 (section 15 first, then the new section 15.9 written by these tasks) > 03 > this
   plan. Each task amends the spec sections it names in the same commit.
-- Pre-assigned ids: each task owns one deviation entry (D-183..D-192, placeholders in
+- Pre-assigned ids: each task owns one deviation entry (D-183..D-193, placeholders in
   `dev/DEVIATIONS.md`), one progress section (`dev/progress/P26.md`) and, where named, one
-  contract item in 04 section 15.9 (IC-75..IC-79, placeholders). Edit only your own placeholder.
+  contract item in 04 section 15.9 (IC-75..IC-80, placeholders). Edit only your own placeholder.
   `NEWS.md` is written once at integration from the progress log.
 - Interactive behaviour is tested with mocks and, where named, a `skip_on_cran()` pty child.
   A test run from an interactive terminal must not read the developer's real fd 0: the console
@@ -355,6 +355,55 @@ Tests (`test-cli-codex.R`, `test-cli-claude.R`, `test-console-render.R`), RED fi
 reasoning and command item render before the final message; a fake claude MCP r call renders a
 tool line and its result; the first CLI turn's waiting row is drawn before the probe returns or
 the probe runs before it. Spec: 03 section 8.3, P20 note. Commit: `fix(cli): show codex progress and claude-cli tool calls while they run`.
+
+### Task 11: Amazon Bedrock with access keys (SigV4) and the Converse API (#20, D-193)
+
+Problem: the `bedrock` provider authenticates only with a bearer token against Bedrock's
+OpenAI-compatible endpoint, so IAM key pairs and SigV4 gateways (UCSF Versa Bedrock,
+`https://unified-api.ucsf.edu/general/awsai`, region `us-west-2`, model
+`us.anthropic.claude-opus-4-8`) cannot be used. Verified 2026-10-17: a SigV4 `converse` call through
+that gateway with the institution's key pair answered (`end_turn`).
+
+Decisions:
+- A Bedrock Converse adapter (`R/provider-bedrock.R`, area `provider`): `ConverseStream`
+  (`POST /model/{id}/converse-stream`) decoded from the AWS event-stream binary framing (prelude,
+  headers, payload, CRC checks) into gptr's provider events: text and tool-use input deltas,
+  reasoning where present, stop reason, usage (unknown stays NA, IC-74). Tools map to Converse
+  `toolConfig`, tool results and images to content blocks, the system prompt to `system`.
+- SigV4 signing in pure R: SHA-256 from `cli::hash_raw_sha256()` (already an Import), HMAC-SHA256
+  built on it; credentials from `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN`
+  through the vault (`gptr_env(aliases = ...)` maps nonstandard names); region and endpoint come
+  from the provider record, so a gateway is configuration. Secrets never reach messages or logs
+  (redaction tests). The bearer-token route stays for `AWS_BEARER_TOKEN_BEDROCK`.
+- No new Imports or Suggests; streaming through the existing reactor (raw-body chunk handler).
+
+Tests (new `test-provider-bedrock.R`), RED first: AWS's published SigV4 test-suite vectors
+(canonical request, string to sign, signature); event-stream decoding of a recorded fixture split
+at every byte boundary, CRC failure rejected; a ConverseStream fixture streams text and a tool call
+through the agent loop with the fake transport; request body mapping (system, tools, tool results,
+images); redaction of the secret key and session token; an opt-in live test (GPTR_LIVE_TESTS,
+skips without credentials) through a configured endpoint. Spec: 03 section 8 provider table, 04
+provider row and a contract note in section 15.9; `?gptr_provider` example for a SigV4 gateway.
+Commit: `feat(provider): Amazon Bedrock Converse with SigV4 signing`.
+
+## Live dogfood matrix (2026-10-17)
+
+Interactive terminal R (tmux), the integrated build installed into a private library, gptr's
+own settings isolated (HOME stays real so the CLIs keep their sign-ins). Routes:
+
+| Route | Setup | Use |
+|---|---|---|
+| Claude Code CLI | `model = "claude-cli"` | primary |
+| Codex CLI | `model = "codex"` (stdio relay, no httpuv) | tools and progress |
+| UCSF Versa Azure GPT-5.6 | `gptr_env(".secrets/llm-passwords.env", aliases = list(AZURE_OPENAI_API_KEY = "API_KEY"), quiet = TRUE, set_env = FALSE)`; `gptr_register(gptr_provider("versa", api = "openai-responses", base_url = "https://unified-api.ucsf.edu/general/openai/v1", auth = "AZURE_OPENAI_API_KEY", models = list(list(id = "gpt-5.6-sol-2026-07-09", tool_call = TRUE), list(id = "gpt-5.6-terra-2026-07-09", tool_call = TRUE), list(id = "gpt-5.6-luna-2026-07-09", tool_call = TRUE)), compat = list(auth_header = "api-key")))` | API streaming, fan-out |
+| UCSF Versa Bedrock Opus 4.8 | Task 11 adapter; key pair loaded with `gptr_env()` aliases (`AWS_ACCESS_KEY_ID = "AWS_ACCESS_KEY"`, `AWS_SECRET_ACCESS_KEY = "AWS_SECRET_KEY"`); endpoint `https://unified-api.ucsf.edu/general/awsai`, region `us-west-2`, model `us.anthropic.claude-opus-4-8` | API streaming, tools |
+
+Scenarios, each on at least two routes: (1) Seurat scRNA-seq analysis (pbmc3k) with iterative
+steering for more figures, tables and datasets; (2) rebuilding the `kdps` package (CRAN `kdps`,
+GitHub UCSD-Salem-Lab/kdps) with fan-out sub-agents; (3) console checks: paste joining,
+type-ahead steering, `!code` completion, yolo mode, approval prompts from sub-agents, fan-out
+progress lines, code blocks and copy-paste, margins and spacing, token streaming cadence. Each
+defect found becomes Task 12+ in this plan with a regression test.
 
 ## Integration (coordinator)
 

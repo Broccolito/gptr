@@ -5180,3 +5180,5 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   console and MCP edges (`cmd_model()` -> `model_canonical()`, `mcp_serve_exec()` -> `tool_call_hook`,
   `tool_run`, `tool_execute_frame`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
+
+**IC-80 Bedrock Converse with SigV4** (P26 Task 11). TBD by P26 Task 11.
