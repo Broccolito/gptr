@@ -155,9 +155,11 @@ format_cost = function(x) {
 }
 
 #' Requests, input tokens and cost of usage rows: "2 requests, 1.2k tokens in, $0.0042"
+#' The tokens in count cache reads and writes, as usage_prompt_tokens() does.
 #' @noRd
 format_usage = function(u) {
   n = nrow(u)
-  paste0(n, if (n == 1L) " request, " else " requests, ",
-         format_count(c(u$input, u$cache_read)), " tokens in, ", format_cost(u$cost))
+  tokens = c(u$input, u$cache_read, u$cache_write_5m, u$cache_write_1h)
+  paste0(n, if (n == 1L) " request, " else " requests, ", format_count(tokens), " tokens in, ",
+         format_cost(u$cost))
 }

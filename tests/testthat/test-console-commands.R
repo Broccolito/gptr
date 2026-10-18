@@ -306,17 +306,19 @@ test_that("/cost lists the agents and one total that keeps the known cost (#38)"
   local_project()
   s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
   rs = repl_state(s, new.env())
-  row = function(id, agent, cost) {
+  row = function(id, agent, cost, write = 0) {
     usage_conform(data.frame(request_id = id, session = s$id, agent = agent, input = 1000,
-                             output = 10, cache_read = 200, cache_write_5m = 0,
-                             cache_write_1h = 0, cost = cost, stringsAsFactors = FALSE))
+                             output = 10, cache_read = 200, cache_write_5m = write,
+                             cache_write_1h = write / 4, cost = cost, stringsAsFactors = FALSE))
   }
   d = session_data(s)
-  d$usage = rbind(row("q1", "main", 1.2), row("q2", "stats", NA), row("q3", "main", 0.3))
+  # cache writes are input tokens too: a fresh claude-cli child sent 2 uncached ones (smoke)
+  d$usage = rbind(row("q1", "main", 1.2), row("q2", "stats", NA, write = 800),
+                  row("q3", "main", 0.3))
   expect_identical(run_command(rs, "/cost")$out, c(
     "  main   2 requests, 2.4k tokens in, $1.5000",
-    "  stats  1 request, 1.2k tokens in, unknown cost",
-    "Total: 3 requests, 3.6k tokens in, $1.5000 + 1 request of unknown cost"))
+    "  stats  1 request, 2.2k tokens in, unknown cost",
+    "Total: 3 requests, 4.6k tokens in, $1.5000 + 1 request of unknown cost"))
 })
 
 test_that("/context on a CLI route says the CLI keeps its own transcript (#38)", {
