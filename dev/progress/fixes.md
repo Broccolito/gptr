@@ -203,3 +203,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `^(arch-layers|lint-rules)$` 19, `^(ext-api|provider-registry)$` 960 green, all WARN 0.
 - Reviews: none recorded.
 - Deviations: none. Open: none.
+
+## Task CI-21 - Every timed compaction wait runs under the controlled clock (2026-10-18, #47)
+- `test-compaction-wait.R:569` failed in run 38997490469 (`ubuntu-latest (release, LC_ALL=C)`,
+  `short$elapsed` 0.42 >= 0.20): `cp_wait_short()` timed `gptr_wait(timeout = 0.04)` on the real
+  clock while its synchronous reactor step (`run_drive()` through `compact.run`) stalled. Fix (tests
+  only): `cp_wait_clock()` opens the eight tests that timed `cp_wait_short()` without it (HEAD
+  `:113, 179, 363, 514, 565, 748, 854, 934`); every 0.2 s bound and fixture guard is unchanged.
+- Red: a scratch copy with a 0.4 s `Sys.sleep()` in the first `run_drive()` of each test's first
+  short wait FAIL 31, in all eight tests. Green: that copy with the fix PASS 506 in 10 of 10 runs;
+  `^compaction-wait$` PASS 506, also under `LC_ALL=C`. Lint clean. Neighbours:
+  `^(compaction-|prompt-compact$)` PASS 1043.
+- Reviews: none recorded.
+- Deviations: none. Open: none.
