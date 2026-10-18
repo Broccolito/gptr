@@ -5173,8 +5173,12 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   direct tools, session-scoped specs; `r` with `mcp_r_schema`), and the four defaults only before a freeze. A
   served call made while a run is live runs that run's `tool_call` hooks (P06's `tool_call_hook`), then the gate;
   a tool other than `r` then runs as the agent loop runs it (`tool_run()`: its record's source, the result check),
-  in the run's tool frame (`tool_execute_frame()`) when the call is reported (D-192). A long-lived claude child keeps the list it read at its start (`listChanged = FALSE`); a tool removed by a
-  refreeze is refused at `tools/call`.
+  in the run's tool frame (`tool_execute_frame()`) when the call is reported (D-192). A reported call, `r` included,
+  runs between the checkpointers' `before` and `after` (`checkpoint_before()`, `checkpoint_after()`), as a call of
+  the loop does, so `/undo` restores what it changed (#24); on a CLI route the files checkpointer then records the
+  edits the child made since the turn's start rather than absorbing them, and captures an untracked file only while
+  it is as the last walk saw it (else its row has no pre-image). A long-lived claude child keeps the list it read at
+  its start (`listChanged = FALSE`); a tool removed by a refreeze is refused at `tools/call`.
 - The OpenAI-compatible, Responses and Google adapters decide tools with one helper (`adp_tools_on`): a model
   whose `tool_call` is `FALSE` gets no tools (IC-74 unchanged), and when that drops a non-empty array gptr gives one
   `gptr_message_notice` per model naming `tool_call = TRUE` and the `gptr_config(providers = ...)` declaration.
@@ -5182,7 +5186,7 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   the reference with `model_canonical()` (a registered router name passes, as at the first prompt) and keeps the
   text as typed; `codex-cli` is an alias of `codex`. The two
   console and MCP edges (`cmd_model()` -> `model_canonical()`, `mcp_serve_exec()` -> `tool_call_hook`,
-  `tool_run`, `tool_execute_frame`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
+  `tool_run`, `tool_execute_frame`, `checkpoint_before`, `checkpoint_after`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
 
 **IC-80 Bedrock Converse with SigV4** (P26 Task 11). TBD by P26 Task 11.

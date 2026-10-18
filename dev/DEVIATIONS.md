@@ -2389,3 +2389,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the process's own spend. Open: a direct live probe.
 - Contract-visible: 04 §8.5 (both routes); 03 §5.5, §8.3; the budget message text.
 - Tests: cli-claude-result, cli-codex, agent-run, session-budget. Evidence: progress/P26.md Task 12.
+
+## D-201 - P26 Calls served to a CLI route pass the checkpointers (2026-10-18)
+- Rule: a reported served call (a live run with no tool of its own on the stack: both CLI routes, an MCP client
+  during a run) runs between `checkpoint_before()` and `checkpoint_after()` as `dispatch_steps()` runs a call, so
+  `/undo` restores its objects, files and state (#24: seurat-claude, kdps-claude and codex kept the undone turn's
+  objects, every turn `objects 0/0`). A call served inside its run's own tool stays covered by that tool's checkpoint.
+- Rule: on a CLI route the files checkpointer's `before()` does not sync: `ckpt_on_cli()` syncs at `agent_start`,
+  and a sync there absorbed the edits the child made before its served call (the triage fix alone: files `1/1`, the
+  child's edit not restored). Each change is recorded once, in the served call's fragment or in the turn scan. An
+  untracked file is captured only while it is as the last walk saw it, so a child's edit never becomes a pre-image
+  (its row says no pre-image, and `/undo` does not claim to restore it).
+- Contract-visible: 04 IC-79 (served calls are checkpointed; contract edges `checkpoint_before`, `checkpoint_after`).
+- Tests: mcp-server, cli-claude, cli-codex, ckpt-files, arch-layers. Evidence: progress/P26.md Task 15.

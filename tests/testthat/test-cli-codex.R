@@ -972,6 +972,10 @@ test_that("without httpuv, later and openssl a fake codex evaluates R in the liv
   expect_identical(mcp$status, 0L)
   dir = codex_argv_relay(fake_argv(f)[[1L]])
   expect_true(reactor_pump(until = function() !dir.exists(dir), timeout = 5))
+  # the relayed call is checkpointed, so a rewind removes what it made (#24)
+  expect_identical(gptr_checkpoints(s)$objects, "1/1")
+  gptr_rewind(s, 0)
+  expect_false(exists("live_answer", envir = e, inherits = FALSE))
 })
 
 test_that("a fake codex returns a function's numeric result through the stdio relay", {

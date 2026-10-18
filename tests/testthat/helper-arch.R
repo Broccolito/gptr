@@ -155,14 +155,15 @@ arch_kernel_sdk = function() {
 # arch_kernel_sdk() stays exactly the IC-33 list (contract section 12.2). P16's ckpt_predict()
 # wraps P11's code_targets() (IC-31, sections 7.11 and 7.16); P19's sub-agents (section 7.6
 # consumers) and the dedicated session of P18's gptr_mcp_serve() (section 6.3) create sessions
-# with P06's session_new(); a served MCP call runs P06's tool_call_hook() and its tool as the
-# loop does (tool_run(), tool_execute_frame()), and the console's /model checks a reference with
-# P06's model_canonical() (IC-79)
+# with P06's session_new(); a served MCP call runs P06's tool_call_hook(), its tool and the
+# checkpointers as the loop does (tool_run(), tool_execute_frame(), checkpoint_before(),
+# checkpoint_after()), and the console's /model checks a reference with P06's model_canonical()
+# (IC-79)
 arch_contract_edges = function() {
   data.frame(
-    caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "console"),
+    caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "console"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
-               "tool_execute_frame", "model_canonical")
+               "tool_execute_frame", "checkpoint_before", "checkpoint_after", "model_canonical")
   )
 }
 

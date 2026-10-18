@@ -686,6 +686,7 @@ test_that("an mcp_message round trip evaluates R in the live session and is gate
   ui = local_scripted_ui(answers = list("y"))
   e = new.env()
   e$big_vector = c(2, 4, 6, 8, 40)
+  e$answer = 1
   s = peter("Compute twice the mean of big_vector", model = f$model, envir = e, mode = "manual")
   local_cli_cleanup(s)
   expect_identical(e$answer, 24)
@@ -693,6 +694,10 @@ test_that("an mcp_message round trip evaluates R in the live session and is gate
   expect_identical(fake_log(f, "permission")[[1]]$behavior, "allow")
   expect_match(fake_log(f, "mcp")[[1]]$text, "24", fixed = TRUE)
   expect_match(s$text, "The tool said:", fixed = TRUE)
+  # the served call is checkpointed, so a rewind restores what it changed (#24)
+  expect_identical(gptr_checkpoints(s)$objects, "1/1")
+  gptr_rewind(s, 0)
+  expect_identical(e$answer, 1)
 })
 
 test_that("a sub-agent asking in a served r call ends the streamed line, not the result (D-188)", {
