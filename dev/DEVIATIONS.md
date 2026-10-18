@@ -2441,3 +2441,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   as deltas) and console_render_on() FALSE (the waiting row, which needs it, redrew during the hold). No gptr change.
 - Open: telling the CLI apart from its model stream needs a live probe of the CLI's API stream (not in this lane).
 - Contract-visible: 03 §8.3 (one sentence). Tests: cli-claude. Evidence: progress/P26.md Task 22.
+
+## D-205 - P26 The steering notice on a CLI route says when the steer is sent (2026-10-18)
+- Rule: while the run's model has type `"cli"`, the steering notice (typed line or pause menu) ends `; it is sent after
+  the CLI's current response` (#34: kdps-claude and seurat-claude steers arrived after the CLI's whole answer while the
+  notice said `it reaches the agent at its next step`). Delivery and the follow-up notice are unchanged (P26 Task 3).
+- The triage asked for the session's provider type; the notice reads the run's model instead, whose response is in
+  flight (a router can pick a CLI model), as console-render.R's CLI thinking rule does. Before a run's first request
+  it is unset, and the steer then joins that request, so the default wording holds.
+- Contract-visible: 04 IC-76 (notices). Tests: console-typing. Evidence: progress/P26.md Task 25.

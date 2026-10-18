@@ -1,5 +1,6 @@
 # tests/testthat/test-console-typing.R -- lines typed while a console answer runs (P26 Task 3,
 # IC-76): they steer the running agent (the `type_ahead` setting); /commands and !code wait.
+source(testthat::test_path("fixtures", "cli", "local-fake-cli.R"), local = TRUE)
 
 # A terminal REPL whose fd 0 holds what `look()` returns at each look of the typing task; the
 # paste joining of a macOS terminal stays off
@@ -62,6 +63,21 @@ test_that("a line typed while an answer runs steers the same run (IC-76, IC-55 s
   expect_length(session_data(res$s)$queue$steer, 0L)
   expect_true(any(grepl("[gptr] steering: 'use base R'; it reaches the agent at its next step",
                         res$out, fixed = TRUE)))
+})
+
+test_that("on a CLI route the steering notice says it is sent after the CLI's response", {
+  skip_on_cran()
+  local_console_test()
+  f = local_fake_cli("claude", "toolstream")
+  local_typed(typed_once("use base R", function() length(fake_log(f, "turn")) == 1L))
+  res = typing_console(f$model, c("go", "/exit"))
+  local_cli_cleanup(res$s)
+  expect_true(any(grepl(
+    "[gptr] steering: 'use base R'; it is sent after the CLI's current response", res$out,
+    fixed = TRUE
+  )))
+  roles = vapply(res$s$messages, function(m) m$role, "")
+  expect_identical(roles, c("user", "assistant", "operator", "assistant"))
 })
 
 test_that("type_ahead = 'follow_up' queues the line for when the agent would stop", {

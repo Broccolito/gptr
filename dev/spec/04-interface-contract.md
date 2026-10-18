@@ -5094,7 +5094,8 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   its enqueue run between one `console_render_pause()` and `console_render_resume()`, so each notice starts its own
   line; `policy_enqueue()` and `policy_flush()` take `source` (default `"pause_menu"`), so the item has the IC-55
   source `repl` and a steer becomes the operator relay.
-- Notices, pause menu included: `[gptr] steering: '<text>'; it reaches the agent at its next step` and
+- Notices, pause menu included: `[gptr] steering: '<text>'; it reaches the agent at its next step` (while the
+  run's model has type `"cli"`: `; it is sent after the CLI's current response`, D-205) and
   `[gptr] follow-up queued: '<text>'; it is sent when the agent would stop`.
 - The setting `type_ahead` (§11.2): `"steer"` (default) or `"follow_up"`; not a tighten key.
 - Limits: the terminal still echoes typed text into the stream (on an ANSI terminal the waiting row's redraw
