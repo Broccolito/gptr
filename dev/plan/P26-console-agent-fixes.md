@@ -388,6 +388,40 @@ skips without credentials) through a configured endpoint. Spec: 03 section 8 pro
 provider row and a contract note in section 15.9; `?gptr_provider` example for a SigV4 gateway.
 Commit: `feat(provider): Amazon Bedrock Converse with SigV4 signing`.
 
+### Tasks 12-37: live dogfood fixes (2026-10-18)
+
+The live dogfood matrix below found issues #21-#46; each was fixed test first on lane x, y or z (based
+on 3313f1e) and merged here. Deviations D-200..D-226; evidence in `dev/progress/P26.md`.
+
+| Task | Issue | Title | Lane | Commit |
+|---|---|---|---|---|
+| 12 | [#21](https://github.com/Broccolito/gptr/issues/21) | CLI usage counts the CLIs' running totals: claude-cli cost and Codex tokens are summed as if per request | x | 1c0636e |
+| 13 | [#22](https://github.com/Broccolito/gptr/issues/22) | A nested peter() without model = leaves the session's model; the egress question hides that a sub-agent asks | y | 50f0274 |
+| 14 | [#23](https://github.com/Broccolito/gptr/issues/23) | The level-4 delete guard is bypassed when the path is held in a variable | y | 76746f5 |
+| 15 | [#24](https://github.com/Broccolito/gptr/issues/24) | Calls served to the CLI routes skip the checkpointers, so /undo leaves their objects | x | 9badee9 |
+| 16 | [#25](https://github.com/Broccolito/gptr/issues/25) | Automatic compaction runs on the CLI routes from turn totals, before nearly every prompt | x | 658425d |
+| 17 | [#26](https://github.com/Broccolito/gptr/issues/26) | Rewind and compaction do not reach the CLI's own conversation | x | 36e8097 |
+| 18 | [#27](https://github.com/Broccolito/gptr/issues/27) | Fan-out children do not reliably get their own element | y | 6995460 |
+| 19 | [#28](https://github.com/Broccolito/gptr/issues/28) | A pasted block answers an approval prompt; pasted fences and """ blocks re-echo at every '... ' | z | 9daf7ee |
+| 20 | [#29](https://github.com/Broccolito/gptr/issues/29) | The plot hook clears the display list between panels: multi-panel plots lose panels and knitr loses chunk figures | z | 166b7ca |
+| 21 | [#30](https://github.com/Broccolito/gptr/issues/30) | Type-ahead is echoed by the terminal into streamed answers and the waiting row | z | aed1001 |
+| 22 | [#31](https://github.com/Broccolito/gptr/issues/31) | claude-cli answers reach the console in one burst at the end of the turn (cause not yet located) | x | c49ca92 |
+| 23 | [#32](https://github.com/Broccolito/gptr/issues/32) | Sub-agent assignments in an overlay are flagged as overwriting the parent's objects | y | 75cf98f |
+| 24 | [#33](https://github.com/Broccolito/gptr/issues/33) | Approval prompt layout: a wall of flagged calls, [a] offered without a rule, an empty level label, cut paths | z | 7c142e4 |
+| 25 | [#34](https://github.com/Broccolito/gptr/issues/34) | The steering notice on CLI routes promises delivery 'at its next step' | x | 76c2585 |
+| 26 | [#35](https://github.com/Broccolito/gptr/issues/35) | Tool result lines: a failed r call hides its objects; paths and errors are cut | z | da4d86e |
+| 27 | [#36](https://github.com/Broccolito/gptr/issues/36) | Sub-agent progress lines: failures without a reason or counter, identical labels for repeated prompts | z | 8dfc1ab |
+| 28 | [#37](https://github.com/Broccolito/gptr/issues/37) | /undo reports each item once, by its final outcome | y | 25d14cc |
+| 29 | [#38](https://github.com/Broccolito/gptr/issues/38) | Status line, /cost and /context describe CLI runs and sub-agents wrongly | x | 7ea3877 |
+| 30 | [#39](https://github.com/Broccolito/gptr/issues/39) | Command output, long prompts and notices bypass the console margin and wrap at column 0 | z | fd106ae |
+| 31 | [#40](https://github.com/Broccolito/gptr/issues/40) | Call previews and progress lines: Codex shell JSON, a fence that looks complete, cut thinking lines | x | ea1381c |
+| 32 | [#41](https://github.com/Broccolito/gptr/issues/41) | Codex messages: the last word is held until the next event, and consecutive messages run together | x | 3fbb7f5 |
+| 33 | [#42](https://github.com/Broccolito/gptr/issues/42) | Plots from CLI-served r calls never reach the screen | x | 2b9fcc5 |
+| 34 | [#43](https://github.com/Broccolito/gptr/issues/43) | Wide pipe tables are held until complete, then printed raw | z | 2f65f41 |
+| 35 | [#44](https://github.com/Broccolito/gptr/issues/44) | /model: the default CLI model is not resolved, and suggestions ignore the typed provider | z | efec04c |
+| 36 | [#45](https://github.com/Broccolito/gptr/issues/45) | /env and /checkpoints wording: layer counts, patchworks, sessions, UTC times, an R-call footer | y | f4ee3ec |
+| 37 | [#46](https://github.com/Broccolito/gptr/issues/46) | Commands started by agent code share the console's terminal as stdin | y | 85567ad |
+
 ## Live dogfood matrix (2026-10-17)
 
 Interactive terminal R (tmux), the integrated build installed into a private library, gptr's
