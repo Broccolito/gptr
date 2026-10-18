@@ -649,6 +649,61 @@ test_that("a claude turn through peter() streams the answer; the next call resum
   expect_all_dead(fake_pids(f)[1L])
 })
 
+# The text of the first user line that the fake claude child `pid` received (its `stdin` rows)
+first_user_text = function(rows, pid) {
+  rows = Filter(function(r) identical(as.integer(r[["pid"]]), pid), rows)
+  lines = lapply(rows, function(r) json_decode(r[["line"]]))
+  user = Filter(function(m) identical(m[["type"]], "user"), lines)[[1L]]
+  paste(vapply(user$message$content, function(b) b[["text"]] %||% "", ""), collapse = "\n")
+}
+
+test_that("after a rewind or a compaction the next turn starts a fresh claude conversation", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "text")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  s |> peter("Quick one: add a logical column flag = TRUE to top5")
+  gptr_rewind(s)
+  s |> peter("Again")
+  argv = fake_argv(f)
+  expect_length(argv, 3L)
+  expect_true("--resume" %in% argv[[2]])
+  expect_false("--resume" %in% argv[[3]])
+  first = first_user_text(fake_log(f, "stdin"), fake_pids(f)[3L])
+  expect_match(first, "Say hello", fixed = TRUE)
+  expect_match(first, "Again", fixed = TRUE)
+  expect_false(grepl("flag = TRUE", first, fixed = TRUE))
+  expect_equal(s$messages[[length(s$messages)]]$usage$cost$total, 0.0012)
+  ext_service_get("compact.run")(s, "manual")
+  s |> peter("Once more")
+  argv = fake_argv(f)
+  expect_length(argv, 5L)
+  expect_true("--resume" %in% argv[[4]])
+  expect_false("--resume" %in% argv[[5]])
+  expect_match(first_user_text(fake_log(f, "stdin"), fake_pids(f)[5L]), "<checkpoint n=\"1\"",
+               fixed = TRUE)
+})
+
+test_that("a rewind stops an unbudgeted claude child that lives across runs", {
+  skip_on_cran()
+  local_mocked_bindings(pcli_claude_budgeted = function(flags) FALSE)
+  f = local_fake_cli("claude", "text")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  s |> peter("Quick one: add a logical column flag = TRUE to top5")
+  expect_length(fake_argv(f), 1L)
+  gptr_rewind(s)
+  s |> peter("Again")
+  argv = fake_argv(f)
+  expect_length(argv, 2L)
+  expect_false("--resume" %in% argv[[2]])
+  expect_all_dead(fake_pids(f)[1L])
+  first = first_user_text(fake_log(f, "stdin"), fake_pids(f)[2L])
+  expect_match(first, "Say hello", fixed = TRUE)
+  expect_false(grepl("flag = TRUE", first, fixed = TRUE))
+  expect_equal(s$messages[[length(s$messages)]]$usage$cost$total, 0.0012)
+})
+
 test_that("the claude argv of a peter() call equals architecture 8.3", {
   skip_on_cran()
   f = local_fake_cli("claude", "text")

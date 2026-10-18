@@ -2416,3 +2416,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: 03 §6.11 (incl. its tool-output sentence), the `r` result budget row, §12.5; 04
   `compact_should` and `format_eval_result` rows, IC-71 compaction row; the console notice.
 - Tests: prompt-compact, agent-run, console-render. Evidence: progress/P26.md Task 16.
+
+## D-203 - P26 A rewind or a compaction starts a fresh CLI conversation (2026-10-18)
+- Rule: builtin:cli handles `session_tree` and `session_compact`: the session's child is stopped (no interrupt wait)
+  and its claude session id, Codex thread and Codex usage baseline are forgotten, so the next build starts a fresh
+  CLI conversation whose first message carries the remaining path or the compaction checkpoint (#26: seurat-claude,
+  after `/undo` claude-cli quoted the undone prompt word for word). Before, the next turn resumed the same CLI
+  conversation, which `pcli_unseen()` can only extend.
+- Every rewind resets, a workspace-only one too (one rule: at worst a needless fresh conversation, never a stale one).
+  The claude cost baseline restarts in build() with the fresh session (D-200); the Codex one is cleared, so a reused
+  thread id never turns a whole count into an increase.
+- Contract-visible: 04 IC-65 (continuity bullet); 03 §6.11, §8.3 (both routes).
+- Tests: cli-claude, cli-codex. Evidence: progress/P26.md Task 17.

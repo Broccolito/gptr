@@ -822,8 +822,9 @@ pcli_mcp = function(msg, s, answer) {
 #' leave the watcher polling the closed pipes and the job row `running` (D-018); a child without
 #' a watcher is killed directly. Called by builtin:cli's `agent_end` hook for a run that ended
 #' during a turn (Ctrl-C, gptr_cancel()) or that leaves a budgeted claude child behind, by its
-#' `session_shutdown` hook, and without the wait by the adapters themselves (billing stop, turn
-#' cap, wall-clock limit, a claude child replaced at a new run).
+#' `session_shutdown` hook, and without the wait by its `session_tree` and `session_compact`
+#' hooks and by the adapters themselves (billing stop, turn cap, wall-clock limit, a claude child
+#' replaced at a new run).
 #' @noRd
 pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
   if (!is.environment(state)) return(invisible(FALSE))
@@ -1209,6 +1210,21 @@ pcli_hook_shutdown = function(event, ctx) {
   invisible(NULL)
 }
 
+#' `session_tree` and `session_compact` hooks: a rewind or a compaction changes the conversation
+#' the CLI holds, so the session's child is stopped and its claude session, Codex thread and
+#' Codex usage baseline are forgotten; the next turn starts a fresh CLI conversation that carries
+#' the remaining path as history, and its usage counts whole (03 8.3; D-203)
+#' @noRd
+pcli_hook_forget = function(event, ctx) {
+  state = pcli_tracked(pcli_ctx_session(ctx))
+  if (is.null(state)) return(invisible(NULL))
+  pcli_stop_child(state, wait_ack = FALSE)
+  state$claude_session = NULL
+  state$codex_thread = NULL
+  state$codex_seen = NULL
+  invisible(NULL)
+}
+
 #' builtin:cli: the plan routes, their process_jsonl adapters and hooks (contract 7.20, 10.3)
 #' @noRd
 builtin_cli = function(gptr) {
@@ -1229,6 +1245,8 @@ builtin_cli = function(gptr) {
   gptr$on("usage", pcli_hook_usage)
   gptr$on("agent_end", pcli_hook_end)
   gptr$on("session_shutdown", pcli_hook_shutdown)
+  gptr$on("session_tree", pcli_hook_forget)
+  gptr$on("session_compact", pcli_hook_forget)
   invisible(NULL)
 }
 

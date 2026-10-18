@@ -944,6 +944,25 @@ test_that("the next turn resumes the Codex thread with -c sandbox_mode=", {
   expect_match(second, "Second\n$")
 })
 
+test_that("after a rewind the next turn starts a fresh Codex thread with the remaining path", {
+  skip_on_cran()
+  f = local_fake_cli("codex", "text")
+  s = peter("First", model = f$model, envir = new.env(), mode = "auto")
+  s |> peter("Quick one: add a logical column flag = TRUE to top5")
+  gptr_rewind(s)
+  s |> peter("Again")
+  argv = fake_argv(f)
+  expect_length(argv, 3L)
+  expect_identical(argv[[2]][1:2], c("exec", "resume"))
+  expect_false("resume" %in% argv[[3]])
+  third = rawToChar(fake_prompts(f)[[3]])
+  expect_match(third, "^<gptr_instructions>\n")
+  expect_match(third, "First", fixed = TRUE)
+  expect_false(grepl("flag = TRUE", third, fixed = TRUE))
+  expect_match(third, "Again\n$")
+  expect_equal(s$messages[[length(s$messages)]]$usage$cache_read, 24448)
+})
+
 test_that("without httpuv, later and openssl a fake codex evaluates R in the live session", {
   skip_on_cran()
   local_gptr_options(quiet = FALSE)

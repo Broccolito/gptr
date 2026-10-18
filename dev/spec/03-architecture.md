@@ -1713,7 +1713,8 @@ floor (static prefix + project instructions + re-injection + checkpoint) is chec
 budgets shrink to 25% of the threshold, and a model whose floor still reaches the threshold is refused for that
 preset; after a threshold compaction the next one waits until the context grew by 20% of the window [IC-71].
 On a CLI route (a model of `type = "cli"`) neither rule triggers, nor the halved tool-output budget: the CLI
-compacts its own conversation; `/compact` still runs. A compaction during a foreground run prints one dim line
+compacts its own conversation; `/compact` still runs, and the next turn starts a fresh CLI conversation from its
+checkpoint [D-203]. A compaction during a foreground run prints one dim line
 with its before and after token counts [D-202].
 
 ### 6.12 Evaluator [12 §3-4]
@@ -2310,7 +2311,8 @@ evaluates R in the live session; because `--allowedTools mcp__gptr__*` pre-allow
 `control_request` interrupt, then `kill_all()`. gptr's own tool calls are reported where they run (`mcp_serve_call()`)
 as `tool_execution_*` events, the end with the result's `content` and `details`, so the console shows them as tool
 and result lines while they run and IC-53 tracks them as calls of the agent loop; the gate is unchanged [D-192]. Stream events reuse the Anthropic normaliser; continuity uses
-the CLI's session id (`--resume` with the same system-prompt file); usage records the increase of `total_cost_usd`, the
+the CLI's session id (`--resume` with the same system-prompt file) until a rewind or a compaction, after which the child is stopped and
+the next turn starts a fresh CLI session that carries the remaining path as history [D-203]; usage records the increase of `total_cost_usd`, the
 CLI session's running total that a resumed child goes on from, as a plan estimate [D-200], and the rate-limit event as plan status. Concurrency: one `claude-cli` child per session by default.
 The provider id avoids the Claude Code product name; `claude_code` is only an alias; the maintainer asks
 Anthropic before advertising the route (policy status UNCERTAIN) [07, J-cran].
@@ -2357,7 +2359,7 @@ On both CLI routes, whose one request runs a whole agent turn, the console shows
 at verbosity 2 above the waiting row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
 carries no text deltas, so the answer arrives whole; token streaming needs the app-server driver (open item). Both
 routes probe their CLI when a run starts, before its waiting row [D-192]. Continuity: `codex exec resume <thread>` when supported
-(UNCERTAIN), else a new thread with a synthetic history. The console states Codex's 19-38K extra input tokens
+(UNCERTAIN), else, and after a rewind or a compaction [D-203], a new thread with a synthetic history. The console states Codex's 19-38K extra input tokens
 per turn [08]. The Codex app-server driver (dynamic tools calling back into R, token streaming, steer, interrupt) and Sign in
 with ChatGPT (the native `openai` provider with `auth = "chatgpt"`, avoiding Codex's overhead) are v1.x plugins
 behind a schema probe and a maintainer's live end-to-end test respectively (§1.3).

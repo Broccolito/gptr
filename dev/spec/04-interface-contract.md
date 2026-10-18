@@ -4806,6 +4806,10 @@ document are exact.
   The one-time notice says Codex runs its own shell inside its sandbox.
 - Codex has no turn cap flag: gptr counts `turn.completed`/`item.completed` events and cancels at the cap; each
   exec has a wall-clock limit (`gptr.cli_turn_timeout`, 3600 s).
+- **Continuity**: a claude child resumes the CLI session (`--resume`), a Codex exec its thread (`exec resume`), and
+  a reused or resumed conversation gets only the turns it has not seen. A rewind or a compaction (`session_tree`,
+  `session_compact`) stops the session's child and forgets the claude session, the Codex thread and its usage
+  baseline, so the next turn starts a fresh CLI conversation carrying the remaining path as history [D-203].
 - Live tests (`GPTR_LIVE_TESTS=true`) run Codex in a non-git temporary directory and require it to call the gptr
   MCP `r` tool; the test needs no optional package (IC-79).
 
