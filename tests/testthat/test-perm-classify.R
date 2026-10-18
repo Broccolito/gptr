@@ -815,7 +815,8 @@ test_that("a name assigned outside a function body holds the paths it may hold (
   for (code in c("p = '/etc/gptr-old.csv'; file.remove(p)",
                  "p = normalizePath('/etc/gptr-old.csv', mustWork = FALSE); file.remove(p)",
                  "p = '/etc/gptr-old.csv'; if (dry) p = tempfile(); unlink(p)",
-                 "p = tempfile(); if (dry) p = '/etc/gptr-old.csv'; unlink(p)")) {
+                 "p = tempfile(); if (dry) p = '/etc/gptr-old.csv'; unlink(p)",
+                 "p = '/etc/gptr-old.csv'; p = tempfile(fileext = file.remove(p))")) {
     r = gptr_risk(code, root = root)
     f = r$flagged[r$flagged$category == "file_delete", ]
     expect_identical(list(r$level, f$path, f$path_class),
@@ -836,7 +837,8 @@ test_that("a name assigned outside a function body holds the paths it may hold (
                  "if (!exists('p')) p = tempfile(); unlink(p, recursive = TRUE)",
                  "p = tempfile(); for (f in c('/etc/a', '/etc/b')) { unlink(p); p = f }",
                  "p = tempfile(); for (f in c('/etc/a')) { unlink(p); p[1] = f }",
-                 "f = function() p <<- '~'; p = tempfile(); f(); unlink(p, recursive = TRUE)")) {
+                 "f = function() p <<- '~'; p = tempfile(); f(); unlink(p, recursive = TRUE)",
+                 "p = tempfile(); assign(value = '/etc/x', x = 'p'); file.remove(p)")) {
     expect_identical(gptr_risk(code, root = root)$level, 3L, label = code)
   }
 })

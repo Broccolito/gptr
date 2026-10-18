@@ -2611,18 +2611,15 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     } else {
       use_fun(r$name, r$pkg, e, ctx)
     }
-    if (r$name %in% risk_assign_ops && length(a) == 2L) {
-      note_assign(a[[1L]], r$name, ctx, a[[2L]])
-      use_value(a[[2L]], ctx, slot = FALSE)
-    }
     if (r$name %in% c("for", "while", "repeat")) {
       b = risk_bound(list(e))
       for (nm in c(b$all, b$val)) known[[nm]] <<- NA_character_
     }
     if (r$name == "for") note_assign(a[[1L]], "=", ctx)
     if (r$name == "assign" && length(a)) {
-      if (is.character(a[[1L]])) {
-        note_assign(as.name(a[[1L]]), "assign", ctx)
+      x = risk_arg(risk_args(e, "assign", "base"), "x", 1L)
+      if (is.character(x)) {
+        note_assign(as.name(x), "assign", ctx)
       } else {
         add_tg("unknown", "assign(<computed name>)")
       }
@@ -2656,6 +2653,11 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     if (r$name %in% risk_quoting_funs) inner$quote = TRUE
     inner$away = ctx$away || r$name %in% risk_unknown_funs
     for (i in seq_along(a)) if (!identical(a[[i]], quote(expr = ))) walk(a[[i]], inner)
+    # after the value is walked, so a use of the name inside it sees the earlier value
+    if (r$name %in% risk_assign_ops && length(a) == 2L) {
+      note_assign(a[[1L]], r$name, ctx, a[[2L]])
+      use_value(a[[2L]], ctx, slot = FALSE)
+    }
   }
 
   walk(exprs, list(quote = FALSE, def = FALSE, seq = TRUE, away = FALSE, line = 1L))
