@@ -2281,6 +2281,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   6.2, 6.17; report 18 Verification log row 50; `?peter`, `/help`, both vignettes.
 - Tests: test-console-typing.R (10 blocks, pty child), test-gptr-config.R (key set),
   test-console-repl.R (macOS pty: typed-ahead lines now steer). Evidence: progress/P26.md Task 3.
+- Review fixes (2026-10-17): a console question first routes the lines waiting on fd 0 (`console_before_message(kind = "prompt")` calls `console_typed()`), so a line typed during a tool directly before an approval steers; a run aborted at a question drops held lines like an interrupt; lines continuing an incomplete held `!code` line are held with it (`typed_code_open()`, across batches); `/help` says "not Windows".
 
 ## D-186 - P26 Console margin, block spacing, waiting row, Markdown and highlighting (2026-10-16)
 - Rule (03 section 6.17; 04 section 7.14 unchanged): where the console renderer is active (`console_pad()`: `verbosity() >= 2L && cli::is_dynamic_tty()`, so `capture.output()` of an interactive call captures the layout too) rendered text, the waiting row, prompts, tool and artifact lines and gptr notices (`console_notice()`, `gptr_inform()` display, word-wrapped, also outside a run) keep a two-column margin, content width `width - 4`; nested lists keep their indentation, pipe tables are aligned (verbatim when malformed or too wide) and a reply's leading, trailing and repeated blank lines collapse. Rscript (verbosity 1), knitr, jsonl and tests (verbosity 0), pipes and Jupyter keep the plain layout (no margin, block gaps, table alignment or notice wrapping); `NO_COLOR` removes colours and styles only, the layout stays (amends the plan's plain list).
@@ -2289,6 +2290,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Markdown: italic `*x*` at token edges only (no `_x_`, strikethrough or bare-URL underline), dim `](url)`, `> ` and `-` rules (no box drawing, Task 5), H1 bold underlined, H2-H6 bold. Code per line (Task 5 redraws streamed lines): R lines that parse through `cli::code_highlight()`, other R and known languages through `code_light()` (cli's default Solarized accents), unknown languages verbatim.
 - Contract-visible: console display only; internal `gptr_message_write(margin =)`; tests pin `cli.ansi = FALSE` (setup.R).
 - Tests: test-console-render.R (4-mode invariance, plain guard at verbosity 0 and 1, margin incl. NO_COLOR, blank lines, continuation after reset_line, tables, styles, highlighting, UI partial line, block spacing incl. rgui), -wait (5), -process-launch (LF only rgui; 4 oracles), -spinner-width (ANSI), -spinner-gui (rgui CR-only frames; 1 oracle removed), -notice (wrap keeping indentation, NO_COLOR, plain contexts; 2 oracles). Evidence: progress/P26.md Task 4.
+- Review fixes (2026-10-17): italic only when one token opens and closes it (an unmatched `*` prints); no LF after a cleared row in R GUIs either (two blank rows at notices, prompts and launches; the block gap gives R.app its stdout line; native check open); inside an evaluation `console_pad()` is the margin recorded at `eval_open()` (`.gptr_console_pad`), so prompts, gaps and notices drawn during a tool keep the layout; the pause menu's prompts get the margin; the plan's "(typing stays visible)" does not hold: a redraw overwrites a partial typed line's echo (IC-76 Limits).
 
 ## D-187 - P26 Code blocks and tool calls as Markdown fences (2026-10-16)
 - Rule (03 section 6.17; 04 section 7.14 unchanged; deviates from P14's `console_symbols()`, fence code and NS-1 tool line): `console_symbols()` loses `bar`, `top`, `bottom`, `result`; console output draws no U+2500-U+257F or U+23BF character.
@@ -2336,6 +2338,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: 03 §6.8.1-6.8.2, §8.3; 04 mode lists, IC-53 items 1/3/6, IC-65, IC-78; 05 P11, P20;
   `?peter`, `?gptr_agent`, `?gptr_security`; configuration, interactive-console, execution-model vignettes.
 - Tests: perm-gate, perm-classify, perm-plan, tool-namespace, session-object, console-*, prompt-context,
+- Review fix (2026-10-17): `dispatch_nested()` gates a listed member when `call_risk()` of its actual input is above the approved level, so `peter$edit()` with a patch's Delete File of `.env` or an outside path asks in auto and yolo and stops `blocked` with nobody to answer; P22's `bridge_recheck()` is subsumed and deleted (it would ask twice).
   gptr-config, subagent-*, cli-*, ext-*, injection-e2e. Evidence: progress/P26.md Task 8.
 
 ## D-191 - P26 Codex stdio relay; CLI routes serve the session's tools; model references (2026-10-16)
@@ -2351,6 +2354,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   §8.5, IC-19, IC-57, IC-58, IC-65, IC-79; 05 P18, P20; P19, P20 notes; `?gptr_mcp_serve`, `?gptr_options`;
   language-models vignette; layering edges console -> `model_canonical()`, mcp -> `tool_call_hook()`.
 - Tests: cli-*, mcp-*, http-reactor, catalog-models, console-commands, provider-openai-completions, aaa-state.
+- Review fix (2026-10-17): a served tool other than `r` runs through `tool_run()` (source attribution, result check) and, when reported, in `tool_execute_frame()`, as in the agent loop; contract edges mcp -> `tool_run`, `tool_execute_frame`.
 
 ## D-192 - P26 Codex progress and claude-cli tool calls while they run (2026-10-16)
 - Rule: `run_on_event()` passes a provider's informational `tool_execution_start`/`_end` to the session's hooks (the
@@ -2365,3 +2369,4 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Open: Codex token streaming needs the app-server driver (v1.x); the row after a tool line is Task 4's.
 - Contract-visible: 03 §1.3, §8.3; 04 §8.5, §10.4; P20 note; vignette. Out of lane: agent-run.R, ext-events.R.
 - Tests: console-render, cli-claude, cli-codex (`codex-progress.jsonl`), mcp-server. Evidence: progress/P26.md Task 10.
+- Review fix (2026-10-17): the reporting is skipped only when the served call's own run has a tool on the stack (`identical(run_current(), run)`), so a nested CLI run inside its parent's tool reports its calls and its approved or yolo control exports run.
