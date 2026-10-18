@@ -2721,8 +2721,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   word-wrapped at width - 4 with its indentation (the prompt's own leading blanks are dropped first, so a padded
   question is not indented twice). In the margin that branch also takes a prompt wider than the content row
   (a `gptr_confirm()` question under 200 bytes), and the answer is read after `  > `; without a margin nothing
-  changes. `/env` lines lose their own two blanks (the banner adds them), so in the margin they sit at column 2. Listings that commands print (`/cost`,
-  `/checkpoints`, `/resume`, `/skills`, `/mcp`, `/permissions`) go through `print_lines()`, which formats at the
+  changes. `/env` lines lose their own two blanks (the banner adds them), so in the margin they sit at column 2. Listings that commands print
+  (`/checkpoints`, `/resume`, `/skills`, `/mcp`, `/permissions`; `/cost` prints D-206's lines) go through `print_lines()`, which formats at the
   content width (`width` and `cli.width`), so rows are not wrapped again. `/help` lays out commands and input
   forms with `formatDL()` at the content width (the console width without a margin): a description wraps under
   its column (commands' at column 17, was 16). The idle-prompt Ctrl-C notice and the pause-menu notice start
@@ -2731,7 +2731,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   a period.
 - Contract-visible: console display only; IC-75, the `gptr_readline()` row of 04 section 7.1, 03 section 6.17.
 - Tests: test-console-commands.R (/help at width 60 in the margin: every line indented, none wider, no split
-  word, descriptions in one column; `/mode`; `/env` at column 2; `/cost` formatted at 56; `1 turn`),
+  word, descriptions in one column; `/mode`; `/env` at column 2; `/resume` formatted at 56; `1 turn`),
   test-utils-options.R (a padded 300-byte prompt wrapped once in the margin and an 83-byte one at width 60, both
   read after `  > `; a fitting prompt read with it), test-console-repl.R (the idle notice follows a line end;
   banner period; banner objects at column 2), test-console-interrupt.R (the pause notice follows a line end).
