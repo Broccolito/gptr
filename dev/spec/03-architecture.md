@@ -246,7 +246,8 @@ Rules that keep this honest:
    shell holds no frames or user objects [IC-71]) and the replay-block table [IC-46]. Usage, queues, abort flags,
    the `peter$out()` store and every in-flight cache live in sessions and runs; `gptr_usage()` aggregates [G3 (2)].
    The console input layer also keeps the seconds its last `readline()` waited (`readline_secs`: process-level
-   input timing, not run state [IC-75]).
+   input timing, not run state [IC-75]) and the terminal modes a console call saved before it turned the echo off
+   (`tty_modes`, cleared when the call ends [IC-76]).
 
 ### 2.3 Execution model
 
@@ -1891,9 +1892,10 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
   stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
   session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`, or `"follow_up"`); one batch (a
-  paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. IDE
-  consoles, R.app and `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer
-  after the CLI's current response.
+  paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. The
+  terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only in its
+  notice; console questions read with the echo restored (D-221). IDE consoles, R.app and `peter("...")` at R's
+  prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current response.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.

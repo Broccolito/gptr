@@ -2389,3 +2389,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: IC-75; 03 section 6.17; P26 Task 2; `?peter`, console vignette.
 - Tests: test-console-ui.R (paste at an approval through the REPL), test-console-repl.R (blocks, macOS pty child).
   Evidence: progress/P26.md Task 19.
+
+## D-221 - P26 The terminal does not echo type-ahead while a console call runs (2026-10-18)
+- Rule: in a terminal REPL (IC-76 scope) `console_send()` saves the tty modes (`tty_modes()`, `stty -g` on fd 0),
+  sets `-echo` for the call and restores them on exit, error and interrupt included; canonical mode stays, so typed
+  lines still arrive whole. A typed line shows once, in its steering or held-lines notice; a partial line shows at
+  the next prompt. Amends P26 Task 4 ("typing stays visible") and IC-76's echo limit.
+- Triage correction: R's readline (CRAN macOS, readline 5.2) shows nothing typed when the tty's echo is off at its
+  start (pty check), so `gptr_readline()` reads with the saved modes while `the$tty_modes` is set and sets `-echo`
+  again after the read: approvals, choices, the pause menu and `gptr_confirm()` echo as before. R code a tool runs
+  that reads the console (`readline()`, `menu()`, `browser()`) reads without echo.
+- Not changed: a notice still ends the streamed row (the answer goes on in the next row), so the pty test compares
+  the answer's text, not its rows, with an undisturbed render. R ending during a call (`q()`, a crash, a kill) runs
+  no restore, so the terminal keeps `-echo` (IC-76 Limits).
+- Contract-visible: IC-76; 04 section 7.1 wrapper row; 03 sections 2.2 rule 5 and 6.17; P26 Task 4; `?peter`,
+  console vignette.
+- Tests: test-console-typing.R (mocked stty around console_send(), gptr_readline(), pty child). Evidence:
+  progress/P26.md Task 21.

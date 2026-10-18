@@ -132,7 +132,9 @@ answer after the prompt.
 
 In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
 runs steers it: the agent reads it at its next step, after the current tool results, and
-lines typed or pasted together are one message. \code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}})
+lines typed or pasted together are one message. The terminal does not echo while an answer
+runs: a line shows once you press Enter, in its notice, so it never mixes into the answer.
+\code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}})
 queues them for when the agent would stop instead. \verb{/command} and \code{!code} lines typed then
 run at the next prompt; an interrupt drops them. On the CLI routes a steer reaches the model
 after the CLI's current response. The RStudio, Positron and R.app consoles, and type-ahead at

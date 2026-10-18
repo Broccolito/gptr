@@ -620,8 +620,8 @@ typed_code_open = function(held) {
 #' `.gptr_interrupt_barrier`, so the policy of this call's run is the outermost one and its
 #' re-signalled interrupt ends here. A failed call keeps its session (the condition's `$session`,
 #' else a new gptr_last()); a stray run left by an early interrupt is aborted. On a terminal the
-#' call's console_typed() task reads typed lines; an interrupt or an aborted run (Ctrl-C at a
-#' question) drops the lines it held.
+#' call's console_typed() task reads typed lines, with the echo off until the call ends (IC-76);
+#' an interrupt or an aborted run (Ctrl-C at a question) drops the lines it held.
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
 console_send = function(rs, text) {
@@ -632,6 +632,16 @@ console_send = function(rs, text) {
   on.exit(console_call_release(rs), add = TRUE)
   task = if (repl_terminal(rs)) reactor_task(console_typed)
   on.exit(if (!is.null(task)) reactor_cancel(task), add = TRUE)
+  # the terminal does not echo type-ahead into the answer; gptr_readline() echoes its reads
+  modes = if (!is.null(task)) tty_modes()
+  if (length(modes) == 1L) {
+    the$tty_modes = modes
+    on.exit({
+      the$tty_modes = NULL
+      tty_modes(modes)
+    }, add = TRUE)
+    tty_modes("-echo")
+  }
   cl = console_call(rs, text)
   rs$sending = cl
   before = gptr::gptr_last()
@@ -973,7 +983,9 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'
 #' In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
 #' runs steers it: the agent reads it at its next step, after the current tool results, and
-#' lines typed or pasted together are one message. `type_ahead = "follow_up"` ([gptr_config()])
+#' lines typed or pasted together are one message. The terminal does not echo while an answer
+#' runs: a line shows once you press Enter, in its notice, so it never mixes into the answer.
+#' `type_ahead = "follow_up"` ([gptr_config()])
 #' queues them for when the agent would stop instead. `/command` and `!code` lines typed then
 #' run at the next prompt; an interrupt drops them. On the CLI routes a steer reaches the model
 #' after the CLI's current response. The RStudio, Positron and R.app consoles, and type-ahead at

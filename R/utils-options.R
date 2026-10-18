@@ -76,6 +76,15 @@ stdin_tty = function() {
   isatty(stdin())
 }
 
+#' Mockable: the modes of the terminal R reads (`stty -g`), or set `modes` (such as "-echo"); NULL
+#' when stty fails (IC-76)
+#' @noRd
+tty_modes = function(modes = "-g") {
+  out = tryCatch(suppressWarnings(system2("stty", modes, stdout = TRUE, stderr = FALSE)),
+                 error = function(e) NULL)
+  if (is.null(attr(out, "status"))) out
+}
+
 #' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its
 #' own copy of readline() as `read` (console_reader()). The seconds it waited go to
 #' `the$readline_secs` (readline_answer()); readline() keeps only 255 bytes of a prompt, so one
@@ -85,6 +94,11 @@ gptr_readline = function(prompt = "", read = readline) {
   if (nchar(prompt, type = "bytes") > 200L) {
     gptr_message_write(paste0(prompt, "\n"), "stdout")
     prompt = "> "
+  }
+  # readline() shows what is typed only while the terminal echoes, which a console call turned off
+  if (!is.null(the$tty_modes)) {
+    tty_modes(the$tty_modes)
+    on.exit(tty_modes("-echo"), add = TRUE)
   }
   start = proc.time()[["elapsed"]]
   x = as_utf8(read(prompt))

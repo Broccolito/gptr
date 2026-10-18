@@ -2212,7 +2212,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_opt(name)` | the option value or the §3.1 default (`NULL` for settings-backed options) | all |
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
-| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183) and `isatty(stdin())` (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs` and prints a prompt over 200 bytes whole, then reads after `> ` (IC-75) | P11, P14, P26 |
+| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes whole, then reads after `> ` (IC-75), and reads with `the$tty_modes` while a console call holds the echo off (IC-76) | P11, P14, P26 |
 | `readline_answer(prompt)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer arrived within 0.1 s (typed or pasted before the question), at most 100 reads, then the last answer; used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
 | `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183) | P07, P14, P15 |
@@ -5096,12 +5096,18 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   source `repl` and a steer becomes the operator relay.
 - Notices, pause menu included: `[gptr] steering: '<text>'; it reaches the agent at its next step` and
   `[gptr] follow-up queued: '<text>'; it is sent when the agent would stop`.
+- No echo (D-221): while the call runs the terminal does not echo, so typed text never lands in the answer or the
+  waiting row; a typed line shows once, in its notice, and a partial line at the next prompt. `console_send()`
+  saves the modes (`tty_modes()`: `stty -g` on fd 0; NULL when stty fails, which changes nothing), sets `-echo`
+  (canonical mode stays) and restores the modes on exit, an error or interrupt included; `the$tty_modes` holds
+  them meanwhile. R's readline shows a line only while the terminal echoes, so `gptr_readline()` (approvals,
+  choices, the pause menu, `gptr_confirm()`) reads with the saved modes and sets `-echo` again after the read.
 - The setting `type_ahead` (§11.2): `"steer"` (default) or `"follow_up"`; not a tighten key.
-- Limits: the terminal still echoes typed text into the stream (on an ANSI terminal the waiting row's redraw
-  overwrites the echo of a partial typed line, and Enter leaves that row with the typed fragment above the
-  next block; the steering or held-lines notice repeats the text); a front end that keeps the tty non-canonical
-  during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the model after the
-  CLI's current response.
+- Limits: R code that a tool runs and that reads the console (`readline()`, `menu()`, `browser()`) reads without
+  echo; R ending during a call (`q()`, a crash or a kill) leaves the terminal without echo (`stty echo` or `reset`
+  restores it); a notice ends the streamed row, so the answer goes on in the row after it; a front end that keeps
+  the tty non-canonical during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the
+  model after the CLI's current response.
 
 **IC-77 Console controls and the asking agent** (P26 Task 6).
 1. Console writer: an evaluation's `.gptr_message_write(text, stream, margin, k)` lifts its own

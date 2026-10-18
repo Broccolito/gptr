@@ -208,6 +208,8 @@ workspace is preserved. Settings and policies are described in
 In a terminal (terminal R or an IDE's Terminal tab; not Windows), a line you type while an
 answer runs steers it: the agent reads it at its next step, after the current tool results, and
 gptr confirms with `[gptr] steering: '<text>'`. Lines typed or pasted together are one message.
+The terminal does not echo while an answer runs: a typed line shows after Enter, in gptr's
+notice, and never mixes into the answer.
 `gptr_config(type_ahead = "follow_up", .scope = "user")` queues them for when the agent would
 otherwise stop instead. `/commands` and `!code` typed during an answer run at the next prompt;
 an interrupt drops them. On the CLI routes (`claude-cli`, `codex`) a steer reaches the model

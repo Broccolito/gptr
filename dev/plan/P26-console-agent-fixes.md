@@ -166,7 +166,8 @@ Decisions (skeptic-corrected):
   `cli::is_ansi_tty()`, spaces otherwise; a cleared row is never followed by an LF except on
   `rgui` (the launch-boundary `newline` argument goes away). Separators are written on finished
   lines, so the next block overwrites the cleared row. The spinner leaves the cursor at the end of
-  its text (typing stays visible).
+  its text; the terminal does not echo during a console call, so type-ahead shows in its notice
+  only (Task 21, D-221).
 - One "other output is about to appear" path: `console_before_message(runs = NULL)` ends partial
   Markdown lines of every foreground record and clears waiting rows but keeps their tasks. It is
   the first statement of `ui_console_permission()`, `ui_console_select()` and
