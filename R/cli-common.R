@@ -905,7 +905,8 @@ pcli_start = function(s, response_id = NULL) {
   invisible(NULL)
 }
 
-#' Emit a whole text or thinking block (start, one delta, end) and keep it
+#' Emit a whole text or thinking block (start, one delta, end) and keep it; the delta ends its
+#' line, so the console shows the block's last word now, not at the next event (#41)
 #' @noRd
 pcli_text_block = function(s, text, kind = "text") {
   if (!rlang::is_string(text) || !nzchar(text)) return(invisible(NULL))
@@ -921,7 +922,8 @@ pcli_text_block = function(s, text, kind = "text") {
   emit = s$opts[["emit"]]
   if (is.function(emit)) {
     emit(ev_new(paste0(kind, "_start"), index = i))
-    emit(ev_new(paste0(kind, "_delta"), index = i, delta = text))
+    emit(ev_new(paste0(kind, "_delta"), index = i,
+                delta = paste0(text, if (!endsWith(text, "\n")) "\n")))
     emit(ev_new(paste0(kind, "_end"), index = i, block = blk))
   }
   s$blocks[[i]] = blk

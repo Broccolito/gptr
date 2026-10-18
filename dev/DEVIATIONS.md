@@ -2484,3 +2484,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   reaching the width with none, so the rest of a line exactly that long was dropped unmarked).
 - Contract-visible: 04 §8.5; 03 §6.17, §8.3. Tests: cli-codex, console-fences, console-ui, console-render. Evidence:
   progress/P26.md Task 31.
+
+## D-208 - P26 A CLI route's whole blocks end their line; text blocks in a row are separated (2026-10-18)
+- Rule (#41; amends D-192): `pcli_text_block()` streams a whole block as one delta ending with a line end, so the
+  console shows a Codex message's last word when the item completes (it was held until the next event, 1.5-9.5 s
+  live). The kept block is unchanged: the triage's `paste0(text, "\n")` on the block would have added a line end to
+  the answer (`$text`, `msg_text()`). A Codex reasoning item's thinking block no longer keeps its own line end.
+- Rule (amends D-186): on the console, a text block that directly follows another text block of the run opens its
+  own block, one blank line between them (three Codex messages printed on adjacent lines). All routes.
+- Contract-visible: 03 §6.17, §8.3; 04 §8.5. Out of lane: console-render.R. Tests: cli-codex
+  (`codex-messages.jsonl`). Evidence: progress/P26.md Task 32.

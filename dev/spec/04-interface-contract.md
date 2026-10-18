@@ -3169,8 +3169,8 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   (`agent_message` -> text, `reasoning` -> thinking, `mcp_tool_call`/`command_execution` -> informational
   `tool_execution_*` events with `informational = TRUE`, which IC-53 does not track since they run outside R,
   except gptr's own `mcp_tool_call` items, which `mcp_serve_call()` reports; a command's `input$command` drops the
-  shell's `-lc` wrapper of a single-quoted script without a single quote of its own, or a bare word [D-207]; a
-  reasoning item's text ends with a line end), `turn.completed{usage}` (the thread's
+  shell's `-lc` wrapper of a single-quoted script without a single quote of its own, or a bare word [D-207]; an
+  item's block is one delta ending with a line end [D-208]), `turn.completed{usage}` (the thread's
   running totals, also on `exec resume`: an exec on the thread of the previous `turn.completed` records each count's
   increase, an exec on a new thread the whole; an increase below zero is unknown [D-200]), `turn.failed{error}`,
   `error` [08 §2.E]; gptr counts turns

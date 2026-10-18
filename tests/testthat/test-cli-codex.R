@@ -1064,6 +1064,36 @@ test_that("a codex turn shows its reasoning and tool steps at the console as the
   expect_identical(e$n_files, 1L)
 })
 
+test_that("a Codex message shows whole once it completes, a blank line from the next (#41)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("codex", "messages")
+  seen = new.env()
+  seen$log = character()
+  event = pcli_codex_event
+  write = console_cat
+  local_mocked_bindings(
+    console_pad = function() "  ",
+    pcli_codex_event = function(obj, s) {
+      seen$log = c(seen$log, paste0("<", obj[["type"]], ">"))
+      event(obj, s)
+    },
+    console_cat = function(text) {
+      seen$log = c(seen$log, text)
+      write(text)
+    })
+  out = utils::capture.output({
+    s = peter("How many files are there?", model = f$model, envir = new.env())
+  })
+  # the last word is on screen before Codex's next event, not held until it
+  expect_lt(which(grepl("files.", seen$log, fixed = TRUE))[[1L]],
+            match("<item.started>", seen$log))
+  at = match("  * codex_shell  ls", out)
+  expect_identical(out[at + 1:4], c("", "  There is one file.", "", "  It is a.txt."))
+  expect_identical(s$text, "I will list the files.\nThere is one file.\nIt is a.txt.")
+})
+
 test_that("a Codex step leaves the control exports to the user; a served call does not (IC-53)", {
   skip_on_cran()
   f = local_fake_cli("codex", "progress")

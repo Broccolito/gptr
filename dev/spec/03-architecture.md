@@ -1904,7 +1904,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
   lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
   width - 4; one blank line separates text, tool, notice, prompt and status blocks (and two
-  prompts) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
+  prompts, and two text blocks in a row [D-208]) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
   the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
   row, R GUIs included); the margin is that of the console an evaluation started from, also for
   prompts and notices drawn inside it. There nested lists keep their indentation, pipe tables are aligned
@@ -2358,7 +2358,8 @@ when it is not ready [08 line 2796]; never bypass the sandbox. The one-time noti
 inside its sandbox. gptr counts Codex's turn events and cancels at the turn cap, with a wall-clock limit per exec.
 Codex's own steps (commands, without the shell's `-lc` wrapper [D-207], file changes, web searches) become
 informational tool events and its calls of gptr's tools are reported where they run, so each shows once; a reasoning
-item is a thinking block ending with a line end.
+item is a thinking block. Each whole block of a CLI route streams as one delta ending with a line end, so the console
+shows its last word at once [D-208].
 The informational events run outside R, so IC-53 does not track them and the user's own control exports still work.
 On both CLI routes, whose one request runs a whole agent turn, the console shows each thinking block's first line dim
 (cut at the width with an ellipsis [D-207]) at verbosity 2 above the waiting row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`

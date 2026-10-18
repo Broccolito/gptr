@@ -487,9 +487,8 @@ pcli_codex_item = function(s, item) {
   if (identical(kind, "agent_message")) {
     pcli_text_block(s, item[["text"]] %||% "")
   } else if (identical(kind, "reasoning")) {
-    # a finished paragraph: its line end tells the console that the first line is whole (D-192)
     text = trimws(pcli_chr(item[["text"]]) %||% "", "right")
-    if (nzchar(text)) pcli_text_block(s, paste0(text, "\n"), kind = "thinking")
+    if (nzchar(text)) pcli_text_block(s, text, kind = "thinking")
   } else if (kind %in% pcli_codex_tool_kinds) {
     pcli_codex_tool(s, item, "end")
     s$items = s$items + 1L

@@ -945,6 +945,8 @@ console_on_message_update = function(event, ctx) {
     if (!is.null(rec$md) && !identical(rec$md_index, event$index)) {
       rec$md$finish()
       rec$md = NULL
+      # a new text block right after one opens its own block, a blank line between (#41)
+      if (identical(rec$last, "text")) rec$last = NULL
     }
     if (is.null(rec$md)) {
       rec$md = render_markdown_stream(before_output = console_stream_output(rec))
