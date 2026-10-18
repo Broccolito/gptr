@@ -3146,7 +3146,9 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   `{"type":"control_response","response":{"subtype":"success","request_id":…,"response":{"mcp_response":…}}}`;
   `can_use_tool` (not sent for the pre-allowed `mcp__gptr__*` tools) -> `opts$gate(call)` answered
   `{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":…}`; unknown subtypes -> an error
-  response. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with `gptr_error_billing`. `result` lines end the turn (usage
+  response. A `tools/call` served in a live run, outside a tool call (either route, or an MCP client during a run),
+  is reported by `mcp_serve_call()` as `tool_execution_start`/`_end` under its gate's call id `mcp_<id>`, the end
+  with the result's `content`, `details` and execution time; its approval's control tokens end with it [D-192]. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with `gptr_error_billing`. `result` lines end the turn (usage
   from `usage` and `total_cost_usd` as an estimate, route `plan-cli`); `rate_limit_event` updates the provider's
   plan status. Interrupt: `{"type":"control_request","request_id":…,"request":{"subtype":"interrupt"}}`, then
   `kill_all()` after the grace period [07 §3.9-3.10].
@@ -3159,7 +3161,9 @@ of `03`. The two plan routes are `type = "cli"` providers whose adapters use `pr
   prompt on stdin (`write_all()`), the child environment `child_env("cli-codex")` with no token; gptr's tools come
   through the stdio relay of IC-79, in every installation. Events `thread.started`, `turn.started`, `item.started|updated|completed`
   (`agent_message` -> text, `reasoning` -> thinking, `mcp_tool_call`/`command_execution` -> informational
-  `tool_execution_*` events), `turn.completed{usage}`, `turn.failed{error}`, `error` [08 §2.E]; gptr counts turns
+  `tool_execution_*` events with `informational = TRUE`, which IC-53 does not track since they run outside R,
+  except gptr's own `mcp_tool_call` items, which `mcp_serve_call()` reports; a
+  reasoning item's text ends with a line end), `turn.completed{usage}`, `turn.failed{error}`, `error` [08 §2.E]; gptr counts turns
   and cancels at the cap, with `gptr.cli_turn_timeout` per exec. Sandbox mapping (IC-65): `plan`, `manual` and
   `edits` -> `read-only` (file changes go through gptr's gated `write`/`edit` over MCP); `auto` and `yolo` ->
   `workspace-write`, with control files hashed before and a files-checkpointer walk after each exec; native
@@ -3492,7 +3496,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `message_start`, `message_update`, `message_end` | pi | notify | `role`; update: `index`, `kind` (`text`, `thinking`, `toolcall`), `delta`; end: `message` | - | P06 |
 | `tool_call` | pi | decision, **error = block** | `tool_name`, `tool_call_id`, `input`, `nested`, `parent_tool_call_id`, `risk` | `NULL`, `list(decision = "block", reason)`, or `list(decision = "modify", input)` | P06 |
 | `permission_request` | gptr | first decision, **error = deny** | the §7.11 permission request record | `list(decision = "allow" \| "deny", reason)` | P06 |
-| `tool_execution_start`, `tool_execution_update`, `tool_execution_end` | pi | notify | `tool_call_id`, `tool_name`, `input` (start), `text` (update), `is_error`, `elapsed`, `details` summary (end) | - | P06 |
+| `tool_execution_start`, `tool_execution_update`, `tool_execution_end` | pi | notify | `tool_call_id`, `tool_name`, `input` (start), `text` (update), `is_error`, `elapsed`, `details` summary (end); the end of a call served in a live run (§8.5) carries the result's `content` and full `details`; a provider's informational events (§8.5) carry `informational = TRUE` and IC-53 does not track them | - | P06 |
 | `tool_result` | pi | patch chain | `tool_name`, `tool_call_id`, `input`, `content`, `details`, `is_error` | `list(content, details, is_error)` (any subset) | P06 |
 | `queue_update` | pi | notify | `steer` int, `follow_up` int | - | P06 |
 | `retry_start`, `retry_end` | gptr | notify | `attempt`, `delay`, `class`; end: `ok` | - | P06 (from P04) |

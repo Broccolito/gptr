@@ -1162,6 +1162,18 @@ pcli_hook_params = function(event, ctx) {
   list(params = list(cli_mode = ctx$mode(), cli_budget = list(turns = turns, cost = cost)))
 }
 
+#' `agent_start` hook: probe the CLI of a session on a plan route before its run's first request,
+#' so the probe's runs (about a second, then cached) never freeze its waiting row; a probe that
+#' fails is left to build(), which reports it (D-192)
+#' @noRd
+pcli_hook_start = function(event, ctx) {
+  api = tryCatch(model_resolve(ctx$model(), strict = FALSE)[["api"]], error = function(e) NULL)
+  if (isTRUE(api %in% c("cli-claude", "cli-codex"))) {
+    tryCatch(pcli_probe(pcli_find(sub("^cli-", "", api))), error = function(e) NULL)
+  }
+  invisible(NULL)
+}
+
 #' The session id of a ctx (NULL for process-level dispatch or a collected session)
 #' @noRd
 pcli_ctx_session = function(ctx) pcli_sid(tryCatch(ctx$session$id, error = function(e) NULL))
@@ -1212,6 +1224,7 @@ builtin_cli = function(gptr) {
                              parse = pcli_claude_parse, capabilities = pcli_capabilities()))
   gptr$register(gptr_adapter("cli-codex", transport = "process_jsonl", build = pcli_codex_build,
                              parse = pcli_codex_parse, capabilities = pcli_capabilities()))
+  gptr$on("agent_start", pcli_hook_start)
   gptr$on("request_params", pcli_hook_params)
   gptr$on("usage", pcli_hook_usage)
   gptr$on("agent_end", pcli_hook_end)

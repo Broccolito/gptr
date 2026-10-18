@@ -2315,6 +2315,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: cli-*, mcp-*, http-reactor, catalog-models, console-commands, provider-openai-completions, aaa-state.
 
 ## D-192 - P26 Codex progress and claude-cli tool calls while they run (2026-10-16)
-- Rule: TBD by P26 Task 10.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 10.
+- Rule: `run_on_event()` passes a provider's informational `tool_execution_start`/`_end` to the session's hooks (the
+  plan's "as today" was wrong: the run dropped them); Codex marks them `informational = TRUE` and `ev_track()` skips
+  them, since its steps run outside R. `mcp_serve_call()` reports a call served in a live run outside a tool call (both
+  CLI routes; an MCP client during a run) under its gate's call id `mcp_<id>`, the end with the result's `content`,
+  `details` (served r adds `objects`, `plots`, `error`) and execution time; Codex's `mcp_tool_call` items for gptr are
+  skipped. Gate unchanged; IC-53's guard, grant expiry and control tokens cover the served calls as loop calls.
+- Rule: on a CLI route (model `type = "cli"`) verbosity 2 prints each thinking block's first line dim, without a bold
+  title's `**`, once its line end or the width completes it, after clearing the waiting row, whose clock runs on; Codex
+  ends a reasoning item with a line end. Other routes unchanged. builtin:cli's `agent_start` hook probes the CLI first.
+- Open: Codex token streaming needs the app-server driver (v1.x); the row after a tool line is Task 4's.
+- Contract-visible: 03 §1.3, §8.3; 04 §8.5, §10.4; P20 note; vignette. Out of lane: agent-run.R, ext-events.R.
+- Tests: console-render, cli-claude, cli-codex (`codex-progress.jsonl`), mcp-server. Evidence: progress/P26.md Task 10.

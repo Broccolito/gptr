@@ -1137,7 +1137,8 @@ run_stream_callbacks = function(run) {
 
 # ---------------------------------------------------------------------------- stream callbacks
 
-#' INFRA-02 events: delta-only agent events, redacted per content block with a streaming hold-back
+#' INFRA-02 events: delta-only agent events, redacted per content block with a streaming hold-back;
+#' the informational tool events of the CLI routes (04 section 8.5) reach the session's hooks
 #' @noRd
 run_on_event = function(run, ev) {
   if (isTRUE(run$settled) || isTRUE(run$request_closed)) return(invisible(NULL))
@@ -1160,7 +1161,8 @@ run_on_event = function(run, ev) {
     run_flush_deltas(run, as.character(ev$index))
   } else if (identical(type, "error")) {
     run$last_error = ev$error
-  } else if (type %in% c("retry_start", "retry_end")) {
+  } else if (type %in% c("retry_start", "retry_end", "tool_execution_start",
+                         "tool_execution_end")) {
     args = ev[setdiff(names(ev), c("type", "ts", "session", "run", "agent", "turn"))]
     do.call(run_emit, c(list(run, type), args))
   }

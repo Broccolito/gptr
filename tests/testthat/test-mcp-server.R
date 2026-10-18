@@ -134,6 +134,80 @@ test_that("a served call inside a run passes the run's tool_call hooks (IC-79)",
   expect_false(exists("b", envir = e, inherits = FALSE))
 })
 
+# Serve calls from the first before_request of a run: a live run with no tool on the stack, as
+# the CLI routes serve them (D-192). `serve(event, ctx)` runs once; the run's tool events are kept.
+serve_in_run = function(serve, .env = parent.frame()) {
+  seen = new.env()
+  seen$events = list()
+  seen$done = FALSE
+  keep = function(event, ctx) {
+    seen$events[[length(seen$events) + 1L]] = event
+    NULL
+  }
+  offs = list(
+    gptr_register(gptr_hook("before_request", function(event, ctx) {
+      if (!seen$done) seen$out = serve(event, ctx)
+      seen$done = TRUE
+      NULL
+    })),
+    gptr_register(gptr_hook("tool_execution_start", keep)),
+    gptr_register(gptr_hook("tool_execution_end", keep)))
+  withr::defer(for (off in offs) off(), envir = .env)
+  seen$envir = new.env()
+  peter("hello", model = local_fake_provider(list("ok"), .env = .env), envir = seen$envir,
+        mode = "auto")
+  seen
+}
+
+test_that("a call served in a live run is reported as a tool call of the run (D-192)", {
+  seen = serve_in_run(function(event, ctx) {
+    mcp_dispatch_local(r_call("stop('no answer')", id = 4L), ctx$session)
+    mcp_dispatch_local(r_call("answer = 21 * 2", id = 5L), ctx$session)$result
+  })
+  expect_false(seen$out$isError)
+  expect_identical(seen$envir$answer, 42)
+  ev = Filter(function(e) identical(e$tool_call_id, "mcp_5"), seen$events)
+  expect_identical(vapply(ev, function(e) e$type, ""),
+                   c("tool_execution_start", "tool_execution_end"))
+  expect_identical(ev[[1L]]$input$code, "answer = 21 * 2")
+  expect_false(ev[[2L]]$is_error)
+  expect_identical(ev[[2L]]$details$objects$added, "answer")
+  expect_identical(ev[[2L]]$content[[1L]]$type, "text")
+  expect_true(is.numeric(ev[[2L]]$elapsed))
+  failed = Filter(function(e) identical(e$tool_call_id, "mcp_4"), seen$events)[[2L]]
+  expect_true(failed$is_error)
+  expect_identical(failed$details$error, "no answer")
+})
+
+test_that("IC-53 covers a call served to a CLI route: control guard and one-shot grants (D-192)", {
+  guarded = gptr_tool("guarded", "Reaches a control export the way model code can.",
+                      parameters = list(type = "object", properties = json_obj()),
+                      annotations = list(read_only = TRUE),
+                      execute = function(input, ctx) {
+                        tryCatch({
+                          ext_control_guard("gptr_register")
+                          "passed"
+                        }, gptr_error_permission = function(e) "refused")
+                      })
+  off = gptr_register(guarded)
+  withr::defer(off())
+  seen = serve_in_run(function(event, ctx) {
+    call = function(id) {
+      msg = mcp_test_msg("tools/call", list(name = "guarded", arguments = json_obj()), id = id)
+      mcp_dispatch_local(msg, ctx$session)$result$content[[1L]]$text
+    }
+    run = session_live(ctx$session)$run
+    out = call(1L)
+    ext_control_grant(event$run, "gptr_register")
+    out = c(out, call(2L), call(3L))
+    ext_control_grant(event$run, "gptr_register")
+    run$signal$control = "gptr_fork"
+    mcp_dispatch_local(r_call("1 + 1", id = 4L), ctx$session)
+    c(out, call(5L), length(run$signal$control))
+  })
+  expect_identical(seen$out, c("refused", "passed", "refused", "refused", "0"))
+})
+
 test_that("a fork's served calls evaluate in its overlay; a plan-mode parent stays in plan", {
   x = local_served_session("auto")
   f = gptr_fork(x$session)

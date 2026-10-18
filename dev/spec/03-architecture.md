@@ -148,7 +148,7 @@ ecosystem is `peter$...`, Shiny artifacts and runnable documents (P3, P11).
 | Deferred | Reason | v1 workaround |
 |---|---|---|
 | Sign in with ChatGPT (native plan auth) | preview API; end-to-end sign-in never executed [08 digest]; J-cran, J-impl | `codex exec` route with live R through the in-session MCP server |
-| Codex app-server driver (dynamic tools) | experimental protocol with schema drift [08 §7] | `codex exec --json` |
+| Codex app-server driver (dynamic tools, token streaming) | experimental protocol with schema drift [08 §7] | `codex exec --json` |
 | Nested-call cassettes | executes code not visible in the script; shape-digest keys can replay stale code (J-cran, J-impl) | nested calls run live; `GPTR_REPLAY=replay` errors "not recorded" |
 | `{gptr}` knitr chunk engine | relaxes S-2; maintainer decision pending [14 §4.6] | `peter("...")` in R chunks with `knit_print` |
 | `apply_patch` direct tool | benefit unbenchmarked [20 §7] | `edit` accepts patch envelopes |
@@ -2228,7 +2228,9 @@ agent's state are removed from the child environment with a warning, following G
 reach the CLI through the in-process `sdk` MCP server over the control protocol (`mcp_message`), so Claude
 evaluates R in the live session; because `--allowedTools mcp__gptr__*` pre-allows them, the gate runs once, in the
 `mcp_message` dispatch (a `can_use_tool` for anything else goes through the injected `opts$gate` and is denied); Ctrl-C sends a
-`control_request` interrupt, then `kill_all()`. Stream events reuse the Anthropic normaliser; continuity uses
+`control_request` interrupt, then `kill_all()`. gptr's own tool calls are reported where they run (`mcp_serve_call()`)
+as `tool_execution_*` events, the end with the result's `content` and `details`, so the console shows them as tool
+and result lines while they run and IC-53 tracks them as calls of the agent loop; the gate is unchanged [D-192]. Stream events reuse the Anthropic normaliser; continuity uses
 the CLI's session id (`--resume` with the same system-prompt file); usage records `total_cost_usd` as a plan
 estimate and the rate-limit event as plan status. Concurrency: one `claude-cli` child per session by default.
 The provider id avoids the Claude Code product name; `claude_code` is only an alias; the maintainer asks
@@ -2268,9 +2270,16 @@ MCP (edits-mode approval and checkpoints apply); `auto` and `yolo` -> `workspace
 each exec (changed ones are not loaded until the user confirms) and a files-checkpointer walk after it so `/undo`
 covers Codex's edits; on native Windows the sandbox is probed and the route falls back to `read-only` with a warning
 when it is not ready [08 line 2796]; never bypass the sandbox. The one-time notice says Codex runs its own shell
-inside its sandbox. gptr counts Codex's turn events and cancels at the turn cap, with a wall-clock limit per exec. Continuity: `codex exec resume <thread>` when supported
+inside its sandbox. gptr counts Codex's turn events and cancels at the turn cap, with a wall-clock limit per exec.
+Codex's own steps (commands, file changes, web searches) become informational tool events and its calls of gptr's
+tools are reported where they run, so each shows once; a reasoning item is a thinking block ending with a line end.
+The informational events run outside R, so IC-53 does not track them and the user's own control exports still work.
+On both CLI routes, whose one request runs a whole agent turn, the console shows each thinking block's first line dim
+at verbosity 2 above the waiting row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
+carries no text deltas, so the answer arrives whole; token streaming needs the app-server driver (open item). Both
+routes probe their CLI when a run starts, before its waiting row [D-192]. Continuity: `codex exec resume <thread>` when supported
 (UNCERTAIN), else a new thread with a synthetic history. The console states Codex's 19-38K extra input tokens
-per turn [08]. The Codex app-server driver (dynamic tools calling back into R, steer, interrupt) and Sign in
+per turn [08]. The Codex app-server driver (dynamic tools calling back into R, token streaming, steer, interrupt) and Sign in
 with ChatGPT (the native `openai` provider with `auth = "chatgpt"`, avoiding Codex's overhead) are v1.x plugins
 behind a schema probe and a maintainer's live end-to-end test respectively (§1.3).
 

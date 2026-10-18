@@ -171,6 +171,13 @@ render_events = function(s, events) {
   })
 }
 
+# Give the live session a run whose model is a CLI model (`type = "cli"`, D-192)
+local_cli_run = function(s, .env = parent.frame()) {
+  live = session_live(s)
+  live$run = list(model = list(type = "cli"))
+  withr::defer(assign("run", NULL, envir = live), envir = .env)
+}
+
 hook_event = function(type, s, ..., run = "u0000test") {
   ev_new(type, session = session_data(s)$id, run = run, ...)
 }
@@ -298,6 +305,89 @@ test_that("an error result shows its first line", {
                input = list(code = "z + 1")),
     hook_event("message_end", s, role = "tool_result", message = bad)))
   expect_identical(out[[2L]], "    -> error: Error: object 'z' not found")
+})
+
+test_that("the end of a call served to a CLI route prints its result line (D-192)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  out = render_events(s, list(
+    hook_event("agent_start", s),
+    hook_event("tool_execution_start", s, tool_call_id = "mcp_3", tool_name = "r",
+               input = list(code = "mean(big_vector)")),
+    hook_event("tool_execution_end", s, tool_call_id = "mcp_3", tool_name = "r", is_error = TRUE,
+               elapsed = 0.1, details = list(),
+               content = list(list(type = "text", text = "Error: object 'big_vector' not found"))),
+    hook_event("tool_execution_start", s, tool_call_id = "mcp_4", tool_name = "r",
+               input = list(code = "answer = 42")),
+    hook_event("tool_execution_end", s, tool_call_id = "mcp_4", tool_name = "r", is_error = FALSE,
+               elapsed = 0.1, details = list(objects = list(added = "answer"), plots = 0L),
+               content = list(list(type = "text", text = "")))))
+  expect_identical(out, c("  * r  mean(big_vector)",
+                          "    -> error: Error: object 'big_vector' not found",
+                          "  * r  answer = 42", "    -> + answer"))
+})
+
+test_that("on a CLI route verbosity 2 shows each thinking block's first line, dim (D-192)", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  events = list(
+    hook_event("agent_start", s),
+    hook_event("message_update", s, index = 1L, kind = "thinking", delta = "\n**Plan"),
+    hook_event("message_update", s, index = 1L, kind = "thinking",
+               delta = "ning**\n\nThe body"),
+    hook_event("message_update", s, index = 1L, kind = "thinking", delta = " stays hidden."),
+    hook_event("message_update", s, index = 2L, kind = "thinking",
+               delta = "step 2 is a line far longer than forty columns"),
+    hook_event("tool_execution_start", s, tool_call_id = "c1", tool_name = "r",
+               input = list(code = "1 + 1")),
+    hook_event("message_update", s, index = 3L, kind = "text", delta = "Done."),
+    hook_event("message_end", s, role = "assistant", message = assistant_msg("Done.")))
+  expect_identical(render_events(s, events), c("  * r  1 + 1", "Done."))
+  local_cli_run(s)
+  plain = c("  Planning", "  step 2 is a line far longer than forty", "  * r  1 + 1", "Done.")
+  expect_identical(render_events(s, events), plain)
+  withr::local_options(cli.num_colors = 256L)
+  out = render_events(s, events)
+  expect_identical(cli::ansi_strip(out), plain)
+  expect_true(all(grepl("\033[90m", out[1:2], fixed = TRUE)))
+  local_gptr_options(verbose = 1L)
+  expect_identical(render_events(s, events[1:5]), character())
+})
+
+test_that("on a CLI route the waiting row keeps its clock around each thinking line (D-192)", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  withr::local_options(cli.dynamic = TRUE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  local_cli_run(s)
+  ctx = session_live(s)$ctx
+  withr::defer(console_drop("u0000test"))
+  think = function(index, delta) {
+    utils::capture.output(invisible(console_on_message_update(
+      hook_event("message_update", s, index = index, kind = "thinking", delta = delta), ctx)))
+  }
+  utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    console_on_before_request(hook_event("before_request", s, provider = "fake",
+                                         model = "fake/fake-1", request_id = "q1",
+                                         tokens_est = 10), ctx)
+  })
+  rec = console_record(list(run = "u0000test"))
+  task = rec$task
+  t0 = rec$spinner$t0
+  expect_identical(think(1L, "**Plan"), character())
+  expect_identical(think(1L, "ning**\n\nThe body"), paste0("\r", strrep(" ", 39L), "\r  Planning"))
+  think(1L, " goes on.")
+  think(2L, "a first line far longer than forty columns")
+  expect_identical(rec$task, task)
+  expect_identical(rec$spinner$t0, t0)
+  console_spinner_stop(rec)
+  expect_identical(think(3L, "after a tool line\n")[[1L]], "  after a tool line")
+  expect_false(is.null(rec$task))
 })
 
 test_that("a tool's render() function replaces the default lines (IC-69)", {

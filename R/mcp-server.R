@@ -182,10 +182,37 @@ mcp_serve_gate = function(call, run, ctx, sid = NULL) {
   mcp_gate_idle(call, ctx, sid)
 }
 
-#' Run one served tool call, validated against its served `schema`, through the tool_call hooks of
-#' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result
+#' Run one served tool call (mcp_serve_exec()). In a live run, outside a tool call on the stack
+#' (the CLI routes, an MCP client during a run), it is reported as `tool_execution_start`/`_end`
+#' under its gate's call id, the end with the result's `content` and `details` and the execution
+#' time, and its approval's control tokens end with it, as for a call of the agent loop (IC-53,
+#' D-192)
 #' @noRd
 mcp_serve_call = function(target, name, args, id, schema) {
+  run = session_live(target$session)$run
+  if (is.null(run) || !is.null(run_current())) {
+    return(mcp_serve_exec(target, name, args, id, schema))
+  }
+  st = new.env(parent = emptyenv())
+  cid = paste0("mcp_", id)
+  run_emit(run, "tool_execution_start", tool_call_id = cid, tool_name = name,
+           input = if (is.list(args)) args else json_obj())
+  on.exit({
+    run$signal$control = character()
+    run_emit(run, "tool_execution_end", tool_call_id = cid, tool_name = name,
+             is_error = !isFALSE(st$res$is_error),
+             elapsed = if (is.null(st$t0)) 0 else reactor_now() - st$t0,
+             details = st$res$details %||% list(), content = st$res$content %||% list())
+  }, add = TRUE)
+  st$res = mcp_serve_exec(target, name, args, id, schema, st)
+  st$res
+}
+
+#' Run one served tool call, validated against its served `schema`, through the tool_call hooks of
+#' a live run (IC-79) and mcp_serve_gate(); returns a gptr_tool_result. `st$t0` marks the start of
+#' its execution.
+#' @noRd
+mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   s = target$session
   live = session_live(s)
   if (is.null(live)) return(gptr_tool_result("This session is not live.", is_error = TRUE))
@@ -228,6 +255,7 @@ mcp_serve_call = function(target, name, args, id, schema) {
                                    "rule with gptr_permissions(allow = ...)."), is_error = TRUE))
   }
   if (is.list(d$input)) input = d$input
+  if (!is.null(st)) st$t0 = reactor_now()
   if (identical(name, "r")) return(mcp_serve_r(input, env, run, s))
   tryCatch(as_tool_result(spec$execute(input, ctx)), error = function(e) {
     gptr_tool_result(paste("Error:", conditionMessage(e)), is_error = TRUE)
@@ -253,7 +281,10 @@ mcp_serve_r = function(input, env, run, session = NULL) {
                   outputs = r_doc_outputs(res))))
   }
   out = format_eval_result(res, budget)
-  gptr_tool_result(out$text, images = out$images, is_error = !identical(res$status, "ok"))
+  err = Filter(function(e) identical(e$type, "error"), res$events %||% list())
+  gptr_tool_result(out$text, images = out$images, is_error = !identical(res$status, "ok"),
+                   details = list(objects = res$changes$objects, plots = length(out$images),
+                                  error = if (length(err)) err[[1L]]$message))
 }
 
 #' Only the exact active token-owned run's document receives native R history. Standalone MCP

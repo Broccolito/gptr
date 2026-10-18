@@ -230,17 +230,32 @@ test_that("the call-1 capture: informational tool events, the answer and the usa
   expect_identical(opts$state$codex_thread, "<UUID>")
 })
 
-test_that("gptr's own MCP calls are reported, reasoning becomes thinking", {
+test_that("Codex reports other servers' MCP calls, not gptr's own; reasoning is thinking", {
   opts = stub_opts()
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
   expect_true(feed_fixture(n, "codex-mcp.jsonl"))
-  starts = Filter(function(e) identical(e$type, "tool_execution_start"), opts$log$events)
-  expect_identical(starts[[1]]$tool_name, "mcp__gptr__r")
-  expect_identical(starts[[1]]$input$code, "live_answer = sum(1:10); live_answer")
+  expect_false(any(startsWith(event_types(opts), "tool_execution")))
+  opts1 = stub_opts()
+  n1 = local_normaliser(pcli_codex_parse, stub_model("codex"), opts1)
+  push_obj(n1, list(type = "item.started",
+                    item = list(id = "item_4", type = "mcp_tool_call", server = "docs",
+                                tool = "search", arguments = list(q = "lm"),
+                                status = "in_progress")))
+  starts = Filter(function(e) identical(e$type, "tool_execution_start"), opts1$log$events)
+  expect_identical(starts[[1]]$tool_name, "mcp__docs__search")
+  expect_identical(starts[[1]]$input$q, "lm")
   opts2 = stub_opts()
   n2 = local_normaliser(pcli_codex_parse, stub_model("codex"), opts2)
   feed_fixture(n2, "codex-text.jsonl")
   expect_identical(vapply(n2$message()$content, function(b) b$type, ""), c("thinking", "text"))
+  opts3 = stub_opts()
+  n3 = local_normaliser(pcli_codex_parse, stub_model("codex"), opts3)
+  push_obj(n3, list(type = "item.completed", item = list(id = "r1", type = "reasoning",
+                                                         text = "step 1 ")))
+  push_obj(n3, list(type = "item.completed", item = list(id = "r2", type = "reasoning",
+                                                         text = "")))
+  deltas = Filter(function(e) identical(e$type, "thinking_delta"), opts3$log$events)
+  expect_identical(vapply(deltas, function(e) e$delta, ""), "step 1\n")
 })
 
 test_that("Codex is stopped at the run's turn cap", {
@@ -957,6 +972,64 @@ test_that("a fake codex returns a function's numeric result through the stdio re
   expect_equal(answer$session$value, expected)
   expect_identical(fake_log(f, "mcp")[[1L]]$status, 0L)
   expect_null(run_current())
+})
+
+test_that("a codex turn shows its reasoning and tool steps at the console as they run (D-192)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 200, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("codex", "progress")
+  e = new.env()
+  out = utils::capture.output(peter("How many files are there?", model = f$model, envir = e,
+                                    mode = "auto"))
+  at = match(c("  Listing the files", "  * codex_shell  {\"command\":\"/bin/sh -lc ls\"}",
+               "  * r  n_files = 1L", "There is one file."), out)
+  expect_false(anyNA(at))
+  expect_false(is.unsorted(at))
+  expect_false(any(grepl("directory listing", out, fixed = TRUE)))
+  expect_identical(sum(grepl("n_files = 1L", out, fixed = TRUE)), 1L)
+  expect_identical(e$n_files, 1L)
+})
+
+test_that("a Codex step leaves the control exports to the user; a served call does not (IC-53)", {
+  skip_on_cran()
+  f = local_fake_cli("codex", "progress")
+  seen = new.env()
+  off = gptr_register(gptr_hook("tool_execution_start", function(event, ctx) {
+    seen[[event$tool_name]] = tryCatch({
+      ext_control_guard("gptr_register")
+      "passed"
+    }, gptr_error_permission = function(e) "refused")
+    NULL
+  }))
+  withr::defer(off())
+  peter("How many files are there?", model = f$model, envir = new.env(), mode = "auto")
+  expect_identical(seen$codex_shell, "passed")
+  expect_identical(seen$r, "refused")
+})
+
+test_that("the first CLI turn probes the CLI before its waiting row starts (D-192)", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("codex", "text")
+  seen = new.env()
+  seen$log = character()
+  probe = pcli_probe
+  local_mocked_bindings(
+    pcli_probe = function(path) {
+      res = probe(path)
+      seen$log = c(seen$log, "probe")
+      res
+    },
+    console_wait_start = function(rec) {
+      seen$log = c(seen$log, "wait")
+      invisible(NULL)
+    })
+  utils::capture.output(peter("Hello", model = f$model, envir = new.env()))
+  expect_identical(seen$log[[1L]], "probe")
+  expect_true("wait" %in% seen$log)
 })
 
 test_that("the auto rule runs CLI-only models on the cli backend", {

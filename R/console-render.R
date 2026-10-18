@@ -291,6 +291,35 @@ console_print_text = function(text) {
   r$finish()
 }
 
+#' Verbosity 2's view of a thinking block of a record on a CLI route: its first line without a
+#' bold title's markers, dim and cut to the width, printed once its line end or the width
+#' completes it, or by finish(), after clearing the waiting row, which keeps its clock; Codex's
+#' reasoning items so show as progress lines (D-192)
+#' @noRd
+console_think_line = function(rec, width = cli::console_width()) {
+  st = new.env(parent = emptyenv())
+  st$text = ""
+  st$open = TRUE
+  st$finish = function() {
+    if (st$open && nzchar(st$text)) {
+      line = sub("^\\*\\*(.+)\\*\\*$", "\\1", console_lines(st$text)[[1L]])
+      if (!is.null(rec$spinner)) rec$spinner$clear()
+      console_write(cli::col_grey(cli::ansi_strtrim(paste0("  ", line), width, ellipsis = "")))
+    }
+    st$open = FALSE
+    invisible(NULL)
+  }
+  st$write = function(delta) {
+    if (!st$open) return(invisible(NULL))
+    st$text = sub("^[[:space:]]+", "", paste0(st$text, paste(delta, collapse = "")))
+    if (!nzchar(st$text)) return(invisible(NULL))
+    first = console_lines(st$text)[[1L]]
+    if (grepl("[\r\n]", st$text) || cli::ansi_nchar(first) + 2L >= width) st$finish()
+    invisible(NULL)
+  }
+  st
+}
+
 #' The waiting indicator (report 18 A.6 wait_indicator()), ticked by its caller
 #'
 #' Uses "\r" redraws; native R GUIs start each shown cycle on a flushed stdout line so deleting
@@ -677,14 +706,18 @@ console_on_before_request = function(event, ctx) {
   NULL
 }
 
-#' message_update: stream text deltas through the markdown renderer; thinking at verbosity 3
+#' message_update: stream text deltas through the markdown renderer; thinking at verbosity 3; on a
+#' CLI route, whose one request runs a whole agent turn, the first line of each thinking block at
+#' verbosity 2, with the waiting row below it
 #' @noRd
 console_on_message_update = function(event, ctx) {
   rec = console_record(event)
   delta = event$delta
   if (is.null(rec) || !is.character(delta) || !console_render_on(rec)) return(NULL)
   kind = event$kind %||% "text"
-  visible = identical(kind, "text") || (identical(kind, "thinking") && verbosity() >= 3L)
+  think = identical(kind, "thinking") &&
+    (verbosity() >= 3L || identical(session_live(rec$session)$run$model[["type"]], "cli"))
+  visible = identical(kind, "text") || think
   if (visible && isTRUE(rec$paused) && any(nzchar(delta))) {
     rec$paused = FALSE
     live = session_live(rec$session)
@@ -710,6 +743,15 @@ console_on_message_update = function(event, ctx) {
       rec$think = render_markdown_stream(before_output = console_stream_output(rec))
     }
     rec$think$write(delta)
+  } else if (think) {
+    if (is.null(rec$think) || !identical(rec$think_index, event$index)) {
+      if (!is.null(rec$think)) rec$think$finish()
+      if (!is.null(rec$md)) rec$md$finish()
+      rec$think = console_think_line(rec)
+      rec$think_index = event$index
+    }
+    rec$think$write(delta)
+    if (!rec$think$open && isTRUE(rec$request_pending)) console_spinner_start(rec)
   }
   NULL
 }
@@ -758,7 +800,8 @@ console_on_tool_start = function(event, ctx) {
 }
 
 #' tool_execution_end: queue the pause-menu items and print the artifact lines held while tools
-#' ran, keep the elapsed time for the result line, report a failure at verbosity 1
+#' ran, keep the elapsed time for the result line, report a failure at verbosity 1; the end of a
+#' call served in a live run carries its `content` and prints its result line (D-192)
 #' @noRd
 console_on_tool_end = function(event, ctx) {
   policy_flush()
@@ -770,6 +813,11 @@ console_on_tool_end = function(event, ctx) {
   if (!is.null(call)) {
     call$elapsed = event$elapsed
     assign(key, call, envir = rec$tools)
+  }
+  if (!is.null(event$content) && console_render_on(rec)) {
+    console_write(console_tool_line(call %||% list(name = event$tool_name, input = list()),
+                                    event[c("content", "is_error", "details", "elapsed")],
+                                    rec$session))
   }
   if (verbosity() == 1L && isTRUE(event$is_error) && console_foreground(rec)) {
     gptr_inform(paste0("gptr: ", console_escape(event$tool_name %||% "?", FALSE), " failed"),

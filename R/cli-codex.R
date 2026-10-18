@@ -347,11 +347,14 @@ pcli_codex_tool_name = function(item) {
          web_search = "codex_web_search", collab_tool_call = "codex_agent", "codex_item")
 }
 
-#' Emit the informational tool_execution_start/_end events of a Codex tool item (contract 8.5)
+#' Emit the informational tool_execution_start/_end events of a Codex tool item (contract 8.5),
+#' marked `informational` since the step runs outside R; calls of gptr's own tools are reported
+#' where they run, mcp_serve_call() (D-192)
 #' @noRd
 pcli_codex_tool = function(s, item, phase) {
   kind = pcli_chr(item[["type"]]) %||% ""
-  if (!(kind %in% pcli_codex_tool_kinds)) return(invisible(FALSE))
+  gptr_own = identical(kind, "mcp_tool_call") && identical(item[["server"]], "gptr")
+  if (!(kind %in% pcli_codex_tool_kinds) || gptr_own) return(invisible(FALSE))
   emit = s$opts[["emit"]]
   if (!is.function(emit)) return(invisible(FALSE))
   id = paste0("codex_", pcli_chr(item[["id"]]) %||% "item")
@@ -365,14 +368,15 @@ pcli_codex_tool = function(s, item, phase) {
                    mcp_tool_call = if (is.list(arguments)) arguments else json_obj(),
                    file_change = list(paths = I(pcli_codex_files(item))),
                    web_search = list(query = pcli_chr(item[["query"]]) %||% ""), json_obj())
-    emit(ev_new("tool_execution_start", tool_call_id = id, tool_name = name, input = input))
+    emit(ev_new("tool_execution_start", tool_call_id = id, tool_name = name, input = input,
+                informational = TRUE))
   }
   if (identical(phase, "end")) {
     failed = isTRUE(status %in% c("failed", "declined")) || !is.null(item[["error"]])
     emit(ev_new("tool_execution_end", tool_call_id = id, tool_name = name, is_error = failed,
                 elapsed = NA_real_,
                 details = list(status = status %||% NA_character_,
-                               files = I(pcli_codex_files(item)))))
+                               files = I(pcli_codex_files(item))), informational = TRUE))
   }
   invisible(TRUE)
 }
@@ -467,7 +471,9 @@ pcli_codex_item = function(s, item) {
   if (identical(kind, "agent_message")) {
     pcli_text_block(s, item[["text"]] %||% "")
   } else if (identical(kind, "reasoning")) {
-    pcli_text_block(s, item[["text"]] %||% "", kind = "thinking")
+    # a finished paragraph: its line end tells the console that the first line is whole (D-192)
+    text = trimws(pcli_chr(item[["text"]]) %||% "", "right")
+    if (nzchar(text)) pcli_text_block(s, paste0(text, "\n"), kind = "thinking")
   } else if (kind %in% pcli_codex_tool_kinds) {
     pcli_codex_tool(s, item, "end")
     s$items = s$items + 1L
