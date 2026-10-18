@@ -1910,7 +1910,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   row, R GUIs included; the pause-menu notice excepted, D-225); the margin is that of the console an
   evaluation started from, also for prompts and notices drawn inside it. There nested lists keep their
   indentation, pipe tables are aligned
-  (verbatim when malformed or too wide) and a reply's leading, trailing and repeated blank lines
+  (when malformed or too wide, verbatim and unwrapped like fenced code so a copied table stays valid,
+  each row printed as it ends once the rows so far rule alignment out)
+  and a reply's leading, trailing and repeated blank lines
   collapse; `NO_COLOR` removes colours and styles only. Rscript (verbosity 1), knitr, jsonl and
   tests (verbosity 0) and non-dynamic outputs (pipes, Jupyter) keep the plain layout (no margin,
   block gaps, table alignment or notice wrapping). Styling adds

@@ -160,6 +160,33 @@ test_that("pipe tables are aligned on an interactive console and stay valid Mark
   }
 })
 
+test_that("a pipe table too wide to align prints verbatim as its rows arrive (#43)", {
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
+  genes = c("IL7R", "CCR7", "S100A4", "CD14", "LYZ", "MS4A1", "CD8A", "FCGR3A", "MS4A7", "GNLY",
+            "NKG7", "FCER1A", "CST3", "PPBP")
+  wide = c(paste("| Cluster |", paste(genes, collapse = " | "), "|"),
+           paste0(strrep("|---", 15L), "|"), paste0("| ", 0:8, " | ", vapply(0:8, function(i) {
+             paste(i + seq_along(genes) / 100, collapse = " | ")
+           }, ""), " |"))
+  stream = function(rows) {
+    r = render_markdown_stream(80L)
+    c(lapply(rows, function(x) utils::capture.output(r$write(paste0(x, "\n")))),
+      list(utils::capture.output(r$finish())))
+  }
+  # the header waits for the delimiter row; from there each row prints when it ends
+  seen = stream(wide)
+  expect_identical(lengths(seen), c(0L, 2L, rep(1L, 9L), 0L))
+  expect_identical(unlist(seen), paste0("  ", wide))
+  # a table that fits is held to the end of its block and aligned
+  expect_identical(stream(c("| a | bb |", "|---|---:|", "| 333 | 4 |")),
+                   list(character(), character(), character(),
+                        c("  | a   |  bb |", "  |-----|----:|", "  | 333 |   4 |")))
+  withr::local_seed(43)
+  text = paste0(paste0(wide, "\n", collapse = ""), "\nafter\n")
+  ref = render_chunks(text, 80L)
+  for (i in seq_len(50L)) expect_identical(render_chunks(random_chunks(text, 9L), 80L), ref)
+})
+
 test_that("italics, link URLs, quotes, rules and headings are styled only with colours", {
   withr::local_options(cli.num_colors = 256L, cli.dynamic = FALSE)
   text = "An *it* and [d](http://x.y) a * b 2*3"

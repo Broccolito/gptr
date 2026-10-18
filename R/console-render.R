@@ -100,6 +100,8 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   st$fence_indent = 0L
   st$shown = 0L
   st$table = character()
+  st$cells = list()
+  st$table_raw = FALSE
   st$space = FALSE
   codes = c(h1 = "1;4", h = "1", bold = "1", italic = "3", code = "36", url = "2")
   st$on = logical(length(codes))
@@ -244,23 +246,41 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     }
     fence_end(line, paste0(sgr("2"), line, sgr("22")))
   }
-  # A block of pipe-table rows, aligned when it has a delimiter row, one cell count and fits;
-  # either way it stays a valid pipe table
-  table_flush = function() {
-    rows = st$table
-    st$table = character()
-    cells = lapply(rows, function(r) {
-      trimws(strsplit(sub("^\\|", "", sub("\\|[ \t]*$", "", r)), "|", fixed = TRUE)[[1L]])
-    })
+  # A block of pipe-table rows is held while it can be aligned: a delimiter second row, one cell
+  # count and a fitting width. From the row that rules this out the block prints verbatim as
+  # each row ends, so a table too wide to align streams (#43); either way it stays a valid pipe
+  # table.
+  table_widths = function() {
+    cells = st$cells
     k = length(cells[[1L]])
-    ok = length(rows) >= 2L && k > 0L && all(lengths(cells) == k) &&
-      all(grepl("^:?-+:?$", cells[[2L]]))
-    body = cells[-2L]
-    widths = if (ok) do.call(pmax, c(lapply(body, nchar, type = "width"), 3L))
-    if (!ok || sum(widths) + 3L * k + 1L > st$width) {
+    if (length(cells) < 2L || k == 0L || any(lengths(cells) != k) ||
+        !all(grepl("^:?-+:?$", cells[[2L]]))) return(NULL)
+    widths = do.call(pmax, c(lapply(cells[-2L], nchar, type = "width"), 3L))
+    if (sum(widths) + 3L * k + 1L <= st$width) widths
+  }
+  table_add = function(line) {
+    st$table = c(st$table, line)
+    if (!st$table_raw) {
+      cl = strsplit(sub("^\\|", "", sub("\\|[ \t]*$", "", line)), "|", fixed = TRUE)[[1L]]
+      st$cells = c(st$cells, list(trimws(cl)))
+      if (length(st$cells) < 2L || !is.null(table_widths())) return(invisible())
+      st$table_raw = TRUE
+      line = st$table
+    }
+    for (r in line) emit(paste0(r, "\n"))
+  }
+  table_flush = function() {
+    widths = if (!st$table_raw) table_widths()
+    rows = if (!st$table_raw) st$table
+    cells = st$cells
+    st$table = character()
+    st$cells = list()
+    st$table_raw = FALSE
+    if (is.null(widths)) {
       for (r in rows) emit(paste0(r, "\n"))
       return(invisible())
     }
+    body = cells[-2L]
     d = cells[[2L]]
     align = ifelse(endsWith(d, ":"), ifelse(startsWith(d, ":"), "c", "r"), "l")
     row = function(cl) {
@@ -300,7 +320,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
         closing = st$fence && grepl("^ {0,3}`{3,}[ \t]*$", line) &&
           nchar(trimws(line)) >= st$fence_n
         if (table_row) {
-          st$table = c(st$table, line)
+          table_add(line)
         } else if (opening || closing) {
           fence_marker(line)
         } else {
