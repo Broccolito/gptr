@@ -1923,9 +1923,12 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   characters appear as they stream and a line without a TAB that fit one row is redrawn
   highlighted. A tool call shows its code on its line when it fits, else as a fence of at most
   20 lines (then `(+N more lines)`; info string `r` only for the r tool); result lines are
-  indented four spaces and an `r` error shows its error message; the one-line approval prompt
-  (6.8.3) is cut to the console width before its `+N more lines`, and the `?` detail shows the
-  code as a plain fence of at most 40 lines. Console output draws no box characters (D-187).
+  indented four spaces and wrap at the width, also indented (a word wider than it is cut); an
+  error shows its message in at most 6 rows, then an ellipsis, an `r` error then its object
+  changes; `write` shows the path relative to the project and the byte count (D-223); the
+  one-line approval prompt (6.8.3) is cut to the console width before its `+N more lines`, and
+  the `?` detail shows the code as a plain fence of at most 40 lines. Console output draws no
+  box characters (D-187).
   Every renderer write and console control (prompts, notices, the pause menu) goes through
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
   whatever `tee` is; prompts and sub-agent lines first end partial lines, also while a tool

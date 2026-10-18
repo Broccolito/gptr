@@ -498,7 +498,7 @@ test_that("tool lines escape the preview and summarise the result (acceptance 7)
   expect_false(any(grepl("\033", out, fixed = TRUE)))
 })
 
-test_that("an error result shows its first line", {
+test_that("an error result shows the lines of its message", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -508,7 +508,36 @@ test_that("an error result shows its first line", {
     hook_event("tool_execution_start", s, tool_call_id = "c2", tool_name = "r",
                input = list(code = "z + 1")),
     hook_event("message_end", s, role = "tool_result", message = bad)))
-  expect_identical(out[[2L]], "    error: Error: object 'z' not found")
+  expect_identical(out[-1L], c("    error: Error: object 'z' not found", "    In: z + 1"))
+})
+
+test_that("result lines keep a failed call's objects, project paths and whole errors (#35)", {
+  testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = FALSE)
+  root = local_project()
+  r = list(id = "c1", name = "r", input = list(code = "res = 1; stop('boom')"))
+  bad = msg_tool_result("c1", "r", "Error: boom", is_error = TRUE, details = list(
+    error = "boom", objects = list(added = "res", modified = character(), removed = character())))
+  expect_identical(console_tool_line(r, bad), c("    error: boom", "    + res"))
+  w = list(id = "c2", name = "write", input = list(path = "analysis.R"))
+  wrote = msg_tool_result("c2", "write", "ok",
+                          details = list(path = file.path(root, "analysis.R"), bytes = 5123L))
+  expect_identical(console_tool_line(w, wrote), "    wrote analysis.R (5,123 bytes)")
+  long = paste0(paste(rep("abcdefghi", 20L), collapse = " "), ".")
+  out = console_tool_line(r, msg_tool_result("c3", "r", long, is_error = TRUE,
+                                             details = list(error = long)))
+  expect_gt(length(out), 1L)
+  expect_true(all(startsWith(out, "    ") & cli::ansi_nchar(out, type = "width") <= 60L))
+  expect_identical(paste(trimws(out), collapse = " "), paste("error:", long))
+  eight = paste0("line ", 1:8, collapse = "\n")
+  expect_identical(console_tool_line(r, msg_tool_result("c4", "r", eight, is_error = TRUE)),
+                   c("    error: line 1", paste0("    line ", 2:6), "    ..."))
+  huge = paste0("not found: ", paste0("GENE", 1:300, collapse = ", "))
+  out = console_tool_line(r, msg_tool_result("c5", "r", huge, is_error = TRUE))
+  expect_identical(c(length(out), out[[7L]]), c("7", "    ..."))
+  inv = list(id = "c6", name = "inventory", input = list())
+  odd = msg_tool_result("c6", "inventory", "3 objects",
+                        details = list(objects = c("a", "b", "c"), plots = "two"))
+  expect_identical(console_tool_line(inv, odd), character())
 })
 
 test_that("the end of a call served to a CLI route prints its result line (D-192)", {
@@ -527,10 +556,16 @@ test_that("the end of a call served to a CLI route prints its result line (D-192
                input = list(code = "answer = 42")),
     hook_event("tool_execution_end", s, tool_call_id = "mcp_4", tool_name = "r", is_error = FALSE,
                elapsed = 0.1, details = list(objects = list(added = "answer"), plots = 0L),
-               content = list(list(type = "text", text = "")))))
+               content = list(list(type = "text", text = ""))),
+    hook_event("tool_execution_start", s, tool_call_id = "mcp_5", tool_name = "r",
+               input = list(code = "res = 1; stop('boom')")),
+    hook_event("tool_execution_end", s, tool_call_id = "mcp_5", tool_name = "r", is_error = TRUE,
+               elapsed = 0.1, details = list(objects = list(added = "res"), plots = 0L),
+               content = list(list(type = "text", text = "Error: boom")))))
   expect_identical(out, c("  * r  mean(big_vector)",
                           "    error: Error: object 'big_vector' not found",
-                          "  * r  answer = 42", "    + answer"))
+                          "  * r  answer = 42", "    + answer",
+                          "  * r  res = 1; stop('boom')", "    error: Error: boom", "    + res"))
 })
 
 test_that("on a CLI route verbosity 2 shows each thinking block's first line, dim (D-192)", {

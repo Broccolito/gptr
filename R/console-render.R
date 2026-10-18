@@ -788,30 +788,32 @@ console_call_line = function(call, width) {
   c(head, paste0(console_pad(), body))
 }
 
-#' The default result lines of a tool call: errors, object changes of `r`, the diff of `edit`,
-#' the path of `write`, else the elapsed time when it took a second or more
+#' The default result lines of a tool call: an error's message, wrapped to at most 6 rows, then
+#' the object changes of `r` (also after an error), the diff of `edit`, the project-relative path
+#' of `write`, else the elapsed time when it took a second or more
 #' @noRd
-console_result_lines = function(call, result) {
+console_result_lines = function(call, result, width) {
   pad = "    "
   el = result$elapsed
   secs = if (isTRUE(el >= 1)) sprintf(" (%.1f s)", el) else ""
   d = result$details %||% list()
+  obj = d$objects
+  parts = if (identical(call$name, "r")) c(
+    if (length(obj$added)) paste0("+ ", paste(obj$added, collapse = ", ")),
+    if (length(obj$modified)) paste0("~ ", paste(obj$modified, collapse = ", ")),
+    if (length(obj$removed)) paste0("- ", paste(obj$removed, collapse = ", ")),
+    if (isTRUE(d$plots >= 1L)) paste0("[", d$plots, if (d$plots == 1L) " plot]" else " plots]")
+  )
+  changes = if (length(parts)) paste0(pad, console_escape(paste(parts, collapse = "  "), FALSE))
   if (isTRUE(result$is_error)) {
-    first = c(text_lines(d$error %||% console_msg_text(result)), "failed")[[1L]]
-    return(cli::col_red(paste0(pad, "error: ", console_escape(first, FALSE), secs)))
+    err = console_escape(text_lines(d$error %||% console_msg_text(result)), FALSE)
+    if (!length(err)) err = "failed"
+    err[[1L]] = paste0("error: ", err[[1L]], secs)
+    rows = console_wrap(paste0(pad, err), width)
+    more = if (length(rows) > 6L) paste0(pad, cli::symbol$ellipsis)
+    return(c(cli::col_red(c(utils::head(rows, 6L), more)), changes))
   }
-  if (identical(call$name, "r")) {
-    obj = d$objects
-    parts = c(
-      if (length(obj$added)) paste0("+ ", paste(obj$added, collapse = ", ")),
-      if (length(obj$modified)) paste0("~ ", paste(obj$modified, collapse = ", ")),
-      if (length(obj$removed)) paste0("- ", paste(obj$removed, collapse = ", ")),
-      if (isTRUE(d$plots >= 1L)) paste0("[", d$plots, if (d$plots == 1L) " plot]" else " plots]")
-    )
-    if (length(parts)) {
-      return(paste0(pad, console_escape(paste(parts, collapse = "  "), FALSE), secs))
-    }
-  }
+  if (!is.null(changes)) return(paste0(changes, secs))
   if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
     shown = utils::head(d$diff, 12L)
     lines = paste0("    ", console_escape(shown, FALSE))
@@ -821,13 +823,24 @@ console_result_lines = function(call, result) {
   }
   if (identical(call$name, "write") && rlang::is_string(d$path)) {
     bytes = if (is.numeric(d$bytes)) paste0(" (", format(d$bytes, big.mark = ","), " bytes)")
-    return(paste0(pad, "wrote ", console_escape(d$path, FALSE), bytes, secs))
+    return(paste0(pad, "wrote ", console_escape(path_rel(d$path), FALSE), bytes, secs))
   }
   if (nzchar(secs)) paste0(pad, "done", secs) else character()
 }
 
-#' The console lines of a tool call (`result = NULL`) or of its result, fitted to `width` (a
-#' call's code fence excepted)
+#' Lines wrapped at `width`, continuation rows indented like their line (a wider word stays whole)
+#' @noRd
+console_wrap = function(lines, width) {
+  as.character(unlist(lapply(lines, function(line) {
+    if (cli::ansi_nchar(line, type = "width") <= width) return(line)
+    lead = attr(regexpr("^ *", cli::ansi_strip(line)), "match.length")
+    cli::ansi_strwrap(line, width, indent = lead, exdent = lead)
+  })))
+}
+
+#' The console lines of a tool call (`result = NULL`) or of its result, fitted to `width`: the
+#' default call line is cut (its code fence never), other lines wrap and keep their indentation
+#' (a word wider than `width` is cut)
 #'
 #' A tool spec's `render(call, result, width)` wins (IC-69), escaped like any untrusted text;
 #' `call` is `list(id, name, input)`, `result` the tool-result message plus `elapsed`.
@@ -839,8 +852,9 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
   }, error = function(e) NULL)
   width = max(20L, as.integer(width) - nchar(console_pad()))
   if (!is.character(out) && is.null(result)) return(console_call_line(call, width))
-  out = if (is.character(out)) console_escape(out, FALSE) else console_result_lines(call, result)
-  as.character(cli::ansi_strtrim(out, width))
+  out = if (is.character(out)) console_escape(out, FALSE) else
+    console_result_lines(call, result, width)
+  as.character(cli::ansi_strtrim(console_wrap(out, width), width))
 }
 
 #' The status line of a run's end: `  done | 2 turns | 1.2k tokens | $0.0042`; the status and

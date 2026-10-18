@@ -2421,3 +2421,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: IC-53 item 8, IC-77 item 3, 04 `builtin_ui` row, 03 section 6.8.3; console vignette.
 - Tests: test-console-ui.R (40-column fit and cap, project-relative path, no empty label, no [a] without a rule),
   test-console-repl.R (stdin prompt). Evidence: progress/P26.md Task 24.
+
+## D-223 - P26 Result lines wrap; a failed r call lists its objects; write paths are project-relative (2026-10-18)
+- Rule: amends D-187 ("Result lines: four spaces; an error shows `details$error`") and P26 Task 5: a result line
+  that does not fit wraps at the content width, continuation rows keep its indentation (a word wider than the
+  width is still cut; a wrapped line loses its runs of spaces, as in an `edit` diff line or between object-change
+  groups). An error shows its message wrapped to at most 6 rows, then an ellipsis row (the triage's "3 lines"
+  cannot show a 200-character error at 60 columns, 4 rows, in full); an `r` error, in the loop or served to a CLI
+  route, then shows its object changes (`+ res`), so a failed call says what it left behind. `write` shows
+  `path_rel(details$path)` and the byte count. A tool's own `render()` lines wrap the same way.
+- Contract-visible: console display only; 03 section 6.17.
+- Tests: test-console-render.R (error then `+ res` in the loop and served to a CLI route, `wrote analysis.R
+  (5,123 bytes)`, a 200-character error at 60 columns in full, 8 error lines and a 2,600-character one cut to 6
+  rows, another tool's `details$objects` ignored). Evidence: progress/P26.md Task 26.
