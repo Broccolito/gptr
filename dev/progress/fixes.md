@@ -232,3 +232,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: none. Open: `:123` may now pass during the `Rscript` stage, so the sweep may kill by
   recorded pid and creation time rather than by marker tree; an orphan that prints a ready line
   from R would pin the marker-tree path (proposed in #47, not done).
+
+## Task CI-23 - The backpressure sampler retries one transient observer failure (2026-10-18, #47)
+- native-06 (`test-proc-writer-idle-slots.R:98, 105`) failed in run 38997490469
+  (`windows-latest (oldrel-4)`) on `observer-metadata-invalid` at `entry-metadata`: CPython
+  `os.lstat` of a delete-pending Windows file returns `st_ino == 0`, and the strict oracle ends the
+  case at the first observer error (the same class failed 8 earlier Windows jobs). Fix (tests only,
+  #47 Option A): `bp_observe()` takes one more snapshot only after `observer-metadata-invalid`,
+  `-snapshot-deadline`, `-parent-entry-absent`, `-link-entry-absent` or
+  `-entry-disappearance-uncertain`; any other reason or a failed retry is still one fatal sampling
+  error, and every bound and the observer are unchanged. The witness adds `observer_retries` and the
+  first `observer_retry_reason`. A failed retry reports its own condition, because the observer's
+  `last_failure` (read by `bp_sample_error()`) then describes the retry.
+- Red: FAIL 51 in `^proc-backpressure-sampling$` (+2 tests: `bp_observe()` per reason; `bp_run()`
+  with a base R child and a scripted observer, where one retried failure completes with
+  `sampling_errors` 0 and a bound reason or a failed retry stays `resource_observation`). Green:
+  `^(proc-backpressure-sampling|bp-declared-observer|bp-disk-observer)$` PASS 639 SKIP 5 (no
+  Python; with Python 3.15 `^bp-disk-observer$` PASS 145). Lint clean. Neighbours: `^(proc-|bp-)`
+  PASS 2285 SKIP 16, `^(bridge-python-native|subagent-worker)$` PASS 157 SKIP 7.
+- Reviews: none recorded.
+- Deviations: none. Open: hosted Windows evidence (native-06 and the other native backpressure
+  cases on release and oldrel-4, twice).
