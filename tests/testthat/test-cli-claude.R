@@ -804,6 +804,30 @@ test_that("a claude-cli r call shows its tool line and result line at the consol
   expect_true(length(answer) == 1L && answer > result)
 })
 
+test_that("the answer after a served call streams as its deltas arrive, printed once (#31)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 200, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("claude", "toolstream")
+  seen = new.env()
+  seen$t = numeric()
+  seen$text = character()
+  local_mocked_bindings(console_cat = function(text) {
+    seen$t = c(seen$t, reactor_now())
+    seen$text = c(seen$text, text)
+    invisible(NULL)
+  })
+  s = peter("Compute, then answer", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  # the fixture sends its three deltas 0.4 s apart: printed whole, they would appear at once
+  first = match(TRUE, grepl("Streamed", seen$text, fixed = TRUE))
+  last = match(TRUE, grepl("third.", seen$text, fixed = TRUE))
+  expect_false(is.na(first) || is.na(last))
+  expect_gte(seen$t[[last]] - seen$t[[first]], 0.5)
+  out = paste(seen$text, collapse = "")
+  expect_identical(lengths(regmatches(out, gregexpr("streamed third.", out, fixed = TRUE))), 1L)
+})
+
 test_that("an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr_error_billing", {
   skip_on_cran()
   f = local_fake_cli("claude", "apikey")

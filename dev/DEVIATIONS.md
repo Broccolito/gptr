@@ -2428,3 +2428,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   thread id never turns a whole count into an increase.
 - Contract-visible: 04 IC-65 (continuity bullet); 03 §6.11, §8.3 (both routes).
 - Tests: cli-claude, cli-codex. Evidence: progress/P26.md Task 17.
+
+## D-204 - P26 A claude-cli answer that follows a served call usually arrives whole (2026-10-18)
+- Finding (#31): the hold is upstream of gptr, in what the claude CLI emits (the CLI or the model stream it
+  receives). The CLI's transcript (`~/.claude/projects/<cwd>/<session>.jsonl`) stamps each content block when the CLI
+  completes it. Aligned with the ts.py recordings, 13 of 16 kdps-claude and 11 of 12 seurat-claude answers after a
+  served call printed half their text within 0.25 s of that stamp, in one burst; the others began seconds earlier and
+  the rest streamed. A message's thinking and text blocks complete milliseconds apart (kdps 06:50:55.655/.666 and
+  07:37:00.938/.941 UTC); answers after a user line have spread stamps and streamed live.
+- gptr forwards and renders each delta as it arrives, also after a served call (fake CLI: deltas 0.4 s apart print
+  0.8 s apart). Ruled out: pcli_claude_result() printing the result (seurat turn 1 had earlier text, so the answer came
+  as deltas) and console_render_on() FALSE (the waiting row, which needs it, redrew during the hold). No gptr change.
+- Open: telling the CLI apart from its model stream needs a live probe of the CLI's API stream (not in this lane).
+- Contract-visible: 03 §8.3 (one sentence). Tests: cli-claude. Evidence: progress/P26.md Task 22.

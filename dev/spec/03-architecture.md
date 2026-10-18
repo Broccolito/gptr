@@ -2310,7 +2310,8 @@ evaluates R in the live session; because `--allowedTools mcp__gptr__*` pre-allow
 `mcp_message` dispatch (a `can_use_tool` for anything else goes through the injected `opts$gate` and is denied); Ctrl-C sends a
 `control_request` interrupt, then `kill_all()`. gptr's own tool calls are reported where they run (`mcp_serve_call()`)
 as `tool_execution_*` events, the end with the result's `content` and `details`, so the console shows them as tool
-and result lines while they run and IC-53 tracks them as calls of the agent loop; the gate is unchanged [D-192]. Stream events reuse the Anthropic normaliser; continuity uses
+and result lines while they run and IC-53 tracks them as calls of the agent loop; the gate is unchanged [D-192]. Stream events reuse the Anthropic normaliser and print as
+they arrive; an answer that follows a served call usually arrives in one burst when the CLI completes it [D-204]. Continuity uses
 the CLI's session id (`--resume` with the same system-prompt file) until a rewind or a compaction, after which the child is stopped and
 the next turn starts a fresh CLI session that carries the remaining path as history [D-203]; usage records the increase of `total_cost_usd`, the
 CLI session's running total that a resumed child goes on from, as a plan estimate [D-200], and the rate-limit event as plan status. Concurrency: one `claude-cli` child per session by default.
