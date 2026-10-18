@@ -5076,9 +5076,12 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
 - `console_typed()` reads only while a run of the call has a session (`policy_targets()`; otherwise the lines stay
   for the next prompt): every 0.1 s one `console_typed_lines(rd, 0L)` (IC-75's reader; the first poll does not
   wait, later polls of a batch wait 50 ms). A canonical tty hands over complete lines only (a partial line is
-  read after Ctrl-D, an empty Ctrl-D reads nothing). Lines matching `^\s*[/!]` are held in `rd$typed`, listed in
-  one `[gptr] after this answer: ...` notice and returned first by the terminal reader, echoed after the prompt;
-  an interrupted call drops and lists them (`[gptr] dropped typed lines: ...`). The other lines of a batch are
+  read after Ctrl-D, an empty Ctrl-D reads nothing). Lines matching `^\s*[/!]`, and the lines that continue a held
+  `!code` line while it is incomplete (`r_incomplete()`, as at the prompt's `+ `, across batches), are held in
+  `rd$typed`, listed in one `[gptr] after this answer: ...` notice and returned first by the terminal reader,
+  echoed after the prompt; an interrupted call or a run aborted at a question (Ctrl-C) drops and lists them
+  (`[gptr] dropped typed lines: ...`). A console question of the run (`ui_console_read()`) first routes the
+  lines waiting on fd 0 this way, so IC-75's stale guard never discards them. The other lines of a batch are
   one message, queued with `policy_enqueue(session, text, <type_ahead>, source = "repl")`. A batch's notices and
   its enqueue run between one `console_render_pause()` and `console_render_resume()`, so each notice starts its own
   line; `policy_enqueue()` and `policy_flush()` take `source` (default `"pause_menu"`), so the item has the IC-55

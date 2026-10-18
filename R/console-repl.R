@@ -553,9 +553,10 @@ console_call_release = function(rs) {
 }
 
 #' The reactor task of a terminal prompt (IC-76): every 0.1 s, the lines typed while a session
-#' of this call runs. /command and !code lines wait in the reader for the next prompt; the others
-#' become one message queued on the session as the `type_ahead` setting says. Nothing is read
-#' while no session runs (the next prompt reads it).
+#' of this call runs. /command and !code lines, and the lines that continue a held !code line
+#' still incomplete (typed_code_open()), wait in the reader for the next prompt; the others become
+#' one message queued on the session as the `type_ahead` setting says. Nothing is read while no
+#' session runs (the next prompt reads it).
 #' @noRd
 console_typed = function() {
   rd = console_repl_find()$reader
@@ -564,7 +565,10 @@ console_typed = function() {
   target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
   if (is.null(target)) return(0.1)
   lines = console_typed_lines(rd, 0L)
-  later = grepl("^\\s*[/!]", lines)
+  later = logical(length(lines))
+  for (i in seq_along(lines)) {
+    later[[i]] = grepl("^\\s*[/!]", lines[[i]]) || typed_code_open(c(rd$typed, lines[later]))
+  }
   text = paste(lines[!later], collapse = "\n")
   if (!any(later) && !nzchar(trimws(text))) return(0.1)
   console_render_pause()
@@ -581,13 +585,29 @@ console_typed = function() {
   0.1
 }
 
+#' Is the last held `!code` line, with the held lines after it, incomplete R code? The next line
+#' then continues it, as at the prompt's "+ " (repl_read_logical())
+#' @noRd
+typed_code_open = function(held) {
+  code = NULL
+  for (x in held) {
+    if (!is.null(code) && r_incomplete(code)) {
+      code = paste0(code, "\n", x)
+    } else {
+      code = if (startsWith(x, "!")) sub("^!!?", "", x)
+    }
+  }
+  !is.null(code) && r_incomplete(code)
+}
+
 #' One prompt as an ordinary gateway call (console_call())
 #'
 #' The frame binds the REPL state (`.gptr_repl`, found by the context blocks) and
 #' `.gptr_interrupt_barrier`, so the policy of this call's run is the outermost one and its
 #' re-signalled interrupt ends here. A failed call keeps its session (the condition's `$session`,
 #' else a new gptr_last()); a stray run left by an early interrupt is aborted. On a terminal the
-#' call's console_typed() task reads typed lines; an interrupt drops the lines it held.
+#' call's console_typed() task reads typed lines; an interrupt or an aborted run (Ctrl-C at a
+#' question) drops the lines it held.
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
 console_send = function(rs, text) {
@@ -616,7 +636,7 @@ console_send = function(rs, text) {
   if (!is.null(s)) rs$session = s
   if (identical(res$status, "interrupt") && !is.null(rs$session)) console_abort_stray(rs$session)
   typed = rs$reader$typed
-  if (identical(res$status, "interrupt") && length(typed)) {
+  if ((identical(res$status, "interrupt") || identical(s$status, "aborted")) && length(typed)) {
     rs$reader$typed = character()
     console_notice("[gptr] dropped typed lines: ",
                    paste(console_escape(paste0("'", typed, "'"), FALSE), collapse = ", "))

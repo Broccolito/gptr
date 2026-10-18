@@ -100,6 +100,56 @@ test_that("a line typed during a tool reaches the request right after its result
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("and also use mtcars"))
 })
 
+# fd 0 of a terminal as one buffer: the typing task and readline() both take its `lines`, and
+# readline() returns a waiting line at once (IC-75 sees 0.01 s), else the next of `answers`
+local_fd0 = function(answers, .env = parent.frame()) {
+  fd0 = new.env(parent = emptyenv())
+  fd0$lines = character()
+  fd0$answers = answers
+  testthat::local_mocked_bindings(
+    repl_terminal = function(rs) TRUE, console_readline_tty = function() FALSE,
+    gptr_is_interactive = function() TRUE,
+    console_typed_lines = function(rd, ...) {
+      x = fd0$lines
+      fd0$lines = character()
+      x
+    },
+    gptr_readline = function(prompt = "", ...) {
+      stale = length(fd0$lines) > 0L
+      if (!stale && !length(fd0$answers)) return(NA_character_)
+      x = if (stale) fd0$lines[[1L]] else fd0$answers[[1L]]
+      if (stale) fd0$lines = fd0$lines[-1L] else fd0$answers = fd0$answers[-1L]
+      the$readline_secs = if (stale) 0.01 else 1
+      x
+    }, .env = .env)
+  withr::defer(assign("readline_secs", NULL, envir = the), envir = .env)
+  fd0
+}
+
+test_that("a line typed during a tool steers when the next call's question follows it", {
+  local_console_test()
+  local_gptr_options(interactive = TRUE)
+  fd0 = local_fd0(c("go", "y", "/exit"))
+  peek = gptr_tool("peek", "Test tool peek", parameters = list(type = "object",
+                                                                properties = json_obj()),
+                   execute = function(input, ctx) {
+                     fd0$lines = "use base R instead"
+                     "seen"
+                   }, annotations = list(read_only = TRUE))
+  e = new.env()
+  fake = gptr_fake_provider(list(fake_tools(list("peek"), list("r", list(code = "zz = 2"))),
+                                 "after"))
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  rs$tools = list(peek)
+  out = utils::capture.output(repl_main(rs))
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(e$zz, 2)
+  expect_identical(msg_text(last_message(reqs[[2L]])), relay("use base R instead"))
+  expect_true(any(grepl("[gptr] steering: 'use base R instead'", out, fixed = TRUE)))
+})
+
 test_that("/commands and !code typed during a run run after the answer; text still steers", {
   local_console_test()
   e = new.env()
@@ -172,6 +222,50 @@ test_that("an interrupted run drops the held lines and lists them", {
   expect_true(any(grepl("[gptr] dropped typed lines: '/status', '!x = 1'", res$out, fixed = TRUE)))
   expect_null(e$x)
   expect_false("peter[auto]> /status" %in% res$out)
+})
+
+test_that("Ctrl-C at an approval prompt aborts the run and drops the held lines", {
+  local_console_test()
+  local_gptr_options(interactive = TRUE)
+  e = new.env()
+  fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2", .text = "hmm")))
+  local_typed(typed_once("!x = 1", function() length(fake_requests(fake)) == 1L))
+  asks = 0L
+  local_mocked_bindings(readline_answer = function(prompt) {
+    asks <<- asks + 1L
+    if (startsWith(prompt, "  allow?")) {
+      signalCondition(structure(class = c("interrupt", "condition"),
+                                list(message = "", call = NULL)))
+    }
+    if (asks == 1L) "go" else "/exit"
+  }, gptr_readline = function(prompt = "", ...) readline_answer(prompt))
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  rs$mode = "manual"
+  out = utils::capture.output(repl_main(rs))
+  expect_true(any(grepl("[gptr] after this answer: '!x = 1'", out, fixed = TRUE)))
+  expect_true(any(grepl("[gptr] dropped typed lines: '!x = 1'", out, fixed = TRUE)))
+  expect_null(e$x)
+  expect_null(e$zz)
+})
+
+test_that("a held !code line keeps the lines that complete it, also from a later batch", {
+  local_console_test()
+  e = new.env()
+  fake = slow_first()
+  batches = list(c("!f = function(x) {", "  x + 1"), c("}", "and steer"))
+  local_typed(function() {
+    if (length(fake_requests(fake)) != 1L || !length(batches)) return(character())
+    x = batches[[1L]]
+    batches <<- batches[-1L]
+    x
+  })
+  res = typing_console(fake, c("go", "!g = 2", "/exit"), envir = e)
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(msg_text(last_message(reqs[[2L]])), relay("and steer"))
+  expect_identical(e$f(1), 2)
+  expect_identical(e$g, 2)
 })
 
 test_that("no fd-0 reads outside a terminal REPL (.stdin, jsonl, peter() with a prompt)", {

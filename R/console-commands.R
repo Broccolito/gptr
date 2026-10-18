@@ -128,9 +128,9 @@ cmd_help = function(args, ctx) {
     paste0("Keys: ", console_interrupt_key(), " pauses a running answer in supported terminals ",
            "(steer, follow-up, continue, abort; background when available); ",
            "twice at the prompt leaves. Other front ends may abort without a pause menu. ",
-           "In a terminal a line typed while an answer runs steers it (setting type_ahead; on ",
-           "the CLI routes after the CLI's response); /commands and !code typed then run after ",
-           "the answer. Other consoles keep typed lines for the next prompt."))
+           "In a terminal (not Windows) a line typed while an answer runs steers it (setting ",
+           "type_ahead; on the CLI routes after the CLI's response); /commands and !code typed ",
+           "then run after the answer. Other consoles keep typed lines for the next prompt."))
 }
 
 #' /exit, /quit, /q

@@ -168,10 +168,13 @@ ui_undo_note = function(request) {
   tryCatch(ext_service_get("checkpoint.note")(call, NULL), error = function(e) NULL)
 }
 
-#' Read one console answer, never a line typed before the question (IC-75); Ctrl-C or EOF gives
-#' NA (a terminal echoes even a `secret` itself)
+#' Read one console answer, never a line typed before the question (IC-75): in a terminal REPL
+#' the lines typed while the run worked are routed first (IC-76); Ctrl-C or EOF gives NA (a
+#' terminal echoes even a `secret` itself)
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
+  rs = console_repl_find()
+  if (!is.null(rs) && repl_terminal(rs)) console_typed()
   ans = tryCatch(readline_answer(prompt), interrupt = function(e) NA_character_)
   if (rlang::is_string(ans)) ans else NA_character_
 }
