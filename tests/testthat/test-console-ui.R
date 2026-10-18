@@ -230,6 +230,33 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
   expect_false(any(grepl("every mode", ui_permission_lines(req), fixed = TRUE)))
 })
 
+test_that("nested calls with the same prompt are told apart by their number (#36)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_project()
+  sub = local_fake_provider(function(request) {
+    if (length(request$last_results)) "child done" else fake_tool("r", code = "x = 1")
+  }, name = "sub")
+  code = "for (id in 1:2) peter('You are annotating one cluster of the object', model = sub)"
+  fake = local_fake_provider(function(request) {
+    if (length(request$last_results)) "parent done" else fake_tool("r", code = code)
+  }, name = "main")
+  local_gptr_options(mode = "manual", interactive = TRUE, verbose = 1L, quiet = FALSE,
+                     ui = ui_console_spec(function(prompt, ...) "y"))
+  e = new.env()
+  e$sub = sub
+  s = NULL
+  out = utils::capture.output({
+    s = peter("annotate", model = fake, envir = e)
+  })
+  expect_identical(s$text, "parent done")
+  who = "  sub-agent 'You are annotating one cluster...' #"
+  for (k in c("1", "2")) {
+    expect_true(paste0(who, k, " > r  x = 1") %in% out, info = k)
+    expect_true(paste0(who, k, " started (sub/sub-1)") %in% out, info = k)
+    expect_true(any(startsWith(out, paste0(who, k, " done"))), info = k)
+  }
+})
+
 test_that("invalid answers are explained; five end in a refusal the model is told (D-188)", {
   root = local_project()
   crit = ui_request("q('no')", tier = "ask_human")

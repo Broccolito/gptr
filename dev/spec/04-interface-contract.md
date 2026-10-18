@@ -2749,8 +2749,9 @@ retained. Permission approval displays keep the separate IC-53 escaping rules.
 <gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, undo_note = chr(1) | NULL (from the
 `checkpoint.note` service), session = chr(1), turn = int(1), nested = lgl(1), tier = "ask" | "ask_human")`
 (IC-53). IC-77 adds `agent = chr(1)`, who asks: `"main"`, a sub-agent's name, or for a nested
-`peter()` call the first line of its prompt quoted and cut to 30 characters; the
-`permission_request` event carries the event's own `agent` label instead.
+`peter()` call the first line of its prompt quoted and cut to 30 characters, then ` #k`, its place among the
+parent run's children (`run$children`), so loop iterations differ (D-224); the `permission_request` event carries
+the event's own `agent` label instead.
 
 Example calls:
 
@@ -5134,9 +5135,10 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
    verbosity 1+ unless `gptr.quiet`, `  sub-agent <agent> started (<model>)` (the model the child
    calls, for a worker not its proxy's `worker/worker`) at `agent_start` and
    `  sub-agent <agent> done (k/N) · <turns> turns · <secs> s` or
-   `  sub-agent <agent> failed: <status>` at `agent_end` through `console_write()`, two columns
-   in as the prompts; `(k/N)` counts the settled runs of a `subagent_schedule()` group
-   (`run$group`: `n`, `runs`).
+   `  sub-agent <agent> failed (k/N): <reason>` (the first line of the end's `reason`, else its
+   status) at `agent_end` through `console_write()`, two columns in as the prompts, each line cut
+   to the console width; `(k/N)` counts the settled runs of a `subagent_schedule()` group
+   (`run$group`: `n`, `runs`) (D-224).
 5. The `r` tool tees only for a depth-0 run (§7.9); nested calls evaluate in an overlay (§6.1
    `envir`).
 

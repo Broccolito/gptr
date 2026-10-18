@@ -2434,3 +2434,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-console-render.R (error then `+ res` in the loop and served to a CLI route, `wrote analysis.R
   (5,123 bytes)`, a 200-character error at 60 columns in full, 8 error lines and a 2,600-character one cut to 6
   rows, another tool's `details$objects` ignored). Evidence: progress/P26.md Task 26.
+
+## D-224 - P26 Sub-agent failure lines give the reason and (k/N); nested calls are numbered (2026-10-18)
+- Rule: amends IC-77 item 4 and D-188 (`failed: <status>`; a nested call's label is its quoted prompt): a shown
+  sub-agent's end reads `  sub-agent <agent> failed (k/N): <reason>`, the first line of the `agent_end` reason
+  (the run's condition message), else its status; `(k/N)` as for `done`. Every sub-agent line is cut to the
+  console width with an ellipsis. A nested `peter()` call's label ends ` #k`, its place among the parent run's
+  children (`run$children`, fan-out and team children included; a continued child keeps its number), so loop
+  iterations with one prompt differ in prompts, questions and progress lines; without a parent run, no number.
+- Contract-visible: IC-77 item 4, 04 section 7.11 `agent`, 03 sections 6.8.3 and 6.17; teams vignette.
+- Tests: test-console-render.R (a fan-out whose children fail with `no_key`; no reason), test-console-ui.R (two
+  sequential nested calls with one prompt), test-gptr-gateway.R (loop labels). Evidence: progress/P26.md Task 27.

@@ -1467,7 +1467,7 @@ opens the detail view (code, flagged calls with levels,
 paths, "cannot be undone" when no checkpoint is possible, and "always in this project", written to the user-level
 project file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; Ctrl-C aborts
 the run. Never `askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1].
-A sub-agent's prompt names it (`  sub-agent alpha > r  cm = 1`; a nested `peter()` by its quoted prompt) and an
+A sub-agent's prompt names it (`  sub-agent alpha > r  cm = 1`; a nested `peter()` by its quoted prompt and number) and an
 `ask_human` prompt adds `asks in every mode: <reason>`. Every console prompt first ends partial lines and clears the
 waiting row, and its lines reach the console even from inside the parent's `r` evaluation (never its tool result).
 An invalid answer is explained (`a` where nothing can be remembered says why); five (`?` is none) end in a refusal
@@ -1935,9 +1935,10 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   executes (conditions raised inside a tool leave the waiting row alone). Children never render;
   a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
   (`  sub-agent a started (kid/kid-1)`, `  sub-agent a done (1/2) · 2 turns · 12 s` or
-  `failed: <status>`; `(k/N)` for a team, fan-out or `gptr_parallel()` group; a nested `peter()`
-  by its quoted prompt). Model code that wraps such calls in `capture.output()` or `sink()` still
-  captures prompts and lines (D-188).
+  `failed (1/2): <first line of the reason>`, cut to the console width; `(k/N)` for a team, fan-out or
+  `gptr_parallel()` group; a nested `peter()` by its quoted prompt and its number among the parent run's
+  children, `'Summarise ...' #2`, D-224). Model code that wraps such calls in `capture.output()` or `sink()`
+  still captures prompts and lines (D-188).
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
   `/compact [focus]`, `/cost`, `/context` (token ledger), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt

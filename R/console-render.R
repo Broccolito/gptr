@@ -586,11 +586,13 @@ console_child_shown = function(run) {
     !isTRUE(top$opts$background) && verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
 }
 
-#' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188)
+#' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), cut to
+#' the console width (D-224)
 #' @noRd
 console_child_line = function(rec, text) {
   console_before_message(tools = TRUE)
-  console_write(paste0("  sub-agent ", rec$child$label, " ", text))
+  console_write(cli::ansi_strtrim(paste0("  sub-agent ", rec$child$label, " ", text),
+                                  cli::console_width()))
 }
 
 #' Render this record on stdout now?
@@ -1079,7 +1081,8 @@ console_on_retry = function(event, ctx) {
 
 #' agent_end: close the streams, show custom entries and the status line, forget the run; queued
 #' artifact lines (an interrupted tool) print last; a shown sub-agent says how it ended, `(k/N)`
-#' counting the settled children of its scheduled group (D-188)
+#' counting the settled children of its scheduled group (D-188), a failure with the first line of
+#' its reason, else its status (D-224)
 #' @noRd
 console_on_agent_end = function(event, ctx) {
   on.exit(console_artifact_flush(), add = TRUE)
@@ -1099,7 +1102,8 @@ console_on_agent_end = function(event, ctx) {
       paste0("done", k, sep, n, if (n == 1L) " turn" else " turns", sep,
              sprintf("%.0f s", as.numeric(Sys.time()) - as.numeric(run$started)))
     } else {
-      paste0("failed: ", console_escape(event$status %||% "?", FALSE))
+      why = c(text_lines(event$reason), event$status, "?")[[1L]]
+      paste0("failed", k, ": ", console_escape(why, FALSE))
     })
   }
   if (!console_foreground(rec)) return(NULL)

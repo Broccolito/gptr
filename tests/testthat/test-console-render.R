@@ -909,6 +909,33 @@ test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no q
                    "  sub-agent a x")
 })
 
+test_that("a failed sub-agent line counts it and gives its reason's first line, cut (#36)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_project()
+  local_gptr_options(mode = "auto", verbose = 1L, quiet = FALSE)
+  fake = local_fake_provider(list("never sent"))
+  local_mocked_bindings(provider_credential = function(provider, register = TRUE) {
+    gptr_abort(c(paste0("No credential found for provider ", provider$id, ". Set FAKE_API_KEY ",
+                        "(for example with gptr_env()) or store one with gptr_login()."),
+                 i = "a second line"), "no_key", provider = provider$id)
+  })
+  out = utils::capture.output(tryCatch(peter("each", list(a = 1, b = 2), model = fake,
+                                             parallel = 1), error = function(e) NULL))
+  failed = grep("failed", out, value = TRUE)
+  expect_identical(failed[[1L]], paste0("  sub-agent a failed (1/2): No credential found for ",
+                                        "provider fake. Set FAKE_A..."))
+  expect_match(failed[[2L]], "^  sub-agent b failed \\(2/2\\): No credential found for")
+  # without a reason, the status
+  local_gptr_options(verbose = 0L)
+  s = render_session()
+  rec = console_track("u0000test", s)
+  withr::defer(console_drop("u0000test"))
+  rec$child = list(label = "c", run = list(started = Sys.time()))
+  expect_identical(utils::capture.output(invisible(console_on_agent_end(
+    hook_event("agent_end", s, status = "aborted", usage = NULL, turns = 1L),
+    session_live(s)$ctx))), "  sub-agent c failed: aborted")
+})
+
 test_that("a foreground run separates text, tool and status blocks once (D-186)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
