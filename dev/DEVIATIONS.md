@@ -2473,3 +2473,23 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: env-describe (a one-layer ggplot; flat, filler, nested and S7 (`meta`) patchworks; a session and its
   children; an environment with one promise; 16 registered methods), ckpt-rewind (`tzone ""`; the /checkpoints
   footer). Evidence: progress/P26.md Task 36.
+
+## D-216 - P26 programs run with system() or system2() share the console's terminal: a prompt rule, not a fix (2026-10-18)
+- Rule: agent code is evaluated in the R process, so a child of `system()` or `system2()` inherits R's stdin, the
+  console's terminal; one that reads stdin blocks the reactor and consumes typed lines. Without compiled code (v1)
+  gptr cannot point fd 0 elsewhere, so the `<r_session>` core gains the line `- system() and system2() children
+  read the user's terminal: use system2(..., stdin = nullfile()) instead of system().` before its closing line
+  (03 §7.3), and `?peter` says the same. `system(input = )` is not offered: R prefixes `< file` to
+  the command, so only the first command of a compound line (`cd dir && pandoc ...`) is redirected; `system2()`
+  appends it, so with shell operators in `args` only the last command is, and a compound line needs
+  `system2("sh", c("-c", shQuote(cmd)), stdin = nullfile())` or `peter$sh()`. `peter$sh()`/`peter$bg()` children
+  already read the null device (processx).
+- Gap: the minimal preset (the default for defined agents, fan-out and team children) renders no `<r_session>`, so
+  its agents are told neither this line nor the `readline()`/`q()` line beside it; the minimal static prefix
+  (1,262, 03 §12.1) is unchanged.
+- Contract-visible: 03 §7.3 `<r_session>` (13 lines) and §12.4 (27 more o200k tokens, within its 500 budget and
+  the 12.7 static-prefix gate: standard_core 2,378 of 2,381); the 11 golden rows already over their prefix gate at
+  base grow by 27 and ns10-mcp-catalog newly exceeds its own (2,895 at base, 2,922 > 2,896), so baseline.csv needs
+  one re-baseline at integration; `?peter`.
+- Tests: prompt-text (the line), northstar and bench-context/prompt-sections (composition byte for byte);
+  `dev/bench/tokens/run.R --check` (the prefix gate). Evidence: progress/P26.md Task 37.
