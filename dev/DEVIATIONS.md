@@ -2372,6 +2372,30 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Review fix (2026-10-17): the reporting is skipped only when the served call's own run has a tool on the stack (`identical(run_current(), run)`), so a nested CLI run inside its parent's tool reports its calls and its approved or yolo control exports run.
 
 ## D-193 - P26 Bedrock Converse with SigV4 signing (2026-10-17)
-- Rule: TBD by P26 Task 11.
-- Contract-visible: TBD.
-- Tests: TBD. Evidence: progress/P26.md Task 11.
+- Rule: the adapter `bedrock-converse` (`R/provider-bedrock.R`, `builtin:bedrock`) streams ConverseStream signed
+  with AWS Signature Version 4 in pure R (HMAC-SHA256 on `cli::hash_raw_sha256()`, a CRC-32 table in R). Region
+  (`compat$region`, required) and endpoint (`base_url`) are data of a registered record; there is no built-in
+  record, so AWS and a SigV4 gateway are both configuration, and the `bedrock` bearer record is unchanged. The
+  record's `auth` is `AWS_SECRET_ACCESS_KEY`; `AWS_ACCESS_KEY_ID` and the optional `AWS_SESSION_TOKEN` come from
+  the vault, else the environment (registered for redaction, origin-bound), never the credential store.
+- Rule: two request-spec fields instead of a new transport (the plan named none): `stream = "raw"` pushes each
+  2xx chunk unsplit (the normaliser owns the event-stream framing; the adapter declares `http_sse`, the HTTP
+  streaming driver), and `sign(method, url, body, value)`, which `http_handle()` calls per attempt, so the key
+  pair is materialised only in `http-request.R` and a re-send is signed at its own time.
+- Rule: no `toolChoice`, cache points or thinking request fields are sent (`forced_tool_choice = FALSE`,
+  `cache = "none"`); reasoning in the stream is decoded and replayed signed to the same model only. Tool ids
+  follow the Anthropic rule in the hand-off (`provider-transform.R`).
+- Review fix (2026-10-18): `AWS_ACCESS_KEY_ID` is a secret name (`_ID` after `KEY` is no plain suffix; G6 section
+  3.3 and P03 listed it as plain), so `gptr_env(set_env = FALSE)` and trusted `.env` discovery keep it in the
+  vault and children drop it like the secret key. `child_env_provider_key()` gives a `bedrock-converse` worker
+  the key id and session token with the secret key. `returns =` adds the IC-71 instruction to the last user
+  message; with no tools to send, past tool calls and results are text (Converse needs `toolConfig` for
+  `toolUse` and `toolResult` blocks). `check_adapter()` replays binary `<case>.bin` fixtures (the body chunks
+  of a `stream = "raw"` request) unsplit; `make_fixtures.R` writes two Bedrock
+  cases with CRC-32s read from gzip trailers. Rotated environment credentials take effect at the next session
+  start or a `gptr_env()` reload (the P05 vault-first order, documented in IC-80, not changed).
+- Contract-visible: 03 sections 1.3, 2.1, 3.2, 8.1, 11.1; 04 sections 3.2, 7.12, 8.1, 10.3, IC-80;
+  `?gptr_provider` (`compat` region, a SigV4 gateway record example).
+- Tests: provider-bedrock (new), live-bedrock (opt-in), arch-layers (122 files), auth-secrets (the key id is a
+  secret name); `setup.R` clears the key-pair variables; the scripted wire of `replay_helpers.R` takes raw
+  bodies; `fixtures/sse/bedrock-converse/` (tool_use, throttled). Evidence: progress/P26.md Task 11.

@@ -86,6 +86,7 @@ arch_layer_table = function() {
     "provider-openai-responses.R", "L1", "P12",
     "provider-openai-completions.R", "L1", "P12",
     "provider-google.R", "L1", "P12",
+    "provider-bedrock.R", "L1", "P26",
     "s1-types.R", "L1", "P13",
     "s1-client.R", "L4", "P13",
     "s1-route.R", "L4", "P13",

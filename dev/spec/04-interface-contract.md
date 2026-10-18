@@ -394,7 +394,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `GPTR_LIVE_TESTS` | tests | `"true"` enables `test-live-*.R` |
 | `GPTR_SUBAGENT_DEPTH`, `GPTR_WORKER` | P19 | set in worker children; `GPTR_WORKER = "1"` marks a worker process |
 | `GPTR_MCP_TOKEN` | P18 | the variable `gptr_mcp_serve()`'s Codex snippet reads its bearer token from; gptr sets it in no process (IC-79) |
-| Provider keys | P05 (vault discovery, P03) | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `XAI_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY`, `VLLM_API_KEY`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` (not secret), `AWS_BEARER_TOKEN_BEDROCK`, `TYPESAFE_API_KEY` (aliases `jev-key`, `JEV_KEY`, `JEV_API_KEY`, `TYPESAFE_KEY` through `gptr_env()`) |
+| Provider keys | P05 (vault discovery, P03) | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `XAI_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY`, `VLLM_API_KEY`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` (not secret), `AWS_BEARER_TOKEN_BEDROCK`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` (`bedrock-converse` records, IC-80), `TYPESAFE_API_KEY` (aliases `jev-key`, `JEV_KEY`, `JEV_API_KEY`, `TYPESAFE_KEY` through `gptr_env()`) |
 | `_R_CHECK_PACKAGE_NAME_`, `_R_CHECK_LIMIT_CORES_` | P01 `check_running()` | forced replay outside testthat (examples; IC-45), child pools capped at 2, no supervision |
 | `GPTR_PROJECT_ROOT` | P01 `project_root()` | overrides the project root (tests; IC-63) |
 | `TESTTHAT` | P08 `replay_mode()` | `"true"` under testthat: no forced replay |
@@ -2769,7 +2769,7 @@ Each file registers one adapter through its `builtin_<name>()` factory (`builtin
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `anthropic_normaliser(model, opts)` | `provider-anthropic.R` | the Anthropic SSE normaliser (`push(ev)`, `finish()`, `fail(cnd)`, `message()`), accepting either SSE events or already-parsed stream-event objects (`push_parsed(obj)`) | P20 (`cli-claude` reuses it for `stream_event` lines) |
-| `check_adapter(adapter, fixtures = NULL)` (service `check.adapter`) | `provider-anthropic.R` | replays `fixtures/sse/<api>/*.sse` (or `fixtures`) through the adapter with random chunkings and compares with `<case>.events.json` / `<case>.message.json`; returns `gptr_check` rows | P02 (`gptr_check()`), P24 |
+| `check_adapter(adapter, fixtures = NULL)` (service `check.adapter`) | `provider-anthropic.R` | replays `fixtures/sse/<api>/*.sse` (binary `*.bin` fixtures, the body chunks of a `stream = "raw"` request, unsplit; or `fixtures`) through the adapter with random chunkings and compares with `<case>.events.json` / `<case>.message.json`; returns `gptr_check` rows | P02 (`gptr_check()`), P24 |
 | `compat_flags(provider, model)` | `provider-openai-completions.R` | the compat record of 09 §3 (field names, `max_tokens` vs `max_completion_tokens`, `reasoning_content` replay, tool-id length, image modes) | P12 |
 
 Example calls:
@@ -3021,14 +3021,14 @@ only caller of adapters for System 2 requests; `s1_request()` (P13) is the only 
 
 **`build(model, context, opts)`** returns a request spec:
 
-- `transport` `http_sse`, `http_ndjson`, `http_json`: `list(url = chr(1), method = "POST", headers = named list of chr(1) or handles, body = chr(1) (UTF-8 JSON text assembled by concatenation of memoised pieces) or raw, stream = "sse" | "ndjson" | "json")`. Only `http-request.R` materialises handles (`secret_value(handle, origin)`), and only when the URL's origin equals the handle's.
+- `transport` `http_sse`, `http_ndjson`, `http_json`: `list(url = chr(1), method = "POST", headers = named list of chr(1) or handles, body = chr(1) (UTF-8 JSON text assembled by concatenation of memoised pieces) or raw, stream = "sse" | "ndjson" | "json" | "raw", sign = NULL | function(method, url, body, value))`. Only `http-request.R` materialises handles (`secret_value(handle, origin)`), and only when the URL's origin equals the handle's; it calls `sign` once per attempt with the raw body and `value(handle)` for the URL's origin and adds the named header strings it returns (IC-80).
 - `transport` `process_jsonl`: `list(start = list(command, args, env_profile, env = named chr, wd) | NULL (the process in `opts$state` is reused), send = list of objects to write as JSON lines for this turn, close_stdin = lgl(1))`.
 
 **`parse(model, opts)`** returns a normaliser, a list of functions:
 
 | Function | Contract |
 |---|---|
-| `push(ev)` | consume one decoded unit; `ev` is `list(event, data, id)` (SSE event; `data` UTF-8 text), `list(data)` (NDJSON line), `list(data, status, headers)` (whole JSON body, once) or `list(data, obj)` (process line, already parsed); emits events; returns `TRUE` when the stream is complete (terminal event emitted), `FALSE` otherwise. `process_jsonl` normalisers answer control requests from the child by calling `opts$send()` |
+| `push(ev)` | consume one decoded unit; `ev` is `list(event, data, id)` (SSE event; `data` UTF-8 text), `list(data)` (NDJSON line, or one raw body chunk for `stream = "raw"`), `list(data, status, headers)` (whole JSON body, once) or `list(data, obj)` (process line, already parsed); emits events; returns `TRUE` when the stream is complete (terminal event emitted), `FALSE` otherwise. `process_jsonl` normalisers answer control requests from the child by calling `opts$send()` |
 | `finish()` | end of input: emits the terminal event if not yet emitted (`done`, or `error` for a truncated stream) and returns the final assistant message |
 | `fail(cnd)` | a transport failure (`cnd` is a classed, unsignalled `gptr_error_*`): emits `error` with the partial message and returns it |
 | `message()` | the current partial assistant message (materialised lazily; never per delta) |
@@ -3054,6 +3054,7 @@ models, IC-71); `request_params` (chr: non-prefix request fields a `request_para
 `tool_shape` (`"anthropic"`, `"responses"`, `"chat"`, `"gemini"`).
 
 Built-in adapters: `anthropic-messages`, `openai-responses`, `openai-completions`, `google-generative-ai` (P12),
+`bedrock-converse` (P26, IC-80),
 `typesafe-system-one`, `ollama-system-one`, `s1-emulate` (P13; IC-74), `cli-claude`, `cli-codex` (P20), `fake`, `fake-classifier` (P01,
 declared by P05).
 
@@ -3467,6 +3468,7 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 | `builtin:tools`, `builtin:r` | `tool-namespace.R`, `tool-r.R` (P10) | one spec each for `read`, `edit`, `write`, `grep`, `find`, `ls` (direct and member forms, IC-37), `r`; the other members of §9.4 owned by P10 (incl. `out`); tool guidelines; `r_session` fragments; section `plugins`; `search_source` for members | yes |
 | `builtin:permissions`, `builtin:plan`, `builtin:ui`, `builtin:ask` | `perm-gate.R`, `perm-plan.R`, `console-ui.R`, `tool-ask.R` (P11) | policies; plan policy and hooks; UI backends; `ask` tool | permissions/plan: no (filters from projects ignored); ui, ask: yes |
 | `builtin:anthropic`, `builtin:openai`, `builtin:openai-compat`, `builtin:google` | P12 files | adapters | yes |
+| `builtin:bedrock` | `provider-bedrock.R` (P26) | adapter `bedrock-converse` (IC-80) | yes |
 | `builtin:system1` | `s1-client.R` (P13) | provider `typesafe`, adapters, route `classifier`, section `system1` | yes |
 | `builtin:console`, `builtin:jsonl` | `console-repl.R`, `console-jsonl.R` (P14) | frontends, route `console`, renderer hooks, commands | yes |
 | `builtin:documents` | `doc-formats.R` (P15) | doc formats, route `document`, hooks, section `documents`, services `doc.*` | yes |
@@ -5181,4 +5183,40 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   `tool_run`, `tool_execute_frame`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
 
-**IC-80 Bedrock Converse with SigV4** (P26 Task 11). TBD by P26 Task 11.
+**IC-80 Bedrock Converse with SigV4** (P26 Task 11, D-193).
+
+- The adapter `bedrock-converse` (`provider-bedrock.R`, `builtin:bedrock`, transport `http_sse`) sends
+  `POST {base_url}/model/{model id, percent-encoded}/converse-stream` with `system`, `messages` (one role per
+  message: user text, context blocks, images and operator text, tool results as `toolResult` blocks with
+  `status = "error"` for errors; assistant text, `toolUse` with sanitised ids, signed or redacted reasoning only
+  to the model that produced it), `toolConfig.tools[].toolSpec{name, description, inputSchema.json}` for a
+  `tool_call` model and `inferenceConfig` (`maxTokens`; `temperature` for a non-reasoning model). The `returns`
+  instruction (IC-71) joins the last user message. With no tools to send, past tool calls and results are text
+  (Converse refuses `toolUse` and `toolResult` blocks without `toolConfig`). No tool choice and no cache points
+  are sent (capabilities `forced_tool_choice = FALSE`, `cache = "none"`).
+- Signing: with a credential, `build()` returns `sign` (04 section 8.1): AWS Signature Version 4 for service
+  `bedrock` and the provider record's `compat$region` (required), signed headers `host`, `x-amz-content-sha256`
+  (the body's SHA-256), `x-amz-date` and, with a session token, `x-amz-security-token`; the canonical URI is the
+  sent path encoded once more. HMAC-SHA256 is built on `cli::hash_raw_sha256()`. The record's `auth`
+  (`AWS_SECRET_ACCESS_KEY`) resolves as every credential; `AWS_ACCESS_KEY_ID` (required) and
+  `AWS_SESSION_TOKEN` come from the vault, else the environment (registered for redaction, bound to the
+  origin); `gptr_env(aliases = ...)` maps other names onto them. `AWS_ACCESS_KEY_ID` is a secret name (`_ID`
+  after `KEY` is no plain suffix), so `gptr_env(set_env = FALSE)` keeps it in the vault, and a
+  `backend = "worker"` sub-agent receives it and the session token with the secret key. A registered value is
+  reused: temporary credentials rotated in the environment take effect at the next session start (ambient
+  discovery) or when reloaded with `gptr_env()`. The spec holds handles only; `http-request.R` materialises
+  them per attempt, so a re-send is signed at its own time. The `bedrock` record (bearer token,
+  OpenAI-compatible endpoint) is unchanged.
+- Decoding: `stream = "raw"` pushes each 2xx body chunk unsplit; the normaliser decodes AWS event-stream frames
+  (prelude, string headers, payload) and refuses a prelude or message CRC-32 mismatch as a `network` error.
+  `:message-type` `event` frames: `contentBlockDelta` text, `toolUse.input` and `reasoningContent`
+  (text, signature, redacted content) open slots by `contentBlockIndex` (`contentBlockStart` names a tool
+  use), `contentBlockStop` closes them, `messageStop` sets the stop reason (as Anthropic's names;
+  `guardrail_intervened` and `content_filtered` are `refusal`), `metadata` records `inputTokens`,
+  `outputTokens`, `cacheReadInputTokens`, `cacheWriteInputTokens` and, after `messageStop`, ends the stream;
+  without `metadata` the stream ends at its end and unreported usage stays NA (IC-74). An `exception` (or `error`) frame is a stream
+  error by `:exception-type` (`throttlingException` rate_limit 429, `serviceUnavailableException` 503,
+  `internalServerException` 500 and `modelStreamErrorException` 424 overloaded, all retried while nothing was
+  committed; `validationException` provider 400; others provider). HTTP errors before the stream are
+  classified by P04 as for every adapter. `check_adapter()` replays binary `fixtures/sse/<api>/<case>.bin`
+  fixtures unsplit.

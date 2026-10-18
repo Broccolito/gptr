@@ -192,6 +192,7 @@ adapter_provided_by = function(api) {
          "google-generative-ai" = "P12",
          "typesafe-system-one" = , "ollama-system-one" = , "s1-emulate" = "P13",
          "cli-claude" = , "cli-codex" = "P20",
+         "bedrock-converse" = "P26",
          "fake" = , "fake-classifier" = "P01",
          "a plugin")
 }
@@ -804,7 +805,7 @@ stream_rate_sync = function(id) {
 
 #' HTTP transports (http_sse, http_ndjson, http_json): one transfer for the whole request
 #' A second on_headers() (a re-send) resets the normaliser and the splitter; a splitter failure
-#' ends the stream like a normaliser failure.
+#' ends the stream like a normaliser failure. `stream = "raw"` pushes each body chunk unsplit.
 #' @noRd
 stream_http = function(st, adapter) {
   st$transport = "http"
@@ -812,10 +813,11 @@ stream_http = function(st, adapter) {
   st$spec = stream_http_spec(st, adapter$build(st$model, st$context, st$opts))
   kind = st$spec[["stream"]] %||%
     switch(adapter[["transport"]] %||% "", http_ndjson = "ndjson", http_json = "json", "sse")
-  if (!is.character(kind) || length(kind) != 1L || !kind %in% c("sse", "ndjson", "json")) {
+  if (!is.character(kind) || length(kind) != 1L ||
+      !kind %in% c("sse", "ndjson", "json", "raw")) {
     gptr_abort("The adapter's request spec names no known stream format.", "invalid_spec",
                kind = "adapter", name = adapter[["api"]] %||% "", field = "stream",
-               problem = "stream must be \"sse\", \"ndjson\" or \"json\"")
+               problem = "stream must be \"sse\", \"ndjson\", \"json\" or \"raw\"")
   }
   reset = function() {
     st$norm = adapter$parse(st$model, st$opts)
@@ -837,6 +839,7 @@ stream_http = function(st, adapter) {
       st$body[[length(st$body) + 1L]] = raw
       return(invisible(NULL))
     }
+    if (identical(kind, "raw")) return(stream_push(st, list(data = raw)))
     units = tryCatch(st$split$push(raw), error = function(e) {
       stream_fail_live(st, stream_error_condition(e, "stream splitter"))
       list()
@@ -852,7 +855,7 @@ stream_http = function(st, adapter) {
       if (identical(kind, "json")) {
         body = if (length(st$body)) do.call(c, st$body) else raw()
         stream_push(st, list(data = raw_to_utf8(body), status = status, headers = headers))
-      } else {
+      } else if (!is.null(st$split)) {
         rest = st$split$flush()
         if (identical(kind, "ndjson")) {
           for (u in rest) stream_push(st, list(data = u))

@@ -138,7 +138,8 @@ child_env_put = function(out, values) {
   out
 }
 
-#' The key a provider's worker needs, as a named character vector (empty when none is found)
+#' The key a provider's worker needs, as a named character vector (empty when none is found);
+#' a `bedrock-converse` key pair travels with its key id and session token (IC-80)
 #' @noRd
 child_env_provider_key = function(provider) {
   spec = tryCatch(registry_get("provider", provider), error = function(e) NULL)
@@ -152,17 +153,23 @@ child_env_provider_key = function(provider) {
     origin = spec[["base_url"]] %||% secret_bound_origin(h)
     return(stats::setNames(secret_value(h, origin), h[["name"]]))
   }
-  for (nm in as.character(spec[["auth"]])) {
+  # the vault, else the environment (registered on the way)
+  one = function(nm) {
     h = secret_lookup(nm)
     if (!is.null(h)) {
       return(stats::setNames(secret_value(h, spec[["base_url"]] %||% secret_bound_origin(h)), nm))
     }
     v = Sys.getenv(nm)
-    if (nzchar(v)) {
-      v = as_utf8(v)
-      h = secret_register(v, nm, source = "environment")
-      return(stats::setNames(secret_value(h, spec[["base_url"]]), nm))
-    }
+    if (!nzchar(v)) return(character())
+    h = secret_register(as_utf8(v), nm, source = "environment")
+    stats::setNames(secret_value(h, spec[["base_url"]]), nm)
+  }
+  pair = if (identical(spec[["api"]], "bedrock-converse")) {
+    c("AWS_ACCESS_KEY_ID", "AWS_SESSION_TOKEN")
+  }
+  for (nm in as.character(spec[["auth"]])) {
+    key = one(nm)
+    if (length(key)) return(c(key, unlist(lapply(pair, one))))
   }
   character()
 }

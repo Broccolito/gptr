@@ -1006,7 +1006,8 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #' @param base_url Endpoint base URL.
 #' @param auth Character vector of environment-variable names, a function, or `NULL`.
 #' @param models List of model records (each with at least `id`).
-#' @param compat Named list of compatibility switches for the adapter.
+#' @param compat Named list of compatibility switches for the adapter (for
+#'   `api = "bedrock-converse"`, `region`: the AWS region requests are signed for).
 #' @param type `"chat"`, `"classifier"` (System 1) or `"cli"`.
 #' @param headers Named list of non-secret header strings.
 #' @param discover `function()` listing models on request, or `NULL`.
@@ -1020,6 +1021,12 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #' @examples
 #' gptr_provider("corp", api = "openai-completions", base_url = "https://llm.corp.example/v1",
 #'               auth = "CORP_LLM_KEY", models = list(list(id = "corp-large", context = 128000)))
+#' # Amazon Bedrock's Converse API through a SigV4 gateway (region and endpoint are record data):
+#' # the IAM key pair is read from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and
+#' # AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them.
+#' gptr_provider("gateway", api = "bedrock-converse", base_url = "https://ai.corp.example/awsai",
+#'               auth = "AWS_SECRET_ACCESS_KEY", compat = list(region = "us-west-2"),
+#'               models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE)))
 #' @export
 gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(),
                          type = c("chat", "classifier", "cli"), headers = list(), discover = NULL,

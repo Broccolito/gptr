@@ -133,7 +133,7 @@ ecosystem is `peter$...`, Shiny artifacts and runnable documents (P3, P11).
 | Area | Content |
 |---|---|
 | Gateway and sessions | `peter()` with every north-star call shape; session object with reference semantics; pipe steering (idle = follow-up, running = steer); explicit `gptr_fork()` (overlay workspace); SDK verbs; Pi-v3-shaped JSONL store with resume; experimental `background = TRUE` |
-| Model access | Native adapters `anthropic-messages`, `openai-responses`, `openai-completions` (+ compat table for OpenRouter, Groq, DeepSeek, Mistral, Together, xAI, Cerebras, Fireworks, Ollama, LM Studio, llama.cpp, vLLM, Azure v1, Bedrock's OpenAI-compatible endpoint), `google-generative-ai`; `typesafe-system-one`, `ollama-system-one` (IC-74); `cli-claude` (unmodified `claude` CLI); `cli-codex` (`codex exec --json`); `fake`; pruned models.dev catalog with prices |
+| Model access | Native adapters `anthropic-messages`, `openai-responses`, `openai-completions` (+ compat table for OpenRouter, Groq, DeepSeek, Mistral, Together, xAI, Cerebras, Fireworks, Ollama, LM Studio, llama.cpp, vLLM, Azure v1, Bedrock's OpenAI-compatible endpoint), `google-generative-ai`, `bedrock-converse` (SigV4, IC-80); `typesafe-system-one`, `ollama-system-one` (IC-74); `cli-claude` (unmodified `claude` CLI); `cli-codex` (`codex exec --json`); `fake`; pruned models.dev catalog with prices |
 | Tools | `r`, `read`, `edit` (accepts a pasted `*** Begin Patch` envelope), `write`, `ask`; namespace members `read/write/edit/grep/find/ls/help/search/describe/plot/out/sh/script/bg/jobs/py/sql/knit/app/mcp` |
 | Safety | Modes plan/manual/edits/auto; advisory classifier (R, shell, SQL, Python); rules; critical and secret guards; checkpoints with `/undo`, `/redo`, `/rewind`; vault, handles, redaction at every sink |
 | Documents | `.R`, `.Rmd`, `.qmd`, `.ipynb` blocks; replay modes; S1 and S2 caches; console transcripts; deferred Rscript writes |
@@ -180,7 +180,8 @@ Claude-plan route (policy status UNCERTAIN [07 §2.18], opt-in with a one-time n
     (built-in       builtin:plan builtin:checkpoints builtin:skills builtin:prompts builtin:agents
      plugins)       builtin:mcp builtin:subagents builtin:cli builtin:system1 builtin:documents
                     builtin:artifacts builtin:workspace builtin:providers builtin:anthropic
-                    builtin:openai builtin:openai-compat builtin:google builtin:secrets
+                    builtin:openai builtin:openai-compat builtin:google builtin:bedrock
+                    builtin:secrets
                     services they may use: evaluator (eval-*), introspection (env-*), walker (tool-walk)
  -----------------------------------------------------------------------------------------------
  L3  SESSION        session object + live registry (weak) . JSONL store . fork/resume
@@ -295,7 +296,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (120 files after the Rscript launcher amendment)
+### 3.2 `R/` files (122 files after the Rscript launcher amendment and P26's Bedrock adapter)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -382,6 +383,7 @@ declares, if any.
 | `provider-openai-responses.R` | L1 | `openai-responses` adapter: stateless replay of encrypted items and `phase` | openai | P12 |
 | `provider-openai-completions.R` | L1 | `openai-completions` adapter + compat flags; `<think>` splitter | openai-compat | P12 |
 | `provider-google.R` | L1 | `google-generative-ai` adapter: thought signatures, finish reasons | google | P12 |
+| `provider-bedrock.R` | L1 | `bedrock-converse` adapter: SigV4 signing, AWS event-stream decoding [IC-80] | bedrock | P26 |
 | `s1-types.R` | L1 | `gptr_decision`, `gptr_choice`, `gptr_score` and methods; delayed vctrs methods; `gptr_prob()` [IC-36] | - | P13 |
 | `s1-client.R` | L4 | native classifier dispatch; bounded rounds on the reactor | system1 | P13 |
 | `s1-ollama.R` | L4 | `ollama-system-one` adapter; text/image Clef decisions and normalization (IC-74) | system1 | P13 |
@@ -398,6 +400,7 @@ declares, if any.
 | `doc-io.R` | L4 | atomic raw I/O (EOL/BOM), md5 conflict checks, deferred Rscript writes, IDE backends | - | P15 |
 | `doc-formats.R` | L4 | formats `r`, `rmd`, `qmd`, `ipynb` (own serializer), `transcript` | documents | P15 |
 | `doc-replay.R` | L4 | replay decisions (the mode is resolved by `replay_mode()`, P08), S2 answer cache, `gptr_doc()`, `gptr_source()`, `gptr_blocks()`, `gptr_cache()` | - | P15 |
+| `doc-export.R` | L4 | deterministic exports of a synchronized, explicitly recorded R document | - | P15 |
 | `doc-knitr.R` | L5 | `knit_print` methods, stale-chunk label hooks | - | P15 |
 | `ckpt-objects.R` | L4 | copy-safe object pre-images, capture policy, settle, spill [G7]; the exported `gptr_preimage()` S3 generic | - | P16 |
 | `ckpt-files.R` | L4 | content-addressed file store, baseline and walk, 3-way restore | - | P16 |
@@ -2255,7 +2258,8 @@ The first use of each provider requires the egress acknowledgement (§6.10).
 | `groq`, `deepseek`, `mistral`, `together`, `xai`, `cerebras`, `fireworks` | `openai-completions` | Bearer | `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `XAI_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY` | compat flags per 09 §3: Groq rejects `messages[].name`; DeepSeek needs `reasoning_content` replayed with tools; Mistral needs 9-character tool ids; Cerebras base64 images only |
 | `ollama`, `lmstudio`, `llamacpp`, `vllm` | `openai-completions` | none (vLLM optional Bearer) | `VLLM_API_KEY` (optional) | loopback defaults; discovery `GET /v1/models` with a 1 s timeout, only on request, never at load or under check; unknown model ids allowed for local providers only |
 | `azure` | `openai-completions` (v1 API) | `api-key` header | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` | `model` is the deployment name; no `api-version` [09] |
-| `bedrock` | `openai-completions` (Bedrock's OpenAI-compatible endpoint) | Bearer | `AWS_BEARER_TOKEN_BEDROCK` | Converse/SigV4 is v1.x |
+| `bedrock` | `openai-completions` (Bedrock's OpenAI-compatible endpoint) | Bearer | `AWS_BEARER_TOKEN_BEDROCK` | key pairs use a `bedrock-converse` record (next row) |
+| a registered record | `bedrock-converse` (ConverseStream, AWS event-stream framing) | AWS Signature Version 4 (service `bedrock`, region `compat$region`) | `AWS_SECRET_ACCESS_KEY` (the record's `auth`), `AWS_ACCESS_KEY_ID`, optional `AWS_SESSION_TOKEN` | `base_url` and region are record data, so AWS (`https://bedrock-runtime.<region>.amazonaws.com`) and SigV4 gateways are configuration; tools as `toolConfig`, tool results and images as content blocks, signed reasoning replayed to the same model; no prompt caching [IC-80] |
 | `fake` | `fake` | none | - | `gptr_fake_provider()`; examples and tests |
 
 Base URLs, compat flags and model lists are catalog data (`inst/extdata/models.json.gz`, 09 §3-4; refreshed
@@ -2660,7 +2664,7 @@ explicit filters (`-builtin:<name>`, `-<kind>:<name>`) [IC-69]; no filter disabl
 | Category | Kind: contract | Built-ins implemented on it | How an R package ships it | What a third-party agentic layer does with it |
 |---|---|---|---|---|
 | Native API providers | `provider` (`gptr_provider()`): data record (id, api, base_url, auth resolver returning a secret handle, models, compat, `type = "chat"`) | `builtin:providers` (anthropic, openai, google, openrouter, groq, deepseek, mistral, together, xai, cerebras, fireworks, ollama, lmstudio, llamacpp, vllm, azure, bedrock) | factory or `inst/gptr/plugin.json` `provides: {provider: [...]}` | a company gateway registers its endpoint and auth by data; `model = "corp/model"` |
-| Wire formats | `adapter` (`gptr_adapter()`): `build(model, request, opts)` -> url/headers/body; `parse()` -> normaliser emitting INFRA-02 events, never throwing after `start`; `capabilities` | `builtin:anthropic`, `builtin:openai`, `builtin:openai-compat`, `builtin:google`; `fake` | exported factory + wire fixtures for `gptr_check()` | a Bedrock Converse adapter package |
+| Wire formats | `adapter` (`gptr_adapter()`): `build(model, request, opts)` -> url/headers/body; `parse()` -> normaliser emitting INFRA-02 events, never throwing after `start`; `capabilities` | `builtin:anthropic`, `builtin:openai`, `builtin:openai-compat`, `builtin:google`, `builtin:bedrock`; `fake` | exported factory + wire fixtures for `gptr_check()` | an adapter package for another wire format |
 | Subscription CLI providers | `provider` with `type = "cli"` + adapter transport `process_jsonl` with a control handler | `builtin:cli`: `claude-cli`, `codex` | factory | drive another agent CLI as a provider or sub-agent |
 | System 1 providers | `provider` with `type = "classifier"` + adapter `classify(model, state, questions, opts)` | `builtin:system1`: `typesafe`, gateway records, `emulate:` | factory | a domain classifier used as `model = mymodel` inside `if()` |
 | Models | `model`: catalog entries (context, max output, reasoning, input types, prices, aliases) | the shipped snapshot | `inst/gptr/models.json` | private fine-tunes with prices |

@@ -126,8 +126,8 @@ png_b64 = function() {
 
 # ---- scripted wire: SSE bodies through the real adapter, run loop and reactor -----------------
 
-# Replace reactor_http() (P04) so that request k receives bodies[[k]] (the last repeats) through
-# reactor_task(); every request spec is kept in wire$requests. No socket is opened.
+# Replace reactor_http() (P04) so that request k receives bodies[[k]] (text or raw; the last
+# repeats) through reactor_task(); every request spec is kept in wire$requests. No socket is opened.
 local_scripted_wire = function(bodies, .env = parent.frame()) {
   wire = new.env(parent = emptyenv())
   wire$bodies = bodies
@@ -139,7 +139,7 @@ local_scripted_wire = function(bodies, .env = parent.frame()) {
     body = wire$bodies[[min(k, length(wire$bodies))]]
     reactor_task(function() {
       if (is.function(on_headers)) on_headers(200L, list(`content-type` = "text/event-stream"))
-      on_bytes(charToRaw(body))
+      on_bytes(if (is.raw(body)) body else charToRaw(body))
       on_done(200L, list())
       FALSE
     })
