@@ -684,6 +684,28 @@ test_that("an S7 object's size is unknown, so overwriting it never trips protect
                all = FALSE)
 })
 
+test_that("a plain assignment binds in envir itself, not in an enclosing environment (#32)", {
+  root = local_project()
+  base = new.env(parent = globalenv())
+  base$markers = data.frame(a = 1:3)
+  base$cfg = new.env()
+  ov = new.env(parent = base)
+  r = gptr_risk("markers = 1", envir = ov, root = root)
+  expect_false("object_write" %in% r$flagged$category)
+  expect_lte(r$level, 1L)
+  expect_identical(r$assigned, "markers")
+  for (code in c("markers <<- 1", "assign('markers', 1)", paste("with(base, markers", la, "1)"),
+                 paste("local(markers", la, "1, envir = base)"))) {
+    expect_match(gptr_risk(code, envir = ov, root = root)$flagged$call, "overwrites `markers`",
+                 fixed = TRUE, all = FALSE, label = code)
+  }
+  expect_match(gptr_risk("cfg$a = 1", envir = ov, root = root)$flagged$call, "modifies `cfg`",
+               fixed = TRUE, all = FALSE)
+  ov$markers = 1
+  expect_match(gptr_risk("markers = 2", envir = ov, root = root)$flagged$call,
+               "overwrites `markers`", fixed = TRUE, all = FALSE)
+})
+
 test_that("secret rules come from P03's secret_scan() (G6 section 3.8)", {
   root = local_project()
   r = gptr_risk("k = Sys.getenv('OPENAI_API_KEY')", root = root)

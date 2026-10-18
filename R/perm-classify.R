@@ -1814,7 +1814,10 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #'
 #' @param code R code: a character vector, a call or an expression.
 #' @param envir `NULL` or the environment the code would run in. When given, assignments to
-#'   existing bindings are reported as overwrites with their size (`object.size()` in a leaf,
+#'   existing bindings (of `envir` itself for a plain assignment evaluated in `envir`; for
+#'   `<<-`, `assign()`, replacement calls and an assignment inside `local()`, `with()` or
+#'   `within()` also of its enclosing environments up to the global environment) are
+#'   reported as overwrites with their size (`object.size()` in a leaf,
 #'   unknown where it overstates, as for functions and S7 objects; promises and active bindings
 #'   are never forced) and user-defined functions called by the
 #'   code are classified through their bodies.
@@ -2042,12 +2045,13 @@ risk_fn_where = function(name, envir) {
   list(kind = "none")
 }
 
-#' Class and size of an existing binding the code overwrites, or NULL
+#' Class and size of an existing binding the code overwrites, or NULL; `inherits = FALSE` looks
+#' in `envir` only
 #'
 #' The object is only ever an argument of the closure-free leaf risk_binding_leaf(): a frame
 #' that held it and created a handler would keep it referenced (copy-safety R4).
 #' @noRd
-risk_binding_info = function(name, envir) {
+risk_binding_info = function(name, envir, inherits) {
   e = envir
   while (!identical(e, emptyenv()) && !isNamespace(e) && !identical(e, baseenv()) &&
          !startsWith(environmentName(e), "package:")) {
@@ -2058,7 +2062,7 @@ risk_binding_info = function(name, envir) {
       }
       return(risk_binding_leaf(get(name, envir = e, inherits = FALSE)))
     }
-    if (identical(e, globalenv())) break
+    if (!inherits || identical(e, globalenv())) break
     e = parent.env(e)
   }
   NULL
@@ -2072,9 +2076,9 @@ risk_binding_leaf = function(obj) {
 
 #' risk_binding_info() with errors caught one frame up
 #' @noRd
-risk_binding_safe = function(name, envir) {
+risk_binding_safe = function(name, envir, inherits) {
   on.exit(assign("envir", NULL), add = TRUE)
-  tryCatch(risk_binding_info(name, envir),
+  tryCatch(risk_binding_info(name, envir, inherits),
            error = function(e) list(class = "<unknown>", bytes = NA_real_))
 }
 
@@ -2563,7 +2567,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       unique(c(known[[nm]] %||% NA_character_, v %||% NA_character_))
     if (is.call(target)) add_tg("modify", nm)
     if (op == "<<-") add(ctx, paste(nm, "<<- ..."), "<<-", 2L, "object_write")
-    info = if (!is.null(envir)) risk_binding_safe(nm, envir)
+    # a plain assignment binds in envir; <<-, assign(), a replacement (of an environment, by
+    # reference) and one inside local(), with() or another risk_unknown_funs call can reach an
+    # enclosing one
+    info = if (!is.null(envir)) {
+      risk_binding_safe(nm, envir,
+                        inherits = ctx$away || is.call(target) || !op %in% c(risk_arrow, "="))
+    }
     if (is.null(info)) return(invisible())
     sizes[[nm]] <<- info$bytes
     add(ctx, paste0(if (is.call(target)) "modifies" else "overwrites", " `", nm, "` <",
@@ -2612,7 +2622,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     if (r$name == "for") note_assign(a[[1L]], "=", ctx)
     if (r$name == "assign" && length(a)) {
       if (is.character(a[[1L]])) {
-        note_assign(as.name(a[[1L]]), "=", ctx)
+        note_assign(as.name(a[[1L]]), "assign", ctx)
       } else {
         add_tg("unknown", "assign(<computed name>)")
       }
@@ -2644,10 +2654,11 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       a = c(as.list(a[[1L]]), a[-1L])
     }
     if (r$name %in% risk_quoting_funs) inner$quote = TRUE
+    inner$away = ctx$away || r$name %in% risk_unknown_funs
     for (i in seq_along(a)) if (!identical(a[[i]], quote(expr = ))) walk(a[[i]], inner)
   }
 
-  walk(exprs, list(quote = FALSE, def = FALSE, seq = TRUE, line = 1L))
+  walk(exprs, list(quote = FALSE, def = FALSE, seq = TRUE, away = FALSE, line = 1L))
   fl = if (length(flags)) do.call(risk_flags_bind, flags) else risk_flags_empty()
   list(flags = fl, targets = lapply(tg, function(x) unique(x[!is.na(x)])), sizes = sizes,
        calls = data.frame(fn = calls$fn, package = calls$package, line = calls$line,

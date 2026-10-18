@@ -10,7 +10,10 @@ gptr_risk(code, envir = NULL, root = NULL)
 \item{code}{R code: a character vector, a call or an expression.}
 
 \item{envir}{\code{NULL} or the environment the code would run in. When given, assignments to
-existing bindings are reported as overwrites with their size (\code{object.size()} in a leaf,
+existing bindings (of \code{envir} itself for a plain assignment evaluated in \code{envir}; for
+\verb{<<-}, \code{assign()}, replacement calls and an assignment inside \code{local()}, \code{with()} or
+\code{within()} also of its enclosing environments up to the global environment) are
+reported as overwrites with their size (\code{object.size()} in a leaf,
 unknown where it overstates, as for functions and S7 objects; promises and active bindings
 are never forced) and user-defined functions called by the
 code are classified through their bodies.}

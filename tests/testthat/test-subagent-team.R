@@ -580,6 +580,41 @@ test_that("sub-agent prompts name the asker and reach only the console (D-188)",
   expect_false(any(c("cm", "pp") %in% ls(e)))
 })
 
+test_that("a fan-out child's plain assignment never asks about the caller's object (#32)", {
+  local_team_fake(function(request) {
+    if (identical(request$last_user, "S")) {
+      if (length(request$last_results)) return("child done")
+      return(fake_tool("r", code = "x = tasks[['io']]; nchar(x)"))
+    }
+    if (length(request$last_results)) return("parent done")
+    fake_tool("r", code = "fan = peter(\"S\", tasks, parallel = 2)")
+  })
+  local_permission_rules()
+  gptr_permissions(allow = "r(level<=1)")
+  asked = character()
+  ask = function(prompt, ...) {
+    asked <<- c(asked, prompt)
+    "y"
+  }
+  local_gptr_options(mode = "manual", interactive = TRUE, ui = ui_console_spec(ask))
+  e = new.env()
+  e$x = strrep("help ", 2000L)
+  e$tasks = list(io = "read", algo = "sort")
+  s = NULL
+  utils::capture.output({
+    s = peter("fan out", envir = e)
+  })
+  expect_identical(s$text, "parent done")
+  expect_identical(asked, character())
+  expect_identical(e$x, strrep("help ", 2000L))
+  for (k in c("io", "algo")) {
+    res = Filter(function(x) {
+      identical(x$type, "message") && identical(x$message$role, "tool_result")
+    }, session_data(e$fan[[k]])$entries)
+    expect_match(msg_text(res[[1L]]$message), "[1] 4", fixed = TRUE, label = k)
+  }
+})
+
 test_that("a foreground fan-out, team or gptr_parallel shows a line per sub-agent (D-188)", {
   local_team_fake(function(request) paste("reply to", request$last_user))
   local_gptr_options(verbose = 1L, quiet = FALSE)

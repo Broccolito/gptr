@@ -2427,3 +2427,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: subagent-team (a symbol and a call input bound alone; context "none" refused with no request),
   copy-subagent (a child returning `length(.x[[1]])` leaves `cohorts$A` editable in place). Evidence: progress/P26.md
   Task 18.
+
+## D-213 - P26 a plain assignment overwrites a binding of the evaluation environment only (2026-10-18)
+- Rule: `gptr_risk(envir =)` reports "overwrites `x`" (level 2, 3 above `gptr.protect_size`) for a plain `=`/`<-`
+  or a `for` variable evaluated in `envir` only when `x` is bound in `envir` itself, where R creates the binding;
+  `<<-`, `assign()`, replacement calls (an environment changes by reference) and an assignment inside a call that
+  may evaluate it elsewhere (`local()`, `with()`, `within()`, `evalq()` and the other unknown-effect calls of IC-31)
+  still look up the enclosing environments to the global one. A sub-agent overlay's `x = ...` over a caller's `x` is
+  level 1 (new object), as is one in plan mode's scratch overlay over the home (it runs there and is discarded).
+- Contract-visible: `gptr_risk()` levels and `sizes` for code in a child environment (04 `gptr_risk()`, `?gptr_risk`).
+- Tests: perm-classify (an overlay's plain assignment; `<<-`, `assign()`, `with()`, `local()`, a replacement and a
+  binding of `envir` itself still flag), subagent-team (a manual-mode fan-out asks nothing and its children's calls
+  run). Evidence: progress/P26.md Task 23.
