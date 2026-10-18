@@ -370,10 +370,10 @@ the probe runs before it. Spec: 03 section 8.3, P20 note. Commit: `fix(cli): sho
 
 | Row | Command | Actual | Status |
 |---|---|---|---|
-| A1 | `isolated-check.R test 'console-'` | | |
-| A2 | `isolated-check.R test 'perm-|session-object|subagent-|cli-|mcp-|catalog-|env-|eval-'` | | |
-| A3 | full `devtools::test()` | | |
-| A4 | `isolated-check.R lint` (whole package) | | |
-| A5 | cross-plan checks | | |
+| A1 | `isolated-check.R test 'console-'` | `[ FAIL 0 \| WARN 0 \| SKIP 1 \| PASS 1643 ]` (2026-10-17, after the merges) | pass |
+| A2 | `isolated-check.R test 'perm-|session-object|subagent-|cli-|mcp-|catalog-|env-|eval-'` | `[ FAIL 0 \| WARN 0 \| SKIP 2 \| PASS 5841 ]` | pass |
+| A3 | full `devtools::test()` | `[ FAIL 1 \| WARN 0 \| SKIP 51 \| PASS 33948 ]`: the one is the known auth-oauth `kill_tree` teardown race under load (helper-mcp-server.R:92); `test 'auth-oauth'` alone `[ FAIL 0 \| PASS 185 ]` | pass (load flake) |
+| A4 | `isolated-check.R lint` (whole package) | `No lints found.` | pass |
+| A5 | cross-plan checks | `26 plans, 1446 blocks, 4391 definitions, 28348 calls, 937 findings (info 823, warn 114)`, 0 error (base 18cd81e: 927, warn 104; the 10 new warns: 9 P26 helpers named in 04 sections 7.1, 7.9 and 15.9 that no plan block defines, and `gptr_readline(read =)` against P01's block); `770 R blocks; 0 with parse/style problems`; `no lints` | pass |
 | A6 | `R CMD check --as-cran --no-manual` (0 errors, 0 warnings) | | |
 | A7 | live terminal dogfood (Task 11+ list) | | |

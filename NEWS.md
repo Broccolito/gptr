@@ -71,6 +71,34 @@ works on the objects already in memory.
 * Successful removal of CLI billing variables emits an informational
   `gptr_message_billing_env` condition with the removed names, never their values. Handlers
   use `muffleMessage`; the notice respects `gptr.quiet`. Actual billing refusals remain errors.
+* The `yolo` mode (`mode = "yolo"`, `/mode yolo`) runs actions without approval, including
+  package installs, writes anywhere and gptr's own configuration functions. A person is still
+  asked before deleting files outside the project or protected files, `rm(list = ls())`,
+  quitting R, `options(gptr.*)` and sending a secret over the network; a one-time notice says
+  so. The classifier reads code; it is not a sandbox.
+* In a terminal, lines typed while the agent works steer it at its next step (setting
+  `type_ahead`: `"steer"` or `"follow_up"`); `/command` and `!code` lines wait for the next
+  prompt.
+* A block pasted at the `peter>` prompt of a macOS terminal is sent as one message, and a line
+  typed or pasted before a question (an approval, a choice, `gptr_confirm()`) never answers it.
+* R in the Terminal tab of RStudio or Positron is treated as a terminal (completion, pause menu,
+  interrupt key), and `!code` completes R code at `peter>` there and in RStudio's console.
+* The console keeps answers, tool calls, notices and prompts in a two-column margin with one
+  blank line between them, aligns Markdown tables, keeps nested lists and highlights code. Code
+  blocks and multi-line tool code are shown as Markdown fences that copy and run as written.
+* A sub-agent's approval prompt reaches the console even while the parent's R code runs and
+  names the sub-agent; an invalid answer is explained. Fan-outs, teams and `gptr_parallel()`
+  print one line when each sub-agent starts and ends.
+* A `peter()` call made by the agent's own code without `envir =` works in an overlay of the
+  caller's environment; its objects are in `res$envir`.
+* Object sizes are honest: S7 objects such as ggplot2 plots are not sized by `object.size()`,
+  code the agent runs keeps no parse data, and values returned by sub-agents stay small.
+* Codex reaches the session through a base-R stdio relay, without 'httpuv', 'later' or
+  'openssl', and both CLI routes get the session's full tool set. Codex reasoning and commands
+  show as progress lines and Claude Code's calls of gptr's tools as tool lines while they run.
+* `/model` and `model =` accept a provider name alone, such as `claude-cli` or `codex-cli`
+  (its first model); `/model` checks the name before the first prompt. A model declared without
+  tool calls says once that the session's tools are not sent.
 
 # gptr 0.7.0
 
