@@ -147,7 +147,9 @@ test_that("a line typed during a tool steers when the next call's question follo
   expect_length(reqs, 2L)
   expect_identical(e$zz, 2)
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("use base R instead"))
-  expect_true(any(grepl("[gptr] steering: 'use base R instead'", out, fixed = TRUE)))
+  # routed before the question is drawn
+  expect_lt(grep("[gptr] steering: 'use base R instead'", out, fixed = TRUE),
+            match("  r  zz = 2", out))
 })
 
 test_that("/commands and !code typed during a run run after the answer; text still steers", {
