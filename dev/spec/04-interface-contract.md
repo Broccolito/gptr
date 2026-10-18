@@ -2737,7 +2737,7 @@ diff_lines(c("a", "b"), c("a", "c"))
 | `rule_suggest(call)` | `perm-rules.R` | chr(1) rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`), or `NULL` (never for level 4) | P11, P14 |
 | `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
 | `builtin_plan(gptr)` | `perm-plan.R` | registers the `plan` policy (writes denied, level-1 R allowed only because the run evaluates in the scratch overlay), the plan-mode `agent_end` hook (captures the last `<proposed_plan>...</proposed_plan>`, saves `<root>/plans/<YYYY-MM-DD>-<slug>.md`, sets `.d$plan`, stores the pending plan under `home_address(home)` with the time, appends `gptr.plan`, offers the execute menu interactively), the plan-mode allowlist check (only calls known to be read-only run, IC-54), and the `plan.pending` service (returns the plan once, only to the next top-level `peter()` call of the same process and environment within one hour; any other call in between discards it; IC-56) | P02 load |
-| `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt lists every flagged call and `+N more lines` (IC-53) | P02 load |
+| `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt shows the call's first line cut to the console width, `(+N more lines)` and every flagged call (IC-53, D-187) | P02 load |
 | `builtin_ask(gptr)` | `tool-ask.R` | registers the `ask` direct tool (schema §9.2) with `available = function(ctx) ctx$has_ui()`; result text as 18 §3.6 (`The user answered:` lines; cancellation and non-interactive texts) | P02 load |
 
 Console `select()` deliberately preserves title line feeds for setup and `ask` questions.
@@ -4566,8 +4566,8 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
 7. A `modify` decision is re-classified and re-checked once; a second `modify` denies. Only `r(secret:NAME)`
    rules pre-approve the secret guard.
 8. Approval displays (console, rstudio dialogs, worker-forwarded requests) escape C0/C1 controls except TAB and
-   bidi and zero-width characters as `<U+XXXX>`; the one-line prompt lists every flagged call and `+N more
-   lines`.
+   bidi and zero-width characters as `<U+XXXX>`; the one-line prompt names who asks (IC-77), the tool and the
+   call's first line, cut to the console width before `(+N more lines)`, and lists every flagged call (D-187).
 
 P24's `test-injection-e2e.R` adds an injected model trying each path above; every attempt ends in a human ask
 (interactive) or `blocked` in every mode but yolo, which runs gptr's own exports by design (IC-78).
