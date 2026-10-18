@@ -372,7 +372,8 @@ compact_should = function(s, tokens, idle_s) {
 #' The checkpoint compactor's trigger: the threshold (waiting for 20% growth of the window
 #' after a threshold compaction, or 20% of the finite cap for an unknown window, IC-71) or the
 #' cold rule (idle beyond the tail TTL with at least `gptr.compact_cold_min` tokens). An unknown
-#' count or idle time is no evidence (IC-74).
+#' count or idle time is no evidence (IC-74). A CLI model never triggers: the CLI compacts its
+#' own conversation (D-202).
 #' @noRd
 compact_checkpoint_should = function(session, ctx) {
   num = function(x) suppressWarnings(as.numeric(x %||% NA_real_))[1]
@@ -381,7 +382,7 @@ compact_checkpoint_should = function(session, ctx) {
   idle = num(inp$idle_s)
   if (is.na(tokens)) return(FALSE)
   m = compact_target(session)
-  if (is.null(m)) return(FALSE)
+  if (is.null(m) || identical(m[["type"]], "cli")) return(FALSE)
   window = num(m[["context"]])
   thr = compact_threshold(window, num(m[["max_output"]]), gptr_opt("r_output_tokens"))
   if (tokens >= thr) {

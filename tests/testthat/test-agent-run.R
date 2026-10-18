@@ -896,6 +896,15 @@ test_that("an unknown prompt count leaves the estimator unchanged (IC-74)", {
   expect_null(session_data(s)$estimator)
 })
 
+test_that("a CLI turn's usage, summed over the CLI's model calls, leaves the estimator (D-202)", {
+  s = test_session()
+  run = test_run(s)
+  run$model = list(provider = "claude-cli", type = "cli")
+  run$tokens_est = 1000
+  run_estimator_update(run, list(route = "plan-cli", usage = usage_new(input = 90000, output = 10)))
+  expect_null(session_data(s)$estimator)
+})
+
 test_that("plugin state emptied after it was persisted is persisted as an empty object", {
   s = test_session()
   st = new.env()

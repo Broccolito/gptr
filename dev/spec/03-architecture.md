@@ -1712,6 +1712,9 @@ entry, with half the budget once the context exceeds half the threshold. For sma
 floor (static prefix + project instructions + re-injection + checkpoint) is checked at freeze: re-injection
 budgets shrink to 25% of the threshold, and a model whose floor still reaches the threshold is refused for that
 preset; after a threshold compaction the next one waits until the context grew by 20% of the window [IC-71].
+On a CLI route (a model of `type = "cli"`) neither rule triggers, nor the halved tool-output budget: the CLI
+compacts its own conversation; `/compact` still runs. A compaction during a foreground run prints one dim line
+with its before and after token counts [D-202].
 
 ### 6.12 Evaluator [12 §3-4]
 
@@ -2837,7 +2840,7 @@ static prefix is read from cache at 0.025-0.1x the input price.
 | `<workspace_changes>` | about 70 | 300; only when non-empty |
 | `<attached>` per object | 60-150 | 150 default, 300 maximum; level-based describers keep 90.8% of 98 facts at 150 [G2 (c)] |
 | `<skill_content>` | skill body | 5,000 per skill, 10,000 re-injected after compaction [G4 §3.8] |
-| `r` result | 30-300 | about 4,000 estimated tokens, head 40% / tail 60% by lines, spill file, `peter$out(id)`; half the budget once the context passes half the compaction threshold [G2 (g), G4 §4.4.5] |
+| `r` result | 30-300 | about 4,000 estimated tokens, head 40% / tail 60% by lines, spill file, `peter$out(id)`; half the budget once the context passes half the compaction threshold, not on a CLI route [G2 (g), G4 §4.4.5, D-202] |
 | namespace helper print (`sh`, `grep`, `sql`, `py`, `out`) | 100-300 | 1,500, and at most 0.6 x the remaining `r` budget; stderr at most 25% with 200/100-token floors [G5 + fact-check] |
 | `read` | file slice | 2,000 lines, 50 KB and 12,000 tokens; line numbers off |
 | `edit` result | about 20 | message only; a diff of at most 400 tokens only when something deviated |
@@ -2917,7 +2920,9 @@ ceil(h/28)`; OpenAI and Gemini per their documented formulas (dated in the catal
 Context projection = the last provider-reported input total + output + `m * est(new entries)`, where the
 per-session multiplier `m` starts at a provider prior (OpenAI 1.00, Claude 4.7+ 1.35, Gemini 1.10) and is
 updated by an EWMA of the log ratio whenever new content is at least 150 estimated tokens (15-19% error on new
-content; 0.3% on the usage-anchored whole). Provider-reported usage is authoritative. No tokenizer ships;
+content; 0.3% on the usage-anchored whole). Provider-reported usage is authoritative. A `plan-cli` reply's usage
+sums the CLI's model calls of a turn, no context size: it neither anchors the projection nor updates `m`
+[D-202]. No tokenizer ships;
 rtiktoken is dev-only. The estimator is an `estimator` spec (replaceable). Producers must mark text UTF-8 at
 the source (in a C locale unmarked text is over-counted, which is conservative [G2 fact-check]).
 

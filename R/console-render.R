@@ -1063,6 +1063,22 @@ console_on_retry = function(event, ctx) {
   NULL
 }
 
+#' session_compact: a compaction during a foreground run (an automatic one; `/compact` reports
+#' itself) prints one dim line with the token counts of its entry (D-202)
+#' @noRd
+console_on_compact = function(event, ctx) {
+  rec = console_record(event)
+  if (is.null(rec) || !console_render_on(rec)) return(NULL)
+  e = Find(function(e) identical(e$type, "compaction"), session_data(rec$session)$entries,
+           right = TRUE)
+  console_pause_one(rec)
+  console_gap(rec, "notice")
+  console_write(cli::col_grey(paste0(
+    "  conversation compacted: ", format_count(e$tokens_before %||% NA_real_), " -> ",
+    format_count(e$details$tokens_after %||% NA_real_), " tokens")))
+  NULL
+}
+
 #' agent_end: close the streams, show custom entries and the status line, forget the run; queued
 #' artifact lines (an interrupted tool) print last; a shown sub-agent says how it ended, `(k/N)`
 #' counting the settled children of its scheduled group (D-188)
@@ -1168,6 +1184,7 @@ console_hooks = function() {
     gptr_hook("tool_execution_start", console_on_tool_start),
     gptr_hook("tool_execution_end", console_on_tool_end),
     gptr_hook("retry_start", console_on_retry),
+    gptr_hook("session_compact", console_on_compact),
     gptr_hook("agent_end", console_on_agent_end),
     gptr_hook("artifact_start", console_on_artifact_start),
     gptr_hook("session_shutdown", console_on_shutdown)

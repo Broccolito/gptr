@@ -430,6 +430,29 @@ test_that("nothing is printed at verbosity 0 or for a background session", {
   expect_identical(render_events(s, events), character())
 })
 
+test_that("a compaction during a foreground run prints one dim notice with its counts (D-202)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  session_append(s, list(type = "compaction", summary = "s", first_kept_entry_id = NULL,
+                         tokens_before = 98200,
+                         details = list(reason = "threshold", tokens_after = 4100),
+                         usage = NULL, gptr = list(blocks = list(block_text("c")),
+                                                   state = compact_state_empty(), n = 1L)))
+  done = function(run = "u0000test") {
+    hook_event("session_compact", s, strategy = "checkpoint", tokens_before = 98200,
+               summary_tokens = 300, run = run)
+  }
+  expect_identical(render_events(s, list(hook_event("agent_start", s), done())),
+                   "  conversation compacted: 98.2k -> 4.1k tokens")
+  # /compact outside a run reports itself
+  expect_identical(render_events(s, list(done(NULL))), character())
+  testthat::local_reproducible_output(width = 80, crayon = TRUE, unicode = FALSE)
+  expect_identical(render_events(s, list(done())),
+                   as.character(cli::col_grey("  conversation compacted: 98.2k -> 4.1k tokens")))
+})
+
 test_that("an answer without deltas is printed whole at message_end", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)

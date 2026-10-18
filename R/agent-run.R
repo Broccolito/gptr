@@ -747,12 +747,15 @@ plugin_state_persist = function(s) {
 }
 
 #' Update the session's estimator multiplier from provider-reported usage (03 section 12.5)
-#' Only a reported prompt total updates it, never an estimate or an unknown count (IC-74).
+#' Only a reported prompt total updates it, never an estimate, an unknown count (IC-74) or a
+#' plan-cli turn's sum over the CLI's model calls (D-202).
 #' @noRd
 run_estimator_update = function(run, msg) {
   d = session_data(run$shell)
   u = msg[["usage"]]
-  if (!is.list(u) || isTRUE(u[["estimated"]])) return(invisible(NULL))
+  if (!is.list(u) || isTRUE(u[["estimated"]]) || identical(msg[["route"]], "plan-cli")) {
+    return(invisible(NULL))
+  }
   counts = vapply(c("input", "cache_read", "cache_write_5m", "cache_write_1h"),
                   function(f) overflow_count(u, f), 1)
   est = run$tokens_est %||% 0
@@ -787,12 +790,13 @@ context_tokens = function(s) {
   m * est(path, d$frozen)
 }
 
-#' The provider-reported total of an entry (an assistant reply that did not fail), else NA
+#' The provider-reported total of an entry (an assistant reply that did not fail), else NA; a
+#' plan-cli reply's total sums the CLI's model calls of a turn, no context size (D-202)
 #' @noRd
 reported_total = function(e) {
   m = e$message
   if (!identical(e$type, "message") || !is.list(m) || !identical(m$role, "assistant") ||
-      msg_failed(m)) {
+      msg_failed(m) || identical(m$route, "plan-cli")) {
     return(NA_real_)
   }
   u = m$usage

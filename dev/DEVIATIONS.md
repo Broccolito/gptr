@@ -2402,3 +2402,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (its row says no pre-image, and `/undo` does not claim to restore it).
 - Contract-visible: 04 IC-79 (served calls are checkpointed; contract edges `checkpoint_before`, `checkpoint_after`).
 - Tests: mcp-server, cli-claude, cli-codex, ckpt-files, arch-layers. Evidence: progress/P26.md Task 15.
+
+## D-202 - P26 No automatic compaction on the CLI routes; plan-cli usage is no context size (2026-10-18)
+- Rule: a `plan-cli` reply's usage sums the CLI's model calls of one turn (codex: 10 threshold compactions in 13
+  prompts at ~4.2k estimated tokens), so `reported_total()` is NA for it: the projection anchors on an earlier API
+  reply or the estimate, also after a `/model` switch to an API route. It does not update the estimator multiplier
+  either (an addition to the triage fix: clamped at 3, a CLI turn's ratio would triple the next API projection).
+- Rule: the checkpoint compactor's threshold and cold rules never trigger for a CLI model (`type = "cli"`), nor
+  the halved `r` result budget (it asks `compact.should`): the CLI compacts its own conversation, and a checkpoint
+  is one more turn on it. `/compact` still runs (Task 17 is to start a fresh CLI conversation from its summary).
+- Rule: a `session_compact` of a foreground run prints one dim line, `conversation compacted: <before> -> <after>
+  tokens`, from the compaction entry (out of lane: console-render.R, one hook).
+- Contract-visible: 03 §6.11 (incl. its tool-output sentence), the `r` result budget row, §12.5; 04
+  `compact_should` and `format_eval_result` rows, IC-71 compaction row; the console notice.
+- Tests: prompt-compact, agent-run, console-render. Evidence: progress/P26.md Task 16.
