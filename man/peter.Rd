@@ -30,8 +30,9 @@ file paths.}
 \item{agents}{A named list of agent definitions for a team (\code{agent()} means \code{\link[=gptr_agent]{gptr_agent()}}).}
 
 \item{parallel}{Fan one list-like context object out over this many concurrent sub-agents.
-A child that succeeds keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}, so they must
-be self-contained.}
+Each child gets its element alone as \code{.x}, a named list of one attached as \code{.x[["A"]]};
+\code{.opts = list(context = "none")}, which would drop it, is refused. A child that succeeds
+keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}, so they must be self-contained.}
 
 \item{choices, levels, threshold, min_confidence, uncertain}{System 1 answer shape and abstention.}
 

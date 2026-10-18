@@ -659,8 +659,8 @@ and never offered non-interactively, and marks results uncalibrated [J-cran D-06
 `agents =` is evaluated in a mask where `agent` is `gptr_agent` [15 §4.3]; agent names equal to a session
 accessor are rejected. `backend = "auto"` everywhere: inline, except `cli` for CLI-only models (`claude_code`,
 `codex`) [15 verifier resolved]. `parallel = n` runs one inline child per element, `n` at a time (every element is
-queued; the 8-task cap applies only to fan-outs started by model code [IC-39]), each reading its element in place (`cohorts[["A"]]` by name, no
-copy). Team and fan-out sessions are sessions (`kind = "team"`/`"fanout"`): `$text` joins the children's
+queued; the 8-task cap applies only to fan-outs started by model code [IC-39]), each given its element alone as `.x`
+(`list(A = cohorts[["A"]])`, attached as `.x[["A"]]`, no copy; `.opts$context = "none"` is refused) [D-212]. Team and fan-out sessions are sessions (`kind = "team"`/`"fanout"`): `$text` joins the children's
 reports under `### <name> (<model>)` headings, `$value` is the named list of child values, `$<name>` and
 `[[` return child sessions, and piping the team continues it with the reports attached as a user-role
 `<agent_reports>` block (sub-agent output is data) [P-A §6.12, P-C §5.1].
@@ -2566,7 +2566,7 @@ prompt per request [07].
    `plan-cli`, `api`. `reviews |> peter("Reconcile these into one list of fixes")` continues the team session
    with the reports attached as `<agent_reports>`.
 5. `summaries = peter("Summarise this cohort", cohorts, parallel = 4)`: route d fan-out: one inline child per
-   element, four at a time, each reading `cohorts[["<name>"]]` in place; `summaries$text` is a named character
+   element, four at a time, each given its element alone as `.x[["<name>"]]`; `summaries$text` is a named character
    vector, `summaries[["A"]]` a child session.
 
 ### 10.5 NS-7: the script is the history

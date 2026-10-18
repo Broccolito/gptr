@@ -211,12 +211,13 @@ subagent_guards = function(child, opts = list(), model = session_data(child)$mod
 }
 
 #' A child session of model `model_ref`: kind `child` under its parent, in its overlay
-#' `spec$home` holding `spec$bind`, with its backend, agent label and export names (P19 is the only
-#' writer of these fields, architecture 5.8) and its rank-0 records: the model's provider spec,
-#' the isolation policy of parallel children and the agent's system text as a T1 section
+#' `spec$home` holding the `spec$values` named by `spec$bind`, with its backend, agent label and
+#' export names (P19 is the only writer of these fields, architecture 5.8) and its rank-0
+#' records: the model's provider spec, the isolation policy of parallel children and the agent's
+#' system text as a T1 section
 #' @noRd
 subagent_child_new = function(spec, model_ref = spec$info$ref) {
-  list2env(spec$bind %||% list(), envir = spec$home)
+  for (nm in spec$bind) assign(nm, get(nm, envir = spec$values), envir = spec$home)
   child = session_new(model_ref, spec$mode, home = spec$home, kind = "child", parent = spec$parent,
                       preset = spec$preset,
                       opts = list(name = spec$name,
@@ -238,11 +239,21 @@ subagent_child_new = function(spec, model_ref = spec$info$ref) {
   child
 }
 
-#' Remove the values bound by `spec$bind` from a settled child's overlay
+#' Remove the values bound by `spec$bind` from a settled child's overlay; a list is defused
+#' after rm(), as P16's checkpoint images are (rule R6), so the elements it shares with the
+#' caller's object do not stay referenced (ckpt_defuse() is another L4 area, architecture 2.2)
 #' @noRd
 subagent_unbind = function(h) {
   home = session_home(h$session)
-  if (is.environment(home)) rm(list = intersect(h$bound, names(home)), envir = home)
+  if (!is.environment(home)) return(invisible(NULL))
+  for (nm in intersect(h$bound, names(home))) {
+    v = get(nm, envir = home, inherits = FALSE)
+    rm(list = nm, envir = home)
+    if (is.list(v)) {
+      oldClass(v) = NULL
+      for (j in seq_along(v)) v[[j]] = FALSE
+    }
+  }
   invisible(NULL)
 }
 
@@ -322,7 +333,8 @@ backend_cancel = function(handle) handle$cancel()
 #' `depth`, `export`, `objects`, `preset`, `rng_state`, `registry`) with P19's fields: `name`,
 #' `parent` (the team, fan-out or running session), `values` and `values_owned`, `opts` (the
 #' call's `.opts`), `budget`, `root`, `nested_group`, `isolate`, `seed`, `max_turns`, `backend`,
-#' `bind` (named values bound in the overlay) and `info`; the inputs `base` or `call` pass through
+#' `bind` (names of `values` bound in the overlay) and `info`; the inputs `base` or `call` pass
+#' through
 #' @noRd
 subagent_spec_complete = function(spec, parent_run) {
   check_list(spec, "spec")
@@ -398,7 +410,7 @@ subagent_start = function(spec, parent_run) {
   h$name = s2$name
   h$model = s2$info$ref
   h$base_is_frame = subagent_is_frame(s2$home)
-  h$bound = names(s2$bind)
+  h$bound = s2$bind
   subagent_emit(s2$parent, "subagent_start", child = session_data(h$session)$id,
                 agent = s2$name, backend = s2$backend, model = s2$info$ref)
   h

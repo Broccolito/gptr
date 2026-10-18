@@ -2411,3 +2411,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   targets.
 - Tests: perm-classify (a name assigned outside a function body; a straight-line reassignment; computed,
   branch-default, loop and `<<-` forms stay 3), perm-gate (auto asks a person). Evidence: progress/P26.md Task 14.
+
+## D-212 - P26 a fan-out child gets its element alone as `.x`; context "none" is refused (2026-10-18)
+- Rule: for every backend a fan-out child's element is bound alone in its overlay as `.x = list(<key> = <element>)`
+  and attached as `.x[["<key>"]]` (P19 Task 5's in-place `cohorts[["A"]]` label and whole-list `.x` superseded;
+  `subagent_element_label()` removed). The list is a binding of the child's private values environment
+  (`spec$bind` now names such bindings), and `subagent_unbind()` removes and defuses it when the child settles
+  (rule R6), so after an inline or cli fan-out the caller's next edit stays in place. A worker's parent keeps its
+  values environment and shipped objects, so that edit still copies the element once (as before; Open in P26.md).
+- Rule: `parallel =` with `.opts$context = "none"` (which dropped every child's element without a warning) is
+  `gptr_error_invalid_argument` naming `.opts = list(context = "names")`, before replay or any child starts.
+- Deviation from the triage design: its `bind = list(.x = ...)` made `test-copy-subagent.R` copy `cohorts$A` once
+  (a list freed by the collector keeps its elements referenced), hence the values binding and the defuse.
+- Contract-visible: 04 §6.1 `parallel` row, §6.5 `gptr_map()` (IC-36); 03 §4.1.6 and §10.4 item 5; `?peter`.
+- Tests: subagent-team (a symbol and a call input bound alone; context "none" refused with no request),
+  copy-subagent (a child returning `length(.x[[1]])` leaves `cohorts$A` editable in place). Evidence: progress/P26.md
+  Task 18.

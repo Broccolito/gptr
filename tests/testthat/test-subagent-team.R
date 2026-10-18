@@ -318,16 +318,6 @@ test_that("children are named by element names, else by position", {
                    c("1", "2", "3"))
 })
 
-test_that("each child reads its element in place by name", {
-  item = list(name = "cohorts")
-  expect_identical(subagent_element_label(item, "A", 1L, "list", FALSE), "cohorts[[\"A\"]]")
-  expect_identical(subagent_element_label(item, "2", 2L, "list", FALSE), "cohorts[[2]]")
-  expect_identical(subagent_element_label(item, "3", 3L, "rows", FALSE), "cohorts[3, ]")
-  expect_identical(subagent_element_label(item, "A", 1L, "list", TRUE), ".x[[\"A\"]]")
-  expect_identical(subagent_element_label(item, "3", 3L, "rows", TRUE, worker = TRUE),
-                   ".x[[\"3\"]]")
-})
-
 test_that("a fan-out needs exactly one list-like context object", {
   local_team_fake()
   e = new.env()
@@ -354,7 +344,7 @@ test_that("gptr_map() runs one child per element and returns a fan-out session",
   expect_identical(names(fan$text), c("A", "B", "C"))
   expect_true(all(startsWith(fan$text, "summary")))
   expect_identical(fan[["B"]], fan$children$B)
-  expect_identical(attached_names(fan$A), "cohorts[[\"A\"]]")
+  expect_identical(attached_names(fan$A), ".x[[\"A\"]]")
   expect_identical(parent.env(fan$C$envir), e)
   expect_identical(fan$C$envir$.x, NULL)
 })
@@ -371,7 +361,7 @@ test_that("a fan-out over a value binds .x in each overlay only while the child 
                                        facts = list(class = "list"))))
   assign(".v2", list(1:2, 1:5), envir = call$values)
   fan = gptr_map(call)
-  expect_identical(attached_names(fan[["1"]]), ".x[[1]]")
+  expect_identical(attached_names(fan[["1"]]), ".x[[\"1\"]]")
   expect_identical(fan[["1"]]$value, 2L)
   expect_false(exists(".x", envir = fan[["1"]]$envir, inherits = FALSE))
 })
@@ -487,6 +477,27 @@ test_that("a fan-out runs every element, parallel at a time (P19 acceptance 6)",
   expect_identical(names(summaries$text), paste0("c", 1:20))
   expect_identical(box$ended, 20L)
   expect_identical(box$peak, 4L)
+})
+
+test_that("each fan-out child gets its own element alone, as .x, for a symbol or a call", {
+  local_team_fake(function(request) {
+    if (length(request$last_results)) return("ok")
+    fake_tool("r", code = "gptr::gptr_return(.x)")
+  })
+  b = list(A = 1:3, B = letters)
+  for (fan in list(peter("p", b, parallel = 2), peter("p", b[1:2], parallel = 2))) {
+    expect_identical(attached_names(fan$A), ".x[[\"A\"]]")
+    expect_identical(attached_names(fan$B), ".x[[\"B\"]]")
+    expect_identical(fan$value, list(A = list(A = 1:3), B = list(B = letters)))
+  }
+})
+
+test_that("a fan-out with context = \"none\" is refused before any child starts", {
+  fake = local_team_fake()
+  b = list(A = 1:3, B = letters)
+  expect_error(peter("p", b, parallel = 2, .opts = list(context = "none")),
+               "context = \"names\"", fixed = TRUE, class = "gptr_error_invalid_argument")
+  expect_length(fake_requests(fake), 0L)
 })
 
 test_that("teams and fan-outs started in an r evaluation are children of the running session", {

@@ -67,8 +67,9 @@
 #' @param tools Tool names, `"+name"`/`"-name"` modifiers, a preset name, or [gptr_tool()] specs.
 #' @param agents A named list of agent definitions for a team (`agent()` means [gptr_agent()]).
 #' @param parallel Fan one list-like context object out over this many concurrent sub-agents.
-#'   A child that succeeds keeps only the values it returned with [gptr_return()], so they must
-#'   be self-contained.
+#'   Each child gets its element alone as `.x`, a named list of one attached as `.x[["A"]]`;
+#'   `.opts = list(context = "none")`, which would drop it, is refused. A child that succeeds
+#'   keeps only the values it returned with [gptr_return()], so they must be self-contained.
 #' @param choices,levels,threshold,min_confidence,uncertain System 1 answer shape and abstention.
 #' @param prompt An explicit prompt; wins over positional selection.
 #' @param envir Where the agent evaluates R code and creates objects. A call made by the agent's

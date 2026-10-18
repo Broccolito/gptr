@@ -1,5 +1,6 @@
 # tests/testthat/test-copy-subagent.R -- copy safety of sub-agents (plan P19; architecture 6.4,
-# 6.13; contract 6.5 "Copy-safety: [R1][R3] (elements are read in place)"; P19 acceptance 4).
+# 6.13; contract 6.5 "Copy-safety: [R1][R3] (an inline or cli child does not copy the element)";
+# P19 acceptance 4).
 # Each row runs in a fresh Rscript through P01's expect_no_copy(), which skips on CRAN and
 # without capabilities("profmem"). The fake scripts are plain functions (the child process has
 # no test helpers); mode auto lets the scripted r calls run without a human.
@@ -41,11 +42,12 @@ test_that("code with <<- is denied in parallel runs and the object stays editabl
     label = "two children trying big <<- 0")
 })
 
-test_that("fan-out elements are read in place (contract 6.5 [R1][R3])", {
+test_that("fan-out elements bound as .x are not copied (contract 6.5 [R1][R3], D-212)", {
   expect_no_copy(
-    setup = subagent_copy_setup("n = length(cohorts[[1]])",
+    setup = subagent_copy_setup("n = length(.x[[1]]); gptr::gptr_return(n)",
                                 object = "cohorts = list(A = runif(5e6), B = runif(10))"),
-    action = "fan = peter('Summarise this cohort', cohorts, model = fake, parallel = 2)",
+    action = c("fan = peter('Summarise this cohort', cohorts, model = fake, parallel = 2)",
+               "stopifnot(identical(unlist(fan$value$A, use.names = FALSE), 5e6L))"),
     edit = "cohorts$A[1] = 0", object = "cohorts$A",
     label = "fan-out over cohorts")
 })

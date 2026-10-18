@@ -1031,7 +1031,7 @@ exact name.
 | `skills`, `plugins`, `extensions` | identifiers (`c(a, b)`) or `NULL` | names resolved by §6.1.3 (normalised, IC-42); `extensions` also accepts `function(gptr)` factories (loaded with `ext_load(rank = 0L, session = <id>)`, visible to this session only, IC-69) and file paths; plugins and named extensions are enabled for the session through P17's `plugin.enable` service (`gptr_error_not_available` before P17); skills are preloaded as `<skill_content>` through `skill.body` |
 | `tools` | chr, identifiers, `<spec:tool>` list, or `NULL` | tool names; `"+grep"`/`"-write"` modifiers; a preset name (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`); tool specs are registered at rank 0 for this session |
 | `agents` | named list or `NULL` | evaluated in a mask where `agent` is `gptr_agent`; names must be unique syntactic names that are not accessor names (IC-71) |
-| `parallel` | `int(1)` >= 1 or `NULL` | fan out one list-like context object over at most `parallel` concurrent children |
+| `parallel` | `int(1)` >= 1 or `NULL` | fan out one list-like context object over at most `parallel` concurrent children; with `.opts$context = "none"` (which would drop each child's element) `gptr_error_invalid_argument` before any child starts (D-212) |
 | `choices` | chr (>= 2, unique, no logical-looking labels) or factor or `NULL` | System 1 choice question |
 | `levels` | chr (>= 2) or `NULL` | System 1 score question (level descriptions, 0-based) |
 | `threshold` | `num(1)` in (0, 1) | System 1: P(yes) at or above it is `TRUE` |
@@ -1685,9 +1685,12 @@ children settled; `"return"` leaves failed children with status `error`.
 
 `gptr_map()` is **internal** (IC-36; S-1 keeps one gateway): the function behind `parallel =`, one inline (or
 `backend`) child per element of `.x` (a list, atomic vector or data frame rows), each receiving the prompt and its
-element as context (read in place by name, `.x[[i]]`); it returns a **fan-out session** (`kind = "fanout"`;
+element alone, for every backend: bound in the child's overlay as `.x`, a named list of one (`list(A = <element>)`),
+and attached as `.x[["A"]]` (D-212); it returns a **fan-out session** (`kind = "fanout"`;
 `$text` a named chr, `[[i]]`/`$name` child sessions). Users write `peter("Summarise this", cohorts, parallel = 4)`.
-Copy-safety: [R1][R3] (elements are read in place; `test-copy-subagent.R`).
+Copy-safety: [R1][R3] (an inline or cli child does not copy the element; the bound list is removed and defused when
+the child settles, as checkpoint images are [R6]; `test-copy-subagent.R`; after a worker fan-out the caller's next edit
+still copies it once, D-212).
 
 ```r
 fake = gptr_fake_provider(list("ok"))
