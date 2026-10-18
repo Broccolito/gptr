@@ -136,7 +136,7 @@ test_that("launch observation preserves genuine stderr and the original conditio
   })
 })
 
-test_that("a launch boundary ends the waiting row with a line feed only in R GUIs (D-186)", {
+test_that("a launch boundary ends the waiting row without a line feed, in R GUIs too (D-186)", {
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -147,7 +147,7 @@ test_that("a launch boundary ends the waiting row with a line feed only in R GUI
     launch_capture(function(bytes) {
       with_interrupt_policy(function() signalCondition(launch_condition()), list(w$run))
       expect_identical(rawToChar(rawConnectionValue(bytes)),
-                       paste0("\r", strrep(" ", 39L), "\r", if (frontend == "rgui") "\n"),
+                       paste0("\r", strrep(" ", 39L), "\r"),
                        info = frontend)
     })
     console_drop(w$run$id)

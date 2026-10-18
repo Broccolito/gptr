@@ -5089,7 +5089,9 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
 - Notices, pause menu included: `[gptr] steering: '<text>'; it reaches the agent at its next step` and
   `[gptr] follow-up queued: '<text>'; it is sent when the agent would stop`.
 - The setting `type_ahead` (§11.2): `"steer"` (default) or `"follow_up"`; not a tighten key.
-- Limits: the terminal still echoes typed text into the stream; a front end that keeps the tty non-canonical
+- Limits: the terminal still echoes typed text into the stream (on an ANSI terminal the waiting row's redraw
+  overwrites the echo of a partial typed line, and Enter leaves that row with the typed fragment above the
+  next block; the steering or held-lines notice repeats the text); a front end that keeps the tty non-canonical
   during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the model after the
   CLI's current response.
 

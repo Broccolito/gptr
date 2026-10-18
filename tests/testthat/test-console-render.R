@@ -172,6 +172,10 @@ test_that("italics, link URLs, quotes, rules and headings are styled only with c
                    c("a", "", strrep("-", 40L), "", "b"))
   expect_identical(render_chunks("# One\n## Two"),
                    c("\033[0;1;4mOne\033[0m", "\033[0;1mTwo\033[0m"))
+  # an asterisk that its own token does not close prints, as in plain mode
+  for (x in c("a *glob* like *.csv and the *apply family.", "*two words* a*b *x")) {
+    expect_identical(cli::ansi_strip(render_chunks(x, 80L)), sub("*glob*", "glob", x, fixed = TRUE))
+  }
   withr::local_options(cli.num_colors = 1L)
   for (plain in c(text, "> q", "a\n\n---\n\nb", "# One\n## Two")) {
     expect_identical(render_chunks(plain, 80L), strsplit(plain, "\n", fixed = TRUE)[[1L]])
@@ -810,6 +814,7 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
   rec = console_record(list(run = "u0000test"))
   bytes = paste(utils::capture.output({
     rec$spinner = console_spinner()
+    rec$last = "wait"
     rec$spinner$tick()
     res = eval_r("tool(pause)", home, plots = "none", tee = FALSE)
   }), collapse = "\n")
@@ -817,6 +822,26 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
   expect_match(bytes, "\r +\rHELDWORD$")
   expect_null(rec$spinner)
   expect_false(grepl("\r|HELDWORD", text(res)))
+})
+
+test_that("inside an evaluation the console margin follows the person's console (D-186)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  home = new.env()
+  home$pad = console_pad
+  prompts = character()
+  home$pick = function() {
+    ui_console_select("Which format?", c("Plot", "Table"), read = function(prompt, ...) {
+      prompts <<- c(prompts, prompt)
+      "1"
+    })
+  }
+  out = utils::capture.output(eval_r("p = pad(); k = pick()", home, plots = "none", tee = FALSE))
+  expect_identical(home$p, "  ")
+  expect_identical(home$k, 1L)
+  expect_identical(prompts, "  Choose (a number): ")
+  expect_true("  Which format?" %in% out)
 })
 
 test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no quiet (D-188)", {
@@ -879,23 +904,51 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Second ending")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L))
+  # a launch boundary and a notice replacing a shown waiting row, which then resumes as the
+  # reactor task draws it
+  rec = function() console_record(list(run = "u0000test"))
+  tick = function() {
+    sp = rec()$spinner
+    sp$last = 0
+    sp$tick()
+  }
+  waits = list(
+    hook_event("agent_start", s), request("q1"), function() console_before_message(kind = NULL),
+    tick, function() {
+      console_before_message()
+      console_notice("[gptr] a notice")
+    }, function() {
+      console_gap(rec(), "wait")
+      tick()
+    },
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "Answer\n\n"),
+    hook_event("message_end", s, role = "assistant", message = assistant_msg("Answer")),
+    hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
+               turns = 1L))
+  rows = list(c("", "  First tail", "", "  * r  1 + 1", "    + value", "", "  Second ending", "",
+                "  done | 1 turn | 0 tokens | $0.0000", ""),
+              c("", "  [gptr] a notice", "", "  Answer", "",
+                "  done | 1 turn | 0 tokens | $0.0000", ""))
   # an R GUI spaces the blocks exactly as a terminal does
   for (fe in c("terminal", "rgui")) {
-    con = rawConnection(raw(), "w")
-    sink(con)
-    tryCatch({
-      for (ev in events) {
-        for (h in hooks[types == ev$type]) h$handler(ev, session_live(s)$ctx)
-      }
-    }, finally = sink())
-    bytes = rawToChar(rawConnectionValue(con))
-    close(con)
-    expect_match(bytes, "thinking", fixed = TRUE)
-    expect_false(grepl("\r +\r\n", bytes))
-    expect_identical(screen_rows(bytes), c("", "  First tail", "", "  * r  1 + 1",
-                                           "    + value", "", "  Second ending", "",
-                                           "  done | 1 turn | 0 tokens | $0.0000", ""),
-                     info = fe)
+    for (i in 1:2) {
+      con = rawConnection(raw(), "w")
+      sink(con)
+      tryCatch({
+        for (ev in list(events, waits)[[i]]) {
+          if (is.function(ev)) {
+            ev()
+          } else {
+            for (h in hooks[types == ev$type]) h$handler(ev, session_live(s)$ctx)
+          }
+        }
+      }, finally = sink())
+      bytes = rawToChar(rawConnectionValue(con))
+      close(con)
+      expect_match(bytes, "thinking", fixed = TRUE)
+      expect_false(grepl("\r +\r\n", bytes))
+      expect_identical(screen_rows(bytes), rows[[i]], info = fe)
+    }
   }
 })
 

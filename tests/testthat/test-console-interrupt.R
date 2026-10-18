@@ -108,6 +108,17 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
   expect_identical(log$prompts, c("? ", "steer> ", "? ", "follow-up> "))
 })
 
+test_that("in the console margin the menu's prompts keep it, as its notices do (D-186)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  log = local_menu_answers(c("s", "use only mpg"))
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  expect_true(any(startsWith(err, "  [gptr] paused")))
+  expect_identical(log$prompts, c("  ? ", "  steer> "))
+})
+
 test_that("pause-menu text passes the input event with source steer", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)

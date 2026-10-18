@@ -1900,13 +1900,14 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
   width - 4; one blank line separates text, tool, notice, prompt and status blocks (and two
   prompts) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
-  the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; only in R GUIs an LF
-  follows a cleared row). There nested lists keep their indentation, pipe tables are aligned
+  the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
+  row, R GUIs included); the margin is that of the console an evaluation started from, also for
+  prompts and notices drawn inside it. There nested lists keep their indentation, pipe tables are aligned
   (verbatim when malformed or too wide) and a reply's leading, trailing and repeated blank lines
   collapse; `NO_COLOR` removes colours and styles only. Rscript (verbosity 1), knitr, jsonl and
   tests (verbosity 0) and non-dynamic outputs (pipes, Jupyter) keep the plain layout (no margin,
   block gaps, table alignment or notice wrapping). Styling adds
-  italics at token edges, dim link URLs, quotes and rules, bold headings (H1 underlined); R lines
+  italics within one token (`*x*`; an unmatched `*` prints), dim link URLs, quotes and rules, bold headings (H1 underlined); R lines
   that parse are highlighted by `cli::code_highlight()`, other R lines and known languages by a
   light highlighter (strings, numbers, comments). The console UI itself ends partial lines and
   clears waiting rows, keeping their task, before it prompts (D-186).

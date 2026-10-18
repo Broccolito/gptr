@@ -93,7 +93,7 @@ test_that("once and quiet notices do not clear an otherwise pending redraw", {
   expect_true(w$rec$spinner$shown)
 })
 
-test_that("native R GUI notices close the redraw row before ordinary message delivery", {
+test_that("native R GUI notices replace the cleared waiting row, as on a terminal (D-186)", {
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -110,22 +110,24 @@ test_that("native R GUI notices close the redraw row before ordinary message del
       observed$shown = sp$shown
     }), type = "message")
   })
-  expect_identical(out[[1L]], paste0("\r", strrep(" ", 39L), "\r"))
-  expect_true(all(startsWith(out[-1L], "  ")))
-  expect_true(all(nchar(out[-1L]) <= 38L))
-  expect_identical(paste(trimws(out[-1L]), collapse = " "), trimws(strrep("long notice ", 12L)))
+  clear = paste0("\r", strrep(" ", 39L), "\r")
+  expect_true(startsWith(out[[1L]], clear))
+  lines = c(substring(out[[1L]], nchar(clear) + 1L), out[-1L])
+  expect_true(all(startsWith(lines, "  ")))
+  expect_true(all(nchar(lines) <= 38L))
+  expect_identical(paste(trimws(lines), collapse = " "), trimws(strrep("long notice ", 12L)))
   expect_identical(err, character())
   expect_s3_class(observed$condition, "gptr_message_notice")
   expect_false(observed$shown)
   expect_true(w$rec$request_pending)
-  # The row must end with LF even though capture.output() strips its final line terminator.
+  # no line feed follows the cleared row: the block gap before it gave R.app its stdout line
   bytes = rawConnection(raw(), "w")
   on.exit(close(bytes), add = TRUE)
   sp$last = 0
   utils::capture.output(invisible(sp$tick()))
   sink(bytes)
   tryCatch(console_before_message(list(w$run)), finally = sink())
-  expect_identical(tail(rawConnectionValue(bytes), 2L), charToRaw("\r\n"))
+  expect_identical(rawToChar(rawConnectionValue(bytes)), clear)
   expect_identical(utils::capture.output(console_before_message(list(w$run))), character())
 })
 
@@ -222,7 +224,8 @@ test_that("real R-tool capture contains no spinner clear bytes or altered warnin
       }, class = "gptr_warning_notice")
     }, type = "message")
   })
-  expect_identical(out, c("tool output", "tool notice"))
+  # the notice keeps the margin of the console the evaluation started from (D-186)
+  expect_identical(out, c("tool output", "  tool notice"))
   expect_identical(err, character())
   expect_false(result$is_error)
   expect_identical(result$details$warnings, "tool warning")

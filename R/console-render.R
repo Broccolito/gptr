@@ -62,7 +62,7 @@ console_notice = function(..., .error = FALSE) {
 #' Chunk-invariant markdown stream renderer (contract 7.14)
 #'
 #' Returns an environment with `write(delta)`, `finish()` and `reset_line()`, writing to stdout.
-#' Styling (bold, italic at token edges, inline code, dim link URLs, headings, bullets, dim
+#' Styling (bold, italic within one token, inline code, dim link URLs, headings, bullets, dim
 #' quotes and rules, highlighted fenced code) is used when `cli::num_ansi_colors() > 1` at
 #' creation; without it the markdown characters are kept. Fenced code stays Markdown: fence lines
 #' as written (dim), the body unwrapped and de-indented by the opener's indentation (D-187).
@@ -167,7 +167,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
       } else if (identical(ch, "*") && (if (st$on[["italic"]]) {
         grepl("^[[:punct:]]*$", substring(tok, i + 1L))
       } else {
-        i == 1L && n > 1L
+        i == 1L && grepl("^\\*[^*[:space:]][^*]*\\*[[:punct:]]*$", tok)
       })) {
         out = c(out, toggle("italic"))
       } else if (identical(two, "](") || (identical(ch, ")") && st$on[["url"]])) {
@@ -649,12 +649,7 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
     found = TRUE
     if (!is.null(rec$think)) rec$think$reset_line()
     if (!is.null(rec$md)) rec$md$reset_line()
-    if (!is.null(rec$spinner)) {
-      shown = isTRUE(rec$spinner$shown)
-      rec$spinner$clear()
-      # R GUIs keep a cleared row's overwrite range, so they continue on a fresh line
-      if (shown && identical(front_end(), "rgui")) console_cat("\n")
-    }
+    if (!is.null(rec$spinner)) rec$spinner$clear()
     if (!is.null(kind)) console_gap(rec, kind)
   }
   invisible(found)

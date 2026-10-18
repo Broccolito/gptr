@@ -203,6 +203,7 @@ eval_open = function(st) {
   } else {
     NULL
   }
+  st$pad = console_pad()
   st$old_opts = options(max.print = 1000L, width = 100L, rlang_interactive = FALSE,
                         cli.dynamic = FALSE, cli.num_colors = 1L, askYesNo = eval_no_ask)
   st$msg_sink = sink.number(type = "message")
@@ -337,6 +338,8 @@ eval_one = function(st, expr, i, sref) {
     gptr_message_write(text, stream, margin, from = k - 1L)
   }
   force(.gptr_message_write)
+  .gptr_console_pad = st$pad
+  force(.gptr_console_pad)
   st$line = if (is.null(sref)) NA_integer_ else as.integer(sref[1L])
   eval_push(st, "source", text = paste(as.character(sref), collapse = "\n"), line = st$line)
   start = length(st$events)

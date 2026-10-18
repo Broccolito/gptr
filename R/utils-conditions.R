@@ -98,9 +98,19 @@ gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() 
 
 #' The left margin of console output (D-186): two columns where the console renderer is active
 #' (verbosity 2+ on a dynamic console, so also in capture.output() of an interactive call), else
-#' none, so Rscript, knitr, jsonl and tests keep the plain layout
+#' none, so Rscript, knitr, jsonl and tests keep the plain layout. Inside an evaluation, whose
+#' options say no dynamic console, the margin of the console it started from
+#' (`.gptr_console_pad`)
 #' @noRd
-console_pad = function() if (verbosity() >= 2L && cli::is_dynamic_tty()) "  " else ""
+console_pad = function() {
+  k = sys.nframe() - 1L
+  while (k >= 1L) {
+    pad = get0(".gptr_console_pad", envir = sys.frame(k), inherits = FALSE)
+    if (is.character(pad)) return(pad)
+    k = k - 1L
+  }
+  if (verbosity() >= 2L && cli::is_dynamic_tty()) "  " else ""
+}
 
 #' Notice lines inside the console margin; a line that does not fit is word-wrapped at the
 #' content width and keeps its indentation (D-186); unchanged without a margin

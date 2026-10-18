@@ -97,10 +97,11 @@ console_repl_find = function() {
   NULL
 }
 
-#' Read one menu answer: from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while
-#' waiting (no resume restart there) gives NA
+#' Read one menu answer: from a `.stdin` REPL's connection, else readline_answer(); the prompt
+#' keeps the console margin (D-186); a Ctrl-C while waiting (no resume restart there) gives NA
 #' @noRd
 console_ask = function(prompt) {
+  prompt = paste0(console_pad(), prompt)
   rs = console_repl_find()
   tryCatch({
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
