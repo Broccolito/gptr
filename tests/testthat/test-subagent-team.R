@@ -386,7 +386,8 @@ test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks s
 })
 
 test_that("each report fits min(2000, budget / n) tokens in a closed element (03 section 12.2)", {
-  local_team_fake(function(request) report)
+  # This exercises report budgets, not thousands of tiny streaming deltas.
+  local_team_fake(function(request) fake_text(report, chunk = 65536L))
   e = new.env()
   e$two = list(`a"b` = 1, c = 2)
   e$many = as.list(1:20)
