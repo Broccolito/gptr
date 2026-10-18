@@ -10,8 +10,11 @@ local_proc_state = function(.env = parent.frame()) {
 
 wait_until = function(cond, seconds = 5) {
   t0 = proc.time()[["elapsed"]]
-  while (!isTRUE(cond()) && proc.time()[["elapsed"]] - t0 < seconds) Sys.sleep(0.05)
-  isTRUE(cond())
+  repeat {
+    if (isTRUE(cond())) return(TRUE)
+    if (proc.time()[["elapsed"]] - t0 >= seconds) return(FALSE)
+    Sys.sleep(0.05)
+  }
 }
 
 # Whether the processes that carry a marker are `pid` and its descendants only. On Windows
@@ -23,6 +26,18 @@ marker_tree_is = function(marker, pid) {
                   error = function(e) list())
   pid %in% pids && all(pids %in% c(pid, vapply(kids, ps::ps_pid, 1L)))
 }
+
+test_that("wait_until() returns once its condition holds and reads it once per poll", {
+  seen = new.env(parent = emptyenv())
+  seen$calls = 0L
+  # TRUE then FALSE, as the macOS exec chain hides a marker tree: a second read reports FALSE
+  expect_true(wait_until(function() {
+    seen$calls = seen$calls + 1L
+    seen$calls == 1L
+  }))
+  expect_identical(seen$calls, 1L)
+  expect_false(wait_until(function() FALSE, 0.1))
+})
 
 test_that("pid_alive() checks liveness and the creation time against pid reuse", {
   local_proc_state()

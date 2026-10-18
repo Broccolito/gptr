@@ -216,3 +216,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `^(compaction-|prompt-compact$)` PASS 1043.
 - Reviews: none recorded.
 - Deviations: none. Open: none.
+
+## Task CI-22 - wait_until() reads its condition once per poll (2026-10-18, #47)
+- `test-proc-supervise.R:123` failed in run 38997490469 (`macos-latest (release)`) well before its
+  10 s deadline: `wait_until()` read `cond()` in its loop test and again for its value, and
+  `marker_tree_is()` is not monotonic on macOS (`ps` cannot read the environment of the SIP
+  `/bin/sh` that runs `R_HOME/bin/R` between `Rscript` and `bin/exec/R`). Fix (tests only): the
+  helper returns TRUE on the first read that holds and FALSE once the deadline passes, in
+  `test-proc-supervise.R` and in its copy in `test-proc-spawn.R` (its `reactor_now()` clock kept);
+  deadlines and callers unchanged (the other callers wait on monotonic conditions).
+- Red: FAIL 4 in `^proc-(supervise|spawn)$` (+1 test per file: a TRUE-then-FALSE condition made the
+  old helper return FALSE after two reads). Green: `^proc-(supervise|spawn)$` PASS 371. Lint clean.
+  Neighbours: `^proc-` PASS 2092 SKIP 11.
+- Reviews: none recorded.
+- Deviations: none. Open: `:123` may now pass during the `Rscript` stage, so the sweep may kill by
+  recorded pid and creation time rather than by marker tree; an orphan that prints a ready line
+  from R would pin the marker-tree path (proposed in #47, not done).

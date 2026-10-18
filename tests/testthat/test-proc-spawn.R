@@ -8,8 +8,11 @@ cat_bytes_code = function(bytes) {
 
 wait_until = function(cond, seconds = 5) {
   t0 = reactor_now()
-  while (!isTRUE(cond()) && reactor_now() - t0 < seconds) Sys.sleep(0.05)
-  isTRUE(cond())
+  repeat {
+    if (isTRUE(cond())) return(TRUE)
+    if (reactor_now() - t0 >= seconds) return(FALSE)
+    Sys.sleep(0.05)
+  }
 }
 
 # The bytes an R child's "\n" reaches the pipe as: R's stdout is a text-mode stream on Windows,
@@ -39,6 +42,18 @@ marker_tree_is = function(marker, pid) {
                   error = function(e) list())
   pid %in% pids && all(pids %in% c(pid, vapply(kids, ps::ps_pid, 1L)))
 }
+
+test_that("wait_until() returns once its condition holds and reads it once per poll", {
+  seen = new.env(parent = emptyenv())
+  seen$calls = 0L
+  # TRUE then FALSE, as the macOS exec chain hides a marker tree: a second read reports FALSE
+  expect_true(wait_until(function() {
+    seen$calls = seen$calls + 1L
+    seen$calls == 1L
+  }))
+  expect_identical(seen$calls, 1L)
+  expect_false(wait_until(function() FALSE, 0.1))
+})
 
 test_that("R children must come from rscript_path(), never a PATH lookup", {
   expect_error(proc_resolve("Rscript", "--version"), class = "gptr_error_invalid_argument")
