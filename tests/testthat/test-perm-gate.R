@@ -98,6 +98,12 @@ test_that("the critical guard asks a person even in auto, unless switched off (I
   expect_identical(gate_decide(gate_r("q('no')"), gate_ctx("manual")), "ask_human")
 })
 
+test_that("in auto a delete outside the project through a name asks a person (D-211)", {
+  root = local_project()
+  code = "tgt = normalizePath('/etc/gptr-old.csv', mustWork = FALSE); file.remove(tgt)"
+  expect_identical(gate_decide(gate_r(code), gate_ctx("auto")), "ask_human")
+})
+
 test_that("control actions need a person in every mode, plan included (IC-53, IC-54)", {
   root = local_project()
   local_gptr_options(critical_guard = FALSE)

@@ -2391,3 +2391,23 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: gptr-gateway (model code without `model =`; on a provider or router spec), subagent-team (team and fan-out
   on a provider spec), gptr-config (egress question inside a run).
   Evidence: progress/P26.md Task 13.
+
+## D-211 - P26 a path held in a name assigned from literals is that path (2026-10-18)
+- Rule: `risk_scan()` keeps, for each name assigned outside a function body, the values it may hold, folded by
+  `risk_fold()` (which also resolves such names), NA for one the code computes (an assignment that does not fold, a
+  replacement call, a `for` variable, `assign()`). A straight-line assignment replaces them (the `r` tool stops at
+  the first error) unless the code assigns the name with `<<-` (a function may do so later); one in a branch, loop
+  or call adds its value, and the binding before the code when it comes first; a loop that assigns the name, by a
+  replacement call too, makes it computed. Outside function bodies the path arguments of risk rows,
+  `file(open = "w")` and the `peter$` file members fold with it and report the path of the worst class, so
+  `p = '~'; unlink(p, recursive = TRUE)` is 4 (D-132's "4 only for a direct literal target" amended for paths; a
+  command, SQL or Python held in a name stays 3).
+- Rule: `normalizePath()` and `path.expand()` fold their `path` argument only (`mustWork = FALSE` no longer hides it).
+- Rule: a rebinding the walk does not see keeps the earlier value and can lower a level (accepted: the classifier is
+  advisory): `p = tempfile(); with(list(p = '~'), unlink(p, recursive = TRUE))` is 1 (was 3); likewise `within()`,
+  `bquote(.())`, `assign()` in a loop, a function or with a computed name, `list2env()`, `load()`, `rm()`,
+  `delayedAssign()`, `makeActiveBinding()` and a function from an earlier turn.
+- Contract-visible: `gptr_risk()` levels, `path` and `path_class` of such calls (03 §6.8.1); checkpoint `files`
+  targets.
+- Tests: perm-classify (a name assigned outside a function body; a straight-line reassignment; computed,
+  branch-default, loop and `<<-` forms stay 3), perm-gate (auto asks a person). Evidence: progress/P26.md Task 14.

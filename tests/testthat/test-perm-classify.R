@@ -777,7 +777,7 @@ test_that("direct literal targets and function values whose row is 4 are level 4
 test_that("indirections reach a literal target only at level 3 (D-132)", {
   root = local_project()
   cases = list(
-    list(3L, "p = '~'; unlink(p, recursive = TRUE)"), list(3L, "cmd = 'rm -rf ~'; system(cmd)"),
+    list(3L, "cmd = 'rm -rf ~'; system(cmd)"),
     list(3L, "identity(unlink)('~', recursive = TRUE)"), list(3L, "eval(bquote(q()))"),
     list(3L, "Negate(file.remove)('.gptr/settings.json')"),
     list(3L, "purrr::partial(unlink, recursive = TRUE)('~')"),
@@ -785,6 +785,37 @@ test_that("indirections reach a literal target only at level 3 (D-132)", {
   )
   for (cs in cases) {
     expect_identical(gptr_risk(cs[[2]], root = root)$level, cs[[1]], label = cs[[2]])
+  }
+})
+
+test_that("a name assigned outside a function body holds the paths it may hold (D-211)", {
+  root = local_project()
+  for (code in c("p = '/etc/gptr-old.csv'; file.remove(p)",
+                 "p = normalizePath('/etc/gptr-old.csv', mustWork = FALSE); file.remove(p)",
+                 "p = '/etc/gptr-old.csv'; if (dry) p = tempfile(); unlink(p)",
+                 "p = tempfile(); if (dry) p = '/etc/gptr-old.csv'; unlink(p)")) {
+    r = gptr_risk(code, root = root)
+    f = r$flagged[r$flagged$category == "file_delete", ]
+    expect_identical(list(r$level, f$path, f$path_class),
+                     list(4L, "/etc/gptr-old.csv", "outside"), label = code)
+  }
+  expect_identical(gptr_risk("p = '~'; unlink(p, recursive = TRUE)", root = root)$level, 4L)
+  for (code in c("f = tempfile(); unlink(f)",
+                 "p = '/etc/gptr-old.csv'; p = tempfile(); unlink(p)")) {
+    expect_identical(gptr_risk(code, root = root)$level, 1L, label = code)
+  }
+  f = gptr_risk("p = tempfile(); if (x) p = '.Rprofile'; file(p, 'w')", root = root)$flagged
+  expect_identical(list(f$level, f$path), list(4L, ".Rprofile"))
+  f = gptr_risk("p = tempfile(); if (x) p = '/etc/x'; peter$write(p, 'y')", root = root)$flagged
+  expect_identical(list(f$level, f$path), list(3L, "/etc/x"))
+  for (code in c("p = '/etc/x'; p = readLines('y')[1]; file.remove(p)",
+                 "p = '/etc/x'; f = function(p) file.remove(p)",
+                 "p = Sys.getenv('OUT'); if (!nzchar(p)) p = tempfile(); unlink(p, TRUE)",
+                 "if (!exists('p')) p = tempfile(); unlink(p, recursive = TRUE)",
+                 "p = tempfile(); for (f in c('/etc/a', '/etc/b')) { unlink(p); p = f }",
+                 "p = tempfile(); for (f in c('/etc/a')) { unlink(p); p[1] = f }",
+                 "f = function() p <<- '~'; p = tempfile(); f(); unlink(p, recursive = TRUE)")) {
+    expect_identical(gptr_risk(code, root = root)$level, 3L, label = code)
   }
 })
 

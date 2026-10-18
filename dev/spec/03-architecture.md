@@ -1420,8 +1420,12 @@ are level 4 `control` and also check `run_current()` [IC-53]; writes to control-
 prompts) level 3 [IC-54]; `peter$sh/script/bg` by the command classifier; `peter$py`/`sql`
 by token and keyword classifiers [G5 §5]; MCP tools by server annotations (untrusted unless the server is
 trusted: `readOnlyHint` 0, `destructiveHint = FALSE` 2, none 3); nested `peter()` inherits and only tightens;
-`ask` is level 0. The classifier is advisory and documented as not a security boundary; in-process R cannot
-be sandboxed [18 §2.5].
+`ask` is level 0. Outside function bodies, a path held in a name the code assigns is folded (literals through
+`c()`, `file.path()`, `paste()`, `paste0()`, `normalizePath()`, `path.expand()`, `tempfile()`), the worst value
+counting: a straight-line assignment replaces the name's values unless the code also assigns it with `<<-`, one in
+a branch, loop or call adds its value (and, when first, the binding before the code), and a value the code
+computes or a loop that assigns the name makes it computed [D-211]. The classifier is advisory and documented as
+not a security boundary; in-process R cannot be sandboxed [18 §2.5].
 
 `yolo` [IC-78] is the loosest mode (plan < manual < edits < auto < yolo): only the person selects it (`peter(mode =)`,
 `/mode`, user or session settings, `options(gptr.mode)` outside a run); project settings, nested calls and
