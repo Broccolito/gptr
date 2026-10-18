@@ -362,7 +362,8 @@ pcli_codex_tool_name = function(item) {
 
 #' Emit the informational tool_execution_start/_end events of a Codex tool item (contract 8.5),
 #' marked `informational` since the step runs outside R; calls of gptr's own tools are reported
-#' where they run, mcp_serve_call() (D-192)
+#' where they run, mcp_serve_call() (D-192); a command's input drops the shell's `-lc` wrapper
+#' of a single-quoted script or a bare word (D-207)
 #' @noRd
 pcli_codex_tool = function(s, item, phase) {
   kind = pcli_chr(item[["type"]]) %||% ""
@@ -377,7 +378,9 @@ pcli_codex_tool = function(s, item, phase) {
     s$open_tools = c(s$open_tools, id)
     arguments = item[["arguments"]]
     input = switch(kind,
-                   command_execution = list(command = pcli_chr(item[["command"]]) %||% ""),
+                   command_execution = list(
+                     command = sub("^\\S*sh -lc ('([^']*)'|([^\\s'\"\\\\]+))$", "\\2\\3",
+                                   pcli_chr(item[["command"]]) %||% "", perl = TRUE)),
                    mcp_tool_call = if (is.list(arguments)) arguments else json_obj(),
                    file_change = list(paths = I(pcli_codex_files(item))),
                    web_search = list(query = pcli_chr(item[["query"]]) %||% ""), json_obj())

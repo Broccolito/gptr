@@ -2469,3 +2469,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: 04 IC-77 item 6; 03 §6.17 (status line, `/cost`, `/context`); `?gptr_usage` (footer).
 - Tests: console-render, console-commands, session-budget, session-object, console-jupyter-progress, console-fences.
   Evidence: progress/P26.md Task 29.
+
+## D-207 - P26 Cut fences say so inside the fence; Codex commands without their shell; cut thinking lines (2026-10-18)
+- Rule (#40; amends D-187 and P26 Task 5's cap lines): a tool-call fence cut at 20 lines (dim) and the `?` detail's
+  plain one cut at 40 end with a `# … +N more lines` line before the closing fence (it followed the fence as
+  `(+N more lines)`, so a copied block looked whole: seurat-versa, codex). The one-line prompt keeps `(+N more lines)`
+  (IC-53 item 8).
+- Rule (amends D-192): a Codex `command_execution` event's `input$command` drops the `<shell> -lc` wrapper of a
+  single-quoted script without a single quote of its own, or a bare word (`/bin/zsh -lc 'wc -l x.csv'` ->
+  `wc -l x.csv`); other commands, such as a double-quoted script, stay whole.
+  `console_preview()` shows an input's one-line `command` after its `code`, so the call reads
+  `● codex_shell  wc -l x.csv`; a command of several lines keeps the one-line JSON preview, so no line is hidden.
+- Rule (amends D-192): a CLI route's thinking line is cut once it passes the width, with cli's ellipsis (it was cut on
+  reaching the width with none, so the rest of a line exactly that long was dropped unmarked).
+- Contract-visible: 04 §8.5; 03 §6.17, §8.3. Tests: cli-codex, console-fences, console-ui, console-render. Evidence:
+  progress/P26.md Task 31.

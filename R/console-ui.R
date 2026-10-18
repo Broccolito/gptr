@@ -121,7 +121,8 @@ ui_permission_lines = function(request) {
     })
 }
 
-#' The detail view shown for `?`: the code as a plain fence (it also feeds the RStudio dialog)
+#' The detail view shown for `?`: the code as a plain fence (it also feeds the RStudio dialog),
+#' a cut one ending in a `# ... +N more lines` line inside the fence (D-207)
 #' @noRd
 ui_permission_detail = function(request) {
   risk = request$risk
@@ -139,8 +140,11 @@ ui_permission_detail = function(request) {
             paste0("  reason: ", ui_escape(request$reason))
           },
           paste0("  ", c(paste0(fence, if (grepl("(^|__)r$", request$tool %||% "")) "r"), shown,
-                         fence)),
-          if (length(lines) > 40L) paste0("  (+", length(lines) - 40L, " more lines)"))
+                         if (length(lines) > 40L) {
+                           paste0("# ", cli::symbol$ellipsis, " +", length(lines) - 40L,
+                                  " more lines")
+                         },
+                         fence)))
   fl = ui_flagged(risk)
   if (NROW(fl)) {
     where = ifelse(is.na(fl$path), "",

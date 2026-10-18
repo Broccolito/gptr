@@ -433,10 +433,11 @@ console_print_text = function(text, before_output = NULL) {
 }
 
 #' Verbosity 2's view of a thinking block of a record on a CLI route: its first line without a
-#' bold title's markers, dim and cut to the width within the margin (D-186), printed as a block
-#' once its line end or the width completes it, or by finish(), after clearing the waiting row,
-#' which keeps its clock; Codex's reasoning items so show as progress lines (D-192). Nothing is
-#' on screen before that, so reset_line() has no partial line to end.
+#' bold title's markers, dim and cut with an ellipsis to the width within the margin (D-186,
+#' D-207), printed as a block once its line end comes or it passes the width, or by finish(),
+#' after clearing the waiting row, which keeps its clock; Codex's reasoning items so show as
+#' progress lines (D-192). Nothing is on screen before that, so reset_line() has no partial line
+#' to end.
 #' @noRd
 console_think_line = function(rec, width = cli::console_width()) {
   width = width - nchar(console_pad())
@@ -448,7 +449,7 @@ console_think_line = function(rec, width = cli::console_width()) {
       line = sub("^\\*\\*(.+)\\*\\*$", "\\1", console_lines(st$text)[[1L]])
       if (!is.null(rec$spinner)) rec$spinner$clear()
       console_gap(rec, "think")
-      console_write(cli::col_grey(cli::ansi_strtrim(paste0("  ", line), width, ellipsis = "")))
+      console_write(cli::col_grey(cli::ansi_strtrim(paste0("  ", line), width)))
     }
     st$open = FALSE
     invisible(NULL)
@@ -459,7 +460,7 @@ console_think_line = function(rec, width = cli::console_width()) {
     st$text = sub("^[[:space:]]+", "", paste0(st$text, paste(delta, collapse = "")))
     if (!nzchar(st$text)) return(invisible(NULL))
     first = console_lines(st$text)[[1L]]
-    if (grepl("[\r\n]", st$text) || cli::ansi_nchar(first) + 2L >= width) st$finish()
+    if (grepl("[\r\n]", st$text) || cli::ansi_nchar(first) + 2L > width) st$finish()
     invisible(NULL)
   }
   st
@@ -753,11 +754,14 @@ console_msg_text = function(msg) {
   paste(text[!is.na(text)], collapse = "\n")
 }
 
-#' The preview lines of a tool input: its code, its path, its questions, else compact JSON
+#' The preview lines of a tool input: its code, its one-line command, its path, its questions,
+#' else compact JSON
 #' @noRd
 console_preview = function(input) {
   text = if (is.character(input$code) && length(input$code)) {
     paste(input$code, collapse = "\n")
+  } else if (rlang::is_string(input$command) && !grepl("\n", input$command, fixed = TRUE)) {
+    input$command
   } else if (is.character(input$path) && length(input$path)) {
     input$path[[1L]]
   } else if (is.list(input$questions)) {
@@ -771,7 +775,8 @@ console_preview = function(input) {
 }
 
 #' The default start of a tool call: "  * r  x = 1" when it fits `width`; code that does not
-#' follows as a Markdown fence of at most 20 lines that are never cut, `r` for the r tool (D-187)
+#' follows as a Markdown fence of at most 20 lines that are never cut, `r` for the r tool (D-187),
+#' a cut one ending in a `# ... +N more lines` line inside the fence (D-207)
 #' @noRd
 console_call_line = function(call, width) {
   lines = console_escape(console_preview(call$input), FALSE)
@@ -785,8 +790,11 @@ console_call_line = function(call, width) {
   fence = doc_rmd_fence("```", code)
   more = length(lines) - length(code)
   lang = if (grepl("(^|__)r$", call$name %||% "")) "r" else ""
-  body = c(cli::style_dim(paste0(fence, lang)), console_code(code, lang), cli::style_dim(fence),
-           if (more > 0L) cli::style_dim(paste0("(+", more, " more lines)")))
+  body = c(cli::style_dim(paste0(fence, lang)), console_code(code, lang),
+           if (more > 0L) {
+             cli::style_dim(paste0("# ", cli::symbol$ellipsis, " +", more, " more lines"))
+           },
+           cli::style_dim(fence))
   c(head, paste0(console_pad(), body))
 }
 

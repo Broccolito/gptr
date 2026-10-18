@@ -1921,10 +1921,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   under a list item closes), so a copied block is Markdown whose body runs; in the margin code
   characters appear as they stream and a line without a TAB that fit one row is redrawn
   highlighted. A tool call shows its code on its line when it fits, else as a fence of at most
-  20 lines (then `(+N more lines)`; info string `r` only for the r tool); result lines are
-  indented four spaces and an `r` error shows its error message; the one-line approval prompt
-  (6.8.3) is cut to the console width before its `+N more lines`, and the `?` detail shows the
-  code as a plain fence of at most 40 lines. Console output draws no box characters (D-187).
+  20 lines (info string `r` only for the r tool); result lines are indented four spaces and an
+  `r` error shows its error message; the one-line approval prompt (6.8.3) is cut to the console
+  width before its `+N more lines`, and the `?` detail shows the code as a plain fence of at most
+  40 lines. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied block
+  shows the cut (D-207). Console output draws no box characters (D-187).
   Every renderer write and console control (prompts, notices, the pause menu) goes through
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
   whatever `tee` is; prompts and sub-agent lines first end partial lines, also while a tool
@@ -2355,11 +2356,12 @@ each exec (changed ones are not loaded until the user confirms) and a files-chec
 covers Codex's edits; on native Windows the sandbox is probed and the route falls back to `read-only` with a warning
 when it is not ready [08 line 2796]; never bypass the sandbox. The one-time notice says Codex runs its own shell
 inside its sandbox. gptr counts Codex's turn events and cancels at the turn cap, with a wall-clock limit per exec.
-Codex's own steps (commands, file changes, web searches) become informational tool events and its calls of gptr's
-tools are reported where they run, so each shows once; a reasoning item is a thinking block ending with a line end.
+Codex's own steps (commands, without the shell's `-lc` wrapper [D-207], file changes, web searches) become
+informational tool events and its calls of gptr's tools are reported where they run, so each shows once; a reasoning
+item is a thinking block ending with a line end.
 The informational events run outside R, so IC-53 does not track them and the user's own control exports still work.
 On both CLI routes, whose one request runs a whole agent turn, the console shows each thinking block's first line dim
-at verbosity 2 above the waiting row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
+(cut at the width with an ellipsis [D-207]) at verbosity 2 above the waiting row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
 carries no text deltas, so the answer arrives whole; token streaming needs the app-server driver (open item). Both
 routes probe their CLI when a run starts, before its waiting row [D-192]. Continuity: `codex exec resume <thread>` when supported
 (UNCERTAIN), else, and after a rewind or a compaction [D-203], a new thread with a synthetic history. The console states Codex's 19-38K extra input tokens

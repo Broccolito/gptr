@@ -256,9 +256,11 @@ test_that("tool code shows on the tool line when it fits, else as a fence never 
                    c("  * r", "```r", long, "y = x", "```"))
   expect_identical(line(call("x = 1\n```{r}\ny")),
                    c("  * r", "````r", "x = 1", "```{r}", "y", "````"))
+  # a cut fence says so inside the fence, where a copied block keeps it as an R comment
   many = sprintf("x%d = %d", 1:25, 1:25)
-  expect_identical(line(call(many)),
-                   c("  * r", "```r", many[1:20], "```", "(+5 more lines)"))
+  cut = line(call(many))
+  expect_identical(cut, c("  * r", "```r", many[1:20], "# ... +5 more lines", "```"))
+  expect_length(parse(text = cut[3:23]), 20L)
   path = list(id = "c2", name = "write", input = list(path = strrep("a/", 30L)))
   expect_lte(nchar(line(path), type = "width"), 40L)
   # the info string says r only for the r tool and its MCP form

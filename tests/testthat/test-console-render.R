@@ -575,7 +575,7 @@ test_that("on a CLI route verbosity 2 shows each thinking block's first line, di
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Done.")))
   expect_identical(render_events(s, events), c("  * r  1 + 1", "Done."))
   local_cli_run(s)
-  plain = c("  Planning", "  step 2 is a line far longer than forty", "  * r  1 + 1", "Done.")
+  plain = c("  Planning", "  step 2 is a line far longer than fo...", "  * r  1 + 1", "Done.")
   expect_identical(render_events(s, events), plain)
   withr::local_options(cli.num_colors = 256L)
   out = render_events(s, events)
@@ -583,6 +583,23 @@ test_that("on a CLI route verbosity 2 shows each thinking block's first line, di
   expect_true(all(grepl("\033[90m", out[1:2], fixed = TRUE)))
   local_gptr_options(verbose = 1L)
   expect_identical(render_events(s, events[1:5]), character())
+})
+
+test_that("a thinking line cut at the width ends with an ellipsis", {
+  testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = TRUE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  local_cli_run(s)
+  long = substr(strrep("a thinking line ", 13L), 1L, 200L)
+  full = strrep("y", 58L)
+  think = function(index, delta) {
+    hook_event("message_update", s, index = index, kind = "thinking", delta = delta)
+  }
+  out = render_events(s, list(hook_event("agent_start", s), think(1L, long), think(2L, full),
+                              think(2L, " goes on"), think(3L, paste0(full, "\n"))))
+  expect_identical(out, c(paste0("  ", substr(long, 1L, 57L), "\u2026"),
+                          paste0("  ", strrep("y", 57L), "\u2026"), paste0("  ", full)))
 })
 
 test_that("on a CLI route the waiting row keeps its clock around each thinking line (D-192)", {
