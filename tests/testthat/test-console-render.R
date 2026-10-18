@@ -525,8 +525,8 @@ test_that("the end of a call served to a CLI route prints its result line (D-192
                elapsed = 0.1, details = list(objects = list(added = "answer"), plots = 0L),
                content = list(list(type = "text", text = "")))))
   expect_identical(out, c("  * r  mean(big_vector)",
-                          "    -> error: Error: object 'big_vector' not found",
-                          "  * r  answer = 42", "    -> + answer"))
+                          "    error: Error: object 'big_vector' not found",
+                          "  * r  answer = 42", "    + answer"))
 })
 
 test_that("on a CLI route verbosity 2 shows each thinking block's first line, dim (D-192)", {
@@ -585,8 +585,14 @@ test_that("on a CLI route the waiting row keeps its clock around each thinking l
   think(2L, "a first line far longer than forty columns")
   expect_identical(rec$task, task)
   expect_identical(rec$spinner$t0, t0)
-  console_spinner_stop(rec)
-  expect_identical(think(3L, "after a tool line\n")[[1L]], "  after a tool line")
+  # nothing of a held thinking line is on screen when a prompt ends partial lines
+  think(3L, "held")
+  expect_no_error(utils::capture.output(console_before_message(kind = "prompt", tools = TRUE)))
+  start = hook_event("tool_execution_start", s, tool_call_id = "c1", tool_name = "r",
+                     input = list(code = "1"))
+  utils::capture.output(console_on_tool_start(start, ctx))
+  # a thinking line after a tool block opens its own block (D-186)
+  expect_identical(think(4L, "after a tool line\n")[1:2], c("", "  after a tool line"))
   expect_false(is.null(rec$task))
 })
 

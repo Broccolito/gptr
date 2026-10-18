@@ -433,11 +433,13 @@ console_print_text = function(text, before_output = NULL) {
 }
 
 #' Verbosity 2's view of a thinking block of a record on a CLI route: its first line without a
-#' bold title's markers, dim and cut to the width, printed once its line end or the width
-#' completes it, or by finish(), after clearing the waiting row, which keeps its clock; Codex's
-#' reasoning items so show as progress lines (D-192)
+#' bold title's markers, dim and cut to the width within the margin (D-186), printed as a block
+#' once its line end or the width completes it, or by finish(), after clearing the waiting row,
+#' which keeps its clock; Codex's reasoning items so show as progress lines (D-192). Nothing is
+#' on screen before that, so reset_line() has no partial line to end.
 #' @noRd
 console_think_line = function(rec, width = cli::console_width()) {
+  width = width - nchar(console_pad())
   st = new.env(parent = emptyenv())
   st$text = ""
   st$open = TRUE
@@ -445,11 +447,13 @@ console_think_line = function(rec, width = cli::console_width()) {
     if (st$open && nzchar(st$text)) {
       line = sub("^\\*\\*(.+)\\*\\*$", "\\1", console_lines(st$text)[[1L]])
       if (!is.null(rec$spinner)) rec$spinner$clear()
+      console_gap(rec, "think")
       console_write(cli::col_grey(cli::ansi_strtrim(paste0("  ", line), width, ellipsis = "")))
     }
     st$open = FALSE
     invisible(NULL)
   }
+  st$reset_line = function() invisible(NULL)
   st$write = function(delta) {
     if (!st$open) return(invisible(NULL))
     st$text = sub("^[[:space:]]+", "", paste0(st$text, paste(delta, collapse = "")))
@@ -960,6 +964,17 @@ console_on_message_update = function(event, ctx) {
   NULL
 }
 
+#' The result lines of a call, in its tool block (a tool-result message, a served call's end)
+#' @noRd
+console_result_block = function(rec, call, result) {
+  lines = console_tool_line(call, result, rec$session)
+  if (length(lines)) {
+    console_gap(rec, "tool")
+    console_write(lines)
+  }
+  invisible(NULL)
+}
+
 #' message_end: close the streamed answer, or print it whole when nothing was streamed; for a
 #' tool result, its result lines
 #' @noRd
@@ -983,12 +998,8 @@ console_on_message_end = function(event, ctx) {
   } else if (identical(msg$role, "tool_result")) {
     call = get0(paste0("t", msg$tool_call_id), envir = rec$tools, inherits = FALSE) %||%
       list(id = msg$tool_call_id, name = msg$tool_name, input = list())
-    result = c(msg[c("content", "is_error", "details")], list(elapsed = call$elapsed))
-    lines = console_tool_line(call, result, rec$session)
-    if (length(lines)) {
-      console_gap(rec, "tool")
-      console_write(lines)
-    }
+    console_result_block(rec, call, c(msg[c("content", "is_error", "details")],
+                                      list(elapsed = call$elapsed)))
   }
   NULL
 }
@@ -1029,9 +1040,8 @@ console_on_tool_end = function(event, ctx) {
     assign(key, call, envir = rec$tools)
   }
   if (!is.null(event$content) && console_render_on(rec)) {
-    console_write(console_tool_line(call %||% list(name = event$tool_name, input = list()),
-                                    event[c("content", "is_error", "details", "elapsed")],
-                                    rec$session))
+    console_result_block(rec, call %||% list(name = event$tool_name, input = list()),
+                         event[c("content", "is_error", "details", "elapsed")])
   }
   if (verbosity() == 1L && isTRUE(event$is_error) && console_foreground(rec)) {
     gptr_inform(paste0("gptr: ", console_escape(event$tool_name %||% "?", FALSE), " failed"),
