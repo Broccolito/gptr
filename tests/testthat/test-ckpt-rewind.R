@@ -491,6 +491,25 @@ test_that("a CLI child's file edit is undone by gptr_rewind() (IC-65)", {
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
 })
 
+test_that("a CLI child's file edit in an aborted turn is undone too (IC-65)", {
+  proj = local_project(files = list("R/a.R" = "a = 1"))
+  local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  st = new.env()
+  local_fake_provider(function(request) {
+    if (is.null(st$s)) return("ok")
+    writeLines("a = 2", file.path(proj, "R", "a.R"))
+    reactor_timer(at = reactor_now() + 0.2, fn = function() gptr_cancel(st$s))
+    list(hang = TRUE)
+  })
+  st$s = peter("one", model = "fake/fake-1", mode = "auto", envir = new.env())
+  try(st$s |> peter("edit a"), silent = TRUE)
+  expect_identical(st$s$status, "aborted")
+  gptr_rewind(st$s, 1)
+  expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
+  # the scan runs after builtin:cli has stopped the child
+  expect_gt(match("checkpoints", ext_builtin_order()), match("cli", ext_builtin_order()))
+})
+
 test_that("undone blocks in a bound document become inert; re-sourcing reproduces the rewind", {
   proj = local_project()
   local_gptr_options(record = "auto", replay = "auto")

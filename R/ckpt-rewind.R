@@ -210,8 +210,8 @@ ckpt_on_cli = function(st, event, ctx) {
   NULL
 }
 
-#' agent_end hook: the memory budget, the per-turn scan (once walks are slow) and one blob
-#' collection per session
+#' agent_end hook: the memory budget, the per-turn scan (once walks are slow, and always on a CLI
+#' route: an aborted run has no `turn_end`) and one blob collection per session
 #' @noRd
 ckpt_on_agent_end = function(st, ctx) {
   s = ctx$session
@@ -220,7 +220,7 @@ ckpt_on_agent_end = function(st, ctx) {
   turn = ckpt_turn(s)
   ckpt_objects_budget(ck, turn, session_home(s))
   if (ckpt_enabled("files", ctx, list())) {
-    frag = ckpt_files_turn_scan(ck, turn)
+    frag = ckpt_files_turn_scan(ck, turn, force = ckpt_cli_session(s))
     if (!is.null(frag)) ckpt_append_scan(s, frag)
   }
   if (is.null(ck$gc_done)) {
@@ -265,7 +265,8 @@ ckpt_rewind_block = function(st, ctx) {
 
 #' builtin:checkpoints (contract 7.16, 10.3): the checkpointers `objects`, `files` and `state`,
 #' the hooks above, the `rewind` block (its own name: a second `workspace_changes` record would
-#' shadow P09's, IC-69) and the commands `undo`, `redo`, `rewind` and `checkpoints`
+#' shadow P09's, IC-69) and the commands `undo`, `redo`, `rewind` and `checkpoints`. Loaded after
+#' builtin:cli, so its `agent_end` scan sees what a CLI child changed while it was stopped
 #' @noRd
 builtin_checkpoints = function(gptr) {
   st = gptr$state
@@ -290,7 +291,7 @@ builtin_checkpoints = function(gptr) {
   invisible(NULL)
 }
 
-on_load(ext_declare_builtin("checkpoints", builtin_checkpoints))
+on_load(ext_declare_builtin("checkpoints", builtin_checkpoints, after = "cli"))
 on_load(ext_service_set("checkpoint.note", ckpt_note, provided_by = "P16",
                         builtin = "checkpoints"))
 
