@@ -259,3 +259,15 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   SKIP 24, RSS 3.3 GB at the end.
 - Deviations: none. Open: hosted Windows evidence (native-06 and the other native backpressure
   cases on release and oldrel-4, twice).
+
+## Task CI-24 - The fd-0 reader test types its check mark only in a UTF-8 locale (2026-10-18, #48)
+- `test-console-typing.R:446` (new in #48) failed in runs 39175666947 and 39179983061
+  (`ubuntu-latest (release, LC_ALL=C)`): `processx` writes text in the native encoding, so
+  `p$write_input("one\ntwo \u2713\nthr")` cannot encode the check mark in a C locale and errors
+  before the reader runs. Fix (tests only): the typed second line is `"two \u2713"` in a UTF-8
+  locale and `"two"` otherwise; the complete-line, partial-line, Ctrl-D and `/dev/null` checks run
+  unchanged in every locale.
+- Red: `^console-typing$` under `LC_ALL=C` ERROR 1 (the CI error). Green: PASS 88 under `LC_ALL=C`
+  and in UTF-8. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: none.

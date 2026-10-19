@@ -443,8 +443,10 @@ test_that("the fd-0 reader returns complete lines, survives Ctrl-D and a /dev/nu
     grepl(x, st$out, fixed = TRUE)
   }
   expect_true(wait_for("READY"))
-  p$write_input("one\ntwo \u2713\nthr")
-  expect_true(wait_for("GOT[one|two \u2713]"))
+  # processx writes text in the native encoding, which holds the check mark only in UTF-8
+  two = if (isTRUE(l10n_info()[["UTF-8"]])) "two \u2713" else "two"
+  p$write_input(paste0("one\n", two, "\nthr"))
+  expect_true(wait_for(paste0("GOT[one|", two, "]")))
   # the partial "thr" stays in the terminal's line until Ctrl-D (or Enter) ends it
   expect_false(wait_for("GOT[thr", timeout = 1))
   p$write_input("\004")
