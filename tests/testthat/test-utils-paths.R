@@ -324,6 +324,15 @@ test_that("path_info() gives a link to nothing no metadata and no warning on eve
   expect_true(all(is.na(expect_no_warning(windows(link)))))
 })
 
+test_that("a case variant is a dangling link only where file names ignore case", {
+  td = withr::local_tempdir()
+  writeLines("x", file.path(td, "File"))
+  local_dangling_link(file.path(td, "Link"))
+  fold = file.exists(file.path(td, "FILE"))
+  expect_false(path_dangling(file.path(td, "file")))
+  expect_identical(path_dangling(file.path(td, "link")), fold)
+})
+
 test_that("readers and file tools take a link to nothing for an absent file on every OS", {
   # A Windows file symlink needs a privilege CRAN may lack; R takes its kind from an existing target
   if (is_windows()) skip_on_cran()

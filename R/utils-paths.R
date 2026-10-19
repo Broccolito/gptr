@@ -274,10 +274,13 @@ path_info = function(path) {
   info
 }
 
-#' Is a path a dangling link: a listed entry without followed metadata? Unlike readlink, this
-#' holds on Windows too.
+#' Is a path a dangling link: one without followed metadata that is a link? POSIX readlink names
+#' its target exactly; Windows readlink has none, so there it is an entry of its directory, whose
+#' names fold case (path_listed()).
 #' @noRd
-path_dangling = function(path) is.na(path_info(path)$mtime) && path_listed(path)
+path_dangling = function(path) {
+  is.na(path_info(path)$mtime) && (if (is_windows()) path_listed(path) else path_is_link(path))
+}
 
 #' Is each path equal to or inside `root`? (compares path keys)
 #' @noRd

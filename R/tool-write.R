@@ -32,16 +32,13 @@ tool_path_physical = function(q) {
 #' @noRd
 resolve_link_target = function(p) {
   f = fs_path(p)
-  l = Sys.readlink(f)
-  link = !is.na(l) && nzchar(l)
-  dangling = if (is_windows()) path_dangling(f) else link && !file.exists(f)
-  if (dangling) {
+  if (path_dangling(f)) {
     gptr_abort(paste0("Cannot write through the symbolic link '", p, "': it names no file ",
                       "(a dangling link or a loop)."),
                "invalid_argument", arg = "path", expected = "a link to an existing file")
   }
   if (is_windows() && file.exists(f)) return(path_norm(p))
-  if (!link) return(p)
+  if (!path_is_link(f)) return(p)
   as_utf8(normalizePath(f, winslash = "/"))
 }
 
