@@ -27,13 +27,14 @@ tool_path_physical = function(q) {
 }
 
 #' The file a symbolic link names, resolved by the OS. Windows has no readlink target, so an
-#' existing destination is canonicalised before rename. A detected dangling link or loop is
-#' refused, never replaced; missing Windows targets cannot be detected by readlink alone.
+#' existing destination is canonicalised before rename, and a missing name its directory still
+#' lists is a link to nothing. A dangling link or loop is refused, never replaced.
 #' @noRd
 resolve_link_target = function(p) {
   if (is_windows() && file.exists(fs_path(p))) return(path_norm(p))
   l = Sys.readlink(fs_path(p))
-  if (is.na(l) || !nzchar(l)) return(p)
+  link = if (is_windows()) path_listed(p) else !is.na(l) && nzchar(l)
+  if (!link) return(p)
   if (!file.exists(fs_path(p))) {
     gptr_abort(paste0("Cannot write through the symbolic link '", p, "': it names no file ",
                       "(a dangling link or a loop)."),

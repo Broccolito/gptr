@@ -143,8 +143,17 @@ test_that("a relative link that climbs with .. resolves from the link's physical
 })
 
 test_that("a chain of links is followed; a loop or a dangling link is refused", {
-  skip_on_os("windows")
+  if (is_windows()) skip_on_cran()
   td = withr::local_tempdir()
+  # R's Windows file.symlink() takes the link's kind from its target, so that exists at first and
+  # the relative links below stay POSIX-only
+  writeBin(charToRaw("gone"), file.path(td, "gone"))
+  expect_true(file.symlink(file.path(td, "gone"), file.path(td, "dangling")))
+  expect_true(file.remove(file.path(td, "gone")))
+  expect_error(write_file(file.path(td, "dangling"), "x"), "it names no file",
+               class = "gptr_error_invalid_argument")
+  expect_identical(list.files(td, all.files = TRUE, no.. = TRUE), "dangling")
+  skip_on_os("windows")
   writeBin(charToRaw("end"), file.path(td, "l0"))
   for (i in 1:3) file.symlink(paste0("l", i - 1L), file.path(td, paste0("l", i)))
   w = write_file(file.path(td, "l3"), "new")
@@ -154,29 +163,9 @@ test_that("a chain of links is followed; a loop or a dangling link is refused", 
   file.symlink("la", file.path(td, "lb"))
   expect_error(write_file(file.path(td, "la"), "x"), "symbolic link",
                class = "gptr_error_invalid_argument")
-  file.symlink("gone", file.path(td, "dangling"))
-  expect_error(write_file(file.path(td, "dangling"), "x"), "symbolic link",
-               class = "gptr_error_invalid_argument")
   expect_identical(sort(list.files(td, all.files = TRUE, no.. = TRUE)),
                    c("dangling", "l0", "l1", "l2", "l3", "la", "lb"))
   expect_identical(raw_of(file.path(td, "l0")), charToRaw("new"))
-})
-
-test_that("a dangling Windows link is replaced by the written file, never written through", {
-  skip_on_cran()
-  skip_if_not(is_windows())
-  td = withr::local_tempdir()
-  gone = file.path(td, "gone.txt")
-  link = file.path(td, "dangling.txt")
-  writeBin(charToRaw("target"), gone)
-  expect_true(file.symlink(gone, link))
-  expect_true(file.remove(gone))
-  # Without a readlink target the dangling link is not detected; rename() replaces the link itself
-  w = write_file(link, "new")
-  expect_true(w$created)
-  expect_identical(raw_of(link), charToRaw("new"))
-  expect_false(path_is_link(link))
-  expect_identical(list.files(td, all.files = TRUE, no.. = TRUE), "dangling.txt")
 })
 
 test_that("non-ASCII directories, files and relative links work in a C locale", {
