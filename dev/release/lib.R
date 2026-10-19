@@ -766,6 +766,10 @@ pkgdown_yaml = function(extra = character()) {
     "  components:", "    cheatsheet:", "      text: Cheatsheet", "      menu:",
     "      - text: HTML", "        href: cheatsheet.html",
     "      - text: PDF", "        href: gptr-cheatsheet.pdf",
+    "", "authors:", "  after: >-",
+    "    **Acknowledgements.** Mario Zechner's [pi](https://github.com/earendil-works/pi) coding",
+    "    agent inspired gptr; its tool descriptions, edit semantics and prompt-template grammar",
+    "    are derived from pi (MIT license; see `inst/COPYRIGHTS`).",
     "", "reference:",
     unlist(Map(section, names(ref), ref), use.names = FALSE), "", "articles:",
     unlist(Map(section, names(articles), articles), use.names = FALSE))

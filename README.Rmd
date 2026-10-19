@@ -213,8 +213,8 @@ as context instead of converting it to text. See `NEWS.md`.
 
 ## Acknowledgments
 
-The tool descriptions, edit semantics and prompt-template grammar are derived from 'pi' by
-Mario Zechner (MIT license). The model catalog is derived from models.dev (MIT license) and the
+gptr was inspired by Mario Zechner's 'pi' coding agent; its tool descriptions, edit semantics
+and prompt-template grammar are derived from 'pi' (MIT license). The model catalog is derived from models.dev (MIT license) and the
 secret patterns from gitleaks (MIT license); see `inst/COPYRIGHTS`. Ideas were borrowed from
 'ellmer', 'tidyllm', 'btw' and 'mcptools', none of which gptr depends on. Anthropic, OpenAI,
 Google, TypeSafe AI, Ollama and the vendors of the command-line tools are third-party services;

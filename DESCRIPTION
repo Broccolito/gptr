@@ -4,8 +4,8 @@ Version: 1.0.0
 Authors@R: c(
     person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0002-7342-7000")),
-    person("Mario", "Zechner", role = c("ctb", "cph"),
-           comment = "Author of 'pi' (MIT), from which tool texts and templates are derived")
+    person("Tianlu", "Zhu", role = "ctb", comment = "UI/UX polishing and CI/CD"),
+    person("Gianmarco", "Bellucci", role = "ctb", comment = "Testing")
   )
 Description: Runs large language model agents inside the running 'R'
     session, so that models inspect and modify objects that are already in
