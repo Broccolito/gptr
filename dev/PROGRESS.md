@@ -1,4 +1,19 @@
-## Current checkpoint — final integration, 2026-10-15
+## Current checkpoint — P27 Windows coverage (PR #51), 2026-10-19
+
+Branch `claude/windows-coverage-p27` (draft PR #51 into `main`), code head `92a2944`; plan
+[P27](plan/P27-windows-coverage.md), fixes CI-25..CI-62 in [fixes](progress/fixes.md), decisions
+D-228..D-234 and the D-019 item 2 correction in `DEVIATIONS.md`. Windows behaviour is claimed only
+from hosted runs.
+
+| Status | Result |
+| --- | --- |
+| Fixed | Product: patch moves keep file links and 8.3 aliases; dangling Windows links are refused by write, edit, the scrub locks and the wire log and read as absent elsewhere (D-231); a `.gptr` junction onto a foreign directory is refused; cmd output is UTF-8 (D-229); Store aliases reached by 8.3 name are skipped; `kill_all()` stops a shell's background children on macOS (D-233); per-turn `/undo` rows (D-228); gptr's own document writes (D-232); an exited app's family at launch; the DevTools port (D-230). CI and tests: plan gates, registries, Python, pwsh, startup guards, runner streams, RSS cap, mock accept. |
+| Unskipped | `skip_on_os("windows")` sites 77 -> 60; 7 tests renamed (P27 table). |
+| Hosted, first pass | R-CMD-check Windows release and oldrel-4 on `9170baf` (run 39217189384) and on `92a2944` (run 39235008757): only `test-bridge-sh.R:146`, `:155` fail, plus `test-utils-paths.R:324` on oldrel-4 at `92a2944`; Exact-tarball on `2c9b6a4` (run 39202180585) green, Windows release and R-devel in CRAN mode; rscript-native (run 39234997432) and the windows-by-file optional packet (run 39235001873) green on `92a2944`. |
+| Open | The PowerShell route returns status 0 after `cmd /c exit 4` and `$LASTEXITCODE` is unset (CI-50); R-CMD-check's system Google Chrome refuses DevTools ("requires a non-default data directory", CI-40); on `92a2944` `test-bridge-sh.R:512` (ubuntu LC_ALL=C) and `test-utils-paths.R:324` (R 4.2.3: Windows and ubuntu oldrel-4); `test-bridge-sh.R:445`, `:449` in the filtered by-file run on `9170baf`; INFRA-01's rate is unproven (CI-62). |
+| Remaining | Every lane green on one commit, each Windows lane twice (P27 acceptance A1-A7, A9); the ordinary windows-by-file full suite and Exact-tarball have not run since `2c9b6a4`, Plan-gates and Optional-integrations not on this branch. |
+
+## Historical checkpoint — final integration, 2026-10-15
 
 Resumed from `dev/PAUSED_HANDOFF_2026-10-15.md`; the coordinator is
 `/Users/wgu/.codex/worktrees/release-validation-notes/gptr`. Evidence:

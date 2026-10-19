@@ -1,4 +1,16 @@
-## Current checkpoint — K Mac validation, 2026-10-15
+## Current checkpoint — P27 Windows coverage (PR #51), 2026-10-19
+
+Branch `claude/windows-coverage-p27` (draft PR #51), code head `92a2944`. Goal: every Windows
+function proven on hosted Windows CI (release, oldrel-4, R-devel; CRAN and NOT_CRAN), every Windows
+lane green twice on one commit. Plan `plan/P27-windows-coverage.md` (acceptance A1-A9), evidence
+`progress/fixes.md` CI-25..CI-62, decisions D-228..D-234. First hosted passes: R-CMD-check Windows
+release and oldrel-4 on `9170baf` and `92a2944` except the PowerShell route (`test-bridge-sh.R:146`,
+`:155`) and, on `92a2944` oldrel-4, `test-utils-paths.R:324`; Exact-tarball on `2c9b6a4`;
+rscript-native and the optional Windows packet on `92a2944`. Open: the PowerShell exit status
+(CI-50), the system Google Chrome DevTools refusal under the suite (CI-40), `test-bridge-sh.R:512`
+(ubuntu LC_ALL=C) and `test-utils-paths.R:324` (R 4.2.3, Windows and ubuntu oldrel-4) on `92a2944`.
+
+## Historical checkpoint — K Mac validation, 2026-10-15
 
 Current evidence and exact source boundaries are recorded in
 [Mac validation checkpoint](progress/mac-validation-20261015.md).
@@ -1032,8 +1044,9 @@ their files in `dev/.validation/scratch/lanes-current.txt` (empty now).
 
 - P12: `claude-haiku-4-5` has `tool_addition = TRUE` but `mid_system = FALSE` (no tool-addition
   declarations sent; D-075).
-- D-019 item 5: processx's stdin write blocks on Windows (a pause, not a deadlock, where children read
-  first; WIN-1 shows workers are safe, D-179). Decide before large stdin payloads go to Windows children.
+- D-019 item 5 (status 2026-10-19): the owned Windows stdin writer carries large stdin; the 4 MB echo,
+  the Windows backpressure file and the 200 KB CLI stdin tests pass on hosted Windows (P27). Untested:
+  claude control responses over one 64 KiB writer chunk (D-104).
 - CRAN check time: under CRAN conditions (`NOT_CRAN` unset) the tests took 284 s on this Mac after PERF-2;
   the `cran-mode` job runs them serially on R-devel. win-builder shows CRAN's real time.
 - Windows open item (WIN-2): concurrent fake CLIs append to one log file (INFRA-19 race, once).

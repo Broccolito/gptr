@@ -582,8 +582,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^bridge-sh$` PASS 281 SKIP 2 on macOS (the Windows assertions do not run there).
 - Reviews: none recorded.
 - Deviations: none. Open: on 9170baf both Windows R-CMD-check rows fail `test-bridge-sh.R:146` (status
-  0) and `:155` (stdout `lec= ok=True` twice); status 6 passes. `$LASTEXITCODE` stays unset after both
-  cmd exits, so registry AutoRun (the only effect of `/d`) is ruled out; the cause is open.
+  0) and `:155` (stdout `lec= ok=True` twice), and again on 92a2944 (run 39235008757); status 6
+  passes. `$LASTEXITCODE` stays unset after both cmd exits, so registry AutoRun (the only effect of
+  `/d`) is ruled out; the cause is open.
 
 ## Task CI-51 - write_file() refuses a dangling Windows link that stat() still sees (2026-10-18, #51)
 - Hosted windows-by-file (run 39193453652) failed `test-tool-write.R:153` with three warnings and
@@ -697,9 +698,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Red: the hosted 9170baf runs show the warnings the new `expect_no_warning()` assertions forbid; a
   macOS emulation reproduces them. Green: 5 neighbouring files FAIL 0 WARN 0 PASS 1873. Lint clean.
 - Reviews: r1 findings applied with CI-61.
-- Deviations: D-231. Open: on 92a2944 `ubuntu-latest (oldrel-4)` (job 118001849303, R 4.2.3) fails
-  the new `test-utils-paths.R:324` ("cannot coerce class '"octmode"' to a data.frame" in the emulated
-  row); not yet fixed.
+- Deviations: D-231. Open: on 92a2944 the Windows release check has WARN 0 (job 118001849245), but
+  the new `test-utils-paths.R:324` fails on R 4.2.3 ("cannot coerce class '"octmode"' to a
+  data.frame" in the emulated row; Windows oldrel-4 job 118001849423, ubuntu oldrel-4 job
+  118001849303); not yet fixed.
 
 ## Task CI-61 - A dangling link reads as absent in Windows readers and tools (2026-10-19, #51)
 - On Windows `file.exists()` is TRUE for a dangling link and a later `file()` warns and fails, so the
@@ -711,7 +713,8 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   answers. Green: the full offline suite FAIL 0 WARN 0 SKIP 62 PASS 34753 on macOS. Lint clean.
 - Reviews: r1 5 findings applied; finding 5's patch-delete part rejected (`patch_key()` refuses the
   link earlier on both OSes).
-- Deviations: D-231. Open: the other `file.exists()` guards are not audited; Windows hosted pending.
+- Deviations: D-231. Open: passed in R-CMD-check run 39235008757 (92a2944, Windows release and
+  oldrel-4); the other `file.exists()` guards are not audited.
 
 ## Task CI-62 - The mock server accepts every pending connection before reading requests (2026-10-19, #51)
 - INFRA-01's six-stream wall failed in about 3% of hosted Windows jobs (11 of 338) while gptr
