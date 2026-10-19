@@ -1,6 +1,7 @@
 """Regression checks for status-bearing plan parse diagnostics; no R process starts."""
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location('plan_checks', Path(__file__).with_name('check-plans.py'))
@@ -33,6 +34,26 @@ class ParseReportTests(unittest.TestCase):
     def test_empty_selection_cannot_pass(self):
         with self.assertRaises(SystemExit):
             checks.validate_parse_report('0 R blocks; 0 with parse/style problems\n', 0)
+
+
+class PlanSetTests(unittest.TestCase):
+    def plans(self, names):
+        with tempfile.TemporaryDirectory() as folder:
+            for name in names:
+                (Path(folder) / name).write_text('')
+            return [p.name for p in checks.plan_files(Path(folder))]
+
+    def numbered(self, count):
+        return ['P%02d-plan.md' % i for i in range(1, count + 1)]
+
+    def test_contiguous_set_beyond_p25(self):
+        self.assertEqual(self.plans(self.numbered(27)), self.numbered(27))
+
+    def test_rejects_short_gapped_duplicate_or_malformed_sets(self):
+        for names in (self.numbered(24), self.numbered(27)[:12] + self.numbered(27)[13:],
+                      self.numbered(25) + ['P25-again.md'], self.numbered(25) + ['P26.md']):
+            with self.subTest(names=names[-2:]), self.assertRaises(SystemExit):
+                self.plans(names)
 
 
 if __name__ == '__main__':

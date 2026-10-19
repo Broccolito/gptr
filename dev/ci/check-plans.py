@@ -21,11 +21,17 @@ def validate_parse_report(report, selected_count):
         raise SystemExit("Plan R parsing/style must select every block with zero problems")
 
 
+def plan_files(plan_dir):
+    plans = sorted(plan_dir.glob("P*.md"))
+    expected = ["P" + str(i).zfill(2) for i in range(1, len(plans) + 1)]
+    if (len(plans) < 25 or any(not re.match(r"^P\d{2}-.+[.]md$", p.name) for p in plans) or
+            [p.name[:3] for p in plans] != expected):
+        raise SystemExit("Require a contiguous P01 through Pnn plan set with n >= 25")
+    return plans
+
+
 def source_manifest(repo):
-    plans = sorted((repo / "dev/plan").glob("P*.md"))
-    if (any(not re.match(r"^P\d{2}-.+[.]md$", p.name) for p in plans) or
-            [p.name[:3] for p in plans] != ["P" + str(i).zfill(2) for i in range(1, 26)]):
-        raise SystemExit("Require the exact P01 through P25 plan set")
+    plans = plan_files(repo / "dev/plan")
     required = ["dev/plan/00-index.md", "dev/plan/00-conventions.md",
                 "dev/spec/03-architecture.md", "dev/spec/04-interface-contract.md",
                 "dev/spec/05-plan-decomposition.md", "dev/spec/07-local-ollama.md",
@@ -95,9 +101,9 @@ def main():
         run([sys.executable, str(check_tools / "build_index.py"), "--repo", str(repo),
              "--out", str(output / "index"), "--quiet"], "index")
         index = json.loads((output / "index/index.json").read_text(encoding="utf-8"))
-        if len(index["plans"]) != 25 or any(
+        if len(index["plans"]) != len(plan_files(repo / "dev/plan")) or any(
                 finding["severity"] == "error" for finding in index["findings"]):
-            raise SystemExit("Plan index must include all 25 plans with zero error findings")
+            raise SystemExit("Plan index must include every plan with zero error findings")
         extract = run([sys.executable, str(check_tools / "extract.py")], "extract")
         if "UNCLOSED" in extract:
             raise SystemExit("Plan extraction found an unclosed fence")
