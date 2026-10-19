@@ -18,8 +18,8 @@ optional_titles = list(
     "the session check passes a working app and returns a 1000x700 screenshot",
     "the session check catches render errors and crashed servers but not validate()"),
   "test-artifact-browser-cleanup.R" = c(
-    "artifact browser cleanup closes its owned local process before the websocket",
-    "artifact browser cleanup still closes its websocket after a process-close error",
+    "artifact browser cleanup uses graceful close before confirming its local process",
+    "artifact browser cleanup retains its owner after a process-close error",
     "artifact browser cleanup leaves a remote browser process alone",
     "the private Linux test temp root fits Chromium's Unix socket limit"),
   "test-config-content-cache.R" = c(
@@ -167,9 +167,9 @@ optional_titles = list(
     "an mcp_message round trip evaluates R in the live session and is gated once",
     "gptr_cancel() sends the interrupt control request, then kill_all()"),
   "test-cli-codex.R" = c(
-    "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
+    "a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in env",
     "the next turn resumes the Codex thread with -c sandbox_mode=",
-    "a fake codex returns a function's numeric result through the HTTP MCP bridge",
+    "a fake codex returns a function's numeric result through the stdio relay",
     "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
     "retargeting a dangling control link warns after the Codex exec completes",
     "a control file gptr cannot read is marked by its size and time instead",

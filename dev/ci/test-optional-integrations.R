@@ -14,6 +14,19 @@ testthat::test_that("no files and missing selected files cannot pass", {
     "test-unapproved.R", FALSE), "Unapproved")
 })
 
+testthat::test_that("every approved title names a current test of its file", {
+  folder = file.path(dirname(runner_path), "..", "..", "tests", "testthat")
+  registry = c(optional_titles, optional_original_os_guards)
+  for (i in seq_along(registry)) {
+    file = names(registry)[[i]]
+    titles = unlist(lapply(parse(file.path(folder, file), keep.source = FALSE), function(x) {
+      if (is.call(x) && deparse(x[[1L]]) %in% c("test_that", "testthat::test_that") &&
+          is.character(x[[2L]])) x[[2L]]
+    }))
+    testthat::expect_identical(setdiff(registry[[i]], titles), character(), info = file)
+  }
+})
+
 testthat::test_that("a mandatory Quarto integration may not silently skip", {
   name = "quarto render records a #| label agent chunk and the next render replays it"
   testthat::expect_error(optional_gate(list(record(name, skipped = 1L)),
@@ -341,9 +354,9 @@ writer_affected_titles = list(
     "an mcp_message round trip evaluates R in the live session and is gated once",
     "gptr_cancel() sends the interrupt control request, then kill_all()"),
   "test-cli-codex.R" = c(
-    "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
+    "a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in env",
     "the next turn resumes the Codex thread with -c sandbox_mode=",
-    "a fake codex returns a function's numeric result through the HTTP MCP bridge",
+    "a fake codex returns a function's numeric result through the stdio relay",
     "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
     "retargeting a dangling control link warns after the Codex exec completes",
     "a control file gptr cannot read is marked by its size and time instead",
@@ -1163,9 +1176,9 @@ testthat::test_that("fixed Codex control cases remain mandatory without capabili
     "control digests query only unobservable Windows entries and retain POSIX markers",
     "fixed dangling SYSTEM and MCP control links keep markers and detect retargeting")
   original = c(
-    "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
+    "a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in env",
     "the next turn resumes the Codex thread with -c sandbox_mode=",
-    "a fake codex returns a function's numeric result through the HTTP MCP bridge",
+    "a fake codex returns a function's numeric result through the stdio relay",
     "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
     "retargeting a dangling control link warns after the Codex exec completes",
     "a control file gptr cannot read is marked by its size and time instead")
