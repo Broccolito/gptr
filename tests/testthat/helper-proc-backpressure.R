@@ -197,7 +197,8 @@ bp_observer_reason = function(stage, error) {
 }
 
 # Retry, every 100 ms, a reason that owned files changing during a walk can raise (Windows lstat
-# of a delete-pending file reports st_ino 0), or a walk stalled on a loaded runner can (the
+# reports st_ino 0 for an entry it cannot open, as when a pending deletion completes during the
+# observer's delete-pending check), or a walk stalled on a loaded runner can (the
 # snapshot or initial deadline), until the observer's 1 s deadline has passed since the first
 # failure. Each retry meets every bound unchanged; any other reason and a reason that outlasts
 # the deadline still end the observation. The last condition is kept, since the observer's
