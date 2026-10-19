@@ -388,9 +388,14 @@ skip_if_no_chrome = function() {
   skip_if(!is.null(artifact_chromote_missing()), "no Chrome or Chromium for chromote")
 }
 
-# A Chrome that does not start in time (hosted runners) gives the contract's HTTP-only result
+# A Chrome that does not start in time (hosted runners) gives the contract's HTTP-only result;
+# the skip names that Chrome and quotes the end of its own startup stderr
 skip_if_browser_failed = function(res) {
-  skip_if(is.na(res$ok) && is.null(artifact_state$browser), res$messages[1])
+  if (!is.na(res$ok) || !is.null(artifact_state$browser)) return(invisible())
+  logs = list.files(tempdir(), "^gptr-chrome-stderr-", full.names = TRUE)
+  said = unlist(strsplit(vapply(logs[which.max(file.mtime(logs))], proc_read_text, ""), "\r?\n"))
+  skip(paste0(res$messages[1], ". Chrome ", chromote::find_chrome(), " wrote to stderr: ",
+              paste(utils::tail(said[nzchar(said)], 3L), collapse = " / ")))
 }
 
 # A served version as a record the session check reads: its URL, its redacted log
