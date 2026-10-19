@@ -39,7 +39,8 @@ optional_titles = list(
     "the optional observer refuses a root replaced by a foreign directory link",
     "the optional observer preserves unchanged empty environment entries and rejects loss",
     "the optional observer restores changed and missing POSIX empty environment entries",
-    "the optional observer restores library paths after success and failure"),
+    "the optional observer restores library paths after success and failure",
+    "the optional observer charges a real Windows delete-pending file until it closes"),
   "test-windows-security.R" = c(
     "Windows true symbolic links are readable and detached without deleting targets",
     "Windows safe instruction links remain while escaped and guarded inputs stay private",
@@ -287,6 +288,8 @@ optional_platform_guard = function(file, name, windows) {
     "idle Windows writer retirement preserves target stdin and later FIFO EOF"))
   if (identical(file, "test-subagent-worker.R")) return(identical(name,
     "a Windows worker exits within 10 s after its acknowledged parent dies (IC-60)"))
+  if (identical(file, "test-bp-disk-observer.R")) return(identical(name,
+    "the optional observer charges a real Windows delete-pending file until it closes"))
   identical(file, "test-proc-writer-runtime.R") && name %in% c(
     "Windows production writer preserves ordered writes and idle EOF",
     "Windows production writer death is a typed IO failure",

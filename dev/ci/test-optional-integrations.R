@@ -1836,6 +1836,7 @@ testthat::test_that(
 
 testthat::test_that("owned nofollow observer controls are mandatory and strict on both hosts", {
   file = "test-bp-disk-observer.R"
+  native = "the optional observer charges a real Windows delete-pending file until it closes"
   expected = c(
     "the optional observer initializes privately and restores wrapper failures",
     "the optional observer charges a real dangling link without following its target",
@@ -1844,28 +1845,39 @@ testthat::test_that("owned nofollow observer controls are mandatory and strict o
     "the optional observer refuses a root replaced by a foreign directory link",
     "the optional observer preserves unchanged empty environment entries and rejects loss",
     "the optional observer restores changed and missing POSIX empty environment entries",
-    "the optional observer restores library paths after success and failure")
+    "the optional observer restores library paths after success and failure",
+    native)
   testthat::expect_identical(optional_titles[[file]], expected)
   rows = lapply(expected, record)
   for (windows in c(FALSE, TRUE)) {
     gate = optional_gate(rows, file, windows)
     testthat::expect_true(gate$passed)
-    testthat::expect_identical(gate$mandatory_cases, expected)
+    # Only the real delete-pending control may skip, and only off Windows.
+    testthat::expect_identical(gate$mandatory_cases, setdiff(expected, if (!windows) native))
     testthat::expect_length(gate$platform_guard_cases, 0L)
     for (i in seq_along(expected)) {
       title = expected[[i]]
-      testthat::expect_false(optional_allowed_skip(file, title, windows))
+      guarded = !windows && identical(title, native)
+      testthat::expect_identical(optional_allowed_skip(file, title, windows), guarded)
       testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
       testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
       for (field in c("failed", "warnings", "skipped", "passed")) {
         changed = rows
         changed[[i]][[field]] = if (field == "passed") 0L else 1L
-        testthat::expect_error(optional_gate(changed, file, windows))
+        if (guarded && field %in% c("skipped", "passed")) {
+          testthat::expect_true(optional_gate(changed, file, windows)$passed)
+        } else {
+          testthat::expect_error(optional_gate(changed, file, windows))
+        }
       }
       late = rows
       late[[i]]$passed = 3L
       late[[i]]$skipped = 1L
-      testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      if (guarded) {
+        testthat::expect_identical(optional_gate(late, file, windows)$platform_guard_cases, native)
+      } else {
+        testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      }
       for (kind in c("expectation_error", "expectation_warning")) {
         raw = rows
         raw[[i]] = optional_result_rows(list(list(test = title, results = list(

@@ -295,3 +295,65 @@ test_that("the optional observer restores library paths after success and failur
     }
   }
 })
+
+test_that("the optional observer charges a real Windows delete-pending file until it closes", {
+  skip_on_cran()
+  skip_if(.Platform$OS.type != "windows", "requires an actual Windows delete-pending file")
+  bp_disk_test_python()
+  bp_disk_test_state()
+  root = withr::local_tempdir(tmpdir = normalizePath(tempdir(), mustWork = TRUE))
+  writeBin(charToRaw("seven!!"), file.path(root, "data"))
+  writeBin(as.raw(rep(42L, 180L)), file.path(root, "marker.json"))
+  observe = bp_disk_observer(root)
+  scope = environment(observe)
+  # FileDispositionInfo is the classic disposition, not the POSIX one DeleteFileW may use: the
+  # name stays listed but unopenable until this, its last handle, closes.
+  code = c(
+    "import ctypes, os, time",
+    "def control(observer, pending):",
+    "    kernel = ctypes.WinDLL('kernel32.dll', use_last_error=True)",
+    "    kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32,",
+    "        ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p]",
+    "    kernel.CreateFileW.restype = ctypes.c_void_p",
+    "    kernel.SetFileInformationByHandle.argtypes = [ctypes.c_void_p, ctypes.c_int,",
+    "        ctypes.c_void_p, ctypes.c_uint32]",
+    "    kernel.CloseHandle.argtypes = [ctypes.c_void_p]",
+    "    def sample():",
+    "        try:",
+    "            x = observer.snapshot()",
+    "        except Exception as error:",
+    "            return str(error)",
+    "        return '%d %d %d' % (x['bytes'], x['disappeared'], x['directories'])",
+    "    marker, data = (os.path.join(observer.root, x) for x in ('marker.json', 'data'))",
+    "    result = dict(ordinary=pending(data), absent=pending(marker + '.absent'))",
+    "    handle = kernel.CreateFileW(marker, 0x10000, 7, None, 3, 0x80, None)",
+    "    if handle in (None, ctypes.c_void_p(-1).value):",
+    "        raise ctypes.WinError(ctypes.get_last_error())",
+    "    try:",
+    "        flag = ctypes.c_ubyte(1)",
+    "        if not kernel.SetFileInformationByHandle(handle, 4, ctypes.byref(flag), 1):",
+    "            raise ctypes.WinError(ctypes.get_last_error())",
+    "        result.update(listed='marker.json' in os.listdir(observer.root),",
+    "                      unopened=os.lstat(marker).st_ino == 0,",
+    "                      opened=os.lstat(data).st_ino > 0, pending=pending(marker),",
+    "                      held=';'.join(sample() for _ in range(3)))",
+    "    finally:",
+    "        result['closed'] = bool(kernel.CloseHandle(handle))",
+    "    deadline = time.monotonic() + 10",
+    "    while 'marker.json' in os.listdir(observer.root) and time.monotonic() < deadline:",
+    "        time.sleep(0.05)",
+    "    result.update(gone='marker.json' not in os.listdir(observer.root),",
+    "                  after=pending(marker), released=sample())",
+    "    return result")
+  result = bp_disk_preserve(function() {
+    builtins = reticulate::import_builtins(convert = FALSE)
+    control = builtins$dict()
+    builtins$exec(paste(code, collapse = "\n"), control, control)
+    reticulate::py_to_r(control[["control"]](get("observer", envir = scope, inherits = FALSE),
+      get("namespace", envir = scope, inherits = FALSE)[["_windows_delete_pending"]]))
+  })
+  # Listed but unopenable, the file is charged its 180 listed bytes; once closed it is gone.
+  expect_identical(result, list(ordinary = FALSE, absent = FALSE, listed = TRUE,
+    unopened = TRUE, opened = TRUE, pending = TRUE, held = "187 0 1;187 0 1;187 0 1",
+    closed = TRUE, gone = TRUE, after = FALSE, released = "7 0 1"))
+})
