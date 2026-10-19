@@ -271,10 +271,13 @@ serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.fra
   owner = new.env(parent = emptyenv())
   owner$p = NULL
   withr::defer({
+    started = proc.time()[["elapsed"]]
     if (is.null(owner$p) || isTRUE(kill_all(owner$p, grace = 0))) {
       unlink(dir, recursive = TRUE)
     } else {
-      stop("The artifact test child did not settle.")
+      stop("The artifact test child did not settle in ",
+           round(proc.time()[["elapsed"]] - started, 1), " s; still listed: [",
+           paste(family_left(owner$p), collapse = "; "), "]")
     }
   }, envir = .env)
   p = proc_rscript("artifact", args = list(dir = vdir, port_file = port_file,
@@ -287,6 +290,30 @@ serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.fra
   deadline = Sys.time() + 30
   while (!file.exists(port_file) && p$is_alive() && Sys.time() < deadline) Sys.sleep(0.05)
   list(proc = p, port_file = port_file, raw = raw)
+}
+
+# What ps still lists of a child's family after polling up to `wait` seconds, none once it has
+# ended: the child itself and every process carrying its tree marker, each as ps formats it
+# with its status. processx's wait() returns at once after is_alive() has read the exit code,
+# while Windows can still list the exited child and processes carrying its marker (its console
+# host exits after its last client), and kill_all() reports a family member it still finds
+family_left = function(p, wait = 0) {
+  rec = proc_record(p$get_pid(), p)
+  if (is.null(rec)) return("no marker record")
+  deadline = Sys.time() + wait
+  repeat {
+    tree = proc_tree(rec$marker)
+    left = "an unreadable process table"
+    if (!isTRUE(attr(tree, "unavailable"))) {
+      child = proc_identity(rec$pid, rec$create_time)
+      if (!isFALSE(child$alive)) tree = c(list(child$handle), tree)
+      left = unique(vapply(tree, function(h) {
+        tryCatch(paste(format(h), ps::ps_status(h)), error = conditionMessage)
+      }, ""))
+    }
+    if (!length(left) || Sys.time() > deadline) return(left)
+    Sys.sleep(0.05)
+  }
 }
 
 # Status of a GET (NA when nothing answers), polled until the app answers
@@ -358,14 +385,42 @@ test_that("artifact_serve() publishes a loopback port and serves only requests w
   expect_identical(http_status(paste0(base, "shared/shiny.min.js")), 200L)
 })
 
+test_that("family_left() waits out an exited child's teardown and names what stays listed", {
+  me = ps::ps_handle()
+  exited = list(get_pid = function() 42L)
+  record = list(marker = proc_marker_new(), pid = 42L, create_time = 10)
+  # each poll reads the marker's tree, then the child: `tree` and `child` answer per poll
+  replay = function(tree, child = function(poll) FALSE, wait = 5) {
+    poll = 0L
+    local_mocked_bindings(
+      proc_record = function(pid, process = NULL) record,
+      proc_tree = function(marker) {
+        poll <<- poll + 1L
+        tree(poll)
+      },
+      proc_identity = function(pid, create_time = NULL) list(handle = me, alive = child(poll))
+    )
+    list(left = family_left(exited, wait), polls = poll)
+  }
+  ended = list(left = character(), polls = 2L)
+  # the exited child, or a process carrying its marker, is still listed at the first poll
+  expect_identical(replay(function(poll) list(), function(poll) poll == 1L), ended)
+  expect_identical(replay(function(poll) if (poll == 1L) list(me) else list()), ended)
+  stays = replay(function(poll) list(me), wait = 0.2)$left
+  expect_match(stays, sprintf("^<ps::ps_handle> PID=%d, .* [a-z]+$", Sys.getpid()))
+  unreadable = function(poll) structure(list(), unavailable = TRUE)
+  expect_identical(replay(unreadable, wait = 0.2)$left, "an unreadable process table")
+  record = NULL
+  expect_identical(replay(function(poll) list())$left, "no marker record")
+})
+
 test_that("a broken app ends the child before a port exists, with its error on stderr", {
   skip_if_cannot_launch()
   local_project()
   broken = c("library(shiny)", "ui = fluidPage(textOutput(no_such_object))",
              "server = function(input, output, session) {}", "shinyApp(ui, server)")
   ch = serve_child(build_version("broken", broken), "")
-  ch$proc$wait(10000)
-  expect_false(ch$proc$is_alive())
+  expect_identical(family_left(ch$proc, 10), character())
   expect_false(file.exists(ch$port_file))
   log = readLines(ch$raw, warn = FALSE, encoding = "UTF-8")
   expect_true(any(grepl("Error: .*no_such_object", log)))
@@ -377,8 +432,7 @@ test_that("the watchdog stops the app when the parent process is gone", {
   dead = processx::process$new(rscript_path(), c("--vanilla", "-e", "invisible(0)"))
   dead$wait(10000)
   ch = serve_child(build_version("orphan", tiny_app), "", parent_pid = dead$get_pid())
-  ch$proc$wait(15000)
-  expect_false(ch$proc$is_alive())
+  expect_identical(family_left(ch$proc, 15), character())
   log = readLines(ch$raw, warn = FALSE, encoding = "UTF-8")
   expect_true(any(grepl("parent R process is gone", log, fixed = TRUE)))
 })
