@@ -198,44 +198,39 @@ test_that("line_reader() drops bytes that are not UTF-8 without a warning", {
   expect_identical(got, c("ok", "caf"))
 })
 
-test_that("a parent killed with SIGTERM leaves children that the next load's sweep removes", {
+test_that("a killed parent leaves a grandchild that the next load's sweep removes", {
   skip_on_cran()
-  skip_on_os("windows")
   withr::local_envvar(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep))
-  script = tempfile(fileext = ".R")
-  spawn_line = paste0("spawn(rs, c('--vanilla', '-e', 'Sys.sleep(120)'), stdout = NULL, ",
-                      "stderr = NULL, supervise = FALSE)")
+  script = withr::local_tempfile(fileext = ".R")
+  ready = file.path(withr::local_tempdir(), "grandchild.pid")
+  # The grandchild (cleanup = FALSE) inherits the child's marker. On Windows processx's
+  # kill-on-close job ends the child with its parent, never a grandchild
+  child = paste("a = commandArgs(TRUE); processx::process$new(a[[1L]], c('--vanilla', '-e',",
+                "a[[2L]], a[[3L]]), cleanup = FALSE); Sys.sleep(120)")
+  grandchild = "cat(Sys.getpid(), file = commandArgs(TRUE)[[1L]]); Sys.sleep(120)"
   writeLines(c(tracemem_loader(),
                "spawn = utils::getFromNamespace('proc_spawn', 'gptr')",
                "rs = utils::getFromNamespace('rscript_path', 'gptr')()",
-               paste0("p1 = ", spawn_line),
-               "cat(p1$get_pid(), '\\n')",
-               "flush(stdout())",
+               sprintf(paste("p1 = spawn(rs, c('--vanilla', '-e', %s, rs, %s, %s), stdout = NULL,",
+                             "stderr = NULL, supervise = FALSE)"),
+                       deparse(child), deparse(grandchild), deparse(ready)),
                "Sys.sleep(120)"), script)
-  parent = processx::process$new(rscript_path(), c("--vanilla", script), stdout = "|",
-                                 stderr = "|")
+  parent = processx::process$new(rscript_path(), c("--vanilla", script))
   withr::defer(try(parent$kill_tree(), silent = TRUE))
-  line = ""
-  t0 = reactor_now()
-  while (!grepl("\n", line) && reactor_now() - t0 < 120 && parent$is_alive()) {
-    processx::poll(list(parent), 500L)
-    line = paste0(line, parent$read_output())
-  }
-  kids = as.integer(strsplit(trimws(line), "\\s+")[[1]])
-  expect_length(kids, 1L)
-  stopifnot(length(kids) == 1L, proc_pid_valid(kids))
-  handle = ps::ps_handle(kids[[1L]])
-  withr::defer(try(ps::ps_kill(handle), silent = TRUE))
+  expect_true(wait_until(function() isTRUE(file.size(ready) > 0), 120))
+  orphan = ps::ps_handle(as.integer(readLines(ready, warn = FALSE)))
+  withr::defer(try(ps::ps_kill(orphan), silent = TRUE))
+  # SIGTERM on Unix, TerminateProcess() on Windows: no finalizer of the parent runs
   parent$signal(tools::SIGTERM)
   parent$wait(10000L)
   expect_false(parent$is_alive())
-  expect_true(all(vapply(kids, pid_alive, NA)))
+  expect_true(proc_handle_alive(orphan))
   # what the next load of gptr runs first (the on_load() expression of proc-supervise.R)
   expect_gte(proc_sweep(), 1L)
-  expect_true(wait_until(function() !any(vapply(kids, pid_alive, NA)), 5))
+  expect_true(wait_until(function() isFALSE(proc_handle_alive(orphan)), 5))
   left = lapply(list.files(proc_dir(), pattern = "^GPTR_PROC_", full.names = TRUE),
                 function(f) json_decode(read_utf8(f)$text))
-  expect_false(any(vapply(left, function(rec) rec$pid %in% kids, NA)))
+  expect_false(any(vapply(left, function(rec) rec$parent_pid == parent$get_pid(), NA)))
 })
 
 test_that("spawn validates arguments and complete environments before creating a process", {
