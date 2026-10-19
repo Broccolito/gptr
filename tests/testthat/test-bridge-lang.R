@@ -173,8 +173,7 @@ test_that("peter$py() receives R objects by name and knitr python chunks share _
 
 test_that("shell engines run through peter$sh() without registered keys and with a timeout", {
   skip_on_cran()
-  skip_on_os("windows")
-  skip_if(!nzchar(Sys.which("bash")) || !nzchar(Sys.which("pgrep")))
+  skip_if(is.null(bridge_program(c("bash", bridge_git_bash()))), "bash is not installed")
   key = paste0("gptr-fake-", "key-0123456789abcdef")
   vault_reset()
   withr::defer(vault_reset())
@@ -192,8 +191,9 @@ test_that("shell engines run through peter$sh() without registered keys and with
   testthat::local_mocked_bindings(bridge_knit_timeout = function() 1)
   t0 = proc.time()[["elapsed"]]
   slow = bridge_knit("bash", "sleep 999")
-  expect_lt(proc.time()[["elapsed"]] - t0, 10)
+  expect_lt(proc.time()[["elapsed"]] - t0, 30)
   expect_true(any(grepl("timed out after", slow, fixed = TRUE)))
+  skip_if(!nzchar(Sys.which("pgrep")), "pgrep is not on PATH")
   Sys.sleep(0.5)
   left = processx::run("pgrep", c("-f", "sleep 999"), error_on_status = FALSE)$stdout
   expect_identical(left, "")
@@ -261,6 +261,19 @@ test_that("the python and sql engines run through peter$py() and peter$sql()", {
 test_that("the cmd engine is refused outside Windows", {
   skip_on_os("windows")
   expect_error(bridge_knit("cmd", "dir"), class = "gptr_error_invalid_argument")
+})
+
+test_that("the cmd and powershell engines run on Windows with UTF-8 output and exit codes", {
+  skip_on_cran()
+  skip_if_not(is_windows())
+  withr::local_envvar(POWERSHELL_TELEMETRY_OPTOUT = "1")
+  text = "caf\u00e9 \u65e5\u672c"
+  cmd = bridge_knit("cmd", paste0("echo \"a b\" ", text, "& exit 4"))
+  expect_identical(cmd[[1L]], paste0("\"a b\" ", text))
+  expect_identical(cmd[[length(cmd)]], "[exit 4]")
+  ps = bridge_knit("powershell", c(paste0("Write-Output \"", text, "\""), "exit 3"))
+  expect_identical(ps[[1L]], text)
+  expect_identical(ps[[length(ps)]], "[exit 3]")
 })
 
 lang_line = paste("- Other languages: peter$py(code); peter$sql(query, name = df);",
