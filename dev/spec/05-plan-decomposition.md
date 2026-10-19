@@ -66,7 +66,7 @@ P08 -> P09 -> P10 -> P11 ;  P05, P07 -> P12 ;  P08, P09, P12 -> P13
 P08, P11 -> P14 ;  P08, P10 -> P15 ;  P11, P15 -> P16 ;  P08, P10 -> P17
 P10, P11 -> P18 ;  P11, P14, P15, P17 -> P19 ;  P12, P18, P19 -> P20 ;  P06, P14 -> P21
 P10, P11 -> P22 ;  P10, P11, P14, P16 -> P23
-P01..P23 -> P24 -> P25
+P01..P23 -> P24 -> P25 -> P26 -> P27
 ```
 
 | Plan | Title | Milestone | Depends on | R files |
@@ -96,6 +96,8 @@ P01..P23 -> P24 -> P25
 | P23 | Artifacts | M5 | P10, P11, P14, P16 | 2 |
 | P24 | Token benchmark and end-to-end acceptance | M5 | P01-P23 | 0 |
 | P25 | Release | M5 | P24 | 0 |
+| P26 | Console and agent fixes | post-M5 | P01-P25 | 1 |
+| P27 | Windows coverage | post-M5 | P01-P26 | 0 |
 
 ## Requirements coverage
 
