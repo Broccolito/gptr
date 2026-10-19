@@ -559,7 +559,13 @@ test_that("a background command line runs in the shell and kill() stops its proc
   j = bridge_bg("sleep 57 & sleep 58 & echo ready; wait")
   withr::defer(j$kill())
   expect_true("ready" %in% j$wait(timeout = 30, until = "ready"))
-  tree = ps::ps_children(j$.proc$as_ps_handle(), recursive = TRUE)
+  # ps lists both sleeps soon after the shell forked them, not always at the first look
+  deadline = Sys.time() + 10
+  repeat {
+    tree = ps::ps_children(j$.proc$as_ps_handle(), recursive = TRUE)
+    if (length(tree) >= 2L || Sys.time() > deadline) break
+    Sys.sleep(0.05)
+  }
   expect_gte(length(tree), 2L)
   j$kill()
   expect_identical(j$status(), "stopped")
