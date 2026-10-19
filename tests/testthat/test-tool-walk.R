@@ -247,15 +247,21 @@ test_that("a file name holding a newline is matched like git", {
   expect_false(grepl(glob_to_regex("*.R"), "a.R\n", perl = TRUE))
 })
 
-test_that("a symlinked directory is listed but not followed", {
-  skip_on_os("windows")
+test_that("a directory link back to the root (a Windows junction) is listed but not followed", {
   td = withr::local_tempdir()
-  dir.create(file.path(td, "a"))
-  file.symlink(td, file.path(td, "a", "back"))
+  put_file(td, "a/f.txt", "needle\n")
+  back = file.path(td, "a", "back")
+  if (is_windows()) {
+    skip_on_cran()
+    wsec_junction(td, back)
+  } else {
+    expect_true(file.symlink(td, back))
+  }
   w = walk_files(td, type = "any")
-  expect_true("a/back" %in% w$path)
-  expect_identical(w$type[w$path == "a/back"], "link")
-  expect_false(any(startsWith(w$path, "a/back/")))
+  expect_identical(w$path, c("a", "a/back", "a/f.txt"))
+  expect_identical(w$type, c("dir", "link", "file"))
+  expect_identical(search_find("**", td, type = "any")$path, w$path)
+  expect_identical(search_grep("needle", td)$file, "a/f.txt")
 })
 
 test_that("the prune list is anchored at the walk root, also below a git root", {
