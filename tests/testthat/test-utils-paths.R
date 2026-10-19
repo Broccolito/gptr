@@ -327,6 +327,35 @@ test_that("path_info() gives a link to nothing no metadata and no warning on eve
   expect_true(all(is.na(expect_no_warning(windows(link)))))
 })
 
+test_that("readers and file tools take a link to nothing for an absent file on every OS", {
+  # A Windows file symlink needs a privilege CRAN may lack; R takes its kind from an existing target
+  if (is_windows()) skip_on_cran()
+  proj = local_project(files = list(a.R = "a = 1"))
+  for (nm in c("gone.txt", ".env")) {
+    writeLines("x", file.path(proj, "target"))
+    expect_true(file.symlink(file.path(proj, "target"), file.path(proj, nm)))
+    expect_true(file.remove(file.path(proj, "target")))
+  }
+  link = file.path(proj, "gone.txt")
+  tr = ckpt_files_tr(ckpt_ck_new("s0000000077"))
+  expect_no_warning({
+    expect_error(read_utf8(link), "not an existing file", class = "gptr_error_invalid_argument")
+    expect_error(read_core(link), "^ENOENT: ", class = "gptr_error_invalid_argument")
+    expect_error(edit_file(link, list(list(oldText = "x", newText = "y"))), "Error code: ENOENT.",
+                 fixed = TRUE)
+    expect_error(patch_apply("*** Begin Patch\n*** Delete File: gone.txt\n*** End Patch", proj),
+                 "it names no file", class = "gptr_error_invalid_argument")
+    expect_error(search_grep("x", link), "^Path not found: ")
+    expect_error(gateway_images_check(link), "existing PNG/JPEG path",
+                 class = "gptr_error_invalid_argument")
+    expect_identical(search_ls(proj)$path, c(".gptr", "a.R"))
+    ckpt_files_sync(tr)
+    expect_identical(dotenv_discover(proj, trusted = TRUE), 0L)
+  })
+  expect_identical(names(tr$hash), "a.R")
+  expect_true(all(c("gone.txt", ".env") %in% list.files(proj, all.files = TRUE)))
+})
+
 test_that("path_rel handles filesystem roots without dropping a character", {
   path = path_norm(file.path(tempdir(), "example.txt"))
   root = if (.Platform$OS.type == "windows") paste0(substr(path, 1L, 2L), "/") else "/"

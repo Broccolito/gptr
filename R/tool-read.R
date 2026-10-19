@@ -44,7 +44,7 @@ format_size = function(bytes) {
 #' @noRd
 read_raw = function(path, n = NULL, offset = 0) {
   p = fs_path(path)
-  size = file.size(p)
+  size = path_info(p)$size
   if (is.na(size)) {
     gptr_abort(paste0("ENOENT: no such file or directory, access '", path, "'"), "invalid_argument",
                arg = "path", expected = "an existing file")
@@ -711,11 +711,12 @@ read_core = function(path, offset = NULL, limit = NULL, budget_tokens = Inf) {
   check_number(limit, "limit", min = 1, max = .Machine$integer.max, null = TRUE)
   abs = read_resolve(path)
   p = fs_path(abs)
-  if (!file.exists(p)) {
+  info = path_info(p)
+  if (is.na(info$size)) {
     gptr_abort(paste0("ENOENT: no such file or directory, access '", abs, "'"), "invalid_argument",
                arg = "path", expected = "an existing file")
   }
-  if (dir.exists(p)) {
+  if (info$isdir) {
     gptr_abort(paste0("EISDIR: illegal operation on a directory, read '", abs, "'"),
                "invalid_argument", arg = "path", expected = "a file, not a directory")
   }
@@ -723,7 +724,7 @@ read_core = function(path, offset = NULL, limit = NULL, budget_tokens = Inf) {
     gptr_abort(paste0("EACCES: permission denied, access '", abs, "'"), "invalid_argument",
                arg = "path", expected = "a readable file")
   }
-  size = file.size(p)
+  size = info$size
   start = if (is.null(offset) || offset < 1) 1L else as.integer(offset)
   out = list(kind = "text", path = path, abs = abs, size = size, start = start, total = NA_integer_,
              lines = character(), truncated = FALSE, by = NA_character_,

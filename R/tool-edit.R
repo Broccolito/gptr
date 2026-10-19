@@ -264,7 +264,8 @@ edit_normalize_args = function(edits) {
 #' @noRd
 edit_source = function(abs, path) {
   p = fs_path(abs)
-  code = if (!file.exists(p)) "ENOENT" else if (dir.exists(p)) "EISDIR" else NULL
+  isdir = path_info(p)$isdir
+  code = if (is.na(isdir)) "ENOENT" else if (isdir) "EISDIR" else NULL
   if (!is.null(code)) {
     gptr_abort(paste0("Could not edit file: ", path, ". Error code: ", code, "."),
                "invalid_argument", arg = "path", expected = "an existing file")

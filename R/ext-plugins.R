@@ -256,7 +256,7 @@ fm_chr_list = function(x, split = "[,[:space:]]+") {
 #' @noRd
 res_file_sig = function(paths) {
   if (!length(paths)) return("")
-  fi = file.info(paths, extra_cols = FALSE)
+  fi = path_info(paths)
   paste(paths, with_calendar_preserved(format(fi$mtime, "%Y%m%d%H%M%OS6")),
         fi$size, sep = ":", collapse = "|")
 }

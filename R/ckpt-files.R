@@ -237,7 +237,7 @@ ckpt_ingest = function(tr, rel) {
 ckpt_regular = function(full) {
   if (!length(full)) return(logical())
   # ps's POSIX stat is unavailable on Windows; named pipes use a separate namespace there.
-  if (is_windows()) return(file.exists(full) & !dir.exists(full) & !ckpt_is_link(full))
+  if (is_windows()) return(path_info(full)$isdir %in% FALSE & !ckpt_is_link(full))
   type = ps::ps_fs_stat(full, follow = FALSE)$type
   if (!is.character(type) || length(type) != length(full)) return(rep(FALSE, length(full)))
   type %in% "regular file" & !ckpt_is_link(full)
@@ -362,7 +362,7 @@ ckpt_explicit_state = function(full) {
 ckpt_as_scanned = function(tr, rel, state) {
   if (rel %in% names(tr$hash)) return(identical(state, tr$hash[[rel]]))
   i = match(rel, tr$stat$path)
-  info = file.info(file.path(tr$root, rel), extra_cols = FALSE)
+  info = path_info(file.path(tr$root, rel))
   if (is.na(i)) return(is.na(info$size))
   isTRUE(info$size == tr$stat$size[i] && as.numeric(info$mtime) == tr$stat$mtime[i])
 }
@@ -373,7 +373,7 @@ ckpt_as_scanned = function(tr, rel, state) {
 ckpt_stat_refresh = function(tr, rel) {
   if (is.null(tr$stat)) return(invisible())
   full = file.path(tr$root, rel)
-  info = file.info(full, extra_cols = FALSE)
+  info = path_info(full)
   add = data.frame(path = rel, size = info$size, mtime = as.numeric(info$mtime),
                    link = ckpt_is_link(full))
   tr$stat = rbind(tr$stat[tr$stat$path != rel, , drop = FALSE], add[!is.na(add$size), ])
@@ -431,9 +431,10 @@ ckpt_files_explicit = function(tr, paths) {
       ""
     }
     rel = ckpt_walked(tr, p)
+    info = path_info(p)
     rows[[length(rows) + 1L]] = ckpt_file_row(
       if (is.na(rel)) p else rel, is.na(rel), status, before, if (identical(now, "?")) "" else now,
-      tr$explicit_mode[[p]], file.size(p), as.numeric(file.mtime(p)), !nzchar(reason), reason)
+      tr$explicit_mode[[p]], info$size, as.numeric(info$mtime), !nzchar(reason), reason)
     tr$explicit[p] = now
     if (!is.na(rel)) {
       tr$hash = tr$hash[names(tr$hash) != rel]

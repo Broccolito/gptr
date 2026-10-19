@@ -150,8 +150,8 @@ test_that("a chain of links is followed; a loop or a dangling link is refused", 
   writeBin(charToRaw("gone"), file.path(td, "gone"))
   expect_true(file.symlink(file.path(td, "gone"), file.path(td, "dangling")))
   expect_true(file.remove(file.path(td, "gone")))
-  expect_error(write_file(file.path(td, "dangling"), "x"), "it names no file",
-               class = "gptr_error_invalid_argument")
+  expect_no_warning(expect_error(write_file(file.path(td, "dangling"), "x"), "it names no file",
+                                 class = "gptr_error_invalid_argument"))
   expect_identical(list.files(td, all.files = TRUE, no.. = TRUE), "dangling")
   skip_on_os("windows")
   writeBin(charToRaw("end"), file.path(td, "l0"))

@@ -352,7 +352,7 @@ repl_mentions = function(text, env) {
   for (t in unique(toks)) {
     nm = gsub("^@\"?|\"$", "", t)
     cand = unique(c(path.expand(nm), file.path(project_root(), nm)))
-    hit = cand[file.exists(cand) & !dir.exists(cand)]
+    hit = cand[path_info(cand)$isdir %in% FALSE]
     if (length(hit)) {
       files = c(files, repl_file_block(hit[[1L]], path_rel(hit[[1L]])))
     } else if (identical(make.names(nm), nm) && console_object_visible(nm, env)) {

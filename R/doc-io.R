@@ -83,11 +83,11 @@ doc_eol_of = function(txt) {
 #' @noRd
 doc_read = function(path) {
   full = path_norm(path)
-  size = file.info(full, extra_cols = FALSE)$size
-  if (is.na(size) || dir.exists(full)) {
+  info = path_info(full)
+  if (is.na(info$size) || isTRUE(info$isdir)) {
     gptr_abort(paste0("Document not found: ", full), "doc_write", path = full, reason = "missing")
   }
-  raw = tryCatch(suppressWarnings(readBin(full, "raw", n = size)), error = function(e) NULL)
+  raw = tryCatch(suppressWarnings(readBin(full, "raw", n = info$size)), error = function(e) NULL)
   if (is.null(raw)) {
     gone = !file.exists(full)
     gptr_abort(paste0(if (gone) "Document not found: " else "Cannot read the document: ", full),
