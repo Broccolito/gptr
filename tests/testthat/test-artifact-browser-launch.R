@@ -38,10 +38,6 @@ artifact_launch_fixture = function() {
     }, get_error_file = function() state$calls$stderr,
     get_output_file = function() state$calls$stdout)
   scope$find_chrome = function() "/synthetic/private/chrome"
-  scope$port_candidates = function(n) {
-    stopifnot(identical(n, 1L))
-    54321L
-  }
   scope$child_env = function(profile, set = character()) {
     stopifnot(identical(profile, "artifact"))
     c(PATH = "/synthetic/bin", SAFE_SETTING = "fixture", set)
@@ -145,8 +141,7 @@ test_that("artifact browser launch keeps fixed loopback and owned profile argume
   call = x$state$calls
   root = x$state$roots[[1L]]
   expect_identical(call$command, "/synthetic/private/chrome")
-  expect_identical(call$args, c("--headless", "--remote-debugging-port=54321",
-    "--remote-allow-origins=http://127.0.0.1:54321",
+  expect_identical(call$args, c("--headless", "--remote-debugging-port=0",
     paste0("--user-data-dir=", file.path(root, "profile")),
     paste0("--crash-dumps-dir=", file.path(root, "crashes")),
     "--mute-audio", "--use-mock-keychain"))
@@ -159,9 +154,9 @@ test_that("artifact browser launch keeps fixed loopback and owned profile argume
   expect_true(owner$is_local())
   expect_identical(owner$get_process(), x$process)
   expect_identical(owner$get_host(), "127.0.0.1")
-  expect_identical(owner$get_port(), 54321L)
+  expect_identical(owner$get_port(), NA_integer_)
   withr::local_options(chromote.headless = "new")
-  expect_identical(x$launch(character())$get_port(), 54321L)
+  expect_identical(x$launch(character())$get_port(), NA_integer_)
   expect_identical(x$state$calls$args[[1L]], "--headless=new")
 })
 
@@ -207,12 +202,14 @@ test_that("artifact browser rejects ownership-changing Chrome arguments before s
 })
 
 test_that("artifact browser readiness requires its exact live endpoint within the startup budget", {
-  for (kind in c("ready", "partial", "wrong_port", "wrong_host", "duplicate", "oversize",
-                "dead", "unknown", "timeout", "late")) {
+  for (kind in c("ready", "partial", "port_max", "port_zero", "port_range", "wrong_host",
+                "duplicate", "oversize", "dead", "unknown", "timeout", "late")) {
     x = artifact_launch_fixture()
     owner = x$launch(character())
     line = "DevTools listening on ws://127.0.0.1:54321/devtools/browser/fixed-id"
-    if (kind == "wrong_port") line = sub("54321", "54322", line, fixed = TRUE)
+    if (kind == "port_max") line = sub("54321", "65535", line, fixed = TRUE)
+    if (kind == "port_zero") line = sub("54321", "0", line, fixed = TRUE)
+    if (kind == "port_range") line = sub("54321", "65536", line, fixed = TRUE)
     if (kind == "wrong_host") line = sub("127.0.0.1", "0.0.0.0", line, fixed = TRUE)
     if (kind == "duplicate") line = c(line, line)
     if (kind == "oversize") line = strrep("x", 1048577L)
@@ -226,10 +223,12 @@ test_that("artifact browser readiness requires its exact live endpoint within th
     if (kind == "unknown") x$state$alive = NA
     if (kind == "timeout") x$state$pump_result = FALSE
     if (kind == "late") x$state$pump_finished = 10.01
-    if (kind %in% c("ready", "partial")) {
+    if (kind %in% c("ready", "partial", "port_max")) {
       expect_true(x$ready(owner))
+      expect_identical(owner$get_port(), if (kind == "port_max") 65535L else 54321L)
     } else {
       expect_error(x$ready(owner), class = "gptr_error_io")
+      expect_identical(owner$get_port(), NA_integer_)
     }
     expect_identical(x$state$signals, integer())
     expect_identical(x$state$releases, 0L)
