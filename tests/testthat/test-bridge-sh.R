@@ -480,7 +480,6 @@ test_that("bg jobs are in gptr_jobs(), write() needs stdin and kill = TRUE stops
 test_that("a background command line runs in the shell and kill() stops its process tree", {
   skip_on_cran()
   skip_if(is_windows() && !any(file.exists(bridge_git_bash())), "Git Bash is not installed")
-  skip_if(is_macos(), "open: kill_all() misses background children of a shell its interrupt ended")
   j = bridge_bg("sleep 57 & sleep 58 & echo ready; wait")
   withr::defer(j$kill())
   expect_true("ready" %in% j$wait(timeout = 30, until = "ready"))

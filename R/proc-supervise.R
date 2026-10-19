@@ -358,11 +358,15 @@ proc_cleanup_record = function(rec) {
 
 #' Kill a child process and its whole tree
 #'
-#' Interrupt, wait `grace` seconds, `kill_tree()` (processx's marker) and gptr's marker, on
-#' Windows `taskkill /F /T /PID` while the process still lives, then `$kill()` (the process
-#' group on Unix); then wait at most 2 s for the process and those the tree kills signalled to
-#' stop running, and the marker cleanup for those it signals itself (Windows `TerminateProcess()`
-#' is asynchronous, and processx reads the exit code before the process is gone; D-019, D-180).
+#' Record the live process's descendants, interrupt, wait `grace` seconds, `kill_tree()`
+#' (processx's marker) and gptr's marker, on Windows `taskkill /F /T /PID` while the process
+#' still lives, `$kill()` (the process group on Unix), then the recorded descendants; then wait
+#' at most 2 s for the process and those the kills signalled to stop running, and the marker
+#' cleanup for those it signals itself (Windows `TerminateProcess()` is asynchronous, and
+#' processx reads the exit code before the process is gone; D-019, D-180). The descendants are
+#' found by parent link before the interrupt: on macOS ps reads no environment of a system
+#' binary (`/bin/sh`, `sleep`), so neither marker finds them, and once the interrupt has ended
+#' their shell, `$kill()` no longer signals its process group.
 #' @param p a processx (or callr) process.
 #' @param grace num(1) seconds to wait after the interrupt.
 #' @return invisible(lgl(1)): TRUE when the process is gone
@@ -371,7 +375,10 @@ kill_all = function(p, grace = 2) {
   if (is.null(p)) return(invisible(TRUE))
   writer_settled = isTRUE(proc_writer_stop(p))
   pid = tryCatch(p$get_pid(), error = function(e) NA_integer_)
+  kids = list()
   if (isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))) {
+    kids = tryCatch(ps::ps_children(p$as_ps_handle(), recursive = TRUE),
+                    error = function(e) list())
     try(p$interrupt(), silent = TRUE)
     if (grace > 0) try(p$wait(as.integer(ceiling(grace * 1000))), silent = TRUE)
   }
@@ -390,9 +397,9 @@ kill_all = function(p, grace = 2) {
     }, silent = TRUE)
   }
   try(p$kill(), silent = TRUE)
-  proc_wait_exit(lapply(unique(c(pid, killed)), function(x) {
+  proc_wait_exit(c(proc_kill_signalled(kids), lapply(unique(c(pid, killed)), function(x) {
     tryCatch(ps::ps_handle(x), error = function(e) NULL)
-  }))
+  })))
   dead = isFALSE(tryCatch(p$is_alive(), error = function(e) NA))
   if (!is.null(rec)) {
     cleanup = proc_cleanup_record(rec)
