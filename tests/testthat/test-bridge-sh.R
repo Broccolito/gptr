@@ -294,6 +294,16 @@ test_that("the interpreter validator normalises extensions and rejects bad field
   expect_identical(err$field, "windows_only")
 })
 
+test_that("a windows_only interpreter has its program on Windows and none elsewhere", {
+  sp = interpreter_validate(list(kind = "interpreter", name = "winr", ext = "winr",
+                                 programs = rscript_path(), windows_only = TRUE))
+  if (is_windows()) {
+    expect_identical(bridge_interpreter_argv(sp, "a.winr", "x"), c(rscript_path(), "a.winr", "x"))
+  } else {
+    expect_error(bridge_interpreter_argv(sp, "a.winr", "x"), class = "gptr_error_spawn")
+  }
+})
+
 test_that("builtin:bridges defines the interpreter kind and the seven built-in interpreters", {
   expect_true("kind.interpreter" %in% gptr_api()$features)
   expect_true(all(c("sh", "py", "r", "js", "pl", "rb", "jl") %in% registry_names("interpreter")))
@@ -344,9 +354,9 @@ test_that("a user interpreter named like the extension overrides the built-in on
   expect_identical(bridge_script(f)$stdout, "ran via-user")
 })
 
-test_that("shell scripts and #! lines run on Unix", {
+test_that("shell scripts run with bash or sh and #! lines with the program they name", {
   skip_on_cran()
-  skip_on_os("windows")
+  skip_if(is.null(bridge_program("sh")), "sh is not on PATH")
   d = withr::local_tempdir()
   writeLines("echo \"sh script args: $@\"", file.path(d, "a.sh"))
   expect_identical(bridge_script(file.path(d, "a.sh"), c("x", "y z"))$stdout,
@@ -368,6 +378,20 @@ test_that("program lookup skips WindowsApps aliases, also under Windows 8.3 shor
                                    sep = .Platform$path.sep))
   expect_null(bridge_program("gptr-p22-tool.exe"))
   expect_identical(bridge_program(c("gptr-p22-tool.exe", tool[[2L]])), tool[[2L]])
+})
+
+test_that("on Windows a .sh script runs through Git Bash when no bash is on PATH", {
+  skip_on_cran()
+  skip_if_not(is_windows())
+  git_bash = Filter(file.exists, bridge_git_bash())
+  skip_if(!length(git_bash), "Git Bash is not installed")
+  # System32 also holds bash.exe, the WSL launcher, when WSL is installed: it is skipped
+  withr::local_envvar(PATH = file.path(Sys.getenv("SystemRoot"), "System32"))
+  expect_identical(bridge_program(registry_get("interpreter", "sh")$programs), git_bash[[1L]])
+  d = withr::local_tempdir()
+  writeLines("echo \"sh script args: $@\"", file.path(d, "a.sh"))
+  expect_identical(bridge_script(file.path(d, "a.sh"), c("x", "y z"))$stdout,
+                   "sh script args: x y z\n")
 })
 
 test_that("unknown extensions, missing scripts and unknown options are argument errors", {
