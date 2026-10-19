@@ -305,13 +305,10 @@ test_that("a patch that names one file in two operations is refused and writes n
                  "*** Delete File: c.R")
   expect_error(patch_apply(move_del, root = td), "more than one operation names c.R", fixed = TRUE)
   expect_identical(rd(file.path(td, "c.R")), "c = 1\n")
-  if (.Platform$OS.type != "windows") {
-    file.symlink(file.path(td, "a.R"), file.path(td, "l.R"))
-    via_link = env("*** Update File: l.R", "@@", "-a = 1", "+a = 10", "*** Update File: a.R", "@@",
-                   "-b = 2", "+b = 20")
-    expect_error(patch_apply(via_link, root = td), "more than one operation names a.R",
-                 fixed = TRUE)
-  }
+  local_symlink(file.path(td, "a.R"), file.path(td, "l.R"))
+  via_link = env("*** Update File: l.R", "@@", "-a = 1", "+a = 10", "*** Update File: a.R", "@@",
+                 "-b = 2", "+b = 20")
+  expect_error(patch_apply(via_link, root = td), "more than one operation names a.R", fixed = TRUE)
   expect_identical(rd(file.path(td, "a.R")), "a = 1\nb = 2\n")
 })
 
