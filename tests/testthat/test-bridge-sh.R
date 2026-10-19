@@ -143,10 +143,15 @@ test_that("without Git Bash a Windows command line runs in PowerShell, else in c
   bin = withr::local_tempdir()
   writeLines("\"$COMSPEC\" \"$@\"", file.path(bin, "cmd"))
   withr::local_envvar(PATH = paste(bin, Sys.getenv("PATH"), sep = ";"))
-  ps = testthat::with_mocked_bindings(
-    bridge_sh(paste0("Write-Output \"", text, "\"; cmd /c exit 4"), timeout = 60),
-    shell_resolve = ps_route)
+  line = paste0("Write-Output \"", text, "\"; cmd /c exit 4")
+  ps = testthat::with_mocked_bindings(bridge_sh(line, timeout = 60), shell_resolve = ps_route)
   expect_identical(ps$stdout, paste0(text, "\n"))
+  expect_identical(ps$status, 4L)
+  # the same line under Windows PowerShell 5.1, the route when pwsh.exe is absent
+  ps51 = unname(Sys.which("powershell.exe"))
+  expect_true(nzchar(ps51))
+  ps = testthat::with_mocked_bindings(bridge_sh(line, timeout = 60),
+    shell_resolve = no_git_bash(function(x) if (x == "powershell.exe") ps51 else ""))
   expect_identical(ps$status, 4L)
   # the last native program's status, here this R's
   r = gsub("'", "''", rscript_path(), fixed = TRUE)
