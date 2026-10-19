@@ -375,8 +375,15 @@ class ObserverControls(unittest.TestCase):
         with self.assertRaisesRegex(ObservationError, "snapshot-deadline"):
             observer.snapshot()
         now[0] = 0
-        with self.assertRaisesRegex(ObservationError, "initial-entry-or-time-limit"):
+        with self.assertRaisesRegex(ObservationError, "initial-deadline"):
             self.observer(fs, clock=clock)
+        # The initial parent chain keeps its own entry limit and reason.
+        fs.add("nested", metadata("directory", 0, 3))
+        nested = os.path.join(fs.root, "nested")
+        with self.assertRaisesRegex(ObservationError, "initial-entry-limit"):
+            DiskObserver(nested, operations=fs, windows=True, max_entries=1)
+        self.assertEqual(DiskObserver(nested, operations=fs, windows=True, max_entries=2).root,
+                         nested)
 
 
     def test_declared_only_charges_link_without_denied_directory_traversal(self):
@@ -1059,7 +1066,7 @@ class PosixLookupControls(unittest.TestCase):
                     return now[0]
 
                 if phase == "initialize":
-                    with self.assertRaisesRegex(ObservationError, "initial-entry-or-time-limit"):
+                    with self.assertRaisesRegex(ObservationError, "initial-deadline"):
                         DiskObserver(fs.root, operations=fs, windows=False, clock=clock)
                 else:
                     scanner = DiskObserver(fs.root, operations=fs, windows=False, clock=lambda: 0)

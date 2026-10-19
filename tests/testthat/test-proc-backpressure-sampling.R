@@ -150,7 +150,7 @@ test_that("backpressure observer diagnostics retain only current fixed reason co
   lines = grep("raise (ObservationError|_EntryAbsent)", source, value = TRUE)
   codes = sort(unique(sub(".*(ObservationError|_EntryAbsent)\\(\"([a-z-]+)\"\\).*",
     "\\2", lines)))
-  expect_length(codes, 46L)
+  expect_length(codes, 47L)
   base_lines = grep("raise ObservationError", lines, value = TRUE, fixed = TRUE)
   base_codes = sub(".*ObservationError\\(\"([a-z-]+)\"\\).*", "\\1", base_lines)
   expect_identical(setdiff(codes, base_codes), "observer-parent-entry-absent")
@@ -671,8 +671,8 @@ test_that("backpressure observation retries fixed transient observer reasons for
   }
   second = observer_error("observer-byte-limit")
   transient = c("observer-metadata-invalid", "observer-snapshot-deadline",
-                "observer-parent-entry-absent", "observer-link-entry-absent",
-                "observer-entry-disappearance-uncertain")
+                "observer-initial-deadline", "observer-parent-entry-absent",
+                "observer-link-entry-absent", "observer-entry-disappearance-uncertain")
   for (reason in transient) {
     expect_identical(observe(list(observer_error(reason))), sample)
     expect_identical(seen$calls, 2L)
@@ -682,7 +682,7 @@ test_that("backpressure observation retries fixed transient observer reasons for
   }
   # Repeated transients that clear within the deadline, in any order, complete the sample.
   expect_identical(observe(lapply(transient, observer_error)), sample)
-  expect_identical(seen$calls, 6L)
+  expect_identical(seen$calls, 7L)
   expect_identical(seen$retried, transient)
   expect_identical(observe(c(lapply(transient[1:2], observer_error), list(second))), second)
   expect_identical(seen$calls, 3L)
@@ -704,6 +704,7 @@ test_that("backpressure observation retries fixed transient observer reasons for
   expect_lt(length(seen$retried), 20L)
   # Bound, identity and link failures, untyped errors and unknown text are never retried.
   for (error in list(second, observer_error("observer-entry-limit"),
+                     observer_error("observer-initial-entry-limit"),
                      observer_error("observer-undeclared-reparse-entry"),
                      observer_error("observer-link-target-differs"),
                      observer_error("observer-directory-identity-changed"),
@@ -719,10 +720,11 @@ test_that("backpressure observation retries fixed transient observer reasons for
 test_that("a retried transient observer failure completes the case and is witnessed", {
   skip_on_cran()
   withr::local_envvar(GPTR_OPTIONAL_NOFOLLOW_OBSERVER = "true")
-  run = function(...) {
+  run = function(..., initial = list()) {
     errors = list(...)
     seen = new.env(parent = emptyenv())
     seen$calls = 0L
+    seen$constructions = 0L
     scope = new.env(parent = environment(bp_run))
     runner = bp_run
     environment(runner) = scope
@@ -730,6 +732,8 @@ test_that("a retried transient observer failure completes the case and is witnes
     scope$bp_loader = function() "NULL"
     scope$bp_child_case = function(case, root, failure) list(case = case)
     scope$bp_disk_observer = function(root, declarations, declared_only) {
+      seen$constructions = seen$constructions + 1L
+      if (seen$constructions <= length(initial)) stop(initial[[seen$constructions]])
       function() {
         seen$calls = seen$calls + 1L
         if (seen$calls <= length(errors)) stop(errors[[seen$calls]])
@@ -775,6 +779,18 @@ test_that("a retried transient observer failure completes the case and is witnes
   expect_gte(x$observer_retries, 2L)
   expect_identical(x$observer_retry_reason, "observer-metadata-invalid")
   expect_identical(x$sample_error$observer_reason, "observer-metadata-invalid")
+  # Construction retries its initial deadline the same way and is witnessed with the samples.
+  x = run(observer_error("observer-snapshot-deadline"),
+          initial = list(observer_error("observer-initial-deadline")))
+  expect_true(x$complete)
+  expect_identical(x$sampling_errors, 0L)
+  expect_identical(x$observer_retries, 2L)
+  expect_identical(x$observer_retry_reason, "observer-initial-deadline")
+  # Its entry limit, and an initial deadline that outlasts the 1 s retry, stay fatal.
+  bound = observer_error("observer-initial-entry-limit")
+  expect_identical(tryCatch(run(initial = list(bound)), error = identity), bound)
+  persisting = rep(list(observer_error("observer-initial-deadline")), 100L)
+  expect_identical(tryCatch(run(initial = persisting), error = identity), persisting[[1L]])
 })
 
 test_that("the observer's supervisor counts toward the cap only by its growth in the case", {

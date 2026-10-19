@@ -174,8 +174,8 @@ bp_observer_reason = function(stage, error) {
       "observer-depth-limit", "observer-directory-entry-absent",
       "observer-directory-identity-changed", "observer-directory-unreadable",
       "observer-duplicate-declaration", "observer-entry-disappearance-uncertain",
-      "observer-entry-kind-unknown", "observer-entry-limit",
-      "observer-initial-entry-or-time-limit", "observer-invalid-bound",
+      "observer-entry-kind-unknown", "observer-entry-limit", "observer-initial-deadline",
+      "observer-initial-entry-limit", "observer-invalid-bound",
       "observer-invalid-declaration", "observer-invalid-entry-name",
       "observer-invalid-relative-path", "observer-link-entry-absent",
       "observer-link-identity-changed", "observer-link-payload-invalid",
@@ -197,10 +197,11 @@ bp_observer_reason = function(stage, error) {
 }
 
 # Retry, every 100 ms, a reason that owned files changing during a walk can raise (Windows lstat
-# of a delete-pending file reports st_ino 0) until the observer's 1 s snapshot deadline has
-# passed since the first failure. Each retry meets every bound unchanged; any other reason and
-# a reason that outlasts the deadline still end the sample. The last condition is kept, since
-# the observer's last_failure describes that snapshot.
+# of a delete-pending file reports st_ino 0), or a walk stalled on a loaded runner can (the
+# snapshot or initial deadline), until the observer's 1 s deadline has passed since the first
+# failure. Each retry meets every bound unchanged; any other reason and a reason that outlasts
+# the deadline still end the observation. The last condition is kept, since the observer's
+# last_failure describes that snapshot.
 bp_observe = function(observe, retried) {
   first = NULL
   repeat {
@@ -209,7 +210,7 @@ bp_observe = function(observe, retried) {
     reason = bp_observer_reason("files", disk)
     first = first %||% proc.time()[["elapsed"]]
     if (!isTRUE(reason %in% c("observer-metadata-invalid", "observer-snapshot-deadline",
-        "observer-parent-entry-absent", "observer-link-entry-absent",
+        "observer-initial-deadline", "observer-parent-entry-absent", "observer-link-entry-absent",
         "observer-entry-disappearance-uncertain")) ||
         proc.time()[["elapsed"]] - first >= 1) stop(disk)
     retried(reason)
@@ -370,6 +371,14 @@ bp_run = function(case, declared_links = list()) {
   observe = NULL
   observer_stats = NULL
   supervisor_rss = NULL
+  tracked = new.env(parent = emptyenv())
+  tracked$handles = list()
+  tracked$census_retries = 0L
+  tracked$observer_retries = 0L
+  observer_retried = function(reason) {
+    tracked$observer_retries = tracked$observer_retries + 1L
+    tracked$observer_retry_reason = tracked$observer_retry_reason %||% reason
+  }
   if (observer_enabled) {
     supervisor = ps::ps_handle(Sys.getpid())
     supervisor_time = as.numeric(ps::ps_create_time(supervisor))
@@ -393,7 +402,9 @@ bp_run = function(case, declared_links = list()) {
       supervisor_pid = Sys.getpid(), supervisor_create_time = supervisor_time,
       before_rss = before_rss), supervisor_rss)
     bp_disk_observer = get("bp_disk_observer", mode = "function")
-    observe = bp_disk_observer(root, declarations = declared_links, declared_only = declared_only)
+    observe = bp_observe(function() {
+      bp_disk_observer(root, declarations = declared_links, declared_only = declared_only)
+    }, observer_retried)
     after_rss = supervisor_rss()
     elapsed = proc.time()[["elapsed"]] - started
     observer_stats = list(initialization_elapsed = elapsed, before_rss = before_rss,
@@ -421,19 +432,11 @@ bp_run = function(case, declared_links = list()) {
   withr::defer(kill_all(p, grace = 0))
   proc_mark(p, marker, rscript_path())
   outer_record = proc_record(p$get_pid())
-  tracked = new.env(parent = emptyenv())
-  tracked$handles = list()
-  tracked$census_retries = 0L
-  tracked$observer_retries = 0L
   remember = function(handle) {
     key = paste(ps::ps_pid(handle), as.numeric(ps::ps_create_time(handle)), sep = ":")
     tracked$handles[[key]] = handle
   }
   remember(ps::ps_handle(p$get_pid()))
-  observer_retried = function(reason) {
-    tracked$observer_retries = tracked$observer_retries + 1L
-    tracked$observer_retry_reason = tracked$observer_retry_reason %||% reason
-  }
   cleanup = function() {
     kill_all(p, grace = 0)
     for (handle in tracked$handles) {

@@ -161,8 +161,10 @@ class DiskObserver:
         def tick(*, entry=True):
             if entry:
                 entries[0] += 1
-            if entries[0] > self.max_entries or self.clock() - started >= self.max_seconds:
-                raise ObservationError("observer-initial-entry-or-time-limit")
+            if entries[0] > self.max_entries:
+                raise ObservationError("observer-initial-entry-limit")
+            if self.clock() - started >= self.max_seconds:
+                raise ObservationError("observer-initial-deadline")
 
         try:
             initial = self._metadata(self.root, tick=tick)
@@ -171,7 +173,7 @@ class DiskObserver:
         if initial["kind"] != "directory":
             raise ObservationError("observer-root-not-direct-directory")
         if self.clock() - started >= self.max_seconds:
-            raise ObservationError("observer-initial-entry-or-time-limit")
+            raise ObservationError("observer-initial-deadline")
         self.root_identity = initial["identity"]
 
     def _relative(self, value):

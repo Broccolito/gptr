@@ -12,8 +12,8 @@ ROOT = pathlib.Path(__file__).absolute().parent
 SOURCE_PATHS = {"observer.py": ROOT.parents[2] / "tests/testthat/fixtures/bp-disk-observer.py",
                 "test_observer.py": ROOT / "test_observer.py"}
 SOURCE_HASHES = {
-    "observer.py": "76614d2eff8dc09c2a084a28658a19116cd865b39894e50d02bbb3f54f455806",
-    "test_observer.py": "0194e90e8a76b84948c1269b21253bfda40415d3e979417168658728dbd2c891",
+    "observer.py": "21f4106c9b74d5db56c512acf9ccaba03035eff9866f2ec8cce5246ddecb01ac",
+    "test_observer.py": "884ddf7cc7ce79c79919ac7f065d3dfb8f8dffc517e22aad898911eb29e92d35",
 }
 
 
