@@ -1,11 +1,5 @@
 # Disposable storage ownership regressions; no real project or credential content.
 
-storage_test_link = function(target, link, .env = parent.frame()) {
-  if (.Platform$OS.type == "windows") return(wsec_link(target, link, .env = .env))
-  ok = suppressWarnings(file.symlink(target, link))
-  skip_if_not(isTRUE(ok), "symbolic links are not available")
-}
-
 test_that("cache info and cleanup stay inside owned cache directories", {
   for (kind in c("s1", "s2", "tmp")) for (action in c("clear", "prune")) {
     for (placement in c("nested", "root")) local({
@@ -23,11 +17,11 @@ test_that("cache info and cleanup stay inside owned cache directories", {
         dir.create(dirname(owned), recursive = TRUE, showWarnings = FALSE)
         writeLines('{"doc":"missing.R","block":"gone00"}', owned)
         Sys.setFileTime(owned, Sys.time() - 100 * 86400)
-        if (kind == "tmp") storage_test_link(foreign, file.path(dir, "linked.json")) else
-          storage_test_link(outside, file.path(dir, "aa"))
+        if (kind == "tmp") local_symlink(foreign, file.path(dir, "linked.json")) else
+          local_symlink(outside, file.path(dir, "aa"))
       } else {
         if (dir.exists(dir)) unlink(dir, recursive = TRUE)
-        storage_test_link(outside, dir)
+        local_symlink(outside, dir)
       }
       label = paste(kind, action, placement)
       info = gptr_cache("info", kind)
@@ -49,7 +43,7 @@ test_that("a cache-kind link to owned workspace storage still works", {
   dir.create(owned)
   file = file.path(owned, "answer.json")
   writeLines("{}", file)
-  storage_test_link(owned, file.path(project, ".gptr", "cache", "s1"))
+  local_symlink(owned, file.path(project, ".gptr", "cache", "s1"))
   expect_identical(gptr_cache("info", "s1")$entries[1L], 1L)
   expect_identical(gptr_cache("clear", "s1"), 1L)
   expect_false(file.exists(file))
@@ -76,11 +70,11 @@ test_that("checkpoint GC never removes foreign content through storage links", {
       owned = file.path(store, "blobs", paste0(strrep("cd", 16L), ".gz"))
       writeLines("owned old blob", owned)
       Sys.setFileTime(owned, old)
-      storage_test_link(outside, file.path(store, "blobs", "ab"))
+      local_symlink(outside, file.path(store, "blobs", "ab"))
     } else {
       link = switch(placement, store = store, blobs = file.path(store, "blobs"),
                     objects = file.path(store, "objects"))
-      storage_test_link(outside, link)
+      local_symlink(outside, link)
     }
     n = if (is.null(owned)) 0L else 1L
     expect_identical(ckpt_gc(root, days = 30)$deleted, n, label = placement)
@@ -102,7 +96,7 @@ test_that("checkpoint GC permits a blob directory linked inside its owned store"
   file = file.path(owned, paste0(strrep("cd", 16L), ".gz"))
   writeLines("owned old blob", file)
   Sys.setFileTime(file, Sys.time() - 40 * 86400)
-  storage_test_link(owned, file.path(store, "blobs"))
+  local_symlink(owned, file.path(store, "blobs"))
   expect_identical(ckpt_gc(root, days = 30)$deleted, 1L)
   expect_false(file.exists(file))
 })
@@ -123,7 +117,7 @@ test_that("discovered project instructions cannot read escaped or guarded link t
     session_append(s, list(type = "message", message = msg_user(first)))
     path = file.path(project, rel)
     unlink(path)
-    storage_test_link(foreign, path)
+    local_symlink(foreign, path)
     fresh = context_first_message(s, list(turn = 1L, human = FALSE))
     update = context_block_by_name(s, "project_instructions_update",
                                    list(turn = 2L, human = FALSE))
@@ -141,7 +135,7 @@ test_that("safe project instruction links and user-level instructions are retain
   user = file.path(gptr_user_dir("config", create = TRUE), "AGENTS.md")
   writeLines("user-level instruction", user)
   withr::defer(unlink(user))
-  storage_test_link(file.path(project, "rules.md"), file.path(project, "AGENTS.md"))
+  local_symlink(file.path(project, "rules.md"), file.path(project, "AGENTS.md"))
   s = p07_session("manual")
   first = context_first_message(s, list(turn = 1L, human = FALSE))
   texts = vapply(first, function(b) b$text, "")
