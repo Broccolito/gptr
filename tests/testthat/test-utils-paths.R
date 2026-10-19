@@ -285,6 +285,21 @@ test_that("lexical control and secret paths stay protected when they are symlink
   expect_identical(path_class("ordinary.json", root), "control")
 })
 
+test_that("Windows junctions and file links keep control and secret paths guarded", {
+  root = wsec_local()
+  plain = file.path(root, "plain")
+  dir.create(plain)
+  writeLines("{}", file.path(plain, "plain.json"))
+  dir.create(file.path(root, ".secrets"))
+  writeLines("{}", file.path(root, ".gptr", "mcp.json"))
+  wsec_junction(plain, file.path(root, ".gptr", "agents"))
+  wsec_junction(file.path(root, ".secrets"), file.path(root, "keys"))
+  wsec_link(file.path(plain, "plain.json"), file.path(root, "credentials.env"))
+  wsec_link(file.path(root, ".gptr", "mcp.json"), file.path(root, "ordinary.json"))
+  paths = c(".gptr/agents/a.md", "keys/token.txt", "credentials.env", "ordinary.json")
+  expect_identical(path_class(paths, root), c("control", "protected", "protected", "control"))
+})
+
 test_that("path_rel handles filesystem roots without dropping a character", {
   path = path_norm(file.path(tempdir(), "example.txt"))
   root = if (.Platform$OS.type == "windows") paste0(substr(path, 1L, 2L), "/") else "/"
