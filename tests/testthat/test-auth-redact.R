@@ -970,6 +970,31 @@ test_that("dangling cache links do not prevent the scrub audit", {
   expect_identical(basename(gptr_scrub()$file), "output.txt")
 })
 
+test_that("Windows scrub skips foreign junctions and dangling links without warnings", {
+  project = wsec_local()
+  outside = withr::local_tempdir("gptr-wsec-foreign-")
+  late = "FAKE_windows_scrub_dangling_0123456789"
+  writeLines(late, file.path(outside, "foreign.txt"))
+  wsec_preserve(file.path(outside, "foreign.txt"))
+  cache = file.path(project, ".gptr", "cache")
+  wsec_junction(outside, file.path(cache, "escape"))
+  gone = file.path(cache, "gone")
+  dir.create(gone)
+  gone_txt = file.path(cache, "gone.txt")
+  writeLines("gone", gone_txt)
+  wsec_junction(gone, file.path(cache, "dangling-dir"))
+  wsec_link(gone_txt, file.path(cache, "dangling.txt"))
+  expect_identical(unlink(gone, recursive = TRUE), 0L)
+  expect_true(file.remove(gone_txt))
+  secret_register(late, "WINDOWS_TEST_KEY", "test")
+  writeLines(late, file.path(cache, "output.txt"))
+  found = expect_no_warning(gptr_scrub())
+  expect_identical(basename(found$file), "output.txt")
+  # The link helpers' teardown oracles expect their targets back.
+  expect_true(dir.create(gone))
+  writeLines("gone", gone_txt)
+})
+
 test_that("scrub discovery does not turn lock metadata into rewrite targets", {
   local_vault()
   proj = local_project()

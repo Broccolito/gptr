@@ -589,7 +589,12 @@ scrub_guarded = function(path) {
 #' Expand a directory without escaping its resolved root or revisiting a symlink cycle
 #' @noRd
 scrub_walk = function(root) {
-  if (!dir.exists(root)) return(root[utils::file_test("-f", root)])
+  # A dangling link has no followed metadata (Windows file.info() warns for one); it is no file.
+  regular = function(x) {
+    info = suppressWarnings(file.info(x, extra_cols = FALSE))
+    !is.na(info$mtime) & !info$isdir
+  }
+  if (!dir.exists(root)) return(root[regular(root)])
   pending = root
   visited = character()
   out = character()
@@ -604,7 +609,7 @@ scrub_walk = function(root) {
     is_dir = dir.exists(entries)
     descend = is_dir & !endsWith(tolower(basename(entries)), ".lock")
     pending = c(pending, entries[descend])
-    out = c(out, entries[!is_dir & utils::file_test("-f", entries)])
+    out = c(out, entries[regular(entries)])
   }
   out
 }
