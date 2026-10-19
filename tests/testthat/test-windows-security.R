@@ -139,6 +139,26 @@ test_that("Windows scrub refuses a dangling lock-root junction before taking any
   expect_true(dir.create(gone))
 })
 
+test_that("Windows scrub refuses a workspace junction onto a foreign directory", {
+  project = wsec_local()
+  outside = withr::local_tempdir("gptr-wsec-foreign-")
+  root = file.path(project, ".gptr")
+  expect_identical(unlink(root, recursive = TRUE), 0L)
+  wsec_junction(outside, root)
+  # The junction resolves both, so containment alone cannot refuse it.
+  expect_true(path_inside(file.path(root, "locks"), root))
+  late = "FAKE_windows_scrub_workspace_junction_0123456789"
+  secret_register(late, "WINDOWS_TEST_KEY", "test")
+  owned = file.path(project, "notes.txt")
+  writeLines(late, owned)
+  before = wsec_bytes(owned)
+  expect_null(scrub_lock(owned))
+  gptr_scrub(owned, dry_run = FALSE)
+  expect_identical(wsec_bytes(owned), before)
+  expect_false(dir.exists(paste0(owned, ".lock")))
+  expect_identical(list.files(outside, all.files = TRUE, no.. = TRUE), character())
+})
+
 test_that("Windows checkpoint walks label links and forbid restoring through them", {
   project = wsec_local()
   data = file.path(project, "data")

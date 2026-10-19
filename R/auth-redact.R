@@ -734,8 +734,7 @@ scrub_append_entry = function(txt, rows) {
 scrub_lock = function(f) {
   root = workspace_root(create = FALSE)
   lock_root = file.path(root, "locks")
-  links = Sys.readlink(c(root, lock_root))
-  if (any(!is.na(links) & nzchar(links)) || path_dangling(root) || path_dangling(lock_root) ||
+  if (any(path_is_link(c(root, lock_root))) || path_dangling(root) || path_dangling(lock_root) ||
       !path_inside(lock_root, root)) return(NULL)
   locks = c(paste0(f, ".lock"), file.path(lock_root, cli::hash_sha1(path_key(f))))
   owned = character()
