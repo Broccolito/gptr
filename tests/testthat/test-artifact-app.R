@@ -383,17 +383,9 @@ test_that("the watchdog stops the app when the parent process is gone", {
   expect_true(any(grepl("parent R process is gone", log, fixed = TRUE)))
 })
 
-# Skip without Chrome. Google Chrome (136+) refuses remote debugging when it cannot resolve its
-# default profile folder, on Windows USERPROFILE\AppData\Local, which the suite's USERPROFILE
-# lacks: give the test one
-local_chrome = function(.env = parent.frame()) {
+skip_if_no_chrome = function() {
   skip_if_not_installed("chromote")
   skip_if(!is.null(artifact_chromote_missing()), "no Chrome or Chromium for chromote")
-  if (is_windows()) {
-    home = withr::local_tempdir("gptr-chrome-home-", .local_envir = .env)
-    dir.create(file.path(home, "AppData", "Local"), recursive = TRUE)
-    withr::local_envvar(USERPROFILE = home, .local_envir = .env)
-  }
 }
 
 # A Chrome that does not start in time (hosted runners) gives the contract's HTTP-only result;
@@ -451,7 +443,7 @@ test_that("without chromote the check is HTTP-only: ok is NA and the messages sa
 
 test_that("the session check passes a working app and returns a 1000x700 screenshot", {
   skip_if_cannot_launch()
-  local_chrome()
+  skip_if_no_chrome()
   local_project()
   withr::defer(artifact_browser_close())
   e = new.env()
@@ -474,7 +466,7 @@ test_that("the session check passes a working app and returns a 1000x700 screens
 
 test_that("the session check catches render errors and crashed servers but not validate()", {
   skip_if_cannot_launch()
-  local_chrome()
+  skip_if_no_chrome()
   local_project()
   withr::defer(artifact_browser_close())
   render_error = c("library(shiny)", "ui = fluidPage(plotOutput('p'))",
