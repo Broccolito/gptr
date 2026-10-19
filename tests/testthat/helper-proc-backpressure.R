@@ -385,8 +385,7 @@ bp_run = function(case, declared_links = list()) {
       identical(bp_child_case, get("rw_child_case"))
     bp_rss_capture("before_observer", list(case = case, writer = writer,
       supervisor_pid = Sys.getpid(), supervisor_create_time = supervisor_time,
-      before_rss = before_rss, resource_failure = before_rss > 1024^3), supervisor_rss,
-      prior_failure = before_rss > 1024^3)
+      before_rss = before_rss), supervisor_rss)
     bp_disk_observer = get("bp_disk_observer", mode = "function")
     observe = bp_disk_observer(root, declarations = declared_links, declared_only = declared_only)
     after_rss = supervisor_rss()
@@ -396,10 +395,11 @@ bp_run = function(case, declared_links = list()) {
       supervisor_create_time = supervisor_time, peak_supervisor_rss = max(before_rss, after_rss),
       peak_combined_rss = max(before_rss, after_rss), last_disk = NULL)
     if (declared_only) observer_stats$scope = "declared-entry-and-ordinary-files"
+    # The supervisor may be a whole test suite, so the cap charges only its growth since before_rss.
     bp_rss_capture("initialization", c(list(case = case, writer = writer,
-      resource_failure = elapsed >= 45 || max(before_rss, after_rss) > 1024^3), observer_stats),
-      prior_failure = elapsed >= 45 || max(before_rss, after_rss) > 1024^3)
-    if (elapsed >= 45 || max(before_rss, after_rss) > 1024^3) {
+      resource_failure = elapsed >= 45 || after_rss - before_rss > 1024^3), observer_stats),
+      prior_failure = elapsed >= 45 || after_rss - before_rss > 1024^3)
+    if (elapsed >= 45 || after_rss - before_rss > 1024^3) {
       stop("Optional observer initialization exceeded its unchanged resource bound")
     }
   }
@@ -495,9 +495,9 @@ bp_run = function(case, declared_links = list()) {
             rss = unname(rss[[i]]))
         }), children_rss = sum(rss), combined_rss = parent_rss + sum(rss),
         resource_failure = sum(rss) > 1024^3 ||
-          (observer_enabled && parent_rss + sum(rss) > 1024^3)),
+          (observer_enabled && parent_rss - before_rss + sum(rss) > 1024^3)),
         prior_failure = sum(rss) > 1024^3 ||
-          (observer_enabled && parent_rss + sum(rss) > 1024^3))
+          (observer_enabled && parent_rss - before_rss + sum(rss) > 1024^3))
       sample_stage = "files"
       if (observer_enabled) {
         disk = bp_observe(observe, observer_retried)
@@ -519,7 +519,7 @@ bp_run = function(case, declared_links = list()) {
         observer_stats$peak_supervisor_rss = max(observer_stats$peak_supervisor_rss, parent_rss)
         observer_stats$peak_combined_rss = max(observer_stats$peak_combined_rss,
           parent_rss + sum(rss))
-        c(rss = sum(rss), disk = disk$bytes, combined = parent_rss + sum(rss))
+        c(rss = sum(rss), disk = disk$bytes, combined = parent_rss - before_rss + sum(rss))
       } else {
         files = list.files(root, recursive = TRUE, full.names = TRUE, all.files = TRUE)
         if (length(declared_links)) {

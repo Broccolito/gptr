@@ -696,9 +696,6 @@ test_that("backpressure observation retries a fixed transient observer reason on
 test_that("a retried transient observer failure completes the case and is witnessed", {
   skip_on_cran()
   withr::local_envvar(GPTR_OPTIONAL_NOFOLLOW_OBSERVER = "true")
-  # The enabled observer counts the supervisor, here the whole suite process, toward the
-  # unchanged 1 GiB caps, so every process reads a unit RSS in this case.
-  local_mocked_bindings(ps_memory_info = function(p) c(rss = 1), .package = "ps")
   run = function(...) {
     errors = list(...)
     seen = new.env(parent = emptyenv())
@@ -741,4 +738,47 @@ test_that("a retried transient observer failure completes the case and is witnes
   expect_identical(x$observer_retries, 1L)
   expect_identical(x$observer_retry_reason, "observer-snapshot-deadline")
   expect_identical(x$sample_error$observer_reason, "observer-metadata-invalid")
+})
+
+test_that("the observer's supervisor counts toward the cap only by its growth in the case", {
+  skip_on_cran()
+  withr::local_envvar(GPTR_OPTIONAL_NOFOLLOW_OBSERVER = "true")
+  # The supervisor is this test process: its RSS before the case is earlier tests' memory.
+  run = function(supervisor) {
+    seen = new.env(parent = emptyenv())
+    seen$reads = 0L
+    local_mocked_bindings(ps_memory_info = function(p) {
+      if (ps::ps_pid(p) != Sys.getpid()) return(c(rss = 2^28))
+      seen$reads = seen$reads + 1L
+      c(rss = supervisor[[min(seen$reads, length(supervisor))]])
+    }, .package = "ps")
+    scope = new.env(parent = environment(bp_run))
+    runner = bp_run
+    environment(runner) = scope
+    scope$bp_loader = function() "NULL"
+    scope$bp_child_case = function(case, root, failure) {
+      Sys.sleep(1)
+      list(case = case)
+    }
+    scope$bp_disk_observer = function(root, declarations, declared_only) {
+      function() {
+        list(entries = 1, directories = 1, declared_links = 0, disappeared = 0, bytes = 0,
+             max_depth = 0, elapsed_s = 0)
+      }
+    }
+    runner("supervisor-growth")
+  }
+  x = run(c(2, 2, 2) * 1024^3)
+  expect_true(x$complete)
+  expect_null(x$guard)
+  expect_gte(x$peak_rss, 2^28)
+  expect_identical(x$disk_observer$peak_supervisor_rss, 2 * 1024^3)
+  # Growth during the case and the owned family share the unchanged cap.
+  x = run(c(2, 2, 2.9) * 1024^3)
+  expect_false(x$complete)
+  expect_identical(x$guard, "resource_limit")
+  expect_gte(x$peak_rss, 2^28)
+  expect_lte(x$peak_rss, 1024^3)
+  expect_error(run(c(2, 3) * 1024^3 + c(0, 1)),
+    "initialization exceeded its unchanged resource bound", fixed = TRUE)
 })
