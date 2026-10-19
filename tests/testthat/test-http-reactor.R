@@ -660,19 +660,24 @@ test_that("INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest
   expect_true(all(vapply(sts, function(s) is.null(s$fail), NA)))
   ended = vapply(sts, function(s) s$wall_end, 0)
   # the mock numbers its requests 1, 2, ... in the order it logs them
+  logs = lapply(srvs, function(s) s$log())
+  ids = vapply(1:6, function(i) match(bodies[[i]], logs[[i]]$body), 0L)
   writes = lapply(1:6, function(i) {
     w = srvs[[i]]$writes()
-    w[which(w$id == match(bodies[[i]], srvs[[i]]$log()$body)), ]
+    w[which(w$id == ids[[i]]), ]
   })
   heads = vapply(writes, function(w) c(w$time[w$event == "head"], NA)[[1L]], 0)
   lasts = vapply(writes, function(w) if (nrow(w)) max(w$time) else NA_real_, 0)
+  read_at = vapply(1:6, function(i) as.numeric(logs[[i]]$time[ids[[i]]]), 0)
   expect_false(anyNA(c(heads, lasts)))
   six = infra01_six(heads, lasts, ended, 0.25 * rep(c(4, 9), each = 3L))
   expect_true(infra01_six_on_time(six), label = sprintf(paste(
-    "wall %.3f s from the first head written (heads within %.3f s; ends at %s s from it; the",
-    "mock's own lateness in writing the last pieces %s s; gptr's delivery of the ends %s s)"
-  ), six$wall, max(heads) - min(heads), toString(round(ended - min(heads), 3)),
-  toString(round(six$mock_late, 3)), toString(round(six$latency, 3))))
+    "wall %.3f s from the first head written (heads at %s s and ends at %s s from it; each head",
+    "written %s s after the mock read its request; the mock's own lateness in writing the last",
+    "pieces %s s; gptr's delivery of the ends %s s)"
+  ), six$wall, toString(round(heads - min(heads), 3)), toString(round(ended - min(heads), 3)),
+  toString(round(heads - read_at, 3)), toString(round(six$mock_late, 3)),
+  toString(round(six$latency, 3))))
 })
 
 test_that("one pump drives an HTTP stream and a child process together", {
