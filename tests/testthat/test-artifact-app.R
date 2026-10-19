@@ -263,7 +263,8 @@ build_version = function(id, lines, data = character(), envir = new.env()) {
 
 # Run artifact_serve() in the native Rscript child as the launcher does; the child is killed
 # and its bootstrap removed when the calling test ends
-serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.frame()) {
+serve_child = function(vdir, token, parent_pid = Sys.getpid(), ports = port_candidates(5L),
+                       .env = parent.frame()) {
   port_file = file.path(withr::local_tempdir(.local_envir = .env), "port")
   raw = withr::local_tempfile(fileext = ".log", .local_envir = .env)
   dir = tempfile("gptr-artifact-test-launch-")
@@ -282,7 +283,7 @@ serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.fra
   }, envir = .env)
   p = proc_rscript("artifact", args = list(dir = vdir, port_file = port_file,
                                            parent_pid = parent_pid, token = token),
-                   dir = dir, env = artifact_child_env(port_candidates(5L)),
+                   dir = dir, env = artifact_child_env(ports),
                    stdout = raw, stderr = "2>&1", wd = vdir, .fun = artifact_serve,
                    .on_spawn = function(p) {
                      owner$p = p
@@ -362,10 +363,18 @@ test_that("artifact_serve() publishes a loopback port and serves only requests w
   vdir = build_version("served", c("stopifnot(!isNamespaceLoaded('gptr'))", ok_app),
                         "markers", e)
   tok = artifact_token()
-  ch = serve_child(vdir, tok)
+  # A candidate that does not bind gives way to the next (Windows refuses one in an excluded
+  # port range with WSAEACCES); this process holds the first one
+  ports = port_candidates(6L)
+  for (busy in ports) {
+    held = tryCatch(httpuv::startServer("127.0.0.1", busy, list()), error = function(e) NULL)
+    if (!is.null(held)) break
+  }
+  withr::defer(httpuv::stopServer(held))
+  ch = serve_child(vdir, tok, ports = c(busy, setdiff(ports, busy)))
   expect_true(file.exists(ch$port_file))
   port = as.integer(readLines(ch$port_file))
-  expect_true(port >= 49152L && port <= 65535L)
+  expect_true(port %in% setdiff(ports, busy))
   base = sprintf("http://127.0.0.1:%d/", port)
   expect_identical(http_status(paste0(base, "?gptr_token=", tok)), 200L)
   expect_identical(http_status(base), 403L)
