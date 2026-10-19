@@ -59,8 +59,9 @@ proc_resolve = function(command, args = character()) {
 #' Unlike cmd, PowerShell resolves a bare name to an extensionless file on PATH too (such as
 #' MSYS2's `usr/bin/cmd` script, which Rtools puts before System32) and opens it with
 #' ShellExecute: no wait, no exit code. The lookup hook, set only on Windows ($IsWindows is
-#' unset in Windows PowerShell), runs the first program of that name with an extension instead.
-#' The exit status is 0 when the last command succeeded, else the last native exit code, else 1.
+#' unset in Windows PowerShell), runs the first program of that name with an extension instead
+#' or, like cmd, finds no command when there is none. The exit status is 0 when the last
+#' command succeeded, else the last native exit code, else 1.
 #' @noRd
 shell_ps_encode = function(cmd) {
   pre = paste0("try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\n",
@@ -68,7 +69,7 @@ shell_ps_encode = function(cmd) {
     "  $ExecutionContext.InvokeCommand.PostCommandLookupAction = { param($n, $e)\n",
     "  if ($e.Command.CommandType -eq 'Application' -and -not $e.Command.Extension) {\n",
     "    $c = @(Get-Command $n -CommandType Application -All | Where-Object Extension)\n",
-    "    if ($c) { $e.Command = $c[0] } } } } } catch {}\n")
+    "    $e.Command = $null; if ($c) { $e.Command = $c[0] } } } } } catch {}\n")
   post = "\nif ($?) { exit 0 }; if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1"
   b = iconv(as_utf8(paste0(pre, cmd, post)), "UTF-8", "UTF-16LE", toRaw = TRUE)[[1L]]
   gsub("\n", "", jsonlite::base64_enc(b), fixed = TRUE)

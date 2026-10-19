@@ -164,6 +164,12 @@ test_that("without Git Bash a Windows command line runs in PowerShell, else in c
   ps = testthat::with_mocked_bindings(bridge_sh("cmd /c exit 0; Write-Error no", timeout = 60),
                                       shell_resolve = ps_route)
   expect_identical(ps$status, 1L)
+  # a name that only an extensionless file provides is not found, as in cmd
+  writeLines("echo none", file.path(bin, "gptr-none"))
+  ps = testthat::with_mocked_bindings(bridge_sh("Write-Output ok; gptr-none", timeout = 60),
+                                      shell_resolve = ps_route)
+  expect_identical(ps$stdout, "ok\n")
+  expect_identical(ps$status, 1L)
   cmd = testthat::with_mocked_bindings(
     bridge_sh(paste0("echo \"a b\" ", text, "& exit 5"), timeout = 60),
     shell_resolve = no_git_bash(function(x) ""))
