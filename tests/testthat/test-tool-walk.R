@@ -13,6 +13,27 @@ test_that("resolve_tool_path() follows Pi's resolveToCwd rules", {
   expect_identical(resolve_tool_path("~draft.md", "/c"), "/c/~draft.md")
 })
 
+test_that("Git-Bash, WSL, Cygwin, file:// and drive-relative paths name a drive only on Windows", {
+  win = is_windows()
+  posix = c("/c/w/x.R", "/mnt/c/w/x.R", "/cygdrive/c/w/x.R", "/c")
+  expect_identical(vapply(posix, resolve_tool_path, "", cwd = "/w", USE.NAMES = FALSE),
+                   if (win) c(rep("c:/w/x.R", 3L), "c:/") else posix)
+  expect_identical(resolve_tool_path("file:///C:/w/a%20b.R", "/w"),
+                   if (win) "C:/w/a b.R" else "/C:/w/a b.R")
+  for (p in c("/cc/x.R", "/mnt/cc/x.R", "//srv/share/x.R")) {
+    expect_identical(resolve_tool_path(p, "/w"), p)
+  }
+  if (win) {
+    # "C:f.R" is relative to the current directory of drive C:
+    td = withr::local_tempdir()
+    withr::local_dir(td)
+    rel = paste0(substr(path_norm(td), 1L, 2L), "f.R")
+    expect_identical(path_key(resolve_tool_path(rel)), path_key(file.path(td, "f.R")))
+  } else {
+    expect_identical(resolve_tool_path("C:f.R", "/w"), "/w/C:f.R")
+  }
+})
+
 test_that("glob_to_regex() implements fd/Pi semantics including the `**/` prefix rule", {
   g = function(glob, x) grepl(glob_to_regex(glob), x, perl = TRUE)
   expect_identical(g("*.R", c("a.R", "d/a.R", "a.r", "a.Rmd")), c(TRUE, TRUE, FALSE, FALSE))
