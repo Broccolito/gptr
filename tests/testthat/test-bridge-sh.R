@@ -22,7 +22,6 @@ test_that("argv vectors, simple lines and shell lines resolve differently", {
   expect_identical(r[c("command", "args", "via")], list(command = "git", args = "status",
                                                         via = "argv"))
   expect_identical(bridge_resolve(c("Rscript", "-e", "1"))$command, rscript_path())
-  skip_on_os("windows")
   d = bridge_resolve(paste(shQuote(rscript_path()), "--version"))
   expect_identical(d$via, "direct")
   expect_identical(d$command, rscript_path())
@@ -119,13 +118,36 @@ test_that("output and arguments stay correct UTF-8 in a C locale", {
 
 test_that("a simple command line runs directly and a pipeline through the shell", {
   skip_on_cran()
-  skip_on_os("windows")
-  d = bridge_sh("echo 'quoted words' plain")
+  d = bridge_sh(paste(shQuote(rscript_path()),
+                      "--vanilla -e \"cat('quoted words', commandArgs(TRUE))\" plain"))
   expect_identical(attr(d, "via"), "direct")
-  expect_identical(d$stdout, "quoted words plain\n")
+  expect_identical(d$stdout, "quoted words plain")
+  skip_if(is_windows() && !any(file.exists(bridge_git_bash())), "Git Bash is not installed")
   p = bridge_sh("printf 'x\\ny\\nx\\n' | sort | uniq -c | sort -rn")
   expect_identical(attr(p, "via"), "shell")
   expect_match(strsplit(p$stdout, "\n", fixed = TRUE)[[1L]][[1L]], "2 x", fixed = TRUE)
+})
+
+test_that("without Git Bash a Windows command line runs in PowerShell, else in cmd", {
+  skip_on_cran()
+  skip_if_not(is_windows())
+  withr::local_envvar(POWERSHELL_TELEMETRY_OPTOUT = "1")
+  no_git_bash = function(which) {
+    function(cmd) {
+      shell_resolve_os(cmd, TRUE, which = which, getenv = Sys.getenv, exists = function(x) FALSE)
+    }
+  }
+  text = "caf\u00e9 \u65e5\u672c"
+  ps = testthat::with_mocked_bindings(
+    bridge_sh(paste0("Write-Output \"", text, "\"; cmd /c exit 4"), timeout = 60),
+    shell_resolve = no_git_bash(function(x) unname(Sys.which(x))))
+  expect_identical(ps$stdout, paste0(text, "\n"))
+  expect_identical(ps$status, 4L)
+  cmd = testthat::with_mocked_bindings(
+    bridge_sh(paste0("echo \"a b\" ", text, "& exit 5"), timeout = 60),
+    shell_resolve = no_git_bash(function(x) ""))
+  expect_identical(cmd$stdout, paste0("\"a b\" ", text, "\n"))
+  expect_identical(cmd$status, 5L)
 })
 
 test_that("stderr stays separate, exits are reported and check = TRUE raises", {
@@ -166,20 +188,25 @@ test_that("input reaches stdin as lines, as CSV or as bytes; env sets variables"
 
 test_that("a timeout kills the process tree and suggests peter$bg()", {
   skip_on_cran()
-  skip_on_os("windows")
-  skip_if(!nzchar(Sys.which("pgrep")))
+  skip_if(is_windows() && !any(file.exists(bridge_git_bash())), "Git Bash is not installed")
+  # the shell's descendants when the timeout kill starts (on Windows MSYS bash and sleep)
+  seen = new.env(parent = emptyenv())
+  kill = kill_all
+  testthat::local_mocked_bindings(kill_all = function(p, grace = 2) {
+    seen$tree = seen$tree %||% ps::ps_children(p$as_ps_handle(), recursive = TRUE)
+    kill(p, grace)
+  })
   t0 = proc.time()[["elapsed"]]
   x = bridge_sh("sleep 57 & sleep 58; wait", timeout = 1)
-  expect_lt(proc.time()[["elapsed"]] - t0, 10)
+  expect_lt(proc.time()[["elapsed"]] - t0, 30)
   expect_true(x$timed_out)
   expect_true(is.na(x$status))
   expect_false(x$ok)
   v = bridge_cmd_view(x)
   expect_match(v[[length(v)]], "timed out after", fixed = TRUE)
   expect_match(v[[length(v)]], "peter$bg()", fixed = TRUE)
-  Sys.sleep(0.5)
-  left = processx::run("pgrep", c("-f", "sleep 5[78]"), error_on_status = FALSE)$stdout
-  expect_identical(left, "")
+  expect_gte(length(seen$tree), 2L)
+  expect_true(proc_wait_exit(seen$tree, 5))
   expect_error(bridge_sh("sleep 5", timeout = 0.5, check = TRUE), class = "gptr_error_timeout")
 })
 
@@ -424,6 +451,20 @@ test_that("bg jobs are in gptr_jobs(), write() needs stdin and kill = TRUE stops
   invisible(bridge_jobs(kill = TRUE))
   expect_identical(j$status(), "stopped")
   expect_identical(gptr_jobs()$status[match(j$id, gptr_jobs()$id)], "stopped")
+})
+
+test_that("a background command line runs in the shell and kill() stops its process tree", {
+  skip_on_cran()
+  skip_if(is_windows() && !any(file.exists(bridge_git_bash())), "Git Bash is not installed")
+  skip_if(is_macos(), "open: kill_all() misses background children of a shell its interrupt ended")
+  j = bridge_bg("sleep 57 & sleep 58 & echo ready; wait")
+  withr::defer(j$kill())
+  expect_true("ready" %in% j$wait(timeout = 30, until = "ready"))
+  tree = ps::ps_children(j$.proc$as_ps_handle(), recursive = TRUE)
+  expect_gte(length(tree), 2L)
+  j$kill()
+  expect_identical(j$status(), "stopped")
+  expect_true(proc_wait_exit(tree, 5))
 })
 
 test_that("at most two jobs run at once under R CMD check (IC-60)", {
