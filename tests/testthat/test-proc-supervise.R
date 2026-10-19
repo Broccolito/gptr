@@ -17,9 +17,9 @@ wait_until = function(cond, seconds = 5) {
   }
 }
 
-# Whether the processes that carry a marker are `pid` and its descendants only. On Windows
-# Rscript.exe runs Rterm.exe as its child, which inherits the marker, so the tree of one Rscript
-# child holds two processes there (hosted Windows: `length(proc_tree(marker)) == 1L` was FALSE)
+# Whether the processes that carry a marker are `pid` and its descendants only. On hosted Windows
+# one Rscript child's tree holds a second marked descendant (`length(proc_tree(marker)) == 1L` was
+# FALSE); it is not Rterm.exe, since Rscript.exe runs R in its own process (D-019 item 2)
 marker_tree_is = function(marker, pid) {
   pids = vapply(proc_tree(marker), ps::ps_pid, 1L)
   kids = tryCatch(ps::ps_children(ps::ps_handle(pid), recursive = TRUE),

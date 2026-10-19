@@ -33,8 +33,8 @@ cat_raw_code = function(bytes) {
 crlf_bytes = function() if (is_windows()) as.raw(0x0a) else as.raw(c(0x0d, 0x0a))
 
 # The pids that carry a tree marker, and whether they are `pid` and its descendants only. On
-# Windows Rscript.exe runs Rterm.exe as its child, which inherits the marker, so the tree of one
-# Rscript child holds two processes there
+# hosted Windows one Rscript child's tree holds a second marked descendant; it is not Rterm.exe,
+# since Rscript.exe runs R in its own process (R's src/unix/Rscript.c calls AppMain())
 marker_pids = function(marker) vapply(proc_tree(marker), ps::ps_pid, 1L)
 marker_tree_is = function(marker, pid) {
   pids = marker_pids(marker)

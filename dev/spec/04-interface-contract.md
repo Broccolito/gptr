@@ -394,6 +394,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `GPTR_LIVE_TESTS` | tests | `"true"` enables `test-live-*.R` |
 | `GPTR_SUBAGENT_DEPTH`, `GPTR_WORKER` | P19 | set in worker children; `GPTR_WORKER = "1"` marks a worker process |
 | `GPTR_MCP_TOKEN` | P18 | the variable `gptr_mcp_serve()`'s Codex snippet reads its bearer token from; gptr sets it in no process (IC-79) |
+| `GPTR_SHELL_CMD` | P22 (Windows cmd route) | set in the outer cmd child to the quoted line its inner cmd runs; reserved: a caller may not set it (D-229) |
 | Provider keys | P05 (vault discovery, P03) | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `XAI_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY`, `VLLM_API_KEY`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` (not secret), `AWS_BEARER_TOKEN_BEDROCK`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` (`bedrock-converse` records, IC-80), `TYPESAFE_API_KEY` (aliases `jev-key`, `JEV_KEY`, `JEV_API_KEY`, `TYPESAFE_KEY` through `gptr_env()`) |
 | `_R_CHECK_PACKAGE_NAME_`, `_R_CHECK_LIMIT_CORES_` | P01 `check_running()` | forced replay outside testthat (examples; IC-45), child pools capped at 2, no supervision |
 | `GPTR_PROJECT_ROOT` | P01 `project_root()` | overrides the project root (tests; IC-63) |
@@ -2458,10 +2459,10 @@ The reactor API is specified in §8.2. Process engine (`proc-spawn.R`, `proc-sup
 |---|---|---|
 | `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "\|", stderr = "\|", cleanup_tree = TRUE, supervise = supervise_default())` | a `processx::process` created with `encoding = "UTF-8"` (IC-60) and a tree marker under `R_user_dir("gptr", "cache")/procs/` for the orphan sweep; `command` resolved with `Sys.which()` (R itself only through `rscript_path()`); `.cmd`/`.bat` run as `cmd.exe /d /c call <shim> args` refusing `% ^ & \| < > " !` CR LF in any argument (`gptr_error_invalid_argument`); argv, wd and env through `os_bytes()`; `stdin = NULL` is the null device, `"\|"` a pipe | P18, P19, P20, P22 |
 | `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` | runs to completion with stdout/stderr redirected to temp files (never `processx::run()`), a `p$wait(200)` loop, `on.exit(kill_all(p))`; returns `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))` decoded as UTF-8 with the code-page fallback | P20, P22 |
-| `shell_resolve(cmd)` | `list(command, args)` for a string command: Unix `/bin/sh -c`; Windows Git Bash, else PowerShell `-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand <base64 UTF-16LE>` with a `$LASTEXITCODE` postfix, else `cmd /d /s /c "chcp 65001 >nul & ..."` [G5] | P22 |
+| `shell_resolve(cmd)` | `list(command, args)` for a string command: Unix `/bin/sh -c`; Windows Git Bash, else PowerShell `-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand <base64 UTF-16LE>` with a `$LASTEXITCODE` postfix, else `list(command, args, env)`: `cmd /d /v:on /s /c "chcp 65001 >nul & "<COMSPEC>" /d /s /c !GPTR_SHELL_CMD!"` (verbatim args) with `env = c(GPTR_SHELL_CMD = "\"<line>\"")`, which the child environment must set; a caller may not set `GPTR_SHELL_CMD` [G5; D-229] | P22 |
 | `write_all(p, data)` | queues chr (as `charToRaw(as_utf8(x))`) or raw for the child's stdin; the reactor drains the buffer non-blockingly with `write_input()` (which writes at most about 8 KB per call), reading stdout/stderr between attempts, within `gptr.stdin_timeout` (`gptr_error_timeout` otherwise); outside the reactor it loops the same way (IC-60) | P18, P19, P20 |
 | `line_reader(p, stream = "stdout", max_line = 16 * 1024^2)` | environment with `read()` -> chr of complete lines (at most 512 chunks per call), `partial()` | P04, P18, P19, P20 |
-| `kill_all(p, grace = 2)` | interrupt, wait `grace`, `kill_tree()`, Windows `taskkill /F /T /PID`, then `$kill()`; `invisible(lgl(1))` | P18, P19, P20, P22, P23 |
+| `kill_all(p, grace = 2)` | record the live process's descendants by parent link, interrupt, wait `grace`, `kill_tree()`, Windows `taskkill /F /T /PID`, `$kill()`, then the recorded descendants (D-233); `invisible(lgl(1))` | P18, P19, P20, P22, P23 |
 | `job_add(kind, id, name, pid = NA, stop, status = function() "running")` | adds a row to the job table (IC-12); `stop` is a zero-argument function that also sets `stop_requested`, so a later non-zero exit maps to `stopped`/`aborted`, never `error` (IC-60) | P18, P19, P20, P21, P22, P23 |
 | `job_remove(id)`, `job_list(kind = NULL)` | job table maintenance; `job_list()` returns a df (`id`, `kind`, `name`, `pid`, `status`, `started`) | P04 (`gptr_jobs()`), P21 |
 | `pid_alive(pid, create_time = NULL)` | `lgl(1)`: `ps::ps_is_running(ps::ps_handle(pid))` and, when given, an equal process creation time (pid reuse); never `tools::pskill()` (IC-59) | P06, P15, P23 |
@@ -4733,8 +4734,9 @@ explicit `.opts$seed` hashed with the agent label. `with_seed_preserved(expr)` (
 restores `.Random.seed` around third-party calls that use R's RNG in the parent (`chromote::Chromote$new()`,
 loading shiny, httpuv helpers). Ports come from `port_candidates()` (P01: RNG-free hash bits in 49152-65535),
 retried through `httpuv::startServer()` up to 20 times; `httpuv::randomPort()` is never called (it calls
-`sample()`, verified). These two functions are the only code that assigns `.Random.seed` (R CMD check exempts
-it; the lint rule allows it only there). Tests assert an identical `.Random.seed` after inline sub-agents,
+`sample()`, verified); the owned headless Chrome binds DevTools port 0 and gptr reads the port Chrome announces
+(D-230). These two functions are the only code that assigns `.Random.seed` (R CMD check exempts it; the lint
+rule allows it only there). Tests assert an identical `.Random.seed` after inline sub-agents,
 `gptr_mcp_serve()`, the OAuth loopback and `peter$app(check = TRUE)`.
 
 **IC-62 Encoding at ingress.** (cran-7) `as_utf8(x)` (P01): strings marked "unknown" that are valid UTF-8 are

@@ -115,10 +115,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 ## D-019 - CI Windows processes: CRLF output, asynchronous kills, blocking child stdin (2026-10-03)
 - Rule: CI Task CI-2; contract 7.4 and IC-60 otherwise unchanged:
   1. `line_reader()` strips one trailing CR; `proc_run()` returns stdout/stderr as written, CRLF included (P22's `bridge_decode()` expects it); `proc_run(echo = TRUE)` shows CRLF as LF before redaction; `secret_variants()` adds the value with CRLF turned into LF to architecture 6.5's forms, kept whenever the value itself reaches `gptr.redact_min_chars`; CRLF fixtures write a bare LF on Windows and bytes, not escapes.
-  2. Tree-marker tests require the marked processes to be the child and its descendants only (`Rscript.exe` runs `Rterm.exe`).
+  2. Tree-marker tests require the marked processes to be the child and its descendants only: hosted Windows lists a second marked descendant of one `Rscript.exe` child. It is not `Rterm.exe`, since `Rscript.exe` runs R in its own process (R's `src/unix/Rscript.c` calls `AppMain()` under `_WIN32`; corrected by P27); probably the child's `conhost.exe` (unverified).
   3. `proc_cleanup_record()` (the sweep and `kill_all()`) waits at most 2 s for signalled processes to stop running (Windows `TerminateProcess()` is asynchronous), never on an unknown state or a failed kill (`ps_kill()` per-handle results).
   4. The reused-PID boundary test collects a synthetic processx-style finalizer and fails only on a signalled gptr marker.
-  5. Open (P04 maintainer decision): processx writes child stdin with a blocking `WriteFile()` on Windows, so IC-60's non-blocking `write_all()` holds only on Unix; the 4 MB echo and no-reader stdin-timeout tests skip there (`skip_if_blocking_stdin()`); P18, P19, P20 and P22 children with large stdin on Windows are affected until decided.
+  5. Open (P04 maintainer decision): processx writes child stdin with a blocking `WriteFile()` on Windows, so IC-60's non-blocking `write_all()` holds only on Unix; the 4 MB echo and no-reader stdin-timeout tests skip there (`skip_if_blocking_stdin()`); P18, P19, P20 and P22 children with large stdin on Windows are affected until decided. Status 2026-10-19: superseded by the owned Windows stdin writer (`90b16cb`, `f70cb7d`): `reactor_drain_child()` hands queued `write_all()` bytes to `proc_writer_drain()`, which publishes 65536-byte mailbox chunks to a writer child, so the parent never blocks in `WriteFile()`; `skip_if_blocking_stdin()` is gone. The 4 MB echo, `test-proc-windows-backpressure.R` and the CLI adapters' 200 KB stdin tests (P27, D-101, D-106) pass on hosted Windows (R-CMD-check run 39217189384, release and oldrel-4; optional run 39235001873). Unverified on Windows: claude control responses over one chunk (D-104) and real CLI binaries.
 - Rule: `dev/ci/test-by-file.R` streams the offline suite file by file to name the file a hung run is in (run on demand; the Windows release job ran it before R CMD check until CI-19, when the suite outgrew its 30 min).
 - Contract-visible: `proc_run(echo = TRUE)` redacts CRLF output as LF; architecture 6.5's derived forms gain the CRLF-to-LF form; no section amended.
 - Tests: test-proc-spawn.R: "line readers end lines at CRLF as a Windows child writes them, across reads" and 3 "proc_run echo ... CRLF" blocks; test-proc-supervise.R: "boundary: orphan cleanup waits for a kill that completes asynchronously", "boundary: a kill counts as signalled only for the handles ps_kill() reached", "boundary: stale process cleanup cannot release or kill a reused PID record". Evidence: progress/infra.md Task CI-2 (hosted Windows release runs on `55ec31d` and `8e8d8e0`: 8 failures, a 68-minute hang).
@@ -1157,8 +1157,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-cli-claude.R: "a budget that is not finite adds no flag; large and tiny budgets stay numbers", "the budget words are plain
   numbers whatever OutDec and digits say", "a budget that is not finite counts as none: that child lives across runs", "white-space-only
   text never becomes a content block" (+14 expectations over the plan; final PASS 52). Evidence: progress/P20.md Task 5.
-- Open: a fresh child's first user line (history and base64 images) is unbounded and `write_all()` blocks on Windows until the CLI reads
-  it (D-019 item 5, open P04 decision; expected a pause, not a hang; not verified on Windows).
+- Open: none for Windows stdin (2026-10-19): a fresh child's first user line (history and base64 images) is unbounded, and a 200 KB one
+  reaches the fake claude child through the owned Windows writer on hosted Windows (D-019 item 5 status; test-cli-claude.R "a 200 KB first
+  user line reaches the claude child intact").
 
 ## D-102 - P08 capture and argument validation: system1_images records, protected .opts refused, one-string choices (2026-10-04)
 - Rule: P08 Task 5 `R/gptr-capture.R` (consumed by Tasks 8-9 and P13's classifier route):
@@ -1205,8 +1206,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-cli-claude.R: 7 tests from "a result line's unreported usage and cost stay unknown, never zeros (IC-74)" to "a late timer or
   queued tools/call of an earlier turn leaves the next turn alone" (+72 expectations; with D-101, later plan counts for the file are 86
   higher; final PASS 191). Evidence: progress/P20.md Task 6.
-- Open: control responses (tool results, base64 plots) go through `write_all()`, which blocks on Windows until the CLI reads them
-  (D-019 item 5; expected a short pause; not verified on Windows).
+- Open: control responses (tool results, base64 plots) go through `write_all()` and, on Windows, the owned stdin writer (D-019 item 5
+  status); one larger than a 65536-byte writer chunk is not tested on Windows.
 
 ## D-105 - P08 identifiers: gptr_agent() list names, one exact mode, exact names win, R3 exception for closures (2026-10-04)
 - Rule: P08 Task 6 identifier resolution in `R/gptr-capture.R` (contract 6.1.3; `identifier.resolve`; consumed by Tasks 8-9, P17, P19):
@@ -1233,7 +1234,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none.
 - Tests: test-cli-codex.R: 15 tests in the three D-106 blocks (+155 expectations, final PASS 226; the symbolic-link and permission tests
   skip where those are unavailable); test-cli-common.R: item 8(e) (1 test). Evidence: progress/P20.md Tasks 7, 9.
-- Open: the Windows probe and the prompt's `write_all()` on Windows (D-019 item 5) are not verified.
+- Open: the Windows probe is not verified. The prompt's `write_all()` on Windows is (2026-10-19): a 200 KB prompt reaches the fake codex
+  through the owned writer on hosted Windows (D-019 item 5 status; test-cli-codex.R).
 
 ## D-107 - P15 writer: patched blocks carry their written sha, fallback blocks are recorded under the transcript (2026-10-04)
 - Rule: P15 Task 9 `R/doc-blocks.R`; the contract 7.15 interface is unchanged; new internal helpers `doc_patch_sha(lines, id)` and `doc_header_set_sha(line, sha)`:
@@ -2772,3 +2774,100 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-console-commands.R (`/cost` with cache writes), test-ckpt-rewind.R (no `<workspace_changes>` after an
   undo; `- probe` after a workspace-only rewind), test-env-snapshot.R (the hooks). Evidence: progress/P26.md
   Live smoke.
+
+## D-228 - P16 per-turn explicit rows of walked paths are relative (2026-10-18)
+- Rule: in per-turn scan mode (after a walk slower than `gptr.checkpoint_scan_budget`), `ckpt_files_explicit()` records
+  a predicted path the walk covers (`ckpt_walked()` not NA) relative to the fragment root (`abs = FALSE`), as the walk
+  does; a predicted path outside the walk stays absolute. This follows P16 Task 5's row rule (paths inside the walked
+  root are relative) and replaces the plan test's `expect_true(frag2$files[[1L]]$abs)`. Before, one file was two
+  `/undo` items (`file <abs>` and `file a.txt`) and the dry run found a conflict (#37 on windows-latest release, CRAN
+  mode, job 117848217386).
+- Contract-visible: rewind item names and `gptr_rewind(preview = TRUE)` items in per-turn mode; no section amended.
+- Tests: test-ckpt-files.R (the per-turn and FIFO rows expect `R/b.R` and `supervisor_stdin`; the outside-project row
+  stays absolute); test-ckpt-rewind.R "a file is one /undo item when slow walks switch to one scan per turn (#37)"
+  (budget -1) and the #37 test in walk mode (budget `Inf`). Evidence: progress/fixes.md Task CI-43.
+
+## D-229 - P22 the Windows cmd route runs its line in a cmd started after chcp 65001 (2026-10-18)
+- Rule: `shell_cmd(line, comspec)` (the cmd fallback of `shell_resolve()` and the knit `cmd` engine) returns
+  `list(command = <COMSPEC>, args, env)`: verbatim args `/d /v:on /s /c "chcp 65001 >nul & "<COMSPEC>" /d /s /c
+  !GPTR_SHELL_CMD!"` and `env = c(GPTR_SHELL_CMD = "\"<line>\"")`. The inner cmd starts after chcp, so it writes
+  UTF-8, and it alone parses the line, as `cmd /d /s /c "<line>"` did (delayed expansion does not rescan the value:
+  community parse rules, not Microsoft documentation). `bridge_exec()` and `bridge_bg()` set the target's `env`;
+  a caller's `GPTR_SHELL_CMD` is refused as a duplicate, and the line's descendants inherit it. Before, chcp and
+  the line shared one `/c` line and the output kept the OEM code page (`caf\x82 ??`, run 39193453652).
+- Contract-visible: 04 section 7.4 `shell_resolve(cmd)` row and 03 section 6.7 amended (a cmd target carries `env`);
+  04 section 3.2 lists `GPTR_SHELL_CMD`.
+- Tests: test-proc-spawn.R "shell_resolve() uses /bin/sh on Unix and Git Bash, PowerShell or cmd on Windows";
+  test-bridge-sh.R "the env of a resolved shell reaches the children of peter$sh() and peter$bg()" and the
+  Windows PowerShell/cmd test; test-bridge-lang.R the cmd and powershell engines. Evidence: progress/fixes.md
+  Task CI-49.
+
+## D-230 - P23 the owned headless Chrome binds DevTools port 0 (2026-10-19)
+- Rule: `artifact_browser_launch()` passes `--remote-debugging-port=0`. Readiness reads the port from the one
+  `DevTools listening on ws://127.0.0.1:<port>/devtools/browser/<id>` line of the owned process's private stderr log,
+  admits it only in 1-65535 and records it (`owner$set_port()`; `get_port()` is NA before); later identity checks use
+  it. One announcement, loopback IPv4, a live process, the 10 s deadline and the 1 MiB log limit are unchanged.
+  `--remote-allow-origins` is no longer passed (the R websocket client sends no Origin header) and stays reserved.
+  Before, `port_candidates(1L)` could fall in a Windows excluded port range: Chrome's one bind failed with WSAEACCES
+  (`0x271D`) and Chrome stayed alive without an endpoint (rscript-native job 117897297705).
+- Contract-visible: IC-61 amended (the DevTools port comes from the system, not `port_candidates()`; no RNG draw).
+- Tests: test-artifact-browser-launch.R "artifact browser readiness requires its exact live endpoint within the
+  startup budget" (`port_zero`, `port_range`, `port_max`) and the launch argv; test-artifact-app.R "artifact_serve()
+  publishes a loopback port and serves only requests with the token" (a held first candidate). Evidence:
+  progress/fixes.md Task CI-59.
+
+## D-231 - P01/P10 Windows dangling links: listed entries without followed metadata read as absent (2026-10-19)
+- Rule: R's Windows `stat()` succeeds on a dangling link, so `file.exists()` is TRUE and `file.info()` warns "cannot
+  open file" with NA times; `Sys.readlink()` is always "" (`do_readlink` needs `HAVE_READLINK`). Hosted 2c9b6a4.
+  1. `path_info()` (`R/utils-paths.R`) is `file.info(extra_cols = FALSE)` with that warning muffled and NA-time rows
+     made all NA, as POSIX gives them; `path_dangling()` is an NA time plus `path_listed()` (the final component
+     listed in its directory, case folded on every OS).
+  2. Refused before any write: by `resolve_link_target()` (write, edit, `patch_key()`), before its Windows existence
+     shortcut; by `scrub_lock()` at the root or lock root, with a link at either (`path_is_link()`); by
+     `wire_log_path()` at or above the log path.
+  3. Absent: readers, the read, edit and grep tools, the walker and `ls`, the files checkpointer, `@file`, document
+     arguments and cache, image checks, `scrub_walk()`, `doc_sidecar_read()` and `write_atomic()` use `path_info()`;
+     gptr's own stores keep base reads, the trust gate `file.exists()`. POSIX is unchanged but for two fail-closed
+     `scrub_lock()` refusals (a case-variant sibling on a case-sensitive file system; a listed, unstat-able entry).
+- Contract-visible: on Windows a dangling link gets POSIX's answers (read and edit `ENOENT`, grep "Path not found",
+  `ls` drops it, `dotenv_discover()` skips it); no section amended. Open: the other `file.exists()` guards.
+- Tests: test-utils-paths.R (2), test-tool-write.R, test-windows-security.R (2), test-http-reactor.R (2),
+  test-auth-redact.R, test-doc-io.R. Evidence: progress/fixes.md Tasks CI-36..CI-38, CI-48, CI-51, CI-52, CI-60,
+  CI-61.
+
+## D-232 - P15/P16 gptr's own document writes are no turn's change (2026-10-18)
+- Rule: `doc_own_write(path, write)` runs every disk write of a document (`doc_write()`) and an IDE backend's save of
+  a clean buffer (`doc_ide_upsert()`) through the P16 service `checkpoint.own_write`: a file tracker that saw the
+  document just before (`ckpt_as_scanned()`) takes the new content without recording it; without
+  builtin:checkpoints the write runs alone. Before, the agent_end turn scan (per-turn mode, every CLI route) recorded
+  the block write, so a rewind deleted the undone blocks instead of marking them inert. Residuals: an edit the
+  tracker has not scanned is recorded together with the write; a detached copy of a session shell records the write
+  at its next scan; a block written into a dirty IDE buffer is saved later as a user edit.
+- Contract-visible: 04 sections 7.0 and 7.16 (`checkpoint.own_write`, added with the fix).
+- Tests: test-ckpt-rewind.R "a turn's file scan never records gptr's own block writes (per-turn mode, CLI route)";
+  test-ckpt-files.R "gptr's own writes are no turn's change; an edit the tracker has not seen still is";
+  test-doc-io.R (the RStudio save runs inside the service). Evidence: progress/fixes.md Task CI-54.
+
+## D-233 - P04 kill_all() kills the descendants it recorded before the interrupt; a macOS limit (2026-10-18)
+- Rule: for a live process `kill_all()` records its descendants by parent link (`ps::ps_children(recursive = TRUE)`)
+  before `$interrupt()` and, after the marker kills, Windows `taskkill` and `$kill()`, kills those handles
+  (`proc_kill_signalled()`) and waits for them with the rest; ps handles carry the creation time, so a reused pid is
+  never signalled. No bound, grace or deadline changes. Before, on macOS a shell ended by SIGINT left its background
+  children running under launchd: ps reads no environment of system binaries, so the marker kills missed them, and
+  processx's `$kill()` does not signal the group of a reaped leader.
+- Limitation (macOS): the background children of a shell that exits by itself, and system binaries left by a dead
+  parent (`proc_sweep()`), stay unreachable: no parent link and no readable marker.
+- Contract-visible: 04 section 7.4 `kill_all()` row and 03 section 6.7 amended (the recorded descendants are killed
+  last; the order of the other steps is kept).
+- Tests: test-bridge-sh.R "a background command line runs in the shell and kill() stops its process tree" (macOS skip
+  removed). Evidence: progress/fixes.md Task CI-47.
+
+## D-234 - P03 Windows allowlist children also get LOGONSERVER and USERDOMAIN (2026-10-18)
+- Rule: processx copies `LOGONSERVER` and `USERDOMAIN` from the parent into every Windows child whose environment
+  lacks them (`required_vars` in `src/win/processx.c`, as libuv does for Node children), so `child_env("mcp")` and
+  the other allowlist profiles reach Windows children with those two names on top. Neither is a secret; gptr keeps
+  them.
+- Contract-visible: 03 section 6.5's `mcp` strict allowlist holds exactly on Unix; on Windows these two names are
+  added by processx; no section amended.
+- Tests: test-auth-childenv.R "an mcp child gets exactly the documented base variables its parent defines". Evidence:
+  progress/fixes.md Task CI-41.
