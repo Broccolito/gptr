@@ -55,9 +55,18 @@ proc_resolve = function(command, args = character()) {
 }
 
 #' PowerShell -EncodedCommand payload: base64 of UTF-16LE, UTF-8 output, exit code preserved
+#'
+#' Unlike cmd, PowerShell resolves a bare name to an extensionless file on PATH too (such as
+#' MSYS2's `usr/bin/cmd` script, which Rtools puts before System32) and opens it with
+#' ShellExecute: no wait, no exit code. The lookup hook runs the first program of that name
+#' with an extension instead.
 #' @noRd
 shell_ps_encode = function(cmd) {
-  pre = "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\n"
+  pre = paste0("try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\n",
+    "try { $ExecutionContext.InvokeCommand.PostCommandLookupAction = { param($n, $e)\n",
+    "  if ($e.Command.CommandType -eq 'Application' -and -not $e.Command.Extension) {\n",
+    "    $c = @(Get-Command $n -CommandType Application -All | Where-Object Extension)\n",
+    "    if ($c) { $e.Command = $c[0] } } } } catch {}\n")
   post = "\n$gptr_ok = $?; if ($LASTEXITCODE) { exit $LASTEXITCODE }; if (-not $gptr_ok) { exit 1 }"
   b = iconv(as_utf8(paste0(pre, cmd, post)), "UTF-8", "UTF-16LE", toRaw = TRUE)[[1L]]
   gsub("\n", "", jsonlite::base64_enc(b), fixed = TRUE)
