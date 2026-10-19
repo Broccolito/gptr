@@ -1905,6 +1905,27 @@ testthat::test_that(
     "out", "err", supplied, spawn = spawn), "Unapproved child action")
 })
 
+testthat::test_that("dependency preflight tool probes keep their checks under one startup bound", {
+  calls = function(expr) {
+    if (!is.call(expr)) return(list())
+    out = list(expr)
+    for (i in seq_along(expr)[-1L]) {
+      if (is.name(expr[[i]]) && !nzchar(as.character(expr[[i]]))) next
+      out = c(out, calls(expr[[i]]))
+    }
+    out
+  }
+  found = calls(body(optional_preflight))
+  runs = Filter(function(call) identical(call[[1L]], quote(processx::run)), found)
+  testthat::expect_identical(optional_startup_s, 60)
+  testthat::expect_identical(runs, list(
+    quote(processx::run(Sys.which("quarto"), "--version", timeout = optional_startup_s)),
+    quote(processx::run(Sys.which("rg"), "--version", timeout = optional_startup_s)),
+    quote(processx::run(Sys.which("perl"), c("-e", "print 42"), timeout = optional_startup_s))))
+  testthat::expect_true(any(vapply(found, identical, logical(1),
+    quote(stopifnot(identical(perl$stdout, "42"))))))
+})
+
 testthat::test_that(
   "optional child result transport preserves original errors and rejects incomplete exits", {
   home = tempfile("optional-result-control-")

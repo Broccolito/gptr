@@ -665,6 +665,9 @@ optional_controller_run = function(main = optional_integrations_main,
   }, warning = function(w) optional_controller_observe(state, w))
 }
 
+# Hang guard for each tool probe, not a tool bound: a hosted-Windows perl start can exceed 5 s.
+optional_startup_s = 60
+
 optional_preflight = function() {
   required = c("gptr", "reticulate", "repr", "chromote", "knitr", "rmarkdown",
                 "shiny", "httpuv", "later", "bslib", "DBI", "RSQLite", "duckdb")
@@ -685,10 +688,10 @@ optional_preflight = function() {
     NULL
   })))
   on.exit(for (remove in rev(off)) remove(), add = TRUE)
-  quarto = processx::run(Sys.which("quarto"), "--version", timeout = 10)
-  rg = processx::run(Sys.which("rg"), "--version", timeout = 5)
+  quarto = processx::run(Sys.which("quarto"), "--version", timeout = optional_startup_s)
+  rg = processx::run(Sys.which("rg"), "--version", timeout = optional_startup_s)
   if (!nzchar(Sys.which("perl"))) stop("Perl is unavailable; provision it before integration tests")
-  perl = processx::run(Sys.which("perl"), c("-e", "print 42"), timeout = 5)
+  perl = processx::run(Sys.which("perl"), c("-e", "print 42"), timeout = optional_startup_s)
   stopifnot(identical(perl$stdout, "42"))
   config = reticulate::py_config()
   stopifnot(identical(normalizePath(config$python),
