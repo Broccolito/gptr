@@ -2772,3 +2772,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-console-commands.R (`/cost` with cache writes), test-ckpt-rewind.R (no `<workspace_changes>` after an
   undo; `- probe` after a workspace-only rewind), test-env-snapshot.R (the hooks). Evidence: progress/P26.md
   Live smoke.
+
+## D-228 - Authors: contributors listed; pi credited outside Authors@R (2026-10-19)
+- Rule: `Authors@R` lists the maintainer and the contributors Tianlu Zhu (UI/UX polishing and CI/CD) and
+  Gianmarco Bellucci (testing). Mario Zechner, whose pi agent inspired gptr and whose MIT-licensed text
+  gptr's tool descriptions and templates derive from, is credited in `inst/COPYRIGHTS` (through
+  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are), in the README acknowledgements
+  and on the site's Authors page, instead of as `ctb, cph` (amends cran-4 in spec 06).
+- Tests: test-zzz.R (IC-72), dev/release/tests/test-pkgdown.R.
