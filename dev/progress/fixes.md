@@ -250,6 +250,12 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `^(proc-backpressure-sampling|bp-declared-observer|bp-disk-observer)$` PASS 639 SKIP 5 (no
   Python; with Python 3.15 `^bp-disk-observer$` PASS 145). Lint clean. Neighbours: `^(proc-|bp-)`
   PASS 2285 SKIP 16, `^(bridge-python-native|subagent-worker)$` PASS 157 SKIP 7.
-- Reviews: none recorded.
+- Reviews: r1 1 finding (high): the `bp_run()` case enabled the observer, so the suite process
+  (its supervisor) counted toward the unchanged 1 GiB caps, and a one-process ordinary run as
+  `test_check()` does (128 files, RSS 3.6 GB) stopped it at initialization -> fixed (tests only):
+  the case mocks `ps::ps_memory_info()` to a unit RSS. Red: ERROR 1 (`initialization exceeded its
+  unchanged resource bound`) with 1.2 GB of ballast in the test process; green PASS 512 with 1.2
+  and 3.6 GB. One process over the 127 ordinary files to this one (installed package): PASS 22265
+  SKIP 24, RSS 3.3 GB at the end.
 - Deviations: none. Open: hosted Windows evidence (native-06 and the other native backpressure
   cases on release and oldrel-4, twice).

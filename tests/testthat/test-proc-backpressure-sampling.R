@@ -696,6 +696,9 @@ test_that("backpressure observation retries a fixed transient observer reason on
 test_that("a retried transient observer failure completes the case and is witnessed", {
   skip_on_cran()
   withr::local_envvar(GPTR_OPTIONAL_NOFOLLOW_OBSERVER = "true")
+  # The enabled observer counts the supervisor, here the whole suite process, toward the
+  # unchanged 1 GiB caps, so every process reads a unit RSS in this case.
+  local_mocked_bindings(ps_memory_info = function(p) c(rss = 1), .package = "ps")
   run = function(...) {
     errors = list(...)
     seen = new.env(parent = emptyenv())
