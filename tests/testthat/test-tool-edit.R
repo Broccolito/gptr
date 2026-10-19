@@ -14,6 +14,12 @@ err = function(expr) {
   }, error = function(e) conditionMessage(e))
 }
 e1 = function(old, new) list(list(oldText = old, newText = new))
+# A true symbolic link; on Windows wsec_link() checks its reparse tag and detaches it at teardown
+edit_link = function(target, link, .env = parent.frame()) {
+  if (!is_windows()) return(expect_true(file.symlink(target, link)))
+  skip_on_cran()
+  wsec_link(target, link, .env = .env)
+}
 
 test_that("a basic edit writes the file and returns Pi's message and a diff", {
   td = withr::local_tempdir()
@@ -348,9 +354,8 @@ test_that("Delete File refuses a directory, an empty Add File is empty, a move r
   patch_apply("*** Begin Patch\n*** Add File: f.R\n*** Delete File: e.R\n*** End Patch", root = td)
   expect_identical(file.size(file.path(td, "f.R")), 0)
   expect_false(file.exists(file.path(td, "e.R")))
-  skip_on_os("windows")
   put_file(td, "real.R", "r = 1\n")
-  file.symlink(file.path(td, "real.R"), file.path(td, "link.R"))
+  edit_link(file.path(td, "real.R"), file.path(td, "link.R"))
   patch_apply(paste0("*** Begin Patch\n*** Update File: link.R\n*** Move to: moved.R\n@@\n",
                      "-r = 1\n+r = 2\n*** End Patch"), root = td)
   expect_identical(rd(file.path(td, "moved.R")), "r = 2\n")
@@ -495,16 +500,16 @@ test_that("a move onto its own file under another spelling keeps the file and ta
     mv("caf\u00e9.R", "cafe\u0301.R", "c = 1", "c = 2")
     expect_identical(rd(u("cafe\u0301.R")), "c = 2\n")
   }
+  put_file(td, "real.R", "r = 1\n")
+  edit_link(file.path(td, "real.R"), file.path(td, "link.R"))
+  mv("link.R", "real.R", "r = 1", "r = 2")
+  expect_identical(rd(u("real.R")), "r = 2\n")
+  expect_false("link.R" %in% list.files(td))
   skip_on_os("windows")
   put_file(td, "a.R", "a = 1\n")
   file.symlink(td, file.path(td, "L"))
   mv("a.R", "L/a.R", "a = 1", "a = 2")
   expect_identical(rd(u("a.R")), "a = 2\n")
-  put_file(td, "real.R", "r = 1\n")
-  file.symlink(file.path(td, "real.R"), file.path(td, "link.R"))
-  mv("link.R", "real.R", "r = 1", "r = 2")
-  expect_identical(rd(u("real.R")), "r = 2\n")
-  expect_false("link.R" %in% list.files(td))
   put_file(td, "b.R", "b = 1\n")
   file.symlink(file.path(td, "b.R"), file.path(td, "lb.R"))
   mv("b.R", "lb.R", "b = 1", "b = 2")
@@ -536,11 +541,7 @@ test_that("two operations on one file through a directory link are refused", {
         paste0("*** Update File: ", p2), "@@", paste0("-", l2), paste0("+", l2, "0"))
   }
   put_file(td, "D/a.R", "a = 1\nb = 2\n")
-  if (.Platform$OS.type == "windows") {
-    wsec_link(file.path(td, "D"), file.path(td, "L"), .env = environment())
-  } else {
-    expect_true(file.symlink(file.path(td, "D"), file.path(td, "L")))
-  }
+  edit_link(file.path(td, "D"), file.path(td, "L"))
   expect_error(patch_apply(upd2("L/a.R", "D/a.R", "a = 1", "b = 2"), root = td),
                "more than one operation names D/a.R", fixed = TRUE,
                class = "gptr_error_invalid_argument")

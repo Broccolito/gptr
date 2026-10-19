@@ -513,15 +513,14 @@ patch_hunk_edits = function(op, text) {
   out
 }
 
-#' Remove a file named by a patch (a link is removed, not its target); a failure is an error. The
-#' name is never a pattern: unlink() expands the wildcards `*`, `?` and `[...]` unless
-#' `expand = FALSE`.
+#' Remove a file named by a patch (a link is removed, not its target); a failure is an error.
+#' file.remove() never expands wildcards and, unlike Windows unlink() (junction tag only), deletes a
+#' symbolic link.
 #' @noRd
 patch_remove = function(abs, path) {
   p = fs_path(abs)
-  unlink(p, expand = FALSE)
-  link = Sys.readlink(p)
-  if (file.exists(p) || (!is.na(link) && nzchar(link))) {
+  suppressWarnings(file.remove(p))
+  if (file.exists(p) || path_is_link(p)) {
     gptr_abort(paste0("Could not delete file: ", path, "."), "doc_write", path = abs,
                reason = "remove")
   }
@@ -543,12 +542,12 @@ patch_key = function(p, fold) {
 
 #' Finish a move once its new name holds `bytes`: remove the old name unless it is that entry
 #' An old name (not a link) that reads as `bytes` is the new name under folding or a directory
-#' link: it is renamed to the new spelling, so a move never deletes the file it wrote.
+#' link: it is renamed to the new spelling, so a move never deletes the file it wrote. A file link
+#' (path_is_link(), as Windows has no readlink target) is removed, never renamed over its target.
 #' @noRd
 patch_finish_move = function(old, new, bytes, path) {
   p = fs_path(old)
-  link = Sys.readlink(p)
-  if (is.na(link) || !nzchar(link)) {
+  if (!path_is_link(p)) {
     now = tryCatch(read_raw(old), error = function(e) NULL)
     if (identical(now, bytes)) {
       suppressWarnings(file.rename(p, fs_path(new)))
