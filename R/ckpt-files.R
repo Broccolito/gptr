@@ -191,8 +191,9 @@ ckpt_walk = function(root) {
 
 #' The session's file tracker, made on first use at project_root(): `stat`, the last walk, taken at
 #' `walk_time`; `hash` and `mode`, the content hash and mode bits of each captured relative path;
-#' `explicit` and `explicit_mode`, predicted absolute paths the walk does not cover ("" absent, "?"
-#' not capturable); `per_turn`, one scan per turn (`scanned_turn`) once walks are slow
+#' `explicit` and `explicit_mode`, predicted absolute paths the walk does not cover, or every
+#' predicted path in per-turn mode ("" absent, "?" not capturable); `per_turn`, one scan per turn
+#' (`scanned_turn`) once walks are slow
 #' @noRd
 ckpt_files_tr = function(ck) {
   if (is.null(ck$files)) ck$files = list2env(list(root = project_root()), parent = emptyenv())
@@ -410,8 +411,9 @@ ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
   list(frag = ckpt_frag_id(), turn = turn, paths = paths)
 }
 
-#' Rows for the explicit paths of a call that changed (absolute paths); a path that was not
-#' capturable before the call is not recorded
+#' Rows for the explicit paths of a call that changed: relative when the walk covers them (per-turn
+#' mode), as a scan records them, so that a file is one rewind item; else absolute. A path that
+#' was not capturable before the call is not recorded
 #' @noRd
 ckpt_files_explicit = function(tr, paths) {
   rows = list()
@@ -428,11 +430,11 @@ ckpt_files_explicit = function(tr, paths) {
     } else {
       ""
     }
-    rows[[length(rows) + 1L]] = ckpt_file_row(
-      p, TRUE, status, before, if (identical(now, "?")) "" else now, tr$explicit_mode[[p]],
-      file.size(p), as.numeric(file.mtime(p)), !nzchar(reason), reason)
-    tr$explicit[p] = now
     rel = ckpt_walked(tr, p)
+    rows[[length(rows) + 1L]] = ckpt_file_row(
+      if (is.na(rel)) p else rel, is.na(rel), status, before, if (identical(now, "?")) "" else now,
+      tr$explicit_mode[[p]], file.size(p), as.numeric(file.mtime(p)), !nzchar(reason), reason)
+    tr$explicit[p] = now
     if (!is.na(rel)) {
       tr$hash = tr$hash[names(tr$hash) != rel]
       if (!now %in% c("", "?")) tr$hash[rel] = now

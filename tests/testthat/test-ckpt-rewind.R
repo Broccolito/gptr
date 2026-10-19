@@ -659,6 +659,24 @@ test_that("/undo lists each item once, by its outcome after the whole undo (#37)
   expect_false(file.exists("a.txt"))
 })
 
+test_that("a file is one /undo item when slow walks switch to one scan per turn (#37)", {
+  local_project()
+  local_gptr_options(checkpoint_scan_budget = -1)
+  local_fake_provider(list(fake_tool("r", code = "writeLines('a', 'a.txt')"),
+                           fake_tool("r", code = "writeLines('b', 'a.txt')"), "done"))
+  s = peter("write a", model = "fake/fake-1", mode = "auto", envir = new.env())
+  ui = local_scripted_ui()
+  ctx = list(session = s, has_ui = function() TRUE,
+             ui = function() ext_service_get("ui.get")(s))
+  plan = gptr_rewind(s, preview = TRUE)
+  expect_identical(plan$item, "file a.txt")
+  expect_identical(plan$restore, TRUE)
+  out = ckpt_cmd_undo("", ctx)
+  expect_identical(nrow(ui$log), 0L)
+  expect_identical(out[1:2], c("Rewound (all).", "file a.txt: removed"))
+  expect_false(file.exists("a.txt"))
+})
+
 test_that("report lines are keyed by the plan's items, so names holding ': ' stay apart (#37)", {
   local_project()
   local_fake_provider(list(fake_tool("r", code = "`k: a` = 1; `k: b` = 1"), "done"))
