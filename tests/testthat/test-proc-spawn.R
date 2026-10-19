@@ -236,7 +236,7 @@ test_that("a killed parent leaves a grandchild that the next load's sweep remove
   # what the next load of gptr runs first (the on_load() expression of proc-supervise.R)
   expect_gte(proc_sweep(), 1L)
   expect_true(wait_until(function() isFALSE(proc_handle_alive(orphan)), 5))
-  left = lapply(list.files(proc_dir(), pattern = "^GPTR_PROC_", full.names = TRUE),
+  left = lapply(list.files(proc_dir(), pattern = "^GPTR_PROC_.*[.]json$", full.names = TRUE),
                 function(f) json_decode(read_utf8(f)$text))
   expect_false(any(vapply(left, function(rec) rec$parent_pid == parent$get_pid(), NA)))
 })
