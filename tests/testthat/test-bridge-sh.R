@@ -431,8 +431,11 @@ test_that("unknown extensions, missing scripts and unknown options are argument 
 
 test_that("a background job is read incrementally and waited for until a pattern", {
   skip_on_cran()
-  j = bridge_bg(r_cmd("cat('ready\\n'); flush(stdout()); Sys.sleep(1); cat('DONE acc=0.93\\n')"),
-                name = "trainer")
+  # The child writes DONE only once the file `go` exists, however long bridge_bg() takes
+  go = withr::local_tempfile()
+  j = bridge_bg(c(r_cmd(paste("go = commandArgs(TRUE); cat('ready\\n'); flush(stdout());",
+                              "while (!file.exists(go)) Sys.sleep(0.05); cat('DONE acc=0.93\\n')")),
+                  go), name = "trainer")
   withr::defer(j$kill())
   expect_s3_class(j, "gptr_job")
   expect_identical(j$name, "trainer")
@@ -441,6 +444,7 @@ test_that("a background job is read incrementally and waited for until a pattern
   first = j$wait(timeout = 20, until = "ready")
   expect_s3_class(first, "gptr_bridge_text")
   expect_true("ready" %in% first)
+  file.create(go)
   rest = j$wait(timeout = 20)
   expect_true("DONE acc=0.93" %in% rest)
   expect_false("ready" %in% rest)
@@ -453,11 +457,14 @@ test_that("a background job is read incrementally and waited for until a pattern
 
 test_that("wait(until =) returns once the matching line is complete", {
   skip_on_cran()
-  j = bridge_bg(r_cmd(paste0("cat('rea'); flush(stdout()); Sys.sleep(1); cat('dy\\n'); ",
-                             "flush(stdout()); Sys.sleep(30)")))
+  go = withr::local_tempfile()
+  j = bridge_bg(c(r_cmd(paste("go = commandArgs(TRUE); cat('rea'); flush(stdout());",
+                              "while (!file.exists(go)) Sys.sleep(0.05); cat('dy\\n');",
+                              "flush(stdout()); Sys.sleep(30)")), go))
   withr::defer(j$kill())
-  first = j$wait(timeout = 20, until = "rea")
-  expect_true("ready" %in% first)
+  expect_length(j$wait(timeout = 1, until = "rea"), 0L)
+  file.create(go)
+  expect_true("ready" %in% j$wait(timeout = 20, until = "rea"))
 })
 
 test_that("a job that exits during a read reads running, so a done read holds all output", {
