@@ -506,7 +506,6 @@ test_that("RStudio's sourced copy of the editor buffer is located in the editor,
 # ---- Task 8 review round 3: a relative `Rscript --file=` after setwd() --------------------------
 
 test_that("a relative Rscript file is found from the launch directory after setwd()", {
-  skip_on_os("windows")
   proj = local_project()
   f = file.path(proj, "run.R")
   writeLines(c("a = peter(\"count rows\")", "setwd(\"sub\")", "b = peter(\"count rows\")"), f)
@@ -524,16 +523,23 @@ test_that("a relative Rscript file is found from the launch directory after setw
   expect_identical(c(s1$kind, s1$path), c("rscript", path_norm(f)))
   expect_identical(s1$stmt, c(1L, 1L))
   withr::local_dir(file.path(proj, "sub"))
-  s2 = locate()
-  expect_identical(c(s2$kind, s2$path), c("rscript", path_norm(f)))
-  expect_identical(s2$stmt, c(3L, 3L))
-  expect_true(s2$top_level)
-  # a file of the same name in the new working directory is not the running script
-  writeLines("x = helper()", file.path(proj, "sub", "run.R"))
-  expect_identical(locate()$path, path_norm(f))
+  other = file.path(proj, "sub", "run.R")
+  if (is_windows()) {
+    # Windows exports no launch directory: after setwd() the script is lost, and a file of its
+    # name in the new working directory is taken for it (the documented limitation)
+    expect_null(doc_rscript_running())
+  } else {
+    s2 = locate()
+    expect_identical(c(s2$kind, s2$path), c("rscript", path_norm(f)))
+    expect_identical(s2$stmt, c(3L, 3L))
+    expect_true(s2$top_level)
+  }
+  # on Unix a file of the same name in the new working directory is not the running script
+  writeLines("x = helper()", other)
+  expect_identical(locate()$path, path_norm(if (is_windows()) other else f))
   # without a launch directory the working directory is the fallback
   withr::local_envvar(PWD = NA)
-  expect_identical(locate()$path, path_norm(file.path(proj, "sub", "run.R")))
+  expect_identical(locate()$path, path_norm(other))
 })
 
 # ---- Task 8 review round 4: notebook pipeline steps, computed prompts equal to a literal one,
