@@ -1489,6 +1489,18 @@ doc_io_legacy_path = function(path) {
   sub("[.](rds|json)$", ".rds", doc_sidecar_path(path))
 }
 
+# A dangling link at `path`: a symlink, on Windows a junction (no privilege needed) that the test
+# detaches itself, as R's recursive unlink() of its directory may fail on a dangling junction
+doc_io_dangling = function(path, .env = parent.frame()) {
+  target = file.path(dirname(path), "absent")
+  if (!is_windows()) return(file.symlink(target, path))
+  dir.create(target)
+  withr::defer(unlink(path), envir = .env)
+  ok = base::Sys.junction(target, path)
+  unlink(target, recursive = TRUE)
+  ok
+}
+
 test_that("new sidecars are closed JSON data with explicit line arrays", {
   local_project()
   local_doc_pending()
@@ -1755,7 +1767,6 @@ test_that("JSON inert notebook sidecars preserve existing fractional number toke
 
 
 test_that("a broken modern sidecar link still prevents legacy deserialization", {
-  skip_on_os("windows")
   local_project()
   f = file.path(getwd(), "legacy.R")
   writeLines('peter("first")', f)
@@ -1764,7 +1775,8 @@ test_that("a broken modern sidecar link still prevents legacy deserialization", 
   unlink(modern)
   legacy = doc_io_legacy_path(f)
   write_atomic(legacy, serialize_leaf(rec))
-  expect_true(file.symlink(file.path(getwd(), "absent.json"), modern))
+  expect_true(doc_io_dangling(modern))
+  expect_true(doc_sidecar_exists(modern))
   reads = 0L
   original = base::readRDS
   testthat::local_mocked_bindings(readRDS = function(file, ...) {
@@ -1904,8 +1916,7 @@ test_that("unknown or malformed POSIX owner identity never deserializes legacy s
   expect_identical(unname(tools::md5sum(legacy)), before)
 })
 
-test_that("a differently cased dangling modern entry masks legacy on a POSIX filesystem", {
-  skip_on_os("windows")
+test_that("a differently cased dangling modern entry masks legacy where names ignore case", {
   local_project()
   f = file.path(getwd(), "case.R")
   writeLines('peter("first")', f)
@@ -1915,10 +1926,8 @@ test_that("a differently cased dangling modern entry masks legacy on a POSIX fil
   legacy = doc_io_legacy_path(f)
   write_atomic(legacy, serialize_leaf(rec))
   before = unname(tools::md5sum(legacy))
-  case = sub("[.]json$", ".JSON", modern)
-  expect_true(file.symlink(file.path(getwd(), "absent.json"), case))
-  link = Sys.readlink(modern)
-  skip_if(is.na(link) || !nzchar(link), "the filesystem is case-sensitive")
+  skip_if_not(file.exists(sub("[.]rds$", ".RDS", legacy)), "the filesystem is case-sensitive")
+  expect_true(doc_io_dangling(sub("[.]json$", ".JSON", modern)))
   expect_true(doc_sidecar_exists(modern))
   reads = 0L
   original = base::readRDS
