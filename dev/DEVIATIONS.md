@@ -2820,20 +2820,21 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: R's Windows `stat()` succeeds on a dangling link, so `file.exists()` is TRUE and `file.info()` warns "cannot
   open file" with NA times; `Sys.readlink()` is always "" (`do_readlink` needs `HAVE_READLINK`). Hosted 2c9b6a4.
   1. `path_info()` (`R/utils-paths.R`) is `file.info(extra_cols = FALSE)` with that warning muffled and NA-time rows
-     made all NA, as POSIX gives them; `path_dangling()` is an NA time plus `path_listed()` (the final component
-     listed in its directory, case folded on every OS).
+     made all NA, as POSIX gives them; `path_dangling()` is an NA time plus, on POSIX, a readlink target
+     (`path_is_link()`, exact) and, on Windows, where readlink has none, `path_listed()` (the final component listed
+     in its directory, case folded as NTFS does).
   2. Refused before any write: by `resolve_link_target()` (write, edit, `patch_key()`), before its Windows existence
      shortcut; by `scrub_lock()` at the root or lock root, with a link at either (`path_is_link()`); by
      `wire_log_path()` at or above the log path.
   3. Absent: readers, the read, edit and grep tools, the walker and `ls`, the files checkpointer, `@file`, document
      arguments and cache, image checks, `scrub_walk()`, `doc_sidecar_read()` and `write_atomic()` use `path_info()`;
-     gptr's own stores keep base reads, the trust gate `file.exists()`. POSIX is unchanged but for two fail-closed
-     `scrub_lock()` refusals (a case-variant sibling on a case-sensitive file system; a listed, unstat-able entry).
+     gptr's own stores keep base reads, the trust gate `file.exists()`. POSIX keeps origin/main's rule (a readlink
+     target without followed metadata), so `wire_log_path()` and `scrub_lock()` are unchanged there (CI-68).
 - Contract-visible: on Windows a dangling link gets POSIX's answers (read and edit `ENOENT`, grep "Path not found",
   `ls` drops it, `dotenv_discover()` skips it); no section amended. Open: the other `file.exists()` guards.
-- Tests: test-utils-paths.R (2), test-tool-write.R, test-windows-security.R (2), test-http-reactor.R (2),
+- Tests: test-utils-paths.R (3), test-tool-write.R, test-windows-security.R (2), test-http-reactor.R (2),
   test-auth-redact.R, test-doc-io.R. Evidence: progress/fixes.md Tasks CI-36..CI-38, CI-48, CI-51, CI-52, CI-60,
-  CI-61.
+  CI-61, CI-68.
 
 ## D-232 - P15/P16 gptr's own document writes are no turn's change (2026-10-18)
 - Rule: `doc_own_write(path, write)` runs every disk write of a document (`doc_write()`) and an IDE backend's save of
@@ -2849,18 +2850,31 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-doc-io.R (the RStudio save runs inside the service). Evidence: progress/fixes.md Task CI-54.
 
 ## D-233 - P04 kill_all() kills the descendants it recorded before the interrupt; a macOS limit (2026-10-18)
-- Rule: for a live process `kill_all()` records its descendants by parent link (`ps::ps_children(recursive = TRUE)`)
-  before `$interrupt()` and, after the marker kills, Windows `taskkill` and `$kill()`, kills those handles
+- Rule: for a live process `kill_all()` records its descendants by parent link (`proc_children()`) before
+  `$interrupt()` and, after the marker kills, Windows `taskkill` and `$kill()`, kills those handles
   (`proc_kill_signalled()`) and waits for them with the rest; ps handles carry the creation time, so a reused pid is
   never signalled. No bound, grace or deadline changes. Before, on macOS a shell ended by SIGINT left its background
   children running under launchd: ps reads no environment of system binaries, so the marker kills missed them, and
   processx's `$kill()` does not signal the group of a reaped leader.
+- Rule: `proc_children(p)` is `ps::ps_children(recursive = TRUE)` of ps's own handle of the pid
+  (`ps::ps_handle(p$get_pid())`), kept only while processx still reads the child alive (the pid named it
+  throughout). Not `p$as_ps_handle()`: on Linux processx stamps a child with the boot time it reads at the spawn, ps
+  times every process with the one it read first, and `ps_children()` drops a descendant timed before the parent's
+  stamp, as were all of a shell's background jobs forked in its first clock tick (hosted ubuntu, CI-69).
+- Rule: the owned headless Chrome's `close()` records the browser's descendants with `proc_children()` before
+  SIGTERM, and `release()` waits for them within the remaining 10 s close deadline before removing the profile; one
+  still running or unknown raises "The owned headless browser family did not finish cleanup." and keeps the profile
+  for a retry. Chrome's helpers carry no readable marker (Linux `setproctitle()` zeroes their environment block,
+  macOS ps reads none), so the profile was removed while they still wrote in it (hosted ubuntu, CI-64). Without a
+  deadline (the startup unwind, the retained cleanup job) `release()` keeps its single check.
 - Limitation (macOS): the background children of a shell that exits by itself, and system binaries left by a dead
   parent (`proc_sweep()`), stay unreachable: no parent link and no readable marker.
 - Contract-visible: 04 section 7.4 `kill_all()` row and 03 section 6.7 amended (the recorded descendants are killed
   last; the order of the other steps is kept).
 - Tests: test-bridge-sh.R "a background command line runs in the shell and kill() stops its process tree" (macOS skip
-  removed). Evidence: progress/fixes.md Task CI-47.
+  removed) and the timeout test; test-proc-supervise.R "proc_children() follows parent links from ps's own handle
+  while the parent lives"; test-artifact-browser-launch.R "artifact browser close waits for its unmarked helpers
+  before removing the profile". Evidence: progress/fixes.md Tasks CI-47, CI-64, CI-69.
 
 ## D-234 - P03 Windows allowlist children also get LOGONSERVER and USERDOMAIN (2026-10-18)
 - Rule: processx copies `LOGONSERVER` and `USERDOMAIN` from the parent into every Windows child whose environment
@@ -2871,3 +2885,25 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   added by processx; no section amended.
 - Tests: test-auth-childenv.R "an mcp child gets exactly the documented base variables its parent defines". Evidence:
   progress/fixes.md Task CI-41.
+
+## D-235 - P04 the PowerShell route resolves a bare name as cmd does and returns the last status (2026-10-19)
+- Rule: `shell_ps_encode()` (`R/proc-spawn.R`: the PowerShell route of `shell_resolve()`, so `peter$sh()` and
+  `peter$bg()`, the knit `powershell` engine and the stdin ACL verifier) wraps the line in:
+  1. a postfix `if ($?) { exit 0 }; if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1`: status 0 when the line's last
+     command succeeded, else the last native exit code if nonzero, else 1. P04 Task 7's postfix read `$LASTEXITCODE`
+     first, so
+     an earlier native failure overrode a last command that succeeded (`cmd /c exit 4; Write-Output ok` exited 4).
+  2. on Windows only (`$IsWindows -ne $false`: pwsh on Windows, and Windows PowerShell 5.1, which leaves it unset), a
+     `PostCommandLookupAction`: a lookup that resolved to an Application without an extension takes the first
+     Application of that name with one (`Get-Command -CommandType Application -All`, PowerShell's PATH order), or
+     none, so the name is not found ("not recognized", status 1), as in cmd; an explicit path to an extensionless file
+     fails the same way. A name with an extension, and a lookup that resolved to a program with one, are unchanged.
+     PowerShell ranks the bare name last only within each PATH directory, so Rtools' extensionless MSYS2
+     `usr/bin/cmd` (first on PATH under R CMD) shadowed `cmd.exe`, and PowerShell opened it with ShellExecute
+     without waiting: `cmd /c exit 4` returned 0 (diagnostic job 118000300246).
+  The argv, bounds and deadlines are unchanged; the verifier's bootstrap stays under its 9998-byte limit.
+- Contract-visible: 04 section 7.4 `shell_resolve(cmd)` row and 03 section 6.7 amended. Open: a name with a non-PATHEXT
+  extension is still opened with ShellExecute; no test runs the hook's Unix branch.
+- Tests: test-bridge-sh.R "without Git Bash a Windows command line runs in PowerShell, else in cmd" (an extensionless
+  `cmd` first on PATH; pwsh and Windows PowerShell 5.1; the last status; `gptr-none`); test-proc-writer-runtime.R
+  (the bootstrap size). Evidence: progress/fixes.md Tasks CI-50, CI-66.

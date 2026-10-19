@@ -1381,7 +1381,9 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
   Last it kills the descendants it found by parent link before the interrupt (D-233).
 - Windows: argv form needs no shell; string commands resolve Git Bash (`ProgramFiles`, `ProgramW6432`,
   `LOCALAPPDATA`; never `System32\bash.exe`), then PowerShell (`-NoProfile -NonInteractive -ExecutionPolicy
-  Bypass -EncodedCommand <base64 UTF-16LE>` with a `$LASTEXITCODE`-preserving postfix), then `cmd /d /v:on /s /c
+  Bypass -EncodedCommand <base64 UTF-16LE>`; exit 0 when the last command succeeded, else the last native exit
+  code, else 1; on Windows a lookup hook resolves a bare name to a program with an extension, as cmd does, or to
+  none, so an extensionless file on PATH such as MSYS2's `usr/bin/cmd` never runs; D-235), then `cmd /d /v:on /s /c
   "chcp 65001 >nul & "<COMSPEC>" /d /s /c !GPTR_SHELL_CMD!"` with the line in the child's `GPTR_SHELL_CMD` (a cmd
   started after chcp writes UTF-8; D-229); `.cmd`/`.bat` shims (npx, uvx, npm CLIs) run as
   `cmd.exe /d /c call <shim> args` refusing `% ^ & | < > " !` CR LF in arguments (BatBadBut) instead of refusing
