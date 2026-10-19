@@ -9,7 +9,7 @@ Windows lane green twice on one commit. Branch `claude/windows-coverage-p27`, dr
 and Chromium sources and the hosted logs, reproduces the failure on macOS where it is portable, or
 emulates the Win32 calls with stubs (`is_windows()` TRUE, `Sys.readlink()` empty, UCRT `stat()`
 facts), and claims Windows behaviour only from hosted runs. Per-fix evidence:
-`dev/progress/fixes.md` Tasks CI-25..CI-62.
+`dev/progress/fixes.md` Tasks CI-25..CI-70.
 
 **Depends on:** P01-P26. **Milestone:** post-M5 maintenance, before CRAN submission.
 
@@ -20,10 +20,10 @@ facts), and claims Windows behaviour only from hosted runs. Per-fix evidence:
 - Issue [#47](https://github.com/Broccolito/gptr/issues/47): no product bound, deadline or
   strictness check is loosened and no test is skipped to get green. A wrong test is corrected; a
   product defect is fixed in product code with a test that is red before the fix; a cause that is
-  not proven is called inferred.
+  not proven is called inferred. Two test elapsed bounds were raised from 10 s to 30 s (Task 2).
 - A Windows branch that cannot run locally is checked against R's Windows sources and, where
   portable, by a macOS emulation; its Windows status stays pending until a hosted run passes it.
-- Ids: fixes CI-25..CI-62, deviations D-228..D-234; every rename, unskip and `dev/ci` registry
+- Ids: fixes CI-25..CI-70, deviations D-228..D-235; every rename, unskip and `dev/ci` registry
   change is named in its commit body.
 - Lanes run in worktrees from this branch and are cherry-picked in order; a lane never pushes or
   dispatches a hosted run.
@@ -57,7 +57,7 @@ Decisions:
 Commits: `3e63a8a`, `b00d681`, `f1b62da`, `17c0fb9`, `1637f4b`, `37edb30`, `6537173`, `c8600c8`,
 `dd4820c`, `8fde8fa`.
 
-### Task 2: Shell routes, scripts and knit engines on Windows (CI-30, CI-31, CI-49, CI-50, D-229)
+### Task 2: Shell routes, scripts and knit engines on Windows (CI-30, CI-31, CI-49, CI-50, CI-65, CI-66, D-229, D-235)
 
 Decisions:
 - `bridge_program()` matches WindowsApps aliases on `normalizePath()`, since `Sys.which()` returns
@@ -67,12 +67,22 @@ Decisions:
   bash on PATH and the cmd and powershell knit engines.
 - The cmd route runs the line in a cmd started after `chcp 65001`, passed through `GPTR_SHELL_CMD`
   (D-229): chcp and an echo on one `/c` line kept the OEM code page (run 39193453652).
-- PowerShell route: `cmd /c exit 4` gives status 0 on hosted Windows. The product is unchanged
-  and the test prints `$LASTEXITCODE` and `$?` after each native exit (open).
+- The PowerShell route (D-235): Rtools' extensionless MSYS2 `usr/bin/cmd`, first on PATH under
+  R CMD, shadowed `cmd.exe` in PowerShell's PATH search and was opened with ShellExecute without a
+  wait, so `cmd /c exit 4` gave status 0 (diagnostic job 118000300246). On Windows a lookup hook
+  resolves a bare name to the first program of that name with an extension, or to none ("not
+  recognized"), as cmd does; the status is 0 when the last command succeeded, else the last native
+  exit code, else 1. The test puts an extensionless `cmd` first on PATH and asserts the statuses
+  under pwsh and Windows PowerShell 5.1.
+- A background job's read takes the status before the bytes, so a read that reports the job ended
+  holds all of its output; the job tests release their child through a file, not a sleep.
+- The timeout test and the shell-engine test allow 30 s instead of 10 s on every OS, for Git Bash
+  start-up on hosted Windows; their jobs run 57 s and 999 s, so the timeout kill is still proven.
 
-Commits: `f370026`, `ec6cf5b`, `838f322`, `6ede769`, `7c36123`, `0fbca74`.
+Commits: `f370026`, `ec6cf5b`, `838f322`, `6ede769`, `7c36123`, `0fbca74`, `adfef78`, `1f5359e`,
+`b4df19c`, `bd8e30b`, `c65f11e`, `3596af1`, `3942e0b`.
 
-### Task 3: The orphan sweep, a bare `R` server and process trees (CI-32, CI-47, CI-56, D-233)
+### Task 3: The orphan sweep, a bare `R` server and process trees (CI-32, CI-47, CI-56, CI-69, D-233)
 
 Decisions:
 - The parent-death sweep test runs on Windows through a `cleanup = FALSE` grandchild: processx's
@@ -81,9 +91,11 @@ Decisions:
   `.stdin` files.
 - A live MCP server started with the command `R` proves `mcp_stdio_command()`'s R mapping.
 - `kill_all()` records the descendants of a live process by parent link before the interrupt and
-  kills them after `$kill()` (D-233).
+  kills them after `$kill()` (D-233). `proc_children()` lists them from ps's own handle of the pid:
+  on Linux processx and ps estimate the boot time differently, and `ps_children()` of processx's
+  handle dropped a shell's background jobs forked in its first clock tick.
 
-Commits: `efe55df`, `e1ebdb6`, `812940c`, `9170baf`.
+Commits: `efe55df`, `e1ebdb6`, `812940c`, `9170baf`, `85e5883` (superseded), `d480ee5`.
 
 ### Task 4: Paths, links and the file tools on Windows (CI-33..CI-36, CI-51, D-231)
 
@@ -100,17 +112,20 @@ Decisions:
 Commits: `d43511f`, `607777a`, `439d00c`, `e761a8a`, `ea3abc9`, `6541910` (superseded),
 `e23f44d`, `d415b90`, `745397d`, `d29750a`, `9be7d4b`, `c036bb2`, `73b60c2`.
 
-### Task 5: The wire log and scrub through Windows links (CI-37, CI-38, CI-48, CI-52, D-231)
+### Task 5: The wire log and scrub through Windows links (CI-37, CI-38, CI-48, CI-52, CI-68, D-231)
 
 Decisions:
-- `wire_log_path()` refuses a listed entry without followed metadata at or above the log path.
+- `path_dangling()` is no followed metadata plus a readlink target on POSIX, as on `main`, and a
+  listed entry (`path_listed()`) on Windows, where readlink has none; `resolve_link_target()` asks
+  it on every OS, and `local_dangling_link()` is the one fixture.
+- `wire_log_path()` refuses a dangling link (`path_dangling()`) at or above the log path.
 - `scrub_walk()` counts a file only with followed metadata, without Windows warnings.
 - `scrub_lock()` refuses a dangling root or lock root (`path_dangling()`) and a link at either
   (`path_is_link()`) before it takes any lock.
 
-Commits: `267f441`, `13de743`, `2c9b6a4`, `fda61bf`.
+Commits: `267f441`, `13de743`, `2c9b6a4`, `fda61bf`, `089bc9a`, `dba9c78`.
 
-### Task 6: A dangling link reads as absent on Windows (CI-60, CI-61, D-231)
+### Task 6: A dangling link reads as absent on Windows (CI-60, CI-61, CI-67, D-231)
 
 Decisions:
 - `path_info()` is `file.info(extra_cols = FALSE)` with Windows' warning muffled and a row with NA
@@ -118,8 +133,10 @@ Decisions:
 - Readers, the read, edit and grep tools, the walker and `ls`, the files checkpointer, `@file`
   mentions, the document file argument and cache, and spec and gateway image checks read through
   it; gptr's own stores keep base reads and the trust gate keeps `file.exists()`.
+- The `path_info()` test's Windows `file.info()` mock adds its octmode column after `data.frame()`
+  (R 4.2) and leaves atime out of the regular-file comparison.
 
-Commits: `4ac06da`, `3383843`.
+Commits: `4ac06da`, `3383843`, `95199d2`.
 
 ### Task 7: Crash recovery on Windows (CI-39)
 
@@ -130,20 +147,25 @@ Decisions:
 
 Commits: `21f01b7`, `f2cf9a3`, `1b87c03`.
 
-### Task 8: Artifacts and Chrome on Windows (CI-40, CI-45, CI-55, CI-59, D-230)
+### Task 8: Artifacts and Chrome on Windows (CI-40, CI-45, CI-55, CI-59, CI-63, CI-64, D-230, D-233)
 
 Decisions:
 - The tokenless fallback and the socket path check run on Windows; a session-check skip names the
   Chrome binary and quotes the stderr log its own launch wrote. The `USERPROFILE` swap was
   reverted as unverified.
+- The suite home is a Windows profile (`APPDATA` and `LOCALAPPDATA` under it), so system Google
+  Chrome can tell its `--user-data-dir` from the default one and serves DevTools; a test asks
+  Windows PowerShell for the browser child's Local AppData.
 - A child that exits by itself must leave the process table with its marker family: the test
   helper `family_left()`, and at the launch `proc_family_wait()` for up to `artifact_stop_grace`
   before the unchanged `kill_all()`.
 - The owned Chrome binds `--remote-debugging-port=0` and gptr records the port Chrome announces
   (D-230); the app child's fall-through past a port that does not bind is tested.
+- The owned Chrome's close records the browser's descendants by parent link and waits for them
+  before removing the profile: Chrome's helpers carry no readable marker (D-233).
 
 Commits: `6644347`, `71baed1`, `610ecf8`, `0cbd095`, `630968f`, `2a5e415`, `f35bb9a`, `c751670`,
-`96aab0e`, `f40cadb`.
+`96aab0e`, `f40cadb`, `6bae056`, `a7b1793`.
 
 ### Task 9: Privacy, the child environment and CLI stdin on Windows (CI-41, D-234)
 
@@ -167,30 +189,34 @@ Decisions:
 
 Commits: `e941222`, `05537a8`, `136beda`.
 
-### Task 11: Test harness bounds on loaded runners (CI-44, CI-62)
+### Task 11: Test harness bounds on loaded runners (CI-44, CI-62, CI-70)
 
 Decisions:
 - `bp_run()` charges the observer's supervisor only for its growth in the case; the 1 GiB cap is
   unchanged and CI-23's unit-RSS mock goes.
 - The mock server reads requests only when no connection waits to be accepted; INFRA-01's 2.475 s
   bound is unchanged and the failure message prints each head's delay after its read.
+- `bp_observe()` retries the five transient observer reasons every 100 ms until the 1 s snapshot
+  deadline has passed since the first failure, not once; the observer, caps and deadlines are
+  unchanged.
 
-Commits: `f663aa1`, `92a2944`.
+Commits: `f663aa1`, `92a2944`, `404b90a`.
 
 ### Task 12: Documentation
 
 Decisions:
 - This plan, its index row and its row in 05's dependency table (with P26's); fixes
-  CI-25..CI-62; D-228..D-234, the D-019 item 2 correction and the Windows stdin status of D-019
-  item 5, D-101, D-104 and D-106; the P27 sections of `dev/PROGRESS.md` and `dev/HANDOFF.md`.
+  CI-25..CI-70; D-228..D-235, the D-231 and D-233 amendments, the D-019 item 2 correction and the
+  Windows stdin status of D-019 item 5, D-101, D-104 and D-106; the P27 sections of
+  `dev/PROGRESS.md` and `dev/HANDOFF.md`.
 - Plans and 05 cite the test titles P27 renamed (P04, P10, P18, P20, P22, P23); 04 section 3.2
-  lists `GPTR_SHELL_CMD`; 04 section 7.4 and 03 section 6.7 give the cmd route and the
-  descendants `kill_all()` records; IC-61 names the DevTools port; `?gptr_login` gives the
+  lists `GPTR_SHELL_CMD`; 04 section 7.4 and 03 section 6.7 give the cmd and PowerShell routes and
+  the descendants `kill_all()` records; IC-61 names the DevTools port; `?gptr_login` gives the
   Windows privacy of `auth.json`.
 
 ## Renamed and unskipped tests
 
-`skip_on_os("windows")` sites: 77 at `f4202bb`, 60 at `92a2944`. Renamed:
+`skip_on_os("windows")` sites: 77 at `f4202bb`, 60 at `92a2944` and `404b90a`. Renamed:
 
 | File | Old title | New title | Commit |
 |---|---|---|---|
@@ -201,6 +227,7 @@ Decisions:
 | `test-tool-walk.R` | a symlinked directory is listed but not followed | a directory link back to the root (a Windows junction) is listed but not followed | `607777a` |
 | `test-doc-io.R` | a differently cased dangling modern entry masks legacy on a POSIX filesystem | a differently cased dangling modern entry masks legacy where names ignore case | `1b87c03` |
 | `test-cli-codex.R` | a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in env | a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env | `275cd6d` |
+| `test-proc-backpressure-sampling.R` | backpressure observation retries a fixed transient observer reason once | backpressure observation retries fixed transient observer reasons for one deadline | `404b90a` |
 
 ## Out of scope
 
@@ -226,12 +253,12 @@ Decisions:
 
 | Row | Command | Actual | Status |
 |---|---|---|---|
-| A1 | R-CMD-check `windows-latest (release)`, NOT_CRAN, green twice on one commit | `9170baf` run 39217189384 job 117943690103: `FAIL 2 \| WARN 8`, `test-bridge-sh.R:146` and `:155` (PowerShell route; `lec= ok=True` after both cmd exits); the WARN are the dangling sidecar warnings fixed by CI-60. `92a2944` run 39235008757 job 118001849245: `FAIL 2 \| WARN 0`, the same two | pending |
-| A2 | R-CMD-check `windows-latest (oldrel-4)`, NOT_CRAN, green twice on one commit | `9170baf` job 117943690159: `FAIL 2 \| WARN 4`, the same two expectations. `92a2944` job 118001849423: `FAIL 3 \| WARN 0`, the same two and `test-utils-paths.R:324` (R 4.2.3 `octmode`, as on ubuntu oldrel-4) | pending |
-| A3 | windows-by-file ordinary full suite (`optional = false`), green twice on one commit | `2c9b6a4` run 39202175985 job 117897290402: `test-bridge-lang.R`, `test-bridge-sh.R`, `test-console-notice.R`, `test-tool-write.R` failed (CI-49, CI-51, CI-53 came after); the filtered `9170baf` run 39217182105 job 117943670939: only `test-bridge-sh.R` failed (`:146`, `:155`, `:445`, `:449`) | pending |
-| A4 | rscript-native on Windows, macOS and Ubuntu, green twice on one commit | `2c9b6a4` run 39202178250: macOS and Ubuntu green; Windows job 117897297705 failed on an unexpected session-check skip (Chrome for Testing bind `0x271D`, fixed by CI-59); `92a2944` run 39234997432: all three green | pending (green once, on `92a2944`) |
-| A5 | Exact-tarball (Windows release and R-devel in CRAN mode, macOS, Ubuntu), green twice on one commit | `2c9b6a4` run 39202180585: all five legs green; not run on `92a2944` | pending (green once, on `2c9b6a4`) |
-| A6 | windows-by-file optional Windows packet, green twice on one commit | `92a2944` run 39235001873 job 118001831486: 12 optional files PASS | pending (green once, on `92a2944`) |
-| A7 | the other R-CMD-check jobs | `9170baf`: 11 green; `ubuntu-latest (oldrel-4)` job 117943690034 `FAIL 1`, `test-artifact-app.R:488` "The private headless browser directory did not finish cleanup: unlink returned 1". `92a2944` run 39235008757: `ubuntu-latest (oldrel-4)` job 118001849303 `FAIL 1`, `test-utils-paths.R:324` (R 4.2.3: "cannot coerce class '"octmode"' to a data.frame" in the emulated row); `ubuntu-latest (release, LC_ALL=C)` job 118001849130 `FAIL 1`, `test-bridge-sh.R:512` (`length(tree)` 1, expected >= 2); the other 10 green | pending |
-| A8 | macOS: full offline suite, lint, `python3 -I dev/ci/check-plans.py` | `3383843`: `[ FAIL 0 \| WARN 0 \| SKIP 62 \| PASS 34753 ]`, lint clean; `92a2944`: `http-reactor` and the 16 other mock-server files `FAIL 0`. Plan checks with this plan: `27 plans, 1446 blocks, 4391 definitions, 28351 calls, 954 findings (info 823, warn 131)`, 0 error; `770 R blocks; 0 with parse/style problems`; `no lints`. P27's 10 warnings name functions that exist in `R/` or `tests/testthat/` but in no plan block (`path_info()`, `path_dangling()`, `path_listed()`, `path_is_link()`, `scrub_walk()`, `scrub_lock()`, `local_symlink()`, `family_left()`, `proc_family_wait()`, `bp_run()`), as P26's do; its `plan_not_in_decomposition` warning, and P26's, are fixed by their rows in 05 | pass |
+| A1 | R-CMD-check `windows-latest (release)`, NOT_CRAN, green twice on one commit | `9170baf` run 39217189384 job 117943690103: `FAIL 2 \| WARN 8`, `test-bridge-sh.R:146` and `:155` (PowerShell route, fixed by CI-66); the WARN are the dangling sidecar warnings fixed by CI-60. `92a2944` run 39235008757 job 118001849245: `FAIL 2 \| WARN 0`, the same two. `85e5883` run 39250578309 job 118053097431 and `74de8c6` run 39255504135 job 118076803835 (the same `R/` and `tests/`): `Status: OK`, `FAIL 0 \| WARN 0 \| SKIP 94 \| PASS 33631`, both artifact session checks ran (CI-63) | pending on the final head (`404b90a` not run) |
+| A2 | R-CMD-check `windows-latest (oldrel-4)`, NOT_CRAN, green twice on one commit | `9170baf` job 117943690159: `FAIL 2 \| WARN 4`, the same two expectations. `92a2944` job 118001849423: `FAIL 3 \| WARN 0`, the same two and `test-utils-paths.R:324` (R 4.2.3 `octmode`, fixed by CI-67). `85e5883` job 118053097175: testthat `FAIL 0 \| WARN 0 \| SKIP 94 \| PASS 33631`, but native-07 failed on `observer-metadata-invalid` twice in a row (fixed by CI-70). `74de8c6` job 118076804097: `Status: 1 NOTE` (size), `FAIL 0` | pending on the final head (green once, on `74de8c6`) |
+| A3 | windows-by-file ordinary full suite (`optional = false`), green twice on one commit | `2c9b6a4` run 39202175985 job 117897290402: `test-bridge-lang.R`, `test-bridge-sh.R`, `test-console-notice.R`, `test-tool-write.R` failed (CI-49, CI-51, CI-53 came after); the filtered `9170baf` run 39217182105 job 117943670939: only `test-bridge-sh.R` failed (`:146`, `:155`, `:445`, `:449`; CI-66, CI-65). `85e5883` run 39250571244 and `74de8c6` runs 39255516069 and 39255537264: all 203 files pass; both `74de8c6` runs skipped the first session check (`test-artifact-app.R:511`) as a browser startup failure, whose reason the runner does not print | pending on the final head |
+| A4 | rscript-native on Windows, macOS and Ubuntu, green twice on one commit | `2c9b6a4` run 39202178250: macOS and Ubuntu green; Windows job 117897297705 failed on an unexpected session-check skip (Chrome for Testing bind `0x271D`, fixed by CI-59); `92a2944` run 39234997432, `85e5883` run 39250575003 and `74de8c6` runs 39255497307 and 39255504649: all three green | pending on the final head |
+| A5 | Exact-tarball (Windows release and R-devel in CRAN mode, macOS, Ubuntu), green twice on one commit | `2c9b6a4` run 39202180585, `85e5883` run 39250578324 and `74de8c6` run 39255512201: all five legs green; a second `74de8c6` run (39255541223) had its Windows and macOS legs green and its Ubuntu legs running when this was written | pending on the final head |
+| A6 | windows-by-file optional Windows packet, green twice on one commit | `92a2944` run 39235001873 job 118001831486: 12 optional files PASS; `85e5883` run 39250581987 and `74de8c6` runs 39255501073 and 39255508574 green | pending on the final head |
+| A7 | the other R-CMD-check jobs | `9170baf`: 11 green; `ubuntu-latest (oldrel-4)` job 117943690034 `FAIL 1`, `test-artifact-app.R:488` "The private headless browser directory did not finish cleanup: unlink returned 1" (fixed by CI-64). `92a2944` run 39235008757: `ubuntu-latest (oldrel-4)` job 118001849303 `FAIL 1`, `test-utils-paths.R:324` (R 4.2.3, CI-67); `ubuntu-latest (release, LC_ALL=C)` job 118001849130 `FAIL 1`, `test-bridge-sh.R:512` (`length(tree)` 1, expected >= 2); the other 10 green. `85e5883`: all 12 green. `74de8c6`: `ubuntu-latest (release, no Suggests)` job 118076803865 `FAIL 1`, `test-bridge-sh.R:569` (0 of 2 sleeps for 10 s, fixed by CI-69); the other 11 green | pending on the final head |
+| A8 | macOS: full offline suite, lint, `python3 -I dev/ci/check-plans.py` | `3383843`: `[ FAIL 0 \| WARN 0 \| SKIP 62 \| PASS 34753 ]`, lint clean; `85e5883`: `[ FAIL 0 \| WARN 0 \| SKIP 63 \| PASS 34801 ]` and `R CMD check --as-cran` 0 errors, 0 warnings, 0 notes; `404b90a`: only the lanes' test files (CI-68..CI-70). Plan checks with this plan: `27 plans, 1446 blocks, 4391 definitions, 28351 calls, 957 findings (info 823, warn 134)`, 0 error; `770 R blocks; 0 with parse/style problems`; `no lints`. P27's 13 warnings name functions that exist in `R/` or `tests/testthat/` but in no plan block (`path_info()`, `path_dangling()`, `path_listed()`, `path_is_link()`, `scrub_walk()`, `scrub_lock()`, `proc_children()`, `proc_family_wait()`, `local_symlink()`, `local_dangling_link()`, `family_left()`, `bp_run()`, `bp_observe()`), as P26's do; its `plan_not_in_decomposition` warning, and P26's, are fixed by their rows in 05 | pass on `85e5883`; pending on the final head |
 | A9 | Plan-gates (Ubuntu) and Optional-integrations (Windows and Ubuntu), green on one commit, the Windows leg twice | neither has run on this branch (both are dispatched with a `source_sha`); the plan checks pass on macOS (A8), and the optional registry passed in the windows-by-file optional packet (A6) | pending |
