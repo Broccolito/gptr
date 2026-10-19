@@ -394,21 +394,22 @@ jobs:
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
             --run Rscript --vanilla dev/ci/windows-token/held-controller.R pure
+      # Windows test steps avoid Git Bash, whose MSYS runtime enables Backup/Restore privileges in
+      # every child and so voids the absence probe's ACL denials; R-CMD-check's Rscript steps do
+      # not. The optional step takes the runner's default shell: bash on Linux, pwsh on Windows.
       - name: Offline tests file by file
         if: '!inputs.optional'
-        shell: bash
-        run: Rscript --vanilla dev/ci/test-by-file.R "$GPTR_LEGACY_FILTER" "$GPTR_LEGACY_MINUTES"
+        shell: pwsh
+        run: Rscript --vanilla dev/ci/test-by-file.R "$env:GPTR_LEGACY_FILTER" "$env:GPTR_LEGACY_MINUTES"
       - name: Mandatory optional tests with five-minute owned-child bounds
         if: inputs.optional && !inputs.held_token && !inputs.supervisor_rss_comparison
-        shell: bash
         env:
           GITHUB_PAT: ''
           GITHUB_TOKEN: ''
-          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-owned
           GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
-        run: |
-          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
-            --run Rscript --vanilla dev/ci/optional-integrations.R
+        run: >-
+          python dev/ci/optional-dependencies.py --state-dir "${{ runner.temp }}/gptr-optional-owned"
+          --run Rscript --vanilla dev/ci/optional-integrations.R
       - name: Four serial complete Windows supervisor RSS comparisons
         if: inputs.optional && inputs.supervisor_rss_comparison && runner.os == 'Windows' && steps.optional_install.outcome == 'success'
         timeout-minutes: 255
