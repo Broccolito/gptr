@@ -18,6 +18,18 @@ template:
     link-color-dark: "#7d9dcb"
     link-hover-color-dark: "#efede7"
 
+navbar:
+  structure:
+    left: [intro, reference, articles, cheatsheet, tutorials, news]
+  components:
+    cheatsheet:
+      text: Cheatsheet
+      menu:
+      - text: HTML
+        href: cheatsheet.html
+      - text: PDF
+        href: gptr-cheatsheet.pdf
+
 reference:
 - title: "Ask Peter"
   contents:
