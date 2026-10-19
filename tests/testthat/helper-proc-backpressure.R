@@ -196,19 +196,25 @@ bp_observer_reason = function(stage, error) {
   }, error = function(condition) NULL, interrupt = function(condition) NULL)
 }
 
-# One more snapshot after a reason that owned files changing during a walk can raise (Windows
-# lstat of a delete-pending file reports st_ino 0). The retry meets every bound unchanged;
-# other reasons and a failed retry still end the sample. The failed retry's own condition is
-# kept, since the observer's last_failure describes that snapshot.
+# Retry, every 100 ms, a reason that owned files changing during a walk can raise (Windows lstat
+# of a delete-pending file reports st_ino 0) until the observer's 1 s snapshot deadline has
+# passed since the first failure. Each retry meets every bound unchanged; any other reason and
+# a reason that outlasts the deadline still end the sample. The last condition is kept, since
+# the observer's last_failure describes that snapshot.
 bp_observe = function(observe, retried) {
-  tryCatch(observe(), error = function(error) {
-    reason = bp_observer_reason("files", error)
+  first = NULL
+  repeat {
+    disk = tryCatch(observe(), error = identity)
+    if (!inherits(disk, "error")) return(disk)
+    reason = bp_observer_reason("files", disk)
+    first = first %||% proc.time()[["elapsed"]]
     if (!isTRUE(reason %in% c("observer-metadata-invalid", "observer-snapshot-deadline",
         "observer-parent-entry-absent", "observer-link-entry-absent",
-        "observer-entry-disappearance-uncertain"))) stop(error)
+        "observer-entry-disappearance-uncertain")) ||
+        proc.time()[["elapsed"]] - first >= 1) stop(disk)
     retried(reason)
-    observe()
-  })
+    Sys.sleep(0.1)
+  }
 }
 
 # Retain a bounded diagnostic without copying arbitrary condition messages or file content.

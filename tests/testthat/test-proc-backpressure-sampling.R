@@ -657,7 +657,7 @@ observer_error = function(reason) {
     class = c("gptr_owned_disk_observer.ObservationError", "error", "condition"))
 }
 
-test_that("backpressure observation retries a fixed transient observer reason once", {
+test_that("backpressure observation retries fixed transient observer reasons for one deadline", {
   sample = list(entries = 1)
   seen = new.env(parent = emptyenv())
   observe = function(errors) {
@@ -670,15 +670,38 @@ test_that("backpressure observation retries a fixed transient observer reason on
     }, function(reason) seen$retried = c(seen$retried, reason)), error = identity)
   }
   second = observer_error("observer-byte-limit")
-  for (reason in c("observer-metadata-invalid", "observer-snapshot-deadline",
-                   "observer-parent-entry-absent", "observer-link-entry-absent",
-                   "observer-entry-disappearance-uncertain")) {
+  transient = c("observer-metadata-invalid", "observer-snapshot-deadline",
+                "observer-parent-entry-absent", "observer-link-entry-absent",
+                "observer-entry-disappearance-uncertain")
+  for (reason in transient) {
     expect_identical(observe(list(observer_error(reason))), sample)
     expect_identical(seen$calls, 2L)
     expect_identical(seen$retried, reason)
     expect_identical(observe(list(observer_error(reason), second)), second)
     expect_identical(seen$calls, 2L)
   }
+  # Repeated transients that clear within the deadline, in any order, complete the sample.
+  expect_identical(observe(lapply(transient, observer_error)), sample)
+  expect_identical(seen$calls, 6L)
+  expect_identical(seen$retried, transient)
+  expect_identical(observe(c(lapply(transient[1:2], observer_error), list(second))), second)
+  expect_identical(seen$calls, 3L)
+  expect_identical(seen$retried, transient[1:2])
+  # A transient that outlasts the 1 s deadline ends the sample with its last snapshot's condition.
+  seen$calls = 0L
+  seen$retried = character()
+  started = proc.time()[["elapsed"]]
+  actual = tryCatch(bp_observe(function() {
+    seen$calls = seen$calls + 1L
+    stop(structure(list(message = "observer-metadata-invalid", call = NULL, attempt = seen$calls),
+      class = c("gptr_owned_disk_observer.ObservationError", "error", "condition")))
+  }, function(reason) seen$retried = c(seen$retried, reason)), error = identity)
+  expect_gte(proc.time()[["elapsed"]] - started, 1)
+  expect_identical(actual$attempt, seen$calls)
+  expect_identical(seen$retried, rep("observer-metadata-invalid", seen$calls - 1L))
+  # Retries are paced at 100 ms, not a busy loop.
+  expect_gte(length(seen$retried), 2L)
+  expect_lt(length(seen$retried), 20L)
   # Bound, identity and link failures, untyped errors and unknown text are never retried.
   for (error in list(second, observer_error("observer-entry-limit"),
                      observer_error("observer-undeclared-reparse-entry"),
@@ -723,20 +746,34 @@ test_that("a retried transient observer failure completes the case and is witnes
   expect_identical(x$observer_retries, 1L)
   expect_identical(x$observer_retry_reason, "observer-metadata-invalid")
   expect_identical(x$result, list(case = "observer-retry"))
-  # Any other reason, or a failed retry, stays one fatal sampling error.
+  # The witness counts every retry and keeps the first reason.
+  x = run(observer_error("observer-snapshot-deadline"),
+          observer_error("observer-metadata-invalid"), observer_error("observer-metadata-invalid"))
+  expect_true(x$complete)
+  expect_identical(x$sampling_errors, 0L)
+  expect_identical(x$observer_retries, 3L)
+  expect_identical(x$observer_retry_reason, "observer-snapshot-deadline")
+  # Any other reason, also after a retry, stays one fatal sampling error.
   x = run(observer_error("observer-byte-limit"))
   expect_false(x$complete)
   expect_identical(x$guard, "resource_observation")
   expect_identical(x$sampling_errors, 1L)
   expect_identical(x$observer_retries, 0L)
   expect_identical(x$sample_error$observer_reason, "observer-byte-limit")
-  x = run(observer_error("observer-snapshot-deadline"),
-          observer_error("observer-metadata-invalid"))
+  x = run(observer_error("observer-snapshot-deadline"), observer_error("observer-byte-limit"))
   expect_false(x$complete)
   expect_identical(x$guard, "resource_observation")
   expect_identical(x$sampling_errors, 1L)
   expect_identical(x$observer_retries, 1L)
   expect_identical(x$observer_retry_reason, "observer-snapshot-deadline")
+  expect_identical(x$sample_error$observer_reason, "observer-byte-limit")
+  # So does a transient that persists past the deadline (more failures than it allows).
+  x = do.call(run, rep(list(observer_error("observer-metadata-invalid")), 100L))
+  expect_false(x$complete)
+  expect_identical(x$guard, "resource_observation")
+  expect_identical(x$sampling_errors, 1L)
+  expect_gte(x$observer_retries, 2L)
+  expect_identical(x$observer_retry_reason, "observer-metadata-invalid")
   expect_identical(x$sample_error$observer_reason, "observer-metadata-invalid")
 })
 
