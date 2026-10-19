@@ -271,3 +271,458 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   and in UTF-8. Lint clean.
 - Reviews: none recorded.
 - Deviations: none. Open: none.
+
+## Task CI-25 - The plan gates accept any contiguous P01..Pnn plan set (2026-10-18, #51)
+- `dev/ci/check-plans.py` required exactly P01..P25 and a 25-plan index, so P26 turned the Linux plan
+  gate (Plan-gates.yaml, Optional-integrations.yaml) red with "Require the exact P01 through P25 plan
+  set" before any check ran. Fix (CI only, `3e63a8a`): `plan_files()` takes P01..Pnn with no gap,
+  duplicate or malformed name and n >= 25, and the index must cover all with zero error findings;
+  `extract.py` extracts every `P<nn>-*.md` (it dropped plans above P25).
+- Red: a full `check-plans.py` at base stops with the P25 message. Green: `test-check-plans.py` 8 OK
+  (+2 plan-set cases); a full run 26 plans, 0 errors, 770 R blocks clean, no lints.
+- Reviews: r1 1 finding (low: `extract.py` still stopped at P25) -> fixed.
+- Deviations: none. Open: `build_index.py --scope` still defaults to P01-P25 (labels only); Plan-gates
+  has not run on this branch (dispatch only).
+
+## Task CI-26 - The optional-integration registry names current tests only (2026-10-18, #51)
+- 7928d0f and 326fe82 renamed two cases each in `test-artifact-browser-cleanup.R` and
+  `test-cli-codex.R`, but `dev/ci/optional-integrations.R` kept the old titles, so every
+  Optional-integrations row selecting those files stopped at "Missing mandatory integration cases".
+  Fix (CI only, `b00d681`): the registry and its two pinned copies carry the current titles; a pure
+  gate test, "every approved title names a current test of its file", walks the combined registry
+  by position.
+- Red: the new test fails on exactly the two renamed files. Green: `dev/ci/test-optional-integrations.R`
+  PASS 3737. Lint clean.
+- Reviews: r1 1 finding (medium: a by-name lookup never read the guard titles) -> fixed (index loop).
+- Deviations: none. Open: none; the gate caught the later renames (CI-57) in the optional run on
+  2c9b6a4 (run 39202182790, job 117897311639) and passed on 92a2944 (run 39235001873).
+
+## Task CI-27 - Ordinary windows-by-file runs provision R-CMD-check's Windows Python (2026-10-18, #51)
+- On Windows `bp_run()` always starts the no-follow disk observer, which needs `RETICULATE_PYTHON` and
+  `RETICULATE_USE_MANAGED_VENV=false`; ordinary windows-by-file set neither, so every observer case
+  failed with "The optional nofollow observer requires its provisioned Python runtime" (run
+  39179988023 job 117830492561; run 38839828091 job 116777121470). Fix (CI only, `f1b62da`): ordinary
+  mode runs R-CMD-check's `actions/setup-python` pin (3.12.10) and provisioning step.
+- Green: the workflow parses and the step conditions select provisioning only in ordinary mode (and
+  the RSS route).
+- Reviews: r1 no finding.
+- Deviations: none. Open: none; the ordinary run on 2c9b6a4 (run 39202175985, job 117897290402)
+  passed every `test-proc-writer-*.R` observer case. Repeat pending (P27 A3).
+
+## Task CI-28 - The checkpoint ACL script gets a startup-safe hang guard (2026-10-18, #51)
+- "the blob store reports effective create denial and restores its owned bucket" ran its test-owned
+  PowerShell deny/restore script under `processx::run(timeout = 5)`; two of four real-CRAN-mode
+  Windows R-devel Exact-tarball legs (jobs 114834115071, 114882859729) stopped at `stage=launch`: a
+  cold PowerShell start alone took over 5 s. Fix (tests only, `17c0fb9`): a 60 s guard for deny and
+  restore; no assertion changed and no product path runs the script.
+- Green: `^ckpt-files$` PASS 241 on macOS (the branch is Windows-only). Lint clean.
+- Reviews: r1 no finding.
+- Deviations: none. Open: Exact-tarball on 2c9b6a4 (run 39202180585) green on Windows release and
+  R-devel in CRAN mode, once. Repeat pending (P27 A5).
+
+## Task CI-29 - Owned Windows test children start from pwsh, not Git Bash (2026-10-18, #51)
+- "Windows native absence probe refuses existing aliases and denied attributes"
+  (`test-proc-writer-runtime.R`) passed in R-CMD-check but failed the windows-by-file optional
+  owned-child runner (runs 38840747973, 38840750797): Git Bash's MSYS runtime enables
+  SeBackup/SeRestore in its token and every child's, so the test's own Deny ACL controls were void
+  (phases `absence-privilege-pre-backup-2`, `control-*-lookup-2`, probe 2). Fix (CI only, `1637f4b`):
+  the ordinary by-file step uses pwsh; the two optional owned-child steps take the runner default
+  (pwsh on Windows, bash on Linux).
+- Green: both workflows parse; the folded command splits into the expected argv for Linux and
+  Windows; `test-optional-dependencies.py` OK.
+- Reviews: r1 1 finding (low: `shell: pwsh` also moved the Linux rows) -> fixed (runner default).
+- Deviations: none. Open: the optional owned-child run of `test-proc-writer-runtime.R` under pwsh has
+  not run; the ordinary pwsh run on 2c9b6a4 passed the file (853 expectations).
+
+## Task CI-30 - bridge_program() skips WindowsApps aliases reported by 8.3 name (2026-10-18, #51)
+- On Windows `Sys.which()` returns `GetShortPathName()` paths, so a Store alias read as
+  `...\MICROS~1\WINDOW~1\python3.exe` and `bridge_program()`'s `windowsapps` match missed it:
+  `peter$script()` and the knit engines could pick the Store python3 or bash stub. Fix (`f370026`,
+  `R/bridge-sh.R`): the stub check matches `normalizePath(path, mustWork = FALSE)`.
+- Red: the old matcher returns an alias reached under another name (a `WINDOW~1` symlink, scratch
+  script). Green: test-bridge-sh.R "program lookup skips WindowsApps aliases, also under Windows 8.3
+  short names" on macOS. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: passed on hosted Windows release and oldrel-4 in R-CMD-check run
+  39217189384 (9170baf); repeat pending.
+
+## Task CI-31 - Shell routes, scripts and knit engines run on Windows (tests, 2026-10-18, #51)
+- `ec6cf5b`, `838f322`, `6ede769` (tests only): the resolution, direct-line, pipeline, timeout
+  (`ps_children()` instead of pgrep), `.sh` and `#!` tests of `test-bridge-sh.R` and the shell-engine
+  test of `test-bridge-lang.R` drop `skip_on_os("windows")`. New: "a background command line runs in
+  the shell and kill() stops its process tree", Windows-only "without Git Bash a Windows command line
+  runs in PowerShell, else in cmd", "on Windows a .sh script runs through Git Bash when no bash is on
+  PATH", "a windows_only interpreter has its program on Windows and none elsewhere" and "the cmd and
+  powershell engines run on Windows with UTF-8 output and exit codes".
+- Green: `^bridge-sh$` PASS 275 SKIP 3, `^bridge-lang$` PASS 106 SKIP 4 on macOS. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: the first hosted runs found cmd output in the OEM page (CI-49) and a lost
+  PowerShell exit status (CI-50, open); the macOS skip of the background tree test went with CI-47.
+
+## Task CI-32 - A bare R MCP server and the orphan sweep run on Windows (tests, 2026-10-18, #51)
+- `efe55df`: "a server configured with a bare Rscript or R command runs with this R" also starts the
+  fixture server with command `R` (on Windows `bin/x64/R.exe`, which starts Rterm.exe). `e1ebdb6`: "a
+  killed parent leaves a grandchild that the next load's sweep removes" runs on Windows: processx's
+  kill-on-close job ends the `proc_spawn()` child with its parent and `Rscript.exe` runs R in its own
+  process (R's `src/unix/Rscript.c` calls `AppMain()`), so the child starts a `cleanup = FALSE`
+  grandchild, which the sweep kills. Tests only.
+- Green: `^mcp-client$` PASS 173 SKIP 1, `^proc-spawn$` PASS 222 on macOS. Lint clean.
+- Reviews: r1 1 finding each: (high) the first sweep test followed a supposed Rterm.exe, which is the
+  child itself -> fixed (grandchild); (low) a tautological `mcp_stdio_command()` check -> dropped.
+- Deviations: D-019 item 2 corrected (P27). Open: the sweep test's read race on hosted Windows is
+  CI-56; both pass in R-CMD-check run 39217189384 (9170baf).
+
+## Task CI-33 - Paths, the walker and the edit and write tools run on Windows (tests, 2026-10-18, #51)
+- Tests only: drive-path rewrites in `resolve_tool_path()` (`d43511f`); a real junction loop through
+  `walk_files()`, `search_find()` and `search_grep()` (`607777a`); case-only patch moves (`439d00c`);
+  read-only files refused with EACCES by write and edit (`ea3abc9`); the relative Rscript file
+  fallback of `doc_rscript_file()` (`e23f44d`); two operations through a file link refused
+  (`9be7d4b`); `path_class()` through junctions and file links (`c036bb2`); `local_symlink()` as the
+  one link helper (`d29750a`). Windows links come from the wsec helpers, which skip on CRAN.
+- Green: `^tool-walk$`, `^tool-edit$` PASS 170, `^tool-write$` PASS 69, `^doc-locate$`,
+  `^storage-boundaries$` PASS 137, `^utils-paths$` PASS 123 SKIP 1 on macOS; the Windows branches were
+  checked with `is_windows()` forced and `Sys.readlink()` emptied. Lint clean.
+- Reviews: r1 4 findings (1 medium, 3 low) -> CI-35, CI-36, `d29750a`, `9be7d4b`.
+- Deviations: none. Open: passed in R-CMD-check run 39217189384 (9170baf, Windows release and
+  oldrel-4); the relative chain and loop of `test-tool-write.R` stay POSIX-only.
+
+## Task CI-34 - A Windows patch move never renames a file link over its target (2026-10-18, #51)
+- On Windows `Sys.readlink()` is always "", so `patch_finish_move()` took a file link for the moved
+  file and renamed it: "Update File: link.R / Move to: real.R" replaced `real.R` with a link to
+  itself and reported success. `patch_remove()` used `unlink()`, which on Windows deletes only a
+  junction-tagged reparse point. Fix (`e761a8a`, `R/tool-edit.R`): `path_is_link()` decides, and
+  `file.remove()` removes the link.
+- Red: a macOS run with `Sys.readlink()` stubbed to "" and `is_windows()` TRUE lost the content.
+  Green: `^tool-edit$` on macOS; the link moves of two tests now run on Windows. Lint clean.
+- Reviews: r1 (medium): `path_is_link()` also flags an 8.3 alias -> CI-35.
+- Deviations: none. Open: passed on hosted Windows in run 39217189384 (9170baf).
+
+## Task CI-35 - A patch move from a Windows short-name alias keeps the file (2026-10-18, #51)
+- `path_is_link()` flags an 8.3 or trailing-dot alias, so after CI-34 `patch_finish_move()` removed
+  the old name and "Update File: LONGFI~1.R / Move to: longfilename.R" deleted the file it had just
+  written. Fix (`d415b90`): on Windows a link must also be its own directory entry (`path_listed()`,
+  case folded); an alias is renamed and kept, a true link is still removed.
+- Red/green: simulated on macOS with an NFD spelling of an NFC name as the alias; `^tool-edit$` PASS
+  169. The move-onto-own-file test moves short to long on Windows when the volume has 8.3 names.
+- Reviews: none recorded.
+- Deviations: none. Open: a short alias of a true file link moved onto the link's target is still
+  renamed over the target; passed on hosted Windows in run 39217189384 (9170baf).
+
+## Task CI-36 - write_file() refuses a dangling Windows link as POSIX does (2026-10-18, #51)
+- `resolve_link_target()` took a dangling Windows link for a new file, so `write_file()` replaced the
+  user's link where POSIX refuses ("it names no file"); `6541910` had pinned that replacement. Fix
+  (`745397d`): a missing name that `path_listed()` finds is refused; the edit tool's `patch_key()`
+  inherits it, and the dangling case of the chain test runs on Windows (NOT_CRAN).
+- Red/green: simulated on macOS with the Windows stubs; `^tool-write$` PASS 69. Lint clean.
+- Reviews: r1 (low): `6541910` pinned a fixable inconsistency -> reversed here.
+- Deviations: D-231. Open: its premise was wrong: Windows `file.exists()` is TRUE for a dangling link,
+  so the refusal never ran there (hosted, CI-51).
+
+## Task CI-37 - The wire log refuses dangling links on Windows too (2026-10-18, #51)
+- R's `Sys.readlink()` is "" on Windows (`do_readlink` needs `HAVE_READLINK`), so
+  `wire_log_path()`'s dangling-link guard never fired there and `wire_log()` opened a dangling
+  junction or file link at or above the log path. Fix (`267f441`): `safe()` refuses a listed entry
+  without followed metadata, on every OS (the rule became `path_dangling()`, CI-48).
+- Red: a POSIX simulation of the two new Windows tests with `Sys.readlink()` emptied fails 3 on the
+  old code. Green: `^http-reactor$` PASS 225 SKIP 2. Lint clean.
+- Reviews: none recorded.
+- Deviations: D-231. Open: "Windows wire log resolves junctions and refuses dangling ones" and
+  "Windows wire log refuses escaping file links, dangling or not" passed in run 39217189384 (9170baf).
+
+## Task CI-38 - Scrub skips dangling links without Windows warnings (2026-10-18, #51)
+- `scrub_walk()` chose files with `utils::file_test("-f")`: on Windows `stat()` succeeds on a dangling
+  link, so `file.info()` warned "cannot open file" (D-137) and the link counted as a file;
+  `scrub_scan()`'s `file.size()` warned again. Fix (`13de743`): a file needs a followed
+  `file.info()` mtime, the warning muffled. POSIX unchanged.
+- Red: a POSIX simulation with Windows `file.info()` gives WARN 1, ERROR 1 on the old code. Green:
+  `^auth-redact$` PASS 486 SKIP 1. Lint clean.
+- Reviews: none recorded.
+- Deviations: D-231. Open: "Windows scrub skips foreign junctions and dangling links without
+  warnings" passed on hosted Windows (2c9b6a4 ordinary by-file; 9170baf R-CMD-check).
+
+## Task CI-39 - Crash recovery runs on Windows (tests, 2026-10-18, #51)
+- Tests only: "SIGKILL mid-stream: resume parses, keeps the last complete message, no duplicate" and
+  "SIGKILL mid-append, resume, three appends: all present and the tree connected (IC-59)" (`21f01b7`)
+  and "SIGTERM leaves a sidecar that the next touch applies around user edits (IC-51)" (`f2cf9a3`)
+  drop their Windows skips: processx's `kill()` and `signal(SIGTERM)` are `TerminateProcess()` plus a
+  wait there. The two dangling sidecar tests use real junctions (`1b87c03`, `doc_io_dangling()`).
+- Green: `^session-store$` PASS 273, `^doc-io$` PASS 670 on macOS. Lint clean.
+- Reviews: r1 3 findings (medium: a tree kill built on the false Rterm.exe cause; low: a renamed
+  IC-51 test; low: an overclaimed commit body) -> fixed.
+- Deviations: none. Open: passed on hosted Windows (2c9b6a4 by-file; 9170baf R-CMD-check), the
+  dangling sidecar tests with warnings until CI-60.
+
+## Task CI-40 - The artifact tests run on Windows; a Chrome skip says why (tests, 2026-10-18, #51)
+- Tests only: the access token test pins the Windows tokenless fallback (`6644347`); the socket path
+  limit check runs on Windows (`0cbd095`); a session-check skip names `chromote::find_chrome()` and
+  quotes the last 3 lines of the stderr log its own launch wrote (`71baed1`, `2a5e415`), since both
+  Windows R-CMD-check jobs skipped with "startup timed out" only (run 39179983061). `610ecf8` (a
+  USERPROFILE with AppData\Local) was reverted by `630968f` as unverified.
+- Green: `^artifact-app$` PASS 494 SKIP 0 (real Chrome), PASS 482 SKIP 2 with a fake Chrome;
+  `^artifact-browser-launch$` PASS 476. Lint clean.
+- Reviews: r1 3 findings (medium: unverified swap -> reverted; low: stale allowances -> CI-42; low: a
+  stale log could be quoted -> fixed; its claim that the refusal is a LOG(ERROR) was rejected).
+- Deviations: none. Open: on 2c9b6a4 the system Google Chrome quoted "DevTools remote debugging
+  requires a non-default data directory" (job 117897245682), so R-CMD-check's session checks still
+  skip; the cause in the suite environment is unconfirmed.
+
+## Task CI-41 - The credential store, child env and CLI stdin are pinned on Windows (tests, 2026-10-18, #51)
+- Tests only: "on Windows auth.json lives under the per-user APPDATA profile (privacy is its ACL)"
+  (`0711327`); "an mcp child gets exactly the documented base variables its parent defines"
+  (`6e225bb`); a 200 KB codex prompt and "a 200 KB first user line reaches the claude child intact"
+  (`275cd6d`), more than the 65536-byte processx stdin pipe and one owned-writer chunk (D-019 item 5).
+- Red: dropping `TMPDIR` from the Unix `env_allow_base()` list fails the env test. Green:
+  `^auth-store$` PASS 64 SKIP 2, `^auth-childenv$` PASS 167, `^cli-(claude|codex)$` PASS 790 on macOS,
+  also under `LC_ALL=C`. Lint clean.
+- Reviews: none recorded.
+- Deviations: D-234; D-019 item 5, D-101, D-104, D-106 status. Open: passed on hosted Windows
+  (2c9b6a4 by-file; 9170baf R-CMD-check); claude control responses over one chunk are untested.
+
+## Task CI-42 - The renamed access-token test loses its Windows skip allowances (2026-10-18, #51)
+- After `6644347` the old access-token title matched no test but stayed allowed to skip on Windows in
+  `dev/ci/rscript-native.R` and `optional_allowed_skip()`. Fix (CI only, `37edb30`): both entries go,
+  and the allowance test names another real Windows platform guard.
+- Green: `dev/ci/test-optional-integrations.R` PASS 3695. Lint clean.
+- Reviews: r1 finding 2 of CI-40 (low).
+- Deviations: none. Open: none.
+
+## Task CI-43 - A walked file is one /undo item in per-turn scan mode (2026-10-18, #51)
+- The Exact-tarball windows-latest release check in CRAN mode (job 117848217386) failed the #37 test:
+  after a walk slower than `gptr.checkpoint_scan_budget` the session scans once per turn, and
+  `ckpt_files_explicit()` recorded the walked `a.txt` with its absolute path, so one file was two
+  `/undo` items, the dry run found a conflict and the UI cancelled. Fix (`e941222`): such a row is
+  relative, as the walk records it; `05537a8` runs the #37 test in walk mode (budget `Inf`) and a new
+  test in per-turn mode (budget -1).
+- Red: per-turn mode forced on the old tree fails the #37 test on the same 7 lines as Windows. Green:
+  all `ckpt-*` tests and the full offline suite. Lint clean.
+- Reviews: r1 (the bound-document rewind fails in per-turn mode) -> CI-54.
+- Deviations: D-228. Open: Exact-tarball on 2c9b6a4 (run 39202180585) green in CRAN mode, once.
+  Repeat pending (P27 A5).
+
+## Task CI-44 - The observer's supervisor counts toward the cap only by its growth (2026-10-18, #51)
+- "a Windows worker exits within 10 s after its acknowledged parent dies (IC-60)" failed in
+  rscript-native (run 39185663719, source context) as `resource_limit`: on Windows the observer added
+  the supervisor's absolute RSS, 537 MB after 11 earlier files in one process, to the 544 MB family
+  (1,088,077,824 > 1,073,741,824); the supervisor grew by 7 MB. Fix (tests only, `f663aa1`): the cap
+  charges the supervisor only for its growth since `before_rss`; the 1 GiB cap, family and disk caps,
+  deadlines and witness fields are unchanged; CI-23's unit-RSS mock goes.
+- Red: FAIL 5 with the old helper and 1.2 GB of ballast. Green:
+  `^(proc-backpressure-sampling|bp-declared-observer)$` PASS 583 with 0, 1.2 and 3.6 GB of ballast.
+  Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: rscript-native on 2c9b6a4 (job 117897297705) completed the case with guard
+  null (combined peak 1,130,909,696 B, growth within the cap); on 92a2944 rscript-native is green.
+
+## Task CI-45 - An exited artifact test child must end with its whole marker family (2026-10-18, #51)
+- Release run 39182291391 (job 117842876468) stopped "a broken app ends the child" in cleanup with
+  "The artifact test child did not settle"; the same test passed in 37 other hosted Windows jobs.
+  Inferred mechanism: processx's `wait()` returns at once after `is_alive()` collected the exit code,
+  while ps 1.9.3 lists an exited pid as running; `kill_all()` then ran within milliseconds. Fix (tests
+  only, `f35bb9a`): the two tests whose child exits by itself wait, within their 10 s and 15 s, until
+  ps lists neither the child nor a carrier of its marker (`family_left()`), which names what stays.
+- Green: `^artifact-app$` PASS 499 (NOT_CRAN), PASS 419 SKIP 13 (CRAN mode). Lint clean.
+- Reviews: r1 findings 2, 5 and 6: the launch path's exposure -> CI-55; the wording fixed.
+- Deviations: none. Open: no recurrence on 2c9b6a4 or 9170baf; the cause stays a hypothesis.
+
+## Task CI-46 - The preflight's tool probes share one startup-safe bound (2026-10-18, #51)
+- The optional run 39185668717 (job 117847473135, R 4.6.1) stopped in its dependency preflight:
+  `processx::run(Sys.which("perl"), c("-e", "print 42"), timeout = 5)` timed out starting Rtools45's
+  `C:\rtools45\usr\bin\perl.exe` (R's installer Rprofile puts Rtools first on PATH). Identical runs
+  finished the preflight in 5.7 s and 6.1 s, so the slow start is intermittent. Fix (CI only,
+  `6537173`): the quarto, rg and perl probes share `optional_startup_s = 60`; every check, the 90 s
+  child deadline and chromote's 10 s bound are unchanged; a dev/ci test pins the probes.
+- Red: a fake perl that sleeps 6 s fails the base preflight with the CI error. Green: it passes all
+  three probes; windows-rss, windows-token and windows-startup controller tests pass. Lint clean.
+- Reviews: r1 finding 4 answered in the commit body; finding 5 declined (the probe calls stay pinned).
+- Deviations: none. Open: the preflight passed in the optional run on 92a2944 (run 39235001873).
+
+## Task CI-47 - kill_all() stops the background children a shell's interrupt leaves on macOS (2026-10-18, #51)
+- `peter$bg("sleep 57 & sleep 58 & echo ready; wait")` then `job$kill()` left both sleeps running on
+  macOS: SIGINT ended the shell alone, the sleeps were reparented to launchd, ps reads no environment
+  of system binaries (no marker), and processx's `$kill()` does not signal a reaped leader's group.
+  Fix (`812940c`, `R/proc-supervise.R`): `kill_all()` records a live process's descendants by parent
+  link before the interrupt and kills them after `$kill()`; no bound changes.
+- Red: the unskipped test fails on macOS with the old `kill_all()`. Green: `^bridge-sh$` PASS 279 SKIP
+  2, 3 runs; `^(proc-.*|bridge-.*)$` PASS 2691 SKIP 23. Lint clean.
+- Reviews: none recorded.
+- Deviations: D-233. Open: on 92a2944 `ubuntu-latest (release, LC_ALL=C)` (job 118001849130) failed
+  `test-bridge-sh.R:512` (`length(tree)` 1, expected >= 2) in this test; not yet diagnosed.
+
+## Task CI-48 - Scrub refuses a dangling lock-root link where readlink has no target (2026-10-18, #51)
+- On Windows `Sys.readlink()` is "" and `normalizePath()` falls back to the lexical path, so
+  `scrub_lock()` took the session lock and tried creates through a dangling junction at `.gptr` or
+  `.gptr/locks` (Win32 `_wmkdir()` failed them; nothing was written outside). Fix (`2c9b6a4`):
+  `scrub_lock()` refuses when `path_dangling(root)` or `path_dangling(lock_root)` holds, before any
+  lock; `path_dangling()` (a listed entry without followed metadata) also backs the wire log.
+- Red: an emulation on macOS records 2 `write_atomic()` calls on the base. Green: none on this
+  commit; `^auth-redact$` PASS 486 SKIP 1, `^utils-paths$`, `^http-reactor$`. Lint clean.
+- Reviews: r1 6 findings; F1-F3 applied, F4 not tested (rests on an unverified `dir.exists()`), F5
+  -> CI-51, F6 -> CI-52.
+- Deviations: D-231. Open: "Windows scrub refuses a dangling lock-root junction before taking any
+  lock" passed in run 39217189384 (9170baf).
+
+## Task CI-49 - A Windows cmd line runs in a cmd started after chcp 65001 (2026-10-18, #51)
+- Hosted windows-by-file (run 39193453652) returned `"a b" caf\x82 ??` for `echo "a b" café 日本`
+  from the cmd knit engine and the cmd route of `peter$sh()`: chcp and the echo shared one `/c` line,
+  so the output kept the OEM page. Fix (`7c36123`): `shell_cmd()` runs an outer
+  `cmd /d /v:on /s /c` that changes the code page and starts the inner cmd that runs the line from
+  `GPTR_SHELL_CMD`; `bridge_exec()` and `bridge_bg()` set the target's env.
+- Red: a cross-platform test of the target env fails with the old plumbing. Green: `^proc-spawn$` PASS
+  224, `^bridge-sh$` PASS 281 SKIP 2, `^bridge-lang$` PASS 106 SKIP 4. Lint clean.
+- Reviews: r1 4 findings: a log claim removed; the env field documented and the spec rows routed to
+  D-229; a caller's `GPTR_SHELL_CMD` documented as refused (precedence kept).
+- Deviations: D-229. Open: the cmd route and engine passed in R-CMD-check run 39217189384 (9170baf,
+  Windows release and oldrel-4); a multi-line cmd chunk still runs only to its first LF.
+
+## Task CI-50 - The PowerShell route's lost exit status is diagnosed, not fixed (2026-10-18, #51)
+- Hosted Windows (run 39193453652) returned status 0 for `Write-Output "café 日本"; cmd /c exit 4`
+  through `-EncodedCommand` while stdout matched. `0fbca74` (tests only) keeps the assertion and adds
+  a run that prints `lec=$LASTEXITCODE ok=$?` after `cmd /c exit 4` and `cmd /d /c exit 5`, then runs
+  this R with status 6. Product unchanged.
+- Green: `^bridge-sh$` PASS 281 SKIP 2 on macOS (the Windows assertions do not run there).
+- Reviews: none recorded.
+- Deviations: none. Open: on 9170baf both Windows R-CMD-check rows fail `test-bridge-sh.R:146` (status
+  0) and `:155` (stdout `lec= ok=True` twice); status 6 passes. `$LASTEXITCODE` stays unset after both
+  cmd exits, so registry AutoRun (the only effect of `/d`) is ruled out; the cause is open.
+
+## Task CI-51 - write_file() refuses a dangling Windows link that stat() still sees (2026-10-18, #51)
+- Hosted windows-by-file (run 39193453652) failed `test-tool-write.R:153` with three warnings and
+  `Error in file(p, "rb"): cannot open the connection`: Windows `file.exists()` is `_wstati64() ==
+  0`, which succeeds on a dangling link, so `resolve_link_target()` returned `path_norm(p)` before
+  CI-36's refusal. Fix (`73b60c2`): `path_dangling()` comes first on Windows; POSIX keeps readlink.
+  An edit of such a link is refused with the classed error, and an Add File gets POSIX's text.
+- Red: a macOS emulation of the Win32 calls reproduces the hosted warnings and error. Green:
+  `^tool-write$` PASS 69, `^tool-edit$` PASS 170, `^windows-link-policy$` PASS 21. Lint clean.
+- Reviews: none recorded.
+- Deviations: D-231. Open: passed in R-CMD-check run 39217189384 (9170baf); a dangling link named
+  by its 8.3 alias is not listed and still ends in an unclassed `file()` error.
+
+## Task CI-52 - Scrub refuses a Windows workspace junction onto a foreign directory (2026-10-18, #51)
+- `scrub_lock()` refused a `.gptr` or locks link only through `Sys.readlink()`, and `path_inside()`
+  resolves both through the same junction, so on Windows it made `<foreign>/locks` and took the
+  document lock there. Fix (`fda61bf`): the readlink check is `any(path_is_link(c(root,
+  lock_root)))`, identical on POSIX. New mandatory case "Windows scrub refuses a workspace junction
+  onto a foreign directory".
+- Red: the emulation on the base returns the locks and leaves `<foreign>/locks`. Green: nine
+  neighbouring files PASS 1382 SKIP 13. Lint clean.
+- Reviews: none recorded.
+- Deviations: D-231. Open: passed in R-CMD-check run 39217189384 (9170baf) and the optional run on
+  92a2944.
+
+## Task CI-53 - The by-file runner writes its progress to stdout (2026-10-18, #51)
+- windows-by-file (run 39193453652) failed `test-console-notice.R:232`: the runner gave testthat's
+  LocationReporter `stderr()`, which writes through `REvprintf()` into an active
+  `sink(type = "message")`, so its line for the `expect_warning()` at 223:7 entered the test's
+  `capture.output(type = "message")`. Fix (CI only, `c8600c8`): the reporter and the runner's lines
+  go to `stdout()`, which no sink diverts; the test is unchanged.
+- Red: the same failure through the runner on macOS. Green: console-notice 66/66 and all 19
+  `console-*` files through the runner. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: `test-console-notice.R` passed in the filtered by-file run on 9170baf (run
+  39217182105).
+
+## Task CI-54 - gptr's own document writes stay out of the files checkpointer's turn scans (2026-10-18, #51)
+- In per-turn scan mode (a slow walk, which a hosted Windows runner can cross at random) and on every
+  CLI route, the agent_end turn scan recorded gptr's own block write into the bound script, so a
+  rewind restored the turn-1 bytes and deleted the undone blocks (0 undone markers, 8 requests not
+  6). Fix (`136beda`): `doc_write()` and the IDE clean-buffer save run through `doc_own_write()` and
+  the new P16 service `checkpoint.own_write`; no bound, scan mode or builtin order changes.
+- Red: the new rewind test fails 6 expectations (3 per mode). Green: the full offline suite FAIL 0
+  SKIP 61 PASS 34702 in default mode and with budget -1. Lint clean.
+- Reviews: r1 4 findings applied (the IDE clean-buffer save included), except part of 3a (a bare
+  `hash_file()` could block on a FIFO) and of 4 (session-scoped records are unreachable).
+- Deviations: D-232. Open: `test-ckpt-rewind.R` passed on hosted Windows (9170baf).
+
+## Task CI-55 - An exited app's family leaves the process table before the launch settles it (2026-10-18, #51)
+- `artifact_launch_shiny()` calls `kill_all(proc, grace = 1)` as soon as the app child exits; if a
+  family member is still listed past `kill_all()`'s waits (CI-45's inferred Windows mechanism), the
+  launch keeps a recovery record, a job row, `run.json` and the raw log. Defensive fix (`c751670`):
+  `proc_family_wait()` (the test rule moved to `R/proc-supervise.R`) gives the exited family up to
+  `artifact_stop_grace` (3 s) first, wrapped so an error or interrupt cannot replace the launch error.
+- Red: 9 failures against the base launch site, 1 against an unwrapped wait. Green: `^artifact-app$`
+  PASS 517 (NOT_CRAN), PASS 437 SKIP 13 (CRAN mode). Lint clean.
+- Reviews: r1 5 findings; 1-3 applied, 4-5 kept by choice.
+- Deviations: none. Open: the root cause is not proven on Windows.
+
+## Task CI-56 - The orphan sweep test reads only the marker records (2026-10-19, #51)
+- R-CMD-check run 39202162326 (2c9b6a4, Windows release and oldrel-4) failed `test-proc-spawn.R:232`:
+  the test listed `proc_dir()` by `^GPTR_PROC_`, which also matches the stdin writer's
+  `<marker>.stdin` files, and one was removed between the listing and the read. Fix (tests only,
+  `9170baf`): the test reads only `<marker>.json`, the records it checks.
+- Green: `^proc-spawn$` on macOS. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: passed in R-CMD-check run 39217189384 (9170baf, release and oldrel-4).
+
+## Task CI-57 - The optional and rscript-native registries match the current tests (2026-10-19, #51)
+- An audit of each registry's titles and skip allowances against the tests found: the stale
+  mandatory "50 KB" codex title (every host failed "Missing mandatory"); Windows allowances for
+  tests now renamed or run on Windows; 8 genuine Windows skips (6 FIFO checkpoint, 2 POSIX rename)
+  and 4 Windows-only tests skipped off Windows without an allowance. Fix (CI only, `dd4820c`): the
+  registries follow, and the skip allowances become one table, `optional_os_skips`, which the title
+  check covers. No mandatory case, bound or strictness check is loosened.
+- Red: `dev/ci/test-optional-integrations.R` 2 failures. Green: 72 cases, 3803 passed; all 37
+  optional files gated on macOS; the hosted 2c9b6a4 by-file rows regated. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: the optional Windows packet passed on 92a2944 (run 39235001873), once.
+
+## Task CI-58 - The optional and callr-native runners write progress to stdout (2026-10-19, #51)
+- The optional-integrations and callr-native children built their LocationReporter on `stderr()`,
+  which enters a test's message sink (CI-53). Fix (CI only, `8fde8fa`): both use `stdout()`, which
+  already goes to its own owned log; the frozen windows-token runners are unchanged.
+- Red: a two-test fixture fails its message-capture test with `stderr()`. Green: both pass with
+  `stdout()`; the 8 optional files that capture messages pass either way. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: passed in the optional run on 92a2944.
+
+## Task CI-59 - The owned Chrome binds an ephemeral DevTools port (2026-10-19, #51)
+- rscript-native on windows-latest (job 117897297705, Chrome for Testing 155) skipped the session
+  check: Chrome logged `bind() ... (0x271D)` and "Cannot start http server for devtools." and stayed
+  alive without an endpoint; the bind of the port from `port_candidates(1L)` failed with WSAEACCES,
+  most likely an excluded port range (inferred: no log shows the runner's ranges), and Chrome does
+  not retry. Fix (`96aab0e`): `--remote-debugging-port=0` and the port read from Chrome's
+  announcement; `f40cadb` proves the Shiny child's fall-through past a port that does not bind.
+- Red: on macOS port 1 reproduces the runner's Chrome log; without the loop's `tryCatch()` the new
+  app test fails 2. Green: `^artifact-browser-launch$` PASS 494, `^artifact-app$` PASS 517 (real
+  Chrome). Lint clean.
+- Reviews: none recorded.
+- Deviations: D-230. Open: rscript-native on 92a2944 (run 39234997432) and the optional packet passed
+  the session checks with Chrome for Testing; R-CMD-check's system Google Chrome refusal (CI-40) stays.
+
+## Task CI-60 - A dangling sidecar link is read without Windows metadata warnings (2026-10-19, #51)
+- R-CMD-check on 2c9b6a4 and 9170baf warned in the two dangling sidecar tests of `test-doc-io.R`:
+  `file.info(f)` in `doc_sidecar_read()` warns "cannot open file" on Windows, as stat() succeeds on
+  the link (R 4.2.3 once per call, job 117897245682; R 4.6.1 twice, with the owner lookup, job
+  117897245789). Fix (`4ac06da`): `path_info()`, used by `doc_sidecar_read()`, `path_dangling()`,
+  `scrub_walk()`, `pcli_control_digest()` and `write_atomic()`.
+- Red: the hosted 9170baf runs show the warnings the new `expect_no_warning()` assertions forbid; a
+  macOS emulation reproduces them. Green: 5 neighbouring files FAIL 0 WARN 0 PASS 1873. Lint clean.
+- Reviews: r1 findings applied with CI-61.
+- Deviations: D-231. Open: on 92a2944 `ubuntu-latest (oldrel-4)` (job 118001849303, R 4.2.3) fails
+  the new `test-utils-paths.R:324` ("cannot coerce class '"octmode"' to a data.frame" in the emulated
+  row); not yet fixed.
+
+## Task CI-61 - A dangling link reads as absent in Windows readers and tools (2026-10-19, #51)
+- On Windows `file.exists()` is TRUE for a dangling link and a later `file()` warns and fails, so the
+  readers, the read, edit and grep tools, `ls`, the files checkpointer, `@file` mentions, the document
+  arguments and cache, image checks and `dotenv_discover()` gave warnings, base errors or wrong answers.
+  Fix (`3383843`): their metadata reads and guards use `path_info()` and give POSIX's answers; gptr's
+  own stores keep base reads and the trust gate keeps `file.exists()`.
+- Red: on 9170baf the Windows emulation of the new test's calls gives warnings, base errors and wrong
+  answers. Green: the full offline suite FAIL 0 WARN 0 SKIP 62 PASS 34753 on macOS. Lint clean.
+- Reviews: r1 5 findings applied; finding 5's patch-delete part rejected (`patch_key()` refuses the
+  link earlier on both OSes).
+- Deviations: D-231. Open: the other `file.exists()` guards are not audited; Windows hosted pending.
+
+## Task CI-62 - The mock server accepts every pending connection before reading requests (2026-10-19, #51)
+- INFRA-01's six-stream wall failed in about 3% of hosted Windows jobs (11 of 338) while gptr
+  delivered every end within 16 ms; 7 of the 9 failures under D-063 show heads at 0, D, D per mock
+  (D = 0.11-0.63 s; job 117897245682: wall 2.594 s against 2.475 s). Most likely cause (inferred):
+  the mock read requests in the same iteration as a `socketAccept()`, which blocks on
+  `gethostbyaddr()`. Fix (tests only, `92a2944`): the mock reads only when no connection waits; the
+  failure message prints each head's delay after its read; bound and latency check unchanged.
+- Red: 0.3 s after every accept reproduces the shape with the old loop (FAIL). Green: the new loop
+  PASS; http-reactor FAIL 0 PASS 225, 16 other mock-server files PASS 4376. Lint clean.
+- Reviews: r1 5 findings; 1, 3, 5 applied, 2 reworded (cause inferred), 4 open.
+- Deviations: none. Open: e288902 (job 114359166815) and ee5088a (job 114920821918) show a separate
+  stall after the read; a late client gives the same shape; proving the fix needs about 50 Windows
+  runs of the test.
