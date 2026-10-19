@@ -2907,3 +2907,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-bridge-sh.R "without Git Bash a Windows command line runs in PowerShell, else in cmd" (an extensionless
   `cmd` first on PATH; pwsh and Windows PowerShell 5.1; the last status; `gptr-none`); test-proc-writer-runtime.R
   (the bootstrap size). Evidence: progress/fixes.md Tasks CI-50, CI-66.
+
+## D-236 - Authors: contributors listed; pi credited outside Authors@R (2026-10-19)
+- Rule: `Authors@R` lists the maintainer and the contributors Tianlu Zhu (UI/UX polishing and CI/CD) and
+  Gianmarco Bellucci (testing). Mario Zechner, whose pi agent inspired gptr and whose MIT-licensed text
+  gptr's tool descriptions and templates derive from, is credited in `inst/COPYRIGHTS` (through
+  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are), in the README acknowledgements
+  and on the site's Authors page, instead of as `ctb, cph` (amends cran-4 in spec 06).
+- Tests: test-zzz.R (IC-72), dev/release/tests/test-pkgdown.R.
