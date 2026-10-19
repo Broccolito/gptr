@@ -162,6 +162,23 @@ test_that("a chain of links is followed; a loop or a dangling link is refused", 
   expect_identical(raw_of(file.path(td, "l0")), charToRaw("new"))
 })
 
+test_that("a dangling Windows link is replaced by the written file, never written through", {
+  skip_on_cran()
+  skip_if_not(is_windows())
+  td = withr::local_tempdir()
+  gone = file.path(td, "gone.txt")
+  link = file.path(td, "dangling.txt")
+  writeBin(charToRaw("target"), gone)
+  expect_true(file.symlink(gone, link))
+  expect_true(file.remove(gone))
+  # Without a readlink target the dangling link is not detected; rename() replaces the link itself
+  w = write_file(link, "new")
+  expect_true(w$created)
+  expect_identical(raw_of(link), charToRaw("new"))
+  expect_false(path_is_link(link))
+  expect_identical(list.files(td, all.files = TRUE, no.. = TRUE), "dangling.txt")
+})
+
 test_that("non-ASCII directories, files and relative links work in a C locale", {
   skip_on_os("windows")
   withr::local_locale(c(LC_CTYPE = "C"))
