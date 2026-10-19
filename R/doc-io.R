@@ -774,7 +774,7 @@ doc_sidecar_read = function(path) {
   if (!is_windows() && !doc_sidecar_trusted(f)) return(NULL)
   tryCatch({
     limit = doc_sidecar_limit()
-    info = file.info(f)
+    info = path_info(f)
     if (is.na(info$size) || isTRUE(info$isdir) || info$size > limit) return(NULL)
     bytes = readBin(f, "raw", n = limit + 1L)
     if (length(bytes) > limit || any(bytes == as.raw(0L)) ||

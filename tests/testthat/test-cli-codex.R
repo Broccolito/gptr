@@ -1322,7 +1322,7 @@ test_that("control digests query only unobservable Windows entries and retain PO
   probe = codex_control_scope(pcli_control_digest, is_windows = function() TRUE,
     hash_file = function(path) stop("synthetic denied content"),
     pcli_control_link = function(path) "",
-    file.info = function(...) {
+    path_info = function(...) {
       data.frame(size = NA_real_, mtime = as.POSIXct(NA_real_, origin = "1970-01-01"))
     },
     pcli_control_reparse = function(path) {
@@ -1332,7 +1332,7 @@ test_that("control digests query only unobservable Windows entries and retain PO
   expect_identical(probe("public-link"), "unreadable:reparse:public-digest")
   expect_identical(seen$calls, 1L)
   finite = codex_control_scope(probe,
-    file.info = function(...) data.frame(size = 12, mtime = as.POSIXct(1, origin = "1970-01-01")))
+    path_info = function(...) data.frame(size = 12, mtime = as.POSIXct(1, origin = "1970-01-01")))
   expect_identical(finite("public-file"), "unreadable:12 1")
   expect_identical(seen$calls, 1L)
   posix = codex_control_scope(probe, is_windows = function() FALSE,
@@ -1340,7 +1340,7 @@ test_that("control digests query only unobservable Windows entries and retain PO
   expect_identical(posix("public-link"), "link:public-gone-target")
   expect_identical(seen$calls, 1L)
   unknown = codex_control_scope(probe, is_windows = function() FALSE,
-    file.info = function(...) NULL)
+    path_info = function(...) NULL)
   expect_identical(unknown("public-file"), "unreadable")
   expect_identical(seen$calls, 1L)
   readable = codex_control_scope(probe, hash_file = function(path) "public-content-digest")

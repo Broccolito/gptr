@@ -1790,11 +1790,11 @@ test_that("a broken modern sidecar link still prevents legacy deserialization", 
     reads <<- reads + 1L
     rec
   }, .package = "base")
-  expect_null(doc_sidecar_read(f))
+  expect_null(expect_no_warning(doc_sidecar_read(f)))
   expect_identical(reads, 0L)
   st = local_doc_pending()
   st$docs[[path_key(f)]] = rec
-  expect_identical(doc_pending_reconcile(rec)$upserts, rec$upserts)
+  expect_identical(expect_no_warning(doc_pending_reconcile(rec))$upserts, rec$upserts)
 })
 
 test_that("modern sidecar reads are bounded before decode and remain authoritative", {
@@ -1942,9 +1942,9 @@ test_that("a differently cased dangling modern entry masks legacy where names ig
     reads <<- reads + 1L
     rec
   }, .package = "base")
-  expect_null(doc_sidecar_read(f))
+  expect_null(expect_no_warning(doc_sidecar_read(f)))
   expect_identical(reads, 0L)
-  expect_identical(doc_pending_reconcile(rec)$upserts, rec$upserts)
+  expect_identical(expect_no_warning(doc_pending_reconcile(rec))$upserts, rec$upserts)
   expect_identical(unname(tools::md5sum(legacy)), before)
 })
 

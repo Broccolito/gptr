@@ -589,11 +589,7 @@ scrub_guarded = function(path) {
 #' Expand a directory without escaping its resolved root or revisiting a symlink cycle
 #' @noRd
 scrub_walk = function(root) {
-  # A dangling link has no followed metadata (Windows file.info() warns for one); it is no file.
-  regular = function(x) {
-    info = suppressWarnings(file.info(x, extra_cols = FALSE))
-    !is.na(info$mtime) & !info$isdir
-  }
+  regular = function(x) path_info(x)$isdir %in% FALSE
   if (!dir.exists(root)) return(root[regular(root)])
   pending = root
   visited = character()

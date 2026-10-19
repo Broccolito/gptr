@@ -300,6 +300,33 @@ test_that("Windows junctions and file links keep control and secret paths guarde
   expect_identical(path_class(paths, root), c("control", "protected", "protected", "control"))
 })
 
+test_that("path_info() gives a link to nothing no metadata and no warning on every OS", {
+  td = withr::local_tempdir()
+  writeLines("x", file.path(td, "file"))
+  gone = file.path(td, "gone")
+  dir.create(gone)
+  link = file.path(td, "dangling")
+  # A Windows junction needs no privilege; R's stat() there still succeeds on the dangling link
+  expect_true(if (is_windows()) base::Sys.junction(gone, link) else file.symlink(gone, link))
+  withr::defer(unlink(link))
+  expect_identical(unlink(gone, recursive = TRUE), 0L)
+  p = file.path(td, c("file", "dangling", "absent"))
+  info = expect_no_warning(path_info(p))
+  expect_identical(info[1L, ], file.info(p[1L], extra_cols = FALSE))
+  expect_true(all(is.na(info[-1L, ])))
+  expect_identical(info$isdir %in% FALSE, c(TRUE, FALSE, FALSE))
+  expect_true(path_dangling(link))
+  # R's Windows file.info() for such a link: stat()'s size and kind, NA times, a warning
+  windows = path_info
+  environment(windows) = list2env(list(file.info = function(...) {
+    warning("cannot open file 'dangling': The system cannot find the file specified")
+    na = .POSIXct(NA_real_)
+    data.frame(size = 0, isdir = TRUE, mode = as.octmode("777"), mtime = na, ctime = na,
+               atime = na)
+  }), parent = environment(path_info))
+  expect_true(all(is.na(expect_no_warning(windows(link)))))
+})
+
 test_that("path_rel handles filesystem roots without dropping a character", {
   path = path_norm(file.path(tempdir(), "example.txt"))
   root = if (.Platform$OS.type == "windows") paste0(substr(path, 1L, 2L), "/") else "/"

@@ -46,7 +46,7 @@ write_atomic = function(path, content, mode = "0600", expected_md5 = NULL) {
   }
   present = file.exists(path)
   before = if (present) unname(tools::md5sum(path)) else NA_character_
-  old = file.info(path, extra_cols = FALSE)$mode
+  old = path_info(path)$mode
   if (!is.na(old)) mode = old
   tmp = tempfile(".gptr-write-", tmpdir = dir)
   on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
@@ -263,10 +263,21 @@ path_listed = function(path) {
   tolower(basename(path)) %in% tolower(list.files(dirname(path), all.files = TRUE, no.. = TRUE))
 }
 
-#' Is a path a dangling link: a listed entry without followed metadata? Unlike readlink, this
-#' holds on Windows too, whose file.info() warns for such a link.
+#' File metadata as file.info() without extra columns, where a link to nothing has none on every
+#' OS. POSIX stat() fails on such a link; Windows stat() succeeds on it, and file.info() warns
+#' when it cannot open the path for its times. That warning is muffled and the row made NA, so
+#' `isdir %in% FALSE` asks for an existing file that is not a directory.
 #' @noRd
-path_dangling = function(path) is.na(suppressWarnings(file.mtime(path))) && path_listed(path)
+path_info = function(path) {
+  info = suppressWarnings(file.info(path, extra_cols = FALSE))
+  info[is.na(info$mtime), ] = NA
+  info
+}
+
+#' Is a path a dangling link: a listed entry without followed metadata? Unlike readlink, this
+#' holds on Windows too.
+#' @noRd
+path_dangling = function(path) is.na(path_info(path)$mtime) && path_listed(path)
 
 #' Is each path equal to or inside `root`? (compares path keys)
 #' @noRd
