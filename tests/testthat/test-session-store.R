@@ -675,7 +675,6 @@ wait_ready = function(p) {
 
 test_that("SIGKILL mid-stream: resume parses, keeps the last complete message, no duplicate", {
   skip_on_cran()
-  skip_on_os("windows")
   dir = local_store()
   script = child_script(dir, c(
     "long = list(text = strrep('x', 4000), gap = 0.05, chunk = 10)",
@@ -709,7 +708,6 @@ test_that("SIGKILL mid-stream: resume parses, keeps the last complete message, n
 
 test_that("SIGKILL mid-append, resume, three appends: all present and the tree connected (IC-59)", {
   skip_on_cran()
-  skip_on_os("windows")
   dir = local_store()
   script = child_script(dir, c(
     "s = session_new('fake/fake-1', 'auto', home = globalenv())",
