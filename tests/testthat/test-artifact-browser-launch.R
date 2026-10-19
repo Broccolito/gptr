@@ -48,7 +48,8 @@ artifact_launch_fixture = function() {
   state$jobs$table = new.env(parent = emptyenv())
   state$jobs$order = character()
   scope$jobs_env = function() state$jobs
-  for (name in c("job_add", "job_remove", "job_status", "job_frame", "job_list", "gptr_jobs")) {
+  for (name in c("job_add", "job_remove", "job_status", "job_frame", "job_list", "gptr_jobs",
+                 "proc_wait_exit")) {
     fun = get(name, envir = namespace, inherits = FALSE)
     environment(fun) = scope
     assign(name, fun, envir = scope)
@@ -97,6 +98,10 @@ artifact_launch_fixture = function() {
   scope$proc_tree = function(marker) {
     stopifnot(identical(marker, "GPTR_PROC_0123456789abcdef"))
     state$tree
+  }
+  scope$proc_children = function(p) {
+    stopifnot(identical(p, process))
+    list()
   }
   scope$proc.time = function() c(elapsed = state$clock)
   scope$reactor_pump = function(until, slice_ms, allow_runs, timeout) {
@@ -490,6 +495,62 @@ test_that("artifact browser directory failure reports its stage and retains retr
     x$scope$unlink = base::unlink
     expect_invisible(owner$release())
     expect_false(dir.exists(root))
+    expect_true(all(file.exists(x$state$files)))
+  }
+})
+
+test_that("artifact browser close waits for its unmarked helpers before removing the profile", {
+  for (exits in c(0.5, Inf)) {
+    x = artifact_launch_fixture()
+    owner = x$launch(character())
+    root = x$state$roots[[1L]]
+    x$state$exits = exits
+    x$state$dead_at = numeric()
+    x$state$unlinked_at = numeric()
+    # The marker misses Chrome's helpers, so only their parent link records them.
+    x$scope$proc_children = function(p) {
+      expect_identical(p, x$process)
+      expect_identical(x$state$signals, integer())
+      list("network-service")
+    }
+    x$scope$proc_handle_alive = function(handle) {
+      stopifnot(identical(handle, "network-service"))
+      alive = x$state$clock < x$state$exits
+      if (!alive && !length(x$state$dead_at)) x$state$dead_at = x$state$clock
+      alive
+    }
+    x$scope$Sys.sleep = function(seconds) {
+      stopifnot(seconds > 0, seconds <= 0.02)
+      x$state$clock = x$state$clock + seconds
+    }
+    x$scope$unlink = function(path, recursive) {
+      x$state$unlinked_at = c(x$state$unlinked_at, x$state$clock)
+      # A helper writing in the profile during the walk makes R's unlink return 1.
+      if (x$state$clock < x$state$exits) 1L else base::unlink(path, recursive = recursive)
+    }
+    close = get("artifact_browser_close", envir = environment(artifact_browser))
+    environment(close) = x$scope
+    seen = tryCatch(close(b = NULL, owner = owner, cached = FALSE), error = identity)
+    expect_identical(x$state$signals, tools::SIGTERM)
+    expect_false(x$state$alive)
+    if (is.finite(exits)) {
+      expect_null(seen)
+      expect_true(x$state$dead_at >= exits)
+      expect_identical(x$state$unlinked_at, x$state$dead_at)
+      expect_false(dir.exists(root))
+    } else {
+      expect_s3_class(seen, "gptr_error_io")
+      expect_match(conditionMessage(seen), "family did not finish cleanup", fixed = TRUE)
+      # The wait ends at the close deadline, at most one 20 ms poll late.
+      expect_true(x$state$clock >= 10 && x$state$clock <= 10.02)
+      expect_identical(x$state$unlinked_at, numeric())
+      expect_true(dir.exists(root))
+      expect_identical(owner$get_process(), x$process)
+      x$state$exits = x$state$clock
+      expect_invisible(owner$release())
+      expect_identical(x$state$unlinked_at, x$state$exits)
+      expect_false(dir.exists(root))
+    }
     expect_true(all(file.exists(x$state$files)))
   }
 })

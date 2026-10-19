@@ -638,6 +638,7 @@ artifact_browser_launch = function(args) {
   held$record = NULL
   held$pid = NA_integer_
   held$port = NA_integer_
+  held$family = list()
   owner = NULL
   lease = NULL
   returned = FALSE
@@ -697,9 +698,14 @@ artifact_browser_launch = function(args) {
         gptr_abort("The owned headless browser state is unavailable.", "io",
                    operation = "close", path = stderr)
       }
-      if (alive) process$signal(tools::SIGTERM)
+      if (alive) {
+        # The marker misses Chrome's helpers (Linux Chrome overwrites their environment, macOS ps
+        # reads none), so record them by parent link before the stop orphans them.
+        held$family = c(held$family, proc_children(process))
+        process$signal(tools::SIGTERM)
+      }
       invisible(NULL)
-    }, release = function() {
+    }, release = function(seconds = 0) {
       process = held$process
       if (!isFALSE(process$is_alive())) {
         gptr_abort("The owned headless browser has not stopped.", "io",
@@ -722,8 +728,11 @@ artifact_browser_launch = function(args) {
                      operation = "close", path = stderr)
         }
       }
+      # Exiting helpers still write in the profile, so wait for them before removing it.
+      proc_wait_exit(held$family, seconds)
       tree = proc_tree(marker)
-      if (length(tree) || isTRUE(attr(tree, "unavailable"))) {
+      if (length(tree) || isTRUE(attr(tree, "unavailable")) ||
+          !all(vapply(held$family, proc_handle_alive, NA) %in% FALSE)) {
         gptr_abort("The owned headless browser family did not finish cleanup.", "io",
                    operation = "close", path = stderr)
       }
@@ -1087,7 +1096,7 @@ artifact_browser_close = function(b = artifact_state$browser,
   }
   remaining()
   if (is.function(owner$release)) {
-    with_seed_preserved(owner$release())
+    with_seed_preserved(owner$release(remaining()))
     remaining()
   }
   if (cached && (!identical(artifact_state$browser, b) ||

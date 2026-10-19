@@ -382,6 +382,12 @@ proc_cleanup_record = function(rec) {
   list(killed = as.integer(killed), complete = complete)
 }
 
+#' The descendants of a live child by parent link, as ps handles (none when unreadable)
+#' @noRd
+proc_children = function(p) {
+  tryCatch(ps::ps_children(p$as_ps_handle(), recursive = TRUE), error = function(e) list())
+}
+
 #' Kill a child process and its whole tree
 #'
 #' Record the live process's descendants, interrupt, wait `grace` seconds, `kill_tree()`
@@ -403,8 +409,7 @@ kill_all = function(p, grace = 2) {
   pid = tryCatch(p$get_pid(), error = function(e) NA_integer_)
   kids = list()
   if (isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))) {
-    kids = tryCatch(ps::ps_children(p$as_ps_handle(), recursive = TRUE),
-                    error = function(e) list())
+    kids = proc_children(p)
     try(p$interrupt(), silent = TRUE)
     if (grace > 0) try(p$wait(as.integer(ceiling(grace * 1000))), silent = TRUE)
   }
