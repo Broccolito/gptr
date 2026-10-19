@@ -303,6 +303,32 @@ proc_wait_exit = function(handles, seconds = 2) {
   }
 }
 
+#' Wait, at most `seconds`, until ps lists neither an exited child nor any process carrying its
+#' tree marker; what it still lists
+#'
+#' processx's `is_alive()` reads the exit code at once, while Windows can still list the exited
+#' child (ps then reads it as running) and the processes carrying its marker (its console host
+#' exits after its last client), and kill_all() reports what it still finds. An unknown child
+#' state counts as listed.
+#' @return list of ps handles, with attribute `unavailable` when the process table could not be
+#'   read; NULL when `p` has no marker record
+#' @noRd
+proc_family_wait = function(p, seconds) {
+  rec = proc_record(p$get_pid(), process = p)
+  if (is.null(rec)) return(NULL)
+  t_end = proc.time()[["elapsed"]] + seconds
+  repeat {
+    left = proc_tree(rec$marker)
+    if (!isTRUE(attr(left, "unavailable"))) {
+      child = proc_identity(rec$pid, rec$create_time)
+      if (!isFALSE(child$alive)) left = c(list(child$handle), left)
+      if (!length(left)) return(left)
+    }
+    if (proc.time()[["elapsed"]] >= t_end) return(left)
+    Sys.sleep(0.05)
+  }
+}
+
 #' Kill handles with one ps_kill() call; returns the handles it signalled
 #'
 #' ps_kill() fails as a whole when one handle fails (access denied, say) and lists the per-handle

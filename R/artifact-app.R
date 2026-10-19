@@ -1233,7 +1233,8 @@ artifact_session_check = function(rec, png, width = artifact_shot_size[["width"]
 artifact_launch_timeout = 30
 
 #' One grace budget for a cooperative exit and any interrupt fallback (report 17 section 2.2:
-#' 2 s was exceeded once under load); forced tree settlement keeps its existing bounds
+#' 2 s was exceeded once under load), and for the family of an app that exited by itself to leave
+#' the process table before its launch settles it; forced tree settlement keeps its existing bounds
 #' @noRd
 artifact_stop_grace = 3
 
@@ -1401,11 +1402,16 @@ artifact_launch_shiny = function(version_dir, ctx) {
   )
   port = artifact_wait_port(proc, port_file)
   if (is.na(port)) {
-    reason = if (isTRUE(proc$is_alive())) {
-      paste0("it did not publish a port within ", artifact_launch_timeout, " s")
-    } else {
+    exited = !isTRUE(proc$is_alive())
+    reason = if (exited) {
       "the app process exited"
+    } else {
+      paste0("it did not publish a port within ", artifact_launch_timeout, " s")
     }
+    # a child that exited by itself: Windows can still list its family, which gets the stop
+    # grace to leave before kill_all() settles the tree
+    if (exited) tryCatch(proc_family_wait(proc, artifact_stop_grace),
+                         error = function(e) NULL, interrupt = function(e) NULL)
     owner$settled = isTRUE(tryCatch(kill_all(proc, grace = 1),
                                    error = function(e) FALSE, interrupt = function(e) FALSE))
     tryCatch(artifact_log_sync(log_record, final = isTRUE(owner$settled)),

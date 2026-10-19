@@ -292,28 +292,16 @@ serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.fra
   list(proc = p, port_file = port_file, raw = raw)
 }
 
-# What ps still lists of a child's family after polling up to `wait` seconds, none once it has
-# ended: the child itself and every process carrying its tree marker, each as ps formats it
-# with its status. processx's wait() returns at once after is_alive() has read the exit code,
-# while Windows can still list the exited child and processes carrying its marker (its console
-# host exits after its last client), and kill_all() reports a family member it still finds
+# What proc_family_wait() still lists of a child's family after up to `wait` seconds, none once
+# it has ended, each as ps formats it with its status. processx's wait() returns at once after
+# is_alive() has read the exit code, so a test whose child exits by itself waits here
 family_left = function(p, wait = 0) {
-  rec = proc_record(p$get_pid(), p)
-  if (is.null(rec)) return("no marker record")
-  deadline = Sys.time() + wait
-  repeat {
-    tree = proc_tree(rec$marker)
-    left = "an unreadable process table"
-    if (!isTRUE(attr(tree, "unavailable"))) {
-      child = proc_identity(rec$pid, rec$create_time)
-      if (!isFALSE(child$alive)) tree = c(list(child$handle), tree)
-      left = unique(vapply(tree, function(h) {
-        tryCatch(paste(format(h), ps::ps_status(h)), error = conditionMessage)
-      }, ""))
-    }
-    if (!length(left) || Sys.time() > deadline) return(left)
-    Sys.sleep(0.05)
-  }
+  left = proc_family_wait(p, wait)
+  if (is.null(left)) return("no marker record")
+  if (isTRUE(attr(left, "unavailable"))) return("an unreadable process table")
+  unique(vapply(left, function(h) {
+    tryCatch(paste(format(h), ps::ps_status(h)), error = conditionMessage)
+  }, ""))
 }
 
 # Status of a GET (NA when nothing answers), polled until the app answers
@@ -635,6 +623,78 @@ test_that("a broken app fails at the launch stage with the child's error in the 
   expect_match(conditionMessage(cnd), "no_such_object", fixed = TRUE)
   expect_true(file.exists(file.path(artifact_dir("broken"), "run", "app-v001.log")))
   expect_length(list.files(tempdir(), pattern = "^gptr-artifact-broken-"), 0L)
+})
+
+test_that("a launch whose app exited lets the child's family leave before it settles", {
+  local_project()
+  seed_artifact("exited")
+  # Windows can still list an exited child's family (its console host exits after its last
+  # client) and kill_all() reports what it still finds: here it settles once ps lists nothing
+  me = ps::ps_handle()
+  state = new.env(parent = emptyenv())
+  state$polls = 0L
+  state$listed = 2L
+  proc = list(is_alive = function() FALSE, get_pid = function() 123L)
+  local_mocked_bindings(
+    artifact_shiny_available = function() TRUE,
+    proc_create_time = function(pid) 10,
+    proc_rscript = function(entry, args, dir, env, stdout, ..., .on_spawn) {
+      state$dir = dir
+      writeLines("Error: object 'no_such_object' not found", stdout)
+      .on_spawn(proc)
+      proc
+    },
+    proc_record = function(pid, process = NULL) {
+      list(marker = "GPTR_PROC_0123456789abcdef", pid = 123L, create_time = 10)
+    },
+    proc_tree = function(marker) {
+      state$polls = state$polls + 1L
+      if (isTRUE(state$interrupt)) {
+        stop(structure(list(message = "controlled wait interrupt", call = NULL),
+                       class = c("interrupt", "condition")))
+      }
+      if (state$polls <= state$listed) list(me) else list()
+    },
+    proc_identity = function(pid, create_time = NULL) list(handle = NULL, alive = FALSE),
+    kill_all = function(p, grace) state$polls > state$listed
+  )
+  withr::defer({
+    state$listed = -1L
+    artifact_stop("exited", emit = FALSE)
+  })
+  launch = function() {
+    started = proc.time()[["elapsed"]]
+    cnd = expect_error(artifact_launch_shiny(artifact_version_dir("exited", 1L), NULL),
+                       class = "gptr_error_artifact")
+    expect_match(conditionMessage(cnd), "the app process exited.*no_such_object")
+    proc.time()[["elapsed"]] - started
+  }
+  launch()
+  expect_identical(state$polls, 3L)
+  expect_null(artifact_proc_get("exited"))
+  expect_identical(nrow(job_list("artifact")), 0L)
+  expect_false(file.exists(file.path(artifact_dir("exited"), "run", "run.json")))
+  expect_false(dir.exists(state$dir))
+  expect_length(list.files(tempdir(), pattern = "^gptr-artifact-exited-"), 0L)
+  # an interrupt during the wait cannot replace the launch error, and the launch still settles
+  state$polls = 0L
+  state$listed = 0L
+  state$interrupt = TRUE
+  caught = tryCatch(artifact_launch_shiny(artifact_version_dir("exited", 1L), NULL),
+                    error = identity, interrupt = identity)
+  state$interrupt = FALSE
+  expect_s3_class(caught, "gptr_error_artifact")
+  expect_null(artifact_proc_get("exited"))
+  # a family that stays listed is waited for at most artifact_stop_grace, then kept for recovery
+  state$polls = 0L
+  state$listed = .Machine$integer.max
+  elapsed = launch()
+  expect_gte(elapsed, artifact_stop_grace)
+  expect_lt(elapsed, 10)
+  expect_gt(state$polls, 1L)
+  expect_identical(artifact_proc_get("exited")$pid, 123L)
+  expect_identical(job_list("artifact")$id, "artifact:exited")
+  expect_true(dir.exists(state$dir))
 })
 
 test_that("artifact_start() runs the ladder, records the run and keeps the port across versions", {
