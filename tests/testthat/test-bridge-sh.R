@@ -328,6 +328,21 @@ test_that("shell scripts and #! lines run on Unix", {
   expect_identical(bridge_script(file.path(d, "tool"))$stdout, "shebang ok\n")
 })
 
+test_that("program lookup skips WindowsApps aliases, also under Windows 8.3 short names", {
+  d = withr::local_tempdir()
+  tool = file.path(d, c("WindowsApps", "bin"), "gptr-p22-tool.exe")
+  for (f in tool) {
+    dir.create(dirname(f))
+    file.create(f)
+    Sys.chmod(f, "755")
+  }
+  # Windows Sys.which() reports 8.3 short names: WindowsApps as WINDOW~1
+  withr::local_envvar(PATH = paste(dirname(tool[[1L]]), Sys.getenv("PATH"),
+                                   sep = .Platform$path.sep))
+  expect_null(bridge_program("gptr-p22-tool.exe"))
+  expect_identical(bridge_program(c("gptr-p22-tool.exe", tool[[2L]])), tool[[2L]])
+})
+
 test_that("unknown extensions, missing scripts and unknown options are argument errors", {
   d = withr::local_tempdir()
   writeLines("x", file.path(d, "a.unknownext"))

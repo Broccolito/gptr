@@ -419,7 +419,9 @@ bridge_program = function(programs) {
   for (word in programs) {
     word = bridge_program_word(word)
     path = if (grepl("[/\\\\]", word)) word else unname(Sys.which(word))
-    stub = grepl("system32[/\\\\]bash\\.exe$|windowsapps", path, ignore.case = TRUE)
+    # Windows Sys.which() returns 8.3 short names (MICROS~1\WINDOW~1): match the long path
+    stub = grepl("system32[/\\\\]bash\\.exe$|windowsapps", normalizePath(path, mustWork = FALSE),
+                 ignore.case = TRUE)
     if (file.exists(path) && !stub) return(path)
   }
   NULL
