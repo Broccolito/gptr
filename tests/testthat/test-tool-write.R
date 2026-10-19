@@ -224,17 +224,17 @@ test_that("a link text that climbs after a symlinked component resolves as the k
 })
 
 test_that("an existing file the process may not write is refused with EACCES and left unchanged", {
-  skip_on_os("windows")
   skip_if(identical(Sys.info()[["effective_user"]], "root"), "root writes any file")
   td = withr::local_tempdir()
   p = file.path(td, "ro.txt")
   writeBin(charToRaw("old\n"), p)
   Sys.chmod(p, "0444", use_umask = FALSE)
+  # Windows unlink() cannot delete a read-only file, so the temporary directory needs this
   withr::defer(Sys.chmod(p, "0644", use_umask = FALSE))
   expect_error(write_file(p, "new\n"),
                paste0("EACCES: permission denied, open '", resolve_tool_path(p), "'"),
                fixed = TRUE, class = "gptr_error_invalid_argument")
-  file.symlink(p, file.path(td, "link.txt"))
+  local_symlink(p, file.path(td, "link.txt"))
   expect_error(write_file(file.path(td, "link.txt"), "new\n"), "EACCES",
                class = "gptr_error_invalid_argument")
   expect_identical(raw_of(p), charToRaw("old\n"))

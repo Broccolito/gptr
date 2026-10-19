@@ -7,3 +7,11 @@ put_file = function(root, rel, content = "x\n") {
   writeBin(if (is.raw(content)) content else charToRaw(content), p)
   p
 }
+
+# A true symbolic link; on Windows wsec_link() checks its reparse tag and detaches it at teardown
+# (it starts native utilities, so it skips on CRAN there)
+local_symlink = function(target, link, .env = parent.frame()) {
+  if (!is_windows()) return(testthat::expect_true(file.symlink(target, link)))
+  testthat::skip_on_cran()
+  wsec_link(target, link, .env = .env)
+}
