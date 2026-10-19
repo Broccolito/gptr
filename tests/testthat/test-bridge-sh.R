@@ -138,11 +138,22 @@ test_that("without Git Bash a Windows command line runs in PowerShell, else in c
     }
   }
   text = "caf\u00e9 \u65e5\u672c"
+  ps_route = no_git_bash(function(x) unname(Sys.which(x)))
   ps = testthat::with_mocked_bindings(
     bridge_sh(paste0("Write-Output \"", text, "\"; cmd /c exit 4"), timeout = 60),
-    shell_resolve = no_git_bash(function(x) unname(Sys.which(x))))
+    shell_resolve = ps_route)
   expect_identical(ps$stdout, paste0(text, "\n"))
   expect_identical(ps$status, 4L)
+  # $LASTEXITCODE and $? after each native exit (an empty lec: PowerShell did not wait; lec=0:
+  # the program returned 0), then this R as the last native program
+  r = gsub("'", "''", rscript_path(), fixed = TRUE)
+  ps = testthat::with_mocked_bindings(bridge_sh(paste0(
+    "cmd /c exit 4; \"lec=$LASTEXITCODE ok=$?\"; cmd /d /c exit 5; \"lec=$LASTEXITCODE ok=$?\"; ",
+    "& '", r, "' --vanilla -e 'cat(6, fill = TRUE); q(status = 6)'"), timeout = 60),
+    shell_resolve = ps_route)
+  expect_identical(ps$stderr, "")
+  expect_identical(ps$stdout, "lec=4 ok=False\nlec=5 ok=False\n6\n")
+  expect_identical(ps$status, 6L)
   cmd = testthat::with_mocked_bindings(
     bridge_sh(paste0("echo \"a b\" ", text, "& exit 5"), timeout = 60),
     shell_resolve = no_git_bash(function(x) ""))
