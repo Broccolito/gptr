@@ -38,7 +38,6 @@ rscript_native_run = function() {
   selected = rows[, setdiff(names(rows), "result"), drop = FALSE]
   jsonlite::write_json(selected, file.path(output, "rows.json"), auto_unbox = TRUE, pretty = TRUE)
   guards = if (.Platform$OS.type == "windows") c(
-    "the access token is 128 random bits from openssl or /dev/urandom",
     "a worker exits within 10 s when its parent is killed (IC-60)",
     "a parent killed with SIGTERM leaves children that the next load's sweep removes") else
     "a Windows worker exits within 10 s after its acknowledged parent dies (IC-60)"

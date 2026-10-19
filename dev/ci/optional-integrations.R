@@ -297,9 +297,7 @@ optional_allowed_skip = function(file, name, windows) {
   if (windows && name %in% optional_original_os_guards[[file]]) return(TRUE)
   if (!windows) return(identical(file, "test-mcp-client.R") && identical(name,
     "a .cmd MCP command runs through cmd.exe /d /c call on Windows"))
-  windows && ((identical(file, "test-artifact-app.R") && identical(name,
-    "the access token is 128 random bits from openssl or /dev/urandom")) ||
-    (identical(file, "test-bridge-lang.R") && name %in% c(
+  windows && ((identical(file, "test-bridge-lang.R") && name %in% c(
       "shell engines run through peter$sh() without registered keys and with a timeout",
       "the cmd engine is refused outside Windows")) ||
     (identical(file, "test-gptr-config.R") && name %in% c(

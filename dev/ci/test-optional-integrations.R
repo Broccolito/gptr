@@ -86,9 +86,9 @@ testthat::test_that("raw diagnostic messages survive a failed gate within explic
 })
 
 testthat::test_that("only named platform guards are allowed to skip", {
-  name = "the access token is 128 random bits from openssl or /dev/urandom"
-  testthat::expect_true(optional_allowed_skip("test-artifact-app.R", name, TRUE))
-  testthat::expect_false(optional_allowed_skip("test-artifact-app.R", name, FALSE))
+  name = "a parent killed with SIGTERM leaves children that the next load's sweep removes"
+  testthat::expect_true(optional_allowed_skip("test-proc-spawn.R", name, TRUE))
+  testthat::expect_false(optional_allowed_skip("test-proc-spawn.R", name, FALSE))
   testthat::expect_false(optional_allowed_skip("test-artifact-app.R",
     "the session check passes a working app and returns a 1000x700 screenshot", TRUE))
   testthat::expect_false(optional_allowed_skip("test-tool-search.R", "unknown", TRUE))
