@@ -263,6 +263,11 @@ path_listed = function(path) {
   tolower(basename(path)) %in% tolower(list.files(dirname(path), all.files = TRUE, no.. = TRUE))
 }
 
+#' Is a path a dangling link: a listed entry without followed metadata? Unlike readlink, this
+#' holds on Windows too, whose file.info() warns for such a link.
+#' @noRd
+path_dangling = function(path) is.na(suppressWarnings(file.mtime(path))) && path_listed(path)
+
 #' Is each path equal to or inside `root`? (compares path keys)
 #' @noRd
 path_inside = function(path, root) {

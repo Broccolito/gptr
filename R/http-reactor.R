@@ -689,9 +689,7 @@ wire_log_path = function(session) {
   safe = function(path) {
     part = path
     repeat {
-      # A listed entry without followed metadata is a dangling link; Windows reads no link target.
-      if (is.na(suppressWarnings(file.mtime(part))) && tolower(basename(part)) %in%
-          tolower(list.files(dirname(part), all.files = TRUE, no.. = TRUE))) return(FALSE)
+      if (path_dangling(part)) return(FALSE)
       parent = dirname(part)
       if (identical(parent, part)) break
       part = parent

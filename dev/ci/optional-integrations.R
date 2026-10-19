@@ -45,6 +45,7 @@ optional_titles = list(
     "Windows safe instruction links remain while escaped and guarded inputs stay private",
     "Windows cache and checkpoint cleanup never follow foreign directory links",
     "Windows scrub excludes escaping links and never writes through a foreign lock root",
+    "Windows scrub refuses a dangling lock-root junction before taking any lock",
     "Windows checkpoint walks label links and forbid restoring through them",
     "Windows writes resolve links and edits refuse duplicate physical file operations",
     "Windows settings refresh after a same-size rewrite with unchanged file timestamps",

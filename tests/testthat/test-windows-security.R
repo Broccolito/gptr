@@ -107,6 +107,38 @@ test_that("Windows scrub excludes escaping links and never writes through a fore
   expect_identical(list.files(outside, all.files = TRUE, no.. = TRUE), "foreign.txt")
 })
 
+test_that("Windows scrub refuses a dangling lock-root junction before taking any lock", {
+  project = wsec_local()
+  outside = withr::local_tempdir("gptr-wsec-foreign-")
+  gone = file.path(outside, "gone")
+  expect_true(dir.create(gone))
+  lock_root = file.path(project, ".gptr", "locks")
+  wsec_junction(gone, lock_root)
+  expect_false(path_dangling(lock_root))
+  expect_identical(unlink(gone, recursive = TRUE), 0L)
+  expect_true(path_dangling(lock_root))
+  late = "FAKE_windows_scrub_dangling_lock_0123456789"
+  secret_register(late, "WINDOWS_TEST_KEY", "test")
+  owned = file.path(project, "notes.txt")
+  writeLines(late, owned)
+  before = wsec_bytes(owned)
+  # Taking a writer lock writes its pid file, even one released after a later failure.
+  taken = character()
+  atomic = write_atomic
+  testthat::local_mocked_bindings(write_atomic = function(path, content) {
+    taken <<- c(taken, path)
+    atomic(path, content)
+  })
+  expect_null(scrub_lock(owned))
+  gptr_scrub(owned, dry_run = FALSE)
+  expect_identical(taken, character())
+  expect_identical(wsec_bytes(owned), before)
+  expect_false(dir.exists(paste0(owned, ".lock")))
+  expect_identical(list.files(outside, all.files = TRUE, no.. = TRUE), character())
+  # The junction helper's teardown oracle expects its target back.
+  expect_true(dir.create(gone))
+})
+
 test_that("Windows checkpoint walks label links and forbid restoring through them", {
   project = wsec_local()
   data = file.path(project, "data")
