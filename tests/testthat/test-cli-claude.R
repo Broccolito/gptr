@@ -657,6 +657,16 @@ first_user_text = function(rows, pid) {
   paste(vapply(user$message$content, function(b) b[["text"]] %||% "", ""), collapse = "\n")
 }
 
+test_that("a 200 KB first user line reaches the claude child intact", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "text")
+  big = paste0("Summarise this text: ", strrep("abcdefghij", 20000L), " caf\u00e9.")
+  s = peter(prompt = big, model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  expect_identical(s$text, "Hello from the fake claude CLI.")
+  expect_true(grepl(big, first_user_text(fake_log(f, "stdin"), fake_pids(f)[1L]), fixed = TRUE))
+})
+
 test_that("after a rewind or a compaction the next turn starts a fresh claude conversation", {
   skip_on_cran()
   f = local_fake_cli("claude", "text")

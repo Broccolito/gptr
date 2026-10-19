@@ -918,7 +918,7 @@ codex_argv_relay = function(argv) {
   json_decode(args)[[3L]]
 }
 
-test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in env", {
+test_that("a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env", {
   skip_on_cran()
   local_gptr_options(quiet = FALSE)
   f = local_fake_cli("codex", "text")
@@ -926,11 +926,11 @@ test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in
                       CODEX_API_KEY = "codex-p20fake-0000000000000",
                       OPENAI_BASE_URL = "https://example.invalid/v1", CODEX_SANDBOX = "seatbelt")
   rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
-  big = paste0("Summarise this text: ", strrep("abcdefghij", 5000L), " caf\u00e9.")
+  big = paste0("Summarise this text: ", strrep("abcdefghij", 20000L), " caf\u00e9.")
   seen = new.env()
   seen$vars = character()
   s = withCallingHandlers(
-    peter(big, model = f$model, envir = new.env(), mode = "edits"),
+    peter(prompt = big, model = f$model, envir = new.env(), mode = "edits"),
     gptr_message_billing_env = function(w) {
       seen$vars = c(seen$vars, w$variables)
       invokeRestart("muffleMessage")
@@ -943,7 +943,7 @@ test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in
   bytes = fake_prompts(f)[[1]]
   prompt = rawToChar(bytes)
   Encoding(prompt) = "UTF-8"
-  expect_gt(length(bytes), 50000L)
+  expect_gt(length(bytes), 200000L)
   expect_true(grepl(big, prompt, fixed = TRUE, useBytes = TRUE))
   expect_match(prompt, "^<gptr_instructions>\n")
   env = fake_env_names(f)[[1]]
