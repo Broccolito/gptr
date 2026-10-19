@@ -18,15 +18,15 @@
 <style>
 :root {
   --ink: #1c1e22; --paper: #ffffff; --cream: #f3f1ec; --muted: #555a62; --rule: #d8d4ca;
-  --accent: #40628f; --fast: #b85450; --deep: #6c8ebf; --logo-fill: #f3f1ec; --logo-ink: #1c1e22;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --accent: #40628f; --fast: #b85450; --deep: #6c8ebf;
+  --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   color-scheme: light;
 }
 @media screen {
   :root[data-theme="dark"] {
     --ink: #efede7; --paper: #1c1e22; --cream: #26292e; --muted: #b2afa7; --rule: #3b3e44;
-    --accent: #7d9dcb; --fast: #d27b76; --deep: #7d9dcb; --logo-fill: #1c1e22; --logo-ink: #efede7;
+    --accent: #7d9dcb; --fast: #d27b76; --deep: #7d9dcb;
     color-scheme: dark;
   }
 }
@@ -41,18 +41,17 @@ dt { overflow-x: auto; }
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; max-width: 1480px; margin: 0 auto;
   padding: 10px 20px; border-bottom: 1px solid var(--rule); }
 .bar a { text-decoration: none; }
-.bar .home { display: flex; align-items: center; gap: 8px; color: var(--ink); font: 600 17px var(--mono); }
-.bar .home svg { width: 24px; height: auto; }
+.bar .home { color: var(--ink); font: 600 17px var(--mono); }
 .bar .spacer { flex: 1; }
 .bar button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
 
 .sheet { max-width: 1480px; margin: 0 auto; padding: 28px 20px 32px; }
-.sheet + .sheet { border-top: 1px solid var(--rule); }
 .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 h1 { margin: 0; font: 300 2.2em/1.1 var(--sans); letter-spacing: -0.01em; }
 h1 b { font-weight: 700; font-size: 0.6em; letter-spacing: 0.05em; vertical-align: 0.14em; }
-.head p { max-width: 76em; margin: 6px 0 0; color: var(--muted); }
+.head p { max-width: 76em; margin: 6px 0 0; color: var(--muted); text-wrap: balance; }
 .head .logo { width: 64px; flex: none; height: auto; }
+@media screen { :root[data-theme="dark"] .head .logo { content: url("reference/figures/logo-dark.png"); } }
 .cols { columns: 3 340px; column-gap: 32px; }
 .col { display: contents; }
 .panel { break-inside: avoid; margin: 0 0 22px; }
@@ -60,33 +59,34 @@ h2 { margin: 0 0 6px; padding-bottom: 3px; border-bottom: 1.5px solid var(--ink)
   font: 600 1.2em/1.25 var(--sans); color: var(--accent); }
 h3 { margin: 9px 0 2px; font: 600 0.78em/1.3 var(--sans); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
 .panel p, figcaption { margin: 4px 0; color: var(--muted); }
-p code, dd code { white-space: nowrap; }
+p code, dd code, td code, .foot code { white-space: nowrap; }
+p, dd, figcaption, td { text-wrap: pretty; }
 dl { margin: 0; }
 dt { margin-top: 7px; white-space: pre; font-size: 0.88em; line-height: 1.38; }
 dd { margin: 1px 0 0; color: var(--muted); }
 dt b { font-weight: 650; }
 dt i, td i { font-style: normal; color: var(--muted); }
 table { width: 100%; border-collapse: collapse; margin: 6px 0 2px; }
-td { padding: 2px 6px 2px 0; text-align: left; vertical-align: baseline; border-top: 1px solid var(--rule); }
-td:first-child { width: 1%; white-space: nowrap; font-family: var(--mono); font-size: 0.88em; }
+td, th { padding: 2px 10px 2px 0; text-align: left; vertical-align: top; border-top: 1px solid var(--rule); }
+th { padding-top: 9px; border: 0; font: 600 0.78em/1.3 var(--sans); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+td:first-child { width: 1%; white-space: nowrap; }
+td:first-child code { font-size: 0.88em; }
 td:last-child { padding-right: 0; color: var(--muted); }
 figure { margin: 6px 0 4px; }
-figure svg { display: block; width: 100%; height: auto; }
+figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
 .foot { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-top: 4px; padding-top: 6px;
   border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.85em; }
 .foot .spacer { flex: 1; }
 
-.lf { fill: var(--logo-fill); stroke: #1c1e22; stroke-width: 16; stroke-linejoin: round; }
-.li { fill: none; stroke: var(--logo-ink); stroke-width: 24; stroke-linecap: square; }
-.lt { fill: var(--logo-ink); font: 600 66px var(--mono); text-anchor: middle; }
 .s1 { fill: var(--fast); }
 .s2 { fill: var(--deep); }
 .box { fill: var(--cream); stroke: var(--ink); stroke-width: 1; }
 .edge { fill: none; stroke: var(--ink); stroke-width: 1; }
-.t { fill: var(--ink); font: 600 9px var(--sans); }
-.tm { fill: var(--ink); font: 500 8px var(--mono); }
-.tl { fill: var(--muted); font: 7.5px var(--sans); }
-.tc { fill: var(--muted); font: 8px var(--mono); }
+.mark { fill: var(--muted); }
+.t { fill: var(--ink); font: 600 9.5px var(--sans); }
+.tm { fill: var(--ink); font: 500 8.6px var(--mono); }
+.tl { fill: var(--muted); font: 8.3px var(--sans); }
+.tc { fill: var(--muted); font: 8.6px var(--mono); }
 
 @media (min-width: 1400px) {
   .cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 28px; }
@@ -97,7 +97,7 @@ figure svg { display: block; width: 100%; height: auto; }
   .cols { columns: 1; }
   h1 { font-size: 1.7em; }
   .head .logo { width: 48px; }
-  .bar .site { display: none; }
+  .bar .site, .foot .spacer { display: none; }
 }
 
 @page { size: 11in 8.5in; margin: 0; }
@@ -106,21 +106,21 @@ figure svg { display: block; width: 100%; height: auto; }
   .bar { display: none; }
   .sheet { width: 11in; height: 8.5in; max-width: none; margin: 0; padding: 0.3in 0.36in 0.22in;
     display: flex; flex-direction: column; overflow: hidden; break-after: page; }
-  .sheet + .sheet { border: 0; }
   .head { margin-bottom: 0.1in; }
   .head .logo { width: 0.6in; }
   .cols { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 0.2in; columns: auto; }
   .col { display: block; }
   .panel { margin-bottom: 0.1in; }
   dt { margin-top: 3.6pt; font-size: 0.9em; overflow: visible; }
-  td:first-child { font-size: 0.9em; }
+  td:first-child code { font-size: 0.9em; }
+  .panel:last-child { margin-bottom: 0; }
   .foot { margin-top: 0; }
 }
 </style>
 </head>
 <body>
 <nav class="bar" aria-label="Site">
-  <a class="home" href="index.html"><svg viewBox="0 0 439 508" aria-hidden="true"><use href="#logo"/></svg>gptr</a>
+  <a class="home" href="index.html">gptr</a>
   <a class="site" href="reference/index.html">Reference</a>
   <a class="site" href="articles/index.html">Guides</a>
   <span class="spacer"></span>
@@ -137,15 +137,7 @@ figure svg { display: block; width: 100%; height: auto; }
         Named for Peter Wason, whose dual-process research inspires its System 1 and System 2 roles,
         and Peter Naur, of Backus-Naur form: sessions become readable, runnable documents.</p>
     </div>
-    <svg class="logo" viewBox="0 0 439 508" role="img" aria-label="gptr logo">
-      <g id="logo">
-        <path class="lf" d="M219.5 9 L430 130.5 L430 377.5 L219.5 499 L9 377.5 L9 130.5 Z"/>
-        <polyline class="li" points="124,174 180,224 124,274"/>
-        <rect class="s1" x="208" y="224" width="16" height="50"/>
-        <rect class="s2" x="240" y="174" width="72" height="100"/>
-        <text class="lt" x="219.5" y="385">gptr</text>
-      </g>
-    </svg>
+    <img class="logo" src="reference/figures/logo.png" alt="gptr logo">
   </header>
   <div class="cols">
     <div class="col">
@@ -166,12 +158,12 @@ figure svg { display: block; width: 100%; height: auto; }
             <rect class="s2" x="202" y="34" width="22" height="32"/>
             <path class="edge" d="M90 32H171" marker-end="url(#arrow)"/>
             <text class="tl" x="131" y="27" text-anchor="middle">prompt + previews</text>
-            <text class="tm" x="131" y="51" text-anchor="middle" font-weight="600">peter()</text>
+            <text class="tm" x="131" y="51" text-anchor="middle" style="font-weight: 600">peter()</text>
             <path class="edge" d="M172 64H91" marker-end="url(#arrow)"/>
             <text class="tl" x="131" y="76" text-anchor="middle">R code to run</text>
           </svg>
           <figcaption>Objects stay in your R session and the agent's R code runs there on the full data.
-            The model sees the prompt, bounded previews and tool output.</figcaption>
+            An agent sees the prompt, bounded previews and tool output; a decision model is sent each input.</figcaption>
         </figure>
         <dl>
           <dt>gptr_describe(mtcars)</dt><dd>What a model is shown of an object.</dd>
@@ -188,8 +180,8 @@ library(gptr)</dt><dd>Install gptr 1.0 from GitHub (R 4.2 or later).</dd>
           <dt>gptr_models("sonnet")</dt><dd>Search the offline model catalog by name, alias or provider.</dd>
           <dt>gptr_config(model = opus, .scope = "user")</dt><dd>Save a default model. Scopes: <code>"session"</code>, <code>"project"</code>, <code>"user"</code>.</dd>
           <dt>gptr_init(".")
-gptr_trust(".", trust = TRUE)</dt><dd>Create a <code>.gptr/</code> project workspace, then trust its settings.</dd>
-          <dt>gptr_permissions(allow = "r(fn:summary)")</dt><dd>Add a permission rule for this R session; no arguments lists the rules.</dd>
+gptr_trust(".", trust = TRUE)</dt><dd>Create a <code>.gptr/</code> project workspace, then trust the project.</dd>
+          <dt>gptr_permissions(allow = "r(fn:saveRDS)")</dt><dd>Add a permission rule for this R session; no arguments lists the rules.</dd>
           <dt>fake = gptr_fake_provider(list("32 rows."))</dt><dd>A scripted offline model for examples and tests: no key, no network.</dd>
         </dl>
         <p>With no model configured, the first interactive <code>peter()</code> offers the Codex CLI, the Claude Code CLI or manual API or Ollama setup.</p>
@@ -203,7 +195,7 @@ gptr_trust(".", trust = TRUE)</dt><dd>Create a <code>.gptr/</code> project works
         <dl>
           <dt>s = peter("Fit mpg on wt; save it as fit.",
   mtcars)</dt><dd>The prompt first, then the objects to work on.</dd>
-          <dt>s$text; s$value; s$turns</dt><dd>Final answer, the value chosen with <code>gptr_return()</code>, completed turns.</dd>
+          <dt>s$text; s$value; s$turns</dt><dd>Final answer, the value chosen with <code>gptr_return()</code>, the turn count.</dd>
           <dt>s$usage; s$cost; s$envir</dt><dd>Usage, total cost and the agent's workspace.</dd>
           <dt>col = "mpg"; n = 3
 peter("Plot {col} for the top {n} cars.")</dt><dd>Literal prompts interpolate <code>{name}</code> from R.</dd>
@@ -213,7 +205,7 @@ peter("Plot {col} for the top {n} cars.")</dt><dd>Literal prompts interpolate <c
   budget = list(tokens = 5e4, turns = 5))</dt><dd>Per-call limits on tokens, cost and turns.</dd>
           <dt>gptr_return(coef(fit))  # in agent R code</dt><dd>Marks the run's result, read back as <code>s$value</code>.</dd>
           <dt>tryCatch(peter("Fit.", d),
-  gptr_error = function(e) e$session)</dt><dd>Errors carry the session as <code>e$session</code>.</dd>
+  gptr_error = function(e) e$session)</dt><dd>A run that stops early carries its session as <code>e$session</code>.</dd>
         </dl>
       </section>
       <section class="panel">
@@ -229,7 +221,7 @@ peter("Plot {col} for the top {n} cars.")</dt><dd>Literal prompts interpolate <c
             <path class="edge" d="M38 22V34M120 22V34M202 22V34"/>
             <rect class="box" x="1" y="34" width="238" height="22" rx="3"/>
             <text class="tl" x="8" y="48">one session, one workspace</text>
-            <text class="tm" x="232" y="48" text-anchor="end">fit  resid  plot</text>
+            <text class="tm" x="232" y="48" text-anchor="end">fit, resid, plot</text>
           </svg>
         </figure>
         <dl>
@@ -253,40 +245,37 @@ session |&gt; peter()</dt><dd>Open the console; <code>/exit</code> returns the s
         </dl>
         <h3>At the peter&gt; prompt</h3>
         <table>
-          <tr><td>Fit mpg on wt.</td><td>A prompt for the session</td></tr>
-          <tr><td>!head(d)</td><td>Run R and show the model</td></tr>
-          <tr><td>!!x = 2</td><td>Run R without telling the model</td></tr>
-          <tr><td>```r … ```</td><td>A fenced block runs like <code>!code</code></td></tr>
-          <tr><td>""" … """</td><td>A multi-line prompt</td></tr>
-          <tr><td>line \</td><td>Continue on the next line</td></tr>
-          <tr><td>@notes.md</td><td>Attach a file's first 40 lines</td></tr>
-          <tr><td>@fit</td><td>Attach an object</td></tr>
-          <tr><td>{n}</td><td>Insert an R value</td></tr>
-        </table>
-        <h3>Slash commands</h3>
-        <table>
-          <tr><td>/help [cmd]</td><td>Commands and syntax</td></tr>
-          <tr><td>/model [ref]</td><td>Show or switch model</td></tr>
-          <tr><td>/mode [mode]</td><td>Show or switch mode</td></tr>
-          <tr><td>/status</td><td>Session, model, mode</td></tr>
-          <tr><td>/cost /context</td><td>Tokens and cost</td></tr>
-          <tr><td>/env [pattern]</td><td>Workspace objects</td></tr>
-          <tr><td>/tools</td><td>Tools and helpers</td></tr>
-          <tr><td>/compact [focus]</td><td>Compact the history</td></tr>
-          <tr><td>/clear</td><td>New chat, same objects</td></tr>
-          <tr><td>/resume [id]</td><td>Resume a stored session</td></tr>
-          <tr><td>/fork</td><td>Fork and continue there</td></tr>
-          <tr><td>/doc [path]</td><td>The history document</td></tr>
-          <tr><td>/skills /skill:name</td><td>List or use skills</td></tr>
-          <tr><td>/mcp</td><td>List MCP servers</td></tr>
-          <tr><td>/permissions</td><td>Show or change rules</td></tr>
-          <tr><td>/undo /redo /retry</td><td>Undo, redo, resend</td></tr>
-          <tr><td>/rewind [k]</td><td>Keep turns 1 to k</td></tr>
-          <tr><td>/explain /review</td><td>Prompt templates</td></tr>
-          <tr><td>/exit</td><td>Leave; return the session</td></tr>
+          <tr><td><code>Fit mpg on wt.</code></td><td>A prompt for the session</td></tr>
+          <tr><td><code>!head(d)</code></td><td>Run R and show the model</td></tr>
+          <tr><td><code>!!x = 2</code></td><td>The same, with no note</td></tr>
+          <tr><td><code>```r … ```</code></td><td>Fenced R, run like <code>!code</code></td></tr>
+          <tr><td><code>""" … """</code></td><td>A multi-line prompt</td></tr>
+          <tr><td><code>line \</code></td><td>Continue on the next line</td></tr>
+          <tr><td><code>@notes.md</code></td><td>Attach a file's first 40 lines</td></tr>
+          <tr><td><code>@fit</code></td><td>Attach an object</td></tr>
+          <tr><td><code>{n}</code></td><td>Insert an R value</td></tr>
+          <tr><th colspan="2">Slash commands</th></tr>
+          <tr><td><code>/help [cmd]</code></td><td>Commands and syntax</td></tr>
+          <tr><td><code>/model [ref]</code></td><td>Show or switch model</td></tr>
+          <tr><td><code>/mode [mode]</code></td><td>Show or switch mode</td></tr>
+          <tr><td><code>/status</code></td><td>Session, model, mode</td></tr>
+          <tr><td><code>/cost /context</code></td><td>Tokens and cost</td></tr>
+          <tr><td><code>/env [pattern]</code></td><td>Workspace objects</td></tr>
+          <tr><td><code>/tools</code></td><td>Tools and helpers</td></tr>
+          <tr><td><code>/compact [focus]</code></td><td>Compact the history</td></tr>
+          <tr><td><code>/clear</code></td><td>New chat, same objects</td></tr>
+          <tr><td><code>/resume [id]</code></td><td>Resume a stored session</td></tr>
+          <tr><td><code>/fork</code></td><td>Fork and continue there</td></tr>
+          <tr><td><code>/doc [path]</code></td><td>The history document</td></tr>
+          <tr><td><code>/skills /skill:name</code></td><td>List or use skills</td></tr>
+          <tr><td><code>/mcp</code></td><td>List MCP servers</td></tr>
+          <tr><td><code>/permissions</code></td><td>Show or change rules</td></tr>
+          <tr><td><code>/undo /redo /retry</code></td><td>Undo, redo, resend</td></tr>
+          <tr><td><code>/rewind [k]</code></td><td>Keep turns 1 to k</td></tr>
+          <tr><td><code>/exit</code></td><td>Leave; return the session</td></tr>
         </table>
         <h3>While an answer runs</h3>
-        <p>In a terminal, type to steer. Ctrl-C pauses: <b>[s]</b>teer, <b>[f]</b>ollow-up, <b>[c]</b>ontinue, <b>[a]</b>bort, <b>[b]</b>ackground; RStudio and Positron use Esc. Approvals: <b>[y]</b>es, <b>[a]</b>lways, <b>[n]</b>o, <b>[?]</b>.</p>
+        <p>In a terminal (not Windows), type to steer. Ctrl-C pauses: <b>[s]</b>teer, <b>[f]</b>ollow-up, <b>[c]</b>ontinue, <b>[a]</b>bort, <b>[b]</b>ackground; in RStudio and Positron, Esc aborts. Approvals: <b>[y]</b>es, <b>[a]</b>lways, <b>[n]</b>o, <b>[?]</b>.</p>
       </section>
     </div>
 
@@ -294,19 +283,19 @@ session |&gt; peter()</dt><dd>Open the console; <code>/exit</code> returns the s
       <section class="panel">
         <h2>System 1 and System 2</h2>
         <figure>
-          <svg viewBox="0 0 240 92" role="img" aria-label="A System 1 decision model returns a typed vector; a System 2 conversational model runs an agent and returns a session.">
-            <rect class="s1" x="6" y="18" width="5" height="16"/>
-            <text class="t" x="30" y="22">System 1</text>
-            <text class="tl" x="30" y="33">typed decision</text>
-            <path class="edge" d="M98 27H120" marker-end="url(#arrow)"/>
-            <text class="tm" x="126" y="24">TRUE "lung" 1.88</text>
-            <text class="tl" x="126" y="35">vector + probabilities</text>
+          <svg viewBox="0 12 240 76" role="img" aria-label="A System 1 decision model returns a typed vector; a System 2 conversational model runs an agent and returns a session.">
+            <rect class="s1" x="10.5" y="18" width="5" height="16"/>
+            <text class="t" x="32" y="23">System 1</text>
+            <text class="tl" x="32" y="34">typed decision</text>
+            <path class="edge" d="M102 27H122" marker-end="url(#arrow)"/>
+            <text class="tm" x="128" y="24">TRUE "lung" 1.88</text>
+            <text class="tl" x="128" y="35">vector + probabilities</text>
             <rect class="s2" x="2" y="52" width="22" height="32"/>
-            <text class="t" x="30" y="64">System 2</text>
-            <text class="tl" x="30" y="75">agent with tools</text>
-            <path class="edge" d="M98 69H120" marker-end="url(#arrow)"/>
-            <text class="tm" x="126" y="66">gptr_session</text>
-            <text class="tl" x="126" y="77">$text, $value, objects</text>
+            <text class="t" x="32" y="65">System 2</text>
+            <text class="tl" x="32" y="76">agent with tools</text>
+            <path class="edge" d="M102 69H122" marker-end="url(#arrow)"/>
+            <text class="tm" x="128" y="66">gptr_session</text>
+            <text class="tl" x="128" y="77">$text, $value, objects</text>
           </svg>
           <figcaption>The model decides what <code>peter()</code> returns. A decision model (Jev, Clef) answers once per input; a conversational model works in turns.</figcaption>
         </figure>
@@ -337,7 +326,6 @@ peter(task, model = m)</dt><dd>Route each task to a deep or a fast agent.</dd>
   </div>
   <footer class="foot">
     <span>gptr 1.0.0 · MIT license</span>
-    <span>Learn more: <code>vignette("getting-started", package = "gptr")</code></span>
     <span class="spacer"></span>
     <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-10</span>
   </footer>
@@ -350,7 +338,7 @@ peter(task, model = m)</dt><dd>Route each task to a deep or a fast agent.</dd>
         <h2>Models and providers</h2>
         <figure>
           <svg viewBox="0 0 240 38" role="img" aria-label="A model reference is provider slash model id, with an optional colon thinking level.">
-            <text class="tm" x="18" y="11" textLength="204" lengthAdjust="spacing">"anthropic/claude-sonnet-5-5:high"</text>
+            <text class="tm" x="18" y="11" style="font-size: 10px" textLength="204" lengthAdjust="spacingAndGlyphs">"anthropic/claude-sonnet-5-5:high"</text>
             <path class="edge" d="M25 16v4h52v-4M85 16v4h100v-4M193 16v4h22v-4"/>
             <text class="tl" x="51" y="31" text-anchor="middle">provider</text>
             <text class="tl" x="135" y="31" text-anchor="middle">model id</text>
@@ -359,21 +347,21 @@ peter(task, model = m)</dt><dd>Route each task to a deep or a fast agent.</dd>
           <figcaption>Aliases work too: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>, <code>gpt</code>, <code>flash</code>, <code>jev</code>, <code>claude_code</code>, <code>codex</code>.</figcaption>
         </figure>
         <table>
-          <tr><td>anthropic/…</td><td>Anthropic · <code>ANTHROPIC_API_KEY</code></td></tr>
-          <tr><td>openai/…</td><td>OpenAI · <code>OPENAI_API_KEY</code></td></tr>
-          <tr><td>google/…</td><td>Google Gemini · <code>GEMINI_API_KEY</code></td></tr>
-          <tr><td>openrouter/…</td><td>Also groq, deepseek, mistral, together, xai, cerebras, fireworks · <code>&lt;NAME&gt;_API_KEY</code></td></tr>
-          <tr><td>azure/…</td><td>Azure OpenAI · <code>AZURE_OPENAI_API_KEY</code>, <code>AZURE_OPENAI_ENDPOINT</code></td></tr>
-          <tr><td>bedrock/…</td><td>AWS Bedrock · <code>AWS_BEARER_TOKEN_BEDROCK</code>, <code>AWS_REGION</code></td></tr>
-          <tr><td>ollama/…</td><td>Ollama, local, no key; also lmstudio, llamacpp, vllm</td></tr>
-          <tr><td>claude-cli</td><td>Claude Code CLI · <code>claude auth login</code></td></tr>
-          <tr><td>codex</td><td>Codex CLI · <code>codex login</code></td></tr>
-          <tr><td>jev</td><td>System 1 · TypeSafe Jev · <code>TYPESAFE_API_KEY</code></td></tr>
-          <tr><td>ollama/clef</td><td>System 1 · local Clef and Clef Flash, Ollama 0.35.1 or later</td></tr>
+          <tr><td><code>anthropic/…</code></td><td>Anthropic · <code>ANTHROPIC_API_KEY</code></td></tr>
+          <tr><td><code>openai/…</code></td><td>OpenAI · <code>OPENAI_API_KEY</code></td></tr>
+          <tr><td><code>google/…</code></td><td>Google Gemini · <code>GEMINI_API_KEY</code></td></tr>
+          <tr><td><code>openrouter/…</code></td><td>OpenRouter; also groq, deepseek, mistral, together, xai, cerebras and fireworks routes · <code>&lt;NAME&gt;_API_KEY</code></td></tr>
+          <tr><td><code>azure/…</code></td><td>Azure OpenAI · <code>AZURE_OPENAI_API_KEY</code>, <code>AZURE_OPENAI_ENDPOINT</code></td></tr>
+          <tr><td><code>bedrock/…</code></td><td>AWS Bedrock · <code>AWS_BEARER_TOKEN_BEDROCK</code>, <code>AWS_REGION</code></td></tr>
+          <tr><td><code>ollama/…</code></td><td>Ollama, local, no key; also lmstudio, llamacpp, vllm</td></tr>
+          <tr><td><code>claude-cli</code></td><td>Claude Code CLI · <code>claude auth login</code></td></tr>
+          <tr><td><code>codex</code></td><td>Codex CLI · <code>codex login</code></td></tr>
+          <tr><td><code>jev</code></td><td>System 1 · TypeSafe Jev · <code>TYPESAFE_API_KEY</code></td></tr>
+          <tr><td><code>ollama/clef</code></td><td>System 1 · local Clef and Clef Flash, Ollama 0.35.1 or later</td></tr>
         </table>
         <dl>
           <dt>gptr_models(provider = "ollama",
-  refresh = TRUE)</dt><dd>List installed Ollama models, once per R process; for a cloud route, fetch its catalog.</dd>
+  refresh = TRUE)</dt><dd>Ask Ollama which models are installed; for a cloud route such as openrouter, download its catalog.</dd>
           <dt>m = list(id = "my-id", tool_call = TRUE)
 gptr_config(providers = list(
   bedrock = list(models = list(m))))</dt><dd>Declare Bedrock or Azure models, then <code>model = "bedrock/my-id"</code>. Each call replaces <code>providers</code>.</dd>
@@ -393,21 +381,21 @@ gptr_config(egress = eg, .scope = "user")</dt><dd>Acknowledge sending context to
         <p>Bind a document, and each top-level <code>peter()</code> call gets a block with the R code the agent ran.</p>
         <figure>
           <svg viewBox="0 0 240 98" role="img" aria-label="A recorded block in analysis.R: the prompt, the block header, the recorded code, its output, a decision note and the closing marker.">
-            <rect class="box" x="1" y="1" width="164" height="96" rx="3"/>
-            <text class="tm" x="8" y="14">peter("Fit mpg on wt.", mtcars)</text>
-            <rect class="s2" x="8" y="21" width="2" height="71"/>
+            <rect class="box" x="1" y="1" width="186" height="96" rx="3"/>
+            <text class="tm" x="8" y="14">peter("Fit mpg on wt in mtcars.")</text>
+            <rect class="mark" x="8" y="21" width="2" height="71"/>
             <text class="tc" x="15" y="29"># &gt;&gt;&gt; gptr:46d369 model=…</text>
             <text class="tm" x="15" y="41">fit = lm(mpg ~ wt, mtcars)</text>
             <text class="tm" x="15" y="53">coef(fit)[["wt"]]</text>
             <text class="tc" x="15" y="65">#&gt; [1] -5.344472</text>
             <text class="tc" x="15" y="77">## Decision: linear fit</text>
             <text class="tc" x="15" y="89"># &lt;&lt;&lt; gptr:46d369</text>
-            <text class="tl" x="172" y="14">your prompt</text>
-            <text class="tl" x="172" y="29">block header</text>
-            <text class="tl" x="172" y="47">recorded code</text>
-            <text class="tl" x="172" y="65">output</text>
-            <text class="tl" x="172" y="77">note</text>
-            <text class="tl" x="172" y="89">end marker</text>
+            <text class="tl" x="194" y="14">prompt</text>
+            <text class="tl" x="194" y="29">header</text>
+            <text class="tl" x="194" y="47">code</text>
+            <text class="tl" x="194" y="65">output</text>
+            <text class="tl" x="194" y="77">note</text>
+            <text class="tl" x="194" y="89">end</text>
           </svg>
         </figure>
         <dl>
@@ -423,6 +411,7 @@ rmarkdown::render("report.Rmd")</dt><dd>Render as usual; each block becomes a ch
           <dt>peter(q, replay = "live")</dt><dd>Modes: <code>"auto"</code> (default), <code>"replay"</code>, <code>"live"</code>, <code>"record"</code>.</dd>
         </dl>
         <h3>Export a recorded .R</h3>
+        <p>Export needs <code>peter()</code> calls with literal arguments.</p>
         <dl>
           <dt>gptr_export("analysis.R", "plain.R")</dt><dd>Plain R: recorded code runs, <code>peter()</code> calls become comments.</dd>
           <dt>gptr_export("analysis.R", "peter.R",
@@ -473,11 +462,11 @@ gptr_artifacts("survey-view", open = TRUE)</dt><dd>List versioned apps; open, st
       <section class="panel">
         <h2>Permissions and trust</h2>
         <table>
-          <tr><td>plan</td><td>Read only; R runs in a scratch environment</td></tr>
-          <tr><td>manual</td><td>Default: read-only actions run, others ask</td></tr>
-          <tr><td>edits</td><td>Also edit and write files in the project</td></tr>
-          <tr><td>auto</td><td>All but critical actions, gptr settings and secret reads</td></tr>
-          <tr><td>yolo</td><td>Nearly all; still asks before critical deletes</td></tr>
+          <tr><td><code>plan</code></td><td>Read only; R runs in a scratch environment</td></tr>
+          <tr><td><code>manual</code></td><td>Default: read-only actions run, others ask</td></tr>
+          <tr><td><code>edits</code></td><td>Also edit and write files in the project</td></tr>
+          <tr><td><code>auto</code></td><td>All but critical actions, gptr settings and secret reads</td></tr>
+          <tr><td><code>yolo</code></td><td>Nearly all; critical actions still ask</td></tr>
         </table>
         <dl>
           <dt>gptr_permissions(deny = "r(sh:rm *)")</dt><dd>Rules: <code>deny</code> beats <code>ask</code> beats <code>allow</code>.</dd>
@@ -508,7 +497,7 @@ off = gptr_register(up)</dt><dd>Add your own tool; <code>off()</code> removes it
       <section class="panel">
         <h2>Teams, fan-outs, background</h2>
         <dl>
-          <dt>peter("Review fit.", agents = list(
+          <dt>s = peter("Review fit.", agents = list(
   stats = agent(system = "Check stats."),
   code = agent(system = "Check code.")))</dt><dd>A team of named roles; <code>s$stats$text</code> reads one.</dd>
           <dt>f = peter("Summarise.", cohorts,
@@ -524,18 +513,13 @@ gptr_wait(b)</dt><dd>Experimental: return at once; also <code>gptr_steer()</code
       <section class="panel">
         <h2>Learn more</h2>
         <dl>
-          <dt>vignette("getting-started",
-  package = "gptr")</dt><dd>Start here. Other guides: why-peter,
-            language-models, system-one, interactive-console, configuration, script-as-history,
-            tools-and-artifacts, teams-and-background, skills-and-plugins, mcp, extending-gptr,
-            execution-model, token-efficiency.</dd>
+          <dt>browseVignettes("gptr")</dt><dd>All guides; start with getting-started.</dd>
         </dl>
       </section>
     </div>
   </div>
   <footer class="foot">
     <span>gptr 1.0.0 · MIT license</span>
-    <span>Security: <code>?gptr_security</code> · Options: <code>?gptr_options</code></span>
     <span class="spacer"></span>
     <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-10</span>
   </footer>
