@@ -495,6 +495,14 @@ test_that("a move onto its own file under another spelling keeps the file and ta
     mv("caf\u00e9.R", "cafe\u0301.R", "c = 1", "c = 2")
     expect_identical(rd(u("cafe\u0301.R")), "c = 2\n")
   }
+  if (is_windows()) {
+    # a short (8.3) alias canonicalises like a link but is no directory entry: the file is kept
+    short = basename(utils::shortPathName(put_file(td, "longfilename.R", "s = 1\n")))
+    if (!identical(tolower(short), "longfilename.r")) {
+      mv(short, "longfilename.R", "s = 1", "s = 2")
+      expect_identical(rd(u("longfilename.R")), "s = 2\n")
+    }
+  }
   put_file(td, "real.R", "r = 1\n")
   local_symlink(file.path(td, "real.R"), file.path(td, "link.R"))
   mv("link.R", "real.R", "r = 1", "r = 2")

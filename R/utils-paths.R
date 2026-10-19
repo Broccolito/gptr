@@ -256,6 +256,13 @@ path_is_link = function(path) {
   out
 }
 
+#' Is a path's final component an entry of its directory (case folded)? On Windows a short (8.3)
+#' or trailing-dot alias is not, while a link is, even a dangling one that stat cannot see.
+#' @noRd
+path_listed = function(path) {
+  tolower(basename(path)) %in% tolower(list.files(dirname(path), all.files = TRUE, no.. = TRUE))
+}
+
 #' Is each path equal to or inside `root`? (compares path keys)
 #' @noRd
 path_inside = function(path, root) {

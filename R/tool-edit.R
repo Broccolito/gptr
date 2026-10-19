@@ -543,11 +543,12 @@ patch_key = function(p, fold) {
 #' Finish a move once its new name holds `bytes`: remove the old name unless it is that entry
 #' An old name (not a link) that reads as `bytes` is the new name under folding or a directory
 #' link: it is renamed to the new spelling, so a move never deletes the file it wrote. A file link
-#' (path_is_link(), as Windows has no readlink target) is removed, never renamed over its target.
+#' (path_is_link(), as Windows has no readlink target) is removed, never renamed over its target;
+#' a Windows short or trailing-dot alias canonicalises like one but is no entry of its own.
 #' @noRd
 patch_finish_move = function(old, new, bytes, path) {
   p = fs_path(old)
-  if (!path_is_link(p)) {
+  if (!path_is_link(p) || (is_windows() && !path_listed(old))) {
     now = tryCatch(read_raw(old), error = function(e) NULL)
     if (identical(now, bytes)) {
       suppressWarnings(file.rename(p, fs_path(new)))
