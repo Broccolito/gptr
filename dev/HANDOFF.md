@@ -1,14 +1,19 @@
 ## Current checkpoint — P27 Windows coverage (PR #51), 2026-10-19
 
-Branch `claude/windows-coverage-p27` (draft PR #51), code head `92a2944`. Goal: every Windows
+Branch `claude/windows-coverage-p27` (draft PR #51), code head `404b90a`. Goal: every Windows
 function proven on hosted Windows CI (release, oldrel-4, R-devel; CRAN and NOT_CRAN), every Windows
 lane green twice on one commit. Plan `plan/P27-windows-coverage.md` (acceptance A1-A9), evidence
-`progress/fixes.md` CI-25..CI-62, decisions D-228..D-234. First hosted passes: R-CMD-check Windows
-release and oldrel-4 on `9170baf` and `92a2944` except the PowerShell route (`test-bridge-sh.R:146`,
-`:155`) and, on `92a2944` oldrel-4, `test-utils-paths.R:324`; Exact-tarball on `2c9b6a4`;
-rscript-native and the optional Windows packet on `92a2944`. Open: the PowerShell exit status
-(CI-50), the system Google Chrome DevTools refusal under the suite (CI-40), `test-bridge-sh.R:512`
-(ubuntu LC_ALL=C) and `test-utils-paths.R:324` (R 4.2.3, Windows and ubuntu oldrel-4) on `92a2944`.
+`progress/fixes.md` CI-25..CI-70, decisions D-228..D-235. Fixed and passed on hosted Windows at
+`85e5883` and its merge with `main`, `74de8c6` (the same `R/` and `tests/`): the PowerShell route
+(CI-66, D-235), system Google Chrome's DevTools refusal under the suite (CI-63), the background job
+tests (CI-65) and the R 4.2.3 `octmode` mock (CI-67); there R-CMD-check Windows release, oldrel-4
+(on `74de8c6`), the ordinary and optional windows-by-file runs, rscript-native and Exact-tarball are
+green. Fixed after `74de8c6` and not yet run on hosted CI: the POSIX readlink rule of
+`path_dangling()` (CI-68), `proc_children()` from ps's own handle for the ubuntu tree test
+`test-bridge-sh.R:569` and `kill_all()` (CI-69, D-233), and the observer retries for native-07 on
+oldrel-4 (CI-70). Open: every lane on the final head, each Windows lane twice (A1-A7, A9;
+Plan-gates and Optional-integrations have not run on this branch); CI-64's ubuntu cleanup race and
+INFRA-01's rate (CI-62) are unproven.
 
 ## Historical checkpoint — K Mac validation, 2026-10-15
 

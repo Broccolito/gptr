@@ -1,17 +1,17 @@
 ## Current checkpoint — P27 Windows coverage (PR #51), 2026-10-19
 
-Branch `claude/windows-coverage-p27` (draft PR #51 into `main`), code head `92a2944`; plan
-[P27](plan/P27-windows-coverage.md), fixes CI-25..CI-62 in [fixes](progress/fixes.md), decisions
-D-228..D-234 and the D-019 item 2 correction in `DEVIATIONS.md`. Windows behaviour is claimed only
-from hosted runs.
+Branch `claude/windows-coverage-p27` (draft PR #51 into `main`, merged from `main` at `74de8c6`),
+code head `404b90a`; plan [P27](plan/P27-windows-coverage.md), fixes CI-25..CI-70 in
+[fixes](progress/fixes.md), decisions D-228..D-235, the D-019 item 2 correction and the D-231 and
+D-233 amendments in `DEVIATIONS.md`. Windows behaviour is claimed only from hosted runs.
 
 | Status | Result |
 | --- | --- |
-| Fixed | Product: patch moves keep file links and 8.3 aliases; dangling Windows links are refused by write, edit, the scrub locks and the wire log and read as absent elsewhere (D-231); a `.gptr` junction onto a foreign directory is refused; cmd output is UTF-8 (D-229); Store aliases reached by 8.3 name are skipped; `kill_all()` stops a shell's background children on macOS (D-233); per-turn `/undo` rows (D-228); gptr's own document writes (D-232); an exited app's family at launch; the DevTools port (D-230). CI and tests: plan gates, registries, Python, pwsh, startup guards, runner streams, RSS cap, mock accept. |
-| Unskipped | `skip_on_os("windows")` sites 77 -> 60; 7 tests renamed (P27 table). |
-| Hosted, first pass | R-CMD-check Windows release and oldrel-4 on `9170baf` (run 39217189384) and on `92a2944` (run 39235008757): only `test-bridge-sh.R:146`, `:155` fail, plus `test-utils-paths.R:324` on oldrel-4 at `92a2944`; Exact-tarball on `2c9b6a4` (run 39202180585) green, Windows release and R-devel in CRAN mode; rscript-native (run 39234997432) and the windows-by-file optional packet (run 39235001873) green on `92a2944`. |
-| Open | The PowerShell route returns status 0 after `cmd /c exit 4` and `$LASTEXITCODE` is unset (CI-50); R-CMD-check's system Google Chrome refuses DevTools ("requires a non-default data directory", CI-40); on `92a2944` `test-bridge-sh.R:512` (ubuntu LC_ALL=C) and `test-utils-paths.R:324` (R 4.2.3: Windows and ubuntu oldrel-4); `test-bridge-sh.R:445`, `:449` in the filtered by-file run on `9170baf`; INFRA-01's rate is unproven (CI-62). |
-| Remaining | Every lane green on one commit, each Windows lane twice (P27 acceptance A1-A7, A9); the ordinary windows-by-file full suite and Exact-tarball have not run since `2c9b6a4`, Plan-gates and Optional-integrations not on this branch. |
+| Fixed | Product: patch moves keep file links and 8.3 aliases; dangling Windows links are refused by write, edit, the scrub locks and the wire log and read as absent elsewhere, POSIX keeping the readlink rule (D-231); a `.gptr` junction onto a foreign directory is refused; cmd output is UTF-8 (D-229); the PowerShell route resolves a bare name as cmd does and returns the last command's status (D-235); Store aliases reached by 8.3 name are skipped; `kill_all()` stops a shell's background children on macOS and reads descendants from ps's own handle (D-233); the owned Chrome's close waits for its helpers; a background job's done read holds all output; per-turn `/undo` rows (D-228); gptr's own document writes (D-232); an exited app's family at launch; the DevTools port (D-230). CI and tests: plan gates, registries, Python, pwsh, startup guards, runner streams, RSS cap, mock accept, the suite's Windows profile, the job tests' release file, the R 4.2 mock, the observer retries. |
+| Unskipped | `skip_on_os("windows")` sites 77 -> 60; 8 tests renamed (P27 table). |
+| Hosted | On `85e5883` and its merge `74de8c6` (the same `R/` and `tests/`): R-CMD-check Windows release green on both and oldrel-4 on `74de8c6` (on `85e5883` native-07's observer failed, CI-70), with both artifact session checks run on system Google Chrome; the ordinary windows-by-file full suite (runs 39250571244, 39255516069, 39255537264), rscript-native (39250575003, 39255497307, 39255504649), the optional Windows packet (39250581987, 39255501073, 39255508574) and Exact-tarball (39250578324, 39255512201) green. Other R-CMD-check rows: all green on `85e5883`; on `74de8c6` ubuntu no-Suggests failed `test-bridge-sh.R:569` (CI-69). |
+| Open | Not yet run on hosted CI: the POSIX readlink rule (CI-68), `proc_children()` (CI-69; its Linux evidence is an emulation) and the observer retries (CI-70). Unproven: CI-64's ubuntu cleanup race (about 1% of jobs) and INFRA-01's rate (CI-62); both ordinary by-file runs on `74de8c6` skipped the first session check as a browser startup failure. |
+| Remaining | Every lane green on the final head, each Windows lane twice (P27 acceptance A1-A7, A9); Plan-gates and Optional-integrations have not run on this branch. |
 
 ## Historical checkpoint — final integration, 2026-10-15
 
