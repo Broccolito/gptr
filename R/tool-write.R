@@ -27,20 +27,22 @@ tool_path_physical = function(q) {
 }
 
 #' The file a symbolic link names, resolved by the OS. Windows has no readlink target, so an
-#' existing destination is canonicalised before rename, and a missing name its directory still
-#' lists is a link to nothing. A dangling link or loop is refused, never replaced.
+#' existing destination is canonicalised before rename; its stat() succeeds on a link to nothing,
+#' which path_dangling() tells apart. A dangling link or loop is refused, never replaced.
 #' @noRd
 resolve_link_target = function(p) {
-  if (is_windows() && file.exists(fs_path(p))) return(path_norm(p))
-  l = Sys.readlink(fs_path(p))
-  link = if (is_windows()) path_listed(p) else !is.na(l) && nzchar(l)
-  if (!link) return(p)
-  if (!file.exists(fs_path(p))) {
+  f = fs_path(p)
+  l = Sys.readlink(f)
+  link = !is.na(l) && nzchar(l)
+  dangling = if (is_windows()) path_dangling(f) else link && !file.exists(f)
+  if (dangling) {
     gptr_abort(paste0("Cannot write through the symbolic link '", p, "': it names no file ",
                       "(a dangling link or a loop)."),
                "invalid_argument", arg = "path", expected = "a link to an existing file")
   }
-  as_utf8(normalizePath(fs_path(p), winslash = "/"))
+  if (is_windows() && file.exists(f)) return(path_norm(p))
+  if (!link) return(p)
+  as_utf8(normalizePath(f, winslash = "/"))
 }
 
 #' Encoding, BOM and dominant line ending of an existing text file; NULL for a new file
