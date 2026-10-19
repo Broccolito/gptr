@@ -640,6 +640,7 @@ test_that("/undo asks first when the preview finds items it cannot restore", {
 
 test_that("/undo lists each item once, by its outcome after the whole undo (#37)", {
   local_project()
+  local_gptr_options(checkpoint_scan_budget = Inf)
   local_fake_provider(list(fake_tool("r", code = "e = new.env(); writeLines('a', 'a.txt')"),
                            fake_tool("r", code = "e$v = 1; writeLines('b', 'a.txt')"), "done"))
   w = new.env()
