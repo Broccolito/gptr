@@ -356,12 +356,6 @@ test_that("Delete File refuses a directory, an empty Add File is empty, a move r
   expect_identical(rd(file.path(td, "moved.R")), "r = 2\n")
   expect_identical(rd(file.path(td, "real.R")), "r = 1\n")
   expect_false("link.R" %in% list.files(td))
-  if (fs_case_insensitive(td)) {
-    put_file(td, "case.R", "k = 1\n")
-    patch_apply(paste0("*** Begin Patch\n*** Update File: case.R\n*** Move to: CASE.R\n@@\n",
-                       "-k = 1\n+k = 2\n*** End Patch"), root = td)
-    expect_identical(rd(file.path(td, "case.R")), "k = 2\n")
-  }
 })
 
 test_that("an envelope whose hunk matched through the fuzzy fallback carries the diff", {
@@ -478,13 +472,30 @@ test_that("Delete File and a move remove only the file they name, whatever its c
 })
 
 test_that("a move onto its own file under another spelling keeps the file and takes the name", {
-  skip_on_os("windows")
   td = withr::local_tempdir()
   u = function(name) fs_path(file.path(td, name))
   mv = function(from, to, old, new) {
     patch_apply(paste0("*** Begin Patch\n*** Update File: ", from, "\n*** Move to: ", to, "\n@@\n-",
                        old, "\n+", new, "\n*** End Patch"), root = td)
   }
+  if (fs_case_insensitive(td)) {
+    put_file(td, "case.R", "k = 1\n")
+    mv("case.R", "CASE.R", "k = 1", "k = 2")
+    expect_identical(rd(u("CASE.R")), "k = 2\n")
+    expect_identical(list.files(td, all.files = TRUE, no.. = TRUE), "CASE.R")
+  }
+  low = "\u00e9t\u00e9.R"
+  put_file(td, fs_path(low), "e = 1\n")
+  if (file.exists(u("\u00c9T\u00c9.R"))) {
+    mv(low, "\u00c9T\u00c9.R", "e = 1", "e = 2")
+    expect_identical(rd(u("\u00c9T\u00c9.R")), "e = 2\n")
+  }
+  put_file(td, fs_path("caf\u00e9.R"), "c = 1\n")
+  if (file.exists(u("cafe\u0301.R"))) {
+    mv("caf\u00e9.R", "cafe\u0301.R", "c = 1", "c = 2")
+    expect_identical(rd(u("cafe\u0301.R")), "c = 2\n")
+  }
+  skip_on_os("windows")
   put_file(td, "a.R", "a = 1\n")
   file.symlink(td, file.path(td, "L"))
   mv("a.R", "L/a.R", "a = 1", "a = 2")
@@ -499,23 +510,6 @@ test_that("a move onto its own file under another spelling keeps the file and ta
   mv("b.R", "lb.R", "b = 1", "b = 2")
   expect_identical(rd(u("lb.R")), "b = 2\n")
   expect_false(file.exists(u("b.R")))
-  if (fs_case_insensitive(td)) {
-    put_file(td, "case.R", "k = 1\n")
-    mv("case.R", "CASE.R", "k = 1", "k = 2")
-    expect_identical(rd(u("CASE.R")), "k = 2\n")
-    expect_true("CASE.R" %in% list.files(td))
-  }
-  low = "\u00e9t\u00e9.R"
-  put_file(td, fs_path(low), "e = 1\n")
-  if (file.exists(u("\u00c9T\u00c9.R"))) {
-    mv(low, "\u00c9T\u00c9.R", "e = 1", "e = 2")
-    expect_identical(rd(u("\u00c9T\u00c9.R")), "e = 2\n")
-  }
-  put_file(td, fs_path("caf\u00e9.R"), "c = 1\n")
-  if (file.exists(u("cafe\u0301.R"))) {
-    mv("caf\u00e9.R", "cafe\u0301.R", "c = 1", "c = 2")
-    expect_identical(rd(u("cafe\u0301.R")), "c = 2\n")
-  }
 })
 
 test_that("an oldText of only whitespace never matches between every two characters", {
