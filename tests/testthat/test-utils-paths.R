@@ -303,13 +303,8 @@ test_that("Windows junctions and file links keep control and secret paths guarde
 test_that("path_info() gives a link to nothing no metadata and no warning on every OS", {
   td = withr::local_tempdir()
   writeLines("x", file.path(td, "file"))
-  gone = file.path(td, "gone")
-  dir.create(gone)
   link = file.path(td, "dangling")
-  # A Windows junction needs no privilege; R's stat() there still succeeds on the dangling link
-  expect_true(if (is_windows()) base::Sys.junction(gone, link) else file.symlink(gone, link))
-  withr::defer(unlink(link))
-  expect_identical(unlink(gone, recursive = TRUE), 0L)
+  local_dangling_link(link)
   p = file.path(td, c("file", "dangling", "absent"))
   info = expect_no_warning(path_info(p))
   keep = setdiff(names(info), "atime")   # reading a file may update its access time

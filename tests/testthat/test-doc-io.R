@@ -1495,18 +1495,6 @@ doc_io_legacy_path = function(path) {
   sub("[.](rds|json)$", ".rds", doc_sidecar_path(path))
 }
 
-# A dangling link at `path`: a symlink, on Windows a junction (no privilege needed) that the test
-# detaches itself, as R's recursive unlink() of its directory may fail on a dangling junction
-doc_io_dangling = function(path, .env = parent.frame()) {
-  target = file.path(dirname(path), "absent")
-  if (!is_windows()) return(file.symlink(target, path))
-  dir.create(target)
-  withr::defer(unlink(path), envir = .env)
-  ok = base::Sys.junction(target, path)
-  unlink(target, recursive = TRUE)
-  ok
-}
-
 test_that("new sidecars are closed JSON data with explicit line arrays", {
   local_project()
   local_doc_pending()
@@ -1781,7 +1769,7 @@ test_that("a broken modern sidecar link still prevents legacy deserialization", 
   unlink(modern)
   legacy = doc_io_legacy_path(f)
   write_atomic(legacy, serialize_leaf(rec))
-  expect_true(doc_io_dangling(modern))
+  local_dangling_link(modern)
   expect_true(doc_sidecar_exists(modern))
   reads = 0L
   original = base::readRDS
@@ -1933,7 +1921,7 @@ test_that("a differently cased dangling modern entry masks legacy where names ig
   write_atomic(legacy, serialize_leaf(rec))
   before = unname(tools::md5sum(legacy))
   skip_if_not(file.exists(sub("[.]rds$", ".RDS", legacy)), "the filesystem is case-sensitive")
-  expect_true(doc_io_dangling(sub("[.]json$", ".JSON", modern)))
+  local_dangling_link(sub("[.]json$", ".JSON", modern))
   expect_true(doc_sidecar_exists(modern))
   reads = 0L
   original = base::readRDS
