@@ -258,7 +258,8 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   and 3.6 GB. One process over the 127 ordinary files to this one (installed package): PASS 22265
   SKIP 24, RSS 3.3 GB at the end.
 - Deviations: none. Open: hosted Windows evidence (native-06 and the other native backpressure
-  cases on release and oldrel-4, twice).
+  cases on release and oldrel-4, twice). On 85e5883 the one retry met the same delete-pending file
+  (native-07), so CI-70 retries for one snapshot deadline.
 
 ## Task CI-24 - The fd-0 reader test types its check mark only in a UTF-8 locale (2026-10-18, #48)
 - `test-console-typing.R:446` (new in #48) failed in runs 39175666947 and 39179983061
@@ -354,10 +355,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   runs in PowerShell, else in cmd", "on Windows a .sh script runs through Git Bash when no bash is on
   PATH", "a windows_only interpreter has its program on Windows and none elsewhere" and "the cmd and
   powershell engines run on Windows with UTF-8 output and exit codes".
+- The elapsed bounds of the timeout test (`ec6cf5b`) and the shell-engine test (`6ede769`) go from
+  10 s to 30 s on every OS, for Git Bash start-up on hosted Windows; their jobs run 57 s and 999 s,
+  so a timeout kill is still proven.
 - Green: `^bridge-sh$` PASS 275 SKIP 3, `^bridge-lang$` PASS 106 SKIP 4 on macOS. Lint clean.
 - Reviews: none recorded.
 - Deviations: none. Open: the first hosted runs found cmd output in the OEM page (CI-49) and a lost
-  PowerShell exit status (CI-50, open); the macOS skip of the background tree test went with CI-47.
+  PowerShell exit status (CI-50, fixed by CI-66); the macOS skip of the background tree test went
+  with CI-47; the background job tests' timing is CI-65.
 
 ## Task CI-32 - A bare R MCP server and the orphan sweep run on Windows (tests, 2026-10-18, #51)
 - `efe55df`: "a server configured with a bare Rscript or R command runs with this R" also starts the
@@ -422,7 +427,8 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - R's `Sys.readlink()` is "" on Windows (`do_readlink` needs `HAVE_READLINK`), so
   `wire_log_path()`'s dangling-link guard never fired there and `wire_log()` opened a dangling
   junction or file link at or above the log path. Fix (`267f441`): `safe()` refuses a listed entry
-  without followed metadata, on every OS (the rule became `path_dangling()`, CI-48).
+  without followed metadata, on every OS (the rule became `path_dangling()`, CI-48; on POSIX a
+  readlink target since CI-68).
 - Red: a POSIX simulation of the two new Windows tests with `Sys.readlink()` emptied fails 3 on the
   old code. Green: `^http-reactor$` PASS 225 SKIP 2. Lint clean.
 - Reviews: none recorded.
@@ -464,7 +470,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   stale log could be quoted -> fixed; its claim that the refusal is a LOG(ERROR) was rejected).
 - Deviations: none. Open: on 2c9b6a4 the system Google Chrome quoted "DevTools remote debugging
   requires a non-default data directory" (job 117897245682), so R-CMD-check's session checks still
-  skip; the cause in the suite environment is unconfirmed.
+  skipped; the cause was the suite's empty Windows profile (CI-63).
 
 ## Task CI-41 - The credential store, child env and CLI stdin are pinned on Windows (tests, 2026-10-18, #51)
 - Tests only: "on Windows auth.json lives under the per-user APPDATA profile (privacy is its ACL)"
@@ -546,14 +552,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   2, 3 runs; `^(proc-.*|bridge-.*)$` PASS 2691 SKIP 23. Lint clean.
 - Reviews: none recorded.
 - Deviations: D-233. Open: on 92a2944 `ubuntu-latest (release, LC_ALL=C)` (job 118001849130) failed
-  `test-bridge-sh.R:512` (`length(tree)` 1, expected >= 2) in this test; not yet diagnosed.
+  `test-bridge-sh.R:512` (`length(tree)` 1, expected >= 2) in this test; the Linux create-time filter
+  of `ps_children()`, which also hid descendants from `kill_all()`, is CI-69.
 
 ## Task CI-48 - Scrub refuses a dangling lock-root link where readlink has no target (2026-10-18, #51)
 - On Windows `Sys.readlink()` is "" and `normalizePath()` falls back to the lexical path, so
   `scrub_lock()` took the session lock and tried creates through a dangling junction at `.gptr` or
   `.gptr/locks` (Win32 `_wmkdir()` failed them; nothing was written outside). Fix (`2c9b6a4`):
   `scrub_lock()` refuses when `path_dangling(root)` or `path_dangling(lock_root)` holds, before any
-  lock; `path_dangling()` (a listed entry without followed metadata) also backs the wire log.
+  lock; `path_dangling()` (a listed entry without followed metadata; on POSIX a readlink target since
+  CI-68) also backs the wire log.
 - Red: an emulation on macOS records 2 `write_atomic()` calls on the base. Green: none on this
   commit; `^auth-redact$` PASS 486 SKIP 1, `^utils-paths$`, `^http-reactor$`. Lint clean.
 - Reviews: r1 6 findings; F1-F3 applied, F4 not tested (rests on an unverified `dir.exists()`), F5
@@ -574,17 +582,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-229. Open: the cmd route and engine passed in R-CMD-check run 39217189384 (9170baf,
   Windows release and oldrel-4); a multi-line cmd chunk still runs only to its first LF.
 
-## Task CI-50 - The PowerShell route's lost exit status is diagnosed, not fixed (2026-10-18, #51)
+## Task CI-50 - The PowerShell route's lost exit status gets a diagnostic test (2026-10-18, #51)
 - Hosted Windows (run 39193453652) returned status 0 for `Write-Output "café 日本"; cmd /c exit 4`
   through `-EncodedCommand` while stdout matched. `0fbca74` (tests only) keeps the assertion and adds
   a run that prints `lec=$LASTEXITCODE ok=$?` after `cmd /c exit 4` and `cmd /d /c exit 5`, then runs
-  this R with status 6. Product unchanged.
+  this R with status 6. Product unchanged here; the fix is CI-66.
 - Green: `^bridge-sh$` PASS 281 SKIP 2 on macOS (the Windows assertions do not run there).
 - Reviews: none recorded.
 - Deviations: none. Open: on 9170baf both Windows R-CMD-check rows fail `test-bridge-sh.R:146` (status
   0) and `:155` (stdout `lec= ok=True` twice), and again on 92a2944 (run 39235008757); status 6
   passes. `$LASTEXITCODE` stays unset after both cmd exits, so registry AutoRun (the only effect of
-  `/d`) is ruled out; the cause is open.
+  `/d`) is ruled out. Cause and fix: CI-66 (Rtools' MSYS2 `usr/bin/cmd` shadows `cmd.exe` in
+  PowerShell's PATH search, diagnostic run 39234534171); its test asserts the status contract instead
+  of printing these values.
 
 ## Task CI-51 - write_file() refuses a dangling Windows link that stat() still sees (2026-10-18, #51)
 - Hosted windows-by-file (run 39193453652) failed `test-tool-write.R:153` with three warnings and
@@ -687,7 +697,8 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   Chrome). Lint clean.
 - Reviews: none recorded.
 - Deviations: D-230. Open: rscript-native on 92a2944 (run 39234997432) and the optional packet passed
-  the session checks with Chrome for Testing; R-CMD-check's system Google Chrome refusal (CI-40) stays.
+  the session checks with Chrome for Testing; R-CMD-check's system Google Chrome refusal (CI-40) is
+  CI-63.
 
 ## Task CI-60 - A dangling sidecar link is read without Windows metadata warnings (2026-10-19, #51)
 - R-CMD-check on 2c9b6a4 and 9170baf warned in the two dangling sidecar tests of `test-doc-io.R`:
@@ -701,7 +712,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-231. Open: on 92a2944 the Windows release check has WARN 0 (job 118001849245), but
   the new `test-utils-paths.R:324` fails on R 4.2.3 ("cannot coerce class '"octmode"' to a
   data.frame" in the emulated row; Windows oldrel-4 job 118001849423, ubuntu oldrel-4 job
-  118001849303); not yet fixed.
+  118001849303); fixed in the test by CI-67.
 
 ## Task CI-61 - A dangling link reads as absent in Windows readers and tools (2026-10-19, #51)
 - On Windows `file.exists()` is TRUE for a dangling link and a later `file()` warns and fails, so the
@@ -729,3 +740,210 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: none. Open: e288902 (job 114359166815) and ee5088a (job 114920821918) show a separate
   stall after the read; a late client gives the same shape; proving the fix needs about 50 Windows
   runs of the test.
+
+## Task CI-63 - The suite home is a Windows profile, so system Chrome serves DevTools (2026-10-19, #51)
+- R-CMD-check `windows-latest` release and oldrel-4 on 2c9b6a4 skipped both `test-artifact-app.R`
+  session checks: system Google Chrome 155 wrote "DevTools remote debugging requires a non-default
+  data directory" (jobs 117897245682, 117897245789) although gptr passes its own `--user-data-dir`.
+  Branded Chrome serves DevTools only when `IsUsingDefaultDataDirectory()` is false and takes "cannot
+  tell" for default; the unknown came from `SHGetFolderPath(CSIDL_LOCAL_APPDATA)`, whose registry value
+  `%USERPROFILE%\AppData\Local` named a missing folder under the suite's empty home (Chromium sources;
+  outside support: the Stack Overflow 50666524 answer). Chrome for Testing has no such gate, and real
+  users keep their profile. Fix (tests only, `6bae056`): `setup.R` creates `APPDATA` and
+  `LOCALAPPDATA` as `home/AppData/Roaming` and `home/AppData/Local`; the new case "the suite home is a
+  Windows profile whose Local AppData the browser child resolves" pins the layout and, on Windows
+  (NOT_CRAN), asks Windows PowerShell 5.1 for `GetFolderPath('LocalApplicationData')` in
+  `child_env("artifact")`.
+- Red: the new case fails before the change on macOS (folders missing, outside the home). Green: it
+  passes, also its Windows branch with `/bin/sh` standing for PowerShell; `artifact-app` and
+  `test-environment` with real Chrome FAIL 0 WARN 0 SKIP 2 PASS 524, both session checks ran; full
+  suite FAIL 0 WARN 0 SKIP 63 PASS 34773. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: R-CMD-check Windows release and oldrel-4 on 85e5883 (jobs 118053097431,
+  118053097175) and 74de8c6 (jobs 118076803835, 118076804097) list no `test-artifact-app.R` skip, so
+  both session checks ran with system Google Chrome, and the new case passed. The two ordinary by-file
+  runs on 74de8c6 (39255516069, 39255537264) skipped the first session check (`test-artifact-app.R:511`,
+  `skip_if_browser_failed()`; the runner prints no skip reason); the run on 85e5883 (39250571244) ran
+  both. Repeat pending on the final head.
+
+## Task CI-64 - The owned Chrome's close waits for its unmarked helpers (2026-10-19, #51)
+- Hosted ubuntu R-CMD-check failed the first real session check's cleanup (`test-artifact-app.R:488`)
+  with "The private headless browser directory did not finish cleanup: unlink returned 1." (oldrel-4
+  on 9170baf, job 117943690034; oldrel-1 on 33720c1; oldrel-4 on 945fa60 before the stage
+  diagnostics): 3 of about 330 ubuntu jobs since Oct 13, none on macOS or Windows. `release()` judged
+  the family by the `GPTR_PROC` marker alone, which Chrome's helpers never show: on Linux their
+  `setproctitle()` zeroes the block `/proc/<pid>/environ` reads, and on macOS ps reads no Chrome
+  environment. So the profile was unlinked while orphaned helpers (the network service above all)
+  still wrote in it. Fix (`a7b1793`): `owner$close()` records the browser's descendants by parent link
+  before SIGTERM through `proc_children()`, which `kill_all()` now shares; `release(seconds)` waits for
+  them with `proc_wait_exit()` within the remaining 10 s `artifact_browser_close()` deadline, and a
+  helper still running or unknown raises "The owned headless browser family did not finish cleanup."
+  and keeps the directory for a retry. The startup unwind and the retained cleanup job keep the single
+  check.
+- Red: the new test "artifact browser close waits for its unmarked helpers before removing the
+  profile" fails on 92a2944 with the hosted message. Green: it passes, and a helper alive past the
+  deadline keeps the root until a retry succeeds; in an offline Ubuntu container with Chromium 145 an
+  immediate unlink failed 3 of 40 rounds and a wait for the recorded family first removed all 40
+  (settled within 0.023 s); with real Chrome on macOS `release()` waits 0.06-0.08 s for 9 helpers;
+  full offline suite FAIL 0 SKIP 62 PASS 34794. Lint clean.
+- Reviews: none recorded.
+- Deviations: D-233 (amended). Open: not seen in the ubuntu R-CMD-check rows on 85e5883 and 74de8c6,
+  which at about 1% per job proves little; after a browser that died before `close()` no helper can be
+  recorded, so `release()` has the marker check alone, as before; `proc_wait_exit()` polls every 20 ms,
+  so the wait can end one poll past the close deadline, which then reports "close timed out".
+
+## Task CI-65 - A job's status is read before its bytes; its tests release through a file (2026-10-19, #51)
+- `test-bridge-sh.R:445` and `:449` failed in the filtered windows-by-file run on 9170baf (run
+  39217182105, job 117943670939) with `(no output) [j... done, 1s]`. Cause (test timing): there
+  `bridge_bg()` takes 0.66 to 1.19 s to return, mostly after the spawn, which used up the child's
+  `Sys.sleep(1)`; the first wait settled after the child had written DONE, so `wait(until = "ready")`
+  rightly returned both lines and the next wait had none. Passing runs had about 60 ms to spare, and
+  the partial-line test passed without exercising its rule. Fix (tests, `1f5359e`): each child blocks
+  after its first output until the test creates the file `go` (its path an argument); the 20 s
+  timeouts and the assertions are unchanged, and the partial-line test adds a 1 s wait that must
+  return no line while only `rea` is written.
+- Product (`adfef78`, a race on every OS, not the hosted cause): `bridge_job_read()` took the status
+  after the bytes, so a child that exited in between gave a `done` footer while its partial last line
+  was unread. The status now comes first and decides whether a partial line waits; the snapshot read
+  (`file.size() - pos`, one `readBin()`) is unchanged.
+- Red: 92a2944 with the new test "a job that exits during a read reads running, so a done read holds
+  all output" FAIL 1 (footer `done`); with `bridge_emit()` slowed by 1.5 s the old tests fail `:445`
+  and `:449` as hosted. Green: `^bridge-sh$` PASS 286 SKIP 2 (4 runs); the new tests pass with
+  `bridge_emit()` slowed by 0, 0.9, 1.5 and 3 s; NOT_CRAN=false PASS 144 SKIP 27. Lint clean. Mutants:
+  a `settled()` that matches partial lines fails the new partial-line test (`:467`); a read that
+  returns partial lines fails `:465`.
+- Reviews: r1 6 findings: the handshake (1) and the partial-line handshake (6) applied; the read-to-EOF
+  loop and the unproven stale Windows `file.size()` claim reverted (2, 5: the hosted logs show the size
+  was current); the `file.size` mock dropped (3); the status-first reorder kept (4).
+- Deviations: none. Open: `test-bridge-sh.R` passed in the ordinary by-file runs on 85e5883
+  (39250571244) and 74de8c6 (39255516069, 39255537264) and in R-CMD-check Windows release and oldrel-4
+  on both; repeat pending on the final head.
+
+## Task CI-66 - PowerShell runs the program cmd would run and returns the last status (2026-10-19, #51)
+- On hosted Windows the PowerShell route of `peter$sh()` returned 0 for `cmd /c exit 4` (CI-50). The
+  diagnostic run 39234534171 (job 118000300246, branch `claude/diag-ps-exit`, since deleted) printed
+  `(Get-Command cmd).Source` = `C:\rtools45/usr/bin\cmd` (pwsh 7.6.6), while `cmd.exe`,
+  `& $env:ComSpec` and `Start-Process` each gave 4. PowerShell's `CommandPathSearch` takes the PATH
+  directories in order and ranks the bare name last only within each, so MSYS2's extensionless
+  `usr/bin/cmd` script, which R CMD's `Rcmd_environ` puts first on PATH, shadows `cmd.exe`;
+  `IsExecutable` is false for it, so PowerShell opens it with ShellExecute in the background, does not
+  wait and sets no `$LASTEXITCODE`.
+- Fix (`shell_ps_encode()`, `R/proc-spawn.R`): `b4df19c` sets a `PostCommandLookupAction` that replaces
+  a lookup resolved to an extensionless Application with the first Application of that name with an
+  extension (`Get-Command -CommandType Application -All`, PowerShell's PATH order); `bd8e30b` makes the
+  postfix `if ($?) { exit 0 }; if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1`, so a last command
+  that succeeded wins over an earlier native failure; `c65f11e` sets the hook only when
+  `$IsWindows -ne $false` (pwsh on Windows and Windows PowerShell 5.1); `3596af1` makes a name that
+  only an extensionless file provides not found ("not recognized", status 1), as in cmd. The same
+  encoder serves the knit powershell engine and the stdin ACL verifier (bootstrap 9133 and 9117 bytes
+  on macOS, limit 9998). `3942e0b` (tests) runs the shadowed line under Windows PowerShell 5.1 too.
+- Red: hosted status 0 where 4 was expected. The Windows test now prepends a temporary directory with
+  an extensionless `cmd` to PATH, which reproduces the shadow on any runner, and asserts status 4 (pwsh
+  and 5.1), status 6 and stdout `6\n` for this R after `cmd /d /c exit 5`, 0 for `cmd /c exit 4;
+  Write-Output ok`, 1 for `cmd /c exit 0; Write-Error no`, and stdout `ok\n` with status 1 for an
+  extensionless-only `gptr-none`. Green: on macOS `proc-spawn`, `bridge-sh`, `bridge-lang` and
+  `proc-writer-runtime` PASS 1293 SKIP 14 (Windows-only). Lint clean.
+- Reviews: r1 5 findings: (medium) green unproven -> the hosted runs below; (low) the 5.1 route never
+  ran -> `3942e0b`; (low) the hook searched PATH on every native lookup under Unix pwsh -> `c65f11e`;
+  (low) plan, spec and DEVIATIONS out of sync -> D-235 and the 03 and 04 rows; (low) a silent 0 for an
+  extensionless-only name -> `3596af1`.
+- Deviations: D-235. Open: the Windows test passed on 85e5883 (R-CMD-check jobs 118053097431 and
+  118053097175, whose failure is CI-70; by-file run 39250571244) and on 74de8c6 (jobs 118076803835,
+  118076804097; by-file runs 39255516069, 39255537264); no test runs the hook's Unix branch; a name
+  with a non-PATHEXT extension is still opened with ShellExecute (a document with a file association,
+  kept on purpose).
+
+## Task CI-67 - path_info()'s dangling-link test runs on R 4.2 and ignores atime (2026-10-19, #51)
+- On 92a2944 R 4.2.3 (Windows oldrel-4 job 118001849423, ubuntu oldrel-4 job 118001849303) errored
+  at `test-utils-paths.R:324` in the Windows `file.info()` mock: R 4.2's `data.frame()` cannot coerce
+  an octmode column. On macOS the comparison of a regular file's row with a second `file.info()` failed
+  once on atime, which reading the file between the calls may update. Fix (tests only, `95199d2`): the
+  mock adds the mode column after construction; atime leaves that one comparison.
+- Red: the hosted R 4.2.3 error; the macOS atime failure once. Green: `test-utils-paths.R` passed on
+  R 4.2.3 in R-CMD-check on 85e5883 (ubuntu oldrel-4 job 118053097194; Windows oldrel-4 job
+  118053097175, whose failure is CI-70) and 74de8c6 (jobs 118076804031, 118076804097). No local run
+  or lint is recorded in the commit.
+- Reviews: none recorded.
+- Deviations: none. Open: none beyond the repeat on the final head.
+
+## Task CI-68 - A dangling link is a readlink target on POSIX, a listed entry on Windows (2026-10-19, #51)
+- Since CI-48 `path_dangling()` asked for no followed metadata and a directory entry whose name matched
+  with case folded, on every OS. On a case-sensitive file system (Linux) a missing name beside a
+  sibling that differs only in case was therefore a dangling link: `wire_log_path()` refused a valid
+  `gptr.wire_log` inside `tempdir()` with the "must be inside the workspace root or tempdir()" notice,
+  and `scrub_lock()` refused a missing `locks/` beside `Locks/`; origin/main (a readlink target and no
+  file) accepted both. Found by the whole-diff review. Fix (`dba9c78`): POSIX takes no followed
+  metadata and a readlink target (`path_is_link()`), Windows keeps `path_listed()` (names folded as
+  NTFS does); `resolve_link_target()` drops its own POSIX rule and asks `path_dangling()` and
+  `path_is_link()` on every OS, with unchanged results. `089bc9a` (tests): `local_dangling_link()` in
+  `helper-files.R` builds the fixture that `test-doc-io.R` and `test-utils-paths.R` each copied.
+- Red: with TMPDIR on a case-sensitive APFS image, 74de8c6's `R/` fails the new case "a case variant
+  is a dangling link only where file names ignore case" at `test-utils-paths.R:332` and `:333`; a
+  base-R replica of its assertions and of `wire_log_path()`, `resolve_link_target()` and
+  `scrub_lock()`'s guard in rocker/r-ver:4.5.0 (`--network none`) fails 5 checks. Green: the replica
+  passes all 12; on the case-sensitive image 6 files FAIL 0 PASS 1767; on macOS
+  `^(utils-paths|tool-write|http-reactor|windows-security)$` PASS 444 and
+  `^(auth-redact|tool-edit|doc-io|tool-read|tool-search|storage-boundaries)$` PASS 1809, the skips
+  Windows-only. Lint clean.
+- Reviews: whole-diff review: `path_listed()` folds case on every OS (medium, low) and a second copy
+  of the fixture (low) -> these commits. r1 3 findings: the D-231 and P27 text (applied); the
+  case-sensitive testthat evidence (above); `doc_sidecar_exists()` kept, since folding it into
+  `path_dangling()` would drop a fail-closed POSIX case (#47).
+- Deviations: D-231 (corrected). Open: not yet run on hosted CI; ubuntu runs the case-sensitive branch
+  without a skip, and no run has taken the Windows branch (a junction `Link` looked up as `link`).
+
+## Task CI-69 - A child's descendants are read from ps's own handle of its pid (2026-10-19, #51)
+- On 92a2944 `ubuntu-latest (release, LC_ALL=C)` (job 118001849130) found 1 of the 2 background
+  sleeps at `test-bridge-sh.R:512` (CI-47). `85e5883` (tests) looked again for up to 10 s until ps
+  listed both; it passed on 85e5883 (job 118053097216), but on 74de8c6 `ubuntu-latest (release, no
+  Suggests)` (run 39255504135, job 118076803865) failed `test-bridge-sh.R:569` with 0 of 2 for the
+  whole 10 s. Cause: on Linux processx 3.9.0 stamps a child from `CLOCK_REALTIME - CLOCK_MONOTONIC`
+  read at the spawn, ps 1.9.3 times every process from the boot time it read once, and
+  `ps_children()` keeps a descendant only when the parent's stamp is not later than its creation time;
+  a shell forks its background jobs in its first 10 ms tick, so whenever processx's estimate was the
+  larger, `ps_children(p$as_ps_handle())` listed none of them, at every look. `kill_all()`'s
+  parent-link record (`proc_children()`) used the same lookup. Fix (`d480ee5`): `proc_children()`
+  lists from `ps::ps_handle(pid)` and keeps the list only while processx still reads the child alive
+  (no pid reuse); the bridge tests read the tree with `proc_children()`; `85e5883`'s re-look is
+  removed; the 5 s bound for `kill()` is unchanged.
+- Red: a C emulation with the formulas of processx 3.9.0, ps 1.9.3 and `ps_children()`, 1000 runs of
+  the test's line in debian bookworm (arm64, dash): processx's handle listed neither sleep in 187 runs
+  (180 with LC_ALL=C; rocker/r-ver:4.5.0 under amd64 emulation 2 and 3 of 300). The new test
+  "proc_children() follows parent links from ps's own handle while the parent lives" lists a child
+  when processx's stamp of the parent reads later than the child (the old lookup lists nothing) and
+  nothing once the parent ended. Green: ps's own handle listed both sleeps in every emulated run; on
+  macOS `bridge-sh` and `proc-supervise` pass, also with `_R_CHECK_PACKAGE_NAME_=gptr` and LC_ALL=C,
+  and the `proc-*`, `subagent-*`, `cli-*` and `bridge-*` files and their neighbours pass. Lint clean.
+- Reviews: none recorded.
+- Deviations: D-233 (amended). Open: not yet run on hosted ubuntu; the Linux evidence is the
+  emulation, not the R test. Other `ps_children()` callers are unchanged: the backpressure and
+  marker-family helpers already use `ps::ps_handle(pid)`, and the windows-startup probe's processx
+  handle carries one OS timestamp on Windows.
+
+## Task CI-70 - The sampler retries transient observer failures for one snapshot deadline (2026-10-19, #51)
+- R-CMD-check `windows-latest (oldrel-4)` on 85e5883 (run 39250578309, job 118053097175) failed
+  "owned writer prototype preserves every 4 MB duplex stdout and stderr line" (native-07,
+  `test-proc-writer-prototype.R:6`) as `resource_observation`: the first snapshot raised
+  `observer-metadata-invalid` at `entry-metadata` (a delete-pending Windows file, CPython `st_ino` 0),
+  and CI-23's one immediate retry met the same file (`elapsed_s` 0, `observer_retries` 1) while the
+  writer met every bound (13 samples, peak disk 4,049,354 B). A file stays delete-pending while any
+  handle (an antivirus or indexer scan) is open, which can span two back-to-back snapshots. Fix (tests
+  only, `404b90a`): `bp_observe()` retries the same five reasons every 100 ms until the observer's own
+  1 s snapshot deadline has passed since the first failure (about ten retries); any other reason, and
+  a transient that outlasts the deadline, stay one fatal sampling error with the last snapshot's
+  condition. `observer_retries` counts every retry and the first reason is kept. The observer, the
+  caps and the 1 s, 30 s and 45/60 s deadlines are unchanged; a sample can take about 1 s longer,
+  inside the 15 s the 60 s lease reserves.
+- Red: `^proc-backpressure-sampling$` FAIL 12 with the old helper. The CI-23 unit test is renamed to
+  "backpressure observation retries fixed transient observer reasons for one deadline" and covers
+  transients that clear, a bound reason after two retries and a persisting transient (it stops after
+  at least 1 s, after 2 to 19 retries); the `bp_run()` case completes after three retries and fails for
+  a bound reason and for a persisting transient. Green:
+  `^(proc-backpressure-sampling|bp-declared-observer|bp-disk-observer)$` PASS 669 SKIP 5; with Python
+  3.15 and the real observer the writer and observer files PASS 841, all four writer cases with
+  `observer_retries` 0; `^(proc-|bp-)` PASS 2317 SKIP 16; `bp_observe()` in rocker/r-ver:4.5.0 stops
+  a persisting transient after 10 retries at 1.09 s. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: not yet run on hosted Windows (native-07 passed on 74de8c6 with the one
+  retry); that 1 s covers the real holder is inferred, as the failing witness shows only that the file
+  was still pending under 15 ms later.
