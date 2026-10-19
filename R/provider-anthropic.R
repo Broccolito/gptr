@@ -502,9 +502,10 @@ adp_flushed = function(fl) {
 }
 
 #' Replay fixture bytes through an adapter's normaliser in chunks of the given sizes, the way
-#' provider_stream() does (P05): splitter -> push(); end of input -> finish()
+#' provider_stream() does (P05): splitter -> push(); end of input -> finish(). `raw = TRUE`
+#' (a request spec with `stream = "raw"`) pushes the chunks unsplit.
 #' @noRd
-adp_replay = function(adapter, model, bytes, sizes) {
+adp_replay = function(adapter, model, bytes, sizes, raw = FALSE) {
   log = new.env(parent = emptyenv())
   log$events = list()
   emit = function(ev) log$events[[length(log$events) + 1L]] = ev
@@ -515,7 +516,9 @@ adp_replay = function(adapter, model, bytes, sizes) {
   res = tryCatch({
     n = adapter$parse(model, opts)
     chunks = adp_split_raw(bytes, sizes)
-    if (identical(adapter$transport, "http_json")) {
+    if (raw) {
+      for (chunk in chunks) n$push(list(data = chunk))
+    } else if (identical(adapter$transport, "http_json")) {
       n$push(list(data = raw_to_utf8(bytes), status = 200L, headers = list()))
     } else if (adapter$transport %in% c("http_ndjson", "process_jsonl")) {
       sp = ndjson_splitter()
@@ -896,6 +899,24 @@ adp_msg_key = function(msg) {
   keep = c("role", "content", "api", "provider", "model", "tool_call_id", "tool_name",
            "is_error", "kind", "tool_add")
   hash_xxh128(msg[intersect(keep, names(msg))])
+}
+
+#' Does the model take the frozen tools? Not when its record says `tool_call = FALSE` (IC-74); when
+#' that drops a non-empty array, gptr says once per model how to declare `tool_call` (IC-79)
+#' @noRd
+adp_tools_on = function(model, context) {
+  if (!isFALSE(model[["tool_call"]])) return(TRUE)
+  tools = as.character(context[["tools_json"]] %||% "")
+  if (!tools %in% c("", "[]")) {
+    ref = paste0(model$provider, "/", model$id)
+    gptr_inform(paste0(ref, " is not declared to support tool calls, so gptr sends it no tools ",
+                       "(no r, read, edit or write). If it supports them, declare it with ",
+                       "tool_call = TRUE: gptr_config(providers = list(`", model$provider,
+                       "` = list(models = list(list(id = \"", model$id,
+                       "\", tool_call = TRUE)))))."),
+                "notice", .once = paste0("tools_dropped:", ref))
+  }
+  FALSE
 }
 
 #' The frozen tool array converted once per session for an api; NULL when there are no tools
@@ -1426,9 +1447,9 @@ adp_fixture_dir = function(sub, fixtures = NULL) {
 #' adp_replay() for conformance: the first warning or message ends the replay as its condition
 #' (04 section 8.1); exiting handlers, since signalCondition() offers no muffle restart.
 #' @noRd
-adp_check_replay = function(adapter, model, bytes, sizes) {
+adp_check_replay = function(adapter, model, bytes, sizes, raw = FALSE) {
   stopped = function(cnd) list(message = NULL, condition = cnd, events = list())
-  tryCatch(adp_replay(adapter, model, bytes, sizes), warning = stopped, message = stopped)
+  tryCatch(adp_replay(adapter, model, bytes, sizes, raw), warning = stopped, message = stopped)
 }
 
 #' Compare an R value with a golden JSON file (key order ignored)
@@ -1709,8 +1730,11 @@ check_adapter = function(adapter, fixtures = NULL) {
     add("adapter.tool_choice", tc$ok, tc$message)
   }
   dir = adp_fixture_dir(file.path("sse", api), fixtures)
-  ext = switch(transport, http_sse = "sse", http_ndjson = "ndjson", http_json = "json",
-               process_jsonl = "jsonl")
+  # binary <case>.bin fixtures are the body chunks of a stream = "raw" request (04 section 8.1),
+  # replayed unsplit
+  raw = !is.null(dir) && length(list.files(dir, "\\.bin$")) > 0L
+  ext = if (raw) "bin" else switch(transport, http_sse = "sse", http_ndjson = "ndjson",
+                                   http_json = "json", process_jsonl = "jsonl")
   files = if (is.null(dir)) character() else
     list.files(dir, pattern = paste0("\\.", ext, "$"), full.names = TRUE)
   # `.json` wire fixtures (http_json) share their extension with the golden files and model.json
@@ -1725,7 +1749,7 @@ check_adapter = function(adapter, fixtures = NULL) {
   for (f in sort(files)) {
     case = sub(paste0("\\.", ext, "$"), "", basename(f))
     bytes = readBin(f, "raw", file.size(f))
-    whole = adp_check_replay(adapter, model, bytes, length(bytes))
+    whole = adp_check_replay(adapter, model, bytes, length(bytes), raw)
     add(paste0("adapter.", case, ".no_condition"), is.null(whole$condition),
         if (is.null(whole$condition)) "" else conditionMessage(whole$condition))
     if (!is.null(whole$condition)) next
@@ -1747,7 +1771,7 @@ check_adapter = function(adapter, fixtures = NULL) {
                  adp_chunk_sizes(paste0(case, "-3")))
     invariant = TRUE
     for (sz in sizes) {
-      r = adp_check_replay(adapter, model, bytes, sz)
+      r = adp_check_replay(adapter, model, bytes, sz, raw)
       if (!is.null(r$condition) || !identical(lapply(r$events, adp_golden_event), golden)) {
         invariant = FALSE
       }

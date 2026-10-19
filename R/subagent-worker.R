@@ -236,12 +236,15 @@ worker_registry_apply = function(reg, sid) {
 }
 
 #' Save the result file: the status and, on success only, the exported objects by name (R7
-#' through save_rds()). Returns the names saved, invisibly.
+#' through save_rds()). The worker's home is written as a reference, read back as the proxy's
+#' overlay, so an export that captured it (a formula, plot or closure) ships none of the worker's
+#' other objects. Returns the names saved, invisibly.
 #' @noRd
 worker_exports_save = function(export, envir, result_path, status) {
   keep = if (identical(status, "idle")) intersect(export, names(envir)) else character()
   vals = if (length(keep)) mget(keep, envir = envir) else list()
-  save_rds(list(status = status, exports = vals), result_path)
+  save_rds(list(status = status, exports = vals), result_path,
+           refhook = function(x) if (identical(x, envir)) "home")
   invisible(keep)
 }
 
@@ -414,7 +417,7 @@ backend_worker_start = function(spec, ctx) {
   state$worker_home = session_home(child)
   state$worker_spec = list(
     prompt = spec$prompt, model = spec$info$ref, mode = spec$mode, depth = spec$depth,
-    agent = spec$agent, name = spec$name, object_names = c(spec$objects, names(spec$bind)),
+    agent = spec$agent, name = spec$name, object_names = c(spec$objects, spec$bind),
     export = spec$export, preset = spec$preset, rng_state = opts$rng_state,
     settings = list(replay = replay_mode(), project_root = project_root(), opts = spec$opts,
                     budget = spec$budget, max_turns = spec$agent$max_turns %||% spec$max_turns),
@@ -505,7 +508,7 @@ worker_on_exit = function(st, status) {
   st$watch = NULL # the reactor removes the watcher before invoking its exit callback
   r = st$result
   res = if (file.exists(st$result_path %||% "")) {
-    tryCatch(readRDS(st$result_path), error = function(e) NULL)
+    tryCatch(readRDS(st$result_path, refhook = function(x) st$home), error = function(e) NULL)
   }
   if (is.environment(st$home)) list2env(res$exports %||% list(), envir = st$home)
   keys = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h", "reasoning")

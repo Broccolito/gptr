@@ -169,6 +169,7 @@ handoff_id_normaliser = function(target) {
   if (identical(handoff_compat(target)[["tool_id"]], "alnum9")) return(id_alnum9_normaliser())
   switch(target[["api"]] %||% "",
          "anthropic-messages" = ,
+         "bedrock-converse" = ,
          "google-generative-ai" = function(id, source) id_sanitize(id, 64L),
          "openai-completions" = function(id, source) id_completions(id, target[["provider"]]),
          "openai-responses" = function(id, source) id_responses(id, target, source),

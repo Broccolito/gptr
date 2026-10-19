@@ -2,12 +2,6 @@
 # Task 4: REPL state and the input layer; Task 5: `!expr`, notes, mentions and console_send();
 # Task 7: scripted console sessions.
 
-# The REPL's persistent stdin connection replaced by a text connection over `lines`
-local_console_stdin = function(lines, .env = parent.frame()) {
-  testthat::local_mocked_bindings(console_stdin_open = function() textConnection(lines),
-                                  .env = .env)
-}
-
 # A reader over `lines` (piped input, no echo unless asked)
 stdin_reader = function(lines, echo = FALSE, .env = parent.frame()) {
   local_console_stdin(lines, .env = .env)
@@ -60,6 +54,17 @@ test_that("a fenced block is R code and ! code continues while incomplete", {
   expect_identical(repl_read_logical(rd, "peter> "), "!!z = 3")
 })
 
+test_that("a fence is R code only for an r, R, {r...} or empty info string (CommonMark)", {
+  rd = stdin_reader(c("```", "x = 1", "```", "```{r, echo = FALSE}", "y = 2", "```",
+                      "  ```R", "  if (TRUE) {", "    z = 3", "  }", "  ```",
+                      "````r", "```", "````", "```python", "print({x})", "  ```"))
+  expect_identical(repl_read_logical(rd, "peter> "), "!x = 1")
+  expect_identical(repl_read_logical(rd, "peter> "), "!y = 2")
+  expect_identical(repl_read_logical(rd, "peter> "), "!if (TRUE) {\n  z = 3\n}")
+  expect_identical(repl_read_logical(rd, "peter> "), "!```")
+  expect_identical(repl_read_logical(rd, "peter> "), "```python\nprint({x})\n```")
+})
+
 test_that("a trailing backslash continues a line; end of input ends every block", {
   rd = stdin_reader(c("first part \\", "second part"))
   expect_identical(repl_read_logical(rd, "peter> "), "first part \nsecond part")
@@ -79,7 +84,8 @@ test_that("r_incomplete() recognises incomplete code in any locale", {
 
 test_that("a line at the readline limit is warned about and dropped", {
   long = strrep("a", readline_limit())
-  local_mocked_bindings(gptr_readline = function(prompt = "") long)
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) long)
+  local_no_fd0()
   rd = console_reader(stdin = FALSE)
   out = NULL
   expect_warning({
@@ -87,6 +93,160 @@ test_that("a line at the readline limit is warned about and dropped", {
   }, "next line you entered", class = "gptr_warning_readline_limit")
   expect_identical(out, "")
   expect_identical(readline_limit(), if (getRversion() >= "4.5.0") 8190L else 4095L)
+})
+
+# The terminal reader with `batches` as the lines waiting on fd 0, one batch per look
+local_waiting = function(batches, .env = parent.frame()) {
+  box = new.env(parent = emptyenv())
+  box$batches = batches
+  box$calls = 0L
+  reader = console_reader
+  testthat::local_mocked_bindings(console_reader = function(...) {
+    rd = reader(...)
+    rd$waiting = function() {
+      box$calls = box$calls + 1L
+      b = if (length(box$batches)) box$batches[[1L]] else character()
+      box$batches = box$batches[-1L]
+      b
+    }
+    rd
+  }, .env = .env)
+  box
+}
+
+test_that("lines waiting after a typed line join it; Enter at '... ' sends one message", {
+  rl = local_readline(c("line1", ""))
+  local_waiting(list(c("line2", "", "  indented")))
+  rd = console_reader(stdin = FALSE)
+  out = NULL
+  shown = utils::capture.output({
+    out = repl_read_logical(rd, "peter> ")
+  })
+  expect_identical(out, "line1\nline2\n\n  indented")
+  expect_identical(rl$prompts, c("peter> ", "... "))
+  expect_match(shown, "(pasted: Enter sends it as one message)", fixed = TRUE)
+})
+
+test_that("text typed at '... ' is appended: it ends a paste without a final newline", {
+  local_readline(c("a", "c"))
+  local_waiting(list("b"))
+  rd = console_reader(stdin = FALSE)
+  out = NULL
+  utils::capture.output({
+    out = repl_read_logical(rd, "peter> ")
+  })
+  expect_identical(out, "a\nb\nc")
+})
+
+test_that("a pasted !code block is one R input; the next typed line is read alone", {
+  local_readline(c("!x = 1", "", "hello"))
+  w = local_waiting(list("y = 2"))
+  rd = console_reader(stdin = FALSE)
+  out = NULL
+  utils::capture.output({
+    out = repl_read_logical(rd, "peter> ")
+  })
+  expect_identical(out, "!x = 1\ny = 2")
+  expect_identical(repl_read_logical(rd, "peter> "), "hello")
+  expect_identical(w$calls, 2L)
+})
+
+test_that("a pasted fence or \"\"\" block is read from the waiting lines, never at '... '", {
+  rl = local_readline(c("```r", '"""', ""))
+  w = local_waiting(list(c("b1 = 1", "b2 = 2", "b1 + b2", "```", "next"), character(),
+                         c("q one", "", "q two", '"""', "after", "more")))
+  rd = console_reader(stdin = FALSE)
+  expect_identical(repl_read_logical(rd, "peter> "), "!b1 = 1\nb2 = 2\nb1 + b2")
+  # the lines after the closer are the next input, unechoed (the terminal showed them)
+  expect_silent(expect_identical(repl_read_logical(rd, "peter> "), "next"))
+  expect_identical(repl_read_logical(rd, "peter> "), "q one\n\nq two")
+  out = NULL
+  shown = utils::capture.output({
+    out = repl_read_logical(rd, "peter> ")
+  })
+  expect_identical(out, "after\nmore")
+  expect_identical(shown, "  (pasted: Enter sends it as one message)")
+  expect_identical(rl$prompts, c("peter> ", "peter> ", "... "))
+  expect_identical(w$calls, 4L)
+  expect_length(rd$typed, 0L)
+})
+
+test_that("a block typed by hand reads line by line; a paste without its closer goes on", {
+  rl = local_readline(c("```r", "x = 1", "```", '"""', '"""', "```", "typed", "```"))
+  w = local_waiting(list(character(), character(), "pasted", character(), "a = 1"))
+  rd = console_reader(stdin = FALSE)
+  expect_identical(repl_read_logical(rd, "peter> "), "!x = 1")
+  expect_identical(repl_read_logical(rd, "peter> "), "pasted")
+  expect_identical(repl_read_logical(rd, "peter> "), "!a = 1\ntyped")
+  expect_identical(rl$prompts, c("peter> ", "... ", "... ", "peter> ", "... ", "peter> ",
+                                 "... ", "... "))
+  expect_identical(w$calls, 7L)
+  expect_length(rd$typed, 0L)
+})
+
+test_that("piped input never looks for waiting lines", {
+  local_mocked_bindings(console_typed_lines = function(rd) stop("polled"),
+                        console_readline_tty = function() TRUE)
+  rd = stdin_reader(c("a", "b", '"""', "c", '"""', "```r", "x = 1", "```"))
+  expect_identical(repl_read_logical(rd, "peter> "), "a")
+  expect_identical(repl_read_logical(rd, "peter> "), "b")
+  expect_identical(repl_read_logical(rd, "peter> "), "c")
+  expect_identical(repl_read_logical(rd, "peter> "), "!x = 1")
+})
+
+test_that("a pasted block whose first line hit the readline limit is dropped whole", {
+  rl = local_readline(strrep("a", readline_limit()))
+  w = local_waiting(list("tail line"))
+  rd = console_reader(stdin = FALSE)
+  out = NULL
+  expect_warning({
+    out = repl_read_logical(rd, "peter> ")
+  }, class = "gptr_warning_readline_limit")
+  expect_identical(out, "")
+  expect_identical(rl$prompts, "peter> ")
+  expect_identical(w$calls, 1L)
+})
+
+test_that("the terminal reader looks at fd 0 only on a macOS readline terminal", {
+  local_mocked_bindings(console_typed_lines = function(rd) "pasted",
+                        console_readline_tty = function() TRUE)
+  expect_identical(console_reader(stdin = FALSE)$waiting(),
+                   if (is_macos()) "pasted" else character())
+  local_mocked_bindings(console_readline_tty = function() FALSE)
+  expect_identical(console_reader(stdin = FALSE)$waiting(), character())
+})
+
+test_that("console_typed_lines() reads what fd 0 holds without blocking and never fails", {
+  box = new.env(parent = emptyenv())
+  box$chunks = c("line2\r\nline3\n", "\n  indented\r")
+  box$created = 0L
+  box$eof = FALSE
+  local_mocked_bindings(
+    conn_create_fd = function(fd, close = TRUE) {
+      box$created = box$created + 1L
+      list(fd = fd, close = close)
+    },
+    conn_is_incomplete = function(con) !box$eof,
+    poll = function(processes, ms) list(if (length(box$chunks)) "ready" else "timeout"),
+    conn_read_chars = function(con, n = -1) {
+      x = box$chunks[[1L]]
+      box$chunks = box$chunks[-1L]
+      x
+    },
+    # it waits for a newline that a partial line never sends
+    conn_read_lines = function(...) stop("conn_read_lines() called"),
+    .package = "processx"
+  )
+  rd = new.env(parent = emptyenv())
+  expect_identical(console_typed_lines(rd), c("line2", "line3", "", "  indented"))
+  expect_identical(rd$fd, list(fd = 0L, close = FALSE))
+  # after the end of input (Ctrl-D on an empty line) fd 0 is opened afresh, never closed
+  box$eof = TRUE
+  box$chunks = "half typed"
+  expect_identical(console_typed_lines(rd), "half typed")
+  expect_identical(box$created, 2L)
+  local_mocked_bindings(poll = function(processes, ms) stop("bad fd"), .package = "processx")
+  expect_identical(console_typed_lines(rd), character())
 })
 
 test_that("repl_state() takes the console call's identifiers, options and objects", {
@@ -111,6 +271,22 @@ test_that("repl_state() takes the console call's identifiers, options and object
   local_gptr_options(mode = "manual")
   expect_identical(repl_prompt(rs), "peter> ")
   expect_error(repl_state(NULL, "not an env"), class = "gptr_error_invalid_argument")
+})
+
+test_that("a console opened in yolo shows the yolo notice with its banner (IC-78)", {
+  local_gptr_options(quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  rs = repl_state(NULL, list2env(list(alpha = 1:10)))
+  rs$mode = "yolo"
+  expect_identical(repl_prompt(rs), "peter[yolo]> ")
+  out = NULL
+  expect_message({
+    out = utils::capture.output(repl_banner(rs))
+  }, "not a sandbox", class = "gptr_message_notice")
+  # the banner lists the objects indented under its first line; an empty workspace adds no line
+  expect_match(out[[2L]], "^  alpha: <integer>")
+  expect_length(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 2L)
 })
 
 test_that("console_history_add() never fails", {
@@ -239,6 +415,7 @@ test_that("!code is announced on the console:direct channel", {
 
 test_that("console_send() makes an ordinary gateway call and continues the session", {
   local_project()
+  local_no_fd0()
   local_console_blocks()
   fake = gptr_fake_provider(list("first answer", "second answer"))
   e = new.env()
@@ -265,6 +442,7 @@ test_that("console_send() makes an ordinary gateway call and continues the sessi
 
 test_that("console_send() attaches @objects by name and @files as a block", {
   local_project(files = list("a.R" = "fit = lm(mpg ~ wt, data = mtcars)"))
+  local_no_fd0()
   local_console_blocks()
   fake = gptr_fake_provider(list("ok"))
   e = new.env(parent = globalenv())
@@ -281,6 +459,7 @@ test_that("console_send() attaches @objects by name and @files as a block", {
 
 test_that("console_send() keeps the session of a failed call and reports the error", {
   local_project()
+  local_no_fd0()
   fake = gptr_fake_provider(list(list(error = "bad key", status = 401L, after = 0L)))
   rs = repl_state(NULL, new.env())
   rs$model = fake
@@ -325,6 +504,7 @@ test_that("the console call's arguments reach the first prompt, also on a piped 
 
 test_that("console_send() passes max_turns from gptr.max_turns_console", {
   local_project()
+  local_no_fd0()
   fake = gptr_fake_provider(list("ok"))
   rs = repl_state(NULL, new.env())
   rs$model = fake
@@ -340,12 +520,6 @@ test_that("console_send() passes max_turns from gptr.max_turns_console", {
 })
 
 # ---------------------------------------------------------------- Task 7: console sessions
-
-# A console test: a temporary project, no history, no document recording questions
-local_console_test = function(.env = parent.frame()) {
-  local_project(.env = .env)
-  local_gptr_options(history = FALSE, record = "off", .env = .env)
-}
 
 test_that("builtin:console registers its frontend, route, commands, blocks and service", {
   routes = registry_all("route")
@@ -380,8 +554,23 @@ test_that("the stdin UI answers selections and approvals from the reader", {
   expect_identical(pick, 2L)
   expect_identical(a1$decision, "allow")
   expect_identical(a2, list(decision = "deny", remember = NULL, feedback = "use base R"))
-  expect_true(any(grepl("Answer [y]es", out, fixed = TRUE)))
+  expect_true(any(grepl("Not an answer: 'maybe'", out, fixed = TRUE)))
   expect_s3_class(ui, "gptr_ui")
+})
+
+test_that("piped .stdin: a nested prompt and its echo reach stdout from an untee'd eval (D-188)", {
+  rd = stdin_reader("y", echo = TRUE)
+  home = new.env()
+  home$ui = ui_console_spec(rd$read, "console_stdin")
+  res = NULL
+  out = utils::capture.output({
+    res = eval_r(paste0("ans = ui$permission(list(tool = 'r', input = list(code = 'x = 1'), ",
+                        "risk = list(level = 1L), suggested_rule = 'r(level<=1)', agent = 'a'))"),
+                 home, plots = "none", tee = FALSE)
+  })
+  expect_identical(out, c("  sub-agent a > r  x = 1", "  allow? [y]es / [a]lways / [n]o / [?]: y"))
+  expect_identical(home$ans$decision, "allow")
+  expect_false(any(grepl("allow", vapply(res$events, function(e) e$text %||% "", ""))))
 })
 
 test_that("the stdin UI never echoes a secret answer", {
@@ -451,7 +640,7 @@ test_that("in IRkernel peter() without a prompt starts the console on gptr_readl
   local_mocked_bindings(
     gptr_is_interactive = function() FALSE, is_testthat = function() FALSE,
     check_running = function() FALSE, is_knitting = function() FALSE,
-    gptr_readline = function(prompt = "") {
+    gptr_readline = function(prompt = "", ...) {
       a = box$answers[[1L]]
       box$answers = box$answers[-1L]
       a
@@ -469,7 +658,7 @@ test_that("in IRkernel peter() without a prompt starts the console on gptr_readl
 
 test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
   local_console_test()
-  ctrl_c = function(prompt = "") {
+  ctrl_c = function(prompt = "", ...) {
     signalCondition(structure(class = c("interrupt", "condition"),
                               list(message = "", call = NULL)))
     ""
@@ -480,14 +669,18 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
     res = console_run(NULL, new.env())
   })
   expect_null(res)
-  expect_length(grep("again to leave gptr", out, fixed = TRUE), 1L)
+  i = grep("again to leave gptr", out, fixed = TRUE)
+  expect_length(i, 1L)
+  # the notice ends the prompt line first; the banner's keys sentence ends with a period
+  expect_identical(out[[i - 1L]], "")
+  expect_match(out[[i - 2L]], "twice at the prompt leaves.", fixed = TRUE)
 })
 
 test_that("a line at the readline limit is reported at once and not sent", {
   local_console_test()
   box = new.env(parent = emptyenv())
   box$answers = c(strrep("a", readline_limit()), "/exit")
-  local_mocked_bindings(gptr_readline = function(prompt = "") {
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
     a = box$answers[[1L]]
     box$answers = box$answers[-1L]
     a
@@ -498,6 +691,110 @@ test_that("a line at the readline limit is reported at once and not sent", {
   })
   expect_null(res)
   expect_true(any(grepl("^Warning: That line was [0-9]+ bytes long", out)))
+})
+
+test_that("a pasted three-line block is one console turn (acceptance)", {
+  local_console_test()
+  withr::local_options(gptr.interactive = TRUE)
+  fake = gptr_fake_provider(list("one answer"))
+  local_readline(c("line1", "", "/exit"))
+  local_waiting(list(c("line2", "line3")))
+  utils::capture.output(peter(model = fake, envir = new.env()))
+  reqs = fake_requests(fake)
+  expect_length(reqs, 1L)
+  expect_identical(reqs[[1L]]$last_user, "line1\nline2\nline3")
+})
+
+test_that("the lines pasted after a fence are one console turn after the code (acceptance)", {
+  local_console_test()
+  withr::local_options(gptr.interactive = TRUE)
+  fake = gptr_fake_provider(list("one answer"))
+  rl = local_readline(c("```r", "", "/exit"))
+  local_waiting(list(c("x = 1", "```", "line a", "line b")))
+  e = new.env()
+  utils::capture.output(peter(model = fake, envir = e))
+  expect_identical(e$x, 1)
+  reqs = fake_requests(fake)
+  expect_length(reqs, 1L)
+  expect_identical(reqs[[1L]]$last_user, "line a\nline b")
+  expect_identical(rl$prompts, c("peter> ", "... ", "peter> "))
+})
+
+test_that("a macOS terminal: a paste is one turn, a fence echoes once, Ctrl-D never hangs", {
+  skip_on_cran()
+  skip_if_not(is_macos(), "paste joining reads a macOS terminal")
+  dir = withr::local_tempdir("gptr-paste-")
+  child = file.path(dir, "child.R")
+  writeLines(c(
+    tracemem_loader(),
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L, cli.unicode = FALSE)",
+    "fake = gptr_fake_provider(function(req) list(",
+    "  text = paste0('GOT ', gsub('\\n', '/', req$last_user), ' END'),",
+    "  delay = if (identical(req$last_user, 'SLOW')) 2 else 0))",
+    "invisible(peter(model = fake, envir = new.env()))",
+    "cat('CHILD DONE\\n')"
+  ), child)
+  # an absolute path, so R CMD check's dummy `R` on PATH is never used (IC-60)
+  p = processx::process$new(
+    file.path(R.home("bin"), "R"), c("--vanilla", "--quiet"), pty = TRUE, wd = dir,
+    env = c("current", R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
+            TERM = "xterm"),
+    cleanup = TRUE
+  )
+  st = new.env(parent = emptyenv())
+  st$out = ""
+  # a pty child exits only once its output is read: p$kill() would wait for it forever
+  withr::defer({
+    if (p$is_alive()) p$signal(tools::SIGKILL)
+    deadline = Sys.time() + 10
+    while (p$is_alive() && Sys.time() < deadline) {
+      p$poll_io(100L)
+      p$read_output()
+    }
+  })
+  seen = function(x) sum(gregexpr(x, st$out, fixed = TRUE, useBytes = TRUE)[[1L]] > 0L)
+  wait_for = function(x, n = 1L, timeout = 30) {
+    deadline = Sys.time() + timeout
+    while (seen(x) < n && p$is_alive() && Sys.time() < deadline) {
+      p$poll_io(200L)
+      st$out = paste0(st$out, p$read_output())
+    }
+    seen(x) >= n
+  }
+  expect_true(wait_for("> "))
+  p$write_input(sprintf("source(%s)\r", deparse(child)))
+  expect_true(wait_for("peter> ", timeout = 120))
+  p$write_input("a\rb\rc\r")
+  expect_true(wait_for("Enter sends it as one message"))
+  p$write_input("\r")
+  expect_true(wait_for("GOT a/b/c END"))
+  expect_identical(seen("GOT "), 1L)
+  # typed while the agent works, the last line ended by Ctrl-D instead of Enter: it steers the
+  # same run (IC-76), whose second answer follows the relay
+  expect_true(wait_for("peter> ", n = 2L))
+  p$write_input("SLOW\r")
+  Sys.sleep(1)
+  p$write_input("x\rhalf\004")
+  expect_true(wait_for("[gptr] steering: 'x"))
+  expect_true(wait_for("GOT SLOW END", n = 2L))
+  expect_true(wait_for("peter> ", n = 3L))
+  # with echo on, as in a terminal, the tty echoes the rest of a paste once, when it is read; a
+  # '... ' read would echo it again. The lines after the closer are one message.
+  p$write_input("!invisible(system('stty echo'))\r")
+  expect_true(wait_for("peter> ", n = 4L))
+  st$out = ""
+  code = c(sprintf("fz%02d = %d", 1:13, 1:13), "fz01 + fz13 + 1000")
+  p$write_input(paste0(paste(c("```r", code, "```", "line aa", "line bb"), collapse = "\r"), "\r"))
+  expect_true(wait_for("Enter sends it as one message"))
+  p$write_input("\r")
+  expect_true(wait_for("GOT line aa/line bb END"))
+  expect_true(wait_for("peter> "))
+  expect_identical(seen("[1] 1014"), 1L)
+  expect_identical(vapply(code, seen, 1L, USE.NAMES = FALSE), rep(1L, 14L))
+  expect_identical(c(seen("line aa"), seen("GOT "), seen("... ")), c(2L, 1L, 1L))
+  p$write_input("/exit\r")
+  expect_true(wait_for("CHILD DONE"))
 })
 
 test_that("background sessions that wait for approval are announced once (IC-57)", {

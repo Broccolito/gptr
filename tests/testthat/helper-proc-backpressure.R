@@ -196,6 +196,21 @@ bp_observer_reason = function(stage, error) {
   }, error = function(condition) NULL, interrupt = function(condition) NULL)
 }
 
+# One more snapshot after a reason that owned files changing during a walk can raise (Windows
+# lstat of a delete-pending file reports st_ino 0). The retry meets every bound unchanged;
+# other reasons and a failed retry still end the sample. The failed retry's own condition is
+# kept, since the observer's last_failure describes that snapshot.
+bp_observe = function(observe, retried) {
+  tryCatch(observe(), error = function(error) {
+    reason = bp_observer_reason("files", error)
+    if (!isTRUE(reason %in% c("observer-metadata-invalid", "observer-snapshot-deadline",
+        "observer-parent-entry-absent", "observer-link-entry-absent",
+        "observer-entry-disappearance-uncertain"))) stop(error)
+    retried(reason)
+    observe()
+  })
+}
+
 # Retain a bounded diagnostic without copying arbitrary condition messages or file content.
 bp_sample_error = function(stage, error, observe = NULL, read = function(object) {
   reticulate::py_to_r(object$last_failure)
@@ -403,11 +418,16 @@ bp_run = function(case, declared_links = list()) {
   tracked = new.env(parent = emptyenv())
   tracked$handles = list()
   tracked$census_retries = 0L
+  tracked$observer_retries = 0L
   remember = function(handle) {
     key = paste(ps::ps_pid(handle), as.numeric(ps::ps_create_time(handle)), sep = ":")
     tracked$handles[[key]] = handle
   }
   remember(ps::ps_handle(p$get_pid()))
+  observer_retried = function(reason) {
+    tracked$observer_retries = tracked$observer_retries + 1L
+    tracked$observer_retry_reason = tracked$observer_retry_reason %||% reason
+  }
   cleanup = function() {
     kill_all(p, grace = 0)
     for (handle in tracked$handles) {
@@ -480,7 +500,7 @@ bp_run = function(case, declared_links = list()) {
           (observer_enabled && parent_rss + sum(rss) > 1024^3))
       sample_stage = "files"
       if (observer_enabled) {
-        disk = observe()
+        disk = bp_observe(observe, observer_retried)
         if (declared_only) {
           files = list.files(root, recursive = TRUE, full.names = TRUE, all.files = TRUE)
           declared = file.path(root, "dangling-file")
@@ -491,7 +511,7 @@ bp_run = function(case, declared_links = list()) {
           sizes = file.info(files, extra_cols = FALSE)$size
           unknown = is.na(sizes) & file.exists(files)
           if (any(unknown)) stop("Could not measure owned case files.")
-          checked = observe()
+          checked = bp_observe(observe, observer_retried)
           checked$bytes = max(disk$bytes, checked$bytes) + sum(sizes, na.rm = TRUE)
           disk = checked
         }
@@ -564,7 +584,8 @@ bp_run = function(case, declared_links = list()) {
     case_deadline = 30, outer_deadline = 60, input_cap = 4 * 1024^2,
     rss_cap = 1024^3, output_cap = 64 * 1024^2, peak_rss = peak_rss, peak_disk = peak_disk,
     samples = samples, sampling_errors = sampling_errors, sample_error = sample_error,
-    census_retries = tracked$census_retries,
+    census_retries = tracked$census_retries, observer_retries = tracked$observer_retries,
+    observer_retry_reason = tracked$observer_retry_reason,
     owned_family_stopped = stopped,
     outer_identity = outer_record, inner_identity = inner_record, phases = phases,
     case_failure = case_failure,

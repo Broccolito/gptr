@@ -7,6 +7,7 @@
 \alias{gptr_describe.matrix}
 \alias{gptr_describe.list}
 \alias{gptr_describe.environment}
+\alias{gptr_describe.gptr_session}
 \alias{gptr_describe.function}
 \alias{gptr_describe.formula}
 \alias{gptr_describe.lm}
@@ -30,6 +31,8 @@ gptr_describe(x, budget = 150L, ...)
 \method{gptr_describe}{list}(x, budget = 150L, ..., level = NULL)
 
 \method{gptr_describe}{environment}(x, budget = 150L, ..., level = NULL)
+
+\method{gptr_describe}{gptr_session}(x, budget = 150L, ..., level = NULL)
 
 \method{gptr_describe}{`function`}(x, budget = 150L, ..., level = NULL)
 

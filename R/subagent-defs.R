@@ -38,7 +38,7 @@ agent_mode = function(x) {
   if (!rlang::is_string(x)) return(NULL)
   switch(tolower(x), plan = "plan", manual = "manual", default = "manual", edits = "edits",
          acceptedits = "edits", auto = "auto", dontask = "auto", bypasspermissions = "auto",
-         NULL)
+         yolo = "yolo", NULL)
 }
 
 #' A turn limit from `max_turns` or Claude's `maxTurns`: a positive whole number (or its text)
@@ -157,7 +157,7 @@ agent_roots = function() {
 #' shadow an agent of another origin whose name is the same after `res_norm()` (IC-42; D-134):
 #' a discovered file, or an agent that `gptr_register()`, an extension or a plugin registered
 #' (`res_foreign_names()`). They are omitted when nobody can answer questions and the mode is
-#' `auto` or `edits` (IC-52). `rows$usable` marks the agents a sync registers. `mode` is the
+#' `auto`, `edits` or `yolo` (IC-52). `rows$usable` marks the agents a sync registers. `mode` is the
 #' session's mode (default: the setting).
 #' @noRd
 agent_collect = function(mode = NULL) {
@@ -191,7 +191,7 @@ agent_collect = function(mode = NULL) {
   )
   if (length(rows)) df = do.call(rbind, rows)
   mode = as.character(mode %||% setting_get("mode", default = "manual"))[1L]
-  omit = !gptr_can_prompt() && mode %in% c("auto", "edits")
+  omit = !gptr_can_prompt() && mode %in% c("auto", "edits", "yolo")
   other = df$name[df$trusted]
   if (any(!df$trusted)) other = c(other, res_foreign_names("agent"))
   shadow = !df$trusted & res_norm(df$name) %in% res_norm(other)

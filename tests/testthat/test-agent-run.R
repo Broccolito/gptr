@@ -141,6 +141,26 @@ test_that("the agent-area accessors reach the run's session for the L2 dispatche
   expect_identical(e$data$kind, "cost")
 })
 
+test_that("the budget question of a sub-agent says who asks (D-188)", {
+  st = local_scripted_ui(list(2L, 2L))
+  s = test_session()
+  for (agent in c("alpha", "main")) {
+    expect_false(run_budget_extend(test_run(s, list(agent = agent)),
+                                   list(kind = "cost", budget = 1)))
+  }
+  expect_identical(st$log$prompt,
+                   c("sub-agent alpha: The cost budget of this call ($1.0000) is reached.",
+                     "The cost budget of this call ($1.0000) is reached."))
+})
+
+test_that("a reached token budget reads as a token count, never 2e+06", {
+  st = local_scripted_ui(list(2L))
+  s = test_session()
+  expect_false(run_budget_extend(test_run(s, list(agent = "main")),
+                                 list(kind = "tokens", budget = 2e6)))
+  expect_identical(st$log$prompt, "The tokens budget of this call (2.0M) is reached.")
+})
+
 # ---------------------------------------------------------------- report 02 section 5.3 (26 checks)
 
 recovery_recs = oracle("recovery")
@@ -873,6 +893,15 @@ test_that("an unknown prompt count leaves the estimator unchanged (IC-74)", {
   run_estimator_update(run, list(usage = usage_as(NULL)))
   run_estimator_update(run, list(usage = usage_new(input = 1500, cache_read = NA_real_,
                                                    output = 10)))
+  expect_null(session_data(s)$estimator)
+})
+
+test_that("a CLI turn's usage, summed over the CLI's model calls, leaves the estimator (D-202)", {
+  s = test_session()
+  run = test_run(s)
+  run$model = list(provider = "claude-cli", type = "cli")
+  run$tokens_est = 1000
+  run_estimator_update(run, list(route = "plan-cli", usage = usage_new(input = 90000, output = 10)))
   expect_null(session_data(s)$estimator)
 })
 

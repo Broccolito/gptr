@@ -32,7 +32,7 @@ with_interrupt_policy = function(expr_fun, runs, mode = c("call", "repl")) {
   tryCatch(
     withCallingHandlers(expr_fun(),
       gptr_message = function(cnd) console_before_message(pol$runs),
-      gptr_process_spawn = function(cnd) console_before_message(pol$runs, newline = TRUE),
+      gptr_process_spawn = function(cnd) console_before_message(pol$runs, kind = NULL),
       interrupt = function(cnd) policy_menu(cnd, pol)),
     interrupt = function(cnd) policy_abort(cnd, pol)
   )
@@ -97,16 +97,17 @@ console_repl_find = function() {
   NULL
 }
 
-#' Read one menu answer: from a `.stdin` REPL's connection, else gptr_readline(); a Ctrl-C while
-#' waiting (no resume restart there) gives NA
+#' Read one menu answer: from a `.stdin` REPL's connection, else readline_answer(); the prompt
+#' keeps the console margin (D-186); a Ctrl-C while waiting (no resume restart there) gives NA
 #' @noRd
 console_ask = function(prompt) {
+  prompt = paste0(console_pad(), prompt)
   rs = console_repl_find()
   tryCatch({
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
     } else {
-      gptr_readline(prompt)
+      readline_answer(prompt)
     }
     if (length(x) != 1L || is.na(x)) NA_character_ else as_utf8(x)
   }, interrupt = function(e) NA_character_)
@@ -131,7 +132,7 @@ policy_menu = function(cnd, pol) {
   }
   who = if (is.null(s)) "" else paste0(" ", session_data(s)$id)
   repeat {
-    console_notice("[gptr] paused", who, ": ", choices)
+    console_notice("\n[gptr] paused", who, ": ", choices)
     ans = console_ask("? ")
     key = if (is.na(ans)) "a" else tolower(substr(trimws(ans), 1L, 1L))
     if (key %in% c("", "c")) {
@@ -162,13 +163,13 @@ policy_menu = function(cnd, pol) {
   }
 }
 
-#' Queue pause-menu text on the session (IC-49, IC-55: source "pause_menu") after the `input`
-#' event (source "steer")
+#' Queue pause-menu or typed text on the session (IC-49, IC-55: source "pause_menu" or "repl",
+#' IC-76) after the `input` event (source "steer"); the notice shows the text
 #'
 #' P06 refuses an enqueue from the session's own tool frames, which are on the stack when the
 #' interrupt hit a tool; the item then waits in the console state for policy_flush().
 #' @noRd
-policy_enqueue = function(s, text, as) {
+policy_enqueue = function(s, text, as, source = "pause_menu") {
   text = as_utf8(text)
   if (!nzchar(trimws(text))) {
     console_notice("[gptr] nothing queued; continuing")
@@ -176,19 +177,26 @@ policy_enqueue = function(s, text, as) {
   }
   ev = ev_dispatch("input", ev_new("input", text = text, source = "steer"), session = s)
   if (identical(ev$action, "handled")) return(invisible(FALSE))
-  console_notice(if (identical(as, "steer")) {
-    "[gptr] steering message queued; it is delivered after the current tool results"
+  shown = console_escape(paste0("'", ev$text, "'"))
+  if (identical(as, "steer")) {
+    console_notice("[gptr] steering: ", shown,
+                   if (identical(session_live(s)$run$model[["type"]], "cli")) {
+                     "; it is sent after the CLI's current response"
+                   } else {
+                     "; it reaches the agent at its next step"
+                   })
   } else {
-    "[gptr] follow-up queued; it is sent when the agent would stop"
-  })
+    console_notice("[gptr] follow-up queued: ", shown, "; it is sent when the agent would stop")
+  }
   st = console_state()
-  st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, run = session_live(s)$run)))
+  st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, source = source,
+                                       run = session_live(s)$run)))
   policy_flush()
   if (length(st$pending)) reactor_timer(at = reactor_now(), fn = policy_flush)
   invisible(TRUE)
 }
 
-#' Queue the pending pause-menu items once no tool executes on the stack: at the next reactor
+#' Queue the pending console items once no tool executes on the stack: at the next reactor
 #' step or when the tool ends (the tool_execution_end hook), so before the next request
 #' (INFRA-12); an item whose run settled first is listed as dropped (03 section 6.2)
 #' @noRd
@@ -202,7 +210,7 @@ policy_flush = function() {
       console_notice("[gptr] dropped queued messages: ",
                      console_escape(paste0("'", it$text, "'"), FALSE))
     } else {
-      tryCatch(session_enqueue(it$s, it$text, as = it$as, source = "pause_menu"),
+      tryCatch(session_enqueue(it$s, it$text, as = it$as, source = it$source),
                error = function(e) {
                  console_notice("[gptr] the queued message could not be delivered: ",
                                 console_escape(conditionMessage(e), FALSE), .error = TRUE)

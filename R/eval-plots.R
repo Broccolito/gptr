@@ -149,12 +149,16 @@ plot_begin = function(mode, human, width = gptr_opt("plot_width"),
   ps
 }
 
-#' Enable the display list on a device the evaluated code opened itself
+#' Enable the display list of a device the evaluated code opened itself while the list is empty
+#' (enabling clears it, so doing it mid-page would drop the earlier panels)
 #' @noRd
 plot_enable_new = function(ps) {
   d = grDevices::dev.cur()
-  fresh = d > 1L && !(d %in% c(ps$devs0, ps$our_devs)) && is.null(ps$last_dl[[as.character(d)]])
-  if (fresh) try(grDevices::dev.control(displaylist = "enable"), silent = TRUE)
+  if (d == 1L || d %in% c(ps$devs0, ps$our_devs)) return(invisible())
+  p = tryCatch(grDevices::recordPlot(), error = function(e) NULL)
+  if (is.null(p) || !length(p[[1L]])) {
+    try(grDevices::dev.control(displaylist = "enable"), silent = TRUE)
+  }
   invisible()
 }
 

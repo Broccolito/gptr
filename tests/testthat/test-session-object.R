@@ -199,9 +199,11 @@ test_that("unknown usage prints as unknown, never as zero (IC-74)", {
   expect_identical(s$cost, NA_real_)
   expect_identical(attr(s$usage, "totals")[["cost"]], NA_real_)
   expect_identical(session_footer(s),
-                   paste0("idle . fake/fake-1 . 1 turn . unknown tokens . unknown cost . ", id))
+                   paste0("idle . fake/fake-1 . 1 turn . unknown tokens . $0.0123 + 1 request ",
+                          "of unknown cost . ", id))
   printed = utils::capture.output(print(s))
-  expect_match(printed, "unknown tokens . unknown cost", fixed = TRUE, all = FALSE)
+  expect_match(printed, "unknown tokens . $0.0123 + 1 request of unknown cost", fixed = TRUE,
+               all = FALSE)
   expect_false(any(grepl("$NA", printed, fixed = TRUE)))
   # a known zero stays a known zero; a fresh session has made no request (known zeros)
   z = test_session()
@@ -453,6 +455,19 @@ test_that("session_set_mode() appends gptr.mode_change; a running session gets a
   expect_identical(op$kind, "mode")
   expect_match(msg_text(op), "<mode name=\"plan\">", fixed = TRUE)
   expect_error(session_set_mode(s, "reckless"), class = "gptr_error_invalid_argument")
+})
+
+test_that("yolo is the loosest mode; entering it says once what still asks (IC-78)", {
+  expect_identical(run_mode_tighter("yolo", "auto"), "auto")
+  expect_identical(run_mode_tighter("manual", "yolo"), "manual")
+  local_gptr_options(quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  expect_message(test_session(mode = "yolo"), "not a sandbox", class = "gptr_message_notice")
+  expect_no_message(session_set_mode(test_session(mode = "manual"), "yolo"))
+  rm(list = "message:mode_yolo", envir = the$once)
+  expect_message(session_set_mode(test_session(mode = "manual"), "yolo"), "not a sandbox",
+                 class = "gptr_message_notice")
 })
 
 test_that("a registered `mode` context block renders the operator note", {

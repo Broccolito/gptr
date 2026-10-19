@@ -217,7 +217,8 @@ ev_default = function(sem, payload) {
 }
 
 #' Mirror active runs (agent_start/end) and executing tools (tool_execution_start/end) for IC-53;
-#' a run's one-shot grants end with their top-level call (an id without "/"), as in P06
+#' a run's one-shot grants end with their top-level call (an id without "/"), as in P06. A
+#' provider's `informational` events report steps that run outside R and are not mirrored (D-192).
 #' @noRd
 ev_track = function(reg, event, payload) {
   run = payload[["run"]]
@@ -233,7 +234,7 @@ ev_track = function(reg, event, payload) {
     drop_grants()
   }
   id = payload[["tool_call_id"]]
-  if (rlang::is_string(id)) {
+  if (rlang::is_string(id) && !isTRUE(payload[["informational"]])) {
     key = paste0(run %||% "", "\r", id)
     if (identical(event, "tool_execution_start")) reg$executing[[key]] = run %||% ""
     if (identical(event, "tool_execution_end")) {

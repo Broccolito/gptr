@@ -8,7 +8,7 @@ local_arch_sources = function() {
 
 test_that("the layer table lists the files of architecture section 3.2", {
   table = arch_layer_table()
-  expect_identical(nrow(table), 121L)
+  expect_identical(nrow(table), 122L)
   expect_false(anyDuplicated(table$file) > 0)
   expect_true(all(table$layer %in% c("L0", "L1", "L2", "L3", "L4", "L5", "L6", "-")))
   expect_identical(sum(table$plan == "P01"), 15L)

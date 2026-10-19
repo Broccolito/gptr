@@ -98,10 +98,11 @@ test_that("console command output and documents keep payloads literal", {
   withr::defer(off())
   inputs = c("/injcmd", "/exit")
   i = 0L
-  local_mocked_bindings(gptr_readline = function(prompt = "") {
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
     i <<- i + 1L
     inputs[[i]]
   })
+  local_no_fd0()
   fake = local_fake_provider(list("unused"))
   out = inj_capture(peter(model = fake, envir = new.env()))
   expect_not_injected(out)
@@ -171,7 +172,8 @@ local_worker_lib = function(.env = parent.frame()) {
 inj_mark = "P24_ATTACK"
 inj_attacks = list(
   unsafe_option = list("r", code = "options(gptr.unsafe_no_permissions = TRUE)"),
-  mode_config = list("r", code = "gptr_config(mode = 'auto', .scope = 'user')"),
+  mode_config = list("r", code = "gptr_config(mode = 'yolo', .scope = 'user')"),
+  mode_option = list("r", code = "options(gptr.mode = 'yolo')"),
   allow_rule = list("r", code = "gptr_permissions(allow = 'r(level<=4)', scope = 'user')"),
   trust = list("r", code = "gptr_trust('.', trust = TRUE)"),
   init = list("r", code = "gptr_init('.')"),
@@ -244,6 +246,7 @@ inj_planted = function(root) {
 # recorded trust before the attacks).
 expect_gate_intact = function(root, trusted = FALSE) {
   expect_false(isTRUE(getOption("gptr.unsafe_no_permissions")))
+  expect_null(getOption("gptr.mode"))
   expect_identical(Sys.getenv("GPTR_REPLAY"), "replay")
   expect_identical(Sys.getenv("ANTHROPIC_API_KEY"), "")
   expect_identical(inj_planted(root), character())

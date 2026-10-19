@@ -140,6 +140,7 @@ lower-numbered plans. "Depends on" lists 05's direct dependencies.
 | 23 | [P23 Artifacts](P23-artifacts.md) | M5 | P10, P11, P14, P16 | 12 | Shiny apps in supervised background R processes, validation ladder, `gptr_artifacts()` |
 | 24 | [P24 Token benchmark and e2e acceptance](P24-token-benchmark-acceptance.md) | M5 | P01-P23 | 13 | `dev/bench/` suites; secrets, injection, north-star and S-11 end-to-end tests |
 | 25 | [P25 Release](P25-release.md) | M5 | P24 | 15 | manual for 63 exports, vignettes, README, NEWS, cran-comments, pkgdown, live calibration, CRAN submission |
+| 26 | [P26 Console and agent fixes](P26-console-agent-fixes.md) | post-M5 | P01-P25 | 11 | pasted blocks, typed steering, `!code` completion, console layout and Markdown code blocks, sub-agent prompts and fan-out status, object sizes, `yolo` mode, Codex stdio relay and CLI streaming, Bedrock SigV4 Converse (issues #10-#20) |
 
 Tasks per milestone: M0 55, M1 56, M2 58, M3 47, M4 40, M5 51; total 307.
 

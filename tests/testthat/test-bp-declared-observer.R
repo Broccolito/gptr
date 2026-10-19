@@ -46,6 +46,8 @@ test_that("declared measurement omits only the natively classified entry and cha
   scope$rss = c(2, 3)
   scope$parent_rss = 7
   scope$observer_stats = list(peak_supervisor_rss = 7, peak_combined_rss = 7)
+  scope$bp_observe = bp_observe
+  scope$observer_retried = function(reason) stop("An untyped failure is never retried")
   seen = new.env(parent = emptyenv())
   seen$info = character()
   seen$observation = 0L
@@ -175,6 +177,8 @@ test_that("ordinary Windows markers use one persistent full nofollow observer", 
   scope$rss = c(2, 3)
   scope$parent_rss = 7
   scope$observer_stats = list(peak_supervisor_rss = 7, peak_combined_rss = 7)
+  scope$bp_observe = bp_observe
+  scope$observer_retried = function(reason) stop("An untyped failure is never retried")
   seen = new.env(parent = emptyenv())
   seen$calls = 0L
   sample = list(entries = 4, directories = 2, declared_links = 0, disappeared = 1,

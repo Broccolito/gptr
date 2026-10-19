@@ -10,6 +10,21 @@ text_lines = function(text) {
   strsplit(paste(x, collapse = "\n"), "\n", fixed = TRUE)[[1L]]
 }
 
+#' Who a run is to the person (D-188): "main", a sub-agent's name, or for a nested peter() call
+#' the first line of its prompt, quoted and cut to 30 characters, then ` #k`, its place among the
+#' children of the parent run, so loop iterations differ (D-224)
+#' @noRd
+agent_label = function(run) {
+  agent = run$opts$agent %||% "main"
+  if (!identical(agent, "nested")) return(agent)
+  p = trimws(c(text_lines(run$opts$call$prompt), "")[[1L]])
+  if (nzchar(p)) {
+    agent = paste0("'", if (nchar(p) > 30L) paste0(trimws(substr(p, 1L, 30L)), "...") else p, "'")
+  }
+  k = match(run$session, run$outer$children)
+  if (is.na(k)) agent else paste0(agent, " #", k)
+}
+
 #' Keep the first `head` and last `1 - head` share of lines within a token budget
 #'
 #' When the text fits, it is returned unchanged. Otherwise the full text is stored in the out
@@ -361,6 +376,16 @@ listing_cell = function(text, width) {
   long = nchar(text, type = "width") > width
   if (any(long)) text[long] = paste0(strtrim(text[long], max(0L, width - 3L)), "...")
   text
+}
+
+#' The fence of a code block (an agent chunk, a console fence): `fence`, made one backtick longer
+#' than the longest backtick run that starts a line of `lines` when that run is at least as long
+#' (such a line would end the block, or start another, under knitr's or pandoc's rules)
+#' @noRd
+doc_rmd_fence = function(fence, lines) {
+  runs = regmatches(lines, regexpr("^[\t >]*`{3,}", lines))
+  n = if (length(runs)) max(nchar(gsub("[^`]", "", runs))) else 0L
+  if (n >= nchar(fence)) strrep("`", n + 1L) else fence
 }
 
 #' Safe notebook Markdown: keep fenced code and matched backtick spans literal, while prose

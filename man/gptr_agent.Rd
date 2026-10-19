@@ -40,11 +40,14 @@ gptr_agent(
 
 \item{max_turns}{Turn limit, or \code{NULL}.}
 
-\item{mode}{Permission mode (\code{"plan"}, \code{"manual"}, \code{"edits"}, \code{"auto"}), or \code{NULL} to inherit.}
+\item{mode}{Permission mode (\code{"plan"}, \code{"manual"}, \code{"edits"}, \code{"auto"}, \code{"yolo"}), or \code{NULL} to
+inherit; a sub-agent never runs looser than its caller.}
 
 \item{objects}{Names of objects the agent may see.}
 
-\item{export}{Names of objects the agent returns.}
+\item{export}{Names of objects the agent returns. Keep them self-contained: a \code{worker} agent
+sends back only these objects, so an exported function or plot finds the caller's objects
+but none of the agent's others.}
 
 \item{returns}{JSON Schema of a structured answer, or \code{NULL}.}
 

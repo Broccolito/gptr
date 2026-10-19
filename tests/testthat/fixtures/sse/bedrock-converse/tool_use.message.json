@@ -1,0 +1,32 @@
+{
+  "stop_reason": "tool_use",
+  "raw_stop_reason": "tool_use",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "The user wants the row count.",
+      "signature": "EqQBCkYIBxgCKkDzT0FMQ=="
+    },
+    {
+      "type": "text",
+      "text": "Counting the rows — one moment."
+    },
+    {
+      "type": "tool_call",
+      "id": "tooluse_kJ8xQ2mRT3a",
+      "name": "r",
+      "arguments": {
+        "code": "nrow(d)"
+      }
+    }
+  ],
+  "usage": {
+    "input": 300,
+    "output": 41,
+    "cache_read": 512,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 853
+  }
+}

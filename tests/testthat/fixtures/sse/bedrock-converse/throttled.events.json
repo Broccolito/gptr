@@ -1,0 +1,13 @@
+[
+  {
+    "type": "start"
+  },
+  {
+    "type": "error",
+    "reason": "error",
+    "error": {
+      "class": "rate_limit",
+      "status": 429
+    }
+  }
+]

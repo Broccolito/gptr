@@ -256,7 +256,7 @@ test_that("the preview lists a fragment whose checkpointer is not registered", {
   expect_identical(plan$restore, FALSE)
   expect_identical(plan$turn, NA_integer_)
   expect_identical(paste0(plan$item, ": ", plan$reason),
-                   ckpt_rewind_apply(tr, ops, list(), NULL, FALSE))
+                   ckpt_rewind_apply(tr, ops, list(), NULL, FALSE, plan$item))
 })
 
 test_that("report lines become the rewind block lines", {
@@ -360,6 +360,29 @@ test_that("each rewind replaces the note: a later full rewind tells the model no
   last = req[[length(req)]]$messages
   texts = vapply(last[[length(last)]]$content, function(b) b$text %||% "", "")
   expect_false(any(startsWith(texts, "<rewind ")))
+})
+
+test_that("after an undo the next request does not report the undone turn's objects", {
+  local_project()
+  fake = local_fake_provider(list("hi", fake_tool("r", code = "probe = 1:5"), "made", "next",
+                                  fake_tool("r", code = "probe = 1"), "made", "after"))
+  e = new.env()
+  s = peter("hello", model = "fake/fake-1", mode = "auto", envir = e)
+  s |> peter("make it")
+  gptr_rewind(s)
+  expect_false(exists("probe", envir = e, inherits = FALSE))
+  s |> peter("anything?")
+  turn_texts = function() {
+    req = fake_requests(fake)
+    last = req[[length(req)]]$messages
+    vapply(last[[length(last)]]$content, function(b) b$text %||% "", "")
+  }
+  expect_false(any(startsWith(turn_texts(), "<workspace_changes")))
+  # a workspace-only rewind keeps the turn the model saw, so the removal is still reported
+  s |> peter("make it again")
+  gptr_rewind(s, restore = "workspace")
+  s |> peter("and now?")
+  expect_true(any(grepl("- probe", turn_texts(), fixed = TRUE)))
 })
 
 test_that("gptr_rewind() refuses a running session and bad arguments", {
@@ -491,6 +514,25 @@ test_that("a CLI child's file edit is undone by gptr_rewind() (IC-65)", {
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
 })
 
+test_that("a CLI child's file edit in an aborted turn is undone too (IC-65)", {
+  proj = local_project(files = list("R/a.R" = "a = 1"))
+  local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  st = new.env()
+  local_fake_provider(function(request) {
+    if (is.null(st$s)) return("ok")
+    writeLines("a = 2", file.path(proj, "R", "a.R"))
+    reactor_timer(at = reactor_now() + 0.2, fn = function() gptr_cancel(st$s))
+    list(hang = TRUE)
+  })
+  st$s = peter("one", model = "fake/fake-1", mode = "auto", envir = new.env())
+  try(st$s |> peter("edit a"), silent = TRUE)
+  expect_identical(st$s$status, "aborted")
+  gptr_rewind(st$s, 1)
+  expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
+  # the scan runs after builtin:cli has stopped the child
+  expect_gt(match("checkpoints", ext_builtin_order()), match("cli", ext_builtin_order()))
+})
+
 test_that("undone blocks in a bound document become inert; re-sourcing reproduces the rewind", {
   proj = local_project()
   local_gptr_options(record = "auto", replay = "auto")
@@ -542,6 +584,7 @@ test_that("gptr_checkpoints() lists the turns of the active path (contract 5.12)
   expect_identical(cp$files, c("1/1", "0/0"))
   expect_identical(cp$branch, c("active", "active"))
   expect_s3_class(cp$time, "POSIXct")
+  expect_identical(attr(cp$time, "tzone"), "")
   expect_true(all(cp$held_mb >= 0))
   expect_identical(cp$id[2L], session_data(s)$leaf)
   expect_output(print(cp), "Rewind with gptr_rewind")
@@ -578,6 +621,7 @@ test_that("/undo, /redo, /rewind k and /checkpoints drive gptr_rewind()", {
   expect_match(ckpt_cmd_rewind("9", ctx), "Cannot rewind to turn 9")
   lines = ckpt_cmd_checkpoints("all", ctx)
   expect_true(any(grepl("abandoned", lines, fixed = TRUE)))
+  expect_identical(lines[length(lines)], "Undo with /undo, or /rewind <turn>.")
   expect_identical(ckpt_cmd_undo("", list(session = NULL)), "There is no session to undo.")
 })
 
@@ -592,6 +636,54 @@ test_that("/undo asks first when the preview finds items it cannot restore", {
   expect_identical(ckpt_cmd_undo("", ctx), "Undo cancelled.")
   expect_identical(s$turns, 2L)
   expect_identical(ui$remaining(), 0L)
+})
+
+test_that("/undo lists each item once, by its outcome after the whole undo (#37)", {
+  local_project()
+  local_fake_provider(list(fake_tool("r", code = "e = new.env(); writeLines('a', 'a.txt')"),
+                           fake_tool("r", code = "e$v = 1; writeLines('b', 'a.txt')"), "done"))
+  w = new.env()
+  s = peter("make e", model = "fake/fake-1", mode = "auto", envir = w)
+  ui = local_scripted_ui()
+  ctx = list(session = s, has_ui = function() TRUE,
+             ui = function() ext_service_get("ui.get")(s))
+  plan = gptr_rewind(s, preview = TRUE)
+  expect_identical(plan$item, c("file a.txt", "object e"))
+  expect_identical(plan$restore, c(TRUE, TRUE))
+  out = ckpt_cmd_undo("", ctx)
+  expect_identical(nrow(ui$log), 0L)
+  expect_identical(out[1:3], c("Rewound (all).", "file a.txt: removed",
+                               "object e: removed (created by the turn)"))
+  expect_identical(s$last_rewind$report, out[2:3])
+  expect_false(exists("e", envir = w, inherits = FALSE))
+  expect_false(file.exists("a.txt"))
+})
+
+test_that("report lines are keyed by the plan's items, so names holding ': ' stay apart (#37)", {
+  local_project()
+  local_fake_provider(list(fake_tool("r", code = "`k: a` = 1; `k: b` = 1"), "done"))
+  w = new.env()
+  s = peter("make k", model = "fake/fake-1", mode = "auto", envir = w)
+  w[["k: b"]] = 2
+  expect_warning(gptr_rewind(s), class = "gptr_warning_rewind_partial")
+  expect_true(s$last_rewind$partial)
+  expect_identical(sort(s$last_rewind$report),
+                   c("object k: a: removed (created by the turn)",
+                     "object k: b: conflict: changed after the checkpoint (kept current)"))
+  expect_false(exists("k: a", envir = w, inherits = FALSE))
+  expect_identical(w[["k: b"]], 2)
+})
+
+test_that("an item name that is not valid UTF-8 does not stop the rewind partway (#37)", {
+  local_project()
+  local_fake_provider(list(fake_tool("r", code = "assign(rawToChar(as.raw(c(0x6b, 0xe9))), 1)"),
+                           "done"))
+  w = new.env()
+  s = peter("make it", model = "fake/fake-1", mode = "auto", envir = w)
+  suppressWarnings(gptr_rewind(s))
+  expect_identical(s$turns, 0L)
+  expect_length(s$last_rewind$report, 1L)
+  expect_identical(ls(w, all.names = TRUE), character())
 })
 
 test_that("/rewind without a turn offers a menu through the UI", {

@@ -203,3 +203,71 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `^(arch-layers|lint-rules)$` 19, `^(ext-api|provider-registry)$` 960 green, all WARN 0.
 - Reviews: none recorded.
 - Deviations: none. Open: none.
+
+## Task CI-21 - Every timed compaction wait runs under the controlled clock (2026-10-18, #47)
+- `test-compaction-wait.R:569` failed in run 38997490469 (`ubuntu-latest (release, LC_ALL=C)`,
+  `short$elapsed` 0.42 >= 0.20): `cp_wait_short()` timed `gptr_wait(timeout = 0.04)` on the real
+  clock while its synchronous reactor step (`run_drive()` through `compact.run`) stalled. Fix (tests
+  only): `cp_wait_clock()` opens the eight tests that timed `cp_wait_short()` without it (HEAD
+  `:113, 179, 363, 514, 565, 748, 854, 934`); every 0.2 s bound and fixture guard is unchanged.
+- Red: a scratch copy with a 0.4 s `Sys.sleep()` in the first `run_drive()` of each test's first
+  short wait FAIL 31, in all eight tests. Green: that copy with the fix PASS 506 in 10 of 10 runs;
+  `^compaction-wait$` PASS 506, also under `LC_ALL=C`. Lint clean. Neighbours:
+  `^(compaction-|prompt-compact$)` PASS 1043.
+- Reviews: none recorded.
+- Deviations: none. Open: none.
+
+## Task CI-22 - wait_until() reads its condition once per poll (2026-10-18, #47)
+- `test-proc-supervise.R:123` failed in run 38997490469 (`macos-latest (release)`) well before its
+  10 s deadline: `wait_until()` read `cond()` in its loop test and again for its value, and
+  `marker_tree_is()` is not monotonic on macOS (`ps` cannot read the environment of the SIP
+  `/bin/sh` that runs `R_HOME/bin/R` between `Rscript` and `bin/exec/R`). Fix (tests only): the
+  helper returns TRUE on the first read that holds and FALSE once the deadline passes, in
+  `test-proc-supervise.R` and in its copy in `test-proc-spawn.R` (its `reactor_now()` clock kept);
+  deadlines and callers unchanged (the other callers wait on monotonic conditions).
+- Red: FAIL 4 in `^proc-(supervise|spawn)$` (+1 test per file: a TRUE-then-FALSE condition made the
+  old helper return FALSE after two reads). Green: `^proc-(supervise|spawn)$` PASS 371. Lint clean.
+  Neighbours: `^proc-` PASS 2092 SKIP 11.
+- Reviews: none recorded.
+- Deviations: none. Open: `:123` may now pass during the `Rscript` stage, so the sweep may kill by
+  recorded pid and creation time rather than by marker tree; an orphan that prints a ready line
+  from R would pin the marker-tree path (proposed in #47, not done).
+
+## Task CI-23 - The backpressure sampler retries one transient observer failure (2026-10-18, #47)
+- native-06 (`test-proc-writer-idle-slots.R:98, 105`) failed in run 38997490469
+  (`windows-latest (oldrel-4)`) on `observer-metadata-invalid` at `entry-metadata`: CPython
+  `os.lstat` of a delete-pending Windows file returns `st_ino == 0`, and the strict oracle ends the
+  case at the first observer error (the same class failed 8 earlier Windows jobs). Fix (tests only,
+  #47 Option A): `bp_observe()` takes one more snapshot only after `observer-metadata-invalid`,
+  `-snapshot-deadline`, `-parent-entry-absent`, `-link-entry-absent` or
+  `-entry-disappearance-uncertain`; any other reason or a failed retry is still one fatal sampling
+  error, and every bound and the observer are unchanged. The witness adds `observer_retries` and the
+  first `observer_retry_reason`. A failed retry reports its own condition, because the observer's
+  `last_failure` (read by `bp_sample_error()`) then describes the retry.
+- Red: FAIL 51 in `^proc-backpressure-sampling$` (+2 tests: `bp_observe()` per reason; `bp_run()`
+  with a base R child and a scripted observer, where one retried failure completes with
+  `sampling_errors` 0 and a bound reason or a failed retry stays `resource_observation`). Green:
+  `^(proc-backpressure-sampling|bp-declared-observer|bp-disk-observer)$` PASS 639 SKIP 5 (no
+  Python; with Python 3.15 `^bp-disk-observer$` PASS 145). Lint clean. Neighbours: `^(proc-|bp-)`
+  PASS 2285 SKIP 16, `^(bridge-python-native|subagent-worker)$` PASS 157 SKIP 7.
+- Reviews: r1 1 finding (high): the `bp_run()` case enabled the observer, so the suite process
+  (its supervisor) counted toward the unchanged 1 GiB caps, and a one-process ordinary run as
+  `test_check()` does (128 files, RSS 3.6 GB) stopped it at initialization -> fixed (tests only):
+  the case mocks `ps::ps_memory_info()` to a unit RSS. Red: ERROR 1 (`initialization exceeded its
+  unchanged resource bound`) with 1.2 GB of ballast in the test process; green PASS 512 with 1.2
+  and 3.6 GB. One process over the 127 ordinary files to this one (installed package): PASS 22265
+  SKIP 24, RSS 3.3 GB at the end.
+- Deviations: none. Open: hosted Windows evidence (native-06 and the other native backpressure
+  cases on release and oldrel-4, twice).
+
+## Task CI-24 - The fd-0 reader test types its check mark only in a UTF-8 locale (2026-10-18, #48)
+- `test-console-typing.R:446` (new in #48) failed in runs 39175666947 and 39179983061
+  (`ubuntu-latest (release, LC_ALL=C)`): `processx` writes text in the native encoding, so
+  `p$write_input("one\ntwo \u2713\nthr")` cannot encode the check mark in a C locale and errors
+  before the reader runs. Fix (tests only): the typed second line is `"two \u2713"` in a UTF-8
+  locale and `"two"` otherwise; the complete-line, partial-line, Ctrl-D and `/dev/null` checks run
+  unchanged in every locale.
+- Red: `^console-typing$` under `LC_ALL=C` ERROR 1 (the CI error). Green: PASS 88 under `LC_ALL=C`
+  and in UTF-8. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: none.

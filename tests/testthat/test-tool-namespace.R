@@ -1122,6 +1122,18 @@ test_that("risk levels follow contract 9.4 and the control and instructions clas
   expect_identical(tool_risk_none(list(), NULL)$level, 0L)
 })
 
+test_that("an edit-tool Delete File is level 4 where unlink() of the path is (IC-78)", {
+  root = local_project(files = list("R/a.R" = "x = 1"))
+  del = function(p) {
+    tool_risk_write(list(edits = paste0("*** Begin Patch\n*** Delete File: ", p,
+                                        "\n*** End Patch")), NULL)$level
+  }
+  expect_identical(del(".env"), 4L)
+  expect_identical(del("/etc/gptr-x.csv"), 4L)
+  expect_identical(del("R/a.R"), 2L)
+  expect_identical(tool_risk_write(list(path = ".env"), NULL)$level, 3L)
+})
+
 test_that("instructions files read at 0 only in the project; risk sees every envelope field", {
   root = local_project(files = list("R/a.R" = "x = 1", "AGENTS.md" = "rules",
                                     ".gptr/skills/x/SKILL.md" = "skill"))

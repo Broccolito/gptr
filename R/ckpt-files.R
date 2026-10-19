@@ -378,17 +378,19 @@ ckpt_stat_refresh = function(tr, rel) {
   tr$stat = rbind(tr$stat[tr$stat$path != rel, , drop = FALSE], add[!is.na(add$size), ])
 }
 
-#' Files checkpointer, before a mutating call: the baseline, or a scan that absorbs edits made
-#' outside gptr (once per turn in per-turn mode); then the predicted paths are captured, in the
+#' Files checkpointer, before a mutating call: the baseline, or (`sync`) a scan that absorbs edits
+#' made outside gptr (once per turn in per-turn mode); then the predicted paths are captured, in the
 #' tracker when the walk covers them, else (and in per-turn mode) as explicit paths. In per-turn
 #' mode a walked path that changed since the turn's scan is left to the turn scan ("?"), whose
-#' pre-image is the content at the start of the turn.
+#' pre-image is the content at the start of the turn. A call served to a CLI route does not
+#' `sync`: the edits its child made since the turn's start are recorded, never absorbed (IC-65),
+#' and an untracked path is captured only while it is as the last walk saw it.
 #' @return A token.
 #' @noRd
-ckpt_files_before = function(ck, call, turn = 1L) {
+ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
   tr = ckpt_files_tr(ck)
   turn = as.integer(turn)
-  if (is.null(tr$stat) || !isTRUE(tr$per_turn) || !identical(tr$scanned_turn, turn)) {
+  if (is.null(tr$stat) || (sync && (!isTRUE(tr$per_turn) || !identical(tr$scanned_turn, turn)))) {
     ckpt_files_sync(tr)
   }
   tr$scanned_turn = turn
@@ -396,7 +398,9 @@ ckpt_files_before = function(ck, call, turn = 1L) {
   for (p in paths) {
     rel = ckpt_walked(tr, p)
     if (!is.na(rel) && !isTRUE(tr$per_turn)) {
-      if (!rel %in% names(tr$hash) && ckpt_capturable(p)) ckpt_ingest(tr, rel)
+      if (!rel %in% names(tr$hash) && ckpt_capturable(p) && ckpt_as_scanned(tr, rel, "")) {
+        ckpt_ingest(tr, rel)
+      }
     } else {
       state = ckpt_explicit_state(p)
       tr$explicit[p] = if (is.na(rel) || ckpt_as_scanned(tr, rel, state)) state else "?"

@@ -87,6 +87,17 @@ test_that("a dynamic spinner starts immediately and survives buffered text", {
   expect_null(w$rec$spinner)
 })
 
+test_that("the first rendered output ends the waiting row, even a style alone (D-186)", {
+  testthat::local_reproducible_output(width = 80, crayon = TRUE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  w = wait_record()
+  utils::capture.output(invisible(wait_request(w)))
+  utils::capture.output(invisible(wait_delta(w, "# Hea")))
+  expect_null(w$rec$task)
+  expect_null(w$rec$spinner)
+})
+
 test_that("spinner redraws cannot enter a nested R tool's captured output", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
@@ -143,6 +154,100 @@ test_that("continue and queued pause messages restore a pending request's spinne
   }
   expect_identical(length(session_data(w$s)$queue$steer), 1L)
   expect_identical(length(session_data(w$s)$queue$follow_up), 1L)
+})
+
+test_that("a prompt clears the waiting row, keeps its task and a later tick redraws (D-186)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  local_mocked_bindings(front_end = function() "terminal")
+  w = wait_record()
+  utils::capture.output(invisible(wait_request(w)))
+  task = w$rec$task
+  code = "gptr_mcp_serve()"
+  req = list(tool = "r", input = list(code = code), risk = gptr_risk(code), tier = "ask_human")
+  prompts = list(function() ui_console_permission(req, read = function(...) "n"),
+                 function() ui_console_select("Pick one", c("a", "b"), read = function(...) "1"))
+  seen = character()
+  for (prompt in prompts) {
+    w$rec$spinner$last = 0
+    utils::capture.output(invisible(w$rec$spinner$tick()))
+    con = rawConnection(raw(), "w")
+    sink(con)
+    tryCatch(invisible(prompt()), finally = sink())
+    seen = c(seen, rawToChar(rawConnectionValue(con)))
+    close(con)
+    expect_false(w$rec$spinner$shown)
+    expect_identical(w$rec$task, task)
+    w$rec$spinner$last = 0
+    redraw = utils::capture.output(invisible(get(task, envir = reactor_get()$tasks)$fn()))
+    expect_true(any(grepl("thinking", redraw, fixed = TRUE)))
+    expect_identical(redraw[[1L]], "")
+  }
+  clear = paste0("\r", strrep(" ", 79L), "\r")
+  expect_true(startsWith(seen[[1L]], paste0(clear, "  r  gptr_mcp_serve()")))
+  expect_true(startsWith(seen[[2L]], paste0(clear, "  Pick one")))
+})
+
+test_that("consecutive prompts in a run stay separated by a blank line (D-186)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  w = wait_record()
+  w$rec$last = "text"
+  read = function(prompt = "", ...) {
+    cat(prompt, "1\n", sep = "")
+    "1"
+  }
+  qs = list(list(id = "a", question = "First?", options = c("x", "y")),
+            list(id = "b", question = "Second?", options = c("p", "q")),
+            list(id = "c", question = "Name?", type = "text"))
+  out = utils::capture.output(invisible(ui_questions_via(
+    function(...) ui_console_select(..., read = read),
+    function(...) ui_console_input(..., read = read), qs)))
+  for (title in c("  First?", "  Second?", "  Name?: 1")) {
+    expect_identical(out[[which(out == title) - 1L]], "")
+  }
+  expect_identical(sum(!nzchar(out)), 7L)
+})
+
+test_that("a CLI tool line keeps the waiting row while its request is pending (D-186)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  w = wait_record()
+  utils::capture.output(invisible(wait_request(w)))
+  tool = function(type) {
+    ev_new(type, run = w$run$id, tool_call_id = "codex_1", tool_name = "codex_shell",
+           input = list(command = "ls"), is_error = FALSE, elapsed = NA_real_)
+  }
+  utils::capture.output(invisible(console_on_tool_start(tool("tool_execution_start"), w$ctx)))
+  expect_null(w$rec$task)
+  utils::capture.output(invisible(console_on_tool_end(tool("tool_execution_end"), w$ctx)))
+  expect_false(is.null(w$rec$task))
+  w$rec$request_pending = FALSE
+  console_spinner_stop(w$rec)
+  utils::capture.output(invisible(console_on_tool_end(tool("tool_execution_end"), w$ctx)))
+  expect_null(w$rec$task)
+})
+
+test_that("CLI tool items add no progress lines on a non-dynamic console (D-186)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L, quiet = FALSE)
+  withr::local_options(cli.dynamic = FALSE)
+  w = wait_record()
+  err = NULL
+  out = utils::capture.output({
+    err = utils::capture.output({
+      wait_request(w)
+      for (type in rep(c("tool_execution_start", "tool_execution_end"), 3L)) {
+        fun = if (endsWith(type, "start")) console_on_tool_start else console_on_tool_end
+        fun(ev_new(type, run = w$run$id, tool_call_id = "codex_1", tool_name = "codex_shell",
+                   input = list(command = "ls"), is_error = FALSE, elapsed = NA_real_), w$ctx)
+      }
+    }, type = "message")
+  })
+  expect_identical(sum(grepl("gptr: thinking", c(out, err), fixed = TRUE)), 1L)
 })
 
 test_that("message completion and agent errors cancel waiting tasks", {

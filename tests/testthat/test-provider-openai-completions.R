@@ -636,6 +636,25 @@ test_that("a model without tool calling gets no tools and no tool_choice (IC-74,
   expect_length(body$tools, 2L)
 })
 
+test_that("a model that gets no tools says so once, with how to declare tool_call (IC-79)", {
+  local_gptr_options(quiet = FALSE)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  blind = test_model(api, provider = "my-llm", id = "qwen3", tool_call = FALSE)
+  ctx = ctx_fixture(list(msg_user("x")))
+  m = expect_message(completions_build(blind, ctx, list()), class = "gptr_message_notice")
+  expect_match(conditionMessage(m), "my-llm/qwen3", fixed = TRUE)
+  # the suggested call is valid R for a provider id with a hyphen
+  expect_match(conditionMessage(m), "list(`my-llm` = list(models", fixed = TRUE)
+  expect_match(conditionMessage(m), "tool_call = TRUE", fixed = TRUE)
+  expect_no_message(completions_build(blind, ctx, list()))
+  # nothing to say without tools, or to a model that takes them
+  other = test_model(api, provider = "llamacpp", id = "qwen3b", tool_call = FALSE)
+  ctx$tools_json = json_verbatim("[]")
+  expect_no_message(completions_build(other, ctx, list()))
+  expect_no_message(completions_build(test_model(api, provider = "groq", id = "large-1"),
+                                      ctx_fixture(list(msg_user("x"))), list()))
+})
+
 test_that("Ollama chat bodies follow the prepared model's capabilities (IC-74, 07 section 6)", {
   # the P05 ollama record: system role, no store, `max_tokens`, reasoning_effort, no tool_choice;
   # reasoning replays in the field Ollama streamed it in (`reasoning`, Task 4)

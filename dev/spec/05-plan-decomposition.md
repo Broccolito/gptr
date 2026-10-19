@@ -749,7 +749,8 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      an ESC or bidi payload in code is escaped in the prompt; a cloned fixture with `settings.local.json` allow
      rules and an AGENTS.md instruction still asks; the pending plan is not handed to a call inside a loop or to a
      call after an intervening `peter()`; with `jupyter.in_kernel = TRUE` mocked and a mocked `gptr_readline()`, an
-     ask is answered.
+     ask is answered. (P26, IC-78: in `yolo` only the `options(gptr.*)` case still needs a human; a plan-mode
+     delete of a control file is denied, not asked.)
 
 ### P12 Native provider adapters
 
@@ -1031,7 +1032,9 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   in `tempdir()` unless `gptr.mcp_debug` (IC-70); OAuth refuses metadata without S256 PKCE and validates `iss`
   (IC-71); foreign-harness configs and `${userHome}` through `user_home()`/`app_config_dir()` (IC-63); the
   fixture server's HTTP transport binds 127.0.0.1 through httpuv (IC-71); `mcp_dispatch_local()` is the single gate
-  for the claude route (IC-65); `followlocation = 0L` on MCP HTTP (IC-64).
+  for the claude route (IC-65); `followlocation = 0L` on MCP HTTP (IC-64). (P26 IC-79: CLI children get no tokens and
+  `mcp.serve_ensure` and the busy error are gone; both CLI routes reach `mcp_dispatch_local()`, which serves the
+  session's frozen tool array, Codex through a base-R stdio relay.)
 - **Owns.** The five R files and tests; `helper-mcp-server.R`; `fixtures/mcp/`.
 - **Test files.** One per owned R file: `test-mcp-client.R`, `test-mcp-config.R`, `test-mcp-namespace.R`, `test-mcp-server.R`, `test-auth-oauth.R` (plus the extra test files named under Owns).
 - **Research.** 16 (all) and fact-check; 06 §4 (MCP as code); 07 §2.13-2.16 and fact-check (sdk transport,
@@ -1118,10 +1121,11 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   `opts$gate` for other `can_use_tool` requests; the `--bare` probe; the `apiKeySource` check and
   `gptr_error_billing`; G6 §3.7 environment lists; codex argv with `--skip-git-repo-check`, `-m`, `-C`,
   `default_tools_approval_mode="approve"`, `required=true`, resume with `-c sandbox_mode=`; sandbox mapping
-  plan/manual/edits -> read-only, auto -> workspace-write with control-file hashing and a checkpointer walk; the
+  plan/manual/edits -> read-only, auto/yolo -> workspace-write with control-file hashing and a checkpointer walk; the
   Windows sandbox probe; the turn counter and `gptr.cli_turn_timeout`; per-session wire logs; per-session MCP tokens
   (IC-58, IC-65, IC-66); fake CLIs run through `rscript_path()` with `offline = TRUE` records (IC-60, IC-45); the
-  CLI leg of INFRA-16 (IC-36).
+  CLI leg of INFRA-16 (IC-36). (P26 IC-79: Codex reaches the session through the base-R stdio relay
+  `inst/gptr/mcp_relay.R` instead of `gptr_mcp_serve()` and a token; both routes serve the frozen tool array.)
 - **Owns.** The three R files and tests; `inst/gptr/fixtures/fake_cli.R`; `fixtures/cli/`; `test-live-cli.R`.
 - **Test files.** One per owned R file: `test-cli-common.R`, `test-cli-claude.R`, `test-cli-codex.R` (plus the extra test files named under Owns).
 - **Research.** 07 §2.13-§4 and fact-check; 08 §2.E-F, §4-§5 and fact-check (`--ignore-user-config`,

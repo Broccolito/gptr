@@ -104,7 +104,7 @@ test_that("children only tighten the inherited mode", {
   expect_identical(subagent_mode_tighten("plan", "auto"), "plan")
   expect_identical(subagent_mode_tighten("edits", NULL), "edits")
   expect_identical(subagent_mode_tighten(NULL, "edits"), "edits")
-  expect_error(subagent_mode_tighten("auto", "yolo"), class = "gptr_error_invalid_argument")
+  expect_error(subagent_mode_tighten("auto", "fast"), class = "gptr_error_invalid_argument")
 })
 
 test_that("pool limits follow the gptr.subagents.* options (IC-71)", {
@@ -969,6 +969,8 @@ backend_inline_start = function(spec, ctx) {
 #' `start()` of the `cli` backend: a child whose model is a subscription CLI. The CLI adapter of
 #' P20 owns the process; the Codex route gets the MCP server bound to this child's session
 #' first (the mcp.serve_ensure service, P18; contract 7.0)
+#' (P26 IC-79: the service is gone; the codex adapter's stdio relay reaches the child's session
+#' itself, so this start needs no MCP step.)
 #' @noRd
 backend_cli_start = function(spec, ctx) {
   child = subagent_child_new(spec, "cli")

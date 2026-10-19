@@ -159,6 +159,14 @@ test_that("untrusted project files are withheld non-interactively in auto; the u
   expect_false(grepl("project rule", proj[[1]]$text, fixed = TRUE))
 })
 
+test_that("yolo withholds untrusted project files non-interactively, as auto does", {
+  user_agents("- my own rule")
+  p07_project(list("AGENTS.md" = "- project rule"))
+  b = context_first_message(p07_session("yolo"), list(turn = 1L))
+  proj = Filter(function(x) identical(x$kind, "project_instructions"), b)
+  expect_false(grepl("project rule", proj[[1]]$text, fixed = TRUE))
+})
+
 test_that("the environment block states date, directory, front end and R", {
   p07_project(list())
   local_mocked_bindings(front_end = function() "rstudio")
@@ -181,6 +189,7 @@ test_that("mode blocks carry the non-interactive suffixes of contract 9.3", {
   expect_identical(context_mode_body("manual", FALSE),
                    paste(tx$mode_manual, tx$noninteractive_manual))
   expect_identical(context_mode_body("auto", FALSE), paste(tx$mode_auto, tx$noninteractive_stop))
+  expect_identical(context_mode_body("yolo", TRUE), tx$mode_auto)
   expect_identical(context_mode_body("edits", FALSE, deny = TRUE),
                    paste(tx$mode_edits, tx$noninteractive_deny))
   p07_project(list())

@@ -4,6 +4,7 @@
 ^renv$
 ^renv\.lock$
 ^dev$
+^\.git$
 ^\.github$
 ^\.lintr$
 ^cran-comments\.md$

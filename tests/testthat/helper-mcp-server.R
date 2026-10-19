@@ -1,7 +1,7 @@
 # MCP and OAuth test helpers (P18; contract 12.2). Fixture scripts live in fixtures/mcp/: the
 # pure-R MCP server speaking either era over stdio or Streamable HTTP on 127.0.0.1 (server.R),
-# the OAuth authorization server and protected resource (oauth.R), a stand-in browser
-# (browser.R) and a stand-in CLI child that speaks HTTP MCP with its GPTR_MCP_TOKEN (client.R).
+# the OAuth authorization server and protected resource (oauth.R) and a stand-in browser
+# (browser.R).
 # Children start with rscript_path() (IC-60), run only off CRAN, and stop when the test ends.
 
 # The library path of this process, for children started with --vanilla
@@ -89,7 +89,8 @@ local_browser = function(.env = parent.frame()) {
       env = c("current", R_LIBS = mcp_fixture_libs()), cleanup_tree = TRUE)
     invisible(NULL)
   }, .env = .env)
-  withr::defer(for (p in seen$procs) p$kill_tree(), envir = .env)
+  # a stand-in that exits on its own can be gone between ps listing its tree and the signal
+  withr::defer(for (p in seen$procs) try(p$kill_tree(), silent = TRUE), envir = .env)
   invisible(seen)
 }
 
@@ -230,24 +231,4 @@ mcp_test_post = function(url, msg, token = NULL, headers = list(), timeout = 20)
   list(status = as.integer(st$status), body = txt,
        json = if (nzchar(txt)) jsonlite::fromJSON(txt, simplifyVector = FALSE),
        headers = st$headers)
-}
-
-# A stand-in CLI child of a session (fixtures/mcp/client.R): a separate R process whose
-# environment carries GPTR_MCP_TOKEN (child_env(), IC-58; `token` is the handle's token handle,
-# or the value of its Codex snippet as P20 passes it) posts `msgs` to `url` while this process
-# pumps the reactor; returns one list(status, body) per message
-mcp_cli_child = function(url, token, msgs, timeout = 60) {
-  env = child_env("mcp", set = list(GPTR_MCP_TOKEN = token, R_LIBS = mcp_fixture_libs()))
-  bodies = vapply(msgs, json_encode, "")
-  p = proc_spawn(rscript_path(), c("--vanilla", file.path(mcp_fixture_dir, "client.R"), url,
-                                   bodies), env = env, stdin = NULL, stdout = "|", stderr = "|")
-  on.exit(kill_all(p, grace = 0), add = TRUE)
-  got = new.env(parent = emptyenv())
-  got$lines = character()
-  reactor_pump(until = function() {
-    got$lines = c(got$lines, p$read_output_lines())
-    !p$is_alive()
-  }, timeout = timeout)
-  lines = c(got$lines, p$read_output_lines())
-  lapply(lines[nzchar(lines)], function(l) jsonlite::fromJSON(l, simplifyVector = FALSE))
 }

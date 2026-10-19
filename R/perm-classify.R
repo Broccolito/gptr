@@ -241,12 +241,14 @@ risk_guard_names = c(".gptr", ".git", ".Rprofile", ".Renviron", ".env", ".netrc"
 # A directory written or deleted as a whole is control when P01 guards one of these children.
 risk_guard_children = c("settings.json", "config", "hooks", "Makevars", "x")
 
-#' Level of reading, writing or deleting a path of class `pc`
+#' Level of reading, writing or deleting a path of class `pc`; tool_risk_write() copies the
+#' delete row
 #' @noRd
 risk_op_level = function(pc, op) {
   switch(op,
          read = switch(pc, url = , protected = 2L, outside = , critical = 1L, 0L),
-         delete = switch(pc, critical = , control = , protected = 4L, temp = 1L, console = 0L, 3L),
+         delete = switch(pc, critical = , control = , protected = , outside = 4L, temp = 1L,
+                         console = 0L, 3L),
          switch(pc, critical = , control = 4L, workspace = 2L, temp = 1L, console = 0L, 3L))
 }
 
@@ -1053,7 +1055,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
     tg = risk_target(t, op, root, dirs)
     if (identical(tg$pc, "console")) return(invisible())
     add(if (identical(op, "delete")) max(3L, tg$level) else tg$level,
-        if (identical(tg$pc, "control")) "control" else if (op == "delete") "file_delete" else
+        if (op == "delete") "file_delete" else if (identical(tg$pc, "control")) "control" else
           "file_write", t, tg$pc)
   }
   operands = function(op) {
@@ -1229,7 +1231,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       tg_ = tgs[[best]]
       if (identical(tg_$pc, "console")) next
       add(max(if (op == "delete") 3L else row$level %||% 2L, tg_$level),
-          if (identical(tg_$pc, "control")) "control" else if (op == "delete") "file_delete" else
+          if (op == "delete") "file_delete" else if (identical(tg_$pc, "control")) "control" else
             "file_write", d[best], tg_$pc)
     }
     if (!length(dests)) add(row$level %||% 2L, "file_write")
@@ -1545,8 +1547,8 @@ risk_literal_rows = function(lits, f, fn, root, call, write = TRUE) {
     }
     tg = if (top >= 2L) risk_target(t, op, root) else list(level = 0L)
     if (tg$level > 2L) {
-      f = risk_flags_bind(f, risk_flags_row(call, fn, tg$level, if (tg$pc == "control") "control"
-                                            else if (op == "delete") "file_delete" else
+      f = risk_flags_bind(f, risk_flags_row(call, fn, tg$level, if (op == "delete") "file_delete"
+                                            else if (tg$pc == "control") "control" else
                                               "file_write", t, tg$pc))
     }
   }
@@ -1812,8 +1814,12 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #'
 #' @param code R code: a character vector, a call or an expression.
 #' @param envir `NULL` or the environment the code would run in. When given, assignments to
-#'   existing bindings are reported as overwrites with their size (`object.size()` in a leaf;
-#'   promises and active bindings are never forced) and user-defined functions called by the
+#'   existing bindings (of `envir` itself for a plain assignment evaluated in `envir`; for
+#'   `<<-`, `assign()`, replacement calls and an assignment inside `local()`, `with()` or
+#'   `within()` also of its enclosing environments up to the global environment) are
+#'   reported as overwrites with their size (`object.size()` in a leaf,
+#'   unknown where it overstates, as for functions and S7 objects; promises and active bindings
+#'   are never forced) and user-defined functions called by the
 #'   code are classified through their bodies.
 #' @param root The project root used for path classes; `NULL` means the current project root.
 #' @return A `gptr_risk` object: a list with `level` (integer 0-4), `label`, `categories`,
@@ -2039,12 +2045,13 @@ risk_fn_where = function(name, envir) {
   list(kind = "none")
 }
 
-#' Class and size of an existing binding the code overwrites, or NULL
+#' Class and size of an existing binding the code overwrites, or NULL; `inherits = FALSE` looks
+#' in `envir` only
 #'
 #' The object is only ever an argument of the closure-free leaf risk_binding_leaf(): a frame
 #' that held it and created a handler would keep it referenced (copy-safety R4).
 #' @noRd
-risk_binding_info = function(name, envir) {
+risk_binding_info = function(name, envir, inherits) {
   e = envir
   while (!identical(e, emptyenv()) && !isNamespace(e) && !identical(e, baseenv()) &&
          !startsWith(environmentName(e), "package:")) {
@@ -2055,23 +2062,23 @@ risk_binding_info = function(name, envir) {
       }
       return(risk_binding_leaf(get(name, envir = e, inherits = FALSE)))
     }
-    if (identical(e, globalenv())) break
+    if (!inherits || identical(e, globalenv())) break
     e = parent.env(e)
   }
   NULL
 }
 
-#' Class and bytes of an object (the closure-free leaf)
+#' Class and bytes of an object (the closure-free leaf; the workspace's size rule)
 #' @noRd
 risk_binding_leaf = function(obj) {
-  list(class = class(obj)[1L], bytes = as.numeric(utils::object.size(obj)))
+  list(class = class(obj)[1L], bytes = env_snap_size(obj))
 }
 
 #' risk_binding_info() with errors caught one frame up
 #' @noRd
-risk_binding_safe = function(name, envir) {
+risk_binding_safe = function(name, envir, inherits) {
   on.exit(assign("envir", NULL), add = TRUE)
-  tryCatch(risk_binding_info(name, envir),
+  tryCatch(risk_binding_info(name, envir, inherits),
            error = function(e) list(class = "<unknown>", bytes = NA_real_))
 }
 
@@ -2124,28 +2131,35 @@ risk_path_exprs = function(a, arg) {
   as.list(a[["..."]] %||% a[!nzchar(nms)])
 }
 
-#' A path expression built from literals, folded; NULL when the code computes it, "" for the
-#' console (tempdir() and tempfile() are this session's)
+#' A path expression built from literals and the names in `known` (each name's folded values,
+#' NA for one the code computes), folded; NULL when the code computes it, "" for the console
+#' (tempdir() and tempfile() are this session's)
 #' @noRd
-risk_fold = function(x) {
+risk_fold = function(x, known = NULL) {
   if (is.character(x)) return(x)
+  if (is.symbol(x)) {
+    v = known[[as.character(x)]]
+    return(if (!anyNA(v)) v)
+  }
   if (!is.call(x) || !is.symbol(x[[1L]])) return(NULL)
   fn = as.character(x[[1L]])
   a = as.list(x)[-1L]
   if (fn %in% c("stdout", "stderr")) return("")
   if (fn == "tempdir") return(tempdir())
   if (fn == "tempfile") {
-    dir = risk_fold(risk_arg(risk_args(x, fn, "base"), "tmpdir", 2L, default = TRUE))
+    dir = risk_fold(risk_arg(risk_args(x, fn, "base"), "tmpdir", 2L, default = TRUE), known)
     return(if (!is.null(dir)) file.path(dir, "file"))
   }
-  if (!fn %in% c("c", "file.path", "paste0", "paste", "path.expand", "normalizePath")) return()
+  if (fn %in% c("path.expand", "normalizePath")) {
+    return(risk_fold(risk_arg(risk_args(x, fn, "base"), "path", 1L), known))
+  }
+  if (!fn %in% c("c", "file.path", "paste0", "paste")) return()
   sep = a$sep %||% " "
   a$sep = NULL
-  parts = lapply(unname(a), risk_fold)
+  parts = lapply(unname(a), risk_fold, known)
   if (!is.character(sep) || any(vapply(parts, is.null, logical(1)))) return(NULL)
   switch(fn, c = unlist(parts), file.path = do.call(file.path, parts),
-         paste0 = do.call(paste0, parts), paste = do.call(paste, c(parts, sep = sep)),
-         parts[[1L]])
+         paste0 = do.call(paste0, parts), do.call(paste, c(parts, sep = sep)))
 }
 
 #' The class of one literal path read, written or deleted by a call of `category`
@@ -2249,6 +2263,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
             remove = character(), super = character(), files = character(),
             unknown = character(), process = character())
   calls = list(fn = character(), package = character(), line = integer())
+  # Paths held in names: every value a name may hold, NA for one the code computes. A
+  # straight-line assignment replaces them (the code stops at its first error) unless the code
+  # assigns the name with <<- (a function may do so later); one in a branch, loop or call adds
+  # its value, and the binding before the code when it comes first; a loop that assigns a name
+  # makes it computed. Code in a function body does not read them (it may bind the name).
+  known = list()
+  kn = function(ctx) if (!ctx$def) known
   bound = risk_bound(exprs)
   env_names = NULL
   protect = gptr_opt("protect_size") %||% 1e8
@@ -2341,24 +2362,27 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     # the worst path the call may pass
     best = list(level = -1L)
     for (p in risk_path_exprs(a, row$path_arg)) {
-      v = risk_fold(p)
-      pc = if (is.null(v)) "unknown" else if (all(v == "")) "console" else
-        risk_cmd_worst(vapply(v[nzchar(v)], risk_path_cls, character(1), row$category, root))
+      v = risk_fold(p, kn(ctx))
+      w = v[nzchar(v)]
+      cls = vapply(w, risk_path_cls, character(1), row$category, root)
+      pc = if (is.null(v)) "unknown" else if (!length(w)) "console" else risk_cmd_worst(cls)
       lv = risk_path_level(row$category, row$level, pc)
       # T1: a read of a secret file is 3
       sec = row$category == "read" &&
-        any(vapply(v[nzchar(v)], function(x) risk_target(x, "read", root)$secret, logical(1)))
+        any(vapply(w, function(x) risk_target(x, "read", root)$secret, logical(1)))
       if (sec) lv = max(lv, 3L)
       if (!is.null(v) && row$category %in% c("file_write", "file_delete", "network")) {
-        add_tg("files", v[nzchar(v)])
+        add_tg("files", w)
       }
       if (lv > best$level) {
-        best = list(level = lv, path = v[1L] %||% NA_character_, pc = pc, sec = sec)
+        path = if (length(w)) w[match(pc, cls)] else v[1L] %||% NA_character_
+        best = list(level = lv, path = path, pc = pc, sec = sec)
       }
     }
     if (best$level < 0L) best = list(level = row$level, path = NA_character_, pc = NA_character_)
+    ctl = identical(best$pc, "control") && !row$category %in% c("read", "file_delete")
     add(ctx, label, name, best$level, if (isTRUE(best$sec)) "secret" else
-      if (identical(best$pc, "control") && row$category != "read") "control" else row$category,
+      if (ctl) "control" else row$category,
         best$path, best$pc)
   }
 
@@ -2465,11 +2489,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     if (name %in% c("file", "gzfile", "bzfile", "xzfile")) {
       mode = risk_arg(a, "open", 2L)
       if (is.null(mode) || (is.character(mode) && !grepl("[wa+]", mode))) return(FALSE)
-      v = risk_fold(risk_arg(a, "description", 1L))
-      pc = if (is.null(v)) "unknown" else risk_path_class(v[1L], root)
+      v = risk_fold(risk_arg(a, "description", 1L), kn(ctx))
+      cls = vapply(v, risk_path_class, character(1), root)
+      pc = if (is.null(v)) "unknown" else risk_cmd_worst(cls)
       if (!is.null(v)) add_tg("files", v)
       add(ctx, label, name, risk_path_level("file_write", 2L, pc),
-          if (pc == "control") "control" else "file_write", v[1L] %||% NA_character_, pc)
+          if (pc == "control") "control" else "file_write", v[match(pc, cls)] %||% NA_character_,
+          pc)
       return(TRUE)
     }
     if (name %in% c("gptr_cache", "gptr_scrub")) {
@@ -2516,7 +2542,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     use_fun(r$name, r$pkg, NULL, ctx)
   }
 
-  note_assign = function(target, op, ctx) {
+  note_assign = function(target, op, ctx, value = NULL) {
     if (ctx$quote) return(invisible())
     node = target
     while (is.call(node) && length(node) >= 2L) {
@@ -2536,9 +2562,18 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       return(invisible())
     }
     add_tg(if (op == "<<-") "super" else "assign", nm)
+    v = if (!is.call(target)) risk_fold(value, kn(ctx))
+    known[[nm]] <<- if (ctx$seq && !nm %in% tg$super) v %||% NA_character_ else
+      unique(c(known[[nm]] %||% NA_character_, v %||% NA_character_))
     if (is.call(target)) add_tg("modify", nm)
     if (op == "<<-") add(ctx, paste(nm, "<<- ..."), "<<-", 2L, "object_write")
-    info = if (!is.null(envir)) risk_binding_safe(nm, envir)
+    # a plain assignment binds in envir; <<-, assign(), a replacement (of an environment, by
+    # reference) and one inside local(), with() or another risk_unknown_funs call can reach an
+    # enclosing one
+    info = if (!is.null(envir)) {
+      risk_binding_safe(nm, envir,
+                        inherits = ctx$away || is.call(target) || !op %in% c(risk_arrow, "="))
+    }
     if (is.null(info)) return(invisible())
     sizes[[nm]] <<- info$bytes
     add(ctx, paste0(if (is.call(target)) "modifies" else "overwrites", " `", nm, "` <",
@@ -2571,19 +2606,20 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     } else if (r$how == "lambda") {
       walk(e[[1L]], ctx)
     } else if (r$how == "member") {
-      add_rows(risk_member_flags(r$name, e, root), ctx)
+      add_rows(risk_member_flags(r$name, e, root, kn(ctx)), ctx)
       if (r$name %in% c("sh", "bg", "script")) add_tg("process", paste0(risk_gateway, "$", r$name))
     } else {
       use_fun(r$name, r$pkg, e, ctx)
     }
-    if (r$name %in% risk_assign_ops && length(a) == 2L) {
-      note_assign(a[[1L]], r$name, ctx)
-      use_value(a[[2L]], ctx, slot = FALSE)
+    if (r$name %in% c("for", "while", "repeat")) {
+      b = risk_bound(list(e))
+      for (nm in c(b$all, b$val)) known[[nm]] <<- NA_character_
     }
     if (r$name == "for") note_assign(a[[1L]], "=", ctx)
     if (r$name == "assign" && length(a)) {
-      if (is.character(a[[1L]])) {
-        note_assign(as.name(a[[1L]]), "=", ctx)
+      x = risk_arg(risk_args(e, "assign", "base"), "x", 1L)
+      if (is.character(x)) {
+        note_assign(as.name(x), "assign", ctx)
       } else {
         add_tg("unknown", "assign(<computed name>)")
       }
@@ -2609,38 +2645,48 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       }
     }
     inner = ctx
+    inner$seq = ctx$seq && r$name == "{"
     if (r$name == "function") {
       inner$def = TRUE
       a = c(as.list(a[[1L]]), a[-1L])
     }
     if (r$name %in% risk_quoting_funs) inner$quote = TRUE
+    inner$away = ctx$away || r$name %in% risk_unknown_funs
     for (i in seq_along(a)) if (!identical(a[[i]], quote(expr = ))) walk(a[[i]], inner)
+    # after the value is walked, so a use of the name inside it sees the earlier value
+    if (r$name %in% risk_assign_ops && length(a) == 2L) {
+      note_assign(a[[1L]], r$name, ctx, a[[2L]])
+      use_value(a[[2L]], ctx, slot = FALSE)
+    }
   }
 
-  walk(exprs, list(quote = FALSE, def = FALSE, line = 1L))
+  walk(exprs, list(quote = FALSE, def = FALSE, seq = TRUE, away = FALSE, line = 1L))
   fl = if (length(flags)) do.call(risk_flags_bind, flags) else risk_flags_empty()
   list(flags = fl, targets = lapply(tg, function(x) unique(x[!is.na(x)])), sizes = sizes,
        calls = data.frame(fn = calls$fn, package = calls$package, line = calls$line,
                           stringsAsFactors = FALSE))
 }
 
-#' Flags of a gateway member call (04 section 9.4); every row's fn is `peter$<member>`
+#' Flags of a gateway member call (04 section 9.4); every row's fn is `peter$<member>`; a path
+#' is folded with `known` (risk_fold())
 #' @noRd
-risk_member_flags = function(member, e, root) {
+risk_member_flags = function(member, e, root, known = NULL) {
   txt = paste0(risk_gateway, "$", member)
   a = as.list(e)[-1L]
   row = function(level, category = "process", call = txt) {
     risk_flags_row(call, txt, level, category)
   }
   if (member %in% c("read", "grep", "find", "ls", "write", "edit")) {
-    v = risk_fold(risk_arg(a, "path", if (member %in% c("grep", "find")) 2L else 1L) %||% ".")
+    v = risk_fold(risk_arg(a, "path", if (member %in% c("grep", "find")) 2L else 1L) %||% ".",
+                  known)
     write = member %in% c("write", "edit")
-    pc = if (is.null(v)) "unknown" else risk_path_cls(v[1L], if (write) "file_write" else "read",
-                                                      root)
+    cls = vapply(v, risk_path_cls, character(1), if (write) "file_write" else "read", root)
+    pc = if (is.null(v)) "unknown" else risk_cmd_worst(cls)
+    p = v[match(pc, cls)]
     lv = risk_path_level(if (write) "file_write" else "read", if (write) 2L else 0L, pc)
-    return(risk_flags_row(paste0(txt, "(", v[1L] %||% "<computed>", ")"), txt, lv,
+    return(risk_flags_row(paste0(txt, "(", p %||% "<computed>", ")"), txt, lv,
                           if (write && pc == "control") "control" else
-                            if (write) "file_write" else "read", v[1L] %||% NA_character_, pc))
+                            if (write) "file_write" else "read", p %||% NA_character_, pc))
   }
   if (member %in% c("help", "search", "describe", "plot", "out")) return(row(0L, "read"))
   if (member == "jobs") return(row(if (isFALSE(risk_arg(a, "kill", 1L) %||% FALSE)) 0L else 3L))

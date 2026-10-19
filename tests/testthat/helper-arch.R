@@ -86,6 +86,7 @@ arch_layer_table = function() {
     "provider-openai-responses.R", "L1", "P12",
     "provider-openai-completions.R", "L1", "P12",
     "provider-google.R", "L1", "P12",
+    "provider-bedrock.R", "L1", "P26",
     "s1-types.R", "L1", "P13",
     "s1-client.R", "L4", "P13",
     "s1-route.R", "L4", "P13",
@@ -155,11 +156,18 @@ arch_kernel_sdk = function() {
 # arch_kernel_sdk() stays exactly the IC-33 list (contract section 12.2). P16's ckpt_predict()
 # wraps P11's code_targets() (IC-31, sections 7.11 and 7.16); P19's sub-agents (section 7.6
 # consumers) and the dedicated session of P18's gptr_mcp_serve() (section 6.3) create sessions
-# with P06's session_new()
+# with P06's session_new(); a served MCP call runs P06's tool_call_hook(), its tool and the
+# checkpointers as the loop does (tool_run(), tool_execute_frame(), checkpoint_before(),
+# checkpoint_after()), the console's /model checks a reference with P06's model_canonical()
+# (IC-79), and /model and /status name the full id behind a CLI's `default` with P20's
+# pcli_default_model() (section 11.10, D-226)
 arch_contract_edges = function() {
   data.frame(
-    caller_area = c("ckpt", "subagent", "mcp"),
-    callee = c("code_targets", "session_new", "session_new")
+    caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "console",
+                    "console"),
+    callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
+               "tool_execute_frame", "checkpoint_before", "checkpoint_after", "model_canonical",
+               "pcli_default_model")
   )
 }
 

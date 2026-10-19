@@ -120,7 +120,9 @@ http_timeout_next = function(t_start, t_first, t_last, timeouts) {
 #' Build the curl handle of a request spec
 #'
 #' `spec` is the `build()` result of an adapter (contract 8.1): `url`, `method` (default POST
-#' with a body, else GET), `headers` (see http_headers()), `body` (chr(1) UTF-8 text or raw).
+#' with a body, else GET), `headers` (see http_headers()), `body` (chr(1) UTF-8 text or raw) and
+#' optionally `sign`, `function(method, url, body, value)` returning more headers for this
+#' attempt, where `body` is raw and `value(handle)` materialises a handle for the URL's origin.
 #' @return a `curl_handle`; errors (for example `gptr_error_untrusted`) are signalled.
 #' @noRd
 http_handle = function(spec) {
@@ -153,6 +155,12 @@ http_handle = function(spec) {
   # CUSTOMREQUEST changes only the verb; HEAD also needs bodyless response semantics.
   if (method == "HEAD") curl::handle_setopt(h, nobody = 1L)
   hdrs = http_headers(spec[["headers"]] %||% list(), origin)
+  # a signed request (IC-80) adds its headers per attempt; handles are materialised only here
+  sign = spec[["sign"]]
+  if (is.function(sign)) {
+    signed = sign(method, url, body %||% raw(), function(handle) secret_value(handle, origin))
+    hdrs = c(hdrs, http_headers(signed, origin))
+  }
   # an empty Expect header stops libcurl from waiting for "100 Continue" before large bodies
   if (!"expect" %in% tolower(names(hdrs))) hdrs[["Expect"]] = ""
   curl::handle_setheaders(h, .list = hdrs)

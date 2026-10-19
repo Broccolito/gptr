@@ -542,6 +542,19 @@ test_that("gptr's own configuration is the control category, level 4 (IC-53, IC-
   expect_identical(gptr_risk("writeLines('x', 'AGENTS.md')", root = root)$level, 3L)
 })
 
+test_that("a delete keeps file_delete, a control target shows in path_class (IC-78)", {
+  root = local_project()
+  r = gptr_risk("unlink('.git', recursive = TRUE)", root = root)
+  f = r$flagged
+  expect_identical(list(f$category, f$path_class, f$level), list("file_delete", "control", 4L))
+  expect_true(perm_is_control(list(name = "r"), r))
+  f = risk_command("rm -rf .git/hooks", root)
+  expect_identical(list(f$category, f$path_class, f$level), list("file_delete", "control", 4L))
+  expect_identical(gptr_risk("unlink('/etc/gptr-old.csv')", root = root)$level, 4L)
+  expect_identical(flags_level(risk_command("rm -rf /etc/gptr-docs", root)), 4L)
+  expect_identical(gptr_risk("unlink(f)", root = root)$level, 3L)
+})
+
 test_that("gptr_artifacts() that relaunches or stops an app is level 3 process (04 9.4)", {
   root = local_project()
   launch = c("gptr_artifacts('a', version = 2)", "gptr_artifacts('a', open = TRUE)",
@@ -658,6 +671,41 @@ test_that("an overwrite above gptr.protect_size is level 3 and reports the size"
   expect_identical(gptr_risk("new_obj = 1", envir = e, root = root)$assigned, "new_obj")
 })
 
+test_that("an S7 object's size is unknown, so overwriting it never trips protect_size (D-189)", {
+  root = local_project()
+  e = new.env()
+  e$plt = structure(list(), class = c("pkg::plot", "S7_object"),
+                    S7_class = structure(function() NULL, pad = numeric(2e5)))
+  local_gptr_options(protect_size = 1e6)
+  r = gptr_risk("plt = 1", envir = e, root = root)
+  expect_identical(r$level, 2L)
+  expect_true(is.na(r$sizes[["plt"]]))
+  expect_match(r$flagged$call, "overwrites `plt` <pkg::plot, size unknown>", fixed = TRUE,
+               all = FALSE)
+})
+
+test_that("a plain assignment binds in envir itself, not in an enclosing environment (#32)", {
+  root = local_project()
+  base = new.env(parent = globalenv())
+  base$markers = data.frame(a = 1:3)
+  base$cfg = new.env()
+  ov = new.env(parent = base)
+  r = gptr_risk("markers = 1", envir = ov, root = root)
+  expect_false("object_write" %in% r$flagged$category)
+  expect_lte(r$level, 1L)
+  expect_identical(r$assigned, "markers")
+  for (code in c("markers <<- 1", "assign('markers', 1)", paste("with(base, markers", la, "1)"),
+                 paste("local(markers", la, "1, envir = base)"))) {
+    expect_match(gptr_risk(code, envir = ov, root = root)$flagged$call, "overwrites `markers`",
+                 fixed = TRUE, all = FALSE, label = code)
+  }
+  expect_match(gptr_risk("cfg$a = 1", envir = ov, root = root)$flagged$call, "modifies `cfg`",
+               fixed = TRUE, all = FALSE)
+  ov$markers = 1
+  expect_match(gptr_risk("markers = 2", envir = ov, root = root)$flagged$call,
+               "overwrites `markers`", fixed = TRUE, all = FALSE)
+})
+
 test_that("secret rules come from P03's secret_scan() (G6 section 3.8)", {
   root = local_project()
   r = gptr_risk("k = Sys.getenv('OPENAI_API_KEY')", root = root)
@@ -751,7 +799,7 @@ test_that("direct literal targets and function values whose row is 4 are level 4
 test_that("indirections reach a literal target only at level 3 (D-132)", {
   root = local_project()
   cases = list(
-    list(3L, "p = '~'; unlink(p, recursive = TRUE)"), list(3L, "cmd = 'rm -rf ~'; system(cmd)"),
+    list(3L, "cmd = 'rm -rf ~'; system(cmd)"),
     list(3L, "identity(unlink)('~', recursive = TRUE)"), list(3L, "eval(bquote(q()))"),
     list(3L, "Negate(file.remove)('.gptr/settings.json')"),
     list(3L, "purrr::partial(unlink, recursive = TRUE)('~')"),
@@ -759,6 +807,39 @@ test_that("indirections reach a literal target only at level 3 (D-132)", {
   )
   for (cs in cases) {
     expect_identical(gptr_risk(cs[[2]], root = root)$level, cs[[1]], label = cs[[2]])
+  }
+})
+
+test_that("a name assigned outside a function body holds the paths it may hold (D-211)", {
+  root = local_project()
+  for (code in c("p = '/etc/gptr-old.csv'; file.remove(p)",
+                 "p = normalizePath('/etc/gptr-old.csv', mustWork = FALSE); file.remove(p)",
+                 "p = '/etc/gptr-old.csv'; if (dry) p = tempfile(); unlink(p)",
+                 "p = tempfile(); if (dry) p = '/etc/gptr-old.csv'; unlink(p)",
+                 "p = '/etc/gptr-old.csv'; p = tempfile(fileext = file.remove(p))")) {
+    r = gptr_risk(code, root = root)
+    f = r$flagged[r$flagged$category == "file_delete", ]
+    expect_identical(list(r$level, f$path, f$path_class),
+                     list(4L, "/etc/gptr-old.csv", "outside"), label = code)
+  }
+  expect_identical(gptr_risk("p = '~'; unlink(p, recursive = TRUE)", root = root)$level, 4L)
+  for (code in c("f = tempfile(); unlink(f)",
+                 "p = '/etc/gptr-old.csv'; p = tempfile(); unlink(p)")) {
+    expect_identical(gptr_risk(code, root = root)$level, 1L, label = code)
+  }
+  f = gptr_risk("p = tempfile(); if (x) p = '.Rprofile'; file(p, 'w')", root = root)$flagged
+  expect_identical(list(f$level, f$path), list(4L, ".Rprofile"))
+  f = gptr_risk("p = tempfile(); if (x) p = '/etc/x'; peter$write(p, 'y')", root = root)$flagged
+  expect_identical(list(f$level, f$path), list(3L, "/etc/x"))
+  for (code in c("p = '/etc/x'; p = readLines('y')[1]; file.remove(p)",
+                 "p = '/etc/x'; f = function(p) file.remove(p)",
+                 "p = Sys.getenv('OUT'); if (!nzchar(p)) p = tempfile(); unlink(p, TRUE)",
+                 "if (!exists('p')) p = tempfile(); unlink(p, recursive = TRUE)",
+                 "p = tempfile(); for (f in c('/etc/a', '/etc/b')) { unlink(p); p = f }",
+                 "p = tempfile(); for (f in c('/etc/a')) { unlink(p); p[1] = f }",
+                 "f = function() p <<- '~'; p = tempfile(); f(); unlink(p, recursive = TRUE)",
+                 "p = tempfile(); assign(value = '/etc/x', x = 'p'); file.remove(p)")) {
+    expect_identical(gptr_risk(code, root = root)$level, 3L, label = code)
   }
 })
 
