@@ -240,9 +240,10 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
     invoke = function(action) {
       writeBin(charToRaw("launch"), stage)
       writeBin(charToRaw("pending"), diagnostic)
+      # A hang guard only: a cold PowerShell start alone has exceeded 5 s on Windows R-devel.
       tryCatch(processx::run(shell, c("-NoProfile", "-NonInteractive", "-File", script,
         "-Path", path, "-Control", control, "-Backup", backup, "-Stage", stage,
-        "-Action", action), timeout = 5, error_on_status = TRUE, windows_hide_window = TRUE,
+        "-Action", action), timeout = 60, error_on_status = TRUE, windows_hide_window = TRUE,
         cleanup_tree = TRUE, env = character()), error = function(error) {
           phase = tryCatch(rawToChar(readBin(stage, "raw", 128L)),
                            error = function(error) "unreadable-marker")
