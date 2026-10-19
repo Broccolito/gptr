@@ -537,8 +537,7 @@ bridge_job_status = function(job) {
 #' New bytes of a job's output file since the last read; while the job runs only through the
 #' last newline, so a partial last line waits
 #' @noRd
-bridge_job_bytes = function(job, stream) {
-  alive = isTRUE(job$.proc$is_alive())
+bridge_job_bytes = function(job, stream, running) {
   path = job$.files[[stream]]
   from = job$.pos[[stream]]
   n = if (file.exists(path)) file.size(path) - from else 0
@@ -547,11 +546,12 @@ bridge_job_bytes = function(job, stream) {
   on.exit(close(con), add = TRUE)
   seek(con, from)
   bytes = readBin(con, "raw", n)
-  if (alive) bytes = bytes[seq_len(max(0L, which(bytes == as.raw(10L))))]
+  if (running) bytes = bytes[seq_len(max(0L, which(bytes == as.raw(10L))))]
   bytes
 }
 
-#' New complete lines of one stream since the last read, with the footer `"[<id> <status>, <s>s]"`
+#' New complete lines of one stream since the last read, with the footer `"[<id> <status>, <s>s]"`;
+#' the status is taken first, so a read that reports the job ended holds all of its output
 #' @noRd
 bridge_job_read = function(job, stream = "stdout", n = NULL) {
   stream = check_choice(stream, c("stdout", "stderr"), "stream")
@@ -560,11 +560,12 @@ bridge_job_read = function(job, stream = "stdout", n = NULL) {
     gptr_abort("This job merges stderr into stdout (merge = TRUE); read stdout.",
                "invalid_argument", arg = "stream", expected = "\"stdout\" for a merged job")
   }
-  bytes = bridge_job_bytes(job, stream)
+  status = bridge_job_status(job)
+  bytes = bridge_job_bytes(job, stream, status == "running")
   job$.pos[[stream]] = job$.pos[[stream]] + length(bytes)
   lines = clean_terminal(raw_to_utf8(bytes))
   if (!is.null(n)) lines = utils::tail(lines, n)
-  bridge_text(lines, paste0("[", job$id, " ", bridge_job_status(job), ", ",
+  bridge_text(lines, paste0("[", job$id, " ", status, ", ",
                             round(reactor_now() - job$.started), "s]"))
 }
 
@@ -576,7 +577,8 @@ bridge_job_wait = function(job, timeout = Inf, until = NULL) {
   settled = function() {
     if (!isTRUE(job$.proc$is_alive())) return(TRUE)
     !is.null(until) &&
-      any(grepl(until, clean_terminal(raw_to_utf8(bridge_job_bytes(job, "stdout"))), perl = TRUE))
+      any(grepl(until, clean_terminal(raw_to_utf8(bridge_job_bytes(job, "stdout", TRUE))),
+                perl = TRUE))
   }
   reactor_pump(until = settled, slice_ms = 200L, timeout = timeout)
   bridge_job_read(job)

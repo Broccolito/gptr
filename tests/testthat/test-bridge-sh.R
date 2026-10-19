@@ -460,6 +460,29 @@ test_that("wait(until =) returns once the matching line is complete", {
   expect_true("ready" %in% first)
 })
 
+test_that("a job that exits during a read reads running, so a done read holds all output", {
+  out = withr::local_tempfile()
+  cat("a\nlast", file = out)
+  # The process answers alive once, then has exited with status 0
+  alive = 1
+  proc = list(get_pid = function() 1L, get_exit_status = function() 0L, is_alive = function() {
+    alive <<- alive - 1
+    alive >= 0
+  })
+  id = id_new("j", 6L)
+  withr::defer({
+    bridge_state$jobs[[id]] = NULL
+    job_remove(id)
+  })
+  j = bridge_job_new(id, "fake", "fake", proc, out, NULL)
+  first = j$read()
+  expect_identical(as.character(first), "a")
+  expect_match(attr(first, "footer"), " running, ", fixed = TRUE)
+  rest = j$read()
+  expect_identical(as.character(rest), "last")
+  expect_match(attr(rest, "footer"), " done, ", fixed = TRUE)
+})
+
 test_that("a job with stdin = TRUE talks over stdin and kill() stops it", {
   skip_on_cran()
   code = paste("con = file('stdin'); open(con); cat('ready\\n'); flush(stdout());",
