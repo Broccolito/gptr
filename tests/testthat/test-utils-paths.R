@@ -312,7 +312,8 @@ test_that("path_info() gives a link to nothing no metadata and no warning on eve
   expect_identical(unlink(gone, recursive = TRUE), 0L)
   p = file.path(td, c("file", "dangling", "absent"))
   info = expect_no_warning(path_info(p))
-  expect_identical(info[1L, ], file.info(p[1L], extra_cols = FALSE))
+  keep = setdiff(names(info), "atime")   # reading a file may update its access time
+  expect_identical(info[1L, keep], file.info(p[1L], extra_cols = FALSE)[keep])
   expect_true(all(is.na(info[-1L, ])))
   expect_identical(info$isdir %in% FALSE, c(TRUE, FALSE, FALSE))
   expect_true(path_dangling(link))
@@ -321,8 +322,9 @@ test_that("path_info() gives a link to nothing no metadata and no warning on eve
   environment(windows) = list2env(list(file.info = function(...) {
     warning("cannot open file 'dangling': The system cannot find the file specified")
     na = .POSIXct(NA_real_)
-    data.frame(size = 0, isdir = TRUE, mode = as.octmode("777"), mtime = na, ctime = na,
-               atime = na)
+    info = data.frame(size = 0, isdir = TRUE, mtime = na, ctime = na, atime = na)
+    info$mode = as.octmode("777")   # R 4.2's data.frame() cannot coerce an octmode column
+    info
   }), parent = environment(path_info))
   expect_true(all(is.na(expect_no_warning(windows(link)))))
 })
