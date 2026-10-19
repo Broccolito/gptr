@@ -1145,6 +1145,11 @@ test_that("RStudio buffers are edited by id, saved when clean, the cursor moved 
   f = file.path(getwd(), "a.R")
   writeLines(c("x = 1", "peter(\"count rows\")", "z = 2"), f)
   ed = local_fake_editor(path_norm(f), readLines(f))
+  own = character()
+  local_service("checkpoint.own_write", function(path, write) {
+    write()
+    own <<- c(own, readLines(path)[4])
+  })
   res = doc_upsert(doc_ide_site(f, "count rows", "rstudio"),
                    structure("n = nrow(mtcars)", header = list(model = "m")))
   expect_identical(res$action, "insert")
@@ -1154,6 +1159,7 @@ test_that("RStudio buffers are edited by id, saved when clean, the cursor moved 
                                      "n = nrow(mtcars)", paste0("# <<< gptr:", res$block_id)))
   expect_identical(ed$ids[[1]], "doc1")
   expect_identical(ed$saved, "doc1")
+  expect_identical(own, "n = nrow(mtcars)")
   expect_identical(ed$cursor, 6L)
   expect_identical(readLines(f), ed$buffer)
 })

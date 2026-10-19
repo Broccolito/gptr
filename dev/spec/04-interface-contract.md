@@ -2189,6 +2189,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `doc.s1_block` | P15 | top-level System 1 calls (P13) | `function(call, summary) invisible(NULL)` (writes the one-line block) |
 | `doc.replay` | P15 | `team` and `fanout` routes (P19) | `function(call) <session> or NULL`: the replayed team or fan-out session for a fresh block, else `NULL` (IC-47) |
 | `checkpoint.note` | P16 | permission detail view (P11) | `function(call, run) chr(1) or NULL` ("cannot be undone: ...") |
+| `checkpoint.own_write` | P16 | P15's own document writes (`doc_own_write()`: `doc_write()`, an IDE backend's save of a clean buffer) | `function(path, write) value`: runs `write()`, gptr's own write of `path`; a files tracker that saw `path` as it was just before takes the new content without recording it, so no turn's undo reverts it |
 | `agent_def.get` | P17 | `gptr_agent()` (P02) | `function(name, file = NULL) <spec:agent>` |
 | `skill.catalog`, `skill.body` | P17 | `skills =` preloads (P08/P07), `peter$search()` (P10) | `function(session, budget) chr(1)`; `function(name) list(text, dir)` |
 | `plugin.enable` | P17 | `peter(plugins =, extensions =)` (P08) | `function(name, rank, session = NULL) invisible(lgl(1))` |
@@ -2856,7 +2857,7 @@ doc_upsert(site, doc_block_lines(s, 1L, site, 1L))
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `builtin_checkpoints(gptr)` | `ckpt-rewind.R` | registers `checkpointer` specs `objects`, `files`, `state`; command specs `/undo`, `/redo`, `/rewind`, `/checkpoints`; the service `checkpoint.note` | P02 load |
+| `builtin_checkpoints(gptr)` | `ckpt-rewind.R` | registers `checkpointer` specs `objects`, `files`, `state`; command specs `/undo`, `/redo`, `/rewind`, `/checkpoints`; the services `checkpoint.note` and `checkpoint.own_write` | P02 load |
 | `ckpt_predict(code)` | `ckpt-objects.R` | `list(assign, modify, byref, remove, super, files, unknown, process)` (chr each): P11's `code_targets()` reduced to what the object and file checkpointers need | P16 |
 | `ckpt_store_put(path)` / `ckpt_store_get(hash, dest)` | `ckpt-files.R` | content-addressed blobs `<root>/checkpoints/blobs/<2hex>/<xxh128>[.gz]` | P16, P23 (artifact records) |
 

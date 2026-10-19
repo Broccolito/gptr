@@ -815,6 +815,28 @@ test_that("a forced turn scan records what a CLI child changed (IC-65)", {
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
 })
 
+test_that("gptr's own writes are no turn's change; an edit the tracker has not seen still is", {
+  proj = local_project(files = list("analysis.R" = "a = 1"))
+  ck = ckpt_ck_new("s0000000035")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  doc = file.path(proj, "analysis.R")
+  new = file.path(proj, "transcript.R")
+  ckpt_files_own_write(list(tr), doc, function() writeLines("a = 2", doc))
+  ckpt_files_own_write(list(tr), new, function() writeLines("t = 1", new))
+  expect_null(ckpt_files_turn_scan(ck, 1L, force = TRUE))
+  for (f in c(doc, new)) writeLines("edited", f)
+  ckpt_files_own_write(list(tr), doc, function() writeLines("a = 3", doc))
+  frag = ckpt_files_turn_scan(ck, 2L, force = TRUE)
+  expect_identical(paths_status(frag), c(analysis.R = "modified", transcript.R = "modified"))
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
+  expect_identical(readLines(doc), "a = 2")
+  expect_identical(readLines(new), "t = 1")
+  local_mocked_bindings(ckpt_ext_state = function(s = NULL) stop("no registry"))
+  ckpt_own_write(doc, function() writeLines("a = 4", doc))
+  expect_identical(readLines(doc), "a = 4")
+})
+
 
 test_that("checkpoint payloads are private before gzip or raw-copy writes", {
   skip_on_os("windows")

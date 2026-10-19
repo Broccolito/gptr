@@ -367,8 +367,8 @@ ckpt_as_scanned = function(tr, rel, state) {
   isTRUE(info$size == tr$stat$size[i] && as.numeric(info$mtime) == tr$stat$mtime[i])
 }
 
-#' Bring the stat row of a relative path up to date (after an explicit record or a restore), so
-#' that the next walk does not report it again
+#' Bring the stat row of a relative path up to date (after an explicit record, a restore or gptr's
+#' own write), so that the next walk does not report it again
 #' @noRd
 ckpt_stat_refresh = function(tr, rel) {
   if (is.null(tr$stat)) return(invisible())
@@ -477,6 +477,31 @@ ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
   rows = ckpt_files_step(tr)
   if (!length(rows)) return(NULL)
   list(id = ckpt_frag_id(), turn = as.integer(turn), root = tr$root, files = rows)
+}
+
+#' gptr's own write of `full` (a document; P15's doc_own_write()): `write()` runs, and each
+#' tracker that saw the file as it was just before takes the new content as a scan would, without
+#' recording it, so no turn's undo reverts it (a rewind makes undone blocks inert instead). A
+#' tracker that had not seen it (an edit not scanned yet) records the edit and the write together
+#' at its next scan; one whose bookkeeping fails is otherwise left to its next scan.
+#' @return The value of `write()`.
+#' @noRd
+ckpt_files_own_write = function(trs, full, write) {
+  seen = function(tr) {
+    rel = if (is.null(tr$stat)) NA_character_ else ckpt_walked(tr, full)
+    if (!is.na(rel) && ckpt_as_scanned(tr, rel, ckpt_explicit_state(full))) rel else NA_character_
+  }
+  rels = vapply(trs, function(tr) tryCatch(seen(tr), error = function(e) NA_character_), "")
+  value = write()
+  for (i in which(!is.na(rels))) {
+    tr = trs[[i]]
+    rel = rels[[i]]
+    tryCatch({
+      if (ckpt_capturable(full)) ckpt_ingest(tr, rel) else tr$hash = tr$hash[names(tr$hash) != rel]
+      ckpt_stat_refresh(tr, rel)
+    }, error = function(e) NULL)
+  }
+  value
 }
 
 # ---- restores (G7 section 3.6; IC-52, IC-54) -----------------------------------------------------

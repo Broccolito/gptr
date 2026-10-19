@@ -533,7 +533,8 @@ test_that("a CLI child's file edit in an aborted turn is undone too (IC-65)", {
   expect_gt(match("checkpoints", ext_builtin_order()), match("cli", ext_builtin_order()))
 })
 
-test_that("undone blocks in a bound document become inert; re-sourcing reproduces the rewind", {
+# A script of three turns recorded into itself, rewound to turn 1 (G7 3.8)
+expect_bound_rewind = function() {
   proj = local_project()
   local_gptr_options(record = "auto", replay = "auto")
   local_mocked_bindings(front_end = function() "terminal")
@@ -561,6 +562,18 @@ test_that("undone blocks in a bound document become inert; re-sourcing reproduce
   expect_identical(e2$a, 1)
   expect_false(exists("b", envir = e2, inherits = FALSE))
   expect_identical(length(fake_requests(fake)), n)
+}
+
+test_that("undone blocks in a bound document become inert; re-sourcing reproduces the rewind", {
+  expect_bound_rewind()
+})
+
+test_that("a turn's file scan never records gptr's own block writes (per-turn mode, CLI route)", {
+  local_gptr_options(checkpoint_scan_budget = -1)
+  expect_bound_rewind()
+  local_gptr_options(checkpoint_scan_budget = Inf)
+  local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  expect_bound_rewind()
 })
 
 two_turn_session = function(e, .env = parent.frame()) {
