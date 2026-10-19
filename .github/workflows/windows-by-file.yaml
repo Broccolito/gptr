@@ -150,11 +150,17 @@ jobs:
           needs: check
       - uses: ./.github/actions/optional-dependencies
         if: inputs.optional
+      # R-CMD-check's Windows Python: bp_run() always starts the Windows no-follow observer
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        id: windows_python
+        if: '!inputs.optional'
+        with:
+          python-version: '3.12.10'
       - name: Provision the Windows private numerical Python and admit its native library
-        if: inputs.optional && inputs.supervisor_rss_comparison && runner.os == 'Windows'
+        if: runner.os == 'Windows' && (!inputs.optional || inputs.supervisor_rss_comparison)
         shell: bash
         env:
-          GPTR_BASE_PYTHON: ${{ env.RETICULATE_PYTHON }}
+          GPTR_BASE_PYTHON: ${{ steps.windows_python.outputs.python-path || env.RETICULATE_PYTHON }}
         run: |
           "$GPTR_BASE_PYTHON" - <<'PY'
           import hashlib, json, os, pathlib, subprocess, sys
