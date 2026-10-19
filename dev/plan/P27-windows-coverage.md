@@ -9,7 +9,7 @@ Windows lane green twice on one commit. Branch `claude/windows-coverage-p27`, dr
 and Chromium sources and the hosted logs, reproduces the failure on macOS where it is portable, or
 emulates the Win32 calls with stubs (`is_windows()` TRUE, `Sys.readlink()` empty, UCRT `stat()`
 facts), and claims Windows behaviour only from hosted runs. Per-fix evidence:
-`dev/progress/fixes.md` Tasks CI-25..CI-70.
+`dev/progress/fixes.md` Tasks CI-25..CI-73.
 
 **Depends on:** P01-P26. **Milestone:** post-M5 maintenance, before CRAN submission.
 
@@ -23,7 +23,7 @@ facts), and claims Windows behaviour only from hosted runs. Per-fix evidence:
   not proven is called inferred. Two test elapsed bounds were raised from 10 s to 30 s (Task 2).
 - A Windows branch that cannot run locally is checked against R's Windows sources and, where
   portable, by a macOS emulation; its Windows status stays pending until a hosted run passes it.
-- Ids: fixes CI-25..CI-70, deviations D-228..D-235; every rename, unskip and `dev/ci` registry
+- Ids: fixes CI-25..CI-73, deviations D-228..D-235; every rename, unskip and `dev/ci` registry
   change is named in its commit body.
 - Lanes run in worktrees from this branch and are cherry-picked in order; a lane never pushes or
   dispatches a hosted run.
@@ -189,7 +189,7 @@ Decisions:
 
 Commits: `e941222`, `05537a8`, `136beda`.
 
-### Task 11: Test harness bounds on loaded runners (CI-44, CI-62, CI-70)
+### Task 11: Test harness bounds on loaded runners (CI-44, CI-62, CI-70..CI-73)
 
 Decisions:
 - `bp_run()` charges the observer's supervisor only for its growth in the case; the 1 GiB cap is
@@ -199,14 +199,24 @@ Decisions:
 - `bp_observe()` retries the five transient observer reasons every 100 ms until the 1 s snapshot
   deadline has passed since the first failure, not once; the observer, caps and deadlines are
   unchanged.
+- The observer's construction raises `observer-initial-entry-limit` and `observer-initial-deadline`
+  apart; `bp_run()` constructs through `bp_observe()`, which retries the initial deadline as it
+  retries the snapshot deadline, and the entry limit stays fatal.
+- The observer charges a non-reparse regular file whose lstat gives `st_ino` 0 as an ordinary file
+  only when `NtQueryAttributesFile` on the same literal path returns exactly `STATUS_DELETE_PENDING`;
+  every other `st_ino`-0 entry stays `observer-metadata-invalid`. A Windows-only case in
+  `test-bp-disk-observer.R` makes a real delete-pending file and is that file's one platform guard
+  in the Optional-integrations registry.
+- Two tests that abort a hanging fake request pump until the run streams (at most 30 s), not for a
+  fixed 0.2 s, so the provider has read the request before the abort.
 
-Commits: `f663aa1`, `92a2944`, `404b90a`.
+Commits: `f663aa1`, `92a2944`, `404b90a`, `a41cfb8`, `6ad7a95`, `1b472c2`, `406befb`.
 
 ### Task 12: Documentation
 
 Decisions:
 - This plan, its index row and its row in 05's dependency table (with P26's); fixes
-  CI-25..CI-70; D-228..D-235, the D-231 and D-233 amendments, the D-019 item 2 correction and the
+  CI-25..CI-73; D-228..D-235, the D-231 and D-233 amendments, the D-019 item 2 correction and the
   Windows stdin status of D-019 item 5, D-101, D-104 and D-106; the P27 sections of
   `dev/PROGRESS.md` and `dev/HANDOFF.md`.
 - Plans and 05 cite the test titles P27 renamed (P04, P10, P18, P20, P22, P23); 04 section 3.2
@@ -216,7 +226,7 @@ Decisions:
 
 ## Renamed and unskipped tests
 
-`skip_on_os("windows")` sites: 77 at `f4202bb`, 60 at `92a2944` and `404b90a`. Renamed:
+`skip_on_os("windows")` sites: 77 at `f4202bb`, 60 at `92a2944`, `404b90a` and `406befb`. Renamed:
 
 | File | Old title | New title | Commit |
 |---|---|---|---|
@@ -253,12 +263,12 @@ Decisions:
 
 | Row | Command | Actual | Status |
 |---|---|---|---|
-| A1 | R-CMD-check `windows-latest (release)`, NOT_CRAN, green twice on one commit | `9170baf` run 39217189384 job 117943690103: `FAIL 2 \| WARN 8`, `test-bridge-sh.R:146` and `:155` (PowerShell route, fixed by CI-66); the WARN are the dangling sidecar warnings fixed by CI-60. `92a2944` run 39235008757 job 118001849245: `FAIL 2 \| WARN 0`, the same two. `85e5883` run 39250578309 job 118053097431 and `74de8c6` run 39255504135 job 118076803835 (the same `R/` and `tests/`): `Status: OK`, `FAIL 0 \| WARN 0 \| SKIP 94 \| PASS 33631`, both artifact session checks ran (CI-63) | pending on the final head (`404b90a` not run) |
-| A2 | R-CMD-check `windows-latest (oldrel-4)`, NOT_CRAN, green twice on one commit | `9170baf` job 117943690159: `FAIL 2 \| WARN 4`, the same two expectations. `92a2944` job 118001849423: `FAIL 3 \| WARN 0`, the same two and `test-utils-paths.R:324` (R 4.2.3 `octmode`, fixed by CI-67). `85e5883` job 118053097175: testthat `FAIL 0 \| WARN 0 \| SKIP 94 \| PASS 33631`, but native-07 failed on `observer-metadata-invalid` twice in a row (fixed by CI-70). `74de8c6` job 118076804097: `Status: 1 NOTE` (size), `FAIL 0` | pending on the final head (green once, on `74de8c6`) |
-| A3 | windows-by-file ordinary full suite (`optional = false`), green twice on one commit | `2c9b6a4` run 39202175985 job 117897290402: `test-bridge-lang.R`, `test-bridge-sh.R`, `test-console-notice.R`, `test-tool-write.R` failed (CI-49, CI-51, CI-53 came after); the filtered `9170baf` run 39217182105 job 117943670939: only `test-bridge-sh.R` failed (`:146`, `:155`, `:445`, `:449`; CI-66, CI-65). `85e5883` run 39250571244 and `74de8c6` runs 39255516069 and 39255537264: all 203 files pass; both `74de8c6` runs skipped the first session check (`test-artifact-app.R:511`) as a browser startup failure, whose reason the runner does not print | pending on the final head |
-| A4 | rscript-native on Windows, macOS and Ubuntu, green twice on one commit | `2c9b6a4` run 39202178250: macOS and Ubuntu green; Windows job 117897297705 failed on an unexpected session-check skip (Chrome for Testing bind `0x271D`, fixed by CI-59); `92a2944` run 39234997432, `85e5883` run 39250575003 and `74de8c6` runs 39255497307 and 39255504649: all three green | pending on the final head |
-| A5 | Exact-tarball (Windows release and R-devel in CRAN mode, macOS, Ubuntu), green twice on one commit | `2c9b6a4` run 39202180585, `85e5883` run 39250578324 and `74de8c6` run 39255512201: all five legs green; a second `74de8c6` run (39255541223) had its Windows and macOS legs green and its Ubuntu legs running when this was written | pending on the final head |
-| A6 | windows-by-file optional Windows packet, green twice on one commit | `92a2944` run 39235001873 job 118001831486: 12 optional files PASS; `85e5883` run 39250581987 and `74de8c6` runs 39255501073 and 39255508574 green | pending on the final head |
-| A7 | the other R-CMD-check jobs | `9170baf`: 11 green; `ubuntu-latest (oldrel-4)` job 117943690034 `FAIL 1`, `test-artifact-app.R:488` "The private headless browser directory did not finish cleanup: unlink returned 1" (fixed by CI-64). `92a2944` run 39235008757: `ubuntu-latest (oldrel-4)` job 118001849303 `FAIL 1`, `test-utils-paths.R:324` (R 4.2.3, CI-67); `ubuntu-latest (release, LC_ALL=C)` job 118001849130 `FAIL 1`, `test-bridge-sh.R:512` (`length(tree)` 1, expected >= 2); the other 10 green. `85e5883`: all 12 green. `74de8c6`: `ubuntu-latest (release, no Suggests)` job 118076803865 `FAIL 1`, `test-bridge-sh.R:569` (0 of 2 sleeps for 10 s, fixed by CI-69); the other 11 green | pending on the final head |
-| A8 | macOS: full offline suite, lint, `python3 -I dev/ci/check-plans.py` | `3383843`: `[ FAIL 0 \| WARN 0 \| SKIP 62 \| PASS 34753 ]`, lint clean; `85e5883`: `[ FAIL 0 \| WARN 0 \| SKIP 63 \| PASS 34801 ]` and `R CMD check --as-cran` 0 errors, 0 warnings, 0 notes; `404b90a`: only the lanes' test files (CI-68..CI-70). Plan checks with this plan: `27 plans, 1446 blocks, 4391 definitions, 28351 calls, 957 findings (info 823, warn 134)`, 0 error; `770 R blocks; 0 with parse/style problems`; `no lints`. P27's 13 warnings name functions that exist in `R/` or `tests/testthat/` but in no plan block (`path_info()`, `path_dangling()`, `path_listed()`, `path_is_link()`, `scrub_walk()`, `scrub_lock()`, `proc_children()`, `proc_family_wait()`, `local_symlink()`, `local_dangling_link()`, `family_left()`, `bp_run()`, `bp_observe()`), as P26's do; its `plan_not_in_decomposition` warning, and P26's, are fixed by their rows in 05 | pass on `85e5883`; pending on the final head |
+| A1 | R-CMD-check `windows-latest (release)`, NOT_CRAN, green twice on one commit | `9170baf` run 39217189384 job 117943690103: `FAIL 2 \| WARN 8`, `test-bridge-sh.R:146` and `:155` (PowerShell route, fixed by CI-66); the WARN are the dangling sidecar warnings fixed by CI-60. `92a2944` run 39235008757 job 118001849245: `FAIL 2 \| WARN 0`, the same two. `85e5883` run 39250578309 job 118053097431 and `74de8c6` run 39255504135 job 118076803835 (the same `R/` and `tests/`): `Status: OK`, `FAIL 0 \| WARN 0 \| SKIP 94 \| PASS 33631`, both artifact session checks ran (CI-63). `d9a7840` (`404b90a` merged with `main`) run 39274424747 jobs 118134892121 and 118200832727 (attempts 1 and 2): green | pending on the final head (green twice on `d9a7840`) |
+| A2 | R-CMD-check `windows-latest (oldrel-4)`, NOT_CRAN, green twice on one commit | `9170baf` job 117943690159: `FAIL 2 \| WARN 4`, the same two expectations. `92a2944` job 118001849423: `FAIL 3 \| WARN 0`, the same two and `test-utils-paths.R:324` (R 4.2.3 `octmode`, fixed by CI-67). `85e5883` job 118053097175: testthat `FAIL 0 \| WARN 0 \| SKIP 94 \| PASS 33631`, but native-07 failed on `observer-metadata-invalid` twice in a row (fixed by CI-70). `74de8c6` job 118076804097: `Status: 1 NOTE` (size), `FAIL 0`. `d9a7840` run 39274424747: attempt 1 job 118134892183 failed native-08 while constructing the observer (`observer-initial-entry-or-time-limit`, fixed by CI-72); attempt 2 job 118200832757 failed native-01 on `observer-metadata-invalid` after 8 retries (CI-73) | pending on the final head (green once, on `74de8c6`) |
+| A3 | windows-by-file ordinary full suite (`optional = false`), green twice on one commit | `2c9b6a4` run 39202175985 job 117897290402: `test-bridge-lang.R`, `test-bridge-sh.R`, `test-console-notice.R`, `test-tool-write.R` failed (CI-49, CI-51, CI-53 came after); the filtered `9170baf` run 39217182105 job 117943670939: only `test-bridge-sh.R` failed (`:146`, `:155`, `:445`, `:449`; CI-66, CI-65). `85e5883` run 39250571244 and `74de8c6` runs 39255516069 and 39255537264: all 203 files pass; both `74de8c6` runs skipped the first session check (`test-artifact-app.R:511`) as a browser startup failure, whose reason the runner does not print. `d9a7840` runs 39274424599 and 39274441623: green | pending on the final head (green twice on `d9a7840`) |
+| A4 | rscript-native on Windows, macOS and Ubuntu, green twice on one commit | `2c9b6a4` run 39202178250: macOS and Ubuntu green; Windows job 117897297705 failed on an unexpected session-check skip (Chrome for Testing bind `0x271D`, fixed by CI-59); `92a2944` run 39234997432, `85e5883` run 39250575003, `74de8c6` runs 39255497307 and 39255504649 and `d9a7840` runs 39274414158 and 39274432989: all three green | pending on the final head (green twice on `d9a7840`) |
+| A5 | Exact-tarball (Windows release and R-devel in CRAN mode, macOS, Ubuntu), green twice on one commit | `2c9b6a4` run 39202180585, `85e5883` run 39250578324, `74de8c6` runs 39255512201 and 39255541223 and `d9a7840` runs 39274429016 and 39274447505: all five legs green | pending on the final head (green twice on `d9a7840`) |
+| A6 | windows-by-file optional Windows packet, green twice on one commit | `92a2944` run 39235001873 job 118001831486: 12 optional files PASS; `85e5883` run 39250581987, `74de8c6` runs 39255501073 and 39255508574 and `d9a7840` runs 39274419504 and 39274437600 green | pending on the final head (green twice on `d9a7840`) |
+| A7 | the other R-CMD-check jobs | `9170baf`: 11 green; `ubuntu-latest (oldrel-4)` job 117943690034 `FAIL 1`, `test-artifact-app.R:488` "The private headless browser directory did not finish cleanup: unlink returned 1" (fixed by CI-64). `92a2944` run 39235008757: `ubuntu-latest (oldrel-4)` job 118001849303 `FAIL 1`, `test-utils-paths.R:324` (R 4.2.3, CI-67); `ubuntu-latest (release, LC_ALL=C)` job 118001849130 `FAIL 1`, `test-bridge-sh.R:512` (`length(tree)` 1, expected >= 2); the other 10 green. `85e5883`: all 12 green. `74de8c6`: `ubuntu-latest (release, no Suggests)` job 118076803865 `FAIL 1`, `test-bridge-sh.R:569` (0 of 2 sleeps for 10 s, fixed by CI-69); the other 11 green. `d9a7840` run 39274424747: `ubuntu-latest (oldrel-4)` hit the 45-minute job timeout on both attempts (jobs 118134892383, 118200833216; fixed by CI-71); the other 11 green on both attempts, `ubuntu-latest (release, no Suggests)` among them (CI-69) | pending on the final head |
+| A8 | macOS: full offline suite, lint, `python3 -I dev/ci/check-plans.py` | `3383843`: `[ FAIL 0 \| WARN 0 \| SKIP 62 \| PASS 34753 ]`, lint clean; `85e5883`: `[ FAIL 0 \| WARN 0 \| SKIP 63 \| PASS 34801 ]` and `R CMD check --as-cran` 0 errors, 0 warnings, 0 notes; `d9a7840`: `[ FAIL 0 \| WARN 0 \| SKIP 63 \| PASS 34827 ]` and `R CMD check --as-cran` 0 errors, 0 warnings, 0 notes; `406befb`: only the lanes' test files (CI-71..CI-73). Plan checks with this plan: `27 plans, 1446 blocks, 4391 definitions, 28351 calls, 957 findings (info 823, warn 134)`, 0 error; `770 R blocks; 0 with parse/style problems`; `no lints`. P27's 13 warnings name functions that exist in `R/` or `tests/testthat/` but in no plan block (`path_info()`, `path_dangling()`, `path_listed()`, `path_is_link()`, `scrub_walk()`, `scrub_lock()`, `proc_children()`, `proc_family_wait()`, `local_symlink()`, `local_dangling_link()`, `family_left()`, `bp_run()`, `bp_observe()`), as P26's do; its `plan_not_in_decomposition` warning, and P26's, are fixed by their rows in 05 | pass on `d9a7840`; pending on the final head |
 | A9 | Plan-gates (Ubuntu) and Optional-integrations (Windows and Ubuntu), green on one commit, the Windows leg twice | neither has run on this branch (both are dispatched with a `source_sha`); the plan checks pass on macOS (A8), and the optional registry passed in the windows-by-file optional packet (A6) | pending |
