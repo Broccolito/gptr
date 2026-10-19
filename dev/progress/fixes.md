@@ -259,7 +259,8 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   SKIP 24, RSS 3.3 GB at the end.
 - Deviations: none. Open: hosted Windows evidence (native-06 and the other native backpressure
   cases on release and oldrel-4, twice). On 85e5883 the one retry met the same delete-pending file
-  (native-07), so CI-70 retries for one snapshot deadline.
+  (native-07), so CI-70 retries for one snapshot deadline; on d9a7840 native-01's entry outlasted
+  that too, so CI-73 charges an exactly delete-pending file as a file.
 
 ## Task CI-24 - The fd-0 reader test types its check mark only in a UTF-8 locale (2026-10-18, #48)
 - `test-console-typing.R:446` (new in #48) failed in runs 39175666947 and 39179983061
@@ -889,8 +890,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   of the fixture (low) -> these commits. r1 3 findings: the D-231 and P27 text (applied); the
   case-sensitive testthat evidence (above); `doc_sidecar_exists()` kept, since folding it into
   `path_dangling()` would drop a fail-closed POSIX case (#47).
-- Deviations: D-231 (corrected). Open: not yet run on hosted CI; ubuntu runs the case-sensitive branch
-  without a skip, and no run has taken the Windows branch (a junction `Link` looked up as `link`).
+- Deviations: D-231 (corrected). Open: on d9a7840 (run 39274424747, both attempts) the case passed in
+  R-CMD-check `windows-latest (release)`, the Windows branch (a junction `Link` looked up as `link`),
+  and in the ubuntu rows other than oldrel-4 (CI-71), the case-sensitive branch; repeat pending on
+  the final head.
 
 ## Task CI-69 - A child's descendants are read from ps's own handle of its pid (2026-10-19, #51)
 - On 92a2944 `ubuntu-latest (release, LC_ALL=C)` (job 118001849130) found 1 of the 2 background
@@ -915,8 +918,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   macOS `bridge-sh` and `proc-supervise` pass, also with `_R_CHECK_PACKAGE_NAME_=gptr` and LC_ALL=C,
   and the `proc-*`, `subagent-*`, `cli-*` and `bridge-*` files and their neighbours pass. Lint clean.
 - Reviews: none recorded.
-- Deviations: D-233 (amended). Open: not yet run on hosted ubuntu; the Linux evidence is the
-  emulation, not the R test. Other `ps_children()` callers are unchanged: the backpressure and
+- Deviations: D-233 (amended). Open: on d9a7840 (run 39274424747) `test-bridge-sh.R` passed in the
+  ubuntu R-CMD-check rows other than oldrel-4 (CI-71) on both attempts, `release, no Suggests` and
+  `release, LC_ALL=C` among them; the old lookup missed only in some runs, so this pair alone does
+  not prove the fix. Other `ps_children()` callers are unchanged: the backpressure and
   marker-family helpers already use `ps::ps_handle(pid)`, and the windows-startup probe's processx
   handle carries one OS timestamp on Windows.
 
@@ -944,6 +949,147 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `observer_retries` 0; `^(proc-|bp-)` PASS 2317 SKIP 16; `bp_observe()` in rocker/r-ver:4.5.0 stops
   a persisting transient after 10 retries at 1.09 s. Lint clean.
 - Reviews: none recorded.
-- Deviations: none. Open: not yet run on hosted Windows (native-07 passed on 74de8c6 with the one
-  retry); that 1 s covers the real holder is inferred, as the failing witness shows only that the file
-  was still pending under 15 ms later.
+- Deviations: none. Open: native-07 passed on 74de8c6 with the one retry. On d9a7840 (run
+  39274424747) the 1 s did not cover native-01's entry on oldrel-4: attempt 2 (job 118200832757)
+  raised `observer-metadata-invalid` after 8 retries, so CI-73 charges an exactly delete-pending file
+  as a file; attempt 1 had failed native-08 earlier, at the observer's construction (CI-72).
+
+## Task CI-71 - Two tests abort a hanging fake request only once the provider has read it (2026-10-19, #51)
+- Both attempts of R-CMD-check `ubuntu-latest (oldrel-4)` on d9a7840 (run 39274424747, jobs
+  118134892383 and 118200833216) hit the 45-minute job timeout. In both hung logs all 21 backpressure
+  witnesses name one worker as `parent_pid` (9900 in attempt 1, 10038 in attempt 2), the later files'
+  output arrives contiguous and in file order, and `> test-agent-run.R: [gptr] aborted`, which the
+  test at line 1135 prints, is missing; the passing oldrel-4 logs (85e5883, 74de8c6, d62eb7f) split
+  the witnesses 4/15, 11/8 and 4/13 and print it. A callr worker on testthat's pipes delivers a
+  flushed `cat()` line while it blocks, so the other worker (9902 in attempt 1, 10040 in attempt 2,
+  each job's only orphan, with no child process) held `test-agent-run.R` and stopped before line
+  1135, where only "run_start(s, NULL) continues from the leaf after an abort" waits without a bound
+  after a hang reply.
+- Cause (a test race since 9cfb00d, c610e38 for the fork test): that test and "a fork of a source
+  still in its first turn freezes its own prompt" (`test-session-store.R`) script the fake provider
+  as `list(list(hang = TRUE), <answer>)`, pump for a fixed 0.2 s, abort, then wait for a second
+  request without a bound. The provider numbers a request at its first stream poll, one pump
+  iteration after the request begins (`reactor_run_tasks()` runs only the tasks that existed when it
+  started); a first iteration of 0.2 s or more leaves the aborted request without a reply, so the
+  second request takes reply 1, the hang. Fix (tests only, `a41cfb8`): both tests pump until the run
+  streams, bounded by the 30 s that the file's other aborts of an in-flight request use; no product
+  code, bound or assertion changed.
+- Red: with a `before_request` hook that sleeps 0.3 s, the d9a7840 versions of both tests ran until
+  killed after 60 s. Green: the new versions pass in 3 s; `test-agent-run.R` (661) and
+  `test-session-store.R` (273) pass; the installed package's suite under `test_check()` with
+  `TESTTHAT_PARALLEL=true`, 2 workers and the aaa-state install test active: 34744 ok, 0 failed.
+  Lint clean.
+- Reviews: r1 3 findings: the trigger wording (medium) -> reworded with the runner and collection
+  evidence below; the localisation (low) -> built on the `parent_pid` split and the missing notice,
+  pids labelled by attempt, the one-baseline minute estimate dropped; a `stopifnot()` on the pump's
+  result (low) not applied, as the reviewer recommended.
+- Deviations: none. Open: why the race lost on both attempts on d9a7840 is not established. None of
+  the 16 earlier parallel oldrel-4 jobs since b612001 hung, and runner speed does not separate the
+  runs (attempt 1 on a centralus runner as fast as 85e5883's, attempt 2 on an eastus runner as slow
+  as the passing westus3 runs); a full collection of the 190 MB heap (0.11 s on an Apple performance
+  core, 0.48 s on an efficiency core) in the first iteration, or a stall from the other worker's
+  processes, would lose it, but neither is shown. Fixed only once `ubuntu-latest (oldrel-4)` passes
+  on hosted CI; should it hang again, a per-file timing reporter would name the stuck test. Neither
+  pump checks its result, so a 30 s stall without a first poll would still end in the unbounded wait.
+
+## Task CI-72 - The sampler retries an observer construction that meets its initial deadline (2026-10-19, #51)
+- R-CMD-check `windows-latest (oldrel-4)` on d9a7840 (run 39274424747, attempt 1, job 118134892183)
+  failed native-08 "idle Windows writer retirement preserves target stdin and later FIFO EOF"
+  (`test-proc-writer-retirement.R:487`) while constructing the observer: `DiskObserver.__init__`
+  raised `observer-initial-entry-or-time-limit`. `windows-latest (release)` on 40c463a (job
+  116949579452) had failed native-04's first case, duplex, the same way.
+- Cause: that one reason covered both limits on the constructor's walk of the lexical parent chain
+  from the volume root. The entry limit cannot fire with the defaults (one entry per path component,
+  at most 32, above which `observer-parent-chain-invalid` is raised, against 4096), so the walk
+  outlasted its 1 s deadline. Both failures were the first construction in a fresh native process:
+  the retained hosted witnesses show 1.06 to 1.97 s of R-side initialization (Python start-up
+  included) for first constructions and 0.01 to 0.50 s for later ones, and in job 116949579452 the
+  next two constructions in the failed process took 0.09 and 0.05 s and completed.
+- Fix (tests only, `6ad7a95`): the observer raises `observer-initial-entry-limit` and
+  `observer-initial-deadline` at the same points with the same limits. `bp_run()` constructs through
+  `bp_observe()`, which adds `observer-initial-deadline` to its transient reasons and retries it
+  every 100 ms until 1 s has passed since the first failure, as for the snapshot deadline (CI-70);
+  the entry limit, every other reason and a deadline that lasts past 1 s stay fatal with the last
+  condition. `tracked` and `observer_retried` are defined before construction, so `observer_retries`
+  counts construction retries and `observer_retry_reason` keeps the first reason. The observer
+  limits, the 45 s initialization bound, the 1 GB RSS cap and the 30 s and 60 s deadlines are
+  unchanged.
+- Red: the new Python controls fail 2 of 46 on the old observer; `^proc-backpressure-sampling$` with
+  the old helper and observer FAIL 10 plus one error at the construction retry. Green:
+  `run-controls.py` passes 46 cases (pins updated);
+  `^(proc-backpressure-sampling|bp-declared-observer|bp-disk-observer)$` PASS 686 SKIP 5; with Python
+  3.15 and the real observer in a clean TMPDIR the writer, backpressure and observer files PASS 1112
+  SKIP 1, all 7 real cases with `observer_retries` 0; an observer copy whose first construction's
+  clock jumps 1 s gives a real `observer-initial-deadline` that `bp_observe()` retries once, and one
+  that is always slow raises after 9 retries at 1.03 s; `^(proc-|bp-)` PASS 2336 SKIP 16; the dev/ci
+  tests that source the helper pass; in rocker/r-ver:4.5.0 (`--network none`) `bp_observe()` stops
+  a persisting initial deadline after 10 retries at 1.07 s. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: not yet run on hosted Windows; a retried construction shows
+  `observer_retry_reason` "observer-initial-deadline" in its witness. The cold cost inside the first
+  construction's 1 s is inferred (a loaded runner or a first-call cost): the witness records only the
+  R-side `initialization_elapsed`. `test-bp-disk-observer.R` constructs directly, without the retry,
+  as it already snapshots without one; the frozen windows-token packets keep the combined reason.
+  Locally the real observer needs a TMPDIR outside macOS's default (104,171 entries), where
+  snapshots meet their 1 s deadline at d9a7840 too.
+
+## Task CI-73 - The observer charges an exactly delete-pending Windows file as a file (2026-10-19, #51)
+- R-CMD-check `windows-latest (oldrel-4)` on d9a7840 (run 39274424747, attempt 2, job 118200832757)
+  failed native-01 "native GPTR Python startup preserves R state and uses its private numerical
+  runtime" as `resource_observation` in phase `independent-python-cli`: `observer-metadata-invalid`
+  at `entry-metadata` (entries 60, directories 5, max_depth 4, bytes 0) after 8 retries, with peak
+  disk 30,148 B and RSS within the caps. An entry's lstat gave `st_ino` 0 for longer than CI-70's
+  1 s retry, which had replaced CI-23's single retry.
+- Cause (inferred, not observed): CPython's Windows lstat falls back to the directory listing, which
+  has no file id, when its attribute open fails with `ERROR_ACCESS_DENIED`, and the observer's
+  identity checks made `st_ino` 0 fatal. In this owned tree the listable parent grants attribute
+  reads, which leaves a classic pending deletion as the likely cause: the file stays listed but
+  unopenable until its last handle (an antivirus scan, say) closes, and Win32 maps that state and a
+  real denial to the same error. A process marker or `write_atomic` temporary in
+  `cache/R/gptr/procs` fits the witness (four directories deep, no bytes charged), but so would a
+  pending `.stdin` mailbox directory, since the witness does not record the entry's kind; the
+  deleter is not identified (R's `unlink()` calls `DeleteFileW`, which recent Windows builds may run
+  with POSIX semantics that unlist the name at once).
+- Fix (tests only, `1b472c2`): after the native attributes, listed metadata and kind checks pass,
+  the observer asks, only for `st_ino` 0 on a non-reparse regular file, whether
+  `NtQueryAttributesFile` on the same literal path (attributes only, no link followed) returns
+  exactly `STATUS_DELETE_PENDING` (0xC0000056) (`_windows_delete_pending()`). Such an entry stays
+  kind `file`: it is charged its listed size like any file (so not in `declared_only` mode) under the
+  unchanged byte, entry and deadline checks, and is never opened, followed or identity-compared. Any
+  other status, an `st_ino`-0 directory or link, a declared entry, another host, or fake operations
+  without the `delete_pending` hook still raise `observer-metadata-invalid` (or
+  `declared-entry-not-link`), which R retries for 1 s as before (CI-70). An `st_ino`-0 entry that
+  also fails one of the earlier checks now reports that reason, which is not retried; a real lstat
+  cannot reach that, and the outcome is stricter. The bounds, `bp_observe()` and its transient
+  reasons and the frozen windows-token packets are unchanged. Retrying in `bp_observe()` for the rest
+  of the case deadline was rejected: it would leave RSS unsampled for up to about 29 s.
+- `406befb` (tests): "the optional observer charges a real Windows delete-pending file until it
+  closes" in `test-bp-disk-observer.R`, which R-CMD-check runs on Windows with the provisioned
+  Python, opens a 180-byte file through ctypes with DELETE access and every share mode, sets the
+  classic `FileDispositionInfo` and keeps that last handle open. One comparison requires that an
+  ordinary file and an absent path are not pending; the file stays listed, lstat gives it `st_ino` 0
+  (not the ordinary file) and `_windows_delete_pending()` says yes; three snapshots charge 187 B
+  (7 + 180) with nothing disappeared; and once the handle closes the name is gone within 10 s, the
+  check says no and a snapshot charges 7 B. It skips off Windows, so the Optional-integrations
+  registry makes it `test-bp-disk-observer.R`'s one platform guard (an allowed skip off Windows
+  only).
+- Red: the new Python controls against the 6ad7a95 observer: failures 4, errors 5 (all five new
+  tests red). Green: `run-controls.py` passes 51 cases (46 -> 51, pins updated) on Python 3.12 and
+  3.15; 100 queries add 2 entries to ctypes' pointer type cache (200 before);
+  `^(proc-backpressure-sampling|bp-declared-observer|bp-disk-observer)$` PASS 686 SKIP 6 without
+  Python and PASS 766 SKIP 1 with the real observer; `^(proc-|bp-)` PASS 2416 SKIP 12; on macOS the
+  new case's Python, through reticulate on Python 3.12 with fake kernel32, observer and check,
+  returns the expected list, and the case skips; `dev/ci/test-optional-integrations.R` passes 3823.
+  Lint clean.
+- Reviews: R1 and R2: a real delete-pending control (R1-1, R2-1) -> `406befb`; the separate
+  `pending` kind dropped, so the entry stays a `file` (R1-3, R2-3); the query types built once
+  (R1-4); a recurrence no longer said to prove another status (R2-2); the scope kept to regular files
+  (R1-2); the reason precedence kept and explained in the commit (R2-4, received truncated).
+- Deviations: none. Open: hosted Windows has not run either commit. The new case is the first real
+  test of the two facts the fix rests on (CPython 3.12's lstat gives `st_ino` 0, the query gives
+  0xC0000056); its failure output shows which does not hold. Even if it passes, native-01's entry is
+  unidentified: a pending directory (still fatal by design, such as a `.stdin` mailbox removed by
+  `unlink(recursive = TRUE)`), another status, or a deletion that completes between lstat and the
+  query (retried) all give that reason, and one green run cannot tell a fix from a race that did not
+  recur, so judge native-01 over several runs. No claim about the native-06 and native-07 failures
+  (CI-23, CI-70).
