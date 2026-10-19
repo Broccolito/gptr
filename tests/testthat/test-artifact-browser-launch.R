@@ -529,7 +529,6 @@ test_that("artifact launch gives only its child a separate private temporary dir
 })
 
 test_that("artifact launch enforces Linux and macOS socket path limits before spawning", {
-  skip_on_os("windows")
   for (mac in c(FALSE, TRUE)) {
     limit = if (mac) 253L else 107L
     for (path_case in c("check", "boundary", "overlong")) {
