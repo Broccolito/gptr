@@ -239,7 +239,7 @@ test_that("a timeout kills the process tree and suggests peter$bg()", {
   seen = new.env(parent = emptyenv())
   kill = kill_all
   testthat::local_mocked_bindings(kill_all = function(p, grace = 2) {
-    seen$tree = seen$tree %||% ps::ps_children(p$as_ps_handle(), recursive = TRUE)
+    seen$tree = seen$tree %||% proc_children(p)
     kill(p, grace)
   })
   t0 = proc.time()[["elapsed"]]
@@ -559,13 +559,7 @@ test_that("a background command line runs in the shell and kill() stops its proc
   j = bridge_bg("sleep 57 & sleep 58 & echo ready; wait")
   withr::defer(j$kill())
   expect_true("ready" %in% j$wait(timeout = 30, until = "ready"))
-  # ps lists both sleeps soon after the shell forked them, not always at the first look
-  deadline = Sys.time() + 10
-  repeat {
-    tree = ps::ps_children(j$.proc$as_ps_handle(), recursive = TRUE)
-    if (length(tree) >= 2L || Sys.time() > deadline) break
-    Sys.sleep(0.05)
-  }
+  tree = proc_children(j$.proc)
   expect_gte(length(tree), 2L)
   j$kill()
   expect_identical(j$status(), "stopped")

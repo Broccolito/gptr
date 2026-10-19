@@ -383,9 +383,18 @@ proc_cleanup_record = function(rec) {
 }
 
 #' The descendants of a live child by parent link, as ps handles (none when unreadable)
+#'
+#' The parent is ps's own handle of the pid, not `p$as_ps_handle()`: on Linux processx stamps a
+#' child with the boot time it reads at the spawn, ps times every process with the one it read
+#' first, and ps_children() of processx's handle drops each descendant timed before that stamp,
+#' as can be all those forked in the child's first clock tick. The list counts only while
+#' processx still reads the child alive, so the pid named it throughout.
 #' @noRd
 proc_children = function(p) {
-  tryCatch(ps::ps_children(p$as_ps_handle(), recursive = TRUE), error = function(e) list())
+  tryCatch({
+    kids = ps::ps_children(ps::ps_handle(p$get_pid()), recursive = TRUE)
+    if (isTRUE(p$is_alive())) kids else list()
+  }, error = function(e) list())
 }
 
 #' Kill a child process and its whole tree

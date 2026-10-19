@@ -84,6 +84,19 @@ test_that("proc_mark() records a marker file that kill_all() releases", {
   expect_null(proc_record(p$get_pid()))
 })
 
+test_that("proc_children() follows parent links from ps's own handle while the parent lives", {
+  local_proc_state()
+  skip_on_cran()
+  kid = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(30)"))
+  withr::defer(try(kid$kill(), silent = TRUE))
+  # on Linux processx's stamp of a parent can read later than its children's creation times
+  late = ps::ps_handle(Sys.getpid(), ps::ps_create_time(ps::ps_handle(kid$get_pid())) + 1)
+  parent = list(get_pid = Sys.getpid, is_alive = function() TRUE, as_ps_handle = function() late)
+  expect_true(kid$get_pid() %in% vapply(proc_children(parent), ps::ps_pid, 1L))
+  parent$is_alive = function() FALSE
+  expect_identical(proc_children(parent), list())
+})
+
 test_that("kill_all() leaves no descendant", {
   local_proc_state()
   skip_on_cran()
