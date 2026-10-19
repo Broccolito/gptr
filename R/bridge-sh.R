@@ -28,7 +28,8 @@ bridge_program_word = function(word) {
 
 #' Resolve cmd: an argv (length > 1), a simple line whose program exists (not a Windows batch
 #' file) run directly, else P04's shell_resolve() (its `args` may carry `verbatim`)
-#' @return `list(command = chr(1), args = chr, via = "argv" | "direct" | "shell")`
+#' @return `list(command = chr(1), args = chr, via = "argv" | "direct" | "shell")`, plus the
+#'   `env` the child must set for cmd
 #' @noRd
 bridge_resolve = function(cmd) {
   if (length(cmd) > 1L) {
@@ -293,10 +294,10 @@ bridge_exec = function(cmd, input = NULL, wd = NULL, timeout = NULL, env = NULL,
     gptr_abort("The directory given as `wd` does not exist.", "invalid_argument", arg = "wd",
                expected = "an existing directory")
   }
+  target = target %||% bridge_resolve(cmd)
   # IC-60 helper environment: named values are set, unnamed ones pass variables through
   named = nzchar(names(env) %||% character(length(env)))
-  child = child_env("helper", pass = unname(env[!named]), set = env[named])
-  target = target %||% bridge_resolve(cmd)
+  child = child_env("helper", pass = unname(env[!named]), set = c(env[named], target$env))
   res = bridge_run(target, bridge_input(input), wd, timeout, child, merge)
   timed_out = isTRUE(res$timed_out)
   status = if (timed_out) NA_integer_ else as.integer(res$status)
@@ -655,7 +656,8 @@ bridge_bg = function(cmd, name = NULL, stdin = FALSE, merge = TRUE) {
   dir.create(dir, showWarnings = FALSE)
   out_f = file.path(dir, paste0(id, ".out"))
   err_f = if (!merge) file.path(dir, paste0(id, ".err"))
-  p = proc_spawn(target$command, target$args, env = child_env("helper"),
+  p = proc_spawn(target$command, target$args,
+                 env = child_env("helper", set = target$env %||% character()),
                  stdin = if (stdin) "|", stdout = out_f, stderr = if (merge) "2>&1" else err_f)
   program = if (length(argv) > 1L) argv[[1L]] else sub("\\s.*", "", trimws(argv))
   job = bridge_job_new(id, label, name %||% basename(program), p, out_f, err_f)

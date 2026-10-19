@@ -96,10 +96,18 @@ test_that("shell_resolve() uses /bin/sh on Unix and Git Bash, PowerShell or cmd 
   decoded = iconv(list(jsonlite::base64_dec(pw$args[6])), "UTF-16LE", "UTF-8")
   expect_match(decoded, "Write-Output \"caf\u00e9\"", fixed = TRUE)
   expect_match(decoded, "exit $LASTEXITCODE", fixed = TRUE)
-  cmd = shell_resolve_os("dir", TRUE, which = none, getenv = none, exists = function(x) FALSE)
-  expect_identical(cmd$command, "cmd.exe")
-  expect_identical(as.vector(cmd$args), c("/d", "/s", "/c", "\"chcp 65001 >nul & dir\""))
+  # cmd: the line reaches the inner cmd, started after chcp, only through the environment
+  comspec = "C:\\Windows\\system32\\cmd.exe"
+  cmd = shell_resolve_os("echo \"a&b\" %OS%", TRUE, which = none,
+                         getenv = function(x) if (x == "COMSPEC") comspec else "",
+                         exists = function(x) FALSE)
+  expect_identical(cmd$command, comspec)
+  expect_identical(as.vector(cmd$args), c("/d", "/v:on", "/s", "/c", paste0(
+    "\"chcp 65001 >nul & \"", comspec, "\" /d /s /c !GPTR_SHELL_CMD!\"")))
   expect_true(isTRUE(attr(cmd$args, "verbatim")))
+  expect_identical(cmd$env, c(GPTR_SHELL_CMD = "\"echo \"a&b\" %OS%\""))
+  expect_identical(shell_resolve_os("dir", TRUE, which = none, getenv = none,
+                                    exists = function(x) FALSE)$command, "cmd.exe")
 })
 
 test_that("proc_spawn() records a tree marker that kill_all() releases", {

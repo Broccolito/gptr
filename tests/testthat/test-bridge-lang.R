@@ -269,8 +269,7 @@ test_that("the cmd and powershell engines run on Windows with UTF-8 output and e
   withr::local_envvar(POWERSHELL_TELEMETRY_OPTOUT = "1")
   text = "caf\u00e9 \u65e5\u672c"
   cmd = bridge_knit("cmd", paste0("echo \"a b\" ", text, "& exit 4"))
-  expect_identical(cmd[[1L]], paste0("\"a b\" ", text))
-  expect_identical(cmd[[length(cmd)]], "[exit 4]")
+  expect_identical(as.character(cmd), c(paste0("\"a b\" ", text), "[exit 4]"))
   ps = bridge_knit("powershell", c(paste0("Write-Output \"", text, "\""), "exit 3"))
   expect_identical(ps[[1L]], text)
   expect_identical(ps[[length(ps)]], "[exit 3]")

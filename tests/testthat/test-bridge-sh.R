@@ -146,8 +146,22 @@ test_that("without Git Bash a Windows command line runs in PowerShell, else in c
   cmd = testthat::with_mocked_bindings(
     bridge_sh(paste0("echo \"a b\" ", text, "& exit 5"), timeout = 60),
     shell_resolve = no_git_bash(function(x) ""))
+  expect_identical(cmd$stderr, "")
   expect_identical(cmd$stdout, paste0("\"a b\" ", text, "\n"))
   expect_identical(cmd$status, 5L)
+})
+
+test_that("the env of a resolved shell reaches the children of peter$sh() and peter$bg()", {
+  skip_on_cran()
+  # shell_cmd() hands cmd its line through this variable
+  argv = r_cmd("writeLines(Sys.getenv('GPTR_SHELL_CMD'))")
+  target = list(command = argv[[1L]], args = argv[-1L], via = "shell",
+                env = c(GPTR_SHELL_CMD = "line"))
+  testthat::local_mocked_bindings(bridge_resolve = function(cmd) target)
+  expect_identical(bridge_sh("a | b")$stdout, "line\n")
+  j = bridge_bg("a | b")
+  withr::defer(j$kill())
+  expect_true("line" %in% j$wait(timeout = 30))
 })
 
 test_that("stderr stays separate, exits are reported and check = TRUE raises", {

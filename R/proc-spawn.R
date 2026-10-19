@@ -11,8 +11,8 @@
 # - `.cmd`/`.bat` shims run as `cmd.exe /d /c call <shim> args`, refusing % ^ & | < > " ! CR
 #   LF in any argument (BatBadBut: CVE-2024-24576, CVE-2024-27980).
 # - String commands: /bin/sh -c on Unix; on Windows Git Bash, else PowerShell
-#   -EncodedCommand (base64 of UTF-16LE, with a $LASTEXITCODE-preserving postfix), else
-#   `cmd /d /s /c "chcp 65001 >nul & ..."` with verbatim arguments.
+#   -EncodedCommand (base64 of UTF-16LE, with a $LASTEXITCODE-preserving postfix), else cmd
+#   with verbatim arguments, the line run by a cmd started after `chcp 65001` (shell_cmd()).
 
 #' Is this path a Windows batch file?
 #' @noRd
@@ -63,6 +63,23 @@ shell_ps_encode = function(cmd) {
   gsub("\n", "", jsonlite::base64_enc(b), fixed = TRUE)
 }
 
+#' cmd.exe running a command line with UTF-8 output: `list(command, args, env)`
+#'
+#' Programs started after `chcp 65001` use the new code page (chcp documentation); on hosted
+#' Windows an echo on the same `/c` line as chcp still wrote the OEM page. So the outer cmd
+#' changes the code page, then starts the cmd that runs `line` as `cmd /d /s /c "<line>"` would;
+#' `line` reaches it through GPTR_SHELL_CMD by delayed expansion, which the outer cmd does not
+#' parse. The route reserves GPTR_SHELL_CMD: a caller may not set it and the line's descendants
+#' inherit it. `args` carry `attr(, "verbatim") = TRUE`.
+#' @noRd
+shell_cmd = function(line, comspec) {
+  if (!nzchar(comspec)) comspec = "cmd.exe"
+  args = c("/d", "/v:on", "/s", "/c",
+           paste0("\"chcp 65001 >nul & \"", comspec, "\" /d /s /c !GPTR_SHELL_CMD!\""))
+  attr(args, "verbatim") = TRUE
+  list(command = comspec, args = args, env = c(GPTR_SHELL_CMD = paste0("\"", line, "\"")))
+}
+
 #' Shell resolution with injectable OS facts (the testable core of shell_resolve())
 #' @noRd
 shell_resolve_os = function(cmd, windows, which, getenv, exists) {
@@ -81,19 +98,16 @@ shell_resolve_os = function(cmd, windows, which, getenv, exists) {
                                         "Bypass", "-EncodedCommand", shell_ps_encode(cmd))))
     }
   }
-  comspec = getenv("COMSPEC")
-  if (!nzchar(comspec)) comspec = "cmd.exe"
-  args = c("/d", "/s", "/c", paste0("\"chcp 65001 >nul & ", cmd, "\""))
-  attr(args, "verbatim") = TRUE
-  list(command = comspec, args = args)
+  shell_cmd(cmd, getenv("COMSPEC"))
 }
 
 #' How to run a string command with a shell
 #'
 #' Unix: `/bin/sh -c`. Windows: Git Bash (never `System32\\bash.exe`, the WSL launcher), else
-#' PowerShell with `-EncodedCommand`, else `cmd /d /s /c "chcp 65001 >nul & ..."`, whose `args`
-#' carry `attr(, "verbatim") = TRUE` for proc_spawn()'s `windows_verbatim_args`.
-#' @return `list(command = chr(1), args = chr)`
+#' PowerShell with `-EncodedCommand`, else cmd (shell_cmd()), whose `args` carry
+#' `attr(, "verbatim") = TRUE` for proc_spawn()'s `windows_verbatim_args` and whose `env` the
+#' child environment must set.
+#' @return `list(command = chr(1), args = chr)`, plus `env = chr` for cmd
 #' @noRd
 shell_resolve = function(cmd) {
   check_string(cmd, "cmd")
