@@ -156,6 +156,14 @@ test_that("without Git Bash a Windows command line runs in PowerShell, else in c
   expect_identical(ps$stderr, "")
   expect_identical(ps$stdout, "6\n")
   expect_identical(ps$status, 6L)
+  # a cmdlet's status when it runs last
+  ps = testthat::with_mocked_bindings(bridge_sh("cmd /c exit 4; Write-Output ok", timeout = 60),
+                                      shell_resolve = ps_route)
+  expect_identical(ps$stdout, "ok\n")
+  expect_identical(ps$status, 0L)
+  ps = testthat::with_mocked_bindings(bridge_sh("cmd /c exit 0; Write-Error no", timeout = 60),
+                                      shell_resolve = ps_route)
+  expect_identical(ps$status, 1L)
   cmd = testthat::with_mocked_bindings(
     bridge_sh(paste0("echo \"a b\" ", text, "& exit 5"), timeout = 60),
     shell_resolve = no_git_bash(function(x) ""))
