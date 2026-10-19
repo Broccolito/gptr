@@ -388,11 +388,13 @@ skip_if_no_chrome = function() {
   skip_if(!is.null(artifact_chromote_missing()), "no Chrome or Chromium for chromote")
 }
 
+chrome_logs = function() list.files(tempdir(), "^gptr-chrome-stderr-", full.names = TRUE)
+
 # A Chrome that does not start in time (hosted runners) gives the contract's HTTP-only result;
-# the skip names that Chrome and quotes the end of its own startup stderr
-skip_if_browser_failed = function(res) {
+# the skip names that Chrome and quotes the end of the newest stderr log not in `before`
+skip_if_browser_failed = function(res, before) {
   if (!is.na(res$ok) || !is.null(artifact_state$browser)) return(invisible())
-  logs = list.files(tempdir(), "^gptr-chrome-stderr-", full.names = TRUE)
+  logs = setdiff(chrome_logs(), before)
   said = unlist(strsplit(vapply(logs[which.max(file.mtime(logs))], proc_read_text, ""), "\r?\n"))
   skip(paste0(res$messages[1], ". Chrome ", chromote::find_chrome(), " wrote to stderr: ",
               paste(utils::tail(said[nzchar(said)], 3L), collapse = " / ")))
@@ -446,6 +448,7 @@ test_that("the session check passes a working app and returns a 1000x700 screens
   skip_if_no_chrome()
   local_project()
   withr::defer(artifact_browser_close())
+  before = chrome_logs()
   e = new.env()
   e$markers = data.frame(gene = c("CD14", "LYZ"))
   rec = served_record("good", ok_app, "markers", e)
@@ -454,7 +457,7 @@ test_that("the session check passes a working app and returns a 1000x700 screens
   png = file.path(artifact_dir("good"), "run", "shot.png")
   res = artifact_session_check(rec, png)
   expect_identical(get(".Random.seed", envir = globalenv()), seed)
-  skip_if_browser_failed(res)
+  skip_if_browser_failed(res, before)
   expect_true(res$ok)
   expect_identical(res$messages, character())
   expect_identical(res$screenshot, png)
@@ -469,18 +472,19 @@ test_that("the session check catches render errors and crashed servers but not v
   skip_if_no_chrome()
   local_project()
   withr::defer(artifact_browser_close())
+  before = chrome_logs()
   render_error = c("library(shiny)", "ui = fluidPage(plotOutput('p'))",
                    "server = function(input, output, session) {",
                    "  output$p = renderPlot(plot(1:3, 1:2))", "}", "shinyApp(ui, server)")
   res = artifact_session_check(served_record("render", render_error), tempfile(fileext = ".png"))
-  skip_if_browser_failed(res)
+  skip_if_browser_failed(res, before)
   expect_false(res$ok)
   expect_true(any(grepl("output error in p", res$messages, fixed = TRUE)))
   crash = c("library(shiny)", "ui = fluidPage(textOutput('t'))",
             "server = function(input, output, session) undefined_helper()",
             "shinyApp(ui, server)")
   res = artifact_session_check(served_record("crash", crash), tempfile(fileext = ".png"))
-  skip_if_browser_failed(res)
+  skip_if_browser_failed(res, before)
   expect_false(res$ok)
   expect_true(any(grepl("undefined_helper", res$messages, fixed = TRUE)))
   valid = c("library(shiny)", "ui = fluidPage(textOutput('t'))",
@@ -488,7 +492,7 @@ test_that("the session check catches render errors and crashed servers but not v
             "  output$t = renderText(validate(need(FALSE, 'Pick a region')))", "}",
             "shinyApp(ui, server)")
   res = artifact_session_check(served_record("valid", valid), tempfile(fileext = ".png"))
-  skip_if_browser_failed(res)
+  skip_if_browser_failed(res, before)
   expect_true(res$ok)
 })
 
