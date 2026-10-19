@@ -459,7 +459,8 @@ test_that("a fork of a source still in its first turn freezes its own prompt", {
   local_fake_provider(list(list(hang = TRUE), "branch answer"))
   s = test_session()
   run = run_start(s, msg_user("first"))
-  run_wait(list(run), timeout = 0.2)
+  # a request aborted before the provider reads it takes no reply; the next would get the hang
+  reactor_pump(until = function() identical(run$status, "streaming"), timeout = 30)
   expect_identical(session_data(s)$entries[[1L]]$custom_type, "gptr.frozen")
   f = gptr_fork(s)
   run_abort(run)

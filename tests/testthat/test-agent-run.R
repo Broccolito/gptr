@@ -1033,7 +1033,8 @@ test_that("run_start(s, NULL) continues from the leaf after an abort", {
   fake = local_fake_provider(list(list(hang = TRUE), "resumed answer"))
   s = test_session()
   run = run_start(s, msg_user("go"))
-  run_wait(list(run), timeout = 0.2)
+  # a request aborted before the provider reads it takes no reply; the next would get the hang
+  reactor_pump(until = function() identical(run$status, "streaming"), timeout = 30)
   run_abort(run, "waiting")
   session_run(s, NULL)
   expect_identical(s$text, "resumed answer")
