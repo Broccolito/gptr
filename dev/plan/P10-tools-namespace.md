@@ -557,7 +557,7 @@ test_that("the file set equals git ls-files on a repository with tricky rules", 
   expect_identical(ours, git)
 })
 
-test_that("a symlinked directory is listed but not followed", {
+test_that("a directory link back to the root (a Windows junction) is listed but not followed", {
   skip_on_os("windows")
   td = withr::local_tempdir()
   dir.create(file.path(td, "a"))
@@ -575,6 +575,9 @@ test_that("fs_case_insensitive() writes nothing", {
   expect_identical(list.files(td, all.files = TRUE, no.. = TRUE), before)
 })
 ```
+
+(P27 Task 4: the walk test also runs on Windows through a real junction and checks `search_find()`
+and `search_grep()` too. The current body is in `tests/testthat/test-tool-walk.R`.)
 
 - [ ] **Step 2: Run it to verify it fails**
 

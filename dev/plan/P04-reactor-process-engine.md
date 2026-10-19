@@ -2728,7 +2728,7 @@ test_that("line_reader() drops bytes that are not UTF-8 without a warning", {
   expect_identical(got, c("ok", "caf"))
 })
 
-test_that("a parent killed with SIGTERM leaves children that the next load's sweep removes", {
+test_that("a killed parent leaves a grandchild that the next load's sweep removes", {
   skip_on_cran()
   skip_on_os("windows")
   withr::local_envvar(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep))
@@ -2767,6 +2767,11 @@ test_that("a parent killed with SIGTERM leaves children that the next load's swe
   expect_false(any(vapply(left, function(rec) rec$pid %in% kids, NA)))
 })
 ```
+
+(P27 Task 3: the current body, in `tests/testthat/test-proc-spawn.R`, replaces the two children
+above with one child that starts a `cleanup = FALSE` grandchild, since on Windows processx's
+kill-on-close job ends the child with its parent; it also runs on Windows and reads only the
+`<marker>.json` records.)
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -5143,7 +5148,7 @@ Run every command from the repository root after Task 12. "Green" means `FAIL 0`
 | 6c | A 2 MB stdin payload arrives complete; a 4 MB payload to a child that echoes each line completes without deadlock | Task 8, `test-proc-spawn.R`: "write_all() delivers 2 MB through a pipe and write_close() sends EOF", "a 4 MB payload to a child that echoes each line completes without deadlock"; Task 7: "proc_run() passes a 2 MB stdin payload complete ..." | as row 6a | as row 6a |
 | 6d | `kill_all()` leaves no descendant | Task 4, `test-proc-supervise.R`: "kill_all() leaves no descendant" | `Rscript --vanilla -e 'devtools::test(filter = "proc-supervise")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 53 ]` |
 | 6e | A `.cmd` argument containing `&` is refused with `gptr_error_invalid_argument` (logic test on every OS) | Task 7: "a .cmd argument containing & is refused on every OS" (no process is started, so it runs on CRAN too) | as row 6a | as row 6a |
-| 7a | A parent killed with SIGTERM leaves children that the next load's sweep removes | Task 7: "a parent killed with SIGTERM leaves children that the next load's sweep removes" (`proc_sweep()` is the `on_load()` expression of Task 4) | as row 6a | as row 6a |
+| 7a | A killed parent leaves a grandchild that the next load's sweep removes | Task 7: "a killed parent leaves a grandchild that the next load's sweep removes" (`proc_sweep()` is the `on_load()` expression of Task 4) | as row 6a | as row 6a |
 | 7b | The redirect mock receives no key bytes and the transfer fails with `gptr_error_redirect` | Task 11, `test-http-request.R`: "IC-64: a redirect is never followed and never carries the key"; Task 3: the 307 row of "retry_classify() implements the retry table" | as row 3 | as row 3 |
 | 7c | `test-http-sse.R` covers CRLF, CR-only, split-CRLF, a BOM and duplicate `event:` fields | Task 1: "CRLF, CR-only and a CRLF split across chunks give the LF result", "a leading BOM is stripped even when split across chunks", "the last event field wins, ...", the re-chunking test | as row 5 | as row 5 |
 | 7d | `retry-after` as an HTTP-date under `LC_ALL=de_DE.UTF-8` and `retry-after: soon` fall back correctly | Task 3: "parse_http_date() is locale-independent and rejects junk", "retry-after values: ms first, then seconds; unparsable falls back to backoff" | as row 4 | as row 4 (the `de_DE.UTF-8` part skips where that locale is not installed) |

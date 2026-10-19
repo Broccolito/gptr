@@ -886,7 +886,7 @@ test_that("a user interpreter named like the extension overrides the built-in on
   expect_identical(bridge_script(f)$stdout, "ran via-user")
 })
 
-test_that("shell scripts and #! lines run on Unix", {
+test_that("shell scripts run with bash or sh and #! lines with the program they name", {
   skip_on_cran()
   skip_on_os("windows")
   d = withr::local_tempdir()
@@ -907,6 +907,10 @@ test_that("unknown extensions, missing scripts and unknown options are argument 
                class = "gptr_error_invalid_argument")
 })
 ```
+
+(P27 Task 2: the test also runs on Windows, skipped only without an sh on PATH, and expects the
+same LF output there (`bridge_exec()` turns CRLF into LF). The current body is in
+`tests/testthat/test-bridge-sh.R`.)
 
 - [ ] **Step 2: Run it to verify it fails**
 

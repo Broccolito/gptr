@@ -2720,7 +2720,7 @@ test_that("the sse transport is refused with an actionable error", {
   expect_error(mcp_connect(spec), "Streamable HTTP", class = "gptr_error_mcp_protocol")
 })
 
-test_that("a server configured with a bare Rscript command runs with this R's Rscript", {
+test_that("a server configured with a bare Rscript or R command runs with this R", {
   expect_identical(mcp_stdio_command("Rscript"), rscript_path())
   expect_identical(mcp_stdio_command("npx"), "npx")
   fx = local_mcp_fixture("modern", "stdio")
@@ -2744,6 +2744,9 @@ test_that("a .cmd MCP command runs through cmd.exe /d /c call on Windows", {
   mcp_close(conn)
 })
 ```
+
+(P27 Task 3: the test also starts the fixture server with the command `R`. The current body is in
+`tests/testthat/test-mcp-client.R`.)
 
 - [ ] **Step 2: Run it to verify it fails**
 

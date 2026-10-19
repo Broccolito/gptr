@@ -384,7 +384,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      complete, and a 4 MB payload to a child that echoes each line completes without deadlock; `kill_all()` leaves
      no descendant; a `.cmd` argument containing `&` is refused with `gptr_error_invalid_argument` (logic test on
      every OS).
-  7. Review additions: a parent killed with SIGTERM leaves children that the next load's sweep removes; the
+  7. Review additions: a killed parent leaves a grandchild that the next load's sweep removes; the
      redirect mock receives no key bytes and the transfer fails with `gptr_error_redirect`; `test-http-sse.R`
      covers CRLF, CR-only, split-CRLF, a BOM and duplicate `event:` fields; `retry-after` as an HTTP-date under
      `LC_ALL=de_DE.UTF-8` and `retry-after: soon` fall back correctly; a nested pump started inside a FIFO tool
@@ -1143,7 +1143,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      within about the slowest agent's wall time (the INFRA-16 CLI leg, IC-36); an `init` line with
      `apiKeySource: "ANTHROPIC_API_KEY"` aborts the turn with `gptr_error_billing`.
   3. The codex invocation passes `--skip-git-repo-check`, `-m <full id>`, `-C`, the MCP overrides including
-     `default_tools_approval_mode="approve"` and `required=true`, and a 50 KB prompt on stdin intact; the resume
+     `default_tools_approval_mode="approve"` and `required=true`, and a 200 KB prompt on stdin intact; the resume
      form uses `-c sandbox_mode=`; `edits` maps to `read-only`; `ANTHROPIC_API_KEY`, `ANTHROPIC_PROFILE`,
      `CLAUDECODE`, `OPENAI_API_KEY`, `CODEX_API_KEY` and `CODEX_SANDBOX` are absent from the children's environment and
      a warning names the billing ones; `gptr_providers()` spawns no process with `check = FALSE`; a `.cmd` fake claude

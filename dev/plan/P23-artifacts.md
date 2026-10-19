@@ -1103,13 +1103,20 @@ http_status = function(url, wait = 15) {
   }
 }
 
-test_that("the access token is 128 random bits from openssl or /dev/urandom", {
+test_that("the access token is 128 random bits from openssl, else /dev/urandom or none (Windows)", {
   tok = artifact_token()
   expect_match(tok, "^[0-9a-f]{32}$")
   expect_false(identical(tok, artifact_token()))
-  skip_on_os("windows")
   local_mocked_bindings(artifact_has_openssl = function() FALSE)
-  expect_match(artifact_token(), "^[0-9a-f]{32}$")
+  if (is_windows()) {
+    withr::local_options(gptr.quiet = FALSE)
+    rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+    expect_message(expect_identical(artifact_token(), ""), "without an access token",
+                   class = "gptr_message_notice")
+    expect_no_message(expect_identical(artifact_token(), ""))
+  } else {
+    expect_match(artifact_token(), "^[0-9a-f]{32}$")
+  }
 })
 
 test_that("ports come from port_candidates() after the artifact's previous port", {
