@@ -512,7 +512,7 @@ optional_child = function(action, file = NULL) {
     } else {
       pkgload::load_all(".", helpers = FALSE, quiet = TRUE)
       optional_result_rows(testthat::test_file(file,
-        reporter = testthat::LocationReporter$new(file = stderr()),
+        reporter = testthat::LocationReporter$new(file = stdout()),
         package = "gptr", load_package = "none"))
     }
   }, warning = observe)
