@@ -1412,7 +1412,6 @@ test_that("an Rscript run writes its blocks only at exit and the next run replay
 
 test_that("SIGTERM leaves a sidecar that the next touch applies around user edits (IC-51)", {
   skip_on_cran()
-  skip_on_os("windows")
   root = local_project()
   f = file.path(root, "job.R")
   doc_child_script(f, doc_two_steps, c("a = peter('first step')", "b = peter('second step')",
@@ -1428,6 +1427,7 @@ test_that("SIGTERM leaves a sidecar that the next touch applies around user edit
     out = paste0(out, p$read_output())
   }
   expect_match(out, "READY", fixed = TRUE)
+  # on Windows processx calls TerminateProcess() and waits for the exit
   p$signal(tools::SIGTERM)
   p$wait(10000)
   expect_identical(readLines(f), before)
