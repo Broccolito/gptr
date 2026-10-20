@@ -246,7 +246,8 @@ risk_guard_children = c("settings.json", "config", "hooks", "Makevars", "x")
 #' @noRd
 risk_op_level = function(pc, op) {
   switch(op,
-         read = switch(pc, url = , protected = 2L, outside = , critical = 1L, 0L),
+         read = switch(pc, url = , protected = 2L, outside = , critical = , unknown = ,
+                       wildcard = 1L, 0L),
          delete = switch(pc, critical = , control = , protected = , outside = 4L, temp = 1L,
                          console = 0L, 3L),
          switch(pc, critical = , control = 4L, workspace = 2L, temp = 1L, console = 0L, 3L))
@@ -1540,7 +1541,8 @@ risk_literal_rows = function(lits, f, fn, root, call, write = TRUE) {
   op = if (any(f$category == "file_delete")) "delete" else "write"
   for (t in lits) {
     rd = risk_target(t, "read", root)
-    if (rd$level > 0L && !rd$secret) {
+    # a string literal expands no `$`, `%` or backquote, so it is never a computed path
+    if (rd$level > 0L && !rd$secret && rd$pc != "unknown") {
       f = risk_flags_bind(f, risk_flags_row(call, fn, rd$level,
                                             if (identical(rd$pc, "url")) "network" else "read",
                                             t, rd$pc))
@@ -2150,9 +2152,9 @@ risk_fold = function(x, known = NULL) {
     dir = risk_fold(risk_arg(risk_args(x, fn, "base"), "tmpdir", 2L, default = TRUE), known)
     return(if (!is.null(dir)) file.path(dir, "file"))
   }
-  if (fn %in% c("path.expand", "normalizePath")) {
-    return(risk_fold(risk_arg(risk_args(x, fn, "base"), "path", 1L), known))
-  }
+  arg = switch(fn, path.expand = , normalizePath = "path",
+               file = , gzfile = , bzfile = , xzfile = "description")
+  if (!is.null(arg)) return(risk_fold(risk_arg(risk_args(x, fn, "base"), arg, 1L), known))
   if (!fn %in% c("c", "file.path", "paste0", "paste")) return()
   sep = a$sep %||% " "
   a$sep = NULL

@@ -246,13 +246,13 @@ test_that("commands follow the classifier standard (D-061)", {
     list(0L, "awk -F, '{print $1}' a.csv"), list(0L, "awk 'NR>1' data.csv"),
     list(0L, "sed -n '1,10p' f.txt"), list(0L, "jq '.a' x.json"),
     list(0L, "find . -name '*.R' -type f"), list(0L, "tree -L 2"),
-    list(0L, "for f in *.csv; do wc -l \"$f\"; done"), list(0L, "if [ -f x ]; then cat x; fi"),
-    list(0L, "[ -f \"$f\" ]"), list(0L, "printf '%s\\n' \"$x\""),
-    list(0L, "git log --author=\"$USER\""), list(0L, "LC_ALL=C sort x"), list(0L, "command -v git"),
+    list(0L, "if [ -f x ]; then cat x; fi"), list(0L, "[ -f \"$f\" ]"),
+    list(0L, "printf '%s\\n' \"$x\""), list(0L, "LC_ALL=C sort x"), list(0L, "command -v git"),
     list(0L, "nice -n 5 ls"), list(0L, "date +%F"), list(0L, "git stash list"),
     list(0L, "git remote -v"), list(0L, "R --version"),
     list(0L, "case $x in a) ls;; b|c) ls;; esac"),
     list(0L, "test -f DESCRIPTION && cat DESCRIPTION"), list(1L, "cat /etc/hosts"),
+    list(1L, "for f in *.csv; do wc -l \"$f\"; done"), list(1L, "git log --author=\"$USER\""),
     list(2L, "git commit -m \"fix: rm -rf ~ in setup\""), list(2L, "ls *"), list(2L, "cat *"),
     list(2L, "set -e"), list(2L, "export -p"), list(2L, "sed -i 's/a/b/' f.txt"),
     list(3L, "printenv OPENAI_API_KEY"), list(3L, "echo $OPENAI_API_KEY"), list(3L, "cat .env"),
@@ -351,7 +351,7 @@ test_that("rows later tasks read keep their call texts and fn (D-061)", {
   expect_identical(f$category, "file_write")
   expect_identical(f$path_class, "workspace")
   f = risk_command("for f in *.csv; do wc -l \"$f\"; done", root)
-  expect_identical(f$call, "wc -l $f")
+  expect_identical(unique(f$call), "wc -l $f")
   expect_setequal(risk_command("xargs -n 1 echo", root)$fn, c("xargs", "echo"))
 })
 
@@ -382,18 +382,19 @@ test_that("text encodings and long glob words are read safely (D-061)", {
   Encoding(native) = "unknown"
   expect_identical(risk_command(native, root)$path, "caf\u00e9/*")
   latin1 = iconv("cat caf\u00e9.csv", "UTF-8", "latin1")
-  expect_identical(flags_level(risk_command(latin1, root)), 0L)
+  read = if (risk_path_class("caf\u00e9.csv", root) == "unknown") 1L else 0L
+  expect_identical(flags_level(risk_command(latin1, root)), read)
   # a non-ASCII path R cannot translate (C locale) is "unknown", never a warning
   latin = expect_silent(risk_command("cat caf\u00e9.csv > r\u00e9sum\u00e9.txt", root))
   pc = latin$path_class[latin$fn == "redirect"]
   expect_true(pc %in% c("workspace", "unknown"))
   expect_identical(flags_level(latin), if (identical(pc, "workspace")) 2L else 3L)
-  # a long glob word is read in linear time
+  # a long glob word is read in linear time (a path too long for R to expand is unknown)
   x = paste0("cat ", strrep("a*[", 3000L))
   t0 = proc.time()[["elapsed"]]
   f = risk_command(x, root)
   expect_lt(proc.time()[["elapsed"]] - t0, 10)
-  expect_identical(flags_level(f), 0L)
+  expect_identical(flags_level(f), 1L)
   expect_identical(risk_glob_rx("a*[b]c["), "^a.*[b]c\\[\\z")
   expect_identical(risk_glob_rx("[!]"), "^\\[!\\]\\z")
   expect_identical(risk_glob_rx("x[^]]y"), "^x[^]]y\\z")
@@ -952,4 +953,38 @@ test_that("the plan-mode allowlist admits only known read-only calls (IC-54)", {
   expect_identical(risk_plan_disallowed("gptr_artifacts()", root), character())
   expect_true("read.csv" %in% risk_plan_disallowed("x = read.csv('https://x.org/a.csv')", root))
   expect_identical(risk_plan_disallowed("this is not R (", root), character())
+})
+
+test_that("a read of a path the classifier cannot resolve is level 1, as outside one", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("readLines(file.path(Sys.getenv('HOME'), '.bash_history'))"), 1L)
+  expect_identical(lv("readLines(toupper('/etc/hosts'))"), 1L)
+  expect_identical(lv("readLines(file(p))"), 1L)
+  expect_identical(risk_op_level("unknown", "read"), 1L)
+  expect_identical(risk_op_level("wildcard", "read"), 1L)
+  expect_identical(flags_level(risk_command("wc -l \"$f\"", root)), 1L)
+  # neighbours: paths the classifier folds stay level 0
+  expect_identical(lv("read.csv(file.path('data', 'a.csv'))"), 0L)
+  expect_identical(lv("readLines(normalizePath('data.csv'))"), 0L)
+  expect_identical(lv("readLines(gzfile('data.csv.gz'))"), 0L)
+  expect_identical(lv("list.files()"), 0L)
+  expect_identical(flags_level(risk_command("wc -l data.csv", root)), 0L)
+  # SQL strings expand nothing
+  expect_identical(flags_level(risk_sql("SELECT * FROM t WHERE a LIKE '%x%'", root)), 0L)
+})
+
+test_that("a reading function passed as a value reads a path the code computes", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("sapply('~/x', readLines)"), 1L)
+  expect_identical(lv("do.call(readLines, list('/etc/hosts'))"), 1L)
+  expect_identical(lv("Map(read.csv, files)"), 1L)
+  expect_identical(lv("purrr::map(files, readLines)"), 1L)
+  f = gptr_risk("lapply(files, readLines)", root = root)$flagged
+  expect_identical(f$path_class[f$fn == "readLines"], "unknown")
+  # neighbours: functions that read no path stay level 0
+  expect_identical(lv("sapply(1:3, sqrt)"), 0L)
+  expect_identical(lv("lapply(x, nchar)"), 0L)
+  expect_identical(lv("do.call(rbind, l)"), 0L)
 })
