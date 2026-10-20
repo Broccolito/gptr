@@ -97,7 +97,7 @@ figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
 .tc { fill: var(--muted); font: 8.6px var(--mono); }
 .fn { font: 700 9.1px var(--sans); }
 
-@media (min-width: 1400px) {
+@media (min-width: 1460px) {
   .cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 28px; }
   .col { display: block; }
 }
@@ -321,8 +321,8 @@ session |&gt; peter()</dt><dd>Open the console; <code>/exit</code> returns the s
   levels = c("low", "mid", "high"))</dt><dd>A score: the expected zero-based level, such as 1.88.</dd>
           <dt>peter(q, x, model = jev,
   min_confidence = 0.8, uncertain = "stop")</dt><dd>Abstain below a confidence: NA by default, or a fallback or an error.</dd>
-          <dt>if (isTRUE(ok)) message("Escalate.")
-abstracts[rct]; sum(rct)</dt><dd>Answers are plain vectors for <code>if</code>, <code>for</code>, subsetting and <code>ifelse()</code>.</dd>
+          <dt>abstracts[rct]; sum(rct)
+ifelse(rct, "RCT", "other")</dt><dd>Answers are plain vectors for <code>if</code>, <code>for</code>, subsetting and <code>ifelse()</code>.</dd>
           <dt>s |&gt; peter("Did it succeed?", model = jev)</dt><dd>Judge a session's last answer; adds no turn.</dd>
           <dt>m = if (isTRUE(hard)) "opus" else "haiku"
 peter(task, model = m)</dt><dd>Route each task to a deep or a fast agent.</dd>
