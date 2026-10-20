@@ -1759,7 +1759,7 @@ risk_plan_syntax = c("{", "(", risk_arrow, "=", "if", "for", "while", "repeat", 
 risk_quoting_funs = c("quote", "bquote", "expression", "substitute", "~", "alist")
 # Function slots: formals whose argument is called in any call R can match, and the slots of
 # functions whose formal name is ambiguous or whose namespace may not be loaded (formal, position).
-risk_slot_names = c("FUN", ".f", ".fn", ".fns", "func", ".p", ".else")
+risk_slot_names = c("FUN", ".f", ".fn", ".fns", "func", ".p", ".else", "ties", "gr")
 risk_hof_args = list(
   Map = c("f", "1"), Reduce = c("f", "1"), Filter = c("f", "1"), Find = c("f", "1"),
   Position = c("f", "1"), Negate = c("f", "1"), do.call = c("what", "1"),
@@ -1772,7 +1772,7 @@ risk_hof_args = list(
   future_map = c(".f", "2"), mclapply = c("FUN", "2"), parLapply = c("fun", "3"),
   parSapply = c("FUN", "3"), clusterCall = c("fun", "2"), later = c("func", "1"),
   rapply = c("f", "2"), optim = c("fn", "2"), optimize = c("f", "1"), optimise = c("f", "1"),
-  uniroot = c("f", "1")
+  uniroot = c("f", "1"), aggregate = c("FUN", "3"), reorder = c("FUN", "3")
 )
 # Handlers: every `...` argument of these is called.
 risk_handler_funs = c("tryCatch", "withCallingHandlers")
@@ -2117,14 +2117,18 @@ risk_args = function(e, fn, pkg) {
 }
 
 #' The expression a call passes for formal `name` (its default when R matched the call and
-#' `default` is set); for an unmatched call, else its `pos`-th unnamed argument
+#' `default` is set); else its `pos`-th unnamed argument (through `...` for a generic R matched)
 #' @noRd
 risk_arg = function(a, name, pos = 0L, default = FALSE) {
   nms = names(a) %||% rep("", length(a))
   if (name %in% nms) return(a[[match(name, nms)]])
   fm = attr(a, "formals")
-  if (!is.null(fm)) return(if (default && !identical(fm[[name]], quote(expr = ))) fm[[name]])
-  un = a[!nzchar(nms)]
+  if (name %in% names(fm)) {
+    return(if (default && !identical(fm[[name]], quote(expr = ))) fm[[name]])
+  }
+  d = a[["..."]]
+  un = c(a[!nzchar(nms) | seq_along(a) < match("...", nms, 0L)],
+         d[!nzchar(names(d) %||% rep("", length(d)))])
   if (pos >= 1L && length(un) >= pos) un[[pos]]
 }
 

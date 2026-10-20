@@ -1678,7 +1678,7 @@
 "tidyselect","starts_with",0,"read","",""
 "tidyselect","where",0,"read","",""
 "tools","R_user_dir",0,"read","",""
-"tools","Rd2txt",0,"read","",""
+"tools","Rd2txt",2,"file_write","out","only with out ="
 "tools","file_ext",0,"read","",""
 "tools","file_path_as_absolute",0,"read","",""
 "tools","file_path_sans_ext",0,"read","",""
