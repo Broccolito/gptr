@@ -106,16 +106,17 @@ jobs:
           GITHUB_PAT: ''
           GITHUB_TOKEN: ''
         run: R CMD INSTALL .
+      # The runner's default shell: bash on Linux, pwsh on Windows. Not Git Bash, whose MSYS runtime
+      # enables Backup/Restore privileges in every child and so voids the absence probe's ACL
+      # denials; R-CMD-check's Rscript steps do not.
       - name: Run mandatory optional cases with five-minute owned-child bounds
-        shell: bash
         env:
           GITHUB_PAT: ''
           GITHUB_TOKEN: ''
-          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-owned
           GPTR_OPTIONAL_NOFOLLOW_OBSERVER: ${{ inputs.nofollow_observer && 'true' || 'false' }}
-        run: |
-          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
-            --run Rscript --vanilla dev/ci/optional-integrations.R
+        run: >-
+          python dev/ci/optional-dependencies.py --state-dir "${{ runner.temp }}/gptr-optional-owned"
+          --run Rscript --vanilla dev/ci/optional-integrations.R
       - name: Run the serial plan gates even after a test failure
         if: always() && runner.os == 'Linux'
         shell: bash

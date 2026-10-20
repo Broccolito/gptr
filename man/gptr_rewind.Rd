@@ -52,21 +52,23 @@ session.
 
 \code{gptr_checkpoints()} lists one row per turn of the active path (\code{all = TRUE} adds the turns of
 abandoned branches): \code{turn}; \code{id}, the last entry of the turn (pass it as \code{to} to
-\code{gptr_rewind()}); \code{time}, when the prompt was sent; \code{prompt} (its first 60 characters);
-\code{objects} and \code{files}, \code{"changed/restorable"} counts; \code{held_mb} and \code{disk_mb}, megabytes of
-object pre-images held in memory and on disk; and \code{branch} (\code{"active"} or \code{"abandoned"}).
+\code{gptr_rewind()}); \code{time}, when the prompt was sent (local time); \code{prompt} (its first 60
+characters); \code{objects} and \code{files}, \code{"changed/restorable"} counts; \code{held_mb} and \code{disk_mb},
+megabytes of object pre-images held in memory and on disk; and \code{branch} (\code{"active"} or
+\code{"abandoned"}).
 }
 \details{
 Restores are 3-way: an object or file that changed after the turn (by you or another session)
 is kept and reported, unless \code{force = TRUE}. Reference objects (environments, R6, external
 pointers), objects over the undo budget, environment variables, loaded namespaces, the
 random-number state and effects outside R (network, databases, processes) are not restored.
-Items that were not restored are listed in \code{s$last_rewind$report} and raise the warning
-\code{gptr_warning_rewind_partial}. Files outside the project and \code{tempdir()} are restored only
-after you confirm each path. After a full restore the model is told nothing (the next
-request's prefix is byte-identical to the earlier request at the target); after a partial one
-the next prompt carries a short \verb{<rewind>} block listing what was not restored. Model code may
-rewind another session only when you approve that call.
+\code{s$last_rewind$report} lists each object, file and state item once, by its outcome after the
+whole rewind; items that were not restored raise the warning \code{gptr_warning_rewind_partial}.
+Files outside the project and \code{tempdir()} are restored only after you confirm each path. After
+a full restore the model is told nothing (the next request's prefix is byte-identical to the
+earlier request at the target); after a partial one the next prompt carries a short \verb{<rewind>}
+block listing what was not restored. Model code may rewind another session only when you
+approve that call.
 }
 \section{Options}{
 

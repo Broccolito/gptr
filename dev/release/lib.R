@@ -761,6 +761,15 @@ pkgdown_yaml = function(extra = character()) {
     '    bg: "#ffffff"', '    fg: "#1c1e22"', '    primary: "#40628f"',
     '    body-bg-dark: "#1c1e22"', '    body-color-dark: "#efede7"',
     '    link-color-dark: "#7d9dcb"', '    link-hover-color-dark: "#efede7"',
+    "", "navbar:", "  structure:",
+    "    left: [intro, reference, articles, cheatsheet, tutorials, news]",
+    "  components:", "    cheatsheet:", "      text: Cheatsheet", "      menu:",
+    "      - text: HTML", "        href: cheatsheet.html",
+    "      - text: PDF", "        href: gptr-cheatsheet.pdf",
+    "", "authors:", "  after: >-",
+    "    **Acknowledgements.** Mario Zechner's [pi](https://github.com/earendil-works/pi) coding",
+    "    agent inspired gptr; its tool descriptions, edit semantics and prompt-template grammar",
+    "    are derived from pi (MIT license; see `inst/COPYRIGHTS`).",
     "", "reference:",
     unlist(Map(section, names(ref), ref), use.names = FALSE), "", "articles:",
     unlist(Map(section, names(articles), articles), use.names = FALSE))
@@ -841,7 +850,7 @@ site_stage = function(root, dest) {
       list(files = rel, dirs = character())
     }
   }
-  public = c("DESCRIPTION", "NAMESPACE", "README.md", "NEWS.md", "LICENSE", "LICENSE.md",
+  public = c("DESCRIPTION", "NAMESPACE", "README.md", "NEWS.md", "LICENSE.md",
              "_pkgdown.yml", dirs)
   public = public[file.exists(file.path(root, public))]
   if (any(file.info(file.path(root, setdiff(public, dirs)))$isdir)) {

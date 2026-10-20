@@ -2,8 +2,7 @@ import re, os, glob, json, sys
 plan_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../plan")
 out = "blocks"; os.makedirs(out, exist_ok=True)
 for f in glob.glob(out + "/*"): os.remove(f)
-plans = sorted(glob.glob(plan_dir + "/P[0-2][0-9]-*.md"))
-plans = [p for p in plans if int(os.path.basename(p)[1:3]) <= 25]
+plans = sorted(glob.glob(plan_dir + "/P[0-9][0-9]-*.md"))
 meta = []
 fence_re = re.compile(r'^(\s*)(`{3,}|~{3,})(.*)$')
 for p in plans:

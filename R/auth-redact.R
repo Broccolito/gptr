@@ -589,7 +589,8 @@ scrub_guarded = function(path) {
 #' Expand a directory without escaping its resolved root or revisiting a symlink cycle
 #' @noRd
 scrub_walk = function(root) {
-  if (!dir.exists(root)) return(root[utils::file_test("-f", root)])
+  regular = function(x) path_info(x)$isdir %in% FALSE
+  if (!dir.exists(root)) return(root[regular(root)])
   pending = root
   visited = character()
   out = character()
@@ -604,7 +605,7 @@ scrub_walk = function(root) {
     is_dir = dir.exists(entries)
     descend = is_dir & !endsWith(tolower(basename(entries)), ".lock")
     pending = c(pending, entries[descend])
-    out = c(out, entries[!is_dir & utils::file_test("-f", entries)])
+    out = c(out, entries[regular(entries)])
   }
   out
 }
@@ -729,8 +730,8 @@ scrub_append_entry = function(txt, rows) {
 scrub_lock = function(f) {
   root = workspace_root(create = FALSE)
   lock_root = file.path(root, "locks")
-  links = Sys.readlink(c(root, lock_root))
-  if (any(!is.na(links) & nzchar(links)) || !path_inside(lock_root, root)) return(NULL)
+  if (any(path_is_link(c(root, lock_root))) || path_dangling(root) || path_dangling(lock_root) ||
+      !path_inside(lock_root, root)) return(NULL)
   locks = c(paste0(f, ".lock"), file.path(lock_root, cli::hash_sha1(path_key(f))))
   owned = character()
   complete = FALSE

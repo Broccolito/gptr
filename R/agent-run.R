@@ -82,7 +82,7 @@ safety_snapshot = function() {
        can_prompt = gptr_can_prompt(), has_human = gptr_has_human())
 }
 
-#' The stricter of two modes (plan < manual < edits < auto)
+#' The stricter of two modes (plan < manual < edits < auto < yolo)
 #' @noRd
 run_mode_tighter = function(a, b) session_modes[min(match(c(a, b), session_modes))]
 
@@ -747,12 +747,15 @@ plugin_state_persist = function(s) {
 }
 
 #' Update the session's estimator multiplier from provider-reported usage (03 section 12.5)
-#' Only a reported prompt total updates it, never an estimate or an unknown count (IC-74).
+#' Only a reported prompt total updates it, never an estimate, an unknown count (IC-74) or a
+#' plan-cli turn's sum over the CLI's model calls (D-202).
 #' @noRd
 run_estimator_update = function(run, msg) {
   d = session_data(run$shell)
   u = msg[["usage"]]
-  if (!is.list(u) || isTRUE(u[["estimated"]])) return(invisible(NULL))
+  if (!is.list(u) || isTRUE(u[["estimated"]]) || identical(msg[["route"]], "plan-cli")) {
+    return(invisible(NULL))
+  }
   counts = vapply(c("input", "cache_read", "cache_write_5m", "cache_write_1h"),
                   function(f) overflow_count(u, f), 1)
   est = run$tokens_est %||% 0
@@ -787,12 +790,13 @@ context_tokens = function(s) {
   m * est(path, d$frozen)
 }
 
-#' The provider-reported total of an entry (an assistant reply that did not fail), else NA
+#' The provider-reported total of an entry (an assistant reply that did not fail), else NA; a
+#' plan-cli reply's total sums the CLI's model calls of a turn, no context size (D-202)
 #' @noRd
 reported_total = function(e) {
   m = e$message
   if (!identical(e$type, "message") || !is.list(m) || !identical(m$role, "assistant") ||
-      msg_failed(m)) {
+      msg_failed(m) || identical(m$route, "plan-cli")) {
     return(NA_real_)
   }
   u = m$usage
@@ -1137,7 +1141,8 @@ run_stream_callbacks = function(run) {
 
 # ---------------------------------------------------------------------------- stream callbacks
 
-#' INFRA-02 events: delta-only agent events, redacted per content block with a streaming hold-back
+#' INFRA-02 events: delta-only agent events, redacted per content block with a streaming hold-back;
+#' the informational tool events of the CLI routes (04 section 8.5) reach the session's hooks
 #' @noRd
 run_on_event = function(run, ev) {
   if (isTRUE(run$settled) || isTRUE(run$request_closed)) return(invisible(NULL))
@@ -1160,7 +1165,8 @@ run_on_event = function(run, ev) {
     run_flush_deltas(run, as.character(ev$index))
   } else if (identical(type, "error")) {
     run$last_error = ev$error
-  } else if (type %in% c("retry_start", "retry_end")) {
+  } else if (type %in% c("retry_start", "retry_end", "tool_execution_start",
+                         "tool_execution_end")) {
     args = ev[setdiff(names(ev), c("type", "ts", "session", "run", "agent", "turn"))]
     do.call(run_emit, c(list(run, type), args))
   }
@@ -1390,13 +1396,23 @@ run_compact_resume = function(run) {
   run_request(run, check_compact = FALSE)
 }
 
+#' A budget amount as the run's messages show it: tokens as format_count() (2.0M), a cost as
+#' format_cost(), turns as they are
+#' @noRd
+run_budget_amount = function(kind, x) {
+  switch(kind, tokens = format_count(x), cost = format_cost(x), format(x))
+}
+
 #' Ask to extend a reached budget by the same amount (ask_human: the run's UI only)
 #' @noRd
 run_budget_extend = function(run, hit) {
   if (!isTRUE(run$opts$safety$can_prompt)) return(FALSE)
   ui = run_ui(run)
   if (is.null(ui) || !isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) return(FALSE)
-  title = paste0("The ", hit$kind, " budget of this call (", format(hit$budget), ") is reached.")
+  who = agent_label(run)
+  title = paste0(if (!identical(who, "main")) paste0("sub-agent ", who, ": "), "The ", hit$kind,
+                 " budget of this call (", run_budget_amount(hit$kind, hit$budget),
+                 ") is reached.")
   ans = tryCatch(ui$select(title, c("Extend it by the same amount", "Stop the run"), default = 2L),
                  error = function(e) NA_integer_)
   if (!identical(suppressWarnings(as.integer(ans)), 1L)) return(FALSE)
@@ -1420,8 +1436,8 @@ run_stop_budget = function(run, hit) {
                                                      used = hit$used)))
   run_emit(run, "budget_exceeded", kind = hit$kind, budget = hit$budget, used = hit$used)
   run$condition = gptr_condition(
-    paste0("the ", hit$kind, " budget of this call (", format(hit$budget), ") is reached (used ",
-           format(hit$used), ")"),
+    paste0("the ", hit$kind, " budget of this call (", run_budget_amount(hit$kind, hit$budget),
+           ") is reached (used ", run_budget_amount(hit$kind, hit$used), ")"),
     c(paste0("budget_", hit$kind), "budget"), "error",
     list(kind = hit$kind, budget = hit$budget, used = hit$used, session = d$id))
   run_settle(run, "budget")

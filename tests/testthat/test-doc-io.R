@@ -1145,6 +1145,11 @@ test_that("RStudio buffers are edited by id, saved when clean, the cursor moved 
   f = file.path(getwd(), "a.R")
   writeLines(c("x = 1", "peter(\"count rows\")", "z = 2"), f)
   ed = local_fake_editor(path_norm(f), readLines(f))
+  own = character()
+  local_service("checkpoint.own_write", function(path, write) {
+    write()
+    own <<- c(own, readLines(path)[4])
+  })
   res = doc_upsert(doc_ide_site(f, "count rows", "rstudio"),
                    structure("n = nrow(mtcars)", header = list(model = "m")))
   expect_identical(res$action, "insert")
@@ -1154,6 +1159,7 @@ test_that("RStudio buffers are edited by id, saved when clean, the cursor moved 
                                      "n = nrow(mtcars)", paste0("# <<< gptr:", res$block_id)))
   expect_identical(ed$ids[[1]], "doc1")
   expect_identical(ed$saved, "doc1")
+  expect_identical(own, "n = nrow(mtcars)")
   expect_identical(ed$cursor, 6L)
   expect_identical(readLines(f), ed$buffer)
 })
@@ -1412,7 +1418,6 @@ test_that("an Rscript run writes its blocks only at exit and the next run replay
 
 test_that("SIGTERM leaves a sidecar that the next touch applies around user edits (IC-51)", {
   skip_on_cran()
-  skip_on_os("windows")
   root = local_project()
   f = file.path(root, "job.R")
   doc_child_script(f, doc_two_steps, c("a = peter('first step')", "b = peter('second step')",
@@ -1428,6 +1433,7 @@ test_that("SIGTERM leaves a sidecar that the next touch applies around user edit
     out = paste0(out, p$read_output())
   }
   expect_match(out, "READY", fixed = TRUE)
+  # on Windows processx calls TerminateProcess() and waits for the exit
   p$signal(tools::SIGTERM)
   p$wait(10000)
   expect_identical(readLines(f), before)
@@ -1755,7 +1761,6 @@ test_that("JSON inert notebook sidecars preserve existing fractional number toke
 
 
 test_that("a broken modern sidecar link still prevents legacy deserialization", {
-  skip_on_os("windows")
   local_project()
   f = file.path(getwd(), "legacy.R")
   writeLines('peter("first")', f)
@@ -1764,7 +1769,8 @@ test_that("a broken modern sidecar link still prevents legacy deserialization", 
   unlink(modern)
   legacy = doc_io_legacy_path(f)
   write_atomic(legacy, serialize_leaf(rec))
-  expect_true(file.symlink(file.path(getwd(), "absent.json"), modern))
+  local_dangling_link(modern)
+  expect_true(doc_sidecar_exists(modern))
   reads = 0L
   original = base::readRDS
   testthat::local_mocked_bindings(readRDS = function(file, ...) {
@@ -1772,11 +1778,11 @@ test_that("a broken modern sidecar link still prevents legacy deserialization", 
     reads <<- reads + 1L
     rec
   }, .package = "base")
-  expect_null(doc_sidecar_read(f))
+  expect_null(expect_no_warning(doc_sidecar_read(f)))
   expect_identical(reads, 0L)
   st = local_doc_pending()
   st$docs[[path_key(f)]] = rec
-  expect_identical(doc_pending_reconcile(rec)$upserts, rec$upserts)
+  expect_identical(expect_no_warning(doc_pending_reconcile(rec))$upserts, rec$upserts)
 })
 
 test_that("modern sidecar reads are bounded before decode and remain authoritative", {
@@ -1904,8 +1910,7 @@ test_that("unknown or malformed POSIX owner identity never deserializes legacy s
   expect_identical(unname(tools::md5sum(legacy)), before)
 })
 
-test_that("a differently cased dangling modern entry masks legacy on a POSIX filesystem", {
-  skip_on_os("windows")
+test_that("a differently cased dangling modern entry masks legacy where names ignore case", {
   local_project()
   f = file.path(getwd(), "case.R")
   writeLines('peter("first")', f)
@@ -1915,10 +1920,8 @@ test_that("a differently cased dangling modern entry masks legacy on a POSIX fil
   legacy = doc_io_legacy_path(f)
   write_atomic(legacy, serialize_leaf(rec))
   before = unname(tools::md5sum(legacy))
-  case = sub("[.]json$", ".JSON", modern)
-  expect_true(file.symlink(file.path(getwd(), "absent.json"), case))
-  link = Sys.readlink(modern)
-  skip_if(is.na(link) || !nzchar(link), "the filesystem is case-sensitive")
+  skip_if_not(file.exists(sub("[.]rds$", ".RDS", legacy)), "the filesystem is case-sensitive")
+  local_dangling_link(sub("[.]json$", ".JSON", modern))
   expect_true(doc_sidecar_exists(modern))
   reads = 0L
   original = base::readRDS
@@ -1927,9 +1930,9 @@ test_that("a differently cased dangling modern entry masks legacy on a POSIX fil
     reads <<- reads + 1L
     rec
   }, .package = "base")
-  expect_null(doc_sidecar_read(f))
+  expect_null(expect_no_warning(doc_sidecar_read(f)))
   expect_identical(reads, 0L)
-  expect_identical(doc_pending_reconcile(rec)$upserts, rec$upserts)
+  expect_identical(expect_no_warning(doc_pending_reconcile(rec))$upserts, rec$upserts)
   expect_identical(unname(tools::md5sum(legacy)), before)
 })
 

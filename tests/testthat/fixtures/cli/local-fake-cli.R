@@ -24,7 +24,7 @@ local_fake_cli_path = function(cli, case = "text", .env = parent.frame()) {
   paths = getOption("gptr.cli_path") %||% list()
   paths[[cli]] = path
   withr::local_options(gptr.cli_path = paths, .local_envir = .env)
-  # the fake Rscript child finds jsonlite and curl in this session's libraries (setup.R moves
+  # the fake Rscript child finds jsonlite and processx in this session's libraries (setup.R moves
   # HOME, so a user library would not be found by default)
   withr::local_envvar(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
                       .local_envir = .env)
@@ -185,25 +185,6 @@ feed_fixture = function(n, name) {
 
 # Push one object as a process line
 push_obj = function(n, obj) n$push(list(data = json_encode(obj), obj = obj))
-
-# A gptr_mcp_handle stand-in (04 5.11 fields) whose token lives in its Codex snippet
-stub_mcp_handle = function(port = 54321L, token = "tok-test-0123456789") {
-  h = new.env(parent = emptyenv())
-  h$url = paste0("http://127.0.0.1:", port, "/mcp")
-  h$port = port
-  h$token_env = "GPTR_MCP_TOKEN"
-  h$config = list(codex = list(env = c(GPTR_MCP_TOKEN = token)))
-  h$stop = function() invisible(NULL)
-  h
-}
-
-# Replace the mcp.serve_ensure service for the calling test with one returning `handle`
-# (a `service` registry record at user rank wins over P18's built-in, IC-34)
-local_mcp_stub = function(handle = stub_mcp_handle(), .env = parent.frame()) {
-  off = gptr_register(gptr_spec("service", "mcp.serve_ensure", fun = function(session) handle))
-  withr::defer(off(), envir = .env)
-  invisible(handle)
-}
 
 # Settle a session's run, stop its CLI child and forget it when the calling test ends (claude
 # children live as long as their session; a run left by a failed test would reach later tests)

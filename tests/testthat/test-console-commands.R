@@ -1,4 +1,5 @@
 # tests/testthat/test-console-commands.R -- the slash commands (plan P14, Task 6).
+source(testthat::test_path("fixtures", "cli", "local-fake-cli.R"), local = TRUE)
 
 # The console's command specs for this test unless builtin:console registered them already
 local_console_commands = function(.env = parent.frame()) {
@@ -132,8 +133,36 @@ test_that("/help lists the commands and the input syntax", {
   out = run_command(repl_state(NULL, new.env()), "/help")$out
   expect_true(any(grepl("^  /mode", out)))
   expect_true(any(grepl("!!code", out, fixed = TRUE)))
+  # the reader of typed lines needs a pollable terminal (repl_terminal(), IC-76)
+  expect_true(any(grepl("In a terminal (not Windows) a line typed", out, fixed = TRUE)))
   expect_identical(run_command(repl_state(NULL, new.env()), "/help mode")$out,
-                   "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto]")
+                   "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
+})
+
+test_that("in the console margin command output wraps inside it; listings fit its width", {
+  local_console_commands()
+  local_project()
+  peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+  testthat::local_reproducible_output(width = 60)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  rs = repl_state(NULL, list2env(list(alpha = 1:10)))
+  out = run_command(rs, "/help")$out
+  expect_true(all(startsWith(out[nzchar(out)], "  ")))
+  expect_true(all(nchar(out, type = "width") <= 60L))
+  words = function(x) strsplit(trimws(paste(x, collapse = " ")), "[[:space:]]+")[[1L]]
+  expect_identical(words(out), words(cmd_help("", list())))
+  # a description wraps under its own column, so no row looks like another command
+  cmds = out[seq(2L, match("  Input:", out) - 1L)]
+  expect_true(all(grepl("^.{16} {3}\\S", cmds)))
+  expect_identical(run_command(rs, "/mode")$out, "  Mode: manual")
+  expect_match(run_command(rs, "/env")$out, "^  alpha: <integer>")
+  # a listing is printed at the content width (60 - 4), not wrapped again
+  listing = withr::with_options(list(width = 56L, cli.width = 56L),
+                                utils::capture.output(print(gptr::gptr_sessions())))
+  expect_identical(run_command(rs, "/resume")$out,
+                   ifelse(nzchar(listing), paste0("  ", listing), ""))
+  expect_equal(c(getOption("width"), getOption("cli.width")), c(60, 60))
 })
 
 test_that("/exit, /quit and /q end the REPL", {
@@ -154,7 +183,59 @@ test_that("/model and /mode before the first prompt set the first prompt's argum
   run_command(rs, "/plan")
   expect_identical(rs$mode, "plan")
   expect_identical(run_command(rs, "/mode")$out, "Mode: plan")
-  expect_match(run_command(rs, "/mode turbo")$out, "Unknown mode 'turbo'", fixed = TRUE)
+  expect_identical(run_command(rs, "/mode turbo")$out,
+                   "Unknown mode 'turbo': use plan, manual, edits, auto or yolo.")
+  local_gptr_options(quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  expect_message(run_command(rs, "/mode yolo"), "not a sandbox", class = "gptr_message_notice")
+  expect_identical(rs$mode, "yolo")
+})
+
+test_that("/model checks a reference before the first prompt; provider names resolve", {
+  local_console_commands()
+  rs = repl_state(NULL, new.env())
+  bad = run_command(rs, "/model codex-clu")
+  expect_match(paste(bad$err, collapse = "\n"), "Unknown model reference 'codex-clu'",
+               fixed = TRUE)
+  expect_null(rs$model)
+  expect_identical(run_command(rs, "/model claude-cli")$out,
+                   "Model: claude-cli (used from the first prompt)")
+  expect_identical(rs$model, "claude-cli")
+  off = gptr_register(gptr_router("cheapest", route = function(request, ctx) "fake/fake-1"))
+  withr::defer(off())
+  expect_identical(run_command(rs, "/model cheapest")$out,
+                   "Model: cheapest (used from the first prompt)")
+  s = idle_session()
+  rs2 = repl_state(s, new.env())
+  expect_identical(run_command(rs2, "/model claude-code")$out,
+                   "Model: claude-cli/default (from the next request)")
+  expect_identical(run_command(rs2, "/model codex-cli")$out,
+                   "Model: codex/default (from the next request)")
+})
+
+test_that("/model and /status name the model a CLI's default runs (#44)", {
+  local_console_commands()
+  off = gptr_register(pcli_fake_provider("claude"))
+  withr::defer(off())
+  local_mocked_bindings(pcli_default_model = function(api) paste0(api, "-id"))
+  shown = "fakeclaude/default (cli-claude-id)"
+  rs = repl_state(NULL, new.env())
+  run_command(rs, "/model fakeclaude/default")
+  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
+  rs$session = idle_session()
+  run_command(rs, "/model fakeclaude/default")
+  expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
+  expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
+  run_command(rs, "/model fakeclaude/claude-sonnet-5-5")
+  expect_identical(run_command(rs, "/model")$out, "Model: fakeclaude/claude-sonnet-5-5")
+  # another CLI adapter decides what its `default` runs
+  off2 = gptr_register(gptr_provider("mycli", api = "mycli-api", type = "cli",
+                                     models = list(list(id = "default"))))
+  withr::defer(off2())
+  run_command(rs, "/model mycli/default")
+  expect_identical(run_command(rs, "/model")$out, "Model: mycli/default")
 })
 
 test_that("/mode on a session appends the mode change for the next turn", {
@@ -163,6 +244,8 @@ test_that("/mode on a session appends the mode change for the next turn", {
   rs = repl_state(s, new.env())
   expect_identical(run_command(rs, "/mode auto")$out, "Mode: auto (from the next turn)")
   expect_identical(s$mode, "auto")
+  expect_identical(run_command(rs, "/mode yolo")$out, "Mode: yolo (from the next turn)")
+  expect_identical(s$mode, "yolo")
   types = vapply(session_data(s)$entries, function(e) e$custom_type %||% "", "")
   expect_true("gptr.mode_change" %in% types)
 })
@@ -175,12 +258,16 @@ test_that("/status, /tools and /env describe the console", {
   expect_match(run_command(rs, "/status")$out[[1L]], "session   (none yet", fixed = TRUE)
   expect_match(run_command(rs, "/tools")$out[[1L]], "Direct tools:", fixed = TRUE)
   env_out = run_command(rs, "/env count")$out
-  expect_match(env_out, "^  counts: ")
+  expect_match(env_out, "^counts: ")
   s = idle_session()
   rs$session = s
   status = run_command(rs, "/status")$out
   expect_identical(status[[1L]], paste0("session   ", s$id, "  (idle, 0 turns)"))
   expect_true(any(grepl("^queue     0 steer, 1 follow-up$", status)))
+  d = session_data(s)
+  d$turns = 1L
+  expect_identical(run_command(rs, "/status")$out[[1L]],
+                   paste0("session   ", s$id, "  (idle, 1 turn)"))
 })
 
 test_that("/clear starts a new conversation and keeps model and mode", {
@@ -200,9 +287,10 @@ test_that("/cost, /context, /fork and /resume work on a session that ran", {
   s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
   rs = repl_state(s, new.env())
   cost = run_command(rs, "/cost")$out
-  expect_match(cost[[length(cost)]], "^Total: \\$")
+  expect_match(cost[[length(cost)]], "^Total: 1 request, ")
   ctx_out = run_command(rs, "/context")$out
   expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+:$")
+  expect_match(ctx_out[[length(ctx_out)]], "^  total ")
   # an unknown cache read is shown as unknown (IC-74)
   d = session_data(s)
   d$ledger$cached = NA
@@ -211,6 +299,39 @@ test_that("/cost, /context, /fork and /resume work on a session that ran", {
   expect_false(identical(rs$session$id, s$id))
   listing = run_command(rs, "/resume")$out
   expect_true(any(grepl(s$id, listing, fixed = TRUE)))
+})
+
+test_that("/cost lists the agents and one total that keeps the known cost (#38)", {
+  local_console_commands()
+  local_project()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+  rs = repl_state(s, new.env())
+  row = function(id, agent, cost, write = 0) {
+    usage_conform(data.frame(request_id = id, session = s$id, agent = agent, input = 1000,
+                             output = 10, cache_read = 200, cache_write_5m = write,
+                             cache_write_1h = write / 4, cost = cost, stringsAsFactors = FALSE))
+  }
+  d = session_data(s)
+  # cache writes are input tokens too: a fresh claude-cli child sent 2 uncached ones (smoke)
+  d$usage = rbind(row("q1", "main", 1.2), row("q2", "stats", NA, write = 800),
+                  row("q3", "main", 0.3))
+  expect_identical(run_command(rs, "/cost")$out, c(
+    "  main   2 requests, 2.4k tokens in, $1.5000",
+    "  stats  1 request, 2.2k tokens in, unknown cost",
+    "Total: 3 requests, 4.6k tokens in, $1.5000 + 1 request of unknown cost"))
+})
+
+test_that("/context on a CLI route says the CLI keeps its own transcript (#38)", {
+  skip_on_cran()
+  local_console_commands()
+  f = local_fake_cli("claude", "text")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  out = run_command(repl_state(s, new.env()), "/context")$out
+  expect_match(out[[length(out) - 1L]], "^  total ")
+  expect_identical(out[[length(out)]], paste0("  The CLI keeps its own transcript; its last ",
+                                              "turn reported 12 input tokens over all its ",
+                                              "model calls."))
 })
 
 test_that("commands of later plans answer when their plan is absent", {

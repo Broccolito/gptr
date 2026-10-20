@@ -380,8 +380,9 @@ bridge_knit_shells = c("bash", "sh", "zsh", "powershell", "cmd")
 #' @noRd
 bridge_knit_timeout = function() 120
 
-#' How a shell engine runs code: list(command, args, via). The engine's program, else Git Bash on
-#' Windows, takes `-c`; knitr's own bash engine has no timeout and assumes bash (G5 item 7).
+#' How a shell engine runs code: list(command, args, via), plus env for cmd (shell_cmd()). The
+#' engine's program, else Git Bash on Windows, takes `-c`; knitr's own bash engine has no timeout
+#' and assumes bash (G5 item 7).
 #' @noRd
 bridge_knit_target = function(engine, code) {
   if (identical(engine, "cmd")) {
@@ -389,11 +390,7 @@ bridge_knit_target = function(engine, code) {
       gptr_abort("The cmd engine runs only on Windows.", "invalid_argument", arg = "engine",
                  expected = "an engine available on this platform")
     }
-    comspec = Sys.getenv("COMSPEC")
-    if (!nzchar(comspec)) comspec = "cmd.exe"
-    args = c("/d", "/s", "/c", paste0("\"chcp 65001 >nul & ", code, "\""))
-    attr(args, "verbatim") = TRUE
-    return(list(command = comspec, args = args, via = "shell"))
+    return(c(shell_cmd(code, Sys.getenv("COMSPEC")), via = "shell"))
   }
   ps = identical(engine, "powershell")
   prog = bridge_program(if (ps) c("pwsh", "powershell") else c(engine, bridge_git_bash()))

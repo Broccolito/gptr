@@ -57,10 +57,12 @@ local({
     publish()
   }
   if (linux) stopifnot(Sys.chmod(root, "0700"))
+  # The home is a Windows profile: Google Chrome refuses DevTools when the shell cannot resolve
+  # its default profile folder under %USERPROFILE%\AppData\Local
   dirs = c(
     config = "user-config", data = "user-data", cache = "user-cache", home = "home",
-    appdata = "appdata", localappdata = "localappdata", xdg = "xdg-config", project = "project",
-    temp = "child-temp"
+    appdata = "home/AppData/Roaming", localappdata = "home/AppData/Local", xdg = "xdg-config",
+    project = "project", temp = "child-temp"
   )
   paths = stats::setNames(file.path(root, dirs), names(dirs))
   for (path in paths) dir.create(path, recursive = TRUE, showWarnings = FALSE)
@@ -92,6 +94,7 @@ local({
       "OPENROUTER_API_KEY", "GROQ_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY",
       "TOGETHER_API_KEY", "XAI_API_KEY", "CEREBRAS_API_KEY", "FIREWORKS_API_KEY", "VLLM_API_KEY",
       "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AWS_BEARER_TOKEN_BEDROCK",
+      "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
       "TYPESAFE_API_KEY", "JEV_KEY", "JEV_API_KEY", "TYPESAFE_KEY"
     )
     withr::local_envvar(
@@ -110,6 +113,8 @@ local({
     gptr.replay = "replay",
     gptr.interactive = FALSE,
     gptr.quiet = TRUE,
+    # waiting rows clear with spaces whether or not the runner's stderr is a terminal
+    cli.ansi = FALSE,
     .local_envir = testthat::teardown_env()
   )
 })

@@ -1,0 +1,77 @@
+[
+  {
+    "type": "start"
+  },
+  {
+    "type": "thinking_start",
+    "index": 1
+  },
+  {
+    "type": "thinking_delta",
+    "index": 1,
+    "delta": "The user wants the row count."
+  },
+  {
+    "type": "thinking_end",
+    "index": 1,
+    "block": {
+      "type": "thinking",
+      "thinking": "The user wants the row count.",
+      "signature": "EqQBCkYIBxgCKkDzT0FMQ=="
+    }
+  },
+  {
+    "type": "text_start",
+    "index": 2
+  },
+  {
+    "type": "text_delta",
+    "index": 2,
+    "delta": "Counting the rows — "
+  },
+  {
+    "type": "text_delta",
+    "index": 2,
+    "delta": "one moment."
+  },
+  {
+    "type": "text_end",
+    "index": 2,
+    "block": {
+      "type": "text",
+      "text": "Counting the rows — one moment."
+    }
+  },
+  {
+    "type": "toolcall_start",
+    "index": 3,
+    "id": "tooluse_kJ8xQ2mRT3a",
+    "name": "r"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 3,
+    "delta": "{\"code\":"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 3,
+    "delta": "\"nrow(d)\"}"
+  },
+  {
+    "type": "toolcall_end",
+    "index": 3,
+    "block": {
+      "type": "tool_call",
+      "id": "tooluse_kJ8xQ2mRT3a",
+      "name": "r",
+      "arguments": {
+        "code": "nrow(d)"
+      }
+    }
+  },
+  {
+    "type": "done",
+    "reason": "tool_use"
+  }
+]

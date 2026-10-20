@@ -33,8 +33,8 @@ test_that("P07's section texts equal architecture 7.3 byte for byte", {
   expect_identical(prompt_text("modes"), j(sec("modes")))
   expect_identical(prompt_text("context"), j(sec("context")))
   rs = sec("r_session")
-  expect_length(rs, 12L)
-  core = j(c(rs[1:5], "{{fragments}}", rs[11:12]))
+  expect_length(rs, 13L)
+  core = j(c(rs[1:5], "{{fragments}}", rs[11:13]))
   expect_identical(prompt_text("r_session"), core)
   tl = sec("tools")
   expect_identical(prompt_text("tools_footer"), tl[length(tl)])
@@ -76,6 +76,8 @@ test_that("minimal variants and the extended r_performance equal contract 9.3", 
   full = sub("; str() makes the next in-place edit of a large object copy it.", ".", full,
              fixed = TRUE)
   expect_identical(prompt_text("r_performance_full"), paste(full, collapse = "\n"))
+  expect_match(prompt_text("r_performance_full"),
+               "object.size(), which overstates S7 objects such as ggplot2 plots", fixed = TRUE)
   flat = gsub("\\s+", " ", paste(c4, collapse = " "))
   upd = sprintf(prompt_text("section_updated"), "<name>", "<section>")
   expect_identical(upd, "Updated system prompt section \"<name>\":\n\n<section>")
@@ -113,6 +115,13 @@ test_that("the r_session core carries exactly one fragments marker on its own li
   expect_identical(lines[length(lines)],
                    paste0("- Never call q(), quit(), readline() or menu(), and do not install, ",
                           "update or remove packages unless the user asked."))
+})
+
+test_that("r_session keeps programs run by system() and system2() off the user's terminal", {
+  lines = strsplit(prompt_text("r_session"), "\n", fixed = TRUE)[[1]]
+  want = paste0("- system() and system2() children read the user's terminal: ",
+                "use system2(..., stdin = nullfile()) instead of system().")
+  expect_identical(lines[length(lines) - 1L], want)
 })
 
 test_that("r_session sources scripts in the calling environment", {

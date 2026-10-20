@@ -515,6 +515,40 @@ test_that("compact_should applies the threshold, the growth rule and the cold ru
   expect_true(compact_should(s, tokens = 200001, idle_s = 0))
 })
 
+test_that("a CLI turn's total is no context size; a CLI route never compacts by itself (D-202)", {
+  off = gptr_register(pcli_fake_provider("claude"))
+  withr::defer(off())
+  x = compact_session(list("AIC 154.12 is the best.",
+                           fake_text("Refitted.", usage = usage_new(input = 2.4e6, output = 10)),
+                           "## Goal\n- checkpoint", "again"))
+  s = x$s
+  d = session_data(s)
+  d$model = "fakeclaude/claude-sonnet-5-5"
+  msg_entry(s, msg_user("fit the models"))
+  cli = list(type = "message", message = msg_assistant(
+    "Fitted.", api = "cli-claude", provider = "fakeclaude", model = "claude-sonnet-5-5",
+    route = "plan-cli", usage = usage_new(input = 2.4e6, output = 10)))
+  session_append(s, cli)
+  expect_identical(reported_total(cli), NA_real_)
+  expect_lt(context_tokens(s), 10000)
+  expect_false(compact_should(s, tokens = 2.4e6, idle_s = 4000))
+  # nor is an r result's budget halved by the turn's usage row
+  usage_add(s, list(request_id = "cli-1", session = d$id, input = 2.4e6, output = 10))
+  expect_false(eval_pressure(s))
+  # after a /model switch to an API route the next prompt is not compacted either
+  d$model = "fake/fake-1"
+  session_run(s, msg_user("which model is best?"))
+  expect_length(compactions(s), 0L)
+  expect_length(fake_requests(x$fake), 1L)
+  # an API route's own total over the threshold still compacts at the next prompt
+  session_run(s, msg_user("refit"))
+  expect_length(compactions(s), 0L)
+  session_run(s, msg_user("and now?"))
+  expect_length(compactions(s), 1L)
+  expect_identical(s$text, "again")
+  expect_identical(compactions(s)[[1L]]$details$reason, "threshold")
+})
+
 test_that("the checkpoint compactor and the compaction services are registered", {
   expect_identical(registry_get("compactor", "checkpoint")$compact, compact_checkpoint)
   expect_identical(ext_service_get("compact.should"), compact_should)

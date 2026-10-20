@@ -370,7 +370,7 @@ gateway_images_check = function(v) {
                "invalid_argument", arg = ".opts$images", expected = "a list of images")
   }
   for (x in items) {
-    ok = (is.character(x) && length(x) == 1L && !is.na(x) && file.exists(x) && !dir.exists(x)) ||
+    ok = (is.character(x) && length(x) == 1L && !is.na(x) && path_info(x)$isdir %in% FALSE) ||
       inherits(x, c("ggplot", "recordedplot"))
     if (!ok) {
       gptr_abort("Each image must be an existing PNG/JPEG path, a ggplot or a recordedplot.",
@@ -625,8 +625,8 @@ ident_check_chr = function(x, arg) {
                arg = arg, expected = "non-empty names")
   }
   if (identical(arg, "mode") && (length(x) != 1L || !(x %in% session_modes))) {
-    gptr_abort("`mode` must be one of plan, manual, edits or auto.", "invalid_argument",
-               arg = "mode", expected = "plan, manual, edits or auto")
+    gptr_abort("`mode` must be one of plan, manual, edits, auto or yolo.", "invalid_argument",
+               arg = "mode", expected = "plan, manual, edits, auto or yolo")
   }
   x
 }

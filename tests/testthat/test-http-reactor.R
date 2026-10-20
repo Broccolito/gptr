@@ -113,25 +113,6 @@ test_that("a nested pump runs the tools of the runs it names in allow_runs", {
   expect_identical(st$log, c("d", "c-end"))
 })
 
-test_that("a nested pump waiting for a served CLI run keeps servicing later", {
-  st = new.env()
-  st$later = integer()
-  local_mocked_bindings(later_run_now = function() {
-    st$later = c(st$later, reactor_depth())
-    invisible(FALSE)
-  })
-  reactor_served("u-cli")
-  withr::defer(reactor_served("u-cli", FALSE))
-  reactor_enqueue_tool("u-e", function() {
-    st$go = FALSE
-    reactor_timer(reactor_now() + 0.2, function() st$go = TRUE)
-    reactor_pump(until = function() st$go, allow_runs = "u-cli", timeout = 5)
-    st$done = TRUE
-  })
-  expect_true(reactor_pump(until = function() isTRUE(st$done), timeout = 10))
-  expect_true(2L %in% st$later)
-})
-
 test_that("reactor_cancel() removes timers, tasks and FIFO items", {
   st = new.env()
   st$fired = FALSE
@@ -182,10 +163,8 @@ test_that("runs are held strongly until removed", {
   run$id = "u-hold"
   reactor_run_add(run)
   expect_true(exists("u-hold", envir = reactor_get()$runs, inherits = FALSE))
-  reactor_served(run)
   reactor_run_remove(run)
   expect_false(exists("u-hold", envir = reactor_get()$runs, inherits = FALSE))
-  expect_false("u-hold" %in% reactor_get()$served)
   expect_identical(reactor_run_id(list(id = "u-1")), "u-1")
   expect_identical(reactor_run_id("u-2"), "u-2")
   expect_true(is.na(reactor_run_id(NULL)))
@@ -195,7 +174,6 @@ test_that("an error in until() leaves the pump depth balanced", {
   expect_error(reactor_pump(until = function() stop("until failed"), timeout = 1),
                "until failed")
   expect_identical(reactor_depth(), 0L)
-  expect_length(reactor_get()$allow_stack, 0L)
 })
 
 test_that("a pump nested in a reactor callback runs no FIFO tool unless allow_runs names it", {
@@ -208,24 +186,6 @@ test_that("a pump nested in a reactor callback runs no FIFO tool unless allow_ru
   })
   expect_true(reactor_pump(until = function() "h" %in% st$log, timeout = 10))
   expect_identical(st$log, c("timer-end", "h"))
-})
-
-test_that("reactor_allow_runs() is NULL in the outermost pump and the nested runs inside", {
-  expect_null(reactor_allow_runs())
-  st = new.env()
-  st$seen = FALSE
-  reactor_enqueue_tool("u-g", function() {
-    st$outer = reactor_allow_runs()
-    reactor_timer(reactor_now(), function() {
-      st$inner = reactor_allow_runs()
-      st$seen = TRUE
-    })
-    reactor_pump(until = function() st$seen, allow_runs = "u-cli2", timeout = 5)
-  })
-  expect_true(reactor_pump(until = function() st$seen, timeout = 10))
-  expect_null(st$outer)
-  expect_identical(st$inner, "u-cli2")
-  expect_null(reactor_allow_runs())
 })
 
 test_that("callbacks may cancel pending work without resurrecting it", {
@@ -258,13 +218,11 @@ test_that("interrupts unwind callback marks and pump stacks without diagnostics"
   expect_s3_class(caught, "interrupt")
   expect_false(r$tasks[[task]]$busy)
   expect_identical(reactor_depth(), 0L)
-  expect_length(r$allow_stack, 0L)
   reactor_cancel(task)
   reactor_enqueue_tool("u-interrupt", interrupt)
   caught = tryCatch(reactor_pump(timeout = 5), interrupt = identity)
   expect_s3_class(caught, "interrupt")
   expect_identical(reactor_depth(), 0L)
-  expect_length(r$allow_stack, 0L)
 })
 
 test_that("callback failures reach the real registry diagnostics", {
@@ -520,6 +478,53 @@ test_that("wire default and fallback paths reject escaping symlinks", {
   expect_false(file.exists(target))
 })
 
+test_that("Windows wire log resolves junctions and refuses dangling ones", {
+  wsec_local()
+  outside = tempfile("gptr-wire-foreign-", tmpdir = dirname(tempdir()))
+  gone = file.path(outside, "gone")
+  expect_true(dir.create(gone, recursive = TRUE))
+  withr::defer(unlink(outside, recursive = TRUE))
+  link = tempfile("gptr-wire-junction-")
+  wsec_junction(outside, link)
+  local_gptr_options(wire_log = file.path(link, "escape.jsonl"))
+  default = ws_path("cache", "tmp", "wire-s1111111111.jsonl")
+  expect_identical(wire_log_path("s1111111111"), default)
+  wire_log(wire_tr(session = "s1111111111"), "start")
+  expect_true(file.exists(default))
+  expect_false(file.exists(file.path(outside, "escape.jsonl")))
+  tmp = dirname(default)
+  expect_identical(unlink(tmp, recursive = TRUE), 0L)
+  wsec_junction(gone, tmp)
+  local_gptr_options(wire_log = TRUE)
+  expect_null(wire_log_path("s2222222222"))
+  expect_identical(unlink(gone, recursive = TRUE), 0L)
+  expect_null(wire_log_path("s2222222222"))
+  wire_log(wire_tr(session = "s2222222222"), "start")
+  expect_false(dir.exists(gone))
+  # The junction helper's teardown oracle expects its target back.
+  expect_true(dir.create(gone))
+})
+
+test_that("Windows wire log refuses escaping file links, dangling or not", {
+  wsec_local()
+  outside = tempfile("gptr-wire-foreign-", tmpdir = dirname(tempdir()))
+  expect_true(dir.create(outside))
+  withr::defer(unlink(outside, recursive = TRUE))
+  target = file.path(outside, "target.jsonl")
+  writeLines("existing", target)
+  local_gptr_options(wire_log = TRUE)
+  wsec_link(target, ws_path("cache", "tmp", "wire-s1111111111.jsonl"))
+  expect_null(wire_log_path("s1111111111"))
+  wire_log(wire_tr(session = "s1111111111"), "start")
+  expect_identical(readLines(target), "existing")
+  expect_true(file.remove(target))
+  expect_null(wire_log_path("s1111111111"))
+  wire_log(wire_tr(session = "s1111111111"), "start")
+  expect_false(file.exists(target))
+  # The link helper's teardown oracle expects its target back.
+  writeLines("existing", target)
+})
+
 # Start a transfer whose bytes go through sse_splitter(); returns its state environment
 # (`arrivals`/`t_end` on the reactor clock, `walls`/`wall_end` on the wall clock the mock logs)
 start_transfer = function(spec, provider = NULL, retry = NULL, run = NULL) {
@@ -655,19 +660,24 @@ test_that("INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest
   expect_true(all(vapply(sts, function(s) is.null(s$fail), NA)))
   ended = vapply(sts, function(s) s$wall_end, 0)
   # the mock numbers its requests 1, 2, ... in the order it logs them
+  logs = lapply(srvs, function(s) s$log())
+  ids = vapply(1:6, function(i) match(bodies[[i]], logs[[i]]$body), 0L)
   writes = lapply(1:6, function(i) {
     w = srvs[[i]]$writes()
-    w[which(w$id == match(bodies[[i]], srvs[[i]]$log()$body)), ]
+    w[which(w$id == ids[[i]]), ]
   })
   heads = vapply(writes, function(w) c(w$time[w$event == "head"], NA)[[1L]], 0)
   lasts = vapply(writes, function(w) if (nrow(w)) max(w$time) else NA_real_, 0)
+  read_at = vapply(1:6, function(i) as.numeric(logs[[i]]$time[ids[[i]]]), 0)
   expect_false(anyNA(c(heads, lasts)))
   six = infra01_six(heads, lasts, ended, 0.25 * rep(c(4, 9), each = 3L))
   expect_true(infra01_six_on_time(six), label = sprintf(paste(
-    "wall %.3f s from the first head written (heads within %.3f s; ends at %s s from it; the",
-    "mock's own lateness in writing the last pieces %s s; gptr's delivery of the ends %s s)"
-  ), six$wall, max(heads) - min(heads), toString(round(ended - min(heads), 3)),
-  toString(round(six$mock_late, 3)), toString(round(six$latency, 3))))
+    "wall %.3f s from the first head written (heads at %s s and ends at %s s from it; each head",
+    "written %s s after the mock read its request; the mock's own lateness in writing the last",
+    "pieces %s s; gptr's delivery of the ends %s s)"
+  ), six$wall, toString(round(heads - min(heads), 3)), toString(round(ended - min(heads), 3)),
+  toString(round(heads - read_at, 3)), toString(round(six$mock_late, 3)),
+  toString(round(six$latency, 3))))
 })
 
 test_that("one pump drives an HTTP stream and a child process together", {
@@ -937,7 +947,6 @@ test_that("short pipe polls service host events before dispatch without running 
     state$log = c(state$log, "yield")
     reactor_pump(until = function() {
       state$depth = reactor_depth()
-      state$allow = reactor_allow_runs()
       TRUE
     }, timeout = 1)
     state$log = c(state$log, "nested-return")
@@ -954,9 +963,7 @@ test_that("short pipe polls service host events before dispatch without running 
   expect_identical(state$log, c("poll", "yield", "nested-return", "read", "stdin", "tool"))
   expect_identical(state$waits, 0)
   expect_identical(state$depth, 2L)
-  expect_identical(state$allow, character())
   expect_identical(reactor_depth(), 0L)
-  expect_length(reactor_get()$allow_stack, 0L)
 })
 
 test_that("an interrupt at the short-poll host yield unwinds before dispatch", {
@@ -975,7 +982,6 @@ test_that("an interrupt at the short-poll host yield unwinds before dispatch", {
   expect_s3_class(caught, "interrupt")
   expect_identical(state$log, "poll")
   expect_identical(reactor_depth(), 0L)
-  expect_length(reactor_get()$allow_stack, 0L)
   expect_identical(length(registry_env()$diag$rows), diagnostics)
 })
 

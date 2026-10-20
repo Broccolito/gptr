@@ -344,6 +344,23 @@ test_that("a finished worker ends the request with its text and imports its expo
   expect_null(st$dir)
 })
 
+test_that("worker exports come back in the proxy overlay, not the worker's home (D-189)", {
+  w = new.env(parent = globalenv()) # the worker's private home with its shipped input `d`
+  eval_r("d = 1:3\nscratch = numeric(1e6)\nm = y ~ x\nf = function() length(d)", w, tee = FALSE)
+  base = new.env(parent = globalenv()) # the caller's environment
+  base$d = 1:3
+  st = stub_worker_state()
+  st$home = new.env(parent = base) # the proxy overlay
+  st$dir = withr::local_tempdir()
+  st$result_path = file.path(st$dir, "result.rds")
+  worker_exports_save(c("m", "f"), w, st$result_path, "idle")
+  st$result = list(type = "result", status = "idle", text = "done", usage = list(), turns = 1L)
+  worker_on_exit(st, 0L)
+  expect_identical(parent.env(environment(st$home$m)), base)
+  expect_lt(length(serialize(st$home$m, NULL)), 1e4)
+  expect_identical(st$home$f(), 3L)
+})
+
 test_that("a worker that dies without a result ends the request with an error", {
   st = stub_worker_state()
   st$result_path = tempfile()

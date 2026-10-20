@@ -395,8 +395,10 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 # ---------------------------------------------------------------------------- nested calls
 
 #' Nested `peter$...` calls made while an `r` evaluation runs (04 section 7.6)
-#' A member listed by the outer call's analysis at or below its approved level runs without a
-#' second prompt; others pass perm_check(). Recorded in `details$nested` (at most 20).
+#' A member listed by the outer call's analysis at or below its approved level, whose own risk of
+#' its actual input (call_risk(): a patch's Delete File, a computed command) is not above that
+#' level either, runs without a second prompt; others pass perm_check(). Recorded in
+#' `details$nested` (at most 20).
 #' @noRd
 dispatch_nested = function(name, input, ctx) {
   check_string(name, "name")
@@ -426,7 +428,8 @@ dispatch_nested = function(name, input, ctx) {
     gptr_abort(call$blocked, "tool", tool = name, status = "blocked")
   }
   level = nested_listed_level(outer, name)
-  if (is.null(level) || level > call$outer_level) {
+  own = risk_level(call_risk(call, ctx, run))
+  if (is.null(level) || max(level, own) > call$outer_level) {
     dec = perm_check(call, run)
     level = risk_level(dec$risk)
     if (!identical(dec$decision, "allow")) {
@@ -514,10 +517,19 @@ nested_record = function(run, outer_id, name, res, level) {
 # ---------------------------------------------------------------------------- permissions
 
 #' The permission combination (IC-04, IC-53): policies, `permission_request` hooks (`ask`), the
-#' UI, the non-interactive stop; the risk is recomputed from the raw input
+#' UI, the non-interactive stop; the risk is recomputed from the raw input. An allowed call gets
+#' the one-shot tokens of its control exports (IC-53 item 3).
 #' @return `list(decision, reason, input, risk, rule, how)`; the dispatcher executes only "allow".
 #' @noRd
 perm_check = function(call, run) {
+  res = perm_decide(call, run)
+  if (identical(res$decision, "allow")) perm_grant_control(run, res$risk)
+  res
+}
+
+#' perm_check() before the token grant
+#' @noRd
+perm_decide = function(call, run) {
   ctx = run_ctx(run)
   snap = run$opts$safety %||% list()
   risk = call_risk(call, ctx, run)
@@ -589,7 +601,7 @@ perm_ask = function(call, run, out, risk) {
   tier = if (identical(out$decision, "ask_human")) "ask_human" else "ask"
   req = perm_request_record(call, run, out, risk, tier)
   if (identical(tier, "ask")) {
-    payload = req[setdiff(names(req), c("session", "turn"))]
+    payload = req[setdiff(names(req), c("session", "turn", "agent"))]
     hk = do.call(run_emit, c(list(run, "permission_request"), payload))
     if (is.list(hk) && identical(hk$decision, "allow")) {
       return(perm_result("allow", hk$reason %||% "allowed by a permission_request hook", call$input,
@@ -609,7 +621,6 @@ perm_ask = function(call, run, out, risk) {
     if (!rlang::is_string(fb) || !nzchar(fb)) ans$feedback = NULL
     if (identical(ans[["decision"]], "allow")) {
       # a `remember` answer is stored by P11's builtin:permissions, not here
-      if (identical(tier, "ask_human")) perm_grant_control(run, risk)
       return(perm_result("allow", "approved by the user", call$input, risk, "user"))
     }
     if (identical(ans[["decision"]], "abort")) {
@@ -658,7 +669,7 @@ perm_ask_questions = function(input) {
   }, "", USE.NAMES = FALSE)
 }
 
-#' Grant the one-shot tokens of an approved `ask_human` call (IC-53 item 3)
+#' Grant the one-shot tokens of an allowed call (IC-53 item 3)
 #' One per flagged `control` export, in `run$signal$control` and P02's `ext_control_grant()`;
 #' cleared when the call ends (tool_execute_frame()).
 #' @noRd
@@ -673,7 +684,7 @@ perm_grant_control = function(run, risk) {
   invisible(fns)
 }
 
-#' The permission request record (04 section 7.11)
+#' The permission request record (04 section 7.11); `agent` says who asks (D-188)
 #' @noRd
 perm_request_record = function(call, run, out, risk, tier) {
   d = run_data(run)
@@ -686,7 +697,7 @@ perm_request_record = function(call, run, out, risk, tier) {
   list(tool = call$name, input = call$input, summary = perm_summary(call), risk = risk,
        reason = perm_reason(out$reason), suggested_rule = if (rlang::is_string(rule)) rule,
        undo_note = if (rlang::is_string(note)) note, session = d$id, turn = d$turns,
-       nested = isTRUE(call$nested), tier = tier)
+       nested = isTRUE(call$nested), tier = tier, agent = agent_label(run))
 }
 
 #' The lines to show for a request: the code (at most 20 lines), a path, or the input as JSON

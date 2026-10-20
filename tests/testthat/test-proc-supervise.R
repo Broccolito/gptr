@@ -10,19 +10,34 @@ local_proc_state = function(.env = parent.frame()) {
 
 wait_until = function(cond, seconds = 5) {
   t0 = proc.time()[["elapsed"]]
-  while (!isTRUE(cond()) && proc.time()[["elapsed"]] - t0 < seconds) Sys.sleep(0.05)
-  isTRUE(cond())
+  repeat {
+    if (isTRUE(cond())) return(TRUE)
+    if (proc.time()[["elapsed"]] - t0 >= seconds) return(FALSE)
+    Sys.sleep(0.05)
+  }
 }
 
-# Whether the processes that carry a marker are `pid` and its descendants only. On Windows
-# Rscript.exe runs Rterm.exe as its child, which inherits the marker, so the tree of one Rscript
-# child holds two processes there (hosted Windows: `length(proc_tree(marker)) == 1L` was FALSE)
+# Whether the processes that carry a marker are `pid` and its descendants only. On hosted Windows
+# one Rscript child's tree holds a second marked descendant (`length(proc_tree(marker)) == 1L` was
+# FALSE); it is not Rterm.exe, since Rscript.exe runs R in its own process (D-019 item 2)
 marker_tree_is = function(marker, pid) {
   pids = vapply(proc_tree(marker), ps::ps_pid, 1L)
   kids = tryCatch(ps::ps_children(ps::ps_handle(pid), recursive = TRUE),
                   error = function(e) list())
   pid %in% pids && all(pids %in% c(pid, vapply(kids, ps::ps_pid, 1L)))
 }
+
+test_that("wait_until() returns once its condition holds and reads it once per poll", {
+  seen = new.env(parent = emptyenv())
+  seen$calls = 0L
+  # TRUE then FALSE, as the macOS exec chain hides a marker tree: a second read reports FALSE
+  expect_true(wait_until(function() {
+    seen$calls = seen$calls + 1L
+    seen$calls == 1L
+  }))
+  expect_identical(seen$calls, 1L)
+  expect_false(wait_until(function() FALSE, 0.1))
+})
 
 test_that("pid_alive() checks liveness and the creation time against pid reuse", {
   local_proc_state()
@@ -67,6 +82,19 @@ test_that("proc_mark() records a marker file that kill_all() releases", {
   expect_true(kill_all(p, grace = 0))
   expect_false(file.exists(path))
   expect_null(proc_record(p$get_pid()))
+})
+
+test_that("proc_children() follows parent links from ps's own handle while the parent lives", {
+  local_proc_state()
+  skip_on_cran()
+  kid = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(30)"))
+  withr::defer(try(kid$kill(), silent = TRUE))
+  # on Linux processx's stamp of a parent can read later than its children's creation times
+  late = ps::ps_handle(Sys.getpid(), ps::ps_create_time(ps::ps_handle(kid$get_pid())) + 1)
+  parent = list(get_pid = Sys.getpid, is_alive = function() TRUE, as_ps_handle = function() late)
+  expect_true(kid$get_pid() %in% vapply(proc_children(parent), ps::ps_pid, 1L))
+  parent$is_alive = function() FALSE
+  expect_identical(proc_children(parent), list())
 })
 
 test_that("kill_all() leaves no descendant", {

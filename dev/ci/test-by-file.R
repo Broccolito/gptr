@@ -3,9 +3,12 @@
 # R CMD check prints the test output only after the tests end, so a hosted run that hangs in
 # "checking tests" names no file. This runs each file in its own R child, limited to `minutes`
 # (default 15), and prints, before each file, its name and the time into the run, then each
-# test's start and end and every expectation (testthat's LocationReporter) to stderr, which R
-# does not buffer, and after each file its counts and failure messages, or TIMEOUT: a test that
-# never returns is the last "Start test:" without an "End test:"; the next file still runs.
+# test's start and end and every expectation (testthat's LocationReporter), and after each file
+# its counts and failure messages, or TIMEOUT: a test that never returns is the last
+# "Start test:" without an "End test:"; the next file still runs.
+# All of it goes to stdout, which R flushes after every write. The reporter holds connection 1,
+# which a test's sink() or capture.output() does not divert; stderr() follows a test's
+# sink(type = "message"), so its lines would enter the messages the test captures.
 # Exits 1 when a test failed, errored or timed out.
 # The user's home and R_user_dir() folders are redirected before the package loads (its load
 # sweeps the process-marker folder); tests/testthat/setup.R isolates each file's tests as usual.
@@ -34,11 +37,11 @@ status = (function() {
     XDG_DATA_HOME = dirs[["data"]], GPTR_PROJECT_ROOT = dirs[["project"]],
     GPTR_LIVE_TESTS = "false", NOT_CRAN = "true"
   )
-  say = function(...) cat(..., "\n", sep = "", file = stderr())
+  say = function(...) cat(..., "\n", sep = "")
   now = function() proc.time()[["elapsed"]]
   run_file = function(f) {
     pkgload::load_all(".", helpers = FALSE, quiet = TRUE)
-    res = testthat::test_file(f, reporter = testthat::LocationReporter$new(file = stderr()),
+    res = testthat::test_file(f, reporter = testthat::LocationReporter$new(file = stdout()),
                               package = "gptr", load_package = "none")
     df = as.data.frame(res)
     msgs = character()

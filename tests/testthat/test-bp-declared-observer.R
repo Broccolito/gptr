@@ -45,7 +45,10 @@ test_that("declared measurement omits only the natively classified entry and cha
   scope$declared_only = TRUE
   scope$rss = c(2, 3)
   scope$parent_rss = 7
+  scope$before_rss = 4
   scope$observer_stats = list(peak_supervisor_rss = 7, peak_combined_rss = 7)
+  scope$bp_observe = bp_observe
+  scope$observer_retried = function(reason) stop("An untyped failure is never retried")
   seen = new.env(parent = emptyenv())
   seen$info = character()
   seen$observation = 0L
@@ -68,7 +71,7 @@ test_that("declared measurement omits only the natively classified entry and cha
   expect_warning({
     actual = eval(branches[[1L]], scope)
   }, NA)
-  expect_identical(actual, c(rss = 5, disk = 16408, combined = 12))
+  expect_identical(actual, c(rss = 5, disk = 16408, combined = 8))
   expect_identical(seen$info, c("C:/owned/keep", "C:/owned/nested/dangling-file"))
   expect_identical(seen$observation, 2L)
   expect_identical(scope$observer_stats$last_disk$bytes, 16408)
@@ -174,7 +177,10 @@ test_that("ordinary Windows markers use one persistent full nofollow observer", 
   scope$declared_only = FALSE
   scope$rss = c(2, 3)
   scope$parent_rss = 7
+  scope$before_rss = 4
   scope$observer_stats = list(peak_supervisor_rss = 7, peak_combined_rss = 7)
+  scope$bp_observe = bp_observe
+  scope$observer_retried = function(reason) stop("An untyped failure is never retried")
   seen = new.env(parent = emptyenv())
   seen$calls = 0L
   sample = list(entries = 4, directories = 2, declared_links = 0, disappeared = 1,
@@ -189,7 +195,7 @@ test_that("ordinary Windows markers use one persistent full nofollow observer", 
     expect_warning({
       actual = eval(branches[[1L]], scope)
     }, NA)
-    expect_identical(actual, c(rss = 5, disk = 51, combined = 12))
+    expect_identical(actual, c(rss = 5, disk = 51, combined = 8))
     expect_identical(seen$calls, i)
     expect_identical(scope$observer_stats$last_disk, sample)
   }

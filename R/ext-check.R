@@ -213,7 +213,7 @@ check_policy = function(spec, target) {
   assign("model", function() "check/check-1", envir = ctx)
   bad = character()
   times = numeric()
-  for (mode in c("plan", "manual", "edits", "auto")) {
+  for (mode in session_modes) {
     assign("mode", function() mode, envir = ctx)
     for (call in check_policy_calls()) {
       t0 = proc.time()[["elapsed"]]

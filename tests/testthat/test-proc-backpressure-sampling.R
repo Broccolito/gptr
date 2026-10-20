@@ -150,7 +150,7 @@ test_that("backpressure observer diagnostics retain only current fixed reason co
   lines = grep("raise (ObservationError|_EntryAbsent)", source, value = TRUE)
   codes = sort(unique(sub(".*(ObservationError|_EntryAbsent)\\(\"([a-z-]+)\"\\).*",
     "\\2", lines)))
-  expect_length(codes, 46L)
+  expect_length(codes, 47L)
   base_lines = grep("raise ObservationError", lines, value = TRUE, fixed = TRUE)
   base_codes = sub(".*ObservationError\\(\"([a-z-]+)\"\\).*", "\\1", base_lines)
   expect_identical(setdiff(codes, base_codes), "observer-parent-entry-absent")
@@ -650,4 +650,188 @@ test_that("backpressure failed observer metrics never read outside the typed fil
     "Other observer classes must retain their original witness.")
   expect(identical(seen$reads, 0L),
     "Diagnostics must not read outside the exact typed file failure.")
+})
+
+observer_error = function(reason) {
+  structure(list(message = reason, call = NULL),
+    class = c("gptr_owned_disk_observer.ObservationError", "error", "condition"))
+}
+
+test_that("backpressure observation retries fixed transient observer reasons for one deadline", {
+  sample = list(entries = 1)
+  seen = new.env(parent = emptyenv())
+  observe = function(errors) {
+    seen$calls = 0L
+    seen$retried = character()
+    tryCatch(bp_observe(function() {
+      seen$calls = seen$calls + 1L
+      if (seen$calls <= length(errors)) stop(errors[[seen$calls]])
+      sample
+    }, function(reason) seen$retried = c(seen$retried, reason)), error = identity)
+  }
+  second = observer_error("observer-byte-limit")
+  transient = c("observer-metadata-invalid", "observer-snapshot-deadline",
+                "observer-initial-deadline", "observer-parent-entry-absent",
+                "observer-link-entry-absent", "observer-entry-disappearance-uncertain")
+  for (reason in transient) {
+    expect_identical(observe(list(observer_error(reason))), sample)
+    expect_identical(seen$calls, 2L)
+    expect_identical(seen$retried, reason)
+    expect_identical(observe(list(observer_error(reason), second)), second)
+    expect_identical(seen$calls, 2L)
+  }
+  # Repeated transients that clear within the deadline, in any order, complete the sample.
+  expect_identical(observe(lapply(transient, observer_error)), sample)
+  expect_identical(seen$calls, 7L)
+  expect_identical(seen$retried, transient)
+  expect_identical(observe(c(lapply(transient[1:2], observer_error), list(second))), second)
+  expect_identical(seen$calls, 3L)
+  expect_identical(seen$retried, transient[1:2])
+  # A transient that outlasts the 1 s deadline ends the sample with its last snapshot's condition.
+  seen$calls = 0L
+  seen$retried = character()
+  started = proc.time()[["elapsed"]]
+  actual = tryCatch(bp_observe(function() {
+    seen$calls = seen$calls + 1L
+    stop(structure(list(message = "observer-metadata-invalid", call = NULL, attempt = seen$calls),
+      class = c("gptr_owned_disk_observer.ObservationError", "error", "condition")))
+  }, function(reason) seen$retried = c(seen$retried, reason)), error = identity)
+  expect_gte(proc.time()[["elapsed"]] - started, 1)
+  expect_identical(actual$attempt, seen$calls)
+  expect_identical(seen$retried, rep("observer-metadata-invalid", seen$calls - 1L))
+  # Retries are paced at 100 ms, not a busy loop.
+  expect_gte(length(seen$retried), 2L)
+  expect_lt(length(seen$retried), 20L)
+  # Bound, identity and link failures, untyped errors and unknown text are never retried.
+  for (error in list(second, observer_error("observer-entry-limit"),
+                     observer_error("observer-initial-entry-limit"),
+                     observer_error("observer-undeclared-reparse-entry"),
+                     observer_error("observer-link-target-differs"),
+                     observer_error("observer-directory-identity-changed"),
+                     observer_error("observer-listed-metadata-changed"),
+                     observer_error("observer-metadata-invalid FAKE-private-path"),
+                     simpleError("observer-metadata-invalid"))) {
+    expect_identical(observe(list(error)), error)
+    expect_identical(seen$calls, 1L)
+    expect_length(seen$retried, 0L)
+  }
+})
+
+test_that("a retried transient observer failure completes the case and is witnessed", {
+  skip_on_cran()
+  withr::local_envvar(GPTR_OPTIONAL_NOFOLLOW_OBSERVER = "true")
+  run = function(..., initial = list()) {
+    errors = list(...)
+    seen = new.env(parent = emptyenv())
+    seen$calls = 0L
+    seen$constructions = 0L
+    scope = new.env(parent = environment(bp_run))
+    runner = bp_run
+    environment(runner) = scope
+    # A base R child and a scripted observer: only the sampler's observation path is real.
+    scope$bp_loader = function() "NULL"
+    scope$bp_child_case = function(case, root, failure) list(case = case)
+    scope$bp_disk_observer = function(root, declarations, declared_only) {
+      seen$constructions = seen$constructions + 1L
+      if (seen$constructions <= length(initial)) stop(initial[[seen$constructions]])
+      function() {
+        seen$calls = seen$calls + 1L
+        if (seen$calls <= length(errors)) stop(errors[[seen$calls]])
+        list(entries = 1, directories = 1, declared_links = 0, disappeared = 0, bytes = 0,
+             max_depth = 0, elapsed_s = 0)
+      }
+    }
+    runner("observer-retry")
+  }
+  x = run(observer_error("observer-metadata-invalid"))
+  expect_true(x$complete)
+  expect_null(x$guard)
+  expect_identical(x$sampling_errors, 0L)
+  expect_identical(x$observer_retries, 1L)
+  expect_identical(x$observer_retry_reason, "observer-metadata-invalid")
+  expect_identical(x$result, list(case = "observer-retry"))
+  # The witness counts every retry and keeps the first reason.
+  x = run(observer_error("observer-snapshot-deadline"),
+          observer_error("observer-metadata-invalid"), observer_error("observer-metadata-invalid"))
+  expect_true(x$complete)
+  expect_identical(x$sampling_errors, 0L)
+  expect_identical(x$observer_retries, 3L)
+  expect_identical(x$observer_retry_reason, "observer-snapshot-deadline")
+  # Any other reason, also after a retry, stays one fatal sampling error.
+  x = run(observer_error("observer-byte-limit"))
+  expect_false(x$complete)
+  expect_identical(x$guard, "resource_observation")
+  expect_identical(x$sampling_errors, 1L)
+  expect_identical(x$observer_retries, 0L)
+  expect_identical(x$sample_error$observer_reason, "observer-byte-limit")
+  x = run(observer_error("observer-snapshot-deadline"), observer_error("observer-byte-limit"))
+  expect_false(x$complete)
+  expect_identical(x$guard, "resource_observation")
+  expect_identical(x$sampling_errors, 1L)
+  expect_identical(x$observer_retries, 1L)
+  expect_identical(x$observer_retry_reason, "observer-snapshot-deadline")
+  expect_identical(x$sample_error$observer_reason, "observer-byte-limit")
+  # So does a transient that persists past the deadline (more failures than it allows).
+  x = do.call(run, rep(list(observer_error("observer-metadata-invalid")), 100L))
+  expect_false(x$complete)
+  expect_identical(x$guard, "resource_observation")
+  expect_identical(x$sampling_errors, 1L)
+  expect_gte(x$observer_retries, 2L)
+  expect_identical(x$observer_retry_reason, "observer-metadata-invalid")
+  expect_identical(x$sample_error$observer_reason, "observer-metadata-invalid")
+  # Construction retries its initial deadline the same way and is witnessed with the samples.
+  x = run(observer_error("observer-snapshot-deadline"),
+          initial = list(observer_error("observer-initial-deadline")))
+  expect_true(x$complete)
+  expect_identical(x$sampling_errors, 0L)
+  expect_identical(x$observer_retries, 2L)
+  expect_identical(x$observer_retry_reason, "observer-initial-deadline")
+  # Its entry limit, and an initial deadline that outlasts the 1 s retry, stay fatal.
+  bound = observer_error("observer-initial-entry-limit")
+  expect_identical(tryCatch(run(initial = list(bound)), error = identity), bound)
+  persisting = rep(list(observer_error("observer-initial-deadline")), 100L)
+  expect_identical(tryCatch(run(initial = persisting), error = identity), persisting[[1L]])
+})
+
+test_that("the observer's supervisor counts toward the cap only by its growth in the case", {
+  skip_on_cran()
+  withr::local_envvar(GPTR_OPTIONAL_NOFOLLOW_OBSERVER = "true")
+  # The supervisor is this test process: its RSS before the case is earlier tests' memory.
+  run = function(supervisor) {
+    seen = new.env(parent = emptyenv())
+    seen$reads = 0L
+    local_mocked_bindings(ps_memory_info = function(p) {
+      if (ps::ps_pid(p) != Sys.getpid()) return(c(rss = 2^28))
+      seen$reads = seen$reads + 1L
+      c(rss = supervisor[[min(seen$reads, length(supervisor))]])
+    }, .package = "ps")
+    scope = new.env(parent = environment(bp_run))
+    runner = bp_run
+    environment(runner) = scope
+    scope$bp_loader = function() "NULL"
+    scope$bp_child_case = function(case, root, failure) {
+      Sys.sleep(1)
+      list(case = case)
+    }
+    scope$bp_disk_observer = function(root, declarations, declared_only) {
+      function() {
+        list(entries = 1, directories = 1, declared_links = 0, disappeared = 0, bytes = 0,
+             max_depth = 0, elapsed_s = 0)
+      }
+    }
+    runner("supervisor-growth")
+  }
+  x = run(c(2, 2, 2) * 1024^3)
+  expect_true(x$complete)
+  expect_null(x$guard)
+  expect_gte(x$peak_rss, 2^28)
+  expect_identical(x$disk_observer$peak_supervisor_rss, 2 * 1024^3)
+  # Growth during the case and the owned family share the unchanged cap.
+  x = run(c(2, 2, 2.9) * 1024^3)
+  expect_false(x$complete)
+  expect_identical(x$guard, "resource_limit")
+  expect_gte(x$peak_rss, 2^28)
+  expect_lte(x$peak_rss, 1024^3)
+  expect_error(run(c(2, 3) * 1024^3 + c(0, 1)),
+    "initialization exceeded its unchanged resource bound", fixed = TRUE)
 })

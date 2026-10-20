@@ -3,40 +3,48 @@
 
 source(testthat::test_path("fixtures", "cli", "local-fake-cli.R"), local = TRUE)
 
-# The MCP overrides of contract 8.5 / IC-65, verbatim
-codex_mcp_8_5 = function(port) {
-  c("-c", paste0("mcp_servers.gptr.url=http://127.0.0.1:", port, "/mcp"),
-    "-c", "mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN",
+# The relay overrides of IC-65 as amended by IC-79, verbatim: Codex starts gptr's stdio relay
+codex_relay_args = function(dir, seconds = "3600") {
+  relay = system.file("gptr", "mcp_relay.R", package = "gptr")
+  c("-c", paste0("mcp_servers.gptr.command=\"", rscript_path(), "\""),
+    "-c", paste0("mcp_servers.gptr.args=[\"--vanilla\",\"", relay, "\",\"", dir, "\",\"",
+                 seconds, "\"]"),
     "-c", "mcp_servers.gptr.default_tools_approval_mode=\"approve\"",
     "-c", "mcp_servers.gptr.required=true",
+    "-c", "mcp_servers.gptr.startup_timeout_sec=60",
     "-c", "mcp_servers.gptr.tool_timeout_sec=3600")
 }
 
 # ---- the cli-codex adapter (Task 7) -------------------------------------------------------------
 
-test_that("the codex argv follows IC-65, and the resume form uses -c sandbox_mode=", {
-  expect_identical(pcli_codex_args("gpt-6-sol", "/w", "read-only", port = 54321L),
+test_that("the codex argv starts gptr's stdio relay; the resume form uses -c sandbox_mode=", {
+  expect_identical(pcli_codex_args("gpt-6-sol", "/w", "read-only", "/r"),
                    c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m",
-                     "gpt-6-sol", "-C", "/w", codex_mcp_8_5(54321L), "--sandbox", "read-only",
+                     "gpt-6-sol", "-C", "/w", codex_relay_args("/r"), "--sandbox", "read-only",
                      "-"))
-  resumed = pcli_codex_args("gpt-6-sol", "/w", "workspace-write", port = 54321L,
+  resumed = pcli_codex_args("gpt-6-sol", "/w", "workspace-write", "/r",
                            resume = "0199a213-thread")
   expect_identical(resumed,
                    c("exec", "resume", "0199a213-thread", "--json", "--ignore-user-config",
-                     "--skip-git-repo-check", "-m", "gpt-6-sol", codex_mcp_8_5(54321L), "-c",
+                     "--skip-git-repo-check", "-m", "gpt-6-sol", codex_relay_args("/r"), "-c",
                      "sandbox_mode=workspace-write", "-"))
   expect_false(any(c("-C", "-s", "--sandbox") %in% resumed))
-  expect_identical(pcli_codex_args("gpt-6-sol", "/w", "read-only"),
-                   c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m",
-                     "gpt-6-sol", "-C", "/w", "--sandbox", "read-only", "-"))
+  expect_false(any(grepl("url=|bearer_token", resumed)))
+  # paths are TOML basic strings; the relay waits no longer than the turn's wall clock
+  local_gptr_options(cli_turn_timeout = 90)
+  args = pcli_codex_args("gpt-6-sol", "/w", "read-only", "C:\\Temp\\a\"b")
+  expect_true(paste0("mcp_servers.gptr.args=[\"--vanilla\",\"",
+                     system.file("gptr", "mcp_relay.R", package = "gptr"),
+                     "\",\"C:\\\\Temp\\\\a\\\"b\",\"90\"]") %in% args)
 })
 
-test_that("plan, manual and edits run read-only; auto workspace-write; Windows falls back", {
+test_that("plan, manual and edits run read-only; auto and yolo write; Windows falls back", {
   local_mocked_bindings(pcli_is_windows = function() FALSE)
   for (mode in c("plan", "manual", "edits")) {
     expect_identical(pcli_codex_sandbox(mode, "codex"), "read-only")
   }
   expect_identical(pcli_codex_sandbox("auto", "codex"), "workspace-write")
+  expect_identical(pcli_codex_sandbox("yolo", "codex"), "workspace-write")
   local_mocked_bindings(pcli_is_windows = function() TRUE,
                         pcli_codex_windows_ready = function(path) FALSE)
   w = expect_warning(pcli_codex_sandbox("auto", "codex"), class = "gptr_warning_cli_sandbox")
@@ -60,75 +68,149 @@ test_that("the prompt carries instructions and history on a fresh thread only", 
   expect_false(grepl("<gptr_instructions>", foreign, fixed = TRUE))
 })
 
-test_that("the MCP record of a session reaches only its own codex exec", {
-  local_mcp_stub(stub_mcp_handle(port = 54999L, token = "tok-session-0123"))
-  rec = pcli_codex_ensure(list(id = "s0123456789"))
-  withr::defer(pcli_codex_forget("s0123456789"))
-  expect_identical(rec$port, 54999L)
-  h = pcli_codex_mcp(stub_opts())
-  expect_identical(h$port, 54999L)
-  expect_identical(h$env, c(GPTR_MCP_TOKEN = "tok-session-0123"))
-  expect_null(pcli_codex_mcp(stub_opts(session = "s9999999999")))
-  expect_null(pcli_codex_ensure(list(id = NULL)))
-  pcli_codex_forget("s0123456789")
-  expect_null(pcli_codex_mcp(stub_opts()))
-})
-
-test_that("a tokenless MCP server leaves the exec on files only", {
-  h = stub_mcp_handle()
-  h$config = list()
-  local_mcp_stub(h)
-  rec = pcli_codex_ensure(list(id = "s0123456789"))
-  withr::defer(pcli_codex_forget("s0123456789"))
-  expect_match(rec$error, "no token", fixed = TRUE)
-  expect_null(pcli_codex_mcp(stub_opts()))
-})
-
-test_that("build() starts one exec per turn with the MCP overrides and the token in env", {
+test_that("build() starts one exec per turn with a fresh private relay mailbox", {
   local_fake_cli_path("codex", "text")
-  seen = new.env()
   local_mocked_bindings(
     pcli_probe = function(path) list(resume = TRUE),
-    pcli_notice = function(cli) invisible(NULL),
-    pcli_codex_mcp = function(opts) list(port = 54321L, env = c(GPTR_MCP_TOKEN = "tok-test-0123")),
-    reactor_served = function(run, served = TRUE) {
-      seen$calls = c(seen$calls, paste(run, served))
-      invisible(run)
-    }
+    pcli_notice = function(cli) invisible(NULL)
   )
   opts = stub_opts(run = "r0000000002")
   ctx = list(system = list(t0 = "T0", t1 = ""), request_id = "q000000000004",
              messages = list(msg_user("Summarise x")),
              params = list(cli_mode = "edits", cli_budget = list(turns = 4)))
   spec = pcli_codex_build(stub_model("codex"), ctx, opts)
+  dir = opts$state$codex_relay
+  withr::defer(unlink(dir, recursive = TRUE))
+  expect_true(dir.exists(dir))
+  expect_identical(dir, path_norm(dir))
+  if (!is_windows()) expect_identical(file.info(dir)$mode, as.octmode("700"))
   args = spec$start$args
   tail = c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m", "gpt-6-sol",
-           "-C", path_norm(getwd()), codex_mcp_8_5(54321L), "--sandbox", "read-only", "-")
+           "-C", path_norm(getwd()), codex_relay_args(dir), "--sandbox", "read-only", "-")
   expect_identical(args[(length(args) - length(tail) + 1L):length(args)], tail)
-  expect_identical(spec$start$env, c(GPTR_MCP_TOKEN = "tok-test-0123"))
+  expect_identical(spec$start$env, character())
   expect_identical(spec$start$env_profile, "cli-codex")
   expect_true(spec$close_stdin)
   expect_s3_class(spec$send[[1]], "json")
   expect_match(spec$send[[1]], "Summarise x$")
   expect_identical(opts$state$codex_cap, 4L)
-  expect_identical(seen$calls, "r0000000002 TRUE")
   opts$state$codex_thread = "0199a213-thread"
   spec2 = pcli_codex_build(stub_model("codex"), ctx, opts)
+  withr::defer(unlink(opts$state$codex_relay, recursive = TRUE))
+  expect_false(identical(opts$state$codex_relay, dir))
   i = match("exec", spec2$start$args)
   expect_identical(spec2$start$args[i + 0:2], c("exec", "resume", "0199a213-thread"))
   expect_identical(as.character(spec2$send[[1]]), "Summarise x")
   pcli_untrack("s0123456789")
 })
 
-test_that("without a token for this session the exec runs on files only", {
-  local_fake_cli_path("codex", "text")
-  local_mocked_bindings(pcli_probe = function(path) list(resume = FALSE),
-                        pcli_notice = function(cli) invisible(NULL),
-                        pcli_codex_mcp = function(opts) NULL)
-  spec = pcli_codex_build(stub_model("codex"), list(messages = list(msg_user("hi"))), stub_opts())
-  expect_false(any(grepl("mcp_servers", spec$start$args, fixed = TRUE)))
-  expect_identical(spec$start$env, character())
-  pcli_untrack("s0123456789")
+# Write one request into a relay mailbox as the relay does, pump until the session answers;
+# returns the answer's text, or NULL when none came within `timeout` seconds
+relay_ask = function(dir, msg, allow_runs = NULL, timeout = 5) {
+  resp = file.path(dir, "resp")
+  write_utf8(file.path(dir, "req"), json_encode(msg))
+  reactor_pump(until = function() file.exists(resp), allow_runs = allow_runs, timeout = timeout)
+  if (!file.exists(resp)) return(NULL)
+  out = read_utf8(resp)$text
+  unlink(resp)
+  out
+}
+
+test_that("the relay mailbox is answered in order; tools/call through the run's FIFO", {
+  dir = withr::local_tempdir()
+  opts = stub_opts(run = "r0000000009")
+  opts$state$codex_relay = dir
+  n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+  init = relay_ask(dir, list(jsonrpc = "2.0", id = 1L, method = "initialize"))
+  expect_identical(json_decode(init)$id, 1L)
+  expect_identical(relay_ask(dir, list(jsonrpc = "2.0", method = "notifications/initialized")),
+                   "\n")
+  call = list(jsonrpc = "2.0", id = 3L, method = "tools/call",
+              params = list(name = "r", arguments = list(code = "24")))
+  # a pump that runs no FIFO tool of the run leaves the call queued, unanswered
+  expect_null(relay_ask(dir, call, allow_runs = character(), timeout = 0.5))
+  expect_false(file.exists(file.path(dir, "req")))
+  expect_true(reactor_pump(until = function() file.exists(file.path(dir, "resp")), timeout = 5))
+  res = json_decode(read_utf8(file.path(dir, "resp"))$text)
+  expect_identical(res$id, 3L)
+  expect_identical(res$result$content[[1L]]$text, "[1] 24")
+  expect_identical(vapply(opts$log$dispatched, function(m) m$method, ""),
+                   c("initialize", "notifications/initialized", "tools/call"))
+  # the end of the turn removes the mailbox (the relay exits) and the task
+  unlink(file.path(dir, "resp"))
+  expect_true(push_obj(n, list(type = "turn.completed")))
+  expect_true(reactor_pump(until = function() !dir.exists(dir), timeout = 5))
+})
+
+test_that("a relayed tools/call whose turn ended is never evaluated (D-104)", {
+  dir = withr::local_tempdir()
+  opts = stub_opts(run = "r0000000010")
+  opts$state$codex_relay = dir
+  n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+  call = list(jsonrpc = "2.0", id = 2L, method = "tools/call",
+              params = list(name = "r", arguments = list(code = "x = 1")))
+  expect_null(relay_ask(dir, call, allow_runs = character(), timeout = 0.5))
+  expect_true(push_obj(n, list(type = "turn.completed")))
+  expect_true(reactor_pump(until = function() {
+    !dir.exists(dir) && !any(vapply(reactor_get()$fifo, function(i) i$run, "") == "r0000000010")
+  }, timeout = 5))
+  expect_length(opts$log$dispatched, 0L)
+})
+
+test_that("the relay script passes lines through its mailbox and exits when it should", {
+  skip_on_cran()
+  relay = system.file("gptr", "mcp_relay.R", package = "gptr", mustWork = TRUE)
+  start = function(dir, seconds = 60, env = parent.frame()) {
+    p = processx::process$new(rscript_path(), c("--vanilla", relay, dir, seconds),
+                              stdin = "|", stdout = "|", stderr = "|", encoding = "UTF-8")
+    withr::defer(p$kill(), envir = env)
+    p
+  }
+  wait = function(cond, seconds = 20) {
+    deadline = Sys.time() + seconds
+    while (!isTRUE(cond()) && Sys.time() < deadline) Sys.sleep(0.02)
+    isTRUE(cond())
+  }
+  dir = withr::local_tempdir()
+  req = file.path(dir, "req")
+  p = start(dir)
+  note = "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"
+  p$write_input(paste0(note, "\n"))
+  expect_true(wait(function() file.exists(req)))
+  expect_identical(read_utf8(req)$text, paste0(note, "\n"))
+  unlink(req)
+  write_utf8(file.path(dir, "resp"), "")
+  ask = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"params\":{\"t\":\"caf\u00e9\"}}"
+  p$write_input(paste0(ask, "\n"))
+  expect_true(wait(function() file.exists(req)))
+  expect_identical(read_utf8(req)$text, paste0(ask, "\n"))
+  unlink(req)
+  answer = "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"t\":\"caf\u00e9\"}}"
+  write_utf8(file.path(dir, "resp"), answer)
+  got = new.env()
+  got$out = character()
+  expect_true(wait(function() {
+    got$out = c(got$out, p$read_output_lines())
+    length(got$out) > 0L
+  }))
+  expect_identical(got$out, answer)
+  # the end of stdin ends the relay
+  close(p$get_input_connection())
+  expect_true(wait(function() !p$is_alive()))
+  expect_identical(p$get_exit_status(), 0L)
+  # so does the removal of its mailbox while it waits for an answer
+  dir2 = withr::local_tempdir()
+  p2 = start(dir2)
+  p2$write_input(paste0(ask, "\n"))
+  expect_true(wait(function() file.exists(file.path(dir2, "req"))))
+  unlink(dir2, recursive = TRUE)
+  expect_true(wait(function() !p2$is_alive()))
+  # and an answer that takes longer than its limit (an R session that died)
+  dir3 = withr::local_tempdir()
+  p3 = start(dir3, seconds = 1)
+  p3$write_input(paste0(ask, "\n"))
+  expect_true(wait(function() !p3$is_alive()))
+  expect_true(file.exists(file.path(dir3, "req")))
 })
 
 test_that("the call-1 capture: informational tool events, the answer and the usage", {
@@ -148,17 +230,63 @@ test_that("the call-1 capture: informational tool events, the answer and the usa
   expect_identical(opts$state$codex_thread, "<UUID>")
 })
 
-test_that("gptr's own MCP calls are reported, reasoning becomes thinking", {
+test_that("a Codex shell step shows its command without the shell's -lc wrapper", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  opts = stub_opts()
+  n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+  shell = function(id, command) {
+    push_obj(n, list(type = "item.started",
+                     item = list(id = id, type = "command_execution", command = command,
+                                 status = "in_progress")))
+    ev = opts$log$events[[length(opts$log$events)]]
+    console_tool_line(list(id = ev$tool_call_id, name = ev$tool_name, input = ev$input))
+  }
+  expect_identical(shell("i1", "/bin/zsh -lc 'wc -l mtcars_by_cyl.csv'"),
+                   "  \u25cf codex_shell  wc -l mtcars_by_cyl.csv")
+  expect_identical(shell("i2", "/bin/sh -lc ls"), "  \u25cf codex_shell  ls")
+  expect_identical(shell("i6", "/bin/zsh -lc 'rg -n \"foo\" R/'"),
+                   "  \u25cf codex_shell  rg -n \"foo\" R/")
+  # a double-quoted script keeps its wrapper
+  expect_identical(shell("i3", "/bin/bash -lc \"echo 'hi'\""),
+                   "  \u25cf codex_shell  /bin/bash -lc \"echo 'hi'\"")
+  expect_identical(shell("i7", "/bin/zsh -lc \"rg -n foo\\\\( R/\""),
+                   "  \u25cf codex_shell  /bin/zsh -lc \"rg -n foo\\\\( R/\"")
+  expect_identical(shell("i8", "/bin/zsh -lc \"ls -la\""),
+                   "  \u25cf codex_shell  /bin/zsh -lc \"ls -la\"")
+  # a command of several lines stays one JSON line, so no line is hidden
+  expect_identical(shell("i4", "/bin/zsh -lc \"python - <<'PY'\nprint(1)\nPY\""),
+                   paste0("  \u25cf codex_shell  ",
+                          "{\"command\":\"/bin/zsh -lc \\\"python - <<'PY'\\nprint(1)\\nPY\\\"\"}"))
+  expect_identical(shell("i5", "/bin/zsh -lc 'set -e\nmake check'"),
+                   "  \u25cf codex_shell  {\"command\":\"set -e\\nmake check\"}")
+})
+
+test_that("Codex reports other servers' MCP calls, not gptr's own; reasoning is thinking", {
   opts = stub_opts()
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
   expect_true(feed_fixture(n, "codex-mcp.jsonl"))
-  starts = Filter(function(e) identical(e$type, "tool_execution_start"), opts$log$events)
-  expect_identical(starts[[1]]$tool_name, "mcp__gptr__r")
-  expect_identical(starts[[1]]$input$code, "live_answer = sum(1:10); live_answer")
+  expect_false(any(startsWith(event_types(opts), "tool_execution")))
+  opts1 = stub_opts()
+  n1 = local_normaliser(pcli_codex_parse, stub_model("codex"), opts1)
+  push_obj(n1, list(type = "item.started",
+                    item = list(id = "item_4", type = "mcp_tool_call", server = "docs",
+                                tool = "search", arguments = list(q = "lm"),
+                                status = "in_progress")))
+  starts = Filter(function(e) identical(e$type, "tool_execution_start"), opts1$log$events)
+  expect_identical(starts[[1]]$tool_name, "mcp__docs__search")
+  expect_identical(starts[[1]]$input$q, "lm")
   opts2 = stub_opts()
   n2 = local_normaliser(pcli_codex_parse, stub_model("codex"), opts2)
   feed_fixture(n2, "codex-text.jsonl")
   expect_identical(vapply(n2$message()$content, function(b) b$type, ""), c("thinking", "text"))
+  opts3 = stub_opts()
+  n3 = local_normaliser(pcli_codex_parse, stub_model("codex"), opts3)
+  push_obj(n3, list(type = "item.completed", item = list(id = "r1", type = "reasoning",
+                                                         text = "step 1 ")))
+  push_obj(n3, list(type = "item.completed", item = list(id = "r2", type = "reasoning",
+                                                         text = "")))
+  deltas = Filter(function(e) identical(e$type, "thinking_delta"), opts3$log$events)
+  expect_identical(vapply(deltas, function(e) e$delta, ""), "step 1\n")
 })
 
 test_that("Codex is stopped at the run's turn cap", {
@@ -281,6 +409,25 @@ test_that("turn.completed usage Codex left out stays unknown, and its cost is un
     expect_identical(event_types(o), c("start", "done"))
     expect_true(all(is.na(c(u$input, u$output, u$total, u$cost$total))))
   }
+})
+
+test_that("a resumed thread's turn.completed counts its increase; a new thread counts whole", {
+  opts = stub_opts()
+  exec = function(thread, input, cached, output) {
+    n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
+    push_obj(n, list(type = "thread.started", thread_id = thread))
+    push_obj(n, list(type = "turn.completed",
+                     usage = list(input_tokens = input, cached_input_tokens = cached,
+                                  cache_write_input_tokens = 0L, output_tokens = output,
+                                  reasoning_output_tokens = 0L)))
+    u = n$message()$usage
+    c(u$input, u$cache_read, u$cache_write_5m, u$output, u$reasoning)
+  }
+  expect_equal(exec("thread-a", 17106L, 12160L, 5L), c(4946, 12160, 0, 5, 0))
+  expect_equal(exec("thread-a", 34231L, 29056L, 10L), c(229, 16896, 0, 5, 0))
+  expect_equal(exec("thread-b", 17106L, 12160L, 5L), c(4946, 12160, 0, 5, 0))
+  # a running total that went down gives an unknown increase, never a negative count (IC-74)
+  expect_equal(exec("thread-b", 17106L, 12000L, 9L), c(NA, NA, 0, 4, 0))
 })
 
 test_that("a turn budget that is not finite or very large still gives a whole-number cap", {
@@ -471,8 +618,7 @@ test_that("control files gptr cannot hash are kept by a marker, so an auto exec 
   local_fake_cli_path("codex", "text")
   local_mocked_bindings(pcli_is_windows = function() FALSE,
                         pcli_probe = function(path) list(resume = FALSE),
-                        pcli_notice = function(cli) invisible(NULL),
-                        pcli_codex_mcp = function(opts) NULL)
+                        pcli_notice = function(cli) invisible(NULL))
   withr::defer(pcli_untrack("s0123456789"))
   opts = stub_opts()
   ctx = list(messages = list(msg_user("hi")), params = list(cli_mode = "auto"))
@@ -637,8 +783,7 @@ test_that("a workspace-write exec P05 ends without its normaliser is checked at 
   local_fake_cli_path("codex", "text")
   local_mocked_bindings(pcli_is_windows = function() FALSE,
                         pcli_probe = function(path) list(resume = FALSE),
-                        pcli_notice = function(cli) invisible(NULL),
-                        pcli_codex_mcp = function(opts) NULL)
+                        pcli_notice = function(cli) invisible(NULL))
   withr::defer(pcli_untrack("s0123456789"))
   auto = list(messages = list(msg_user("hi")), params = list(cli_mode = "auto"))
   edits = list(messages = list(msg_user("next")), params = list(cli_mode = "edits"))
@@ -674,8 +819,7 @@ test_that("the deferred control-file check hashes the project the exec ran in", 
   local_fake_cli_path("codex", "text")
   local_mocked_bindings(pcli_is_windows = function() FALSE,
                         pcli_probe = function(path) list(resume = FALSE),
-                        pcli_notice = function(cli) invisible(NULL),
-                        pcli_codex_mcp = function(opts) NULL)
+                        pcli_notice = function(cli) invisible(NULL))
   withr::defer(pcli_untrack("s0123456789"))
   auto = list(messages = list(msg_user("hi")), params = list(cli_mode = "auto"))
   edits = list(messages = list(msg_user("next")), params = list(cli_mode = "edits"))
@@ -767,36 +911,43 @@ test_that("an exec that ends in an internal error has its control files checked,
 
 # ---- the codex route end to end, the CLI leg of INFRA-16 (Task 10) ------------------------------
 
-test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env", {
+# The relay mailbox named in a codex argv
+codex_argv_relay = function(argv) {
+  args = sub("^mcp_servers[.]gptr[.]args=", "", grep("^mcp_servers[.]gptr[.]args=", argv,
+                                                     value = TRUE))
+  json_decode(args)[[3L]]
+}
+
+test_that("a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env", {
   skip_on_cran()
   local_gptr_options(quiet = FALSE)
   f = local_fake_cli("codex", "text")
-  local_mcp_stub()
   withr::local_envvar(OPENAI_API_KEY = "sk-p20fake-openai-0000000000000000",
                       CODEX_API_KEY = "codex-p20fake-0000000000000",
                       OPENAI_BASE_URL = "https://example.invalid/v1", CODEX_SANDBOX = "seatbelt")
   rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
-  big = paste0("Summarise this text: ", strrep("abcdefghij", 5000L), " caf\u00e9.")
+  big = paste0("Summarise this text: ", strrep("abcdefghij", 20000L), " caf\u00e9.")
   seen = new.env()
   seen$vars = character()
   s = withCallingHandlers(
-    peter(big, model = f$model, envir = new.env(), mode = "edits"),
+    peter(prompt = big, model = f$model, envir = new.env(), mode = "edits"),
     gptr_message_billing_env = function(w) {
       seen$vars = c(seen$vars, w$variables)
       invokeRestart("muffleMessage")
     })
-  expect_identical(fake_argv(f)[[1]],
+  argv = fake_argv(f)[[1]]
+  expect_identical(argv,
                    c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m",
-                     "gpt-6-sol", "-C", path_norm(getwd()), codex_mcp_8_5(54321L), "--sandbox",
-                     "read-only", "-"))
+                     "gpt-6-sol", "-C", path_norm(getwd()),
+                     codex_relay_args(codex_argv_relay(argv)), "--sandbox", "read-only", "-"))
   bytes = fake_prompts(f)[[1]]
   prompt = rawToChar(bytes)
   Encoding(prompt) = "UTF-8"
-  expect_gt(length(bytes), 50000L)
+  expect_gt(length(bytes), 200000L)
   expect_true(grepl(big, prompt, fixed = TRUE, useBytes = TRUE))
   expect_match(prompt, "^<gptr_instructions>\n")
   env = fake_env_names(f)[[1]]
-  expect_true("GPTR_MCP_TOKEN" %in% env)
+  expect_false("GPTR_MCP_TOKEN" %in% env)
   expect_false(any(c("OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL", "CODEX_SANDBOX") %in%
                      env))
   expect_true(all(c("OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL") %in% seen$vars))
@@ -811,7 +962,6 @@ test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, the token o
 test_that("the next turn resumes the Codex thread with -c sandbox_mode=", {
   skip_on_cran()
   f = local_fake_cli("codex", "text")
-  local_mcp_stub()
   s = peter("First", model = f$model, envir = new.env(), mode = "auto")
   s |> peter("Second")
   argv = fake_argv(f)
@@ -825,32 +975,61 @@ test_that("the next turn resumes the Codex thread with -c sandbox_mode=", {
   expect_match(second, "Second\n$")
 })
 
-test_that("a fake codex evaluates R in the live session through gptr's MCP server", {
+test_that("after a rewind the next turn starts a fresh Codex thread with the remaining path", {
   skip_on_cran()
-  skip_if(!length(find.package("httpuv", quiet = TRUE, verbose = FALSE)),
-    "httpuv is not installed")
-  skip_if(!length(find.package("later", quiet = TRUE, verbose = FALSE)),
-    "later is not installed")
-  skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
-    "openssl is not installed")
-  withr::defer(gptr_mcp_serve(stop = TRUE))
-  f = local_fake_cli("codex", "mcp")
-  e = new.env()
-  s = peter("Compute the sum of 1 to 10 in R", model = f$model, envir = e, mode = "auto")
-  expect_identical(e$live_answer, 55L)
-  expect_identical(fake_log(f, "mcp")[[1]]$status, 200L)
-  expect_match(s$text, "55", fixed = TRUE)
+  f = local_fake_cli("codex", "text")
+  s = peter("First", model = f$model, envir = new.env(), mode = "auto")
+  s |> peter("Quick one: add a logical column flag = TRUE to top5")
+  gptr_rewind(s)
+  s |> peter("Again")
+  argv = fake_argv(f)
+  expect_length(argv, 3L)
+  expect_identical(argv[[2]][1:2], c("exec", "resume"))
+  expect_false("resume" %in% argv[[3]])
+  third = rawToChar(fake_prompts(f)[[3]])
+  expect_match(third, "^<gptr_instructions>\n")
+  expect_match(third, "First", fixed = TRUE)
+  expect_false(grepl("flag = TRUE", third, fixed = TRUE))
+  expect_match(third, "Again\n$")
+  expect_equal(s$messages[[length(s$messages)]]$usage$cache_read, 24448)
 })
 
-test_that("a fake codex returns a function's numeric result through the HTTP MCP bridge", {
+test_that("without httpuv, later and openssl a fake codex evaluates R in the live session", {
   skip_on_cran()
-  skip_if(!length(find.package("httpuv", quiet = TRUE, verbose = FALSE)),
-    "httpuv is not installed")
-  skip_if(!length(find.package("later", quiet = TRUE, verbose = FALSE)),
-    "later is not installed")
-  skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
-    "openssl is not installed")
-  withr::defer(gptr_mcp_serve(stop = TRUE))
+  local_gptr_options(quiet = FALSE)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  local_mocked_bindings(mcp_serve_start = function(port = NULL) {
+    stop("The MCP server needs the 'httpuv' package.")
+  })
+  f = local_fake_cli("codex", "mcp")
+  e = new.env()
+  seen = new.env()
+  seen$text = character()
+  s = withCallingHandlers(
+    peter("Compute the sum of 1 to 10 in R", model = f$model, envir = e, mode = "auto"),
+    gptr_message = function(m) {
+      seen$text = c(seen$text, conditionMessage(m))
+      invokeRestart("muffleMessage")
+    })
+  expect_identical(e$live_answer, 55L)
+  expect_match(s$text, "55", fixed = TRUE)
+  expect_false(any(grepl("files only", seen$text, fixed = TRUE)))
+  expect_false("GPTR_MCP_TOKEN" %in% fake_env_names(f)[[1L]])
+  # Codex is served the session's frozen tools, the array an API provider gets (IC-79); the
+  # relay ends with Codex's stdin and the session removes the mailbox after the turn
+  mcp = fake_log(f, "mcp")[[1L]]
+  expect_identical(as.character(unlist(mcp$tools)), session_data(s)$frozen$tool_names)
+  expect_identical(mcp$status, 0L)
+  dir = codex_argv_relay(fake_argv(f)[[1L]])
+  expect_true(reactor_pump(until = function() !dir.exists(dir), timeout = 5))
+  # the relayed call is checkpointed, so a rewind removes what it made (#24)
+  expect_identical(gptr_checkpoints(s)$objects, "1/1")
+  gptr_rewind(s, 0)
+  expect_false(exists("live_answer", envir = e, inherits = FALSE))
+})
+
+test_that("a fake codex returns a function's numeric result through the stdio relay", {
+  skip_on_cran()
   f = local_fake_cli("codex", "mcp-return")
   fit_in_session = function(data) {
     work = new.env(parent = baseenv())
@@ -864,8 +1043,96 @@ test_that("a fake codex returns a function's numeric result through the HTTP MCP
   expect_s3_class(answer$fit, "lm")
   expect_equal(answer$beta, expected)
   expect_equal(answer$session$value, expected)
-  expect_identical(fake_log(f, "mcp")[[1L]]$status, 200L)
+  expect_identical(fake_log(f, "mcp")[[1L]]$status, 0L)
   expect_null(run_current())
+})
+
+test_that("a codex turn shows its reasoning and tool steps at the console as they run (D-192)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 200, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("codex", "progress")
+  e = new.env()
+  out = utils::capture.output(peter("How many files are there?", model = f$model, envir = e,
+                                    mode = "auto"))
+  at = match(c("  Listing the files", "  * codex_shell  ls",
+               "  * r  n_files = 1L", "There is one file."), out)
+  expect_false(anyNA(at))
+  expect_false(is.unsorted(at))
+  expect_false(any(grepl("directory listing", out, fixed = TRUE)))
+  expect_identical(sum(grepl("n_files = 1L", out, fixed = TRUE)), 1L)
+  expect_identical(e$n_files, 1L)
+})
+
+test_that("a Codex message shows whole once it completes, a blank line from the next (#41)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("codex", "messages")
+  seen = new.env()
+  seen$log = character()
+  event = pcli_codex_event
+  write = console_cat
+  local_mocked_bindings(
+    console_pad = function() "  ",
+    pcli_codex_event = function(obj, s) {
+      seen$log = c(seen$log, paste0("<", obj[["type"]], ">"))
+      event(obj, s)
+    },
+    console_cat = function(text) {
+      seen$log = c(seen$log, text)
+      write(text)
+    })
+  out = utils::capture.output({
+    s = peter("How many files are there?", model = f$model, envir = new.env())
+  })
+  # the last word is on screen before Codex's next event, not held until it
+  expect_lt(which(grepl("files.", seen$log, fixed = TRUE))[[1L]],
+            match("<item.started>", seen$log))
+  at = match("  * codex_shell  ls", out)
+  expect_identical(out[at + 1:4], c("", "  There is one file.", "", "  It is a.txt."))
+  expect_identical(s$text, "I will list the files.\nThere is one file.\nIt is a.txt.")
+})
+
+test_that("a Codex step leaves the control exports to the user; a served call does not (IC-53)", {
+  skip_on_cran()
+  f = local_fake_cli("codex", "progress")
+  seen = new.env()
+  off = gptr_register(gptr_hook("tool_execution_start", function(event, ctx) {
+    seen[[event$tool_name]] = tryCatch({
+      ext_control_guard("gptr_register")
+      "passed"
+    }, gptr_error_permission = function(e) "refused")
+    NULL
+  }))
+  withr::defer(off())
+  peter("How many files are there?", model = f$model, envir = new.env(), mode = "auto")
+  expect_identical(seen$codex_shell, "passed")
+  expect_identical(seen$r, "refused")
+})
+
+test_that("the first CLI turn probes the CLI before its waiting row starts (D-192)", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("codex", "text")
+  seen = new.env()
+  seen$log = character()
+  probe = pcli_probe
+  local_mocked_bindings(
+    pcli_probe = function(path) {
+      res = probe(path)
+      seen$log = c(seen$log, "probe")
+      res
+    },
+    console_wait_start = function(rec) {
+      seen$log = c(seen$log, "wait")
+      invisible(NULL)
+    })
+  utils::capture.output(peter("Hello", model = f$model, envir = new.env()))
+  expect_identical(seen$log[[1L]], "probe")
+  expect_true("wait" %in% seen$log)
 })
 
 test_that("the auto rule runs CLI-only models on the cli backend", {
@@ -878,7 +1145,6 @@ test_that("a fake CLI joins two inline agents and two workers on one reactor (IN
   skip_on_cran()
   skip_without_installed_gptr()
   f = local_fake_cli("codex", "slow")
-  local_mcp_stub()
   slow = function(name) {
     gptr_fake_provider(list(list(text = paste(name, "done"), delay = 3)), name = name)
   }
@@ -1056,7 +1322,7 @@ test_that("control digests query only unobservable Windows entries and retain PO
   probe = codex_control_scope(pcli_control_digest, is_windows = function() TRUE,
     hash_file = function(path) stop("synthetic denied content"),
     pcli_control_link = function(path) "",
-    file.info = function(...) {
+    path_info = function(...) {
       data.frame(size = NA_real_, mtime = as.POSIXct(NA_real_, origin = "1970-01-01"))
     },
     pcli_control_reparse = function(path) {
@@ -1066,7 +1332,7 @@ test_that("control digests query only unobservable Windows entries and retain PO
   expect_identical(probe("public-link"), "unreadable:reparse:public-digest")
   expect_identical(seen$calls, 1L)
   finite = codex_control_scope(probe,
-    file.info = function(...) data.frame(size = 12, mtime = as.POSIXct(1, origin = "1970-01-01")))
+    path_info = function(...) data.frame(size = 12, mtime = as.POSIXct(1, origin = "1970-01-01")))
   expect_identical(finite("public-file"), "unreadable:12 1")
   expect_identical(seen$calls, 1L)
   posix = codex_control_scope(probe, is_windows = function() FALSE,
@@ -1074,7 +1340,7 @@ test_that("control digests query only unobservable Windows entries and retain PO
   expect_identical(posix("public-link"), "link:public-gone-target")
   expect_identical(seen$calls, 1L)
   unknown = codex_control_scope(probe, is_windows = function() FALSE,
-    file.info = function(...) NULL)
+    path_info = function(...) NULL)
   expect_identical(unknown("public-file"), "unreadable")
   expect_identical(seen$calls, 1L)
   readable = codex_control_scope(probe, hash_file = function(path) "public-content-digest")

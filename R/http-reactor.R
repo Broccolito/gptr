@@ -12,8 +12,7 @@
 # Re-entrancy (IC-57): the reactor counts its pump depth. A nested pump (a sub-agent, System 1
 # or MCP call made inside an `r` evaluation) runs FIFO tools only of the runs named in its
 # `allow_runs` (default: none whenever another pump is on the stack), and later::run_now(0)
-# runs only at depth 1 or when `allow_runs` holds a run marked with reactor_served() (a CLI
-# child served by gptr's MCP server).
+# runs only at depth 1.
 
 #' The process reactor, created on first use
 #' @return the `gptr_reactor` environment
@@ -33,8 +32,6 @@ reactor_get = function() {
   r$fifo = list()
   r$runs = new.env(parent = emptyenv())
   r$depth = 0L
-  r$allow_stack = list()
-  r$served = character()
   r$limits = new.env(parent = emptyenv())
   class(r) = "gptr_reactor"
   assign("reactor", r, envir = the)
@@ -50,20 +47,6 @@ reactor_now = function() as.numeric(proc.time()[["elapsed"]])
 reactor_depth = function() {
   r = get0("reactor", envir = the, inherits = FALSE)
   if (is.null(r)) 0L else r$depth
-}
-
-#' The runs a server answering inside the current pump may serve (IC-57)
-#'
-#' NULL (every run) outside any pump and in the outermost pump; inside a nested pump, that
-#' pump's `allow_runs`. P18's MCP handler, which runs from later::run_now(0) in a nested pump
-#' only when that pump waits for a served CLI child, answers a request whose token is bound to
-#' a run outside this set with the retryable JSON-RPC error -32002.
-#' @return NULL or chr
-#' @noRd
-reactor_allow_runs = function() {
-  r = get0("reactor", envir = the, inherits = FALSE)
-  if (is.null(r) || r$depth <= 1L || !length(r$allow_stack)) return(NULL)
-  r$allow_stack[[length(r$allow_stack)]]
 }
 
 #' The next id, `t<integer>` (IC-20)
@@ -107,20 +90,6 @@ reactor_call = function(what, fn, ...) {
     registry_diagnostic("reactor", what, "error", conditionMessage(e))
     e
   })
-}
-
-#' Mark a run as waiting for a CLI child served by gptr's MCP server (IC-57)
-#'
-#' A nested pump whose `allow_runs` holds such a run still calls later::run_now(0), so the
-#' in-session MCP server keeps answering that child. P18/P20 set and clear the mark;
-#' reactor_run_remove() clears it at settlement.
-#' @return invisible(chr) the marked run ids
-#' @noRd
-reactor_served = function(run, served = TRUE) {
-  r = reactor_get()
-  id = reactor_run_id(run)
-  r$served = if (isTRUE(served)) union(r$served, id) else setdiff(r$served, id)
-  invisible(r$served)
 }
 
 #' Register a timer: `fn()` runs once when `reactor_now() >= at`
@@ -178,13 +147,12 @@ reactor_run_add = function(run) {
   invisible(id)
 }
 
-#' Drop the reference to a settled run (and its served mark)
+#' Drop the reference to a settled run
 #' @noRd
 reactor_run_remove = function(run) {
   r = reactor_get()
   id = reactor_run_id(run)
   if (!is.na(id) && exists(id, envir = r$runs, inherits = FALSE)) rm(list = id, envir = r$runs)
-  r$served = setdiff(r$served, id)
   invisible(id)
 }
 
@@ -225,10 +193,8 @@ reactor_pump = function(until = function() FALSE, slice_ms = 100L, allow_runs = 
     check_strings(allow_runs, "allow_runs", null = TRUE)
   }
   r$depth = r$depth + 1L
-  r$allow_stack = c(r$allow_stack, list(allow_runs))
   on.exit({
     r$depth = r$depth - 1L
-    r$allow_stack = r$allow_stack[-length(r$allow_stack)]
   }, add = TRUE)
   t_end = reactor_now() + timeout
   repeat {
@@ -244,7 +210,7 @@ reactor_step = function(r, allow_runs, slice_ms, t_end) {
   reactor_io(r, allow_runs, slice_ms, t_end)
   reactor_fire_timers(r)
   reactor_run_tasks(r)
-  if (r$depth == 1L || length(intersect(allow_runs, r$served))) later_run_now()
+  if (r$depth == 1L) later_run_now()
   reactor_run_fifo(r, allow_runs)
   invisible(NULL)
 }
@@ -723,8 +689,7 @@ wire_log_path = function(session) {
   safe = function(path) {
     part = path
     repeat {
-      link = Sys.readlink(part)
-      if (!is.na(link) && nzchar(link) && !file.exists(part)) return(FALSE)
+      if (path_dangling(part)) return(FALSE)
       parent = dirname(part)
       if (identical(parent, part)) break
       part = parent

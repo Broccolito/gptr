@@ -19,6 +19,8 @@ works on the objects already in memory.
 * Providers and models are chosen with the `model` argument or with `gptr_config()`.
 * 'RCurl' is no longer used; HTTP is handled by 'curl'.
 * R 4.2.0 or later is required.
+* gptr is now licensed under the Apache License 2.0; gptr 0.7.0 was MIT-licensed. Third-party
+  notices are in `inst/COPYRIGHTS`.
 
 ## New features
 
@@ -71,6 +73,64 @@ works on the objects already in memory.
 * Successful removal of CLI billing variables emits an informational
   `gptr_message_billing_env` condition with the removed names, never their values. Handlers
   use `muffleMessage`; the notice respects `gptr.quiet`. Actual billing refusals remain errors.
+* The `yolo` mode (`mode = "yolo"`, `/mode yolo`) runs actions without approval, including
+  package installs, writes anywhere and gptr's own configuration functions. A person is still
+  asked before deleting files outside the project or protected files, `rm(list = ls())`,
+  quitting R, `options(gptr.*)` and sending a secret over the network; a one-time notice says
+  so. The classifier reads code; it is not a sandbox.
+* In a terminal, lines typed while the agent works steer it at its next step (setting
+  `type_ahead`: `"steer"` or `"follow_up"`); `/command` and `!code` lines wait for the next
+  prompt. The terminal does not echo them into the answer; each shows once in its notice. On
+  the CLI routes a steer is sent after the CLI's current response.
+* A block pasted at the `peter>` prompt of a macOS terminal is sent as one message, and a line
+  typed or pasted before a question (an approval, a choice, `gptr_confirm()`) never answers it.
+  A block pasted at an approval or a choice is dropped, not read as the answer, and pasted
+  fences and `"""` blocks are read at once.
+* R in the Terminal tab of RStudio or Positron is treated as a terminal (completion, pause menu,
+  interrupt key), and `!code` completes R code at `peter>` there and in RStudio's console.
+* The console keeps answers, tool calls, notices and prompts in a two-column margin with one
+  blank line between them, aligns Markdown tables, keeps nested lists and highlights code. Code
+  blocks and multi-line tool code are shown as Markdown fences that copy and run as written.
+* A sub-agent's approval prompt reaches the console even while the parent's R code runs and
+  names the sub-agent; an invalid answer is explained. Fan-outs, teams and `gptr_parallel()`
+  print one line when each sub-agent starts and ends.
+* A `peter()` call made by the agent's own code without `envir =` works in an overlay of the
+  caller's environment; its objects are in `res$envir`.
+* Object sizes are honest: S7 objects such as ggplot2 plots are not sized by `object.size()`,
+  code the agent runs keeps no parse data, and values returned by sub-agents stay small.
+* Codex reaches the session through a base-R stdio relay, without 'httpuv', 'later' or
+  'openssl', and both CLI routes get the session's full tool set. Codex reasoning and commands
+  show as progress lines and Claude Code's calls of gptr's tools as tool lines while they run.
+* `/model` and `model =` accept a provider name alone, such as `claude-cli` or `codex-cli`
+  (its first model); `/model` checks the name before the first prompt. A model declared without
+  tool calls says once that the session's tools are not sent.
+* Amazon Bedrock's Converse API with AWS access keys: `api = "bedrock-converse"` signs requests
+  with Signature Version 4 in R. Region and endpoint are provider-record data
+  (`compat = list(region = ...)`, `base_url`), so a SigV4 gateway is configuration; see
+  `?gptr_provider`. `AWS_ACCESS_KEY_ID` is handled as a secret.
+* On the Claude Code and Codex CLI routes, cost and tokens count each turn's increase of the
+  CLI's running totals instead of the totals themselves. The status line counts the run's
+  requests and adds what its sub-agents cost, `/cost` lists each agent and one total that keeps
+  the known cost when a request's cost is unknown, and `/context` says the CLI keeps its own
+  transcript.
+* On the CLI routes, `/undo` and `gptr_rewind()` restore what the agent's served calls changed,
+  and a rewind or compaction starts a fresh CLI conversation. Automatic compaction does not run
+  there, since the CLI keeps its own context. `/undo` reports each item once, by its outcome.
+* Multi-panel plots such as `par(mfrow = c(1, 2))` keep every panel and knitr chunks keep their
+  figures; plots of calls served to the CLI routes are drawn on your device.
+* A fan-out child gets its own element as `.x`; `parallel =` with `.opts$context = "none"` is an
+  error. A `peter()` call made by the agent's code without `model =` uses the running session's
+  model, and the egress question names the sub-agent that asks. Assignments in a sub-agent's
+  overlay are not reported as overwriting your objects.
+* The delete guard also covers a path held in a variable assigned from literals, as in
+  `p = normalizePath("../x.txt"); file.remove(p)`.
+* Console layout: the approval prompt lists at most five flagged calls, one per line, and offers
+  `[a]` only when it has a rule to suggest; result lines and errors wrap in the margin, and a
+  failed `r` call still lists its objects; sub-agent failures give their reason and count, and
+  repeated nested prompts are numbered; command output and long prompts stay in the margin;
+  Codex commands show without their shell wrapper and Codex messages without a held last word; a
+  cut code block says so inside its fence; wide pipe tables stream verbatim; `/model` and
+  `/status` name the model behind a CLI's `default`.
 
 # gptr 0.7.0
 

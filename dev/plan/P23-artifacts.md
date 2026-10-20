@@ -1103,13 +1103,20 @@ http_status = function(url, wait = 15) {
   }
 }
 
-test_that("the access token is 128 random bits from openssl or /dev/urandom", {
+test_that("the access token is 128 random bits from openssl, else /dev/urandom or none (Windows)", {
   tok = artifact_token()
   expect_match(tok, "^[0-9a-f]{32}$")
   expect_false(identical(tok, artifact_token()))
-  skip_on_os("windows")
   local_mocked_bindings(artifact_has_openssl = function() FALSE)
-  expect_match(artifact_token(), "^[0-9a-f]{32}$")
+  if (is_windows()) {
+    withr::local_options(gptr.quiet = FALSE)
+    rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+    expect_message(expect_identical(artifact_token(), ""), "without an access token",
+                   class = "gptr_message_notice")
+    expect_no_message(expect_identical(artifact_token(), ""))
+  } else {
+    expect_match(artifact_token(), "^[0-9a-f]{32}$")
+  }
 })
 
 test_that("ports come from port_candidates() after the artifact's previous port", {
@@ -3829,7 +3836,7 @@ Create `inst/gptr/skills/shiny-bslib/SKILL.md`:
 ---
 name: shiny-bslib
 description: "Build Shiny apps with bslib layouts (page_sidebar, cards, value boxes) for artifacts."
-license: MIT
+license: Apache-2.0
 metadata:
   source: "gptr research report 17, sections 2.4 and 4.4"
 ---
@@ -3947,7 +3954,7 @@ Create `dev/bench/tokens/fixtures/ns08-marker-explorer.json`:
               "input": {
                 "path": "skill:shiny-bslib/SKILL.md"
               },
-              "result": "---\nname: shiny-bslib\ndescription: \"Build Shiny apps with bslib layouts (page_sidebar, cards, value boxes) for artifacts.\"\nlicense: MIT\nmetadata:\n  source: \"gptr research report 17, sections 2.4 and 4.4\"\n---\n\n# Shiny artifacts with bslib\n\nWrite `<artifacts>/<id>/app.R` (id: lower-case letters, digits, `-`), then in r run\n`a = peter$app(\"<id>\", data = c(\"obj\"))` and print `a`. Each call snapshots the objects into a new\nversion on the same URL. Fix what the checks, messages or screenshot show with edit (not a rewrite)\nand call `peter$app()` again until no check reads FAILED.\n\nRules for app.R:\n- One file ending in `shinyApp(ui, server)`; the objects in `data` exist under their names. Never\n  read files or call `setwd()`, `runApp()` or `install.packages()`.\n- Ship small data (the rows and columns shown); check it in r with `dim()` or `peter$describe(x)`.\n- `page_sidebar()` with the inputs in `sidebar()`; KPIs as `value_box()` in `layout_columns()`;\n  each chart or table in `card(card_header(), ..., full_screen = TRUE)`; never nest cards or pages.\n- `renderPlot()` with ggplot2 and `theme_minimal()`; plotly, DT or leaflet only if `<r_env>` lists\n  them. Filter once in `reactive()`; `req()` for empty inputs, `validate(need())` for empty\n  results; no custom CSS or JS. Use `=` and `|>`.\n\n```r\nlibrary(shiny)\nlibrary(bslib)\nui = page_sidebar(\n  title = \"Markers\",\n  sidebar = sidebar(textInput(\"gene\", \"Gene\")),\n  layout_columns(value_box(\"Markers shown\", textOutput(\"n\"))),\n  card(card_header(\"Top markers\"), tableOutput(\"top\"), full_screen = TRUE)\n)\nserver = function(input, output, session) {\n  shown = reactive(markers[grepl(input$gene, markers$gene, ignore.case = TRUE), ])\n  output$n = renderText(nrow(shown()))\n  output$top = renderTable({\n    validate(need(nrow(shown()) > 0, \"No marker matches the search.\"))\n    head(shown(), 20)\n  })\n}\nshinyApp(ui, server)\n```\n\nRaw HTML only when truly required: write `<artifacts>/<id>/page.html` and call\n`peter$app(\"<id>\", data = c(\"obj\"), kind = \"html\")`; the data is `window.GPTR_DATA.<name>`.",
+              "result": "---\nname: shiny-bslib\ndescription: \"Build Shiny apps with bslib layouts (page_sidebar, cards, value boxes) for artifacts.\"\nlicense: Apache-2.0\nmetadata:\n  source: \"gptr research report 17, sections 2.4 and 4.4\"\n---\n\n# Shiny artifacts with bslib\n\nWrite `<artifacts>/<id>/app.R` (id: lower-case letters, digits, `-`), then in r run\n`a = peter$app(\"<id>\", data = c(\"obj\"))` and print `a`. Each call snapshots the objects into a new\nversion on the same URL. Fix what the checks, messages or screenshot show with edit (not a rewrite)\nand call `peter$app()` again until no check reads FAILED.\n\nRules for app.R:\n- One file ending in `shinyApp(ui, server)`; the objects in `data` exist under their names. Never\n  read files or call `setwd()`, `runApp()` or `install.packages()`.\n- Ship small data (the rows and columns shown); check it in r with `dim()` or `peter$describe(x)`.\n- `page_sidebar()` with the inputs in `sidebar()`; KPIs as `value_box()` in `layout_columns()`;\n  each chart or table in `card(card_header(), ..., full_screen = TRUE)`; never nest cards or pages.\n- `renderPlot()` with ggplot2 and `theme_minimal()`; plotly, DT or leaflet only if `<r_env>` lists\n  them. Filter once in `reactive()`; `req()` for empty inputs, `validate(need())` for empty\n  results; no custom CSS or JS. Use `=` and `|>`.\n\n```r\nlibrary(shiny)\nlibrary(bslib)\nui = page_sidebar(\n  title = \"Markers\",\n  sidebar = sidebar(textInput(\"gene\", \"Gene\")),\n  layout_columns(value_box(\"Markers shown\", textOutput(\"n\"))),\n  card(card_header(\"Top markers\"), tableOutput(\"top\"), full_screen = TRUE)\n)\nserver = function(input, output, session) {\n  shown = reactive(markers[grepl(input$gene, markers$gene, ignore.case = TRUE), ])\n  output$n = renderText(nrow(shown()))\n  output$top = renderTable({\n    validate(need(nrow(shown()) > 0, \"No marker matches the search.\"))\n    head(shown(), 20)\n  })\n}\nshinyApp(ui, server)\n```\n\nRaw HTML only when truly required: write `<artifacts>/<id>/page.html` and call\n`peter$app(\"<id>\", data = c(\"obj\"), kind = \"html\")`; the data is `window.GPTR_DATA.<name>`.",
               "details": {
                 "path": "skill:shiny-bslib/SKILL.md"
               }

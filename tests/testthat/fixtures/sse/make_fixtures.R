@@ -1,6 +1,7 @@
-# Writes the P12 wire fixtures: tests/testthat/fixtures/sse/<api>/<case>.sse (raw stream bytes)
-# with the hand-specified golden files <case>.events.json and <case>.message.json (contract
-# sec 12.4). The golden values are written here by hand, never computed by gptr.
+# Writes the P12 wire fixtures: tests/testthat/fixtures/sse/<api>/<case>.sse (raw stream bytes;
+# <case>.bin for a binary stream) with the hand-specified golden files <case>.events.json and
+# <case>.message.json (contract sec 12.4). The golden values are written here by hand, never
+# computed by gptr.
 # Run from the repository root: Rscript --vanilla tests/testthat/fixtures/sse/make_fixtures.R
 # ASCII only: non-ASCII text is written with \u escapes, which are marked UTF-8 in every locale.
 
@@ -13,7 +14,7 @@ to_json = function(x) {
 write_text = function(path, text) {
   con = file(path, open = "wb")
   on.exit(close(con), add = TRUE)
-  writeBin(charToRaw(text), con)
+  writeBin(if (is.raw(text)) text else charToRaw(text), con)
 }
 obj = function() structure(list(), names = character())
 drop_null = function(x) x[!vapply(x, is.null, logical(1))]
@@ -65,9 +66,9 @@ g_msg = function(stop, raw = NULL, err = NULL, rid = NULL, rmodel = NULL, conten
 write_case = function(api, case, stream, events, message, eol = "\n") {
   dir = file.path(root, api)
   dir.create(dir, showWarnings = FALSE, recursive = TRUE)
-  stream = paste(stream, collapse = "")
+  if (!is.raw(stream)) stream = paste(stream, collapse = "")
   if (!identical(eol, "\n")) stream = gsub("\n", eol, stream, fixed = TRUE)
-  write_text(file.path(dir, paste0(case, ".sse")), stream)
+  write_text(file.path(dir, paste0(case, if (is.raw(stream)) ".bin" else ".sse")), stream)
   write_text(file.path(dir, paste0(case, ".events.json")), paste0(to_json(events), "\n"))
   write_text(file.path(dir, paste0(case, ".message.json")), paste0(to_json(message), "\n"))
 }
@@ -909,4 +910,99 @@ write_case(
        e_end("text", 1L, g_text("Partial")), e_error("network")),
   g_msg("error", err = "The Google stream ended without a finish reason.", rid = "r5",
         content = list(g_text("Partial")), usage = g_usage_unknown())
+)
+
+# ============================================================================================
+# bedrock-converse (P26 Task 11): AWS event-stream frames; each CRC-32 is read from the trailer
+# of a gzip file (zlib), never computed by gptr
+# ============================================================================================
+b = "bedrock-converse"
+crc32 = function(bytes) {
+  f = tempfile()
+  con = gzfile(f, "wb")
+  writeBin(bytes, con)
+  close(con)
+  z = readBin(f, "raw", file.size(f))
+  unlink(f)
+  sum(as.integer(z[length(z) - 7:4]) * 256^(0:3))
+}
+stopifnot(crc32(charToRaw("123456789")) == 3421780262)
+u32 = function(x) as.raw(c(x %/% 16777216, x %/% 65536 %% 256, x %/% 256 %% 256, x %% 256))
+# One frame: prelude (total and header lengths, CRC), string headers (type 7), payload, CRC
+es_frame = function(headers, payload) {
+  hb = raw()
+  for (k in names(headers)) {
+    hb = c(hb, as.raw(nchar(k)), charToRaw(k), as.raw(c(7L, 0L, nchar(headers[[k]]))),
+           charToRaw(headers[[k]]))
+  }
+  p = charToRaw(enc2utf8(payload))
+  prelude = c(u32(16 + length(hb) + length(p)), u32(length(hb)))
+  msg = c(prelude, u32(crc32(prelude)), hb, p)
+  c(msg, u32(crc32(msg)))
+}
+es = function(type, payload) {
+  es_frame(list(`:event-type` = type, `:content-type` = "application/json",
+                `:message-type` = "event"), payload)
+}
+bsig = "EqQBCkYIBxgCKkDzT0FMQ=="
+b_tools = c(
+  es("messageStart", '{"p":"abcdefghijk","role":"assistant"}'),
+  es("contentBlockDelta", js(
+    '{"contentBlockIndex":0,"delta":{"reasoningContent":{"text":"The user wants the row count."}},',
+    '"p":"abcd"}'
+  )),
+  es("contentBlockDelta", js(
+    '{"contentBlockIndex":0,"delta":{"reasoningContent":{"signature":"', bsig, '"}},"p":"ab"}'
+  )),
+  es("contentBlockStop", '{"contentBlockIndex":0,"p":"abcdefgh"}'),
+  es("contentBlockDelta", js(
+    '{"contentBlockIndex":1,"delta":{"text":"Counting the rows \u2014 "},"p":"abc"}'
+  )),
+  es("contentBlockDelta", '{"contentBlockIndex":1,"delta":{"text":"one moment."},"p":"a"}'),
+  es("contentBlockStop", '{"contentBlockIndex":1,"p":"abcdefghij"}'),
+  es("contentBlockStart", js(
+    '{"contentBlockIndex":2,"p":"abcdef","start":{"toolUse":{"name":"r",',
+    '"toolUseId":"tooluse_kJ8xQ2mRT3a"}}}'
+  )),
+  es("contentBlockDelta", js(
+    '{"contentBlockIndex":2,"delta":{"toolUse":{"input":"{\\"code\\":"}},"p":"ab"}'
+  )),
+  es("contentBlockDelta", js(
+    '{"contentBlockIndex":2,"delta":{"toolUse":{"input":"\\"nrow(d)\\"}"}},"p":"abcdefg"}'
+  )),
+  es("contentBlockStop", '{"contentBlockIndex":2,"p":"abcdefghijklm"}'),
+  es("messageStop", '{"p":"abcdefghijklmnopqrstu","stopReason":"tool_use"}'),
+  es("metadata", js(
+    '{"metrics":{"latencyMs":1290},"p":"abcdefghij","usage":{"cacheReadInputTokens":512,',
+    '"cacheWriteInputTokens":0,"inputTokens":300,"outputTokens":41,"totalTokens":853}}'
+  ))
+)
+b_think = "The user wants the row count."
+b_text = "Counting the rows \u2014 one moment."
+write_case(
+  b, "tool_use", b_tools,
+  list(list(type = "start"), e_open("thinking", 1L), e_delta("thinking", 1L, b_think),
+       e_end("thinking", 1L, g_think(b_think, signature = bsig)),
+       e_open("text", 2L), e_delta("text", 2L, "Counting the rows \u2014 "),
+       e_delta("text", 2L, "one moment."), e_end("text", 2L, g_text(b_text)),
+       e_tstart(3L, "tooluse_kJ8xQ2mRT3a", "r"), e_delta("toolcall", 3L, "{\"code\":"),
+       e_delta("toolcall", 3L, "\"nrow(d)\"}"),
+       e_end("toolcall", 3L, g_tool("tooluse_kJ8xQ2mRT3a", "r", list(code = "nrow(d)"))),
+       e_done("tool_use")),
+  g_msg("tool_use", "tool_use",
+        content = list(g_think(b_think, signature = bsig), g_text(b_text),
+                       g_tool("tooluse_kJ8xQ2mRT3a", "r", list(code = "nrow(d)"))),
+        usage = g_usage(300, 41, 512))
+)
+
+# an exception frame before any delta; no usage was reported, so it stays unknown (IC-74)
+write_case(
+  b, "throttled",
+  c(es("messageStart", '{"role":"assistant"}'),
+    es_frame(list(`:exception-type` = "throttlingException",
+                  `:content-type` = "application/json", `:message-type` = "exception"),
+             '{"message":"Too many requests, please wait before trying again."}')),
+  list(list(type = "start"), e_error("rate_limit", 429L)),
+  g_msg("error", err = "throttlingException: Too many requests, please wait before trying again.",
+        usage = g_usage_unknown())
 )

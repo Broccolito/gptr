@@ -318,16 +318,6 @@ test_that("children are named by element names, else by position", {
                    c("1", "2", "3"))
 })
 
-test_that("each child reads its element in place by name", {
-  item = list(name = "cohorts")
-  expect_identical(subagent_element_label(item, "A", 1L, "list", FALSE), "cohorts[[\"A\"]]")
-  expect_identical(subagent_element_label(item, "2", 2L, "list", FALSE), "cohorts[[2]]")
-  expect_identical(subagent_element_label(item, "3", 3L, "rows", FALSE), "cohorts[3, ]")
-  expect_identical(subagent_element_label(item, "A", 1L, "list", TRUE), ".x[[\"A\"]]")
-  expect_identical(subagent_element_label(item, "3", 3L, "rows", TRUE, worker = TRUE),
-                   ".x[[\"3\"]]")
-})
-
 test_that("a fan-out needs exactly one list-like context object", {
   local_team_fake()
   e = new.env()
@@ -354,14 +344,15 @@ test_that("gptr_map() runs one child per element and returns a fan-out session",
   expect_identical(names(fan$text), c("A", "B", "C"))
   expect_true(all(startsWith(fan$text, "summary")))
   expect_identical(fan[["B"]], fan$children$B)
-  expect_identical(attached_names(fan$A), "cohorts[[\"A\"]]")
+  expect_identical(attached_names(fan$A), ".x[[\"A\"]]")
   expect_identical(parent.env(fan$C$envir), e)
   expect_identical(fan$C$envir$.x, NULL)
 })
 
 test_that("a fan-out over a value binds .x in each overlay only while the child runs", {
   local_team_fake(function(request) {
-    if (length(request$last_results)) "ok" else fake_tool("r", code = "n = length(.x[[1]])")
+    if (length(request$last_results)) return("ok")
+    fake_tool("r", code = "n = length(.x[[1]])\ngptr::gptr_return(n)")
   })
   e = new.env()
   call = team_call("x", parallel = 3L, envir = e, values = new.env(),
@@ -370,9 +361,22 @@ test_that("a fan-out over a value binds .x in each overlay only while the child 
                                        facts = list(class = "list"))))
   assign(".v2", list(1:2, 1:5), envir = call$values)
   fan = gptr_map(call)
-  expect_identical(attached_names(fan[["1"]]), ".x[[1]]")
-  expect_identical(fan[["1"]]$envir$n, 2L)
+  expect_identical(attached_names(fan[["1"]]), ".x[[\"1\"]]")
+  expect_identical(fan[["1"]]$value, 2L)
   expect_false(exists(".x", envir = fan[["1"]]$envir, inherits = FALSE))
+})
+
+test_that("a fan-out child that succeeds keeps only its values held by name (D-189)", {
+  local_team_fake(function(request) {
+    if (length(request$last_results)) return("ok")
+    fake_tool("r", code = "scratch = numeric(1e5)\nbig = numeric(2e5)\ngptr::gptr_return(big)")
+  })
+  e = new.env()
+  e$cohorts = list(A = 1, B = 2)
+  fan = gptr_map(team_call("x", parallel = 2L, envir = e,
+                           context = list(sym_item("cohorts", e$cohorts))))
+  expect_identical(names(fan$A$envir), "big")
+  expect_identical(fan$value$A, numeric(2e5))
 })
 
 test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks says (IC-39)", {
@@ -475,6 +479,27 @@ test_that("a fan-out runs every element, parallel at a time (P19 acceptance 6)",
   expect_identical(box$peak, 4L)
 })
 
+test_that("each fan-out child gets its own element alone, as .x, for a symbol or a call", {
+  local_team_fake(function(request) {
+    if (length(request$last_results)) return("ok")
+    fake_tool("r", code = "gptr::gptr_return(.x)")
+  })
+  b = list(A = 1:3, B = letters)
+  for (fan in list(peter("p", b, parallel = 2), peter("p", b[1:2], parallel = 2))) {
+    expect_identical(attached_names(fan$A), ".x[[\"A\"]]")
+    expect_identical(attached_names(fan$B), ".x[[\"B\"]]")
+    expect_identical(fan$value, list(A = list(A = 1:3), B = list(B = letters)))
+  }
+})
+
+test_that("a fan-out with context = \"none\" is refused before any child starts", {
+  fake = local_team_fake()
+  b = list(A = 1:3, B = letters)
+  expect_error(peter("p", b, parallel = 2, .opts = list(context = "none")),
+               "context = \"names\"", fixed = TRUE, class = "gptr_error_invalid_argument")
+  expect_length(fake_requests(fake), 0L)
+})
+
 test_that("teams and fan-outs started in an r evaluation are children of the running session", {
   local_team_fake(function(request) {
     if (identical(request$last_user, "check")) return("inner report")
@@ -500,6 +525,126 @@ test_that("teams and fan-outs started in an r evaluation are children of the run
   expect_identical(session_data(team$a)$depth, session_data(team)$depth + 1L)
   # usage rolls up to the root (IC-39, IC-66): 2 own requests, 1 team member, 2 fan-out elements
   expect_identical(nrow(s$usage), 5L)
+})
+
+test_that("teams and fan-outs from model code without model = run on the session's model", {
+  local_project()
+  local_gptr_options(mode = "auto", model = "other/other-1")
+  other = local_fake_provider(list("other"), name = "other")
+  # a spec registered for the outer session only
+  kid = gptr_fake_provider(function(request) {
+    if (request$last_user %in% c("check", "each")) return("inner")
+    if (length(request$last_results)) return("done")
+    fake_tool("r", code = paste0("rev = peter('check', agents = list(a = agent(system = 'Do.')))\n",
+                                 "fan = peter('each', list(p = 1), parallel = 1)"))
+  }, name = "kid")
+  e = new.env()
+  s = peter("outer", model = kid, envir = e)
+  expect_identical(s$text, "done")
+  for (x in list(e$rev, e$rev$a, e$fan, e$fan$p)) expect_identical(x$model, "kid/kid-1")
+  expect_identical(c(e$rev$a$text, e$fan$p$text), c("inner", "inner"))
+  expect_length(fake_requests(other), 0L)
+})
+
+test_that("sub-agent prompts name the asker and reach only the console (D-188)", {
+  local_team_fake(function(request) {
+    if (identical(request$last_user, "S")) {
+      if (length(request$last_results)) return("child done")
+      return(fake_tool("r", code = "cm = 1; pp = 2; cm + pp"))
+    }
+    if (length(request$last_results)) return("parent done")
+    fake_tool("r", code = "fan = peter(\"S\", list(a = 1, b = 2), parallel = 2)")
+  })
+  local_gptr_options(mode = "manual", interactive = TRUE, verbose = 2L, quiet = FALSE,
+                     ui = ui_console_spec(function(prompt, ...) "y"))
+  e = new.env()
+  s = NULL
+  out = utils::capture.output({
+    s = peter("fan out", envir = e)
+  })
+  expect_identical(s$text, "parent done")
+  for (k in c("a", "b")) {
+    expect_true(paste0("  sub-agent ", k, " > r  cm = 1; pp = 2; cm + pp") %in% out)
+    expect_true(paste0("  sub-agent ", k, " started (fake/fake-1)") %in% out)
+  }
+  done = grep("^  sub-agent [ab] done \\([12]/2\\) . [0-9]+ turns? . [0-9]+ s$", out, value = TRUE)
+  expect_identical(sort(sub("^.*done \\(([0-9/]+)\\).*$", "\\1", done)), c("1/2", "2/2"))
+  # neither the prompts, the lines nor the children's own output reach the parent model
+  res = Filter(function(x) {
+    identical(x$type, "message") && identical(x$message$role, "tool_result")
+  }, session_data(s)$entries)
+  text = msg_text(res[[1L]]$message)
+  for (bit in c("cm = 1", "sub-agent", "[1] 3", "allow?")) {
+    expect_false(grepl(bit, text, fixed = TRUE), info = bit)
+  }
+  expect_false(any(c("cm", "pp") %in% ls(e)))
+})
+
+test_that("a fan-out child's plain assignment never asks about the caller's object (#32)", {
+  local_team_fake(function(request) {
+    if (identical(request$last_user, "S")) {
+      if (length(request$last_results)) return("child done")
+      return(fake_tool("r", code = "x = tasks[['io']]; nchar(x)"))
+    }
+    if (length(request$last_results)) return("parent done")
+    fake_tool("r", code = "fan = peter(\"S\", tasks, parallel = 2)")
+  })
+  local_permission_rules()
+  gptr_permissions(allow = "r(level<=1)")
+  asked = character()
+  ask = function(prompt, ...) {
+    asked <<- c(asked, prompt)
+    "y"
+  }
+  local_gptr_options(mode = "manual", interactive = TRUE, ui = ui_console_spec(ask))
+  e = new.env()
+  e$x = strrep("help ", 2000L)
+  e$tasks = list(io = "read", algo = "sort")
+  s = NULL
+  utils::capture.output({
+    s = peter("fan out", envir = e)
+  })
+  expect_identical(s$text, "parent done")
+  expect_identical(asked, character())
+  expect_identical(e$x, strrep("help ", 2000L))
+  for (k in c("io", "algo")) {
+    res = Filter(function(x) {
+      identical(x$type, "message") && identical(x$message$role, "tool_result")
+    }, session_data(e$fan[[k]])$entries)
+    expect_match(msg_text(res[[1L]]$message), "[1] 4", fixed = TRUE, label = k)
+  }
+})
+
+test_that("a foreground fan-out, team or gptr_parallel shows a line per sub-agent (D-188)", {
+  local_team_fake(function(request) paste("reply to", request$last_user))
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  run_all = function() {
+    utils::capture.output({
+      peter("each", list(p = 1, q = 2), parallel = 2)
+      peter("check", agents = list(a = agent(model = "fake/fake-1")))
+      gptr_parallel(x = peter("one", envir = new.env()), y = peter("two", envir = new.env()))
+    })
+  }
+  out = run_all()
+  for (k in c("p", "q", "a", "x", "y")) {
+    expect_true(paste0("  sub-agent ", k, " started (fake/fake-1)") %in% out, info = k)
+  }
+  done = grep("^  sub-agent [pqaxy] done \\([12]/[12]\\) . 1 turn . [0-9]+ s$", out, value = TRUE)
+  expect_identical(sort(sub("^.*done \\(([0-9/]+)\\).*$", "\\1", done)),
+                   c("1/1", "1/2", "1/2", "2/2", "2/2"))
+  # a worker child names the model its worker calls, not its proxy's worker/worker
+  local_mocked_bindings(worker_spawn = function(st) {
+    st$result = list(type = "result", status = "idle", text = "w done", turns = 1L)
+    worker_on_exit(st, 0L)
+  })
+  out = utils::capture.output(peter("each", list(w = 1), parallel = 1,
+                                    .opts = list(backend = "worker")))
+  expect_true("  sub-agent w started (fake/fake-1)" %in% out)
+  expect_true(any(grepl("^  sub-agent w done \\(1/1\\)", out)))
+  local_gptr_options(verbose = 0L)
+  expect_false(any(grepl("sub-agent", run_all(), fixed = TRUE)))
+  local_gptr_options(verbose = 1L, quiet = TRUE)
+  expect_false(any(grepl("sub-agent", run_all(), fixed = TRUE)))
 })
 
 test_that("model-issued teams above gptr.subagents.max_tasks fail in the tool result", {

@@ -285,6 +285,83 @@ test_that("lexical control and secret paths stay protected when they are symlink
   expect_identical(path_class("ordinary.json", root), "control")
 })
 
+test_that("Windows junctions and file links keep control and secret paths guarded", {
+  root = wsec_local()
+  plain = file.path(root, "plain")
+  dir.create(plain)
+  writeLines("{}", file.path(plain, "plain.json"))
+  dir.create(file.path(root, ".secrets"))
+  writeLines("{}", file.path(root, ".gptr", "mcp.json"))
+  wsec_junction(plain, file.path(root, ".gptr", "agents"))
+  wsec_junction(file.path(root, ".secrets"), file.path(root, "keys"))
+  wsec_link(file.path(plain, "plain.json"), file.path(root, "credentials.env"))
+  wsec_link(file.path(root, ".gptr", "mcp.json"), file.path(root, "ordinary.json"))
+  paths = c(".gptr/agents/a.md", "keys/token.txt", "credentials.env", "ordinary.json")
+  expect_identical(path_class(paths, root), c("control", "protected", "protected", "control"))
+})
+
+test_that("path_info() gives a link to nothing no metadata and no warning on every OS", {
+  td = withr::local_tempdir()
+  writeLines("x", file.path(td, "file"))
+  link = file.path(td, "dangling")
+  local_dangling_link(link)
+  p = file.path(td, c("file", "dangling", "absent"))
+  info = expect_no_warning(path_info(p))
+  keep = setdiff(names(info), "atime")   # reading a file may update its access time
+  expect_identical(info[1L, keep], file.info(p[1L], extra_cols = FALSE)[keep])
+  expect_true(all(is.na(info[-1L, ])))
+  expect_identical(info$isdir %in% FALSE, c(TRUE, FALSE, FALSE))
+  expect_true(path_dangling(link))
+  # R's Windows file.info() for such a link: stat()'s size and kind, NA times, a warning
+  windows = path_info
+  environment(windows) = list2env(list(file.info = function(...) {
+    warning("cannot open file 'dangling': The system cannot find the file specified")
+    na = .POSIXct(NA_real_)
+    info = data.frame(size = 0, isdir = TRUE, mtime = na, ctime = na, atime = na)
+    info$mode = as.octmode("777")   # R 4.2's data.frame() cannot coerce an octmode column
+    info
+  }), parent = environment(path_info))
+  expect_true(all(is.na(expect_no_warning(windows(link)))))
+})
+
+test_that("a case variant is a dangling link only where file names ignore case", {
+  td = withr::local_tempdir()
+  writeLines("x", file.path(td, "File"))
+  local_dangling_link(file.path(td, "Link"))
+  fold = file.exists(file.path(td, "FILE"))
+  expect_false(path_dangling(file.path(td, "file")))
+  expect_identical(path_dangling(file.path(td, "link")), fold)
+})
+
+test_that("readers and file tools take a link to nothing for an absent file on every OS", {
+  # A Windows file symlink needs a privilege CRAN may lack; R takes its kind from an existing target
+  if (is_windows()) skip_on_cran()
+  proj = local_project(files = list(a.R = "a = 1"))
+  for (nm in c("gone.txt", ".env")) {
+    writeLines("x", file.path(proj, "target"))
+    expect_true(file.symlink(file.path(proj, "target"), file.path(proj, nm)))
+    expect_true(file.remove(file.path(proj, "target")))
+  }
+  link = file.path(proj, "gone.txt")
+  tr = ckpt_files_tr(ckpt_ck_new("s0000000077"))
+  expect_no_warning({
+    expect_error(read_utf8(link), "not an existing file", class = "gptr_error_invalid_argument")
+    expect_error(read_core(link), "^ENOENT: ", class = "gptr_error_invalid_argument")
+    expect_error(edit_file(link, list(list(oldText = "x", newText = "y"))), "Error code: ENOENT.",
+                 fixed = TRUE)
+    expect_error(patch_apply("*** Begin Patch\n*** Delete File: gone.txt\n*** End Patch", proj),
+                 "it names no file", class = "gptr_error_invalid_argument")
+    expect_error(search_grep("x", link), "^Path not found: ")
+    expect_error(gateway_images_check(link), "existing PNG/JPEG path",
+                 class = "gptr_error_invalid_argument")
+    expect_identical(search_ls(proj)$path, c(".gptr", "a.R"))
+    ckpt_files_sync(tr)
+    expect_identical(dotenv_discover(proj, trusted = TRUE), 0L)
+  })
+  expect_identical(names(tr$hash), "a.R")
+  expect_true(all(c("gone.txt", ".env") %in% list.files(proj, all.files = TRUE)))
+})
+
 test_that("path_rel handles filesystem roots without dropping a character", {
   path = path_norm(file.path(tempdir(), "example.txt"))
   root = if (.Platform$OS.type == "windows") paste0(substr(path, 1L, 2L), "/") else "/"

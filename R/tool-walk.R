@@ -500,7 +500,7 @@ walk_files = function(root = ".", type = c("file", "dir", "any"), gitignore = TR
   if (type == "file") w = w[!w$is_dir, , drop = FALSE]
   if (type == "dir") w = w[w$is_dir, , drop = FALSE]
   real_root = attr(w, "root")
-  fi = file.info(fs_path(file.path(real_root, w$rel)), extra_cols = FALSE)
+  fi = path_info(fs_path(file.path(real_root, w$rel)))
   size = as.numeric(fi$size)
   size[w$is_dir] = NA_real_
   kind = rep("file", nrow(w))

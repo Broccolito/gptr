@@ -97,8 +97,9 @@ still part of the workspace that later calls can inspect or describe. Neither pr
 through the model's permission gate: you are explicitly running your own R code. Do not paste
 unreviewed code merely because the agent suggested it.
 
-In a terminal R with readline, Tab completes R names and file paths after `!` and `!!`; other
-front ends keep their own completion.
+In terminal R with readline, R in an IDE's Terminal tab included, Tab completes R names and
+file paths after `!` and `!!`. RStudio's console completes R code at `peter>` too; radian and
+Positron's console offer no completion there.
 
 ```text
 peter> !fit = lm(mpg ~ wt, data = mtcars)
@@ -108,9 +109,20 @@ peter> !!local_note = "Check the measurement units later"
 ```
 
 For multiple lines, use a triple-quoted prompt, a trailing backslash to continue a prompt, or
-a fenced R block. The fenced block behaves like `!code`. Incomplete `!`/`!!` R expressions
+a fenced R block. A fence marked `r`, `R`, `{r}` or unmarked behaves like `!code`; any other
+fence, such as one marked `python`, is sent as prompt text. Incomplete `!`/`!!` R expressions
 continue at the `+ ` prompt until they parse. Very long single lines can exceed R's console
 input limit; use an `@file` or a multiline prompt instead.
+
+In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
+and `... ` waits for Enter, where text you type is added. A pasted fence or `"""` block is read up
+to its closer at once, and a block pasted at an approval or a choice is dropped and the question
+asked again. A last pasted line without a newline waits for Enter at the next prompt, so a
+two-line paste without a final newline answers with its first line. Homebrew or conda R, Linux
+terminals, RStudio, R.app, Positron and Windows deliver pasted lines one at a time, so wrap a
+multi-line paste in `"""` there. Lines typed, pasted or run from a script before a question
+appears (an approval, a choice, the pause menu) are discarded and never answer it; answer after
+the prompt.
 
 ```text
 peter> """
@@ -140,7 +152,7 @@ commands available in the current session, including any supplied by plugins or 
 | `/help [command]` | List input syntax and commands, or describe one command. |
 | `/exit`, `/quit`, `/q` | Leave the chat and return its session. |
 | `/model [provider/model or alias]` | Show the model or switch it from the next request; keeps the conversation. |
-| `/mode [plan|manual|edits|auto]` | Show the mode or switch it from the next turn. |
+| `/mode [plan|manual|edits|auto|yolo]` | Show the mode or switch it from the next turn. |
 | `/plan` | Switch to plan mode for read-only exploration and a proposed plan. |
 | `/tools` | List direct tools and `peter$` members. |
 | `/env [pattern]` | Describe workspace objects whose names contain the pattern. |
@@ -170,13 +182,28 @@ on restoration.
 ## Approve, interrupt and continue
 
 In `manual`, known read-only actions and actions covered by existing allow rules run directly;
-other changes ask for approval. The prompt offers `y` for this action, `a` for a session rule
-covering the flagged calls, `n` to deny, and `?` for details. `edits` allows project file edits
+other changes ask for approval. The prompt lists the flagged calls, riskiest first (at most five;
+`?` shows all), and offers `y` for this action, `a` for a session rule covering them when one can be
+written, `n` to deny, and `?` for details. A sub-agent's prompt starts with its
+name (`sub-agent A > r  ...`); an answer that is none of these is explained, and five such answers
+refuse the action. `edits` allows project file edits
 while still asking about R changes unless an allow rule applies; `auto` allows ordinary actions
 while retaining critical and secret guards. `plan` offers read-only tools and level-1 R
 exploration in a scratch environment, where intermediate bindings can change while the user
 workspace is preserved. Settings and policies are described in
 [Configuration](configuration.html) and `?gptr_security`.
+
+In a terminal (terminal R or an IDE's Terminal tab; not Windows), a line you type while an
+answer runs steers it: the agent reads it at its next step, after the current tool results, and
+gptr confirms with `[gptr] steering: '<text>'`. Lines typed or pasted together are one message.
+The terminal does not echo while an answer runs: a typed line shows after Enter, in gptr's
+notice, and never mixes into the answer.
+`gptr_config(type_ahead = "follow_up", .scope = "user")` queues them for when the agent would
+otherwise stop instead. `/commands` and `!code` typed during an answer run at the next prompt;
+an interrupt drops them. On the CLI routes (`claude-cli`, `codex`) a steer reaches the model
+after the CLI's current response. The RStudio, Positron and R.app consoles hold typed input
+until R reads again, so there a line typed during an answer becomes the next prompt;
+type-ahead during `peter("...")` at R's prompt stays R's next input.
 
 While an answer or tool runs in a supported terminal, Ctrl-C opens a pause menu:
 
@@ -193,9 +220,10 @@ progress while it waits for input. Under Rscript, background runs advance only i
 gptr calls. Inline R tools still occupy the same R process while they execute.
 
 At the chat prompt, one interrupt prints a hint; two consecutive interrupts leave the chat.
-Use Ctrl-C in a terminal and the front end's interrupt key in an IDE: Esc in RStudio, R.app,
-RGui and Positron. IDEs that cannot resume an interrupted evaluation use an abort fallback;
-pause/resume behavior is not uniformly verified across front ends.
+Use Ctrl-C in a terminal, an IDE's Terminal tab included, and the front end's interrupt key in
+an IDE console: Esc in RStudio, R.app, RGui and Positron. IDEs that cannot resume an
+interrupted evaluation use an abort fallback; pause/resume behavior is not uniformly verified
+across front ends.
 
 The equivalent session verbs work from R:
 

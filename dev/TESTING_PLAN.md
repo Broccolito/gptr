@@ -1530,3 +1530,24 @@ were observed. Four source-heavy agents and small serial offline tests continue;
 high-memory/GPU job is admitted while sustained load/swap limits fail. Hosted native uses
 at most two jobs. Recheck admission before each local-heavy or model job. Reports measure
 owned-family RSS separately from external model/unified memory and retain failed attempts.
+
+## P26 live dogfood matrix (2026-10-17)
+
+Interactive terminal R (tmux), the integrated build installed into a private library, gptr's
+own settings isolated (HOME stays real so the CLIs keep their sign-ins). Routes:
+
+| Route | Setup | Use |
+|---|---|---|
+| Claude Code CLI | `model = "claude-cli"` | primary |
+| Codex CLI | `model = "codex"` (stdio relay, no httpuv) | tools and progress |
+| UCSF Versa Azure GPT-5.6 | `gptr_env(".secrets/llm-passwords.env", aliases = list(AZURE_OPENAI_API_KEY = "API_KEY"), quiet = TRUE, set_env = FALSE)`; `gptr_register(gptr_provider("versa", api = "openai-responses", base_url = "https://unified-api.ucsf.edu/general/openai/v1", auth = "AZURE_OPENAI_API_KEY", models = list(list(id = "gpt-5.6-sol-2026-07-09", tool_call = TRUE), list(id = "gpt-5.6-terra-2026-07-09", tool_call = TRUE), list(id = "gpt-5.6-luna-2026-07-09", tool_call = TRUE)), compat = list(auth_header = "api-key")))` | API streaming, fan-out |
+| UCSF Versa Bedrock Opus 4.8 | Task 11 adapter; key pair loaded with `gptr_env()` aliases (`AWS_ACCESS_KEY_ID = "AWS_ACCESS_KEY"`, `AWS_SECRET_ACCESS_KEY = "AWS_SECRET_KEY"`); endpoint `https://unified-api.ucsf.edu/general/awsai`, region `us-west-2`, model `us.anthropic.claude-opus-4-8` | API streaming, tools |
+
+Scenarios, each on at least two routes: (1) Seurat scRNA-seq analysis (pbmc3k) with iterative
+steering for more figures, tables and datasets; (2) rebuilding the `kdps` package (CRAN `kdps`,
+GitHub UCSD-Salem-Lab/kdps) with fan-out sub-agents; (3) console checks: paste joining,
+type-ahead steering, `!code` completion, yolo mode, approval prompts from sub-agents, fan-out
+progress lines, code blocks and copy-paste, margins and spacing, token streaming cadence. Each
+defect found becomes Task 12+ in this plan with a regression test.
+
+Plan and results: `dev/plan/P26-console-agent-fixes.md` (Task 11, Live dogfood matrix, Tasks 12+).

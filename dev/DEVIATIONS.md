@@ -115,10 +115,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 ## D-019 - CI Windows processes: CRLF output, asynchronous kills, blocking child stdin (2026-10-03)
 - Rule: CI Task CI-2; contract 7.4 and IC-60 otherwise unchanged:
   1. `line_reader()` strips one trailing CR; `proc_run()` returns stdout/stderr as written, CRLF included (P22's `bridge_decode()` expects it); `proc_run(echo = TRUE)` shows CRLF as LF before redaction; `secret_variants()` adds the value with CRLF turned into LF to architecture 6.5's forms, kept whenever the value itself reaches `gptr.redact_min_chars`; CRLF fixtures write a bare LF on Windows and bytes, not escapes.
-  2. Tree-marker tests require the marked processes to be the child and its descendants only (`Rscript.exe` runs `Rterm.exe`).
+  2. Tree-marker tests require the marked processes to be the child and its descendants only: hosted Windows lists a second marked descendant of one `Rscript.exe` child. It is not `Rterm.exe`, since `Rscript.exe` runs R in its own process (R's `src/unix/Rscript.c` calls `AppMain()` under `_WIN32`; corrected by P27); probably the child's `conhost.exe` (unverified).
   3. `proc_cleanup_record()` (the sweep and `kill_all()`) waits at most 2 s for signalled processes to stop running (Windows `TerminateProcess()` is asynchronous), never on an unknown state or a failed kill (`ps_kill()` per-handle results).
   4. The reused-PID boundary test collects a synthetic processx-style finalizer and fails only on a signalled gptr marker.
-  5. Open (P04 maintainer decision): processx writes child stdin with a blocking `WriteFile()` on Windows, so IC-60's non-blocking `write_all()` holds only on Unix; the 4 MB echo and no-reader stdin-timeout tests skip there (`skip_if_blocking_stdin()`); P18, P19, P20 and P22 children with large stdin on Windows are affected until decided.
+  5. Open (P04 maintainer decision): processx writes child stdin with a blocking `WriteFile()` on Windows, so IC-60's non-blocking `write_all()` holds only on Unix; the 4 MB echo and no-reader stdin-timeout tests skip there (`skip_if_blocking_stdin()`); P18, P19, P20 and P22 children with large stdin on Windows are affected until decided. Status 2026-10-19: superseded by the owned Windows stdin writer (`90b16cb`, `f70cb7d`): `reactor_drain_child()` hands queued `write_all()` bytes to `proc_writer_drain()`, which publishes 65536-byte mailbox chunks to a writer child, so the parent never blocks in `WriteFile()`; `skip_if_blocking_stdin()` is gone. The 4 MB echo, `test-proc-windows-backpressure.R` and the CLI adapters' 200 KB stdin tests (P27, D-101, D-106) pass on hosted Windows (R-CMD-check run 39217189384, release and oldrel-4; optional run 39235001873). Unverified on Windows: claude control responses over one chunk (D-104) and real CLI binaries.
 - Rule: `dev/ci/test-by-file.R` streams the offline suite file by file to name the file a hung run is in (run on demand; the Windows release job ran it before R CMD check until CI-19, when the suite outgrew its 30 min).
 - Contract-visible: `proc_run(echo = TRUE)` redacts CRLF output as LF; architecture 6.5's derived forms gain the CRLF-to-LF form; no section amended.
 - Tests: test-proc-spawn.R: "line readers end lines at CRLF as a Windows child writes them, across reads" and 3 "proc_run echo ... CRLF" blocks; test-proc-supervise.R: "boundary: orphan cleanup waits for a kill that completes asynchronously", "boundary: a kill counts as signalled only for the handles ps_kill() reached", "boundary: stale process cleanup cannot release or kill a reused PID record". Evidence: progress/infra.md Task CI-2 (hosted Windows release runs on `55ec31d` and `8e8d8e0`: 8 failures, a 68-minute hang).
@@ -1157,8 +1157,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-cli-claude.R: "a budget that is not finite adds no flag; large and tiny budgets stay numbers", "the budget words are plain
   numbers whatever OutDec and digits say", "a budget that is not finite counts as none: that child lives across runs", "white-space-only
   text never becomes a content block" (+14 expectations over the plan; final PASS 52). Evidence: progress/P20.md Task 5.
-- Open: a fresh child's first user line (history and base64 images) is unbounded and `write_all()` blocks on Windows until the CLI reads
-  it (D-019 item 5, open P04 decision; expected a pause, not a hang; not verified on Windows).
+- Open: none for Windows stdin (2026-10-19): a fresh child's first user line (history and base64 images) is unbounded, and a 200 KB one
+  reaches the fake claude child through the owned Windows writer on hosted Windows (D-019 item 5 status; test-cli-claude.R "a 200 KB first
+  user line reaches the claude child intact").
 
 ## D-102 - P08 capture and argument validation: system1_images records, protected .opts refused, one-string choices (2026-10-04)
 - Rule: P08 Task 5 `R/gptr-capture.R` (consumed by Tasks 8-9 and P13's classifier route):
@@ -1205,8 +1206,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-cli-claude.R: 7 tests from "a result line's unreported usage and cost stay unknown, never zeros (IC-74)" to "a late timer or
   queued tools/call of an earlier turn leaves the next turn alone" (+72 expectations; with D-101, later plan counts for the file are 86
   higher; final PASS 191). Evidence: progress/P20.md Task 6.
-- Open: control responses (tool results, base64 plots) go through `write_all()`, which blocks on Windows until the CLI reads them
-  (D-019 item 5; expected a short pause; not verified on Windows).
+- Open: control responses (tool results, base64 plots) go through `write_all()` and, on Windows, the owned stdin writer (D-019 item 5
+  status); one larger than a 65536-byte writer chunk is not tested on Windows.
 
 ## D-105 - P08 identifiers: gptr_agent() list names, one exact mode, exact names win, R3 exception for closures (2026-10-04)
 - Rule: P08 Task 6 identifier resolution in `R/gptr-capture.R` (contract 6.1.3; `identifier.resolve`; consumed by Tasks 8-9, P17, P19):
@@ -1233,7 +1234,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none.
 - Tests: test-cli-codex.R: 15 tests in the three D-106 blocks (+155 expectations, final PASS 226; the symbolic-link and permission tests
   skip where those are unavailable); test-cli-common.R: item 8(e) (1 test). Evidence: progress/P20.md Tasks 7, 9.
-- Open: the Windows probe and the prompt's `write_all()` on Windows (D-019 item 5) are not verified.
+- Open: the Windows probe is not verified. The prompt's `write_all()` on Windows is (2026-10-19): a 200 KB prompt reaches the fake codex
+  through the owned writer on hosted Windows (D-019 item 5 status; test-cli-codex.R).
 
 ## D-107 - P15 writer: patched blocks carry their written sha, fallback blocks are recorded under the transcript (2026-10-04)
 - Rule: P15 Task 9 `R/doc-blocks.R`; the contract 7.15 interface is unchanged; new internal helpers `doc_patch_sha(lines, id)` and `doc_header_set_sha(line, sha)`:
@@ -2239,3 +2241,688 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: `R CMD check --as-cran` runs all 59 example pages offline with 0 problems and no global
   objects; dev/release check-examples and check-docs report 0 problems. Evidence: TESTING_PLAN.md
   current checkpoint.
+
+## D-183 - P26 IDE terminal tabs are terminals; !code completion everywhere (2026-10-16)
+- Rule: `front_end()` counts inherited `RSTUDIO=1`/`POSITRON=1` only for an interactive R whose
+  stdin is not a tty (`stdin_tty()`); `.Platform$GUI` checks are unchanged. The REPL's `!`
+  word-break gate drops its `front_end()` term (cledit + tty suffice).
+- Rule: the REPL reader calls `gptr_readline(prompt, rl)` with `rl = structure(readline, gptr =
+  TRUE)` built at run time (not a namespace object: R CMD check flags namespace closures whose
+  body calls `.Internal`; run-time also keeps IRkernel's `readline`). Other prompts keep
+  `readline()`. Mocks of `gptr_readline` that feed the REPL take `...`.
+- Contract-visible: 04 section 7.1 rows (`gptr_readline(prompt, read)`, `stdin_tty()`,
+  `front_end()`); 03 sections 6.2 and 6.17 (REPL completion bullet); `?peter`, console vignette.
+- Tests: test-console-completion.R (IDE terminal tab bang; reader readline copy; IDE consoles as
+  tty = FALSE); test-utils-options.R (IDE terminal tab front end). Evidence: progress/P26.md Task 1.
+
+## D-184 - P26 Pasted blocks are one message; stale input never answers a question (2026-10-16)
+- Rule: on a macOS terminal (`is_macos()` and `console_readline_tty()`, the Task 1 gate, now
+  shared) the lines waiting on fd 0 join a prompt, slash or `!code` line, then one `... ` read.
+  The fd-0 reader `console_typed_lines(rd)` (shared with Task 3) does one `conn_read_chars()` per
+  50 ms poll; `rd$fd` is reopened after an end of input and never closed; an error reads nothing.
+- Rule: `readline_answer()` re-reads an answer that arrived within 0.1 s (at most 100 reads) for
+  `ui_console_read()`, `console_ask()` and `gptr_confirm()`, so scripted drivers answer >= 0.1 s
+  after a prompt. `gptr_readline()` times reads in `the$readline_secs` and prints a prompt over
+  200 bytes whole before `> ` (moved from Task 6). A fence is R only for an `r`, `R`, `{r...}` or
+  empty info string.
+- Contract-visible: 04 section 7.1 (`gptr_readline`, `readline_answer`, `gptr_confirm`), IC-75;
+  03 section 2.2 rule 5, section 6.17; `?peter`, console vignette.
+- Tests: test-console-repl.R (paste, fences, fd-0 reader, acceptance, macOS pty child),
+  test-utils-options.R, test-console-ui.R, test-console-interrupt.R. Evidence: progress/P26.md Task 2.
+
+## D-185 - P26 Typed lines steer the running agent (type_ahead setting) (2026-10-16)
+- Rule: `console_send()` runs the reactor task `console_typed()` when `repl_terminal(rs)` (not
+  `.stdin`, not Windows, interactive, `stdin_tty()`; no `front_end()` term). It reads only while
+  a run of the call has a session, with the IC-75 reader `console_typed_lines(rd, 0L)` (new
+  `wait`: the first poll's, default 50). `/`/`!` lines wait in `rd$typed` for the next prompt (an
+  interrupt drops and lists them); the rest of a batch is one `policy_enqueue(..., source =
+  "repl")` as the new setting `type_ahead` says. Notices show the text.
+- Plan correction: IDE consoles are abort-only (`console_menu_available()`), so `?peter` and
+  `/help` say typed lines there wait for the next input, not that the pause menu steers.
+- Contract-visible: 04 sections 10.4 (`input`), 11.2 (`type_ahead`), IC-49, IC-76; 03 sections
+  6.2, 6.17; report 18 Verification log row 50; `?peter`, `/help`, both vignettes.
+- Tests: test-console-typing.R (10 blocks, pty child), test-gptr-config.R (key set),
+  test-console-repl.R (macOS pty: typed-ahead lines now steer). Evidence: progress/P26.md Task 3.
+- Review fixes (2026-10-17): a console question first routes the lines waiting on fd 0 (`console_before_message(kind = "prompt")` calls `console_typed()`), so a line typed during a tool directly before an approval steers; a run aborted at a question drops held lines like an interrupt; lines continuing an incomplete held `!code` line are held with it (`typed_code_open()`, across batches); `/help` says "not Windows".
+
+## D-186 - P26 Console margin, block spacing, waiting row, Markdown and highlighting (2026-10-16)
+- Rule (03 section 6.17; 04 section 7.14 unchanged): where the console renderer is active (`console_pad()`: `verbosity() >= 2L && cli::is_dynamic_tty()`, so `capture.output()` of an interactive call captures the layout too) rendered text, the waiting row, prompts, tool and artifact lines and gptr notices (`console_notice()`, `gptr_inform()` display, word-wrapped, also outside a run) keep a two-column margin, content width `width - 4`; nested lists keep their indentation, pipe tables are aligned (verbatim when malformed or too wide) and a reply's leading, trailing and repeated blank lines collapse. Rscript (verbosity 1), knitr, jsonl and tests (verbosity 0), pipes and Jupyter keep the plain layout (no margin, block gaps, table alignment or notice wrapping); `NO_COLOR` removes colours and styles only, the layout stays (amends the plan's plain list).
+- Blocks: `console_gap()` writes one blank line when the block kind changes (text, tool, notice, prompt, waiting row, status, and after the status line) and between two prompts, on finished lines only; a block replacing a cleared waiting row writes none. The spinner's rgui per-cycle LF (6501a64) is deleted: the gap before a waiting row gives R.app the fresh stdout line of that colour fix.
+- Waiting row: margin; `\r\033[K` when `cli::is_ansi_tty()` (the cursor stays after the text there), spaces elsewhere; an LF follows a clear only on rgui. `console_before_message(runs = NULL, kind = "notice")` ends partial lines, clears rows keeping tasks and opens a block of `kind`; the launch boundary passes `kind = NULL` (replaces `newline`, so no block opens); `ui_console_permission/select/input` start with it (`kind = "prompt"`); `console_on_permission` and its hook are deleted; `console_on_tool_end` restarts the spinner (no progress line) while the request is pending; any rendered output, a style alone too, stops the spinner.
+- Markdown: italic `*x*` at token edges only (no `_x_`, strikethrough or bare-URL underline), dim `](url)`, `> ` and `-` rules (no box drawing, Task 5), H1 bold underlined, H2-H6 bold. Code per line (Task 5 redraws streamed lines): R lines that parse through `cli::code_highlight()`, other R and known languages through `code_light()` (cli's default Solarized accents), unknown languages verbatim.
+- Contract-visible: console display only; internal `gptr_message_write(margin =)`; tests pin `cli.ansi = FALSE` (setup.R).
+- Tests: test-console-render.R (4-mode invariance, plain guard at verbosity 0 and 1, margin incl. NO_COLOR, blank lines, continuation after reset_line, tables, styles, highlighting, UI partial line, block spacing incl. rgui), -wait (5), -process-launch (LF only rgui; 4 oracles), -spinner-width (ANSI), -spinner-gui (rgui CR-only frames; 1 oracle removed), -notice (wrap keeping indentation, NO_COLOR, plain contexts; 2 oracles). Evidence: progress/P26.md Task 4.
+- Review fixes (2026-10-17): italic only when one token opens and closes it (an unmatched `*` prints); no LF after a cleared row in R GUIs either (two blank rows at notices, prompts and launches; the block gap gives R.app its stdout line; native check open); inside an evaluation `console_pad()` is the margin recorded at `eval_open()` (`.gptr_console_pad`), so prompts, gaps and notices drawn during a tool keep the layout; the pause menu's prompts get the margin; the plan's "(typing stays visible)" does not hold: a redraw overwrites a partial typed line's echo (IC-76 Limits).
+
+## D-187 - P26 Code blocks and tool calls as Markdown fences (2026-10-16)
+- Rule (03 section 6.17; 04 section 7.14 unchanged; deviates from P14's `console_symbols()`, fence code and NS-1 tool line): `console_symbols()` loses `bar`, `top`, `bottom`, `result`; console output draws no U+2500-U+257F or U+23BF character.
+- Fences, every mode: fence lines as written (dim when styled), body verbatim and unwrapped, every fenced line de-indented by the opener's indentation (CommonMark; before, a fence indented 4+ spaces under a list item never closed and swallowed the reply). In the margin (D-186) fenced characters print as they arrive; a line without a TAB (nchar() gives it no width) that filled one content row is redrawn styled (`\r` + margin); a line broken by other output is printed whole again; elsewhere lines print when complete.
+- Tool calls: `  * r  <code>` when the line fits; else `  * r` and a `doc_rmd_fence()` fence (moved to `utils-text.R`, L0; callers keep the name) of at most 20 code lines highlighted as one block, never cut, then a dim `(+N more lines)`; info string `r` only for `r` and `*__r` (also in `?`); inputs without `code` stay one trimmed line. Result lines: four spaces; an error shows `details$error` before the result text.
+- Approval: the plan's "first line names the tool only" is not applied: IC-53 item 8 (04 ranks above the plan) keeps the first line and `+N more lines`, and MCP-served and nested calls print no tool line above the prompt (verbosity 1 only a one-line one). The first line is cut to the console width (minus the margin) before `+N more lines` instead of at 72 characters, so it no longer wraps. `?` shows the request lines as a plain fence (no SGR, also the RStudio dialog), at most 40 lines, the cap line outside.
+- Contract-visible: console display only. Integration (2026-10-17): IC-53 item 8, the 04 `builtin_ui` row and 03 section 6.8.3 now describe this prompt (who asks, the tool and the first line cut to the console width before `(+N more lines)`, flagged calls); the plan's tool-only first line stays unapplied. Since D-192 a call served to a CLI route in a live run also prints its tool line above its prompt, so there too the prompt repeats the call's first line, as on the API routes.
+- Tests: test-console-fences.R (frame oracles of 12 blocks to Markdown; UTF-8 copy and parse, list-indented fences per split, tool fences and info string, error line), -render (4-mode invariance incl. a list-indented fence, streaming redraw, TAB line, broken line; 7 oracles incl. margin screen model), -ui (prompt fit, `?` fence). Evidence: progress/P26.md Task 5.
+
+## D-188 - P26 Prompts reach the person and name the asker; fan-out status; nested overlays (2026-10-16)
+- Rule (IC-77; 03 sections 5.8, 6.8.3, 6.13, 6.17, 7.3; 04 sections 2 conditions, 6.1 `envir`, 7.9, 7.11): an evaluation's `.gptr_message_write(text, stream, margin, k)` lifts only its own top capture sink and hands the text on (`gptr_message_write(from = k - 1L)`); `console_cat()` (every `console_write()`, the Markdown emit, the spinner, the rgui LF, block gaps) and the console UI (`permission`, `select`; `notify` through `console_notice()`) write through it, so prompts reach the console whatever `tee` is and never a tool result; for prompts and sub-agent lines `console_before_message(tools = TRUE)` also ends partial lines while a tool executes (conditions raised inside a tool still leave the waiting row alone).
+- Who asks: the request record gains `agent = agent_label(run)` (L0: `"main"`, a name, a nested call's first prompt line quoted and cut to 30 characters); prompt `  sub-agent <agent> > r  <code>`, detail `sub-agent <agent> wants to use`, `     asks in every mode: <reason>` for `ask_human`, `sub-agent <agent> asks: ` (ask tool) and `sub-agent <agent>: ` (budget select). `perm_ask()` drops `agent` from the `permission_request` payload (the event keeps its own label).
+- Invalid answers: `a`/`p` not offered is explained; others `Not an answer: '<text>'. Type y, a, n ...`; after five (`?` is none) `No valid answer after 5 tries; refused.` with feedback `no valid answer was given at the approval prompt` (was a silent "the user declined").
+- Progress (coordinator decision, replaces the plan's `console.status` service; no service or aaa-state change): the `agent_start`/`agent_end` hooks print `  sub-agent <agent> started (<model>)` (a worker's real model, not `worker/worker`) and `done (k/N) · <n> turns · <s> s` or `failed: <status>` for a child run whose outermost run is in the foreground, at verbosity 1+, not quiet (`console_child_shown()`); `subagent_schedule()` gives each child run `group` (`n`, `runs`) for `(k/N)`.
+- `r_tool_execute()` tees only depth 0. A nested `peter()` without `envir =` (also in-run `gptr_parallel()` members) evaluates in `overlay_new(<caller>, <running session id>)` unless the caller is a function frame (D-04 default unchanged at top level); the `<r_session>` line names `res$envir`.
+- Not as planned: long prompts are Task 2's (coordinator); `subagent_overlay()` stays, L4 may not call P06's `overlay_new()` (architecture 2.2, test-arch-layers); a held Markdown word continues after a prompt (D-186 `reset_line()`), so the line ends before the prompt and the word follows it. Out of scope: a child's run-level notices raised during the parent's pump are still recorded in the parent's tool result (eval_on_message); model code wrapping calls in `capture.output()`/`sink()` still captures prompts (documented).
+- Contract-visible: request record `agent`; IC-77 lines; nested-call `envir` default; console display.
+- Tests: test-console-message-stream.R (untee'd and nested controls; user sinks with tee FALSE), -render (prompt and pause in a tool frame; child predicate), -ui (who asks, ask_human, invalid answers), -repl (piped .stdin; 1 oracle), test-agent-dispatch.R, -agent-run (budget), -tool-ask, -tool-r (tee), -subagent-team (API fan-out end to end; fan-out, team, gptr_parallel lines), -gptr-gateway (overlay, loop labels), -copy-gateway (overlay row), -cli-claude (fixture claude-fantext), -subagent-backends, -northstar and fixtures/bench/prefix-baseline.json (fragment text). Evidence: progress/P26.md Task 6.
+
+## D-189 - P26 Honest object sizes; console-sized agent exports (2026-10-16)
+- Rule: one size rule, `env_snap_size()` (NA for environments, functions, external pointers, compact
+  sequences and S7 objects), reused by `dsc_leaf_core()` and `risk_binding_leaf()`: overwrite notes
+  say `size unknown`, protect_size skips NA, checkpoint capture counts NA as 0 bytes.
+- Rule: `workspace_lines()` ranks an unsized value other than a function or environment at the median
+  known size, ties by name (the plan's "by name rather than last"); functions, environments,
+  promises and active bindings stay last, so helpers never hide data.
+- Rule: `eval_parse()` parses under `keep.parse.data = FALSE`; worker results use the refhook pair;
+  a settled idle fan-out child keeps only its values held by name (`subagent_export(clear =)`).
+- Contract-visible: 04 §6.6 gptr_risk, §7.9 eval_r/env_snapshot/workspace_lines, §7.19 worker_main,
+  §9.3 r_performance; 03 §6.4 R4, §6.13, §7.5; `?peter`, `?gptr_agent`, `?gptr_risk`, vignette.
+- Tests: env-snapshot, env-describe, perm-classify, eval-core, subagent-worker, subagent-team,
+  prompt-text, mcp-server (guard). Evidence: progress/P26.md Task 7.
+
+## D-190 - P26 The yolo permission mode (2026-10-16)
+- Rule: `session_modes` ends in `yolo`; every mode list uses it (`pcli_params()` names it at L1). Only the
+  person selects it; projects (against the default when the user's mode is invalid), nested calls and children
+  only tighten. Codex runs workspace-write; its shell edits and deletes in the project ungated, as in auto.
+- Rule: yolo = auto plus control exports and control-path writes, secret reads, no protect_size; `critical_guard`
+  ignores control rows except `options(gptr.*)` (namespace patches and `~/.Rprofile` writes run, accepted risks);
+  secret-to-network flows and deny/ask rules still apply. Any final allow grants the control tokens.
+- Rule (every mode): deleting an `outside` path (`/tmp` too; only `tempdir()` is temp) is level 4; a delete
+  keeps `file_delete` with the control target in `path_class` (plan denies such deletes instead of asking); the
+  edit tool's Delete File is level 4 where `unlink()` of the path is, typed `file_delete` so a control path in
+  the same patch cannot hide it. `<mode name="yolo">` reuses auto's text; a one-time notice on entry.
+- Contract-visible: 03 §6.8.1-6.8.2, §8.3; 04 mode lists, IC-53 items 1/3/6, IC-65, IC-78; 05 P11, P20;
+  `?peter`, `?gptr_agent`, `?gptr_security`; configuration, interactive-console, execution-model vignettes.
+- Tests: perm-gate, perm-classify, perm-plan, tool-namespace, session-object, console-*, prompt-context,
+- Review fix (2026-10-17): `dispatch_nested()` gates a listed member when `call_risk()` of its actual input is above the approved level, so `peter$edit()` with a patch's Delete File of `.env` or an outside path asks in auto and yolo and stops `blocked` with nobody to answer; P22's `bridge_recheck()` is subsumed and deleted (it would ask twice).
+  gptr-config, subagent-*, cli-*, ext-*, injection-e2e. Evidence: progress/P26.md Task 8.
+
+## D-191 - P26 Codex stdio relay; CLI routes serve the session's tools; model references (2026-10-16)
+- Rule: Codex always reaches gptr through `inst/gptr/mcp_relay.R` (base R): each line passes a fresh 0700 mailbox
+  (`req`/`resp` by rename) to a reactor task of the run that answers through `pcli_mcp()`, shared with the claude
+  route (FIFO, D-104 refusals). No socket, token or Suggests; gone: the files-only fallback, `mcp.serve_ensure`,
+  CLI tokens, the served-run mark, `reactor_allow_runs()` and the `-32002` busy rule. `gptr_mcp_serve()` unchanged.
+- Rule: both CLI routes are served and validated against the session's frozen tool array (four defaults before a
+  freeze); a live run's `tool_call` hooks run first. `adp_tools_on()` gives one notice per model whose tools are
+  dropped (IC-74 unchanged). A registered provider alone is its first model in `model_match()` (before fuzzy),
+  alias names normalise like ids, `/model` checks before the first prompt; alias `codex-cli`.
+- Contract-visible: 03 §1.3, §2.3, §6.1, §6.14, §8.3, §8.4, §9.2, §10.4, §12.4; 04 §3.2, §6.3, §7.0, §7.18, §8.2,
+  §8.5, IC-19, IC-57, IC-58, IC-65, IC-79; 05 P18, P20; P19, P20 notes; `?gptr_mcp_serve`, `?gptr_options`;
+  language-models vignette; layering edges console -> `model_canonical()`, mcp -> `tool_call_hook()`.
+- Tests: cli-*, mcp-*, http-reactor, catalog-models, console-commands, provider-openai-completions, aaa-state.
+- Review fix (2026-10-17): a served tool other than `r` runs through `tool_run()` (source attribution, result check) and, when reported, in `tool_execute_frame()`, as in the agent loop; contract edges mcp -> `tool_run`, `tool_execute_frame`.
+
+## D-192 - P26 Codex progress and claude-cli tool calls while they run (2026-10-16)
+- Rule: `run_on_event()` passes a provider's informational `tool_execution_start`/`_end` to the session's hooks (the
+  plan's "as today" was wrong: the run dropped them); Codex marks them `informational = TRUE` and `ev_track()` skips
+  them, since its steps run outside R. `mcp_serve_call()` reports a call served in a live run outside a tool call (both
+  CLI routes; an MCP client during a run) under its gate's call id `mcp_<id>`, the end with the result's `content`,
+  `details` (served r adds `objects`, `plots`, `error`) and execution time; Codex's `mcp_tool_call` items for gptr are
+  skipped. Gate unchanged; IC-53's guard, grant expiry and control tokens cover the served calls as loop calls.
+- Rule: on a CLI route (model `type = "cli"`) verbosity 2 prints each thinking block's first line dim, without a bold
+  title's `**`, once its line end or the width completes it, after clearing the waiting row, whose clock runs on; Codex
+  ends a reasoning item with a line end. Other routes unchanged. builtin:cli's `agent_start` hook probes the CLI first.
+- Open: Codex token streaming needs the app-server driver (v1.x); the row after a tool line is Task 4's.
+- Contract-visible: 03 §1.3, §8.3; 04 §8.5, §10.4; P20 note; vignette. Out of lane: agent-run.R, ext-events.R.
+- Tests: console-render, cli-claude, cli-codex (`codex-progress.jsonl`), mcp-server. Evidence: progress/P26.md Task 10.
+- Review fix (2026-10-17): the reporting is skipped only when the served call's own run has a tool on the stack (`identical(run_current(), run)`), so a nested CLI run inside its parent's tool reports its calls and its approved or yolo control exports run.
+
+## D-193 - P26 Bedrock Converse with SigV4 signing (2026-10-17)
+- Rule: the adapter `bedrock-converse` (`R/provider-bedrock.R`, `builtin:bedrock`) streams ConverseStream signed
+  with AWS Signature Version 4 in pure R (HMAC-SHA256 on `cli::hash_raw_sha256()`, a CRC-32 table in R). Region
+  (`compat$region`, required) and endpoint (`base_url`) are data of a registered record; there is no built-in
+  record, so AWS and a SigV4 gateway are both configuration, and the `bedrock` bearer record is unchanged. The
+  record's `auth` is `AWS_SECRET_ACCESS_KEY`; `AWS_ACCESS_KEY_ID` and the optional `AWS_SESSION_TOKEN` come from
+  the vault, else the environment (registered for redaction, origin-bound), never the credential store.
+- Rule: two request-spec fields instead of a new transport (the plan named none): `stream = "raw"` pushes each
+  2xx chunk unsplit (the normaliser owns the event-stream framing; the adapter declares `http_sse`, the HTTP
+  streaming driver), and `sign(method, url, body, value)`, which `http_handle()` calls per attempt, so the key
+  pair is materialised only in `http-request.R` and a re-send is signed at its own time.
+- Rule: no `toolChoice`, cache points or thinking request fields are sent (`forced_tool_choice = FALSE`,
+  `cache = "none"`); reasoning in the stream is decoded and replayed signed to the same model only. Tool ids
+  follow the Anthropic rule in the hand-off (`provider-transform.R`).
+- Review fix (2026-10-18): `AWS_ACCESS_KEY_ID` is a secret name (`_ID` after `KEY` is no plain suffix; G6 section
+  3.3 and P03 listed it as plain), so `gptr_env(set_env = FALSE)` and trusted `.env` discovery keep it in the
+  vault and children drop it like the secret key. `child_env_provider_key()` gives a `bedrock-converse` worker
+  the key id and session token with the secret key. `returns =` adds the IC-71 instruction to the last user
+  message; with no tools to send, past tool calls and results are text (Converse needs `toolConfig` for
+  `toolUse` and `toolResult` blocks). `check_adapter()` replays binary `<case>.bin` fixtures (the body chunks
+  of a `stream = "raw"` request) unsplit; `make_fixtures.R` writes two Bedrock
+  cases with CRC-32s read from gzip trailers. Rotated environment credentials take effect at the next session
+  start or a `gptr_env()` reload (the P05 vault-first order, documented in IC-80, not changed).
+- Contract-visible: 03 sections 1.3, 2.1, 3.2, 8.1, 11.1; 04 sections 3.2, 7.12, 8.1, 10.3, IC-80;
+  `?gptr_provider` (`compat` region, a SigV4 gateway record example).
+- Tests: provider-bedrock (new), live-bedrock (opt-in), arch-layers (122 files), auth-secrets (the key id is a
+  secret name); `setup.R` clears the key-pair variables; the scripted wire of `replay_helpers.R` takes raw
+  bodies; `fixtures/sse/bedrock-converse/` (tool_use, throttled). Evidence: progress/P26.md Task 11.
+
+## D-200 - P26 CLI usage is the increase of the CLIs' running totals (2026-10-18)
+- Rule: claude-cli's `total_cost_usd` is the CLI session's running total, also after `--resume` (seurat-claude: each
+  run's first result was the previous total plus its cost); the baseline resets only for a child that starts a fresh
+  CLI session, a turn costs the increase, a smaller total (a session not resumed) counts whole (04 §8.5).
+- Rule: Codex's `turn.completed` usage is the thread's running total, also on `exec resume` (probe: 17106/12160/5, then
+  34231/29056/10); an exec on the thread of the previous `turn.completed` records each count's increase, one on a new
+  thread the whole; an increase below zero or of an unknown count is unknown (IC-74).
+- Rule: budget question and stop message print tokens with `format_count()` (`2.0M`), cost with `format_cost()`.
+- `--max-budget-usd` unchanged, not probed live (no real CLI in this lane): in kdps-claude captures/32 a resumed
+  session already at $6.20 ran a turn of several tool calls under `--max-budget-usd 5` unstopped, so the flag counts
+  the process's own spend. Open: a direct live probe.
+- Contract-visible: 04 §8.5 (both routes); 03 §5.5, §8.3; the budget message text.
+- Tests: cli-claude-result, cli-codex, agent-run, session-budget. Evidence: progress/P26.md Task 12.
+
+## D-201 - P26 Calls served to a CLI route pass the checkpointers (2026-10-18)
+- Rule: a reported served call (a live run with no tool of its own on the stack: both CLI routes, an MCP client
+  during a run) runs between `checkpoint_before()` and `checkpoint_after()` as `dispatch_steps()` runs a call, so
+  `/undo` restores its objects, files and state (#24: seurat-claude, kdps-claude and codex kept the undone turn's
+  objects, every turn `objects 0/0`). A call served inside its run's own tool stays covered by that tool's checkpoint.
+- Rule: on a CLI route the files checkpointer's `before()` does not sync: `ckpt_on_cli()` syncs at `agent_start`,
+  and a sync there absorbed the edits the child made before its served call (the triage fix alone: files `1/1`, the
+  child's edit not restored). Each change is recorded once, in the served call's fragment or in the turn scan; an
+  aborted run has no `turn_end`, so on a CLI route `agent_end` scans too, after builtin:cli has stopped the child
+  (builtin:checkpoints loads after builtin:cli; review: a cancelled Codex turn's own edits were absorbed by the
+  next sync, files `0/0`). An untracked file is captured only while it is as the last walk saw it, so a child's edit never becomes a pre-image
+  (its row says no pre-image, and `/undo` does not claim to restore it).
+- Contract-visible: 04 IC-79 (served calls are checkpointed; contract edges `checkpoint_before`, `checkpoint_after`).
+- Tests: mcp-server, cli-claude, cli-codex, ckpt-files, ckpt-rewind (an aborted turn), arch-layers. Evidence:
+  progress/P26.md Task 15.
+
+## D-202 - P26 No automatic compaction on the CLI routes; plan-cli usage is no context size (2026-10-18)
+- Rule: a `plan-cli` reply's usage sums the CLI's model calls of one turn (codex: 10 threshold compactions in 13
+  prompts at ~4.2k estimated tokens), so `reported_total()` is NA for it: the projection anchors on an earlier API
+  reply or the estimate, also after a `/model` switch to an API route. It does not update the estimator multiplier
+  either (an addition to the triage fix: clamped at 3, a CLI turn's ratio would triple the next API projection).
+- Rule: the checkpoint compactor's threshold and cold rules never trigger for a CLI model (`type = "cli"`), nor
+  the halved `r` result budget (it asks `compact.should`): the CLI compacts its own conversation, and a checkpoint
+  is one more turn on it. `/compact` still runs (Task 17 is to start a fresh CLI conversation from its summary).
+- Rule: a `session_compact` of a foreground run prints one dim line, `conversation compacted: <before> -> <after>
+  tokens`, from the compaction entry (out of lane: console-render.R, one hook).
+- Contract-visible: 03 §6.11 (incl. its tool-output sentence), the `r` result budget row, §12.5; 04
+  `compact_should` and `format_eval_result` rows, IC-71 compaction row; the console notice.
+- Tests: prompt-compact, agent-run, console-render. Evidence: progress/P26.md Task 16.
+
+## D-203 - P26 A rewind or a compaction starts a fresh CLI conversation (2026-10-18)
+- Rule: builtin:cli handles `session_tree` and `session_compact`: the session's child is stopped (no interrupt wait)
+  and its claude session id, Codex thread and Codex usage baseline are forgotten, so the next build starts a fresh
+  CLI conversation whose first message carries the remaining path or the compaction checkpoint (#26: seurat-claude,
+  after `/undo` claude-cli quoted the undone prompt word for word). Before, the next turn resumed the same CLI
+  conversation, which `pcli_unseen()` can only extend.
+- Every rewind resets, a workspace-only one too (one rule: at worst a needless fresh conversation, never a stale one).
+  The claude cost baseline restarts in build() with the fresh session (D-200); the Codex one is cleared, so a reused
+  thread id never turns a whole count into an increase.
+- Contract-visible: 04 IC-65 (continuity bullet); 03 §6.11, §8.3 (both routes).
+- Tests: cli-claude, cli-codex. Evidence: progress/P26.md Task 17.
+
+## D-204 - P26 A claude-cli answer that follows a served call usually arrives whole (2026-10-18)
+- Finding (#31): the hold is upstream of gptr, in what the claude CLI emits (the CLI or the model stream it
+  receives). The CLI's transcript (`~/.claude/projects/<cwd>/<session>.jsonl`) stamps each content block when the CLI
+  completes it. Aligned with the ts.py recordings, 13 of 16 kdps-claude and 11 of 12 seurat-claude answers after a
+  served call printed half their text within 0.25 s of that stamp, in one burst; the others began seconds earlier and
+  the rest streamed. A message's thinking and text blocks complete milliseconds apart (kdps 06:50:55.655/.666 and
+  07:37:00.938/.941 UTC); answers after a user line have spread stamps and streamed live.
+- gptr forwards and renders each delta as it arrives, also after a served call (fake CLI: deltas 0.4 s apart print
+  0.8 s apart). Ruled out: pcli_claude_result() printing the result (seurat turn 1 had earlier text, so the answer came
+  as deltas) and console_render_on() FALSE (the waiting row, which needs it, redrew during the hold). No gptr change.
+- Open: telling the CLI apart from its model stream needs a live probe of the CLI's API stream (not in this lane).
+- Contract-visible: 03 §8.3 (one sentence). Tests: cli-claude. Evidence: progress/P26.md Task 22.
+
+## D-205 - P26 The steering notice on a CLI route says when the steer is sent (2026-10-18)
+- Rule: while the run's model has type `"cli"`, the steering notice (typed line or pause menu) ends `; it is sent after
+  the CLI's current response` (#34: kdps-claude and seurat-claude steers arrived after the CLI's whole answer while the
+  notice said `it reaches the agent at its next step`). Delivery and the follow-up notice are unchanged (P26 Task 3).
+- The triage asked for the session's provider type; the notice reads the run's model instead, whose response is in
+  flight (a router can pick a CLI model), as console-render.R's CLI thinking rule does. Before a run's first request
+  it is unset, and the steer then joins that request, so the default wording holds.
+- Contract-visible: 04 IC-76 (notices). Tests: console-typing. Evidence: progress/P26.md Task 25.
+
+## D-206 - P26 Run lines, /cost and /context describe the run, its sub-agents and the CLI (2026-10-18)
+- Rule: the status line counts the run's own requests (`agent_end`'s `usage` rows) instead of the session's turns,
+  which the payload keeps (kdps-claude: `1 turn`, `2 turns`, ... `12 turns` over one-turn runs), and adds
+  `sub-agents <cost>` from the rows other sessions charged to the session during the run (IC-66: a fan-out child's
+  rows reach the root through its container; `done · 2 turns · 156.7k tokens · $0.2125` left out $0.85).
+- Rule: `format_cost()` of request costs is the known sum plus a count of the requests of unknown cost (`$9.5100 + 1
+  request of unknown cost`), `unknown cost` when none is known, wherever a cost prints (the status line, the
+  `print()` and `gptr_usage()` footers, `/cost`): one aborted claude-cli request hid the session's known $9.51.
+  `NA` values in the data are unchanged (IC-74).
+- Rule: `/cost` prints `<agent>  <n> requests, <tokens> tokens in, <cost>` per agent name and one `Total:` line (it
+  printed a data frame by session id, cut at 20 rows, and two totals). `/context` on a request whose usage row has
+  route `plan-cli` adds `The CLI keeps its own transcript; its last turn reported <n> input tokens over all its
+  model calls.` (that row's input and cache tokens: a sum over the turn, no context size, D-202).
+- The triage's `+ $0.85 sub-agents` is its own part, `sub-agents $0.8500`: joined to an own cost with unknown requests
+  it read `$0.0010 + 1 request of unknown cost + $0.5000 ... sub-agents`.
+- Contract-visible: 04 IC-77 item 6; 03 §6.17 (status line, `/cost`, `/context`); `?gptr_usage` (footer).
+- Tests: console-render, console-commands, session-budget, session-object, console-jupyter-progress, console-fences.
+  Evidence: progress/P26.md Task 29.
+
+## D-207 - P26 Cut fences say so inside the fence; Codex commands without their shell; cut thinking lines (2026-10-18)
+- Rule (#40; amends D-187 and P26 Task 5's cap lines): a tool-call fence cut at 20 lines (dim) and the `?` detail's
+  plain one cut at 40 end with a `# … +N more lines` line before the closing fence (it followed the fence as
+  `(+N more lines)`, so a copied block looked whole: seurat-versa, codex). The one-line prompt keeps `(+N more lines)`
+  (IC-53 item 8).
+- Rule (amends D-192): a Codex `command_execution` event's `input$command` drops the `<shell> -lc` wrapper of a
+  single-quoted script without a single quote of its own, or a bare word (`/bin/zsh -lc 'wc -l x.csv'` ->
+  `wc -l x.csv`); other commands, such as a double-quoted script, stay whole.
+  `console_preview()` shows an input's one-line `command` after its `code`, so the call reads
+  `● codex_shell  wc -l x.csv`; a command of several lines keeps the one-line JSON preview, so no line is hidden.
+- Rule (amends D-192): a CLI route's thinking line is cut once it passes the width, with cli's ellipsis (it was cut on
+  reaching the width with none, so the rest of a line exactly that long was dropped unmarked).
+- Contract-visible: 04 §8.5; 03 §6.17, §8.3. Tests: cli-codex, console-fences, console-ui, console-render. Evidence:
+  progress/P26.md Task 31.
+
+## D-208 - P26 A CLI route's whole blocks end their line; text blocks in a row are separated (2026-10-18)
+- Rule (#41; amends D-192): `pcli_text_block()` streams a whole block as one delta ending with a line end, so the
+  console shows a Codex message's last word when the item completes (it was held until the next event, 1.5-9.5 s
+  live). The kept block is unchanged: the triage's `paste0(text, "\n")` on the block would have added a line end to
+  the answer (`$text`, `msg_text()`). A Codex reasoning item's thinking block no longer keeps its own line end.
+- Rule (amends D-186): on the console, a text block that directly follows another text block of the run opens its
+  own block, one blank line between them (three Codex messages printed on adjacent lines). All routes.
+- Contract-visible: 03 §6.17, §8.3; 04 §8.5. Out of lane: console-render.R. Tests: cli-codex
+  (`codex-messages.jsonl`). Evidence: progress/P26.md Task 32.
+
+## D-209 - P26 Plots of calls served during a run reach the person's device (2026-10-18)
+- Rule (#42): `mcp_serve_r()` evaluates with `plots = "auto"` while the session has a live run, as the loop's `r`
+  tool does: on the person's open device, or on a new one when a human is present (kdps-claude: the console showed
+  `[1 plot]`, `dev.list()` was NULL). Without a run (`gptr_mcp_serve()` between runs) it keeps `"capture"`, offscreen.
+  The model still gets the image either way.
+- Contract-visible: 04 IC-79 (served calls bullet). Tests: mcp-server. Evidence: progress/P26.md Task 33.
+
+## D-210 - P26 sub-agents from model code keep the session's model; the egress question names them (2026-10-18)
+- Rule: a `peter()`, team or fan-out started inside a run without `model =` runs on the running session's model,
+  before the `model` setting and `model_default()` (P19 note 8 and the container order superseded); a team member
+  takes the agent's model, else the call's, else the team's.
+- Rule: a child session resolves its model as the running session (or its team or fan-out) sees it and registers
+  that session's own spec of the model's provider or router at rank 0 (`registry_model_spec()`, also used by
+  `gptr_parallel()`'s team), so a session started with `model = <spec>` passes it on.
+- Rule: `egress_check(asker =)`; inside a run (`run_current()` non-NULL), when `gateway_guards()` or
+  `subagent_guards()` pass the model as `asker`, the question starts "The agent's code starts a sub-agent on <ref>,
+  which sends its prompt to <id>"; System 1 passes none.
+- Contract-visible: 03 §6.13; 04 §6.1 `model` row, §7.2 `registry_model_spec()`, §7.8 `gateway_run()` and
+  `egress_check()` rows, IC-39; `?peter`.
+- Tests: gptr-gateway (model code without `model =`; on a provider or router spec), subagent-team (team and fan-out
+  on a provider spec), gptr-config (egress question inside a run).
+  Evidence: progress/P26.md Task 13.
+
+## D-211 - P26 a path held in a name assigned from literals is that path (2026-10-18)
+- Rule: `risk_scan()` keeps, for each name assigned outside a function body, the values it may hold, folded by
+  `risk_fold()` (which also resolves such names), NA for one the code computes (an assignment that does not fold, a
+  replacement call, a `for` variable, `assign()`). A straight-line assignment replaces them (the `r` tool stops at
+  the first error) unless the code assigns the name with `<<-` (a function may do so later); one in a branch, loop
+  or call adds its value, and the binding before the code when it comes first; a loop that assigns the name, by a
+  replacement call too, makes it computed. Outside function bodies the path arguments of risk rows,
+  `file(open = "w")` and the `peter$` file members fold with it and report the path of the worst class, so
+  `p = '~'; unlink(p, recursive = TRUE)` is 4 (D-132's "4 only for a direct literal target" amended for paths; a
+  command, SQL or Python held in a name stays 3).
+- Rule: `normalizePath()` and `path.expand()` fold their `path` argument only (`mustWork = FALSE` no longer hides it).
+- Rule: a rebinding the walk does not see keeps the earlier value and can lower a level (accepted: the classifier is
+  advisory): `p = tempfile(); with(list(p = '~'), unlink(p, recursive = TRUE))` is 1 (was 3); likewise `within()`,
+  `bquote(.())`, `assign()` in a loop, a function or with a computed name, `list2env()`, `load()`, `rm()`,
+  `delayedAssign()`, `makeActiveBinding()`, a replacement through an environment alias (`e = environment();
+  e$p = ...`), `replicate()` and a function from an earlier turn. A name's new value is stored after its right
+  side is walked, so `p = tempfile(fileext = file.remove(p))` checks the earlier `p`, and `assign()` takes the
+  name its `x` argument matches (review: both lowered a level).
+- Contract-visible: `gptr_risk()` levels, `path` and `path_class` of such calls (03 §6.8.1); checkpoint `files`
+  targets.
+- Tests: perm-classify (a name assigned outside a function body; a straight-line reassignment; a value that uses
+  the name; computed, branch-default, loop, `<<-` and named `assign()` forms stay 3), perm-gate (auto asks a person). Evidence: progress/P26.md Task 14.
+
+## D-212 - P26 a fan-out child gets its element alone as `.x`; context "none" is refused (2026-10-18)
+- Rule: for every backend a fan-out child's element is bound alone in its overlay as `.x = list(<key> = <element>)`
+  and attached as `.x[["<key>"]]` (P19 Task 5's in-place `cohorts[["A"]]` label and whole-list `.x` superseded;
+  `subagent_element_label()` removed). The list is a binding of the child's private values environment
+  (`spec$bind` now names such bindings), and `subagent_unbind()` removes and defuses it when the child settles
+  (rule R6), so after an inline or cli fan-out the caller's next edit stays in place. A worker's parent keeps its
+  values environment and shipped objects, so that edit still copies the element once (as before; Open in P26.md).
+- Rule: `parallel =` with `.opts$context = "none"` (which dropped every child's element without a warning) is
+  `gptr_error_invalid_argument` naming `.opts = list(context = "names")`, before replay or any child starts.
+- Deviation from the triage design: its `bind = list(.x = ...)` made `test-copy-subagent.R` copy `cohorts$A` once
+  (a list freed by the collector keeps its elements referenced), hence the values binding and the defuse.
+- Contract-visible: 04 §6.1 `parallel` row, §6.5 `gptr_map()` (IC-36); 03 §4.1.6 and §10.4 item 5; `?peter`.
+- Tests: subagent-team (a symbol and a call input bound alone; context "none" refused with no request),
+  copy-subagent (a child returning `length(.x[[1]])` leaves `cohorts$A` editable in place). Evidence: progress/P26.md
+  Task 18.
+
+## D-213 - P26 a plain assignment overwrites a binding of the evaluation environment only (2026-10-18)
+- Rule: `gptr_risk(envir =)` reports "overwrites `x`" (level 2, 3 above `gptr.protect_size`) for a plain `=`/`<-`
+  or a `for` variable evaluated in `envir` only when `x` is bound in `envir` itself, where R creates the binding;
+  `<<-`, `assign()`, replacement calls (an environment changes by reference) and an assignment inside a call that
+  may evaluate it elsewhere (`local()`, `with()`, `within()`, `evalq()` and the other unknown-effect calls of IC-31)
+  still look up the enclosing environments to the global one. A sub-agent overlay's `x = ...` over a caller's `x` is
+  level 1 (new object), as is one in plan mode's scratch overlay over the home (it runs there and is discarded).
+- Contract-visible: `gptr_risk()` levels and `sizes` for code in a child environment (04 `gptr_risk()`, `?gptr_risk`).
+- Tests: perm-classify (an overlay's plain assignment; `<<-`, `assign()`, `with()`, `local()`, a replacement and a
+  binding of `envir` itself still flag), subagent-team (a manual-mode fan-out asks nothing and its children's calls
+  run). Evidence: progress/P26.md Task 23.
+
+## D-214 - P26 a rewind reports each item once, by its outcome after the whole rewind (2026-10-18)
+- Rule: `gptr_rewind()`'s plan (`preview = TRUE`, the `session_before_tree` payload) keeps one row per item and
+  its report (`s$last_rewind$report`, the `gptr.rewind` entry, `session_tree`) one line per plan item: its last
+  row or line in application order (for an undo, its oldest record), after the chain rule that credits a conflict
+  following an earlier success. `/undo` therefore asks only about items whose final outcome is not restored; an
+  object a turn creates and later changes (an environment modified in place) is removed without a question.
+- Rule: a report line belongs to the longest plan item it starts with (`<item>: `, lengths in bytes, so a name not
+  valid UTF-8 never stops a rewind partway); a line of no plan item (a checkpointer without `preview()`, such as
+  artifacts or a plugin) is its own key, so a not-restored line is never dropped for another item (`k: a` and
+  `k: b` stay apart).
+- Rule: known limits: a reference object the turn reaches through a new binding (`e = g`, then `e$v = 1` in a
+  later call) keeps its in-place change while the report shows only the binding removed (silent in one call
+  already); when a newer record fails and the older one then conflicts, the item reads as a conflict, not the
+  newer record's reason (it still counts as not restored).
+- Contract-visible: 04 §6.5 `gptr_rewind()`; `?gptr_rewind`.
+- Tests: ckpt-rewind (a turn creating `e` and `a.txt` in one call and changing both in a later call: a preview of
+  two rows, `/undo` asks nothing, the report is `file a.txt: removed` and `object e: removed (created by the
+  turn)`; objects `k: a` and `k: b`, one changed after the turn: two lines and the partial warning; an object
+  whose name is not valid UTF-8: rewound in full). Evidence: progress/P26.md Task 28.
+
+## D-215 - P26 /env and /checkpoints wording: counts, patchworks, sessions, local times (2026-10-18)
+- Rule: `gptr_describe()` counts agree with their noun ("1 layer", "1 binding", "1 unevaluated promise"); a
+  `patchwork` (through the `ggplot` method) is `<patchwork> of <n> plots`: its own plot unless that is patchwork's
+  empty filler, and each of its `patches$plots` (in `meta` under S7 ggplot2), a nested patchwork counting its plots.
+- Rule: new method `gptr_describe.gptr_session()`: `<gptr_session> <kind>, model <ref>, <status>, <n> turn(s),
+  <cost>`; level 2 adds `children: <names>`. /env, `<attached>` and `peter$describe()` no longer list its `.d`.
+- Rule: `gptr_checkpoints()$time` is local time (`tzone ""`; parsed from the UTC entry timestamp); the console's
+  `/checkpoints` prints the footer `Undo with /undo, or /rewind <turn>.` (`gptr_checkpoints()` keeps its R footer).
+- Contract-visible: 04 §6.5 `gptr_checkpoints()`, §6.6 `gptr_describe()` built-in methods; `?gptr_describe`,
+  `?gptr_rewind`.
+- Tests: env-describe (a one-layer ggplot; flat, filler, nested and S7 (`meta`) patchworks; a session and its
+  children; an environment with one promise; 16 registered methods), ckpt-rewind (`tzone ""`; the /checkpoints
+  footer). Evidence: progress/P26.md Task 36.
+
+## D-216 - P26 programs run with system() or system2() share the console's terminal: a prompt rule, not a fix (2026-10-18)
+- Rule: agent code is evaluated in the R process, so a child of `system()` or `system2()` inherits R's stdin, the
+  console's terminal; one that reads stdin blocks the reactor and consumes typed lines. Without compiled code (v1)
+  gptr cannot point fd 0 elsewhere, so the `<r_session>` core gains the line `- system() and system2() children
+  read the user's terminal: use system2(..., stdin = nullfile()) instead of system().` before its closing line
+  (03 §7.3), and `?peter` says the same. `system(input = )` is not offered: R prefixes `< file` to
+  the command, so only the first command of a compound line (`cd dir && pandoc ...`) is redirected; `system2()`
+  appends it, so with shell operators in `args` only the last command is, and a compound line needs
+  `system2("sh", c("-c", shQuote(cmd)), stdin = nullfile())` or `peter$sh()`. `peter$sh()`/`peter$bg()` children
+  already read the null device (processx).
+- Gap: the minimal preset (the default for defined agents, fan-out and team children) renders no `<r_session>`, so
+  its agents are told neither this line nor the `readline()`/`q()` line beside it; the minimal static prefix
+  (1,262, 03 §12.1) is unchanged.
+- Contract-visible: 03 §7.3 `<r_session>` (13 lines) and §12.4 (27 more o200k tokens, within its 500 budget and
+  the 12.7 static-prefix gate: standard_core 2,378 of 2,381); the 11 golden rows already over their prefix gate at
+  base grow by 27 and ns10-mcp-catalog newly exceeds its own (2,895 at base, 2,922 > 2,896), so baseline.csv needs
+  one re-baseline at integration; `?peter`.
+- Tests: prompt-text (the line), northstar and bench-context/prompt-sections (composition byte for byte);
+  `dev/bench/tokens/run.R --check` (the prefix gate). Evidence: progress/P26.md Task 37.
+
+## D-220 - P26 A pasted block never answers a question; pasted fences are read at once (2026-10-18)
+- Rule: `ui_console_read()` (approvals, choices, input) asks again when the REPL's reader finds lines waiting
+  after an answer: the answer and the lines (a paste) are dropped with one `A pasted block is not an answer (N
+  lines dropped).` line; this is no invalid answer (D-188). Amends D-184/IC-75 ("fences never poll"): a `"""`
+  block or fence takes each line from the lines waiting on fd 0 before a `... ` read (none while `rd$held` or
+  `rd$typed` holds lines); the waiting lines after its closer stay in `rd$held`, read first and unechoed, so
+  the next input joins them like any paste (hint, `... `), never one turn per line. A paste's last line without
+  a newline is never waiting (the tty holds it until Enter; pure R cannot peek at it), so a two-line paste
+  without a final newline still answers with its first line. The pause menu (`console_ask()`) and
+  `gptr_confirm()` are unchanged.
+- Contract-visible: IC-75; 03 section 6.17; P26 Task 2; `?peter`, console vignette.
+- Tests: test-console-ui.R (paste at an approval through the REPL), test-console-repl.R (blocks, macOS pty child).
+  Evidence: progress/P26.md Task 19.
+
+## D-221 - P26 The terminal does not echo type-ahead while a console call runs (2026-10-18)
+- Rule: in a terminal REPL (IC-76 scope) `console_send()` saves the tty modes (`tty_modes()`, `stty -g` on fd 0),
+  sets `-echo` for the call and restores them on exit, error and interrupt included; canonical mode stays, so typed
+  lines still arrive whole. A typed line shows once, in its steering or held-lines notice; a partial line shows at
+  the next prompt. Amends P26 Task 4 ("typing stays visible") and IC-76's echo limit.
+- Triage correction: R's readline (CRAN macOS, readline 5.2) shows nothing typed when the tty's echo is off at its
+  start (pty check), so `gptr_readline()` reads with the saved modes while `the$tty_modes` is set and sets `-echo`
+  again after the read: approvals, choices, the pause menu and `gptr_confirm()` echo as before. R code a tool runs
+  that reads the console (`readline()`, `menu()`, `browser()`) reads without echo.
+- Not changed: a notice still ends the streamed row (the answer goes on in the next row), so the pty test compares
+  the answer's text, not its rows, with an undisturbed render. R ending during a call (`q()`, a crash, a kill) runs
+  no restore, so the terminal keeps `-echo` (IC-76 Limits).
+- Contract-visible: IC-76; 04 section 7.1 wrapper row; 03 sections 2.2 rule 5 and 6.17; P26 Task 4; `?peter`,
+  console vignette.
+- Tests: test-console-typing.R (mocked stty around console_send(), gptr_readline(), pty child). Evidence:
+  progress/P26.md Task 21.
+
+## D-222 - P26 The approval prompt shows at most five flagged calls, one per line; [a] needs a rule (2026-10-18)
+- Rule: amends IC-53 item 8 and D-187 ("lists every flagged call", joined by `; `): the one-line prompt shows the
+  flagged calls one per line, highest level first, each line (`[level category] call`) cut to the console width,
+  at most 5, then `(+N more; ? shows all)`; the detail view lists them all, highest level first. A request path
+  that is absolute shows normalised, relative to the project inside it. `[a]`/`[p]` are offered only when the
+  request carries a `suggested_rule`; else `a`/`p` say `no rule covers these calls` (IC-77 item 3), so an
+  object overwrite (no rule) no longer offers `(a rule for these calls)` and records nothing. A risk without a
+  label shows `(level N)`, not `(level N: )`.
+- Triage correction: normalising the request's risk in `perm_decide()` (`risk_norm()`) breaks the layering
+  (L2 `agent-dispatch.R` may not call L4 `perm-classify.R`; test-arch-layers), so a tool's own risk record still
+  reaches the UI without `label` (04 section 7.11 says `<gptr_risk>`); the `reason` line names the label.
+- Contract-visible: IC-53 item 8, IC-77 item 3, 04 `builtin_ui` row, 03 section 6.8.3; console vignette.
+- Tests: test-console-ui.R (40-column fit and cap, project-relative path, no empty label, no [a] without a rule),
+  test-console-repl.R (stdin prompt). Evidence: progress/P26.md Task 24.
+
+## D-223 - P26 Result lines wrap; a failed r call lists its objects; write paths are project-relative (2026-10-18)
+- Rule: amends D-187 ("Result lines: four spaces; an error shows `details$error`") and P26 Task 5: a result line
+  that does not fit wraps at the content width, continuation rows keep its indentation (a word wider than the
+  width is still cut; a wrapped line loses its runs of spaces, as in an `edit` diff line or between object-change
+  groups). An error shows its message wrapped to at most 6 rows, then an ellipsis row (the triage's "3 lines"
+  cannot show a 200-character error at 60 columns, 4 rows, in full); an `r` error, in the loop or served to a CLI
+  route, then shows its object changes (`+ res`), so a failed call says what it left behind. `write` shows
+  `path_rel(details$path)` and the byte count. A tool's own `render()` lines wrap the same way.
+- Contract-visible: console display only; 03 section 6.17.
+- Tests: test-console-render.R (error then `+ res` in the loop and served to a CLI route, `wrote analysis.R
+  (5,123 bytes)`, a 200-character error at 60 columns in full, 8 error lines and a 2,600-character one cut to 6
+  rows, another tool's `details$objects` ignored). Evidence: progress/P26.md Task 26.
+
+## D-224 - P26 Sub-agent failure lines give the reason and (k/N); nested calls are numbered (2026-10-18)
+- Rule: amends IC-77 item 4 and D-188 (`failed: <status>`; a nested call's label is its quoted prompt): a shown
+  sub-agent's end reads `  sub-agent <agent> failed (k/N): <reason>`, the first line of the `agent_end` reason
+  (the run's condition message), else its status; `(k/N)` as for `done`. Every sub-agent line is cut to the
+  console width with an ellipsis. A nested `peter()` call's label ends ` #k`, its place among the parent run's
+  children (`run$children`, fan-out and team children included; a continued child keeps its number), so loop
+  iterations with one prompt differ in prompts, questions and progress lines; without a parent run, no number.
+- Contract-visible: IC-77 item 4, 04 section 7.11 `agent`, 03 sections 6.8.3 and 6.17; teams vignette.
+- Tests: test-console-render.R (a fan-out whose children fail with `no_key`; no reason), test-console-ui.R (two
+  sequential nested calls with one prompt), test-gptr-gateway.R (loop labels). Evidence: progress/P26.md Task 27.
+
+## D-225 - P26 Command output and long prompts keep the console margin; interrupt notices start a line (2026-10-18)
+- Rule: amends D-186 and IC-75 ("a prompt over 200 bytes is printed whole"): `console_out()` (slash-command
+  results, a printed console value, the manual-setup lines) and the long-prompt branch of `gptr_readline()` write
+  through `gptr_message_write(margin = TRUE)`, so their lines get the margin and a line that does not fit is
+  word-wrapped at width - 4 with its indentation, measured without colour codes as for D-223's result lines (one
+  helper, `console_wrap()`; the prompt's own leading blanks are dropped first, so a padded question is not
+  indented twice). In the margin that branch also takes a prompt wider than the content row
+  (a `gptr_confirm()` question under 200 bytes), and the answer is read after `  > `; without a margin nothing
+  changes. `/env` lines lose their own two blanks (the banner adds them), so in the margin they sit at column 2. Listings that commands print
+  (`/checkpoints`, `/resume`, `/skills`, `/mcp`, `/permissions`; `/cost` prints D-206's lines) go through `print_lines()`, which formats at the
+  content width (`width` and `cli.width`), so rows are not wrapped again. `/help` lays out commands and input
+  forms with `formatDL()` at the content width (the console width without a margin): a description wraps under
+  its column (commands' at column 17, was 16). The idle-prompt Ctrl-C notice and the pause-menu notice start
+  with a line end (a pause after a cleared waiting row shows one more blank row; accepted so that an echoed `^C`
+  or the prompt never joins the notice). `/status` and `/resume` say `1 turn`; the banner's sentence ends with
+  a period.
+- Contract-visible: console display only; IC-75, the `gptr_readline()` row of 04 section 7.1, 03 section 6.17.
+- Tests: test-console-commands.R (/help at width 60 in the margin: every line indented, none wider, no split
+  word, descriptions in one column; `/mode`; `/env` at column 2; `/resume` formatted at 56; `1 turn`),
+  test-utils-options.R (a padded 300-byte prompt wrapped once in the margin and an 83-byte one at width 60, both
+  read after `  > `; a fitting prompt read with it), test-console-repl.R (the idle notice follows a line end;
+  banner period; banner objects at column 2), test-console-interrupt.R (the pause notice follows a line end).
+  Evidence: progress/P26.md Task 30.
+
+## D-226 - P26 /model and /status name a CLI default's model; suggestions keep the typed provider (2026-10-18)
+- Rule: `/model` (no argument) and `/status` show a built-in CLI's (claude, codex) `default` with the full id the
+  CLI gets (`claude-cli/default (claude-sonnet-5-5)`, 04 section 11.10), through P20's `pcli_default_model()`, a
+  new console contract edge of the layering test (`cmd_model_label()`); another CLI adapter's `default` is shown
+  as typed. An unknown reference that starts with a known `provider/` (a provider id or alias) gets its `adist()`
+  suggestions from that provider's references only (`versa/gpt-9` suggests `versa/...`); other references are
+  compared with the whole catalog as before.
+- Contract-visible: console display and `gptr_error_unknown_model$suggestions`; 03 section 8.4, the
+  `model_resolve()` row of 04 section 7.5, IC-79 in 04 section 15.9.
+- Tests: test-console-commands.R (`/model` and `/status` before and after the first prompt on the fake CLI's
+  `default`; a full id and another CLI adapter's `default` unchanged), test-catalog-models.R
+  (`versa/gpt-9-nonexistent`, `versa/`, `versa/gpt-9:high` suggest the three versa models). Evidence:
+  progress/P26.md Task 35.
+
+## D-227 - P26 Live smoke: tokens in count cache writes; a rewind rebases workspace_changes (2026-10-18)
+- Rule: `format_usage()` (`/cost`, the `gptr_usage()` and `print()` footers) counts input, cache reads and cache
+  writes as tokens in, as `usage_prompt_tokens()` does. It left out cache writes, so a request whose prompt was
+  written to the cache read `2 tokens in` (a fresh claude-cli child) or `3 tokens in` (a Versa sub-agent).
+- Rule: builtin:workspace handles `session_tree`. After a rewind that moves the conversation (`restore` `all` or
+  `conversation`), the next `<workspace_changes>` is measured from the restored workspace, and the expressions the
+  user ran are still reported. Before, `/undo` sent `- undo_probe` for an object the rewound conversation never
+  saw, and the claude-cli agent read it as a listed object. A workspace-only rewind keeps the conversation, so its
+  removals are still reported. An object the user changed between the undone turn and the rewind is reported only
+  through `user ran:`.
+- Contract-visible: `/cost` and usage footers; `<workspace_changes>` after a rewind (04 section 7.9).
+- Tests: test-console-commands.R (`/cost` with cache writes), test-ckpt-rewind.R (no `<workspace_changes>` after an
+  undo; `- probe` after a workspace-only rewind), test-env-snapshot.R (the hooks). Evidence: progress/P26.md
+  Live smoke.
+
+## D-228 - P16 per-turn explicit rows of walked paths are relative (2026-10-18)
+- Rule: in per-turn scan mode (after a walk slower than `gptr.checkpoint_scan_budget`), `ckpt_files_explicit()` records
+  a predicted path the walk covers (`ckpt_walked()` not NA) relative to the fragment root (`abs = FALSE`), as the walk
+  does; a predicted path outside the walk stays absolute. This follows P16 Task 5's row rule (paths inside the walked
+  root are relative) and replaces the plan test's `expect_true(frag2$files[[1L]]$abs)`. Before, one file was two
+  `/undo` items (`file <abs>` and `file a.txt`) and the dry run found a conflict (#37 on windows-latest release, CRAN
+  mode, job 117848217386).
+- Contract-visible: rewind item names and `gptr_rewind(preview = TRUE)` items in per-turn mode; no section amended.
+- Tests: test-ckpt-files.R (the per-turn and FIFO rows expect `R/b.R` and `supervisor_stdin`; the outside-project row
+  stays absolute); test-ckpt-rewind.R "a file is one /undo item when slow walks switch to one scan per turn (#37)"
+  (budget -1) and the #37 test in walk mode (budget `Inf`). Evidence: progress/fixes.md Task CI-43.
+
+## D-229 - P22 the Windows cmd route runs its line in a cmd started after chcp 65001 (2026-10-18)
+- Rule: `shell_cmd(line, comspec)` (the cmd fallback of `shell_resolve()` and the knit `cmd` engine) returns
+  `list(command = <COMSPEC>, args, env)`: verbatim args `/d /v:on /s /c "chcp 65001 >nul & "<COMSPEC>" /d /s /c
+  !GPTR_SHELL_CMD!"` and `env = c(GPTR_SHELL_CMD = "\"<line>\"")`. The inner cmd starts after chcp, so it writes
+  UTF-8, and it alone parses the line, as `cmd /d /s /c "<line>"` did (delayed expansion does not rescan the value:
+  community parse rules, not Microsoft documentation). `bridge_exec()` and `bridge_bg()` set the target's `env`;
+  a caller's `GPTR_SHELL_CMD` is refused as a duplicate, and the line's descendants inherit it. Before, chcp and
+  the line shared one `/c` line and the output kept the OEM code page (`caf\x82 ??`, run 39193453652).
+- Contract-visible: 04 section 7.4 `shell_resolve(cmd)` row and 03 section 6.7 amended (a cmd target carries `env`);
+  04 section 3.2 lists `GPTR_SHELL_CMD`.
+- Tests: test-proc-spawn.R "shell_resolve() uses /bin/sh on Unix and Git Bash, PowerShell or cmd on Windows";
+  test-bridge-sh.R "the env of a resolved shell reaches the children of peter$sh() and peter$bg()" and the
+  Windows PowerShell/cmd test; test-bridge-lang.R the cmd and powershell engines. Evidence: progress/fixes.md
+  Task CI-49.
+
+## D-230 - P23 the owned headless Chrome binds DevTools port 0 (2026-10-19)
+- Rule: `artifact_browser_launch()` passes `--remote-debugging-port=0`. Readiness reads the port from the one
+  `DevTools listening on ws://127.0.0.1:<port>/devtools/browser/<id>` line of the owned process's private stderr log,
+  admits it only in 1-65535 and records it (`owner$set_port()`; `get_port()` is NA before); later identity checks use
+  it. One announcement, loopback IPv4, a live process, the 10 s deadline and the 1 MiB log limit are unchanged.
+  `--remote-allow-origins` is no longer passed (the R websocket client sends no Origin header) and stays reserved.
+  Before, `port_candidates(1L)` could fall in a Windows excluded port range: Chrome's one bind failed with WSAEACCES
+  (`0x271D`) and Chrome stayed alive without an endpoint (rscript-native job 117897297705).
+- Contract-visible: IC-61 amended (the DevTools port comes from the system, not `port_candidates()`; no RNG draw).
+- Tests: test-artifact-browser-launch.R "artifact browser readiness requires its exact live endpoint within the
+  startup budget" (`port_zero`, `port_range`, `port_max`) and the launch argv; test-artifact-app.R "artifact_serve()
+  publishes a loopback port and serves only requests with the token" (a held first candidate). Evidence:
+  progress/fixes.md Task CI-59.
+
+## D-231 - P01/P10 Windows dangling links: listed entries without followed metadata read as absent (2026-10-19)
+- Rule: R's Windows `stat()` succeeds on a dangling link, so `file.exists()` is TRUE and `file.info()` warns "cannot
+  open file" with NA times; `Sys.readlink()` is always "" (`do_readlink` needs `HAVE_READLINK`). Hosted 2c9b6a4.
+  1. `path_info()` (`R/utils-paths.R`) is `file.info(extra_cols = FALSE)` with that warning muffled and NA-time rows
+     made all NA, as POSIX gives them; `path_dangling()` is an NA time plus, on POSIX, a readlink target
+     (`path_is_link()`, exact) and, on Windows, where readlink has none, `path_listed()` (the final component listed
+     in its directory, case folded as NTFS does).
+  2. Refused before any write: by `resolve_link_target()` (write, edit, `patch_key()`), before its Windows existence
+     shortcut; by `scrub_lock()` at the root or lock root, with a link at either (`path_is_link()`); by
+     `wire_log_path()` at or above the log path.
+  3. Absent: readers, the read, edit and grep tools, the walker and `ls`, the files checkpointer, `@file`, document
+     arguments and cache, image checks, `scrub_walk()`, `doc_sidecar_read()` and `write_atomic()` use `path_info()`;
+     gptr's own stores keep base reads, the trust gate `file.exists()`. POSIX keeps origin/main's rule (a readlink
+     target without followed metadata), so `wire_log_path()` and `scrub_lock()` are unchanged there (CI-68).
+- Contract-visible: on Windows a dangling link gets POSIX's answers (read and edit `ENOENT`, grep "Path not found",
+  `ls` drops it, `dotenv_discover()` skips it); no section amended. Open: the other `file.exists()` guards.
+- Tests: test-utils-paths.R (3), test-tool-write.R, test-windows-security.R (2), test-http-reactor.R (2),
+  test-auth-redact.R, test-doc-io.R. Evidence: progress/fixes.md Tasks CI-36..CI-38, CI-48, CI-51, CI-52, CI-60,
+  CI-61, CI-68.
+
+## D-232 - P15/P16 gptr's own document writes are no turn's change (2026-10-18)
+- Rule: `doc_own_write(path, write)` runs every disk write of a document (`doc_write()`) and an IDE backend's save of
+  a clean buffer (`doc_ide_upsert()`) through the P16 service `checkpoint.own_write`: a file tracker that saw the
+  document just before (`ckpt_as_scanned()`) takes the new content without recording it; without
+  builtin:checkpoints the write runs alone. Before, the agent_end turn scan (per-turn mode, every CLI route) recorded
+  the block write, so a rewind deleted the undone blocks instead of marking them inert. Residuals: an edit the
+  tracker has not scanned is recorded together with the write; a detached copy of a session shell records the write
+  at its next scan; a block written into a dirty IDE buffer is saved later as a user edit.
+- Contract-visible: 04 sections 7.0 and 7.16 (`checkpoint.own_write`, added with the fix).
+- Tests: test-ckpt-rewind.R "a turn's file scan never records gptr's own block writes (per-turn mode, CLI route)";
+  test-ckpt-files.R "gptr's own writes are no turn's change; an edit the tracker has not seen still is";
+  test-doc-io.R (the RStudio save runs inside the service). Evidence: progress/fixes.md Task CI-54.
+
+## D-233 - P04 kill_all() kills the descendants it recorded before the interrupt; a macOS limit (2026-10-18)
+- Rule: for a live process `kill_all()` records its descendants by parent link (`proc_children()`) before
+  `$interrupt()` and, after the marker kills, Windows `taskkill` and `$kill()`, kills those handles
+  (`proc_kill_signalled()`) and waits for them with the rest; ps handles carry the creation time, so a reused pid is
+  never signalled. No bound, grace or deadline changes. Before, on macOS a shell ended by SIGINT left its background
+  children running under launchd: ps reads no environment of system binaries, so the marker kills missed them, and
+  processx's `$kill()` does not signal the group of a reaped leader.
+- Rule: `proc_children(p)` is `ps::ps_children(recursive = TRUE)` of ps's own handle of the pid
+  (`ps::ps_handle(p$get_pid())`), kept only while processx still reads the child alive (the pid named it
+  throughout). Not `p$as_ps_handle()`: on Linux processx stamps a child with the boot time it reads at the spawn, ps
+  times every process with the one it read first, and `ps_children()` drops a descendant timed before the parent's
+  stamp, as were all of a shell's background jobs forked in its first clock tick (hosted ubuntu, CI-69).
+- Rule: the owned headless Chrome's `close()` records the browser's descendants with `proc_children()` before
+  SIGTERM, and `release()` waits for them within the remaining 10 s close deadline before removing the profile; one
+  still running or unknown raises "The owned headless browser family did not finish cleanup." and keeps the profile
+  for a retry. Chrome's helpers carry no readable marker (Linux `setproctitle()` zeroes their environment block,
+  macOS ps reads none), so the profile was removed while they still wrote in it (hosted ubuntu, CI-64). Without a
+  deadline (the startup unwind, the retained cleanup job) `release()` keeps its single check.
+- Limitation (macOS): the background children of a shell that exits by itself, and system binaries left by a dead
+  parent (`proc_sweep()`), stay unreachable: no parent link and no readable marker.
+- Contract-visible: 04 section 7.4 `kill_all()` row and 03 section 6.7 amended (the recorded descendants are killed
+  last; the order of the other steps is kept).
+- Tests: test-bridge-sh.R "a background command line runs in the shell and kill() stops its process tree" (macOS skip
+  removed) and the timeout test; test-proc-supervise.R "proc_children() follows parent links from ps's own handle
+  while the parent lives"; test-artifact-browser-launch.R "artifact browser close waits for its unmarked helpers
+  before removing the profile". Evidence: progress/fixes.md Tasks CI-47, CI-64, CI-69.
+
+## D-234 - P03 Windows allowlist children also get LOGONSERVER and USERDOMAIN (2026-10-18)
+- Rule: processx copies `LOGONSERVER` and `USERDOMAIN` from the parent into every Windows child whose environment
+  lacks them (`required_vars` in `src/win/processx.c`, as libuv does for Node children), so `child_env("mcp")` and
+  the other allowlist profiles reach Windows children with those two names on top. Neither is a secret; gptr keeps
+  them.
+- Contract-visible: 03 section 6.5's `mcp` strict allowlist holds exactly on Unix; on Windows these two names are
+  added by processx; no section amended.
+- Tests: test-auth-childenv.R "an mcp child gets exactly the documented base variables its parent defines". Evidence:
+  progress/fixes.md Task CI-41.
+
+## D-235 - P04 the PowerShell route resolves a bare name as cmd does and returns the last status (2026-10-19)
+- Rule: `shell_ps_encode()` (`R/proc-spawn.R`: the PowerShell route of `shell_resolve()`, so `peter$sh()` and
+  `peter$bg()`, the knit `powershell` engine and the stdin ACL verifier) wraps the line in:
+  1. a postfix `if ($?) { exit 0 }; if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1`: status 0 when the line's last
+     command succeeded, else the last native exit code if nonzero, else 1. P04 Task 7's postfix read `$LASTEXITCODE`
+     first, so
+     an earlier native failure overrode a last command that succeeded (`cmd /c exit 4; Write-Output ok` exited 4).
+  2. on Windows only (`$IsWindows -ne $false`: pwsh on Windows, and Windows PowerShell 5.1, which leaves it unset), a
+     `PostCommandLookupAction`: a lookup that resolved to an Application without an extension takes the first
+     Application of that name with one (`Get-Command -CommandType Application -All`, PowerShell's PATH order), or
+     none, so the name is not found ("not recognized", status 1), as in cmd; an explicit path to an extensionless file
+     fails the same way. A name with an extension, and a lookup that resolved to a program with one, are unchanged.
+     PowerShell ranks the bare name last only within each PATH directory, so Rtools' extensionless MSYS2
+     `usr/bin/cmd` (first on PATH under R CMD) shadowed `cmd.exe`, and PowerShell opened it with ShellExecute
+     without waiting: `cmd /c exit 4` returned 0 (diagnostic job 118000300246).
+  The argv, bounds and deadlines are unchanged; the verifier's bootstrap stays under its 9998-byte limit.
+- Contract-visible: 04 section 7.4 `shell_resolve(cmd)` row and 03 section 6.7 amended. Open: a name with a non-PATHEXT
+  extension is still opened with ShellExecute; no test runs the hook's Unix branch.
+- Tests: test-bridge-sh.R "without Git Bash a Windows command line runs in PowerShell, else in cmd" (an extensionless
+  `cmd` first on PATH; pwsh and Windows PowerShell 5.1; the last status; `gptr-none`); test-proc-writer-runtime.R
+  (the bootstrap size). Evidence: progress/fixes.md Tasks CI-50, CI-66.
+
+## D-236 - Authors: contributors listed; pi credited outside Authors@R (2026-10-19)
+- Rule: `Authors@R` lists the maintainer and the contributors Tianlu Zhu (UI/UX polishing and CI/CD) and
+  Gianmarco Bellucci (testing). Mario Zechner, whose pi agent inspired gptr and whose MIT-licensed text
+  gptr's tool descriptions and templates derive from, is credited in `inst/COPYRIGHTS` (through
+  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are), in the README acknowledgements
+  and on the site's Authors page, instead of as `ctb, cph` (amends cran-4 in spec 06).
+- Tests: test-zzz.R (IC-72), dev/release/tests/test-pkgdown.R.
+
+## D-237 - License: the Apache License 2.0 replaces MIT (2026-10-20)
+- Rule: gptr is licensed under the Apache License 2.0: `License: Apache License (== 2.0)`, a standard license, so
+  the package has no `LICENSE` file; `LICENSE.md` (build-ignored) holds the full text. Third-party MIT notices for
+  derived material (pi, models.dev, gitleaks) stay in `inst/COPYRIGHTS`, as the MIT license requires. gptr 0.7.0
+  was MIT-licensed; NEWS.md and cran-comments.md say so, and the README's License section states the Apache License 2.0. Amends P01 and IC-72, architecture section 9,
+  spec 05 P01 and research 13 C-05; the bundled skills and toy test packages now say Apache-2.0 too.
+- Consent: contributor Tianlu Zhu, whose code was contributed under MIT, agreed to the Apache License 2.0
+  (2026-10-20). inst/COPYRIGHTS also gains the MIT notice of typesafe-ai/system-one-adapter-python, whose
+  prompt and schema `R/s1-emulate.R` follows.
+- Tests: test-zzz.R (IC-72), dev/release/tests (site-stage, examples, precompute), dev/ci/test-exact-source.py.

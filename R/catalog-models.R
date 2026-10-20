@@ -670,7 +670,17 @@ model_fake_entry = function(pid, id) {
   e
 }
 
-#' Resolve a reference without its thinking suffix (report 09 match_pattern())
+#' The target of an alias name, its separators compared as in ids ("claude-code" is
+#' "claude_code"); NA when it names no alias
+#' @noRd
+model_alias_target = function(name, targets) {
+  if (!length(targets)) return(NA_character_)
+  unname(targets[match(catalog_norm_id(name), catalog_norm_id(names(targets)))])
+}
+
+#' Resolve a reference without its thinking suffix (report 09 match_pattern()): an exact
+#' provider/id, then an id, an alias, a registered provider named alone (its first declared
+#' model, IC-19), then the fuzzy step
 #' @noRd
 model_match = function(pat, ctg) {
   idx = ctg$index
@@ -678,7 +688,7 @@ model_match = function(pat, ctg) {
   w = which(tolower(idx$ref) == lp)
   if (length(w) == 1L) return(list(entry = ctg$models[[w]], how = "exact provider/id"))
   targets = ctg$alias_targets
-  alias = if (length(targets)) targets[match(lp, tolower(names(targets)))] else NA_character_
+  alias = model_alias_target(pat, targets)
   sl = regexpr("/", pat, fixed = TRUE)
   if (sl > 0L) {
     pv = model_provider_id(substr(pat, 1L, sl - 1L), ctg)
@@ -691,11 +701,7 @@ model_match = function(pat, ctg) {
       sel = idx$provider == pv
       r = model_match_id(rest, ctg, sel)
       if (!is.null(r)) return(r)
-      sub_alias = if (length(targets)) {
-        targets[match(tolower(rest), tolower(names(targets)))]
-      } else {
-        NA_character_
-      }
+      sub_alias = model_alias_target(rest, targets)
       if (!is.na(sub_alias) && startsWith(sub_alias, paste0(pv, "/"))) {
         e = model_alias_entry(sub_alias, ctg)
         if (!is.null(e)) return(list(entry = e, how = "alias"))
@@ -710,6 +716,10 @@ model_match = function(pat, ctg) {
   if (!is.null(r)) return(r)
   e = model_alias_entry(alias, ctg)
   if (!is.null(e)) return(list(entry = e, how = "alias"))
+  pv = model_provider_id(pat, ctg)
+  models = if (!is.na(pv)) provider_get(pv)$models
+  e = if (length(models)) model_alias_entry(paste0(pv, "/", models[[1L]]$id), ctg)
+  if (!is.null(e)) return(list(entry = e, how = "provider"))
   r = model_match_fuzzy(pat, ctg, every)
   if (!is.null(r)) return(r)
   list(entry = NULL, how = "no match")
@@ -751,13 +761,20 @@ model_lookup = function(text, ctg) {
   hit
 }
 
-#' Up to three suggestions for an unresolved reference (utils::adist(), report 09)
+#' Up to three suggestions for an unresolved reference (utils::adist(), report 09); a reference
+#' that starts with a known `provider/` is compared with that provider's references only
 #' @noRd
 model_suggestions = function(text, ctg, candidates = NULL) {
   if (length(candidates)) return(utils::head(candidates, 3L))
-  known = unique(c(ctg$index$ref, ctg$index$id, names(ctg$aliases)))
+  text = sub(":.*$", "", text)
+  pv = if (grepl("/", text, fixed = TRUE)) model_provider_id(sub("/.*$", "", text), ctg) else NA
+  known = if (is.na(pv)) {
+    unique(c(ctg$index$ref, ctg$index$id, names(ctg$aliases)))
+  } else {
+    ctg$index$ref[ctg$index$provider %in% pv]
+  }
   if (!length(known)) return(character())
-  d = utils::adist(tolower(sub(":.*$", "", text)), tolower(known))[1, ]
+  d = utils::adist(tolower(text), tolower(known))[1, ]
   known[order(d, known, method = "radix")][seq_len(min(3L, length(known)))]
 }
 
@@ -849,8 +866,7 @@ model_resolve = function(ref, strict = TRUE) {
   hit = model_lookup(ref, ctg)
   if (is.null(hit$entry)) {
     if (!strict) return(NULL)
-    targets = ctg$alias_targets
-    target = if (length(targets)) targets[match(tolower(ref), tolower(names(targets)))] else NA
+    target = model_alias_target(ref, ctg$alias_targets)
     if (!is.na(target)) {
       gptr_abort(paste0("The model alias '", ref, "' points to ", target, ", but its provider ",
                         sub("/.*$", "", target), " is not registered."),

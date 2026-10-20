@@ -36,7 +36,7 @@ cp_wait_fixture = function(script, budget = NULL, should = TRUE, .env = parent.f
 }
 
 # Offline scheduling uses a controlled clock; timer and task callbacks remain real.
-# The other fixtures retain their wall-clock waits and completion aborts.
+# Every timed finite wait runs under it, so a stalled synchronous step cannot fail its bound.
 cp_wait_clock = function(.env = parent.frame()) {
   r = reactor_get()
   stopifnot(!length(ls(r$transfers)), !length(ls(r$procs)), !length(ls(r$stdin)),
@@ -111,6 +111,7 @@ cp_wait_finished = function(x) {
 }
 
 test_that("a finite public wait yields a deferred checkpoint and a second wait completes it", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Remember the fit.", delay = 0.3,
                                     usage = usage_new(input = 100, output = 5)), "Done."))
   bytes = serialize(list(dat = x$home$dat, beta = x$home$beta), NULL)
@@ -177,6 +178,7 @@ test_that("a finite public wait yields a deferred checkpoint and a second wait c
 })
 
 test_that("cancelling a yielded checkpoint charges unknown once and never appends a summary", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(list(hang = TRUE)))
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
@@ -361,6 +363,7 @@ test_that("a yielded empty checkpoint retries once and preserves both known char
 })
 
 test_that("a yielded checkpoint consumes its request budget before a retry can start", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("", delay = 0.3,
                                     usage = usage_new(input = 100, output = 5)),
                           "Must not start."), budget = list(turns = 1L))
@@ -512,6 +515,7 @@ test_that("a yielded checkpoint without metering stays unknown after durable rec
 })
 
 test_that("a yielded checkpoint leaves all caller state intact across both waits", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Done."))
   snapshot = function() {
     list(env = Sys.getenv(), options = options(), cwd = getwd(),
@@ -563,6 +567,7 @@ test_that("a yielded checkpoint leaves all caller state intact across both waits
 })
 
 test_that("a pending checkpoint keeps served R disabled until its owning run completes", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Done."))
   short = cp_wait_short(x)
   admitted = cp_wait_admit(x)
@@ -746,6 +751,7 @@ test_that("a deferred checkpoint accounting failure cannot start an ordinary req
 })
 
 test_that("manual compaction on an active session completes without an orphan continuation", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Ordinary answer.", delay = 0.5,
                                     usage = usage_new(input = 30, output = 3)),
                           fake_text("Manual summary.", delay = 0.1,
@@ -852,6 +858,7 @@ test_that("manual compaction on an active session completes without an orphan co
 })
 
 test_that("a manual command cannot replace a yielded automatic checkpoint", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3,
                                     usage = usage_new(input = 100, output = 5)), "Done."))
   short = cp_wait_short(x)
@@ -932,6 +939,7 @@ test_that("a manual command cannot replace a yielded automatic checkpoint", {
 })
 
 test_that("an admitted stuck checkpoint still aborts under its independent completion guard", {
+  cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Must not finish.", hang = TRUE)))
   startup_started = reactor_now()
   reactor_pump(until = function() {

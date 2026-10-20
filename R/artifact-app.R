@@ -594,7 +594,9 @@ artifact_chromote_missing = function() {
   NULL
 }
 
-#' Start a marked local Chrome owner with the artifact child environment
+#' Start a marked local Chrome owner with the artifact child environment. Its DevTools server
+#' binds port 0: the system then picks a free port, never one of a Windows excluded port range
+#' (where a chosen port fails with WSAEACCES), and readiness records the port Chrome announces.
 #' @noRd
 artifact_browser_launch = function(args) {
   check_strings(args, "args")
@@ -609,7 +611,6 @@ artifact_browser_launch = function(args) {
   }
   path = chromote::find_chrome()
   check_string(path, "Chrome path")
-  port = port_candidates(1L)[[1L]]
   mode = getOption("chromote.headless")
   if (is.null(mode)) {
     mode = Sys.getenv("CHROMOTE_HEADLESS", "")
@@ -636,6 +637,8 @@ artifact_browser_launch = function(args) {
   held$process = NULL
   held$record = NULL
   held$pid = NA_integer_
+  held$port = NA_integer_
+  held$family = list()
   owner = NULL
   lease = NULL
   returned = FALSE
@@ -681,12 +684,12 @@ artifact_browser_launch = function(args) {
                operation = "open", path = root)
   }
   Sys.chmod(c(stdout, stderr), mode = "0600")
-  argv = c(headless, paste0("--remote-debugging-port=", port),
-    paste0("--remote-allow-origins=http://127.0.0.1:", port),
-    paste0("--user-data-dir=", profile), paste0("--crash-dumps-dir=", crashes), args)
+  argv = c(headless, "--remote-debugging-port=0", paste0("--user-data-dir=", profile),
+    paste0("--crash-dumps-dir=", crashes), args)
   marker = proc_marker_new()
   owner = list(is_local = function() TRUE, get_process = function() held$process,
-    get_host = function() "127.0.0.1", get_port = function() port,
+    get_host = function() "127.0.0.1", get_port = function() held$port,
+    set_port = function(port) held$port = port,
     close = function(wait = FALSE) {
       if (!isFALSE(wait)) arg_abort(wait, "wait", "FALSE for the owned close deadline")
       process = held$process
@@ -695,9 +698,14 @@ artifact_browser_launch = function(args) {
         gptr_abort("The owned headless browser state is unavailable.", "io",
                    operation = "close", path = stderr)
       }
-      if (alive) process$signal(tools::SIGTERM)
+      if (alive) {
+        # The marker misses Chrome's helpers (Linux Chrome overwrites their environment, macOS ps
+        # reads none), so record them by parent link before the stop orphans them.
+        held$family = c(held$family, proc_children(process))
+        process$signal(tools::SIGTERM)
+      }
       invisible(NULL)
-    }, release = function() {
+    }, release = function(seconds = 0) {
       process = held$process
       if (!isFALSE(process$is_alive())) {
         gptr_abort("The owned headless browser has not stopped.", "io",
@@ -720,8 +728,11 @@ artifact_browser_launch = function(args) {
                      operation = "close", path = stderr)
         }
       }
+      # Exiting helpers still write in the profile, so wait for them before removing it.
+      proc_wait_exit(held$family, seconds)
       tree = proc_tree(marker)
-      if (length(tree) || isTRUE(attr(tree, "unavailable"))) {
+      if (length(tree) || isTRUE(attr(tree, "unavailable")) ||
+          !all(vapply(held$family, proc_handle_alive, NA) %in% FALSE)) {
         gptr_abort("The owned headless browser family did not finish cleanup.", "io",
                    operation = "close", path = stderr)
       }
@@ -802,15 +813,15 @@ artifact_browser_launch = function(args) {
   owner
 }
 
-#' Admit only the returned owner's live loopback DevTools endpoint
+#' Admit only the returned owner's live loopback DevTools endpoint and record its port
 #' @noRd
 artifact_browser_ready = function(owner) {
   process = owner$get_process()
   path = process$get_error_file()
-  port = owner$get_port()
   deadline = proc.time()[["elapsed"]] + 10
-  endpoint = paste0("^DevTools listening on ws://127\\.0\\.0\\.1:", port,
+  endpoint = paste0("^DevTools listening on ws://127\\.0\\.0\\.1:([1-9][0-9]{0,4})",
     "/devtools/browser/[A-Za-z0-9-]+$")
+  port = NA_integer_
   ready = function() {
     alive = process$is_alive()
     if (!isTRUE(alive)) {
@@ -828,7 +839,8 @@ artifact_browser_ready = function(owner) {
     lines = sub("\r$", "", lines)
     announced = grep("^DevTools listening on ws://", lines, value = TRUE)
     if (!length(announced)) return(FALSE)
-    if (length(announced) != 1L || !grepl(endpoint, announced)) {
+    port <<- as.integer(regmatches(announced, regexec(endpoint, announced))[[1L]][2L])
+    if (length(announced) != 1L || is.na(port) || port > 65535L) {
       gptr_abort("The headless browser announced a different endpoint.", "io",
                  operation = "open", path = path)
     }
@@ -841,6 +853,7 @@ artifact_browser_ready = function(owner) {
     gptr_abort("The owned headless browser startup timed out or did not remain alive.", "io",
                operation = "open", path = path)
   }
+  owner$set_port(port)
   invisible(TRUE)
 }
 
@@ -1083,7 +1096,7 @@ artifact_browser_close = function(b = artifact_state$browser,
   }
   remaining()
   if (is.function(owner$release)) {
-    with_seed_preserved(owner$release())
+    with_seed_preserved(owner$release(remaining()))
     remaining()
   }
   if (cached && (!identical(artifact_state$browser, b) ||
@@ -1233,7 +1246,8 @@ artifact_session_check = function(rec, png, width = artifact_shot_size[["width"]
 artifact_launch_timeout = 30
 
 #' One grace budget for a cooperative exit and any interrupt fallback (report 17 section 2.2:
-#' 2 s was exceeded once under load); forced tree settlement keeps its existing bounds
+#' 2 s was exceeded once under load), and for the family of an app that exited by itself to leave
+#' the process table before its launch settles it; forced tree settlement keeps its existing bounds
 #' @noRd
 artifact_stop_grace = 3
 
@@ -1401,11 +1415,16 @@ artifact_launch_shiny = function(version_dir, ctx) {
   )
   port = artifact_wait_port(proc, port_file)
   if (is.na(port)) {
-    reason = if (isTRUE(proc$is_alive())) {
-      paste0("it did not publish a port within ", artifact_launch_timeout, " s")
-    } else {
+    exited = !isTRUE(proc$is_alive())
+    reason = if (exited) {
       "the app process exited"
+    } else {
+      paste0("it did not publish a port within ", artifact_launch_timeout, " s")
     }
+    # a child that exited by itself: Windows can still list its family, which gets the stop
+    # grace to leave before kill_all() settles the tree
+    if (exited) tryCatch(proc_family_wait(proc, artifact_stop_grace),
+                         error = function(e) NULL, interrupt = function(e) NULL)
     owner$settled = isTRUE(tryCatch(kill_all(proc, grace = 1),
                                    error = function(e) FALSE, interrupt = function(e) FALSE))
     tryCatch(artifact_log_sync(log_record, final = isTRUE(owner$settled)),

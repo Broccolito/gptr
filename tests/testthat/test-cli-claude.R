@@ -649,6 +649,71 @@ test_that("a claude turn through peter() streams the answer; the next call resum
   expect_all_dead(fake_pids(f)[1L])
 })
 
+# The text of the first user line that the fake claude child `pid` received (its `stdin` rows)
+first_user_text = function(rows, pid) {
+  rows = Filter(function(r) identical(as.integer(r[["pid"]]), pid), rows)
+  lines = lapply(rows, function(r) json_decode(r[["line"]]))
+  user = Filter(function(m) identical(m[["type"]], "user"), lines)[[1L]]
+  paste(vapply(user$message$content, function(b) b[["text"]] %||% "", ""), collapse = "\n")
+}
+
+test_that("a 200 KB first user line reaches the claude child intact", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "text")
+  big = paste0("Summarise this text: ", strrep("abcdefghij", 20000L), " caf\u00e9.")
+  s = peter(prompt = big, model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  expect_identical(s$text, "Hello from the fake claude CLI.")
+  expect_true(grepl(big, first_user_text(fake_log(f, "stdin"), fake_pids(f)[1L]), fixed = TRUE))
+})
+
+test_that("after a rewind or a compaction the next turn starts a fresh claude conversation", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "text")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  s |> peter("Quick one: add a logical column flag = TRUE to top5")
+  gptr_rewind(s)
+  s |> peter("Again")
+  argv = fake_argv(f)
+  expect_length(argv, 3L)
+  expect_true("--resume" %in% argv[[2]])
+  expect_false("--resume" %in% argv[[3]])
+  first = first_user_text(fake_log(f, "stdin"), fake_pids(f)[3L])
+  expect_match(first, "Say hello", fixed = TRUE)
+  expect_match(first, "Again", fixed = TRUE)
+  expect_false(grepl("flag = TRUE", first, fixed = TRUE))
+  expect_equal(s$messages[[length(s$messages)]]$usage$cost$total, 0.0012)
+  ext_service_get("compact.run")(s, "manual")
+  s |> peter("Once more")
+  argv = fake_argv(f)
+  expect_length(argv, 5L)
+  expect_true("--resume" %in% argv[[4]])
+  expect_false("--resume" %in% argv[[5]])
+  expect_match(first_user_text(fake_log(f, "stdin"), fake_pids(f)[5L]), "<checkpoint n=\"1\"",
+               fixed = TRUE)
+})
+
+test_that("a rewind stops an unbudgeted claude child that lives across runs", {
+  skip_on_cran()
+  local_mocked_bindings(pcli_claude_budgeted = function(flags) FALSE)
+  f = local_fake_cli("claude", "text")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  s |> peter("Quick one: add a logical column flag = TRUE to top5")
+  expect_length(fake_argv(f), 1L)
+  gptr_rewind(s)
+  s |> peter("Again")
+  argv = fake_argv(f)
+  expect_length(argv, 2L)
+  expect_false("--resume" %in% argv[[2]])
+  expect_all_dead(fake_pids(f)[1L])
+  first = first_user_text(fake_log(f, "stdin"), fake_pids(f)[2L])
+  expect_match(first, "Say hello", fixed = TRUE)
+  expect_false(grepl("flag = TRUE", first, fixed = TRUE))
+  expect_equal(s$messages[[length(s$messages)]]$usage$cost$total, 0.0012)
+})
+
 test_that("the claude argv of a peter() call equals architecture 8.3", {
   skip_on_cran()
   f = local_fake_cli("claude", "text")
@@ -686,6 +751,7 @@ test_that("an mcp_message round trip evaluates R in the live session and is gate
   ui = local_scripted_ui(answers = list("y"))
   e = new.env()
   e$big_vector = c(2, 4, 6, 8, 40)
+  e$answer = 1
   s = peter("Compute twice the mean of big_vector", model = f$model, envir = e, mode = "manual")
   local_cli_cleanup(s)
   expect_identical(e$answer, 24)
@@ -693,6 +759,83 @@ test_that("an mcp_message round trip evaluates R in the live session and is gate
   expect_identical(fake_log(f, "permission")[[1]]$behavior, "allow")
   expect_match(fake_log(f, "mcp")[[1]]$text, "24", fixed = TRUE)
   expect_match(s$text, "The tool said:", fixed = TRUE)
+  # the served call is checkpointed, so a rewind restores what it changed (#24)
+  expect_identical(gptr_checkpoints(s)$objects, "1/1")
+  gptr_rewind(s, 0)
+  expect_identical(e$answer, 1)
+})
+
+test_that("a sub-agent asking in a served r call ends the streamed line, not the result (D-188)", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "fantext")
+  local_fake_provider(function(request) {
+    if (length(request$last_results)) "child done" else
+      fake_tool("r", code = "gptr_mcp_serve(tools = 'r')")
+  }, name = "kid")
+  local_gptr_options(interactive = TRUE, verbose = 2L, quiet = FALSE,
+                     ui = ui_console_spec(function(prompt, ...) "n"))
+  e = new.env()
+  e$topics = c(a = "alpha", b = "beta")
+  s = NULL
+  out = utils::capture.output({
+    s = peter("Fan out", model = f$model, envir = e, mode = "auto")
+  })
+  local_cli_cleanup(s)
+  # the served call's tool line (D-192) ends the streamed line, its held word too, before the
+  # prompts
+  asks = grep("^  sub-agent [ab] > r  gptr_mcp_serve", out)
+  expect_length(asks, 2L)
+  expect_identical(match("Fanning out HELDWORD", out) + 1L, match("  * r", out))
+  expect_true(all(asks > match("  * r", out)))
+  expect_true(any(grepl("^  sub-agent [ab] done ", out)))
+  text = fake_log(f, "mcp")[[1]]$text
+  expect_match(text, "child done", fixed = TRUE)
+  for (bit in c("HELDWORD", "flagged", "sub-agent", "every mode")) {
+    expect_false(grepl(bit, text, fixed = TRUE), info = bit)
+  }
+})
+
+test_that("a claude-cli r call shows its tool line and result line at the console (D-192)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 200, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("claude", "tool")
+  s = NULL
+  out = utils::capture.output({
+    s = peter("Compute twice the mean of big_vector", model = f$model, envir = new.env(),
+              mode = "auto")
+  })
+  local_cli_cleanup(s)
+  call = match("  * r  answer = mean(big_vector) * 2; answer", out)
+  result = grep("^    error: object 'big_vector' not found", out)
+  answer = grep("^The tool said:", out)
+  expect_false(is.na(call))
+  expect_identical(result, call + 1L)
+  expect_true(length(answer) == 1L && answer > result)
+})
+
+test_that("the answer after a served call streams as its deltas arrive, printed once (#31)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 200, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  f = local_fake_cli("claude", "toolstream")
+  seen = new.env()
+  seen$t = numeric()
+  seen$text = character()
+  local_mocked_bindings(console_cat = function(text) {
+    seen$t = c(seen$t, reactor_now())
+    seen$text = c(seen$text, text)
+    invisible(NULL)
+  })
+  s = peter("Compute, then answer", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  # the fixture sends its three deltas 0.4 s apart: printed whole, they would appear at once
+  first = match(TRUE, grepl("Streamed", seen$text, fixed = TRUE))
+  last = match(TRUE, grepl("third.", seen$text, fixed = TRUE))
+  expect_false(is.na(first) || is.na(last))
+  expect_gte(seen$t[[last]] - seen$t[[first]], 0.5)
+  out = paste(seen$text, collapse = "")
+  expect_identical(lengths(regmatches(out, gregexpr("streamed third.", out, fixed = TRUE))), 1L)
 })
 
 test_that("an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr_error_billing", {

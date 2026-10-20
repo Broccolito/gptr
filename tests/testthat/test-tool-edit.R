@@ -52,12 +52,13 @@ test_that("edit errors use Pi's texts and never write partially", {
   expect_match(err(edit_file(f, e1("", "x"))), "oldText must not be empty", fixed = TRUE)
   expect_match(err(edit_file(f, list())), "edits must contain at least one replacement",
                fixed = TRUE)
-  if (.Platform$OS.type != "windows") {
-    f = put_file(td, "ro.txt", "hello\n")
-    Sys.chmod(f, "0444")
-    expect_identical(err(edit_file(f, e1("hello", "w"))),
-                     sprintf("Could not edit file: %s. Error code: EACCES.", f))
-  }
+  f = put_file(td, "ro.txt", "hello\n")
+  Sys.chmod(f, "0444")
+  # Windows unlink() cannot delete a read-only file, so the temporary directory needs this
+  withr::defer(Sys.chmod(f, "0644"))
+  expect_identical(err(edit_file(f, e1("hello", "w"))),
+                   sprintf("Could not edit file: %s. Error code: EACCES.", f))
+  expect_identical(rd(f), "hello\n")
 })
 
 test_that("multiple edits are matched against the original, not incrementally", {
@@ -304,13 +305,10 @@ test_that("a patch that names one file in two operations is refused and writes n
                  "*** Delete File: c.R")
   expect_error(patch_apply(move_del, root = td), "more than one operation names c.R", fixed = TRUE)
   expect_identical(rd(file.path(td, "c.R")), "c = 1\n")
-  if (.Platform$OS.type != "windows") {
-    file.symlink(file.path(td, "a.R"), file.path(td, "l.R"))
-    via_link = env("*** Update File: l.R", "@@", "-a = 1", "+a = 10", "*** Update File: a.R", "@@",
-                   "-b = 2", "+b = 20")
-    expect_error(patch_apply(via_link, root = td), "more than one operation names a.R",
-                 fixed = TRUE)
-  }
+  local_symlink(file.path(td, "a.R"), file.path(td, "l.R"))
+  via_link = env("*** Update File: l.R", "@@", "-a = 1", "+a = 10", "*** Update File: a.R", "@@",
+                 "-b = 2", "+b = 20")
+  expect_error(patch_apply(via_link, root = td), "more than one operation names a.R", fixed = TRUE)
   expect_identical(rd(file.path(td, "a.R")), "a = 1\nb = 2\n")
 })
 
@@ -348,20 +346,13 @@ test_that("Delete File refuses a directory, an empty Add File is empty, a move r
   patch_apply("*** Begin Patch\n*** Add File: f.R\n*** Delete File: e.R\n*** End Patch", root = td)
   expect_identical(file.size(file.path(td, "f.R")), 0)
   expect_false(file.exists(file.path(td, "e.R")))
-  skip_on_os("windows")
   put_file(td, "real.R", "r = 1\n")
-  file.symlink(file.path(td, "real.R"), file.path(td, "link.R"))
+  local_symlink(file.path(td, "real.R"), file.path(td, "link.R"))
   patch_apply(paste0("*** Begin Patch\n*** Update File: link.R\n*** Move to: moved.R\n@@\n",
                      "-r = 1\n+r = 2\n*** End Patch"), root = td)
   expect_identical(rd(file.path(td, "moved.R")), "r = 2\n")
   expect_identical(rd(file.path(td, "real.R")), "r = 1\n")
   expect_false("link.R" %in% list.files(td))
-  if (fs_case_insensitive(td)) {
-    put_file(td, "case.R", "k = 1\n")
-    patch_apply(paste0("*** Begin Patch\n*** Update File: case.R\n*** Move to: CASE.R\n@@\n",
-                       "-k = 1\n+k = 2\n*** End Patch"), root = td)
-    expect_identical(rd(file.path(td, "case.R")), "k = 2\n")
-  }
 })
 
 test_that("an envelope whose hunk matched through the fuzzy fallback carries the diff", {
@@ -478,32 +469,17 @@ test_that("Delete File and a move remove only the file they name, whatever its c
 })
 
 test_that("a move onto its own file under another spelling keeps the file and takes the name", {
-  skip_on_os("windows")
   td = withr::local_tempdir()
   u = function(name) fs_path(file.path(td, name))
   mv = function(from, to, old, new) {
     patch_apply(paste0("*** Begin Patch\n*** Update File: ", from, "\n*** Move to: ", to, "\n@@\n-",
                        old, "\n+", new, "\n*** End Patch"), root = td)
   }
-  put_file(td, "a.R", "a = 1\n")
-  file.symlink(td, file.path(td, "L"))
-  mv("a.R", "L/a.R", "a = 1", "a = 2")
-  expect_identical(rd(u("a.R")), "a = 2\n")
-  put_file(td, "real.R", "r = 1\n")
-  file.symlink(file.path(td, "real.R"), file.path(td, "link.R"))
-  mv("link.R", "real.R", "r = 1", "r = 2")
-  expect_identical(rd(u("real.R")), "r = 2\n")
-  expect_false("link.R" %in% list.files(td))
-  put_file(td, "b.R", "b = 1\n")
-  file.symlink(file.path(td, "b.R"), file.path(td, "lb.R"))
-  mv("b.R", "lb.R", "b = 1", "b = 2")
-  expect_identical(rd(u("lb.R")), "b = 2\n")
-  expect_false(file.exists(u("b.R")))
   if (fs_case_insensitive(td)) {
     put_file(td, "case.R", "k = 1\n")
     mv("case.R", "CASE.R", "k = 1", "k = 2")
     expect_identical(rd(u("CASE.R")), "k = 2\n")
-    expect_true("CASE.R" %in% list.files(td))
+    expect_identical(list.files(td, all.files = TRUE, no.. = TRUE), "CASE.R")
   }
   low = "\u00e9t\u00e9.R"
   put_file(td, fs_path(low), "e = 1\n")
@@ -516,6 +492,29 @@ test_that("a move onto its own file under another spelling keeps the file and ta
     mv("caf\u00e9.R", "cafe\u0301.R", "c = 1", "c = 2")
     expect_identical(rd(u("cafe\u0301.R")), "c = 2\n")
   }
+  if (is_windows()) {
+    # a short (8.3) alias canonicalises like a link but is no directory entry: the file is kept
+    short = basename(utils::shortPathName(put_file(td, "longfilename.R", "s = 1\n")))
+    if (!identical(tolower(short), "longfilename.r")) {
+      mv(short, "longfilename.R", "s = 1", "s = 2")
+      expect_identical(rd(u("longfilename.R")), "s = 2\n")
+    }
+  }
+  put_file(td, "real.R", "r = 1\n")
+  local_symlink(file.path(td, "real.R"), file.path(td, "link.R"))
+  mv("link.R", "real.R", "r = 1", "r = 2")
+  expect_identical(rd(u("real.R")), "r = 2\n")
+  expect_false("link.R" %in% list.files(td))
+  skip_on_os("windows")
+  put_file(td, "a.R", "a = 1\n")
+  file.symlink(td, file.path(td, "L"))
+  mv("a.R", "L/a.R", "a = 1", "a = 2")
+  expect_identical(rd(u("a.R")), "a = 2\n")
+  put_file(td, "b.R", "b = 1\n")
+  file.symlink(file.path(td, "b.R"), file.path(td, "lb.R"))
+  mv("b.R", "lb.R", "b = 1", "b = 2")
+  expect_identical(rd(u("lb.R")), "b = 2\n")
+  expect_false(file.exists(u("b.R")))
 })
 
 test_that("an oldText of only whitespace never matches between every two characters", {
@@ -542,11 +541,7 @@ test_that("two operations on one file through a directory link are refused", {
         paste0("*** Update File: ", p2), "@@", paste0("-", l2), paste0("+", l2, "0"))
   }
   put_file(td, "D/a.R", "a = 1\nb = 2\n")
-  if (.Platform$OS.type == "windows") {
-    wsec_link(file.path(td, "D"), file.path(td, "L"), .env = environment())
-  } else {
-    expect_true(file.symlink(file.path(td, "D"), file.path(td, "L")))
-  }
+  local_symlink(file.path(td, "D"), file.path(td, "L"))
   expect_error(patch_apply(upd2("L/a.R", "D/a.R", "a = 1", "b = 2"), root = td),
                "more than one operation names D/a.R", fixed = TRUE,
                class = "gptr_error_invalid_argument")

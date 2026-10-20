@@ -1,4 +1,5 @@
-# R.app can inherit stderr color after deleting a CR row; start a fresh stdout line first.
+# Spinner frames are CR-only everywhere; in R.app the block gap before a waiting row gives the
+# fresh stdout line that keeps a deleted row from inheriting stderr color (D-186).
 spinner_gui_capture = function(callback) {
   bytes = rawConnection(raw(), "w")
   on.exit(close(bytes), add = TRUE)
@@ -6,50 +7,10 @@ spinner_gui_capture = function(callback) {
   tryCatch(callback(bytes), finally = sink())
 }
 
-test_that("native R GUI spinner establishes a flushed stdout line once per shown cycle", {
+test_that("dynamic frontends, R GUIs too, use carriage-return-only spinner frames", {
   withr::local_options(cli.dynamic = TRUE, cli.unicode = FALSE, cli.num_colors = 1L,
     cli.width = 40L)
-  local_mocked_bindings(front_end = function() "rgui")
-  spinner_gui_capture(function(bytes) {
-    observed = new.env(parent = emptyenv())
-    observed$flushes = list()
-    local_mocked_bindings(flush.console = function() {
-      observed$flushes[[length(observed$flushes) + 1L]] = rawToChar(rawConnectionValue(bytes))
-    }, .package = "utils")
-    sp = console_spinner()
-    sp$tick()
-    first = rawToChar(rawConnectionValue(bytes))
-    expect_true(startsWith(first, "\n\r"))
-    expect_identical(sum(rawConnectionValue(bytes) == charToRaw("\n")), 1L)
-    expect_length(observed$flushes, 2L)
-    expect_identical(observed$flushes[[1L]], "\n")
-    expect_identical(tail(observed$flushes, 1L)[[1L]], first)
-    expect_true(sp$shown)
-    expect_false(grepl("\033", first, fixed = TRUE))
-    sp$last = 0
-    sp$tick()
-    expect_identical(sum(rawConnectionValue(bytes) == charToRaw("\n")), 1L)
-    expect_length(observed$flushes, 3L)
-    sp$clear()
-    expect_false(sp$shown)
-    cleared = rawConnectionValue(bytes)
-    sp$last = Inf
-    sp$tick()
-    expect_identical(rawConnectionValue(bytes), cleared)
-    expect_false(sp$shown)
-    sp$last = 0
-    sp$tick()
-    expect_identical(sum(rawConnectionValue(bytes) == charToRaw("\n")), 2L)
-    expect_true(sp$shown)
-    second = substring(rawToChar(rawConnectionValue(bytes)), nchar(rawToChar(cleared)) + 1L)
-    expect_true(startsWith(second, "\n\r"))
-  })
-})
-
-test_that("other dynamic frontends retain carriage-return-only spinner frames", {
-  withr::local_options(cli.dynamic = TRUE, cli.unicode = FALSE, cli.num_colors = 1L,
-    cli.width = 40L)
-  for (frontend in c("terminal", "vscode", "rstudio", "positron", "jupyter", "rscript",
+  for (frontend in c("rgui", "terminal", "vscode", "rstudio", "positron", "jupyter", "rscript",
                      "knitr", "quarto", "unknown")) {
     local_mocked_bindings(front_end = function() frontend)
     spinner_gui_capture(function(bytes) {

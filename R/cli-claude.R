@@ -1,6 +1,7 @@
 # The cli-claude adapter (P20): the user's own claude CLI in stream-json mode, one long-lived
-# child per session (per run while it carries budget flags), gptr's tools through the
-# in-process `sdk` MCP server over the control protocol (architecture 8.3; contract 8.5,
+# child per session (per run while it carries budget flags, as under the default cost budget;
+# a new child resumes the CLI session), gptr's tools through the in-process `sdk` MCP server
+# over the control protocol (architecture 8.3; contract 8.5,
 # IC-65). L1: besides L0 helpers, the shared helpers of cli-common.R and P05's usage_new() it
 # calls only the injected opts$send, opts$gate and opts$mcp_dispatch and P12's
 # anthropic_normaliser() (IC-33).
@@ -115,11 +116,12 @@ pcli_claude_budgeted = function(flags) {
 #' 8.5)
 #'
 #' A child is reused for the same model while it lives, but a child with budget flags only
-#' within the run that started it: the flags are fixed at launch and the CLI counts cost for its
-#' whole process, while gptr's budgets restart with every top-level call (IC-66). A replaced
-#' child is retired here through pcli_stop_child() (stdin closed, then P05's
-#' stream_process_kill()), and the new one resumes the CLI session. A reused child or a resumed
-#' session gets the turns it has not seen (another model may have answered them,
+#' within the run that started it: the flags are fixed at launch and `--max-budget-usd` counts
+#' the cost of the whole process, while gptr's budgets restart with every top-level call
+#' (IC-66). A replaced child is retired here through pcli_stop_child() (stdin closed, then P05's
+#' stream_process_kill()), and the new one resumes the CLI session, whose reported
+#' `total_cost_usd` goes on from the session's running total (D-200). A reused child or a
+#' resumed session gets the turns it has not seen (another model may have answered them,
 #' pcli_unseen()); a fresh child gets the whole earlier conversation.
 #'
 #' The turn's lines are written by P05's transport with write_all(); a fresh child's first user
@@ -156,8 +158,8 @@ pcli_claude_build = function(model, context, opts) {
     state$claude_model = model_id
     state$claude_run = opts[["run"]]
     state$claude_flags = flags
-    # the new process's own cumulative total_cost_usd starts here (Task 6 records increases)
-    state$claude_cost_seen = 0
+    # a fresh CLI session's running total_cost_usd starts here; a resumed one goes on (D-200)
+    if (is.null(resume)) state$claude_cost_seen = 0
     state$n_req = 0L
     send = list(pcli_control_request(state, list(subtype = "initialize", hooks = NULL)))
   }
@@ -192,55 +194,19 @@ pcli_claude_ack = function(obj, state) {
   invisible(NULL)
 }
 
-#' mcp_message: one JSON-RPC message for gptr's tools, answered through opts$mcp_dispatch (P18's
-#' mcp_dispatch_local, the single gate of the claude route, IC-65)
-#'
-#' `tools/call` runs from the reactor's tool FIFO of the run, so the R tools of other agents
-#' never overlap with it (IC-57); the handshake and notifications are answered at once. A
-#' notification (no id) gets the ack `{"jsonrpc":"2.0","result":{}}` (07 3.10). A queued
-#' `tools/call` whose turn ended before the FIFO reached it (the wall clock stopped the child, or
-#' P05 let go of the turn and the session started another, pcli_turn_current()) is refused,
-#' never evaluated (D-104).
-#'
-#' Every answer is built before pcli_send() is called: an argument forced only inside the
-#' transport's send() would turn an error into a silent no-answer, and the CLI would wait for it
-#' until the wall clock fires (D-104).
+#' mcp_message: one JSON-RPC message for gptr's tools, answered through pcli_mcp() as a
+#' control_response (IC-65)
 #' @noRd
 pcli_claude_mcp = function(req, id, s) {
-  opts = s$opts
   msg = req[["message"]] %||% list()
   answer = function(resp) {
     out = pcli_control_ok(id, list(mcp_response = resp))
-    pcli_send(opts, out)
+    pcli_send(s$opts, out)
   }
   if (!identical(req[["server_name"]], "gptr")) {
     return(answer(mcp_rpc_err(msg[["id"]], -32601L, "Server not found")))
   }
-  dispatch = opts[["mcp_dispatch"]]
-  if (!is.function(dispatch)) {
-    return(answer(mcp_rpc_err(msg[["id"]], -32603L, "gptr's MCP dispatcher is not available")))
-  }
-  run_it = function() {
-    if (pcli_aborted(s)) {
-      return(answer(mcp_rpc_err(msg[["id"]], -32603L, "The gptr run was aborted.")))
-    }
-    if (s$done || !pcli_turn_current(s)) {
-      return(answer(mcp_rpc_err(msg[["id"]], -32603L, "The gptr turn is over.")))
-    }
-    resp = tryCatch(dispatch(msg), error = function(e) {
-      mcp_rpc_err(msg[["id"]], -32603L, redact(conditionMessage(e), "context"))
-    })
-    if (is.null(resp)) resp = list(jsonrpc = "2.0", result = json_obj())
-    answer(resp)
-  }
-  run = opts[["run"]]
-  queue = identical(msg[["method"]], "tools/call") && rlang::is_string(run)
-  if (queue && !s$done && !pcli_aborted(s)) {
-    reactor_enqueue_tool(run, run_it)
-  } else {
-    run_it()
-  }
-  invisible(NULL)
+  pcli_mcp(msg, s, answer)
 }
 
 #' can_use_tool: gptr's own tools are pre-allowed by --allowedTools mcp__gptr__* and gated once,
@@ -359,11 +325,12 @@ pcli_claude_system = function(obj, s) {
   invisible(NULL)
 }
 
-#' The plan-cost estimate of one turn from a `result` line (contract 8.5). `total_cost_usd`
-#' covers the whole CLI process (07 3.14: it equals `modelUsage.costUSD`, which also counts the
-#' CLI's auxiliary calls), so the turn costs its increase since the child's previous result;
-#' a smaller value (a new process) counts whole. NULL when the line carries no cost or a value
-#' that is not one finite nonnegative number (unknown, IC-74; the child's baseline is kept).
+#' The plan-cost estimate of one turn from a `result` line (contract 8.5). `total_cost_usd` is
+#' the running total of the CLI session, across the children that resume it (07 3.14: it
+#' equals `modelUsage.costUSD`, which also counts the CLI's auxiliary calls; D-200), so the turn
+#' costs its increase since the session's previous result; a smaller value (a session the CLI
+#' could not resume) counts whole. NULL when the line carries no cost or a value that is not
+#' one finite nonnegative number (unknown, IC-74; the baseline is kept).
 #' @noRd
 pcli_claude_cost = function(obj, state = NULL) {
   total = pcli_num(obj[["total_cost_usd"]])

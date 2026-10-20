@@ -10,7 +10,8 @@
 #' whose pool is full waits without holding back the others. `on_settle(i, handle)` is called
 #' once per child, in settlement order. At top level the pump runs under the console interrupt
 #' policy when P14 provides it, with no child run to steer or background (architecture 6.2); any
-#' exit other than a normal finish cancels the running children.
+#' exit other than a normal finish cancels the running children. Each child run gets `group`, the
+#' size and started runs of the group, so the console can count settled siblings (D-188).
 #' @return The handles in item order.
 #' @noRd
 subagent_schedule = function(items, max_total, on_settle = NULL) {
@@ -22,6 +23,9 @@ subagent_schedule = function(items, max_total, on_settle = NULL) {
   settled = function() any(vapply(handles[running], subagent_settled, NA))
   top = is.null(run_current())
   done = FALSE
+  group = new.env(parent = emptyenv())
+  group$n = length(items)
+  group$runs = list()
   on.exit(if (!done) {
     for (h in handles[running]) tryCatch(h$cancel(), error = function(e) NULL)
   }, add = TRUE)
@@ -30,6 +34,11 @@ subagent_schedule = function(items, max_total, on_settle = NULL) {
       if (length(running) >= max_total) break
       if (sum(pools[running] == pools[[i]]) >= caps[[pools[[i]]]]) next
       handles[i] = list(items[[i]]$start())
+      run = handles[[i]]$run
+      if (is.environment(run)) {
+        run$group = group
+        group$runs = c(group$runs, list(run))
+      }
       pending = setdiff(pending, i)
       running = c(running, i)
     }
@@ -112,7 +121,7 @@ parallel_check = function(members) {
 
 #' The team of gptr_parallel(): the first member's model, a child of the running session inside a
 #' run; members created at top level become its children (P06 has no verb to re-parent). The
-#' first member's own provider spec (`model = <spec>`) is registered for the team as well, so
+#' first member's own provider or router spec (`model = <spec>`) is registered for the team too, so
 #' that piping the team into peter() can call that model.
 #' @noRd
 parallel_team = function(members, caller, cur) {
@@ -120,11 +129,8 @@ parallel_team = function(members, caller, cur) {
   mode = subagent_mode_tighten(cur$mode, setting_get("mode", default = "manual"))
   team = session_new(first$model, mode, home = caller, kind = "team", parent = cur$shell)
   td = session_data(team)
-  pid = sub("[/:].*$", "", first$model)
-  pr = registry_get("provider", pid, session = first$id)
-  if (!is.null(pr) && is.null(registry_get("provider", pid))) {
-    registry_add(pr, source = "session", rank = 0L, session = td$id)
-  }
+  spec = registry_model_spec(first$model, first$id)
+  if (!is.null(spec)) registry_add(spec, source = "session", rank = 0L, session = td$id)
   session_record_initial_model(team)
   kids = td$children
   for (nm in names(members)) {
@@ -254,12 +260,14 @@ subagent_doc_replay = function(call, names, kind) {
 }
 
 #' A team or fan-out container (kind `team`/`fanout`): a child of the running session inside a
-#' run (IC-39); its model is the call's, the settings default, `fallback` or the running
-#' session's, and is used only when the container is continued
+#' run (IC-39); its model is the call's, inside a run the running session's (with that session's
+#' own spec of it, D-210), else the settings default or `fallback`; its children and a
+#' continuation use it unless they name another
 #' @noRd
 subagent_container = function(call, kind, cur, fallback = NULL) {
-  info = subagent_model_info(call$ids$model %||% setting_get("model") %||% fallback %||%
-                               (if (!is.null(cur)) session_data(cur$shell)$model))
+  running = if (!is.null(cur)) session_data(cur$shell)$model
+  info = subagent_model_info(call$ids$model %||% running %||% setting_get("model") %||% fallback,
+                             cur$session)
   mode = subagent_mode_tighten(cur$mode, call$ids$mode %||% setting_get("mode", default = "manual"))
   s = session_new(info$ref, mode, home = call$envir, kind = kind, parent = cur$shell)
   if (!is.null(info$spec)) {
@@ -291,7 +299,8 @@ subagent_run_children = function(container, items, max_total, call) {
     subagent_overlay_release(h$session, h$base_is_frame)
   })
   taken = character()
-  for (h in handles) taken = subagent_export(h, call$envir, taken)
+  fan = identical(session_data(container)$kind, "fanout")
+  for (h in handles) taken = subagent_export(h, call$envir, taken, clear = fan)
   subagent_record_reports(container)
   idle = vapply(handles, function(h) identical(session_data(h$session)$status, "idle"), NA)
   d = session_data(container)
@@ -418,12 +427,12 @@ subagent_record_reports = function(s) {
 route_team_match = function(call) length(call$ids$agents) > 0L
 
 #' The child spec of one team member (contract 7.19; subagent_spec_complete() fills the rest): the
-#' agent's model, else the call's, the settings default or the team's
+#' agent's model, else the call's or the team's
 #' @noRd
 subagent_team_spec = function(call, team, agent, name, isolate) {
   td = session_data(team)
   opts = call$args$opts %||% list()
-  model = agent[["model"]] %||% call$ids$model %||% setting_get("model") %||% td$model
+  model = agent[["model"]] %||% call$ids$model %||% td$model
   list(agent = agent, name = name, prompt = call$prompt, context = call$context,
        values = call$values, model = model, mode = call$ids$mode, preset = opts$preset,
        parent = team, call = call, opts = opts, budget = call$args$budget,
@@ -477,9 +486,16 @@ subagent_shape = function(x) {
 }
 
 #' The one list-like context item of a fan-out call: its index and shape; any other number of
-#' list-like items is `gptr_error_invalid_argument`
+#' list-like items, or `.opts$context = "none"` (which would drop each child's element), is
+#' `gptr_error_invalid_argument`
 #' @noRd
 subagent_fanout_item = function(call) {
+  if (identical(call$args$opts$context, "none")) {
+    gptr_abort(paste0("parallel = sends each child its element as attached context; use ",
+                      ".opts = list(context = \"names\")."),
+               "invalid_argument", arg = ".opts",
+               expected = "context = \"names\" or \"summary\" with parallel =")
+  }
   shapes = lapply(seq_along(call$context), function(i) subagent_shape(call_value(call, i)))
   hits = which(vapply(shapes, function(s) s$n >= 1L, NA))
   if (length(hits) != 1L) {
@@ -500,33 +516,18 @@ subagent_fanout_names = function(shape) {
   as.character(seq_len(shape$n))
 }
 
-#' The R expression a fan-out child reads its element with: `cohorts[["A"]]` (a context symbol,
-#' read in place through the child's overlay), else `.x[["A"]]` (`.x` bound in the overlay);
-#' data-frame rows as `x[i, ]`. A worker receives its element alone, as `.x[["<key>"]]`.
-#' @noRd
-subagent_element_label = function(item, key, i, kind, bound, worker = FALSE) {
-  quoted = paste0("[[", encodeString(key, quote = "\""), "]]")
-  if (worker) return(paste0(".x", quoted))
-  base = if (bound) ".x" else item$name
-  if (identical(kind, "rows")) return(paste0(base, "[", i, ", ]"))
-  if (identical(key, as.character(i))) return(paste0(base, "[[", i, "]]"))
-  paste0(base, quoted)
-}
-
-#' The child spec of fan-out element `i`: the call's prompt, the element as its first context
-#' item (slot `.e1` of a private values environment, released after the first message) and the
-#' call's other context items
+#' The child spec of fan-out element `i`: the call's prompt, the element alone as `.x` (a named
+#' list of one, bound in the child's overlay) and as its first context item `.x[["<key>"]]`, and
+#' the call's other context items; both sit in a private values environment (`.x` and `.e1`)
+#' that an inline or cli child releases after its first message (a worker's parent keeps it)
 #' @noRd
 subagent_fanout_spec = function(call, fan, agent, target, i, key, backend) {
-  item = call$context[[target$index]]
-  kind = target$shape$kind
   x = call_value(call, target$index)
-  el = if (identical(kind, "rows")) x[i, , drop = FALSE] else x[[i]]
-  worker = identical(backend, "worker")
-  bound = worker || !identical(item$kind, "symbol")
+  el = if (identical(target$shape$kind, "rows")) x[i, , drop = FALSE] else x[[i]]
   values = new.env(parent = emptyenv())
   assign(".e1", el, envir = values)
-  ctx = list(list(label = subagent_element_label(item, key, i, kind, bound, worker),
+  assign(".x", stats::setNames(list(el), key), envir = values)
+  ctx = list(list(label = paste0(".x[[", encodeString(key, quote = "\""), "]]"),
                   kind = "value", name = NULL, slot = ".e1", address = NULL,
                   facts = list(class = class(el), dim = dim(el), length = length(el),
                                bytes = as.numeric(utils::object.size(el)),
@@ -542,7 +543,7 @@ subagent_fanout_spec = function(call, fan, agent, target, i, key, backend) {
        preset = opts$preset, parent = fan, call = call, opts = opts,
        budget = call$args$budget, nested_group = fd$id, isolate = target$shape$n > 1L,
        seed = opts$seed, max_turns = opts$max_turns, backend = backend,
-       bind = if (worker) list(.x = stats::setNames(list(el), key)) else if (bound) list(.x = x))
+       bind = ".x")
 }
 
 #' The function behind `parallel =` (internal, IC-36)
@@ -550,7 +551,7 @@ subagent_fanout_spec = function(call, fan, agent, target, i, key, backend) {
 #' One child per element of the call's list-like context object (a list, an atomic vector or
 #' the rows of a data frame), `call$args$parallel` at a time; every element is queued (the task
 #' limit applies only to fan-outs started by model code, IC-39). Each child receives the prompt
-#' and its element as context, read in place by name (`cohorts[["A"]]`). Returns a fan-out
+#' and its element alone, bound as `.x` and attached as `.x[["A"]]`. Returns a fan-out
 #' session (`kind = "fanout"`): `$text` is the named chr of child texts, `[[i]]`/`$name` the
 #' child sessions.
 #' @param call The gptr_call record of the gateway (contract 7.8).

@@ -171,8 +171,9 @@ search_basename = function(paths) as_utf8(sub("(?s)^.*/", "", paths, perl = TRUE
 #' @noRd
 grep_candidates = function(root, glob = NULL, sort = "path") {
   if (!dir.exists(fs_path(root))) {
-    return(list(files = root, labels = search_basename(root), sizes = file.size(fs_path(root)),
-                skipped_big = 0L, mtime = file.mtime(fs_path(root))))
+    info = path_info(fs_path(root))
+    return(list(files = root, labels = search_basename(root), sizes = info$size,
+                skipped_big = 0L, mtime = info$mtime))
   }
   w = walk_files(root, type = "file", hidden = TRUE)
   if (!is.null(glob) && nzchar(glob)) {
@@ -214,7 +215,7 @@ search_grep = function(pattern, path = ".", glob = NULL, ignore_case = FALSE, fi
   output = check_choice(output, c("content", "files", "count"), "output")
   sort = check_choice(sort, c("path", "count", "mtime"), "sort")
   root = resolve_tool_path(path)
-  if (!file.exists(fs_path(root))) {
+  if (is.na(path_info(fs_path(root))$size)) {
     gptr_abort(paste0("Path not found: ", root), "invalid_argument", arg = "path",
                expected = "an existing file or directory")
   }
@@ -451,7 +452,7 @@ search_ls = function(path = ".", sort = c("name", "mtime", "size"), long = FALSE
   bad = !validUTF8(nm)
   nm = as_utf8(nm[!bad])
   full = file.path(dir, nm)
-  fi = file.info(fs_path(full), extra_cols = FALSE)
+  fi = path_info(fs_path(full))
   lnk = Sys.readlink(fs_path(full))
   is_dir = fi$isdir %in% TRUE
   kind = ifelse(!is.na(lnk) & nzchar(lnk), "link", ifelse(is_dir, "dir", "file"))

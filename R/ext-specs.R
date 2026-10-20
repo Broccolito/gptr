@@ -715,7 +715,7 @@ kinds_install = function(k) {
     description = f("chr1"), model = f("ref"), tools = f("chr|list"), skills = f("ref"),
     system = f("chr1"), backend = f("chr1", default = "auto"),
     preset = f("chr1", default = "minimal"), max_turns = f("int1"),
-    mode = f("enum", values = c("plan", "manual", "edits", "auto")), objects = f("chr"),
+    mode = f("enum", values = session_modes), objects = f("chr"),
     export = f("chr"), returns = f("list"), file = f("chr1")
   ), kind_check_agent)
   def("ui", list(
@@ -1006,7 +1006,8 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #' @param base_url Endpoint base URL.
 #' @param auth Character vector of environment-variable names, a function, or `NULL`.
 #' @param models List of model records (each with at least `id`).
-#' @param compat Named list of compatibility switches for the adapter.
+#' @param compat Named list of compatibility switches for the adapter (for
+#'   `api = "bedrock-converse"`, `region`: the AWS region requests are signed for).
 #' @param type `"chat"`, `"classifier"` (System 1) or `"cli"`.
 #' @param headers Named list of non-secret header strings.
 #' @param discover `function()` listing models on request, or `NULL`.
@@ -1020,6 +1021,12 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #' @examples
 #' gptr_provider("corp", api = "openai-completions", base_url = "https://llm.corp.example/v1",
 #'               auth = "CORP_LLM_KEY", models = list(list(id = "corp-large", context = 128000)))
+#' # Amazon Bedrock's Converse API through a SigV4 gateway (region and endpoint are record data):
+#' # the IAM key pair is read from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and
+#' # AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them.
+#' gptr_provider("gateway", api = "bedrock-converse", base_url = "https://ai.corp.example/awsai",
+#'               auth = "AWS_SECRET_ACCESS_KEY", compat = list(region = "us-west-2"),
+#'               models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE)))
 #' @export
 gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(),
                          type = c("chat", "classifier", "cli"), headers = list(), discover = NULL,
@@ -1156,9 +1163,12 @@ gptr_policy = function(name, check, description = NULL) {
 #' @param backend `"auto"`, `"inline"`, `"worker"`, `"cli"` or a registered backend name.
 #' @param preset Tool preset of the agent's session.
 #' @param max_turns Turn limit, or `NULL`.
-#' @param mode Permission mode (`"plan"`, `"manual"`, `"edits"`, `"auto"`), or `NULL` to inherit.
+#' @param mode Permission mode (`"plan"`, `"manual"`, `"edits"`, `"auto"`, `"yolo"`), or `NULL` to
+#'   inherit; a sub-agent never runs looser than its caller.
 #' @param objects Names of objects the agent may see.
-#' @param export Names of objects the agent returns.
+#' @param export Names of objects the agent returns. Keep them self-contained: a `worker` agent
+#'   sends back only these objects, so an exported function or plot finds the caller's objects
+#'   but none of the agent's others.
 #' @param returns JSON Schema of a structured answer, or `NULL`.
 #' @param file Path of an agent definition file.
 #' @return A spec of class `c("gptr_agent", "gptr_spec")`.
@@ -1309,8 +1319,9 @@ spec_result_images = function(images) {
     }
     if (is.raw(im)) return(block_image(b64(im), mime = "image/png", source = "plot"))
     ext = if (is.character(im) && length(im) == 1L) tolower(path_ext(im)) else ""
-    if (nzchar(ext) && ext %in% names(mimes) && file.exists(im)) {
-      raw = readBin(im, "raw", n = file.info(im)$size)
+    size = if (nzchar(ext) && ext %in% names(mimes)) path_info(im)$size else NA
+    if (!is.na(size)) {
+      raw = readBin(im, "raw", n = size)
       return(block_image(b64(raw), mime = unname(mimes[ext]), source = "file"))
     }
     gptr_abort("An element of `images` is neither an image block, an image file nor raw PNG.",

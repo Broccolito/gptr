@@ -459,7 +459,8 @@ test_that("a fork of a source still in its first turn freezes its own prompt", {
   local_fake_provider(list(list(hang = TRUE), "branch answer"))
   s = test_session()
   run = run_start(s, msg_user("first"))
-  run_wait(list(run), timeout = 0.2)
+  # a request aborted before the provider reads it takes no reply; the next would get the hang
+  reactor_pump(until = function() identical(run$status, "streaming"), timeout = 30)
   expect_identical(session_data(s)$entries[[1L]]$custom_type, "gptr.frozen")
   f = gptr_fork(s)
   run_abort(run)
@@ -675,7 +676,6 @@ wait_ready = function(p) {
 
 test_that("SIGKILL mid-stream: resume parses, keeps the last complete message, no duplicate", {
   skip_on_cran()
-  skip_on_os("windows")
   dir = local_store()
   script = child_script(dir, c(
     "long = list(text = strrep('x', 4000), gap = 0.05, chunk = 10)",
@@ -709,7 +709,6 @@ test_that("SIGKILL mid-stream: resume parses, keeps the last complete message, n
 
 test_that("SIGKILL mid-append, resume, three appends: all present and the tree connected (IC-59)", {
   skip_on_cran()
-  skip_on_os("windows")
   dir = local_store()
   script = child_script(dir, c(
     "s = session_new('fake/fake-1', 'auto', home = globalenv())",

@@ -106,6 +106,80 @@ test_that("gptr_confirm() never asks without a human and parses answers", {
   expect_true(gptr_confirm("Proceed?"))
 })
 
+test_that("gptr_readline() records how long it waited; a long prompt is printed whole", {
+  withr::defer(assign("readline_secs", NULL, envir = the))
+  read = function(prompt) {
+    Sys.sleep(0.15)
+    prompt
+  }
+  expect_identical(gptr_readline("ok? ", read), "ok? ")
+  expect_gte(the$readline_secs, 0.1)
+  # readline() keeps only 255 bytes of its prompt: the question's [y/N] was cut off
+  long = paste0(strrep("x", 201L), " [y/N] ")
+  got = NULL
+  out = utils::capture.output({
+    got = gptr_readline(long, read)
+  })
+  expect_identical(out, long)
+  expect_identical(got, "> ")
+})
+
+test_that("in the console margin a prompt wider than a row is printed wrapped inside it (IC-75)", {
+  withr::defer(assign("readline_secs", NULL, envir = the))
+  testthat::local_reproducible_output(width = 60)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  read = function(prompt) prompt
+  words = function(x) strsplit(trimws(paste(x, collapse = " ")), " +")[[1L]]
+  # a caller's own margin (console_pad()) is not doubled
+  long = paste0("  ", paste(rep("word", 60L), collapse = " "), " [y/N] ")
+  got = NULL
+  out = utils::capture.output({
+    got = gptr_readline(long, read)
+  })
+  expect_identical(got, "  > ")
+  expect_true(all(startsWith(out, "  ") & !startsWith(out, "   ")))
+  expect_true(all(nchar(out) <= 60L))
+  expect_identical(words(out), words(long))
+  # under 200 bytes but wider than the content row (56 columns), as gptr_confirm() asks
+  q = "The prompt contains a secret-looking value. Send it with the value replaced? [Y/n] "
+  out = utils::capture.output({
+    got = gptr_readline(q, read)
+  })
+  expect_identical(got, "  > ")
+  expect_true(all(startsWith(out, "  ") & nchar(out) <= 60L))
+  expect_identical(words(out), words(q))
+  # a prompt that fits is read with it
+  out = utils::capture.output({
+    got = gptr_readline("  allow? [y]es / [n]o / [?]: ", read)
+  })
+  expect_identical(out, character())
+  expect_identical(got, "  allow? [y]es / [n]o / [?]: ")
+})
+
+test_that("readline_answer() asks again while answers arrive within 0.1 s, at most 100 times", {
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  rl = local_readline(c("y", "", "n"), secs = c(0.001, 0.002, 2))
+  expect_identical(readline_answer("allow? "), "n")
+  expect_identical(rl$i, 3L)
+  # an interactive R reading a pipe gets "" at once at its end
+  rl = local_readline(rep("", 101L), secs = 0)
+  expect_identical(readline_answer("allow? "), "")
+  expect_identical(rl$i, 100L)
+  local_mocked_bindings(gptr_is_interactive = function() FALSE)
+  rl = local_readline("y", secs = 0)
+  expect_identical(readline_answer("allow? "), "y")
+  expect_identical(rl$i, 1L)
+})
+
+test_that("gptr_confirm() never takes a line typed before its question (IC-75)", {
+  withr::local_options(gptr.interactive = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  rl = local_readline(c("y", "n"), secs = c(0.01, 1))
+  expect_false(gptr_confirm("Proceed?"))
+  expect_identical(rl$i, 2L)
+})
+
 test_that("front_end() recognises the documented environments", {
   withr::local_options(jupyter.in_kernel = NULL, knitr.in.progress = NULL)
   withr::local_envvar(
@@ -117,7 +191,8 @@ test_that("front_end() recognises the documented environments", {
   # IDE variables are inherited by child processes: a non-interactive child is an Rscript
   withr::local_envvar(TERM_PROGRAM = "vscode", RSTUDIO = "1", POSITRON = "1")
   expect_identical(front_end(), "rscript")
-  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  # an IDE console reads no tty
+  local_mocked_bindings(gptr_is_interactive = function() TRUE, stdin_tty = function() FALSE)
   expect_identical(front_end(), "positron")
   withr::local_envvar(POSITRON = NA)
   expect_identical(front_end(), "rstudio")
@@ -136,6 +211,19 @@ test_that("front_end() recognises the documented environments", {
   expect_identical(front_end(), "quarto")
   withr::local_options(jupyter.in_kernel = TRUE)
   expect_identical(front_end(), "jupyter")
+})
+
+test_that("an IDE's terminal tab is a terminal: inherited IDE variables count only without a tty", {
+  withr::local_options(jupyter.in_kernel = NULL, knitr.in.progress = NULL)
+  withr::local_envvar(
+    JPY_SESSION_NAME = NA, QUARTO_DOCUMENT_PATH = NA, QUARTO_DOCUMENT_FILE = NA,
+    POSITRON = NA, RSTUDIO = "1", TERM_PROGRAM = NA, TERM = "xterm-256color"
+  )
+  local_mocked_bindings(gptr_is_interactive = function() TRUE, platform_gui = function() "X11",
+                        stdin_tty = function() TRUE)
+  expect_identical(front_end(), "terminal")
+  withr::local_envvar(RSTUDIO = NA, POSITRON = "1", TERM_PROGRAM = "vscode")
+  expect_identical(front_end(), "vscode")
 })
 
 test_that("verbosity() follows the option, then the context", {

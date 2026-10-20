@@ -51,7 +51,7 @@ test_that("policy matrix has exclusive synthetic kernel precedence", {
   })
   result = gptr_check(policy)
   expect_true(result$ok[result$check == "policy.matrix"])
-  expect_setequal(unique(seen$modes), c("plan", "manual", "edits", "auto"))
+  expect_setequal(unique(seen$modes), session_modes)
   expect_identical(ctx_new(NULL)$mode(), "outside")
 })
 
@@ -312,7 +312,7 @@ test_that("policies are run over the modes x report 18 matrix", {
   res = gptr_check(plan_guard)
   expect_true(all(res$ok[res$check != "policy.speed"]))
   expect_match(res$message[res$check == "policy.speed"], "^median [0-9.]+ ms$")
-  expect_match(res$message[res$check == "policy.matrix"], "40 calls", fixed = TRUE)
+  expect_match(res$message[res$check == "policy.matrix"], "50 calls", fixed = TRUE)
   odd = gptr_policy("odd", function(call, ctx) list(decision = "maybe"))
   expect_false(gptr_check(odd)$ok[gptr_check(odd)$check == "policy.matrix"])
   # IC-53 item 6: the guards' ask_human tier (P11's mode and critical_guard) is well formed

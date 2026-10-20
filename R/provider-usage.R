@@ -320,7 +320,7 @@ usage_rows_check = function(rows, arg) {
   out
 }
 
-#' The cost a plan CLI reported itself (`total_cost_usd`, contract section 8.5)
+#' The cost a plan CLI reported itself (the increase of `total_cost_usd`, contract section 8.5)
 #' A reported `cost$total` (zero included) is kept; missing, or an estimated record, is NA (IC-74).
 #' @noRd
 usage_reported_cost = function(usage) {

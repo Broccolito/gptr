@@ -22,7 +22,7 @@ test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)"
   expect_identical(unname(d[["Package"]]), "gptr")
   expect_identical(unname(d[["Title"]]), "Language Model Agents Inside the Live 'R' Session")
   expect_identical(tools::toTitleCase(d[["Title"]]), unname(d[["Title"]]))
-  expect_identical(unname(d[["License"]]), "MIT + file LICENSE")
+  expect_identical(unname(d[["License"]]), "Apache License (== 2.0)")
   expect_identical(unname(d[["Copyright"]]), "file inst/COPYRIGHTS")
   expect_identical(
     trimws(strsplit(unname(d[["URL"]]), ",", fixed = TRUE)[[1L]]),
@@ -48,13 +48,16 @@ test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)"
   expect_false("Collate" %in% names(d))
 })
 
-test_that("Authors@R credits the maintainer and the author of pi (IC-72)", {
+test_that("Authors@R credits the maintainer and contributors; COPYRIGHTS credits pi (IC-72)", {
   authors = eval(parse(text = desc_fields()[["Authors@R"]]))
   families = unlist(authors$family)
   roles = authors$role
+  expect_setequal(families, c("Gu", "Zhu", "Bellucci"))
   expect_setequal(roles[[which(families == "Gu")]], c("aut", "cre", "cph"))
-  expect_setequal(roles[[which(families == "Zechner")]], c("ctb", "cph"))
-  expect_match(authors[[which(families == "Zechner")]]$comment, "'pi' (MIT)", fixed = TRUE)
+  expect_identical(unname(desc_fields()[["Copyright"]]), "file inst/COPYRIGHTS")
+  path = source_file(file.path("inst", "COPYRIGHTS"))
+  if (is.null(path)) path = system.file("COPYRIGHTS", package = "gptr")
+  expect_true(any(grepl("Copyright (c) 2025 Mario Zechner", readLines(path), fixed = TRUE)))
 })
 
 test_that("Imports and Suggests are the final lists of conventions section 8", {

@@ -75,7 +75,7 @@ ckpt_cp_before = function(st, name, call, ctx) {
         ckpt_objects_before(ck, call, home, turn)
       }
     },
-    files = ckpt_files_before(ck, call, turn),
+    files = ckpt_files_before(ck, call, turn, sync = !ckpt_cli_session(s)),
     state = ckpt_state_before(ck, call, turn))
 }
 
@@ -210,8 +210,8 @@ ckpt_on_cli = function(st, event, ctx) {
   NULL
 }
 
-#' agent_end hook: the memory budget, the per-turn scan (once walks are slow) and one blob
-#' collection per session
+#' agent_end hook: the memory budget, the per-turn scan (once walks are slow, and always on a CLI
+#' route: an aborted run has no `turn_end`) and one blob collection per session
 #' @noRd
 ckpt_on_agent_end = function(st, ctx) {
   s = ctx$session
@@ -220,7 +220,7 @@ ckpt_on_agent_end = function(st, ctx) {
   turn = ckpt_turn(s)
   ckpt_objects_budget(ck, turn, session_home(s))
   if (ckpt_enabled("files", ctx, list())) {
-    frag = ckpt_files_turn_scan(ck, turn)
+    frag = ckpt_files_turn_scan(ck, turn, force = ckpt_cli_session(s))
     if (!is.null(frag)) ckpt_append_scan(s, frag)
   }
   if (is.null(ck$gc_done)) {
@@ -265,7 +265,8 @@ ckpt_rewind_block = function(st, ctx) {
 
 #' builtin:checkpoints (contract 7.16, 10.3): the checkpointers `objects`, `files` and `state`,
 #' the hooks above, the `rewind` block (its own name: a second `workspace_changes` record would
-#' shadow P09's, IC-69) and the commands `undo`, `redo`, `rewind` and `checkpoints`
+#' shadow P09's, IC-69) and the commands `undo`, `redo`, `rewind` and `checkpoints`. Loaded after
+#' builtin:cli, so its `agent_end` scan sees what a CLI child changed while it was stopped
 #' @noRd
 builtin_checkpoints = function(gptr) {
   st = gptr$state
@@ -290,8 +291,23 @@ builtin_checkpoints = function(gptr) {
   invisible(NULL)
 }
 
-on_load(ext_declare_builtin("checkpoints", builtin_checkpoints))
+#' The `checkpoint.own_write` service (contract 7.0): `write()`, gptr's own write of `path`,
+#' through the file trackers of every live session (ckpt_files_own_write()); when they cannot be
+#' found, the write still runs. Only sessions registered in the process's extension state are
+#' reached: a detached copy of a shell (ckpt_ck_of()) records the write at its next scan.
+#' @noRd
+ckpt_own_write = function(path, write) {
+  trs = tryCatch({
+    ws = ckpt_ext_state()$sessions
+    lapply(if (is.environment(ws)) as.list(ws), function(w) rlang::wref_value(w)$files)
+  }, error = function(e) list())
+  ckpt_files_own_write(Filter(is.environment, trs), path, write)
+}
+
+on_load(ext_declare_builtin("checkpoints", builtin_checkpoints, after = "cli"))
 on_load(ext_service_set("checkpoint.note", ckpt_note, provided_by = "P16",
+                        builtin = "checkpoints"))
+on_load(ext_service_set("checkpoint.own_write", ckpt_own_write, provided_by = "P16",
                         builtin = "checkpoints"))
 
 # ---- the session tree and gptr_rewind() (contract 6.5; G7 sections 3.2, 3.6, 4.2-4.3) -----------
@@ -435,9 +451,11 @@ ckpt_rewind_each = function(tree, ops, fun) {
   out
 }
 
-#' Undo and redo the records through their checkpointers (plugins included): the report lines
+#' Undo and redo the records through their checkpointers (plugins included): the report lines,
+#' each of the plan's `items` once, by its last line ("<item>: ..."; the longest such item): its
+#' outcome after the whole rewind (a line of no plan item is its own key)
 #' @noRd
-ckpt_rewind_apply = function(tree, ops, specs, ctx, force) {
+ckpt_rewind_apply = function(tree, ops, specs, ctx, force, items) {
   report = ckpt_rewind_each(tree, ops, function(direction, id, nm, fr) {
     sp = specs[[nm]]
     if (is.null(sp)) return(paste0("checkpointer ", nm, ": not restored (it is not registered)"))
@@ -445,12 +463,16 @@ ckpt_rewind_apply = function(tree, ops, specs, ctx, force) {
       paste0("checkpointer ", nm, ": failed (", conditionMessage(e), ")")
     })
   })
-  c(unlist(report), paste0("checkpoint ", ops$foreign, ": not restored (made before the fork; ",
-                           "the source session owns it)", recycle0 = TRUE))
+  report = key = as.character(unlist(report))
+  for (it in items[order(nchar(items, "bytes"))]) key[startsWith(report, paste0(it, ": "))] = it
+  c(report[!duplicated(key, fromLast = TRUE)],
+    paste0("checkpoint ", ops$foreign, ": not restored (made before the fork; ",
+           "the source session owns it)", recycle0 = TRUE))
 }
 
-#' The rewind plan: one row per item and whether it would be restored (the built-ins dry-run
-#' their preview(); other checkpointers list their describe() lines with an unknown outcome)
+#' The rewind plan: one row per item, its last in the rewind, and whether it would be restored
+#' (the built-ins dry-run their preview(); other checkpointers list their describe() lines with
+#' an unknown outcome)
 #' @noRd
 ckpt_rewind_plan = function(tree, ops, specs, ctx, force) {
   rows = ckpt_rewind_each(tree, ops, function(direction, id, nm, fr) {
@@ -476,7 +498,10 @@ ckpt_rewind_plan = function(tree, ops, specs, ctx, force) {
   empty = data.frame(record = character(), turn = integer(), action = character(),
                      checkpointer = character(), item = character(), restore = logical(),
                      reason = character())
-  ckpt_plan_chain(do.call(rbind, c(list(empty), rows)))
+  plan = ckpt_plan_chain(do.call(rbind, c(list(empty), rows)))
+  plan = plan[!duplicated(plan$item, fromLast = TRUE), , drop = FALSE]
+  row.names(plan) = NULL
+  plan
 }
 
 #' A dry run checks each record against the current workspace, so an item that an earlier record
@@ -518,11 +543,11 @@ ckpt_rewind_guard = function(d) {
   invisible(TRUE)
 }
 
-#' The extension state of builtin:checkpoints, found through its checkpointer specs (NULL when
-#' the built-in is filtered out)
+#' The extension state of builtin:checkpoints, found through the checkpointer specs of session `s`
+#' (by default the process's; NULL when the built-in is filtered out)
 #' @noRd
-ckpt_ext_state = function(s) {
-  for (sp in registry_all("checkpointer", session = session_data(s)$id)) {
+ckpt_ext_state = function(s = NULL) {
+  for (sp in registry_all("checkpointer", session = if (!is.null(s)) session_data(s)$id)) {
     if (is.environment(sp$ckpt_state)) return(sp$ckpt_state)
   }
   NULL
@@ -542,12 +567,13 @@ ckpt_ext_state = function(s) {
 #' is kept and reported, unless `force = TRUE`. Reference objects (environments, R6, external
 #' pointers), objects over the undo budget, environment variables, loaded namespaces, the
 #' random-number state and effects outside R (network, databases, processes) are not restored.
-#' Items that were not restored are listed in `s$last_rewind$report` and raise the warning
-#' `gptr_warning_rewind_partial`. Files outside the project and `tempdir()` are restored only
-#' after you confirm each path. After a full restore the model is told nothing (the next
-#' request's prefix is byte-identical to the earlier request at the target); after a partial one
-#' the next prompt carries a short `<rewind>` block listing what was not restored. Model code may
-#' rewind another session only when you approve that call.
+#' `s$last_rewind$report` lists each object, file and state item once, by its outcome after the
+#' whole rewind; items that were not restored raise the warning `gptr_warning_rewind_partial`.
+#' Files outside the project and `tempdir()` are restored only after you confirm each path. After
+#' a full restore the model is told nothing (the next request's prefix is byte-identical to the
+#' earlier request at the target); after a partial one the next prompt carries a short `<rewind>`
+#' block listing what was not restored. Model code may rewind another session only when you
+#' approve that call.
 #'
 #' @param s A `gptr_session`.
 #' @param turn Integer. Negative counts back from the last turn (`-1` undoes the last turn); `0`
@@ -629,7 +655,7 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
                        dec$reason %||% "no reason given"), "notice")
     return(invisible(s))
   }
-  report = ckpt_rewind_apply(tree, ops, specs, ctx, force)
+  report = ckpt_rewind_apply(tree, ops, specs, ctx, force, plan$item)
   bad = report[grepl("not restored|not redone|conflict|failed", report)]
   entry = list(type = "custom", custom_type = "gptr.rewind",
                data = list(from = from, to = tgt$target, keep = tgt$keep, restore = restore,
@@ -675,9 +701,10 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
 #' @description
 #' `gptr_checkpoints()` lists one row per turn of the active path (`all = TRUE` adds the turns of
 #' abandoned branches): `turn`; `id`, the last entry of the turn (pass it as `to` to
-#' `gptr_rewind()`); `time`, when the prompt was sent; `prompt` (its first 60 characters);
-#' `objects` and `files`, `"changed/restorable"` counts; `held_mb` and `disk_mb`, megabytes of
-#' object pre-images held in memory and on disk; and `branch` (`"active"` or `"abandoned"`).
+#' `gptr_rewind()`); `time`, when the prompt was sent (local time); `prompt` (its first 60
+#' characters); `objects` and `files`, `"changed/restorable"` counts; `held_mb` and `disk_mb`,
+#' megabytes of object pre-images held in memory and on disk; and `branch` (`"active"` or
+#' `"abandoned"`).
 #' @param all Also list the turns of abandoned branches.
 #' @rdname gptr_rewind
 #' @order 2
@@ -711,14 +738,14 @@ ckpt_turn_rows = function(tree, path, branch, ck, exclude = character()) {
     seg = match(path[starts[j]:ends[j]], tree$ids)
     first = tree$entries[[seg[1L]]]
     data.frame(turn = j, id = path[ends[j]],
-               time = with_calendar_preserved(as.POSIXct(
+               time = structure(with_calendar_preserved(as.POSIXct(
                  sub("Z$", "", first$timestamp %||% NA), tz = "UTC",
-                 format = "%Y-%m-%dT%H:%M:%OS")),
+                 format = "%Y-%m-%dT%H:%M:%OS")), tzone = ""),
                prompt = substr(msg_text(first$message), 1L, 60L),
                ckpt_turn_counts(tree$entries[seg[tree$ctype[seg] == "gptr.checkpoint"]], ck),
                branch = branch)
   })
-  empty = data.frame(turn = integer(), id = character(), time = .POSIXct(numeric(), tz = "UTC"),
+  empty = data.frame(turn = integer(), id = character(), time = .POSIXct(numeric(), tz = ""),
                      prompt = character(), objects = character(), files = character(),
                      held_mb = numeric(), disk_mb = numeric(), branch = character())
   do.call(rbind, c(list(empty), rows))
@@ -837,10 +864,12 @@ ckpt_cmd_rewind = function(args, ctx) {
   ckpt_cmd_run(s, turn = k - 1L, restore = c("all", "conversation", "workspace")[act])
 }
 
-#' /checkpoints, /checkpoints all: the listing
+#' /checkpoints, /checkpoints all: the listing, its footer naming the console commands
 #' @noRd
 ckpt_cmd_checkpoints = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no session.")
-  utils::capture.output(print(gptr_checkpoints(s, all = identical(trimws(args), "all"))))
+  cp = gptr_checkpoints(s, all = identical(trimws(args), "all"))
+  attr(cp, "footer") = "Undo with /undo, or /rewind <turn>."
+  print_lines(cp)
 }

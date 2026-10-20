@@ -177,6 +177,30 @@ test_that("processx starts with a helper environment", {
   expect_identical(p$read_all_output(), "dumb")
 })
 
+test_that("an mcp child gets exactly the documented base variables its parent defines", {
+  skip_on_cran()
+  if (is_windows()) {
+    base = c("APPDATA", "COMSPEC", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
+             "PROCESSOR_ARCHITECTURE", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+             "PROGRAMW6432", "SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "TMP", "USERNAME",
+             "USERPROFILE", "WINDIR")
+    cmd = c(Sys.getenv("COMSPEC"), "/d", "/c", "set")
+  } else {
+    base = c("HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER", "TMPDIR")
+    cmd = "/usr/bin/env"
+  }
+  parent = toupper(names(Sys.getenv()))
+  res = proc_run(cmd[1L], cmd[-1L], env = child_env("mcp"))
+  expect_identical(res$status, 0L)
+  lines = grep("^[^=]+=", strsplit(res$stdout, "\r?\n")[[1L]], value = TRUE, useBytes = TRUE)
+  got = toupper(sub("=.*", "", lines, useBytes = TRUE))
+  # processx adds its tree id and, on Windows, LOGONSERVER and USERDOMAIN as libuv does;
+  # proc_spawn adds its marker and cmd.exe its PROMPT
+  own = grepl("^(PROCESSX|GPTR_PROC)_", got) | got %in% c("LOGONSERVER", "USERDOMAIN", "PROMPT")
+  expect_setequal(got[!own], c(intersect(parent, c(base, toupper(env_allow_common))),
+                               "R_ENVIRON_USER", "R_PROFILE_USER"))
+})
+
 test_that("Rscript children of the mcp and helper profiles never see a .Renviron key", {
   skip_on_cran()
   local_vault()

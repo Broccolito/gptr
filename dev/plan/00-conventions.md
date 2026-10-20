@@ -42,7 +42,7 @@ expected in the red phase).
 ## 3. Repository layout
 
 ```
-DESCRIPTION  NAMESPACE  NEWS.md  README.Rmd  README.md  LICENSE  LICENSE.md (both P01's)
+DESCRIPTION  NAMESPACE  NEWS.md  README.Rmd  README.md  LICENSE.md (P01's)
 R/aaa-state.R            the one exception to the naming rule: `the`, on_load(), the service
                          table, the redaction hook; it collates first (contract IC-32)
 R/                       one file per topic, named <area>-<topic>.R

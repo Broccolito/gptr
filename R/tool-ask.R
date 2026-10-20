@@ -71,7 +71,8 @@ ask_text_answers = function(qs, answers) {
   paste(c("The user answered:", lines), collapse = "\n")
 }
 
-#' Execute the ask tool; a failing dialog counts as cancelled
+#' Execute the ask tool; a failing dialog counts as cancelled; a sub-agent's first question says
+#' who asks (D-188)
 #' @noRd
 ask_execute = function(input, ctx) {
   err = ask_validate(input)
@@ -85,6 +86,10 @@ ask_execute = function(input, ctx) {
                            is_error = TRUE)
     res$terminate = TRUE
     return(res)
+  }
+  who = agent_label(run_current())
+  if (!identical(who, "main")) {
+    qs[[1L]]$question = paste0("sub-agent ", who, " asks: ", qs[[1L]]$question)
   }
   res = tryCatch(ctx$ui()$questions(qs), error = function(e) NULL)
   if (!is.list(res)) res = list(cancelled = TRUE)

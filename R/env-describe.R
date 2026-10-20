@@ -148,11 +148,7 @@ dsc_leaf_core = function(x) {
   list(class = class(x), type = typeof(x), length = length(x), dim = attr(x, "dim"),
        df = df, nrow = if (df) .row_names_info(x, 2L) else NA_integer_, s4 = isS4(x),
        env = env, fun = fun, atomic = is.atomic(x), compact = env_compact_seq(x),
-       size = if (env || fun || typeof(x) == "externalptr") {
-         NA_real_
-       } else {
-         as.numeric(utils::object.size(x))
-       })
+       size = env_snap_size(x))
 }
 
 #' Evenly spaced sample indices (at most 1e5; report 12 section 3.5)
@@ -313,7 +309,21 @@ dsc_leaf_gg = function(x) {
   }
   list(nrow = if (inherits(data, "data.frame")) .row_names_info(data, 2L) else NA_integer_,
        ncol = if (inherits(data, "data.frame")) length(data) else NA_integer_,
-       mapping = names(get_part(x, "mapping")), geoms = geoms)
+       mapping = names(get_part(x, "mapping")), geoms = geoms,
+       plots = if (inherits(x, "patchwork")) dsc_gg_plots(x) else NA_integer_)
+}
+
+#' Plots of a patchwork (a leaf): its own plot unless that is patchwork's empty filler, and each of
+#' its `patches$plots` (in `meta` under S7 ggplot2), a nested patchwork counting its own plots
+#' @noRd
+dsc_gg_plots = function(x) {
+  get_part = if (is.list(x)) .subset2 else attr
+  patches = get_part(x, "patches") %||% .subset2(get_part(x, "meta"), "patches")
+  n = as.integer(!inherits(x, "plot_filler"))
+  for (p in .subset2(patches, "plots")) {
+    n = n + if (inherits(p, "patchwork")) dsc_gg_plots(p) else 1L
+  }
+  n
 }
 
 # ---------------------------------------------------------------- formatters (facts only)
@@ -329,15 +339,19 @@ dsc_header = function(f) {
   } else {
     paste("length", env_fmt_n(f$length))
   }
-  size = if (is.na(f$size)) {
+  size = if (isTRUE(f$compact)) {
+    " (compact sequence)"
+  } else if (is.na(f$size)) {
     ""
-  } else if (isTRUE(f$compact)) {
-    paste0(", <= ", env_fmt_bytes(f$size), " (compact sequence)")
   } else {
     paste0(", ", env_fmt_bytes(f$size))
   }
   sprintf("<%s> %s%s", paste(f$class, collapse = "/"), shape, size)
 }
+
+#' `n` and its noun, plural unless `n` is 1
+#' @noRd
+dsc_count = function(n, noun) paste(n, if (n == 1) noun else paste0(noun, "s"))
 
 #' Short type names for data frame columns
 #' @noRd
@@ -558,10 +572,11 @@ gptr_describe.environment = function(x, budget = 150L, ..., level = NULL) {
 #' @noRd
 dsc_describe_env = function(x, f, budget, level) {
   e = dsc_leaf_env(x)
-  h = sprintf("<%s>%s with %d bindings (%d functions, %d active, %d unevaluated promises)",
+  h = sprintf("<%s>%s with %s (%s, %d active, %s)",
               paste(f$class, collapse = "/"),
               if (nzchar(e$label)) paste0(" '", e$label, "'") else "",
-              length(e$names), sum(e$fun), sum(e$act), sum(e$lazy))
+              dsc_count(length(e$names), "binding"), dsc_count(sum(e$fun), "function"),
+              sum(e$act), dsc_count(sum(e$lazy), "unevaluated promise"))
   fields = e$names[!e$fun]
   methods = e$names[e$fun]
   l2 = c(h,
@@ -571,6 +586,18 @@ dsc_describe_env = function(x, f, budget, level) {
          if (length(methods)) {
            paste0("  methods: ", paste(utils::head(methods, 30L), collapse = ", "))
          })
+  dsc_pick(list(h, l2), budget, level)
+}
+
+#' @rdname gptr_describe
+#' @export
+gptr_describe.gptr_session = function(x, budget = 150L, ..., level = NULL) {
+  h = sprintf("<gptr_session> %s, model %s, %s, %s, %s", x$kind, x$model, x$status,
+              dsc_count(x$turns, "turn"), format_cost(x$cost))
+  kids = names(x$children)
+  l2 = c(h, if (length(kids)) {
+    paste0("  children: ", paste(utils::head(kids, 30L), collapse = ", "))
+  })
   dsc_pick(list(h, l2), budget, level)
 }
 
@@ -708,7 +735,11 @@ gptr_describe.DBIConnection = function(x, budget = 150L, ..., level = NULL) {
 #' @export
 gptr_describe.ggplot = function(x, budget = 150L, ..., level = NULL) {
   g = dsc_leaf_gg(x)
-  h = sprintf("<ggplot> %d layers (%s)", length(g$geoms), paste(g$geoms, collapse = ", "))
+  if (!is.na(g$plots)) {
+    return(dsc_pick(list(paste("<patchwork> of", dsc_count(g$plots, "plot"))), budget, level))
+  }
+  h = sprintf("<ggplot> %s (%s)", dsc_count(length(g$geoms), "layer"),
+              paste(g$geoms, collapse = ", "))
   l2 = c(h, sprintf("  data: %s x %s; mapping: %s", env_fmt_n(g$nrow), env_fmt_n(g$ncol),
                     paste(g$mapping, collapse = ", ")))
   dsc_pick(list(h, l2), budget, level)

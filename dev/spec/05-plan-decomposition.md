@@ -66,7 +66,7 @@ P08 -> P09 -> P10 -> P11 ;  P05, P07 -> P12 ;  P08, P09, P12 -> P13
 P08, P11 -> P14 ;  P08, P10 -> P15 ;  P11, P15 -> P16 ;  P08, P10 -> P17
 P10, P11 -> P18 ;  P11, P14, P15, P17 -> P19 ;  P12, P18, P19 -> P20 ;  P06, P14 -> P21
 P10, P11 -> P22 ;  P10, P11, P14, P16 -> P23
-P01..P23 -> P24 -> P25
+P01..P23 -> P24 -> P25 -> P26 -> P27
 ```
 
 | Plan | Title | Milestone | Depends on | R files |
@@ -96,6 +96,8 @@ P01..P23 -> P24 -> P25
 | P23 | Artifacts | M5 | P10, P11, P14, P16 | 2 |
 | P24 | Token benchmark and end-to-end acceptance | M5 | P01-P23 | 0 |
 | P25 | Release | M5 | P24 | 0 |
+| P26 | Console and agent fixes | post-M5 | P01-P25 | 1 |
+| P27 | Windows coverage | post-M5 | P01-P26 | 0 |
 
 ## Requirements coverage
 
@@ -146,8 +148,8 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
     Session", one-paragraph Description per 13 §3 (software names single-quoted), `Authors@R` with the current
     maintainer in roles `aut`, `cre`, `cph` plus `person("Mario", "Zechner", role = c("ctb", "cph"), comment =
     "Author of 'pi' (MIT), from which tool texts and templates are derived")`, `Copyright: file inst/COPYRIGHTS`,
-    `URL`, `BugReports`, `Language: en-US`, `License: MIT + file LICENSE` (year 2026 in `LICENSE`, plus
-    `LICENSE.md`), `Depends: R (>= 4.2.0)`, the final Imports (jsonlite, curl, processx, callr, rlang, cli, yaml,
+    `URL`, `BugReports`, `Language: en-US`, `License: Apache License (== 2.0)` (no `LICENSE`
+    file; full text in `LICENSE.md`), `Depends: R (>= 4.2.0)`, the final Imports (jsonlite, curl, processx, callr, rlang, cli, yaml,
     ps, methods, stats, tools, utils, grDevices, graphics) and Suggests (architecture §9.2) with floors,
     `SystemRequirements`, `Config/testthat/edition: 3`, `Encoding: UTF-8`, `Roxygen: list(markdown = TRUE)`; no
     `VignetteBuilder` (P25 adds it) (IC-72).
@@ -204,7 +206,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   `processx::run(`, no `serialize(`/`saveRDS(` without `ascii = FALSE` outside the leaf wrapper, and the
   further rules of contract §12.3),
   `fixtures/tokens/` (a 12-class sample of G2's corpus with o200k counts); `DESCRIPTION`, `.lintr`,
-  `.Rbuildignore`, `.gitignore`, `LICENSE`, `LICENSE.md`, `.github/workflows/R-CMD-check.yaml`, `dev/style.R`,
+  `.Rbuildignore`, `.gitignore`, `LICENSE.md`, `.github/workflows/R-CMD-check.yaml`, `dev/style.R`,
   `inst/COPYRIGHTS`.
 - **Test files.** One per owned R file: `test-aaa-state.R`, `test-utils-conditions.R`, `test-utils-hash.R`, `test-utils-encoding.R`, `test-utils-options.R`, `test-utils-paths.R`, `test-utils-text.R`, `test-utils-tokens.R`, `test-json-encode.R`, `test-json-partial.R`, `test-json-schema.R`, `test-provider-message.R`, `test-provider-events.R`, `test-provider-fake.R`, `test-zzz.R` (plus the extra test files named under Owns).
 - **Research.** Conventions (all); 13 §2-§5 and C-01..C-58 (DESCRIPTION, tests, CI, C-36); 10a §14
@@ -384,7 +386,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      complete, and a 4 MB payload to a child that echoes each line completes without deadlock; `kill_all()` leaves
      no descendant; a `.cmd` argument containing `&` is refused with `gptr_error_invalid_argument` (logic test on
      every OS).
-  7. Review additions: a parent killed with SIGTERM leaves children that the next load's sweep removes; the
+  7. Review additions: a killed parent leaves a grandchild that the next load's sweep removes; the
      redirect mock receives no key bytes and the transfer fails with `gptr_error_redirect`; `test-http-sse.R`
      covers CRLF, CR-only, split-CRLF, a BOM and duplicate `event:` fields; `retry-after` as an HTTP-date under
      `LC_ALL=de_DE.UTF-8` and `retry-after: soon` fall back correctly; a nested pump started inside a FIFO tool
@@ -749,7 +751,8 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      an ESC or bidi payload in code is escaped in the prompt; a cloned fixture with `settings.local.json` allow
      rules and an AGENTS.md instruction still asks; the pending plan is not handed to a call inside a loop or to a
      call after an intervening `peter()`; with `jupyter.in_kernel = TRUE` mocked and a mocked `gptr_readline()`, an
-     ask is answered.
+     ask is answered. (P26, IC-78: in `yolo` only the `options(gptr.*)` case still needs a human; a plan-mode
+     delete of a control file is denied, not asked.)
 
 ### P12 Native provider adapters
 
@@ -1031,7 +1034,9 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   in `tempdir()` unless `gptr.mcp_debug` (IC-70); OAuth refuses metadata without S256 PKCE and validates `iss`
   (IC-71); foreign-harness configs and `${userHome}` through `user_home()`/`app_config_dir()` (IC-63); the
   fixture server's HTTP transport binds 127.0.0.1 through httpuv (IC-71); `mcp_dispatch_local()` is the single gate
-  for the claude route (IC-65); `followlocation = 0L` on MCP HTTP (IC-64).
+  for the claude route (IC-65); `followlocation = 0L` on MCP HTTP (IC-64). (P26 IC-79: CLI children get no tokens and
+  `mcp.serve_ensure` and the busy error are gone; both CLI routes reach `mcp_dispatch_local()`, which serves the
+  session's frozen tool array, Codex through a base-R stdio relay.)
 - **Owns.** The five R files and tests; `helper-mcp-server.R`; `fixtures/mcp/`.
 - **Test files.** One per owned R file: `test-mcp-client.R`, `test-mcp-config.R`, `test-mcp-namespace.R`, `test-mcp-server.R`, `test-auth-oauth.R` (plus the extra test files named under Owns).
 - **Research.** 16 (all) and fact-check; 06 §4 (MCP as code); 07 §2.13-2.16 and fact-check (sdk transport,
@@ -1118,10 +1123,11 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   `opts$gate` for other `can_use_tool` requests; the `--bare` probe; the `apiKeySource` check and
   `gptr_error_billing`; G6 §3.7 environment lists; codex argv with `--skip-git-repo-check`, `-m`, `-C`,
   `default_tools_approval_mode="approve"`, `required=true`, resume with `-c sandbox_mode=`; sandbox mapping
-  plan/manual/edits -> read-only, auto -> workspace-write with control-file hashing and a checkpointer walk; the
+  plan/manual/edits -> read-only, auto/yolo -> workspace-write with control-file hashing and a checkpointer walk; the
   Windows sandbox probe; the turn counter and `gptr.cli_turn_timeout`; per-session wire logs; per-session MCP tokens
   (IC-58, IC-65, IC-66); fake CLIs run through `rscript_path()` with `offline = TRUE` records (IC-60, IC-45); the
-  CLI leg of INFRA-16 (IC-36).
+  CLI leg of INFRA-16 (IC-36). (P26 IC-79: Codex reaches the session through the base-R stdio relay
+  `inst/gptr/mcp_relay.R` instead of `gptr_mcp_serve()` and a token; both routes serve the frozen tool array.)
 - **Owns.** The three R files and tests; `inst/gptr/fixtures/fake_cli.R`; `fixtures/cli/`; `test-live-cli.R`.
 - **Test files.** One per owned R file: `test-cli-common.R`, `test-cli-claude.R`, `test-cli-codex.R` (plus the extra test files named under Owns).
 - **Research.** 07 §2.13-§4 and fact-check; 08 §2.E-F, §4-§5 and fact-check (`--ignore-user-config`,
@@ -1139,7 +1145,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      within about the slowest agent's wall time (the INFRA-16 CLI leg, IC-36); an `init` line with
      `apiKeySource: "ANTHROPIC_API_KEY"` aborts the turn with `gptr_error_billing`.
   3. The codex invocation passes `--skip-git-repo-check`, `-m <full id>`, `-C`, the MCP overrides including
-     `default_tools_approval_mode="approve"` and `required=true`, and a 50 KB prompt on stdin intact; the resume
+     `default_tools_approval_mode="approve"` and `required=true`, and a 200 KB prompt on stdin intact; the resume
      form uses `-c sandbox_mode=`; `edits` maps to `read-only`; `ANTHROPIC_API_KEY`, `ANTHROPIC_PROFILE`,
      `CLAUDECODE`, `OPENAI_API_KEY`, `CODEX_API_KEY` and `CODEX_SANDBOX` are absent from the children's environment and
      a warning names the billing ones; `gptr_providers()` spawns no process with `check = FALSE`; a `.cmd` fake claude

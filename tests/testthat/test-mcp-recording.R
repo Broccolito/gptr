@@ -20,15 +20,10 @@ local_mcp_record_probe = function(.env = parent.frame()) {
   invisible(NULL)
 }
 
-test_that("native HTTP MCP code records once and replays a callable result without a CLI", {
+test_that("relayed MCP code records once and replays a callable result without a CLI", {
   skip_on_cran()
-  skip_if_not_installed("httpuv")
-  skip_if_not_installed("later")
-  skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
-    "openssl is not installed")
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", mode = "auto")
-  withr::defer(gptr_mcp_serve(stop = TRUE))
   f = local_fake_cli("codex", "mcp-return")
   path = file.path(root, "native.R")
   writeLines(c("dat = datasets::mtcars", paste0("res = peter(\"Fit the public data\", model = ",

@@ -4,13 +4,14 @@
 # the compiled redaction state live in `the$secrets` (04 section 7.0; `the$redactor` stays P01's
 # installed redaction hook). House style: "=" and "|>" (S-9).
 
-# Secret-looking variable names (G6 section 3.3).
+# Secret-looking variable names (G6 section 3.3). A key's id (AWS_ACCESS_KEY_ID) is half of a
+# key pair, so `_ID` after KEY is not a plain suffix (D-193).
 secret_name_re = paste0(
   "(API_?KEY|ACCESS_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PASSPHRASE|CREDENTIAL|",
   "PRIVATE_?KEY|COOKIE|(^|_)PAT$|(^|_)KEY$)"
 )
 nonsecret_suffix_re = paste0(
-  "_(FILE|PATH|DIR|HOME|URL|URI|HOST|PORT|ID|USER|USERNAME|MODEL|REGION|LEVEL|SOCK)$"
+  "(_(FILE|PATH|DIR|HOME|URL|URI|HOST|PORT|USER|USERNAME|MODEL|REGION|LEVEL|SOCK)|(?<!KEY)_ID)$"
 )
 nonsecret_names = c("SSH_AUTH_SOCK", "GPG_AGENT_INFO", "XAUTHORITY", "PWD", "OLDPWD")
 # Characters that can occur inside a key or token (streaming hold-back, G6 section 3.6).

@@ -14,6 +14,24 @@ test_that("test children inherit temporary directories owned by the suite", {
   }
 })
 
+# Google Chrome serves DevTools only when SHGetFolderPath(CSIDL_LOCAL_APPDATA), its default
+# profile folder, resolves; the probe checks that it resolves to the suite's LOCALAPPDATA
+test_that("the suite home is a Windows profile whose Local AppData the browser child resolves", {
+  appdata = file.path(Sys.getenv("USERPROFILE"), "AppData", c("Roaming", "Local"))
+  expect_identical(unname(Sys.getenv(c("APPDATA", "LOCALAPPDATA"))), appdata)
+  expect_true(all(dir.exists(appdata)))
+  skip_on_cran()
+  skip_if_not(is_windows())
+  shell = file.path(Sys.getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0",
+    "powershell.exe")
+  # .NET Framework's GetFolderPath is SHGetFolderPath(CSIDL_LOCAL_APPDATA, SHGFP_TYPE_CURRENT)
+  got = processx::run(shell, c("-NoProfile", "-NonInteractive", "-Command",
+    "[Environment]::GetFolderPath('LocalApplicationData')"), env = child_env("artifact"),
+    timeout = 60, windows_hide_window = TRUE, cleanup_tree = TRUE)$stdout
+  expect_identical(normalizePath(trimws(got), winslash = "/", mustWork = FALSE),
+                   normalizePath(appdata[[2L]], winslash = "/"))
+})
+
 test_that("a killed Windows Rscript expression leaves detritus only in its owned tree", {
   skip_on_cran()
   skip_if_not(is_windows())

@@ -6,7 +6,7 @@ These tools checked the 25 implementation plans for cross-plan consistency and r
 | Tool | What it does |
 |---|---|
 | `build_index.py` | Parses every `dev/plan/P*.md`. It indexes every function defined and called (with argument names), every file each task touches, and every option, condition, event, registry kind, service and test helper. It then reports error/warn/info findings: duplicate definitions, files created by two plans, undefined calls, argument names that are not formals of the callee, calls outside a plan's dependency closure, undefined test helpers, and near-identical names. Output goes to a new temporary directory, whose path it prints. |
-| `extract.py` | Writes every fenced code block of P01-P25 to `./blocks/` (`<plan>_L<fence line>_<lang>_d<nesting>.txt`). |
+| `extract.py` | Writes every fenced code block of every `dev/plan/P<nn>-*.md` to `./blocks/` (`<plan>_L<fence line>_<lang>_d<nesting>.txt`). |
 | `check_r.R` | Checks that every R block in `./blocks/` parses and has no `<-`, `->`, `%>%` or non-ASCII byte. |
 | `lint_all.R` | Lints a directory of `.R` files with P01's `.lintr` linters (`indentation_linter = NULL`). |
 

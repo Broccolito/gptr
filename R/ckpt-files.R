@@ -191,8 +191,9 @@ ckpt_walk = function(root) {
 
 #' The session's file tracker, made on first use at project_root(): `stat`, the last walk, taken at
 #' `walk_time`; `hash` and `mode`, the content hash and mode bits of each captured relative path;
-#' `explicit` and `explicit_mode`, predicted absolute paths the walk does not cover ("" absent, "?"
-#' not capturable); `per_turn`, one scan per turn (`scanned_turn`) once walks are slow
+#' `explicit` and `explicit_mode`, predicted absolute paths the walk does not cover, or every
+#' predicted path in per-turn mode ("" absent, "?" not capturable); `per_turn`, one scan per turn
+#' (`scanned_turn`) once walks are slow
 #' @noRd
 ckpt_files_tr = function(ck) {
   if (is.null(ck$files)) ck$files = list2env(list(root = project_root()), parent = emptyenv())
@@ -236,7 +237,7 @@ ckpt_ingest = function(tr, rel) {
 ckpt_regular = function(full) {
   if (!length(full)) return(logical())
   # ps's POSIX stat is unavailable on Windows; named pipes use a separate namespace there.
-  if (is_windows()) return(file.exists(full) & !dir.exists(full) & !ckpt_is_link(full))
+  if (is_windows()) return(path_info(full)$isdir %in% FALSE & !ckpt_is_link(full))
   type = ps::ps_fs_stat(full, follow = FALSE)$type
   if (!is.character(type) || length(type) != length(full)) return(rep(FALSE, length(full)))
   type %in% "regular file" & !ckpt_is_link(full)
@@ -361,34 +362,36 @@ ckpt_explicit_state = function(full) {
 ckpt_as_scanned = function(tr, rel, state) {
   if (rel %in% names(tr$hash)) return(identical(state, tr$hash[[rel]]))
   i = match(rel, tr$stat$path)
-  info = file.info(file.path(tr$root, rel), extra_cols = FALSE)
+  info = path_info(file.path(tr$root, rel))
   if (is.na(i)) return(is.na(info$size))
   isTRUE(info$size == tr$stat$size[i] && as.numeric(info$mtime) == tr$stat$mtime[i])
 }
 
-#' Bring the stat row of a relative path up to date (after an explicit record or a restore), so
-#' that the next walk does not report it again
+#' Bring the stat row of a relative path up to date (after an explicit record, a restore or gptr's
+#' own write), so that the next walk does not report it again
 #' @noRd
 ckpt_stat_refresh = function(tr, rel) {
   if (is.null(tr$stat)) return(invisible())
   full = file.path(tr$root, rel)
-  info = file.info(full, extra_cols = FALSE)
+  info = path_info(full)
   add = data.frame(path = rel, size = info$size, mtime = as.numeric(info$mtime),
                    link = ckpt_is_link(full))
   tr$stat = rbind(tr$stat[tr$stat$path != rel, , drop = FALSE], add[!is.na(add$size), ])
 }
 
-#' Files checkpointer, before a mutating call: the baseline, or a scan that absorbs edits made
-#' outside gptr (once per turn in per-turn mode); then the predicted paths are captured, in the
+#' Files checkpointer, before a mutating call: the baseline, or (`sync`) a scan that absorbs edits
+#' made outside gptr (once per turn in per-turn mode); then the predicted paths are captured, in the
 #' tracker when the walk covers them, else (and in per-turn mode) as explicit paths. In per-turn
 #' mode a walked path that changed since the turn's scan is left to the turn scan ("?"), whose
-#' pre-image is the content at the start of the turn.
+#' pre-image is the content at the start of the turn. A call served to a CLI route does not
+#' `sync`: the edits its child made since the turn's start are recorded, never absorbed (IC-65),
+#' and an untracked path is captured only while it is as the last walk saw it.
 #' @return A token.
 #' @noRd
-ckpt_files_before = function(ck, call, turn = 1L) {
+ckpt_files_before = function(ck, call, turn = 1L, sync = TRUE) {
   tr = ckpt_files_tr(ck)
   turn = as.integer(turn)
-  if (is.null(tr$stat) || !isTRUE(tr$per_turn) || !identical(tr$scanned_turn, turn)) {
+  if (is.null(tr$stat) || (sync && (!isTRUE(tr$per_turn) || !identical(tr$scanned_turn, turn)))) {
     ckpt_files_sync(tr)
   }
   tr$scanned_turn = turn
@@ -396,7 +399,9 @@ ckpt_files_before = function(ck, call, turn = 1L) {
   for (p in paths) {
     rel = ckpt_walked(tr, p)
     if (!is.na(rel) && !isTRUE(tr$per_turn)) {
-      if (!rel %in% names(tr$hash) && ckpt_capturable(p)) ckpt_ingest(tr, rel)
+      if (!rel %in% names(tr$hash) && ckpt_capturable(p) && ckpt_as_scanned(tr, rel, "")) {
+        ckpt_ingest(tr, rel)
+      }
     } else {
       state = ckpt_explicit_state(p)
       tr$explicit[p] = if (is.na(rel) || ckpt_as_scanned(tr, rel, state)) state else "?"
@@ -406,8 +411,9 @@ ckpt_files_before = function(ck, call, turn = 1L) {
   list(frag = ckpt_frag_id(), turn = turn, paths = paths)
 }
 
-#' Rows for the explicit paths of a call that changed (absolute paths); a path that was not
-#' capturable before the call is not recorded
+#' Rows for the explicit paths of a call that changed: relative when the walk covers them (per-turn
+#' mode), as a scan records them, so that a file is one rewind item; else absolute. A path that
+#' was not capturable before the call is not recorded
 #' @noRd
 ckpt_files_explicit = function(tr, paths) {
   rows = list()
@@ -424,11 +430,12 @@ ckpt_files_explicit = function(tr, paths) {
     } else {
       ""
     }
-    rows[[length(rows) + 1L]] = ckpt_file_row(
-      p, TRUE, status, before, if (identical(now, "?")) "" else now, tr$explicit_mode[[p]],
-      file.size(p), as.numeric(file.mtime(p)), !nzchar(reason), reason)
-    tr$explicit[p] = now
     rel = ckpt_walked(tr, p)
+    info = path_info(p)
+    rows[[length(rows) + 1L]] = ckpt_file_row(
+      if (is.na(rel)) p else rel, is.na(rel), status, before, if (identical(now, "?")) "" else now,
+      tr$explicit_mode[[p]], info$size, as.numeric(info$mtime), !nzchar(reason), reason)
+    tr$explicit[p] = now
     if (!is.na(rel)) {
       tr$hash = tr$hash[names(tr$hash) != rel]
       if (!now %in% c("", "?")) tr$hash[rel] = now
@@ -471,6 +478,31 @@ ckpt_files_turn_scan = function(ck, turn, force = FALSE) {
   rows = ckpt_files_step(tr)
   if (!length(rows)) return(NULL)
   list(id = ckpt_frag_id(), turn = as.integer(turn), root = tr$root, files = rows)
+}
+
+#' gptr's own write of `full` (a document; P15's doc_own_write()): `write()` runs, and each
+#' tracker that saw the file as it was just before takes the new content as a scan would, without
+#' recording it, so no turn's undo reverts it (a rewind makes undone blocks inert instead). A
+#' tracker that had not seen it (an edit not scanned yet) records the edit and the write together
+#' at its next scan; one whose bookkeeping fails is otherwise left to its next scan.
+#' @return The value of `write()`.
+#' @noRd
+ckpt_files_own_write = function(trs, full, write) {
+  seen = function(tr) {
+    rel = if (is.null(tr$stat)) NA_character_ else ckpt_walked(tr, full)
+    if (!is.na(rel) && ckpt_as_scanned(tr, rel, ckpt_explicit_state(full))) rel else NA_character_
+  }
+  rels = vapply(trs, function(tr) tryCatch(seen(tr), error = function(e) NA_character_), "")
+  value = write()
+  for (i in which(!is.na(rels))) {
+    tr = trs[[i]]
+    rel = rels[[i]]
+    tryCatch({
+      if (ckpt_capturable(full)) ckpt_ingest(tr, rel) else tr$hash = tr$hash[names(tr$hash) != rel]
+      ckpt_stat_refresh(tr, rel)
+    }, error = function(e) NULL)
+  }
+  value
 }
 
 # ---- restores (G7 section 3.6; IC-52, IC-54) -----------------------------------------------------

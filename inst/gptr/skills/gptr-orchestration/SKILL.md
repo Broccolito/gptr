@@ -1,6 +1,7 @@
 ---
 name: gptr-orchestration
 description: "Write multi-agent R workflows with gptr: sub-agents as peter() calls, teams with agents =, fan-outs with parallel =, gptr_parallel(), exports, and System 1 decisions inside if, for and while."
+license: Apache-2.0
 disable-model-invocation: true
 ---
 
@@ -48,8 +49,9 @@ summaries$text          # a named character vector, one entry per element
 summaries[["A"]]        # the session of element A
 ```
 
-Each child sees its element as `cohorts[["A"]]`; at most `parallel` run at once and every
-element is processed.
+Each child gets its element alone as `.x` (attached as `.x[["A"]]`); `.opts = list(context =
+"none")` is refused with `parallel =`. At most `parallel` run at once and every element is
+processed.
 
 ## Any calls at once
 

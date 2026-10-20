@@ -72,7 +72,19 @@ child names; otherwise positions are used. Inspect a child with `session$A` or
 
 For object-producing work, keep each child's results separate and specify exports only when
 needed. Export-name collisions are reported and results are collected in task order; this
-is not an automatic merge of competing analyses.
+is not an automatic merge of competing analyses. Keep exports and returned values
+self-contained: a fan-out child that succeeds keeps only the values it returned with
+`gptr_return()`, and a worker sends back only its exports, so an exported function or plot
+finds the caller's objects but none of the child's other objects.
+
+At the console each child of a foreground call prints one line when it starts,
+`sub-agent A started (<model>)`, and one when it ends, `sub-agent A done (1/3)` with its turns
+and seconds, or `sub-agent A failed (1/3): <reason>`. A child's approval prompts and questions
+name it (`sub-agent A > r  ...`; a nested `peter()` call by its prompt and number,
+`'Summarise ...' #2`), and its printed output stays in its own result. A `peter()` call that
+the agent's own R code makes without `envir =` reads your objects and keeps the ones it creates
+in `res$envir`. R code that wraps such calls in `capture.output()` or `sink()` also captures
+their prompts.
 
 ## Independent calls with gptr_parallel()
 

@@ -952,7 +952,7 @@ gptr_blocks = function(file) {
 doc_file_arg = function(file, formats, expected) {
   check_string(file, "file")
   path = path_norm(file)
-  if (!isTRUE(doc_format_of(path) %in% formats) || !file.exists(path) || dir.exists(path)) {
+  if (!isTRUE(doc_format_of(path) %in% formats) || !path_info(path)$isdir %in% FALSE) {
     gptr_abort(paste0("Not ", expected, ": ", path), "invalid_argument", arg = "file",
                expected = expected)
   }
@@ -1097,7 +1097,7 @@ doc_cache_files = function(kind) {
   sidecars = grepl("^pending-.*[.](json|rds)$", basename(f))
   if (identical(kind, "tmp")) f = f[!sidecars]
   if (identical(kind, "sidecar")) f = f[sidecars]
-  f[file.exists(f) & !dir.exists(f)]
+  f[path_info(f)$isdir %in% FALSE]
 }
 
 #' The gptr_cache_info listing (one row per kind plus the sidecars)

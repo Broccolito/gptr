@@ -130,11 +130,13 @@ env_snap_facts = function(box, name) {
            error = function(e) env_snap_bare(get(name, envir = box$envir, inherits = FALSE)))
 }
 
-#' Size in bytes of one binding value; NA for environments, functions, external pointers and
-#' compact sequences (object.size() overstates them) (a leaf)
+#' Size in bytes of one binding value; NA for environments, functions, external pointers,
+#' compact sequences and S7 objects (object.size() overstates them; it counts an S7 object's class
+#' object in full) (a leaf)
 #' @noRd
 env_snap_size = function(x) {
-  if (is.environment(x) || is.function(x) || typeof(x) == "externalptr" || env_compact_seq(x)) {
+  if (is.environment(x) || is.function(x) || typeof(x) == "externalptr" || env_compact_seq(x) ||
+      inherits(x, "S7_object")) {
     return(NA_real_)
   }
   as.numeric(utils::object.size(x))
@@ -251,13 +253,18 @@ env_align = function(name, cls, shape, size) {
 
 #' Lines of the `<workspace>` block within `budget` estimated tokens
 #' At most 12 lines `name  class  shape  size`, largest first, then `(+ n smaller objects: use
-#' ls())`; promises and active bindings show as `<promise>` and `<active>`.
+#' ls())`; promises and active bindings show as `<promise>` and `<active>`. A value of unknown
+#' size other than a function or environment (an S7 plot) ranks at the median known size, so it is
+#' not always cut; the rest rank last.
 #' @noRd
 workspace_lines = function(snapshot, budget = 600L) {
   check_number(budget, "budget", min = 20)
   n = nrow(snapshot)
   if (!n) return(character())
   size = snapshot$bytes
+  lift = is.na(size) & snapshot$kind == "value" &
+    !snapshot$class %in% c("function", "environment")
+  size[lift] = stats::median(size, na.rm = TRUE)
   size[is.na(size)] = -1
   s = snapshot[order(-size, snapshot$name, method = "radix"), , drop = FALSE]
   value = s$kind == "value"
@@ -484,6 +491,19 @@ env_on_agent_end = function(event, ctx) {
   NULL
 }
 
+#' session_tree hook: after a rewind that moves the conversation, the next `<workspace_changes>`
+#' starts from the restored workspace, since the undone turns' objects are not the user's changes
+#' (the expressions the user ran are still reported)
+#' @noRd
+env_on_tree = function(event, ctx) {
+  envir = env_home(ctx)
+  mem = env_memory(ctx)
+  if (!identical(event$restore, "workspace") && !is.null(envir) && !is.null(mem$snapshot)) {
+    mem$snapshot = env_snapshot(envir, mem$snapshot)
+  }
+  NULL
+}
+
 #' session_shutdown hook: release the history log of the session
 #' @noRd
 env_on_shutdown = function(event, ctx) {
@@ -494,7 +514,7 @@ env_on_shutdown = function(event, ctx) {
 }
 
 #' The built-in `workspace` extension (architecture sections 7.4-7.5; 04 section 7.9)
-#' Context blocks (IC-38), the T1 section `r_env`, the `evaluator` record `r` (IC-69) and two
+#' Context blocks (IC-38), the T1 section `r_env`, the `evaluator` record `r` (IC-69) and three
 #' hooks; the `eval.r` and `describe` services below are owned by this built-in (IC-34).
 #' @noRd
 builtin_workspace = function(gptr) {
@@ -510,6 +530,7 @@ builtin_workspace = function(gptr) {
                                     order = 900L, budget = 450L))
   gptr$register(gptr_spec("evaluator", "r", eval = eval_r))
   gptr$on("agent_end", env_on_agent_end)
+  gptr$on("session_tree", env_on_tree)
   gptr$on("session_shutdown", env_on_shutdown)
   invisible(NULL)
 }

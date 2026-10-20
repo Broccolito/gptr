@@ -11,8 +11,8 @@
 # - `.cmd`/`.bat` shims run as `cmd.exe /d /c call <shim> args`, refusing % ^ & | < > " ! CR
 #   LF in any argument (BatBadBut: CVE-2024-24576, CVE-2024-27980).
 # - String commands: /bin/sh -c on Unix; on Windows Git Bash, else PowerShell
-#   -EncodedCommand (base64 of UTF-16LE, with a $LASTEXITCODE-preserving postfix), else
-#   `cmd /d /s /c "chcp 65001 >nul & ..."` with verbatim arguments.
+#   -EncodedCommand (base64 of UTF-16LE, with a last-status-preserving postfix), else cmd
+#   with verbatim arguments, the line run by a cmd started after `chcp 65001` (shell_cmd()).
 
 #' Is this path a Windows batch file?
 #' @noRd
@@ -55,12 +55,41 @@ proc_resolve = function(command, args = character()) {
 }
 
 #' PowerShell -EncodedCommand payload: base64 of UTF-16LE, UTF-8 output, exit code preserved
+#'
+#' Unlike cmd, PowerShell resolves a bare name to an extensionless file on PATH too (such as
+#' MSYS2's `usr/bin/cmd` script, which Rtools puts before System32) and opens it with
+#' ShellExecute: no wait, no exit code. The lookup hook, set only on Windows ($IsWindows is
+#' unset in Windows PowerShell), runs the first program of that name with an extension instead
+#' or, like cmd, finds no command when there is none. The exit status is 0 when the last
+#' command succeeded, else the last native exit code, else 1.
 #' @noRd
 shell_ps_encode = function(cmd) {
-  pre = "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\n"
-  post = "\n$gptr_ok = $?; if ($LASTEXITCODE) { exit $LASTEXITCODE }; if (-not $gptr_ok) { exit 1 }"
+  pre = paste0("try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\n",
+    "try { if ($IsWindows -ne $false) {\n",
+    "  $ExecutionContext.InvokeCommand.PostCommandLookupAction = { param($n, $e)\n",
+    "  if ($e.Command.CommandType -eq 'Application' -and -not $e.Command.Extension) {\n",
+    "    $c = @(Get-Command $n -CommandType Application -All | Where-Object Extension)\n",
+    "    $e.Command = $null; if ($c) { $e.Command = $c[0] } } } } } catch {}\n")
+  post = "\nif ($?) { exit 0 }; if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1"
   b = iconv(as_utf8(paste0(pre, cmd, post)), "UTF-8", "UTF-16LE", toRaw = TRUE)[[1L]]
   gsub("\n", "", jsonlite::base64_enc(b), fixed = TRUE)
+}
+
+#' cmd.exe running a command line with UTF-8 output: `list(command, args, env)`
+#'
+#' Programs started after `chcp 65001` use the new code page (chcp documentation); on hosted
+#' Windows an echo on the same `/c` line as chcp still wrote the OEM page. So the outer cmd
+#' changes the code page, then starts the cmd that runs `line` as `cmd /d /s /c "<line>"` would;
+#' `line` reaches it through GPTR_SHELL_CMD by delayed expansion, which the outer cmd does not
+#' parse. The route reserves GPTR_SHELL_CMD: a caller may not set it and the line's descendants
+#' inherit it. `args` carry `attr(, "verbatim") = TRUE`.
+#' @noRd
+shell_cmd = function(line, comspec) {
+  if (!nzchar(comspec)) comspec = "cmd.exe"
+  args = c("/d", "/v:on", "/s", "/c",
+           paste0("\"chcp 65001 >nul & \"", comspec, "\" /d /s /c !GPTR_SHELL_CMD!\""))
+  attr(args, "verbatim") = TRUE
+  list(command = comspec, args = args, env = c(GPTR_SHELL_CMD = paste0("\"", line, "\"")))
 }
 
 #' Shell resolution with injectable OS facts (the testable core of shell_resolve())
@@ -81,19 +110,16 @@ shell_resolve_os = function(cmd, windows, which, getenv, exists) {
                                         "Bypass", "-EncodedCommand", shell_ps_encode(cmd))))
     }
   }
-  comspec = getenv("COMSPEC")
-  if (!nzchar(comspec)) comspec = "cmd.exe"
-  args = c("/d", "/s", "/c", paste0("\"chcp 65001 >nul & ", cmd, "\""))
-  attr(args, "verbatim") = TRUE
-  list(command = comspec, args = args)
+  shell_cmd(cmd, getenv("COMSPEC"))
 }
 
 #' How to run a string command with a shell
 #'
 #' Unix: `/bin/sh -c`. Windows: Git Bash (never `System32\\bash.exe`, the WSL launcher), else
-#' PowerShell with `-EncodedCommand`, else `cmd /d /s /c "chcp 65001 >nul & ..."`, whose `args`
-#' carry `attr(, "verbatim") = TRUE` for proc_spawn()'s `windows_verbatim_args`.
-#' @return `list(command = chr(1), args = chr)`
+#' PowerShell with `-EncodedCommand`, else cmd (shell_cmd()), whose `args` carry
+#' `attr(, "verbatim") = TRUE` for proc_spawn()'s `windows_verbatim_args` and whose `env` the
+#' child environment must set.
+#' @return `list(command = chr(1), args = chr)`, plus `env = chr` for cmd
 #' @noRd
 shell_resolve = function(cmd) {
   check_string(cmd, "cmd")

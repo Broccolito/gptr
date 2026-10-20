@@ -226,3 +226,42 @@ test_that("device capture enables an empty user's display list", {
   plot_close(ps)
   expect_identical(grDevices::dev.cur(), user_dev)
 })
+
+test_that("a device the code opens keeps every panel of a multi-panel page (#29)", {
+  plot_news = function(p) {
+    sum(vapply(p[[1L]], function(x) identical(x[[2L]][[1L]]$name, "C_plot_new"), NA))
+  }
+  devs = grDevices::dev.list()
+  e = new.env()
+  res = eval_r("pdf(NULL); par(mfrow = c(1, 2)); plot(1:3); plot(3:1); p = recordPlot(); dev.off()",
+               e)
+  expect_identical(res$status, "ok")
+  expect_identical(plot_news(e$p), 2L)
+  expect_identical(grDevices::dev.list(), devs)
+  # a device opened at the number of one the code closed is enabled too
+  e$g = list()
+  res = eval_r("for (i in 1:2) { pdf(NULL); plot(i); g[[i]] = recordPlot(); dev.off() }", e)
+  expect_identical(vapply(e$g, plot_news, 0L), c(1L, 1L))
+  ps = plot_begin("capture", human = FALSE)
+  withr::defer(plot_close(ps))
+  withr::local_pdf(NULL)
+  graphics::par(mfrow = c(1L, 2L))
+  plot_enable_new(ps)
+  graphics::plot(1:3)
+  plot_enable_new(ps)
+  expect_false(plot_capture(ps))
+  graphics::plot(3:1)
+  expect_true(plot_capture(ps))
+  expect_identical(ps$n, 1L)
+  expect_identical(plot_news(ps$recorded[[1L]]), 2L)
+})
+
+test_that("a knitr chunk with two panels knitted through eval_r() writes its figure (#29)", {
+  skip_if_not_installed("knitr")
+  skip_if_not(isTRUE(capabilities("png")))
+  withr::local_dir(withr::local_tempdir())
+  writeLines(c("```{r two}", "par(mfrow = c(1, 2)); plot(1:3); plot(3:1)", "```"), "t.Rmd")
+  res = eval_r("knitr::knit('t.Rmd', quiet = TRUE)", new.env())
+  expect_identical(res$status, "ok")
+  expect_true(file.exists(file.path("figure", "two-1.png")))
+})

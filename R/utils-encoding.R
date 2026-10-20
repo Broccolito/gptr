@@ -99,8 +99,8 @@ read_utf8 = function(path) {
   # Windows can report a file link's empty metadata rather than the target's byte length.
   # Obtain both size and content from the same canonical target.
   target = if (is_windows()) path_norm(path) else path
-  size = file.size(target)
-  if (is.na(size) || dir.exists(target)) {
+  info = path_info(target)
+  if (is.na(info$size) || isTRUE(info$isdir)) {
     gptr_abort(
       paste0("Cannot read '", path, "': it is not an existing file."),
       "invalid_argument",
@@ -108,7 +108,7 @@ read_utf8 = function(path) {
       expected = "an existing file"
     )
   }
-  bytes = readBin(target, "raw", n = size)
+  bytes = readBin(target, "raw", n = info$size)
   bom = length(bytes) >= 3L && identical(bytes[1:3], as.raw(c(0xef, 0xbb, 0xbf)))
   valid = validUTF8(rawToChar(bytes[bytes != as.raw(0L)]))
   text = raw_to_utf8(bytes)

@@ -98,7 +98,7 @@ API [07]). Documents record quoted canonical ids.
 ## 9. Dependencies (D-20, D-21, D-23)
 
 `Depends: R (>= 4.2.0)` (UTF-8 native encoding on current Windows, the `_` pipe placeholder; oldrel-4 today;
-proven by an oldrel-4 CI job) [13 §2.7]. `NeedsCompilation: no`. `License: MIT + file LICENSE`.
+proven by an oldrel-4 CI job) [13 §2.7]. `NeedsCompilation: no`. `License: Apache License (== 2.0)`.
 
 ### 9.1 Imports (7 non-base; dependency closure 9 packages, 10 with callr 3.8.0's otel)
 

@@ -193,7 +193,7 @@ redacted, encrypted reasoning, parallel tools, overload, truncation), `fixtures/
 
 | Path | Content | Plan |
 |---|---|---|
-| `DESCRIPTION`, `NAMESPACE` (roxygen), `.lintr`, `.Rbuildignore`, `.gitignore`, `LICENSE` (year 2026) | package skeleton; `.Rprofile` deleted | P01 |
+| `DESCRIPTION`, `NAMESPACE` (roxygen), `.lintr`, `.Rbuildignore`, `.gitignore`, `LICENSE.md` (Apache License 2.0) | package skeleton; `.Rprofile` deleted | P01 |
 | `.github/workflows/R-CMD-check.yaml` | r-lib check-standard (macOS, Windows, Ubuntu release/devel/oldrel-1) + oldrel-4 + no-suggests + `LC_ALL=C` job + copy-safety job on R-release and R-devel | P01 |
 | `dev/style.R` | `gptr_style()` styler helper (conventions §4) | P01 |
 | `dev/catalog/build_models.R` | builds `inst/extdata/models.json.gz` from models.dev | P05 |

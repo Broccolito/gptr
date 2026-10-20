@@ -451,9 +451,11 @@ budget_near = function(run) {
 #' `x = NULL`, of every live session of this process plus the process System 1 log. Reads only.
 #'
 #' Unknown usage stays unknown: a token count or cost that a provider did not report is `NA`,
-#' never zero, so a group or total that includes it is `NA` and the footer prints it as
-#' `unknown`. A known zero, such as the metered charge of a local model, stays zero. Rows without
-#' a session, agent, model or route (process-level System 1 calls) form the `NA` group.
+#' never zero, so a group or total that includes it is `NA`. The footer prints such tokens as
+#' `unknown` and adds the known cost to a count of the requests of unknown cost
+#' (`$1.2000 + 1 request of unknown cost`). A known zero, such as the metered charge of a local
+#' model, stays zero. Rows without a session, agent, model or route (process-level System 1
+#' calls) form the `NA` group.
 #'
 #' The detailed component ledger contains estimates; its sum can differ from provider-reported
 #' usage. A run's token budget checks estimated next-input tokens and recorded usage before
@@ -504,13 +506,8 @@ gptr_usage = function(x = NULL, by = c("session", "agent", "model", "route"), de
                   cache_write = agg("cache_write_5m") + agg("cache_write_1h"), cost = agg("cost"),
                   stringsAsFactors = FALSE)
   rownames(df) = NULL
-  totals = usage_totals(rows)
-  n = as.integer(totals[["requests"]])
-  footer = paste0(n, if (n == 1L) " request, " else " requests, ",
-                  format_count(c(totals[["input"]], totals[["cache_read"]])), " tokens in, ",
-                  format_cost(totals[["cost"]]))
-  out = new_listing(df, "gptr_usage", footer = footer)
-  attr(out, "totals") = totals
+  out = new_listing(df, "gptr_usage", footer = format_usage(rows))
+  attr(out, "totals") = usage_totals(rows)
   out
 }
 

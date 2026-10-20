@@ -820,7 +820,7 @@ toy_package = function(root) {
     "Authors@R: person(\"Toy\", \"Author\", email = \"toy@example.org\",",
     "    role = c(\"aut\", \"cre\"))",
     "Description: A toy plugin package used by the gptr test suite.",
-    "License: MIT",
+    "License: Apache License (== 2.0)",
     "Encoding: UTF-8",
     "Suggests: gptr",
     "Config/gptr/plugin: true",

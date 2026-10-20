@@ -108,6 +108,19 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
   expect_identical(log$prompts, c("? ", "steer> ", "? ", "follow-up> "))
 })
 
+test_that("in the console margin the menu's prompts keep it, as its notices do (D-186)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  log = local_menu_answers(c("s", "use only mpg"))
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  # the notice starts on a line of its own (a terminal may have echoed ^C)
+  expect_identical(err[[1L]], "")
+  expect_true(startsWith(err[[2L]], "  [gptr] paused"))
+  expect_identical(log$prompts, c("  ? ", "  steer> "))
+})
+
 test_that("pause-menu text passes the input event with source steer", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
@@ -169,6 +182,13 @@ test_that("a second Ctrl-C while the menu waits aborts", {
   })
   expect_null(res)
   expect_identical(aborted$aborted, "u0000run1")
+})
+
+test_that("a line typed before the pause menu appeared never answers it (IC-75)", {
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  rl = local_readline(c("a", "c"), secs = c(0.01, 1))
+  expect_identical(console_ask("[c]ontinue, [a]bort: "), "c")
+  expect_identical(rl$i, 2L)
 })
 
 test_that("the policy is abort-only where resuming is unverified (RStudio, Rgui, Jupyter)", {
