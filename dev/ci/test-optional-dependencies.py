@@ -1,6 +1,7 @@
 """Offline discovery checks; no executables, browser, R or Python modules are launched."""
 import importlib.util
 import os
+import shutil
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -83,12 +84,30 @@ class DiscoveryTests(unittest.TestCase):
         env = MODULE.child_environment({'PATH': '/old'}, self.tools)
         original = dict(env)
         run = self.root / 'owned-state'
-        actual = MODULE.isolated_environment(env, run)
+        actual = MODULE.isolated_environment(env, run, platform='win32')
         self.assertEqual(env, original)
         self.assertEqual(actual['HOME'], str(run / 'home'))
+        self.assertEqual(actual['TMPDIR'], str(run / 'tmp'))
         self.assertTrue((run / 'project').is_dir())
         with self.assertRaisesRegex(RuntimeError, 'fresh'):
             MODULE.isolated_environment(env, run)
+
+    def test_linux_children_get_a_short_private_temp_root_under_tmp(self):
+        run = self.root / 'owned-linux-state'
+        actual = MODULE.isolated_environment({'PATH': '/old'}, run, platform='linux')
+        tmp = Path(actual['TMPDIR'])
+        self.addCleanup(shutil.rmtree, tmp)
+        self.assertEqual(tmp.parent, Path('/tmp'))
+        self.assertTrue(tmp.is_dir())
+        self.assertFalse((run / 'tmp').exists())
+        for name in ('TMP', 'TEMP', 'MAC_CHROMIUM_TMPDIR'):
+            self.assertEqual(actual[name], str(tmp))
+        if os.name != 'nt':
+            self.assertEqual(tmp.stat().st_mode & 0o777, 0o700)
+        # R's tempdir() and gptr's private browser root leave room for Chromium's socket name
+        socket = tmp / 'RtmpXXXXXX' / 'gptr-xxxxxxxxxxxx' / 'tmp' / \
+            'org.chromium.Chromium.XXXXXX' / 'SingletonSocket'
+        self.assertLessEqual(len(str(socket).encode()), 107)
 
     def test_isolated_startup_uses_owned_empty_files_without_empty_environment_entries(self):
         env = MODULE.child_environment({'PATH': '/old'}, self.tools)
