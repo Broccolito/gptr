@@ -401,6 +401,19 @@ test_that("the user's abort of a forwarded request aborts the proxy run", {
   expect_identical(h$session$status, "aborted")
 })
 
+test_that("a worker is shipped the parent's context mode, which it cannot read itself", {
+  local_team_fake(list("never"))
+  local_gptr_options(context = "none")
+  local_mocked_bindings(worker_spawn = function(st) stop("not spawned"))
+  parent = session_new("fake/fake-1", "auto", home = new.env(), kind = "team")
+  h = subagent_start(list(agent = gptr_agent("w", description = "worker", model = "fake/fake-1",
+                                             backend = "worker"),
+                          prompt = "go", parent = parent, base = new.env()), NULL)
+  spec = session_live(h$session)$adapter$worker_spec
+  expect_identical(spec$settings$opts$context, "none")
+  expect_true(run_wait(list(h$run), timeout = 10))
+})
+
 test_that("a proxy session without a worker spec fails its request", {
   gen = worker_stream(list(api = "subagent-worker"), list(messages = list()),
                       list(state = new.env(), signal = new.env()))

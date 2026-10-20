@@ -404,12 +404,14 @@ worker_key_provider = function(ref) {
 
 #' `start()` of the `worker` backend: a proxy child session whose overlay receives the exports.
 #' Its spec (contract 11.11) waits in the session's adapter state (contract 8.1 `opts$state`)
-#' with the object names only, so no user object is kept (rules R1, R2). The egress acknowledgment,
-#' the replay guard (for the real model, which the worker never checks) and the objects are
-#' checked before any process starts.
+#' with the object names only, so no user object is kept (rules R1, R2), and the parent's context
+#' mode, which the worker cannot read from its own options and settings. The egress
+#' acknowledgment, the replay guard (for the real model, which the worker never checks) and the
+#' objects are checked before any process starts.
 #' @noRd
 backend_worker_start = function(spec, ctx) {
   child = subagent_child_new(spec, "worker/worker")
+  spec$opts$context = context_mode(spec$opts)
   subagent_guards(child, spec$opts, spec$info$ref)
   worker_ship_objects(spec$objects, spec$home)
   opts = subagent_run_opts(spec, child)
