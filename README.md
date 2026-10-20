@@ -41,19 +41,17 @@ reference](https://broccolito.github.io/gptr/) online.
 
 ## Installation
 
-Install gptr from GitHub's `main` branch with R 4.2 or later:
+Install gptr from CRAN, or the development version from GitHub, with R
+4.2 or later:
 
 ``` r
-install.packages("pak")  # if pak is not installed
-pak::pak("Broccolito/gptr@main")
+install.packages("gptr")
+pak::pak("Broccolito/gptr")
 ```
 
-This README documents gptr 1.0. CRAN submission is being prepared.
-
-`install.packages("gptr")` installs the CRAN version, which may still
-expose the older 0.7 API. Check `packageVersion("gptr")` before
-following these examples. No model server or CLI is required for the
-offline examples below.
+This README documents gptr 1.0; the 0.7 API is different, so check that
+`packageVersion("gptr")` is at least 1.0.0. No model server or CLI is
+required for the offline examples below.
 
 ## Connect a model
 
@@ -114,7 +112,7 @@ ls(work)
 
 session |> peter("Reuse fit to predict mpg for the same cars.")
 #> The predictions are stored in predicted.
-#> idle . fake/fake-1 . 2 turns . 6.9k tokens . $0.0000 . sb3623d8e14
+#> idle . fake/fake-1 . 2 turns . 6.9k tokens . $0.0000 . s06f3632ec6
 head(work$predicted)
 #>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
 #>          23.28261          21.91977          24.88595          20.10265

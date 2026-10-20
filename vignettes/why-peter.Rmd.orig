@@ -18,7 +18,7 @@ Peter Naur was a Danish computer scientist and a central contributor to ALGOL 60
 its language report, which used the syntax notation now known as **Backus-Naur Form** to
 describe how programs are constructed. This was collaborative work, including John Backus;
 Naur helped make the language's definition precise and readable.
-The [revised ALGOL 60 report](https://www.cs.tufts.edu/comp/150FP/archive/peter-naur/algol60.pdf)
+The [revised ALGOL 60 report](https://doi.org/10.1145/366193.366201)
 records this collaborative work and shows the notation in use.
 
 For gptr, the connection is practical: an analysis should leave code you can read, inspect
@@ -30,7 +30,7 @@ replay still depends on the code's inputs, packages and side effects.
 
 Peter Cathcart Wason studied human reasoning. With Jonathan St. B. T. Evans, he proposed a
 dual-process account in
-["Dual processes in reasoning?"](https://cogsci.ucsd.edu/~coulson/203/wason-evans.pdf).
+["Dual processes in reasoning?"](https://doi.org/10.1016/0010-0277(74)90017-1).
 Their study distinguished processes behind people's responses from the conscious reasons
 people gave for them. An explanation could be a justification rather than an accurate account
 of how a response arose.
