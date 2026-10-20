@@ -1527,10 +1527,12 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `tools::R_user_dir("gptr", "cache")`. A model is contacted only when you call [peter()] (or a
 #' function that you give a prompt), and model-written code is evaluated only in the
 #' environment you pass as `envir` (by default the frame that called [peter()]); gptr never
-#' assigns into the global environment by itself. Files are written only inside the project's
-#' `.gptr/` directory once it exists (see [gptr_init()]), inside `tools::R_user_dir("gptr")`,
-#' inside the session temporary directory, into documents you bound with [gptr_doc()] or
-#' confirmed, and by tool calls that the permission mode allowed.
+#' assigns into the global environment by itself. Files are written only into paths you pass to
+#' a gptr function (for example `to` in [gptr_export()] or `paths` in [gptr_scrub()] with
+#' `dry_run = FALSE`), inside the project's `.gptr/` directory once it exists (see
+#' [gptr_init()]), inside `tools::R_user_dir("gptr")`, inside the session temporary directory,
+#' into files you bound with [gptr_doc()] or confirmed, and by tool calls that the permission
+#' mode allowed.
 #'
 #' @section Permission modes:
 #' Every tool call passes a permission gate. The default mode is `manual`: actions that the

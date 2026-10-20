@@ -16,10 +16,12 @@ left running after it was killed or crashed, and removes their records in
 \code{tools::R_user_dir("gptr", "cache")}. A model is contacted only when you call \code{\link[=peter]{peter()}} (or a
 function that you give a prompt), and model-written code is evaluated only in the
 environment you pass as \code{envir} (by default the frame that called \code{\link[=peter]{peter()}}); gptr never
-assigns into the global environment by itself. Files are written only inside the project's
-\verb{.gptr/} directory once it exists (see \code{\link[=gptr_init]{gptr_init()}}), inside \code{tools::R_user_dir("gptr")},
-inside the session temporary directory, into documents you bound with \code{\link[=gptr_doc]{gptr_doc()}} or
-confirmed, and by tool calls that the permission mode allowed.
+assigns into the global environment by itself. Files are written only into paths you pass to
+a gptr function (for example \code{to} in \code{\link[=gptr_export]{gptr_export()}} or \code{paths} in \code{\link[=gptr_scrub]{gptr_scrub()}} with
+\code{dry_run = FALSE}), inside the project's \verb{.gptr/} directory once it exists (see
+\code{\link[=gptr_init]{gptr_init()}}), inside \code{tools::R_user_dir("gptr")}, inside the session temporary directory,
+into files you bound with \code{\link[=gptr_doc]{gptr_doc()}} or confirmed, and by tool calls that the permission
+mode allowed.
 }
 
 \section{Permission modes}{
