@@ -1116,9 +1116,9 @@ egress_can_ask = function(safety = egress_safety()) {
   gptr_can_prompt()
 }
 
-#' The question shown before the first automatic context goes to a provider (gptr_confirm()
-#' appends the ` [y/N] ` hint itself); it names the effective endpoint when there is one, and the
-#' model `asker` of a sub-agent that model code starts
+#' The question shown before the first automatic context or System 1 input goes to a provider
+#' (gptr_confirm() appends the ` [y/N] ` hint itself); it names the effective endpoint when there
+#' is one, and the model `asker` of a sub-agent that model code starts
 #' @noRd
 egress_question = function(id, origin = NULL, asker = NULL) {
   to = if (is.null(origin)) id else paste0(id, " (", origin, ")")
@@ -1129,8 +1129,10 @@ egress_question = function(id, origin = NULL, asker = NULL) {
   }
   paste0(lead, " together with automatic context: the workspace listing (object names, classes ",
          "and sizes), the objects you added, changed or removed and the R expressions you ran ",
-         "since the previous prompt, a description of the R environment, project instructions ",
-         "and descriptions of the objects you attach. Allow this for ", id, " from now on?")
+         "since the previous prompt (in the console, with their printed output), a description ",
+         "of the R environment, project instructions and descriptions of the objects you attach, ",
+         "and the inputs of System 1 questions (each vector element or data frame row). Allow ",
+         "this for ", id, " from now on?")
 }
 
 #' Records `egress.<id> = "ack"` in the user settings file by one read-modify-write under its
@@ -1640,9 +1642,9 @@ NULL
 #'   dimensions, column names and types and a few values); a small object can appear in full.
 #' - Automatic context: a short listing of the objects in the evaluation environment (names,
 #'   classes and sizes); the objects you added, changed or removed and the top-level R
-#'   expressions you ran since the previous prompt; the R version, platform and available
-#'   packages; and the project instruction files (`AGENTS.md`, `CLAUDE.md`,
-#'   `.gptr/vignette.Rmd`).
+#'   expressions you ran since the previous prompt (in the console, with their printed output);
+#'   the R version, platform and available packages; and the project instruction files
+#'   (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`).
 #' - Tool results: the printed output of R code the model ran, the parts of files it read, and
 #'   images of plots it made. In `manual` mode every action that is not known to be read-only
 #'   needs your approval before its result can be sent.
@@ -1665,7 +1667,7 @@ NULL
 #'
 #' @section Acknowledgment:
 #' The first time you use a provider (or a command-line route such as `claude_code` or `codex`)
-#' in an interactive session, gptr shows what automatic context is sent and records your
+#' in an interactive session, gptr shows what is sent and records your
 #' acknowledgment in your user settings. A non-interactive run with a provider that was never
 #' acknowledged stops with a `gptr_error_egress` condition. Record the acknowledgment once with
 #' `gptr_config(egress = list(anthropic = "ack"), .scope = "user")` (this replaces the stored
