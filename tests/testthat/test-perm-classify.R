@@ -395,6 +395,7 @@ test_that("text encodings and long glob words are read safely (D-061)", {
   f = risk_command(x, root)
   expect_lt(proc.time()[["elapsed"]] - t0, 10)
   expect_identical(flags_level(f), 1L)
+  expect_no_warning(gptr_risk(sprintf("readLines('%s/.env')", strrep("a", 5000)), root = root))
   expect_identical(risk_glob_rx("a*[b]c["), "^a.*[b]c\\[\\z")
   expect_identical(risk_glob_rx("[!]"), "^\\[!\\]\\z")
   expect_identical(risk_glob_rx("x[^]]y"), "^x[^]]y\\z")
