@@ -2456,7 +2456,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
         add(ctx, paste0(label, " (in the background)"), name, 2L, "process")
       }
       for (x in list(risk_arg(a, "stdout"), risk_arg(a, "stderr"))) {
-        if (!is.null(x) && !is.logical(x) && !identical(x, "|") && !identical(x, "2>&1")) {
+        if (!is.null(x) && !is.logical(x) &&
+            (name == "system2" || !(identical(x, "|") || identical(x, "2>&1")))) {
           add_path(list(x), "file_write", 2L, ctx, label, name)
         }
       }

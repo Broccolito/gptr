@@ -981,9 +981,11 @@ test_that("a process's stdout or stderr file is a write classified by its path",
   expect_identical(lv("processx::run('ls', stdout = 'out.txt')"), 2L)
   expect_identical(lv("system2('ls', stderr = '.gptr/settings.json')"), 4L)
   expect_identical(lv("system2('ls', stdout = f)"), 2L)
+  expect_identical(lv("system2('ls', stdout = '|')"), 2L)
+  expect_identical(lv("system2('ls', stderr = '2>&1')"), 2L)
   r = gptr_risk("system2('ls', stdout = 'out.txt')", root = root)
   expect_identical(r$paths, "out.txt")
-  # neighbours: the console, a capture, a pipe or a merge write no file
+  # neighbours: the console, a capture, or processx's pipe or merge write no file
   expect_identical(lv("system2('ls', stdout = TRUE)"), 0L)
   expect_identical(lv("system2('ls', stdout = FALSE)"), 0L)
   expect_identical(lv("system2('ls', stdout = '')"), 0L)
