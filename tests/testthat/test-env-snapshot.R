@@ -546,3 +546,41 @@ test_that("a call's first message sends <attached> after <workspace>, and turns 
   turn = context_turn_blocks(s, list(call = cl, turn = 2L, prompt = "y"))
   expect_true("attached" %in% block_kinds(turn))
 })
+
+# The texts of every message the fake provider received
+sent_texts = function(fake) {
+  msgs = unlist(lapply(fake_requests(fake), function(r) r$messages), recursive = FALSE)
+  unlist(lapply(msgs, function(m) vapply(m$content, function(b) b$text %||% "", "")))
+}
+
+test_that("a context setting of \"none\" sends no workspace, changes or attached block", {
+  local_gw()
+  user_log_stop()
+  withr::defer(user_log_stop())
+  fake = local_fake_provider(list("one", "two"))
+  gptr_config(context = "none", .scope = "session")
+  e = new.env()
+  e$a = 1
+  mt = mtcars
+  s = peter("first", mt, model = fake, envir = e)
+  e$b = 2
+  s |> peter("second")
+  texts = sent_texts(fake)
+  expect_true("second" %in% texts)
+  expect_false(any(grepl("^<(workspace|workspace_changes|attached)", texts)))
+})
+
+test_that("a context setting of \"names\" lists workspace names only", {
+  local_gw()
+  user_log_stop()
+  withr::defer(user_log_stop())
+  fake = local_fake_provider(list("one"))
+  gptr_config(context = "names", .scope = "session")
+  e = new.env()
+  e$a = 1
+  e$mt = mtcars
+  peter("first", model = fake, envir = e)
+  ws = grep("^<workspace ", sent_texts(fake), value = TRUE)
+  expect_length(ws, 1L)
+  expect_match(ws, ">\na, mt\n</workspace>$")
+})
