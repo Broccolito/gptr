@@ -21,8 +21,10 @@ contain data values. Native typed decision inputs use the separate encoding desc
 \item With summary context, a budgeted description of each attached object (its class,
 dimensions, column names and types and a few values); a small object can appear in full.
 \item Automatic context: a short listing of the objects in the evaluation environment (names,
-classes and sizes), the R version, platform and available packages, and the project
-instruction files (\code{AGENTS.md}, \code{CLAUDE.md}, \code{.gptr/vignette.Rmd}).
+classes and sizes); the objects you added, changed or removed and the top-level R
+expressions you ran since the previous prompt; the R version, platform and available
+packages; and the project instruction files (\code{AGENTS.md}, \code{CLAUDE.md},
+\code{.gptr/vignette.Rmd}).
 \item Tool results: the printed output of R code the model ran, the parts of files it read, and
 images of plots it made. In \code{manual} mode every action that is not known to be read-only
 needs your approval before its result can be sent.
@@ -39,8 +41,9 @@ Registered secrets are replaced by markers before anything is sent.
 
 \section{Limiting automatic context}{
 
-\code{.opts = list(context = "names")} sends workspace object names and attached-object headers,
-and \code{.opts = list(context = "none")} suppresses workspace and attached-object descriptions.
+\code{.opts = list(context = "names")} sends workspace object names, the workspace changes and
+attached-object headers, and \code{.opts = list(context = "none")} suppresses the workspace
+listing, the workspace changes and attached-object descriptions.
 Prompts, tool results and native typed decision inputs have their own paths. Attach only the
 objects the task needs. The \code{plan} mode permits actions classified as read-only so you can
 inspect a proposed workflow before allowing changes to your workspace.

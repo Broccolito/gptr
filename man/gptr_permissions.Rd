@@ -35,12 +35,12 @@ rules. Allow rules never loosen plan mode and never pre-approve level-4 (critica
 actions.
 }
 \details{
-Scopes: \code{"session"} is this R process; \code{"project"} is the user-level project file
-\verb{tools::R_user_dir("gptr", "config")/projects/<hash>.json}, personal and never inside the
-project tree; \code{"user"} is the user settings file. The listing also shows the shared project
-rules of \code{.gptr/settings.json} (an untrusted project contributes only \code{deny} and \code{ask}
-rules) and the \code{deny}/\code{ask} rules of a legacy \code{.gptr/settings.local.json} in a trusted
-project.
+Scopes: \code{"session"} is this R process; \code{"project"} is the user-level file
+\file{projects/<hash>.json} in \code{tools::R_user_dir("gptr", "config")}, personal and never
+inside the project tree; \code{"user"} is the user settings file. The listing also shows the
+shared project rules of \code{.gptr/settings.json} (an untrusted project contributes only \code{deny}
+and \code{ask} rules) and the \code{deny}/\code{ask} rules of a legacy \code{.gptr/settings.local.json} in a
+trusted project.
 
 Called from model code during a run, adding or removing rules needs the user's approval of
 that call; otherwise it signals \code{gptr_error_permission}.

@@ -31,6 +31,11 @@ Clearing the System 2 answer cache does not remove the R code of document blocks
 saved answers needed to reconstruct a replayed call may no longer be available.
 }
 \examples{
+proj = tempfile("proj")
+dir.create(file.path(proj, ".gptr"), recursive = TRUE)
+old = options(gptr.project_root = proj)
 gptr_cache()
 gptr_cache("prune", "tmp")
+options(old)
+unlink(proj, recursive = TRUE)
 }

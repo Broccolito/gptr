@@ -1128,8 +1128,9 @@ egress_question = function(id, origin = NULL, asker = NULL) {
     paste0("The agent's code starts a sub-agent on ", asker, ", which sends its prompt to ", to)
   }
   paste0(lead, " together with automatic context: the workspace listing (object names, classes ",
-         "and sizes), a description of the R environment, project instructions and descriptions ",
-         "of the objects you attach. Allow this for ", id, " from now on?")
+         "and sizes), the objects you added, changed or removed and the R expressions you ran ",
+         "since the previous prompt, a description of the R environment, project instructions ",
+         "and descriptions of the objects you attach. Allow this for ", id, " from now on?")
 }
 
 #' Records `egress.<id> = "ack"` in the user settings file by one read-modify-write under its
@@ -1519,21 +1520,22 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' where its protections end. [gptr_egress] describes what is sent to model providers.
 #'
 #' @section Everything happens because you asked:
-#' Nothing runs when the package is loaded. A model is contacted only when you call [peter()] (or
-#' a function that you give a prompt), and model-written code is evaluated only in the
+#' When the package is loaded, it only stops the child processes that an earlier gptr session
+#' left running after it was killed or crashed, and removes their records in
+#' `tools::R_user_dir("gptr", "cache")`. A model is contacted only when you call [peter()] (or a
+#' function that you give a prompt), and model-written code is evaluated only in the
 #' environment you pass as `envir` (by default the frame that called [peter()]); gptr never
-#' assigns into the global environment by itself. Files are written only inside a `.gptr/`
-#' directory you created with [gptr_init()] or confirmed interactively, inside
-#' `tools::R_user_dir("gptr")`, inside the session temporary directory, into documents you bound
-#' with [gptr_doc()] or confirmed, and by tool calls that the permission mode allowed. In a
-#' non-interactive run without such consent nothing is written outside the session temporary
-#' directory.
+#' assigns into the global environment by itself. Files are written only inside the project's
+#' `.gptr/` directory once it exists (see [gptr_init()]), inside `tools::R_user_dir("gptr")`,
+#' inside the session temporary directory, into documents you bound with [gptr_doc()] or
+#' confirmed, and by tool calls that the permission mode allowed.
 #'
 #' @section Permission modes:
-#' Every tool call passes a permission gate. The default mode is `manual`: only actions that the
-#' classifier knows to be read-only run without asking; every other action, including any change
-#' to a file or an object, asks first with a one-line prompt. `edits` also allows file edits
-#' inside the project and still asks before R code that is not known to be read-only; `auto`
+#' Every tool call passes a permission gate. The default mode is `manual`: actions that the
+#' static classifier labels read-only run without asking; every other action it recognizes,
+#' including a change to a file or an object, asks first with a one-line prompt. The classifier
+#' is advisory, not a security boundary (see below). `edits` also allows file edits inside the
+#' project and still asks before R code that is not known to be read-only; `auto`
 #' asks only for level-4 actions (for example deleting the project directory or a file outside the
 #' project, where a system temporary directory such as `/tmp` counts as outside, or changing gptr's
 #' own configuration) and for reads of registered secrets; `yolo`, which only you can select (a
@@ -1637,8 +1639,10 @@ NULL
 #' - With summary context, a budgeted description of each attached object (its class,
 #'   dimensions, column names and types and a few values); a small object can appear in full.
 #' - Automatic context: a short listing of the objects in the evaluation environment (names,
-#'   classes and sizes), the R version, platform and available packages, and the project
-#'   instruction files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`).
+#'   classes and sizes); the objects you added, changed or removed and the top-level R
+#'   expressions you ran since the previous prompt; the R version, platform and available
+#'   packages; and the project instruction files (`AGENTS.md`, `CLAUDE.md`,
+#'   `.gptr/vignette.Rmd`).
 #' - Tool results: the printed output of R code the model ran, the parts of files it read, and
 #'   images of plots it made. In `manual` mode every action that is not known to be read-only
 #'   needs your approval before its result can be sent.
@@ -1652,8 +1656,9 @@ NULL
 #' Registered secrets are replaced by markers before anything is sent.
 #'
 #' @section Limiting automatic context:
-#' `.opts = list(context = "names")` sends workspace object names and attached-object headers,
-#' and `.opts = list(context = "none")` suppresses workspace and attached-object descriptions.
+#' `.opts = list(context = "names")` sends workspace object names, the workspace changes and
+#' attached-object headers, and `.opts = list(context = "none")` suppresses the workspace
+#' listing, the workspace changes and attached-object descriptions.
 #' Prompts, tool results and native typed decision inputs have their own paths. Attach only the
 #' objects the task needs. The `plan` mode permits actions classified as read-only so you can
 #' inspect a proposed workflow before allowing changes to your workspace.
