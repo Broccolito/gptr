@@ -1040,6 +1040,7 @@ test_that("a function passed by position to aggregate or reorder, or as ties or 
   expect_identical(lv("aggregate(len ~ supp, data = ToothGrowth, file.create)"), 2L)
   expect_identical(lv("aggregate('o.txt', by = list(1), file.create)"), 2L)
   expect_identical(lv("aggregate(df, list(1), cleanup)"), 3L)
+  expect_identical(lv("aggregate(by = list(1:3), 1:3, unlink)"), 3L)
   expect_identical(lv("reorder(factor(c('a', 'b')), c('o1.txt', 'o2.txt'), file.create)"), 2L)
   expect_identical(lv("reorder(factor('a'), X = 'o.txt', file.create)"), 2L)
   expect_identical(lv("approx(c(1, 1, 2), c(1, 2, 3), ties = file.create)"), 2L)
@@ -1053,6 +1054,8 @@ test_that("a function passed by position to aggregate or reorder, or as ties or 
   expect_identical(lv("aggregate(1, by = list(1), mean)"), 0L)
   expect_identical(lv("reorder(factor('a'), 1, median)"), 0L)
   expect_identical(lv("approx(1:2, 1:2, ties = 'ordered')"), 0L)
+  expect_identical(lv("optimHess(1, function(x) x^2)"), 0L)
+  expect_identical(lv("stepfun(1:3, c(0, 1, 2, 3))"), 0L)
   # ...and ties or gr of another function is data
   expect_identical(lv("survival::coxph(f, data = d, ties = opts$ties)"), 1L)
   expect_identical(lv("rGREAT::great(gr = peaks[1:10], 'GO:BP', 'hg19')"), 1L)

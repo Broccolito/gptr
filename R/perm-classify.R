@@ -2139,12 +2139,14 @@ risk_arg = function(a, name, pos = 0L, default = FALSE) {
   if (pos >= 1L && length(un) >= pos) un[[pos]]
 }
 
-#' The arguments of call `e` to S3 generic `fn` as each of its methods matches them
+#' The arguments of call `e` to stats S3 generic `fn` as each of its methods matches them; as
+#' written when R cannot list the methods
 #' @noRd
 risk_s3_args = function(e, fn) {
-  tryCatch(lapply(utils::.S3methods(fn), function(m) {
-    risk_args(e, utils::getS3method(fn, substring(m, nchar(fn) + 2L)))
-  }), condition = function(c) list())
+  ns = asNamespace("stats")
+  tryCatch(lapply(utils::.S3methods(fn, envir = ns), function(m) {
+    risk_args(e, utils::getS3method(fn, substring(m, nchar(fn) + 2L), envir = ns))
+  }), error = function(err) list(as.list(e)[-1L]))
 }
 
 #' The expressions a call may pass as its path argument: the matched one; for `...` rows, a

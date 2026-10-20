@@ -2937,8 +2937,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   and `tools::Rd2txt(out =)` is a file_write. A `file://` word is its local path, `path_norm()` resolves `~name`
   to that user's home, and a `git -C` directory is read. A function passed to aggregate() or reorder() is walked
   as each of their S3 methods matches the call, as are the `ties` of approx, approxfun, spline, splinefun and
-  stepfun and the `fn` and `gr` of optim and optimHess. The CRAN-readiness audit found that manual mode ran
-  these at level 0 without asking.
+  stepfun and the `fn` and `gr` of optim and optimHess (both now listed read-only, as stepfun is). The
+  CRAN-readiness audit found that manual mode ran these at level 0 without asking.
 - Level changes: computed read paths (`read.csv(here::here(...))`, `readLines(system.file(...))`), `$VAR`
   operands and option values, and paths the locale cannot translate now ask; plan mode refuses `peter$read()` of
   a computed path; `command -v git &>/dev/null` 0 -> 2; md5sum, dir.exists, file.access and file_test outside
