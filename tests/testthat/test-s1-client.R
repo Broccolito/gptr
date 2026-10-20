@@ -440,6 +440,7 @@ test_that("a fake classifier answers every state; identical states are sent once
 })
 
 test_that("at most gptr.s1_max_active requests are in flight", {
+  skip_on_cran()
   log = local_fake_transfers(function(body) ok_reply(body), delay = 0.05)
   p = wire_provider()
   res = s1_request(s1_model(p), states_of(paste("item", 1:30)), noul_questions(),
@@ -906,6 +907,7 @@ test_that("NS-4: a data frame split into rows prints the once-per-session s1_spl
 })
 
 test_that("a piped session gives one state: no turn, a gptr.decision entry, at most 2,000 chars", {
+  skip_on_cran()
   s1_fresh()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_fake_provider(list(strrep("The fit converged and the residuals look fine. ", 100)))

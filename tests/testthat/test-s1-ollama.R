@@ -514,6 +514,7 @@ test_that("a prepared Clef answers on the reactor without a key, one request at 
 })
 
 test_that("per-server admission holds one request at a time across calls (IC-74)", {
+  skip_on_cran()
   local_ollama_discovery()
   model = s1_prepare("ollama/clef-flash")
   log = local_ollama_transfers(delay = 0.02)
@@ -536,6 +537,7 @@ test_that("per-server admission holds one request at a time across calls (IC-74)
 })
 
 test_that("a native Ollama model without max_active still gets one request per server", {
+  skip_on_cran()
   local_ollama_discovery()
   s1_prepare("ollama/clef-flash")
   # a provider spec whose Clef has no decision record: P05's preflight passes against the

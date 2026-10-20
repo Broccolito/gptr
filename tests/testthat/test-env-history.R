@@ -128,6 +128,7 @@ test_that("every way of naming peter() is filtered and other gptr functions are 
 })
 
 test_that("wide and deep expressions are logged quickly and never make the callback throw", {
+  skip_on_cran()
   local_history()
   wide = str2lang(paste0("x = c(", paste(1:1e5, collapse = ", "), ")"))
   elapsed = system.time(expect_true(user_log_callback(wide, NULL, TRUE, TRUE)))[["elapsed"]]

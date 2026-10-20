@@ -117,6 +117,7 @@ relay_ask = function(dir, msg, allow_runs = NULL, timeout = 5) {
 }
 
 test_that("the relay mailbox is answered in order; tools/call through the run's FIFO", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   opts = stub_opts(run = "r0000000009")
   opts$state$codex_relay = dir
@@ -143,6 +144,7 @@ test_that("the relay mailbox is answered in order; tools/call through the run's 
 })
 
 test_that("a relayed tools/call whose turn ended is never evaluated (D-104)", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   opts = stub_opts(run = "r0000000010")
   opts$state$codex_relay = dir
@@ -308,6 +310,7 @@ test_that("Codex is stopped at the run's turn cap", {
 })
 
 test_that("turn.failed, a missing turn.completed and the wall clock end the exec", {
+  skip_on_cran()
   opts = stub_opts()
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
   push_obj(n, list(type = "turn.started"))
@@ -445,6 +448,7 @@ test_that("a turn budget that is not finite or very large still gives a whole-nu
 })
 
 test_that("the wall clock of an aborted run ends the exec as aborted and stops it", {
+  skip_on_cran()
   local_gptr_options(cli_turn_timeout = 0.3)
   stopped = new.env()
   stopped$n = 0L

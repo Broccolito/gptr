@@ -943,6 +943,7 @@ test_that("the example loads with extensions = for that session only (IC-69)", {
 })
 
 test_that("a complex request plans on the strong model and switches once after the first edit", {
+  skip_on_cran()
   s1_fresh()
   m = local_router_models(
     strong = list(fake_tool("lookup", path = "a.R"), fake_tool("edit", path = "a.R")),
@@ -965,6 +966,7 @@ test_that("a complex request plans on the strong model and switches once after t
 })
 
 test_that("an ordinary request plans on the standard model; a failed edit does not switch", {
+  skip_on_cran()
   s1_fresh()
   m = local_router_models(
     strong = list("strong reply"),
@@ -1018,6 +1020,7 @@ test_that("the route keeps its phase across a compaction and plans without Syste
 })
 
 test_that("a compaction right after the first edit moves the router to implementation", {
+  skip_on_cran()
   s1_fresh()
   m = local_router_models(
     strong = list(fake_tool("edit", path = "a.R"), "strong reply"),
@@ -1063,6 +1066,7 @@ test_that("a compaction right after the first edit moves the router to implement
 })
 
 test_that("a System 1 rating slower than 2 s still chooses the planner", {
+  skip_on_cran()
   s1_fresh()
   m = local_router_models(strong = list("strong reply"), standard = list("standard reply"),
                           implement = list("done"), complex = 0.9)

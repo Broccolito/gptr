@@ -54,6 +54,7 @@ relay = function(text) paste0("The user sent this message while you were working
 slow_first = function() gptr_fake_provider(list(list(text = "first", delay = 0.3), "second"))
 
 test_that("a line typed while an answer runs steers the same run (IC-76, IC-55 source repl)", {
+  skip_on_cran()
   local_console_test()
   fake = slow_first()
   local_typed(typed_once("use base R", function() length(fake_requests(fake)) == 1L))
@@ -92,6 +93,7 @@ test_that("on a CLI route the steering notice says it is sent after the CLI's re
 })
 
 test_that("type_ahead = 'follow_up' queues the line for when the agent would stop", {
+  skip_on_cran()
   local_console_test()
   local_gptr_options(type_ahead = "follow_up")
   fake = slow_first()
@@ -110,6 +112,7 @@ test_that("type_ahead = 'follow_up' queues the line for when the agent would sto
 })
 
 test_that("a line typed during a tool reaches the request right after its result", {
+  skip_on_cran()
   local_console_test()
   box = new.env(parent = emptyenv())
   slow = test_tool("slow", function(ctx) {
@@ -180,6 +183,7 @@ test_that("a line typed during a tool steers when the next call's question follo
 })
 
 test_that("/commands and !code typed during a run run after the answer; text still steers", {
+  skip_on_cran()
   local_console_test()
   e = new.env()
   fake = slow_first()
@@ -196,6 +200,7 @@ test_that("/commands and !code typed during a run run after the answer; text sti
 })
 
 test_that("the held-lines notice ends the streamed line first (render pause)", {
+  skip_on_cran()
   local_console_test()
   log = character()
   pause = console_render_pause
@@ -223,6 +228,7 @@ test_that("the held-lines notice ends the streamed line first (render pause)", {
 })
 
 test_that("lines typed in one batch (a paste) are one message", {
+  skip_on_cran()
   local_console_test()
   fake = slow_first()
   local_typed(typed_once(c("a", "", "b"), function() length(fake_requests(fake)) == 1L))
@@ -233,6 +239,7 @@ test_that("lines typed in one batch (a paste) are one message", {
 })
 
 test_that("an interrupted run drops the held lines and lists them", {
+  skip_on_cran()
   local_console_test()
   e = new.env()
   fake = gptr_fake_provider(list(list(text = "first", delay = 5)))
@@ -279,6 +286,7 @@ test_that("Ctrl-C at an approval prompt aborts the run and drops the held lines"
 })
 
 test_that("a held !code line keeps the lines that complete it, also from a later batch", {
+  skip_on_cran()
   local_console_test()
   e = new.env()
   fake = slow_first()
@@ -298,6 +306,7 @@ test_that("a held !code line keeps the lines that complete it, also from a later
 })
 
 test_that("no fd-0 reads outside a terminal REPL (.stdin, jsonl, peter() with a prompt)", {
+  skip_on_cran()
   local_console_test()
   local_scripted_ui()
   tty = local_stty()
@@ -322,6 +331,7 @@ test_that("no fd-0 reads outside a terminal REPL (.stdin, jsonl, peter() with a 
 })
 
 test_that("a terminal call runs without echo; its modes return after it, an error or interrupt", {
+  skip_on_cran()
   local_console_test()
   tty = local_stty()
   during = list()

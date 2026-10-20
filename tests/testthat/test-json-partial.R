@@ -49,6 +49,7 @@ test_that("partial values follow partial-json Allow.ALL semantics (report 03 cas
 })
 
 test_that("the scanner yields the final object for every prefix split (05 P01 acceptance 4)", {
+  skip_on_cran()
   full = paste0(
     "{\"path\": \"R/plot.R\", \"edits\": [{\"old\": \"ggplot(df, aes(x, y))\", ",
     "\"new\": \"ggplot(df, aes(x = wt, y = mpg)) +\\n  geom_point(colour = \\\"#1b9e77\\\")\"}, ",

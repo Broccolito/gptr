@@ -394,6 +394,7 @@ test_that("a turn without a result line ends with an error; an aborted one with 
 })
 
 test_that("the per-turn wall clock interrupts the CLI and ends the turn as out of budget", {
+  skip_on_cran()
   local_gptr_options(cli_turn_timeout = 0.3)
   opts = stub_opts()
   n = local_normaliser(pcli_claude_parse, stub_model("claude"), opts)
@@ -495,6 +496,7 @@ test_that("an answer to a control request that cannot be built ends the turn, ne
 })
 
 test_that("a tools/call still queued when the wall clock ended the turn is refused, not run", {
+  skip_on_cran()
   local_gptr_options(cli_turn_timeout = 0.3)
   queued = new.env()
   queued$fns = list()
@@ -518,6 +520,7 @@ test_that("a tools/call still queued when the wall clock ended the turn is refus
 })
 
 test_that("the wall clock of an aborted run ends the turn as aborted, without an interrupt", {
+  skip_on_cran()
   local_gptr_options(cli_turn_timeout = 0.3)
   stopped = new.env()
   stopped$n = 0L
@@ -543,6 +546,7 @@ test_that("the wall clock of an aborted run ends the turn as aborted, without an
 })
 
 test_that("a turn P05 ended without its normaliser cannot stop the session's next turn", {
+  skip_on_cran()
   local_gptr_options(cli_turn_timeout = 0.3)
   killed = new.env()
   killed$n = 0L

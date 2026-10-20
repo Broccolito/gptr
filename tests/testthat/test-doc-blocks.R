@@ -470,8 +470,9 @@ test_that("doc_drop_expr() drops the gptr::-qualified forms like the bare ones (
   expect_true(doc_drop_expr(quote(gptr::peter[["out"]]("o1a2b3"))))
   expect_false(doc_drop_expr(quote(gptr::peter$grep("mtcars"))))
   expect_false(doc_drop_expr(quote(gptr::peter("task"))))
-  expect_false(doc_drop_expr(quote(other::gptr_return(x))))
-  expect_false(doc_drop_expr(quote(other::peter$out("o1a2b3"))))
+  # str2lang() keeps R CMD check's dependency scan from reading `other::` as a package
+  expect_false(doc_drop_expr(str2lang("other::gptr_return(x)")))
+  expect_false(doc_drop_expr(str2lang("other::peter$out('o1a2b3')")))
   expect_identical(as.character(doc_code_clean("gptr::peter$out(\"o1a2b3\"); y = 1")), "y = 1")
 })
 
@@ -923,6 +924,7 @@ test_that("a document that keeps changing gives up after three attempts with a w
 })
 
 test_that("a lock held by another live process records nothing", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
   f = file.path(getwd(), "a.R")

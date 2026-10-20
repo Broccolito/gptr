@@ -226,6 +226,7 @@ test_that("20 turns: every same-model request pair without compaction is a byte 
 })
 
 test_that("compaction keeps the tools, the system blocks and the anchored project block", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = "- Style: = for assignment, |> for pipes."))
   sc = scn_run(scn_targets())
   pairs = scn_pairs(sc)
@@ -243,6 +244,7 @@ test_that("compaction keeps the tools, the system blocks and the anchored projec
 })
 
 test_that("negative controls: a re-rendered system prompt and an edited entry break the prefix", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = "- Style: = for assignment, |> for pipes."))
   targets = scn_targets()
   rerender = scn_run(targets, mutate = function(sc) {

@@ -265,6 +265,7 @@ test_that("IC-53 covers a call served to a CLI route: control guard and one-shot
 })
 
 test_that("a nested run's served calls are its tool calls; a yolo control export runs (D-192)", {
+  skip_on_cran()
   seen = new.env()
   seen$events = list()
   keep = function(event, ctx) {

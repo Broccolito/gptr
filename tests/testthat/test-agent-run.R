@@ -1099,6 +1099,7 @@ test_that("a function-frame home is used for the run but never kept (R2)", {
 
 test_that("run_abort() records the partial answer, moves the queue to dropped and settles aborted",
           {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list(list(hang = TRUE)))
   ev = local_events("agent_end")
@@ -1191,6 +1192,7 @@ test_that("a nested run tightens the mode, inherits the snapshot and links to th
 })
 
 test_that("gptr.max_nested_calls caps peter() calls of one evaluation; a group counts once", {
+  skip_on_cran()
   local_permissive()
   local_gptr_options(max_nested_calls = 2L)
   box = new.env()
@@ -1566,6 +1568,7 @@ test_that("a decision-only model or a refused request preflight ends the run bef
 })
 
 test_that("a pump nested in a hook runs only its own run's tools, never another run's (IC-57)", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("probe", function(input, ctx) {

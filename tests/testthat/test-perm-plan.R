@@ -330,6 +330,7 @@ test_that("builtin:plan registers the policy and the plan.pending service", {
 })
 
 test_that("plan mode on the fake provider: denied writes, scratch r, a plan handed over once", {
+  skip_on_cran()
   root = local_project()
   local_plan_store()
   fake = local_fake_provider(list(

@@ -1,4 +1,5 @@
 test_that("live direct specs survive collection and a later piped turn", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   log = new.env(parent = emptyenv())
@@ -29,6 +30,7 @@ test_that("live direct specs survive collection and a later piped turn", {
 })
 
 test_that("discarded closure-bearing direct specs do not root their session", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   make = function() {
@@ -66,6 +68,7 @@ test_that("discarded closure-bearing direct specs do not root their session", {
 })
 
 test_that("collected aliased hooks are removed from their event index", {
+  skip_on_cran()
   local_gw()
   make = function() {
     session = peter("one", model = gptr_fake_provider(list("done")),
@@ -94,6 +97,7 @@ test_that("collected aliased hooks are removed from their event index", {
 })
 
 test_that("a collected session still dispatches its own shutdown handler before removal", {
+  skip_on_cran()
   local_gw()
   log = new.env(parent = emptyenv())
   log$reason = NULL
@@ -125,6 +129,7 @@ test_that("a collected session still dispatches its own shutdown handler before 
 })
 
 test_that("forked sessions preserve copied direct specs for their own turns", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   tool = test_tool("fork_probe", function(ctx) "ok")
@@ -170,6 +175,7 @@ test_that("worker snapshots hydrate session records without starting a worker", 
 })
 
 test_that("explicit global registration keeps its captured state until removal", {
+  skip_on_cran()
   local_gw()
   make = function() {
     canary = new.env(parent = emptyenv())
@@ -190,6 +196,7 @@ test_that("explicit global registration keeps its captured state until removal",
 })
 
 test_that("collected scoped specs survive deferred shutdown without resurrection", {
+  skip_on_cran()
   local_gw()
   reg = registry_env()
   previous = gptr_last()
@@ -247,6 +254,7 @@ test_that("collected scoped specs survive deferred shutdown without resurrection
 })
 
 test_that("a self-capturing public shutdown hook releases its session after safe dispatch", {
+  skip_on_cran()
   local_gw()
   reg = registry_env()
   previous = gptr_last()

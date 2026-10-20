@@ -28,6 +28,7 @@ test_that("the stdin reader echoes the prompt and the escaped line when asked", 
 })
 
 test_that("close() closes the stdin connection once (IC-59)", {
+  skip_on_cran()
   n0 = nrow(showConnections())
   local_console_stdin("x")
   rd = console_reader(stdin = TRUE)
@@ -585,6 +586,7 @@ test_that("the stdin UI never echoes a secret answer", {
 })
 
 test_that("a scripted .stdin console session (acceptance 2)", {
+  skip_on_cran()
   local_console_test()
   local_scripted_ui()
   fake = gptr_fake_provider(list("first answer", "second answer"))

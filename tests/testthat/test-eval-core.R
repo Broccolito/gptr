@@ -270,6 +270,7 @@ test_that("an infinite recursion becomes an error result instead of escaping", {
 })
 
 test_that("sinks, options, hooks and the time limit are restored after errors and interrupts", {
+  skip_on_cran()
   e = new.env()
   n_sink = sink.number()
   width = getOption("width")
@@ -318,6 +319,7 @@ test_that("R's lazily set TZDIR is not reported as a change", {
 })
 
 test_that("a timeout stops a busy loop with status timeout", {
+  skip_on_cran()
   res = eval_r("i = 0\nrepeat { i = i + 1 }", new.env(), timeout = 1)
   expect_equal(res$status, "timeout")
   expect_lt(res$elapsed, 10)
@@ -487,6 +489,7 @@ test_that("code that is not valid UTF-8 is a parse error, not an R error", {
 })
 
 test_that("a message sink the code leaves open is undone, also over the user's own one", {
+  skip_on_cran()
   # eval_r() stops at the first error, so code that diverts messages and fails before its reset
   # line left the user's later errors and messages going into the code's file (review round 1)
   e = new.env()
@@ -529,6 +532,7 @@ test_that("a message sink the code leaves open is undone, also over the user's o
 })
 
 test_that("a message sink on the capture connection is undone before that connection closes", {
+  skip_on_cran()
   # While output is captured, stdout() is the capture connection, so sink(stdout(), type =
   # 'message') pointed messages at it, and closing it threw from eval_r() before the options,
   # the plot device and the message sink were restored (review round 2)
@@ -641,6 +645,7 @@ test_that("a visible value is printed with the print methods visible from envir"
 })
 
 test_that("paired RStudio resizes survive tool success, errors and interrupts", {
+  skip_on_cran()
   withr::local_options(width = 52L, max.print = 123L, cli.width = 45L)
   withr::local_envvar(RSTUDIO_CONSOLE_WIDTH = "52")
   local_mocked_bindings(gptr_is_interactive = function() TRUE,
@@ -667,6 +672,7 @@ test_that("paired RStudio resizes survive tool success, errors and interrupts", 
 })
 
 test_that("unpaired metrics and ordinary tool widths restore the caller width", {
+  skip_on_cran()
   withr::local_options(width = 52L, cli.width = 45L)
   withr::local_envvar(RSTUDIO_CONSOLE_WIDTH = "52")
   human = TRUE

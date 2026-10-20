@@ -31,6 +31,7 @@ test_that("settings files keep unknown keys and a NULL removes a key", {
 })
 
 test_that("a settings file is parsed once per change, a same-size rewrite included", {
+  skip_on_cran()
   local_gw()
   p = settings_path("user", create = TRUE)
   box = new.env()

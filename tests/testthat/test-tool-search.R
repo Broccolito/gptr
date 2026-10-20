@@ -295,6 +295,7 @@ test_that("ls skips and counts an entry whose name is not valid UTF-8, as the wa
 # pattern again; a PCRE match-limit error there must not leak a warning (report 11 section 7.1
 # risk 3). The window then starts at the beginning of the line.
 test_that("a match-limit error while placing a long line's window leaks no warning", {
+  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "cat.txt", paste0("aaa\n", strrep("a", 600), "b\n"))
   m = expect_no_warning(search_grep("(a+)+$", td, context = 1L))
@@ -311,6 +312,7 @@ test_that("a match-limit error while placing a long line's window leaks no warni
 # both prints. A failure of the whole-file prefilter says nothing about the file's lines, so the
 # per-line matcher decides; before, the file was dropped (ripgrep -P finds f.txt:14).
 test_that("a match-limit failure is reported without rows and loses only the lines it hits", {
+  skip_on_cran()
   note = "he pattern was too expensive on some lines; results may be incomplete]"
   td = withr::local_tempdir()
   put_file(td, "cat.txt", paste0(strrep("a", 600), "b\naaa\n"))

@@ -230,6 +230,7 @@ test_that("a styled block copies as Markdown whose body runs: no frame character
 })
 
 test_that("a fence indented under a list item closes and shows its body unindented", {
+  skip_on_cran()
   for (pad in c("    ", "        ")) {
     text = paste0("- item\n\n", pad, "```r\n", pad, "x = 1\n", pad, "  y\n", pad, "```\n\n",
                   "## After\n")

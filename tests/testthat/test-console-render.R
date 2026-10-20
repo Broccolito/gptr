@@ -62,6 +62,7 @@ render_rich = paste0(
   "```\n```python\nx = 'a'  # comment 1\n```\nWide \u4e2d\u6587 chars.\n\n")
 
 test_that("the output does not depend on chunking in the four console modes (acceptance 3)", {
+  skip_on_cran()
   withr::local_seed(42)
   # highlighting decides per complete line; cli's parser is slow for 800 renders
   local_mocked_bindings(code_highlight = function(code) code, .package = "cli")
@@ -161,6 +162,7 @@ test_that("pipe tables are aligned on an interactive console and stay valid Mark
 })
 
 test_that("a pipe table too wide to align prints verbatim as its rows arrive (#43)", {
+  skip_on_cran()
   withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
   genes = c("IL7R", "CCR7", "S100A4", "CD14", "LYZ", "MS4A1", "CD8A", "FCGR3A", "MS4A7", "GNLY",
             "NKG7", "FCER1A", "CST3", "PPBP")
@@ -1214,6 +1216,7 @@ infra27_run = function(verbose) {
 }
 
 test_that("the transcript is the same at verbosity 0, 1 and 2 (INFRA-27, acceptance 4)", {
+  skip_on_cran()
   local_project()
   v0 = infra27_normalise(infra27_run(0L))
   v1 = infra27_normalise(infra27_run(1L))

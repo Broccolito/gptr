@@ -69,6 +69,7 @@ test_that("artifact owner uncertainty and endpoint changes cannot signal a proce
 
 test_that(
   "artifact constructor unwind settles only its retained owner and preserves primary conditions", {
+  skip_on_cran()
   for (kind in c("error", "interrupt")) {
     for (cleanup_fails in c(FALSE, TRUE)) {
       x = artifact_owner_fixture()

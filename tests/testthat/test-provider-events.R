@@ -51,6 +51,7 @@ test_that("the accumulator returns the terminal message once `done` arrives", {
 })
 
 test_that("100,000 deltas accumulate in linear time (INFRA-23)", {
+  skip_on_cran()
   # Linear accumulation takes well under 1 s here; a buffer list copied on every delta (quadratic)
   # takes about 1.7 s for 20,000 deltas and about 40 s for 100,000, far above the 5 s bound
   acc = acc_new()

@@ -677,6 +677,7 @@ test_that("named extensions resolve from .gptr/extensions of a trusted project",
 })
 
 test_that("a plugin passed with plugins = is invisible to the next peter() call (IC-69)", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "scoped-plug"}')
   write_file(file.path(d, "skills", "scoped-skill", "SKILL.md"),
@@ -713,6 +714,7 @@ test_that("after gptr_reload() declarative records are rebuilt once and code is 
 })
 
 test_that("NS-10: skills = c(single_cell, plotting) and plugins = clinical_trials (e2e)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   skill = function(name, desc, body) {
     paste(c("---", paste0("name: ", name), paste0("description: ", desc), "---", body),
