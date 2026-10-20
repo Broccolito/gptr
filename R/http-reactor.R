@@ -689,8 +689,7 @@ wire_log_path = function(session) {
   safe = function(path) {
     part = path
     repeat {
-      link = Sys.readlink(part)
-      if (!is.na(link) && nzchar(link) && !file.exists(part)) return(FALSE)
+      if (path_dangling(part)) return(FALSE)
       parent = dirname(part)
       if (identical(parent, part)) break
       part = parent

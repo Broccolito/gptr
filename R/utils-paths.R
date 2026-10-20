@@ -46,7 +46,7 @@ write_atomic = function(path, content, mode = "0600", expected_md5 = NULL) {
   }
   present = file.exists(path)
   before = if (present) unname(tools::md5sum(path)) else NA_character_
-  old = file.info(path, extra_cols = FALSE)$mode
+  old = path_info(path)$mode
   if (!is.na(old)) mode = old
   tmp = tempfile(".gptr-write-", tmpdir = dir)
   on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
@@ -254,6 +254,32 @@ path_is_link = function(path) {
   lexical = vapply(file.path(parent, basename(requested)), path_lexical, "")
   out[existing] = tolower(path_norm(requested)) != tolower(lexical)
   out
+}
+
+#' Is a path's final component an entry of its directory (case folded)? On Windows a short (8.3)
+#' or trailing-dot alias is not, while a link is, even a dangling one that stat cannot see.
+#' @noRd
+path_listed = function(path) {
+  tolower(basename(path)) %in% tolower(list.files(dirname(path), all.files = TRUE, no.. = TRUE))
+}
+
+#' File metadata as file.info() without extra columns, where a link to nothing has none on every
+#' OS. POSIX stat() fails on such a link; Windows stat() succeeds on it, and file.info() warns
+#' when it cannot open the path for its times. That warning is muffled and the row made NA, so
+#' `isdir %in% FALSE` asks for an existing file that is not a directory.
+#' @noRd
+path_info = function(path) {
+  info = suppressWarnings(file.info(path, extra_cols = FALSE))
+  info[is.na(info$mtime), ] = NA
+  info
+}
+
+#' Is a path a dangling link: one without followed metadata that is a link? POSIX readlink names
+#' its target exactly; Windows readlink has none, so there it is an entry of its directory, whose
+#' names fold case (path_listed()).
+#' @noRd
+path_dangling = function(path) {
+  is.na(path_info(path)$mtime) && (if (is_windows()) path_listed(path) else path_is_link(path))
 }
 
 #' Is each path equal to or inside `root`? (compares path keys)

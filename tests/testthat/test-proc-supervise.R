@@ -17,9 +17,9 @@ wait_until = function(cond, seconds = 5) {
   }
 }
 
-# Whether the processes that carry a marker are `pid` and its descendants only. On Windows
-# Rscript.exe runs Rterm.exe as its child, which inherits the marker, so the tree of one Rscript
-# child holds two processes there (hosted Windows: `length(proc_tree(marker)) == 1L` was FALSE)
+# Whether the processes that carry a marker are `pid` and its descendants only. On hosted Windows
+# one Rscript child's tree holds a second marked descendant (`length(proc_tree(marker)) == 1L` was
+# FALSE); it is not Rterm.exe, since Rscript.exe runs R in its own process (D-019 item 2)
 marker_tree_is = function(marker, pid) {
   pids = vapply(proc_tree(marker), ps::ps_pid, 1L)
   kids = tryCatch(ps::ps_children(ps::ps_handle(pid), recursive = TRUE),
@@ -82,6 +82,19 @@ test_that("proc_mark() records a marker file that kill_all() releases", {
   expect_true(kill_all(p, grace = 0))
   expect_false(file.exists(path))
   expect_null(proc_record(p$get_pid()))
+})
+
+test_that("proc_children() follows parent links from ps's own handle while the parent lives", {
+  local_proc_state()
+  skip_on_cran()
+  kid = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(30)"))
+  withr::defer(try(kid$kill(), silent = TRUE))
+  # on Linux processx's stamp of a parent can read later than its children's creation times
+  late = ps::ps_handle(Sys.getpid(), ps::ps_create_time(ps::ps_handle(kid$get_pid())) + 1)
+  parent = list(get_pid = Sys.getpid, is_alive = function() TRUE, as_ps_handle = function() late)
+  expect_true(kid$get_pid() %in% vapply(proc_children(parent), ps::ps_pid, 1L))
+  parent$is_alive = function() FALSE
+  expect_identical(proc_children(parent), list())
 })
 
 test_that("kill_all() leaves no descendant", {

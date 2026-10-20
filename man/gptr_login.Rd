@@ -25,7 +25,9 @@ Stores a credential for a model provider (for example \code{"openrouter"}) or fo
 get the authorization-code flow with PKCE (S256): a page on 127.0.0.1 receives the redirect
 when 'httpuv' and 'later' are installed; otherwise you paste the address your browser ends
 on. Everything else gets masked key entry. Credentials go to the credential store
-(\code{auth.json}, readable only by you, or a keyring reference); access tokens stay in memory.
+(\code{auth.json}, readable only by you: mode 0600 on Unix, and on Windows the access control list
+of your user profile, so keep \code{tools::R_user_dir("gptr", "config")} inside it; or a keyring
+reference); access tokens stay in memory.
 A tool call never opens a browser: when an MCP server needs a sign-in, the call fails with
 an error naming this function.
 }

@@ -226,7 +226,7 @@ settings_content_hash = function(paths) {
 
 #' Settings cache stamp and age; an unavailable content hash never permits a hit or insertion
 #' @noRd
-settings_file_stamp = function(path, info = file.info(path, extra_cols = FALSE)) {
+settings_file_stamp = function(path, info = path_info(path)) {
   time = as.numeric(c(info$mtime, info$ctime))
   hashes = settings_content_hash(path)
   stamp = paste(c(format(time, digits = 15), info$size), collapse = " ")
@@ -439,7 +439,7 @@ trust_file_hash = function(path) {
 #' @noRd
 trust_fingerprint = function(root) {
   paths = trust_gated_paths(root)
-  info = file.info(paths, extra_cols = FALSE)
+  info = path_info(paths)
   stamp = paste(paths, format(as.numeric(info$mtime), digits = 15),
                 format(as.numeric(info$ctime), digits = 15), info$size, collapse = "|")
   hashes = settings_content_hash(paths)

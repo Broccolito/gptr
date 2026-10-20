@@ -57,10 +57,12 @@ local({
     publish()
   }
   if (linux) stopifnot(Sys.chmod(root, "0700"))
+  # The home is a Windows profile: Google Chrome refuses DevTools when the shell cannot resolve
+  # its default profile folder under %USERPROFILE%\AppData\Local
   dirs = c(
     config = "user-config", data = "user-data", cache = "user-cache", home = "home",
-    appdata = "appdata", localappdata = "localappdata", xdg = "xdg-config", project = "project",
-    temp = "child-temp"
+    appdata = "home/AppData/Roaming", localappdata = "home/AppData/Local", xdg = "xdg-config",
+    project = "project", temp = "child-temp"
   )
   paths = stats::setNames(file.path(root, dirs), names(dirs))
   for (path in paths) dir.create(path, recursive = TRUE, showWarnings = FALSE)

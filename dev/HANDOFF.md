@@ -1,4 +1,24 @@
-## Current checkpoint — K Mac validation, 2026-10-15
+## Current checkpoint — P27 Windows coverage (PR #51), 2026-10-19
+
+Branch `claude/windows-coverage-p27` (draft PR #51), code head `406befb`. Goal: every Windows
+function proven on hosted Windows CI (release, oldrel-4, R-devel; CRAN and NOT_CRAN), every Windows
+lane green twice on one commit. Plan `plan/P27-windows-coverage.md` (acceptance A1-A9), evidence
+`progress/fixes.md` CI-25..CI-73, decisions D-228..D-235. On `d9a7840` (`404b90a` merged with
+`main`) R-CMD-check run 39274424747 is green on both attempts except Windows and ubuntu oldrel-4,
+so Windows release, the POSIX readlink rule of `path_dangling()` (CI-68) and `proc_children()` from
+ps's own handle (CI-69, D-233) passed there; the ordinary and optional windows-by-file runs,
+rscript-native and Exact-tarball (all five legs) are green twice; locally the full suite and
+`R CMD check --as-cran` are clean. Earlier fixes passed on hosted Windows at `85e5883` and
+`74de8c6`: the PowerShell route (CI-66, D-235), system Google Chrome's DevTools refusal under the
+suite (CI-63), the background job tests (CI-65) and the R 4.2.3 `octmode` mock (CI-67). Fixed after
+`d9a7840` and not yet run on hosted CI: the abort tests' race behind ubuntu oldrel-4's 45-minute
+timeout on both attempts (CI-71, trigger not established), the observer's initial-deadline retry
+for native-08 (CI-72) and the exactly delete-pending file for native-01 (CI-73, an inferred cause),
+both on Windows oldrel-4, where CI-70's retries did not cover native-01. Open: every lane on the
+final head `406befb`, each Windows lane twice (A1-A7, A9; Plan-gates and Optional-integrations have
+not run on this branch); CI-64's ubuntu cleanup race and INFRA-01's rate (CI-62) are unproven.
+
+## Historical checkpoint — K Mac validation, 2026-10-15
 
 Current evidence and exact source boundaries are recorded in
 [Mac validation checkpoint](progress/mac-validation-20261015.md).
@@ -1032,8 +1052,9 @@ their files in `dev/.validation/scratch/lanes-current.txt` (empty now).
 
 - P12: `claude-haiku-4-5` has `tool_addition = TRUE` but `mid_system = FALSE` (no tool-addition
   declarations sent; D-075).
-- D-019 item 5: processx's stdin write blocks on Windows (a pause, not a deadlock, where children read
-  first; WIN-1 shows workers are safe, D-179). Decide before large stdin payloads go to Windows children.
+- D-019 item 5 (status 2026-10-19): the owned Windows stdin writer carries large stdin; the 4 MB echo,
+  the Windows backpressure file and the 200 KB CLI stdin tests pass on hosted Windows (P27). Untested:
+  claude control responses over one 64 KiB writer chunk (D-104).
 - CRAN check time: under CRAN conditions (`NOT_CRAN` unset) the tests took 284 s on this Mac after PERF-2;
   the `cran-mode` job runs them serially on R-devel. win-builder shows CRAN's real time.
 - Windows open item (WIN-2): concurrent fake CLIs append to one log file (INFRA-19 race, once).

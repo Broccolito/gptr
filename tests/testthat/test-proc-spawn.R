@@ -33,8 +33,8 @@ cat_raw_code = function(bytes) {
 crlf_bytes = function() if (is_windows()) as.raw(0x0a) else as.raw(c(0x0d, 0x0a))
 
 # The pids that carry a tree marker, and whether they are `pid` and its descendants only. On
-# Windows Rscript.exe runs Rterm.exe as its child, which inherits the marker, so the tree of one
-# Rscript child holds two processes there
+# hosted Windows one Rscript child's tree holds a second marked descendant; it is not Rterm.exe,
+# since Rscript.exe runs R in its own process (R's src/unix/Rscript.c calls AppMain())
 marker_pids = function(marker) vapply(proc_tree(marker), ps::ps_pid, 1L)
 marker_tree_is = function(marker, pid) {
   pids = marker_pids(marker)
@@ -96,10 +96,18 @@ test_that("shell_resolve() uses /bin/sh on Unix and Git Bash, PowerShell or cmd 
   decoded = iconv(list(jsonlite::base64_dec(pw$args[6])), "UTF-16LE", "UTF-8")
   expect_match(decoded, "Write-Output \"caf\u00e9\"", fixed = TRUE)
   expect_match(decoded, "exit $LASTEXITCODE", fixed = TRUE)
-  cmd = shell_resolve_os("dir", TRUE, which = none, getenv = none, exists = function(x) FALSE)
-  expect_identical(cmd$command, "cmd.exe")
-  expect_identical(as.vector(cmd$args), c("/d", "/s", "/c", "\"chcp 65001 >nul & dir\""))
+  # cmd: the line reaches the inner cmd, started after chcp, only through the environment
+  comspec = "C:\\Windows\\system32\\cmd.exe"
+  cmd = shell_resolve_os("echo \"a&b\" %OS%", TRUE, which = none,
+                         getenv = function(x) if (x == "COMSPEC") comspec else "",
+                         exists = function(x) FALSE)
+  expect_identical(cmd$command, comspec)
+  expect_identical(as.vector(cmd$args), c("/d", "/v:on", "/s", "/c", paste0(
+    "\"chcp 65001 >nul & \"", comspec, "\" /d /s /c !GPTR_SHELL_CMD!\"")))
   expect_true(isTRUE(attr(cmd$args, "verbatim")))
+  expect_identical(cmd$env, c(GPTR_SHELL_CMD = "\"echo \"a&b\" %OS%\""))
+  expect_identical(shell_resolve_os("dir", TRUE, which = none, getenv = none,
+                                    exists = function(x) FALSE)$command, "cmd.exe")
 })
 
 test_that("proc_spawn() records a tree marker that kill_all() releases", {
@@ -198,44 +206,39 @@ test_that("line_reader() drops bytes that are not UTF-8 without a warning", {
   expect_identical(got, c("ok", "caf"))
 })
 
-test_that("a parent killed with SIGTERM leaves children that the next load's sweep removes", {
+test_that("a killed parent leaves a grandchild that the next load's sweep removes", {
   skip_on_cran()
-  skip_on_os("windows")
   withr::local_envvar(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep))
-  script = tempfile(fileext = ".R")
-  spawn_line = paste0("spawn(rs, c('--vanilla', '-e', 'Sys.sleep(120)'), stdout = NULL, ",
-                      "stderr = NULL, supervise = FALSE)")
+  script = withr::local_tempfile(fileext = ".R")
+  ready = file.path(withr::local_tempdir(), "grandchild.pid")
+  # The grandchild (cleanup = FALSE) inherits the child's marker. On Windows processx's
+  # kill-on-close job ends the child with its parent, never a grandchild
+  child = paste("a = commandArgs(TRUE); processx::process$new(a[[1L]], c('--vanilla', '-e',",
+                "a[[2L]], a[[3L]]), cleanup = FALSE); Sys.sleep(120)")
+  grandchild = "cat(Sys.getpid(), file = commandArgs(TRUE)[[1L]]); Sys.sleep(120)"
   writeLines(c(tracemem_loader(),
                "spawn = utils::getFromNamespace('proc_spawn', 'gptr')",
                "rs = utils::getFromNamespace('rscript_path', 'gptr')()",
-               paste0("p1 = ", spawn_line),
-               "cat(p1$get_pid(), '\\n')",
-               "flush(stdout())",
+               sprintf(paste("p1 = spawn(rs, c('--vanilla', '-e', %s, rs, %s, %s), stdout = NULL,",
+                             "stderr = NULL, supervise = FALSE)"),
+                       deparse(child), deparse(grandchild), deparse(ready)),
                "Sys.sleep(120)"), script)
-  parent = processx::process$new(rscript_path(), c("--vanilla", script), stdout = "|",
-                                 stderr = "|")
+  parent = processx::process$new(rscript_path(), c("--vanilla", script))
   withr::defer(try(parent$kill_tree(), silent = TRUE))
-  line = ""
-  t0 = reactor_now()
-  while (!grepl("\n", line) && reactor_now() - t0 < 120 && parent$is_alive()) {
-    processx::poll(list(parent), 500L)
-    line = paste0(line, parent$read_output())
-  }
-  kids = as.integer(strsplit(trimws(line), "\\s+")[[1]])
-  expect_length(kids, 1L)
-  stopifnot(length(kids) == 1L, proc_pid_valid(kids))
-  handle = ps::ps_handle(kids[[1L]])
-  withr::defer(try(ps::ps_kill(handle), silent = TRUE))
+  expect_true(wait_until(function() isTRUE(file.size(ready) > 0), 120))
+  orphan = ps::ps_handle(as.integer(readLines(ready, warn = FALSE)))
+  withr::defer(try(ps::ps_kill(orphan), silent = TRUE))
+  # SIGTERM on Unix, TerminateProcess() on Windows: no finalizer of the parent runs
   parent$signal(tools::SIGTERM)
   parent$wait(10000L)
   expect_false(parent$is_alive())
-  expect_true(all(vapply(kids, pid_alive, NA)))
+  expect_true(proc_handle_alive(orphan))
   # what the next load of gptr runs first (the on_load() expression of proc-supervise.R)
   expect_gte(proc_sweep(), 1L)
-  expect_true(wait_until(function() !any(vapply(kids, pid_alive, NA)), 5))
-  left = lapply(list.files(proc_dir(), pattern = "^GPTR_PROC_", full.names = TRUE),
+  expect_true(wait_until(function() isFALSE(proc_handle_alive(orphan)), 5))
+  left = lapply(list.files(proc_dir(), pattern = "^GPTR_PROC_.*[.]json$", full.names = TRUE),
                 function(f) json_decode(read_utf8(f)$text))
-  expect_false(any(vapply(left, function(rec) rec$pid %in% kids, NA)))
+  expect_false(any(vapply(left, function(rec) rec$parent_pid == parent$get_pid(), NA)))
 })
 
 test_that("spawn validates arguments and complete environments before creating a process", {

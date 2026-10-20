@@ -116,7 +116,7 @@ callr_native_child = function(file, result_path, library) {
     compatibility = if (compat) callr_native_compat_preflight() else list()
     if (!upstream) pkgload::load_all(".", helpers = FALSE, quiet = TRUE)
     raw = testthat::test_file(file,
-      reporter = testthat::LocationReporter$new(file = stderr()),
+      reporter = testthat::LocationReporter$new(file = stdout()),
       package = if (upstream) "callr" else "gptr",
       load_package = if (upstream) "installed" else "none")
     result = list(rows = optional_result_rows(raw), errors = sum(vapply(raw, function(test) {

@@ -92,11 +92,12 @@ dotenv_unescape = function(v) {
 #' @noRd
 dotenv_parse = function(path) {
   check_string(path, "path")
-  if (!file.exists(path) || dir.exists(path)) {
+  info = path_info(path)
+  if (is.na(info$size) || isTRUE(info$isdir)) {
     gptr_abort("`path` must name an existing .env file.", "invalid_argument",
                arg = "path", expected = "an existing file")
   }
-  raw = readBin(path, "raw", file.size(path))
+  raw = readBin(path, "raw", info$size)
   if (any(raw == as.raw(0L))) {
     gptr_abort("A .env file must be text, not binary data.", "invalid_argument",
                arg = "path", expected = "a text .env file")

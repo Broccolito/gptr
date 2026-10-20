@@ -544,7 +544,7 @@ mcp_sync = function(force = FALSE, session = NULL) {
   st = mcp_state()
   project = project_root()
   srcs = mcp_config_sources(project)
-  info = file.info(vapply(srcs, function(s) s$path, ""))
+  info = path_info(vapply(srcs, function(s) s$path, ""))
   stamp = paste(c(project, info$size, as.numeric(info$mtime), trust_ok(project),
                   mcp_map_chr(setting_get("mcp.import"))), collapse = "|")
   if (!isTRUE(force) && identical(st$stamp, stamp)) return(mcp_servers_all(session))

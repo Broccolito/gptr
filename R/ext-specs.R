@@ -1319,8 +1319,9 @@ spec_result_images = function(images) {
     }
     if (is.raw(im)) return(block_image(b64(im), mime = "image/png", source = "plot"))
     ext = if (is.character(im) && length(im) == 1L) tolower(path_ext(im)) else ""
-    if (nzchar(ext) && ext %in% names(mimes) && file.exists(im)) {
-      raw = readBin(im, "raw", n = file.info(im)$size)
+    size = if (nzchar(ext) && ext %in% names(mimes)) path_info(im)$size else NA
+    if (!is.na(size)) {
+      raw = readBin(im, "raw", n = size)
       return(block_image(b64(raw), mime = unname(mimes[ext]), source = "file"))
     }
     gptr_abort("An element of `images` is neither an image block, an image file nor raw PNG.",

@@ -34,7 +34,7 @@ class Operations:
                      self.root: metadata("directory", 0, 1)}
         self.children = {self.anchor: [os.path.basename(self.root)], self.root: []}
         self.targets, self.stat_paths, self.scan_paths = {}, [], []
-        self.find_paths = []
+        self.find_paths, self.pending, self.pending_paths = [], set(), []
 
     def add(self, name, info, target=None):
         self.info[os.path.join(self.root, name)] = info
@@ -74,6 +74,10 @@ class Operations:
 
     def readlink(self, path):
         return self.targets[path]
+
+    def delete_pending(self, path):
+        self.pending_paths.append(path)
+        return path in self.pending
 
 
 class ObserverControls(unittest.TestCase):
@@ -375,8 +379,15 @@ class ObserverControls(unittest.TestCase):
         with self.assertRaisesRegex(ObservationError, "snapshot-deadline"):
             observer.snapshot()
         now[0] = 0
-        with self.assertRaisesRegex(ObservationError, "initial-entry-or-time-limit"):
+        with self.assertRaisesRegex(ObservationError, "initial-deadline"):
             self.observer(fs, clock=clock)
+        # The initial parent chain keeps its own entry limit and reason.
+        fs.add("nested", metadata("directory", 0, 3))
+        nested = os.path.join(fs.root, "nested")
+        with self.assertRaisesRegex(ObservationError, "initial-entry-limit"):
+            DiskObserver(nested, operations=fs, windows=True, max_entries=1)
+        self.assertEqual(DiskObserver(nested, operations=fs, windows=True, max_entries=2).root,
+                         nested)
 
 
     def test_declared_only_charges_link_without_denied_directory_traversal(self):
@@ -1059,7 +1070,7 @@ class PosixLookupControls(unittest.TestCase):
                     return now[0]
 
                 if phase == "initialize":
-                    with self.assertRaisesRegex(ObservationError, "initial-entry-or-time-limit"):
+                    with self.assertRaisesRegex(ObservationError, "initial-deadline"):
                         DiskObserver(fs.root, operations=fs, windows=False, clock=clock)
                 else:
                     scanner = DiskObserver(fs.root, operations=fs, windows=False, clock=lambda: 0)
@@ -1165,6 +1176,176 @@ class PosixLookupControls(unittest.TestCase):
         fs.add("data", metadata(size=7))
         with self.assertRaisesRegex(ObservationError, "byte-limit"):
             DiskObserver(fs.root, operations=fs, windows=False, byte_cap=6).snapshot()
+
+
+class PendingAPI:
+    def __init__(self, status=0xC0000056):
+        self.status, self.paths, self.layout = status, [], None
+        self.NtQueryAttributesFile = NativeCall(self.query)
+
+    def query(self, attributes, basic):
+        import ctypes
+        self.record = record = attributes._obj
+        name = record.name.contents
+        self.paths.append(ctypes.string_at(name.buffer, name.maximum).decode("utf-16-le"))
+        self.layout = (record.length, ctypes.sizeof(record), ctypes.sizeof(name), record.root,
+                       record.attributes, record.descriptor, record.service, name.length,
+                       name.maximum, ctypes.sizeof(basic._obj))
+        return self.status
+
+
+class DeletePendingControls(unittest.TestCase):
+    def pending(self):
+        fs = Operations()
+        fs.add("data", metadata(size=7))
+        fs.add("marker.json", metadata(size=180, inode=0))
+        marker = os.path.join(fs.root, "marker.json")
+        fs.pending.add(marker)
+        return fs, marker
+
+    def test_delete_pending_file_keeps_its_listed_bytes_until_it_is_removed(self):
+        fs, marker = self.pending()
+        now = [0]
+        scanner = DiskObserver(fs.root, operations=fs, windows=True, clock=lambda: now[0])
+        # The state outlasts two snapshot deadlines, and every walk still completes.
+        for moment in (0, 0.6, 1.2, 1.8, 2.4):
+            now[0] = moment
+            sample = scanner.snapshot()
+            self.assertEqual((sample["bytes"], sample["disappeared"], sample["entries"],
+                              sample["directories"]), (187, 0, 5, 1))
+            self.assertIsNone(scanner.last_failure)
+        self.assertEqual(fs.pending_paths, [marker] * 5)
+        self.assertNotIn(marker, fs.scan_paths)
+        fs.children[fs.root].remove("marker.json")
+        sample = scanner.snapshot()
+        self.assertEqual((sample["bytes"], sample["disappeared"], sample["entries"]), (7, 0, 4))
+        fs, marker = self.pending()
+        fs.add("alias", metadata("link", 0, 3, 0xA000000C), "missing")
+        scanner = DiskObserver(fs.root, [{"entry": "alias", "target": "missing"}],
+                               operations=fs, windows=True, clock=lambda: 0)
+        # It is then a file like any other, which declared_only mode does not charge.
+        sample = scanner.snapshot(declared_only=True)
+        self.assertEqual((sample["bytes"], sample["disappeared"], sample["declared_links"]),
+                         (16384, 0, 1))
+        self.assertEqual(fs.pending_paths, [marker])
+
+    def test_delete_pending_file_keeps_the_byte_entry_and_deadline_bounds(self):
+        for mode, reason in (("bytes", "byte-limit"), ("entries", "entry-limit"),
+                             ("deadline", "snapshot-deadline")):
+            with self.subTest(mode=mode):
+                fs, marker = self.pending()
+                now = [0]
+                scanner = DiskObserver(fs.root, operations=fs, windows=True,
+                                       clock=lambda: now[0],
+                                       byte_cap=186 if mode == "bytes" else 64 * 1024 ** 2,
+                                       max_entries=4 if mode == "entries" else 4096)
+                if mode == "deadline":
+                    def slow(path):
+                        now[0] = 1
+                        return True
+
+                    fs.delete_pending = slow
+                with self.assertRaisesRegex(ObservationError, reason):
+                    scanner.snapshot()
+                self.assertIsNotNone(scanner.last_failure)
+
+    def test_unopenable_entries_without_exact_pending_deletion_stay_invalid(self):
+        fs, marker = self.pending()
+        fs.pending.clear()
+        now = [0]
+        scanner = DiskObserver(fs.root, operations=fs, windows=True, clock=lambda: now[0])
+        for moment in (0, 0.6, 1.2, 1.8, 2.4):
+            now[0] = moment
+            with self.assertRaisesRegex(ObservationError, "metadata-invalid"):
+                scanner.snapshot()
+            self.assertEqual(scanner.last_failure["operation"], "entry-metadata")
+        self.assertEqual(fs.pending_paths, [marker] * 5)
+        declared = [{"entry": "marker.json", "target": "missing"}]
+        for mode, info, windows, declarations, reason in (
+                ("directory", metadata("directory", 0, 0), True, (), "metadata-invalid"),
+                ("link", metadata("link", 0, 0, 0xA000000C), True, declared, "metadata-invalid"),
+                ("negative", metadata(size=-1, inode=0), True, (), "metadata-invalid"),
+                ("posix", metadata(size=180, inode=0), False, (), "metadata-invalid"),
+                ("unhooked", metadata(size=180, inode=0), True, (), "metadata-invalid"),
+                ("declared", metadata(size=180, inode=0), True, declared,
+                 "declared-entry-not-link")):
+            with self.subTest(mode=mode):
+                fs = Operations()
+                fs.add("marker.json", info, "missing" if mode == "link" else None)
+                marker = os.path.join(fs.root, "marker.json")
+                fs.pending.add(marker)
+                if mode == "unhooked":
+                    fs.delete_pending = None
+                scanner = DiskObserver(fs.root, declarations, operations=fs, windows=windows,
+                                       clock=lambda: 0)
+                with self.assertRaisesRegex(ObservationError, reason):
+                    scanner.snapshot()
+                self.assertEqual(fs.pending_paths, [marker] if mode == "declared" else [])
+
+    def test_native_pending_query_is_literal_and_matches_only_the_exact_status(self):
+        import ctypes
+
+        word = ctypes.sizeof(ctypes.c_void_p)
+        units = len("\\??\\C:\\owned\\café".encode("utf-16-le"))
+        records = []
+        for path in ("C:\\owned\\café", "\\\\?\\C:\\owned\\café"):
+            with self.subTest(path=path):
+                api = PendingAPI()
+                self.assertIs(observer._windows_delete_pending(path, api=api), True)
+                self.assertEqual(api.paths, ["\\??\\C:\\owned\\café\0"])
+                self.assertEqual(api.layout, (6 * word, 6 * word, 2 * word, None, 0x40,
+                                              None, None, units, units + 2, 40))
+                records.append(api.record)
+        # The ABI types are built once; each query still gets fresh structures.
+        self.assertIs(type(records[0]), type(records[1]))
+        self.assertIsNot(records[0], records[1])
+        for status in (0, 0x103, 0xC0000022, 0xC0000034, 0xC000003A, 0xC0000043):
+            with self.subTest(status=status):
+                api = PendingAPI(status)
+                self.assertIs(observer._windows_delete_pending("C:\\owned\\café", api=api),
+                              False)
+                self.assertEqual(api.paths, ["\\??\\C:\\owned\\café\0"])
+
+        def sized(length):
+            path = "C:"
+            while len(path) < length:
+                path += "\\" + "a" * min(200, length - len(path) - 1)
+            return path
+
+        api = PendingAPI()
+        self.assertIs(observer._windows_delete_pending(sized(32762), api=api), True)
+        self.assertEqual(api.layout[7:9], (65532, 65534))
+        for path in (sized(32763), "C:\\owned\\caf*", "C:\\owned\\..\\café",
+                     "C:\\owned\\name:stream", "C:café", "\\\\server\\share\\café", None):
+            with self.subTest(path=path if path is None or len(path) < 64 else len(path)):
+                api = PendingAPI()
+                with self.assertRaisesRegex(ObservationError, "literal-path-invalid"):
+                    observer._windows_delete_pending(path, api=api)
+                self.assertEqual(api.paths, [])
+
+    def test_native_pending_query_binds_ntdll_only_for_a_valid_literal(self):
+        import ctypes
+        from unittest.mock import patch
+
+        configured = []
+
+        class ConfiguredCall(NativeCall):
+            def __setattr__(self, name, value):
+                if name in ("argtypes", "restype"):
+                    configured.append(name)
+                super().__setattr__(name, value)
+
+        api = PendingAPI()
+        api.NtQueryAttributesFile = ConfiguredCall(api.query)
+        with patch.object(ctypes, "WinDLL", return_value=api, create=True) as load:
+            with self.assertRaisesRegex(ObservationError, "literal-path-invalid"):
+                observer._windows_delete_pending("C:\\owned\\..\\café")
+            load.assert_not_called()
+            self.assertIs(observer._windows_delete_pending("C:\\owned\\café"), True)
+        load.assert_called_once_with("ntdll.dll")
+        self.assertEqual(configured, ["argtypes", "restype"])
+        self.assertIs(api.NtQueryAttributesFile.restype, ctypes.c_uint32)
+        self.assertEqual(api.paths, ["\\??\\C:\\owned\\café\0"])
 
 
 if __name__ == "__main__":

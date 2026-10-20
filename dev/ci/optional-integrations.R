@@ -18,8 +18,8 @@ optional_titles = list(
     "the session check passes a working app and returns a 1000x700 screenshot",
     "the session check catches render errors and crashed servers but not validate()"),
   "test-artifact-browser-cleanup.R" = c(
-    "artifact browser cleanup closes its owned local process before the websocket",
-    "artifact browser cleanup still closes its websocket after a process-close error",
+    "artifact browser cleanup uses graceful close before confirming its local process",
+    "artifact browser cleanup retains its owner after a process-close error",
     "artifact browser cleanup leaves a remote browser process alone",
     "the private Linux test temp root fits Chromium's Unix socket limit"),
   "test-config-content-cache.R" = c(
@@ -39,12 +39,15 @@ optional_titles = list(
     "the optional observer refuses a root replaced by a foreign directory link",
     "the optional observer preserves unchanged empty environment entries and rejects loss",
     "the optional observer restores changed and missing POSIX empty environment entries",
-    "the optional observer restores library paths after success and failure"),
+    "the optional observer restores library paths after success and failure",
+    "the optional observer charges a real Windows delete-pending file until it closes"),
   "test-windows-security.R" = c(
     "Windows true symbolic links are readable and detached without deleting targets",
     "Windows safe instruction links remain while escaped and guarded inputs stay private",
     "Windows cache and checkpoint cleanup never follow foreign directory links",
     "Windows scrub excludes escaping links and never writes through a foreign lock root",
+    "Windows scrub refuses a dangling lock-root junction before taking any lock",
+    "Windows scrub refuses a workspace junction onto a foreign directory",
     "Windows checkpoint walks label links and forbid restoring through them",
     "Windows writes resolve links and edits refuse duplicate physical file operations",
     "Windows settings refresh after a same-size rewrite with unchanged file timestamps",
@@ -167,9 +170,9 @@ optional_titles = list(
     "an mcp_message round trip evaluates R in the live session and is gated once",
     "gptr_cancel() sends the interrupt control request, then kill_all()"),
   "test-cli-codex.R" = c(
-    "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
+    "a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env",
     "the next turn resumes the Codex thread with -c sandbox_mode=",
-    "a fake codex returns a function's numeric result through the HTTP MCP bridge",
+    "a fake codex returns a function's numeric result through the stdio relay",
     "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
     "retargeting a dangling control link warns after the Codex exec completes",
     "a control file gptr cannot read is marked by its size and time instead",
@@ -243,7 +246,9 @@ optional_select = function(pattern, root) {
 optional_original_os_guards = list(
   "test-utils-paths.R" = c(
     "write_atomic() writes privately, keeps replaced permission bits, else `mode`",
-    "lexical control and secret paths stay protected when they are symlinks"),
+    "lexical control and secret paths stay protected when they are symlinks",
+    "an absent rename-fallback target is private before payload writing",
+    "a fallback permission failure removes only its newly created empty target"),
   "test-tool-write.R" = c(
     "write refuses directories and writes through symbolic links keeping the mode",
     "a new file gets the umask's default mode, an existing one keeps its own",
@@ -251,11 +256,8 @@ optional_original_os_guards = list(
     "a chain of links is followed; a loop or a dangling link is refused",
     "non-ASCII directories, files and relative links work in a C locale",
     "a file that may be written but not read is written verbatim, keeping its mode",
-    "a link text that climbs after a symlinked component resolves as the kernel does",
-    "an existing file the process may not write is refused with EACCES and left unchanged"),
-  "test-tool-walk.R" = c(
-    "a file name holding a newline is matched like git",
-    "a symlinked directory is listed but not followed"),
+    "a link text that climbs after a symlinked component resolves as the kernel does"),
+  "test-tool-walk.R" = "a file name holding a newline is matched like git",
   "test-ckpt-files.R" = c(
     "the walk prunes .git and .gptr and lists links unfollowed; restores avoid them",
     "files over the capture cap and symbolic links are not restorable",
@@ -263,9 +265,14 @@ optional_original_os_guards = list(
     "a file that cannot be written or read is an item and the undo goes on",
     "files that cannot be read are listed, never captured and stop nothing else",
     "checkpoint payloads are private before gzip or raw-copy writes",
-    "a checkpoint permission failure publishes no blob or private payload"),
+    "a checkpoint permission failure publishes no blob or private payload",
+    "checkpoint baseline excludes owned FIFOs before hashing",
+    "checkpoint changed FIFOs and links stay listed without capture or restore",
+    "checkpoint racy scans reject a tracked regular file replaced by a FIFO",
+    "checkpoint file-type uncertainty preserves original stat conditions",
+    "checkpoint undo refuses a regular post-image replaced by an owned FIFO",
+    "checkpoint explicit paths reject FIFO and preserve regular size-cap semantics"),
   "test-tool-edit.R" = c(
-    "Delete File refuses a directory, an empty Add File is empty, a move removes its name",
     "Delete File and a move remove only the file they name, whatever its characters",
     "a move onto its own file under another spelling keeps the file and takes the name"))
 
@@ -281,6 +288,8 @@ optional_platform_guard = function(file, name, windows) {
     "idle Windows writer retirement preserves target stdin and later FIFO EOF"))
   if (identical(file, "test-subagent-worker.R")) return(identical(name,
     "a Windows worker exits within 10 s after its acknowledged parent dies (IC-60)"))
+  if (identical(file, "test-bp-disk-observer.R")) return(identical(name,
+    "the optional observer charges a real Windows delete-pending file until it closes"))
   identical(file, "test-proc-writer-runtime.R") && name %in% c(
     "Windows production writer preserves ordered writes and idle EOF",
     "Windows production writer death is a typed IO failure",
@@ -292,28 +301,33 @@ optional_platform_guard = function(file, name, windows) {
     "Windows native absence probe refuses existing aliases and denied attributes")
 }
 
-optional_allowed_skip = function(file, name, windows) {
-  if (optional_platform_guard(file, name, windows)) return(TRUE)
-  if (windows && name %in% optional_original_os_guards[[file]]) return(TRUE)
-  if (!windows) return(identical(file, "test-mcp-client.R") && identical(name,
-    "a .cmd MCP command runs through cmd.exe /d /c call on Windows"))
-  windows && ((identical(file, "test-artifact-app.R") && identical(name,
-    "the access token is 128 random bits from openssl or /dev/urandom")) ||
-    (identical(file, "test-bridge-lang.R") && name %in% c(
+# Besides the platform guards, the cases each host may skip: file -> titles, one entry a file.
+optional_os_skips = list(
+  windows = c(optional_original_os_guards, list(
+    "test-bridge-lang.R" = c(
       "shell engines run through peter$sh() without registered keys and with a timeout",
-      "the cmd engine is refused outside Windows")) ||
-    (identical(file, "test-gptr-config.R") && name %in% c(
+      "the cmd engine is refused outside Windows"),
+    "test-gptr-config.R" = c(
       "a settings file is parsed once per change, a same-size rewrite included",
-      "a gated file rewritten at the same size with its old mtime still voids trust")) ||
-    (identical(file, "test-proc-spawn.R") && identical(name,
-      "a parent killed with SIGTERM leaves children that the next load's sweep removes")) ||
-    (identical(file, "test-http-reactor.R") && name %in% c(
+      "a gated file rewritten at the same size with its old mtime still voids trust"),
+    "test-http-reactor.R" = c(
       "wire log resolves symlinks before enforcing its path boundary",
-      "wire default and fallback paths reject escaping symlinks")) ||
-    (identical(file, "test-subagent-worker.R") && identical(name,
-      "a worker exits within 10 s when its parent is killed (IC-60)")) ||
-    (identical(file, "test-cli-common.R") && identical(name,
-      "an install location without the execute bit is skipped, as on PATH")))
+      "wire default and fallback paths reject escaping symlinks"),
+    "test-subagent-worker.R" = "a worker exits within 10 s when its parent is killed (IC-60)",
+    "test-cli-common.R" = "an install location without the execute bit is skipped, as on PATH")),
+  unix = list(
+    "test-mcp-client.R" = "a .cmd MCP command runs through cmd.exe /d /c call on Windows",
+    "test-bridge-lang.R" =
+      "the cmd and powershell engines run on Windows with UTF-8 output and exit codes",
+    "test-http-reactor.R" = c(
+      "Windows wire log resolves junctions and refuses dangling ones",
+      "Windows wire log refuses escaping file links, dangling or not"),
+    "test-utils-paths.R" =
+      "Windows junctions and file links keep control and secret paths guarded"))
+
+optional_allowed_skip = function(file, name, windows) {
+  optional_platform_guard(file, name, windows) ||
+    name %in% optional_os_skips[[if (windows) "windows" else "unix"]][[file]]
 }
 
 optional_gate = function(rows, file, windows) {
@@ -501,7 +515,7 @@ optional_child = function(action, file = NULL) {
     } else {
       pkgload::load_all(".", helpers = FALSE, quiet = TRUE)
       optional_result_rows(testthat::test_file(file,
-        reporter = testthat::LocationReporter$new(file = stderr()),
+        reporter = testthat::LocationReporter$new(file = stdout()),
         package = "gptr", load_package = "none"))
     }
   }, warning = observe)
@@ -667,6 +681,9 @@ optional_controller_run = function(main = optional_integrations_main,
   }, warning = function(w) optional_controller_observe(state, w))
 }
 
+# Hang guard for each tool probe, not a tool bound: a hosted-Windows perl start can exceed 5 s.
+optional_startup_s = 60
+
 optional_preflight = function() {
   required = c("gptr", "reticulate", "repr", "chromote", "knitr", "rmarkdown",
                 "shiny", "httpuv", "later", "bslib", "DBI", "RSQLite", "duckdb")
@@ -687,10 +704,10 @@ optional_preflight = function() {
     NULL
   })))
   on.exit(for (remove in rev(off)) remove(), add = TRUE)
-  quarto = processx::run(Sys.which("quarto"), "--version", timeout = 10)
-  rg = processx::run(Sys.which("rg"), "--version", timeout = 5)
+  quarto = processx::run(Sys.which("quarto"), "--version", timeout = optional_startup_s)
+  rg = processx::run(Sys.which("rg"), "--version", timeout = optional_startup_s)
   if (!nzchar(Sys.which("perl"))) stop("Perl is unavailable; provision it before integration tests")
-  perl = processx::run(Sys.which("perl"), c("-e", "print 42"), timeout = 5)
+  perl = processx::run(Sys.which("perl"), c("-e", "print 42"), timeout = optional_startup_s)
   stopifnot(identical(perl$stdout, "42"))
   config = reticulate::py_config()
   stopifnot(identical(normalizePath(config$python),

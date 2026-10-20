@@ -4647,7 +4647,7 @@ Append to `tests/testthat/test-cli-codex.R`:
 ```r
 # ---- the codex route end to end, the CLI leg of INFRA-16 (Task 10) ------------------------------
 
-test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env", {
+test_that("a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env", {
   skip_on_cran()
   f = local_fake_cli("codex", "text")
   local_mcp_stub()
@@ -4750,6 +4750,10 @@ test_that("a fake CLI joins two inline agents and two workers on one reactor (IN
   expect_lt(elapsed, 13)
 })
 ```
+
+(P26 IC-79 and P27 Task 9: the test sends a 200 KB prompt as `prompt =`, more than the 64 KiB
+Windows pipe buffer, and the codex child, which talks to the session through the stdio relay, gets
+no token. The current body is in `tests/testthat/test-cli-codex.R`.)
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -4923,7 +4927,7 @@ git commit -m "test(cli): gated live tests of the claude and codex plan routes"
 
 ## Plan acceptance
 
-Run from the repository root after Task 11, with P01-P19 in place. Every check of 05 P20 (acceptance 1-3 and the review amendments) maps to the tasks and tests below; acceptance 4 (the M4 exit) is row 4, proven by the Milestone gate after this section (steps 1-4 at the end of this plan, step 5 in P21).
+Run from the repository root after Task 11, with P01-P19 in place. Every check of 05 P20 (acceptance 1-3 and the review amendments) maps to the tasks and tests below; acceptance 4 (the M4 exit) is row 4, proven by the Milestone gate after this section (steps 1-4 at the end of this plan, step 5 in P21). Rows 3a, 3b and R11 cite Task 7 and 8 codex tests by this plan's titles: P26 renamed those of 3a and 3b (IC-79, IC-78) and retired R11's with the MCP token (IC-79); the current tests are in `tests/testthat/test-cli-codex.R`.
 
 | # | Check (05 P20) | Proven by | Command and expected result |
 |---|---|---|---|
@@ -4935,9 +4939,9 @@ Run from the repository root after Task 11, with P01-P19 in place. Every check o
 | 2e | "usage fields are populated" | Task 6 "the call-2 capture streams thinking and text and reports the result's usage"; Task 8 "usage fields are populated and the rate-limit event becomes plan status"; Task 7 "the call-1 capture: informational tool events, the answer and the usage" | as 2a and `devtools::test(filter = "cli-codex")` green |
 | 2f | "a fake CLI joins two inline agents and two workers on one reactor within about the slowest agent's wall time (the INFRA-16 CLI leg, IC-36)" | Task 10 "a fake CLI joins two inline agents and two workers on one reactor (INFRA-16)" | runs under R CMD check (`devtools::check()`, Milestone gate step 5, which is P21's Plan acceptance command 5); with the version under test installed also under `devtools::test(filter = "cli-codex")` |
 | 2g | "an `init` line with `apiKeySource: "ANTHROPIC_API_KEY"` aborts the turn with `gptr_error_billing`" | Task 6 "an apiKeySource other than none ends the turn with gptr_error_billing"; Task 8 "an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr_error_billing" (the child is gone afterwards) | as 2a |
-| 3a | "The codex invocation passes `--skip-git-repo-check`, `-m <full id>`, `-C`, the MCP overrides including `default_tools_approval_mode="approve"` and `required=true`, and a 50 KB prompt on stdin intact" | Task 7 "the codex argv follows IC-65, and the resume form uses -c sandbox_mode=", "build() starts one exec per turn with the MCP overrides and the token in env"; Task 10 "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env" | `devtools::test(filter = "cli-codex")` green |
-| 3b | "the resume form uses `-c sandbox_mode=`; `edits` maps to `read-only`" | Task 7 (argv and "plan, manual and edits run read-only; auto workspace-write; Windows falls back"); Task 10 "the next turn resumes the Codex thread with -c sandbox_mode=" and the 50 KB test (`mode = "edits"` -> `--sandbox read-only`) | as 3a |
-| 3c | "`ANTHROPIC_API_KEY`, `ANTHROPIC_PROFILE`, `CLAUDECODE`, `OPENAI_API_KEY`, `CODEX_API_KEY` and `CODEX_SANDBOX` are absent from the children's environment and a warning names the billing ones" | Task 8 "billing and enclosing-agent variables never reach the claude child"; Task 10 "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env" (the fake logs the variable names it saw; `gptr_warning_billing_env$variables` names the billing ones, not `CLAUDECODE`/`CODEX_SANDBOX`) | as 2a and 3a |
+| 3a | "The codex invocation passes `--skip-git-repo-check`, `-m <full id>`, `-C`, the MCP overrides including `default_tools_approval_mode="approve"` and `required=true`, and a 200 KB prompt on stdin intact" | Task 7 "the codex argv follows IC-65, and the resume form uses -c sandbox_mode=", "build() starts one exec per turn with the MCP overrides and the token in env"; Task 10 "a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env" | `devtools::test(filter = "cli-codex")` green |
+| 3b | "the resume form uses `-c sandbox_mode=`; `edits` maps to `read-only`" | Task 7 (argv and "plan, manual and edits run read-only; auto workspace-write; Windows falls back"); Task 10 "the next turn resumes the Codex thread with -c sandbox_mode=" and the 200 KB test (`mode = "edits"` -> `--sandbox read-only`) | as 3a |
+| 3c | "`ANTHROPIC_API_KEY`, `ANTHROPIC_PROFILE`, `CLAUDECODE`, `OPENAI_API_KEY`, `CODEX_API_KEY` and `CODEX_SANDBOX` are absent from the children's environment and a warning names the billing ones" | Task 8 "billing and enclosing-agent variables never reach the claude child"; Task 10 "a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env" (the fake logs the variable names it saw; `gptr_warning_billing_env$variables` names the billing ones, not `CLAUDECODE`/`CODEX_SANDBOX`) | as 2a and 3a |
 | 3d | "`gptr_providers()` spawns no process with `check = FALSE`" | Task 3 "status() never starts a process without check = TRUE"; Task 10 "gptr_providers() lists both plan routes without starting a process" | `devtools::test(filter = "cli-common")` green |
 | 3e | "a `.cmd` fake claude is refused with the install hint" | Task 1 "a .cmd claude is refused with the install hint"; Task 8 "a .cmd claude is refused with the install hint through peter()" | as 3d and 2a |
 | 3f | "the gated live test runs Codex in a non-git temporary directory and requires a call of the gptr `r` tool" | Task 11 "Codex in a non-git temporary directory calls the gptr r tool" (and the claude counterpart; `GPTR_REPLAY=live` and `.opts = list(context = "none")` so P08's replay guard and egress check let the real CLIs run) | `GPTR_LIVE_TESTS=true GPTR_LIVE_HOME="$HOME" Rscript --vanilla -e 'devtools::test(filter = "live-cli")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 7 ]` (maintainer only; spends plan quota) |
@@ -4952,7 +4956,7 @@ Run from the repository root after Task 11, with P01-P19 in place. Every check o
 | R8 | "the Windows sandbox probe" | Task 7 sandbox test (`pcli_codex_windows_ready()` false -> `read-only` and `gptr_warning_cli_sandbox`); the fake CLI answers `codex sandbox ...` with status 0 | as 3a |
 | R9 | "the turn counter and `gptr.cli_turn_timeout`" | Task 7 "Codex is stopped at the run's turn cap", "turn.failed, a missing turn.completed and the wall clock end the exec", "a Codex error event is noted, not terminal; turn.failed and the exit report it"; Task 6 "the per-turn wall clock interrupts the CLI and ends the turn as out of budget" | as 2a, 3a |
 | R10 | "per-session wire logs" | Task 4 "the wire log gets one redacted line per CLI turn start and terminal event" | as 3d |
-| R11 | "per-session MCP tokens (IC-58)" | Task 7 "the MCP record of a session reaches only its own codex exec", "a tokenless MCP server leaves the exec on files only" and the build test (`GPTR_MCP_TOKEN` only in `start$env`); Task 8 "request_params ensures gptr's MCP server for a codex session, not for claude" (`mcp.serve_ensure(ctx$session)` before every codex request); Task 10 50 KB test (the token's name in the child's environment, not in argv) and the live-server round trip | as 3a |
+| R11 | "per-session MCP tokens (IC-58)" | Task 7 "the MCP record of a session reaches only its own codex exec", "a tokenless MCP server leaves the exec on files only" and the build test (`GPTR_MCP_TOKEN` only in `start$env`); Task 8 "request_params ensures gptr's MCP server for a codex session, not for claude" (`mcp.serve_ensure(ctx$session)` before every codex request); Task 10 200 KB test (since P26 IC-79: no token reaches the codex child) and the live-server round trip | as 3a |
 | R12 | "fake CLIs run through `rscript_path()` with `offline = TRUE` records (IC-60, IC-45)" | Task 2 (`pcli_fake_command()`), Task 3 "the plan routes list `default` and full ids; fake CLI records are offline" | as 3d |
 | R13 | "the CLI leg of INFRA-16 (IC-36)" | as 2f | as 2f |
 | - | 05 Scope: "one-time notice", "cached `status()` data", "session continuity", "usage as plan estimate", "resume when supported", "overhead notice" | Task 2 notice test; Task 3 status tests; Task 4 "a CLI sees only the turns after the last one its own provider answered"; Task 5 "a restarted child resumes the CLI session; a fresh one gets the history" and "a budgeted child serves one run; an unbudgeted child lives across runs"; Task 8 "a claude turn through peter() streams the answer; the next call resumes the session"; Task 6 call-2 usage and "a reused child's turn costs the increase of the CLI's total_cost_usd"; Task 7 build test (`resume` only when the probe lists it) and the notice text (19-38K tokens) | as above |
@@ -4993,7 +4997,7 @@ Run from the repository root after Task 11, with P01-P19 in place. Every check o
 | "session continuity" | 5 (`--resume`, same system-prompt file, history for a fresh child, the unseen turns of other models for a reused or resumed one; a budgeted child serves one run and the next resumes the session), 4 (`pcli_unseen()`), 6 (`system/init` session id; "No conversation found"), 7 (the unseen turns on a resumed Codex thread) |
 | "usage as plan estimate" | 6 (`total_cost_usd` as the increase since the child's previous result, route `plan-cli`), 8 |
 | `cli-codex.R`: "`codex exec --json --ignore-user-config` with MCP `-c` overrides pointing at `gptr_mcp_serve()`" | 7 (`pcli_codex_ensure()`, `pcli_codex_mcp()`), 8 (the `request_params` hook calls `mcp.serve_ensure(ctx$session)`), 10 |
-| "prompt on stdin via `write_all()`" | 7 (send object), 10 (50 KB through P05's `write_all()`) |
+| "prompt on stdin via `write_all()`" | 7 (send object), 10 (200 KB through P05's `write_all()`) |
 | "sandbox mapping" | 7 |
 | "resume when supported" | 7 (`probe$resume`), 10 |
 | "overhead notice" | 2 (19-38K tokens, own shell in its sandbox) |

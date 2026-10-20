@@ -143,8 +143,17 @@ test_that("a relative link that climbs with .. resolves from the link's physical
 })
 
 test_that("a chain of links is followed; a loop or a dangling link is refused", {
-  skip_on_os("windows")
+  if (is_windows()) skip_on_cran()
   td = withr::local_tempdir()
+  # R's Windows file.symlink() takes the link's kind from its target, so that exists at first and
+  # the relative links below stay POSIX-only
+  writeBin(charToRaw("gone"), file.path(td, "gone"))
+  expect_true(file.symlink(file.path(td, "gone"), file.path(td, "dangling")))
+  expect_true(file.remove(file.path(td, "gone")))
+  expect_no_warning(expect_error(write_file(file.path(td, "dangling"), "x"), "it names no file",
+                                 class = "gptr_error_invalid_argument"))
+  expect_identical(list.files(td, all.files = TRUE, no.. = TRUE), "dangling")
+  skip_on_os("windows")
   writeBin(charToRaw("end"), file.path(td, "l0"))
   for (i in 1:3) file.symlink(paste0("l", i - 1L), file.path(td, paste0("l", i)))
   w = write_file(file.path(td, "l3"), "new")
@@ -153,9 +162,6 @@ test_that("a chain of links is followed; a loop or a dangling link is refused", 
   file.symlink("lb", file.path(td, "la"))
   file.symlink("la", file.path(td, "lb"))
   expect_error(write_file(file.path(td, "la"), "x"), "symbolic link",
-               class = "gptr_error_invalid_argument")
-  file.symlink("gone", file.path(td, "dangling"))
-  expect_error(write_file(file.path(td, "dangling"), "x"), "symbolic link",
                class = "gptr_error_invalid_argument")
   expect_identical(sort(list.files(td, all.files = TRUE, no.. = TRUE)),
                    c("dangling", "l0", "l1", "l2", "l3", "la", "lb"))
@@ -224,17 +230,17 @@ test_that("a link text that climbs after a symlinked component resolves as the k
 })
 
 test_that("an existing file the process may not write is refused with EACCES and left unchanged", {
-  skip_on_os("windows")
   skip_if(identical(Sys.info()[["effective_user"]], "root"), "root writes any file")
   td = withr::local_tempdir()
   p = file.path(td, "ro.txt")
   writeBin(charToRaw("old\n"), p)
   Sys.chmod(p, "0444", use_umask = FALSE)
+  # Windows unlink() cannot delete a read-only file, so the temporary directory needs this
   withr::defer(Sys.chmod(p, "0644", use_umask = FALSE))
   expect_error(write_file(p, "new\n"),
                paste0("EACCES: permission denied, open '", resolve_tool_path(p), "'"),
                fixed = TRUE, class = "gptr_error_invalid_argument")
-  file.symlink(p, file.path(td, "link.txt"))
+  local_symlink(p, file.path(td, "link.txt"))
   expect_error(write_file(file.path(td, "link.txt"), "new\n"), "EACCES",
                class = "gptr_error_invalid_argument")
   expect_identical(raw_of(p), charToRaw("old\n"))

@@ -218,7 +218,7 @@ pcli_min_version = list(claude = "2.0.0", codex = NULL)
 #' Cache key of a command: its words and the executable's modification time (contract 7.20)
 #' @noRd
 pcli_cache_key = function(cmd) {
-  mtime = file.mtime(cmd[[1L]])
+  mtime = path_info(cmd[[1L]])$mtime
   stamp = if (is.na(mtime)) "NA" else format(as.numeric(mtime), digits = 15)
   paste(c(as.character(cmd), stamp), collapse = "\r")
 }

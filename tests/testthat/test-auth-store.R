@@ -24,6 +24,21 @@ test_that("auth.json is created 0600 in a 0700 directory and round-trips an api 
   expect_false(dir.exists(paste0(p, ".lock")))
 })
 
+test_that("on Windows auth.json lives under the per-user APPDATA profile (privacy is its ACL)", {
+  skip_if_not(is_windows())
+  local_vault()
+  appdata = withr::local_tempdir()
+  withr::local_envvar(R_USER_CONFIG_DIR = NA, XDG_CONFIG_HOME = NA, APPDATA = appdata)
+  auth_store_set("openrouter", list(type = "api_key", key = fake_or))
+  auth_store_set("openrouter", list(type = "api_key", key = fake_or))
+  p = auth_store_path()
+  expect_identical(normalizePath(p, winslash = "/"),
+                   normalizePath(file.path(appdata, "R", "config", "R", "gptr", "auth.json"),
+                                 winslash = "/"))
+  expect_identical(list.files(dirname(p), all.files = TRUE, no.. = TRUE), "auth.json")
+  expect_identical(secret_value(auth_store_get("openrouter")$key, NULL), fake_or)
+})
+
 test_that("access tokens stay in memory: registered, never written", {
   local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())

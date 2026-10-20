@@ -263,7 +263,8 @@ build_version = function(id, lines, data = character(), envir = new.env()) {
 
 # Run artifact_serve() in the native Rscript child as the launcher does; the child is killed
 # and its bootstrap removed when the calling test ends
-serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.frame()) {
+serve_child = function(vdir, token, parent_pid = Sys.getpid(), ports = port_candidates(5L),
+                       .env = parent.frame()) {
   port_file = file.path(withr::local_tempdir(.local_envir = .env), "port")
   raw = withr::local_tempfile(fileext = ".log", .local_envir = .env)
   dir = tempfile("gptr-artifact-test-launch-")
@@ -271,15 +272,18 @@ serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.fra
   owner = new.env(parent = emptyenv())
   owner$p = NULL
   withr::defer({
+    started = proc.time()[["elapsed"]]
     if (is.null(owner$p) || isTRUE(kill_all(owner$p, grace = 0))) {
       unlink(dir, recursive = TRUE)
     } else {
-      stop("The artifact test child did not settle.")
+      stop("The artifact test child did not settle in ",
+           round(proc.time()[["elapsed"]] - started, 1), " s; still listed: [",
+           paste(family_left(owner$p), collapse = "; "), "]")
     }
   }, envir = .env)
   p = proc_rscript("artifact", args = list(dir = vdir, port_file = port_file,
                                            parent_pid = parent_pid, token = token),
-                   dir = dir, env = artifact_child_env(port_candidates(5L)),
+                   dir = dir, env = artifact_child_env(ports),
                    stdout = raw, stderr = "2>&1", wd = vdir, .fun = artifact_serve,
                    .on_spawn = function(p) {
                      owner$p = p
@@ -287,6 +291,18 @@ serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.fra
   deadline = Sys.time() + 30
   while (!file.exists(port_file) && p$is_alive() && Sys.time() < deadline) Sys.sleep(0.05)
   list(proc = p, port_file = port_file, raw = raw)
+}
+
+# What proc_family_wait() still lists of a child's family after up to `wait` seconds, none once
+# it has ended, each as ps formats it with its status. processx's wait() returns at once after
+# is_alive() has read the exit code, so a test whose child exits by itself waits here
+family_left = function(p, wait = 0) {
+  left = proc_family_wait(p, wait)
+  if (is.null(left)) return("no marker record")
+  if (isTRUE(attr(left, "unavailable"))) return("an unreadable process table")
+  unique(vapply(left, function(h) {
+    tryCatch(paste(format(h), ps::ps_status(h)), error = conditionMessage)
+  }, ""))
 }
 
 # Status of a GET (NA when nothing answers), polled until the app answers
@@ -301,13 +317,20 @@ http_status = function(url, wait = 15) {
   }
 }
 
-test_that("the access token is 128 random bits from openssl or /dev/urandom", {
+test_that("the access token is 128 random bits from openssl, else /dev/urandom or none (Windows)", {
   tok = artifact_token()
   expect_match(tok, "^[0-9a-f]{32}$")
   expect_false(identical(tok, artifact_token()))
-  skip_on_os("windows")
   local_mocked_bindings(artifact_has_openssl = function() FALSE)
-  expect_match(artifact_token(), "^[0-9a-f]{32}$")
+  if (is_windows()) {
+    withr::local_options(gptr.quiet = FALSE)
+    rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+    expect_message(expect_identical(artifact_token(), ""), "without an access token",
+                   class = "gptr_message_notice")
+    expect_no_message(expect_identical(artifact_token(), ""))
+  } else {
+    expect_match(artifact_token(), "^[0-9a-f]{32}$")
+  }
 })
 
 test_that("ports come from port_candidates() after the artifact's previous port", {
@@ -340,15 +363,52 @@ test_that("artifact_serve() publishes a loopback port and serves only requests w
   vdir = build_version("served", c("stopifnot(!isNamespaceLoaded('gptr'))", ok_app),
                         "markers", e)
   tok = artifact_token()
-  ch = serve_child(vdir, tok)
+  # A candidate that does not bind gives way to the next (Windows refuses one in an excluded
+  # port range with WSAEACCES); this process holds the first one
+  ports = port_candidates(6L)
+  for (busy in ports) {
+    held = tryCatch(httpuv::startServer("127.0.0.1", busy, list()), error = function(e) NULL)
+    if (!is.null(held)) break
+  }
+  withr::defer(httpuv::stopServer(held))
+  ch = serve_child(vdir, tok, ports = c(busy, setdiff(ports, busy)))
   expect_true(file.exists(ch$port_file))
   port = as.integer(readLines(ch$port_file))
-  expect_true(port >= 49152L && port <= 65535L)
+  expect_true(port %in% setdiff(ports, busy))
   base = sprintf("http://127.0.0.1:%d/", port)
   expect_identical(http_status(paste0(base, "?gptr_token=", tok)), 200L)
   expect_identical(http_status(base), 403L)
   expect_identical(http_status(paste0(base, "?gptr_token=", strrep("0", 32))), 403L)
   expect_identical(http_status(paste0(base, "shared/shiny.min.js")), 200L)
+})
+
+test_that("family_left() waits out an exited child's teardown and names what stays listed", {
+  me = ps::ps_handle()
+  exited = list(get_pid = function() 42L)
+  record = list(marker = proc_marker_new(), pid = 42L, create_time = 10)
+  # each poll reads the marker's tree, then the child: `tree` and `child` answer per poll
+  replay = function(tree, child = function(poll) FALSE, wait = 5) {
+    poll = 0L
+    local_mocked_bindings(
+      proc_record = function(pid, process = NULL) record,
+      proc_tree = function(marker) {
+        poll <<- poll + 1L
+        tree(poll)
+      },
+      proc_identity = function(pid, create_time = NULL) list(handle = me, alive = child(poll))
+    )
+    list(left = family_left(exited, wait), polls = poll)
+  }
+  ended = list(left = character(), polls = 2L)
+  # the exited child, or a process carrying its marker, is still listed at the first poll
+  expect_identical(replay(function(poll) list(), function(poll) poll == 1L), ended)
+  expect_identical(replay(function(poll) if (poll == 1L) list(me) else list()), ended)
+  stays = replay(function(poll) list(me), wait = 0.2)$left
+  expect_match(stays, sprintf("^<ps::ps_handle> PID=%d, .* [a-z]+$", Sys.getpid()))
+  unreadable = function(poll) structure(list(), unavailable = TRUE)
+  expect_identical(replay(unreadable, wait = 0.2)$left, "an unreadable process table")
+  record = NULL
+  expect_identical(replay(function(poll) list())$left, "no marker record")
 })
 
 test_that("a broken app ends the child before a port exists, with its error on stderr", {
@@ -357,8 +417,7 @@ test_that("a broken app ends the child before a port exists, with its error on s
   broken = c("library(shiny)", "ui = fluidPage(textOutput(no_such_object))",
              "server = function(input, output, session) {}", "shinyApp(ui, server)")
   ch = serve_child(build_version("broken", broken), "")
-  ch$proc$wait(10000)
-  expect_false(ch$proc$is_alive())
+  expect_identical(family_left(ch$proc, 10), character())
   expect_false(file.exists(ch$port_file))
   log = readLines(ch$raw, warn = FALSE, encoding = "UTF-8")
   expect_true(any(grepl("Error: .*no_such_object", log)))
@@ -370,8 +429,7 @@ test_that("the watchdog stops the app when the parent process is gone", {
   dead = processx::process$new(rscript_path(), c("--vanilla", "-e", "invisible(0)"))
   dead$wait(10000)
   ch = serve_child(build_version("orphan", tiny_app), "", parent_pid = dead$get_pid())
-  ch$proc$wait(15000)
-  expect_false(ch$proc$is_alive())
+  expect_identical(family_left(ch$proc, 15), character())
   log = readLines(ch$raw, warn = FALSE, encoding = "UTF-8")
   expect_true(any(grepl("parent R process is gone", log, fixed = TRUE)))
 })
@@ -381,9 +439,16 @@ skip_if_no_chrome = function() {
   skip_if(!is.null(artifact_chromote_missing()), "no Chrome or Chromium for chromote")
 }
 
-# A Chrome that does not start in time (hosted runners) gives the contract's HTTP-only result
-skip_if_browser_failed = function(res) {
-  skip_if(is.na(res$ok) && is.null(artifact_state$browser), res$messages[1])
+chrome_logs = function() list.files(tempdir(), "^gptr-chrome-stderr-", full.names = TRUE)
+
+# A Chrome that does not start in time (hosted runners) gives the contract's HTTP-only result;
+# the skip names that Chrome and quotes the end of the newest stderr log not in `before`
+skip_if_browser_failed = function(res, before) {
+  if (!is.na(res$ok) || !is.null(artifact_state$browser)) return(invisible())
+  logs = setdiff(chrome_logs(), before)
+  said = unlist(strsplit(vapply(logs[which.max(file.mtime(logs))], proc_read_text, ""), "\r?\n"))
+  skip(paste0(res$messages[1], ". Chrome ", chromote::find_chrome(), " wrote to stderr: ",
+              paste(utils::tail(said[nzchar(said)], 3L), collapse = " / ")))
 }
 
 # A served version as a record the session check reads: its URL, its redacted log
@@ -434,6 +499,7 @@ test_that("the session check passes a working app and returns a 1000x700 screens
   skip_if_no_chrome()
   local_project()
   withr::defer(artifact_browser_close())
+  before = chrome_logs()
   e = new.env()
   e$markers = data.frame(gene = c("CD14", "LYZ"))
   rec = served_record("good", ok_app, "markers", e)
@@ -442,7 +508,7 @@ test_that("the session check passes a working app and returns a 1000x700 screens
   png = file.path(artifact_dir("good"), "run", "shot.png")
   res = artifact_session_check(rec, png)
   expect_identical(get(".Random.seed", envir = globalenv()), seed)
-  skip_if_browser_failed(res)
+  skip_if_browser_failed(res, before)
   expect_true(res$ok)
   expect_identical(res$messages, character())
   expect_identical(res$screenshot, png)
@@ -457,18 +523,19 @@ test_that("the session check catches render errors and crashed servers but not v
   skip_if_no_chrome()
   local_project()
   withr::defer(artifact_browser_close())
+  before = chrome_logs()
   render_error = c("library(shiny)", "ui = fluidPage(plotOutput('p'))",
                    "server = function(input, output, session) {",
                    "  output$p = renderPlot(plot(1:3, 1:2))", "}", "shinyApp(ui, server)")
   res = artifact_session_check(served_record("render", render_error), tempfile(fileext = ".png"))
-  skip_if_browser_failed(res)
+  skip_if_browser_failed(res, before)
   expect_false(res$ok)
   expect_true(any(grepl("output error in p", res$messages, fixed = TRUE)))
   crash = c("library(shiny)", "ui = fluidPage(textOutput('t'))",
             "server = function(input, output, session) undefined_helper()",
             "shinyApp(ui, server)")
   res = artifact_session_check(served_record("crash", crash), tempfile(fileext = ".png"))
-  skip_if_browser_failed(res)
+  skip_if_browser_failed(res, before)
   expect_false(res$ok)
   expect_true(any(grepl("undefined_helper", res$messages, fixed = TRUE)))
   valid = c("library(shiny)", "ui = fluidPage(textOutput('t'))",
@@ -476,7 +543,7 @@ test_that("the session check catches render errors and crashed servers but not v
             "  output$t = renderText(validate(need(FALSE, 'Pick a region')))", "}",
             "shinyApp(ui, server)")
   res = artifact_session_check(served_record("valid", valid), tempfile(fileext = ".png"))
-  skip_if_browser_failed(res)
+  skip_if_browser_failed(res, before)
   expect_true(res$ok)
 })
 
@@ -565,6 +632,78 @@ test_that("a broken app fails at the launch stage with the child's error in the 
   expect_match(conditionMessage(cnd), "no_such_object", fixed = TRUE)
   expect_true(file.exists(file.path(artifact_dir("broken"), "run", "app-v001.log")))
   expect_length(list.files(tempdir(), pattern = "^gptr-artifact-broken-"), 0L)
+})
+
+test_that("a launch whose app exited lets the child's family leave before it settles", {
+  local_project()
+  seed_artifact("exited")
+  # Windows can still list an exited child's family (its console host exits after its last
+  # client) and kill_all() reports what it still finds: here it settles once ps lists nothing
+  me = ps::ps_handle()
+  state = new.env(parent = emptyenv())
+  state$polls = 0L
+  state$listed = 2L
+  proc = list(is_alive = function() FALSE, get_pid = function() 123L)
+  local_mocked_bindings(
+    artifact_shiny_available = function() TRUE,
+    proc_create_time = function(pid) 10,
+    proc_rscript = function(entry, args, dir, env, stdout, ..., .on_spawn) {
+      state$dir = dir
+      writeLines("Error: object 'no_such_object' not found", stdout)
+      .on_spawn(proc)
+      proc
+    },
+    proc_record = function(pid, process = NULL) {
+      list(marker = "GPTR_PROC_0123456789abcdef", pid = 123L, create_time = 10)
+    },
+    proc_tree = function(marker) {
+      state$polls = state$polls + 1L
+      if (isTRUE(state$interrupt)) {
+        stop(structure(list(message = "controlled wait interrupt", call = NULL),
+                       class = c("interrupt", "condition")))
+      }
+      if (state$polls <= state$listed) list(me) else list()
+    },
+    proc_identity = function(pid, create_time = NULL) list(handle = NULL, alive = FALSE),
+    kill_all = function(p, grace) state$polls > state$listed
+  )
+  withr::defer({
+    state$listed = -1L
+    artifact_stop("exited", emit = FALSE)
+  })
+  launch = function() {
+    started = proc.time()[["elapsed"]]
+    cnd = expect_error(artifact_launch_shiny(artifact_version_dir("exited", 1L), NULL),
+                       class = "gptr_error_artifact")
+    expect_match(conditionMessage(cnd), "the app process exited.*no_such_object")
+    proc.time()[["elapsed"]] - started
+  }
+  launch()
+  expect_identical(state$polls, 3L)
+  expect_null(artifact_proc_get("exited"))
+  expect_identical(nrow(job_list("artifact")), 0L)
+  expect_false(file.exists(file.path(artifact_dir("exited"), "run", "run.json")))
+  expect_false(dir.exists(state$dir))
+  expect_length(list.files(tempdir(), pattern = "^gptr-artifact-exited-"), 0L)
+  # an interrupt during the wait cannot replace the launch error, and the launch still settles
+  state$polls = 0L
+  state$listed = 0L
+  state$interrupt = TRUE
+  caught = tryCatch(artifact_launch_shiny(artifact_version_dir("exited", 1L), NULL),
+                    error = identity, interrupt = identity)
+  state$interrupt = FALSE
+  expect_s3_class(caught, "gptr_error_artifact")
+  expect_null(artifact_proc_get("exited"))
+  # a family that stays listed is waited for at most artifact_stop_grace, then kept for recovery
+  state$polls = 0L
+  state$listed = .Machine$integer.max
+  elapsed = launch()
+  expect_gte(elapsed, artifact_stop_grace)
+  expect_lt(elapsed, 10)
+  expect_gt(state$polls, 1L)
+  expect_identical(artifact_proc_get("exited")$pid, 123L)
+  expect_identical(job_list("artifact")$id, "artifact:exited")
+  expect_true(dir.exists(state$dir))
 })
 
 test_that("artifact_start() runs the ladder, records the run and keeps the port across versions", {

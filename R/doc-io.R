@@ -83,11 +83,11 @@ doc_eol_of = function(txt) {
 #' @noRd
 doc_read = function(path) {
   full = path_norm(path)
-  size = file.info(full, extra_cols = FALSE)$size
-  if (is.na(size) || dir.exists(full)) {
+  info = path_info(full)
+  if (is.na(info$size) || isTRUE(info$isdir)) {
     gptr_abort(paste0("Document not found: ", full), "doc_write", path = full, reason = "missing")
   }
-  raw = tryCatch(suppressWarnings(readBin(full, "raw", n = size)), error = function(e) NULL)
+  raw = tryCatch(suppressWarnings(readBin(full, "raw", n = info$size)), error = function(e) NULL)
   if (is.null(raw)) {
     gone = !file.exists(full)
     gptr_abort(paste0(if (gone) "Document not found: " else "Cannot read the document: ", full),
@@ -136,7 +136,7 @@ doc_serialize = function(lines, eol = "\n", bom = FALSE, final_nl = TRUE) {
 #' the rename and falls back to an in-place write, IC-51). Signals gptr_error_doc_write with
 #' reason "conflict" when the file changed since `doc` was read. The returned record's md5 is
 #' that of the bytes written, so an edit landing just after the write is a conflict for the next
-#' checked write rather than its base.
+#' checked write rather than its base. The write is one of gptr's own (doc_own_write()).
 #' @noRd
 doc_write = function(doc, lines, check = TRUE) {
   path = doc$path
@@ -149,10 +149,21 @@ doc_write = function(doc, lines, check = TRUE) {
   }
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   bytes = doc_serialize(lines, doc$eol, doc$bom, doc$final_nl)
-  write_atomic(path, bytes, expected_md5 = if (check) doc$md5 else NULL)
+  doc_own_write(path, function() {
+    write_atomic(path, bytes, expected_md5 = if (check) doc$md5 else NULL)
+  })
   doc$lines = lines
   doc$md5 = cli::hash_raw_md5(bytes)
   invisible(doc)
+}
+
+#' gptr's own write of the document `path`: `write()` through the `checkpoint.own_write` service
+#' (P16), so the files checkpointer does not record it as a turn's change unless the document also
+#' holds an edit it has not scanned; without builtin:checkpoints, `write()` alone
+#' @noRd
+doc_own_write = function(path, write) {
+  own = service_lookup("checkpoint.own_write") %||% function(path, write) write()
+  own(path, write)
 }
 
 #' Is a lock directory stale: its pid is dead or reused (P04's pid_alive()), or it has had no pid
@@ -763,7 +774,7 @@ doc_sidecar_read = function(path) {
   if (!is_windows() && !doc_sidecar_trusted(f)) return(NULL)
   tryCatch({
     limit = doc_sidecar_limit()
-    info = file.info(f)
+    info = path_info(f)
     if (is.na(info$size) || isTRUE(info$isdir) || info$size > limit) return(NULL)
     bytes = readBin(f, "raw", n = limit + 1L)
     if (length(bytes) > limit || any(bytes == as.raw(0L)) ||
@@ -1318,8 +1329,9 @@ doc_ide_clean = function(buffer, path) {
 }
 
 #' Upsert through the editor buffer: RStudio and VS Code edit by document id and save a buffer
-#' that was clean; Positron edits only the active editor, so a clean buffer is written on disk
-#' (Positron reloads it) and the console context ("#console") is never edited
+#' that was clean (one of gptr's own writes, doc_own_write()); Positron edits only the active
+#' editor, so a clean buffer is written on disk (Positron reloads it) and the console context
+#' ("#console") is never edited
 #' @noRd
 doc_ide_upsert = function(fmt, site, up) {
   backend = site$backend
@@ -1347,7 +1359,7 @@ doc_ide_upsert = function(fmt, site, up) {
   }
   id = if (identical(backend, "positron")) NULL else ctx$id
   doc_ide_modify(doc_ide_edit_range(buffer, new), id)
-  if (clean) doc_ide_save(id)
+  if (clean) doc_own_write(site$path, function() doc_ide_save(id))
   b = doc_block_get(site$format, new, prep$id)
   if (!is.null(b)) doc_ide_cursor(b$end + 1L, id)
   list(action = prep$action, block_id = prep$id, lines = c(b$start, b$end), backend = backend,

@@ -28,7 +28,8 @@ bridge_program_word = function(word) {
 
 #' Resolve cmd: an argv (length > 1), a simple line whose program exists (not a Windows batch
 #' file) run directly, else P04's shell_resolve() (its `args` may carry `verbatim`)
-#' @return `list(command = chr(1), args = chr, via = "argv" | "direct" | "shell")`
+#' @return `list(command = chr(1), args = chr, via = "argv" | "direct" | "shell")`, plus the
+#'   `env` the child must set for cmd
 #' @noRd
 bridge_resolve = function(cmd) {
   if (length(cmd) > 1L) {
@@ -293,10 +294,10 @@ bridge_exec = function(cmd, input = NULL, wd = NULL, timeout = NULL, env = NULL,
     gptr_abort("The directory given as `wd` does not exist.", "invalid_argument", arg = "wd",
                expected = "an existing directory")
   }
+  target = target %||% bridge_resolve(cmd)
   # IC-60 helper environment: named values are set, unnamed ones pass variables through
   named = nzchar(names(env) %||% character(length(env)))
-  child = child_env("helper", pass = unname(env[!named]), set = env[named])
-  target = target %||% bridge_resolve(cmd)
+  child = child_env("helper", pass = unname(env[!named]), set = c(env[named], target$env))
   res = bridge_run(target, bridge_input(input), wd, timeout, child, merge)
   timed_out = isTRUE(res$timed_out)
   status = if (timed_out) NA_integer_ else as.integer(res$status)
@@ -419,7 +420,9 @@ bridge_program = function(programs) {
   for (word in programs) {
     word = bridge_program_word(word)
     path = if (grepl("[/\\\\]", word)) word else unname(Sys.which(word))
-    stub = grepl("system32[/\\\\]bash\\.exe$|windowsapps", path, ignore.case = TRUE)
+    # Windows Sys.which() returns 8.3 short names (MICROS~1\WINDOW~1): match the long path
+    stub = grepl("system32[/\\\\]bash\\.exe$|windowsapps", normalizePath(path, mustWork = FALSE),
+                 ignore.case = TRUE)
     if (file.exists(path) && !stub) return(path)
   }
   NULL
@@ -534,8 +537,7 @@ bridge_job_status = function(job) {
 #' New bytes of a job's output file since the last read; while the job runs only through the
 #' last newline, so a partial last line waits
 #' @noRd
-bridge_job_bytes = function(job, stream) {
-  alive = isTRUE(job$.proc$is_alive())
+bridge_job_bytes = function(job, stream, running) {
   path = job$.files[[stream]]
   from = job$.pos[[stream]]
   n = if (file.exists(path)) file.size(path) - from else 0
@@ -544,11 +546,12 @@ bridge_job_bytes = function(job, stream) {
   on.exit(close(con), add = TRUE)
   seek(con, from)
   bytes = readBin(con, "raw", n)
-  if (alive) bytes = bytes[seq_len(max(0L, which(bytes == as.raw(10L))))]
+  if (running) bytes = bytes[seq_len(max(0L, which(bytes == as.raw(10L))))]
   bytes
 }
 
-#' New complete lines of one stream since the last read, with the footer `"[<id> <status>, <s>s]"`
+#' New complete lines of one stream since the last read, with the footer `"[<id> <status>, <s>s]"`;
+#' the status is taken first, so a read that reports the job ended holds all of its output
 #' @noRd
 bridge_job_read = function(job, stream = "stdout", n = NULL) {
   stream = check_choice(stream, c("stdout", "stderr"), "stream")
@@ -557,11 +560,12 @@ bridge_job_read = function(job, stream = "stdout", n = NULL) {
     gptr_abort("This job merges stderr into stdout (merge = TRUE); read stdout.",
                "invalid_argument", arg = "stream", expected = "\"stdout\" for a merged job")
   }
-  bytes = bridge_job_bytes(job, stream)
+  status = bridge_job_status(job)
+  bytes = bridge_job_bytes(job, stream, status == "running")
   job$.pos[[stream]] = job$.pos[[stream]] + length(bytes)
   lines = clean_terminal(raw_to_utf8(bytes))
   if (!is.null(n)) lines = utils::tail(lines, n)
-  bridge_text(lines, paste0("[", job$id, " ", bridge_job_status(job), ", ",
+  bridge_text(lines, paste0("[", job$id, " ", status, ", ",
                             round(reactor_now() - job$.started), "s]"))
 }
 
@@ -573,7 +577,8 @@ bridge_job_wait = function(job, timeout = Inf, until = NULL) {
   settled = function() {
     if (!isTRUE(job$.proc$is_alive())) return(TRUE)
     !is.null(until) &&
-      any(grepl(until, clean_terminal(raw_to_utf8(bridge_job_bytes(job, "stdout"))), perl = TRUE))
+      any(grepl(until, clean_terminal(raw_to_utf8(bridge_job_bytes(job, "stdout", TRUE))),
+                perl = TRUE))
   }
   reactor_pump(until = settled, slice_ms = 200L, timeout = timeout)
   bridge_job_read(job)
@@ -653,7 +658,8 @@ bridge_bg = function(cmd, name = NULL, stdin = FALSE, merge = TRUE) {
   dir.create(dir, showWarnings = FALSE)
   out_f = file.path(dir, paste0(id, ".out"))
   err_f = if (!merge) file.path(dir, paste0(id, ".err"))
-  p = proc_spawn(target$command, target$args, env = child_env("helper"),
+  p = proc_spawn(target$command, target$args,
+                 env = child_env("helper", set = target$env %||% character()),
                  stdin = if (stdin) "|", stdout = out_f, stderr = if (merge) "2>&1" else err_f)
   program = if (length(argv) > 1L) argv[[1L]] else sub("\\s.*", "", trimws(argv))
   job = bridge_job_new(id, label, name %||% basename(program), p, out_f, err_f)

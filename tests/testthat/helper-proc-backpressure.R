@@ -174,8 +174,8 @@ bp_observer_reason = function(stage, error) {
       "observer-depth-limit", "observer-directory-entry-absent",
       "observer-directory-identity-changed", "observer-directory-unreadable",
       "observer-duplicate-declaration", "observer-entry-disappearance-uncertain",
-      "observer-entry-kind-unknown", "observer-entry-limit",
-      "observer-initial-entry-or-time-limit", "observer-invalid-bound",
+      "observer-entry-kind-unknown", "observer-entry-limit", "observer-initial-deadline",
+      "observer-initial-entry-limit", "observer-invalid-bound",
       "observer-invalid-declaration", "observer-invalid-entry-name",
       "observer-invalid-relative-path", "observer-link-entry-absent",
       "observer-link-identity-changed", "observer-link-payload-invalid",
@@ -196,19 +196,27 @@ bp_observer_reason = function(stage, error) {
   }, error = function(condition) NULL, interrupt = function(condition) NULL)
 }
 
-# One more snapshot after a reason that owned files changing during a walk can raise (Windows
-# lstat of a delete-pending file reports st_ino 0). The retry meets every bound unchanged;
-# other reasons and a failed retry still end the sample. The failed retry's own condition is
-# kept, since the observer's last_failure describes that snapshot.
+# Retry, every 100 ms, a reason that owned files changing during a walk can raise (Windows lstat
+# reports st_ino 0 for an entry it cannot open, as when a pending deletion completes during the
+# observer's delete-pending check), or a walk stalled on a loaded runner can (the
+# snapshot or initial deadline), until the observer's 1 s deadline has passed since the first
+# failure. Each retry meets every bound unchanged; any other reason and a reason that outlasts
+# the deadline still end the observation. The last condition is kept, since the observer's
+# last_failure describes that snapshot.
 bp_observe = function(observe, retried) {
-  tryCatch(observe(), error = function(error) {
-    reason = bp_observer_reason("files", error)
+  first = NULL
+  repeat {
+    disk = tryCatch(observe(), error = identity)
+    if (!inherits(disk, "error")) return(disk)
+    reason = bp_observer_reason("files", disk)
+    first = first %||% proc.time()[["elapsed"]]
     if (!isTRUE(reason %in% c("observer-metadata-invalid", "observer-snapshot-deadline",
-        "observer-parent-entry-absent", "observer-link-entry-absent",
-        "observer-entry-disappearance-uncertain"))) stop(error)
+        "observer-initial-deadline", "observer-parent-entry-absent", "observer-link-entry-absent",
+        "observer-entry-disappearance-uncertain")) ||
+        proc.time()[["elapsed"]] - first >= 1) stop(disk)
     retried(reason)
-    observe()
-  })
+    Sys.sleep(0.1)
+  }
 }
 
 # Retain a bounded diagnostic without copying arbitrary condition messages or file content.
@@ -364,6 +372,14 @@ bp_run = function(case, declared_links = list()) {
   observe = NULL
   observer_stats = NULL
   supervisor_rss = NULL
+  tracked = new.env(parent = emptyenv())
+  tracked$handles = list()
+  tracked$census_retries = 0L
+  tracked$observer_retries = 0L
+  observer_retried = function(reason) {
+    tracked$observer_retries = tracked$observer_retries + 1L
+    tracked$observer_retry_reason = tracked$observer_retry_reason %||% reason
+  }
   if (observer_enabled) {
     supervisor = ps::ps_handle(Sys.getpid())
     supervisor_time = as.numeric(ps::ps_create_time(supervisor))
@@ -385,10 +401,11 @@ bp_run = function(case, declared_links = list()) {
       identical(bp_child_case, get("rw_child_case"))
     bp_rss_capture("before_observer", list(case = case, writer = writer,
       supervisor_pid = Sys.getpid(), supervisor_create_time = supervisor_time,
-      before_rss = before_rss, resource_failure = before_rss > 1024^3), supervisor_rss,
-      prior_failure = before_rss > 1024^3)
+      before_rss = before_rss), supervisor_rss)
     bp_disk_observer = get("bp_disk_observer", mode = "function")
-    observe = bp_disk_observer(root, declarations = declared_links, declared_only = declared_only)
+    observe = bp_observe(function() {
+      bp_disk_observer(root, declarations = declared_links, declared_only = declared_only)
+    }, observer_retried)
     after_rss = supervisor_rss()
     elapsed = proc.time()[["elapsed"]] - started
     observer_stats = list(initialization_elapsed = elapsed, before_rss = before_rss,
@@ -396,10 +413,11 @@ bp_run = function(case, declared_links = list()) {
       supervisor_create_time = supervisor_time, peak_supervisor_rss = max(before_rss, after_rss),
       peak_combined_rss = max(before_rss, after_rss), last_disk = NULL)
     if (declared_only) observer_stats$scope = "declared-entry-and-ordinary-files"
+    # The supervisor may be a whole test suite, so the cap charges only its growth since before_rss.
     bp_rss_capture("initialization", c(list(case = case, writer = writer,
-      resource_failure = elapsed >= 45 || max(before_rss, after_rss) > 1024^3), observer_stats),
-      prior_failure = elapsed >= 45 || max(before_rss, after_rss) > 1024^3)
-    if (elapsed >= 45 || max(before_rss, after_rss) > 1024^3) {
+      resource_failure = elapsed >= 45 || after_rss - before_rss > 1024^3), observer_stats),
+      prior_failure = elapsed >= 45 || after_rss - before_rss > 1024^3)
+    if (elapsed >= 45 || after_rss - before_rss > 1024^3) {
       stop("Optional observer initialization exceeded its unchanged resource bound")
     }
   }
@@ -415,19 +433,11 @@ bp_run = function(case, declared_links = list()) {
   withr::defer(kill_all(p, grace = 0))
   proc_mark(p, marker, rscript_path())
   outer_record = proc_record(p$get_pid())
-  tracked = new.env(parent = emptyenv())
-  tracked$handles = list()
-  tracked$census_retries = 0L
-  tracked$observer_retries = 0L
   remember = function(handle) {
     key = paste(ps::ps_pid(handle), as.numeric(ps::ps_create_time(handle)), sep = ":")
     tracked$handles[[key]] = handle
   }
   remember(ps::ps_handle(p$get_pid()))
-  observer_retried = function(reason) {
-    tracked$observer_retries = tracked$observer_retries + 1L
-    tracked$observer_retry_reason = tracked$observer_retry_reason %||% reason
-  }
   cleanup = function() {
     kill_all(p, grace = 0)
     for (handle in tracked$handles) {
@@ -495,9 +505,9 @@ bp_run = function(case, declared_links = list()) {
             rss = unname(rss[[i]]))
         }), children_rss = sum(rss), combined_rss = parent_rss + sum(rss),
         resource_failure = sum(rss) > 1024^3 ||
-          (observer_enabled && parent_rss + sum(rss) > 1024^3)),
+          (observer_enabled && parent_rss - before_rss + sum(rss) > 1024^3)),
         prior_failure = sum(rss) > 1024^3 ||
-          (observer_enabled && parent_rss + sum(rss) > 1024^3))
+          (observer_enabled && parent_rss - before_rss + sum(rss) > 1024^3))
       sample_stage = "files"
       if (observer_enabled) {
         disk = bp_observe(observe, observer_retried)
@@ -519,7 +529,7 @@ bp_run = function(case, declared_links = list()) {
         observer_stats$peak_supervisor_rss = max(observer_stats$peak_supervisor_rss, parent_rss)
         observer_stats$peak_combined_rss = max(observer_stats$peak_combined_rss,
           parent_rss + sum(rss))
-        c(rss = sum(rss), disk = disk$bytes, combined = parent_rss + sum(rss))
+        c(rss = sum(rss), disk = disk$bytes, combined = parent_rss - before_rss + sum(rss))
       } else {
         files = list.files(root, recursive = TRUE, full.names = TRUE, all.files = TRUE)
         if (length(declared_links)) {

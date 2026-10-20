@@ -562,7 +562,11 @@ repeat {
       )
     }
   }
-  for (key in keys[ready[-seq_along(servers)]]) {
+  # A request is read only when no connection waits to be accepted: socketAccept() blocks while it
+  # resolves the client's address, so reading between accepts let one slow accept hold back
+  # requests that arrived together (INFRA-01)
+  reads = if (any(ready[seq_along(servers)])) character() else keys[ready[-seq_along(servers)]]
+  for (key in reads) {
     if (is.null(srv$clients[[key]])) next
     chunk = tryCatch(readBin(srv$clients[[key]]$con, "raw", 65536L), error = function(e) raw(0))
     tryCatch(handle_read(key, chunk), error = function(e) {

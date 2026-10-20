@@ -370,7 +370,7 @@ gateway_images_check = function(v) {
                "invalid_argument", arg = ".opts$images", expected = "a list of images")
   }
   for (x in items) {
-    ok = (is.character(x) && length(x) == 1L && !is.na(x) && file.exists(x) && !dir.exists(x)) ||
+    ok = (is.character(x) && length(x) == 1L && !is.na(x) && path_info(x)$isdir %in% FALSE) ||
       inherits(x, c("ggplot", "recordedplot"))
     if (!ok) {
       gptr_abort("Each image must be an existing PNG/JPEG path, a ggplot or a recordedplot.",

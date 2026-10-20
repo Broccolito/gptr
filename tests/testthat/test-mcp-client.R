@@ -374,7 +374,7 @@ test_that("the sse transport is refused with an actionable error", {
   expect_error(mcp_connect(spec), "Streamable HTTP", class = "gptr_error_mcp_protocol")
 })
 
-test_that("a server configured with a bare Rscript command runs with this R's Rscript", {
+test_that("a server configured with a bare Rscript or R command runs with this R", {
   expect_identical(mcp_stdio_command("Rscript"), rscript_path())
   expect_identical(mcp_stdio_command("npx"), "npx")
   fx = local_mcp_fixture("modern", "stdio")
@@ -382,6 +382,13 @@ test_that("a server configured with a bare Rscript command runs with this R's Rs
   spec$command = "Rscript"
   conn = mcp_connect(spec)
   expect_identical(mcp_call(conn, "echo", list(text = "via Rscript"))$text, "via Rscript")
+  mcp_close(conn)
+  # R.exe on Windows (bin/x64/R.exe starts Rterm.exe), the R front-end script elsewhere
+  spec$command = "R"
+  spec$args = c("--vanilla", "--no-echo", paste0("--file=", fx$spec$args[[2L]]), "--args",
+                fx$spec$args[-(1:2)])
+  conn = mcp_connect(spec)
+  expect_identical(mcp_call(conn, "echo", list(text = "via R"))$text, "via R")
   mcp_close(conn)
 })
 

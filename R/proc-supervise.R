@@ -303,6 +303,32 @@ proc_wait_exit = function(handles, seconds = 2) {
   }
 }
 
+#' Wait, at most `seconds`, until ps lists neither an exited child nor any process carrying its
+#' tree marker; what it still lists
+#'
+#' processx's `is_alive()` reads the exit code at once, while Windows can still list the exited
+#' child (ps then reads it as running) and the processes carrying its marker (its console host
+#' exits after its last client), and kill_all() reports what it still finds. An unknown child
+#' state counts as listed.
+#' @return list of ps handles, with attribute `unavailable` when the process table could not be
+#'   read; NULL when `p` has no marker record
+#' @noRd
+proc_family_wait = function(p, seconds) {
+  rec = proc_record(p$get_pid(), process = p)
+  if (is.null(rec)) return(NULL)
+  t_end = proc.time()[["elapsed"]] + seconds
+  repeat {
+    left = proc_tree(rec$marker)
+    if (!isTRUE(attr(left, "unavailable"))) {
+      child = proc_identity(rec$pid, rec$create_time)
+      if (!isFALSE(child$alive)) left = c(list(child$handle), left)
+      if (!length(left)) return(left)
+    }
+    if (proc.time()[["elapsed"]] >= t_end) return(left)
+    Sys.sleep(0.05)
+  }
+}
+
 #' Kill handles with one ps_kill() call; returns the handles it signalled
 #'
 #' ps_kill() fails as a whole when one handle fails (access denied, say) and lists the per-handle
@@ -356,13 +382,32 @@ proc_cleanup_record = function(rec) {
   list(killed = as.integer(killed), complete = complete)
 }
 
+#' The descendants of a live child by parent link, as ps handles (none when unreadable)
+#'
+#' The parent is ps's own handle of the pid, not `p$as_ps_handle()`: on Linux processx stamps a
+#' child with the boot time it reads at the spawn, ps times every process with the one it read
+#' first, and ps_children() of processx's handle drops each descendant timed before that stamp,
+#' as can be all those forked in the child's first clock tick. The list counts only while
+#' processx still reads the child alive, so the pid named it throughout.
+#' @noRd
+proc_children = function(p) {
+  tryCatch({
+    kids = ps::ps_children(ps::ps_handle(p$get_pid()), recursive = TRUE)
+    if (isTRUE(p$is_alive())) kids else list()
+  }, error = function(e) list())
+}
+
 #' Kill a child process and its whole tree
 #'
-#' Interrupt, wait `grace` seconds, `kill_tree()` (processx's marker) and gptr's marker, on
-#' Windows `taskkill /F /T /PID` while the process still lives, then `$kill()` (the process
-#' group on Unix); then wait at most 2 s for the process and those the tree kills signalled to
-#' stop running, and the marker cleanup for those it signals itself (Windows `TerminateProcess()`
-#' is asynchronous, and processx reads the exit code before the process is gone; D-019, D-180).
+#' Record the live process's descendants, interrupt, wait `grace` seconds, `kill_tree()`
+#' (processx's marker) and gptr's marker, on Windows `taskkill /F /T /PID` while the process
+#' still lives, `$kill()` (the process group on Unix), then the recorded descendants; then wait
+#' at most 2 s for the process and those the kills signalled to stop running, and the marker
+#' cleanup for those it signals itself (Windows `TerminateProcess()` is asynchronous, and
+#' processx reads the exit code before the process is gone; D-019, D-180). The descendants are
+#' found by parent link before the interrupt: on macOS ps reads no environment of a system
+#' binary (`/bin/sh`, `sleep`), so neither marker finds them, and once the interrupt has ended
+#' their shell, `$kill()` no longer signals its process group.
 #' @param p a processx (or callr) process.
 #' @param grace num(1) seconds to wait after the interrupt.
 #' @return invisible(lgl(1)): TRUE when the process is gone
@@ -371,7 +416,9 @@ kill_all = function(p, grace = 2) {
   if (is.null(p)) return(invisible(TRUE))
   writer_settled = isTRUE(proc_writer_stop(p))
   pid = tryCatch(p$get_pid(), error = function(e) NA_integer_)
+  kids = list()
   if (isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))) {
+    kids = proc_children(p)
     try(p$interrupt(), silent = TRUE)
     if (grace > 0) try(p$wait(as.integer(ceiling(grace * 1000))), silent = TRUE)
   }
@@ -390,9 +437,9 @@ kill_all = function(p, grace = 2) {
     }, silent = TRUE)
   }
   try(p$kill(), silent = TRUE)
-  proc_wait_exit(lapply(unique(c(pid, killed)), function(x) {
+  proc_wait_exit(c(proc_kill_signalled(kids), lapply(unique(c(pid, killed)), function(x) {
     tryCatch(ps::ps_handle(x), error = function(e) NULL)
-  }))
+  })))
   dead = isFALSE(tryCatch(p$is_alive(), error = function(e) NA))
   if (!is.null(rec)) {
     cleanup = proc_cleanup_record(rec)

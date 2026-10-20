@@ -113,6 +113,7 @@ service_plans = c(
   "console.interrupt_policy" = "P14", "ui.get" = "P11", "risk.classify" = "P11",
   "plan.pending" = "P11", "s1.decide" = "P13", "doc.site" = "P15", "doc.edit" = "P15",
   "doc.s1_block" = "P15", "doc.replay" = "P15", "checkpoint.note" = "P16",
+  "checkpoint.own_write" = "P16",
   "agent_def.get" = "P17", "skill.catalog" = "P17", "skill.body" = "P17",
   "plugin.enable" = "P17", "mcp.catalog" = "P18", "mcp.dispatch_local" = "P18",
   "bg.register" = "P21", "check.adapter" = "P12",

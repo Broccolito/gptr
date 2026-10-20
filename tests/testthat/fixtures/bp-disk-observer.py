@@ -61,10 +61,7 @@ def _windows_bindings(api):
     return bindings
 
 
-def _windows_entry(path, *, api=None):
-    # FindFirstFileW with one literal name reads entry attributes, not a link's
-    # target. The caller has already checked each preceding lexical component.
-    import ctypes
+def _windows_literal(path):
     import ntpath
 
     if not isinstance(path, str):
@@ -78,7 +75,55 @@ def _windows_entry(path, *, api=None):
             any(not part or part in (".", "..") or len(part) > 256 or
                 "*" in part or "?" in part or ":" in part for part in parts[1:])):
         raise ObservationError("observer-native-literal-path-invalid")
-    name = parts[-1]
+    return literal, parts[-1]
+
+
+_windows_query_types = None
+
+
+def _windows_delete_pending(path, *, api=None):
+    # Win32 reports a pending deletion and an access denial as one error; the
+    # NT query returns STATUS_DELETE_PENDING itself. It reads only attributes
+    # of this entry, like GetFileAttributesW, and never a link's target.
+    import ctypes
+    global _windows_query_types
+
+    literal, _ = _windows_literal(path)
+    units = ("\\??\\" + literal).encode("utf-16-le", "surrogatepass")
+    if len(units) > 65532:
+        raise ObservationError("observer-native-literal-path-invalid")
+    if _windows_query_types is None:
+        class Name(ctypes.Structure):
+            # Only the immutable ABI is shared; every query gets fresh data.
+            _fields_ = [("length", ctypes.c_uint16), ("maximum", ctypes.c_uint16),
+                        ("buffer", ctypes.c_void_p)]
+
+        class Attributes(ctypes.Structure):
+            _fields_ = [("length", ctypes.c_uint32), ("root", ctypes.c_void_p),
+                        ("name", ctypes.POINTER(Name)), ("attributes", ctypes.c_uint32),
+                        ("descriptor", ctypes.c_void_p), ("service", ctypes.c_void_p)]
+
+        _windows_query_types = Name, Attributes, ctypes.POINTER(Attributes)
+    Name, Attributes, reference = _windows_query_types
+    buffer = ctypes.create_string_buffer(units, len(units) + 2)
+    name = Name(len(units), len(units) + 2, ctypes.addressof(buffer))
+    # The kernel refuses any other Length; 0x40 is OBJ_CASE_INSENSITIVE, as in Win32.
+    attributes = Attributes(ctypes.sizeof(Attributes), None, ctypes.pointer(name), 0x40)
+    basic = (ctypes.c_uint64 * 5)()
+    native = ctypes.WinDLL("ntdll.dll") if api is None else api
+    native.NtQueryAttributesFile.argtypes = [reference, ctypes.c_void_p]
+    native.NtQueryAttributesFile.restype = ctypes.c_uint32
+    status = native.NtQueryAttributesFile(ctypes.byref(attributes), ctypes.byref(basic))
+    return status == 0xC0000056
+
+
+def _windows_entry(path, *, api=None):
+    # FindFirstFileW with one literal name reads entry attributes, not a link's
+    # target. The caller has already checked each preceding lexical component.
+    import ctypes
+    import ntpath
+
+    literal, name = _windows_literal(path)
 
     find_data, native = _windows_bindings(api)
     data = find_data()
@@ -161,8 +206,10 @@ class DiskObserver:
         def tick(*, entry=True):
             if entry:
                 entries[0] += 1
-            if entries[0] > self.max_entries or self.clock() - started >= self.max_seconds:
-                raise ObservationError("observer-initial-entry-or-time-limit")
+            if entries[0] > self.max_entries:
+                raise ObservationError("observer-initial-entry-limit")
+            if self.clock() - started >= self.max_seconds:
+                raise ObservationError("observer-initial-deadline")
 
         try:
             initial = self._metadata(self.root, tick=tick)
@@ -171,7 +218,7 @@ class DiskObserver:
         if initial["kind"] != "directory":
             raise ObservationError("observer-root-not-direct-directory")
         if self.clock() - started >= self.max_seconds:
-            raise ObservationError("observer-initial-entry-or-time-limit")
+            raise ObservationError("observer-initial-deadline")
         self.root_identity = initial["identity"]
 
     def _relative(self, value):
@@ -270,7 +317,7 @@ class DiskObserver:
                 raise
             raise ObservationError("observer-metadata-unavailable") from None
         values = (item.st_size, item.st_ino, item.st_dev, item.st_mode)
-        if any(not isinstance(x, int) or x < 0 for x in values) or item.st_ino == 0:
+        if any(not isinstance(x, int) or x < 0 for x in values):
             raise ObservationError("observer-metadata-invalid")
         reparse = stat.S_ISLNK(item.st_mode)
         tag = None
@@ -282,6 +329,14 @@ class DiskObserver:
                 "file" if stat.S_ISREG(item.st_mode) else "unknown")
         if kind == "unknown":
             raise ObservationError("observer-entry-kind-unknown")
+        if item.st_ino == 0:
+            # Windows lstat falls back to listed data, with st_ino 0, for an entry it
+            # cannot open. Only an exact delete-pending regular file passes; it is then
+            # charged like any file, whose identity no check compares or follows.
+            pending = _windows_delete_pending if self.ops is os else getattr(
+                self.ops, "delete_pending", None)
+            if not (self.windows and kind == "file" and callable(pending) and pending(path)):
+                raise ObservationError("observer-metadata-invalid")
         return {"kind": kind, "size": item.st_size, "tag": tag,
                 "identity": (item.st_dev, item.st_ino)}
 

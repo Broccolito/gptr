@@ -533,7 +533,8 @@ test_that("a CLI child's file edit in an aborted turn is undone too (IC-65)", {
   expect_gt(match("checkpoints", ext_builtin_order()), match("cli", ext_builtin_order()))
 })
 
-test_that("undone blocks in a bound document become inert; re-sourcing reproduces the rewind", {
+# A script of three turns recorded into itself, rewound to turn 1 (G7 3.8)
+expect_bound_rewind = function() {
   proj = local_project()
   local_gptr_options(record = "auto", replay = "auto")
   local_mocked_bindings(front_end = function() "terminal")
@@ -561,6 +562,18 @@ test_that("undone blocks in a bound document become inert; re-sourcing reproduce
   expect_identical(e2$a, 1)
   expect_false(exists("b", envir = e2, inherits = FALSE))
   expect_identical(length(fake_requests(fake)), n)
+}
+
+test_that("undone blocks in a bound document become inert; re-sourcing reproduces the rewind", {
+  expect_bound_rewind()
+})
+
+test_that("a turn's file scan never records gptr's own block writes (per-turn mode, CLI route)", {
+  local_gptr_options(checkpoint_scan_budget = -1)
+  expect_bound_rewind()
+  local_gptr_options(checkpoint_scan_budget = Inf)
+  local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
+  expect_bound_rewind()
 })
 
 two_turn_session = function(e, .env = parent.frame()) {
@@ -640,6 +653,7 @@ test_that("/undo asks first when the preview finds items it cannot restore", {
 
 test_that("/undo lists each item once, by its outcome after the whole undo (#37)", {
   local_project()
+  local_gptr_options(checkpoint_scan_budget = Inf)
   local_fake_provider(list(fake_tool("r", code = "e = new.env(); writeLines('a', 'a.txt')"),
                            fake_tool("r", code = "e$v = 1; writeLines('b', 'a.txt')"), "done"))
   w = new.env()
@@ -656,6 +670,24 @@ test_that("/undo lists each item once, by its outcome after the whole undo (#37)
                                "object e: removed (created by the turn)"))
   expect_identical(s$last_rewind$report, out[2:3])
   expect_false(exists("e", envir = w, inherits = FALSE))
+  expect_false(file.exists("a.txt"))
+})
+
+test_that("a file is one /undo item when slow walks switch to one scan per turn (#37)", {
+  local_project()
+  local_gptr_options(checkpoint_scan_budget = -1)
+  local_fake_provider(list(fake_tool("r", code = "writeLines('a', 'a.txt')"),
+                           fake_tool("r", code = "writeLines('b', 'a.txt')"), "done"))
+  s = peter("write a", model = "fake/fake-1", mode = "auto", envir = new.env())
+  ui = local_scripted_ui()
+  ctx = list(session = s, has_ui = function() TRUE,
+             ui = function() ext_service_get("ui.get")(s))
+  plan = gptr_rewind(s, preview = TRUE)
+  expect_identical(plan$item, "file a.txt")
+  expect_identical(plan$restore, TRUE)
+  out = ckpt_cmd_undo("", ctx)
+  expect_identical(nrow(ui$log), 0L)
+  expect_identical(out[1:2], c("Rewound (all).", "file a.txt: removed"))
   expect_false(file.exists("a.txt"))
 })
 

@@ -478,6 +478,53 @@ test_that("wire default and fallback paths reject escaping symlinks", {
   expect_false(file.exists(target))
 })
 
+test_that("Windows wire log resolves junctions and refuses dangling ones", {
+  wsec_local()
+  outside = tempfile("gptr-wire-foreign-", tmpdir = dirname(tempdir()))
+  gone = file.path(outside, "gone")
+  expect_true(dir.create(gone, recursive = TRUE))
+  withr::defer(unlink(outside, recursive = TRUE))
+  link = tempfile("gptr-wire-junction-")
+  wsec_junction(outside, link)
+  local_gptr_options(wire_log = file.path(link, "escape.jsonl"))
+  default = ws_path("cache", "tmp", "wire-s1111111111.jsonl")
+  expect_identical(wire_log_path("s1111111111"), default)
+  wire_log(wire_tr(session = "s1111111111"), "start")
+  expect_true(file.exists(default))
+  expect_false(file.exists(file.path(outside, "escape.jsonl")))
+  tmp = dirname(default)
+  expect_identical(unlink(tmp, recursive = TRUE), 0L)
+  wsec_junction(gone, tmp)
+  local_gptr_options(wire_log = TRUE)
+  expect_null(wire_log_path("s2222222222"))
+  expect_identical(unlink(gone, recursive = TRUE), 0L)
+  expect_null(wire_log_path("s2222222222"))
+  wire_log(wire_tr(session = "s2222222222"), "start")
+  expect_false(dir.exists(gone))
+  # The junction helper's teardown oracle expects its target back.
+  expect_true(dir.create(gone))
+})
+
+test_that("Windows wire log refuses escaping file links, dangling or not", {
+  wsec_local()
+  outside = tempfile("gptr-wire-foreign-", tmpdir = dirname(tempdir()))
+  expect_true(dir.create(outside))
+  withr::defer(unlink(outside, recursive = TRUE))
+  target = file.path(outside, "target.jsonl")
+  writeLines("existing", target)
+  local_gptr_options(wire_log = TRUE)
+  wsec_link(target, ws_path("cache", "tmp", "wire-s1111111111.jsonl"))
+  expect_null(wire_log_path("s1111111111"))
+  wire_log(wire_tr(session = "s1111111111"), "start")
+  expect_identical(readLines(target), "existing")
+  expect_true(file.remove(target))
+  expect_null(wire_log_path("s1111111111"))
+  wire_log(wire_tr(session = "s1111111111"), "start")
+  expect_false(file.exists(target))
+  # The link helper's teardown oracle expects its target back.
+  writeLines("existing", target)
+})
+
 # Start a transfer whose bytes go through sse_splitter(); returns its state environment
 # (`arrivals`/`t_end` on the reactor clock, `walls`/`wall_end` on the wall clock the mock logs)
 start_transfer = function(spec, provider = NULL, retry = NULL, run = NULL) {
@@ -613,19 +660,24 @@ test_that("INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest
   expect_true(all(vapply(sts, function(s) is.null(s$fail), NA)))
   ended = vapply(sts, function(s) s$wall_end, 0)
   # the mock numbers its requests 1, 2, ... in the order it logs them
+  logs = lapply(srvs, function(s) s$log())
+  ids = vapply(1:6, function(i) match(bodies[[i]], logs[[i]]$body), 0L)
   writes = lapply(1:6, function(i) {
     w = srvs[[i]]$writes()
-    w[which(w$id == match(bodies[[i]], srvs[[i]]$log()$body)), ]
+    w[which(w$id == ids[[i]]), ]
   })
   heads = vapply(writes, function(w) c(w$time[w$event == "head"], NA)[[1L]], 0)
   lasts = vapply(writes, function(w) if (nrow(w)) max(w$time) else NA_real_, 0)
+  read_at = vapply(1:6, function(i) as.numeric(logs[[i]]$time[ids[[i]]]), 0)
   expect_false(anyNA(c(heads, lasts)))
   six = infra01_six(heads, lasts, ended, 0.25 * rep(c(4, 9), each = 3L))
   expect_true(infra01_six_on_time(six), label = sprintf(paste(
-    "wall %.3f s from the first head written (heads within %.3f s; ends at %s s from it; the",
-    "mock's own lateness in writing the last pieces %s s; gptr's delivery of the ends %s s)"
-  ), six$wall, max(heads) - min(heads), toString(round(ended - min(heads), 3)),
-  toString(round(six$mock_late, 3)), toString(round(six$latency, 3))))
+    "wall %.3f s from the first head written (heads at %s s and ends at %s s from it; each head",
+    "written %s s after the mock read its request; the mock's own lateness in writing the last",
+    "pieces %s s; gptr's delivery of the ends %s s)"
+  ), six$wall, toString(round(heads - min(heads), 3)), toString(round(ended - min(heads), 3)),
+  toString(round(heads - read_at, 3)), toString(round(six$mock_late, 3)),
+  toString(round(six$latency, 3))))
 })
 
 test_that("one pump drives an HTTP stream and a child process together", {

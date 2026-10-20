@@ -918,7 +918,7 @@ codex_argv_relay = function(argv) {
   json_decode(args)[[3L]]
 }
 
-test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in env", {
+test_that("a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env", {
   skip_on_cran()
   local_gptr_options(quiet = FALSE)
   f = local_fake_cli("codex", "text")
@@ -926,11 +926,11 @@ test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in
                       CODEX_API_KEY = "codex-p20fake-0000000000000",
                       OPENAI_BASE_URL = "https://example.invalid/v1", CODEX_SANDBOX = "seatbelt")
   rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
-  big = paste0("Summarise this text: ", strrep("abcdefghij", 5000L), " caf\u00e9.")
+  big = paste0("Summarise this text: ", strrep("abcdefghij", 20000L), " caf\u00e9.")
   seen = new.env()
   seen$vars = character()
   s = withCallingHandlers(
-    peter(big, model = f$model, envir = new.env(), mode = "edits"),
+    peter(prompt = big, model = f$model, envir = new.env(), mode = "edits"),
     gptr_message_billing_env = function(w) {
       seen$vars = c(seen$vars, w$variables)
       invokeRestart("muffleMessage")
@@ -943,7 +943,7 @@ test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, no token in
   bytes = fake_prompts(f)[[1]]
   prompt = rawToChar(bytes)
   Encoding(prompt) = "UTF-8"
-  expect_gt(length(bytes), 50000L)
+  expect_gt(length(bytes), 200000L)
   expect_true(grepl(big, prompt, fixed = TRUE, useBytes = TRUE))
   expect_match(prompt, "^<gptr_instructions>\n")
   env = fake_env_names(f)[[1]]
@@ -1322,7 +1322,7 @@ test_that("control digests query only unobservable Windows entries and retain PO
   probe = codex_control_scope(pcli_control_digest, is_windows = function() TRUE,
     hash_file = function(path) stop("synthetic denied content"),
     pcli_control_link = function(path) "",
-    file.info = function(...) {
+    path_info = function(...) {
       data.frame(size = NA_real_, mtime = as.POSIXct(NA_real_, origin = "1970-01-01"))
     },
     pcli_control_reparse = function(path) {
@@ -1332,7 +1332,7 @@ test_that("control digests query only unobservable Windows entries and retain PO
   expect_identical(probe("public-link"), "unreadable:reparse:public-digest")
   expect_identical(seen$calls, 1L)
   finite = codex_control_scope(probe,
-    file.info = function(...) data.frame(size = 12, mtime = as.POSIXct(1, origin = "1970-01-01")))
+    path_info = function(...) data.frame(size = 12, mtime = as.POSIXct(1, origin = "1970-01-01")))
   expect_identical(finite("public-file"), "unreadable:12 1")
   expect_identical(seen$calls, 1L)
   posix = codex_control_scope(probe, is_windows = function() FALSE,
@@ -1340,7 +1340,7 @@ test_that("control digests query only unobservable Windows entries and retain PO
   expect_identical(posix("public-link"), "link:public-gone-target")
   expect_identical(seen$calls, 1L)
   unknown = codex_control_scope(probe, is_windows = function() FALSE,
-    file.info = function(...) NULL)
+    path_info = function(...) NULL)
   expect_identical(unknown("public-file"), "unreadable")
   expect_identical(seen$calls, 1L)
   readable = codex_control_scope(probe, hash_file = function(path) "public-content-digest")

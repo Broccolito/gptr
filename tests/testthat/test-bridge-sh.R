@@ -22,7 +22,6 @@ test_that("argv vectors, simple lines and shell lines resolve differently", {
   expect_identical(r[c("command", "args", "via")], list(command = "git", args = "status",
                                                         via = "argv"))
   expect_identical(bridge_resolve(c("Rscript", "-e", "1"))$command, rscript_path())
-  skip_on_os("windows")
   d = bridge_resolve(paste(shQuote(rscript_path()), "--version"))
   expect_identical(d$via, "direct")
   expect_identical(d$command, rscript_path())
@@ -119,13 +118,82 @@ test_that("output and arguments stay correct UTF-8 in a C locale", {
 
 test_that("a simple command line runs directly and a pipeline through the shell", {
   skip_on_cran()
-  skip_on_os("windows")
-  d = bridge_sh("echo 'quoted words' plain")
+  d = bridge_sh(paste(shQuote(rscript_path()),
+                      "--vanilla -e \"cat('quoted words', commandArgs(TRUE))\" plain"))
   expect_identical(attr(d, "via"), "direct")
-  expect_identical(d$stdout, "quoted words plain\n")
+  expect_identical(d$stdout, "quoted words plain")
+  skip_if(is_windows() && !any(file.exists(bridge_git_bash())), "Git Bash is not installed")
   p = bridge_sh("printf 'x\\ny\\nx\\n' | sort | uniq -c | sort -rn")
   expect_identical(attr(p, "via"), "shell")
   expect_match(strsplit(p$stdout, "\n", fixed = TRUE)[[1L]][[1L]], "2 x", fixed = TRUE)
+})
+
+test_that("without Git Bash a Windows command line runs in PowerShell, else in cmd", {
+  skip_on_cran()
+  skip_if_not(is_windows())
+  withr::local_envvar(POWERSHELL_TELEMETRY_OPTOUT = "1")
+  no_git_bash = function(which) {
+    function(cmd) {
+      shell_resolve_os(cmd, TRUE, which = which, getenv = Sys.getenv, exists = function(x) FALSE)
+    }
+  }
+  text = "caf\u00e9 \u65e5\u672c"
+  ps_route = no_git_bash(function(x) unname(Sys.which(x)))
+  # an extensionless cmd first on PATH, as Rtools puts MSYS2's usr/bin/cmd script
+  bin = withr::local_tempdir()
+  writeLines("\"$COMSPEC\" \"$@\"", file.path(bin, "cmd"))
+  withr::local_envvar(PATH = paste(bin, Sys.getenv("PATH"), sep = ";"))
+  line = paste0("Write-Output \"", text, "\"; cmd /c exit 4")
+  ps = testthat::with_mocked_bindings(bridge_sh(line, timeout = 60), shell_resolve = ps_route)
+  expect_identical(ps$stdout, paste0(text, "\n"))
+  expect_identical(ps$status, 4L)
+  # the same line under Windows PowerShell 5.1, the route when pwsh.exe is absent
+  ps51 = unname(Sys.which("powershell.exe"))
+  expect_true(nzchar(ps51))
+  ps = testthat::with_mocked_bindings(bridge_sh(line, timeout = 60),
+    shell_resolve = no_git_bash(function(x) if (x == "powershell.exe") ps51 else ""))
+  expect_identical(ps$status, 4L)
+  # the last native program's status, here this R's
+  r = gsub("'", "''", rscript_path(), fixed = TRUE)
+  ps = testthat::with_mocked_bindings(bridge_sh(paste0(
+    "cmd /d /c exit 5; & '", r, "' --vanilla -e 'cat(6, fill = TRUE); q(status = 6)'"),
+    timeout = 60), shell_resolve = ps_route)
+  expect_identical(ps$stderr, "")
+  expect_identical(ps$stdout, "6\n")
+  expect_identical(ps$status, 6L)
+  # a cmdlet's status when it runs last
+  ps = testthat::with_mocked_bindings(bridge_sh("cmd /c exit 4; Write-Output ok", timeout = 60),
+                                      shell_resolve = ps_route)
+  expect_identical(ps$stdout, "ok\n")
+  expect_identical(ps$status, 0L)
+  ps = testthat::with_mocked_bindings(bridge_sh("cmd /c exit 0; Write-Error no", timeout = 60),
+                                      shell_resolve = ps_route)
+  expect_identical(ps$status, 1L)
+  # a name that only an extensionless file provides is not found, as in cmd
+  writeLines("echo none", file.path(bin, "gptr-none"))
+  ps = testthat::with_mocked_bindings(bridge_sh("Write-Output ok; gptr-none", timeout = 60),
+                                      shell_resolve = ps_route)
+  expect_identical(ps$stdout, "ok\n")
+  expect_identical(ps$status, 1L)
+  cmd = testthat::with_mocked_bindings(
+    bridge_sh(paste0("echo \"a b\" ", text, "& exit 5"), timeout = 60),
+    shell_resolve = no_git_bash(function(x) ""))
+  expect_identical(cmd$stderr, "")
+  expect_identical(cmd$stdout, paste0("\"a b\" ", text, "\n"))
+  expect_identical(cmd$status, 5L)
+})
+
+test_that("the env of a resolved shell reaches the children of peter$sh() and peter$bg()", {
+  skip_on_cran()
+  # shell_cmd() hands cmd its line through this variable
+  argv = r_cmd("writeLines(Sys.getenv('GPTR_SHELL_CMD'))")
+  target = list(command = argv[[1L]], args = argv[-1L], via = "shell",
+                env = c(GPTR_SHELL_CMD = "line"))
+  testthat::local_mocked_bindings(bridge_resolve = function(cmd) target)
+  expect_identical(bridge_sh("a | b")$stdout, "line\n")
+  j = bridge_bg("a | b")
+  withr::defer(j$kill())
+  expect_true("line" %in% j$wait(timeout = 30))
 })
 
 test_that("stderr stays separate, exits are reported and check = TRUE raises", {
@@ -166,20 +234,25 @@ test_that("input reaches stdin as lines, as CSV or as bytes; env sets variables"
 
 test_that("a timeout kills the process tree and suggests peter$bg()", {
   skip_on_cran()
-  skip_on_os("windows")
-  skip_if(!nzchar(Sys.which("pgrep")))
+  skip_if(is_windows() && !any(file.exists(bridge_git_bash())), "Git Bash is not installed")
+  # the shell's descendants when the timeout kill starts (on Windows MSYS bash and sleep)
+  seen = new.env(parent = emptyenv())
+  kill = kill_all
+  testthat::local_mocked_bindings(kill_all = function(p, grace = 2) {
+    seen$tree = seen$tree %||% proc_children(p)
+    kill(p, grace)
+  })
   t0 = proc.time()[["elapsed"]]
   x = bridge_sh("sleep 57 & sleep 58; wait", timeout = 1)
-  expect_lt(proc.time()[["elapsed"]] - t0, 10)
+  expect_lt(proc.time()[["elapsed"]] - t0, 30)
   expect_true(x$timed_out)
   expect_true(is.na(x$status))
   expect_false(x$ok)
   v = bridge_cmd_view(x)
   expect_match(v[[length(v)]], "timed out after", fixed = TRUE)
   expect_match(v[[length(v)]], "peter$bg()", fixed = TRUE)
-  Sys.sleep(0.5)
-  left = processx::run("pgrep", c("-f", "sleep 5[78]"), error_on_status = FALSE)$stdout
-  expect_identical(left, "")
+  expect_gte(length(seen$tree), 2L)
+  expect_true(proc_wait_exit(seen$tree, 5))
   expect_error(bridge_sh("sleep 5", timeout = 0.5, check = TRUE), class = "gptr_error_timeout")
 })
 
@@ -267,6 +340,16 @@ test_that("the interpreter validator normalises extensions and rejects bad field
   expect_identical(err$field, "windows_only")
 })
 
+test_that("a windows_only interpreter has its program on Windows and none elsewhere", {
+  sp = interpreter_validate(list(kind = "interpreter", name = "winr", ext = "winr",
+                                 programs = rscript_path(), windows_only = TRUE))
+  if (is_windows()) {
+    expect_identical(bridge_interpreter_argv(sp, "a.winr", "x"), c(rscript_path(), "a.winr", "x"))
+  } else {
+    expect_error(bridge_interpreter_argv(sp, "a.winr", "x"), class = "gptr_error_spawn")
+  }
+})
+
 test_that("builtin:bridges defines the interpreter kind and the seven built-in interpreters", {
   expect_true("kind.interpreter" %in% gptr_api()$features)
   expect_true(all(c("sh", "py", "r", "js", "pl", "rb", "jl") %in% registry_names("interpreter")))
@@ -317,15 +400,44 @@ test_that("a user interpreter named like the extension overrides the built-in on
   expect_identical(bridge_script(f)$stdout, "ran via-user")
 })
 
-test_that("shell scripts and #! lines run on Unix", {
+test_that("shell scripts run with bash or sh and #! lines with the program they name", {
   skip_on_cran()
-  skip_on_os("windows")
+  skip_if(is.null(bridge_program("sh")), "sh is not on PATH")
   d = withr::local_tempdir()
   writeLines("echo \"sh script args: $@\"", file.path(d, "a.sh"))
   expect_identical(bridge_script(file.path(d, "a.sh"), c("x", "y z"))$stdout,
                    "sh script args: x y z\n")
   writeLines(c("#!/bin/sh", "echo shebang ok"), file.path(d, "tool"))
   expect_identical(bridge_script(file.path(d, "tool"))$stdout, "shebang ok\n")
+})
+
+test_that("program lookup skips WindowsApps aliases, also under Windows 8.3 short names", {
+  d = withr::local_tempdir()
+  tool = file.path(d, c("WindowsApps", "bin"), "gptr-p22-tool.exe")
+  for (f in tool) {
+    dir.create(dirname(f))
+    file.create(f)
+    Sys.chmod(f, "755")
+  }
+  # Windows Sys.which() reports 8.3 short names: WindowsApps as WINDOW~1
+  withr::local_envvar(PATH = paste(dirname(tool[[1L]]), Sys.getenv("PATH"),
+                                   sep = .Platform$path.sep))
+  expect_null(bridge_program("gptr-p22-tool.exe"))
+  expect_identical(bridge_program(c("gptr-p22-tool.exe", tool[[2L]])), tool[[2L]])
+})
+
+test_that("on Windows a .sh script runs through Git Bash when no bash is on PATH", {
+  skip_on_cran()
+  skip_if_not(is_windows())
+  git_bash = Filter(file.exists, bridge_git_bash())
+  skip_if(!length(git_bash), "Git Bash is not installed")
+  # System32 also holds bash.exe, the WSL launcher, when WSL is installed: it is skipped
+  withr::local_envvar(PATH = file.path(Sys.getenv("SystemRoot"), "System32"))
+  expect_identical(bridge_program(registry_get("interpreter", "sh")$programs), git_bash[[1L]])
+  d = withr::local_tempdir()
+  writeLines("echo \"sh script args: $@\"", file.path(d, "a.sh"))
+  expect_identical(bridge_script(file.path(d, "a.sh"), c("x", "y z"))$stdout,
+                   "sh script args: x y z\n")
 })
 
 test_that("unknown extensions, missing scripts and unknown options are argument errors", {
@@ -340,8 +452,11 @@ test_that("unknown extensions, missing scripts and unknown options are argument 
 
 test_that("a background job is read incrementally and waited for until a pattern", {
   skip_on_cran()
-  j = bridge_bg(r_cmd("cat('ready\\n'); flush(stdout()); Sys.sleep(1); cat('DONE acc=0.93\\n')"),
-                name = "trainer")
+  # The child writes DONE only once the file `go` exists, however long bridge_bg() takes
+  go = withr::local_tempfile()
+  j = bridge_bg(c(r_cmd(paste("go = commandArgs(TRUE); cat('ready\\n'); flush(stdout());",
+                              "while (!file.exists(go)) Sys.sleep(0.05); cat('DONE acc=0.93\\n')")),
+                  go), name = "trainer")
   withr::defer(j$kill())
   expect_s3_class(j, "gptr_job")
   expect_identical(j$name, "trainer")
@@ -350,6 +465,7 @@ test_that("a background job is read incrementally and waited for until a pattern
   first = j$wait(timeout = 20, until = "ready")
   expect_s3_class(first, "gptr_bridge_text")
   expect_true("ready" %in% first)
+  file.create(go)
   rest = j$wait(timeout = 20)
   expect_true("DONE acc=0.93" %in% rest)
   expect_false("ready" %in% rest)
@@ -362,11 +478,37 @@ test_that("a background job is read incrementally and waited for until a pattern
 
 test_that("wait(until =) returns once the matching line is complete", {
   skip_on_cran()
-  j = bridge_bg(r_cmd(paste0("cat('rea'); flush(stdout()); Sys.sleep(1); cat('dy\\n'); ",
-                             "flush(stdout()); Sys.sleep(30)")))
+  go = withr::local_tempfile()
+  j = bridge_bg(c(r_cmd(paste("go = commandArgs(TRUE); cat('rea'); flush(stdout());",
+                              "while (!file.exists(go)) Sys.sleep(0.05); cat('dy\\n');",
+                              "flush(stdout()); Sys.sleep(30)")), go))
   withr::defer(j$kill())
-  first = j$wait(timeout = 20, until = "rea")
-  expect_true("ready" %in% first)
+  expect_length(j$wait(timeout = 1, until = "rea"), 0L)
+  file.create(go)
+  expect_true("ready" %in% j$wait(timeout = 20, until = "rea"))
+})
+
+test_that("a job that exits during a read reads running, so a done read holds all output", {
+  out = withr::local_tempfile()
+  cat("a\nlast", file = out)
+  # The process answers alive once, then has exited with status 0
+  alive = 1
+  proc = list(get_pid = function() 1L, get_exit_status = function() 0L, is_alive = function() {
+    alive <<- alive - 1
+    alive >= 0
+  })
+  id = id_new("j", 6L)
+  withr::defer({
+    bridge_state$jobs[[id]] = NULL
+    job_remove(id)
+  })
+  j = bridge_job_new(id, "fake", "fake", proc, out, NULL)
+  first = j$read()
+  expect_identical(as.character(first), "a")
+  expect_match(attr(first, "footer"), " running, ", fixed = TRUE)
+  rest = j$read()
+  expect_identical(as.character(rest), "last")
+  expect_match(attr(rest, "footer"), " done, ", fixed = TRUE)
 })
 
 test_that("a job with stdin = TRUE talks over stdin and kill() stops it", {
@@ -409,6 +551,19 @@ test_that("bg jobs are in gptr_jobs(), write() needs stdin and kill = TRUE stops
   invisible(bridge_jobs(kill = TRUE))
   expect_identical(j$status(), "stopped")
   expect_identical(gptr_jobs()$status[match(j$id, gptr_jobs()$id)], "stopped")
+})
+
+test_that("a background command line runs in the shell and kill() stops its process tree", {
+  skip_on_cran()
+  skip_if(is_windows() && !any(file.exists(bridge_git_bash())), "Git Bash is not installed")
+  j = bridge_bg("sleep 57 & sleep 58 & echo ready; wait")
+  withr::defer(j$kill())
+  expect_true("ready" %in% j$wait(timeout = 30, until = "ready"))
+  tree = proc_children(j$.proc)
+  expect_gte(length(tree), 2L)
+  j$kill()
+  expect_identical(j$status(), "stopped")
+  expect_true(proc_wait_exit(tree, 5))
 })
 
 test_that("at most two jobs run at once under R CMD check (IC-60)", {

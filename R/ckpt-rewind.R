@@ -291,8 +291,23 @@ builtin_checkpoints = function(gptr) {
   invisible(NULL)
 }
 
+#' The `checkpoint.own_write` service (contract 7.0): `write()`, gptr's own write of `path`,
+#' through the file trackers of every live session (ckpt_files_own_write()); when they cannot be
+#' found, the write still runs. Only sessions registered in the process's extension state are
+#' reached: a detached copy of a shell (ckpt_ck_of()) records the write at its next scan.
+#' @noRd
+ckpt_own_write = function(path, write) {
+  trs = tryCatch({
+    ws = ckpt_ext_state()$sessions
+    lapply(if (is.environment(ws)) as.list(ws), function(w) rlang::wref_value(w)$files)
+  }, error = function(e) list())
+  ckpt_files_own_write(Filter(is.environment, trs), path, write)
+}
+
 on_load(ext_declare_builtin("checkpoints", builtin_checkpoints, after = "cli"))
 on_load(ext_service_set("checkpoint.note", ckpt_note, provided_by = "P16",
+                        builtin = "checkpoints"))
+on_load(ext_service_set("checkpoint.own_write", ckpt_own_write, provided_by = "P16",
                         builtin = "checkpoints"))
 
 # ---- the session tree and gptr_rewind() (contract 6.5; G7 sections 3.2, 3.6, 4.2-4.3) -----------
@@ -528,11 +543,11 @@ ckpt_rewind_guard = function(d) {
   invisible(TRUE)
 }
 
-#' The extension state of builtin:checkpoints, found through its checkpointer specs (NULL when
-#' the built-in is filtered out)
+#' The extension state of builtin:checkpoints, found through the checkpointer specs of session `s`
+#' (by default the process's; NULL when the built-in is filtered out)
 #' @noRd
-ckpt_ext_state = function(s) {
-  for (sp in registry_all("checkpointer", session = session_data(s)$id)) {
+ckpt_ext_state = function(s = NULL) {
+  for (sp in registry_all("checkpointer", session = if (!is.null(s)) session_data(s)$id)) {
     if (is.environment(sp$ckpt_state)) return(sp$ckpt_state)
   }
   NULL

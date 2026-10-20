@@ -204,9 +204,8 @@ pcli_control_digest = function(path) {
   tryCatch(as.character(hash_file(path)), error = function(e) {
     target = pcli_control_link(path)
     if (nzchar(target)) return(paste0("link:", target))
-    info = tryCatch(suppressWarnings(file.info(path, extra_cols = FALSE)),
-                    error = function(e2) NULL)
-    if (is_windows() && (is.null(info) || nrow(info) != 1L || !is.finite(info$size) ||
+    info = tryCatch(path_info(path), error = function(e2) NULL)
+    if (is_windows() && (is.null(info) || nrow(info) != 1L ||
         !is.finite(as.numeric(info$mtime)))) return(pcli_control_reparse(path))
     if (is.null(info) || nrow(info) != 1L) return("unreadable")
     paste0("unreadable:", info$size, " ", format(as.numeric(info$mtime), digits = 15))

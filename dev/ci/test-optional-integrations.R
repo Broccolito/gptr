@@ -14,6 +14,20 @@ testthat::test_that("no files and missing selected files cannot pass", {
     "test-unapproved.R", FALSE), "Unapproved")
 })
 
+testthat::test_that("every approved title names a current test of its file", {
+  folder = file.path(dirname(runner_path), "..", "..", "tests", "testthat")
+  registry = c(optional_titles, optional_os_skips$windows, optional_os_skips$unix)
+  for (skips in optional_os_skips) testthat::expect_identical(anyDuplicated(names(skips)), 0L)
+  for (i in seq_along(registry)) {
+    file = names(registry)[[i]]
+    titles = unlist(lapply(parse(file.path(folder, file), keep.source = FALSE), function(x) {
+      if (is.call(x) && deparse(x[[1L]]) %in% c("test_that", "testthat::test_that") &&
+          is.character(x[[2L]])) x[[2L]]
+    }))
+    testthat::expect_identical(setdiff(registry[[i]], titles), character(), info = file)
+  }
+})
+
 testthat::test_that("a mandatory Quarto integration may not silently skip", {
   name = "quarto render records a #| label agent chunk and the next render replays it"
   testthat::expect_error(optional_gate(list(record(name, skipped = 1L)),
@@ -73,9 +87,10 @@ testthat::test_that("raw diagnostic messages survive a failed gate within explic
 })
 
 testthat::test_that("only named platform guards are allowed to skip", {
-  name = "the access token is 128 random bits from openssl or /dev/urandom"
-  testthat::expect_true(optional_allowed_skip("test-artifact-app.R", name, TRUE))
-  testthat::expect_false(optional_allowed_skip("test-artifact-app.R", name, FALSE))
+  name = "a worker exits within 10 s when its parent is killed (IC-60)"
+  testthat::expect_true(optional_allowed_skip("test-subagent-worker.R", name, TRUE))
+  testthat::expect_false(optional_allowed_skip("test-subagent-worker.R", name, FALSE))
+  testthat::expect_false(optional_allowed_skip("test-proc-spawn.R", name, TRUE))
   testthat::expect_false(optional_allowed_skip("test-artifact-app.R",
     "the session check passes a working app and returns a 1000x700 screenshot", TRUE))
   testthat::expect_false(optional_allowed_skip("test-tool-search.R", "unknown", TRUE))
@@ -272,8 +287,6 @@ testthat::test_that("production writer mandatory rows reject omissions, duplicat
 
 testthat::test_that("affected process files retain only their named native platform guards", {
   guards = list(
-    "test-proc-spawn.R" =
-      "a parent killed with SIGTERM leaves children that the next load's sweep removes",
     "test-http-reactor.R" = c(
       "wire log resolves symlinks before enforcing its path boundary",
       "wire default and fallback paths reject escaping symlinks"),
@@ -289,16 +302,32 @@ testthat::test_that("affected process files retain only their named native platf
     testthat::expect_identical(result$platform_guard_cases, name)
     testthat::expect_identical(result$mandatory_cases, optional_titles[[file]])
   }
-  cmd = "a .cmd MCP command runs through cmd.exe /d /c call on Windows"
-  testthat::expect_true(optional_allowed_skip("test-mcp-client.R", cmd, FALSE))
-  testthat::expect_false(optional_allowed_skip("test-mcp-client.R", cmd, TRUE))
+  windows_only = list(
+    "test-mcp-client.R" = "a .cmd MCP command runs through cmd.exe /d /c call on Windows",
+    "test-bridge-lang.R" =
+      "the cmd and powershell engines run on Windows with UTF-8 output and exit codes",
+    "test-http-reactor.R" = c(
+      "Windows wire log resolves junctions and refuses dangling ones",
+      "Windows wire log refuses escaping file links, dangling or not"),
+    "test-utils-paths.R" =
+      "Windows junctions and file links keep control and secret paths guarded")
+  testthat::expect_identical(optional_os_skips$unix, windows_only)
+  for (file in names(windows_only)) for (name in windows_only[[file]]) {
+    testthat::expect_true(optional_allowed_skip(file, name, FALSE))
+    testthat::expect_false(optional_allowed_skip(file, name, TRUE))
+    guarded = c(lapply(optional_titles[[file]], record),
+      list(record(name, passed = 0L, skipped = 1L)))
+    testthat::expect_identical(optional_gate(guarded, file, FALSE)$platform_guard_cases, name)
+    testthat::expect_error(optional_gate(guarded, file, TRUE), "Skipped")
+  }
   mode = "an install location without the execute bit is skipped, as on PATH"
   testthat::expect_true(optional_allowed_skip("test-cli-common.R", mode, TRUE))
   testthat::expect_false(optional_allowed_skip("test-cli-common.R", mode, FALSE))
   testthat::expect_false(optional_allowed_skip("test-cli-common.R",
     "a missing command signals gptr_error_cli_missing with the install hint", TRUE))
   for (name in c("a 4 MB payload to a child that echoes each line completes without deadlock",
-    "write_all() times out on a child that reads nothing and refuses one without a pipe")) {
+    "write_all() times out on a child that reads nothing and refuses one without a pipe",
+    "a killed parent leaves a grandchild that the next load's sweep removes")) {
     testthat::expect_false(optional_allowed_skip("test-proc-spawn.R", name, TRUE))
     testthat::expect_false(optional_allowed_skip("test-proc-spawn.R", name, FALSE))
   }
@@ -341,9 +370,9 @@ writer_affected_titles = list(
     "an mcp_message round trip evaluates R in the live session and is gated once",
     "gptr_cancel() sends the interrupt control request, then kill_all()"),
   "test-cli-codex.R" = c(
-    "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
+    "a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env",
     "the next turn resumes the Codex thread with -c sandbox_mode=",
-    "a fake codex returns a function's numeric result through the HTTP MCP bridge",
+    "a fake codex returns a function's numeric result through the stdio relay",
     "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
     "retargeting a dangling control link warns after the Codex exec completes",
     "a control file gptr cannot read is marked by its size and time instead",
@@ -500,7 +529,9 @@ original_regression_titles = list(
 original_os_guards = list(
   "test-utils-paths.R" = c(
     "write_atomic() writes privately, keeps replaced permission bits, else `mode`",
-    "lexical control and secret paths stay protected when they are symlinks"),
+    "lexical control and secret paths stay protected when they are symlinks",
+    "an absent rename-fallback target is private before payload writing",
+    "a fallback permission failure removes only its newly created empty target"),
   "test-tool-write.R" = c(
     "write refuses directories and writes through symbolic links keeping the mode",
     "a new file gets the umask's default mode, an existing one keeps its own",
@@ -508,11 +539,8 @@ original_os_guards = list(
     "a chain of links is followed; a loop or a dangling link is refused",
     "non-ASCII directories, files and relative links work in a C locale",
     "a file that may be written but not read is written verbatim, keeping its mode",
-    "a link text that climbs after a symlinked component resolves as the kernel does",
-    "an existing file the process may not write is refused with EACCES and left unchanged"),
-  "test-tool-walk.R" = c(
-    "a file name holding a newline is matched like git",
-    "a symlinked directory is listed but not followed"),
+    "a link text that climbs after a symlinked component resolves as the kernel does"),
+  "test-tool-walk.R" = "a file name holding a newline is matched like git",
   "test-ckpt-files.R" = c(
     "the walk prunes .git and .gptr and lists links unfollowed; restores avoid them",
     "files over the capture cap and symbolic links are not restorable",
@@ -520,9 +548,14 @@ original_os_guards = list(
     "a file that cannot be written or read is an item and the undo goes on",
     "files that cannot be read are listed, never captured and stop nothing else",
     "checkpoint payloads are private before gzip or raw-copy writes",
-    "a checkpoint permission failure publishes no blob or private payload"),
+    "a checkpoint permission failure publishes no blob or private payload",
+    "checkpoint baseline excludes owned FIFOs before hashing",
+    "checkpoint changed FIFOs and links stay listed without capture or restore",
+    "checkpoint racy scans reject a tracked regular file replaced by a FIFO",
+    "checkpoint file-type uncertainty preserves original stat conditions",
+    "checkpoint undo refuses a regular post-image replaced by an owned FIFO",
+    "checkpoint explicit paths reject FIFO and preserve regular size-cap semantics"),
   "test-tool-edit.R" = c(
-    "Delete File refuses a directory, an empty Add File is empty, a move removes its name",
     "Delete File and a move remove only the file they name, whatever its characters",
     "a move onto its own file under another spelling keeps the file and takes the name"))
 
@@ -609,7 +642,7 @@ testthat::test_that("split filesystem cases require real assertions without late
     "test-tool-edit.R" = c(
       "two operations on one file through a directory link are refused",
       "patch additions respect the observed case-folding of the filesystem"))
-  testthat::expect_length(unlist(optional_original_os_guards), 22L)
+  testthat::expect_length(unlist(optional_original_os_guards), 27L)
   for (file in names(variants)) for (name in variants[[file]]) {
     testthat::expect_true(name %in% optional_titles[[file]])
     for (windows in c(FALSE, TRUE)) {
@@ -1163,9 +1196,9 @@ testthat::test_that("fixed Codex control cases remain mandatory without capabili
     "control digests query only unobservable Windows entries and retain POSIX markers",
     "fixed dangling SYSTEM and MCP control links keep markers and detect retargeting")
   original = c(
-    "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
+    "a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env",
     "the next turn resumes the Codex thread with -c sandbox_mode=",
-    "a fake codex returns a function's numeric result through the HTTP MCP bridge",
+    "a fake codex returns a function's numeric result through the stdio relay",
     "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
     "retargeting a dangling control link warns after the Codex exec completes",
     "a control file gptr cannot read is marked by its size and time instead")
@@ -1803,6 +1836,7 @@ testthat::test_that(
 
 testthat::test_that("owned nofollow observer controls are mandatory and strict on both hosts", {
   file = "test-bp-disk-observer.R"
+  native = "the optional observer charges a real Windows delete-pending file until it closes"
   expected = c(
     "the optional observer initializes privately and restores wrapper failures",
     "the optional observer charges a real dangling link without following its target",
@@ -1811,28 +1845,39 @@ testthat::test_that("owned nofollow observer controls are mandatory and strict o
     "the optional observer refuses a root replaced by a foreign directory link",
     "the optional observer preserves unchanged empty environment entries and rejects loss",
     "the optional observer restores changed and missing POSIX empty environment entries",
-    "the optional observer restores library paths after success and failure")
+    "the optional observer restores library paths after success and failure",
+    native)
   testthat::expect_identical(optional_titles[[file]], expected)
   rows = lapply(expected, record)
   for (windows in c(FALSE, TRUE)) {
     gate = optional_gate(rows, file, windows)
     testthat::expect_true(gate$passed)
-    testthat::expect_identical(gate$mandatory_cases, expected)
+    # Only the real delete-pending control may skip, and only off Windows.
+    testthat::expect_identical(gate$mandatory_cases, setdiff(expected, if (!windows) native))
     testthat::expect_length(gate$platform_guard_cases, 0L)
     for (i in seq_along(expected)) {
       title = expected[[i]]
-      testthat::expect_false(optional_allowed_skip(file, title, windows))
+      guarded = !windows && identical(title, native)
+      testthat::expect_identical(optional_allowed_skip(file, title, windows), guarded)
       testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
       testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
       for (field in c("failed", "warnings", "skipped", "passed")) {
         changed = rows
         changed[[i]][[field]] = if (field == "passed") 0L else 1L
-        testthat::expect_error(optional_gate(changed, file, windows))
+        if (guarded && field %in% c("skipped", "passed")) {
+          testthat::expect_true(optional_gate(changed, file, windows)$passed)
+        } else {
+          testthat::expect_error(optional_gate(changed, file, windows))
+        }
       }
       late = rows
       late[[i]]$passed = 3L
       late[[i]]$skipped = 1L
-      testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      if (guarded) {
+        testthat::expect_identical(optional_gate(late, file, windows)$platform_guard_cases, native)
+      } else {
+        testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      }
       for (kind in c("expectation_error", "expectation_warning")) {
         raw = rows
         raw[[i]] = optional_result_rows(list(list(test = title, results = list(
@@ -1890,6 +1935,27 @@ testthat::test_that(
   testthat::expect_false(any(grepl("callr|tools:callr|Sys.setenv|Sys.unsetenv", script)))
   testthat::expect_error(optional_child_start("unapproved", NULL, root, launch,
     "out", "err", supplied, spawn = spawn), "Unapproved child action")
+})
+
+testthat::test_that("dependency preflight tool probes keep their checks under one startup bound", {
+  calls = function(expr) {
+    if (!is.call(expr)) return(list())
+    out = list(expr)
+    for (i in seq_along(expr)[-1L]) {
+      if (is.name(expr[[i]]) && !nzchar(as.character(expr[[i]]))) next
+      out = c(out, calls(expr[[i]]))
+    }
+    out
+  }
+  found = calls(body(optional_preflight))
+  runs = Filter(function(call) identical(call[[1L]], quote(processx::run)), found)
+  testthat::expect_identical(optional_startup_s, 60)
+  testthat::expect_identical(runs, list(
+    quote(processx::run(Sys.which("quarto"), "--version", timeout = optional_startup_s)),
+    quote(processx::run(Sys.which("rg"), "--version", timeout = optional_startup_s)),
+    quote(processx::run(Sys.which("perl"), c("-e", "print 42"), timeout = optional_startup_s))))
+  testthat::expect_true(any(vapply(found, identical, logical(1),
+    quote(stopifnot(identical(perl$stdout, "42"))))))
 })
 
 testthat::test_that(

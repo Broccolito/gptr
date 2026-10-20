@@ -240,9 +240,10 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
     invoke = function(action) {
       writeBin(charToRaw("launch"), stage)
       writeBin(charToRaw("pending"), diagnostic)
+      # A hang guard only: a cold PowerShell start alone has exceeded 5 s on Windows R-devel.
       tryCatch(processx::run(shell, c("-NoProfile", "-NonInteractive", "-File", script,
         "-Path", path, "-Control", control, "-Backup", backup, "-Stage", stage,
-        "-Action", action), timeout = 5, error_on_status = TRUE, windows_hide_window = TRUE,
+        "-Action", action), timeout = 60, error_on_status = TRUE, windows_hide_window = TRUE,
         cleanup_tree = TRUE, env = character()), error = function(error) {
           phase = tryCatch(rawToChar(readBin(stage, "raw", 128L)),
                            error = function(error) "unreadable-marker")
@@ -755,8 +756,8 @@ test_that("slow walks switch the session to one scan per turn plus predicted pat
   writeLines("unpredicted", file.path(proj, "other.txt"))
   frag2 = ckpt_files_after(ck, call2, tok2)
   expect_length(frag2$files, 1L)
-  expect_true(frag2$files[[1L]]$abs)
-  expect_identical(basename(frag2$files[[1L]]$path), "b.R")
+  expect_false(frag2$files[[1L]]$abs)
+  expect_identical(frag2$files[[1L]]$path, "R/b.R")
   turn_frag = ckpt_files_turn_scan(ck, 1L)
   expect_identical(names(paths_status(turn_frag)), "other.txt")
   call3 = list(id = "c3", name = "write", input = list(path = "R/a.R", content = "big"))
@@ -812,6 +813,28 @@ test_that("a forced turn scan records what a CLI child changed (IC-65)", {
   u = ckpt_files_undo(ck, frag)
   expect_true(u$ok)
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 1")
+})
+
+test_that("gptr's own writes are no turn's change; an edit the tracker has not seen still is", {
+  proj = local_project(files = list("analysis.R" = "a = 1"))
+  ck = ckpt_ck_new("s0000000035")
+  tr = ckpt_files_tr(ck)
+  ckpt_files_sync(tr)
+  doc = file.path(proj, "analysis.R")
+  new = file.path(proj, "transcript.R")
+  ckpt_files_own_write(list(tr), doc, function() writeLines("a = 2", doc))
+  ckpt_files_own_write(list(tr), new, function() writeLines("t = 1", new))
+  expect_null(ckpt_files_turn_scan(ck, 1L, force = TRUE))
+  for (f in c(doc, new)) writeLines("edited", f)
+  ckpt_files_own_write(list(tr), doc, function() writeLines("a = 3", doc))
+  frag = ckpt_files_turn_scan(ck, 2L, force = TRUE)
+  expect_identical(paths_status(frag), c(analysis.R = "modified", transcript.R = "modified"))
+  expect_true(all(ckpt_files_undo(ck, frag)$ok))
+  expect_identical(readLines(doc), "a = 2")
+  expect_identical(readLines(new), "t = 1")
+  local_mocked_bindings(ckpt_ext_state = function(s = NULL) stop("no registry"))
+  ckpt_own_write(doc, function() writeLines("a = 4", doc))
+  expect_identical(readLines(doc), "a = 4")
 })
 
 
@@ -1089,8 +1112,8 @@ test_that("checkpoint explicit paths reject FIFO and preserve regular size-cap s
   fragment = ckpt_files_after(ck, call, token)
   expect_length(fragment$files, 1L)
   row = fragment$files[[1L]]
-  expect_true(row$abs)
-  expect_identical(row$path, pipe)
+  expect_false(row$abs)
+  expect_identical(row$path, "supervisor_stdin")
   expect_identical(row$status, "created")
   expect_identical(row$post, "")
   expect_false(row$restorable)
