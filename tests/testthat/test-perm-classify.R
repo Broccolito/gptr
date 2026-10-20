@@ -395,6 +395,7 @@ test_that("text encodings and long glob words are read safely (D-061)", {
   f = risk_command(x, root)
   expect_lt(proc.time()[["elapsed"]] - t0, 10)
   expect_identical(flags_level(f), 1L)
+  expect_no_warning(gptr_risk(sprintf("readLines('%s/.env')", strrep("a", 5000)), root = root))
   expect_identical(risk_glob_rx("a*[b]c["), "^a.*[b]c\\[\\z")
   expect_identical(risk_glob_rx("[!]"), "^\\[!\\]\\z")
   expect_identical(risk_glob_rx("x[^]]y"), "^x[^]]y\\z")
@@ -981,9 +982,11 @@ test_that("a process's stdout or stderr file is a write classified by its path",
   expect_identical(lv("processx::run('ls', stdout = 'out.txt')"), 2L)
   expect_identical(lv("system2('ls', stderr = '.gptr/settings.json')"), 4L)
   expect_identical(lv("system2('ls', stdout = f)"), 2L)
+  expect_identical(lv("system2('ls', stdout = '|')"), 2L)
+  expect_identical(lv("system2('ls', stderr = '2>&1')"), 2L)
   r = gptr_risk("system2('ls', stdout = 'out.txt')", root = root)
   expect_identical(r$paths, "out.txt")
-  # neighbours: the console, a capture, a pipe or a merge write no file
+  # neighbours: the console, a capture, or processx's pipe or merge write no file
   expect_identical(lv("system2('ls', stdout = TRUE)"), 0L)
   expect_identical(lv("system2('ls', stdout = FALSE)"), 0L)
   expect_identical(lv("system2('ls', stdout = '')"), 0L)
@@ -1001,6 +1004,8 @@ test_that("starting a background process is level 2 process", {
   expect_identical(lv("system2('sleep', '1', wait = FALSE)"), 2L)
   expect_identical(lv("peter$sh('ls &')"), 2L)
   expect_identical(gptr_risk("system('ls & ls')", root = root)$categories, "process")
+  expect_identical(lv("system('sleep 1 &>/dev/null')"), 2L)
+  expect_identical(lv("system('sleep 1&>/dev/null')"), 2L)
   # neighbours: `&&`, `>&`, `|&`, a quoted `&` and a waited process keep their level
   expect_identical(lv("system('ls')"), 0L)
   expect_identical(lv("system('ls', wait = TRUE)"), 0L)
@@ -1024,4 +1029,84 @@ test_that("a reading function passed as a value reads a path the code computes",
   expect_identical(lv("sapply(1:3, sqrt)"), 0L)
   expect_identical(lv("lapply(x, nchar)"), 0L)
   expect_identical(lv("do.call(rbind, l)"), 0L)
+})
+
+test_that("a function passed by position to aggregate or reorder, or as ties or gr, is called", {
+  root = local_project()
+  e = classify_env()
+  lv = function(code) gptr_risk(code, envir = e, root = root)$level
+  expect_identical(lv("aggregate('o.txt', list(1), file.create)"), 2L)
+  expect_identical(lv("aggregate(len ~ supp, ToothGrowth, file.create)"), 2L)
+  expect_identical(lv("aggregate(len ~ supp, data = ToothGrowth, file.create)"), 2L)
+  expect_identical(lv("aggregate('o.txt', by = list(1), file.create)"), 2L)
+  expect_identical(lv("aggregate(df, list(1), cleanup)"), 3L)
+  expect_identical(lv("reorder(factor(c('a', 'b')), c('o1.txt', 'o2.txt'), file.create)"), 2L)
+  expect_identical(lv("reorder(factor('a'), X = 'o.txt', file.create)"), 2L)
+  expect_identical(lv("approx(c(1, 1, 2), c(1, 2, 3), ties = file.create)"), 2L)
+  expect_identical(lv("optim(1, sum, file.create)"), 2L)
+  expect_identical(lv("tools::Rd2txt('none.Rd', out = 'keep.txt')"), 2L)
+  expect_identical(lv("tools::Rd2txt('none.Rd', out = '~/.Rprofile')"), 4L)
+  # neighbours: read-only functions, the console and inspecting a function stay level 0
+  expect_identical(lv("aggregate(1, list(1), mean)"), 0L)
+  expect_identical(lv("aggregate(len ~ supp, ToothGrowth, mean)"), 0L)
+  expect_identical(lv("aggregate(len ~ supp, data = ToothGrowth, mean)"), 0L)
+  expect_identical(lv("aggregate(1, by = list(1), mean)"), 0L)
+  expect_identical(lv("reorder(factor('a'), 1, median)"), 0L)
+  expect_identical(lv("approx(1:2, 1:2, ties = 'ordered')"), 0L)
+  # ...and ties or gr of another function is data
+  expect_identical(lv("survival::coxph(f, data = d, ties = opts$ties)"), 1L)
+  expect_identical(lv("rGREAT::great(gr = peaks[1:10], 'GO:BP', 'hg19')"), 1L)
+  expect_identical(lv("tools::Rd2txt('x.Rd')"), 0L)
+  expect_identical(lv("args(write.csv)"), 0L)
+  expect_identical(lv("environment(write.csv)"), 0L)
+})
+
+test_that("a file:// URL is classified as the local path R's file() opens", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("readLines('file:///etc/hosts')"), 1L)
+  expect_identical(lv("read.csv('file:///etc/hosts')"), 1L)
+  expect_identical(lv("writeLines('x', 'file:///etc/hosts')"), 3L)
+  # neighbours: a project file stays level 0, and R opens `FILE://` as a relative path
+  expect_identical(lv("readLines('file://data.csv')"), 0L)
+  expect_identical(lv("readLines('FILE:///etc/hosts')"), 0L)
+})
+
+test_that("a `~name` path is that user's home, as R and the shell expand it", {
+  skip_on_os("windows")
+  u = paste0("~", Sys.info()[["user"]])
+  skip_if(identical(path.expand(u), u), "the user has no home R can find")
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv(sprintf("readLines('%s/x.txt')", u)), 1L)
+  expect_identical(lv(sprintf("system('cat %s/x.txt')", u)), 1L)
+  expect_identical(lv(sprintf("writeLines('x', '%s/x.txt')", u)), 3L)
+  expect_identical(lv(sprintf("unlink('%s', recursive = TRUE)", u)), 4L)
+  # neighbour: R leaves `~name` of an unknown user as written, a project path
+  expect_identical(lv("readLines('~nosuchuserzz/x')"), 0L)
+})
+
+test_that("md5sum, dir.exists, file.access and file_test are classified by their paths", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("tools::md5sum('/etc/hosts')"), 1L)
+  expect_identical(lv("tools::md5sum('~/.ssh/id_rsa')"), 3L)
+  expect_identical(lv("dir.exists('/etc')"), 1L)
+  expect_identical(lv("file.access('/etc/hosts')"), 1L)
+  expect_identical(lv("utils::file_test('-f', '/etc/hosts')"), 1L)
+  # neighbours: project paths stay level 0
+  expect_identical(lv("tools::md5sum('data.csv')"), 0L)
+  expect_identical(lv("dir.exists('R')"), 0L)
+  expect_identical(lv("file.access('R', 4)"), 0L)
+  expect_identical(lv("utils::file_test('-f', 'R/x.R')"), 0L)
+})
+
+test_that("the directory git -C names is read", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("system('git -C /etc log')"), 1L)
+  expect_identical(lv("system2('git', c('-C', '/etc', 'log'))"), 1L)
+  # neighbours: git run in the project stays level 0
+  expect_identical(lv("system('git -C . log')"), 0L)
+  expect_identical(lv("system('git status')"), 0L)
 })

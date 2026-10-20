@@ -380,6 +380,7 @@ test_that("credential path detection is conservative on case-insensitive filesys
   for (path in c("analysis.R", "data/env.csv")) {
     expect_identical(secret_scan(paste0("readLines('", path, "')"))$level, 0L)
   }
+  expect_identical(secret_scan(sprintf("readLines('%s/.env')", strrep("a", 5000)))$level, 3L)
 })
 
 test_that("known shell environment dumps include PowerShell and command case variants", {

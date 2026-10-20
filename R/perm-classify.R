@@ -341,6 +341,7 @@ risk_glob_match = function(g, names) {
 #' P01 guards one of its children
 #' @noRd
 risk_target = function(w, op, root, dirs = root) {
+  w = sub("^file://", "", w)
   w = sub("^\\$(HOME\\b|\\{HOME\\})", "~", w, perl = TRUE)
   if (tolower(w) %in% risk_null_paths) return(list(pc = "console", level = 0L, secret = FALSE))
   if (grepl("^/dev/(tcp|udp)/", w)) return(list(pc = "url", level = risk_op_level("url", op),
@@ -788,10 +789,10 @@ risk_sh_tokens = function(cmd) {
     } else if (identical(c1, "|")) {
       op("|")
       if (identical(c2, "&")) i = i + 1L
-    } else if (identical(c1, "&") && !identical(c2, ">")) {
+    } else if (identical(c1, "&")) {
       bg = TRUE
       op(";")
-    } else if (c1 %in% c(">", "<") || (c1 %in% c("1", "2", "&") && identical(c2, ">") && !has)) {
+    } else if (c1 %in% c(">", "<") || (c1 %in% c("1", "2") && identical(c2, ">") && !has)) {
       if (grepl("^([0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})\\z", cur, perl = TRUE) && !nzchar(d)) {
         cur = ""
         has = FALSE
@@ -824,7 +825,8 @@ risk_sh_tokens = function(cmd) {
   }
   if (nzchar(q)) hidden = c(hidden, piece)
   push()
-  # `bg`: a lone `&` (not `&&`, `&>`, `>&` or `|&`) runs the command before it in the background
+  # `bg`: a lone `&` (not `&&`, `>&` or `|&`) runs the command before it in the background; sh
+  # such as dash reads `&>` as `&` then `>`
   structure(out, dyn = dyn, quoted = quo, hidden = hidden, bg = bg)
 }
 
@@ -1094,7 +1096,11 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       }
       dir = if (a[1L] %in% c("-C", "--work-tree", "--git-dir") && k == 2L) a[2L] else
         sub("^--(work-tree|git-dir)=?", "", a[1L])[grepl("^--(work-tree|git-dir)=.", a[1L])]
-      if (length(dir)) dirs = unique(c(dirs, if (is_abs_path(dir)) dir else file.path(root, dir)))
+      if (length(dir)) {
+        tg = risk_target(dir, "read", root, dirs)
+        if (tg$level > 0L) add(tg$level, if (tg$secret) "secret" else "read", dir, tg$pc)
+        dirs = unique(c(dirs, if (is_abs_path(dir)) dir else file.path(root, dir)))
+      }
       if (k == 2L) tail(sub("^[^=]*=", "", a[2L]))
       a = a[-seq_len(k)]
       da = da[-seq_len(k)]
@@ -1758,7 +1764,8 @@ risk_plan_syntax = c("{", "(", risk_arrow, "=", "if", "for", "while", "repeat", 
                      "<lambda>")
 risk_quoting_funs = c("quote", "bquote", "expression", "substitute", "~", "alist")
 # Function slots: formals whose argument is called in any call R can match, and the slots of
-# functions whose formal name is ambiguous or whose namespace may not be loaded (formal, position).
+# functions whose formal name is ambiguous or whose namespace may not be loaded ((formal,
+# position) pairs).
 risk_slot_names = c("FUN", ".f", ".fn", ".fns", "func", ".p", ".else")
 risk_hof_args = list(
   Map = c("f", "1"), Reduce = c("f", "1"), Filter = c("f", "1"), Find = c("f", "1"),
@@ -1771,8 +1778,11 @@ risk_hof_args = list(
   if_any = c(".fns", "2"), if_all = c(".fns", "2"), future_lapply = c("FUN", "2"),
   future_map = c(".f", "2"), mclapply = c("FUN", "2"), parLapply = c("fun", "3"),
   parSapply = c("FUN", "3"), clusterCall = c("fun", "2"), later = c("func", "1"),
-  rapply = c("f", "2"), optim = c("fn", "2"), optimize = c("f", "1"), optimise = c("f", "1"),
-  uniroot = c("f", "1")
+  rapply = c("f", "2"), optim = c("fn", "2", "gr", "3"), optimHess = c("fn", "2", "gr", "3"),
+  optimize = c("f", "1"), optimise = c("f", "1"), uniroot = c("f", "1"),
+  aggregate = c("FUN", "3"), reorder = c("FUN", "3"), approx = c("ties", "10"),
+  approxfun = c("ties", "8"), spline = c("ties", "8"), splinefun = c("ties", "4"),
+  stepfun = c("ties", "4")
 )
 # Handlers: every `...` argument of these is called.
 risk_handler_funs = c("tryCatch", "withCallingHandlers")
@@ -2100,12 +2110,13 @@ risk_bytes = function(b) {
 
 # ---- arguments and paths -------------------------------------------------------------------
 
-#' The arguments of call `e` by formal name, as R matches them when the function's namespace is
-#' loaded (attribute `formals`); else as written. An empty argument is NULL, in place.
+#' The arguments of call `e` by formal name, as R matches them to function `fn`, or to `fn` in
+#' namespace `pkg` when it is loaded (attribute `formals`); else as written. An empty argument is
+#' NULL, in place.
 #' @noRd
 risk_args = function(e, fn, pkg) {
   e[vapply(as.list(e), identical, NA, quote(expr = ))] = list(NULL)
-  f = if (!is.na(pkg) && isNamespaceLoaded(pkg)) {
+  f = if (is.function(fn)) fn else if (!is.na(pkg) && isNamespaceLoaded(pkg)) {
     get0(fn, envir = asNamespace(pkg), mode = "function")
   }
   if (is.primitive(f)) f = args(f)
@@ -2126,6 +2137,14 @@ risk_arg = function(a, name, pos = 0L, default = FALSE) {
   if (!is.null(fm)) return(if (default && !identical(fm[[name]], quote(expr = ))) fm[[name]])
   un = a[!nzchar(nms)]
   if (pos >= 1L && length(un) >= pos) un[[pos]]
+}
+
+#' The arguments of call `e` to S3 generic `fn` as each of its methods matches them
+#' @noRd
+risk_s3_args = function(e, fn) {
+  tryCatch(lapply(utils::.S3methods(fn), function(m) {
+    risk_args(e, utils::getS3method(fn, substring(m, nchar(fn) + 2L)))
+  }), condition = function(c) list())
 }
 
 #' The expressions a call may pass as its path argument: the matched one; for `...` rows, a
@@ -2356,7 +2375,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     row = risk_lookup(name, pkg)
     a = risk_args(e, name, row$package %||% (if (is.na(pkg)) "base" else pkg))
     reach(name, pkg, a, ctx, label)
-    slots(name, a, ctx)
+    slots(name, a, e, ctx)
     if (is.null(row)) return(add(ctx, label, name, 1L, "unlisted"))
     if (by_args(name, row, a, as.list(e)[-1L], ctx, label)) return(invisible())
     if (startsWith(row$note, "by reference") && name != ":=" && is.symbol(e[[2L]])) {
@@ -2423,14 +2442,18 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   }
 
   # Function slots: the functions a call calls.
-  slots = function(name, a, ctx) {
+  slots = function(name, a, e, ctx) {
     nms = names(a) %||% rep("", length(a))
     d = a[["..."]]
     vals = c(a[nms %in% risk_slot_names], d[names(d) %in% risk_slot_names])
     if (name %in% risk_handler_funs) vals = c(vals, d %||% a[nzchar(nms)])
-    hof = risk_hof_args[[name]]
-    if (!is.null(hof) && !hof[1L] %in% names(vals)) {
-      vals = c(vals, list(risk_arg(a, hof[1L], as.integer(hof[2L]))))
+    hof = matrix(risk_hof_args[[name]] %||% character(), 2L)
+    fm = names(attr(a, "formals"))
+    for (i in seq_len(ncol(hof))) {
+      if (hof[1L, i] %in% names(vals)) next
+      # a slot of a generic's methods (aggregate.formula's FUN), as each method matches the call
+      as = if (is.null(fm) || hof[1L, i] %in% fm) list(a) else risk_s3_args(e, name)
+      vals = c(vals, lapply(as, risk_arg, hof[1L, i], as.integer(hof[2L, i])))
     }
     for (v in vals) if (!is.null(v)) use_value(v, ctx, slot = TRUE)
   }
@@ -2446,7 +2469,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
         add(ctx, paste0(label, " (in the background)"), name, 2L, "process")
       }
       for (x in list(risk_arg(a, "stdout"), risk_arg(a, "stderr"))) {
-        if (!is.null(x) && !is.logical(x) && !identical(x, "|") && !identical(x, "2>&1")) {
+        if (!is.null(x) && !is.logical(x) &&
+            (name == "system2" || !(identical(x, "|") || identical(x, "2>&1")))) {
           add_path(list(x), "file_write", 2L, ctx, label, name)
         }
       }

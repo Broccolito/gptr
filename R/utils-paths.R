@@ -164,9 +164,11 @@ is_abs_path = function(path) {
 #' @noRd
 path_norm_one = function(path) {
   # "~" is expanded before backslashes become slashes, so the result has forward slashes whatever
-  # user_home() returns (CI-5, D-111)
+  # user_home() returns (CI-5, D-111); "~name" is that user's home, as R's file functions expand it
   if (identical(path, "~") || grepl("^~[/\\\\]", path)) {
     path = paste0(user_home(), substring(path, 2L))
+  } else if (startsWith(path, "~")) {
+    path = path.expand(path)
   }
   path = gsub("\\", "/", path, fixed = TRUE)
   if (!is_abs_path(path)) path = file.path(getwd(), path)

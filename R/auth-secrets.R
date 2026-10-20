@@ -596,7 +596,7 @@ secret_scan = function(code, tainted = character()) {
       if (any(c("Sys.getenv", "readRenviron") %in% c(lits, syms))) add("env_dynamic", fn)
     }
     if (fn %in% scan_read_funs && length(lits)) {
-      hit = lits[grepl(scan_secret_path_re, path.expand(lits), perl = TRUE, ignore.case = TRUE)]
+      hit = lits[grepl(scan_secret_path_re, lits, perl = TRUE, ignore.case = TRUE)]
       if (length(hit)) add("secret_file", hit[1])
     }
     if (fn %in% c("key_get", "key_list", "key_get_raw") || pkg == "keyring") add("keyring", fn)
