@@ -420,6 +420,8 @@ s3_register = function(generic, class, method = NULL) {
 #' - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `TYPESAFE_API_KEY` and the other
 #'   provider keys: read at the first use of a provider; see [gptr_env()] for `.env` files.
 #' - `GPTR_WORKER` and `GPTR_SUBAGENT_DEPTH`: set by gptr in its own child processes only.
+#' - `GPTR_MCP_TOKEN`: the variable through which the Codex snippet of [gptr_mcp_serve()] passes
+#'   the server's bearer token to the client; gptr itself never reads it.
 #' - `GPTR_LIVE_TESTS`: `"true"` enables the package's live tests; not used at run time.
 #' - `_R_CHECK_PACKAGE_NAME_`: set by `R CMD check`; outside the package's own tests gptr then
 #'   replays recorded document blocks only and caps each child-process pool at two.

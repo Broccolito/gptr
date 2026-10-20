@@ -210,6 +210,8 @@ that a script makes no model calls.
 \item \code{ANTHROPIC_API_KEY}, \code{OPENAI_API_KEY}, \code{GEMINI_API_KEY}, \code{TYPESAFE_API_KEY} and the other
 provider keys: read at the first use of a provider; see \code{\link[=gptr_env]{gptr_env()}} for \code{.env} files.
 \item \code{GPTR_WORKER} and \code{GPTR_SUBAGENT_DEPTH}: set by gptr in its own child processes only.
+\item \code{GPTR_MCP_TOKEN}: the variable through which the Codex snippet of \code{\link[=gptr_mcp_serve]{gptr_mcp_serve()}} passes
+the server's bearer token to the client; gptr itself never reads it.
 \item \code{GPTR_LIVE_TESTS}: \code{"true"} enables the package's live tests; not used at run time.
 \item \verb{_R_CHECK_PACKAGE_NAME_}: set by \verb{R CMD check}; outside the package's own tests gptr then
 replays recorded document blocks only and caps each child-process pool at two.
