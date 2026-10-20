@@ -1128,8 +1128,9 @@ egress_question = function(id, origin = NULL, asker = NULL) {
     paste0("The agent's code starts a sub-agent on ", asker, ", which sends its prompt to ", to)
   }
   paste0(lead, " together with automatic context: the workspace listing (object names, classes ",
-         "and sizes), a description of the R environment, project instructions and descriptions ",
-         "of the objects you attach. Allow this for ", id, " from now on?")
+         "and sizes), the objects you added, changed or removed and the R expressions you ran ",
+         "since the previous prompt, a description of the R environment, project instructions ",
+         "and descriptions of the objects you attach. Allow this for ", id, " from now on?")
 }
 
 #' Records `egress.<id> = "ack"` in the user settings file by one read-modify-write under its
@@ -1637,8 +1638,10 @@ NULL
 #' - With summary context, a budgeted description of each attached object (its class,
 #'   dimensions, column names and types and a few values); a small object can appear in full.
 #' - Automatic context: a short listing of the objects in the evaluation environment (names,
-#'   classes and sizes), the R version, platform and available packages, and the project
-#'   instruction files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`).
+#'   classes and sizes); the objects you added, changed or removed and the top-level R
+#'   expressions you ran since the previous prompt; the R version, platform and available
+#'   packages; and the project instruction files (`AGENTS.md`, `CLAUDE.md`,
+#'   `.gptr/vignette.Rmd`).
 #' - Tool results: the printed output of R code the model ran, the parts of files it read, and
 #'   images of plots it made. In `manual` mode every action that is not known to be read-only
 #'   needs your approval before its result can be sent.
@@ -1652,8 +1655,9 @@ NULL
 #' Registered secrets are replaced by markers before anything is sent.
 #'
 #' @section Limiting automatic context:
-#' `.opts = list(context = "names")` sends workspace object names and attached-object headers,
-#' and `.opts = list(context = "none")` suppresses workspace and attached-object descriptions.
+#' `.opts = list(context = "names")` sends workspace object names, the workspace changes and
+#' attached-object headers, and `.opts = list(context = "none")` suppresses the workspace
+#' listing, the workspace changes and attached-object descriptions.
 #' Prompts, tool results and native typed decision inputs have their own paths. Attach only the
 #' objects the task needs. The `plan` mode permits actions classified as read-only so you can
 #' inspect a proposed workflow before allowing changes to your workspace.
