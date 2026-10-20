@@ -114,7 +114,7 @@ ls(work)
 
 session |> peter("Reuse fit to predict mpg for the same cars.")
 #> The predictions are stored in predicted.
-#> idle . fake/fake-1 . 2 turns . 6.9k tokens . $0.0000 . s1dd819336e
+#> idle . fake/fake-1 . 2 turns . 6.9k tokens . $0.0000 . sb3623d8e14
 head(work$predicted)
 #>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
 #>          23.28261          21.91977          24.88595          20.10265
@@ -258,9 +258,10 @@ in `inst/COPYRIGHTS`.
 gptr was inspired by Mario Zechner's 'pi' coding agent; its tool
 descriptions, edit semantics and prompt-template grammar are derived
 from 'pi' (MIT license). The model catalog is derived from models.dev
-(MIT license) and the secret patterns from gitleaks (MIT license); see
-`inst/COPYRIGHTS`. Ideas were borrowed from 'ellmer', 'tidyllm', 'btw'
-and 'mcptools', none of which gptr depends on. Anthropic, OpenAI,
-Google, TypeSafe AI, Ollama and the vendors of the command-line tools
-are third-party services; gptr is not affiliated with or endorsed by
-them.
+(MIT license) and the secret patterns from gitleaks (MIT license), and
+the System 1 emulation prompt follows TypeSafe AI's
+system-one-adapter-python (MIT license); see `inst/COPYRIGHTS`. Ideas
+were borrowed from 'ellmer', 'tidyllm', 'btw' and 'mcptools', none of
+which gptr depends on. Anthropic, OpenAI, Google, TypeSafe AI, Ollama
+and the vendors of the command-line tools are third-party services; gptr
+is not affiliated with or endorsed by them.

@@ -2922,4 +2922,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   derived material (pi, models.dev, gitleaks) stay in `inst/COPYRIGHTS`, as the MIT license requires. gptr 0.7.0
   was MIT-licensed; NEWS.md and cran-comments.md say so, and the README's License section states the Apache License 2.0. Amends P01 and IC-72, architecture section 9,
   spec 05 P01 and research 13 C-05; the bundled skills and toy test packages now say Apache-2.0 too.
+- Consent: contributor Tianlu Zhu, whose code was contributed under MIT, agreed to the Apache License 2.0
+  (2026-10-20). inst/COPYRIGHTS also gains the MIT notice of typesafe-ai/system-one-adapter-python, whose
+  prompt and schema `R/s1-emulate.R` follows.
 - Tests: test-zzz.R (IC-72), dev/release/tests (site-stage, examples, precompute), dev/ci/test-exact-source.py.

@@ -2,7 +2,7 @@
 
 gptr 1.0.0 is a pure-R package. Examples and the 14 precomputed guides run offline without credentials. CRAN submission is being prepared.
 
-License change: gptr 0.7.0 was released under `MIT + file LICENSE`; gptr 1.0.0 is released under `Apache License (== 2.0)`. Third-party notices for derived MIT-licensed material are in `inst/COPYRIGHTS`.
+License change: gptr 0.7.0 was released under `MIT + file LICENSE`; gptr 1.0.0 is released under `Apache License (== 2.0)`, with the agreement of its contributors. Third-party notices for derived MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## Test environments
 

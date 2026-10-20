@@ -219,7 +219,8 @@ gptr is licensed under the Apache License 2.0. Third-party notices are in `inst/
 
 gptr was inspired by Mario Zechner's 'pi' coding agent; its tool descriptions, edit semantics
 and prompt-template grammar are derived from 'pi' (MIT license). The model catalog is derived from models.dev (MIT license) and the
-secret patterns from gitleaks (MIT license); see `inst/COPYRIGHTS`. Ideas were borrowed from
+secret patterns from gitleaks (MIT license), and the System 1 emulation prompt follows TypeSafe AI's
+system-one-adapter-python (MIT license); see `inst/COPYRIGHTS`. Ideas were borrowed from
 'ellmer', 'tidyllm', 'btw' and 'mcptools', none of which gptr depends on. Anthropic, OpenAI,
 Google, TypeSafe AI, Ollama and the vendors of the command-line tools are third-party services;
 gptr is not affiliated with or endorsed by them.
