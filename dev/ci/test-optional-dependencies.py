@@ -93,6 +93,8 @@ class DiscoveryTests(unittest.TestCase):
             MODULE.isolated_environment(env, run)
 
     def test_linux_children_get_a_short_private_temp_root_under_tmp(self):
+        if os.name == 'nt':
+            self.skipTest('Windows has no /tmp')
         run = self.root / 'owned-linux-state'
         actual = MODULE.isolated_environment({'PATH': '/old'}, run, platform='linux')
         tmp = Path(actual['TMPDIR'])
@@ -102,8 +104,7 @@ class DiscoveryTests(unittest.TestCase):
         self.assertFalse((run / 'tmp').exists())
         for name in ('TMP', 'TEMP', 'MAC_CHROMIUM_TMPDIR'):
             self.assertEqual(actual[name], str(tmp))
-        if os.name != 'nt':
-            self.assertEqual(tmp.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(tmp.stat().st_mode & 0o777, 0o700)
         # R's tempdir() and gptr's private browser root leave room for Chromium's socket name
         socket = tmp / 'RtmpXXXXXX' / 'gptr-xxxxxxxxxxxx' / 'tmp' / \
             'org.chromium.Chromium.XXXXXX' / 'SingletonSocket'
