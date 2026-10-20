@@ -140,7 +140,8 @@ skill_parse_cached = function(path) res_cached(path, skill_parse, "skill")
 #' A relative entry is resolved against the project root, so it names project content and is
 #' returned under `project` (trust-gated like `.gptr/skills`, IC-52; D-074). Absolute entries and
 #' `~`, `~/...` entries (`~` expanded through `user_home()`, IC-63) are the user's own
-#' directories. `path_norm()` expands no other `~name` form, so such an entry is relative too.
+#' directories. A `~name` entry is not one of these, so it is relative: it is joined to the
+#' project root before `path_norm()`.
 #' @noRd
 skill_setting_paths = function() {
   p = as.character(unlist(setting_get("skills", default = list())[["paths"]], use.names = FALSE))
