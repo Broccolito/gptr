@@ -133,14 +133,14 @@ than assuming every object is a fully resident data frame.
 
 ``` r
 session$id
-#> [1] "s44c24d5f4d"
+#> [1] "sbdb467af0b"
 session$model
 #> [1] "fake/fake-1"
 session$turns
 #> [1] 1
 gptr_usage(session)
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 s44c24d5f4d  2         3265   20      0           0            0
+#> 1 sbdb467af0b  2         3343   20      0           0            0
 #>
 #> # 1 row
 #> 2 requests, 3.3k tokens in, $0.0000
@@ -165,17 +165,17 @@ unknown.
 session$history
 #>   turn  role         preview                   tools  tokens
 #> 1 1     user         Fit fuel economy agai...         8
-#> 2 1     assistant                              r      1644
+#> 2 1     assistant                              r      1683
 #> 3 1     tool_result  + fit <lm length 12>      r      5
-#> 4 1     assistant    The regression is ready.         1641
+#> 4 1     assistant    The regression is ready.         1680
 #> # 4 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . s44c24d5f4d
+#> idle . fake/fake-1 . 1 turn . 3.4k tokens . $0.0000 . sbdb467af0b
 as.data.frame(session$history)
 #>   turn        role                          preview tools tokens
 #> 1    1        user Fit fuel economy against weight.            8
-#> 2    1   assistant                                      r   1644
+#> 2    1   assistant                                      r   1683
 #> 3    1 tool_result             + fit <lm length 12>     r      5
-#> 4    1   assistant         The regression is ready.         1641
+#> 4    1   assistant         The regression is ready.         1680
 ```
 
 Without an initialized project workspace, session files use a temporary directory.
@@ -205,5 +205,6 @@ pauses event-loop callbacks until evaluation returns. A worker is a separate R p
 receives serializable context; it does not share the parent workspace. See
 [Teams and background work](teams-and-background.html).
 
-Agent code draws from its own random-number stream, so your `.Random.seed` is preserved,
+Model code in a top-level run draws from your random-number stream, as your own code would.
+Inline sub-agents draw from their own stream, so your `.Random.seed` is preserved around them,
 except after a deliberate `RNGkind()` change or a callback R runs while idle.

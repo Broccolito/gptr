@@ -19,24 +19,28 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   no default path), into a project `.gptr/` directory once it exists, into documents the user
   named with `gptr_doc()` or confirmed interactively, into `tools::R_user_dir("gptr")`
   (settings, trust decisions and credentials the user stores, and small caches), into
-  `tempdir()`, or as allowed by the permission mode the user selected. Without that consent
-  nothing else is written outside `tempdir()` in a non-interactive session.
+  `tempdir()`, or as allowed by the permission mode the user selected. Without that consent gptr
+  itself writes nothing else outside `tempdir()` in a non-interactive session; model code is held
+  back only as far as the classifier recognizes its writes (next point).
 * Model-generated R code is evaluated in the environment the user passes to `peter()` or
   `gptr_mcp_serve()` (by default the caller's frame), or in a separate R process for worker
   sub-agents. In the default `manual` permission mode, code that the package's static classifier
   labels read-only runs without asking; code it labels as creating or changing objects or files,
   starting processes or reading outside the project runs only after the user approves it. The
   classifier is advisory, not a security boundary, as `?gptr_security` says. A non-interactive run
-  that would need an approval stops with a classed error. The package never leaves objects in the
-  global environment; while model code runs, `.Random.seed` is swapped for the agent's own stream
-  and the user's seed is restored afterwards.
+  that would need an approval stops with a classed error. gptr itself never assigns objects in the
+  global environment. Model code in a top-level run draws from the user's random-number stream, as
+  the user's own code would; inline sub-agents draw from their own stream, and the user's
+  `.Random.seed` is restored after them.
 * Data is sent to a model provider only when the user runs a prompt with that provider's model.
   Before automatic session context first goes to a provider, gptr shows what it contains
   (including the R expressions the user ran since the previous prompt) and asks for an
-  acknowledgment; a non-interactive run needs a recorded acknowledgment unless it sends no
-  context (`.opts = list(context = "none")`). Offline providers and local providers on a loopback
-  address (such as a local 'Ollama' server while its local-only inference is on, the default)
-  need none. There is no telemetry.
+  acknowledgment; a non-interactive run needs a recorded acknowledgment unless automatic context
+  is off (`context = "none"`): the prompt then goes with project instruction files and a short
+  description of the R environment, but without the workspace listing, the workspace changes or
+  descriptions of attached objects. Offline providers and local providers on a loopback address
+  (such as a local 'Ollama' server while its local-only inference is on, the default) need none.
+  There is no telemetry.
 * The external programs named in SystemRequirements (an 'Ollama' server, 'claude', 'codex',
   'quarto' and a 'Chrome'-family browser) are optional: gptr starts or contacts them only when
   the user selects a feature that needs them, and the package passes its checks without them.
@@ -65,8 +69,9 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   `HOME`, `R_USER_*_DIR` and `TMPDIR` at a temporary directory that is deleted afterwards,
   blanks provider key variables and sets replay mode. With `NOT_CRAN` unset that directory is
   under `tempdir()`, tests that start a local server (a mock provider, an MCP server or a Shiny
-  app) or gptr worker processes are skipped, and the suite needs no network: TEST_TIME. Live
-  provider tests run only when `GPTR_LIVE_TESTS` is `"true"`.
+  app) or gptr worker processes are skipped, and the suite needs no network; it takes about 2.5
+  minutes (`Running 'testthat.R' [136s/149s]` in the local check). Live provider tests run only
+  when `GPTR_LIVE_TESTS` is `"true"`.
 * The 14 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
 * Under `R CMD check` every pool of child processes is capped at two.
@@ -79,15 +84,19 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   Windows (release, oldrel-4), Ubuntu (devel, release, oldrel-1, oldrel-4), Ubuntu R-devel with
   `NOT_CRAN=false` (the tests as CRAN runs them), Ubuntu without Suggests and Ubuntu under
   `LC_ALL=C`.
-* win-builder (R-devel): to be run before submission.
 
 ## R CMD check results
 
-CHECK_RESULTS
+0 errors | 0 warnings | 0 notes
+
+The local check also reports two INFO lines: 'repr', which gptr enhances, was not available for
+checking, and the installed size.
 
 ## Installed size
 
-INSTALLED_SIZE
+The installed size is 6.7 Mb: R 5.0 Mb and doc 1.2 Mb. R is the byte-compiled code of 122 R
+files, with no data sets and no compiled code; doc holds the 14 HTML vignettes. Current R
+versions report the size as INFO; R 4.2 reports it as a NOTE.
 
 ## Reverse dependencies
 

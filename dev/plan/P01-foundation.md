@@ -506,8 +506,9 @@ Copyright (c) 2025 Mario Zechner
 
 Derived material: the wording of the read, write and edit tool descriptions and parameter
 schemas, the edit guidelines, the context-overflow message patterns, the prompt-template
-grammar, the session-file field names, the sensitive-key pattern of its bug report and the
-jev-router example extension (inst/gptr/examples/jev-router.R).
+grammar and its test cases (tests/testthat/fixtures/oracles/pi-templates/templates.json), the
+session-file field names, the sensitive-key pattern of its bug report and the jev-router
+example extension (inst/gptr/examples/jev-router.R).
 
 
 2. models.dev (https://github.com/anomalyco/models.dev)

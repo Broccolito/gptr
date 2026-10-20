@@ -144,7 +144,7 @@ def read_record(path):
                 "unlink_condition_classes", "last_priority_reached"}
     if set(row) != expected or row["schema"] != 1 or type(row["pid"]) is not int:
         raise ValueError("metadata schema differs")
-    if not isinstance(row["root"], str) or not re.fullmatch(r"/tmp/(Rtmp[A-Za-z0-9]+/)?gptr-tests-[A-Za-z0-9]+", row["root"]):
+    if not isinstance(row["root"], str) or not re.fullmatch(r"/tmp/(Rtmp[A-Za-z0-9]+/working_dir/Rtmp[A-Za-z0-9]+/)?gptr-tests-[A-Za-z0-9]+", row["root"]):
         raise ValueError("root is not an exact Linux suite path")
     if row["pid"] <= 0 or path.name != "suite-" + str(row["pid"]) + "-" + Path(row["root"]).name + ".json":
         raise ValueError("metadata PID and name differ")
