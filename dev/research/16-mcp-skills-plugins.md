@@ -1121,7 +1121,7 @@ Claude Code equivalent (report 07 verified the "sdk" variant live). An HTTP entr
 ---
 name: r-plot
 description: Make publication-quality ggplot2 figures from objects in the live R session. Use when the user asks for a plot.
-license: MIT
+license: Apache-2.0
 compatibility: Requires R >= 4.1 and ggplot2
 metadata:
   author: gptr

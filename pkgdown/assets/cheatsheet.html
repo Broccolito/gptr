@@ -17,16 +17,17 @@
 </script>
 <style>
 :root {
-  --ink: #1c1e22; --paper: #ffffff; --cream: #f3f1ec; --muted: #555a62; --rule: #d8d4ca;
+  --ink: #1c1e22; --paper: #ffffff; --cream: #f3f1ec; --muted: #4a4e55; --rule: #d8d4ca;
   --accent: #40628f; --fast: #b85450; --deep: #6c8ebf;
   --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --gap: 12px;
   color-scheme: light;
 }
 @media screen {
   :root[data-theme="dark"] {
-    --ink: #efede7; --paper: #1c1e22; --cream: #26292e; --muted: #b2afa7; --rule: #3b3e44;
-    --accent: #7d9dcb; --fast: #d27b76; --deep: #7d9dcb;
+    --ink: #efede7; --paper: #1c1e22; --cream: #26292e; --muted: #a8a59d; --rule: #3b3e44;
+    --accent: #7d9dcb; --fast: #b85450; --deep: #7d9dcb;
     color-scheme: dark;
   }
 }
@@ -35,7 +36,7 @@ html { background: var(--paper); }
 body { margin: 0; color: var(--ink); background: var(--paper); font: 14px/1.45 var(--sans); }
 a { color: var(--accent); }
 code, dt, .mono { font-family: var(--mono); }
-code { font-size: 0.92em; }
+code { font-size: 0.9em; }
 dt { overflow-x: auto; }
 
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; max-width: 1480px; margin: 0 auto;
@@ -54,25 +55,32 @@ h1 b { font-weight: 700; font-size: 0.6em; letter-spacing: 0.05em; vertical-alig
 @media screen { :root[data-theme="dark"] .head .logo { content: url("reference/figures/logo-dark.png"); } }
 .cols { columns: 3 340px; column-gap: 32px; }
 .col { display: contents; }
-.panel { break-inside: avoid; margin: 0 0 22px; }
-h2 { margin: 0 0 6px; padding-bottom: 3px; border-bottom: 1.5px solid var(--ink);
+.panel { margin: 0 0 calc(2.5 * var(--gap)); }
+dt, dd, tr, figure, .panel p { break-inside: avoid; }
+h2, h3, dt { break-after: avoid; }
+h2 { margin: 0; padding-bottom: 3px; border-bottom: 1.5px solid var(--ink);
   font: 600 1.2em/1.25 var(--sans); color: var(--accent); }
-h3 { margin: 9px 0 2px; font: 600 0.78em/1.3 var(--sans); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
-.panel p, figcaption { margin: 4px 0; color: var(--muted); }
-p code, dd code, td code, .foot code { white-space: nowrap; }
+h3, th { font: 600 0.8em/1.3 var(--sans); letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink); }
+h3 code { text-transform: none; letter-spacing: 0; }
+h3 { margin: calc(1.5 * var(--gap)) 0 0; }
+.panel p, figure, table { margin: var(--gap) 0 0; }
+.panel h3 + p, h3 + table, h3 + dl > dt:first-child { margin-top: 0.3em; }
+.panel dl + p { margin-top: calc(1.5 * var(--gap)); }
+.panel p, figcaption { color: var(--muted); }
+figcaption { margin-top: 0.3em; }
+p code, dd code, td code, .foot code, .nowrap { white-space: nowrap; }
 p, dd, figcaption, td { text-wrap: pretty; }
 dl { margin: 0; }
-dt { margin-top: 7px; white-space: pre; font-size: 0.88em; line-height: 1.38; }
-dd { margin: 1px 0 0; color: var(--muted); }
-dt b { font-weight: 650; }
+dt { margin-top: var(--gap); white-space: pre; font-size: 0.9em; line-height: 1.4; }
+dd { margin: 0.15em 0 0; color: var(--muted); }
+dt b { font: 700 1.06em/1 var(--sans); margin-right: -0.06em; }
 dt i, td i { font-style: normal; color: var(--muted); }
-table { width: 100%; border-collapse: collapse; margin: 6px 0 2px; }
+table { width: 100%; border-collapse: collapse; }
 td, th { padding: 2px 10px 2px 0; text-align: left; vertical-align: top; border-top: 1px solid var(--rule); }
-th { padding-top: 9px; border: 0; font: 600 0.78em/1.3 var(--sans); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+th { padding: calc(1.5 * var(--gap)) 0 0.3em; border: 0; }
 td:first-child { width: 1%; white-space: nowrap; }
-td:first-child code { font-size: 0.88em; }
+h2 + table tr:first-child > td { border-top: 0; }
 td:last-child { padding-right: 0; color: var(--muted); }
-figure { margin: 6px 0 4px; }
 figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
 .foot { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-top: 4px; padding-top: 6px;
   border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.85em; }
@@ -87,8 +95,9 @@ figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
 .tm { fill: var(--ink); font: 500 8.6px var(--mono); }
 .tl { fill: var(--muted); font: 8.3px var(--sans); }
 .tc { fill: var(--muted); font: 8.6px var(--mono); }
+.fn { font: 700 9.1px var(--sans); }
 
-@media (min-width: 1400px) {
+@media (min-width: 1460px) {
   .cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 28px; }
   .col { display: block; }
 }
@@ -99,10 +108,12 @@ figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
   .head .logo { width: 48px; }
   .bar .site, .foot .spacer { display: none; }
 }
+@media (max-width: 359px) { dt { white-space: pre-wrap; } }
 
 @page { size: 11in 8.5in; margin: 0; }
 @media print {
-  body { font-size: 7.2pt; line-height: 1.3; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  :root { --gap: 7px; }
+  body { font-size: 7.2pt; line-height: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .bar { display: none; }
   .sheet { width: 11in; height: 8.5in; max-width: none; margin: 0; padding: 0.3in 0.36in 0.22in;
     display: flex; flex-direction: column; overflow: hidden; break-after: page; }
@@ -110,11 +121,11 @@ figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
   .head .logo { width: 0.6in; }
   .cols { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 0.2in; columns: auto; }
   .col { display: block; }
-  .panel { margin-bottom: 0.1in; }
-  dt { margin-top: 3.6pt; font-size: 0.9em; overflow: visible; }
-  td:first-child code { font-size: 0.9em; }
+  dt { line-height: 11px; overflow: visible; }
+  dd { margin-top: 0; }
   .panel:last-child { margin-bottom: 0; }
   .foot { margin-top: 0; }
+  .foot a { text-decoration: none; }
 }
 </style>
 </head>
@@ -158,7 +169,7 @@ figure svg { display: block; width: 100%; max-width: 360px; height: auto; }
             <rect class="s2" x="202" y="34" width="22" height="32"/>
             <path class="edge" d="M90 32H171" marker-end="url(#arrow)"/>
             <text class="tl" x="131" y="27" text-anchor="middle">prompt + previews</text>
-            <text class="tm" x="131" y="51" text-anchor="middle" style="font-weight: 600">peter()</text>
+            <text class="tm" x="131" y="51" text-anchor="middle"><tspan class="fn">peter</tspan>()</text>
             <path class="edge" d="M172 64H91" marker-end="url(#arrow)"/>
             <text class="tl" x="131" y="76" text-anchor="middle">R code to run</text>
           </svg>
@@ -213,11 +224,11 @@ peter("Plot {col} for the top {n} cars.")</dt><dd>Literal prompts interpolate <c
         <figure>
           <svg viewBox="0 0 240 58" role="img" aria-label="Three piped peter() calls add turns to one session and one workspace.">
             <rect class="box" x="1" y="2" width="74" height="20" rx="3"/>
-            <text class="tm" x="38" y="15" text-anchor="middle">peter(p1)</text>
+            <text class="tm" x="38" y="15" text-anchor="middle"><tspan class="fn">peter</tspan>(p1)</text>
             <rect class="box" x="83" y="2" width="74" height="20" rx="3"/>
-            <text class="tm" x="120" y="15" text-anchor="middle">|&gt; peter(p2)</text>
+            <text class="tm" x="120" y="15" text-anchor="middle">|&gt; <tspan class="fn">peter</tspan>(p2)</text>
             <rect class="box" x="165" y="2" width="74" height="20" rx="3"/>
-            <text class="tm" x="202" y="15" text-anchor="middle">|&gt; peter(p3)</text>
+            <text class="tm" x="202" y="15" text-anchor="middle">|&gt; <tspan class="fn">peter</tspan>(p3)</text>
             <path class="edge" d="M38 22V34M120 22V34M202 22V34"/>
             <rect class="box" x="1" y="34" width="238" height="22" rx="3"/>
             <text class="tl" x="8" y="48">one session, one workspace</text>
@@ -243,7 +254,7 @@ b |&gt; peter("Try a log model instead.")</dt><dd>Branch off; the original stays
           <dt>session = peter()
 session |&gt; peter()</dt><dd>Open the console; <code>/exit</code> returns the session.</dd>
         </dl>
-        <h3>At the peter&gt; prompt</h3>
+        <h3>At the <code>peter&gt;</code> prompt</h3>
         <table>
           <tr><td><code>Fit mpg on wt.</code></td><td>A prompt for the session</td></tr>
           <tr><td><code>!head(d)</code></td><td>Run R and show the model</td></tr>
@@ -302,7 +313,7 @@ session |&gt; peter()</dt><dd>Open the console; <code>/exit</code> returns the s
         <h3>System 1: typed decisions</h3>
         <dl>
           <dt>rct = peter("Is this an RCT?", abstracts,
-  model = jev)</dt><dd>One logical answer per element, TRUE when P(yes) &ge; <code>threshold</code> (0.5).</dd>
+  model = jev)</dt><dd>One logical answer per element, TRUE when P(yes)&nbsp;&ge;&nbsp;<code>threshold</code> (0.5).</dd>
           <dt>gptr_prob(rct)</dt><dd>P(yes) per element; <code>"probabilities"</code> gives the matrix.</dd>
           <dt>peter("Which tissue?", cells, model = jev,
   choices = c("liver", "lung", "other"))</dt><dd>One label per input: a character vector.</dd>
@@ -310,8 +321,8 @@ session |&gt; peter()</dt><dd>Open the console; <code>/exit</code> returns the s
   levels = c("low", "mid", "high"))</dt><dd>A score: the expected zero-based level, such as 1.88.</dd>
           <dt>peter(q, x, model = jev,
   min_confidence = 0.8, uncertain = "stop")</dt><dd>Abstain below a confidence: NA by default, or a fallback or an error.</dd>
-          <dt>if (isTRUE(ok)) message("Escalate.")
-abstracts[rct]; sum(rct)</dt><dd>Answers are plain vectors for <code>if</code>, <code>for</code>, subsetting and <code>ifelse()</code>.</dd>
+          <dt>abstracts[rct]; sum(rct)
+ifelse(rct, "RCT", "other")</dt><dd>Answers are plain vectors for <code>if</code>, <code>for</code>, subsetting and <code>ifelse()</code>.</dd>
           <dt>s |&gt; peter("Did it succeed?", model = jev)</dt><dd>Judge a session's last answer; adds no turn.</dd>
           <dt>m = if (isTRUE(hard)) "opus" else "haiku"
 peter(task, model = m)</dt><dd>Route each task to a deep or a fast agent.</dd>
@@ -325,7 +336,7 @@ peter(task, model = m)</dt><dd>Route each task to a deep or a fast agent.</dd>
     </div>
   </div>
   <footer class="foot">
-    <span>gptr 1.0.0 · MIT license</span>
+    <span>gptr 1.0.0 · Apache License 2.0</span>
     <span class="spacer"></span>
     <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-10</span>
   </footer>
@@ -337,7 +348,7 @@ peter(task, model = m)</dt><dd>Route each task to a deep or a fast agent.</dd>
       <section class="panel">
         <h2>Models and providers</h2>
         <figure>
-          <svg viewBox="0 0 240 38" role="img" aria-label="A model reference is provider slash model id, with an optional colon thinking level.">
+          <svg viewBox="17 0 240 38" role="img" aria-label="A model reference is provider slash model id, with an optional colon thinking level.">
             <text class="tm" x="18" y="11" style="font-size: 10px" textLength="204" lengthAdjust="spacingAndGlyphs">"anthropic/claude-sonnet-5-5:high"</text>
             <path class="edge" d="M25 16v4h52v-4M85 16v4h100v-4M193 16v4h22v-4"/>
             <text class="tl" x="51" y="31" text-anchor="middle">provider</text>
@@ -347,16 +358,16 @@ peter(task, model = m)</dt><dd>Route each task to a deep or a fast agent.</dd>
           <figcaption>Aliases work too: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>, <code>gpt</code>, <code>flash</code>, <code>jev</code>, <code>claude_code</code>, <code>codex</code>.</figcaption>
         </figure>
         <table>
-          <tr><td><code>anthropic/…</code></td><td>Anthropic · <code>ANTHROPIC_API_KEY</code></td></tr>
-          <tr><td><code>openai/…</code></td><td>OpenAI · <code>OPENAI_API_KEY</code></td></tr>
-          <tr><td><code>google/…</code></td><td>Google Gemini · <code>GEMINI_API_KEY</code></td></tr>
-          <tr><td><code>openrouter/…</code></td><td>OpenRouter; also groq, deepseek, mistral, together, xai, cerebras and fireworks routes · <code>&lt;NAME&gt;_API_KEY</code></td></tr>
-          <tr><td><code>azure/…</code></td><td>Azure OpenAI · <code>AZURE_OPENAI_API_KEY</code>, <code>AZURE_OPENAI_ENDPOINT</code></td></tr>
-          <tr><td><code>bedrock/…</code></td><td>AWS Bedrock · <code>AWS_BEARER_TOKEN_BEDROCK</code>, <code>AWS_REGION</code></td></tr>
+          <tr><td><code>anthropic/…</code></td><td>Anthropic<br><code>ANTHROPIC_API_KEY</code></td></tr>
+          <tr><td><code>openai/…</code></td><td>OpenAI<br><code>OPENAI_API_KEY</code></td></tr>
+          <tr><td><code>google/…</code></td><td>Google Gemini<br><code>GEMINI_API_KEY</code></td></tr>
+          <tr><td><code>openrouter/…</code></td><td>OpenRouter; also groq, deepseek, mistral, together, xai, cerebras and fireworks routes<br><code>&lt;NAME&gt;_API_KEY</code></td></tr>
+          <tr><td><code>azure/…</code></td><td>Azure OpenAI<br><code>AZURE_OPENAI_API_KEY</code>, <code>AZURE_OPENAI_ENDPOINT</code></td></tr>
+          <tr><td><code>bedrock/…</code></td><td>AWS Bedrock<br><code>AWS_BEARER_TOKEN_BEDROCK</code>, <code>AWS_REGION</code></td></tr>
           <tr><td><code>ollama/…</code></td><td>Ollama, local, no key; also lmstudio, llamacpp, vllm</td></tr>
-          <tr><td><code>claude-cli</code></td><td>Claude Code CLI · <code>claude auth login</code></td></tr>
-          <tr><td><code>codex</code></td><td>Codex CLI · <code>codex login</code></td></tr>
-          <tr><td><code>jev</code></td><td>System 1 · TypeSafe Jev · <code>TYPESAFE_API_KEY</code></td></tr>
+          <tr><td><code>claude-cli</code></td><td>Claude Code CLI<br><code>claude auth login</code></td></tr>
+          <tr><td><code>codex</code></td><td>Codex CLI<br><code>codex login</code></td></tr>
+          <tr><td><code>jev</code></td><td>System 1 · TypeSafe Jev<br><code>TYPESAFE_API_KEY</code></td></tr>
           <tr><td><code>ollama/clef</code></td><td>System 1 · local Clef and Clef Flash, Ollama 0.35.1 or later</td></tr>
         </table>
         <dl>
@@ -382,7 +393,7 @@ gptr_config(egress = eg, .scope = "user")</dt><dd>Acknowledge sending context to
         <figure>
           <svg viewBox="0 0 240 98" role="img" aria-label="A recorded block in analysis.R: the prompt, the block header, the recorded code, its output, a decision note and the closing marker.">
             <rect class="box" x="1" y="1" width="186" height="96" rx="3"/>
-            <text class="tm" x="8" y="14">peter("Fit mpg on wt in mtcars.")</text>
+            <text class="tm" x="8" y="14"><tspan class="fn">peter</tspan>("Fit mpg on wt in mtcars.")</text>
             <rect class="mark" x="8" y="21" width="2" height="71"/>
             <text class="tc" x="15" y="29"># &gt;&gt;&gt; gptr:46d369 model=…</text>
             <text class="tm" x="15" y="41">fit = lm(mpg ~ wt, mtcars)</text>
@@ -403,7 +414,7 @@ gptr_config(egress = eg, .scope = "user")</dt><dd>Acknowledge sending context to
           <dt>gptr_source("analysis.R",
   replay = "replay")</dt><dd>Rerun: fresh blocks replay with no model call.</dd>
           <dt>GPTR_REPLAY=replay Rscript analysis.R</dt><dd>Prove from the shell that a script needs no model.</dd>
-          <dt>gptr_blocks("analysis.R")</dt><dd>Each block's status: fresh, stale (prompt edited), user-edited or undone.</dd>
+          <dt>gptr_blocks("analysis.R")</dt><dd>Each block's status: fresh, stale (prompt edited), <span class="nowrap">user-edited</span> or undone.</dd>
           <dt>gptr_doc("report.Rmd")
 rmarkdown::render("report.Rmd")</dt><dd>Render as usual; each block becomes a chunk named <code>gptr-&lt;id&gt;</code>.</dd>
           <dt>gptr_doc("analysis.ipynb", sync = TRUE)</dt><dd>Apply blocks queued while it was open.</dd>
@@ -519,21 +530,26 @@ gptr_wait(b)</dt><dd>Experimental: return at once; also <code>gptr_steer()</code
     </div>
   </div>
   <footer class="foot">
-    <span>gptr 1.0.0 · MIT license</span>
+    <span>gptr 1.0.0 · Apache License 2.0</span>
     <span class="spacer"></span>
     <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-10</span>
   </footer>
 </section>
 </main>
 <script>
-  // Bold function names and soften comments in code, as on Posit's cheatsheets.
+  // Bold the called function (and gptr's own names) and soften comments, as on Posit's cheatsheets.
   const escape = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
   document.querySelectorAll("dt").forEach((el) => {
-    el.innerHTML = el.textContent.split("\n").map((line) => {
-      const [, code, note] = line.match(/^(.*?)(\s+# .*)?$/);
-      const out = escape(code).replace(/([A-Za-z_][\w.$]*)(?=\()/g, "<b>$1</b>");
-      return note ? out + "<i>" + escape(note) + "</i>" : out;
-    }).join("\n");
+    let depth = 0;
+    el.innerHTML = el.textContent.replace(
+      /("[^"]*")|(\s+# .*)|([A-Za-z_][\w.$<>]*(?:::[A-Za-z_][\w.$]*)?(?=\()|[A-Za-z_]\w*\$\w+(?=;|$))|[^]/gm,
+      (match, string, note, name) => {
+        if (match === "(") depth++;
+        if (match === ")") depth--;
+        if (note) return "<i>" + escape(note) + "</i>";
+        if (name && (depth === 0 || /^(peter|gptr_)/.test(name))) return "<b>" + escape(name) + "</b>";
+        return escape(match);
+      });
   });
   // One switch shared with the site: the same localStorage key and values.
   (() => {

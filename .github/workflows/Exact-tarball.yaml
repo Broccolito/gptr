@@ -150,7 +150,7 @@ jobs:
               assert not ({'.secrets', '.git', 'node_modules'} & set(parts)), item.name
           names = [item.name for item in members if item.isfile()]
           assert len(names) == len(set(names)), 'Archive contains duplicate regular members'
-          assert {'gptr/DESCRIPTION', 'gptr/NAMESPACE', 'gptr/LICENSE'} <= set(names)
+          assert {'gptr/DESCRIPTION', 'gptr/NAMESPACE'} <= set(names)
           docs = [name for name in names if name.startswith('gptr/inst/doc/')]
           counts = {ext: sum(name.endswith(ext) for name in docs)
                     for ext in ('.Rmd', '.html')}

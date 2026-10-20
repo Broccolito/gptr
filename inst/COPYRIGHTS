@@ -1,7 +1,8 @@
 gptr copyright and third-party notices
 ======================================
 
-gptr is Copyright (c) 2026 Wanjun Gu and is released under the MIT license (see LICENSE).
+gptr is Copyright (c) 2026 Wanjun Gu and is licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0).
 
 gptr contains material derived from the following MIT-licensed works. Their copyright notices
 and the MIT permission notice are reproduced below as that license requires.
@@ -34,7 +35,16 @@ Derived material: the shapes of the regular expressions used to recognise API ke
 private keys in text that gptr redacts.
 
 
-MIT License (applies to the three works above)
+4. system-one-adapter-python (https://github.com/typesafe-ai/system-one-adapter-python)
+-------------------------------------------------------------------------------------
+
+Copyright (c) 2026 TypeSafe AI
+
+Derived material: the prompt and answer schema of version 0.2.1 that gptr's opt-in System 1
+emulation through a chat model follows.
+
+
+MIT License (applies to the four works above)
 ----------------------------------------------
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

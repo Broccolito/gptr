@@ -1,7 +1,8 @@
 # Opt-in System 1 emulation through a chat model's structured output (contract 7.13, IC-19;
 # architecture 4.1.5 and 8.2; IC-74, D-082): canonical answers, always uncalibrated. The prompt
-# and schema follow typesafe-ai/system-one-adapter-python 0.2.1 (MIT; _client.py:66-94,
-# _schema.py:153-247) as ported in report 04 sections 3.8 and 5.3 (probabilities mode).
+# and schema follow typesafe-ai/system-one-adapter-python 0.2.1 (MIT; inst/COPYRIGHTS;
+# _client.py:66-94, _schema.py:153-247) as ported in report 04 sections 3.8 and 5.3
+# (probabilities mode).
 
 s1_emu_prompt = paste(
   "Evaluate every question using only the supplied document.",

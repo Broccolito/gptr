@@ -1368,7 +1368,7 @@ Create `inst/gptr/skills/high-performance-r/SKILL.md`:
 ---
 name: high-performance-r
 description: "Fast data work in R: data.table, arrow, duckdb, collapse or qs2 when installed; large CSV/Parquet, grouping, sorting, parallel work, single-cell objects."
-license: MIT
+license: Apache-2.0
 metadata:
   source: "gptr research report 19, section 3.4 (verified recipes)"
 ---
@@ -4527,7 +4527,7 @@ toy_package = function(root) {
     "Authors@R: person(\"Toy\", \"Author\", email = \"toy@example.org\",",
     "    role = c(\"aut\", \"cre\"))",
     "Description: A toy plugin package used by the gptr test suite.",
-    "License: MIT",
+    "License: Apache License (== 2.0)",
     "Encoding: UTF-8",
     "Suggests: gptr",
     "Config/gptr/plugin: true",

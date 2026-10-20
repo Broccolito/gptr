@@ -809,7 +809,7 @@ Description: Throw-away research prototype (track G1) of a single versioned
     extension registry through which every capability category of an agent
     harness registers, including its built-in features, plus the stepwise
     session interface that third-party packages build on. Not for release.
-License: MIT + file LICENSE
+License: Apache License (== 2.0)
 Encoding: UTF-8
 Depends: R (>= 4.2)
 Imports: jsonlite, stats, utils
@@ -3046,7 +3046,7 @@ Authors@R: person("G1", "Prototype", email = "g1@example.org", role = c("aut", "
 Description: Toy plugin used by research track G1: an orchestrator that runs a
     panel of reviewer agents on one prompt through the public 'gptr' interface,
     plus a domain skill, one tool, one command, one hook and one MCP server entry.
-License: MIT + file LICENSE
+License: Apache License (== 2.0)
 Encoding: UTF-8
 Depends: R (>= 4.2)
 Imports: gptr
@@ -3211,7 +3211,7 @@ Authors@R: person("G1", "Prototype", email = "g1@example.org", role = c("aut", "
 Description: Toy domain package used by research track G1. It defines a small
     cohort class and, only when 'gptr' is installed, a compact describer method
     and a skill; 'gptr' is in Suggests.
-License: MIT + file LICENSE
+License: Apache License (== 2.0)
 Encoding: UTF-8
 Depends: R (>= 4.2)
 Suggests: gptr

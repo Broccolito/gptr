@@ -1771,7 +1771,7 @@ toy_package = function(examples) {
   writeLines(c("Package: toyex", "Title: Toy Package for the Example Runner", "Version: 0.0.1",
                "Authors@R: person(\"A\", \"B\", email = \"a@b.org\", role = c(\"aut\", \"cre\"))",
                "Description: A toy package used by the gptr release self-tests.",
-               "License: MIT", "Encoding: UTF-8"),
+               "License: Apache License (== 2.0)", "Encoding: UTF-8"),
              file.path(root, "DESCRIPTION"))
   writeLines("export(f)", file.path(root, "NAMESPACE"))
   writeLines("f = function(x) x", file.path(root, "R", "f.R"))
@@ -2068,7 +2068,7 @@ toy_vignette_package = function(vignette_code) {
   writeLines(c("Package: toyvig", "Title: Toy Package for the Vignette Runner", "Version: 0.0.1",
                "Authors@R: person(\"A\", \"B\", email = \"a@b.org\", role = c(\"aut\", \"cre\"))",
                "Description: A toy package used by the gptr release self-tests.",
-               "License: MIT", "Encoding: UTF-8"),
+               "License: Apache License (== 2.0)", "Encoding: UTF-8"),
              file.path(root, "DESCRIPTION"))
   writeLines("export(twice)", file.path(root, "NAMESPACE"))
   writeLines("twice = function(x) 2 * x", file.path(root, "R", "twice.R"))
@@ -3745,18 +3745,19 @@ gptr 1.0.0 is a complete rewrite. `get_response()` and `dataframe_to_text()` wer
 use `peter("your prompt")$text` instead of `get_response()`, and pass a data frame to `peter()`
 as context instead of converting it to text. See `NEWS.md`.
 
+## License
+
+gptr is licensed under the Apache License 2.0. Third-party notices are in `inst/COPYRIGHTS`.
+
 ## Acknowledgments
 
 The tool descriptions, edit semantics and prompt-template grammar are derived from 'pi' by
 Mario Zechner (MIT license). The model catalog is derived from models.dev (MIT license) and the
-secret patterns from gitleaks (MIT license); see `inst/COPYRIGHTS`. Ideas were borrowed from
+secret patterns from gitleaks (MIT license), and the System 1 emulation prompt follows TypeSafe AI's
+system-one-adapter-python (MIT license); see `inst/COPYRIGHTS`. Ideas were borrowed from
 'ellmer', 'tidyllm', 'btw' and 'mcptools', none of which gptr depends on. Anthropic, OpenAI,
 Google, TypeSafe AI and the vendors of the command-line tools are third-party services; gptr is
 not affiliated with or endorsed by them.
-
-## License
-
-MIT (c) Wanjun Gu.
 ````
 
 Render it:

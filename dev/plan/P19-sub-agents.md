@@ -4457,6 +4457,7 @@ Create `inst/gptr/skills/gptr-orchestration/SKILL.md`:
 ---
 name: gptr-orchestration
 description: "Write multi-agent R workflows with gptr: sub-agents as peter() calls, teams with agents =, fan-outs with parallel =, gptr_parallel(), exports, and System 1 decisions inside if, for and while."
+license: Apache-2.0
 disable-model-invocation: true
 ---
 

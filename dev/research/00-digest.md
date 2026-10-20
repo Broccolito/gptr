@@ -1986,7 +1986,7 @@ Main answers:
 - Title: "Language Model Agents Inside the Live 'R' Session".
 - Description: one paragraph, 161 words, software names single-quoted, one URL in angle brackets. An emulation of CRAN's aspell filter flags nothing.
 - `Depends: R (>= 4.2)`: UTF-8 is native on Windows from 4.2, the pipe placeholder needs it, and it is oldrel-4 today.
-- `MIT + file LICENSE` with only the YEAR and COPYRIGHT HOLDER lines.
+- `Apache License (== 2.0)`: a standard license, so no `LICENSE` file; the full text stays in the build-ignored `LICENSE.md`.
 - Imports budget: at most 20 non-base; recommend 8. rlang is required whenever cli condition helpers are used.
 
 (4) Release:
@@ -2022,7 +2022,7 @@ The report also covers Windows specifics: CRLF translation in text mode, atomic 
 - The edit and write tools use binary I/O preserving EOL, and atomic writes via a temp file in the same directory followed by file.rename. Sanitise Windows reserved names and case collisions in session, skill and artifact file names.
 - Tests: setup.R redirects R_USER_*_DIR, blanks API keys unless GPTR_LIVE_TESTS=true, sets OMP_THREAD_LIMIT=2 and options(gptr.interactive = FALSE, gptr.quiet = TRUE). Layers: fake provider, httr2 mocks, fixtures with pure parsers, webfakes loopback, snapshots, gated live tests.
 - Every exported function has \value and at least one always-runnable fake-provider example; key-needing examples use @examplesIf interactive() && nzchar(Sys.getenv(KEY)). Vignettes are precomputed from .Rmd.orig.
-- gptr_init() inside a package source offers to add ^\.gptr$ to .Rbuildignore. The gptr repo's .Rbuildignore adds .gptr, cran-comments.md, CRAN-SUBMISSION, .github and vignettes/*.Rmd.orig. Update the LICENSE year to 2026.
+- gptr_init() inside a package source offers to add ^\.gptr$ to .Rbuildignore. The gptr repo's .Rbuildignore adds .gptr, cran-comments.md, CRAN-SUBMISSION, .github and vignettes/*.Rmd.orig. gptr uses the standard `Apache License (== 2.0)`, so there is no LICENSE file.
 - Provider data egress: minimal default context, documented in ?gptr_context, options(gptr.context = 'none'), a one-time interactive disclosure per provider, and no telemetry.
 - External CLIs (claude, codex, quarto) are optional, declared in SystemRequirements, discovered with Sys.which(), and run through processx with argument vectors (no shell).
 

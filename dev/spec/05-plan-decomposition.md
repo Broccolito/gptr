@@ -148,8 +148,8 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
     Session", one-paragraph Description per 13 §3 (software names single-quoted), `Authors@R` with the current
     maintainer in roles `aut`, `cre`, `cph` plus `person("Mario", "Zechner", role = c("ctb", "cph"), comment =
     "Author of 'pi' (MIT), from which tool texts and templates are derived")`, `Copyright: file inst/COPYRIGHTS`,
-    `URL`, `BugReports`, `Language: en-US`, `License: MIT + file LICENSE` (year 2026 in `LICENSE`, plus
-    `LICENSE.md`), `Depends: R (>= 4.2.0)`, the final Imports (jsonlite, curl, processx, callr, rlang, cli, yaml,
+    `URL`, `BugReports`, `Language: en-US`, `License: Apache License (== 2.0)` (no `LICENSE`
+    file; full text in `LICENSE.md`), `Depends: R (>= 4.2.0)`, the final Imports (jsonlite, curl, processx, callr, rlang, cli, yaml,
     ps, methods, stats, tools, utils, grDevices, graphics) and Suggests (architecture §9.2) with floors,
     `SystemRequirements`, `Config/testthat/edition: 3`, `Encoding: UTF-8`, `Roxygen: list(markdown = TRUE)`; no
     `VignetteBuilder` (P25 adds it) (IC-72).
@@ -206,7 +206,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   `processx::run(`, no `serialize(`/`saveRDS(` without `ascii = FALSE` outside the leaf wrapper, and the
   further rules of contract §12.3),
   `fixtures/tokens/` (a 12-class sample of G2's corpus with o200k counts); `DESCRIPTION`, `.lintr`,
-  `.Rbuildignore`, `.gitignore`, `LICENSE`, `LICENSE.md`, `.github/workflows/R-CMD-check.yaml`, `dev/style.R`,
+  `.Rbuildignore`, `.gitignore`, `LICENSE.md`, `.github/workflows/R-CMD-check.yaml`, `dev/style.R`,
   `inst/COPYRIGHTS`.
 - **Test files.** One per owned R file: `test-aaa-state.R`, `test-utils-conditions.R`, `test-utils-hash.R`, `test-utils-encoding.R`, `test-utils-options.R`, `test-utils-paths.R`, `test-utils-text.R`, `test-utils-tokens.R`, `test-json-encode.R`, `test-json-partial.R`, `test-json-schema.R`, `test-provider-message.R`, `test-provider-events.R`, `test-provider-fake.R`, `test-zzz.R` (plus the extra test files named under Owns).
 - **Research.** Conventions (all); 13 §2-§5 and C-01..C-58 (DESCRIPTION, tests, CI, C-36); 10a §14

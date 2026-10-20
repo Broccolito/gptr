@@ -24,7 +24,7 @@ test_that("ex_run_all() passes clean examples and reports every kind of side eff
   writeLines(c("Package: toyex", "Title: Toy Package for the Example Runner", "Version: 0.0.1",
                "Authors@R: person(\"A\", \"B\", email = \"a@b.org\", role = c(\"aut\", \"cre\"))",
                "Description: A toy package used by the gptr release self-tests.",
-               "License: MIT", "Encoding: UTF-8"),
+               "License: Apache License (== 2.0)", "Encoding: UTF-8"),
              file.path(root, "DESCRIPTION"))
   writeLines("export(f)", file.path(root, "NAMESPACE"))
   writeLines("f = function(x) x", file.path(root, "R", "f.R"))

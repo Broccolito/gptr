@@ -87,7 +87,7 @@ quoted (copyright). Local paths are abbreviated as follows:
     - Before each submission: `devtools::check_win_devel()` (the same machine as CRAN's r-devel-windows), rhub v2 (`rhub_check(platforms = c("windows", "macos-arm64", "nosuggests", "donttest", ...))`), and the macOS builder if an M1 issue ever appears.
 18. **Housekeeping for the real repository** (do not act now; recorded for the implementer):
     - Add `^\.gptr$`, `^cran-comments\.md$`, `^CRAN-SUBMISSION$`, `^\.github$` and `^vignettes/.*\.Rmd\.orig$` to `.Rbuildignore`. A `.gptr/` directory otherwise ends up in the tarball and triggers the hidden-directory NOTE (VERIFIED). `.Rprofile` is excluded by `R CMD build` automatically (VERIFIED).
-    - Update the LICENSE year to 2026.
+    - Delete the MIT `LICENSE` stub: gptr uses the standard `Apache License (== 2.0)`.
     - Keep the maintainer email that CRAN already has, `wanjun.gu@ucsf.edu`, or follow the email-change procedure.
     - Credit Mario Zechner (Pi, MIT) as `ctb`/`cph` if any Pi text or code is ported.
 
@@ -222,7 +222,7 @@ Rules (all VERIFIED):
   - if in doubt, make it longer rather than shorter.
 - **Authors@R is required for CRAN submissions.** ORCID or ROR identifiers are strongly encouraged (WRE line 388, identical in 4.6.1 and 4.7.0). Extrachecks adds that CRAN asks sole authors to add the `cph` role.
 - **Spell check.** CRAN's incoming spell check runs `aspell` on Title and Description when `_R_CHECK_CRAN_INCOMING_USE_ASPELL_` is true (its default in the R source is `"FALSE"`; that CRAN's incoming machines turn it on is LIKELY, from the widely reported "Possibly misspelled words in DESCRIPTION" pretest NOTE, but the variable is not documented in R Internals). It uses dictionaries en_US, en_GB and "en_stats". It ignores text in single quotes, `fun()`-style function names, and URLs or DOIs inside angle brackets (VERIFIED: `deparse(tools:::.check_package_CRAN_incoming)`, R 4.4.3).
-- **License.** `MIT + file LICENSE` is a template licence. The LICENSE file must contain only `YEAR:` and `COPYRIGHT HOLDER:` lines, and a full MIT text is rejected with an "invalid DCF" licence-stub NOTE. Ivan Krylov made this point in the openaistream thread (https://stat.ethz.ch/pipermail/r-package-devel/2024q1/010357.html; the "invalid DCF" NOTE is quoted in the thread root 010356). The Cookbook has a matching "LICENSE files" section. Keep the full text in `LICENSE.md`, listed in `.Rbuildignore`; the current repository already does this.
+- **License.** gptr uses `Apache License (== 2.0)`, a standard license in R's license database, so DESCRIPTION has no `+ file LICENSE` and the package has no `LICENSE` file (a template licence such as `MIT + file LICENSE` would need a stub with only `YEAR:` and `COPYRIGHT HOLDER:` lines; Ivan Krylov, https://stat.ethz.ch/pipermail/r-package-devel/2024q1/010357.html). Keep the full text in `LICENSE.md`, listed in `.Rbuildignore`.
 - **Minimum R version.** Specify `R (>= x.y)` without a patch level: `_R_CHECK_R_DEPENDS_=warn` under `--as-cran` (R Internals line 2173; WRE line 511).
 - **SystemRequirements** lists external dependencies (WRE line 396). External commands must be used conditionally on a presence test such as `Sys.which()`, and the package must pass its checks without them (WRE line 2370).
 
@@ -394,7 +394,7 @@ VERIFIED in `$W/web/cookbook_*.txt` and `extrachecks.txt`:
 
 ### 3.1 The proposed DESCRIPTION
 
-**(a) Validated text.** This is exactly what `R CMD check --as-cran` passed (5.4); file `$W/pkg/gptr/DESCRIPTION`:
+**(a) Validated text.** This is exactly what `R CMD check --as-cran` passed (5.4), except that D-237 later changed the License line from `MIT + file LICENSE` to `Apache License (== 2.0)` (not re-checked here); file `$W/pkg/gptr/DESCRIPTION`:
 
 ```
 Package: gptr
@@ -421,7 +421,7 @@ Description: Runs large language model agents inside the running 'R'
     'R Markdown', 'Quarto' or 'Jupyter' documents that can be re-run.
     Writing files and evaluating model-generated code require the user's
     permission by default.
-License: MIT + file LICENSE
+License: Apache License (== 2.0)
 URL: https://github.com/Broccolito/gptr
 BugReports: https://github.com/Broccolito/gptr/issues
 Depends:
@@ -495,14 +495,9 @@ That is 8 non-base Imports, well under the 20-package NOTE, and a closure of 19 
 `person("Mario", "Zechner", role = c("ctb", "cph"), comment = "Author of 'pi', from which parts are derived")`
 and an `inst/COPYRIGHTS` file (Pi is MIT, "Copyright (c) 2025 Mario Zechner": VERIFIED in `$S/pi/LICENSE`).
 
-### 3.2 LICENSE (template MIT) — exact content
+### 3.2 License: standard `Apache License (== 2.0)`, no LICENSE file
 
-```
-YEAR: 2026
-COPYRIGHT HOLDER: Wanjun Gu
-```
-
-The repository's `LICENSE` currently says `YEAR: 2023` (VERIFIED). Update it. Keep the full text in `LICENSE.md`, which is already ignored at build.
+gptr is licensed under the standard `Apache License (== 2.0)`, so the repository's former MIT `LICENSE` stub (it said `YEAR: 2023`, VERIFIED) is deleted, not updated. Keep the full text in `LICENSE.md`, which is already ignored at build.
 
 ### 3.3 `.Rbuildignore` — recommended content (validated in the skeleton)
 
@@ -738,7 +733,7 @@ ignore <- c("(?<=[ \t[:punct:]])'[^']*'(?=[ \t[:punct:]])",
 
 **C-04 Maintainer address.** Rule: a single person with a working, unfiltered address. Explain any change and confirm from the old address. Source: policy lines 51, 188. Pattern: keep `wanjun.gu@ucsf.edu`, which CRAN has on file.
 
-**C-05 License.** Rule: `MIT + file LICENSE`, with LICENSE holding only `YEAR`/`COPYRIGHT HOLDER`. Source: WRE 1.1.2; Cookbook "LICENSE files"; https://stat.ethz.ch/pipermail/r-package-devel/2024q1/010357.html (Krylov; thread root 010356). Pattern: 3.2. Keep `LICENSE.md` in `.Rbuildignore`.
+**C-05 License.** Rule: `Apache License (== 2.0)`, a standard license: no `+ file LICENSE` and no `LICENSE` file. Source: WRE 1.1.2. Pattern: 3.2. Keep the full text in `LICENSE.md`, listed in `.Rbuildignore`.
 
 **C-06 Minimum R.** Rule: declare a real floor, with no patch level, and test it. Source: WRE 1.1.3 (line 511); R Packages 9.6.1; R NEWS 4.2.0 (UTF-8 on Windows). Pattern: `Depends: R (>= 4.2)`, and CI on `oldrel-4`. Guard base functions newer than 4.2:
 ```r
