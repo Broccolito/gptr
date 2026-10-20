@@ -297,6 +297,29 @@ test_that("an interrupt can be resumed (G3); one that unwinds sends notification
   mcp_close(conn)
 })
 
+test_that("progress that arrives while a cancel is written does not re-enter the caller", {
+  fx = local_mcp_fixture("modern", "stdio")
+  conn = mcp_connect(fx$spec)
+  esc = structure(class = c("interrupt", "condition"), list(message = "", call = NULL))
+  calls = 0L
+  # the server sends its next progress while the slow handler runs, so it is queued when the
+  # interrupt unwinds and the cancel is written
+  on_progress = function(p) {
+    calls <<- calls + 1L
+    Sys.sleep(0.15)
+    stop(esc)
+  }
+  got = tryCatch(mcp_call(conn, "slow", list(steps = 6L, step_ms = 20L), timeout = 10,
+                          on_progress = on_progress),
+                 interrupt = function(e) "interrupted")
+  expect_identical(got, "interrupted")
+  expect_identical(calls, 1L)
+  deadline = Sys.time() + 10
+  while (!"notifications/cancelled" %in% fx$log()$method && Sys.time() < deadline) Sys.sleep(0.05)
+  expect_true("notifications/cancelled" %in% fx$log()$method)
+  mcp_close(conn)
+})
+
 test_that("input_required rounds (modern) and elicitation/create (legacy) reach the ask UI", {
   ui = local_scripted_ui(list(list(name = "octocat"), list(name = "octocat")))
   for (era in c("modern", "legacy")) {

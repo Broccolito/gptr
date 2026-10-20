@@ -747,12 +747,15 @@ mcp_await = function(conn, key, st, id, method, timeout) {
   }
 }
 
-#' Cancel an in-flight request: a late answer is dropped; stdio and legacy HTTP send
+#' Cancel an in-flight request: a late answer or progress is dropped (progress must not re-enter
+#' an unwinding caller while the notice is written); stdio and legacy HTTP send
 #' notifications/cancelled (queued, never awaited); modern HTTP closes the response stream,
 #' which is the cancellation
 #' @noRd
 mcp_cancel = function(conn, id, st, reason) {
   assign(as.character(id), TRUE, envir = conn$cancelled)
+  tok = paste0("p", id)
+  if (exists(tok, envir = conn$progress, inherits = FALSE)) rm(list = tok, envir = conn$progress)
   if (!is.null(st$transfer)) try(reactor_cancel(st$transfer), silent = TRUE)
   if (isTRUE(conn$alive) && (identical(conn$transport, "stdio") || identical(conn$era, "legacy"))) {
     msg = list(jsonrpc = "2.0", method = "notifications/cancelled",
