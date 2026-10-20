@@ -33,3 +33,9 @@ The unmodified serial devel CRAN-mode job `117308886093` in run `39002733279` al
 passed (56m55s with cold dependency compilation). Its package inputs are identical:
 only excluded CI files changed after that run started. This is independent of the
 23m Windows workflow's waiting time.
+
+Merged upstream main `f42ed3b` on 2026-10-20. Local regressions still pass (46);
+the current 203-file inventory partitions into 193 ordinary files and 10 native files
+without gaps or duplication. Native entry bodies and the serial CRAN-mode job are
+unchanged from upstream. The timings above predate this merge; the PR's CI must
+validate the merged package and its current wall-clock duration.
