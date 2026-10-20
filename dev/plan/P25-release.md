@@ -3745,6 +3745,10 @@ gptr 1.0.0 is a complete rewrite. `get_response()` and `dataframe_to_text()` wer
 use `peter("your prompt")$text` instead of `get_response()`, and pass a data frame to `peter()`
 as context instead of converting it to text. See `NEWS.md`.
 
+## License
+
+gptr is licensed under the Apache License 2.0. Third-party notices are in `inst/COPYRIGHTS`.
+
 ## Acknowledgments
 
 The tool descriptions, edit semantics and prompt-template grammar are derived from 'pi' by
@@ -3753,10 +3757,6 @@ secret patterns from gitleaks (MIT license); see `inst/COPYRIGHTS`. Ideas were b
 'ellmer', 'tidyllm', 'btw' and 'mcptools', none of which gptr depends on. Anthropic, OpenAI,
 Google, TypeSafe AI and the vendors of the command-line tools are third-party services; gptr is
 not affiliated with or endorsed by them.
-
-## License
-
-Apache License 2.0 (c) Wanjun Gu.
 ````
 
 Render it:

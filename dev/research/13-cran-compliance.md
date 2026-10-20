@@ -394,7 +394,7 @@ VERIFIED in `$W/web/cookbook_*.txt` and `extrachecks.txt`:
 
 ### 3.1 The proposed DESCRIPTION
 
-**(a) Validated text.** This is exactly what `R CMD check --as-cran` passed (5.4); file `$W/pkg/gptr/DESCRIPTION`:
+**(a) Validated text.** This is exactly what `R CMD check --as-cran` passed (5.4), except that D-237 later changed the License line from `MIT + file LICENSE` to `Apache License (== 2.0)` (not re-checked here); file `$W/pkg/gptr/DESCRIPTION`:
 
 ```
 Package: gptr

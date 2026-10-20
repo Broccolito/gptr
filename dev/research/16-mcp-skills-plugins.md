@@ -1186,7 +1186,7 @@ Limits:
  "description":"Deployment commands, a review agent, and a status monitor",
  "author":{"name":"Example Team","email":"dev@example.com","url":"https://example.com"},
  "homepage":"https://example.com/docs/deploy-tools","repository":"https://github.com/example/deploy-tools",
- "license":"Apache-2.0","keywords":["deployment","ci"],"defaultEnabled":true,"dependencies":["secrets-vault"],
+ "license":"MIT","keywords":["deployment","ci"],"defaultEnabled":true,"dependencies":["secrets-vault"],
  "skills":["./extra-skills/"],
  "commands":{"status":{"source":"./commands/status.md","description":"Show the current deployment status"}},
  "agents":["./agents/reviewer.md"],"hooks":"./config/extra-hooks.json",
