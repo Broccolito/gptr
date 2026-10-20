@@ -2361,19 +2361,23 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     lk = risk_lookups[[name]]
     if (!is.null(lk) && literal_fun(risk_arg(a, lk[1L], as.integer(lk[2L])))) return(invisible())
     if (!nzchar(row$path_arg)) return(add(ctx, label, name, row$level, row$category))
-    # the worst path the call may pass
+    add_path(risk_path_exprs(a, row$path_arg), row$category, row$level, ctx, label, name)
+  }
+
+  # The worst of the paths `ps` a call of `category` at `level` may read, write or delete.
+  add_path = function(ps, category, level, ctx, label, name) {
     best = list(level = -1L)
-    for (p in risk_path_exprs(a, row$path_arg)) {
+    for (p in ps) {
       v = risk_fold(p, kn(ctx))
       w = v[nzchar(v)]
-      cls = vapply(w, risk_path_cls, character(1), row$category, root)
+      cls = vapply(w, risk_path_cls, character(1), category, root)
       pc = if (is.null(v)) "unknown" else if (!length(w)) "console" else risk_cmd_worst(cls)
-      lv = risk_path_level(row$category, row$level, pc)
+      lv = risk_path_level(category, level, pc)
       # T1: a read of a secret file is 3
-      sec = row$category == "read" &&
+      sec = category == "read" &&
         any(vapply(w, function(x) risk_target(x, "read", root)$secret, logical(1)))
       if (sec) lv = max(lv, 3L)
-      if (!is.null(v) && row$category %in% c("file_write", "file_delete", "network")) {
+      if (!is.null(v) && category %in% c("file_write", "file_delete", "network")) {
         add_tg("files", w)
       }
       if (lv > best$level) {
@@ -2381,10 +2385,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
         best = list(level = lv, path = path, pc = pc, sec = sec)
       }
     }
-    if (best$level < 0L) best = list(level = row$level, path = NA_character_, pc = NA_character_)
-    ctl = identical(best$pc, "control") && !row$category %in% c("read", "file_delete")
+    if (best$level < 0L) best = list(level = level, path = NA_character_, pc = NA_character_)
+    ctl = identical(best$pc, "control") && !category %in% c("read", "file_delete")
     add(ctx, label, name, best$level, if (isTRUE(best$sec)) "secret" else
-      if (ctl) "control" else row$category,
+      if (ctl) "control" else category,
         best$path, best$pc)
   }
 
@@ -2430,6 +2434,14 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   by_args = function(name, row, a, w, ctx, label) {
     nms = names(w) %||% rep("", length(w))
     lit = vapply(w, is.character, logical(1))
+    if (row$category == "process") {
+      # the files a process's stdout and stderr go to
+      for (x in list(risk_arg(a, "stdout"), risk_arg(a, "stderr"))) {
+        if (!is.null(x) && !is.logical(x) && !identical(x, "|") && !identical(x, "2>&1")) {
+          add_path(list(x), "file_write", 2L, ctx, label, name)
+        }
+      }
+    }
     code = risk_code_args[[name]]
     if (!is.null(code) && (name != "run" || row$package == "processx")) {
       if (row$category == "process") add_tg("process", name)

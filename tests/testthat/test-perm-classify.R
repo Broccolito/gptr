@@ -974,6 +974,25 @@ test_that("a read of a path the classifier cannot resolve is level 1, as outside
   expect_identical(flags_level(risk_sql("SELECT * FROM t WHERE a LIKE '%x%'", root)), 0L)
 })
 
+test_that("a process's stdout or stderr file is a write classified by its path", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("system2('echo', 'x', stdout = '/etc/gptr-test.txt')"), 3L)
+  expect_identical(lv("processx::run('ls', stdout = 'out.txt')"), 2L)
+  expect_identical(lv("system2('ls', stderr = '.gptr/settings.json')"), 4L)
+  expect_identical(lv("system2('ls', stdout = f)"), 2L)
+  r = gptr_risk("system2('ls', stdout = 'out.txt')", root = root)
+  expect_identical(r$paths, "out.txt")
+  # neighbours: the console, a capture, a pipe or a merge write no file
+  expect_identical(lv("system2('ls', stdout = TRUE)"), 0L)
+  expect_identical(lv("system2('ls', stdout = FALSE)"), 0L)
+  expect_identical(lv("system2('ls', stdout = '')"), 0L)
+  expect_identical(lv("system2('ls', stdout = NULL)"), 0L)
+  expect_identical(lv("system2('ls', stdout = '/dev/null')"), 0L)
+  expect_identical(lv("processx::run('ls', stdout = '|')"), 0L)
+  expect_identical(lv("processx::run('ls', stderr = '2>&1')"), 0L)
+})
+
 test_that("a reading function passed as a value reads a path the code computes", {
   root = local_project()
   lv = function(code) gptr_risk(code, root = root)$level
