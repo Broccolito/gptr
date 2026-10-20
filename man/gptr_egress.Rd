@@ -4,8 +4,9 @@
 \alias{gptr_egress}
 \title{Data egress: what gptr sends to model providers}
 \description{
-gptr sends data to a model provider only when you run a prompt with that provider's model.
-The package itself collects nothing: there is no telemetry, no usage reporting and no network
+gptr sends data to a model provider only when you run a prompt with that provider's model, or
+when model code that the permission mode allowed starts a sub-agent with that model. The package
+itself collects nothing: there is no telemetry, no usage reporting and no network
 access when the package loads. This page lists what a request contains so that you can decide
 what may leave your machine.
 }
@@ -22,9 +23,9 @@ contain data values. Native typed decision inputs use the separate encoding desc
 dimensions, column names and types and a few values); a small object can appear in full.
 \item Automatic context: a short listing of the objects in the evaluation environment (names,
 classes and sizes); the objects you added, changed or removed and the top-level R
-expressions you ran since the previous prompt (in the console, with their printed output);
-the R version, platform and available packages; and the project instruction files
-(\code{AGENTS.md}, \code{CLAUDE.md}, \code{.gptr/vignette.Rmd}).
+expressions you ran since the previous prompt (with the output of \code{!code} lines in the
+\code{\link[=peter]{peter()}} console); the R version, platform and available packages; and the project
+instruction files (\code{AGENTS.md}, \code{CLAUDE.md}, \code{.gptr/vignette.Rmd}).
 \item Tool results: the printed output of R code the model ran, the parts of files it read, and
 images of plots it made. In \code{manual} mode every action that is not known to be read-only
 needs your approval before its result can be sent.
@@ -56,7 +57,8 @@ in an interactive session, gptr shows what is sent and records your
 acknowledgment in your user settings. A non-interactive run with a provider that was never
 acknowledged stops with a \code{gptr_error_egress} condition. Record the acknowledgment once with
 \code{gptr_config(egress = list(anthropic = "ack"), .scope = "user")} (this replaces the stored
-list, so name every provider you use), or run with \code{.opts = list(context = "none")}. Offline
+list, so name every provider you use), or, except for System 1 questions, run with
+\code{.opts = list(context = "none")}. Offline
 providers such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}} and local providers on a loopback address need no
 acknowledgment. An Ollama server can forward requests to cloud models, so Ollama is exempt only
 while its local-only inference is on (the default; see \code{providers} in \code{\link[=gptr_config]{gptr_config()}}).

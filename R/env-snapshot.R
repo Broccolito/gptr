@@ -305,10 +305,6 @@ changes_lines = function(diff, snapshot, user_ran, budget = 300L) {
 
 # ---------------------------------------------------------------- builtin:workspace
 
-#' The context mode of a call's `.opts`, else the `context` setting
-#' @noRd
-context_mode = function(opts) opts$context %||% setting_get("context", default = "summary")
-
 #' The context mode of the call: "summary" (default), "names" or "none" (context_mode())
 #' @noRd
 env_context_mode = function(ctx) {

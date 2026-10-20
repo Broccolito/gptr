@@ -52,6 +52,10 @@ setting_get = function(key, session = NULL, default = NULL) {
   value %||% default
 }
 
+#' The context mode of a call's `.opts`, else the `context` setting
+#' @noRd
+context_mode = function(opts) opts$context %||% setting_get("context", default = "summary")
+
 #' Say once per R process what yolo still asks for (IC-78)
 #' @noRd
 mode_notice = function(mode) {

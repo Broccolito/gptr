@@ -1129,10 +1129,10 @@ egress_question = function(id, origin = NULL, asker = NULL) {
   }
   paste0(lead, " together with automatic context: the workspace listing (object names, classes ",
          "and sizes), the objects you added, changed or removed and the R expressions you ran ",
-         "since the previous prompt (in the console, with their printed output), a description ",
-         "of the R environment, project instructions and descriptions of the objects you attach, ",
-         "and the inputs of System 1 questions (each vector element or data frame row). Allow ",
-         "this for ", id, " from now on?")
+         "since the previous prompt (with the output of !code lines in peter()'s console), a ",
+         "description of the R environment, project instructions and descriptions of the objects ",
+         "you attach, and the inputs of System 1 questions (each vector element or data frame ",
+         "row). Allow this for ", id, " from now on?")
 }
 
 #' Records `egress.<id> = "ack"` in the user settings file by one read-modify-write under its
@@ -1183,8 +1183,8 @@ egress_check = function(provider_id, provider = provider_get(provider_id),
   gptr_abort(c(paste0("gptr has not been told that it may send session context to ", pid, where,
                       "."),
                st$why,
-               paste0("Acknowledge it once with ", how,
-                      ", or pass .opts = list(context = \"none\").")),
+               paste0("Acknowledge it once with ", how, ", or, except for a System 1 question, ",
+                      "pass .opts = list(context = \"none\").")),
              "egress", provider = pid, how_to_ack = how)
 }
 
@@ -1629,8 +1629,9 @@ NULL
 
 #' Data egress: what gptr sends to model providers
 #'
-#' gptr sends data to a model provider only when you run a prompt with that provider's model.
-#' The package itself collects nothing: there is no telemetry, no usage reporting and no network
+#' gptr sends data to a model provider only when you run a prompt with that provider's model, or
+#' when model code that the permission mode allowed starts a sub-agent with that model. The package
+#' itself collects nothing: there is no telemetry, no usage reporting and no network
 #' access when the package loads. This page lists what a request contains so that you can decide
 #' what may leave your machine.
 #'
@@ -1644,9 +1645,9 @@ NULL
 #'   dimensions, column names and types and a few values); a small object can appear in full.
 #' - Automatic context: a short listing of the objects in the evaluation environment (names,
 #'   classes and sizes); the objects you added, changed or removed and the top-level R
-#'   expressions you ran since the previous prompt (in the console, with their printed output);
-#'   the R version, platform and available packages; and the project instruction files
-#'   (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`).
+#'   expressions you ran since the previous prompt (with the output of `!code` lines in the
+#'   [peter()] console); the R version, platform and available packages; and the project
+#'   instruction files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`).
 #' - Tool results: the printed output of R code the model ran, the parts of files it read, and
 #'   images of plots it made. In `manual` mode every action that is not known to be read-only
 #'   needs your approval before its result can be sent.
@@ -1673,7 +1674,8 @@ NULL
 #' acknowledgment in your user settings. A non-interactive run with a provider that was never
 #' acknowledged stops with a `gptr_error_egress` condition. Record the acknowledgment once with
 #' `gptr_config(egress = list(anthropic = "ack"), .scope = "user")` (this replaces the stored
-#' list, so name every provider you use), or run with `.opts = list(context = "none")`. Offline
+#' list, so name every provider you use), or, except for System 1 questions, run with
+#' `.opts = list(context = "none")`. Offline
 #' providers such as [gptr_fake_provider()] and local providers on a loopback address need no
 #' acknowledgment. An Ollama server can forward requests to cloud models, so Ollama is exempt only
 #' while its local-only inference is on (the default; see `providers` in [gptr_config()]).
