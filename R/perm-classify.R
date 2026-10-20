@@ -1764,8 +1764,9 @@ risk_plan_syntax = c("{", "(", risk_arrow, "=", "if", "for", "while", "repeat", 
                      "<lambda>")
 risk_quoting_funs = c("quote", "bquote", "expression", "substitute", "~", "alist")
 # Function slots: formals whose argument is called in any call R can match, and the slots of
-# functions whose formal name is ambiguous or whose namespace may not be loaded (formal, position).
-risk_slot_names = c("FUN", ".f", ".fn", ".fns", "func", ".p", ".else", "ties", "gr")
+# functions whose formal name is ambiguous or whose namespace may not be loaded ((formal,
+# position) pairs).
+risk_slot_names = c("FUN", ".f", ".fn", ".fns", "func", ".p", ".else")
 risk_hof_args = list(
   Map = c("f", "1"), Reduce = c("f", "1"), Filter = c("f", "1"), Find = c("f", "1"),
   Position = c("f", "1"), Negate = c("f", "1"), do.call = c("what", "1"),
@@ -1777,8 +1778,11 @@ risk_hof_args = list(
   if_any = c(".fns", "2"), if_all = c(".fns", "2"), future_lapply = c("FUN", "2"),
   future_map = c(".f", "2"), mclapply = c("FUN", "2"), parLapply = c("fun", "3"),
   parSapply = c("FUN", "3"), clusterCall = c("fun", "2"), later = c("func", "1"),
-  rapply = c("f", "2"), optim = c("fn", "2"), optimize = c("f", "1"), optimise = c("f", "1"),
-  uniroot = c("f", "1"), aggregate = c("FUN", "3"), reorder = c("FUN", "3")
+  rapply = c("f", "2"), optim = c("fn", "2", "gr", "3"), optimHess = c("fn", "2", "gr", "3"),
+  optimize = c("f", "1"), optimise = c("f", "1"), uniroot = c("f", "1"),
+  aggregate = c("FUN", "3"), reorder = c("FUN", "3"), approx = c("ties", "10"),
+  approxfun = c("ties", "8"), spline = c("ties", "8"), splinefun = c("ties", "4"),
+  stepfun = c("ties", "4")
 )
 # Handlers: every `...` argument of these is called.
 risk_handler_funs = c("tryCatch", "withCallingHandlers")
@@ -2443,12 +2447,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     d = a[["..."]]
     vals = c(a[nms %in% risk_slot_names], d[names(d) %in% risk_slot_names])
     if (name %in% risk_handler_funs) vals = c(vals, d %||% a[nzchar(nms)])
-    hof = risk_hof_args[[name]]
-    if (!is.null(hof) && !hof[1L] %in% names(vals)) {
+    hof = matrix(risk_hof_args[[name]] %||% character(), 2L)
+    fm = names(attr(a, "formals"))
+    for (i in seq_len(ncol(hof))) {
+      if (hof[1L, i] %in% names(vals)) next
       # a slot of a generic's methods (aggregate.formula's FUN), as each method matches the call
-      fm = names(attr(a, "formals"))
-      as = if (is.null(fm) || hof[1L] %in% fm) list(a) else risk_s3_args(e, name)
-      vals = c(vals, lapply(as, risk_arg, hof[1L], as.integer(hof[2L])))
+      as = if (is.null(fm) || hof[1L, i] %in% fm) list(a) else risk_s3_args(e, name)
+      vals = c(vals, lapply(as, risk_arg, hof[1L, i], as.integer(hof[2L, i])))
     }
     for (v in vals) if (!is.null(v)) use_value(v, ctx, slot = TRUE)
   }
