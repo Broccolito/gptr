@@ -297,12 +297,12 @@ perm_control_guard = function(what) {
 #' rules. Allow rules never loosen plan mode and never pre-approve level-4 (critical or control)
 #' actions.
 #'
-#' Scopes: `"session"` is this R process; `"project"` is the user-level project file
-#' `tools::R_user_dir("gptr", "config")/projects/<hash>.json`, personal and never inside the
-#' project tree; `"user"` is the user settings file. The listing also shows the shared project
-#' rules of `.gptr/settings.json` (an untrusted project contributes only `deny` and `ask`
-#' rules) and the `deny`/`ask` rules of a legacy `.gptr/settings.local.json` in a trusted
-#' project.
+#' Scopes: `"session"` is this R process; `"project"` is the user-level file
+#' \file{projects/<hash>.json} in `tools::R_user_dir("gptr", "config")`, personal and never
+#' inside the project tree; `"user"` is the user settings file. The listing also shows the
+#' shared project rules of `.gptr/settings.json` (an untrusted project contributes only `deny`
+#' and `ask` rules) and the `deny`/`ask` rules of a legacy `.gptr/settings.local.json` in a
+#' trusted project.
 #'
 #' Called from model code during a run, adding or removing rules needs the user's approval of
 #' that call; otherwise it signals `gptr_error_permission`.

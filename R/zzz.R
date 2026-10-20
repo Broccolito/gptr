@@ -1,4 +1,5 @@
-# Load and unload hooks. No disk, network or process activity at load (13 C-29).
+# Load and unload hooks. No network at load; only proc_sweep() touches disk and processes, to
+# stop orphaned child processes of an earlier session (13 C-29, IC-60).
 
 #' Run the on_load() queue and load the built-ins (load errors are kept, never raised)
 #' @noRd
