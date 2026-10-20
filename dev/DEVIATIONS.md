@@ -2926,3 +2926,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (2026-10-20). inst/COPYRIGHTS also gains the MIT notice of typesafe-ai/system-one-adapter-python, whose
   prompt and schema `R/s1-emulate.R` follows.
 - Tests: test-zzz.R (IC-72), dev/release/tests (site-stage, examples, precompute), dev/ci/test-exact-source.py.
+
+## D-238 - P11 unresolved read paths, process output files and background processes ask first (2026-10-20)
+- Rule: a read whose path the classifier cannot resolve (`unknown`, `wildcard`) is level 1, as `outside` is;
+  `file()`, `gzfile()`, `bzfile()` and `xzfile()` fold to their description path, and an unknown SQL or Python
+  string literal stays 0. A `stdout` or `stderr` file of a process call (system2, processx::run, callr) is a
+  `file_write` row classified by its path. `wait` other than TRUE, or a lone shell `&`, adds a level-2 `process`
+  row. The CRAN-readiness audit found that manual mode ran these at level 0 without asking.
+- Level changes: computed read paths (`read.csv(here::here(...))`, `readLines(system.file(...))`), `$VAR`
+  operands and option values, and paths the locale cannot translate now ask; plan mode refuses `peter$read()` of
+  a computed path. Reported to the maintainer 2026-10-20.
+- Tests: test-perm-classify.R (four new blocks; three D-061 cases move from 0 to 1).
