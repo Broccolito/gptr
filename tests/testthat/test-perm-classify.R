@@ -1072,3 +1072,18 @@ test_that("a `~name` path is that user's home, as R and the shell expand it", {
   # neighbour: R leaves `~name` of an unknown user as written, a project path
   expect_identical(lv("readLines('~nosuchuserzz/x')"), 0L)
 })
+
+test_that("md5sum, dir.exists, file.access and file_test are classified by their paths", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("tools::md5sum('/etc/hosts')"), 1L)
+  expect_identical(lv("tools::md5sum('~/.ssh/id_rsa')"), 3L)
+  expect_identical(lv("dir.exists('/etc')"), 1L)
+  expect_identical(lv("file.access('/etc/hosts')"), 1L)
+  expect_identical(lv("utils::file_test('-f', '/etc/hosts')"), 1L)
+  # neighbours: project paths stay level 0
+  expect_identical(lv("tools::md5sum('data.csv')"), 0L)
+  expect_identical(lv("dir.exists('R')"), 0L)
+  expect_identical(lv("file.access('R', 4)"), 0L)
+  expect_identical(lv("utils::file_test('-f', 'R/x.R')"), 0L)
+})
