@@ -29,16 +29,19 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   starting processes or reading outside the project runs only after the user approves it. The
   classifier is advisory, not a security boundary, as `?gptr_security` says. A non-interactive run
   that would need an approval stops with a classed error. gptr itself never assigns objects in the
-  global environment. Model code in a top-level run draws from the user's random-number stream, as
-  the user's own code would; inline sub-agents draw from their own stream, and the user's
-  `.Random.seed` is restored after them.
-* Data is sent to a model provider only when the user runs a prompt with that provider's model.
+  global environment. Model code in a top-level run, and in a plain `peter()` sub-agent it starts,
+  draws from the user's random-number stream, as the user's own code would; members of a team, a
+  fan-out or `gptr_parallel()` draw from their own stream, and the user's `.Random.seed` is
+  restored after them.
+* Data is sent to a model provider only when the user runs a prompt with that provider's model,
+  or when model code that the permission mode allowed starts a sub-agent with that model.
   Before automatic session context first goes to a provider, gptr shows what it contains
   (including the R expressions the user ran since the previous prompt) and asks for an
   acknowledgment; a non-interactive run needs a recorded acknowledgment unless automatic context
   is off (`context = "none"`): the prompt then goes with project instruction files and a short
   description of the R environment, but without the workspace listing, the workspace changes or
-  descriptions of attached objects. Offline providers and local providers on a loopback address
+  descriptions of attached objects. A System 1 question sends its inputs and always needs the
+  acknowledgment. Offline providers and local providers on a loopback address
   (such as a local 'Ollama' server while its local-only inference is on, the default) need none.
   There is no telemetry.
 * The external programs named in SystemRequirements (an 'Ollama' server, 'claude', 'codex',
@@ -55,11 +58,10 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 * Every example runs offline and without keys, and each takes about a second at most. Examples
   that run a session use the exported scripted model `gptr_fake_provider()`; the only scripted
-  model that runs R code (`?gptr_rewind`) evaluates it in a new environment, the others return
-  text only, and every file an example writes is under `tempdir()`. While `R CMD check` runs the
-  examples, every model call without its own `replay =` argument runs in replay mode, where only
-  offline providers answer; no example passes another value, so no example can reach a model
-  server, remote or local.
+  model that runs R code (`?gptr_rewind`) evaluates it in a new environment, and every file an
+  example writes is under `tempdir()`. While `R CMD check` runs the examples, every model call
+  without its own `replay =` argument runs in replay mode, where only offline providers answer; no
+  example passes another value, so no example can reach a model server, remote or local.
 * No example uses `\dontrun{}`, `\donttest{}` or `@examplesIf`. Only two pages keep their
   examples inside visible `if` guards: `gptr_login()` and `gptr_logout()` under
   `if (interactive())`, because a person enters a key or completes an OAuth sign-in, and
