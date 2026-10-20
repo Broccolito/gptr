@@ -1001,6 +1001,8 @@ test_that("starting a background process is level 2 process", {
   expect_identical(lv("system2('sleep', '1', wait = FALSE)"), 2L)
   expect_identical(lv("peter$sh('ls &')"), 2L)
   expect_identical(gptr_risk("system('ls & ls')", root = root)$categories, "process")
+  expect_identical(lv("system('sleep 1 &>/dev/null')"), 2L)
+  expect_identical(lv("system('sleep 1&>/dev/null')"), 2L)
   # neighbours: `&&`, `>&`, `|&`, a quoted `&` and a waited process keep their level
   expect_identical(lv("system('ls')"), 0L)
   expect_identical(lv("system('ls', wait = TRUE)"), 0L)

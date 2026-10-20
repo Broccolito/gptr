@@ -789,10 +789,10 @@ risk_sh_tokens = function(cmd) {
     } else if (identical(c1, "|")) {
       op("|")
       if (identical(c2, "&")) i = i + 1L
-    } else if (identical(c1, "&") && !identical(c2, ">")) {
+    } else if (identical(c1, "&")) {
       bg = TRUE
       op(";")
-    } else if (c1 %in% c(">", "<") || (c1 %in% c("1", "2", "&") && identical(c2, ">") && !has)) {
+    } else if (c1 %in% c(">", "<") || (c1 %in% c("1", "2") && identical(c2, ">") && !has)) {
       if (grepl("^([0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})\\z", cur, perl = TRUE) && !nzchar(d)) {
         cur = ""
         has = FALSE
@@ -825,7 +825,8 @@ risk_sh_tokens = function(cmd) {
   }
   if (nzchar(q)) hidden = c(hidden, piece)
   push()
-  # `bg`: a lone `&` (not `&&`, `&>`, `>&` or `|&`) runs the command before it in the background
+  # `bg`: a lone `&` (not `&&`, `>&` or `|&`) runs the command before it in the background; sh
+  # such as dash reads `&>` as `&` then `>`
   structure(out, dyn = dyn, quoted = quo, hidden = hidden, bg = bg)
 }
 
