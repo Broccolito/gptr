@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMES = ('python', 'quarto', 'chrome', 'rg')
@@ -95,13 +96,20 @@ def child_environment(environment, tools):
     return result
 
 
-def isolated_environment(environment, run):
+def isolated_environment(environment, run, platform=sys.platform):
     run = Path(run).absolute()
     if run.exists():
         raise RuntimeError('Use a fresh owned state directory')
     run.mkdir(parents=True, mode=0o700)
-    for name in ('home', 'config', 'cache', 'data', 'project', 'tmp'):
+    for name in ('home', 'config', 'cache', 'data', 'project'):
         (run / name).mkdir(mode=0o700)
+    # On Linux, R's tempdir() must leave Chromium's SingletonSocket path within 107 bytes, so the
+    # private temp root lives under /tmp, as in tests/testthat/setup.R
+    if platform.startswith('linux'):
+        tmp = Path(tempfile.mkdtemp(prefix='gptr-', dir='/tmp'))
+    else:
+        tmp = run / 'tmp'
+        tmp.mkdir(mode=0o700)
     # Windows R cannot restore true-empty entries after callr's temporary environment.
     # Neutralize startup through fresh owned zero-byte files, before the R child starts.
     startup = run / 'startup'
@@ -118,8 +126,8 @@ def isolated_environment(environment, run):
         R_USER_DATA_DIR=str(run / 'data'), APPDATA=str(run / 'config'),
         LOCALAPPDATA=str(run / 'cache'), XDG_CONFIG_HOME=str(run / 'config'),
         XDG_CACHE_HOME=str(run / 'cache'), XDG_DATA_HOME=str(run / 'data'),
-        TMPDIR=str(run / 'tmp'), TMP=str(run / 'tmp'), TEMP=str(run / 'tmp'),
-        MAC_CHROMIUM_TMPDIR=str(run / 'tmp'), GPTR_PROJECT_ROOT=str(run / 'project'))
+        TMPDIR=str(tmp), TMP=str(tmp), TEMP=str(tmp), MAC_CHROMIUM_TMPDIR=str(tmp),
+        GPTR_PROJECT_ROOT=str(run / 'project'))
     return result
 
 
