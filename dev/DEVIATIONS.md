@@ -2932,8 +2932,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `file()`, `gzfile()`, `bzfile()` and `xzfile()` fold to their description path, and an unknown SQL or Python
   string literal stays 0. A `stdout` or `stderr` file of a process call (system2, processx::run, callr) is a
   `file_write` row classified by its path. `wait` other than TRUE, or a lone shell `&`, adds a level-2 `process`
-  row. The CRAN-readiness audit found that manual mode ran these at level 0 without asking.
+  row; so does `&>`, which dash and POSIX sh read as `&` then `>` (stricter than bash). system2()'s `stdout` or
+  `stderr` "|" or "2>&1" is a file name. md5sum, dir.exists, file.access and file_test read their path argument,
+  and `tools::Rd2txt(out =)` is a file_write. A `file://` word is its local path, `path_norm()` resolves `~name`
+  to that user's home, and a `git -C` directory is read. A function passed to aggregate() or reorder() is walked
+  as each of their S3 methods matches the call, as are the `ties` of approx, approxfun, spline, splinefun and
+  stepfun and the `fn` and `gr` of optim and optimHess. The CRAN-readiness audit found that manual mode ran
+  these at level 0 without asking.
 - Level changes: computed read paths (`read.csv(here::here(...))`, `readLines(system.file(...))`), `$VAR`
   operands and option values, and paths the locale cannot translate now ask; plan mode refuses `peter$read()` of
-  a computed path. Reported to the maintainer 2026-10-20.
-- Tests: test-perm-classify.R (four new blocks; three D-061 cases move from 0 to 1).
+  a computed path; `command -v git &>/dev/null` 0 -> 2; md5sum, dir.exists, file.access and file_test outside
+  the project 0 -> 1; `Rd2txt("x.Rd", "keep.txt")` and `aggregate(len ~ supp, data = d, file.create)` 0 -> 2.
+  Reported to the maintainer 2026-10-20.
+- Tests: test-perm-classify.R (new blocks; three D-061 cases move from 0 to 1), test-auth-secrets.R.
