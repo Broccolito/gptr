@@ -1058,3 +1058,17 @@ test_that("a file:// URL is classified as the local path R's file() opens", {
   expect_identical(lv("readLines('file://data.csv')"), 0L)
   expect_identical(lv("readLines('FILE:///etc/hosts')"), 0L)
 })
+
+test_that("a `~name` path is that user's home, as R and the shell expand it", {
+  skip_on_os("windows")
+  u = paste0("~", Sys.info()[["user"]])
+  skip_if(identical(path.expand(u), u), "the user has no home R can find")
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv(sprintf("readLines('%s/x.txt')", u)), 1L)
+  expect_identical(lv(sprintf("system('cat %s/x.txt')", u)), 1L)
+  expect_identical(lv(sprintf("writeLines('x', '%s/x.txt')", u)), 3L)
+  expect_identical(lv(sprintf("unlink('%s', recursive = TRUE)", u)), 4L)
+  # neighbour: R leaves `~name` of an unknown user as written, a project path
+  expect_identical(lv("readLines('~nosuchuserzz/x')"), 0L)
+})
