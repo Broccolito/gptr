@@ -51,6 +51,7 @@ test_that("NS-1: the console clusters, runs !expr and switches mode without relo
 })
 
 test_that("NS-2: a programmatic call returns the session with $value and $usage", {
+  skip_on_cran()
   local_project()
   fake = local_fake_provider(list(
     fake_tool("r", code = "fit = lm(weight ~ diet, data = mice)\ngptr_return(fit)",
@@ -74,6 +75,7 @@ test_that("NS-2: a programmatic call returns the session with $value and $usage"
 })
 
 test_that("NS-3: the pipe steers one session object; switching model hands the history over", {
+  skip_on_cran()
   local_project()
   fake = local_fake_provider(list("Loaded and normalised.", "Three components explain 80%."))
   strong = local_fake_provider(list("Plotted PC1 against PC2 coloured by batch."), name = "strong")
@@ -161,6 +163,7 @@ test_that("NS-5: System 1 routes each task to a strong or a cheap System 2 model
 })
 
 test_that("NS-6: sub-agents run as a team and fan out four at a time", {
+  skip_on_cran()
   local_project()
   rev1 = local_fake_provider(list("stats: no errors found"), name = "rev1")
   rev2 = local_fake_provider(list("code: style is fine"), name = "rev2")
@@ -254,6 +257,7 @@ test_that("NS-9: setup from R needs no keys and makes no requests", {
 })
 
 test_that("NS-10: skills, plugins and MCP servers are usable by name", {
+  skip_on_cran()
   plugin = c("function(gptr) {",
              "  gptr$register(gptr_tool(\"search\", \"Search trials for a condition.\",",
              "    fun = function(condition) paste(\"3 trials for\", condition),",
@@ -289,6 +293,7 @@ test_that("NS-10: skills, plugins and MCP servers are usable by name", {
 })
 
 test_that("NS-11: a whole workflow script sources as R and runs every call shape", {
+  skip_on_cran()
   root = local_project()
   prep = local_fake_provider(function(request) paste("done:", request$last_user), name = "prep")
   judge = local_fake_provider(function(state, question) {
@@ -333,6 +338,7 @@ test_that("NS-11: a whole workflow script sources as R and runs every call shape
 })
 
 test_that("NS-12: plan mode changes nothing; a non-interactive manual ask stops clearly", {
+  skip_on_cran()
   local_project()
   e = new.env()
   planner = local_fake_provider(list(

@@ -756,6 +756,7 @@ test_that("declared request params reach the body; others do not (IC-69)", {
 })
 
 test_that("builtin adapters keep their capabilities and pass check_adapter() and gptr_check()", {
+  skip_on_cran()
   for (k in names(native_adapters)) {
     x = native_adapters[[k]]
     a = adapter_get(k)

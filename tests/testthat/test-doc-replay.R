@@ -1916,6 +1916,7 @@ test_that("per-call record FALSE does not ask for or remember a console transcri
 })
 
 test_that("per-call record FALSE prevents writes to an explicitly bound document", {
+  skip_on_cran()
   x = local_doc_e2e(rep(list(fake_tool("r", code = "answer = 42"), fake_text("Done.")), 2L),
                      record = "ask")
   f = file.path(x$root, "analysis.R")
@@ -2000,6 +2001,7 @@ test_that("a recorded block replays under source() with zero model calls (accept
 })
 
 test_that("a stale prompt regenerates through gptr_source(replay = \"record\") (acceptance 2)", {
+  skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "old_ran = TRUE"), fake_text("old"),
                          fake_tool("r", code = "new_ran = TRUE"), fake_text("new")))
   f = file.path(x$root, "analysis.R")
@@ -2053,6 +2055,7 @@ test_that("value= replays by name and no document gets a $value line (acceptance
 })
 
 test_that("documents are written only with consent; a project cannot grant it (acceptance 5)", {
+  skip_on_cran()
   x = local_doc_e2e(function(request) {
     if (request$n %% 2L == 1L) fake_tool("r", code = "n = 1") else fake_text("one.")
   }, record = NULL)
@@ -2088,6 +2091,7 @@ test_that("a fresh clone without consent replays with zero calls and runs each b
 })
 
 test_that("gptr_return() and peter$out() calls are dropped and the block re-sources (6)", {
+  skip_on_cran()
   script = function(request) {
     if (request$n == 1L) {
       return(fake_tool("r", code = "cat(rep(\"line\", 400), sep = \"\\n\")", record = FALSE))
@@ -2116,6 +2120,7 @@ test_that("gptr_return() and peter$out() calls are dropped and the block re-sour
 })
 
 test_that("re-sourcing NS-3 twice keeps the main line and the fork's overlay apart (IC-46)", {
+  skip_on_cran()
   x = local_doc_e2e(list(
     fake_tool("r", code = "qc_flags = d$mt > 20\ngptr_return(qc_flags)"), fake_text("Flagged."),
     fake_tool("r", code = "qc_flags = d$mt > 15\ngptr_return(qc_flags)"), fake_text("Updated."),
@@ -2148,6 +2153,7 @@ test_that("re-sourcing NS-3 twice keeps the main line and the fork's overlay apa
 })
 
 test_that("a replayed pipe chain is one session; a clone continues from its document (IC-46)", {
+  skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "a = 1"), fake_text("one."),
                          fake_tool("r", code = "b = 2"), fake_text("two."),
                          fake_text("three, live.")))
@@ -2183,6 +2189,7 @@ test_that("a replayed pipe chain is one session; a clone continues from its docu
 })
 
 test_that("two values of an interpolated {gene} never replay each other's block (IC-45)", {
+  skip_on_cran()
   skip_if_not_installed("knitr")
   x = local_doc_e2e(rep(list(fake_tool("r", code = "plotted = gene"), fake_text("Plotted.")), 2L))
   rmd = file.path(x$root, "report.Rmd")
@@ -2200,6 +2207,7 @@ test_that("two values of an interpolated {gene} never replay each other's block 
 })
 
 test_that("a two-turn console session with a menu steer re-sources as one session (IC-49)", {
+  skip_on_cran()
   steer_once = new.env()
   script = function(request) {
     if (request$n == 3L && is.null(steer_once$done)) {
@@ -2251,6 +2259,7 @@ test_that("a plan-mode run records only its plan line (IC-48)", {
 })
 
 test_that("a block with a nested sub-agent call replays with zero requests (IC-47)", {
+  skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "sub = peter(\"Summarise d\")"),
                          fake_text("d has 4 rows."), fake_text("Done.")))
   f = file.path(x$root, "nested.R")

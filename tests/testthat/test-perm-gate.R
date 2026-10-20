@@ -251,6 +251,7 @@ test_that("in yolo a control export runs without a person; options(gptr.*) asks 
 })
 
 test_that("a nested auto run started by yolo model code asks before a protected delete", {
+  skip_on_cran()
   root = local_project(files = list(".ssh/id_rsa" = "KEY"), trust = TRUE)
   ui = local_scripted_ui(list("n"))
   local_fake_provider(list(fake_tool("r", code = "unlink('.ssh', recursive = TRUE)"), "Done."),
@@ -264,6 +265,7 @@ test_that("a nested auto run started by yolo model code asks before a protected 
 })
 
 test_that("a nested member is gated at its own risk of its actual input (IC-78, 03 6.8.4)", {
+  skip_on_cran()
   root = local_project(files = list("R/a.R" = "x = 1", ".env" = "KEY=1"), trust = TRUE)
   ui = local_scripted_ui(list("n", "n", "n", "n", "n"))
   del = "*** Begin Patch\n*** Delete File: .env\n*** End Patch"

@@ -282,6 +282,7 @@ test_that("boundary: failed orphan cleanup retains the recovery marker", {
 })
 
 test_that("boundary: orphan cleanup waits for a kill that completes asynchronously", {
+  skip_on_cran()
   local_proc_state()
   # On Windows ps_kill() calls TerminateProcess(), which returns before the process has exited:
   # just after the kill the child still reads as running and still carries its marker (hosted
@@ -314,6 +315,7 @@ test_that("boundary: orphan cleanup waits for a kill that completes asynchronous
 })
 
 test_that("kill_all() returns once the processes it signalled stop running (WIN-2)", {
+  skip_on_cran()
   local_proc_state()
   # hosted Windows: kill_tree()'s TerminateProcess() returns at once and processx reads the exit
   # code, but the killed artifact child read as running for about 0.3 s more
@@ -341,6 +343,7 @@ test_that("kill_all() returns once the processes it signalled stop running (WIN-
 })
 
 test_that("boundary: a kill counts as signalled only for the handles ps_kill() reached", {
+  skip_on_cran()
   handles = list(list(pid = 41L), list(pid = 42L))
   outcome = "partial"
   calls = 0L
@@ -611,6 +614,7 @@ test_that("boundary: job PID metadata is scalar and status uncertainty remains v
 })
 
 test_that("boundary: unload cleans marked children even when their environment is unreadable", {
+  skip_on_cran()
   local_proc_state()
   killed = FALSE
   local_mocked_bindings(

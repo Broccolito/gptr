@@ -107,6 +107,7 @@ test_that("gptr_confirm() never asks without a human and parses answers", {
 })
 
 test_that("gptr_readline() records how long it waited; a long prompt is printed whole", {
+  skip_on_cran()
   withr::defer(assign("readline_secs", NULL, envir = the))
   read = function(prompt) {
     Sys.sleep(0.15)

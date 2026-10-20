@@ -711,6 +711,7 @@ test_that("peter$help() shows only members that resolve, a primitive's arguments
 })
 
 test_that("peter$search() indexes text that is not valid UTF-8 instead of failing", {
+  skip_on_cran()
   e9 = rawToChar(as.raw(0xe9))
   bad = paste0("caf", e9)
   local_spec(gptr_spec("search_source", "bytes9", docs = function(ctx) {
@@ -993,6 +994,7 @@ test_that("peter$nope lists the members; completion lists the built-in members (
 })
 
 test_that("accessing a member performs no I/O and opens no connection", {
+  skip_on_cran()
   cons = nrow(showConnections())
   n = count_io(function() {
     for (m in members) ns_resolve(m)

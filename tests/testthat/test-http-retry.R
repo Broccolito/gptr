@@ -164,6 +164,7 @@ test_that("only recognized error code fields can indicate the spend cap", {
 })
 
 test_that("the limiter gates admission from headers and never waits", {
+  skip_on_cran()
   ratelimit_update("rl-unit-a", list(`x-ratelimit-remaining-requests` = "2",
                                      `x-ratelimit-reset-requests` = "400ms"))
   expect_true(ratelimit_admit("rl-unit-a"))

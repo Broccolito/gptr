@@ -364,6 +364,7 @@ test_that("adapters are replayed through the check.adapter service when it exist
 })
 
 test_that("factories: load, register, no action at load, and every registered spec passes", {
+  skip_on_cran()
   local_registry()
   res = gptr_check(function(gptr) {
     gptr$register(gptr_command("panel", function(args, ctx) "ok"))

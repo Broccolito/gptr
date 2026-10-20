@@ -176,6 +176,7 @@ test_that("a failed-closed redactor never releases held bytes on end or completi
 })
 
 test_that("adjacent text blocks cannot reconstruct a synthetic secret on the console", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   for (colours in c(1L, 256L)) {

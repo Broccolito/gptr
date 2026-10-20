@@ -54,6 +54,7 @@ test_that("a concurrent edit is detected by md5 and non-UTF-8 documents are refu
 })
 
 test_that("document locks exclude a live holder and break a dead one", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   writeLines("x = 1", f)
@@ -314,6 +315,7 @@ test_that("a document that cannot be opened is refused with reason unreadable", 
 })
 
 test_that("record and transcript updates keep other entries and hold a lock beside the file", {
+  skip_on_cran()
   local_project()
   settings_write("user_project", list(transcript = list(target = "a.R", extra = "keep")))
   doc_project_transcript("b.R")
@@ -487,6 +489,7 @@ test_that("an open notebook is never written; its blocks wait for gptr_doc(sync 
 })
 
 test_that("a deferred document locked by another live process records nothing", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
   local_doc_pending()

@@ -924,6 +924,7 @@ test_that("a document that keeps changing gives up after three attempts with a w
 })
 
 test_that("a lock held by another live process records nothing", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
   f = file.path(getwd(), "a.R")

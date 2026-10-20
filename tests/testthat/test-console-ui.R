@@ -232,6 +232,7 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
 })
 
 test_that("nested calls with the same prompt are told apart by their number (#36)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_project()
   sub = local_fake_provider(function(request) {
@@ -383,6 +384,7 @@ test_that("answering [a]lways adds a session rule covering exactly the flagged c
 })
 
 test_that("[a]lways in a run covers the same calls in the next run (05 P11 acceptance 5)", {
+  skip_on_cran()
   root = local_project()
   local_permission_rules()
   st = local_scripted_ui(list("a"))

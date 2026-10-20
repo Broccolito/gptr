@@ -10,6 +10,7 @@ test_that("reactor_get() creates one gptr_reactor per process", {
 })
 
 test_that("timers fire once, in time order, and the pump honours its timeout", {
+  skip_on_cran()
   st = new.env()
   st$log = character()
   now = reactor_now()
@@ -24,6 +25,7 @@ test_that("timers fire once, in time order, and the pump honours its timeout", {
 })
 
 test_that("tasks run each iteration until FALSE; a number delays the next call", {
+  skip_on_cran()
   st = new.env()
   st$n = 0L
   st$m = 0L
@@ -42,6 +44,7 @@ test_that("tasks run each iteration until FALSE; a number delays the next call",
 })
 
 test_that("a task that keeps returning TRUE does not make the pump spin", {
+  skip_on_cran()
   st = new.env()
   st$n = 0L
   id = reactor_task(function() {
@@ -56,6 +59,7 @@ test_that("a task that keeps returning TRUE does not make the pump spin", {
 })
 
 test_that("a task is never re-entered by a pump nested inside its own call", {
+  skip_on_cran()
   # an inprocess generator whose events reach a hook that calls System 1 pumps the reactor
   # from inside its task (IC-57): the nested pump must not call the generator again
   st = new.env()
@@ -80,6 +84,7 @@ test_that("a task is never re-entered by a pump nested inside its own call", {
 })
 
 test_that("a nested pump inside a FIFO tool never runs a sibling's tool nor later::run_now(0)", {
+  skip_on_cran()
   st = new.env()
   st$log = character()
   st$later = integer()
@@ -114,6 +119,7 @@ test_that("a nested pump runs the tools of the runs it names in allow_runs", {
 })
 
 test_that("reactor_cancel() removes timers, tasks and FIFO items", {
+  skip_on_cran()
   st = new.env()
   st$fired = FALSE
   timer = reactor_timer(reactor_now() + 0.1, function() st$fired = TRUE)
@@ -146,6 +152,7 @@ test_that("failing timers, tasks and tools become diagnostics and the pump conti
 })
 
 test_that("an error in a later callback becomes a diagnostic, not a pump failure", {
+  skip_on_cran()
   skip_if_not_installed("later")
   st = new.env()
   st$diag = character()
@@ -177,6 +184,7 @@ test_that("an error in until() leaves the pump depth balanced", {
 })
 
 test_that("a pump nested in a reactor callback runs no FIFO tool unless allow_runs names it", {
+  skip_on_cran()
   st = new.env()
   st$log = character()
   reactor_timer(reactor_now(), function() {
@@ -342,6 +350,7 @@ wire_tr = function(session = "s0123456789", request_id = "q000000000001", model 
 }
 
 test_that("INFRA-28: the wire log writes redacted lines open-append-close", {
+  skip_on_cran()
   local_gptr_options(wire_log = TRUE)
   secret_register("sk-wire-test-0123456789abcdef", "GPTR_TEST_WIRE_KEY")
   tr = wire_tr(model = "sk-wire-test-0123456789abcdef")
@@ -428,6 +437,7 @@ test_that("wire metadata is redacted before JSON escaping and absent fields are 
 })
 
 test_that("wire writes close their connection when encoding fails", {
+  skip_on_cran()
   path = tempfile(fileext = ".jsonl")
   before = showConnections(all = TRUE)
   expect_error(wire_log_append(path, new.env()))

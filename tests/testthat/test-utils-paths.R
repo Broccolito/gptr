@@ -18,6 +18,7 @@ test_that("write_atomic() writes UTF-8 lines with LF, or raw bytes, and replaces
 })
 
 test_that("write_atomic() falls back to an in-place write when rename keeps failing (IC-51)", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   path = file.path(dir, "locked.txt")
   writeLines("old", path)
@@ -28,6 +29,7 @@ test_that("write_atomic() falls back to an in-place write when rename keeps fail
 })
 
 test_that("write_atomic() refuses the in-place write when the file changed meanwhile", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   path = file.path(dir, "busy.txt")
   writeLines("old", path)

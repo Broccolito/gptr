@@ -146,6 +146,7 @@ tool_texts = function(s) {
 }
 
 test_that("an inline child runs in an overlay of the caller's environment", {
+  skip_on_cran()
   local_fake_provider(list(fake_tool("r", code = "n = nrow(big)"), fake_text("five rows")))
   parent = local_parent()
   e = new.env()
@@ -187,6 +188,7 @@ test_that("children only tighten the mode they inherit", {
 })
 
 test_that("each inline child draws from its own RNG stream; the user's seed is kept (IC-61)", {
+  skip_on_cran()
   local_fake_provider(function(request) {
     if (length(request$last_results)) return(fake_text("ok"))
     fake_tool("r", code = "x = stats::runif(2)")
