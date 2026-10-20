@@ -1037,8 +1037,11 @@ test_that("a function passed by position to aggregate or reorder, or as ties or 
   lv = function(code) gptr_risk(code, envir = e, root = root)$level
   expect_identical(lv("aggregate('o.txt', list(1), file.create)"), 2L)
   expect_identical(lv("aggregate(len ~ supp, ToothGrowth, file.create)"), 2L)
+  expect_identical(lv("aggregate(len ~ supp, data = ToothGrowth, file.create)"), 2L)
+  expect_identical(lv("aggregate('o.txt', by = list(1), file.create)"), 2L)
   expect_identical(lv("aggregate(df, list(1), cleanup)"), 3L)
   expect_identical(lv("reorder(factor(c('a', 'b')), c('o1.txt', 'o2.txt'), file.create)"), 2L)
+  expect_identical(lv("reorder(factor('a'), X = 'o.txt', file.create)"), 2L)
   expect_identical(lv("approx(c(1, 1, 2), c(1, 2, 3), ties = file.create)"), 2L)
   expect_identical(lv("optim(1, sum, file.create)"), 2L)
   expect_identical(lv("tools::Rd2txt('none.Rd', out = 'keep.txt')"), 2L)
@@ -1046,6 +1049,8 @@ test_that("a function passed by position to aggregate or reorder, or as ties or 
   # neighbours: read-only functions, the console and inspecting a function stay level 0
   expect_identical(lv("aggregate(1, list(1), mean)"), 0L)
   expect_identical(lv("aggregate(len ~ supp, ToothGrowth, mean)"), 0L)
+  expect_identical(lv("aggregate(len ~ supp, data = ToothGrowth, mean)"), 0L)
+  expect_identical(lv("aggregate(1, by = list(1), mean)"), 0L)
   expect_identical(lv("reorder(factor('a'), 1, median)"), 0L)
   expect_identical(lv("approx(1:2, 1:2, ties = 'ordered')"), 0L)
   expect_identical(lv("tools::Rd2txt('x.Rd')"), 0L)

@@ -2106,12 +2106,13 @@ risk_bytes = function(b) {
 
 # ---- arguments and paths -------------------------------------------------------------------
 
-#' The arguments of call `e` by formal name, as R matches them when the function's namespace is
-#' loaded (attribute `formals`); else as written. An empty argument is NULL, in place.
+#' The arguments of call `e` by formal name, as R matches them to function `fn`, or to `fn` in
+#' namespace `pkg` when it is loaded (attribute `formals`); else as written. An empty argument is
+#' NULL, in place.
 #' @noRd
 risk_args = function(e, fn, pkg) {
   e[vapply(as.list(e), identical, NA, quote(expr = ))] = list(NULL)
-  f = if (!is.na(pkg) && isNamespaceLoaded(pkg)) {
+  f = if (is.function(fn)) fn else if (!is.na(pkg) && isNamespaceLoaded(pkg)) {
     get0(fn, envir = asNamespace(pkg), mode = "function")
   }
   if (is.primitive(f)) f = args(f)
@@ -2123,19 +2124,23 @@ risk_args = function(e, fn, pkg) {
 }
 
 #' The expression a call passes for formal `name` (its default when R matched the call and
-#' `default` is set); else its `pos`-th unnamed argument (through `...` for a generic R matched)
+#' `default` is set); for an unmatched call, else its `pos`-th unnamed argument
 #' @noRd
 risk_arg = function(a, name, pos = 0L, default = FALSE) {
   nms = names(a) %||% rep("", length(a))
   if (name %in% nms) return(a[[match(name, nms)]])
   fm = attr(a, "formals")
-  if (name %in% names(fm)) {
-    return(if (default && !identical(fm[[name]], quote(expr = ))) fm[[name]])
-  }
-  d = a[["..."]]
-  un = c(a[!nzchar(nms) | seq_along(a) < match("...", nms, 0L)],
-         d[!nzchar(names(d) %||% rep("", length(d)))])
+  if (!is.null(fm)) return(if (default && !identical(fm[[name]], quote(expr = ))) fm[[name]])
+  un = a[!nzchar(nms)]
   if (pos >= 1L && length(un) >= pos) un[[pos]]
+}
+
+#' The arguments of call `e` to S3 generic `fn` as each of its methods matches them
+#' @noRd
+risk_s3_args = function(e, fn) {
+  tryCatch(lapply(utils::.S3methods(fn), function(m) {
+    risk_args(e, utils::getS3method(fn, substring(m, nchar(fn) + 2L)))
+  }), condition = function(c) list())
 }
 
 #' The expressions a call may pass as its path argument: the matched one; for `...` rows, a
@@ -2366,7 +2371,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     row = risk_lookup(name, pkg)
     a = risk_args(e, name, row$package %||% (if (is.na(pkg)) "base" else pkg))
     reach(name, pkg, a, ctx, label)
-    slots(name, a, ctx)
+    slots(name, a, e, ctx)
     if (is.null(row)) return(add(ctx, label, name, 1L, "unlisted"))
     if (by_args(name, row, a, as.list(e)[-1L], ctx, label)) return(invisible())
     if (startsWith(row$note, "by reference") && name != ":=" && is.symbol(e[[2L]])) {
@@ -2433,14 +2438,17 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   }
 
   # Function slots: the functions a call calls.
-  slots = function(name, a, ctx) {
+  slots = function(name, a, e, ctx) {
     nms = names(a) %||% rep("", length(a))
     d = a[["..."]]
     vals = c(a[nms %in% risk_slot_names], d[names(d) %in% risk_slot_names])
     if (name %in% risk_handler_funs) vals = c(vals, d %||% a[nzchar(nms)])
     hof = risk_hof_args[[name]]
     if (!is.null(hof) && !hof[1L] %in% names(vals)) {
-      vals = c(vals, list(risk_arg(a, hof[1L], as.integer(hof[2L]))))
+      # a slot of a generic's methods (aggregate.formula's FUN), as each method matches the call
+      fm = names(attr(a, "formals"))
+      as = if (is.null(fm) || hof[1L] %in% fm) list(a) else risk_s3_args(e, name)
+      vals = c(vals, lapply(as, risk_arg, hof[1L], as.integer(hof[2L])))
     }
     for (v in vals) if (!is.null(v)) use_value(v, ctx, slot = TRUE)
   }
