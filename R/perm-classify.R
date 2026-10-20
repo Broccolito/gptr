@@ -341,6 +341,7 @@ risk_glob_match = function(g, names) {
 #' P01 guards one of its children
 #' @noRd
 risk_target = function(w, op, root, dirs = root) {
+  w = sub("^file://", "", w)
   w = sub("^\\$(HOME\\b|\\{HOME\\})", "~", w, perl = TRUE)
   if (tolower(w) %in% risk_null_paths) return(list(pc = "console", level = 0L, secret = FALSE))
   if (grepl("^/dev/(tcp|udp)/", w)) return(list(pc = "url", level = risk_op_level("url", op),

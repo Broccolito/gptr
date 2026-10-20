@@ -1047,3 +1047,14 @@ test_that("a function passed by position to aggregate or reorder, or as ties or 
   expect_identical(lv("args(write.csv)"), 0L)
   expect_identical(lv("environment(write.csv)"), 0L)
 })
+
+test_that("a file:// URL is classified as the local path R's file() opens", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("readLines('file:///etc/hosts')"), 1L)
+  expect_identical(lv("read.csv('file:///etc/hosts')"), 1L)
+  expect_identical(lv("writeLines('x', 'file:///etc/hosts')"), 3L)
+  # neighbours: a project file stays level 0, and R opens `FILE://` as a relative path
+  expect_identical(lv("readLines('file://data.csv')"), 0L)
+  expect_identical(lv("readLines('FILE:///etc/hosts')"), 0L)
+})
