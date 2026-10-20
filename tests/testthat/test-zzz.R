@@ -22,7 +22,7 @@ test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)"
   expect_identical(unname(d[["Package"]]), "gptr")
   expect_identical(unname(d[["Title"]]), "Language Model Agents Inside the Live 'R' Session")
   expect_identical(tools::toTitleCase(d[["Title"]]), unname(d[["Title"]]))
-  expect_identical(unname(d[["License"]]), "MIT + file LICENSE")
+  expect_identical(unname(d[["License"]]), "Apache License (== 2.0)")
   expect_identical(unname(d[["Copyright"]]), "file inst/COPYRIGHTS")
   expect_identical(
     trimws(strsplit(unname(d[["URL"]]), ",", fixed = TRUE)[[1L]]),

@@ -2230,7 +2230,7 @@ expand_skill_command <- function(text, skills) {
 if (sys.nframe() == 0L) {
   td <- file.path(tempdir(), "sk"); unlink(td, recursive = TRUE); dir.create(td)
   mk <- function(rel, txt) { p <- file.path(td, rel); dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE); writeLines(txt, p, useBytes = TRUE); p }
-  mk("proj/.gptr/skills/pdf-tools/SKILL.md", c("---", "name: pdf-tools", "description: Extract text & tables from <PDF> files. Use when reading PDFs.", "license: MIT", "metadata:", "  author: me", "  version: \"1.0\"", "---", "", "# PDF tools", "Read `references/formats.md`."))
+  mk("proj/.gptr/skills/pdf-tools/SKILL.md", c("---", "name: pdf-tools", "description: Extract text & tables from <PDF> files. Use when reading PDFs.", "license: Apache-2.0", "metadata:", "  author: me", "  version: \"1.0\"", "---", "", "# PDF tools", "Read `references/formats.md`."))
   mk("proj/.gptr/skills/pdf-tools/references/formats.md", "should not be treated as a skill")
   mk("proj/.gptr/skills/standalone.md", c("---", "name: standalone", "description: A standalone markdown skill", "---", "body"))
   mk("proj/.gptr/skills/README.md", "# no frontmatter: ignored")
@@ -3799,7 +3799,7 @@ dir.create(file.path(pkg, "inst/gptr/skills/demo-skill"), recursive = TRUE)
 dir.create(file.path(pkg, "inst/gptr/extensions"), recursive = TRUE)
 dir.create(file.path(pkg, "inst/gptr/prompts"), recursive = TRUE)
 dir.create(file.path(pkg, "R"))
-writeLines(c("Package: gptrdemo", "Title: Demo gptr Plugin", "Version: 0.0.1", "Description: Demo.", "License: MIT",
+writeLines(c("Package: gptrdemo", "Title: Demo gptr Plugin", "Version: 0.0.1", "Description: Demo.", "License: Apache License (== 2.0)",
              "Config/gptr/plugin: true", "Encoding: UTF-8"), file.path(pkg, "DESCRIPTION"))
 writeLines("export(gptr_extension)", file.path(pkg, "NAMESPACE"))
 writeLines(c("gptr_extension <- function(gptr) {", "  gptr$register_command('hello', description = 'Say hi', handler = function(args, ctx) ctx$ui$notify(paste('hi', args)))", "  invisible(NULL)", "}"), file.path(pkg, "R/ext.R"))

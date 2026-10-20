@@ -5,7 +5,7 @@ site_fixture = function() {
     dir.create(file.path(root, dir), mode = "0700")
   }
   dir.create(file.path(root, "inst", "gptr", "agents"), recursive = TRUE, mode = "0700")
-  text = c("DESCRIPTION", "NAMESPACE", "README.md", "NEWS.md", "LICENSE", "LICENSE.md",
+  text = c("DESCRIPTION", "NAMESPACE", "README.md", "NEWS.md", "LICENSE.md",
            "_pkgdown.yml", "R/public.R", "man/public.Rd", "inst/public.txt",
            "vignettes/public.Rmd", "pkgdown/extra.css", "inst/gptr/agents/reviewer.md")
   for (path in text) writeLines(paste("public bytes", path), file.path(root, path))

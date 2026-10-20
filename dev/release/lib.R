@@ -850,7 +850,7 @@ site_stage = function(root, dest) {
       list(files = rel, dirs = character())
     }
   }
-  public = c("DESCRIPTION", "NAMESPACE", "README.md", "NEWS.md", "LICENSE", "LICENSE.md",
+  public = c("DESCRIPTION", "NAMESPACE", "README.md", "NEWS.md", "LICENSE.md",
              "_pkgdown.yml", dirs)
   public = public[file.exists(file.path(root, public))]
   if (any(file.info(file.path(root, setdiff(public, dirs)))$isdir)) {

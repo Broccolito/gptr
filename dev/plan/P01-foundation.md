@@ -22,7 +22,7 @@
 
 `dev/plan/00-conventions.md` applies in full (house style `=` and `|>`, ASCII-only R sources, `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()`, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`). Plan-specific requirements, with the exact values of the spec:
 
-- DESCRIPTION (05 P01, IC-72): `Package: gptr`; `Version: 0.99.0.9000`; `Title: Language Model Agents Inside the Live 'R' Session`; `Depends: R (>= 4.2.0)`; `License: MIT + file LICENSE` (year 2026 in `LICENSE`, full text in `LICENSE.md`); `Copyright: file inst/COPYRIGHTS`; `URL: https://github.com/Broccolito/gptr`; `BugReports: https://github.com/Broccolito/gptr/issues`; `Language: en-US`; `Encoding: UTF-8`; `Config/testthat/edition: 3`; `Roxygen: list(markdown = TRUE)`; `NeedsCompilation: no`; no `VignetteBuilder` (P25 adds it) and no `Collate` field (IC-32).
+- DESCRIPTION (05 P01, IC-72): `Package: gptr`; `Version: 0.99.0.9000`; `Title: Language Model Agents Inside the Live 'R' Session`; `Depends: R (>= 4.2.0)`; `License: Apache License (== 2.0)` (no `LICENSE` file; full text in `LICENSE.md`); `Copyright: file inst/COPYRIGHTS`; `URL: https://github.com/Broccolito/gptr`; `BugReports: https://github.com/Broccolito/gptr/issues`; `Language: en-US`; `Encoding: UTF-8`; `Config/testthat/edition: 3`; `Roxygen: list(markdown = TRUE)`; `NeedsCompilation: no`; no `VignetteBuilder` (P25 adds it) and no `Collate` field (IC-32).
 - `Authors@R`: the maintainer `person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"), comment = c(ORCID = "0000-0002-7342-7000"))` plus `person("Mario", "Zechner", role = c("ctb", "cph"), comment = "Author of 'pi' (MIT), from which tool texts and templates are derived")`.
 - Imports (final, written once; no later plan adds one): jsonlite, curl, processx, callr, rlang, cli, yaml, ps, methods, stats, tools, utils, grDevices, graphics. Suggests: testthat (>= 3.2.0), withr, knitr, rmarkdown, later, httpuv, openssl, shiny, bslib, chromote, ragg, rstudioapi, reticulate, DBI, duckdb, RSQLite, data.table, vctrs, stringi, magick, keyring, codetools. Never: httr2, R6, S7, evaluate, digest, glue, promises, coro, mirai, fs, magrittr or any R LLM package.
 - `.lintr`: `assignment_linter(operator = c("=", "<<-"))`, `indentation_linter = NULL` (conventions §4: aligned hanging indents are allowed; the two-space block indent still applies), `line_length_linter(100)`, `object_name_linter(styles = "snake_case", regexes = c(s3 = "^(\\.DollarNames|knit_print|vec_[a-z0-9_]+)\\.[a-z0-9_]+$"))`; every other default linter stays on; `exclusions: list("tests/testthat/fixtures/docs")` (the P15 document fixtures of 04 §12.4 carry CRLF, BOM and missing final newlines on purpose).
@@ -49,7 +49,7 @@
 | File | Responsibility | Task |
 |---|---|---|
 | `DESCRIPTION` | package metadata, final Imports and Suggests (rewritten) | 1 |
-| `LICENSE`, `LICENSE.md` | MIT licence stub (year 2026) and full text | 1 |
+| `LICENSE`, `LICENSE.md` | `LICENSE` deleted (a standard license takes no license file); Apache License 2.0 full text in `LICENSE.md` | 1 |
 | `.Rbuildignore`, `.gitignore` | build and VCS exclusions | 1 |
 | `.lintr` | lintr configuration of conventions §4 | 1 |
 | `.Rprofile` | deleted (it sources a missing `renv/activate.R`) | 1 |
@@ -108,7 +108,7 @@ Tasks ("Create `f`" means write a new file with exactly the block shown; "Append
 
 ### Task 1: Package skeleton, metadata and the test environment
 
-**Files:** Create: `.lintr`, `dev/style.R`, `inst/COPYRIGHTS`; Modify: `DESCRIPTION`, `LICENSE`, `LICENSE.md`, `.Rbuildignore`, `.gitignore`; Delete: `.Rprofile` (and commit the deletion of the old API files); Test: `tests/testthat.R`, `tests/testthat/setup.R`, `tests/testthat/test-zzz.R` (create).
+**Files:** Create: `.lintr`, `dev/style.R`, `inst/COPYRIGHTS`; Modify: `DESCRIPTION`, `LICENSE.md`, `.Rbuildignore`, `.gitignore`; Delete: `LICENSE`, `.Rprofile` (and commit the deletion of the old API files); Test: `tests/testthat.R`, `tests/testthat/setup.R`, `tests/testthat/test-zzz.R` (create).
 
 Rewrite the package metadata once, with the final dependency lists, and install the test environment every later test runs in. The old API files (`R/get_response.R`, `R/dataframe_to_text.R` and their `man/` pages) are already deleted in the working tree (S-7); this task commits their removal. `man/img/logo.png` stays. The DESCRIPTION text is report 13 section 3.1(a) (validated by `R CMD check --as-cran` there) with the IC-72 fields and the final Imports/Suggests of architecture section 9.
 
@@ -209,7 +209,7 @@ test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)"
   expect_identical(unname(d[["Package"]]), "gptr")
   expect_identical(unname(d[["Title"]]), "Language Model Agents Inside the Live 'R' Session")
   expect_identical(tools::toTitleCase(d[["Title"]]), unname(d[["Title"]]))
-  expect_identical(unname(d[["License"]]), "MIT + file LICENSE")
+  expect_identical(unname(d[["License"]]), "Apache License (== 2.0)")
   expect_identical(unname(d[["Copyright"]]), "file inst/COPYRIGHTS")
   expect_identical(unname(d[["URL"]]), "https://github.com/Broccolito/gptr")
   expect_identical(unname(d[["BugReports"]]), "https://github.com/Broccolito/gptr/issues")
@@ -343,7 +343,7 @@ Description: Runs large language model agents inside the running 'R'
     'R Markdown', 'Quarto' or 'Jupyter' documents that can be re-run.
     Writing files and evaluating model-generated code require the user's
     permission by default.
-License: MIT + file LICENSE
+License: Apache License (== 2.0)
 URL: https://github.com/Broccolito/gptr
 BugReports: https://github.com/Broccolito/gptr/issues
 Depends:
@@ -398,38 +398,10 @@ SystemRequirements: Optional external programs: 'claude' (Claude Code)
     documents, and a 'Chrome'-family browser for app screenshots.
 ```
 
-Replace the contents of `LICENSE`:
-
-```text
-YEAR: 2026
-COPYRIGHT HOLDER: Wanjun Gu
-```
-
-Replace the contents of `LICENSE.md`:
-
-```text
-# MIT License
-
-Copyright (c) 2026 Wanjun Gu
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
+Delete `LICENSE` (Step 3 removes it): `Apache License (== 2.0)` is a standard license, so the package has no
+license file. Replace the contents of `LICENSE.md` with the full Apache License 2.0 text in the Markdown form
+that `usethis::use_apache_license(version = 2, include_future = FALSE)` writes
+(https://www.apache.org/licenses/LICENSE-2.0).
 
 Replace the contents of `.Rbuildignore`:
 
@@ -520,7 +492,8 @@ Create `inst/COPYRIGHTS`:
 gptr copyright and third-party notices
 ======================================
 
-gptr is Copyright (c) 2026 Wanjun Gu and is released under the MIT license (see LICENSE).
+gptr is Copyright (c) 2026 Wanjun Gu and is licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0).
 
 gptr contains material derived from the following MIT-licensed works. Their copyright notices
 and the MIT permission notice are reproduced below as that license requires.
@@ -584,7 +557,7 @@ session. No code from these packages is included.
 ```
 
 ```bash
-git rm -q --ignore-unmatch .Rprofile
+git rm -q --ignore-unmatch .Rprofile LICENSE
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -599,7 +572,7 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 42 ]`.
 
 ```bash
 git rm -q --cached --ignore-unmatch R/dataframe_to_text.R R/get_response.R man/dataframe_to_text.Rd man/get_response.Rd
-git add tests/testthat.R tests/testthat/setup.R DESCRIPTION LICENSE LICENSE.md .Rbuildignore .gitignore .lintr dev/style.R inst/COPYRIGHTS tests/testthat/test-zzz.R NAMESPACE
+git add tests/testthat.R tests/testthat/setup.R DESCRIPTION LICENSE.md .Rbuildignore .gitignore .lintr dev/style.R inst/COPYRIGHTS tests/testthat/test-zzz.R NAMESPACE
 git commit -m "chore(pkg): rewrite the package skeleton, metadata and test environment for gptr 1.0"
 ```
 
@@ -8937,7 +8910,7 @@ Note on A3: lintr's `object_usage_linter` resolves internal functions through `g
 
 | 05 P01 scope item or owned file | Task |
 |---|---|
-| DESCRIPTION rewrite (Package, Version, Title, Description per report 13 §3.1, `Authors@R` with `cph` and Mario Zechner, `Copyright`, `URL`, `BugReports`, `Language`, `License` + `LICENSE`/`LICENSE.md` 2026, `Depends: R (>= 4.2.0)`, final Imports incl. `ps`, Suggests, `SystemRequirements`, `Config/testthat/edition: 3`, `Encoding`, `Roxygen`; no `VignetteBuilder` until P25 adds `knitr` with the vignettes, IC-72) | 1 |
+| DESCRIPTION rewrite (Package, Version, Title, Description per report 13 §3.1, `Authors@R` with `cph` and Mario Zechner, `Copyright`, `URL`, `BugReports`, `Language`, `License: Apache License (== 2.0)` + `LICENSE.md` full text (no `LICENSE`), `Depends: R (>= 4.2.0)`, final Imports incl. `ps`, Suggests, `SystemRequirements`, `Config/testthat/edition: 3`, `Encoding`, `Roxygen`; no `VignetteBuilder` until P25 adds `knitr` with the vignettes, IC-72) | 1 |
 | delete `.Rprofile`; keep `man/img/`; old API files gone (S-7) | 1 |
 | `.lintr`, `.Rbuildignore` (all 13 required entries plus Rproj entries), `.gitignore`, `dev/style.R` | 1 |
 | `.github/workflows/R-CMD-check.yaml` (check-standard matrix, oldrel-4, no-suggests, `LC_ALL=C`, copy-safety on release and devel, connections-left-open, bench) | 21 |

@@ -114,7 +114,7 @@ ls(work)
 
 session |> peter("Reuse fit to predict mpg for the same cars.")
 #> The predictions are stored in predicted.
-#> idle . fake/fake-1 . 2 turns . 6.9k tokens . $0.0000 . s782cbc40a3
+#> idle . fake/fake-1 . 2 turns . 6.9k tokens . $0.0000 . s1dd819336e
 head(work$predicted)
 #>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
 #>          23.28261          21.91977          24.88595          20.10265
@@ -247,6 +247,11 @@ gptr 1.0.0 is a complete rewrite. `get_response()` and
 `dataframe_to_text()` were removed: use `peter("your prompt")$text`
 instead of `get_response()`, and pass a data frame to `peter()` as
 context instead of converting it to text. See `NEWS.md`.
+
+## License
+
+gptr is licensed under the Apache License 2.0. Third-party notices are
+in `inst/COPYRIGHTS`.
 
 ## Acknowledgments
 

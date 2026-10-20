@@ -1121,7 +1121,7 @@ Claude Code equivalent (report 07 verified the "sdk" variant live). An HTTP entr
 ---
 name: r-plot
 description: Make publication-quality ggplot2 figures from objects in the live R session. Use when the user asks for a plot.
-license: MIT
+license: Apache-2.0
 compatibility: Requires R >= 4.1 and ggplot2
 metadata:
   author: gptr
@@ -1186,7 +1186,7 @@ Limits:
  "description":"Deployment commands, a review agent, and a status monitor",
  "author":{"name":"Example Team","email":"dev@example.com","url":"https://example.com"},
  "homepage":"https://example.com/docs/deploy-tools","repository":"https://github.com/example/deploy-tools",
- "license":"MIT","keywords":["deployment","ci"],"defaultEnabled":true,"dependencies":["secrets-vault"],
+ "license":"Apache-2.0","keywords":["deployment","ci"],"defaultEnabled":true,"dependencies":["secrets-vault"],
  "skills":["./extra-skills/"],
  "commands":{"status":{"source":"./commands/status.md","description":"Show the current deployment status"}},
  "agents":["./agents/reviewer.md"],"hooks":"./config/extra-hooks.json",

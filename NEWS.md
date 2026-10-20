@@ -19,6 +19,8 @@ works on the objects already in memory.
 * Providers and models are chosen with the `model` argument or with `gptr_config()`.
 * 'RCurl' is no longer used; HTTP is handled by 'curl'.
 * R 4.2.0 or later is required.
+* gptr is now licensed under the Apache License 2.0; gptr 0.7.0 was MIT-licensed. Third-party
+  notices are in `inst/COPYRIGHTS`.
 
 ## New features
 

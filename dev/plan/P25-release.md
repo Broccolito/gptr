@@ -1771,7 +1771,7 @@ toy_package = function(examples) {
   writeLines(c("Package: toyex", "Title: Toy Package for the Example Runner", "Version: 0.0.1",
                "Authors@R: person(\"A\", \"B\", email = \"a@b.org\", role = c(\"aut\", \"cre\"))",
                "Description: A toy package used by the gptr release self-tests.",
-               "License: MIT", "Encoding: UTF-8"),
+               "License: Apache License (== 2.0)", "Encoding: UTF-8"),
              file.path(root, "DESCRIPTION"))
   writeLines("export(f)", file.path(root, "NAMESPACE"))
   writeLines("f = function(x) x", file.path(root, "R", "f.R"))
@@ -2068,7 +2068,7 @@ toy_vignette_package = function(vignette_code) {
   writeLines(c("Package: toyvig", "Title: Toy Package for the Vignette Runner", "Version: 0.0.1",
                "Authors@R: person(\"A\", \"B\", email = \"a@b.org\", role = c(\"aut\", \"cre\"))",
                "Description: A toy package used by the gptr release self-tests.",
-               "License: MIT", "Encoding: UTF-8"),
+               "License: Apache License (== 2.0)", "Encoding: UTF-8"),
              file.path(root, "DESCRIPTION"))
   writeLines("export(twice)", file.path(root, "NAMESPACE"))
   writeLines("twice = function(x) 2 * x", file.path(root, "R", "twice.R"))
@@ -3756,7 +3756,7 @@ not affiliated with or endorsed by them.
 
 ## License
 
-MIT (c) Wanjun Gu.
+Apache License 2.0 (c) Wanjun Gu.
 ````
 
 Render it:

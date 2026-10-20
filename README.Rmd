@@ -211,6 +211,10 @@ gptr 1.0.0 is a complete rewrite. `get_response()` and `dataframe_to_text()` wer
 use `peter("your prompt")$text` instead of `get_response()`, and pass a data frame to `peter()`
 as context instead of converting it to text. See `NEWS.md`.
 
+## License
+
+gptr is licensed under the Apache License 2.0. Third-party notices are in `inst/COPYRIGHTS`.
+
 ## Acknowledgments
 
 gptr was inspired by Mario Zechner's 'pi' coding agent; its tool descriptions, edit semantics

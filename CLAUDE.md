@@ -27,6 +27,8 @@ overrides its body.
   the console), and its member namespace is `peter$...`. Other exports keep the `gptr_` prefix.
   `dev/research`, `dev/spec/proposals`, `dev/progress` and DEVIATIONS predate D-135; there
   `gptr()`/`gptr$` mean `peter()`/`peter$`.
+- **License.** gptr is licensed under the Apache License 2.0 (D-237). In `dev/progress` and in
+  notes about gptr 0.7.0, "MIT" describes the old license; third-party notices stay in `inst/COPYRIGHTS`.
   The name honours Peter Wason (System 1 / System 2 reasoning) and Peter Naur (Backus-Naur form;
   sessions recorded as runnable documents); keep that rationale in the README and `?peter`.
 - R style: assign with `=`, never `<-`; pipe with `|>`, never `%>%`. `.lintr` (created by P01 Task 1) enforces it.

@@ -47,7 +47,7 @@ def fixture(count=120):
             (folder / "source/R").mkdir(parents=True)
             records = []
             members = {"gptr/DESCRIPTION": b"Package: gptr\nVersion: 1.0.0\nImports: processx\n",
-                       "gptr/NAMESPACE": b"export(peter)\n", "gptr/LICENSE": b"YEAR: 2026\n"}
+                       "gptr/NAMESPACE": b"export(peter)\n"}
             for index in range(count):
                 name = "proc-rscript.R" if index == count - 1 else f"source-{index:03d}.R"
                 path = "R/" + name
