@@ -133,14 +133,14 @@ than assuming every object is a fully resident data frame.
 
 ``` r
 session$id
-#> [1] "sbdb467af0b"
+#> [1] "s4f8e6d2e7c"
 session$model
 #> [1] "fake/fake-1"
 session$turns
 #> [1] 1
 gptr_usage(session)
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 sbdb467af0b  2         3343   20      0           0            0
+#> 1 s4f8e6d2e7c  2         3343   20      0           0            0
 #>
 #> # 1 row
 #> 2 requests, 3.3k tokens in, $0.0000
@@ -169,7 +169,7 @@ session$history
 #> 3 1     tool_result  + fit <lm length 12>      r      5
 #> 4 1     assistant    The regression is ready.         1680
 #> # 4 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.4k tokens . $0.0000 . sbdb467af0b
+#> idle . fake/fake-1 . 1 turn . 3.4k tokens . $0.0000 . s4f8e6d2e7c
 as.data.frame(session$history)
 #>   turn        role                          preview tools tokens
 #> 1    1        user Fit fuel economy against weight.            8
