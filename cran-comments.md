@@ -70,7 +70,7 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   blanks provider key variables and sets replay mode. With `NOT_CRAN` unset that directory is
   under `tempdir()`, tests that start a local server (a mock provider, an MCP server or a Shiny
   app) or gptr worker processes are skipped, and the suite needs no network; it takes about 2.5
-  minutes (`Running 'testthat.R' [136s/149s]` in the local check). Live provider tests run only
+  minutes (`Running 'testthat.R' [134s/148s]` in the local check). Live provider tests run only
   when `GPTR_LIVE_TESTS` is `"true"`.
 * The 14 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
