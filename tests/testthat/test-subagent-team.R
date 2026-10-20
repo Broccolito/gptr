@@ -512,6 +512,8 @@ test_that("a fan-out with context = \"none\" is refused before any child starts"
   b = list(A = 1:3, B = letters)
   expect_error(peter("p", b, parallel = 2, .opts = list(context = "none")),
                "context = \"names\"", fixed = TRUE, class = "gptr_error_invalid_argument")
+  local_gptr_options(context = "none")
+  expect_error(peter("p", b, parallel = 2), class = "gptr_error_invalid_argument")
   expect_length(fake_requests(fake), 0L)
 })
 

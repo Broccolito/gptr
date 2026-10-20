@@ -22,9 +22,9 @@ contain data values. Native typed decision inputs use the separate encoding desc
 dimensions, column names and types and a few values); a small object can appear in full.
 \item Automatic context: a short listing of the objects in the evaluation environment (names,
 classes and sizes); the objects you added, changed or removed and the top-level R
-expressions you ran since the previous prompt; the R version, platform and available
-packages; and the project instruction files (\code{AGENTS.md}, \code{CLAUDE.md},
-\code{.gptr/vignette.Rmd}).
+expressions you ran since the previous prompt (in the console, with their printed output);
+the R version, platform and available packages; and the project instruction files
+(\code{AGENTS.md}, \code{CLAUDE.md}, \code{.gptr/vignette.Rmd}).
 \item Tool results: the printed output of R code the model ran, the parts of files it read, and
 images of plots it made. In \code{manual} mode every action that is not known to be read-only
 needs your approval before its result can be sent.
@@ -52,7 +52,7 @@ inspect a proposed workflow before allowing changes to your workspace.
 \section{Acknowledgment}{
 
 The first time you use a provider (or a command-line route such as \code{claude_code} or \code{codex})
-in an interactive session, gptr shows what automatic context is sent and records your
+in an interactive session, gptr shows what is sent and records your
 acknowledgment in your user settings. A non-interactive run with a provider that was never
 acknowledged stops with a \code{gptr_error_egress} condition. Record the acknowledgment once with
 \code{gptr_config(egress = list(anthropic = "ack"), .scope = "user")} (this replaces the stored

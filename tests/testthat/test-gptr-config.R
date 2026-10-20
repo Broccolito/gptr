@@ -848,8 +848,11 @@ test_that("the egress question asked inside a run names the sub-agent and its mo
   }
   q = asked(egress_check("corp", asker = "corp/corp-1"))
   expect_match(q, "^gptr sends your prompts to corp together with automatic context: ")
-  # <workspace_changes> carries the user's own expressions, so the question names them
-  expect_match(q, "the R expressions you ran since the previous prompt", fixed = TRUE)
+  # <workspace_changes> carries the user's own expressions, a console note their printed output
+  # and a System 1 request its inputs, so the question names them
+  expect_match(q, "the R expressions you ran since the previous prompt (in the console, with",
+               fixed = TRUE)
+  expect_match(q, "the inputs of System 1 questions", fixed = TRUE)
   run = fake_run()
   run$opts = list(safety = list(can_prompt = TRUE))
   local_mocked_bindings(run_current = function() run)

@@ -686,8 +686,9 @@ gateway_guards = function(call, s, safety, m = NULL) {
   if (is.null(m) && startsWith(d$model, "router:")) return(invisible(TRUE))
   pid = m$provider %||% gateway_provider_id(d$model)
   pr = gateway_provider(s, pid)
-  context = call$args$opts$context %||% setting_get("context", default = "summary")
-  if (!identical(context, "none")) egress_check(pid, pr, safety, asker = m$ref %||% d$model)
+  if (!identical(context_mode(call$args$opts), "none")) {
+    egress_check(pid, pr, safety, asker = m$ref %||% d$model)
+  }
   replay_guard(pr %||% m %||% d$model, mode = replay_mode(call$args$replay))
 }
 
