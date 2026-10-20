@@ -1087,3 +1087,13 @@ test_that("md5sum, dir.exists, file.access and file_test are classified by their
   expect_identical(lv("file.access('R', 4)"), 0L)
   expect_identical(lv("utils::file_test('-f', 'R/x.R')"), 0L)
 })
+
+test_that("the directory git -C names is read", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("system('git -C /etc log')"), 1L)
+  expect_identical(lv("system2('git', c('-C', '/etc', 'log'))"), 1L)
+  # neighbours: git run in the project stays level 0
+  expect_identical(lv("system('git -C . log')"), 0L)
+  expect_identical(lv("system('git status')"), 0L)
+})

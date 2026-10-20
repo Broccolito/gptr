@@ -1095,7 +1095,11 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       }
       dir = if (a[1L] %in% c("-C", "--work-tree", "--git-dir") && k == 2L) a[2L] else
         sub("^--(work-tree|git-dir)=?", "", a[1L])[grepl("^--(work-tree|git-dir)=.", a[1L])]
-      if (length(dir)) dirs = unique(c(dirs, if (is_abs_path(dir)) dir else file.path(root, dir)))
+      if (length(dir)) {
+        tg = risk_target(dir, "read", root, dirs)
+        if (tg$level > 0L) add(tg$level, if (tg$secret) "secret" else "read", dir, tg$pc)
+        dirs = unique(c(dirs, if (is_abs_path(dir)) dir else file.path(root, dir)))
+      }
       if (k == 2L) tail(sub("^[^=]*=", "", a[2L]))
       a = a[-seq_len(k)]
       da = da[-seq_len(k)]
