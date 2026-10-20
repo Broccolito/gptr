@@ -246,7 +246,8 @@ risk_guard_children = c("settings.json", "config", "hooks", "Makevars", "x")
 #' @noRd
 risk_op_level = function(pc, op) {
   switch(op,
-         read = switch(pc, url = , protected = 2L, outside = , critical = 1L, 0L),
+         read = switch(pc, url = , protected = 2L, outside = , critical = , unknown = ,
+                       wildcard = 1L, 0L),
          delete = switch(pc, critical = , control = , protected = , outside = 4L, temp = 1L,
                          console = 0L, 3L),
          switch(pc, critical = , control = 4L, workspace = 2L, temp = 1L, console = 0L, 3L))
@@ -714,6 +715,7 @@ risk_sh_tokens = function(cmd) {
   qd = FALSE
   q = ""
   piece = ""
+  bg = FALSE
   i = 1L
   n = length(ch)
   mark = function(x) if (!grepl(x, d, fixed = TRUE)) d <<- paste0(d, x)
@@ -785,7 +787,9 @@ risk_sh_tokens = function(cmd) {
       i = i + 1L
     } else if (identical(c1, "|")) {
       op("|")
+      if (identical(c2, "&")) i = i + 1L
     } else if (identical(c1, "&") && !identical(c2, ">")) {
+      bg = TRUE
       op(";")
     } else if (c1 %in% c(">", "<") || (c1 %in% c("1", "2", "&") && identical(c2, ">") && !has)) {
       if (grepl("^([0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})\\z", cur, perl = TRUE) && !nzchar(d)) {
@@ -820,7 +824,8 @@ risk_sh_tokens = function(cmd) {
   }
   if (nzchar(q)) hidden = c(hidden, piece)
   push()
-  structure(out, dyn = dyn, quoted = quo, hidden = hidden)
+  # `bg`: a lone `&` (not `&&`, `&>`, `>&` or `|&`) runs the command before it in the background
+  structure(out, dyn = dyn, quoted = quo, hidden = hidden, bg = bg)
 }
 
 #' Split tokens into simple commands (words, dyn, quoted, piped_in, pipe_from: the words of
@@ -1477,6 +1482,7 @@ risk_cmd_line = function(cmd, root, scan = FALSE) {
       }
     }
   }
+  if (attr(tok, "bg")) f = risk_flags_bind(f, risk_flags_row(trimws(cmd), "&", 2L, "process"))
   structure(f, hidden = hidden)
 }
 
@@ -1540,7 +1546,8 @@ risk_literal_rows = function(lits, f, fn, root, call, write = TRUE) {
   op = if (any(f$category == "file_delete")) "delete" else "write"
   for (t in lits) {
     rd = risk_target(t, "read", root)
-    if (rd$level > 0L && !rd$secret) {
+    # a string literal expands no `$`, `%` or backquote, so it is never a computed path
+    if (rd$level > 0L && !rd$secret && rd$pc != "unknown") {
       f = risk_flags_bind(f, risk_flags_row(call, fn, rd$level,
                                             if (identical(rd$pc, "url")) "network" else "read",
                                             t, rd$pc))
@@ -2150,9 +2157,9 @@ risk_fold = function(x, known = NULL) {
     dir = risk_fold(risk_arg(risk_args(x, fn, "base"), "tmpdir", 2L, default = TRUE), known)
     return(if (!is.null(dir)) file.path(dir, "file"))
   }
-  if (fn %in% c("path.expand", "normalizePath")) {
-    return(risk_fold(risk_arg(risk_args(x, fn, "base"), "path", 1L), known))
-  }
+  arg = switch(fn, path.expand = , normalizePath = "path",
+               file = , gzfile = , bzfile = , xzfile = "description")
+  if (!is.null(arg)) return(risk_fold(risk_arg(risk_args(x, fn, "base"), arg, 1L), known))
   if (!fn %in% c("c", "file.path", "paste0", "paste")) return()
   sep = a$sep %||% " "
   a$sep = NULL
@@ -2359,19 +2366,23 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     lk = risk_lookups[[name]]
     if (!is.null(lk) && literal_fun(risk_arg(a, lk[1L], as.integer(lk[2L])))) return(invisible())
     if (!nzchar(row$path_arg)) return(add(ctx, label, name, row$level, row$category))
-    # the worst path the call may pass
+    add_path(risk_path_exprs(a, row$path_arg), row$category, row$level, ctx, label, name)
+  }
+
+  # The worst of the paths `ps` a call of `category` at `level` may read, write or delete.
+  add_path = function(ps, category, level, ctx, label, name) {
     best = list(level = -1L)
-    for (p in risk_path_exprs(a, row$path_arg)) {
+    for (p in ps) {
       v = risk_fold(p, kn(ctx))
       w = v[nzchar(v)]
-      cls = vapply(w, risk_path_cls, character(1), row$category, root)
+      cls = vapply(w, risk_path_cls, character(1), category, root)
       pc = if (is.null(v)) "unknown" else if (!length(w)) "console" else risk_cmd_worst(cls)
-      lv = risk_path_level(row$category, row$level, pc)
+      lv = risk_path_level(category, level, pc)
       # T1: a read of a secret file is 3
-      sec = row$category == "read" &&
+      sec = category == "read" &&
         any(vapply(w, function(x) risk_target(x, "read", root)$secret, logical(1)))
       if (sec) lv = max(lv, 3L)
-      if (!is.null(v) && row$category %in% c("file_write", "file_delete", "network")) {
+      if (!is.null(v) && category %in% c("file_write", "file_delete", "network")) {
         add_tg("files", w)
       }
       if (lv > best$level) {
@@ -2379,10 +2390,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
         best = list(level = lv, path = path, pc = pc, sec = sec)
       }
     }
-    if (best$level < 0L) best = list(level = row$level, path = NA_character_, pc = NA_character_)
-    ctl = identical(best$pc, "control") && !row$category %in% c("read", "file_delete")
+    if (best$level < 0L) best = list(level = level, path = NA_character_, pc = NA_character_)
+    ctl = identical(best$pc, "control") && !category %in% c("read", "file_delete")
     add(ctx, label, name, best$level, if (isTRUE(best$sec)) "secret" else
-      if (ctl) "control" else row$category,
+      if (ctl) "control" else category,
         best$path, best$pc)
   }
 
@@ -2428,6 +2439,18 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   by_args = function(name, row, a, w, ctx, label) {
     nms = names(w) %||% rep("", length(w))
     lit = vapply(w, is.character, logical(1))
+    if (row$category == "process") {
+      # a process left running (wait = FALSE), and the files its stdout and stderr go to
+      wait = risk_arg(a, "wait")
+      if (!is.null(wait) && !isTRUE(wait)) {
+        add(ctx, paste0(label, " (in the background)"), name, 2L, "process")
+      }
+      for (x in list(risk_arg(a, "stdout"), risk_arg(a, "stderr"))) {
+        if (!is.null(x) && !is.logical(x) && !identical(x, "|") && !identical(x, "2>&1")) {
+          add_path(list(x), "file_write", 2L, ctx, label, name)
+        }
+      }
+    }
     code = risk_code_args[[name]]
     if (!is.null(code) && (name != "run" || row$package == "processx")) {
       if (row$category == "process") add_tg("process", name)
