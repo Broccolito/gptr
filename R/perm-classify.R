@@ -715,6 +715,7 @@ risk_sh_tokens = function(cmd) {
   qd = FALSE
   q = ""
   piece = ""
+  bg = FALSE
   i = 1L
   n = length(ch)
   mark = function(x) if (!grepl(x, d, fixed = TRUE)) d <<- paste0(d, x)
@@ -786,7 +787,9 @@ risk_sh_tokens = function(cmd) {
       i = i + 1L
     } else if (identical(c1, "|")) {
       op("|")
+      if (identical(c2, "&")) i = i + 1L
     } else if (identical(c1, "&") && !identical(c2, ">")) {
+      bg = TRUE
       op(";")
     } else if (c1 %in% c(">", "<") || (c1 %in% c("1", "2", "&") && identical(c2, ">") && !has)) {
       if (grepl("^([0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})\\z", cur, perl = TRUE) && !nzchar(d)) {
@@ -821,7 +824,8 @@ risk_sh_tokens = function(cmd) {
   }
   if (nzchar(q)) hidden = c(hidden, piece)
   push()
-  structure(out, dyn = dyn, quoted = quo, hidden = hidden)
+  # `bg`: a lone `&` (not `&&`, `&>`, `>&` or `|&`) runs the command before it in the background
+  structure(out, dyn = dyn, quoted = quo, hidden = hidden, bg = bg)
 }
 
 #' Split tokens into simple commands (words, dyn, quoted, piped_in, pipe_from: the words of
@@ -1478,6 +1482,7 @@ risk_cmd_line = function(cmd, root, scan = FALSE) {
       }
     }
   }
+  if (attr(tok, "bg")) f = risk_flags_bind(f, risk_flags_row(trimws(cmd), "&", 2L, "process"))
   structure(f, hidden = hidden)
 }
 
@@ -2435,7 +2440,11 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     nms = names(w) %||% rep("", length(w))
     lit = vapply(w, is.character, logical(1))
     if (row$category == "process") {
-      # the files a process's stdout and stderr go to
+      # a process left running (wait = FALSE), and the files its stdout and stderr go to
+      wait = risk_arg(a, "wait")
+      if (!is.null(wait) && !isTRUE(wait)) {
+        add(ctx, paste0(label, " (in the background)"), name, 2L, "process")
+      }
       for (x in list(risk_arg(a, "stdout"), risk_arg(a, "stderr"))) {
         if (!is.null(x) && !is.logical(x) && !identical(x, "|") && !identical(x, "2>&1")) {
           add_path(list(x), "file_write", 2L, ctx, label, name)

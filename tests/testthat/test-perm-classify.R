@@ -993,6 +993,24 @@ test_that("a process's stdout or stderr file is a write classified by its path",
   expect_identical(lv("processx::run('ls', stderr = '2>&1')"), 0L)
 })
 
+test_that("starting a background process is level 2 process", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("system('sleep 1 &')"), 2L)
+  expect_identical(lv("system('ls', wait = FALSE)"), 2L)
+  expect_identical(lv("system2('sleep', '1', wait = FALSE)"), 2L)
+  expect_identical(lv("peter$sh('ls &')"), 2L)
+  expect_identical(gptr_risk("system('ls & ls')", root = root)$categories, "process")
+  # neighbours: `&&`, `>&`, `|&`, a quoted `&` and a waited process keep their level
+  expect_identical(lv("system('ls')"), 0L)
+  expect_identical(lv("system('ls', wait = TRUE)"), 0L)
+  expect_identical(lv("system2('git', 'status')"), 0L)
+  expect_identical(lv("system('ls && pwd')"), 0L)
+  expect_identical(lv("system('ls 2>&1')"), 0L)
+  expect_identical(lv("system('ls |& cat')"), 0L)
+  expect_identical(lv("system(\"echo 'a & b'\")"), 0L)
+})
+
 test_that("a reading function passed as a value reads a path the code computes", {
   root = local_project()
   lv = function(code) gptr_risk(code, root = root)$level
