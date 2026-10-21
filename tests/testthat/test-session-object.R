@@ -35,6 +35,7 @@ test_that("session_new() validates its arguments with gptr_error_invalid_argumen
 })
 
 test_that("an adopted id is one file-name-safe string: no path segments, no `_` (IC-20)", {
+  skip_on_cran()
   local_store()
   expect_error(test_session(opts = list(id = 1)), class = "gptr_error_invalid_argument")
   expect_error(test_session(opts = list(id = "/../../../escaped")),
@@ -47,6 +48,7 @@ test_that("an adopted id is one file-name-safe string: no path segments, no `_` 
 })
 
 test_that("an id already live in this process is split brain", {
+  skip_on_cran()
   s = test_session()
   expect_error(test_session(opts = list(id = session_data(s)$id)), class = "gptr_error_split_brain")
 })
@@ -79,6 +81,7 @@ test_that("session_append() numbers, parents and time-stamps entries and moves t
 })
 
 test_that("a user message's turn is added to its entry-level gptr fields, never replacing them", {
+  skip_on_cran()
   s = test_session()
   d = session_data(s)
   d$turns = 2L
@@ -89,6 +92,7 @@ test_that("a user message's turn is added to its entry-level gptr fields, never 
 })
 
 test_that("entries_path() walks leaf to root; path_messages(), path_turn(), final_text() read it", {
+  skip_on_cran()
   s = test_session()
   d = session_data(s)
   d$turns = 1L
@@ -136,6 +140,7 @@ test_that("accessors read .d; names() and .DollarNames() list them; unknown memb
 })
 
 test_that("$<- and [[<- are refused (gptr_error_readonly)", {
+  skip_on_cran()
   s = test_session()
   expect_error({
     s$status = "x"
@@ -270,6 +275,7 @@ test_that("print preserves trailing newlines and displays invalid UTF-8 as inert
 })
 
 test_that("session footer and structure escape metadata before applying trusted styles", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80)
   session = answered_session()
   data = session_data(session)
@@ -298,6 +304,7 @@ test_that("session footer and structure escape metadata before applying trusted 
 })
 
 test_that("session display leaves actual error classes and explicit stderr routing intact", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80)
   session = answered_session()
   failure = tryCatch(gptr_abort("actual failure", "session_display_fixture"), error = identity)
@@ -320,6 +327,7 @@ test_that("session display leaves actual error classes and explicit stderr routi
 # ---------------------------------------------------------------- the value policy (03 section 5.1)
 
 test_that("a small bound value is copied, a large one held by name, an anonymous one boxed", {
+  skip_on_cran()
   home = new.env()
   home$small = 1:10
   home$big = as.numeric(1:3e5)
@@ -339,6 +347,7 @@ test_that("a small bound value is copied, a large one held by name, an anonymous
 })
 
 test_that("$value is the latest designated value; names are live views with a rebound notice", {
+  skip_on_cran()
   home = new.env()
   home$big = as.numeric(1:3e5)
   s = test_session(home = home)
@@ -397,6 +406,7 @@ test_that("a name is looked up in the home and its fork overlays, never in other
 })
 
 test_that("a value bound in a function frame that is not kept is boxed", {
+  skip_on_cran()
   s = test_session(home = new.env())
   f = function() {
     fit = list(coef = 1)
@@ -408,6 +418,7 @@ test_that("a value bound in a function frame that is not kept is boxed", {
 })
 
 test_that("held copies and boxes are trimmed to gptr.values_max_bytes, the latest kept", {
+  skip_on_cran()
   local_gptr_options(values_max_bytes = 5000)
   s = test_session()
   for (i in 1:5) session_value_set(s, paste0("v", i), rep(as.numeric(i), 500))
@@ -418,6 +429,7 @@ test_that("held copies and boxes are trimmed to gptr.values_max_bytes, the lates
 })
 
 test_that("session_value_get(turn =) returns the value of that turn or NULL", {
+  skip_on_cran()
   s = test_session()
   d = session_data(s)
   session_value_set(s, "a", "first")
@@ -608,6 +620,7 @@ test_that("a mid-run switch into or out of plan mode moves `r` into or out of a 
 })
 
 test_that("only a `mode` block of rank 3 or more speaks in the operator note (IC-52)", {
+  skip_on_cran()
   s = test_session()
   sid = session_data(s)$id
   fallback = "<mode name=\"edits\">\nThe permission mode is now edits.\n</mode>"
@@ -1107,6 +1120,7 @@ test_that("a block already seen adds no turn and no entry", {
 })
 
 test_that("value= designates the named object of the kept home under the value policy", {
+  skip_on_cran()
   home = new.env()
   home$qc = c(a = 1, b = 2)
   s = test_session(home = home)
@@ -1121,6 +1135,7 @@ test_that("value= designates the named object of the kept home under the value p
 })
 
 test_that("session_replay_apply() validates its arguments", {
+  skip_on_cran()
   s = test_session()
   expect_error(session_replay_apply(s, 1, list()), class = "gptr_error_invalid_argument")
   expect_error(session_replay_apply(s, "a1b2c3", "x"), class = "gptr_error_invalid_argument")
@@ -1129,6 +1144,7 @@ test_that("session_replay_apply() validates its arguments", {
 })
 
 test_that("session_replay_new() returns the live session holding the header's id", {
+  skip_on_cran()
   s = test_session()
   r = session_replay_new("a1b2c3", list(session = s$id, turn = "1"), envir = globalenv(),
                          doc = list(path = "analysis.R", text = "cached"))
@@ -1242,6 +1258,7 @@ test_that("a header id, a value= name or a document field of the wrong type is r
 })
 
 test_that("session_replay_new() takes doc as optional; a missing answer is not invented", {
+  skip_on_cran()
   local_store()
   r = session_replay_new("a1b2c3", list(session = "s0123456786", turn = "1"), envir = new.env())
   expect_identical(session_data(r)$history_source, "reconstructed")

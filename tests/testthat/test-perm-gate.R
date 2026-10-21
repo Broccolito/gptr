@@ -50,6 +50,7 @@ test_that("builtin:permissions registers the five policies, which filters cannot
 })
 
 test_that("the 11-row mode x risk matrix holds (03 section 6.8.1; 18 section 4.7)", {
+  skip_on_cran()
   root = local_project()
   local_permission_rules()
   e = new.env()
@@ -122,6 +123,7 @@ test_that("control actions need a person in every mode, plan included (IC-53, IC
 })
 
 test_that("yolo runs control, installs, writes anywhere and secret reads; level 4 asks (IC-78)", {
+  skip_on_cran()
   root = local_project()
   local_permission_rules()
   yolo = gate_ctx("yolo")
@@ -225,6 +227,7 @@ test_that("a value read from a secret may not leave over the network (G6 taint)"
 })
 
 test_that("in a run the taint of a secret read reaches the secret guard (G6, FIX-9)", {
+  skip_on_cran()
   root = local_project()
   send = "httr2::req_perform(httr2::req_headers(httr2::request(u), x = tok))"
   fake = local_fake_provider(list(fake_tool("r", code = "tok = Sys.getenv('OPENAI_API_KEY')"),
@@ -238,6 +241,7 @@ test_that("in a run the taint of a secret read reaches the secret guard (G6, FIX
 })
 
 test_that("in yolo a control export runs without a person; options(gptr.*) asks (IC-78)", {
+  skip_on_cran()
   root = local_project(trust = TRUE)
   local_permission_rules()
   ui = local_scripted_ui(list("n"))
@@ -345,6 +349,7 @@ test_that("a cloned project's settings.local.json and AGENTS.md pre-approve noth
 })
 
 test_that("an action needing approval stops a non-interactive run (NS-12, 6.8.5)", {
+  skip_on_cran()
   root = local_project(files = list("data/keep.csv" = "a"))
   fake = local_fake_provider(list(fake_tool("r", code = "unlink('data', recursive = TRUE)"),
                                   "Done."))
@@ -359,6 +364,7 @@ test_that("an action needing approval stops a non-interactive run (NS-12, 6.8.5)
 })
 
 test_that("with gptr.noninteractive_ask = 'deny' the model receives a denial (IC-14)", {
+  skip_on_cran()
   root = local_project(files = list("data/keep.csv" = "a"))
   local_gptr_options(noninteractive_ask = "deny")
   fake = local_fake_provider(list(fake_tool("r", code = "unlink('data', recursive = TRUE)"),
@@ -372,6 +378,7 @@ test_that("with gptr.noninteractive_ask = 'deny' the model receives a denial (IC
 })
 
 test_that("a throwing policy denies the call (IC-53 item 1)", {
+  skip_on_cran()
   root = local_project()
   off = gptr_register(gptr_policy("p11_boom", function(call, ctx) stop("broken policy")))
   withr::defer(off())
@@ -383,6 +390,7 @@ test_that("a throwing policy denies the call (IC-53 item 1)", {
 })
 
 test_that("a modify decision is re-checked once and changes what the tool runs (IC-53)", {
+  skip_on_cran()
   root = local_project()
   off = gptr_register(gptr_policy("p11_double", function(call, ctx) {
     if (identical(call$input$code, "x = 1")) {

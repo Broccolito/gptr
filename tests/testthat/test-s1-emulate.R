@@ -10,6 +10,7 @@ source(testthat::test_path("fixtures", "jev", "harness.R"), local = TRUE)
 # ---- Task 6: emulation through structured output ------------------------------------------------
 
 test_that("the schema closes every object and carries the adapter's descriptions", {
+  skip_on_cran()
   q = list(yes = s1_question("Is it good?", "x")$wire,
            pick = s1_question("Which?", "x", choices = c(a = "First", b = NA))$wire,
            rate = s1_question("How?", "x", levels = c("low", "high"))$wire)
@@ -40,6 +41,7 @@ test_that("the document escapes angle brackets so the state cannot close it", {
 })
 
 test_that("stated probabilities become canonical answers (fences stripped, rescaled)", {
+  skip_on_cran()
   q = list(answer = s1_question("Which?", "x", choices = c("a", "b"))$wire)
   w = s1_emu_wire("```json\n{\"answers\": {\"answer\": {\"a\": 0.2, \"b\": 0.6}}}\n```", q)
   expect_identical(w$answer$choice, "b")
@@ -98,6 +100,7 @@ test_that("malformed or failed chat replies become System 1 conditions", {
 # ---- IC-74: canonical answers, validation, preflight, usage and provenance ----------------------
 
 test_that("emulated answers are canonical records the dispatch check accepts unchanged (IC-74)", {
+  skip_on_cran()
   q = list(yes = s1_question("Ok?", "x")$wire,
            pick = s1_question("Which?", "x", choices = c("a", "b", "c"))$wire,
            rate = s1_question("How?", "x", levels = c("lo", "mid", "hi"))$wire)
@@ -426,6 +429,7 @@ test_that("emulation happens only with gptr_config(system1 = \"emulate:<model>\"
 })
 
 test_that("a missing Jev key never falls back to emulation", {
+  skip_on_cran()
   s1_fresh()
   local_no_network()
   chat = local_fake_provider(list(list(json = list(answers = list(answer = 0.8)))), name = "emu")

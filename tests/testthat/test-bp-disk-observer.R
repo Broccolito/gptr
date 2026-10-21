@@ -273,6 +273,7 @@ test_that("the optional observer restores changed and missing POSIX empty enviro
 
 
 test_that("the optional observer restores library paths after success and failure", {
+  skip_on_cran()
   bp_disk_test_state()
   prior = .libPaths()
   owned = withr::local_tempdir(tmpdir = normalizePath(tempdir(), mustWork = TRUE))

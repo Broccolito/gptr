@@ -1,4 +1,5 @@
 test_that("a cold artifact browser separately owns Chrome and reuses its remote connection", {
+  skip_on_cran()
   x = artifact_owner_fixture()
   x$scope$artifact_state$browser = x$scope$artifact_state$browser_owner = NULL
   b = x$open()
@@ -15,6 +16,7 @@ test_that("a cold artifact browser separately owns Chrome and reuses its remote 
 })
 
 test_that("owned artifact disconnect settles its loop before signalling and waiting once", {
+  skip_on_cran()
   x = artifact_owner_fixture()
   expect_invisible(x$close())
   expect_identical(x$state$events[[1L]], "websocket")
@@ -205,6 +207,7 @@ test_that(
 })
 
 test_that("foreign remote artifacts and already dead local owners receive no process signal", {
+  skip_on_cran()
   x = artifact_owner_fixture(remote = TRUE)
   expect_invisible(x$close())
   expect_identical(x$state$events, "websocket")
@@ -222,6 +225,7 @@ test_that("foreign remote artifacts and already dead local owners receive no pro
 })
 
 test_that("artifact replacement caches cannot be discarded or used for a local signal", {
+  skip_on_cran()
   for (which in c("browser", "owner")) {
     x = artifact_owner_fixture()
     x$state[[paste0("replace_", which)]] = TRUE
@@ -383,6 +387,7 @@ test_that("Mac artifact browsers merge display timing without replacing user fea
 })
 
 test_that("artifact display timing is Mac only and preserves the caller RNG", {
+  skip_on_cran()
   for (platform in c("Linux", "Windows", "Darwin")) {
     local({
       withr::local_preserve_seed()

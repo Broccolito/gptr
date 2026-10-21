@@ -1,5 +1,6 @@
 # Fixed R entry points use the existing process engine without changing caller state.
 test_that("Rscript workers use a fixed bootstrap and explicit installed library", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   got = NULL
   handle = new.env(parent = emptyenv())
@@ -37,6 +38,7 @@ test_that("Rscript workers use a fixed bootstrap and explicit installed library"
 })
 
 test_that("artifact bootstrap is detached from the caller and gptr namespace", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   got = NULL
   local_mocked_bindings(proc_spawn = function(command, args, env, ...) {
@@ -69,6 +71,7 @@ test_that("Rscript bootstrap refuses unknown entries and reused launch files", {
 })
 
 test_that("Rscript spawn errors retain owned launch files for confirmed cleanup", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   local_mocked_bindings(proc_spawn = function(...) stop("synthetic launch failure"))
   before = Sys.getenv()

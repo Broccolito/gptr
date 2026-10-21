@@ -52,6 +52,7 @@ test_that("Python setup restores known R environment keys after new and existing
 })
 
 test_that("Python setup restores keys before propagating the original error or interrupt", {
+  skip_on_cran()
   skip_if_not_installed("reticulate")
   for (type in c("error", "interrupt")) {
     for (stage in c("import", "helper")) {
@@ -149,6 +150,7 @@ test_that("Python setup keeps untouched empty keys when Python is already initia
 })
 
 test_that("Python user evaluation keeps deliberate environment changes after setup restoration", {
+  skip_on_cran()
   skip_if_not_installed("reticulate")
   py_init_test_env(py_init_test_values("before-"), extra = "GPTR_PY_INIT_USER_CANARY")
   withr::local_envvar(GPTR_PY_INIT_USER_CANARY = NA_character_)
@@ -174,6 +176,7 @@ test_that("Python user evaluation keeps deliberate environment changes after set
 })
 
 test_that("Python setup never completes when environment restoration is uncertain", {
+  skip_on_cran()
   skip_if_not_installed("reticulate")
   for (type in c("false", "error", "interrupt")) {
     local({
@@ -193,6 +196,7 @@ test_that("Python setup never completes when environment restoration is uncertai
 })
 
 test_that("Python setup keeps its original failure when restoration also fails", {
+  skip_on_cran()
   skip_if_not_installed("reticulate")
   for (type in c("error", "interrupt")) {
     local({
@@ -322,6 +326,7 @@ py_init_test_main_loader = function(loader) {
 }
 
 test_that("Python setup preserves the caller's absent or configured Matrix callback", {
+  skip_on_cran()
   skip_if_not_installed("reticulate")
   callback = function(condition) invisible(NULL)
   for (prior in list(NULL, callback)) {

@@ -20,6 +20,7 @@ test_that("usage_columns are the 21 section 4.3 columns of P05's usage_empty(), 
 })
 
 test_that("usage_conform() orders the columns, fills missing ones and fixes the types", {
+  skip_on_cran()
   row = data.frame(model = "fake-1", request_id = "q000000000001", input = 5L, output = 2L,
                    started = 0, stringsAsFactors = FALSE)
   u = usage_conform(row)
@@ -35,6 +36,7 @@ test_that("usage_conform() orders the columns, fills missing ones and fixes the 
 })
 
 test_that("usage_conform() keeps missing usage unknown and known zeros known (IC-74)", {
+  skip_on_cran()
   u = usage_conform(data.frame(request_id = "q1", input = 0, cost = 0,
                                stringsAsFactors = FALSE))
   expect_identical(u$input, 0)
@@ -55,6 +57,7 @@ test_that("usage_conform() keeps missing usage unknown and known zeros known (IC
 })
 
 test_that("usage_conform() passes P05's usage_row() rows through unchanged", {
+  skip_on_cran()
   started = as.POSIXct("2026-10-01 12:00:00", tz = "UTC")
   msg = list(role = "assistant", content = list(), stop_reason = "stop")
   row_of = function(msg) {
@@ -86,6 +89,7 @@ test_that("usage_totals() sums requests, tokens and cost", {
 })
 
 test_that("usage_totals() makes a sum with an unknown value unknown (IC-74)", {
+  skip_on_cran()
   u = rbind(usage_fixture("s1", "q1", cost = 0.25), usage_fixture("s1", "q2", cost = NA_real_))
   tot = usage_totals(u)
   expect_identical(tot[["cost"]], NA_real_)
@@ -99,6 +103,7 @@ test_that("usage_totals() makes a sum with an unknown value unknown (IC-74)", {
 })
 
 test_that("ledger_empty() has the ledger columns and format_count() abbreviates", {
+  skip_on_cran()
   expect_identical(names(ledger_empty()), c("request_id", "component", "tokens", "cached"))
   expect_identical(format_count(950), "950")
   expect_identical(format_count(1234), "1.2k")
@@ -106,6 +111,7 @@ test_that("ledger_empty() has the ledger columns and format_count() abbreviates"
 })
 
 test_that("format_count() prints an unknown count as unknown and rounds across units", {
+  skip_on_cran()
   expect_identical(format_count(NA_real_), "unknown")
   expect_identical(format_count(c(10, NA)), "unknown")
   expect_identical(format_count(c(400, 550)), "950")
@@ -133,6 +139,7 @@ test_that("usage rows roll up to every ancestor and are deduplicated per request
 })
 
 test_that("ledger_add() records components and ledger_mark_cached() marks the cached prefix", {
+  skip_on_cran()
   s = test_session()
   ledger_add(s, "q1", list(t0 = 600, tools = 400, transcript = 300))
   ledger_mark_cached(s, "q1", cache_read = 1000)
@@ -164,6 +171,7 @@ test_that("an unknown cost or token count rolls up to the ancestors as unknown (
 })
 
 test_that("usage_add() refuses a row without a request id, the de-duplication key", {
+  skip_on_cran()
   s = test_session()
   row = usage_fixture(session_data(s)$id, NA_character_, cost = 0.25)
   err = expect_error(usage_add(s, row), class = "gptr_error_invalid_argument")
@@ -173,6 +181,7 @@ test_that("usage_add() refuses a row without a request id, the de-duplication ke
 })
 
 test_that("ledger_mark_cached() leaves the cache unknown when the cache read is unknown (IC-74)", {
+  skip_on_cran()
   s = test_session()
   ledger_add(s, "q1", list(t0 = 600, transcript = 300))
   ledger_add(s, "q2", list(t0 = 600, transcript = 300))
@@ -184,6 +193,7 @@ test_that("ledger_mark_cached() leaves the cache unknown when the cache read is 
 })
 
 test_that("format_cost() prints dollars and counts the requests of unknown cost (IC-74)", {
+  skip_on_cran()
   expect_identical(format_cost(0.0123), "$0.0123")
   expect_identical(format_cost(c(0.25, 0.5)), "$0.7500")
   expect_identical(format_cost(numeric()), "$0.0000")
@@ -209,6 +219,7 @@ test_that("the default budget is 2e6 tokens and 5 USD per top-level call; NULL d
 })
 
 test_that("budget_check() is NULL outside a run and names the kind inside one", {
+  skip_on_cran()
   s = test_session()
   expect_null(budget_check(s))
   test_run(s, list(budget = list(turns = 1, tokens = 1000)))
@@ -433,12 +444,14 @@ test_that("gptr_usage() validates x, by and detail", {
 })
 
 test_that("gptr_usage() with x = NULL covers the live sessions of this process", {
+  skip_on_cran()
   s = test_session()
   usage_add(s, usage_fixture(session_data(s)$id, "q-live-1"))
   expect_true(session_data(s)$id %in% gptr_usage()$group)
 })
 
 test_that("gptr_usage() counts rows whose group is NA (process-level System 1 rows)", {
+  skip_on_cran()
   s = test_session()
   usage_add(s, usage_fixture(session_data(s)$id, "q-na", cost = 0.5, agent = NA_character_))
   u = gptr_usage(s, by = "agent")
@@ -493,6 +506,7 @@ test_that("gptr_usage() keeps unknown usage unknown in groups, totals and the fo
 })
 
 test_that("gptr_usage() keeps known zeros and prints an empty view as zero requests", {
+  skip_on_cran()
   s = test_session()
   u = gptr_usage(s)
   expect_s3_class(u, "gptr_usage")
@@ -511,6 +525,7 @@ test_that("gptr_usage() keeps known zeros and prints an empty view as zero reque
 })
 
 test_that("gptr_usage(by = \"model\") groups an unknown provider or model as unknown", {
+  skip_on_cran()
   s = test_session()
   sid = session_data(s)$id
   usage_add(s, usage_fixture(sid, "q-m1"))
@@ -577,6 +592,7 @@ test_that("gptr_usage(detail = TRUE) reads the sessions' own ledgers, not their 
 })
 
 test_that("gptr_usage() names the argument it refuses", {
+  skip_on_cran()
   s = test_session()
   err = expect_error(gptr_usage(list(s, 1)), class = "gptr_error_invalid_argument")
   expect_identical(err$arg, "x")

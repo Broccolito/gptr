@@ -86,6 +86,7 @@ test_that("history display adapts to the current width and keeps unknown tokens 
 })
 
 test_that("history rendering sanitizes only its display copy", {
+  skip_on_cran()
   local_vault()
   canary = paste0("FAKE-history-", "display-canary")
   secret_register(canary, "HISTORY_TEST", "test")

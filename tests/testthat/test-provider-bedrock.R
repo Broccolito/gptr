@@ -109,6 +109,7 @@ test_that("hmac_sha256() matches RFC 4231 (test cases 2 and 6, a key longer than
 })
 
 test_that("sigv4() reproduces AWS's get-vanilla and post-vanilla test-suite vectors", {
+  skip_on_cran()
   at = as.POSIXct("2015-08-30 12:36:00", tz = "UTC")
   empty = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   vectors = list(
@@ -137,6 +138,7 @@ test_that("sigv4() reproduces AWS's get-vanilla and post-vanilla test-suite vect
 })
 
 test_that("the canonical URI encodes the sent path once more and keeps a gateway prefix", {
+  skip_on_cran()
   url = "https://gw.example.test:8443/general/awsai/model/anthropic.claude-v1%3A0/converse-stream"
   s = sigv4("POST", url, list(`x-amz-content-sha256` = "abc"), "abc", aws_key_id, aws_secret,
             "us-west-2", "bedrock")
@@ -151,6 +153,7 @@ test_that("the canonical URI encodes the sent path once more and keeps a gateway
 # ---- the AWS event-stream decoder ------------------------------------------------------------
 
 test_that("bedrock_crc32() is the IEEE CRC-32 and frames match AWS's empty-message vector", {
+  skip_on_cran()
   expect_identical(bedrock_crc32(charToRaw("123456789")), 3421780262)
   expect_identical(bedrock_crc32(raw()), 0)
   # aws-c-event-stream encoded/positive/empty_message
@@ -199,6 +202,7 @@ test_that("the decoder gives the same frames for every split of the bytes (excep
 })
 
 test_that("a CRC mismatch in the prelude or the message is refused", {
+  skip_on_cran()
   bytes = converse_text("Hello")
   bad = bytes
   bad[[length(bytes) - 10L]] = xor(bad[[length(bytes) - 10L]], as.raw(1L))
@@ -236,6 +240,7 @@ test_that("text and a tool call stream as events; stop reason and usage come fro
 })
 
 test_that("unreported usage stays unknown and a missing messageStop is a truncated stream", {
+  skip_on_cran()
   m = bedrock_replay(converse_text("Hi", metadata = FALSE))$message
   expect_identical(m$stop_reason, "stop")
   expect_identical(c(m$usage$input, m$usage$output), c(NA_real_, NA_real_))
@@ -249,6 +254,7 @@ test_that("unreported usage stays unknown and a missing messageStop is a truncat
 })
 
 test_that("an exception frame is a provider error, retried only before any delta", {
+  skip_on_cran()
   bytes = c(es_event("messageStart", '{"role":"assistant"}'),
             es_event("contentBlockDelta", '{"contentBlockIndex":0,"delta":{"text":"Hel"}}'),
             es_exception("throttlingException", "Too many requests"))
@@ -273,6 +279,7 @@ test_that("an exception frame is a provider error, retried only before any delta
 })
 
 test_that("reasoning deltas are a signed thinking block; a guardrail stop is a refusal", {
+  skip_on_cran()
   bytes = c(es_event("messageStart", "{}"),
             es_event("contentBlockDelta", paste0('{"contentBlockIndex":0,"delta":',
                                                  '{"reasoningContent":{"text":"Think."}}}')),
@@ -364,6 +371,7 @@ test_that("`returns =` adds the schema instruction to the last user message", {
 })
 
 test_that("without tools to send, past tool calls and results are text (no toolConfig)", {
+  skip_on_cran()
   turn = msg_assistant(list(block_text("Reading."),
                             block_tool_call("toolu_1", "read", list(path = "a.R"))),
                        api = api, provider = "fixture", model = "fixture-1")
@@ -427,6 +435,7 @@ test_that("with a key pair the request is signed for service bedrock and the rec
 })
 
 test_that("a key pair loaded into the vault only, through aliases, signs the request", {
+  skip_on_cran()
   local_vault()
   f = withr::local_tempfile(fileext = ".env")
   writeLines(c(paste0("AWS_ACCESS_KEY=", aws_key_id), paste0("AWS_SECRET_KEY=", aws_secret)), f)
@@ -461,6 +470,7 @@ test_that("a worker sub-agent gets the key id and session token with the secret 
 })
 
 test_that("http_handle() calls spec$sign per attempt with values for the URL's own origin only", {
+  skip_on_cran()
   local_vault()
   h = secret_register("synthetic-sign-secret-0123456789", "GPTR_SIGN_TEST_KEY",
                       origin = "https://sign.example.test")
@@ -564,6 +574,7 @@ test_that("a refused key pair over HTTP names no secret in the error or the even
 })
 
 test_that("the adapter is registered and the bearer-token bedrock record is unchanged", {
+  skip_on_cran()
   withr::local_envvar(AWS_REGION = "", AWS_DEFAULT_REGION = "")
   a = adapter_get(api)
   expect_identical(a$transport, "http_sse")

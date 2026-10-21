@@ -2,6 +2,7 @@
 # pending writes, IDE backends.
 
 test_that("CRLF, BOM and a missing final newline survive a read-modify-write", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "crlf.R")
   writeBin(c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("x = 1\r\npeter(\"hi\")\r\ny = 2")), f)
@@ -26,6 +27,7 @@ test_that("CRLF, BOM and a missing final newline survive a read-modify-write", {
 })
 
 test_that("the byte fixtures round-trip exactly", {
+  skip_on_cran()
   # test_path() is relative to tests/testthat, which local_project() leaves: resolve it first
   src = normalizePath(testthat::test_path("fixtures", "docs", "crlf-bom.R"))
   expected = normalizePath(testthat::test_path("fixtures", "docs", "crlf-bom.expected.R"))
@@ -39,6 +41,7 @@ test_that("the byte fixtures round-trip exactly", {
 })
 
 test_that("a concurrent edit is detected by md5 and non-UTF-8 documents are refused", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   writeLines("x = 1", f)
@@ -74,6 +77,7 @@ test_that("document locks exclude a live holder and break a dead one", {
 })
 
 test_that("a held lock is reused by this process and released at the end", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   writeLines("x = 1", f)
@@ -88,6 +92,7 @@ test_that("a held lock is reused by this process and released at the end", {
 })
 
 test_that("the user-level project file remembers record answers and the transcript target", {
+  skip_on_cran()
   local_project()
   expect_identical(doc_project_get(), list())
   doc_project_update("record", "a.R", "auto")
@@ -102,6 +107,7 @@ test_that("the user-level project file remembers record answers and the transcri
 })
 
 test_that("paths, formats and the root are derived without writing anything", {
+  skip_on_cran()
   root = local_project(gptr = FALSE)
   expect_identical(doc_format_of("x.Rmd"), "rmd")
   expect_identical(doc_format_of("x.R"), "r")
@@ -114,6 +120,7 @@ test_that("paths, formats and the root are derived without writing anything", {
 })
 
 test_that("gptr_source() frames log block actions only for the document they source", {
+  skip_on_cran()
   local_project()
   st = doc_state()
   old = st$sources
@@ -139,6 +146,7 @@ test_that("gptr_source() frames log block actions only for the document they sou
 # ---- Task 4 adaptations (IC-51, IC-71; dev/DEVIATIONS.md D-096) ---------------------------------
 
 test_that("a document lock that is gone or being released is not stale; an old empty one is", {
+  skip_on_cran()
   local_project()
   dir = doc_lock_dir(file.path(getwd(), "a.R"))
   withr::defer(unlink(dir, recursive = TRUE))
@@ -164,6 +172,7 @@ test_that("a lock whose pid file cannot be written is not left behind", {
 })
 
 test_that("NUL bytes and directories are refused with their doc_write reason", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "utf16.R")
   writeBin(as.raw(c(0xff, 0xfe, 0x78, 0x00, 0x0a, 0x00)), f)
@@ -176,6 +185,7 @@ test_that("NUL bytes and directories are refused with their doc_write reason", {
 })
 
 test_that("mixed line endings keep the line ending most lines use", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "mixed.R")
   writeBin(charToRaw("a\nb\r\nc\n"), f)
@@ -192,6 +202,7 @@ test_that("mixed line endings keep the line ending most lines use", {
 })
 
 test_that("a document's md5 is that of the bytes read; a change while it is read is a conflict", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   writeBin(c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("x = 1\r\ny = 2")), f)
@@ -208,6 +219,7 @@ test_that("a document's md5 is that of the bytes read; a change while it is read
 })
 
 test_that("the project file is P08's user_project file; a record that is no object is replaced", {
+  skip_on_cran()
   local_project()
   expect_identical(doc_project_file(), settings_path("user_project"))
   f = doc_project_file()
@@ -224,6 +236,7 @@ test_that("the project file is P08's user_project file; a record that is no obje
 # ---- Task 4 review round 1 (dev/DEVIATIONS.md D-096 items 7-10) --------------------------------
 
 test_that("a written document's md5 is that of the bytes written, not of a later edit", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   writeLines("x = 1", f)
@@ -246,6 +259,7 @@ test_that("a written document's md5 is that of the bytes written, not of a later
 })
 
 test_that("checked document writes preserve edits made during temporary preparation", {
+  skip_on_cran()
   for (existing in c(TRUE, FALSE)) local({
     project = local_project()
     path = file.path(project, "job.R")
@@ -267,6 +281,7 @@ test_that("checked document writes preserve edits made during temporary preparat
 })
 
 test_that("unchecked document writes keep intentional replacement semantics", {
+  skip_on_cran()
   project = local_project()
   path = file.path(project, "job.R")
   doc = doc_read_or_new(path)
@@ -567,6 +582,7 @@ test_that("a sidecar of an earlier process that had this pid is a dead one (pid 
 })
 
 test_that("a forked child stamps its own creation time, not proc_self()'s inherited one", {
+  skip_on_cran()
   skip_if(is.na(proc_self()$create_time), "no process creation time on this platform")
   local_project()
   f = file.path(getwd(), "a.R")
@@ -580,6 +596,7 @@ test_that("a forked child stamps its own creation time, not proc_self()'s inheri
 })
 
 test_that("the lock of a deferred run is released at exit even when no block was queued", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -707,6 +724,7 @@ test_that("a kernel that cannot name its notebook never syncs the notebooks it m
 })
 
 test_that("a document path given relative to the working directory is kept absolute", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -722,6 +740,7 @@ test_that("a document path given relative to the working directory is kept absol
 })
 
 test_that("a deferred block needs write consent and keeps a local model's tag (IC-45, IC-74)", {
+  skip_on_cran()
   local_project()
   local_doc_pending()
   f = file.path(getwd(), "job.R")
@@ -1144,6 +1163,7 @@ doc_ide_site = function(path, prompt, backend) {
 }
 
 test_that("the IDE range arithmetic reproduces every edit", {
+  skip_on_cran()
   cases = list(
     list(c("a", "b", "c"), c("a", "X", "Y", "b", "c")),
     list(c("a", "b", "c"), c("a", "b", "c", "X")),
@@ -1161,6 +1181,7 @@ test_that("the IDE range arithmetic reproduces every edit", {
 })
 
 test_that("RStudio buffers are edited by id, saved when clean, the cursor moved past the block", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1208,6 +1229,7 @@ test_that("Positron writes a clean buffer on disk and edits only the active edit
 })
 
 test_that("a console-focused or foreign editor is never edited", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
   f = file.path(getwd(), "a.R")
@@ -1223,6 +1245,7 @@ test_that("a console-focused or foreign editor is never edited", {
 })
 
 test_that("transcript appends need consent and pass the document_write event", {
+  skip_on_cran()
   proj = local_project()
   t = file.path(proj, ".gptr", "transcripts", "t.R")
   local_gptr_options(record = "off")
@@ -1281,6 +1304,7 @@ test_that("an editor's empty line after the final newline is clean unless the fi
 })
 
 test_that("transcript lines are appended only to an .R transcript", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   nb = file.path(proj, "notes.ipynb")
@@ -1302,6 +1326,7 @@ test_that("transcript lines are appended only to an .R transcript", {
 })
 
 test_that("transcript lines are written and shown to hooks redacted (IC-74)", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   t = file.path(proj, ".gptr", "transcripts", "t.R")
@@ -1321,6 +1346,7 @@ test_that("transcript lines are written and shown to hooks redacted (IC-74)", {
 })
 
 test_that("an editor showing another file or an untitled buffer is never edited", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
   a = file.path(getwd(), "a.R")
@@ -1353,6 +1379,7 @@ test_that("an editor showing another file or an untitled buffer is never edited"
 })
 
 test_that("an editor buffer is never edited without write consent (IC-45, IC-74)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "off")
   f = file.path(getwd(), "a.R")
@@ -1373,6 +1400,7 @@ test_that("an editor buffer is never edited without write consent (IC-45, IC-74)
 # R >= 4.6's tools::file_ext() calls basename(), which stops on a marked UTF-8 non-ASCII path in
 # a non-UTF-8 locale
 test_that("a non-ASCII document name has its format in any locale (R >= 4.6)", {
+  skip_on_cran()
   local_name_locale()
   expect_identical(doc_format_of("caf\u00e9.R"), "r")
   expect_identical(doc_format_of("/tmp/r\u00e9sum\u00e9/caf\u00e9.Rmd"), "rmd")
@@ -1546,6 +1574,7 @@ test_that("new sidecars are closed JSON data with explicit line arrays", {
 })
 
 test_that("Windows leaves legacy sidecars pending without any RDS read", {
+  skip_on_cran()
   local_project()
   local_gptr_options(quiet = FALSE)
   testthat::local_mocked_bindings(is_windows = function() TRUE)
@@ -1766,6 +1795,7 @@ test_that("JSON recovery rejects nonscalar consumed notebook metadata", {
 })
 
 test_that("JSON inert notebook sidecars preserve existing fractional number tokens", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   st = local_doc_pending()
@@ -1791,6 +1821,7 @@ test_that("JSON inert notebook sidecars preserve existing fractional number toke
 
 
 test_that("a broken modern sidecar link still prevents legacy deserialization", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "legacy.R")
   writeLines('peter("first")', f)
@@ -1816,6 +1847,7 @@ test_that("a broken modern sidecar link still prevents legacy deserialization", 
 })
 
 test_that("modern sidecar reads are bounded before decode and remain authoritative", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "bounded.R")
   writeLines('peter("first")', f)
@@ -1847,6 +1879,7 @@ test_that("modern sidecar reads are bounded before decode and remain authoritati
 })
 
 test_that("over-limit JSON writes preserve the existing durable record", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "bounded.R")
   writeLines('peter("first")', f)
@@ -1876,6 +1909,7 @@ test_that("over-limit JSON writes preserve the existing durable record", {
 })
 
 test_that("sidecar presence uses directory entries when link targets cannot be probed", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "dangling.R")
   modern = doc_sidecar_path(f)
@@ -1942,6 +1976,7 @@ test_that("unknown or malformed POSIX owner identity never deserializes legacy s
 })
 
 test_that("a differently cased dangling modern entry masks legacy where names ignore case", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "case.R")
   writeLines('peter("first")', f)
@@ -2082,6 +2117,7 @@ test_that("upsert and total line bounds precede numeric preservation after bound
 })
 
 test_that("aggregate writer bounds refuse conversion and preserve previous sidecar bytes", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "writer-bounds.R")
   writeLines('peter("first")', f)
@@ -2125,6 +2161,7 @@ test_that("aggregate writer bounds refuse conversion and preserve previous sidec
 })
 
 test_that("bounded JSON strings keep escaped punctuation and valid writer roundtrips", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "quoted.R")
   writeLines('peter("first")', f)
@@ -2143,6 +2180,7 @@ test_that("bounded JSON strings keep escaped punctuation and valid writer roundt
 })
 
 test_that("whole writer metadata is bounded before normalization and JSON allocation", {
+  skip_on_cran()
   local_project()
   nb = file.path(getwd(), "writer-meta-bounds.ipynb")
   doc_io_nb_write(nb, 'peter("one")')
@@ -2186,6 +2224,7 @@ test_that("whole writer metadata is bounded before normalization and JSON alloca
 })
 
 test_that("chunk-spanning escaped quotes do not become JSON containers or tokens", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "chunk-quotes.R")
   side = doc_sidecar_path(f)
@@ -2236,6 +2275,7 @@ test_that("sidecar call identity bytes are bounded before R parsing", {
 })
 
 test_that("sidecar call AST limits precede normalization and writer deparsing", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "call-bounds.R")
   writeLines('peter("first")', f)

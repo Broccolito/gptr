@@ -25,6 +25,7 @@ spec_system_prompt = function() {
 }
 
 test_that("P07's section texts equal architecture 7.3 byte for byte", {
+  skip_on_cran()
   sp = spec_system_prompt()
   sec = function(name) between(sp, paste0("<", name, ">"), paste0("</", name, ">"))
   j = function(x) paste(x, collapse = "\n")

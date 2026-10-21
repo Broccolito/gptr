@@ -105,6 +105,7 @@ test_that("an owned later pump keeps independent agent RNG advancement", {
 })
 
 test_that("an owned later pump restores ambient RNG after diagnosing a callback error", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     local({
       withr::local_preserve_seed()
@@ -129,6 +130,7 @@ test_that("an owned later pump restores ambient RNG after diagnosing a callback 
 })
 
 test_that("an owned later pump preserves its original interrupt and ambient RNG", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     local({
       withr::local_preserve_seed()

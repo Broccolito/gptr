@@ -29,6 +29,7 @@ oauth_cold_need = function(loader, windows = FALSE, warm = FALSE, extra = list()
 }
 
 test_that("dependency setup restores PATH and askpass values and the caller RNG", {
+  skip_on_cran()
   for (value in c(NA_character_, "synthetic-custom-askpass")) {
     for (seeded in c(FALSE, TRUE)) {
       local({
@@ -58,6 +59,7 @@ test_that("dependency setup restores PATH and askpass values and the caller RNG"
 })
 
 test_that("dependency setup restores state before missing errors and original conditions", {
+  skip_on_cran()
   for (outcome in c("missing", "error", "interrupt")) {
     for (seeded in c(FALSE, TRUE)) {
       local({
@@ -91,6 +93,7 @@ test_that("dependency setup restores state before missing errors and original co
 })
 
 test_that("repeated warm dependency setup still restores changed askpass values", {
+  skip_on_cran()
   oauth_cold_env(oauth_cold_values("synthetic-original-askpass"))
   before = Sys.getenv()
   state = new.env(parent = emptyenv())
@@ -130,6 +133,7 @@ test_that("POSIX empty initialization and untouched warm Windows empties stay ex
 })
 
 test_that("cold openssl refuses native-empty Windows initialization before loading", {
+  skip_on_cran()
   for (name in oauth_cold_keys) {
     local({
       state = new.env(parent = emptyenv())
@@ -159,6 +163,7 @@ test_that("cold openssl refuses native-empty Windows initialization before loadi
 })
 
 test_that("uncertain dependency restoration is fatal without replacing an original condition", {
+  skip_on_cran()
   for (outcome in c("success", "error", "interrupt")) {
     local({
       original = structure(list(message = "synthetic original dependency condition", call = NULL),

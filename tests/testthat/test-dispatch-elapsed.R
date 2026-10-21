@@ -49,6 +49,7 @@ test_that("an unexecuted tool has zero execution duration after a delayed denial
 })
 
 test_that("an interrupted tool reports execution duration without earlier approval time", {
+  skip_on_cran()
   local_fake_provider(list("ok"))
   local_permissive()
   clock = new.env(parent = emptyenv())

@@ -1,4 +1,5 @@
 test_that("the API object exposes name, dir, state and the verbs; it refuses assignment", {
+  skip_on_cran()
   local_registry()
   api = ext_api_new("plugin:demo", dir = tempdir())
   expect_s3_class(api, "gptr_extension_api")
@@ -51,6 +52,7 @@ test_that("register_<kind>() is gptr_spec() sugar for every kind, including plug
 })
 
 test_that("require() uses caret semantics and has() tests features", {
+  skip_on_cran()
   local_registry()
   api = ext_api_new("plugin:demo")
   expect_true(api$require("1.0")) # nolint: object_usage_linter.
@@ -70,6 +72,7 @@ test_that("require() uses caret semantics and has() tests features", {
 })
 
 test_that("api_satisfies() implements the requirement grammar (report G1 3.5)", {
+  skip_on_cran()
   expect_true(api_satisfies("1"))
   expect_true(api_satisfies("1.0"))
   expect_false(api_satisfies("1.2"))
@@ -94,6 +97,7 @@ test_that("API requirements reject empty clauses and integer overflow with typed
 })
 
 test_that("API unregister closures preserve registry, generation and unload boundaries", {
+  skip_on_cran()
   reg = local_registry()
   api = ext_api_new("plugin:probe")
   off = api$register(gptr_command("original", function(args, ctx) "x"))
@@ -294,6 +298,7 @@ test_that("ctx services: ui, risk, secret, tokens, eval, describe, decide, add_t
 })
 
 test_that("ctx refuses assignment, reports unknown members and prints", {
+  skip_on_cran()
   local_registry()
   ctx = ctx_new(NULL)
   expect_error({
@@ -324,6 +329,7 @@ test_that("a service record replaces the bootstrap service of the same name (IC-
 })
 
 test_that("generated member functions call execute() with the process ctx", {
+  skip_on_cran()
   local_registry()
   m = gptr_tool("double", "Double a number", exposure = "r",
                 parameters = list(type = "object", required = I("x"),
@@ -386,6 +392,7 @@ test_that("public generated members preserve arbitrary schema names with real co
 })
 
 test_that("malformed context identities cannot silently become process context", {
+  skip_on_cran()
   local_registry()
   invalid = list("", NA_character_, c("s1", "s2"), 42, list(id = NA_character_), list(id = 42))
   for (value in invalid) {
@@ -440,6 +447,7 @@ test_that("package-created API methods discard source references without changin
 })
 
 test_that("the package-created directory factory keeps file execution and worker user state", {
+  skip_on_cran()
   local_registry()
   constructor = eval(parse(text = deparse(plugin_dir_factory, width.cutoff = 500L),
     keep.source = TRUE)[[1L]], envir = environment(plugin_dir_factory))
@@ -472,6 +480,7 @@ test_that("the package-created directory factory keeps file execution and worker
 })
 
 test_that("user factory and handler source references and captured values remain untouched", {
+  skip_on_cran()
   local_registry()
   home = new.env(parent = baseenv())
   home$payload = raw(30000L)

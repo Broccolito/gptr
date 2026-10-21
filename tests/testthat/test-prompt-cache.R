@@ -108,6 +108,7 @@ test_that("tool-result details never enter the request elements", {
 })
 
 test_that("cache plans anchor T0 and the project block per provider", {
+  skip_on_cran()
   parts = list(t0 = "a", t1 = "b", tools_json = "[]", project = TRUE, n = 1L)
   s = p07_session()
   expect_identical(prompt_cache_plan_gap(parts, list(cache = "anthropic"), s)$anchors,

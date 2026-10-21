@@ -12,6 +12,7 @@ write_skill = function(root, dir, lines) {
 }
 
 test_that("skill_parse builds a skill spec from SKILL.md", {
+  skip_on_cran()
   root = withr::local_tempdir()
   md = skill_md("pdf-tools", "Extract text from PDF files.",
                 c("allowed-tools: read r", "version: 1.0"))
@@ -29,6 +30,7 @@ test_that("skill_parse builds a skill spec from SKILL.md", {
 })
 
 test_that("skills without a description or with an invalid name are skipped and diagnosed", {
+  skip_on_cran()
   root = withr::local_tempdir()
   expect_null(skill_parse(write_skill(root, "nodesc", c("---", "name: nodesc", "---", "x"))))
   bad = c("---", "description: Named after its folder.", "---", "x")
@@ -120,6 +122,7 @@ test_that("gptr_skills lists project and user skills; the project wins a name", 
 })
 
 test_that("an untrusted project's skills are listed as untrusted and never visible", {
+  skip_on_cran()
   p = local_project(trust = FALSE)
   write_skill(file.path(p, ".gptr", "skills"), "proj-skill", skill_md("proj-skill", "Project."))
   sk = gptr_skills("project")
@@ -134,6 +137,7 @@ test_that("gptr_skills validates its scope", {
 # Task 2 review round 1 (D-074): untrusted SKILL.md text never stops discovery.
 
 test_that("NA spellings in SKILL.md frontmatter never stop gptr_skills() (IC-71)", {
+  skip_on_cran()
   p = local_project(trust = FALSE)
   root = file.path(p, ".gptr", "skills")
   write_skill(root, "good", skill_md("good", "A valid skill."))
@@ -152,6 +156,7 @@ test_that("NA spellings in SKILL.md frontmatter never stop gptr_skills() (IC-71)
 })
 
 test_that("skill_parse treats NA fields as missing and turns a failure into a diagnostic", {
+  skip_on_cran()
   root = withr::local_tempdir()
   f = write_skill(root, "fallback", skill_md("fallback", "On disk."))
   meta = list(name = NA_character_, description = "From the parser.")
@@ -197,6 +202,7 @@ test_that("a relative skills.paths entry is a project root and follows project t
 # Task 2 review round 3 (D-074 items 5-7): bounded parsing, no warnings, `~name` entries.
 
 test_that("a SKILL.md whose YAML aliases expand too far is skipped with a diagnostic", {
+  skip_on_cran()
   p = local_project(trust = FALSE)
   root = file.path(p, ".gptr", "skills")
   write_skill(root, "good", skill_md("good", "A valid skill."))
@@ -210,6 +216,7 @@ test_that("a SKILL.md whose YAML aliases expand too far is skipped with a diagno
 })
 
 test_that("skill_parse reads a scalar disable-model-invocation and flat allowed-tools only", {
+  skip_on_cran()
   root = withr::local_tempdir()
   f = write_skill(root, "shape", skill_md("shape", "On disk."))
   nested = letters[1:9]
@@ -251,6 +258,7 @@ test_that("an unreadable SKILL.md is a diagnostic and never a warning (contract 
 })
 
 test_that("only ~ and ~/ skills.paths entries are home directories; ~name is project content", {
+  skip_on_cran()
   p = local_project(trust = FALSE)
   home = withr::local_tempdir()
   local_mocked_bindings(user_home = function() home)
@@ -272,6 +280,7 @@ test_that("only ~ and ~/ skills.paths entries are home directories; ~name is pro
 # Task 2 review round 4 (D-074 item 8): a name ends at the end of the string.
 
 test_that("a skill name ending in a newline is refused with a diagnostic (contract 11.13)", {
+  skip_on_cran()
   p = local_project(trust = FALSE)
   root = file.path(p, ".gptr", "skills")
   write_skill(root, "good", skill_md("good", "A valid skill."))
@@ -315,6 +324,7 @@ hpr_files = function() {
 }
 
 test_that("the built-in high-performance-r skill parses with its catalog line", {
+  skip_on_cran()
   f = system.file("gptr", "skills", "high-performance-r", "SKILL.md", package = "gptr")
   expect_true(nzchar(f))
   s = skill_parse(f)
@@ -335,6 +345,7 @@ test_that("the shipped skill never recommends str() and states its cost (IC-67)"
 })
 
 test_that("every R recipe in the skill parses", {
+  skip_on_cran()
   n = 0L
   for (f in hpr_files()) {
     lines = readLines(f, encoding = "UTF-8")
@@ -363,6 +374,7 @@ skills_header = paste0("Skills hold specialized instructions. When a task matche
                        "paths inside it are relative to the skill (read skill:<name>/<path>).")
 
 test_that("the catalog starts with the verbatim header and lists the built-in skill", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   skill_sync()
   lines = strsplit(skill_catalog(NULL, 1500L), "\n", fixed = TRUE)[[1L]]
@@ -452,6 +464,7 @@ test_that("the skills section appears only when read is active", {
 })
 
 test_that("a preview of a new session lists the skills a session start would sync", {
+  skip_on_cran()
   local_project()
   res_prune("skills:", character())
   withr::defer(res_prune("skills:", character()))
@@ -461,6 +474,7 @@ test_that("a preview of a new session lists the skills a session start would syn
 })
 
 test_that("builtin:skills registers the section and the services, and no search source", {
+  skip_on_cran()
   sec = Filter(function(s) identical(s[["name"]], "skills"), registry_all("prompt_section"))
   expect_length(sec, 1L)
   expect_identical(sec[[1L]][["tier"]], "T1")

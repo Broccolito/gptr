@@ -36,6 +36,7 @@ test_that("the callback logs successful user expressions and skips peter() calls
 })
 
 test_that("entries are cut to 120 characters and only the last 20 are kept", {
+  skip_on_cran()
   local_history()
   user_log_push(str2lang(paste0("f(", strrep("a", 200), ")")))
   expect_equal(nchar(user_expr_log()), 120L)
@@ -74,6 +75,7 @@ test_that("the task callback is registered per session and removed with the last
 # one guards the IC-62 text in every locale.
 
 test_that("multi-line expressions are logged on one line, not as their first line", {
+  skip_on_cran()
   local_history()
   user_log_push(str2lang("for (i in 1:3) {\n  y = i\n  z = y + 1\n}"))
   user_log_push(str2lang("f = function(x) {\n  x + 1\n}"))
@@ -170,6 +172,7 @@ test_that("entries are valid UTF-8 and cut by characters", {
 # on each, which the callback must not pass on to R.
 
 test_that("names deparse() rejects in a UTF-8 locale are logged as a note", {
+  skip_on_cran()
   local_history()
   skip_if_not(local_utf8_ctype(), "no UTF-8 locale is available")
   lines = c("`\\xff` = 1", "`a\\xe9b` = 2", "x = list(`\\xfe` = 1)", "f = function(`\\xff`) 1")

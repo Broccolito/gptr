@@ -29,6 +29,7 @@ test_that("valid input passes with the documented coercions only", {
 })
 
 test_that("type, enum and integer errors are reported with the property path", {
+  skip_on_cran()
   res = schema_validate(r_schema, list(code = 1, timeout = 2.5, mode = "medium", record = "yes"))
   expect_false(res$ok)
   expect_length(res$errors, 4L)
@@ -98,6 +99,7 @@ test_that("object constraints apply to object instances under union types", {
 })
 
 test_that("nullable object schemas preserve explicit null inputs", {
+  skip_on_cran()
   schema = list(type = c("object", "null"), required = "x",
                 properties = list(x = list(type = "string")))
   res = schema_validate(schema, NULL)
@@ -118,6 +120,7 @@ test_that("empty JSON objects and arrays retain distinct schema types", {
 })
 
 test_that("enum comparisons preserve JSON scalar types", {
+  skip_on_cran()
   expect_false(schema_validate(list(enum = 1), "1")$ok)
   expect_false(schema_validate(list(enum = TRUE), 1)$ok)
   expect_false(schema_validate(list(enum = "true"), TRUE)$ok)
@@ -130,6 +133,7 @@ test_that("enum comparisons preserve JSON scalar types", {
 })
 
 test_that("enum comparisons preserve nested objects, arrays and null", {
+  skip_on_cran()
   schema = json_decode('{"enum":[{"a":[1,2],"b":true},[1,2],null,{},[]]}')
   expect_true(schema_validate(schema, list(b = TRUE, a = list(1, 2)))$ok)
   expect_true(schema_validate(schema, list(1L, 2L))$ok)
@@ -145,6 +149,7 @@ test_that("enum comparisons preserve nested objects, arrays and null", {
 })
 
 test_that("JSON number validation rejects non-finite and complex values", {
+  skip_on_cran()
   for (value in list(Inf, -Inf, NaN, 1 + 1i, json_decode("1e999"))) {
     expect_false(schema_validate(list(type = "number"), value)$ok)
   }

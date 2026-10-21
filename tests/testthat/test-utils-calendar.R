@@ -138,6 +138,7 @@ test_that("calendar restoration uncertainty is fatal without replacing an origin
 })
 
 test_that("fake price construction and recording headers preserve their own calendar prestate", {
+  skip_on_cran()
   for (origin in c("fake-price", "recording-header")) {
     for (value in list(character(), c(TZDIR = "synthetic-zone"), c(TZDIR = ""))) {
       probe = calendar_probe(value)

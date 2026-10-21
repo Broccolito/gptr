@@ -51,6 +51,7 @@ test_that("the budget words are plain numbers whatever OutDec and digits say", {
 })
 
 test_that("a budget that is not finite counts as none: that child lives across runs", {
+  skip_on_cran()
   local_fake_cli_path("claude", "text")
   stopped = new.env()
   stopped$n = 0L
@@ -102,6 +103,7 @@ test_that("the new input becomes Anthropic content blocks", {
 })
 
 test_that("build() starts a child once, then reuses it for the next turn", {
+  skip_on_cran()
   local_fake_cli_path("claude", "text")
   local_mocked_bindings(pcli_probe = function(path) list(bare_optout = NULL),
                         pcli_notice = function(cli) invisible(NULL))
@@ -136,6 +138,7 @@ test_that("build() starts a child once, then reuses it for the next turn", {
 })
 
 test_that("a budgeted child serves one run; an unbudgeted child lives across runs", {
+  skip_on_cran()
   local_fake_cli_path("claude", "text")
   stopped = new.env()
   stopped$n = 0L
@@ -175,6 +178,7 @@ test_that("a budgeted child serves one run; an unbudgeted child lives across run
 })
 
 test_that("a restarted child resumes the CLI session; a fresh one gets the history", {
+  skip_on_cran()
   local_fake_cli_path("claude", "text")
   local_mocked_bindings(pcli_probe = function(path) list(bare_optout = "--no-bare"),
                         pcli_notice = function(cli) invisible(NULL))
@@ -215,6 +219,7 @@ test_that("a restarted child resumes the CLI session; a fresh one gets the histo
 # ---- the cli-claude normaliser (Task 6) ---------------------------------------------------------
 
 test_that("the call-2 capture streams thinking and text and reports the result's usage", {
+  skip_on_cran()
   pcli_cache_clear()
   withr::defer(pcli_cache_clear())
   opts = stub_opts()
@@ -255,6 +260,7 @@ test_that("a reused child's turn costs the increase of the CLI's total_cost_usd"
 })
 
 test_that("mcp_message requests go to opts$mcp_dispatch; tools/call through the tool FIFO", {
+  skip_on_cran()
   queued = new.env()
   queued$fns = list()
   local_mocked_bindings(reactor_enqueue_tool = function(run, fn) {
@@ -292,6 +298,7 @@ test_that("mcp_message requests go to opts$mcp_dispatch; tools/call through the 
 })
 
 test_that("can_use_tool allows gptr's own tools without a second gate; others ask the gate", {
+  skip_on_cran()
   opts = stub_opts()
   n = local_normaliser(pcli_claude_parse, stub_model("claude"), opts)
   ask = function(id, tool) {
@@ -320,6 +327,7 @@ test_that("can_use_tool allows gptr's own tools without a second gate; others as
 })
 
 test_that("an apiKeySource other than none ends the turn with gptr_error_billing", {
+  skip_on_cran()
   stopped = new.env()
   stopped$n = 0L
   local_mocked_bindings(pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
@@ -339,6 +347,7 @@ test_that("an apiKeySource other than none ends the turn with gptr_error_billing
 })
 
 test_that("failed results map to gptr condition classes", {
+  skip_on_cran()
   run = function(result) {
     opts = stub_opts()
     n = local_normaliser(pcli_claude_parse, stub_model("claude"), opts)
@@ -367,6 +376,7 @@ test_that("failed results map to gptr condition classes", {
 })
 
 test_that("a turn without a result line ends with an error; an aborted one with aborted", {
+  skip_on_cran()
   opts = stub_opts()
   n = local_normaliser(pcli_claude_parse, stub_model("claude"), opts)
   feed_fixture(n, "claude-hang.ndjson")
@@ -407,6 +417,7 @@ test_that("the per-turn wall clock interrupts the CLI and ends the turn as out o
 })
 
 test_that("a result line's unreported usage and cost stay unknown, never zeros (IC-74)", {
+  skip_on_cran()
   u = pcli_claude_usage(list(usage = list(input_tokens = 5L, output_tokens = 2L)))
   expect_equal(c(u$input, u$output), c(5, 2))
   expect_true(all(is.na(c(u$cache_read, u$cache_write_5m, u$cache_write_1h, u$reasoning))))
@@ -428,6 +439,7 @@ test_that("a result line's unreported usage and cost stay unknown, never zeros (
 })
 
 test_that("an R error inside the normaliser ends the turn with one error event (contract 8.1)", {
+  skip_on_cran()
   stopped = new.env()
   stopped$n = 0L
   local_mocked_bindings(pcli_claude_system = function(obj, s) stop("boom"),
@@ -463,6 +475,7 @@ test_that("an R error inside the normaliser ends the turn with one error event (
 })
 
 test_that("an answer to a control request that cannot be built ends the turn, never hangs", {
+  skip_on_cran()
   stopped = new.env()
   stopped$n = 0L
   local_mocked_bindings(pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
@@ -578,6 +591,7 @@ test_that("a turn P05 ended without its normaliser cannot stop the session's nex
 })
 
 test_that("a late timer or queued tools/call of an earlier turn leaves the next turn alone", {
+  skip_on_cran()
   timers = new.env()
   timers$fns = list()
   queued = new.env()

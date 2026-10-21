@@ -69,6 +69,7 @@ test_that("the prompt carries instructions and history on a fresh thread only", 
 })
 
 test_that("build() starts one exec per turn with a fresh private relay mailbox", {
+  skip_on_cran()
   local_fake_cli_path("codex", "text")
   local_mocked_bindings(
     pcli_probe = function(path) list(resume = TRUE),
@@ -216,6 +217,7 @@ test_that("the relay script passes lines through its mailbox and exits when it s
 })
 
 test_that("the call-1 capture: informational tool events, the answer and the usage", {
+  skip_on_cran()
   opts = stub_opts()
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
   expect_true(feed_fixture(n, "codex-call1.jsonl"))
@@ -233,6 +235,7 @@ test_that("the call-1 capture: informational tool events, the answer and the usa
 })
 
 test_that("a Codex shell step shows its command without the shell's -lc wrapper", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
   opts = stub_opts()
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
@@ -264,6 +267,7 @@ test_that("a Codex shell step shows its command without the shell's -lc wrapper"
 })
 
 test_that("Codex reports other servers' MCP calls, not gptr's own; reasoning is thinking", {
+  skip_on_cran()
   opts = stub_opts()
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
   expect_true(feed_fixture(n, "codex-mcp.jsonl"))
@@ -356,6 +360,7 @@ test_that("a Codex error event is noted, not terminal; turn.failed and the exit 
 })
 
 test_that("a workspace-write exec that changes control files is reported after it ends", {
+  skip_on_cran()
   root = local_project(files = list(".gptr/settings.json" = "{}"))
   opts = stub_opts()
   opts$state$codex_sandbox = "workspace-write"
@@ -379,6 +384,7 @@ test_that("a workspace-write exec that changes control files is reported after i
 # ---- reconciliations with the contract, IC-74 and the shared helpers (Task 7, D-106) -----------
 
 test_that("turn.completed usage Codex left out stays unknown, and its cost is unknown (IC-74)", {
+  skip_on_cran()
   full = pcli_codex_usage(list(input_tokens = 38544L, cached_input_tokens = 30208L,
                                cache_write_input_tokens = 0L, output_tokens = 35L,
                                reasoning_output_tokens = 0L))
@@ -434,6 +440,7 @@ test_that("a resumed thread's turn.completed counts its increase; a new thread c
 })
 
 test_that("a turn budget that is not finite or very large still gives a whole-number cap", {
+  skip_on_cran()
   expect_identical(pcli_codex_cap(list(turns = Inf)), 50L)
   expect_identical(pcli_codex_cap(list(turns = 3e9)), .Machine$integer.max)
   expect_identical(pcli_codex_cap(list(turns = 2.7)), 2L)
@@ -478,6 +485,7 @@ test_that("the wall clock of an aborted run ends the exec as aborted and stops i
 })
 
 test_that("a late wall clock of an earlier exec leaves the session's next exec alone", {
+  skip_on_cran()
   timers = new.env()
   timers$fns = list()
   stopped = new.env()
@@ -511,6 +519,7 @@ test_that("a late wall clock of an earlier exec leaves the session's next exec a
 })
 
 test_that("an R error inside the codex normaliser ends the exec with one error event (8.1)", {
+  skip_on_cran()
   stopped = new.env()
   stopped$n = 0L
   local_mocked_bindings(pcli_codex_event = function(obj, s) stop("boom"),
@@ -542,6 +551,7 @@ test_that("an R error inside the codex normaliser ends the exec with one error e
 })
 
 test_that("malformed Codex events are ignored or read as unknown, never an R error", {
+  skip_on_cran()
   opts = stub_opts()
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
   expect_false(push_obj(n, list(type = "thread.started", thread_id = list("t"))))
@@ -568,6 +578,7 @@ test_that("malformed Codex events are ignored or read as unknown, never an R err
 })
 
 test_that("the Windows sandbox probe caches answers and timeouts, never a run that did not start", {
+  skip_on_cran()
   runs = new.env()
   runs$args = list()
   runs$queue = list("error", list(status = NA_integer_, timed_out = FALSE),
@@ -693,6 +704,7 @@ test_that("a control file gptr cannot read is marked by its size and time instea
 })
 
 test_that("a control-file check that fails still completes the exec, then warns", {
+  skip_on_cran()
   local_project(files = list(".gptr/settings.json" = "{}"))
   opts = stub_opts()
   opts$state$codex_sandbox = "workspace-write"
@@ -715,6 +727,7 @@ test_that("a control-file check that fails still completes the exec, then warns"
 })
 
 test_that("the wall clock ends the exec and stops Codex even when its own work fails", {
+  skip_on_cran()
   timers = new.env()
   timers$fns = list()
   stopped = new.env()
@@ -757,6 +770,7 @@ test_that("the wall clock ends the exec and stops Codex even when its own work f
 })
 
 test_that("an exec gptr stops is stopped before its control files are checked", {
+  skip_on_cran()
   root = local_project(files = list(".gptr/settings.json" = "{}"))
   seen = new.env()
   opts = stub_opts()
@@ -782,6 +796,7 @@ test_that("an exec gptr stops is stopped before its control files are checked", 
 # ---- review round 2: execs that end without the normaliser's own end (Task 7, D-106) -----------
 
 test_that("a workspace-write exec P05 ends without its normaliser is checked at the next build", {
+  skip_on_cran()
   root = local_project(files = list(".gptr/settings.json" = "{}"))
   settings = file.path(root, ".gptr", "settings.json")
   local_fake_cli_path("codex", "text")
@@ -819,6 +834,7 @@ test_that("a workspace-write exec P05 ends without its normaliser is checked at 
 })
 
 test_that("the deferred control-file check hashes the project the exec ran in", {
+  skip_on_cran()
   a = local_project(files = list(".gptr/settings.json" = "{}"))
   local_fake_cli_path("codex", "text")
   local_mocked_bindings(pcli_is_windows = function() FALSE,
@@ -844,6 +860,7 @@ test_that("the deferred control-file check hashes the project the exec ran in", 
 })
 
 test_that("an exec that ends in an internal error has its control files checked, then warns", {
+  skip_on_cran()
   root = local_project(files = list(".gptr/settings.json" = "{}"))
   settings = file.path(root, ".gptr", "settings.json")
   timers = new.env()
@@ -1140,6 +1157,7 @@ test_that("the first CLI turn probes the CLI before its waiting row starts (D-19
 })
 
 test_that("the auto rule runs CLI-only models on the cli backend", {
+  skip_on_cran()
   f = local_fake_cli("codex", "text")
   expect_identical(subagent_backend(gptr_agent("code", model = "fakecodex/gpt-6-sol"),
                                     model_resolve(f$model)), "cli")
@@ -1178,6 +1196,7 @@ codex_control_scope = function(fun, ...) {
 }
 
 test_that("Windows control entry listing refuses unreadable or uncertain parents", {
+  skip_on_cran()
   seen = new.env(parent = emptyenv())
   seen$calls = list()
   probe = codex_control_scope(pcli_control_entries, dir.exists = function(path) TRUE,
@@ -1323,6 +1342,7 @@ test_that("Windows reparse probes reject unavailable executables and uncertain r
 })
 
 test_that("control digests query only unobservable Windows entries and retain POSIX markers", {
+  skip_on_cran()
   seen = new.env(parent = emptyenv())
   seen$calls = 0L
   probe = codex_control_scope(pcli_control_digest, is_windows = function() TRUE,

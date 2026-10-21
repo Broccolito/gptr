@@ -318,6 +318,7 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
 }
 
 test_that("the blob store deduplicates, compresses small text and restores atomically", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "a.R")
   writeLines(c("x = 1", "y = 2"), f)
@@ -340,6 +341,7 @@ test_that("the blob store deduplicates, compresses small text and restores atomi
 })
 
 test_that("already-compressed files are stored raw and come back byte for byte", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "d.rds")
   saveRDS(1:10, f)
@@ -383,6 +385,7 @@ test_that("without a workspace the store lives under tempdir(), never in the pro
 })
 
 test_that("blob GC keeps referenced and young blobs and deletes old unreferenced ones", {
+  skip_on_cran()
   proj = local_project()
   root = workspace_root(create = FALSE)
   make = function(txt) {
@@ -427,6 +430,7 @@ test_that("blob GC keeps referenced and young blobs and deletes old unreferenced
 })
 
 test_that("blob GC skips while another live process holds a session lock (IC-71)", {
+  skip_on_cran()
   proj = local_project()
   root = workspace_root(create = FALSE)
   f = withr::local_tempfile(fileext = ".txt")
@@ -494,6 +498,7 @@ test_that("the walk prunes .git and .gptr and lists links unfollowed; restores a
 })
 
 test_that("the checkpoint store is never walked, also where it lies inside the project", {
+  skip_on_cran()
   proj = local_project(gptr = FALSE, files = list("a.R" = "a = 1"))
   store = file.path(proj, "tmp[1]", "gptr")
   local_mocked_bindings(workspace_root = function(create = TRUE) {
@@ -558,6 +563,7 @@ test_that("files changed by a child process are recorded too", {
 })
 
 test_that("undo keeps a file edited after the turn (3-way) unless forced", {
+  skip_on_cran()
   proj = local_project(files = list("b.R" = "h = function() 'b'"))
   ck = ckpt_ck_new("s0000000023")
   call = list(id = "c1", name = "write", input = list(path = "b.R", content = "child"))
@@ -712,6 +718,7 @@ test_that("a path outside the project and tempdir() is restored only after a hum
 })
 
 test_that("a planted record pointing outside the project is not restored without a human", {
+  skip_on_cran()
   proj = local_project()
   outside = withr::local_tempdir()
   local_mocked_bindings(ckpt_temp_root = function() file.path(tempdir(), "not-this-one"))
@@ -731,6 +738,7 @@ test_that("a planted record pointing outside the project is not restored without
 })
 
 test_that("restores never write into .git or gptr's user directories; control paths ask", {
+  skip_on_cran()
   proj = local_project()
   g = ckpt_restore_guard(file.path(proj, ".git", "config"))
   expect_false(g$ok)
@@ -810,6 +818,7 @@ test_that("files that cannot be read are listed, never captured and stop nothing
 })
 
 test_that("a forced turn scan records what a CLI child changed (IC-65)", {
+  skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   ck = ckpt_ck_new("s0000000028")
   ckpt_files_sync(ckpt_files_tr(ck))
@@ -883,6 +892,7 @@ test_that("checkpoint payloads are private before gzip or raw-copy writes", {
 })
 
 test_that("a failed raw checkpoint copy cannot publish an empty precreated blob", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "payload.rds")
   writeBin(charToRaw("synthetic raw payload"), f)
@@ -1030,6 +1040,7 @@ test_that("checkpoint file-type uncertainty preserves original stat conditions",
 })
 
 test_that("checkpoint Windows fallback keeps existing filesystem and link guards", {
+  skip_on_cran()
   proj = local_project(files = list("source.R" = "answer = 42", "empty.txt" = character()))
   paths = file.path(proj, c("source.R", "empty.txt", "absent"))
   regular = ckpt_regular
@@ -1076,6 +1087,7 @@ test_that("checkpoint undo refuses a regular post-image replaced by an owned FIF
 
 
 test_that("checkpoint prediction preserves capture of a newly created regular file", {
+  skip_on_cran()
   proj = local_project()
   path = file.path(proj, "created.R")
   ck = ckpt_ck_new("s0000000094")

@@ -453,6 +453,7 @@ test_that("the agent record runs through the backend record", {
 })
 
 test_that("the artifact type record builds and checks an artifact", {
+  skip_on_cran()
   skip_if_not_installed("shiny")
   # The working copy of a kind without a working file is the artifact's directory (P23)
   dir.create(file.path(local_project(), ".gptr", "artifacts", "s11-app"), recursive = TRUE)

@@ -79,6 +79,7 @@ test_that("a process that ends without a stop request reads failed", {
 })
 
 test_that("child output reaches the log in complete lines, redacted, and the raw file goes", {
+  skip_on_cran()
   local_project()
   vault_reset()
   withr::defer(vault_reset())
@@ -197,6 +198,7 @@ test_that("gptr_artifacts() lists nothing when no artifact exists", {
 })
 
 test_that("gptr_artifacts() lists every artifact of the workspace", {
+  skip_on_cran()
   local_project()
   seed_artifact("alpha", n = 2L)
   seed_artifact("beta")
@@ -215,6 +217,7 @@ test_that("gptr_artifacts() lists every artifact of the workspace", {
 })
 
 test_that("gptr_artifacts() validates its arguments", {
+  skip_on_cran()
   local_project()
   seed_artifact("alpha")
   expect_error(gptr_artifacts("absent"), class = "gptr_error_invalid_argument")
@@ -421,6 +424,7 @@ test_that("a repaired app relaunches after its failed child has settled", {
 })
 
 test_that("builtin failed-launch placeholders settle without signalling unknown processes", {
+  skip_on_cran()
   signals = 0L
   local_mocked_bindings(artifact_kill = function(...) {
     signals = signals + 1L
@@ -436,6 +440,7 @@ test_that("builtin failed-launch placeholders settle without signalling unknown 
 
 
 test_that("an unsettled artifact stop retains recovery state until a confirmed retry", {
+  skip_on_cran()
   local_project()
   seed_artifact("retry")
   state = new.env(parent = emptyenv())
@@ -473,6 +478,7 @@ test_that("an unsettled artifact stop retains recovery state until a confirmed r
 })
 
 test_that("an artifact relaunch cannot replace an unsettled recovery record", {
+  skip_on_cran()
   local_project()
   seed_artifact("blocked")
   state = new.env(parent = emptyenv())
@@ -498,6 +504,7 @@ test_that("an artifact relaunch cannot replace an unsettled recovery record", {
 
 
 test_that("custom artifact stops accept a void return only after independent settlement", {
+  skip_on_cran()
   local_project()
   seed_artifact("void")
   state = new.env(parent = emptyenv())

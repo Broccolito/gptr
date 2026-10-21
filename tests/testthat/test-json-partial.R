@@ -84,6 +84,7 @@ test_that("incremental pushes agree with one-shot parsing of every prefix", {
 })
 
 test_that("complete(), text() and preview() report the scanner state", {
+  skip_on_cran()
   scanner = partial_json()
   scanner$push("{\"a\": ")
   expect_false(scanner$complete())

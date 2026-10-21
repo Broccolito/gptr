@@ -43,6 +43,7 @@ test_that("canonical_json() gives the same bytes under LC_ALL=C and en_US.UTF-8"
 })
 
 test_that("ids have the documented shapes (IC-20)", {
+  skip_on_cran()
   expect_match(id_new("s", 10L), "^s[0-9a-f]{10}$")
   expect_match(id_new("q", 12L), "^q[0-9a-f]{12}$")
   expect_false(identical(id_new(), id_new()))

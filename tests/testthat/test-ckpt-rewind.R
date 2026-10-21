@@ -210,6 +210,7 @@ three_turns = function(...) {
 }
 
 test_that("rewind targets: kept turns, relative turns, entry ids and range errors", {
+  skip_on_cran()
   tr = three_turns()
   t1 = ckpt_rewind_target(tr, 1L, NULL)
   expect_identical(t1$target, "a1")
@@ -227,6 +228,7 @@ test_that("rewind targets: kept turns, relative turns, entry ids and range error
 })
 
 test_that("applied records follow the rewinds in file order; redo targets abandoned records", {
+  skip_on_cran()
   tr = three_turns(e_rw("r1", "a1", from = "a3", undone = c("c3", "c2")),
                    e_user("u4", "r1", "four", 2), e_cp("c4", "u4"), e_asst("a4", "c4"))
   expect_identical(ckpt_applied(tr, c("c1", "c2", "c3", "c4")),
@@ -418,6 +420,7 @@ test_that("gptr_rewind() refuses a running session and bad arguments", {
 })
 
 test_that("the IC-53 guard: rewinding another session from model code needs the one-shot token", {
+  skip_on_cran()
   sig = new.env(parent = emptyenv())
   sig$control = character()
   local_mocked_bindings(run_current = function() list(session = "s9999999999", signal = sig))

@@ -32,6 +32,7 @@ launch_capture = function(callback) {
 }
 
 test_that("process launch signals a private boundary before the native constructor", {
+  skip_on_cran()
   local_project()
   observed = new.env(parent = emptyenv())
   observed$order = character()
@@ -115,6 +116,7 @@ test_that("a foreground launch closes the thinking row before stderr and resumes
 })
 
 test_that("launch observation preserves genuine stderr and the original condition", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -157,6 +159,7 @@ test_that("a launch boundary ends the waiting row without a line feed, in R GUIs
 })
 
 test_that("nested and background launches do not inject foreground display bytes", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -205,6 +208,7 @@ test_that("real R-tool launch observation leaves captured text and warnings inta
 })
 
 test_that("nested policies clear once and inactive policies emit no boundary output", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -286,6 +290,7 @@ test_that("bare command lookup closes the thinking row before its native diagnos
 })
 
 test_that("lookup failure preserves its original error without starting a native process", {
+  skip_on_cran()
   local_project()
   parent_env = Sys.getenv()
   original = simpleError("synthetic lookup failure")

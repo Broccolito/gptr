@@ -2,6 +2,7 @@
 # delayed S3 registration (Task 4).
 
 test_that("gptr_opt() returns the option or its documented default", {
+  skip_on_cran()
   expect_identical(gptr_opt("out_keep"), 20L)
   expect_identical(gptr_opt("noninteractive_ask"), "stop")
   expect_identical(gptr_opt("subagents.max_depth"), 1L)
@@ -90,6 +91,7 @@ test_that("check_running() reads _R_CHECK_PACKAGE_NAME_ only (contract section 7
 })
 
 test_that("gptr_confirm() never asks without a human and parses answers", {
+  skip_on_cran()
   withr::local_options(gptr.interactive = FALSE)
   expect_true(gptr_confirm("Proceed?", default = TRUE))
   expect_false(gptr_confirm("Proceed?"))
@@ -126,6 +128,7 @@ test_that("gptr_readline() records how long it waited; a long prompt is printed 
 })
 
 test_that("in the console margin a prompt wider than a row is printed wrapped inside it (IC-75)", {
+  skip_on_cran()
   withr::defer(assign("readline_secs", NULL, envir = the))
   testthat::local_reproducible_output(width = 60)
   local_gptr_options(verbose = 2L)
@@ -159,6 +162,7 @@ test_that("in the console margin a prompt wider than a row is printed wrapped in
 })
 
 test_that("readline_answer() asks again while answers arrive within 0.1 s, at most 100 times", {
+  skip_on_cran()
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   rl = local_readline(c("y", "", "n"), secs = c(0.001, 0.002, 2))
   expect_identical(readline_answer("allow? "), "n")
@@ -182,6 +186,7 @@ test_that("gptr_confirm() never takes a line typed before its question (IC-75)",
 })
 
 test_that("front_end() recognises the documented environments", {
+  skip_on_cran()
   withr::local_options(jupyter.in_kernel = NULL, knitr.in.progress = NULL)
   withr::local_envvar(
     JPY_SESSION_NAME = NA, QUARTO_DOCUMENT_PATH = NA, QUARTO_DOCUMENT_FILE = NA,

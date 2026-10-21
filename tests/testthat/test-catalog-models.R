@@ -2,6 +2,7 @@
 # layers, the resolver, defaults, explicit refresh and gptr_models().
 
 test_that("the shipped snapshot has the documented structure (04 section 11.10)", {
+  skip_on_cran()
   path = system.file("extdata", "models.json.gz", package = "gptr")
   expect_true(nzchar(path))
   expect_lt(file.size(path), 1e6)
@@ -25,6 +26,7 @@ test_that("the shipped snapshot has the documented structure (04 section 11.10)"
 })
 
 test_that("models.dev entries are pruned and converted; overrides only patch", {
+  skip_on_cran()
   api = list(
     anthropic = list(id = "anthropic", env = list("ANTHROPIC_API_KEY"), models = list(
       `claude-sonnet-5-5` = list(
@@ -72,6 +74,7 @@ test_that("models.dev entries are pruned and converted; overrides only patch", {
 })
 
 test_that("native decisions bypass chat pruning and retain typed IC-74 metadata", {
+  skip_on_cran()
   decision = list(
     id = "ollama/clef-flash", name = "Clef Flash", type = "decision", tool_call = FALSE,
     capabilities = list(decision = TRUE, tools = FALSE, vision = TRUE),
@@ -112,6 +115,7 @@ test_that("native decisions bypass chat pruning and retain typed IC-74 metadata"
 })
 
 test_that("decision-only snapshots and offline Clef seeds do not claim availability", {
+  skip_on_cran()
   decision = list(id = "ollama/fixture", type = "decision",
                    modalities = list(input = list("text", "image")))
   snap = catalog_snapshot(decision = list(decision), generated = "2026-10-03")
@@ -130,6 +134,7 @@ test_that("decision-only snapshots and offline Clef seeds do not claim availabil
 })
 
 test_that("chat catalog conversion retains locality markers and configured context", {
+  skip_on_cran()
   chat = list(id = "qwen3:1.7b", tool_call = TRUE,
                modalities = list(input = list("text"), output = list("text")),
                capabilities = list(tools = TRUE), digest = "sha256:chat-fixture",
@@ -271,6 +276,7 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
 })
 
 test_that("a reference that names a provider gets suggestions from that provider only (#44)", {
+  skip_on_cran()
   local_catalog()
   ids = paste0("gpt-5.6-", c("sol", "luna", "terra"), "-2026-07-09")
   off = gptr_register(gptr_provider("versa", api = "openai-responses",
@@ -327,6 +333,7 @@ test_that("local providers accept unknown ids; a provider added by data resolves
 })
 
 test_that("user configuration is a merge layer above the snapshot", {
+  skip_on_cran()
   local_catalog()
   local_settings(providers = list(anthropic = list(models = list(
     list(id = "claude-sonnet-5-5", context = 2e6)
@@ -336,6 +343,7 @@ test_that("user configuration is a merge layer above the snapshot", {
 })
 
 test_that("a bare id of several providers goes to the one with a credential, then the owner", {
+  skip_on_cran()
   local_catalog()
   local_mocked_bindings(model_key_present = function(id, vars) FALSE)
   expect_equal(model_resolve("claude-opus-5-5")$ref, "anthropic/claude-opus-5-5")
@@ -351,6 +359,7 @@ test_that("a bare id of several providers goes to the one with a credential, the
 })
 
 test_that("a model registered as a `model` spec joins the catalog (04 section 10.2 row 3)", {
+  skip_on_cran()
   local_catalog()
   off = gptr_register(gptr_spec("model", "anthropic/claude-lab-1", label = "Claude Lab 1",
                                 family = "claude-lab", context = 4096, status = "preview"))
@@ -403,6 +412,7 @@ test_that("mixed provider models resolve their own native route and typed metada
 })
 
 test_that("unknown Ollama model names never grant tools vision or configured capacity", {
+  skip_on_cran()
   local_catalog()
   model = model_resolve("ollama/unknown-model:7b")
   expect_false(model$tool_call)
@@ -431,6 +441,7 @@ test_that("credential presence checks do not register store values or query keyr
 })
 
 test_that("pure resolution does not invoke provider discovery and rejects malformed capabilities", {
+  skip_on_cran()
   local_catalog()
   off = gptr_register(gptr_provider("pure-local", api = "openai-completions", local = TRUE,
     base_url = "http://127.0.0.1:1234/v1", discover = function() stop("unexpected discovery"),
@@ -449,6 +460,7 @@ test_that("pure resolution does not invoke provider discovery and rejects malfor
 # discovery and request preflight (IC-74, 07-local-ollama.md sections 2 and 2.1) -----------------
 
 test_that("catalog HTTP GET uses the reactor and preserves status headers and bytes", {
+  skip_on_cran()
   local_mocked_bindings(
     reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL,
                             run = NULL, provider = NULL, retry = NULL) {
@@ -495,6 +507,7 @@ test_that("catalog HTTP supports metadata POST and HTTP error status", {
 })
 
 test_that("catalog HTTP cancels only its own transfer on timeout, interrupt or oversize", {
+  skip_on_cran()
   cancelled = character()
   local_mocked_bindings(
     reactor_http = function(...) "catalog-owned",
@@ -573,6 +586,7 @@ test_that("catalog_http_request() runs on the real reactor against loopback fixt
 })
 
 test_that("a loopback server's listed models join the catalog only on request", {
+  skip_on_cran()
   local_catalog()
   local_mocked_bindings(
     check_running = function() FALSE,
@@ -612,6 +626,7 @@ test_that("gptr_models() searches the catalog and lists prices in force", {
 })
 
 test_that("model_default() follows the settings, then the first available key", {
+  skip_on_cran()
   local_catalog()
   local_mocked_bindings(secret_lookup = function(name) NULL, auth_store_get = function(key) NULL,
                         auth_store_read = function() list(),
@@ -642,6 +657,7 @@ test_that("model_default() skips providers disabled in the settings", {
 })
 
 test_that("a detected subscription CLI is the last default route", {
+  skip_on_cran()
   local_catalog()
   local_mocked_bindings(model_key_present = function(id, vars) FALSE)
   off = gptr_register(gptr_provider("claude-cli", api = "cli-claude", type = "cli",
@@ -688,6 +704,7 @@ test_that("an explicit refresh revalidates with the ETag and caches in R_user_di
 })
 
 test_that("resolution is offline: builtins and gptr_models('sonnet') start no transfer", {
+  skip_on_cran()
   count = new.env()
   count$transfers = 0L
   local_mocked_bindings(reactor_http = function(...) {
@@ -846,6 +863,7 @@ test_that("native Ollama discovery reads version, tags and show only on explicit
 })
 
 test_that("provider_preflight() is pure and passes other providers' models through", {
+  skip_on_cran()
   local_catalog()
   local_mocked_bindings(catalog_http_request = function(...) stop("preflight did I/O"),
                         reactor_http = function(...) stop("preflight started a transfer"))
@@ -864,6 +882,7 @@ test_that("provider_preflight() is pure and passes other providers' models throu
 })
 
 test_that("catalog fields, model specs and settings cannot self-attest local execution", {
+  skip_on_cran()
   local_catalog()
   local_mocked_bindings(catalog_http_request = function(...) stop("no request expected"))
   claimed = list(id = "qwen3:1.7b", type = "chat", tool_call = TRUE, locality = "local",

@@ -293,6 +293,7 @@ scan_cases = list(
 )
 
 test_that("the 40 secret-access cases of G6 section 5.4 get their level and guard", {
+  skip_on_cran()
   local_vault()
   secret_register(paste0("ts_", "FAKE0000jev0key0for0tests00001"), "TYPESAFE_API_KEY", "test")
   secret_register(paste0("sk-", "ant-api03-", strrep("FAKEant0", 11)), "ANTHROPIC_API_KEY", "test")

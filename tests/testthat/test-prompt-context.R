@@ -20,6 +20,7 @@ user_agents = function(text, .env = parent.frame()) {
 }
 
 test_that("instruction files load user-level first, root to cwd, vignette.Rmd last", {
+  skip_on_cran()
   user_agents("# user rules")
   root = p07_project(list("AGENTS.md" = "# root", "CLAUDE.md" = "# not read (AGENTS.md first)",
                           "sub/CLAUDE.md" = "# sub", "sub/CLAUDE.local.md" = "# local",
@@ -34,6 +35,7 @@ test_that("instruction files load user-level first, root to cwd, vignette.Rmd la
 })
 
 test_that("the directory walk runs from the root to cwd and never leaves the root", {
+  skip_on_cran()
   root = p07_project(list("..cache/sub/AGENTS.md" = "# dotted"))
   sub = file.path(root, "..cache", "sub")
   expect_identical(context_dirs(root, sub),
@@ -65,6 +67,7 @@ test_that("@file lines of vignette.Rmd include project files once, inside the pr
 })
 
 test_that("an @file line naming an existing file outside the project is dropped", {
+  skip_on_cran()
   # P01's path_rel() gives an absolute path (never "..") for a path outside the root
   outside = withr::local_tempdir("gptr-outside-")
   writeLines("- outside rule", file.path(outside, "rules.md"))
@@ -137,6 +140,7 @@ test_that("session_start blocks follow the registered blocks of the first messag
 })
 
 test_that("an untrusted project renders trusted=\"false\"; a trusted one does not (IC-52)", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = "- rule"))
   s = p07_session("manual")
   b = context_first_message(s, list(turn = 1L))
@@ -148,6 +152,7 @@ test_that("an untrusted project renders trusted=\"false\"; a trusted one does no
 })
 
 test_that("untrusted project files are withheld non-interactively in auto; the user's stay", {
+  skip_on_cran()
   user_agents("- my own rule")
   p07_project(list("AGENTS.md" = "- project rule"))
   local_gptr_options(quiet = FALSE)
@@ -164,6 +169,7 @@ test_that("untrusted project files are withheld non-interactively in auto; the u
 })
 
 test_that("yolo withholds untrusted project files non-interactively, as auto does", {
+  skip_on_cran()
   user_agents("- my own rule")
   p07_project(list("AGENTS.md" = "- project rule"))
   b = context_first_message(p07_session("yolo"), list(turn = 1L))
@@ -255,6 +261,7 @@ test_that("an unchanged turn block is sent once; a changed one again (IC-38)", {
 })
 
 test_that("the mode provider reads the session when the kernel calls it without an input", {
+  skip_on_cran()
   p07_project(list())
   s = p07_session("manual")
   session_set_mode(s, "auto")

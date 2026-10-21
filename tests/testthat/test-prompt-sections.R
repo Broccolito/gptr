@@ -35,6 +35,7 @@ test_that("the rendering input is bound only while rendering, innermost first", 
 })
 
 test_that("an error inside a rendering still pops the input", {
+  skip_on_cran()
   s = p07_session()
   ctx = prompt_ctx(s)
   expect_error(with_prompt_input(ctx, list(a = 1), function() stop("boom")), "boom")
@@ -53,6 +54,7 @@ test_that("prompt_truncate cuts at a line boundary and appends the notice", {
 })
 
 test_that("prompt_path walks from the root to the leaf", {
+  skip_on_cran()
   s = p07_session()
   session_append(s, list(type = "custom", custom_type = "gptr.test", data = list(i = 1L)))
   session_append(s, list(type = "custom", custom_type = "gptr.test", data = list(i = 2L)))
@@ -106,6 +108,7 @@ test_that("prompt_read_file normalises line ends, the BOM and trailing newlines"
 })
 
 test_that("prompt_specs keeps the winning record of each name, in order", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   off1 = gptr_register(gptr_prompt_section("zz_late", "late", tier = "T1", order = 990L))
@@ -168,6 +171,7 @@ test_that("operator entries are read in the kernel shape and the flat Pi shape",
 })
 
 test_that("trust and the bound document fall back before P08 and P15 exist", {
+  skip_on_cran()
   s = p07_session()
   local_mocked_bindings(ext_service_has = function(name) FALSE)
   expect_false(prompt_trusted(tempdir()))
@@ -177,6 +181,7 @@ test_that("trust and the bound document fall back before P08 and P15 exist", {
 # ---- Task 3: presets ----------------------------------------------------------------------------
 
 test_that("the four presets are registered records (IC-69)", {
+  skip_on_cran()
   expect_true(all(c("minimal", "standard", "readonly", "extended") %in% registry_names("preset")))
   expect_identical(registry_get("preset", "minimal")$preamble, "short")
   expect_false(preset_includes(registry_get("preset", "minimal"), "r_session"))
@@ -186,6 +191,7 @@ test_that("the four presets are registered records (IC-69)", {
 })
 
 test_that("preset_tools follows the presets and the ask rule (NS-12, IC-68)", {
+  skip_on_cran()
   expect_identical(preset_tools("minimal", human = TRUE), c("read", "r", "edit", "write"))
   expect_identical(preset_tools("standard", human = TRUE, mode = "auto"),
                    c("read", "r", "edit", "write", "ask"))
@@ -217,6 +223,7 @@ test_that("the user's tools.presets maps a model glob to a preset", {
 })
 
 test_that("the shipped extended default applies only past break-even (IC-73)", {
+  skip_on_cran()
   haiku = list(provider = "anthropic", id = "claude-haiku-4-5", cache_min = 4096)
   ref = "anthropic/claude-haiku-4-5"
   expect_true(preset_shipped_applies(ref, haiku, 2000, TRUE, "chat"))
@@ -235,6 +242,7 @@ test_that("the shipped extended default applies only past break-even (IC-73)", {
 })
 
 test_that("preset tools functions are called as P02 validates them (positional human, model)", {
+  skip_on_cran()
   posn = registry_add(gptr_spec("preset", "p07_posn", tools = function(h, m) {
     c("read", if (isTRUE(h)) "ask", if (identical(m, "x/y")) "edit")
   }), "user", 3L)
@@ -269,6 +277,7 @@ test_that("a session's rank-0 preset is found through preset_tools(session =) (I
 })
 
 test_that("empty and NA modifiers name no tool", {
+  skip_on_cran()
   base = c("read", "r", "edit", "write")
   expect_identical(preset_tools("minimal", FALSE, modifiers = ""), base)
   expect_identical(preset_tools("minimal", FALSE, modifiers = "+"), base)
@@ -279,6 +288,7 @@ test_that("empty and NA modifiers name no tool", {
 # builtin:prompt (declared below) owns the ctx.input service of Task 2: P01's
 # service_builtin_active() serves it only once the registry lists a builtin:prompt record.
 test_that("ctx$input reaches the ctx.input service once builtin:prompt is loaded", {
+  skip_on_cran()
   s = p07_session()
   ctx = prompt_ctx(s)
   expect_identical(ext_service_get("ctx.input"), prompt_input_get)
@@ -489,6 +499,7 @@ test_that("the tools.disable setting also leaves out plugin direct tools", {
 })
 
 test_that("prompt_tools_always() declares lazy direct tools; namespaced ones stay lazy (10.8)", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   runs = new.env()
@@ -857,6 +868,7 @@ test_that("session.add_tools is P07's service", {
 })
 
 test_that("section patches are queued as operator messages (Pi's wording)", {
+  skip_on_cran()
   s = p07_session()
   prompt_section_patch(s, "r_env", "R 4.5.0")
   prompt_section_patch(s, "mcp")
@@ -1243,6 +1255,7 @@ test_that("gptr_prompt() validates its arguments", {
 })
 
 test_that("printing a prompt view shows each part and returns it invisibly", {
+  skip_on_cran()
   v = gptr_prompt(preset = "minimal")
   vis = NULL
   out = paste(utils::capture.output({

@@ -81,6 +81,7 @@ test_that("raw history export preserves interleaved R across a pipeline and a se
 })
 
 test_that("Peter export keeps calls active and recorded code inert exactly once", {
+  skip_on_cran()
   local_project()
   body = c("hits = hits + 1L", "value = c(", "  2, 4", ")", "## Decision: Keep the data.",
            "## Steer: Retain the user note.", "#> [1] 6")
@@ -239,6 +240,7 @@ test_that("history export rejects missing stale edited undone and secret-marked 
 })
 
 test_that("export never evaluates input or recovers pending writes", {
+  skip_on_cran()
   local_project()
   f = export_fixture(body = "stop(\"would execute\")", before = "stop(\"user side effect\")")
   target = file.path(getwd(), "raw.R")
@@ -263,6 +265,7 @@ test_that("export never evaluates input or recovers pending writes", {
 })
 
 test_that("export preserves BOM CRLF final-newline and ordinary source bytes", {
+  skip_on_cran()
   local_project()
   f = export_fixture(before = c("# caf\u00e9 user note", "user = c(", "  2, 4", ")"),
                      after = "answer = sum(user) + x")
@@ -286,6 +289,7 @@ test_that("export preserves BOM CRLF final-newline and ordinary source bytes", {
 })
 
 test_that("export refuses source conflicts and respects the model control boundary", {
+  skip_on_cran()
   local_project()
   f = export_fixture()
   target = file.path(getwd(), "conflict.R")
@@ -411,6 +415,7 @@ test_that("Peter export places feedback between separate pipeline operands witho
 })
 
 test_that("raw prompt comments wrap losslessly while source and executable code stay intact", {
+  skip_on_cran()
   local_project()
   prompt = paste0(
     strrep("Keep  the original words and spacing. ", 8L),

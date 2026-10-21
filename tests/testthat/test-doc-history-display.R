@@ -44,6 +44,7 @@ test_that("history renderers register lazily for each inherited document format"
 })
 
 test_that("notebook MIME displays share the compact printer without changing full history", {
+  skip_on_cran()
   doc_history_load_repr()
   testthat::local_reproducible_output(width = 100)
   x = doc_history_fixture()
@@ -85,6 +86,7 @@ test_that("notebook MIME displays share the compact printer without changing ful
 })
 
 test_that("rich history displays keep markup inert and redact only a display copy", {
+  skip_on_cran()
   doc_history_load_repr()
   local_vault()
   canary = paste0("FAKE-doc-history-", "display-canary")
@@ -115,6 +117,7 @@ test_that("rich history displays keep markup inert and redact only a display cop
 })
 
 test_that("knitr dispatch prints a history once before a data-frame renderer can intercept it", {
+  skip_on_cran()
   skip_if_not_installed("knitr")
   requireNamespace("knitr", quietly = TRUE)
   testthat::local_reproducible_output(width = 100)

@@ -164,6 +164,7 @@ bad_utf8 = function(prefix) {
 }
 
 test_that("the command classifier meets G5's command cases (g5_classify.R)", {
+  skip_on_cran()
   # G5's `echo x >> ~/.bashrc` is written with an absolute path outside the project: setup.R
   # moves HOME into tempdir(), where every path is of class "temp"
   root = local_project()
@@ -237,6 +238,7 @@ test_that("flag rows bind without duplicates", {
 # Added (D-061): the classifier standard. (A) Level 0 only through a read-only reading; (B) a
 # construct gptr does not model is at least 3; (C) 4 only for a literal critical or control target.
 test_that("commands follow the classifier standard (D-061)", {
+  skip_on_cran()
   root = local_project()
   cases = list(
     list(0L, "ls -la"), list(0L, "git log --oneline -10"), list(0L, "git diff HEAD~1 -- R/"),
@@ -300,6 +302,7 @@ test_that("commands follow the classifier standard (D-061)", {
 })
 
 test_that("SQL and Python follow the classifier standard (D-061)", {
+  skip_on_cran()
   root = local_project()
   sql = list(
     list(0L, "SELECT date_part('year', d), list_value(1, 2) FROM t"),
@@ -373,6 +376,7 @@ test_that("every shipped level-0 command row has a read-only reading (D-061)", {
 })
 
 test_that("text encodings and long glob words are read safely (D-061)", {
+  skip_on_cran()
   root = local_project()
   expect_identical(flags_level(risk_command(c("git", NA_character_), root)), 3L)
   expect_identical(nrow(risk_command(character(), root)), 0L)
@@ -427,6 +431,7 @@ classify_env = function() {
 }
 
 test_that("report 18's 101 cases get their levels (18 section 2.5.2, amended)", {
+  skip_on_cran()
   root = local_project(files = list("helper.R" = "unlink('data', recursive = TRUE)"))
   e = classify_env()
   # Six expectations differ from 18's table on purpose: system2('rm', c('-rf', '/')) 3 -> 4 and
@@ -577,6 +582,7 @@ test_that("gptr_artifacts() that relaunches or stops an app is level 3 process (
 })
 
 test_that("G5's 46 polyglot calls are classified through their arguments (G5 p08)", {
+  skip_on_cran()
   root = local_project(files = list(
     "build.sh" = c("#!/bin/sh", "echo building", "mkdir -p out", "cp data.csv out/",
                    "rm -rf build")))
@@ -773,6 +779,7 @@ test_that("computed calls, slots, lookups and secret reads are level 3 (D-132)",
 })
 
 test_that("direct literal targets and function values whose row is 4 are level 4 (D-132)", {
+  skip_on_cran()
   root = local_project()
   e = classify_env()
   for (code in c("writeLines(text = 'x', '.Rprofile')", "saveRDS(object = x, '.Rprofile')",
@@ -815,6 +822,7 @@ test_that("indirections reach a literal target only at level 3 (D-132)", {
 })
 
 test_that("a name assigned outside a function body holds the paths it may hold (D-211)", {
+  skip_on_cran()
   root = local_project()
   for (code in c("p = '/etc/gptr-old.csv'; file.remove(p)",
                  "p = normalizePath('/etc/gptr-old.csv', mustWork = FALSE); file.remove(p)",
@@ -1034,6 +1042,7 @@ test_that("a reading function passed as a value reads a path the code computes",
 })
 
 test_that("a function passed by position to aggregate or reorder, or as ties or gr, is called", {
+  skip_on_cran()
   root = local_project()
   e = classify_env()
   lv = function(code) gptr_risk(code, envir = e, root = root)$level

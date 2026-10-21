@@ -1,6 +1,7 @@
 # Rich notebook display stays separate from the recorded source and never emits messages.
 
 test_that("session representations return answer and footer without printing or repeating code", {
+  skip_on_cran()
   local_project()
   s = doc_test_session(list(doc_test_turn("recorded_only = 42")))
   d = session_data(s)
@@ -62,6 +63,7 @@ test_that("notebook Markdown keeps code literal and prose HTML and images inert"
 })
 
 test_that("notebook session display redacts synthetic credentials without changing the session", {
+  skip_on_cran()
   local_project()
   local_vault()
   s = doc_test_session(list(doc_test_turn("n = 1")))

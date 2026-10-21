@@ -73,6 +73,7 @@ test_that("owned MCP stop preserves seeded and absent RNG while revoking its tok
 })
 
 test_that("owned MCP stop retains the original error or interrupt and caller RNG", {
+  skip_on_cran()
   for (outcome in c("error", "interrupt")) {
     for (seeded in c(FALSE, TRUE)) {
       local({
@@ -211,6 +212,7 @@ test_that("unknown MCP stop confirmation never reports success or drops recovery
 })
 
 test_that("a stopping MCP listener refuses new serving tokens and HTTP dispatch", {
+  skip_on_cran()
   x = mcp_stop_pure(function() NULL)
   x$state$server$stopping = TRUE
   calls = new.env(parent = emptyenv())

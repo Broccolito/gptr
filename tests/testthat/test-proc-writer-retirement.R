@@ -64,6 +64,7 @@ retirement_state = function(.env = parent.frame()) {
 }
 
 test_that("idle writer eligibility requires exact identities and a clean acknowledged mailbox", {
+  skip_on_cran()
   x = retirement_state()
   expect_true(proc_writer_idle(x$state, x$reactor))
   expect_identical(x$kills, 0L)
@@ -110,6 +111,7 @@ test_that("idle writer eligibility refuses queued unknown changed and unpublishe
 })
 
 test_that("retiring an acknowledged writer preserves the target input connection", {
+  skip_on_cran()
   x = retirement_state()
   x$state$retiring = TRUE
   expect_true(proc_writer_stop(x$target, .close_target = FALSE))
@@ -170,6 +172,7 @@ test_that("writer stop never removes a replacement table state", {
 })
 
 test_that("ordinary writer stop retains its default target-input close", {
+  skip_on_cran()
   x = retirement_state()
   expect_true(proc_writer_stop(x$target))
   expect_identical(x$closes, 1L)
@@ -192,6 +195,7 @@ test_that("retiring writer retry refuses replacement until owned cleanup settles
 })
 
 test_that("writer admission retires only one verified other idle actor at the unchanged cap", {
+  skip_on_cran()
   x = retirement_state()
   other = new.env(parent = emptyenv())
   other$closed = FALSE
@@ -209,6 +213,7 @@ test_that("writer admission retires only one verified other idle actor at the un
 })
 
 test_that("writer admission does not retire a queued actor to obtain a cap slot", {
+  skip_on_cran()
   x = retirement_state()
   other = new.env(parent = emptyenv())
   other$closed = FALSE

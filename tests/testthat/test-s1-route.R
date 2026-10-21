@@ -8,6 +8,7 @@ source(testthat::test_path("fixtures", "jev", "harness.R"), local = TRUE)
 # ---- Task 7: states and the batch rule ----------------------------------------------------------
 
 test_that("the batch rule gives one state per element or unnamed list item", {
+  skip_on_cran()
   expect_identical(s1_states(c(a = "A puppy.", b = "A car."), "text"),
                    list(a = list(text = "A puppy."), b = list(text = "A car.")))
   expect_identical(s1_states(1:3, "n")[[3]], list(n = 3L))
@@ -22,6 +23,7 @@ test_that("the batch rule gives one state per element or unnamed list item", {
 })
 
 test_that("a data frame gives one record per row and marks the split; I() keeps it whole", {
+  skip_on_cran()
   df = data.frame(a = 1:2, b = c("u", "v"))
   st = s1_states(df, "row")
   expect_identical(st[[2]], list(row = list(a = 2L, b = "v")))
@@ -45,6 +47,7 @@ test_that("matrices, environments and functions are one described state", {
 })
 
 test_that("large values are described instead of sent, and long text is cut", {
+  skip_on_cran()
   local_mocked_bindings(
     describe_binding = function(name, envir, budget = 150L) c("<numeric> 5000 values", name),
     gptr_describe = function(x, budget = 150L, ...) "<numeric> described"
@@ -85,6 +88,7 @@ test_that("a session becomes at most gptr.s1_state_max characters of facts and a
 })
 
 test_that("inputs combine element-wise and must share one length", {
+  skip_on_cran()
   z = s1_zip(list(s1_part(c(x = 1, y = 2), "a"), s1_part("ctx", "b")))
   expect_identical(z$states, list(list(a = 1, b = "ctx"), list(a = 2, b = "ctx")))
   expect_identical(z$names, c("x", "y"))
@@ -208,6 +212,7 @@ test_that("states leave I() lists, date-times and nested data frames editable in
 })
 
 test_that("a session state stays within gptr.s1_state_max even when its facts are long", {
+  skip_on_cran()
   local_mocked_bindings(session_data = function(s) {
     list(status = "error", reason = strrep("r", 300), last_text = "Fine.",
          values = list(list(name = "fit", class = "lm")))
@@ -514,6 +519,7 @@ test_that("a cached record that no longer answers the question is a miss (IC-74)
 })
 
 test_that("the request preflight runs before the call's values are read (IC-74)", {
+  skip_on_cran()
   s1_fresh()
   local_mocked_bindings(catalog_ollama_discover = function(...) stop("discovery must not run"),
                         s1_inputs = function(call) stop("the call's values were read"))
@@ -707,6 +713,7 @@ test_that("an answer whose confidence is unknown is inside the uncertain band (I
 })
 
 test_that("a value from an uncertain() function must be a value of the question", {
+  skip_on_cran()
   sq = list(type = "score", options = c("lo", "mid", "hi"))
   sc = s1_build(sq, list(list(score = 1.2, probabilities = c(lo = 0.2, mid = 0.4, hi = 0.4),
                               confidence = 0.1)), NULL, 0.5, list())
@@ -932,6 +939,7 @@ router_spec = function() {
 }
 
 test_that("the example ends with a factory that registers the jev-auto router", {
+  skip_on_cran()
   path = jev_router_path()
   expect_true(file.exists(path))
   factory = source(path, local = new.env())$value
@@ -1012,6 +1020,7 @@ test_that("without a System 1 model the router plans on the standard model", {
 })
 
 test_that("the route keeps its phase across a compaction and plans without System 1", {
+  skip_on_cran()
   spec = router_spec()
   asked = new.env()
   asked$n = 0L

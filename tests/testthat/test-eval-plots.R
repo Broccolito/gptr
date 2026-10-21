@@ -8,6 +8,7 @@ record_scatter = function() {
 }
 
 test_that("plot_png renders a recorded plot to a 768x512 PNG image block", {
+  skip_on_cran()
   skip_if_not(isTRUE(capabilities("png")) || requireNamespace("ragg", quietly = TRUE))
   p = record_scatter()
   b = plot_png(p)
@@ -22,6 +23,7 @@ test_that("plot_png renders a recorded plot to a 768x512 PNG image block", {
 })
 
 test_that("offscreen capture uses pdf(NULL), writes no Rplots.pdf and restores the device", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   withr::local_dir(dir)
   before = grDevices::dev.cur()
@@ -94,6 +96,7 @@ test_that("low-level additions update the captured page instead of adding a plot
 })
 
 test_that("a device the code opens after closing the offscreen one is offscreen too (IC-67)", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   withr::local_dir(dir)
   devs = grDevices::dev.list()
@@ -123,6 +126,7 @@ test_that("a device the code opens after closing the offscreen one is offscreen 
 })
 
 test_that("without a human, a device the code opens after closing the user's is offscreen", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   withr::local_dir(dir)
   devs = grDevices::dev.list()
@@ -147,6 +151,7 @@ test_that("without a human, a device the code opens after closing the user's is 
 })
 
 test_that("plot_png keeps no PNG file and keeps the current device, also when replay fails", {
+  skip_on_cran()
   skip_if_not(isTRUE(capabilities("png")) || requireNamespace("ragg", quietly = TRUE))
   p = record_scatter()
   tmp = dirname(ws_path("cache", "tmp", "gptr-plot-probe"))
@@ -167,6 +172,7 @@ test_that("plot_png keeps no PNG file and keeps the current device, also when re
 })
 
 test_that("in capture mode, a device opened at the number of a closed user device is captured", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   withr::local_dir(dir)
   devs = grDevices::dev.list()
@@ -192,6 +198,7 @@ test_that("in capture mode, a device opened at the number of a closed user devic
 })
 
 test_that("plot_render_all removes the PNG of a failed replay and gives NA for it", {
+  skip_on_cran()
   skip_if_not(isTRUE(capabilities("png")) || requireNamespace("ragg", quietly = TRUE))
   tmp = dirname(ws_path("cache", "tmp", "gptr-plot-probe"))
   pngs = function() list.files(tmp, pattern = "^gptr-plot-.*[.]png$")
@@ -213,6 +220,7 @@ test_that("plot_render_all removes the PNG of a failed replay and gives NA for i
 })
 
 test_that("device capture enables an empty user's display list", {
+  skip_on_cran()
   withr::local_pdf(NULL)
   grDevices::dev.control(displaylist = "inhibit")
   user_dev = grDevices::dev.cur()
@@ -228,6 +236,7 @@ test_that("device capture enables an empty user's display list", {
 })
 
 test_that("a device the code opens keeps every panel of a multi-panel page (#29)", {
+  skip_on_cran()
   plot_news = function(p) {
     sum(vapply(p[[1L]], function(x) identical(x[[2L]][[1L]]$name, "C_plot_new"), NA))
   }

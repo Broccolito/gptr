@@ -5,6 +5,7 @@ fake_refresh = paste0("rt_", strrep("FAKErefresh", 3))
 fake_access = paste0("at_", strrep("FAKEaccess0", 3))
 
 test_that("auth.json is created 0600 in a 0700 directory and round-trips an api key", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   auth_store_set("openrouter", list(type = "api_key", key = fake_or))
@@ -25,6 +26,7 @@ test_that("auth.json is created 0600 in a 0700 directory and round-trips an api 
 })
 
 test_that("on Windows auth.json lives under the per-user APPDATA profile (privacy is its ACL)", {
+  skip_on_cran()
   skip_if_not(is_windows())
   local_vault()
   appdata = withr::local_tempdir()
@@ -40,6 +42,7 @@ test_that("on Windows auth.json lives under the per-user APPDATA profile (privac
 })
 
 test_that("access tokens stay in memory: registered, never written", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   auth_store_set("mcp:github", list(type = "oauth", issuer = "https://auth.example.test",
@@ -92,6 +95,7 @@ test_that("a keyring reference without keyring installed is a classed error", {
 })
 
 test_that("remove, stale locks, corrupt files and handles in records", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   expect_false(auth_store_remove("openrouter"))
@@ -112,6 +116,7 @@ test_that("remove, stale locks, corrupt files and handles in records", {
 })
 
 test_that("a lock is stale only when its holder is gone, its pid was reused, or after 30 s", {
+  skip_on_cran()
   d = withr::local_tempdir()
   lock = file.path(d, "auth.json.lock")
   dir.create(lock)
@@ -127,6 +132,7 @@ test_that("a lock is stale only when its holder is gone, its pid was reused, or 
 })
 
 test_that("Linux missing-process errors release a lock only with confirmed holder absence", {
+  skip_on_cran()
   codes = stats::setNames(ps::errno()$value, ps::errno()$name)
   lock = file.path(withr::local_tempdir(), "auth.json.lock")
   dir.create(lock)
@@ -152,6 +158,7 @@ test_that("Linux missing-process errors release a lock only with confirmed holde
 })
 
 test_that("malformed stores and credential fields fail before writing values", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   p = auth_store_path(create = TRUE)
@@ -187,6 +194,7 @@ test_that("keyring references are validated before backend access", {
 })
 
 test_that("record metadata cannot partially select keyring actions", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   keyring_calls = 0L

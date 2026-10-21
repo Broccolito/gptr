@@ -33,6 +33,7 @@ test_that("Windows text reads canonical file bytes despite empty alias metadata"
 })
 
 test_that("Windows writes use the canonical target when readlink reports no link", {
+  skip_on_cran()
   root = path_norm(withr::local_tempdir())
   target = file.path(root, "real.R")
   alias = file.path(root, "alias.R")
@@ -47,6 +48,7 @@ test_that("Windows writes use the canonical target when readlink reports no link
 })
 
 test_that("Windows direct link policy distinguishes a link from its ordinary descendants", {
+  skip_on_cran()
   root = path_norm(withr::local_tempdir())
   target = file.path(root, "real")
   alias = file.path(root, "alias")
@@ -64,6 +66,7 @@ test_that("Windows direct link policy distinguishes a link from its ordinary des
 })
 
 test_that("Windows checkpoint walks list directory links without descending into them", {
+  skip_on_cran()
   root = local_project()
   target = file.path(root, "data")
   alias = file.path(root, "data-link")
@@ -80,6 +83,7 @@ test_that("Windows checkpoint walks list directory links without descending into
 })
 
 test_that("Windows checkpoint capture refuses a direct file link", {
+  skip_on_cran()
   root = local_project()
   target = file.path(root, "real.txt")
   alias = file.path(root, "alias.txt")

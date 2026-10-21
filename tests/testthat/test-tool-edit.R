@@ -16,6 +16,7 @@ err = function(expr) {
 e1 = function(old, new) list(list(oldText = old, newText = new))
 
 test_that("a basic edit writes the file and returns Pi's message and a diff", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "edit-test.txt", "Hello, world!")
   ed = edit_file(f, e1("world", "testing"))
@@ -30,6 +31,7 @@ test_that("a basic edit writes the file and returns Pi's message and a diff", {
 })
 
 test_that("edit errors use Pi's texts and never write partially", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "edit-test.txt", "Hello, world!")
   expect_match(err(edit_file(f, e1("nonexistent", "t"))), "^Could not find the exact text in ")
@@ -76,6 +78,7 @@ test_that("multiple edits are matched against the original, not incrementally", 
 })
 
 test_that("the fuzzy fallback normalises whitespace, quotes, dashes and special spaces", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "tws.txt", "line one   \nline two  \nline three\n")
   edit_file(f, e1("line one\nline two\n", "replaced\n"))
@@ -113,6 +116,7 @@ test_that("NFKC compatibility forms match through stringi", {
 })
 
 test_that("exact matches win and occurrences are counted in fuzzy space (Pi)", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "exact.txt", "const x = 'exact';\nconst y = 'other';\n")
   ed = edit_file(f, e1("const x = 'exact';", "const x = 'changed';"))
@@ -123,6 +127,7 @@ test_that("exact matches win and occurrences are counted in fuzzy space (Pi)", {
 })
 
 test_that("CRLF, BOM, mixed endings, CP1252, UTF-16 and stray bytes round-trip byte for byte", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "crlf.txt", "first\r\nsecond\r\nthird\r\n")
   edit_file(f, e1("second\n", "REPLACED\n"))
@@ -158,6 +163,7 @@ test_that("CRLF, BOM, mixed endings, CP1252, UTF-16 and stray bytes round-trip b
 })
 
 test_that("replace_all replaces every occurrence", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "e1.R", "f = function(x) x\ng = function(y) y\n")
   ed = edit_file(f, e1("function", "\\(z)"), replace_all = TRUE)
@@ -178,6 +184,7 @@ test_that("Pi's argument shim accepts JSON strings, a single object and a data f
 })
 
 test_that("the result text carries a diff only when something deviated (acceptance 6)", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "exact.R", "x = 1\ny = 2\n")
   ed = edit_file(f, e1("y = 2", "y = 3"))
@@ -198,6 +205,7 @@ test_that("the result text carries a diff only when something deviated (acceptan
 })
 
 test_that("patch envelopes add, update, move and delete files atomically", {
+  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "a.R", "x = 1\ny = 2\nz = 3\n")
   put_file(td, "old.R", "gone\n")
@@ -235,6 +243,7 @@ test_that("edit_file() applies a pasted envelope relative to the working directo
 })
 
 test_that("an envelope pasted into the only edit's newText or oldText is applied as a patch", {
+  skip_on_cran()
   td = withr::local_tempdir()
   withr::local_dir(td)
   put_file(td, "a.R", "x = 1\n")
@@ -270,6 +279,7 @@ test_that("gptr_patch prints the message, and the diff only when fuzzy", {
 # (dev/.validation/P10/task6-probe-plan-literal.log).
 
 test_that("a patch hunk that only removes lines also removes their line ending", {
+  skip_on_cran()
   td = withr::local_tempdir()
   ap = function(name, text, hunk) {
     put_file(td, name, text)
@@ -314,6 +324,7 @@ test_that("a patch that names one file in two operations is refused and writes n
 })
 
 test_that("a hunk line without a prefix and an update without hunks are invalid patches", {
+  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "a.R", "x = 1\n  = 1\n")
   bare = "*** Begin Patch\n*** Update File: a.R\n@@\nx = 1\n-  = 1\n*** End Patch"
@@ -357,6 +368,7 @@ test_that("Delete File refuses a directory, an empty Add File is empty, a move r
 })
 
 test_that("an envelope whose hunk matched through the fuzzy fallback carries the diff", {
+  skip_on_cran()
   td = withr::local_tempdir()
   withr::local_dir(td)
   put_file(td, "a.R", "x = 1   \ny = 2\n")
@@ -393,6 +405,7 @@ test_that("a NUL byte past the first 8000 makes a file binary, with or without a
 })
 
 test_that("an oldText or newText that is not one string is refused with a classed error", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "t.txt", "abc\n")
   cls = "gptr_error_invalid_argument"
@@ -409,6 +422,7 @@ test_that("an oldText or newText that is not one string is refused with a classe
 })
 
 test_that("an envelope inside JSON-string, single-object or data-frame edits is a patch", {
+  skip_on_cran()
   td = withr::local_tempdir()
   withr::local_dir(td)
   env = "*** Begin Patch\n*** Update File: a.R\n@@\n-x = 1\n+x = 2\n*** End Patch"
@@ -519,6 +533,7 @@ test_that("a move onto its own file under another spelling keeps the file and ta
 })
 
 test_that("an oldText of only whitespace never matches between every two characters", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "w.txt", "ab\ncd\n")
   expect_match(err(edit_file(f, e1("\t", "X"), replace_all = TRUE)),

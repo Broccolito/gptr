@@ -17,6 +17,7 @@ local_login_probe = function(cli, response, help = NULL, .env = parent.frame()) 
 }
 
 test_that("Codex login status recognizes signed-in and explicit signed-out reports", {
+  skip_on_cran()
   for (signed_in in c(TRUE, FALSE)) {
     response = list(status = if (signed_in) 0L else 1L, stdout = "",
                     stderr = if (signed_in) "Logged in using ChatGPT" else "Not logged in")
@@ -58,6 +59,7 @@ test_that("unsupported status commands never enter the chat path", {
 })
 
 test_that("malformed, inconsistent, timed-out and failed status checks are unknown", {
+  skip_on_cran()
   responses = list(
     list(status = 0L, stdout = "not JSON", stderr = ""),
     list(status = 0L, stdout = '{"loggedIn":false}', stderr = ""),
@@ -112,6 +114,7 @@ test_that("provider listing opts into login checks without HTTP or inference", {
 })
 
 test_that("unavailable CLI providers skip login subprocesses", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   local_mocked_bindings(
     provider_status = function(p, h, check) list(status = "not found", version = NA_character_),

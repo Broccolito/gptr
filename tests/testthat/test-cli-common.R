@@ -17,6 +17,7 @@ test_that("pcli_find() uses options(gptr.cli_path) and keeps prefix arguments", 
 })
 
 test_that("a missing command signals gptr_error_cli_missing with the install hint", {
+  skip_on_cran()
   withr::local_options(gptr.cli_path = list(codex = file.path(tempdir(), "no-such-codex")))
   err = expect_error(pcli_find("codex"), class = "gptr_error_cli_missing")
   expect_identical(err$cli, "codex")
@@ -96,6 +97,7 @@ test_that("the Unix install locations are those of IC-65, plus ~/.claude/local f
 })
 
 test_that("options(gptr.cli_path) must be NULL or a list named claude or codex", {
+  skip_on_cran()
   pcli_cache_clear()
   withr::local_options(gptr.cli_path = file.path(tempdir(), "claude"))
   err = expect_error(pcli_find("claude"), class = "gptr_error_invalid_argument")
@@ -157,6 +159,7 @@ test_that("a codex npm shim resolves to its vendored codex.exe", {
 # ---- version and capability probes, notices (Task 2) -------------------------------------------
 
 test_that("pcli_bare_state() detects a -p that defaults to --bare and its opt-out", {
+  skip_on_cran()
   plain = pcli_bare_state("  --bare   Minimal mode: skip hooks, plugins and CLAUDE.md")
   expect_false(plain$bare_default)
   expect_null(plain$bare_optout)
@@ -232,6 +235,7 @@ local_probe_runs = function(results, .env = parent.frame()) {
 }
 
 test_that("a --version run that failed or timed out is unreadable and is not cached", {
+  skip_on_cran()
   pcli_cache_clear()
   withr::defer(pcli_cache_clear())
   path = structure("/no/such/dir/claude", cli = "claude")
@@ -251,6 +255,7 @@ test_that("a --version run that failed or timed out is unreadable and is not cac
 })
 
 test_that("a help probe that failed or timed out is an error and is not cached", {
+  skip_on_cran()
   pcli_cache_clear()
   withr::defer(pcli_cache_clear())
   codex = structure("/no/such/dir/codex", cli = "codex")
@@ -307,6 +312,7 @@ test_that("each route prints its one-time notice through gptr_inform()", {
 # ---- status, plan status, model entries (Task 3) -------------------------------------------------
 
 test_that("status() never starts a process without check = TRUE", {
+  skip_on_cran()
   pcli_cache_clear()
   withr::defer(pcli_cache_clear())
   local_mocked_bindings(proc_run = function(...) stop("spawned a process"),
@@ -352,6 +358,7 @@ test_that("CLI invocations always get full model ids", {
 })
 
 test_that("a rate_limit_event becomes the provider's plan status", {
+  skip_on_cran()
   pcli_cache_clear()
   withr::defer(pcli_cache_clear())
   info = list(status = "allowed", resetsAt = 1790749800, rateLimitType = "five_hour",
@@ -368,6 +375,7 @@ test_that("a rate_limit_event becomes the provider's plan status", {
 })
 
 test_that("the plan routes list `default` and full ids; fake CLI records are offline", {
+  skip_on_cran()
   ids = vapply(pcli_models("claude"), function(m) m$id, "")
   expect_identical(ids, c("default", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5"))
   expect_identical(pcli_models("codex")[[1]]$id, "default")
@@ -384,6 +392,7 @@ test_that("the plan routes list `default` and full ids; fake CLI records are off
 # ---- Task 3 review round 1 (D-097) --------------------------------------------------------------
 
 test_that("codex/default is always a model the Codex route lists", {
+  skip_on_cran()
   listed = setdiff(vapply(pcli_models("codex"), function(m) m$id, ""), "default")
   # the shipped catalog's newest GPT (gpt-6.1-sol) is absent from the Codex catalog (08 2.C)
   expect_true(pcli_default_model("cli-codex") %in% listed)
@@ -415,6 +424,7 @@ test_that("status(check = TRUE) keeps a capability problem the probe finds", {
 })
 
 test_that("a malformed rate_limit_event leaves NA fields instead of an error", {
+  skip_on_cran()
   pcli_cache_clear()
   withr::defer(pcli_cache_clear())
   rec = pcli_plan_set("claude-cli", "oops")
@@ -474,6 +484,7 @@ test_that("a CLI sees only the turns after the last one its own provider answere
 })
 
 test_that("pcli_params() reads the mode and budget patched in by request_params", {
+  skip_on_cran()
   p = pcli_params(list(params = list(cli_mode = "auto", cli_budget = list(turns = 3, cost = 1.5))))
   expect_identical(p, list(mode = "auto", turns = 3, cost = 1.5))
   p = pcli_params(list(params = list(max_tokens = 1000L)))
@@ -488,6 +499,7 @@ test_that("pcli_params() reads the mode and budget patched in by request_params"
 })
 
 test_that("one CLI turn emits one start and one terminal event and closes the turn", {
+  skip_on_cran()
   opts = stub_opts()
   opts$state$pcli_request_id = "q000000000001"
   s = pcli_turn_new(stub_model("codex"), opts)
@@ -509,6 +521,7 @@ test_that("one CLI turn emits one start and one terminal event and closes the tu
 })
 
 test_that("a failed turn emits one error event with the class and the partial message", {
+  skip_on_cran()
   opts = stub_opts()
   s = pcli_turn_new(stub_model("claude"), opts)
   pcli_text_block(s, "partial")
@@ -524,6 +537,7 @@ test_that("a failed turn emits one error event with the class and the partial me
 })
 
 test_that("a CLI turn without reported usage records unknown usage, never zeros (IC-74)", {
+  skip_on_cran()
   opts = stub_opts()
   s = pcli_turn_new(stub_model("claude"), opts)
   msg = pcli_fail(s, "billing", "billed to an API key")
@@ -564,6 +578,7 @@ test_that("the child table holds adapter states weakly", {
 })
 
 test_that("stopping a claude child mid-turn sends the interrupt, then kill_all()", {
+  skip_on_cran()
   seen = new.env()
   seen$written = character()
   seen$killed = 0L
@@ -656,6 +671,7 @@ test_that("the wire log gets one redacted line per CLI turn start and terminal e
 })
 
 test_that("wire-log values are redacted before encoding, so each line stays valid JSON", {
+  skip_on_cran()
   local_project()
   local_gptr_options(wire_log = TRUE)
   # a rule ending in \S* (common in redaction rules) runs on to the end of a compact JSON line
@@ -689,6 +705,7 @@ cli_hook_events = function() {
 }
 
 test_that("builtin:cli registers the claude-cli route, its adapter and two hooks", {
+  skip_on_cran()
   claude = registry_get("provider", "claude-cli")
   expect_identical(claude$api, "cli-claude")
   expect_identical(claude$type, "cli")
@@ -711,6 +728,7 @@ test_that("tests find no installed CLI: setup.R points gptr.cli_path at no file"
 })
 
 test_that("request_params gives CLI routes the mode and the remaining budget", {
+  skip_on_cran()
   local_mocked_bindings(setting_get = function(key, session = NULL, default = NULL) {
     if (identical(key, "budget")) list(tokens = 2e6, cost = 5, turns = 10) else default
   })
@@ -738,6 +756,7 @@ test_that("request_params gives CLI routes the mode and the remaining budget", {
 # ---- stopping CLI children (Task 9) --------------------------------------------------------------
 
 test_that("agent_end stops a child whose turn is open; session_shutdown always", {
+  skip_on_cran()
   calls = new.env()
   calls$n = 0L
   local_mocked_bindings(pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
@@ -777,6 +796,7 @@ test_that("builtin:cli also hooks agent_end and session_shutdown", {
 })
 
 test_that("the hooks check the control files of a codex exec they stopped (D-106)", {
+  skip_on_cran()
   root = local_project(files = list(".gptr/settings.json" = "{}"))
   local_mocked_bindings(pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
     invisible(TRUE)
@@ -800,6 +820,7 @@ test_that("the hooks check the control files of a codex exec they stopped (D-106
 # ---- the codex route (Task 10) ------------------------------------------------------------------
 
 test_that("builtin:cli registers the codex route and its adapter", {
+  skip_on_cran()
   codex = registry_get("provider", "codex")
   expect_identical(codex$api, "cli-codex")
   expect_identical(codex$type, "cli")

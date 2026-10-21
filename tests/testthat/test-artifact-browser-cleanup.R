@@ -48,6 +48,7 @@ test_that("artifact browser cleanup retains its owner after a process-close erro
 })
 
 test_that("artifact browser cleanup leaves a remote browser process alone", {
+  skip_on_cran()
   x = artifact_browser_fixture(local = FALSE)
   expect_invisible(x$close())
   expect_identical(x$state$events, "websocket")
@@ -92,6 +93,7 @@ test_that(
 })
 
 test_that("artifact browser cleanup retries a dead owner's failed socket without signalling", {
+  skip_on_cran()
   x = artifact_browser_fixture()
   x$state$alive = FALSE
   original = simpleError("controlled socket close")
@@ -110,6 +112,7 @@ test_that("artifact browser cleanup retries a dead owner's failed socket without
 })
 
 test_that("artifact browser cleanup cannot discard a replacement cache object", {
+  skip_on_cran()
   x = artifact_browser_fixture()
   x$state$replace_on_close = TRUE
   expect_error(x$close(), class = "gptr_error_io")
@@ -120,6 +123,7 @@ test_that("artifact browser cleanup cannot discard a replacement cache object", 
 })
 
 test_that("artifact browser cache refuses unknown ownership without constructing a replacement", {
+  skip_on_cran()
   for (kind in c("unknown", "error", "interrupt")) {
     x = artifact_browser_fixture()
     original = if (kind == "error") simpleError("controlled cache query") else
@@ -169,6 +173,7 @@ test_that("artifact browser cache reuses its live exact container without a new 
 })
 
 test_that("a dead browser settles only its retained child loop before closing the socket", {
+  skip_on_cran()
   x = artifact_browser_fixture()
   x$state$alive = FALSE
   x$state$needs_pump = TRUE
@@ -286,6 +291,7 @@ test_that("browser close preserves caller RNG and callback effects on success an
 })
 
 test_that("remote browser socket cleanup preserves caller RNG without a local process query", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     local({
       withr::local_preserve_seed()
@@ -428,6 +434,7 @@ test_that("browser cleanup retains ownership after deadline or clock failure", {
 })
 
 test_that("delayed browser callbacks preserve exact conditions and replacement caches", {
+  skip_on_cran()
   for (kind in c("error", "interrupt")) {
     x = artifact_browser_fixture()
     original = structure(list(message = "controlled delayed callback", call = NULL),
@@ -466,6 +473,7 @@ test_that("delayed browser callbacks preserve exact conditions and replacement c
 })
 
 test_that("an owned connected browser disconnects before its exact process is stopped", {
+  skip_on_cran()
   x = artifact_browser_fixture()
   x$state$cdp_error = simpleError("must not truncate the open socket")
   expect_invisible(x$close())
@@ -483,6 +491,7 @@ test_that("an owned connected browser disconnects before its exact process is st
 })
 
 test_that("owned socket-close errors and interrupts retain the connection before signalling", {
+  skip_on_cran()
   for (kind in c("error", "interrupt")) {
     x = artifact_browser_fixture()
     original = structure(list(message = "controlled owned socket", call = NULL),
@@ -543,6 +552,7 @@ test_that("socket-first cleanup leaves borrowed dead and mismatched owners prote
 })
 
 test_that("socket-first close keeps the exact-owner fallback and shared deadline", {
+  skip_on_cran()
   x = artifact_browser_fixture()
   expect_invisible(x$close())
   expect_identical(x$state$cdp_calls, 0L)
@@ -563,6 +573,7 @@ test_that("socket-first close keeps the exact-owner fallback and shared deadline
 })
 
 test_that("socket-first cleanup never sends a destructive browser-close command", {
+  skip_on_cran()
   x = artifact_browser_fixture()
   x$state$cdp_error = simpleError("a CDP close would end the server-side socket")
   x$state$cdp_ack_error = simpleError("a CDP wait would wait for process shutdown")
@@ -576,6 +587,7 @@ test_that("socket-first cleanup never sends a destructive browser-close command"
 })
 
 test_that("socket activity-query failures retain exact conditions and ownership", {
+  skip_on_cran()
   for (kind in c("error", "interrupt")) {
     x = artifact_browser_fixture()
     original = structure(list(message = "controlled activity query", call = NULL),

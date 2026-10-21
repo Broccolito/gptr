@@ -120,6 +120,7 @@ test_that("finish_turn can end the loop with a reason", {
 })
 
 test_that("queue items become relays, user messages, extension notes and agent reports (IC-55)", {
+  skip_on_cran()
   it = function(source, name = NULL) {
     list(text = "use TPM", blocks = list(), source = source, name = name, t = 0)
   }
@@ -157,6 +158,7 @@ test_that("request caps preserve queued input that cannot be delivered", {
 })
 
 test_that("tools finish in source order before steering or follow-ups are polled", {
+  skip_on_cran()
   log = character()
   append_log = function(x) log <<- c(log, x)
   lp = loop_new(steering = function() {
@@ -188,6 +190,7 @@ test_that("tools finish in source order before steering or follow-ups are polled
 })
 
 test_that("failure preserves the partial message and never dispatches its tool calls", {
+  skip_on_cran()
   for (reason in c("error", "aborted")) {
     partial = reply_tool(stop = reason)
     seen = NULL
@@ -215,6 +218,7 @@ test_that("late callbacks cannot reopen a settled loop", {
 })
 
 test_that("callbacks reject out-of-order delivery", {
+  skip_on_cran()
   lp = loop_new()
   expect_error(loop_response(lp, reply_text()), class = "gptr_error_internal")
   loop_next(lp)
@@ -263,6 +267,7 @@ test_that("follow-ups are consumed one at a time and text stop at cap leaves que
 })
 
 test_that("both truncation reasons mark tool batches; user-source steers become relays", {
+  skip_on_cran()
   for (reason in c("length", "refusal")) {
     lp = loop_new()
     loop_next(lp)

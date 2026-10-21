@@ -316,6 +316,7 @@ attached_names = function(s) {
 }
 
 test_that("shapes: lists, data-frame rows and vectors fan out; other objects do not", {
+  skip_on_cran()
   expect_identical(subagent_shape(list(a = 1, b = 2))[c("kind", "n")], list(kind = "list", n = 2L))
   expect_identical(subagent_shape(mtcars[1:3, ])$kind, "rows")
   expect_identical(subagent_shape(mtcars[1:3, ])$n, 3L)
@@ -517,6 +518,7 @@ test_that("each fan-out child gets its own element alone, as .x, for a symbol or
 })
 
 test_that("a fan-out with context = \"none\" is refused before any child starts", {
+  skip_on_cran()
   fake = local_team_fake()
   b = list(A = 1:3, B = letters)
   expect_error(peter("p", b, parallel = 2, .opts = list(context = "none")),

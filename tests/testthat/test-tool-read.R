@@ -9,6 +9,7 @@ png1 = jsonlite::base64_dec(paste0(
 ))
 
 test_that("read returns a small file verbatim, without line numbers", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "test.txt", "Hello, world!\nLine 2\nLine 3")
   r = read_file(f)
@@ -35,6 +36,7 @@ test_that("read truncates at 2000 lines and 50 KB with Pi's notices", {
 })
 
 test_that("offset and limit follow Pi (1-indexed; remaining-lines notice)", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "hundred.txt", paste(sprintf("Line %d", 1:100), collapse = "\n"))
   o = read_file(f, offset = 51)$text
@@ -53,6 +55,7 @@ test_that("offset and limit follow Pi (1-indexed; remaining-lines notice)", {
 })
 
 test_that("images are recognised by magic bytes, not by extension", {
+  skip_on_cran()
   td = withr::local_tempdir()
   r = read_file(put_file(td, "image.txt", png1))
   expect_identical(r$text, "Read image file [image/png]")
@@ -68,6 +71,7 @@ test_that("images are recognised by magic bytes, not by extension", {
 })
 
 test_that("a BMP is converted with magick or omitted with a note", {
+  skip_on_cran()
   td = withr::local_tempdir()
   bmp = raw(58)
   bmp[1:2] = charToRaw("BM")
@@ -100,6 +104,7 @@ test_that("binary files get a notice with a loading hint and are never deseriali
 })
 
 test_that("CP1252, UTF-16 and BOM files are decoded; the CR of CRLF is not shown", {
+  skip_on_cran()
   td = withr::local_tempdir()
   o = read_file(put_file(td, "latin1.txt", as.raw(c(0x63, 0x61, 0x66, 0xe9, 0x0a))))$text
   expect_true(startsWith(o, "caf\u00e9\n"))
@@ -119,6 +124,7 @@ test_that("CP1252, UTF-16 and BOM files are decoded; the CR of CRLF is not shown
 })
 
 test_that("the token cap and a giant first line are reported, never a partial line", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "prose.txt",
                 paste(rep("a sentence of ordinary prose words", 400), collapse = "\n"))
@@ -138,6 +144,7 @@ test_that("the token cap and a giant first line are reported, never a partial li
 })
 
 test_that("the streaming index gives the same windows as the in-memory reader", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "idx.txt",
                 paste0(paste(sprintf("row %d caf\u00e9", 1:1000), collapse = "\n"), "\n"))
@@ -154,6 +161,7 @@ test_that("the streaming index gives the same windows as the in-memory reader", 
 })
 
 test_that("skill:<name>/<path> resolves inside the skill directory only (IC-68)", {
+  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "sk/references/a.md", "reference text")
   put_file(td, "sk/SKILL.md", "---\nname: demo\n---\nbody")
@@ -167,6 +175,7 @@ test_that("skill:<name>/<path> resolves inside the skill directory only (IC-68)"
 })
 
 test_that("macOS screenshot names are found through Pi's fallbacks", {
+  skip_on_cran()
   td = withr::local_tempdir()
   real = put_file(td, "Screenshot 2024-01-01 at 10.00.00\u202fAM.png", "x")
   expect_identical(read_resolve(file.path(td, "Screenshot 2024-01-01 at 10.00.00 AM.png")),
@@ -176,6 +185,7 @@ test_that("macOS screenshot names are found through Pi's fallbacks", {
 })
 
 test_that("peter$read() gives gptr_lines with the contract attributes and prints within budget", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "hundred.txt", paste(sprintf("Line %d", 1:100), collapse = "\n"))
   v = read_lines_value(f, offset = 11, limit = 5)
@@ -202,6 +212,7 @@ test_that("peter$read() gives gptr_lines with the contract attributes and prints
 # (Task 4) lists which blocks are red against it and which only add coverage.
 
 test_that("a file that starts with BM is an image only with a plausible DIB header (Pi mime.ts)", {
+  skip_on_cran()
   td = withr::local_tempdir()
   txt = "BMI notes: body mass index is weight / height^2 in metric units.\n"
   expect_true(is.na(detect_image_mime(charToRaw(txt))))
@@ -247,6 +258,7 @@ test_that("offsets print without scientific notation; integer-range overflow is 
 })
 
 test_that("a long line is cut on a UTF-8 character boundary without dropping a whole character", {
+  skip_on_cran()
   expect_identical(read_line_prefix("a\u00e9", 3), "a\u00e9")
   expect_identical(read_line_prefix("a\u00e9", 2), "a")
   expect_identical(read_line_prefix("\u20ac\u20ac", 5), "\u20ac")
@@ -274,6 +286,7 @@ test_that("UTF-8 BOM text with invalid bytes decodes as decode_raw() decodes it 
 })
 
 test_that("the streaming reader decides the encoding on whole characters and decodes late bytes", {
+  skip_on_cran()
   td = withr::local_tempdir()
   cut = put_file(td, "cut.txt", c(charToRaw(strrep("a", 65531)), charToRaw("\u00e9"),
                              charToRaw(paste0(strrep("b", 100), "\nline two caf\u00e9\n"))))
@@ -302,6 +315,7 @@ test_that("a NUL byte in a large file's head or window makes it binary, never an
 })
 
 test_that("trailing NUL bytes past the first 8000 make an in-memory file binary, never an error", {
+  skip_on_cran()
   td = withr::local_tempdir()
   cp = put_file(td, "nul-tail-cp.txt", c(charToRaw(strrep("x\n", 5000)), charToRaw("caf"),
                                     as.raw(c(0xe9, 0x0a, 0, 0))))
@@ -315,6 +329,7 @@ test_that("trailing NUL bytes past the first 8000 make an in-memory file binary,
 })
 
 test_that("the streaming reader keeps at most cap bytes of a window and measures a longer line", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = put_file(td, "long.txt", paste0("short\n", strrep("z", 1000), "\r\nend\n"))
   w = read_text_window(f, 1L, 10L, big = 10, every = 7L, cap = 100)
@@ -363,6 +378,7 @@ test_that("skill pseudo-paths need P17's skill.body service", {
 # non-ASCII path in a non-UTF-8 locale, so reading cafe.R or cafe.rds with an accent stopped there
 # (the read tool names files through fs_path(), D-041).
 test_that("a non-ASCII file is read and classed by its extension in any locale (R >= 4.6)", {
+  skip_on_cran()
   local_name_locale()
   td = withr::local_tempdir()
   put_file(td, "caf\u00e9.R", "x = 1\ny = 2")
@@ -377,6 +393,7 @@ test_that("a non-ASCII file is read and classed by its extension in any locale (
 
 
 test_that("inline image encoding delegates native and fallback availability", {
+  skip_on_cran()
   skip_if(!nzchar(system.file(package = "openssl")), "openssl is not installed.")
   stopifnot(requireNamespace("openssl", quietly = TRUE))
   record = new.env(parent = emptyenv())
@@ -536,6 +553,7 @@ test_that("unavailable image conversion keeps the omission note and caller state
 })
 
 test_that("image loader errors and interrupts retain original identity and caller state", {
+  skip_on_cran()
   for (kind in c("error", "interrupt")) {
     local({
       image_magick_fixture()
@@ -624,6 +642,7 @@ test_that("the image startup guard does not reset unrelated state", {
 })
 
 test_that("image conversion preserves absent or existing RNG on success, error and interrupt", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     for (kind in c("success", "error", "interrupt")) {
       local({

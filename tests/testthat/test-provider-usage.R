@@ -9,6 +9,7 @@ opus_like = function() {
 }
 
 test_that("usage_new() fills zeros, the total and an empty cost", {
+  skip_on_cran()
   u = usage_new(input = 10, output = 5, cache_read = 100)
   expect_named(u, c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h",
                     "reasoning", "images", "total", "cost", "estimated"))
@@ -23,6 +24,7 @@ test_that("usage_new() fills zeros, the total and an empty cost", {
 })
 
 test_that("usage_cost() gives the documented dollar amounts (INFRA-20)", {
+  skip_on_cran()
   # report 07 section 5.2: Opus 5.5, 50 in, 1200 out, 200000 cache reads, 3000 5-minute writes
   u = usage_cost(usage_new(input = 50, output = 1200, cache_read = 200000,
                            cache_write_5m = 3000), opus_like())
@@ -46,6 +48,7 @@ test_that("usage_cost() gives the documented dollar amounts (INFRA-20)", {
 })
 
 test_that("price tiers switch on the prompt size and on the date", {
+  skip_on_cran()
   sol = list(prices = price_rows(
     list(from = "2000-01-01", tier = "default", input = 2, output = 10, cache_read = 0.1),
     list(from = "2000-01-01", tier = ">272k", input = 4, output = 15, cache_read = 0.2)
@@ -144,6 +147,7 @@ test_that("known zero local API rates do not erase unknown tokens", {
 })
 
 test_that("unknown prompt size does not silently select a cheaper threshold tier", {
+  skip_on_cran()
   tiers = price_rows(list(input = 1, output = 2),
                      list(tier = ">2k", input = 3, output = 4),
                      list(tier = ">4k", input = 5, output = 6))
@@ -252,6 +256,7 @@ test_that("child usage rows record the parent session and the route (INFRA-20)",
 })
 
 test_that("the process System 1 log is append-only", {
+  skip_on_cran()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
   assign("s1_log", NULL, envir = the)

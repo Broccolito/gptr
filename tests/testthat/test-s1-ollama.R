@@ -172,6 +172,7 @@ test_that("the endpoint is /v1/systemone on the configured origin, never a doubl
 })
 
 test_that("a request sends the state, the questions and raw base64 images, never a key", {
+  skip_on_cran()
   q = list(seen = list(type = "noul", instructions = "Is it a dog?"),
            kind = list(type = "choice", instructions = "Which?",
                        criteria = list(dog = NULL, cat = "A cat")),

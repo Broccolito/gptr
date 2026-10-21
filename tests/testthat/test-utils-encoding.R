@@ -10,6 +10,7 @@ local_c_ctype = function(.env = parent.frame()) {
 cafe_bytes = as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9))
 
 test_that("as_utf8() keeps valid UTF-8 bytes under LC_ALL=C where enc2utf8() does not (IC-62)", {
+  skip_on_cran()
   x = "caf\xc3\xa9"
   expect_identical(Encoding(x), "unknown")
   local_c_ctype()
@@ -63,6 +64,7 @@ test_that("raw_to_utf8() strips a BOM and falls back to CP1252", {
 })
 
 test_that("read_utf8() and write_utf8() round-trip CRLF, BOM and missing final newlines", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   cases = list(
     lf = charToRaw("a\nb\n"),

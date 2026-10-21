@@ -167,6 +167,7 @@ test_that("an error in a later callback becomes a diagnostic, not a pump failure
 })
 
 test_that("runs are held strongly until removed", {
+  skip_on_cran()
   run = new.env()
   run$id = "u-hold"
   reactor_run_add(run)
@@ -216,6 +217,7 @@ test_that("callbacks may cancel pending work without resurrecting it", {
 })
 
 test_that("interrupts unwind callback marks and pump stacks without diagnostics", {
+  skip_on_cran()
   interrupt = function() {
     stop(structure(list(message = "test interrupt", call = NULL),
                    class = c("interrupt", "condition")))
@@ -235,6 +237,7 @@ test_that("interrupts unwind callback marks and pump stacks without diagnostics"
 })
 
 test_that("callback failures reach the real registry diagnostics", {
+  skip_on_cran()
   registry = registry_env()
   before = length(registry$diag$rows)
   reactor_task(function() stop("reactor integration sentinel"))
@@ -397,6 +400,7 @@ test_that("INFRA-28: the wire log writes redacted lines open-append-close", {
 })
 
 test_that("the wire log is off by default and stays inside the workspace or tempdir()", {
+  skip_on_cran()
   local_gptr_options(wire_log = NULL)
   expect_null(wire_log_path("s1111111111"))
   local_gptr_options(wire_log = FALSE)
@@ -607,6 +611,7 @@ infra01_six = function(heads, lasts, ended, scheduled) {
 infra01_six_on_time = function(six) six$wall <= 1.10 * 9 * 0.25 && all(six$latency > -0.05)
 
 test_that("INFRA-01 measurements catch late, stalled, batched and serialised delivery", {
+  skip_on_cran()
   written = 100 + 0.25 * 1:12
   expect_true(infra01_on_time(infra01_delivery(written + 0.003, written)))
   # the mock writing delta 5 0.11 s late is its own lateness, not gptr's
@@ -981,6 +986,7 @@ test_that("short pipe polls service host events before dispatch without running 
 })
 
 test_that("an interrupt at the short-poll host yield unwinds before dispatch", {
+  skip_on_cran()
   state = new.env()
   state$log = character()
   diagnostics = length(registry_env()$diag$rows)
@@ -1000,6 +1006,7 @@ test_that("an interrupt at the short-poll host yield unwinds before dispatch", {
 })
 
 test_that("immediately ready polls yield without adding a scheduling delay", {
+  skip_on_cran()
   state = new.env()
   state$log = character()
   state$waits = numeric()

@@ -213,6 +213,7 @@ test_that("boundary: malformed marker records never reach process operations", {
 })
 
 test_that("boundary: process records distinguish stale handles with reused PIDs", {
+  skip_on_cran()
   local_proc_state()
   local_mocked_bindings(proc_create_time = function(pid) 10, .package = "gptr")
   old = list(get_pid = function() 42L, tag = "old")
@@ -256,6 +257,7 @@ test_that("boundary: orphan cleanup signals through the recorded process identit
 })
 
 test_that("boundary: failed orphan cleanup retains the recovery marker", {
+  skip_on_cran()
   local_proc_state()
   local_mocked_bindings(
     ps_handle = function(pid, time = NULL) list(pid = pid, time = time),
@@ -422,6 +424,7 @@ test_that("boundary: stale process cleanup cannot release or kill a reused PID r
 })
 
 test_that("boundary: unavailable tree inspection preserves recovery records", {
+  skip_on_cran()
   local_proc_state()
   local_mocked_bindings(
     proc_tree = function(marker) structure(list(), unavailable = TRUE),
@@ -438,6 +441,7 @@ test_that("boundary: unavailable tree inspection preserves recovery records", {
 })
 
 test_that("boundary: unreadable parent identity never authorizes orphan cleanup", {
+  skip_on_cran()
   local_proc_state()
   calls = 0L
   local_mocked_bindings(
@@ -491,6 +495,7 @@ test_that("boundary: a Linux status-read race recognizes the vanished handle", {
 })
 
 test_that("boundary: OS errors need an independent process inventory before declaring absence", {
+  skip_on_cran()
   codes = stats::setNames(ps::errno()$value, ps::errno()$name)
   code = codes[["ENOENT"]]
   pids = Sys.getpid()
@@ -526,6 +531,7 @@ test_that("boundary: JSON timestamp rounding does not turn a live parent into an
 })
 
 test_that("the job table maps a requested stop to stopped or aborted, never error", {
+  skip_on_cran()
   local_proc_state()
   st = new.env()
   st$w = "running"
@@ -605,6 +611,7 @@ test_that("proc_unload() stops every job", {
 })
 
 test_that("boundary: job PID metadata is scalar and status uncertainty remains visible", {
+  skip_on_cran()
   local_proc_state()
   for (pid in list(c(1L, 2L), NULL, "invalid", TRUE, Inf, NaN, -1L, 1.5)) {
     expect_error(job_add("bg", "bad", "bad", pid = pid, stop = function() NULL),
@@ -643,6 +650,7 @@ test_that("boundary: unload cleans marked children even when their environment i
 })
 
 test_that("boundary: unload retains records when owned child cleanup is unconfirmed", {
+  skip_on_cran()
   local_proc_state()
   local_mocked_bindings(
     proc_create_time = function(pid) 10,

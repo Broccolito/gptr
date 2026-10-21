@@ -5,6 +5,7 @@
 raw_of = function(p) readBin(fs_path(p), "raw", file.size(fs_path(p)) + 10)
 
 test_that("write creates parent directories and writes a new file verbatim", {
+  skip_on_cran()
   td = withr::local_tempdir()
   p = file.path(td, "nested", "dir", "test.txt")
   w = write_file(p, "Nested \u4f60\u597d\r\nx")
@@ -27,6 +28,7 @@ test_that("relative paths resolve against the working directory", {
 })
 
 test_that("an existing CRLF file keeps CRLF, its BOM and its encoding", {
+  skip_on_cran()
   td = withr::local_tempdir()
   p = file.path(td, "crlf.txt")
   writeBin(charToRaw("a\r\nb\r\n"), p)
@@ -74,6 +76,7 @@ test_that("no temporary file is left behind", {
 # file the process may write but not read.
 
 test_that("an existing file without a line ending takes the content's line endings verbatim", {
+  skip_on_cran()
   td = withr::local_tempdir()
   p = file.path(td, "empty.bat")
   file.create(p)
@@ -97,6 +100,7 @@ test_that("an existing file without a line ending takes the content's line endin
 })
 
 test_that("a UTF-8 file whose 1 MiB sample ends inside a character stays UTF-8", {
+  skip_on_cran()
   td = withr::local_tempdir()
   p = file.path(td, "big.txt")
   writeBin(c(charToRaw("first\n"), rep(charToRaw("a"), 1024^2 - 7), charToRaw("\u00e9\nmore\n")),

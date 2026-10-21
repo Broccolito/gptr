@@ -1,4 +1,5 @@
 test_that("classifier callback validation keeps the IC-74 and chat signatures separate", {
+  skip_on_cran()
   local_registry()
   build = function(model, state, questions, opts) NULL
   parse = function(model, status, headers, body, questions) NULL
@@ -97,6 +98,7 @@ test_that("callbacks accept the supplied positional arguments without missing re
 })
 
 test_that("UI selection fails closed for malformed index values", {
+  skip_on_cran()
   for (value in list(1.9, TRUE, "1", NA_integer_, Inf, c(1L, 2L), list(1L))) {
     select = local({
       answer = value
@@ -108,6 +110,7 @@ test_that("UI selection fails closed for malformed index values", {
 })
 
 test_that("top-level and embedded model records validate known fields and unique names", {
+  skip_on_cran()
   local_registry()
   invalid = list(list(id = "m", type = TRUE), list(id = "m", api = 1L),
                  list(id = "m", context = "unlimited"), list(id = "m", local = "yes"),
@@ -122,6 +125,7 @@ test_that("top-level and embedded model records validate known fields and unique
 })
 
 test_that("a scratch registry can be swapped in and out; the fields of `the` follow it", {
+  skip_on_cran()
   before = registry_env()
   reg = local_registry()
   expect_s3_class(reg, "gptr_registry_env")
@@ -144,6 +148,7 @@ test_that("ext_session_id() accepts ids, session-like objects and NULL", {
 })
 
 test_that("the kind table holds the 37 kinds of contract 10.2 (interpreter is P22's)", {
+  skip_on_cran()
   local_registry()
   kinds = c("adapter", "agent", "artifact_type", "backend", "cache_policy", "checkpointer",
             "child_env", "command", "compactor", "context_block", "doc_format", "env_alias",
@@ -166,6 +171,7 @@ test_that("the kind table holds the 37 kinds of contract 10.2 (interpreter is P2
 })
 
 test_that("gptr_spec() builds a classed spec carrying api_version", {
+  skip_on_cran()
   local_registry()
   s = gptr_spec("env_alias", "SLACK_BOT_TOKEN", aliases = "slack-token")
   expect_s3_class(s, c("gptr_env_alias", "gptr_spec"), exact = TRUE)
@@ -179,6 +185,7 @@ test_that("gptr_spec() builds a classed spec carrying api_version", {
 })
 
 test_that("validators name the failing field and accept unknown fields", {
+  skip_on_cran()
   local_registry()
   err = expect_error(gptr_spec("router", "r1", route = "not a function"),
                      class = "gptr_error_invalid_spec")
@@ -201,6 +208,7 @@ test_that("validators name the failing field and accept unknown fields", {
 })
 
 test_that("defaults are filled and whole numbers become integers", {
+  skip_on_cran()
   local_registry()
   b = gptr_spec("context_block", "lab", provide = function(ctx, budget) "x", order = 700)
   expect_equal(b$placement, "turn")
@@ -215,6 +223,7 @@ test_that("defaults are filled and whole numbers become integers", {
 })
 
 test_that("provider specs: id rules, and the fake provider of P01 validates", {
+  skip_on_cran()
   local_registry()
   p = gptr_spec("provider", "corp", api = "openai-completions")
   expect_equal(p$id, "corp")
@@ -234,6 +243,7 @@ test_that("provider specs: id rules, and the fake provider of P01 validates", {
 })
 
 test_that("adapter specs are validated per transport (IC-35)", {
+  skip_on_cran()
   local_registry()
   expect_error(gptr_spec("adapter", "wire", transport = "http_sse",
                          build = function(model, context, opts) NULL),
@@ -279,6 +289,7 @@ test_that("hook specs accept catalogued events and plugin channels only", {
 })
 
 test_that("tool specs: name rule, execute or fun, schema from formals, fun matching the schema", {
+  skip_on_cran()
   local_registry()
   expect_error(gptr_spec("tool", "bad name", description = "d",
                          execute = function(input, ctx) NULL), class = "gptr_error_invalid_spec")
@@ -353,6 +364,7 @@ test_that("kind-specific rules: skill, command, setting, redaction, alias, risk,
 })
 
 test_that("plugin kinds: kind_define() and validators that throw", {
+  skip_on_cran()
   local_registry()
   kind_define("reviewer", validate = function(spec) spec, resolve = "all", source = "plugin:p")
   expect_true("reviewer" %in% kind_names())
@@ -382,6 +394,7 @@ test_that("format() shows fields and never function bodies", {
 })
 
 test_that("every example of contract 6.8 runs and returns its class (IC-35)", {
+  skip_on_cran()
   local_registry()
   specs = list(
     gptr_tool("nrow_of", "Number of rows of a data frame in the session",
@@ -467,6 +480,7 @@ test_that("constructors pick the first choice and report missing or wrong argume
 })
 
 test_that("gptr_agent() stores the raw captured expressions (IC-34)", {
+  skip_on_cran()
   local_registry()
   a = gptr_agent("rev", description = "Reviewer", model = opus, skills = c(stats, plots))
   expect_identical(a$model, quote(opus))
@@ -484,6 +498,7 @@ test_that("gptr_agent() stores the raw captured expressions (IC-34)", {
 })
 
 test_that("gptr_tool_result() builds text, image, details and value", {
+  skip_on_cran()
   r = gptr_tool_result(c("3 rows", "2 cols"), details = list(n = 3L), value = 3L)
   expect_s3_class(r, "gptr_tool_result")
   expect_named(r, c("content", "details", "is_error", "value", "spill", "out_id", "truncated",
@@ -510,6 +525,7 @@ test_that("gptr_tool_result() builds text, image, details and value", {
 })
 
 test_that("as_tool_result() normalises the shapes execute() may return (contract 5.7)", {
+  skip_on_cran()
   expect_equal(format(as_tool_result(NULL)), "(no output)")
   expect_equal(format(as_tool_result(list())), "(no output)")
   expect_equal(format(as_tool_result(c("a", "b"))), "a\nb")
@@ -525,6 +541,7 @@ test_that("as_tool_result() normalises the shapes execute() may return (contract
 })
 
 test_that("a direct tool with only fun gets an execute() printing the value in budget", {
+  skip_on_cran()
   local_registry()
   t = gptr_tool("paste2", "Paste two strings", fun = function(a, b = "x") paste(a, b))
   res = t$execute(list(a = "hello", b = "world"), NULL)
@@ -541,6 +558,7 @@ test_that("a direct tool with only fun gets an execute() printing the value in b
 })
 
 test_that("tool result boundaries preserve canonical named records and logical errors", {
+  skip_on_cran()
   for (details in list(stats::setNames(list(1), NA_character_), list(a = 1, a = 2))) {
     expect_error(gptr_tool_result(details = details), class = "gptr_error_invalid_argument")
   }
@@ -559,6 +577,7 @@ test_that("tool result boundaries preserve canonical named records and logical e
 })
 
 test_that("preformed result images obey the canonical block_image boundary", {
+  skip_on_cran()
   image = block_image("YWJj", mime = "image/png", source = "plot", width = 3L, height = 2L)
   expect_identical(gptr_tool_result(images = list(image))$content[[1]], image)
   bad = list(list(type = "image"),

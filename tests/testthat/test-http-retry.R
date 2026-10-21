@@ -1,4 +1,5 @@
 test_that("parse_http_date() is locale-independent and rejects junk", {
+  skip_on_cran()
   expect_identical(parse_http_date("Wed, 21 Oct 2015 07:28:00 GMT"), 1445412480)
   expect_true(is.na(parse_http_date("soon")))
   expect_true(is.na(parse_http_date("Wed, 21 Okt 2015 07:28:00 GMT")))
@@ -17,6 +18,7 @@ test_that("parse_http_date() is locale-independent and rejects junk", {
 })
 
 test_that("retry-after values: ms first, then seconds; unparsable falls back to backoff", {
+  skip_on_cran()
   expect_identical(retry_after_seconds(list(`retry-after-ms` = "1500", `retry-after` = "9")), 1.5)
   expect_identical(retry_after_seconds(list(`retry-after` = "2")), 2)
   expect_null(retry_after_seconds(list(`retry-after` = "soon")))
@@ -27,6 +29,7 @@ test_that("retry-after values: ms first, then seconds; unparsable falls back to 
 })
 
 test_that("retry_classify() implements the retry table", {
+  skip_on_cran()
   r2 = retry_classify(429L, list(`retry-after` = "2"))
   expect_true(r2$retry)
   expect_identical(r2$delay, 2)
@@ -60,6 +63,7 @@ test_that("retry_classify() implements the retry table", {
 })
 
 test_that("retry_classify() keeps the service's message from FastAPI detail bodies (report 04a)", {
+  skip_on_cran()
   auth_body = charToRaw(paste0("{\"detail\":{\"error_type\":\"authentication_error\",",
                                "\"message\":\"Cannot authenticate with the server.\"}}"))
   auth = retry_classify(401L, list(), body = auth_body)
@@ -112,6 +116,7 @@ test_that("backoff is 0.5 s * 2^(attempt - 1), capped at 8 s, and RNG-free", {
 })
 
 test_that("RFC 3339 and duration resets parse without the locale", {
+  skip_on_cran()
   expect_identical(parse_rfc3339("2015-10-21T07:28:00Z"), 1445412480)
   expect_identical(parse_rfc3339("2015-10-21T09:28:00+02:00"), 1445412480)
   expect_identical(parse_rfc3339("2015-10-21T07:28:00.500Z"), 1445412480.5)
@@ -122,6 +127,7 @@ test_that("RFC 3339 and duration resets parse without the locale", {
 })
 
 test_that("reset parsing rejects impossible offsets and nonfinite or negative durations", {
+  skip_on_cran()
   for (x in c("2015-10-21T07:28:00+25:00", "2015-10-21T07:28:00-02:99",
               "2015-02-31T07:28:00Z", "2015-10-21T25:00:00Z")) {
     expect_true(is.na(parse_rfc3339(x)))
@@ -223,6 +229,7 @@ test_that("static rates come from the provider record through the registry", {
 })
 
 test_that("fractional static rates permit one request and refill without moving deadlines", {
+  skip_on_cran()
   clock = new.env()
   clock$now = 100
   local_mocked_bindings(reactor_now = function() clock$now)
@@ -259,6 +266,7 @@ test_that("static rates and provider identities reject invalid values without mu
 })
 
 test_that("retry cooldown does not exhaust a positive long-lived request window", {
+  skip_on_cran()
   clock = new.env()
   clock$now = 100
   local_mocked_bindings(reactor_now = function() clock$now)
@@ -279,6 +287,7 @@ test_that("retry cooldown does not exhaust a positive long-lived request window"
 })
 
 test_that("independent token windows retain their own exhaustion and reset times", {
+  skip_on_cran()
   clock = new.env()
   clock$now = 100
   local_mocked_bindings(reactor_now = function() clock$now)
@@ -302,6 +311,7 @@ test_that("independent token windows retain their own exhaustion and reset times
 })
 
 test_that("malformed headers cannot poison known budgets or create infinite deadlines", {
+  skip_on_cran()
   clock = new.env()
   clock$now = 100
   local_mocked_bindings(reactor_now = function() clock$now)
@@ -327,6 +337,7 @@ test_that("malformed headers cannot poison known budgets or create infinite dead
 })
 
 test_that("a request without a provider is never rate limited", {
+  skip_on_cran()
   local_mocked_bindings(registry_get = function(kind, name, session = NULL) {
     if (identical(name, "(none)")) list(rate = list(requests_per_s = 0.5))
   })

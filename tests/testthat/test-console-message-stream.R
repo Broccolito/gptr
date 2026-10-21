@@ -1,4 +1,5 @@
 test_that("informational conditions display as ordinary stdout without losing handlers", {
+  skip_on_cran()
   local_gptr_options(quiet = FALSE)
   observed = new.env(parent = emptyenv())
   out = utils::capture.output({
@@ -66,6 +67,7 @@ test_that("UI notifications distinguish actual errors from ordinary guidance", {
 })
 
 test_that("teed R messages display once and retain one message event", {
+  skip_on_cran()
   local_gptr_options(quiet = FALSE)
   home = new.env()
   home$inform = gptr_inform
@@ -96,6 +98,7 @@ test_that("teed R messages display once and retain one message event", {
 })
 
 test_that("console controls stay out of R-tool results while normal prints remain", {
+  skip_on_cran()
   home = new.env()
   home$notice = console_notice
   home$verbatim = msg_verbatim
@@ -133,6 +136,7 @@ test_that("console controls reach the person when the capture is not teed, also 
 })
 
 test_that("informational display preserves user-created output sinks", {
+  skip_on_cran()
   local_gptr_options(quiet = FALSE)
   for (split in c(FALSE, TRUE)) {
     path = withr::local_tempfile()
@@ -160,6 +164,7 @@ test_that("informational display preserves user-created output sinks", {
 })
 
 test_that("a console control in an untee'd evaluation keeps user-created sinks (D-188)", {
+  skip_on_cran()
   for (split in c(FALSE, TRUE)) {
     path = withr::local_tempfile()
     home = new.env()

@@ -34,10 +34,12 @@ test_that(oracle_title(store_recs, "S03"), {
 })
 
 test_that(oracle_title(store_recs, "S04"), {
+  skip_on_cran()
   expect_match(session_data(test_session())$id, "^s[0-9a-f]{10}$")
 })
 
 test_that(oracle_title(store_recs, "S05"), {
+  skip_on_cran()
   local_store()
   s = test_session()
   expect_null(session_data(s)$file)
@@ -46,6 +48,7 @@ test_that(oracle_title(store_recs, "S05"), {
 })
 
 test_that(oracle_title(store_recs, "S06"), {
+  skip_on_cran()
   local_store()
   s = test_session()
   session_append(s, entry_message(msg_user("hello")))
@@ -53,6 +56,7 @@ test_that(oracle_title(store_recs, "S06"), {
 })
 
 test_that(oracle_title(store_recs, "S07"), {
+  skip_on_cran()
   s = written_session()
   lines = readLines(session_data(s)$file, encoding = "UTF-8")
   expect_length(lines, 1L + length(session_data(s)$entries))
@@ -80,6 +84,7 @@ test_that(oracle_title(store_recs, "S09"), {
 })
 
 test_that(oracle_title(store_recs, "S10"), {
+  skip_on_cran()
   s = written_session()
   file = session_data(s)$file
   raw = readBin(file, "raw", file.size(file))
@@ -88,6 +93,7 @@ test_that(oracle_title(store_recs, "S10"), {
 })
 
 test_that(oracle_title(store_recs, "S30"), {
+  skip_on_cran()
   s = written_session()
   lines = readLines(session_data(s)$file, encoding = "UTF-8")
   call_line = lines[grepl("\"toolCall\"", lines, fixed = TRUE)][[1L]]
@@ -191,6 +197,7 @@ test_that("appends leave no connection open (IC-59)", {
 })
 
 test_that("a detached copy persists nothing until it is attached", {
+  skip_on_cran()
   local_store()
   s = test_session()
   session_append(s, entry_message(msg_user("hello")))
@@ -210,6 +217,7 @@ test_that(oracle_title(store_recs, "S31"), {
 })
 
 test_that(oracle_title(store_recs, "S34"), {
+  skip_on_cran()
   s = test_session()
   session_append(s, entry_message(msg_user(strrep("long question ", 200))))
   session_append(s, entry_message(msg_assistant("a", api = "fake", provider = "fake",
@@ -620,6 +628,7 @@ test_that(oracle_title(store_recs, "S18"), {
 })
 
 test_that(oracle_title(store_recs, "S19"), {
+  skip_on_cran()
   local_fake_provider(list("x"))
   x = store_read(pi_file(withr::local_tempdir()))
   msgs = project_messages(x$entries, x$entries[[length(x$entries)]]$id,
@@ -785,6 +794,7 @@ test_that("SIGKILL mid-append, resume, three appends: all present and the tree c
 # ---------------------------------------------------------------- listing and resume
 
 test_that("the built-in store record is registered and selected by the store setting", {
+  skip_on_cran()
   expect_false(is.null(registry_get("store", "jsonl")))
   expect_true(is.function(store_impl()$append))
 })
@@ -904,6 +914,7 @@ test_that("a file from another project gets a fresh prompt and imported turns (I
 })
 
 test_that("gptr_resume() validates x", {
+  skip_on_cran()
   local_store()
   expect_error(gptr_resume("s9999999999"), class = "gptr_error_invalid_argument")
   expect_error(gptr_resume(42), class = "gptr_error_invalid_argument")
@@ -1086,6 +1097,7 @@ test_that("a session frozen for nobody resumes frozen for nobody, with full budg
 })
 
 test_that("rebuild_frozen() falls back as P07's restore does when a key is missing (FIX-3)", {
+  skip_on_cran()
   entry = function(...) {
     entry_custom("gptr.frozen", list(preset = "standard", t0 = "T0", t1 = "", toolsJson = "[]",
                                      toolNames = list(), sections = list(),

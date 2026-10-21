@@ -106,6 +106,7 @@ test_that("a loaded namespace is installed at its loaded version, also from a so
 })
 
 test_that("a dependency without Meta/package.rds is missing; a loaded dependency is found", {
+  skip_on_cran()
   lib = withr::local_tempdir()
   dir.create(file.path(lib, "p09srcdep"))
   writeLines(c("Package: p09srcdep", "Version: 1.0"), file.path(lib, "p09srcdep", "DESCRIPTION"))

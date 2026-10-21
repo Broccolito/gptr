@@ -39,6 +39,7 @@ test_that("Pi's 67 template tests pass (report 05 section 5.1)", {
 })
 
 test_that("template_expand takes the raw argument string or a vector (contract example)", {
+  skip_on_cran()
   expect_identical(template_expand("Review $1 for $ARGUMENTS", "analysis.R statistics"),
                    "Review analysis.R for analysis.R statistics")
   expect_identical(template_expand("$2", c("a b", "c")), "c")
@@ -63,6 +64,7 @@ test_that("substitution keeps UTF-8 bytes in any locale", {
 # Task 5 adaptations (D-084)
 
 test_that("arguments split on the command pattern's ASCII whitespace in every locale (D-084)", {
+  skip_on_cran()
   expect_identical(template_args_parse("a\vb\fc\rd"), c("a", "b", "c", "d"))
   for (cp in c(0x00A0L, 0x1680L, 0x2003L, 0x2028L, 0x3000L)) {
     word = paste0("x", intToUtf8(cp), "y")
@@ -101,6 +103,7 @@ test_that("a latin1 argument string is converted before it is joined, in any loc
 # Task 6: template files, commands, builtin:prompts.
 
 test_that("template_parse reads description, argument-hint and the body", {
+  skip_on_cran()
   root = withr::local_tempdir()
   f = file.path(root, "triage.md")
   writeLines(c("---", "description: Triage an issue", "argument-hint: \"<issue> [area]\"", "---",
@@ -154,6 +157,7 @@ test_that("a template that code registers is a command unless a file template sh
 })
 
 test_that("an untrusted project's templates are not registered", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   p = local_project(trust = FALSE)
   dir.create(file.path(p, ".gptr", "prompts"), showWarnings = FALSE)
@@ -195,6 +199,7 @@ test_that("builtin:prompts ships /review and /explain as commands", {
 })
 
 test_that("Claude plugin commands are /<plugin>:<cmd>, also reachable as /<plugin> <cmd>", {
+  skip_on_cran()
   root = withr::local_tempdir()
   dir.create(file.path(root, "commands"))
   writeLines(c("---", "description: Show the status", "---", "Status of $ARGUMENTS."),
@@ -328,6 +333,7 @@ test_that("a plugin's code commands win over templates, its template commands do
 })
 
 test_that("the /<plugin> dispatcher splits on ASCII whitespace in every locale (D-133)", {
+  skip_on_cran()
   root = withr::local_tempdir()
   dir.create(file.path(root, "commands"))
   writeLines("Status of $ARGUMENTS.", file.path(root, "commands", "status.md"))
@@ -400,6 +406,7 @@ test_that("a template record removed elsewhere does not hide a later command (D-
 })
 
 test_that("a template name may not hold ASCII whitespace, in every locale (D-133)", {
+  skip_on_cran()
   root = withr::local_tempdir()
   f = file.path(root, "x.md")
   writeLines("Body $1", f)

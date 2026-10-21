@@ -36,6 +36,7 @@ local_foreign_configs = function(trust = FALSE, files = list(), .env = parent.fr
 }
 
 test_that("the TOML subset reads a Codex config", {
+  skip_on_cran()
   x = mcp_toml_read(text = c(
     "# comment", "model = \"gpt-5.5\"", "[mcp_servers.context7]", "command = \"npx\"",
     "args = [\"-y\", \"pkg\"]   # trailing", "tool_timeout_sec = 60.5",
@@ -146,6 +147,7 @@ test_that("gptr_mcp() lists servers without connecting; untrusted project server
 })
 
 test_that("a .claude.json under the user's profile is listed (Windows home, IC-63)", {
+  skip_on_cran()
   home = local_mcp_home()
   other = withr::local_tempdir("not-home-")
   if (.Platform$OS.type == "windows") withr::local_envvar(HOME = other)

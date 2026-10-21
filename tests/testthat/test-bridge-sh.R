@@ -2,6 +2,7 @@
 # interpreter kind, background jobs, builtin:bridges.
 
 test_that("simple command lines split into words and shell syntax does not", {
+  skip_on_cran()
   expect_identical(bridge_split("git status --porcelain"), c("git", "status", "--porcelain"))
   expect_identical(bridge_split("echo 'quoted words' plain"), c("echo", "quoted words", "plain"))
   expect_identical(bridge_split("printf \"a b\""), c("printf", "a b"))
@@ -36,6 +37,7 @@ test_that("argv vectors, simple lines and shell lines resolve differently", {
 })
 
 test_that("validated JSON arrays flatten back to character vectors", {
+  skip_on_cran()
   expect_identical(bridge_chr(list("git", "status")), c("git", "status"))
   expect_identical(bridge_chr("ls"), "ls")
   expect_null(bridge_chr(NULL))
@@ -67,6 +69,7 @@ test_that("views keep head and tail within the budget and name the out id", {
 })
 
 test_that("the print budget is the option, capped at 0.6 x the r budget inside a run", {
+  skip_on_cran()
   expect_identical(bridge_budget(NULL), 1500L)
   expect_identical(bridge_budget(120), 120L)
   local_gptr_options(helper_output_tokens = 900L)
@@ -327,6 +330,7 @@ test_that("a registered value is redacted before the digest label or cmd is cut"
 })
 
 test_that("the interpreter validator normalises extensions and rejects bad fields", {
+  skip_on_cran()
   sp = interpreter_validate(list(kind = "interpreter", name = "tcl", ext = ".TCL",
                                  programs = "tclsh"))
   expect_identical(sp$ext, "tcl")
@@ -660,6 +664,7 @@ test_that("member risks follow the command classifier; script and bg are at leas
 })
 
 test_that("r code calling peter$sh() is classified by the command it runs (acceptance 3)", {
+  skip_on_cran()
   expect_identical(gptr_risk("peter$sh(\"rm -rf data\")")$level, 3L)
   expect_identical(gptr_risk("peter$sh(c(\"git\", \"status\"))")$level, 0L)
   expect_identical(gptr_risk("x = paste(\"rm\", f); peter$sh(x)")$level, 3L)

@@ -9,6 +9,7 @@ test_that("url_origin() and url_for_log() keep scheme, host and port only", {
 })
 
 test_that("header handles materialise only for their own origin", {
+  skip_on_cran()
   h = secret_register("sk-hdr-test-0123456789abcdef", "GPTR_TEST_HDR_KEY",
                       origin = "https://api.example.test")
   out = http_headers(list(`x-api-key` = h, authorization = list("Bearer ", h),
@@ -26,6 +27,7 @@ test_that("header handles materialise only for their own origin", {
 })
 
 test_that("layered timeouts: first byte, then idle; no total timeout", {
+  skip_on_cran()
   local_gptr_options(connect_timeout = 5, first_byte_timeout = 7, idle_timeout = 3)
   t = http_timeouts(list())
   expect_identical(t, list(connect = 5, first_byte = 7, idle = 3))
@@ -40,6 +42,7 @@ test_that("layered timeouts: first byte, then idle; no total timeout", {
 })
 
 test_that("origins use complete validated authorities and canonical IP addresses", {
+  skip_on_cran()
   for (url in c("http://example.test:bad/path", "http://example.test:99999/",
                 "http://example.test:80suffix/", "http://example.test\r\n/path",
                 "http://[not-ipv6]/")) {
@@ -53,6 +56,7 @@ test_that("origins use complete validated authorities and canonical IP addresses
 })
 
 test_that("header names and values must match the scalar request contract", {
+  skip_on_cran()
   bad = list(list("unnamed"), list(x = NA_character_), list(x = c("a", "b")),
              list(x = 12), list(x = "secret\r\nInjected: yes"),
              list("bad\nname" = "x"), list(x = list(named = "piece")),
@@ -85,6 +89,7 @@ test_that("invalid request specs and timeouts fail before curl can send", {
 })
 
 test_that("request fields match exactly and HEAD configures a bodyless response", {
+  skip_on_cran()
   local_gptr_options(idle_timeout = 90)
   captured = new.env(parent = emptyenv())
   captured$options = list()

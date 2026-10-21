@@ -38,6 +38,7 @@ resp_text = function(text = "x") {
 # ---- the normaliser (Task 6) -------------------------------------------------------------------
 
 test_that("reasoning items, phase and fc_/call_ ids are kept verbatim (INFRA-07)", {
+  skip_on_cran()
   msg = replay_case(api, responses_normaliser, "reasoning_tools")$message
   types = vapply(msg$content, function(b) b$type, "")
   expect_identical(types, c("thinking", "opaque", "text", "tool_call"))
@@ -55,6 +56,7 @@ test_that("encrypted_content missing from output_item.done is backfilled from co
 })
 
 test_that("failed and truncated streams each end with one error event and the partial", {
+  skip_on_cran()
   for (case in c("failed", "truncated")) {
     ev = replay_case(api, responses_normaliser, case)$events
     expect_one_terminal(ev)
@@ -80,6 +82,7 @@ test_that("an error event before any delta asks the transport to retry", {
 # ---- additions beyond the plan (IC-74, contract typing, robustness) ----------------------------
 
 test_that("unreported or null usage stays unknown; fields left out keep P05's zero (IC-74)", {
+  skip_on_cran()
   usage_of = function(usage) {
     r = resp_run(c(resp_created(), resp_text(), resp_terminal(paste0(
       '{"id":"resp_x","status":"completed","output":[],"usage":', usage, "}"
@@ -133,6 +136,7 @@ test_that("unreported or null usage stays unknown; fields left out keep P05's ze
 
 
 test_that("error codes are classified by text; spend caps are never retried (08 3.5, 04 2.2)", {
+  skip_on_cran()
   info = function(x) responses_error_info(x)[c("class", "status", "retry")]
   expect_identical(info("insufficient_quota"),
                    list(class = "spend_cap", status = 429L, retry = FALSE))
@@ -154,6 +158,7 @@ test_that("error codes are classified by text; spend caps are never retried (08 
 })
 
 test_that("stream errors: retry before any delta, spend caps final, every shape read (08 3.5)", {
+  skip_on_cran()
   retried = event_log()
   # a spend cap before any delta is final; the transport is not asked to retry
   r = resp_run(resp_terminal(paste0('{"id":"resp_q","status":"failed","error":',
@@ -195,6 +200,7 @@ test_that("stream errors: retry before any delta, spend caps final, every shape 
 })
 
 test_that("only max_output_tokens is a length stop; other statuses are errors (04 4.2)", {
+  skip_on_cran()
   r = resp_run(c(resp_created(), resp_text(), resp_terminal(
     '{"id":"resp_x","status":"incomplete","incomplete_details":{"reason":"content_filter"}}',
     "response.incomplete"
@@ -324,6 +330,7 @@ test_that("a done item with an empty summary or content list keeps the streamed 
 # ---- the request body and the built-in (Task 7) ------------------------------------------------
 
 test_that("Responses bodies: store = false, the cache key, explicit breakpoints (G4 3.7)", {
+  skip_on_cran()
   model = test_model(api, provider = "openai", id = "gpt-6-sol")
   plan = list(anchors = c("t0", "t1", "project"), tail_ttl = "5m", key = "gptr:0123456789ab")
   req = responses_build(model, ctx_fixture(list(first_message()), cache_plan = plan),
@@ -366,6 +373,7 @@ test_that("the default cache policy gives T0, T1 and project breakpoints (accept
 })
 
 test_that("reasoning items, phase and fc_ ids replay byte for byte to the same model only", {
+  skip_on_cran()
   dir = sse_dir(api)
   model = adp_fixture_model(api, dir)
   msg = replay_case(api, responses_normaliser, "reasoning_tools")$message
@@ -422,6 +430,7 @@ test_that("a handed-off Anthropic conversation: no foreign opaque data, valid bo
 })
 
 test_that("a PNG tool result is sent as an input_image (acceptance 3)", {
+  skip_on_cran()
   model = test_model(api)
   call = block_tool_call("call_9|fc_9", "r", list(code = "plot(1)"))
   asst = msg_assistant(list(call), api = api, provider = model$provider, model = model$id,
@@ -437,6 +446,7 @@ test_that("a PNG tool result is sent as an input_image (acceptance 3)", {
 })
 
 test_that("reasoning effort, tool_choice, operators and returns follow 08 section 3.1", {
+  skip_on_cran()
   model = test_model(api, thinking_levels = c("off", "low", "high"))
   body = json_decode(responses_build(model, ctx_fixture(list(msg_user("x")),
                                                         params = list(thinking = "high")),
@@ -469,6 +479,7 @@ test_that("reasoning effort, tool_choice, operators and returns follow 08 sectio
 })
 
 test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", {
+  skip_on_cran()
   model = test_model(api, provider = "openai", id = "gpt-6-sol")
   plan = list(anchors = c("t0", "t1", "project"), tail_ttl = "5m", key = "gptr:0123456789ab")
   call = block_tool_call("call_A1|fc_A1", "r", list(code = "nrow(d)"))
@@ -568,6 +579,7 @@ test_that("build() takes compat and headers from the record provider_stream() re
 })
 
 test_that("a model without tool calling gets no tools, tool_choice or added tools (IC-74)", {
+  skip_on_cran()
   # 07-local-ollama.md section 1: tool calling is enabled only when the model supports it
   # (D-029 items 1 and 2 for this adapter); the history's calls and results are still sent
   forced = list(type = "tool", name = "read")
@@ -601,6 +613,7 @@ test_that("a model without tool calling gets no tools, tool_choice or added tool
 })
 
 test_that("a text signature replays only its own id and phase strings (no partial matching)", {
+  skip_on_cran()
   model = test_model(api)
   input = function(sig) {
     msg = msg_assistant(list(block_text("Done.", signature = sig)), api = api,
@@ -622,6 +635,7 @@ test_that("a text signature replays only its own id and phase strings (no partia
 })
 
 test_that("a forced choice: any is required, and returns = never forces a call (IC-71)", {
+  skip_on_cran()
   # 08 section 3.1: tool_choice is "none", "required" or a named function, and a forced choice
   # is sent only when the model allows it and `returns` is not set (IC-71: auto, the closing
   # instruction and validation)

@@ -365,6 +365,7 @@ test_that("plan mode on the fake provider: denied writes, scratch r, a plan hand
 })
 
 test_that("a plan is pending for the environment its run evaluated in (IC-40, IC-56)", {
+  skip_on_cran()
   root = local_project()
   local_plan_store()
   fake = local_fake_provider(list("ok", "<proposed_plan>\n1. a\n</proposed_plan>"))

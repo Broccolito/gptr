@@ -2,6 +2,7 @@
 # sessions, the inline backend and builtin:subagents (plan P19).
 
 test_that("children only tighten the inherited mode", {
+  skip_on_cran()
   expect_identical(subagent_mode_tighten("auto", "manual"), "manual")
   expect_identical(subagent_mode_tighten("plan", "auto"), "plan")
   expect_identical(subagent_mode_tighten("edits", NULL), "edits")
@@ -29,6 +30,7 @@ test_that("pool limits follow the gptr.subagents.* options (IC-71)", {
 })
 
 test_that("process pools are capped at 2 under R CMD check (IC-60)", {
+  skip_on_cran()
   local_gptr_options(subagents.max_cli = 4L, subagents.max_workers = 4L,
                      subagents.max_active = 8L)
   withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr")
@@ -55,6 +57,7 @@ test_that("a null setting takes the built-in default; an unknown core count give
 })
 
 test_that("the auto rule picks inline, cli for CLI-only models, else the agent's backend", {
+  skip_on_cran()
   expect_identical(subagent_backend(list(backend = "auto"), list(type = "chat")), "inline")
   expect_identical(subagent_backend(list(backend = "auto"), list(type = "cli")), "cli")
   expect_identical(subagent_backend(list(backend = "worker"), list(type = "cli")), "worker")
@@ -73,6 +76,7 @@ test_that("RNG streams are keyed by session id or by the seed and agent label (I
 })
 
 test_that("writes that leave the overlay are found statically, nothing is evaluated", {
+  skip_on_cran()
   expect_identical(code_writes_by_ref("counter <<- counter + 1"), "<<-")
   expect_identical(code_writes_by_ref("1 ->> y"), "<<-")
   expect_identical(code_writes_by_ref("dt[, b := a * 10]"), ":=")
@@ -104,6 +108,7 @@ test_that("child text is cut at a byte limit without splitting a character", {
 })
 
 test_that("usage sums count each request once and keep unknown usage unknown (IC-74)", {
+  skip_on_cran()
   u = data.frame(request_id = c("q1", "q1", "q2"), input = c(10, 10, 5), output = c(1, 1, 2),
                  cost = c(0.1, 0.1, 0.2))
   s = subagent_usage_sums(u)
@@ -303,6 +308,7 @@ test_that("the nesting limit and unknown backends are refused", {
 })
 
 test_that("frames are told apart from kept environments [R2]", {
+  skip_on_cran()
   f = function() subagent_is_frame(environment())
   expect_true(f())
   expect_false(subagent_is_frame(globalenv()))
@@ -494,6 +500,7 @@ test_that("gptr_agent('reviewer') loads the shipped definition", {
 })
 
 test_that("the gptr-orchestration skill is shipped but kept out of the catalog", {
+  skip_on_cran()
   path = system.file("gptr", "skills", "gptr-orchestration", "SKILL.md", package = "gptr")
   expect_true(nzchar(path))
   txt = readLines(path, encoding = "UTF-8")

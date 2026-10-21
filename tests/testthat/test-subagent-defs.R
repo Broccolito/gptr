@@ -5,6 +5,7 @@ agent_lines = function(name, desc, extra = character(), body = "System text.") {
 }
 
 test_that("tool_name_map maps Claude and Pi names (contract example)", {
+  skip_on_cran()
   expect_identical(tool_name_map(c("Read", "Bash", "Glob")), c("read", "r", "find"))
   expect_identical(tool_name_map(c("Write", "Edit", "MultiEdit", "PowerShell", "Grep", "LS")),
                    c("write", "edit", "r", "grep", "ls"))
@@ -18,6 +19,7 @@ test_that("tool_name_map maps Claude and Pi names (contract example)", {
 })
 
 test_that("agent_file_parse reads a Claude Code agent file (report 16 section 3.8)", {
+  skip_on_cran()
   root = withr::local_tempdir()
   f = file.path(root, "stats.md")
   extra = c(
@@ -57,6 +59,7 @@ test_that("model inherit, Pi tool names and Pi's mode: inline map correctly", {
 })
 
 test_that("documentation files are skipped silently; broken agent files are diagnosed", {
+  skip_on_cran()
   root = withr::local_tempdir()
   writeLines("# Agents in this folder", file.path(root, "README.md"))
   writeLines(c("---", "description: no name", "---", "x"), file.path(root, "noname.md"))
@@ -83,6 +86,7 @@ agent_probe = function(root, extra) {
 }
 
 test_that("a sequence as mode or permissionMode never throws", {
+  skip_on_cran()
   root = withr::local_tempdir()
   modes = c("mode: [inline, plan]", "permissionMode: [plan, auto]")
   for (extra in modes) expect_no_error(agent_probe(root, extra))
@@ -94,6 +98,7 @@ test_that("a sequence as mode or permissionMode never throws", {
 })
 
 test_that("a sequence or a map as the turn limit never throws", {
+  skip_on_cran()
   root = withr::local_tempdir()
   limits = c("max_turns: {a: [1, 2]}", "maxTurns: [[1, 2]]")
   for (extra in limits) expect_no_error(agent_probe(root, extra))
@@ -105,6 +110,7 @@ test_that("a sequence or a map as the turn limit never throws", {
 })
 
 test_that("a turn limit is a positive whole number or its text", {
+  skip_on_cran()
   root = withr::local_tempdir()
   turns = function(line) agent_probe(root, line)[["max_turns"]]
   expect_identical(turns("max_turns: \"12\""), 12L)
@@ -117,6 +123,7 @@ test_that("a turn limit is a positive whole number or its text", {
 })
 
 test_that("Claude permission modes map to gptr modes next to Pi's backend mode", {
+  skip_on_cran()
   expect_identical(agent_mode("default"), "manual")
   expect_identical(agent_mode("acceptEdits"), "edits")
   expect_identical(agent_mode("bypassPermissions"), "auto")
@@ -133,6 +140,7 @@ test_that("Claude permission modes map to gptr modes next to Pi's backend mode",
 # Task 7 review fixes (D-086)
 
 test_that("permissionMode applies whenever mode is not a permission mode", {
+  skip_on_cran()
   root = withr::local_tempdir()
   a = agent_probe(root, c("backend: worker", "mode: inline", "permissionMode: plan"))
   expect_identical(a[["backend"]], "worker")
@@ -161,6 +169,7 @@ test_that("documentation files give no diagnostic", {
 })
 
 test_that("a tools value that is not a list of names is diagnosed, not dropped silently", {
+  skip_on_cran()
   root = withr::local_tempdir()
   parse_tools = function(file, line) {
     f = file.path(root, file)
@@ -267,6 +276,7 @@ test_that("agent_def.get backs gptr_agent(name) and gptr_agent(file = )", {
 })
 
 test_that("a file of an untrusted project loses model and tools through gptr_agent(file =)", {
+  skip_on_cran()
   files = list()
   files[[".gptr/agents/u.md"]] = agent_text("u-agent", "Untrusted",
                                             c("model: opus", "tools: Bash"))

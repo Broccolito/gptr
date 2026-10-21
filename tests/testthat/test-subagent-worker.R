@@ -20,6 +20,7 @@ local_worker_io = function(.env = parent.frame()) {
 }
 
 test_that("a permission request goes to the parent and its answer comes back", {
+  skip_on_cran()
   w = local_worker_io()
   w$write(list(type = "permission", id = "p1", decision = "allow"))
   ans = worker_ui_permission(w$io, list(tool = "r", input = list(code = "x = 1"),
@@ -38,6 +39,7 @@ test_that("a permission request goes to the parent and its answer comes back", {
 })
 
 test_that("questions, select and input are forwarded as ask lines", {
+  skip_on_cran()
   w = local_worker_io()
   w$write(list(type = "answer", id = "q1", answers = list(choice = "B")))
   expect_identical(worker_ui_select(w$io, "Which?", c("A", "B")), 2L)
@@ -89,6 +91,7 @@ test_that("a partial line on a blocking stdin waits for its end without blocking
 })
 
 test_that("stdin on Windows is an R connection, read only while a request waits (WIN-1)", {
+  skip_on_cran()
   tc = textConnection("out", "w", local = TRUE)
   withr::defer(close(tc))
   replies = vapply(list(list(type = "permission", id = "p1", decision = "allow"),
@@ -268,6 +271,7 @@ stub_worker_state = function(gate = function(call) list(decision = "allow", reas
 }
 
 test_that("worker requests are re-classified by the parent's gate and answered (IC-53)", {
+  skip_on_cran()
   seen = new.env()
   st = stub_worker_state(gate = function(call) {
     seen$call = call
@@ -313,6 +317,7 @@ test_that("worker requests are re-classified by the parent's gate and answered (
 })
 
 test_that("questions from a worker without a human are answered as cancelled", {
+  skip_on_cran()
   st = stub_worker_state()
   local_mocked_bindings(worker_reply = function(st, obj) {
     st$replies[[length(st$replies) + 1L]] = obj
@@ -326,6 +331,7 @@ test_that("questions from a worker without a human are answered as cancelled", {
 })
 
 test_that("a finished worker ends the request with its text and imports its exports", {
+  skip_on_cran()
   st = stub_worker_state()
   st$home = new.env()
   dir = withr::local_tempdir()
@@ -429,6 +435,7 @@ test_that("a proxy session without a worker spec fails its request", {
 })
 
 test_that("specs that cannot be serialised are found; others are not (IC-69)", {
+  skip_on_cran()
   expect_false(worker_unserialisable(list(a = 1, f = function(x) x + 1)))
   con = file(tempfile(), "w")
   withr::defer(close(con))
@@ -788,6 +795,7 @@ test_that("unknown worker cost stays unknown through the result wire without war
 })
 
 test_that("unknown worker counters preserve known zeros and cost through the result wire", {
+  skip_on_cran()
   local_project()
   session = session_new("fake/fake-1", "auto", home = new.env())
   data = session_data(session)

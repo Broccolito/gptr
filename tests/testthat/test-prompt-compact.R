@@ -2,6 +2,7 @@
 # compactor and INFRA-26 (Task 13).
 
 test_that("compact_threshold follows architecture 6.11", {
+  skip_on_cran()
   expect_equal(compact_threshold(32768, 4096), 16384)
   expect_equal(compact_threshold(131072, 8192), 101072)
   expect_equal(compact_threshold(200000, 8192), 170000)
@@ -60,6 +61,7 @@ fake_assistant = function(content, stop_reason = "stop") {
 }
 
 test_that("compact_assigned_names finds every assignment form with the code as written", {
+  skip_on_cran()
   arrow = paste0("<", "-")
   y_code = paste("y", arrow, "f(2)")
   a = compact_assigned_names(paste("x = 1", y_code, "names(z) = c('a')", "assign('w', 3)",
@@ -105,6 +107,7 @@ test_that("extract_state collects the harness state of a transcript", {
 })
 
 test_that("a failed r call contributes no objects", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   msg_entry(s, msg_tool_result("c1", "r", "Error", is_error = TRUE,
@@ -113,6 +116,7 @@ test_that("a failed r call contributes no objects", {
 })
 
 test_that("the state of an earlier compaction is merged under the newer one", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   old = compact_state_empty()
@@ -166,6 +170,7 @@ test_that("the checkpoint body follows G4 section 3.6", {
 })
 
 test_that("objects stay oldest first across reassignment and compaction; oldest dropped", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   old = compact_state_empty()
@@ -191,6 +196,7 @@ test_that("objects stay oldest first across reassignment and compaction; oldest 
 })
 
 test_that("shapes come from the session's workspace snapshot; unforced bindings give ?", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   expect_identical(compact_shapes(NULL), list())
@@ -240,6 +246,7 @@ test_that("a compaction state read back from the session file merges the same wa
 # ---- Task 12 review round 1 ---------------------------------------------------------------------
 
 test_that("the user message list stays within its budget, long first and newest included", {
+  skip_on_cran()
   long1 = paste(rep("alpha", 5000), collapse = " ")
   long2 = paste(rep("omega", 5000), collapse = " ")
   out = compact_user_messages(c(long1, strrep("m", 200), long2))
@@ -561,6 +568,7 @@ test_that("a CLI turn's total is no context size; a CLI route never compacts by 
 })
 
 test_that("the checkpoint compactor and the compaction services are registered", {
+  skip_on_cran()
   expect_identical(registry_get("compactor", "checkpoint")$compact, compact_checkpoint)
   expect_identical(ext_service_get("compact.should"), compact_should)
   expect_identical(ext_service_get("compact.run"), compact_run)
@@ -1253,6 +1261,7 @@ test_that("finite-cap growth produces one durable checkpoint charge at the bound
 })
 
 test_that("finite-cap waiting leaves known-window cold and disabled-cap rules intact", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   local_gptr_options(compact_at = 1500, compact_cold_min = 1000)

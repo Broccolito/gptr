@@ -26,6 +26,7 @@ chat_run = function(chunks, provider = "fixture", id = "fixture-1", opts = list(
 # ---- compat flags, the <think> splitter and tool ids (Task 4) ---------------------------------
 
 test_that("compat_flags() combines detection with the provider records of P05 (09 section 3.3)", {
+  skip_on_cran()
   ds = compat_flags("deepseek", list(id = "deepseek-v4-pro"))
   expect_identical(ds$thinking_format, "deepseek")
   expect_true(ds$requires_reasoning_content)
@@ -61,6 +62,7 @@ test_that("OpenRouter sends cache_control only for Anthropic and Google models (
 })
 
 test_that("compat_flags() applies a record's compat in snake_case or Pi's camelCase", {
+  skip_on_cran()
   rec = list(id = "corp", base_url = "https://llm.corp.example/v1",
              compat = list(maxTokensField = "max_tokens", requires_tool_result_name = TRUE,
                            requiresReasoningContentOnAssistantMessages = TRUE,
@@ -84,6 +86,7 @@ test_that("Azure deployments come from AZURE_OPENAI_DEPLOYMENT_NAME_MAP (09 sect
 })
 
 test_that("the <think> splitter routes tagged text to thinking across any chunking", {
+  skip_on_cran()
   text = "<think>Plan: count rows.</think>The answer is 32."
   for (size in c(1L, 2L, 3L, 5L, 7L, 100L)) {
     sp = think_splitter()
@@ -119,6 +122,7 @@ test_that("completions_tool_id() keeps ids within each provider's rules", {
 # ---- the normaliser (Task 4) -------------------------------------------------------------------
 
 test_that("a mid-stream error chunk and a truncated stream each give one error event", {
+  skip_on_cran()
   for (case in c("error_chunk", "truncated")) {
     ev = replay_case(api, completions_normaliser, case)$events
     expect_one_terminal(ev)
@@ -198,6 +202,7 @@ test_that("an Ollama chat stream keeps reasoning, tool calls, usage and the outp
 })
 
 test_that("unreported or null usage stays unknown; fields left out keep P05's zero (IC-74)", {
+  skip_on_cran()
   usage_of = function(usage) {
     r = chat_run(c(chat_chunk('{"content":"x"}', '"stop"'),
                    paste0('{"id":"c1","choices":[],"usage":', usage, "}"), "[DONE]"))
@@ -233,6 +238,7 @@ test_that("unreported or null usage stays unknown; fields left out keep P05's ze
 })
 
 test_that("non-string finish reasons are never matched by position (04 4.2)", {
+  skip_on_cran()
   # R's switch() picks an alternative by position for a number: 2 would have been "stop"
   r = chat_run(c(chat_chunk('{"content":"x"}', "2"), "[DONE]"))
   expect_identical(r$message$stop_reason, "error")
@@ -273,6 +279,7 @@ test_that("the compat record comes from the provider record provider_stream() re
 })
 
 test_that("a string error, object arguments and a bare Mistral thinking string are kept", {
+  skip_on_cran()
   # an error given as a bare string is the provider's message, not an internal adapter error
   r = chat_run(c(chat_chunk('{"content":"x"}'), '{"id":"c1","error":"Model unloaded"}'))
   last = r$events[[length(r$events)]]
@@ -292,6 +299,7 @@ test_that("a string error, object arguments and a bare Mistral thinking string a
 })
 
 test_that("an error chunk before any delta is handed to the transport's retry (09 2.4, 08 3.5)", {
+  skip_on_cran()
   # OpenRouter's mid-stream error chunk before content: the transport may restart the request
   log = event_log()
   retried = event_log()
@@ -338,6 +346,7 @@ test_that("an error chunk before any delta is handed to the transport's retry (0
 })
 
 test_that("an error code that is not an HTTP status is never coerced (04 8.1, D-027)", {
+  skip_on_cran()
   # only one whole number from 100 to 599 is a status (google_error_info()'s rule, D-034): an
   # integer overflow would warn, and normalisers signal no R condition after start
   info = function(x) completions_error_info(x)[c("class", "status", "retry")]
@@ -357,6 +366,7 @@ test_that("an error code that is not an HTTP status is never coerced (04 8.1, D-
 })
 
 test_that("OpenRouter reasoning_details become one opaque block, merged as Pi does (09 2.3)", {
+  skip_on_cran()
   # consecutive reasoning.text / reasoning.summary fragments of one index are joined, the closing
   # signature kept; reasoning.encrypted stays discrete; a single object counts as one item
   det = function(...) paste0('{"reasoning_details":', paste0(...), "}")
@@ -427,6 +437,7 @@ completions_turn2 = function(model) {
 }
 
 test_that("completions bodies: one system message, converted tools, the messages last", {
+  skip_on_cran()
   model = test_model(api, provider = "groq", id = "openai/gpt-oss-120b")
   req = completions_build(model, ctx_fixture(list(first_message())),
                           list(base_url = "https://api.groq.com/openai/v1"))
@@ -442,6 +453,7 @@ test_that("completions bodies: one system message, converted tools, the messages
 })
 
 test_that("OpenRouter Anthropic models get cache_control on the system and project blocks", {
+  skip_on_cran()
   model = test_model(api, provider = "openrouter", id = "anthropic/claude-sonnet-5-5")
   req = completions_build(model, ctx_fixture(list(first_message())), list())
   body = json_decode(req$body)
@@ -477,6 +489,7 @@ test_that("the default cache policy anchors the OpenRouter system and project bl
 })
 
 test_that("reasoning is replayed in its own field to the same model; DeepSeek forces the field", {
+  skip_on_cran()
   model = test_model(api, provider = "together", id = "deepseek-r1")
   body = json_decode(completions_build(model, ctx_fixture(completions_turn2(model)), list())$body)
   asst = body$messages[[3L]]
@@ -492,6 +505,7 @@ test_that("reasoning is replayed in its own field to the same model; DeepSeek fo
 })
 
 test_that("tool-result images follow as one user message; Mistral ids are 9 characters", {
+  skip_on_cran()
   model = test_model(api, provider = "mistral", id = "pixtral-large")
   msgs = completions_turn2(model)
   msgs[[3L]] = msg_tool_result("call_A1", "r", list(block_text("plot drawn"),
@@ -517,6 +531,7 @@ test_that("no tools but tool calls in history sends tools: []; max_tokens per co
 })
 
 test_that("thinking formats, tool_choice and auth headers follow the compat record", {
+  skip_on_cran()
   model = test_model(api, provider = "openrouter", id = "openai/gpt-6-sol")
   forced = list(type = "tool", name = "read")
   req = completions_build(model, ctx_fixture(list(msg_user("x")),
@@ -617,6 +632,7 @@ test_that("build() takes compat and headers from the record provider_stream() re
 })
 
 test_that("a model without tool calling gets no tools and no tool_choice (IC-74, 07 section 1)", {
+  skip_on_cran()
   # P05 prepares an Ollama model with tool_call = FALSE when the server lacks the tools capability
   forced = list(type = "tool", name = "read")
   blind = test_model(api, provider = "groq", id = "small-1", tool_call = FALSE)
@@ -640,6 +656,7 @@ test_that("a model without tool calling gets no tools and no tool_choice (IC-74,
 })
 
 test_that("a model that gets no tools says so once, with how to declare tool_call (IC-79)", {
+  skip_on_cran()
   local_gptr_options(quiet = FALSE)
   rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
   blind = test_model(api, provider = "my-llm", id = "qwen3", tool_call = FALSE)
@@ -659,6 +676,7 @@ test_that("a model that gets no tools says so once, with how to declare tool_cal
 })
 
 test_that("Ollama chat bodies follow the prepared model's capabilities (IC-74, 07 section 6)", {
+  skip_on_cran()
   # the P05 ollama record: system role, no store, `max_tokens`, reasoning_effort, no tool_choice;
   # reasoning replays in the field Ollama streamed it in (`reasoning`, Task 4)
   ol = test_model(api, provider = "ollama", id = "qwen3:8b", input = "text")
@@ -715,6 +733,7 @@ test_that("an image-only tool result for a text-only model carries only the omis
 })
 
 test_that("the bridging assistant message precedes every user message after tool results", {
+  skip_on_cran()
   # requires_assistant_after_tool_result: a user message never directly follows tool results,
   # neither the returns instruction nor the message carrying the results' images, which the
   # bridge precedes (report 09 section 3.2; Pi 1426-1461, 1443-1448)
@@ -747,6 +766,7 @@ test_that("the bridging assistant message precedes every user message after tool
 })
 
 test_that("memoised pieces follow the model's image input and the compat record", {
+  skip_on_cran()
   memo = new.env(parent = emptyenv())
   msgs = list(msg_user(list(block_text("Look."), block_image(png_b64())), timestamp = 1))
   vision = test_model(api, provider = "p12-memo", id = "m1")
@@ -775,6 +795,7 @@ test_that("memoised pieces follow the model's image input and the compat record"
 })
 
 test_that("a resolved model whose record omits tool_call gets no tools (P05, IC-74)", {
+  skip_on_cran()
   # P05's model_resolve() turns an omitted tool_call into FALSE (user and plugin models, generic
   # local ids): such a model gets no tools until its record says tool_call = TRUE (D-029.1)
   off = gptr_register(gptr_provider("p12-resolve", api = api,
@@ -796,6 +817,7 @@ test_that("a resolved model whose record omits tool_call gets no tools (P05, IC-
 })
 
 test_that("OpenRouter reasoning_details replay verbatim to the same model only (INFRA-07)", {
+  skip_on_cran()
   model = test_model(api, provider = "openrouter", id = "openai/gpt-6-sol")
   details = '[{"type":"reasoning.encrypted","data":"enc+/1=","id":"rs_1","index":0}]'
   asst = msg_assistant(list(block_thinking("Plan.", signature = "reasoning"), block_text("Done."),

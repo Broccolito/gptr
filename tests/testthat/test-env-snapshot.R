@@ -7,6 +7,7 @@ s4_where = function() {
 }
 
 test_that("env_fmt_bytes and env_fmt_n give the workspace formats", {
+  skip_on_cran()
   expect_equal(env_fmt_bytes(0), "0 B")
   expect_equal(env_fmt_bytes(3072), "3 KB")
   expect_equal(env_fmt_bytes(1.2 * 1024^2), "1.2 MB")
@@ -18,6 +19,7 @@ test_that("env_fmt_bytes and env_fmt_n give the workspace formats", {
 })
 
 test_that("env_snapshot lists bindings with facts and never forces promises", {
+  skip_on_cran()
   e = new.env()
   e$df = data.frame(a = 1:3, b = letters[1:3])
   e$v = c(1.5, 2.5)
@@ -84,6 +86,7 @@ test_that("env_diff reports added, modified, removed, assignment targets and for
 })
 
 test_that("workspace_lines aligns columns, sorts largest first and caps at 12 lines", {
+  skip_on_cran()
   snap = data.frame(
     name = c("pbmc", "qc_tbl", "genes", "markers", "meta", "cfg"),
     kind = "value", address = NA_character_,
@@ -190,6 +193,7 @@ test_that("Seurat shapes come from attributes only", {
 })
 
 test_that("a function-frame home with unsupplied arguments or empty dots is listed, not fatal", {
+  skip_on_cran()
   f = function(x, y = 2, ...) {
     force(y)
     env_snapshot(environment())
@@ -236,6 +240,7 @@ test_that("counts and sizes keep their format under a comma decimal mark", {
 })
 
 test_that("object names that are not valid UTF-8 are shown with byte escapes", {
+  skip_on_cran()
   e = new.env()
   latin1_bytes = "\xe9t\xe9"
   assign(latin1_bytes, 1, envir = e)
@@ -293,6 +298,7 @@ fake_call = function(envir, ...) {
 }
 
 test_that("the workspace block lists the environment within its budget", {
+  skip_on_cran()
   e = new.env()
   e$mt = mtcars
   e$v = 1:10 + 0
@@ -309,6 +315,7 @@ test_that("the workspace block lists the environment within its budget", {
 })
 
 test_that("workspace_changes reports what changed since the last block", {
+  skip_on_cran()
   user_log_stop()
   withr::defer(user_log_stop())
   e = new.env()
@@ -328,6 +335,7 @@ test_that("workspace_changes reports what changed since the last block", {
 })
 
 test_that("the agent_end hook resets the baseline of workspace_changes", {
+  skip_on_cran()
   e = new.env()
   e$a = 1
   ctx = fake_ctx(e)
@@ -341,6 +349,7 @@ test_that("the agent_end hook resets the baseline of workspace_changes", {
 })
 
 test_that("the attached block describes each context object by label", {
+  skip_on_cran()
   e = new.env()
   e$mt = mtcars
   e$v = c(1.5, 2.5)
@@ -404,6 +413,7 @@ test_that("builtin_workspace registers the blocks, the section, the evaluator an
 })
 
 test_that("the eval.r and describe services are registered by builtin:workspace", {
+  skip_on_cran()
   expect_true(ext_service_has("eval.r"))
   expect_true(ext_service_has("describe"))
   e = new.env()
@@ -454,6 +464,7 @@ test_that("block providers and the agent_end hook of a session share one baselin
 })
 
 test_that("a prompt preview leaves the workspace baseline and the history log alone", {
+  skip_on_cran()
   local_fake_provider(list("ok"))
   user_log_stop()
   withr::defer(user_log_stop())
@@ -467,6 +478,7 @@ test_that("a prompt preview leaves the workspace baseline and the history log al
 })
 
 test_that("the env attribute is the session's home label unless the session has none", {
+  skip_on_cran()
   user_log_stop()
   withr::defer(user_log_stop())
   e = new.env()

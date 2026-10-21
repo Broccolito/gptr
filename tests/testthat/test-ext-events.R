@@ -1,4 +1,5 @@
 test_that("the catalogue lists the 46 events of contract 10.4 with their semantics", {
+  skip_on_cran()
   cat = ev_catalogue()
   expect_named(cat, c("event", "semantics", "fail_closed", "payload", "returns", "origin"))
   expect_equal(nrow(cat), 46L)
@@ -110,6 +111,7 @@ test_that("the input transform chain replaces text and stops at handled", {
 })
 
 test_that("plugin channels reject newline-suffixed names", {
+  skip_on_cran()
   for (channel in c("plugin:topic\n", "plugin:topic\r\n", "plugin:topic\r")) {
     expect_false(ev_is_channel(channel))
     expect_error(ev_check_name(channel), class = "gptr_error_invalid_argument")
@@ -117,6 +119,7 @@ test_that("plugin channels reject newline-suffixed names", {
 })
 
 test_that("handled transforms cannot bypass the injected context cap", {
+  skip_on_cran()
   local_registry()
   hook_add("input", function(event, ctx) list(action = "handled", text = strrep("x", 10001)))
   res = ev_dispatch("input", list(text = "original"))
@@ -146,6 +149,7 @@ test_that("tool_call: modify flows on, block stops, and a throwing hook blocks (
 })
 
 test_that("tool_call: an unknown decision blocks; a non-list return has no opinion", {
+  skip_on_cran()
   local_registry()
   log = new.env()
   hook_add("tool_call", function(event, ctx) log$seen = event$tool_name)
@@ -200,6 +204,7 @@ test_that("first decision: non-list and empty returns have no opinion", {
 })
 
 test_that("tool_result patches content, details and is_error only", {
+  skip_on_cran()
   local_registry()
   hook_add("tool_result", function(event, ctx) {
     list(content = list(list(type = "text", text = "[patched]")), status = "ignored")
@@ -238,6 +243,7 @@ test_that("request_params patches only `params`; unset declared keys can be adde
 })
 
 test_that("malformed parameter patch names cannot replace valid request parameters", {
+  skip_on_cran()
   for (patch in list(stats::setNames(list("bad"), NA_character_),
                      stats::setNames(list("bad"), ""),
                      list(service_tier = "flex", service_tier = "hidden"))) {
@@ -317,6 +323,7 @@ test_that("malformed tool result patch fields are ignored with diagnostics", {
 })
 
 test_that("replay preservation cannot exempt arbitrary user fields from redaction", {
+  skip_on_cran()
   local_registry()
   old = the$redactor
   withr::defer(assign("redactor", old, envir = the))
@@ -460,6 +467,7 @@ test_that("hook_add validates names; hook_remove removes", {
 })
 
 test_that("a throwing policy denies; malformed answers deny; NULL or no decision has no opinion", {
+  skip_on_cran()
   local_registry()
   call = list(id = "c1", name = "r", input = list(code = "1"))
   bad = gptr_policy("buggy", function(call, ctx) stop("policy bug"))

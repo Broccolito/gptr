@@ -61,6 +61,7 @@ test_that("every command of architecture 6.17 that P14 owns is a command spec", 
 })
 
 test_that("unknown commands and failing handlers are reported; the input counts as handled", {
+  skip_on_cran()
   local_console_commands()
   off = gptr_register(gptr_command("boom", function(args, ctx) stop("kaput")))
   withr::defer(off())
@@ -74,6 +75,7 @@ test_that("unknown commands and failing handlers are reported; the input counts 
 })
 
 test_that("a command's text is printed escaped and a list(prompt =) is sent", {
+  skip_on_cran()
   off = gptr_register(gptr_command("echo", function(args, ctx) paste("got", args, "\033")))
   withr::defer(off())
   off2 = gptr_register(gptr_command("ask", function(args, ctx) list(prompt = "the prompt")))
@@ -89,6 +91,7 @@ test_that("a command's text is printed escaped and a list(prompt =) is sent", {
 })
 
 test_that("commands pass the input event (source repl): recorded, handled or transformed", {
+  skip_on_cran()
   local_console_commands()
   got = new.env(parent = emptyenv())
   got$texts = character()
@@ -129,6 +132,7 @@ test_that("commands pass the input event (source repl): recorded, handled or tra
 })
 
 test_that("/help lists the commands and the input syntax", {
+  skip_on_cran()
   local_console_commands()
   out = run_command(repl_state(NULL, new.env()), "/help")$out
   expect_true(any(grepl("^  /mode", out)))
@@ -167,6 +171,7 @@ test_that("in the console margin command output wraps inside it; listings fit it
 })
 
 test_that("/exit, /quit and /q end the REPL", {
+  skip_on_cran()
   local_console_commands()
   for (cmd in c("/exit", "/quit", "/q")) {
     rs = repl_state(NULL, new.env())
@@ -176,6 +181,7 @@ test_that("/exit, /quit and /q end the REPL", {
 })
 
 test_that("/model and /mode before the first prompt set the first prompt's arguments", {
+  skip_on_cran()
   local_console_commands()
   rs = repl_state(NULL, new.env())
   expect_identical(run_command(rs, "/model haiku")$out,
@@ -394,6 +400,7 @@ test_that("/skill:<name> preloads the skill for the next prompt", {
 })
 
 test_that("/permissions shows and changes the rules of this R session", {
+  skip_on_cran()
   local_console_commands()
   local_permission_rules()
   rs = repl_state(NULL, new.env())

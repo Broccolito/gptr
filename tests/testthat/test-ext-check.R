@@ -71,6 +71,7 @@ test_that("unavailable process observation cannot pass conformance", {
 })
 
 test_that("package manifests cannot omit or malform a declared factory", {
+  skip_on_cran()
   local_registry()
   root = withr::local_tempdir()
   dir.create(file.path(root, "gptr"))
@@ -142,6 +143,7 @@ test_that("conformance permits current captured API reads while keeping writes s
 })
 
 test_that("gptr_api() reports version 1.0 and the kind, event and named features", {
+  skip_on_cran()
   local_registry()
   api = gptr_api()
   expect_s3_class(api, "gptr_api")
@@ -254,6 +256,7 @@ test_that("gptr_check() passes a valid spec of every kind (acceptance 3)", {
 })
 
 test_that("an invalid spec fails and names the failing field; error = TRUE signals", {
+  skip_on_cran()
   local_registry()
   s = gptr_command("hello", function(args, ctx) "hi")
   s$handler = "not a function"
@@ -271,6 +274,7 @@ test_that("an invalid spec fails and names the failing field; error = TRUE signa
 })
 
 test_that("a direct tool description over 400 tokens fails (acceptance 3)", {
+  skip_on_cran()
   local_registry()
   long = gptr_tool("long", paste(rep("word", 600), collapse = " "),
                    execute = function(input, ctx) "x")
@@ -284,6 +288,7 @@ test_that("a direct tool description over 400 tokens fails (acceptance 3)", {
 })
 
 test_that("tools: schema problems and empty-input handling are checked", {
+  skip_on_cran()
   local_registry()
   bad_schema = gptr_tool("bad", "Bad schema",
                          parameters = list(type = "object",
@@ -310,6 +315,7 @@ test_that("prompt sections must fit their budget", {
 })
 
 test_that("policies are run over the modes x report 18 matrix", {
+  skip_on_cran()
   local_registry()
   plan_guard = gptr_policy("plan_guard", function(call, ctx) {
     if (ctx$mode() == "plan" && call$risk$level > 0) list(decision = "deny", reason = "plan")

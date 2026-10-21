@@ -15,6 +15,7 @@ local_nested_dispatch = function(seen = new.env(), .env = parent.frame()) {
 }
 
 test_that("the r schema is frozen in one of four variants (IC-68)", {
+  skip_on_cran()
   props = function(document, human) names(r_schema(document, human)$properties)
   expect_identical(props(TRUE, FALSE), c("code", "record", "note", "timeout"))
   expect_identical(props(TRUE, TRUE), c("code", "record", "note"))
@@ -72,6 +73,7 @@ test_that("specified R input guidance reaches every preset and both CLI transpor
 })
 
 test_that("the r spec reproduces P07's stand-in in each of its four variants (IC-68)", {
+  skip_on_cran()
   sb = jsonlite::fromJSON(test_path("fixtures", "bench", "prefix-baseline.json"),
                           simplifyVector = FALSE)$standins
   t = Filter(function(x) identical(x$name, "r"), sb$tools)[[1L]]
@@ -120,6 +122,7 @@ test_that("the r tool evaluates in ctx$envir outside a run and fills the details
 })
 
 test_that("an error stops the evaluation and is reported; plan mode never records", {
+  skip_on_cran()
   e = new.env()
   res = r_tool_execute(list(code = "a = 1\nstop('boom')\nb = 2"), list(envir = e, session = NULL))
   expect_true(res$is_error)
@@ -135,6 +138,7 @@ test_that("an error stops the evaluation and is reported; plan mode never record
 })
 
 test_that("only depth-0 runs tee r output; a sub-agent's output stays in its result (D-188)", {
+  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   run = structure(new.env(), class = "gptr_run")
   run$opts = list()
@@ -153,6 +157,7 @@ test_that("only depth-0 runs tee r output; a sub-agent's output stays in its res
 })
 
 test_that("images attached by peter$plot() during the evaluation are added to the result", {
+  skip_on_cran()
   local_nested_dispatch()
   e = new.env()
   withr::local_pdf(NULL)
@@ -166,6 +171,7 @@ test_that("images attached by peter$plot() during the evaluation are added to th
 })
 
 test_that("images beyond gptr.r_max_images are not attached and the result names them (IC-67)", {
+  skip_on_cran()
   local_nested_dispatch()
   local_gptr_options(r_max_images = 2L)
   td = withr::local_tempdir()
@@ -193,6 +199,7 @@ test_that("#> outputs keep at most gptr.doc_output_lines lines of 76 characters 
 })
 
 test_that("bridge digests and artifact paths are collected through session hooks and unhooked", {
+  skip_on_cran()
   added = new.env()
   removed = new.env()
   removed$ids = character()

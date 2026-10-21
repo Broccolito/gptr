@@ -41,6 +41,7 @@ apply_ops = function(a, b, ops) {
 }
 
 test_that("diff_lines() renders unified hunks without file headers (GNU conventions)", {
+  skip_on_cran()
   expect_identical(diff_lines(c("a", "b", "c"), c("a", "x", "c")),
                    c("@@ -1,3 +1,3 @@", " a", "-b", "+x", " c"))
   expect_identical(diff_lines(c("a", "b"), c("a", "b")), character())
@@ -76,6 +77,7 @@ test_that("edit scripts are valid on generated inputs", {
 })
 
 test_that("a total rewrite stays fast and valid under the D = 256 cap", {
+  skip_on_cran()
   a = sprintf("old line %d", 1:2000)
   b = sprintf("new line %d", 1:2000)
   t0 = proc.time()[["elapsed"]]
@@ -86,6 +88,7 @@ test_that("a total rewrite stays fast and valid under the D = 256 cap", {
 })
 
 test_that("diff_lines() cuts to max_tokens with a notice", {
+  skip_on_cran()
   a = sprintf("line %03d with some words in it", 1:300)
   b = sprintf("LINE %03d with some words in it", 1:300)
   d = diff_lines(a, b, max_tokens = 100)
@@ -217,6 +220,7 @@ test_that("generated unified diffs apply cleanly with git apply (any context, an
 })
 
 test_that("the LIS step returns a longest strictly increasing subsequence", {
+  skip_on_cran()
   expect_identical(diff_lis(integer()), integer())
   expect_identical(diff_lis(5L), 1L)
   expect_identical(diff_lis(c(3L, 1L, 2L)), c(2L, 3L))

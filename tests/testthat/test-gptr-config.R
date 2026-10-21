@@ -2,6 +2,7 @@
 # replay and egress (plan P08).
 
 test_that("settings_write() and settings_read() round-trip every scope", {
+  skip_on_cran()
   proj = local_gw()
   settings_write("session", list(mode = "plan"))
   expect_identical(settings_read("session")$mode, "plan")
@@ -22,6 +23,7 @@ test_that("settings_write() and settings_read() round-trip every scope", {
 })
 
 test_that("settings files keep unknown keys and a NULL removes a key", {
+  skip_on_cran()
   local_gw()
   settings_write("user", list(zzz_plugin_key = list(a = 1L), preset = "minimal"))
   settings_write("user", list(preset = NULL))
@@ -65,6 +67,7 @@ test_that("the project scope needs a workspace", {
 })
 
 test_that("file locks are released, and a lock of a dead process is broken (IC-71)", {
+  skip_on_cran()
   local_gw()
   p = settings_path("user", create = TRUE)
   dir.create(paste0(p, ".lock"))
@@ -75,6 +78,7 @@ test_that("file locks are released, and a lock of a dead process is broken (IC-7
 })
 
 test_that("settings_write() refuses a file that is not a JSON object and leaves it as it was", {
+  skip_on_cran()
   local_gw()
   p = settings_path("user", create = TRUE)
   bad = c(paste0("{\"model\": \"anthropic/claude\", \"preset\": \"minimal\", ",
@@ -96,6 +100,7 @@ test_that("settings_write() refuses a file that is not a JSON object and leaves 
 })
 
 test_that("a rewrite keeps the JSON form of the keys it does not change (contract 11)", {
+  skip_on_cran()
   local_gw()
   p = settings_path("user", create = TRUE)
   writeLines(c("{",
@@ -114,6 +119,7 @@ test_that("a rewrite keeps the JSON form of the keys it does not change (contrac
 })
 
 test_that("a lock that is gone or being released is not stale; an old empty one is (IC-71)", {
+  skip_on_cran()
   local_gw()
   lock = paste0(settings_path("user", create = TRUE), ".lock")
   expect_false(lock_stale(lock))
@@ -129,6 +135,7 @@ test_that("a lock that is gone or being released is not stale; an old empty one 
 })
 
 test_that("a configuration change from model code needs a one-shot approval (IC-53)", {
+  skip_on_cran()
   local_gw()
   expect_invisible(session_control_check("gptr_config"))
   run = fake_run()
@@ -141,6 +148,7 @@ test_that("a configuration change from model code needs a one-shot approval (IC-
 })
 
 test_that("a configuration refusal names the running tool call (IC-53)", {
+  skip_on_cran()
   local_gw()
   run = fake_run()
   local_mocked_bindings(run_current = function() run)
@@ -152,6 +160,7 @@ test_that("a configuration refusal names the running tool call (IC-53)", {
 })
 
 test_that("the core setting specs cover contract 11.2 and validate their values (IC-24)", {
+  skip_on_cran()
   specs = gateway_setting_specs()
   names = vapply(specs, function(s) s$name, "")
   expect_setequal(names, c(
@@ -174,6 +183,7 @@ test_that("the core setting specs cover contract 11.2 and validate their values 
 })
 
 test_that("providers.<id>.local_only is TRUE or FALSE and entries are objects (IC-74)", {
+  skip_on_cran()
   validate = settings_spec("providers")$validate
   ok = list(ollama = list(local_only = FALSE, base_url = "http://127.0.0.1:11434"))
   expect_identical(validate(ok), ok)
@@ -191,6 +201,7 @@ test_that("providers.<id>.local_only is TRUE or FALSE and entries are objects (I
 # ------------------------------------------------------------------ Task 2: project trust
 
 test_that("gptr_trust() records a decision with a fingerprint (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   expect_identical(gptr_trust(proj), NA)
   expect_false(trust_get(proj))
@@ -204,6 +215,7 @@ test_that("gptr_trust() records a decision with a fingerprint (IC-52)", {
 })
 
 test_that("a changed trust-gated file makes the project untrusted again", {
+  skip_on_cran()
   proj = local_gw()
   writeLines('{"preset": "extended"}', file.path(proj, ".gptr", "settings.json"))
   gptr_trust(proj, TRUE)
@@ -214,6 +226,7 @@ test_that("a changed trust-gated file makes the project untrusted again", {
 })
 
 test_that("gptr's own writes to a trusted project re-fingerprint it", {
+  skip_on_cran()
   proj = local_gw()
   gptr_trust(proj, TRUE)
   settings_write("project", list(preset = "minimal"))
@@ -221,6 +234,7 @@ test_that("gptr's own writes to a trusted project re-fingerprint it", {
 })
 
 test_that("a trust decision taken in this process lapses when a gated file changes (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   writeLines("{}", file.path(proj, ".gptr", "settings.json"))
   off = gptr_register(gptr_hook("project_trust", function(event, ctx) list(decision = "yes")))
@@ -232,6 +246,7 @@ test_that("a trust decision taken in this process lapses when a gated file chang
 })
 
 test_that("untrusted project resources are ignored non-interactively, with one notice", {
+  skip_on_cran()
   proj = local_gw()
   writeLines("{}", file.path(proj, ".gptr", "settings.json"))
   local_gptr_options(quiet = FALSE)
@@ -240,6 +255,7 @@ test_that("untrusted project resources are ignored non-interactively, with one n
 })
 
 test_that("a project_trust handler decides first and can remember (IC-71)", {
+  skip_on_cran()
   proj = local_gw()
   writeLines("{}", file.path(proj, ".gptr", "settings.json"))
   off = gptr_register(gptr_hook("project_trust", function(event, ctx) {
@@ -251,6 +267,7 @@ test_that("a project_trust handler decides first and can remember (IC-71)", {
 })
 
 test_that("with a human the question lists the files changed since trust was given", {
+  skip_on_cran()
   proj = local_gw()
   writeLines("{}", file.path(proj, ".gptr", "settings.json"))
   gptr_trust(proj, TRUE)
@@ -277,6 +294,7 @@ test_that("gptr_trust() is refused from model code during a run (IC-53)", {
 # Task 2 adaptations (see dev/progress/P08.md, Task 2).
 
 test_that("both .env files P03 discovers are trust-gated (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   writeLines("A=1", file.path(proj, ".gptr", ".env"))
   gptr_trust(proj, TRUE)
@@ -309,6 +327,7 @@ test_that("a gated file rewritten at the same size with its old mtime still void
 })
 
 test_that("gptr's own write keeps an in-process decision without recording it (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   writeLines("{}", file.path(proj, ".gptr", "settings.json"))
   off = gptr_register(gptr_hook("project_trust", function(event, ctx) list(decision = "yes")))
@@ -320,6 +339,7 @@ test_that("gptr's own write keeps an in-process decision without recording it (I
 })
 
 test_that("gptr's own write does not restore a trust that a foreign change voided (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   p = file.path(proj, ".gptr", "settings.json")
   writeLines("{}", p)
@@ -347,6 +367,7 @@ test_that("a trust.json gptr cannot read trusts nothing and is never rewritten",
 })
 
 test_that("trust.json keeps other projects and fields; each changed file is listed (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   p = trust_file(create = TRUE)
   other = list(trusted = TRUE, date = "2026-09-29", fingerprint = strrep("0", 64),
@@ -419,6 +440,7 @@ local_foreign_writer = function(foreign, .env = parent.frame()) {
 }
 
 test_that("gptr's own write does not carry trust over a gated file changed beside it (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   mcp = file.path(proj, ".gptr", "mcp.json")
   writeLines("{}", file.path(proj, ".gptr", "settings.json"))
@@ -441,6 +463,7 @@ test_that("gptr's own write does not carry trust over a gated file changed besid
 })
 
 test_that("gptr's own write does not carry trust over a foreign rewrite of its file (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   writeLines("{}", file.path(proj, ".gptr", "settings.json"))
   off = gptr_register(gptr_hook("project_trust", function(event, ctx) list(decision = "yes")))
@@ -456,6 +479,7 @@ test_that("gptr's own write does not carry trust over a foreign rewrite of its f
 # ------------------------------------------------------------------ Task 3: settings layers
 
 test_that("settings_get() layers defaults, user file, options and the session", {
+  skip_on_cran()
   local_gw()
   expect_identical(settings_get("mode"), "manual")
   settings_write("user", list(preset = "readonly"))
@@ -467,6 +491,7 @@ test_that("settings_get() layers defaults, user file, options and the session", 
 })
 
 test_that("an untrusted project only tightens (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   writeLines(paste0('{"mode": "auto", "preset": "extended", "context": "names", ',
                     '"permissions": {"allow": ["write(**)"], "deny": ["r(fn:unlink)"]}}'),
@@ -480,6 +505,7 @@ test_that("an untrusted project only tightens (IC-52)", {
 })
 
 test_that("a trusted project applies every key, but tighten-type keys only tighten", {
+  skip_on_cran()
   proj = local_gw()
   writeLines('{"mode": "yolo", "preset": "extended", "permissions": {"allow": ["write(**)"]}}',
              file.path(proj, ".gptr", "settings.json"))
@@ -492,6 +518,7 @@ test_that("a trusted project applies every key, but tighten-type keys only tight
 })
 
 test_that("an invalid user mode does not let a project loosen past the default", {
+  skip_on_cran()
   proj = local_gw()
   writeLines('{"mode": "yolo", "record": "auto"}', file.path(proj, ".gptr", "settings.json"))
   up = settings_path("user")
@@ -507,6 +534,7 @@ test_that("an invalid user mode does not let a project loosen past the default",
 })
 
 test_that("the user-level project file adds rules; egress comes from the user file only", {
+  skip_on_cran()
   proj = local_gw()
   settings_write("user_project", list(permissions = list(allow = "r(level<=1)")))
   expect_identical(settings_get("permissions")$allow, "r(level<=1)")
@@ -518,6 +546,7 @@ test_that("the user-level project file adds rules; egress comes from the user fi
 })
 
 test_that("dotted keys read nested objects and their own options", {
+  skip_on_cran()
   local_gw()
   expect_identical(settings_get("subagents.max_depth"), 1L)
   withr::local_options(gptr.subagents.max_depth = 2L)
@@ -526,6 +555,7 @@ test_that("dotted keys read nested objects and their own options", {
 })
 
 test_that("settings_effective() reports each key with its layer and prints it", {
+  skip_on_cran()
   proj = local_gw()
   writeLines('{"mode": "plan"}', file.path(proj, ".gptr", "settings.json"))
   cfg = settings_effective()
@@ -538,6 +568,7 @@ test_that("settings_effective() reports each key with its layer and prints it", 
 # Task 3 adaptations (see dev/progress/P08.md, Task 3).
 
 test_that("project files and options() never relax providers.<id>.local_only (IC-74)", {
+  skip_on_cran()
   proj = local_gw()
   p = file.path(proj, ".gptr", "settings.json")
   expect_true(settings_local_only("ollama"))
@@ -627,6 +658,7 @@ test_that("a project base URL needs trust and a one-time confirmation (contract 
 })
 
 test_that("a refused project base URL is not asked again in this process", {
+  skip_on_cran()
   proj = local_gw()
   writeLines('{"providers": {"corp": {"base_url": "https://llm.project.example/v1"}}}',
              file.path(proj, ".gptr", "settings.json"))
@@ -645,6 +677,7 @@ test_that("a refused project base URL is not asked again in this process", {
 })
 
 test_that("user-scope settings and egress come from the user file only", {
+  skip_on_cran()
   proj = local_gw()
   off = gptr_register(gptr_spec("setting", "demo.level", default = 1L, scope = "user"))
   withr::defer(off())
@@ -663,6 +696,7 @@ test_that("user-scope settings and egress come from the user file only", {
 })
 
 test_that("an explicit null in a settings file is a value; option-only keys keep their defaults", {
+  skip_on_cran()
   proj = local_gw()
   expect_identical(settings_get("compact_at"), 200000)
   writeLines('{"compact_at": null}', settings_path("user", create = TRUE))
@@ -675,6 +709,7 @@ test_that("an explicit null in a settings file is a value; option-only keys keep
 })
 
 test_that("a trusted project's settings.local.json adds only deny and ask rules (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   writeLines('{"permissions": {"allow": ["write(**)"], "deny": ["r(fn:unlink)"]}}',
              file.path(proj, ".gptr", "settings.local.json"))
@@ -690,6 +725,7 @@ test_that("a trusted project's settings.local.json adds only deny and ask rules 
 })
 
 test_that("print(<gptr_config>) shows nulls and redacts secret-looking values", {
+  skip_on_cran()
   local_gw()
   secret = "abcdef0123456789abcdef0123"
   settings_write("session", list(providers = list(corp = list(
@@ -739,6 +775,7 @@ test_that("a registered setting spec cannot relax local_only or widen egress (IC
 })
 
 test_that("a session object is above the dotted options of its keys (contract 11.2)", {
+  skip_on_cran()
   local_gw()
   settings_write("session", list(subagents = list(max_depth = 2L)))
   withr::local_options(gptr.subagents.max_depth = 0L, gptr.subagents = list(max_cli = 1L))
@@ -750,6 +787,7 @@ test_that("a session object is above the dotted options of its keys (contract 11
 })
 
 test_that("a layer whose providers the guard drops entirely contributes nothing", {
+  skip_on_cran()
   local_gw()
   withr::local_options(gptr.providers = list(ollama = list(local_only = FALSE)))
   expect_identical(settings_resolve("providers"), list(value = json_obj(), source = "default"))
@@ -766,6 +804,7 @@ test_that("a layer whose providers the guard drops entirely contributes nothing"
 # Task 4: replay mode, the replay guard and the egress acknowledgement.
 
 test_that("replay_mode() resolves argument, option, environment and default", {
+  skip_on_cran()
   local_gw()
   withr::local_envvar(GPTR_REPLAY = NA, `_R_CHECK_PACKAGE_NAME_` = NA)
   withr::local_options(gptr.replay = NULL)
@@ -779,6 +818,7 @@ test_that("replay_mode() resolves argument, option, environment and default", {
 })
 
 test_that("replay is forced only when R CMD check runs outside testthat (IC-45)", {
+  skip_on_cran()
   local_gw()
   withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr", TESTTHAT = "true", GPTR_REPLAY = NA)
   withr::local_options(gptr.replay = NULL)
@@ -802,6 +842,7 @@ test_that("replay_guard() refuses providers that call a remote model, in replay 
 })
 
 test_that("egress_check() passes local, offline and acknowledged providers", {
+  skip_on_cran()
   local_gw()
   local_fake_provider(list("ok"))
   expect_invisible(egress_check("fake"))
@@ -820,6 +861,7 @@ test_that("a first non-interactive use without an acknowledgement is gptr_error_
 })
 
 test_that("following the egress hint keeps the acknowledgements already given", {
+  skip_on_cran()
   local_gw()
   cnd = expect_error(egress_check("corp"), class = "gptr_error_egress")
   settings_write("user", list(egress = list(anthropic = "ack")))
@@ -828,6 +870,7 @@ test_that("following the egress hint keeps the acknowledgements already given", 
 })
 
 test_that("an interactive yes records the acknowledgement at user scope", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(interactive = TRUE)
   local_mocked_bindings(gptr_confirm = function(question, default = FALSE) TRUE)
@@ -978,6 +1021,7 @@ test_that("acknowledgements are keyed by the provider's own id; the hint is plai
 })
 
 test_that("the egress question names the endpoint and the context; a yes is announced", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(interactive = TRUE, quiet = FALSE)
   local_gptr_options(providers = list(ollama = list(base_url = "https://ollama.example/v1")))
@@ -996,6 +1040,7 @@ test_that("the egress question names the endpoint and the context; a yes is anno
 })
 
 test_that("recording an acknowledgement keeps the others and the file's other keys (IC-71)", {
+  skip_on_cran()
   local_gw()
   settings_write("user", list(egress = list(anthropic = "ack"), plugins = "demo"))
   local_gptr_options(interactive = TRUE)
@@ -1010,6 +1055,7 @@ test_that("recording an acknowledgement keeps the others and the file's other ke
 })
 
 test_that("egress_check() never asks inside a run nobody can answer (IC-43)", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(interactive = TRUE)
   seen = new.env()
@@ -1067,6 +1113,7 @@ test_that("inside a run egress_check() asks only when the run's snapshot allows 
 })
 
 test_that("an acknowledgement another process records meanwhile is kept (IC-71)", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(interactive = TRUE)
   local_mocked_bindings(gptr_confirm = function(question, default = FALSE) TRUE)
@@ -1083,6 +1130,7 @@ test_that("an acknowledgement another process records meanwhile is kept (IC-71)"
 # ------------------------------------------------------------- Task 7: gptr_config(), gptr_init()
 
 test_that("gptr_config() without arguments returns the effective settings", {
+  skip_on_cran()
   local_gw()
   cfg = gptr_config()
   expect_s3_class(cfg, "gptr_config")
@@ -1090,6 +1138,7 @@ test_that("gptr_config() without arguments returns the effective settings", {
 })
 
 test_that("gptr_config() takes bare identifiers and returns the previous values", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   old = gptr_config(mode = plan)
   expect_null(old$mode)
@@ -1100,6 +1149,7 @@ test_that("gptr_config() takes bare identifiers and returns the previous values"
 })
 
 test_that("gptr_config(.scope = NULL) writes the project file when a workspace exists (IC-71)", {
+  skip_on_cran()
   local_gw()
   gptr_config(mode = manual)
   expect_identical(settings_read("project")$mode, "manual")
@@ -1107,6 +1157,7 @@ test_that("gptr_config(.scope = NULL) writes the project file when a workspace e
 })
 
 test_that("gptr_config() validates keys, scopes and values", {
+  skip_on_cran()
   local_gw()
   expect_error(gptr_config(nope = 1), class = "gptr_error_invalid_argument")
   expect_error(gptr_config(egress = list(a = "ack"), .scope = "session"),
@@ -1132,6 +1183,7 @@ test_that("gptr_config(filters = ) applies the scope's filters to the registry (
 })
 
 test_that("user and trusted project filters reach the registry once per change (04 10.1)", {
+  skip_on_cran()
   proj = local_gw()
   st = gateway_state()
   old = st$filters_applied
@@ -1184,6 +1236,7 @@ test_that("gptr_init() without a path needs someone to answer", {
 })
 
 test_that("gptr_init(path) writes the templates once and never overwrites them", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   d = withr::local_tempdir()
   ws = gptr_init(d)
@@ -1200,6 +1253,7 @@ test_that("gptr_init(path) writes the templates once and never overwrites them",
 })
 
 test_that("gptr_init() in a package source offers the .Rbuildignore line, never writes it", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   d = withr::local_tempdir()
   writeLines(c("Package: toy", "Version: 0.1.0"), file.path(d, "DESCRIPTION"))
@@ -1216,6 +1270,7 @@ test_that("gptr_init() refuses a .gptr that is not a directory", {
 })
 
 test_that("with a human, gptr_init() asks to create the workspace and then about trust", {
+  skip_on_cran()
   proj = local_gw(workspace = FALSE)
   local_gptr_options(interactive = TRUE)
   local_mocked_bindings(gptr_confirm = function(question, default = FALSE) TRUE)
@@ -1264,6 +1319,7 @@ test_that("a project never relaxes the protected local-only control by gptr_conf
 })
 
 test_that("gptr_config() sets providers and egress only as whole objects (IC-74)", {
+  skip_on_cran()
   local_gw()
   off = gptr_register(gptr_spec("setting", "providers.ollama.local_only", default = TRUE))
   withr::defer(off())
@@ -1284,6 +1340,7 @@ test_that("gptr_config() sets providers and egress only as whole objects (IC-74)
 })
 
 test_that("gptr_config(filters = ) refuses a malformed filter before writing (04 10.1)", {
+  skip_on_cran()
   proj = local_gw()
   box = new.env()
   box$calls = 0L
@@ -1323,6 +1380,7 @@ test_that("gptr_config() names the setting it refuses and wants one scope", {
 })
 
 test_that("gptr_init() writes the templates with LF line endings (contract 11)", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   src = withr::local_tempdir()
   for (name in c("settings.json", "vignette.Rmd", "gitignore")) {
@@ -1344,6 +1402,7 @@ test_that("gptr_init() writes the templates with LF line endings (contract 11)",
 })
 
 test_that("with a human, gptr_init() adds the .Rbuildignore line on a yes and keeps the others", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   local_gptr_options(interactive = TRUE)
   seen = new.env()
@@ -1399,6 +1458,7 @@ test_that("gptr_init() keeps the trust that held across its own settings.json wr
 })
 
 test_that("gptr_init() does not carry trust over a gated file changed beside its write (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   gptr_trust(proj, TRUE)
   real = write_atomic

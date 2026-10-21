@@ -164,6 +164,7 @@ test_that("tool arguments named like the member closure's own variables reach th
 })
 
 test_that("signatures name the closure's formals when property names are not syntactic", {
+  skip_on_cran()
   schema = list(type = "object", properties = list(`file-path` = list(type = "string")),
                 required = list("file-path"))
   tool = list(name = "read-file", description = "Read a file.", input_schema = schema)

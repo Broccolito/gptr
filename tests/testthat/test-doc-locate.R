@@ -37,6 +37,7 @@ local_no_running_document = function(.env = parent.frame()) {
 }
 
 test_that("a sourced top-level call is located through its srcref and owns its block", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "analysis.R")
   ph = prompt_hash("count rows")
@@ -130,6 +131,7 @@ test_that("Quarto and Jupyter locations come from their environment variables", 
 })
 
 test_that("calls in no document go to the console transcript target, if any", {
+  skip_on_cran()
   proj = local_project()
   local_no_running_document()
   call = doc_bare_call(quote(peter("first prompt")), "first prompt")
@@ -147,6 +149,7 @@ test_that("calls in no document go to the console transcript target, if any", {
 })
 
 test_that("transcript targets follow the setting and are validated (IC-52)", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(transcript = "off")
   expect_null(doc_transcript_target())
@@ -164,6 +167,7 @@ test_that("transcript targets follow the setting and are validated (IC-52)", {
 })
 
 test_that("an interactive console asks once where to record and remembers the answer", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(transcript = "ask", interactive = TRUE)
   has = ext_service_has
@@ -224,6 +228,7 @@ test_that("an Rscript run counts executions per call, and a repeated prompt per 
 })
 
 test_that("a notebook call with a computed prompt is anchored by its call and owns its cell", {
+  skip_on_cran()
   proj = local_project()
   nb = file.path(proj, "dyn.ipynb")
   cell = function(id, src, meta = json_obj()) {
@@ -249,6 +254,7 @@ test_that("a notebook call with a computed prompt is anchored by its call and ow
 })
 
 test_that("an IDE call is located in the editor buffer at or above the cursor", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "ide.R")
   writeLines(c("peter(\"count rows\")", "y = 2"), f)
@@ -307,6 +313,7 @@ test_that("without a workspace or an active document nothing is asked or remembe
 })
 
 test_that("a malformed session or context item never stops the console fallback", {
+  skip_on_cran()
   proj = local_project()
   local_no_running_document()
   local_doc_binding(file.path(proj, ".gptr", "transcripts", "t.R"))
@@ -321,6 +328,7 @@ test_that("a malformed session or context item never stops the console fallback"
 })
 
 test_that("an Rscript run counts a computed prompt per call, whatever its value", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "run.R")
   writeLines(c("q = \"summarise mtcars\"", "a = peter(q)", "q = \"summarise iris\"",
@@ -338,6 +346,7 @@ test_that("an Rscript run counts a computed prompt per call, whatever its value"
 })
 
 test_that("the UI's dialog answers where to record; a failing or absent dialog is no answer", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(transcript = "ask", interactive = TRUE)
   has = ext_service_has
@@ -386,6 +395,7 @@ test_that("the UI's dialog answers where to record; a failing or absent dialog i
 })
 
 test_that("with an active document and no workspace the question names the document", {
+  skip_on_cran()
   proj = local_project(gptr = FALSE)
   f = file.path(proj, "analysis.R")
   writeLines("x = 1", f)
@@ -419,6 +429,7 @@ doc_locate_both = function(call) {
 }
 
 test_that("a call nested in a sourced script is no console turn, with or without srcrefs", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "analysis.R")
   writeLines(c("f = function() peter(\"inner\")", "inner = f()"), f)
@@ -456,6 +467,7 @@ test_that("a call nested in a sourced script is no console turn, with or without
 })
 
 test_that("a call that the running Rscript file or knitted document does not hold is nested", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "run.R")
   writeLines(c("for (i in 1:2) a = peter(\"count rows\")", "x = helper()"), f)
@@ -487,6 +499,7 @@ test_that("a call that the running Rscript file or knitted document does not hol
 })
 
 test_that("RStudio's sourced copy of the editor buffer is located in the editor, not nested", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "analysis.R")
   buffer = c("x = 1", "site = peter(\"count rows\")")
@@ -512,6 +525,7 @@ test_that("RStudio's sourced copy of the editor buffer is located in the editor,
 # ---- Task 8 review round 3: a relative `Rscript --file=` after setwd() --------------------------
 
 test_that("a relative Rscript file is found from the launch directory after setwd()", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "run.R")
   writeLines(c("a = peter(\"count rows\")", "setwd(\"sub\")", "b = peter(\"count rows\")"), f)

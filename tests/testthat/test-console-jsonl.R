@@ -19,6 +19,7 @@ jsonl_run = function(verbose, script = NULL) {
 }
 
 test_that("jsonl_event() gives the contract 4.5 JSON form", {
+  skip_on_cran()
   msg = msg_assistant("hi", api = "fake", provider = "fake", model = "fake-1",
                       stop_reason = "tool_use")
   ev = ev_new("message_end", session = "s0123456789", run = "u01234567", role = "assistant",

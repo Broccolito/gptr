@@ -15,6 +15,7 @@ test_that("backpressure enumeration tolerates only a dead original parent exit r
 })
 
 test_that("backpressure enumeration preserves the returned original child handles", {
+  skip_on_cran()
   handle = new.env(parent = emptyenv())
   child = new.env(parent = emptyenv())
   children = function(p, recursive) {
@@ -27,6 +28,7 @@ test_that("backpressure enumeration preserves the returned original child handle
 })
 
 test_that("backpressure enumeration fails closed for live and unknown parent identities", {
+  skip_on_cran()
   handle = new.env(parent = emptyenv())
   error = structure(list(message = "observation unavailable", call = NULL, errno = 13L),
     class = c("os_error", "ps_error", "error", "condition"))
@@ -190,6 +192,7 @@ test_that("backpressure observer diagnostics reject unknown or private message f
 })
 
 test_that("backpressure observer diagnostics preserve the original typed failure", {
+  skip_on_cran()
   error = structure(list(message = paste0("gptr_owned_disk_observer.ObservationError: ",
     "observer-entry-disappearance-uncertain\nFAKE-private-path"), call = NULL,
     errno = 13L, pid = 123L),
@@ -230,6 +233,7 @@ test_that("backpressure observer diagnostics preserve the original typed failure
 
 
 test_that("backpressure census retries one ENOENT only with the same live parent", {
+  skip_on_cran()
   handle = new.env(parent = emptyenv())
   child = new.env(parent = emptyenv())
   first = structure(list(message = "PUBLIC-CENSUS-ENOENT", call = NULL, errno = 2L),
@@ -285,6 +289,7 @@ test_that("backpressure census retries one ENOENT only with the same live parent
 })
 
 test_that("backpressure census preserves permission and uncertain parent observations", {
+  skip_on_cran()
   handle = new.env(parent = emptyenv())
   first = structure(list(message = "PUBLIC-CENSUS-ENOENT", call = NULL, errno = 2L),
     class = c("os_error", "ps_error", "error", "condition"))
@@ -509,6 +514,7 @@ test_that("backpressure census retries one ESRCH without changing failure owners
 
 
 test_that("backpressure failed observer metrics retain bounded fields and fatal routing", {
+  skip_on_cran()
   failure = structure(list(message = "observer-snapshot-deadline\nFAKE-private-path", call = NULL),
     class = c("gptr_owned_disk_observer.ObservationError", "error", "condition"))
   before = serialize(failure, NULL)

@@ -23,6 +23,7 @@ test_that("a factory's registrations are committed together when it returns", {
 })
 
 test_that("a factory that errors after two registrations is rolled back (G1 check)", {
+  skip_on_cran()
   reg = local_registry()
   ok = NULL
   expect_warning({
@@ -41,6 +42,7 @@ test_that("a factory that errors after two registrations is rolled back (G1 chec
 })
 
 test_that("an unmet API requirement disables only that factory (G1 check)", {
+  skip_on_cran()
   local_registry()
   expect_warning(
     ext_load(function(gptr) {
@@ -65,6 +67,7 @@ test_that("an unmet API requirement disables only that factory (G1 check)", {
 })
 
 test_that("a missing API method and an invalid spec roll back too", {
+  skip_on_cran()
   local_registry()
   expect_warning(ext_load(function(gptr) {
     gptr$register(cmd("x"))
@@ -104,6 +107,7 @@ test_that("an unregister function returned while staging cancels the registratio
 })
 
 test_that("lazy manifests register placeholders and declarations; first use activates", {
+  skip_on_cran()
   local_registry()
   runs = new.env()
   runs$n = 0L
@@ -161,6 +165,7 @@ test_that("the first dispatch of a provided event activates a lazy plugin", {
 })
 
 test_that("an activation that fails or forgets a provided name removes the placeholder", {
+  skip_on_cran()
   local_registry()
   expect_true(ext_load(function(gptr) stop("broken on first use"), "plugin:lazybad", 5L,
                        manifest = manifest(list(command = "late")), lazy = TRUE))
@@ -197,6 +202,7 @@ test_that("a stale API object raises gptr_error_stale_api after gptr_reload() (G
 })
 
 test_that("gptr_reload() re-declares lazily activated plugins", {
+  skip_on_cran()
   local_registry()
   runs = new.env()
   runs$n = 0L
@@ -220,6 +226,7 @@ test_that("gptr_reload() is refused from model code during a run (IC-53)", {
 })
 
 test_that("a factory loaded with session = <id> is invisible to other sessions (IC-69)", {
+  skip_on_cran()
   reg = local_registry()
   keep = new.env()
   ext_load(function(gptr) {
@@ -256,6 +263,7 @@ test_that("a session's extension releases its factory and captured frames (R10)"
 })
 
 test_that("a plugin service record replaces a built-in service and leaves with its plugin", {
+  skip_on_cran()
   local_registry()
   old = the$services
   withr::defer(assign("services", old, envir = the))
@@ -271,6 +279,7 @@ test_that("a plugin service record replaces a built-in service and leaves with i
 })
 
 test_that("unloading a plugin removes its records and makes its API objects stale", {
+  skip_on_cran()
   local_registry()
   keep = new.env()
   ext_load(function(gptr) {
@@ -308,6 +317,7 @@ test_that("package unload is watched once through packageEvent(pkg, 'onUnload')"
 })
 
 test_that("filtered sources are not loaded; argument errors are classed", {
+  skip_on_cran()
   local_registry()
   registry_filters_set("-plugin:blocked", "user")
   expect_false(ext_load(function(gptr) gptr$register(cmd("z")), "plugin:blocked", 5L))
@@ -343,6 +353,7 @@ test_that("ext_activate(source) runs a lazy extension's factory on request", {
 })
 
 test_that("invalid explicit session identities fail before a factory is retained", {
+  skip_on_cran()
   reg = local_registry()
   for (session in list(NULL, "", NA_character_, 1, list(), list(id = ""))) {
     expect_error(ext_load(function(gptr) stop("must not run"), "session", 0L,
@@ -355,6 +366,7 @@ test_that("invalid explicit session identities fail before a factory is retained
 })
 
 test_that("cancelled staged kinds leave no definition or orphan dependent records", {
+  skip_on_cran()
   reg = local_registry()
   expect_true(ext_load(function(gptr) {
     off = gptr$register_kind("cancelled_kind", validate = function(spec) spec)
@@ -389,6 +401,7 @@ test_that("failed factories release newly created state and captured APIs", {
 })
 
 test_that("failed reloads restore existing state bindings and committed services", {
+  skip_on_cran()
   reg = local_registry()
   keep = new.env()
   ext_load(function(gptr) {
@@ -410,6 +423,7 @@ test_that("failed reloads restore existing state bindings and committed services
 })
 
 test_that("malformed lazy requirements and declarations never run or retain factories", {
+  skip_on_cran()
   reg = local_registry()
   seen = new.env()
   seen$n = 0L
@@ -429,6 +443,7 @@ test_that("malformed lazy requirements and declarations never run or retain fact
 })
 
 test_that("factory interruption rolls back staged kinds, state and factory ownership", {
+  skip_on_cran()
   reg = local_registry()
   keep = new.env()
   caught = tryCatch(ext_load(function(gptr) {
@@ -462,6 +477,7 @@ test_that("eager manifest validation happens before a factory can mutate state",
 })
 
 test_that("unload or reload during a factory invalidates its transaction", {
+  skip_on_cran()
   for (action in c("unload", "reload")) {
     reg = local_registry()
     source = paste0("plugin:self-", action)

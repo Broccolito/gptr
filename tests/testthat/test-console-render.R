@@ -123,6 +123,7 @@ test_that("an interactive console keeps a two-column margin at 40 columns (D-186
 })
 
 test_that("blank lines collapse and nested lists keep their indentation (D-186)", {
+  skip_on_cran()
   withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
   text = "\n\n# T\n\n\n- a\n  - b\n    - c\n1. x\n   - y\n\nend\n\n"
   expect_identical(render_chunks(text), c("  # T", "", "  - a", "    - b", "      - c",
@@ -149,6 +150,7 @@ test_that("a line ended by other output continues at the margin, nesting kept (D
 })
 
 test_that("pipe tables are aligned on an interactive console and stay valid Markdown (D-186)", {
+  skip_on_cran()
   withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)
   for (colours in c(1L, 256L)) {
     withr::local_options(cli.num_colors = colours)
@@ -192,6 +194,7 @@ test_that("a pipe table too wide to align prints verbatim as its rows arrive (#4
 })
 
 test_that("italics, link URLs, quotes, rules and headings are styled only with colours", {
+  skip_on_cran()
   withr::local_options(cli.num_colors = 256L, cli.dynamic = FALSE)
   text = "An *it* and [d](http://x.y) a * b 2*3"
   out = render_chunks(text, 80L)
@@ -281,6 +284,7 @@ test_that("a fenced line broken by other output is shown whole after it (D-187)"
 })
 
 test_that("prose lines respect the width and bullets hang (UTF-8 locale)", {
+  skip_on_cran()
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "display widths need a UTF-8 locale (report 18)")
   withr::local_options(cli.num_colors = 1L)
   out = render_chunks(render_sample, width = 40L)
@@ -309,6 +313,7 @@ test_that("untrusted braces are printed verbatim and never evaluated (rule C1)",
 })
 
 test_that("control, bidi, zero-width characters and invalid bytes are escaped (IC-53 item 8)", {
+  skip_on_cran()
   expect_identical(console_escape("a\033[31mb"), "a<U+001B>[31mb")
   expect_identical(console_escape(paste0("x", intToUtf8(0x202e), "y")), "x<U+202E>y")
   expect_identical(console_escape(paste0("x", intToUtf8(0x200b), "y")), "x<U+200B>y")
@@ -576,6 +581,7 @@ test_that("an error result shows the lines of its message", {
 })
 
 test_that("result lines keep a failed call's objects, project paths and whole errors (#35)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = FALSE)
   root = local_project()
   r = list(id = "c1", name = "r", input = list(code = "res = 1; stop('boom')"))

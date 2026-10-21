@@ -36,6 +36,7 @@ test_that("rng_swap removes .Random.seed again and keeps the kind when the user 
 })
 
 test_that("rng_seeds matches IC-61's derivation word for word without drawing a number", {
+  skip_on_cran()
   # Reference vectors computed independently (Python hashlib): the first 24 bytes of
   # sha256(key) as six big-endian 32-bit words, three modulo m1 and three modulo m2, in
   # two's complement. Pinned so that reproducible streams (.opts$seed) stay stable.
@@ -135,6 +136,7 @@ test_that("rng_swap leaves R's generator kind as it found it when the user had a
 })
 
 test_that("rng_swap restores a .Random.seed that R would reject, silently and identically", {
+  skip_on_cran()
   env = globalenv()
   withr::local_preserve_seed()
   withr::defer({
@@ -158,6 +160,7 @@ ev_types = function(res) vapply(res$events, function(e) e$type, "")
 ev_of = function(res, type) Filter(function(e) identical(e$type, type), res$events)
 
 test_that("eval_r evaluates in envir, prints like the console and keeps no value", {
+  skip_on_cran()
   e = new.env()
   res = eval_r("x = 1:3\nx\ny = x * 2; invisible(y)\nsum(y)", e)
   expect_s3_class(res, "gptr_eval_result")
@@ -190,6 +193,7 @@ test_that("warnings and messages are captured in order and muffled without tee",
 })
 
 test_that("an error stops at the first failing expression with a trimmed traceback", {
+  skip_on_cran()
   e = new.env()
   code = "a1 = 1\nh = function(v) stop('boom: ', v)\ng = function(v) h(v)\ng('z')\na2 = 2"
   res = eval_r(code, e)
@@ -218,6 +222,7 @@ test_that("options(warn = 2) turns a model warning into an error result", {
 })
 
 test_that("q(), readline() and g = q; g() are refused without evaluation", {
+  skip_on_cran()
   e = new.env()
   codes = c("done = TRUE; q('no')", "done = TRUE; x = readline('?')", "done = TRUE; g = q; g()")
   for (code in codes) {
@@ -236,6 +241,7 @@ test_that("parse errors evaluate nothing", {
 })
 
 test_that("CR LF line ends parse, and query calls print like the console", {
+  skip_on_cran()
   e = new.env()
   withr::local_options(digits = 7)
   res = eval_r("x = 1\r\ny = 2\r\nx + y", e)
@@ -246,6 +252,7 @@ test_that("CR LF line ends parse, and query calls print like the console", {
 })
 
 test_that("functions the code defines keep their source lines but no parse data (D-189)", {
+  skip_on_cran()
   for (keep in c(FALSE, TRUE)) {
     withr::local_options(keep.parse.data = keep)
     e = new.env()
@@ -259,6 +266,7 @@ test_that("functions the code defines keep their source lines but no parse data 
 })
 
 test_that("an infinite recursion becomes an error result instead of escaping", {
+  skip_on_cran()
   e = new.env()
   res = eval_r("f = function(n) f(n + 1)\nf(1)\nafter = 1", e)
   expect_equal(res$status, "error")
@@ -294,6 +302,7 @@ test_that("sinks, options, hooks and the time limit are restored after errors an
 })
 
 test_that("session-state changes are reported by name, never by value", {
+  skip_on_cran()
   e = new.env()
   withr::local_dir(getwd())
   withr::local_envvar(GPTR_P09_TEST = NA)
@@ -360,6 +369,7 @@ test_that("a 50-plot loop attaches 3 images and keeps the rest in one out entry"
 })
 
 test_that("a plot finished by low-level calls in later expressions is one image", {
+  skip_on_cran()
   skip_if_not(isTRUE(capabilities("png")) || requireNamespace("ragg", quietly = TRUE))
   res = eval_r("plot(1:10)\nabline(h = 5)\nlines(10:1)\npoints(3, 3)", new.env())
   expect_length(res$images, 1L)
@@ -392,6 +402,7 @@ test_that("the gptr shim reaches gptr:: when gptr is not visible from envir", {
 })
 
 test_that("an evaluation with an agent stream leaves .Random.seed identical (IC-61)", {
+  skip_on_cran()
   withr::local_seed(42)
   before = get(".Random.seed", envir = globalenv())
   st1 = new.env()
@@ -459,6 +470,7 @@ test_that("added promises and active bindings are reported by kind and never for
 })
 
 test_that("non-ASCII and invalid object names are reported as valid UTF-8, never an R error", {
+  skip_on_cran()
   # ls() returns a name parsed from code (donn<e9>es) with unknown encoding, which R's radix
   # sort refuses: env_diff() threw after the code had run. R parses such a name only in a UTF-8
   # locale.

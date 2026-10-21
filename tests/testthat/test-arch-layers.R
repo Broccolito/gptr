@@ -7,6 +7,7 @@ local_arch_sources = function() {
 }
 
 test_that("the layer table lists the files of architecture section 3.2", {
+  skip_on_cran()
   table = arch_layer_table()
   expect_identical(nrow(table), 122L)
   expect_false(anyDuplicated(table$file) > 0)
@@ -100,6 +101,7 @@ test_that("the retained-source R parser has one L0 home (IC-33, IC-56)", {
 })
 
 test_that("the shared parser preserves source bytes and options without evaluation (IC-62)", {
+  skip_on_cran()
   lines = c('label = "\u00e9";\tfor (i in 1L) gateway()', 'stop("must not be evaluated")')
   for (keep in c(FALSE, TRUE)) {
     withr::local_options(keep.parse.data = keep)

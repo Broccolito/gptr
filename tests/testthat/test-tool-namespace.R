@@ -75,6 +75,7 @@ test_that("member_budget() is gptr.helper_output_tokens, capped at 0.6 x the r b
 })
 
 test_that("member prints inside one r call shrink the budget (0.6 x the remaining r budget)", {
+  skip_on_cran()
   local_gptr_options(helper_output_tokens = 1500L, r_output_tokens = 1000L)
   words = rep("several words of printed member output on one line", 20)
   got = with_r_call(function() {
@@ -90,6 +91,7 @@ test_that("member prints inside one r call shrink the budget (0.6 x the remainin
 })
 
 test_that("budget_head() and budget_head_tail() keep whole lines within the budget", {
+  skip_on_cran()
   lines = sprintf("row %04d of a long printed result with some words", 1:500)
   h = budget_head(lines, 200)
   expect_lte(est_tokens(h$lines, "r_output"), 200)
@@ -127,6 +129,7 @@ double_spec = function() {
 }
 
 test_that("member_closure() keeps the function's formals and calls it directly outside r", {
+  skip_on_cran()
   m = member_closure(double_spec())
   expect_s3_class(m, "gptr_member")
   expect_identical(names(formals(m)), c("x", "times"))
@@ -140,6 +143,7 @@ test_that("member_closure() keeps the function's formals and calls it directly o
 })
 
 test_that("inside r a member call passes dispatch_nested() with the supplied arguments only", {
+  skip_on_cran()
   seen = new.env()
   local_mocked_bindings(dispatch_nested = function(name, input, ctx) {
     seen$name = name
@@ -228,6 +232,7 @@ test_that("plugin members live under their namespace; gptr_ns nodes are lazy and
 })
 
 test_that("a plugin r member without a namespace or with a reserved one is refused (IC-37)", {
+  skip_on_cran()
   local_spec(gptr_tool("nsless", "No namespace.", fun = function(x) x, exposure = "r"),
              source = "plugin:demo", rank = 5L)
   expect_error(ns_resolve("nsless"), class = "gptr_error_unknown_member")
@@ -278,6 +283,7 @@ test_that("a bound history document is edited through the doc.edit service", {
 })
 
 test_that("an execute-only member gets the process ctx and its machinery cannot be shadowed", {
+  skip_on_cran()
   seen = new.env()
   params = list(type = "object", required = I("exec"),
                 properties = list(exec = list(type = "string"), arg_names = list(type = "string"),
@@ -316,6 +322,7 @@ test_that("an edit the document backend refuses signals gptr_error_tool", {
 })
 
 test_that("a hidden plugin member is neither listed nor resolved (IC-37)", {
+  skip_on_cran()
   local_spec(gptr_tool("shown", "Shown.", fun = function(x) x, exposure = "r",
                        namespace = "demo8"), source = "plugin:demo8", rank = 5L)
   local_spec(gptr_tool("secret", "Secret.", fun = function(x) x, exposure = "hidden",
@@ -333,6 +340,7 @@ test_that("a hidden plugin member is neither listed nor resolved (IC-37)", {
 })
 
 test_that("a completion pattern that is not a regular expression matches as a prefix", {
+  skip_on_cran()
   withr::defer(rm("mcpy", envir = ns_providers))
   ns_register_provider("mcpy", function(path) {
     ns_node(path, "mcp", members = function() c("a(b", "c"))
@@ -344,6 +352,7 @@ test_that("a completion pattern that is not a regular expression matches as a pr
 })
 
 test_that("a member whose schema is a function of ctx takes `...` (contract 9.1)", {
+  skip_on_cran()
   seen = new.env()
   params = function(ctx) list(type = "object", properties = list(a = list(type = "string")))
   exec = function(input, ctx) {
@@ -382,6 +391,7 @@ test_that("a primitive fun keeps the formals that args() gives it", {
 })
 
 test_that("arguments named member_fun, missing, substitute or list cannot shadow the machinery", {
+  skip_on_cran()
   spec = gptr_tool("clash2", "Clash.", exposure = "r",
                    fun = function(x, member_fun = NULL, missing = NULL, list = NULL, ...) {
                      base::list(x = x, mf = is.function(member_fun), mi = is.function(missing),
@@ -413,6 +423,7 @@ test_that("arguments named member_fun, missing, substitute or list cannot shadow
 })
 
 test_that("a plugin namespace registered before a member of that name is refused once", {
+  skip_on_cran()
   withr::defer(if (exists("mine2$", envir = ns_refused, inherits = FALSE)) {
     rm("mine2$", envir = ns_refused)
   })
@@ -490,6 +501,7 @@ test_that("a lazy plugin is catalogued, completed and searched through its decla
 })
 
 test_that("the BM25 port reproduces Pi's tokens, ranking and scores (report 06 section 5.7)", {
+  skip_on_cran()
   words = "getHTTPResponse parses XMLHttpRequest_bodies, the Queries & classes/boxes"
   expect_identical(bm25_tokenize(words),
                    c("get", "http", "response", "parse", "xml", "http", "request", "body", "query",
@@ -757,6 +769,7 @@ test_that("peter$out() returns stored text from the process store and pages it w
 })
 
 test_that("peter$plot() attaches the current plot or a stored one to the running r result", {
+  skip_on_cran()
   expect_null(member_plot())
   withr::local_pdf(NULL)
   grDevices::dev.control(displaylist = "enable")
@@ -812,6 +825,7 @@ test_that("file members return R values; an image read inside r is attached", {
 })
 
 test_that("peter$grep() and peter$ls() accept the direct tools' argument names (P02 formals)", {
+  skip_on_cran()
   td = withr::local_tempdir()
   writeBin(charToRaw("Alpha\nbeta\n"), file.path(td, "a.txt"))
   writeBin(charToRaw("x"), file.path(td, "b.txt"))
@@ -954,6 +968,7 @@ test_that("the specs preserve P07's stand-ins apart from read's path and line gu
 })
 
 test_that("builtin:tools registers fragments, the plugins section, a search source, services", {
+  skip_on_cran()
   secs = registry_all("prompt_section")
   frag = Filter(function(s) identical(s$parent, "r_session") && s$name %in% c("helpers", "out"),
                 secs)
@@ -996,6 +1011,7 @@ count_io = function(expr_fun) {
 }
 
 test_that("peter$nope lists the members; completion lists the built-in members (acceptance 3)", {
+  skip_on_cran()
   cnd = tryCatch(peter$nope, error = identity)
   expect_s3_class(cnd, "gptr_error_unknown_member")
   expect_identical(cnd$name, "nope")
@@ -1054,6 +1070,7 @@ test_that("direct tools return Pi's texts", {
 })
 
 test_that("a fuzzy edit returns the message and a diff of at most 400 tokens (acceptance 6)", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = file.path(td, "fuzzy.R")
   body = paste0(paste(sprintf("v%03d = %d   ", 1:300, 1:300), collapse = "\n"), "\n")
@@ -1073,6 +1090,7 @@ test_that("a fuzzy edit returns the message and a diff of at most 400 tokens (ac
 })
 
 test_that("inside r members return R values through the gate; describe passes labels (R1)", {
+  skip_on_cran()
   td = withr::local_tempdir()
   writeBin(charToRaw("needle one\nhay\n"), file.path(td, "x.txt"))
   seen = local_nested_dispatch()
@@ -1096,6 +1114,7 @@ test_that("inside r members return R values through the gate; describe passes la
 })
 
 test_that("inside r an envelope, member argument names and out lines pass the schema check", {
+  skip_on_cran()
   td = withr::local_tempdir()
   withr::local_dir(td)
   writeBin(charToRaw("x = 1\nNeedle\n"), file.path(td, "a.R"))
@@ -1140,6 +1159,7 @@ test_that("risk levels follow contract 9.4 and the control and instructions clas
 })
 
 test_that("an edit-tool Delete File is level 4 where unlink() of the path is (IC-78)", {
+  skip_on_cran()
   root = local_project(files = list("R/a.R" = "x = 1"))
   del = function(p) {
     tool_risk_write(list(edits = paste0("*** Begin Patch\n*** Delete File: ", p,
@@ -1152,6 +1172,7 @@ test_that("an edit-tool Delete File is level 4 where unlink() of the path is (IC
 })
 
 test_that("instructions files read at 0 only in the project; risk sees every envelope field", {
+  skip_on_cran()
   root = local_project(files = list("R/a.R" = "x = 1", "AGENTS.md" = "rules",
                                     ".gptr/skills/x/SKILL.md" = "skill"))
   other = withr::local_tempdir()
@@ -1174,6 +1195,7 @@ test_that("instructions files read at 0 only in the project; risk sees every env
 })
 
 test_that("plot as a direct tool is an error result; a nested call attaches the plot", {
+  skip_on_cran()
   r = tool_plot_execute(list(), NULL)
   expect_true(r$is_error)
   expect_match(format(r), "running r call", fixed = TRUE)
@@ -1200,6 +1222,7 @@ test_that("plot as a direct tool is an error result; a nested call attaches the 
 # `skill:<name>/<path>` string is a skill pseudo-path for the read risk.
 
 test_that("a direct read or describe returns the R value too (ctx$execute_tool, contract 10.6)", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = file.path(td, "a.txt")
   writeBin(charToRaw("one\ntwo\nthree\n"), f)
@@ -1226,6 +1249,7 @@ test_that("a direct read or describe returns the R value too (ctx$execute_tool, 
 })
 
 test_that("help, search and out as direct tools use their ctx's session, not the r call's", {
+  skip_on_cran()
   probe = member_execute(function() ns_session_id(), "probe")
   parent = list(session = list(id = "s_parent"))
   child = list(session = list(id = "s_child"))
@@ -1247,6 +1271,7 @@ test_that("help, search and out as direct tools use their ctx's session, not the
 })
 
 test_that("only skill:<name>/<path> is a skill pseudo-path for the read risk", {
+  skip_on_cran()
   local_project(files = list("R/a.R" = "x = 1"))
   lvl = function(path) tool_risk_read(list(path = path), NULL)$level
   expect_identical(lvl("skill:demo/SKILL.md"), 0L)

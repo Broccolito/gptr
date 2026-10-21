@@ -35,6 +35,7 @@ test_that("a yes/no question uses the wire type noul and names the state fields"
 })
 
 test_that("choices become a choice question; names carry descriptions; factors are remembered", {
+  skip_on_cran()
   q = s1_question("Which animal?", "text", choices = c("dog", "cat"))
   expect_identical(q$type, "choice")
   expect_identical(q$options, c("dog", "cat"))
@@ -71,6 +72,7 @@ test_that("levels become a score question with an array of 2 to 10 level descrip
 })
 
 test_that("a model's decision record sets the question limits instead of TypeSafe's (IC-74)", {
+  skip_on_cran()
   # 07-local-ollama.md section 2: Clef's decision record; its 2-26 options or levels replace
   # Jev's documented 255 options and 2-10 levels (04b: "do not assume Jev's limits apply")
   clef = list(types = c("noul", "choice", "score"), max_options = 26L)
@@ -100,6 +102,7 @@ test_that("a model's decision record sets the question limits instead of TypeSaf
 })
 
 test_that("the request body equals the recorded wire fixtures", {
+  skip_on_cran()
   questions = list(
     noul = s1_question("Does this text describe a dog?", "text"),
     choice = s1_question("Which animal does the text describe?", "text",
@@ -134,6 +137,7 @@ test_that("the bearer credential stays a handle in the request spec", {
 })
 
 test_that("responses parse by name: choice probabilities come back in request order", {
+  skip_on_cran()
   fx = wire_fixture("choice")
   questions = list(answer = fx$request$questions$answer)
   res = s1_typesafe_parse(jev_model(), 200L, list(`x-typesafe-request-id` = "req_1"),
@@ -164,6 +168,7 @@ test_that("a non-ASCII choice matches labels marked 'unknown', as readLines() gi
 })
 
 test_that("a multi-question response parses noul, choice and score answers together", {
+  skip_on_cran()
   fx = wire_fixture("multi")
   res = s1_typesafe_parse(jev_model(), 200L, list(), json_encode(fx$response),
                           fx$request$questions)
@@ -313,6 +318,7 @@ test_that("answers are validated against the request before they become canonica
 })
 
 test_that("an empty probability map (a gateway rerun) is missing, not zero", {
+  skip_on_cran()
   ch = list(type = "choice", instructions = "Q?", criteria = list(a = NULL, b = NULL))
   a = s1_parse_answer(list(type = "choice", choice = "a", probabilities = json_obj(),
                            confidence = 0), ch)
@@ -359,6 +365,7 @@ test_that("missing confidences are recomputed with TypeSafe's formulas (report 0
 })
 
 test_that("HTTP statuses map to the System 1 classes of report 04 section 4.12", {
+  skip_on_cran()
   expect_identical(s1_status_class(401L), "s1_auth")
   expect_identical(s1_status_class(403L), "s1_auth")
   expect_identical(s1_status_class(400L), "s1_validation")
@@ -422,6 +429,7 @@ ok_reply = function(body, p = 0.9) {
 }
 
 test_that("a fake classifier answers every state; identical states are sent once", {
+  skip_on_cran()
   judge = local_fake_provider(function(state, question) {
     if (grepl("puppy", state$text)) 0.95 else 0.05
   }, name = "judge", type = "classifier")
@@ -498,6 +506,7 @@ test_that("bounded rounds resubmit only failed elements, honouring retry-after u
 })
 
 test_that("transport failures map to retryable or final System 1 conditions", {
+  skip_on_cran()
   # a reactor failure's class (contract 2.2) as s1_request() hands it over
   fail = function(cls, status = NA_integer_, retry_after = NULL) {
     s1_failure(paste0("gptr_error_", cls), status, "x", NA, "jev-latest", retry_after)
@@ -584,6 +593,7 @@ test_that("the adapter follows the resolved model's api, not its provider's (IC-
 })
 
 test_that("the request preflight runs before any adapter, credential or transfer (IC-74)", {
+  skip_on_cran()
   local_mocked_bindings(catalog_ollama_discover = function(...) stop("discovery must not run"),
                         s1_adapter = function(api) stop("an adapter was looked up"),
                         s1_credential = function(provider) stop("a credential was looked up"))
@@ -805,6 +815,7 @@ rct_judge = function(name = "judge", .env = parent.frame()) {
 }
 
 test_that("builtin:system1 registers the providers, adapters, route, section and service", {
+  skip_on_cran()
   tp = registry_get("provider", "typesafe")
   expect_identical(tp$api, "typesafe-system-one")
   expect_identical(tp$base_url, "https://api.typesafe.ai/v1/")
@@ -834,6 +845,7 @@ test_that("builtin:system1 registers the providers, adapters, route, section and
 })
 
 test_that("the system1 section is architecture 7.3 verbatim and shown only when usable", {
+  skip_on_cran()
   pb = json_decode(read_utf8(testthat::test_path("fixtures", "bench",
                                                  "prefix-baseline.json"))$text)
   st = Filter(function(x) identical(x$name, "system1"), pb$standins$sections)[[1]]
@@ -889,6 +901,7 @@ test_that("NS-4: a vector gives a named decision vector; repeats come from the c
 })
 
 test_that("levels give a gptr_score of expected 0-based levels", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(c(0, 0.02, 0.98)), name = "rater", type = "classifier")
   mood = peter("How positive is the review?", c(r1 = "Loved it."), model = "rater/rater-s1",
@@ -995,6 +1008,7 @@ test_that("failures: a scalar call signals, a vector gives NA and one s1_errors 
 })
 
 test_that("calls above gptr.s1_max_elements fail with a hint to chunk", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(0.5), name = "judge", type = "classifier")
   local_gptr_options(s1_max_elements = 5L)
@@ -1040,6 +1054,7 @@ test_that("jev without a key fails cleanly: egress first, then no_key; nothing i
 })
 
 test_that("the gptr_prob() example runs", {
+  skip_on_cran()
   s1_fresh()
   judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
   d = peter("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)

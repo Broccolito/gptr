@@ -1,4 +1,5 @@
 test_that("the lowest rank wins per (kind, name): session < project < user < plugin < builtin", {
+  skip_on_cran()
   local_registry()
   registry_add(cmd("hi", "builtin"), "builtin:console", 6L)
   expect_equal(registry_get("command", "hi")$handler("", NULL), "builtin")
@@ -24,6 +25,7 @@ test_that("ties go to the first registration with a collision diagnostic", {
 })
 
 test_that("overrides are per record: a user read leaves the built-in edit and grep (IC-69)", {
+  skip_on_cran()
   local_registry()
   tool = function(name, text) {
     force(text)
@@ -44,6 +46,7 @@ test_that("overrides are per record: a user read leaves the built-in edit and gr
 })
 
 test_that("registry_all() orders all-kinds by their order field and returns winners otherwise", {
+  skip_on_cran()
   local_registry()
   pol = function(name, order) {
     gptr_spec("policy", name, check = function(call, ctx) NULL, order = order)
@@ -64,6 +67,7 @@ test_that("registry_all() orders all-kinds by their order field and returns winn
 })
 
 test_that("registry_remove() drops a record; a kind record defines and undefines its kind", {
+  skip_on_cran()
   local_registry()
   id = registry_add(cmd("x"), "user", 3L)
   expect_true(registry_remove(id))
@@ -84,6 +88,7 @@ test_that("registry_remove() drops a record; a kind record defines and undefines
 })
 
 test_that("registration rules that depend on the source: operator blocks and namespaces", {
+  skip_on_cran()
   local_registry()
   blk = gptr_context_block("orders", function(ctx, budget) "x", authority = "operator")
   err = expect_error(registry_add(blk, "project", 1L), class = "gptr_error_invalid_spec")
@@ -140,6 +145,7 @@ test_that("gptr_register() is refused from model code during a run unless grante
 })
 
 test_that("gptr_registry() lists records with the tokens and experimental columns", {
+  skip_on_cran()
   local_registry()
   gptr_register(gptr_tool("add", "Add two numbers",
                           parameters = list(type = "object", required = I(c("a", "b")),
@@ -165,6 +171,7 @@ test_that("gptr_registry() lists records with the tokens and experimental column
 })
 
 test_that("the full listing is cached until records or kinds change", {
+  skip_on_cran()
   reg = local_registry()
   registry_add(cmd("a"), "user", 3L)
   first = gptr_registry()
@@ -181,6 +188,7 @@ test_that("the full listing is cached until records or kinds change", {
 })
 
 test_that("diagnostics are redacted, capped and listed", {
+  skip_on_cran()
   local_registry()
   old = the$redactor
   withr::defer(assign("redactor", old, envir = the))
@@ -266,6 +274,7 @@ test_that("unregister closures do not mutate a replacement scratch registry", {
 })
 
 test_that("malformed session and source values cannot widen registration scope", {
+  skip_on_cran()
   local_registry()
   for (sid in list(NULL, "", NA_character_, list(id = NA_character_), list(id = 42))) {
     expect_error(registry_add(cmd("private"), "session", 0L, session = sid),
@@ -283,6 +292,7 @@ test_that("malformed session and source values cannot widen registration scope",
 })
 
 test_that("-kind:name hides a record and +kind:name restores it", {
+  skip_on_cran()
   local_registry()
   local_builtins()
   registry_add(cmd("grep"), "builtin:tools", 6L)
@@ -413,6 +423,7 @@ test_that("a filter on a kind not defined yet is kept with a diagnostic (plugin 
 })
 
 test_that("a non-replaceable built-in source cannot be disabled in any scope", {
+  skip_on_cran()
   local_registry()
   local_builtins()
   the$builtins = list(locked = list(replaceable = FALSE))
@@ -466,6 +477,7 @@ test_that("filter validation rejects trailing line terminators", {
 
 
 test_that("unregister callbacks discard package source while preserving user hooks", {
+  skip_on_cran()
   reg = local_registry()
   user_env = new.env(parent = baseenv())
   user_env$marker = "user hook data"
@@ -514,6 +526,7 @@ test_that("unregister callbacks discard package source while preserving user hoo
 })
 
 test_that("source-free unregister callbacks keep worker references and permission guards", {
+  skip_on_cran()
   reg = local_registry()
   user_env = new.env(parent = baseenv())
   user_env$marker = "worker user data"

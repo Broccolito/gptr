@@ -86,6 +86,7 @@ test_that("long output keeps head and tail with a peter$out() notice", {
 })
 
 test_that("image tokens count against the budget", {
+  skip_on_cran()
   img = list(type = "image", mime = "image/png", data = "x", source = "plot", width = 768L,
              height = 512L)
   lines = paste(rep("0123456789 abcdefghij", 100), collapse = "\n")
@@ -137,6 +138,7 @@ usage_fake = function(session, input, output = 0, cache_read = 0) {
 }
 
 test_that("context pressure asks compact.should with twice the session's last request", {
+  skip_on_cran()
   seen = new.env()
   seen$tokens = numeric()
   seen$threshold = 3000

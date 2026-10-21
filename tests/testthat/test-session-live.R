@@ -11,6 +11,7 @@ test_that("the live registry is weak and keyed on the shell: a detached copy has
 })
 
 test_that("a function frame is never kept as the home (R2)", {
+  skip_on_cran()
   f = function() test_session(home = environment())
   s = f()
   expect_null(session_home(s))
@@ -96,6 +97,7 @@ test_that("a detached copy continues from its own leaf once the original is gone
 })
 
 test_that("locks hold the pid and the process creation time; a dead holder is stale", {
+  skip_on_cran()
   local_store()
   s = test_session()
   session_append(s, entry_custom("test.note", list(i = 1L)))
@@ -140,6 +142,7 @@ test_that("300 sessions kept in a list leave no connection open (IC-59)", {
 })
 
 test_that("secret_register() warns secret_late for a value a live session already holds (IC-70)", {
+  skip_on_cran()
   local_store()
   s = test_session()
   late = paste0("FAKE_late_", "kernel_secret_77")

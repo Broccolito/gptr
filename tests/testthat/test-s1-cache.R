@@ -10,6 +10,7 @@ choice_q = function() {
 }
 
 test_that("before a workspace exists the cache lives in memory and writes no file", {
+  skip_on_cran()
   dir = s1_fresh(gptr = FALSE)
   expect_identical(s1_cache_salt(), "")
   key = s1_cache_keys("", "offline:judge", "judge/judge-s1", noul_q(), list(list(text = "a")))
@@ -23,6 +24,7 @@ test_that("before a workspace exists the cache lives in memory and writes no fil
 })
 
 test_that("with a workspace the salt is created once and the records are files", {
+  skip_on_cran()
   dir = s1_fresh(gptr = TRUE)
   salt = s1_cache_salt()
   expect_match(salt, "^[0-9a-f]{32}$")
@@ -43,6 +45,7 @@ test_that("with a workspace the salt is created once and the records are files",
 })
 
 test_that("cache_commit = list(s1 = FALSE) keeps the System 1 cache out of git", {
+  skip_on_cran()
   dir = s1_fresh(gptr = TRUE)
   local_gptr_options(cache_commit = list(s1 = FALSE, s2 = FALSE))
   s1_cache_salt()
@@ -54,6 +57,7 @@ test_that("cache_commit = list(s1 = FALSE) keeps the System 1 cache out of git",
 })
 
 test_that("cache files contain neither the input nor the question text (IC-70)", {
+  skip_on_cran()
   dir = s1_fresh(gptr = TRUE)
   salt = s1_cache_salt()
   q = noul_q()
@@ -76,6 +80,7 @@ test_that("cache files contain neither the input nor the question text (IC-70)",
 })
 
 test_that("keys are schema 2, salted, and change with the input, question and model", {
+  skip_on_cran()
   st = list(list(text = "a"))
   k = s1_cache_keys("s", "e", "m", noul_q(), st)
   want = list(schema = 2L, salt = "s", endpoint = "e", model = "m",
@@ -91,6 +96,7 @@ test_that("keys are schema 2, salted, and change with the input, question and mo
 })
 
 test_that("a hit touches the record's modification time", {
+  skip_on_cran()
   dir = s1_fresh(gptr = TRUE)
   key = s1_cache_keys(s1_cache_salt(), "e", "m", noul_q(), list(list(text = "x")))
   s1_cache_put(key, list(key = key, answer = 0.5))
@@ -101,6 +107,7 @@ test_that("a hit touches the record's modification time", {
 })
 
 test_that("records round-trip noul, choice and score answers", {
+  skip_on_cran()
   noul = list(type = "noul", prob = 0.3)
   rec = s1_cache_record("k", noul, "m", "a", noul_q(), list(), "", list())
   expect_identical(s1_cache_answer(rec, noul_q()), noul)
@@ -133,6 +140,7 @@ clef_model = function(...) {
 clef_endpoint = "http://127.0.0.1:11434/v1/systemone"
 
 test_that("keys carry the adapter, the model digest and the server version (IC-74)", {
+  skip_on_cran()
   st = list(list(text = "a"))
   id = s1_cache_identity(clef_model())
   expect_identical(id, list(adapter = "ollama-system-one", digest = strrep("a", 64L),
@@ -159,6 +167,7 @@ test_that("keys carry the adapter, the model digest and the server version (IC-7
 })
 
 test_that("image bytes and MIME types are keyed in order and never stored (IC-74)", {
+  skip_on_cran()
   dir = s1_fresh(gptr = TRUE)
   salt = s1_cache_salt()
   png = list(data = as.raw(c(0x89, 0x50, 0x4e, 0x47, 1:40)), mime = "image/png")
@@ -203,6 +212,7 @@ test_that("image bytes and MIME types are keyed in order and never stored (IC-74
 })
 
 test_that("an Ollama model without a digest gives answers the cache never keeps (IC-74)", {
+  skip_on_cran()
   dir = s1_fresh(gptr = TRUE)
   salt = s1_cache_salt()
   states = list(list(text = "a"), list(text = "b"))

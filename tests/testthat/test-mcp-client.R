@@ -68,6 +68,7 @@ test_that("tool results become text, images and R values", {
 })
 
 test_that("placeholders expand at connect time; secret-like values are registered", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(MCP_T_TOKEN = "tok-abcdefghijklmnop", MCP_T_UNSET = NA,
                       MCP_T_ARG_TOKEN = "argtok-abcdefghijkl")
@@ -87,6 +88,7 @@ test_that("placeholders expand at connect time; secret-like values are registere
 })
 
 test_that("era and tool caches live in the user cache with their keys and expiry (11.9)", {
+  skip_on_cran()
   withr::local_envvar(R_USER_CACHE_DIR = withr::local_tempdir("gptr-cache-"))
   spec = list(name = "s", command = "srv", args = c("a", "b"))
   expect_identical(mcp_cache_key(spec),
@@ -109,6 +111,7 @@ test_that("era and tool caches live in the user cache with their keys and expiry
 })
 
 test_that("placeholder values are spliced in once and literally; env entries become strings", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(MCP_T_NESTED = "${MCP_T_TOKEN}", MCP_T_TOKEN = "tok-abcdefghijklmnop",
                       MCP_T_UNSET = NA)
@@ -133,6 +136,7 @@ test_that("placeholder values are spliced in once and literally; env entries bec
 })
 
 test_that("a value that cannot become one scalar is an argument error; big integers stay exact", {
+  skip_on_cran()
   schema = list(type = "object", properties = list(
     n = list(type = "integer"), x = list(type = "number"), b = list(type = "boolean"),
     e = list(anyOf = list(list(type = "integer"), list(type = "string")))))
@@ -157,6 +161,7 @@ test_that("a value that cannot become one scalar is an argument error; big integ
 })
 
 test_that("a cache file that is not a JSON object reads as absent; freshness is a flag", {
+  skip_on_cran()
   withr::local_envvar(R_USER_CACHE_DIR = withr::local_tempdir("gptr-cache-"))
   spec = list(name = "s", command = "srv")
   mcp_era_put(spec, "modern", "2026-07-28")
@@ -536,6 +541,7 @@ test_that("a credential bound to another origin is never sent; the 401 asks for 
 })
 
 test_that("an access token bound to an https origin on the default port is sent", {
+  skip_on_cran()
   local_user_dirs()
   auth_store_set("mcp:web", list(type = "oauth", issuer = "https://as.example", client_id = "c1",
                                  token_endpoint = "https://as.example/token",

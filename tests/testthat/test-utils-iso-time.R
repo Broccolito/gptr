@@ -58,6 +58,7 @@ test_that("ISO timestamps retain exact finite rollover and empty input semantics
 })
 
 test_that("ISO timestamps restore absent custom and empty TZDIR without unrelated rollback", {
+  skip_on_cran()
   for (value in list(character(), c(TZDIR = "synthetic-zone"), c(TZDIR = ""))) {
     probe = iso_tzdir_probe(value, function(state) {
       state$values[["TZDIR"]] = "synthetic-calendar"

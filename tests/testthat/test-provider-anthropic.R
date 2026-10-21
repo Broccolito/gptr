@@ -59,6 +59,7 @@ test_that("text is UTF-8 and usage splits 5-minute and 1-hour cache writes", {
 })
 
 test_that("unreported usage stays unknown and cost needs price evidence (IC-74)", {
+  skip_on_cran()
   # no usage was ever reported: unknown counters and cost, never a known zero
   n = anthropic_normaliser(test_model(api), list(emit = function(ev) NULL))
   n$push(list(event = "error", data = paste0(
@@ -92,6 +93,7 @@ test_that("unreported usage stays unknown and cost needs price evidence (IC-74)"
 })
 
 test_that("a server error event and a truncated stream each end with one error and the partial", {
+  skip_on_cran()
   err = replay_case(api, anthropic_normaliser, "error_midstream")
   last = err$events[[length(err$events)]]
   expect_identical(last$type, "error")
@@ -107,6 +109,7 @@ test_that("a server error event and a truncated stream each end with one error a
 })
 
 test_that("an overload before any delta asks the transport to retry instead of failing", {
+  skip_on_cran()
   log = event_log()
   retried = event_log()
   n = anthropic_normaliser(test_model(api), list(emit = log$emit, retry = retried$emit))
@@ -170,6 +173,7 @@ test_that("push() reports the stream complete when the transport refuses a retry
 })
 
 test_that("non-string error types and stop reasons are never matched by position (04 4.2)", {
+  skip_on_cran()
   log = event_log()
   n = anthropic_normaliser(test_model(api), list(emit = log$emit))
   expect_true(n$push(list(event = "error", data = paste0(
@@ -216,6 +220,7 @@ usage_vec = function(u) {
 }
 
 test_that("a bare cache total in message_delta keeps the 5-minute/1-hour split (07 3.14)", {
+  skip_on_cran()
   # the verified wire shape: message_delta repeats the cumulative cache_creation_input_tokens
   # without a cache_creation object
   wire = c(
@@ -387,6 +392,7 @@ anthropic_turn2 = function(model) {
 }
 
 test_that("anthropic breakpoints follow G4 section 3.7: T0 and the project block 1 h, auto tail", {
+  skip_on_cran()
   model = test_model(api)
   req = anthropic_build(model, ctx_fixture(list(first_message())), list())
   body = json_decode(req$body)
@@ -407,6 +413,7 @@ test_that("anthropic breakpoints follow G4 section 3.7: T0 and the project block
 })
 
 test_that("the default cache policy of prompt-cache.R drives the breakpoints (acceptance 4)", {
+  skip_on_cran()
   plan = default_plan(api)
   expect_identical(plan$anchors, c("t0", "project"))
   body = json_decode(anthropic_build(test_model(api), ctx_fixture(list(first_message()),
@@ -424,6 +431,7 @@ test_that("the default cache policy of prompt-cache.R drives the breakpoints (ac
 })
 
 test_that("without a project block the second breakpoint moves to the T1 system block", {
+  skip_on_cran()
   plan = list(anchors = c("t0", "t1"), tail_ttl = "5m", key = "gptr:0123456789ab")
   body = json_decode(anthropic_build(test_model(api), ctx_fixture(list(msg_user("hi")),
                                                                   cache_plan = plan),
@@ -438,6 +446,7 @@ test_that("without a project block the second breakpoint moves to the T1 system 
 })
 
 test_that("the frozen prefix stays byte-identical across turns and pieces are memoised", {
+  skip_on_cran()
   model = test_model(api)
   memo = new.env(parent = emptyenv())
   b1 = anthropic_build(model, ctx_fixture(list(first_message())), list(memo = memo))$body
@@ -470,6 +479,7 @@ test_that("a PNG tool result is sent as a native image block (acceptance 3)", {
 })
 
 test_that("an image-only tool result for a text-only model carries only the omission note", {
+  skip_on_cran()
   msgs = anthropic_turn2(test_model(api))
   msgs[[3L]] = msg_tool_result("toolu_01A", "r", list(block_image(png_b64())))
   result = function(model) {
@@ -486,6 +496,7 @@ test_that("an image-only tool result for a text-only model carries only the omis
 })
 
 test_that("signed and redacted thinking replay byte for byte only to the same model", {
+  skip_on_cran()
   dir = sse_dir(api)
   model = adp_fixture_model(api, dir)
   msg = replay_case(api, anthropic_normaliser, "thinking_tools")$message
@@ -505,6 +516,7 @@ test_that("signed and redacted thinking replay byte for byte only to the same mo
 })
 
 test_that("adaptive models get adaptive thinking and effort; budget models an enabled budget", {
+  skip_on_cran()
   body = json_decode(anthropic_build(test_model(api),
                                      ctx_fixture(list(msg_user("hi")),
                                                  params = list(thinking = "high")),
@@ -563,6 +575,7 @@ test_that("returns = uses output_config.format and keeps the tools (IC-71, INFRA
 })
 
 test_that("a forced tool_choice is never sent while forced_tool_choice is FALSE (IC-71)", {
+  skip_on_cran()
   forced = list(tool_choice = list(type = "tool", name = "read"))
   no = test_model(api, reasoning = FALSE, capabilities = list(forced_tool_choice = FALSE))
   body = json_decode(anthropic_build(no, ctx_fixture(list(msg_user("x")), params = forced),
@@ -583,6 +596,7 @@ test_that("a forced tool_choice is never sent while forced_tool_choice is FALSE 
 })
 
 test_that("operator messages are system messages only where the placement rule allows", {
+  skip_on_cran()
   model = test_model(api)
   relay = msg_operator("steer_relay",
                        "The user sent this message while you were working: use TPM")
@@ -608,6 +622,7 @@ test_that("operator messages are system messages only where the placement rule a
 })
 
 test_that("a run of operator messages is one system message, never two in a row (07 2.3)", {
+  skip_on_cran()
   model = test_model(api)
   mode = msg_operator("mode", "Mode changed to auto.")
   relay = msg_operator("steer_relay",
@@ -631,6 +646,7 @@ test_that("a run of operator messages is one system message, never two in a row 
 })
 
 test_that("credentials stay handles: x-api-key, or Bearer with the oauth beta", {
+  skip_on_cran()
   key = fake_handle("ANTHROPIC_API_KEY")
   req = anthropic_build(test_model(api), ctx_fixture(list(msg_user("x"))),
                         list(credential = key, base_url = "https://api.anthropic.com"))
@@ -689,6 +705,7 @@ test_that("provider headers come from the record provider_stream() resolved (04 
 })
 
 test_that("provider headers never repeat an adapter header: betas join, the adapter's win", {
+  skip_on_cran()
   # 04 10.2 row 1 allows any non-secret header in a provider record, and P04's http_headers()
   # refuses a spec that repeats a name in any case, so the request would never leave the process
   rec = function(...) {
@@ -731,6 +748,7 @@ test_that("provider headers never repeat an adapter header: betas join, the adap
 })
 
 test_that("a budget model without room for the minimum budget sends no thinking (07 2.6)", {
+  skip_on_cran()
   # the API needs 1024 <= budget_tokens < max_tokens
   haiku = test_model(api, id = "claude-haiku-4-5", max_output = 1024,
                      capabilities = list(adaptive_thinking = FALSE, effort = FALSE))
@@ -776,6 +794,7 @@ test_that("builtin adapters keep their capabilities and pass check_adapter() and
 })
 
 test_that("provider_stream() puts the returns schema on the wire (INFRA-25)", {
+  skip_on_cran()
   local_scripted_provider(api)
   wire = local_scripted_wire(list(anthropic_sse_text("{\"n\":32}")))
   out = new.env(parent = emptyenv())
@@ -993,6 +1012,7 @@ test_that("check_adapter() explains a failing build() and an empty replay; check
 })
 
 test_that("check_adapter() replays .json fixtures of http_json adapters, not their goldens", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   for (f in c("one.json", "one.events.json", "one.message.json", "model.json")) {
     write_utf8(file.path(dir, f), "{}")
@@ -1295,6 +1315,7 @@ test_that("classifier usage meets its golden: unreported counts stay NA (IC-74)"
 })
 
 test_that("inprocess classifiers: P01's fake classifier answers fixture states canonically", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   write_utf8(file.path(dir, "model.json"),
              json_encode(list(ref = "conformance/conformance-s1", provider = "conformance",

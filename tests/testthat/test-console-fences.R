@@ -56,6 +56,7 @@ test_that("opening and indented closing fences survive every single stream split
 })
 
 test_that("fence closing handles split CRLF lone CR blank lines and final EOF", {
+  skip_on_cran()
   expected = c("```python", "value", "", " ```\t", "", "after")
   for (ending in c("\n", "\r\n", "\r")) {
     text = paste(c("```python", "value", "", " ```\t", "", "after"), collapse = ending)
@@ -67,6 +68,7 @@ test_that("fence closing handles split CRLF lone CR blank lines and final EOF", 
 })
 
 test_that("a close marker must match the opening length and contain no nonblank suffix", {
+  skip_on_cran()
   literal = c("```", "```suffix", "``` suffix", "    ````", "~~~", "x = '```'", "")
   text = paste(c("````r", literal, "   ````` \t", "## outside"), collapse = "\n")
   expected = c("````r", literal, "   ````` \t", "outside")
@@ -103,6 +105,7 @@ test_that("several fenced language blocks reset their closing and language state
 })
 
 test_that("ordinary inline backticks do not open a fence", {
+  skip_on_cran()
   text = "Use `value` or ``literal`` in prose.\nThe marker ``` occurs mid-line.\n## Heading"
   for (colours in c(1L, 256L)) {
     out = fence_capture(strsplit(text, "", fixed = TRUE)[[1L]], colours)
@@ -185,6 +188,7 @@ test_that("an indented closing fence never evaluates literal code or control tex
 
 
 test_that("indented opening fences and labels survive streamed boundaries", {
+  skip_on_cran()
   for (indent in 0:3) {
     text = paste0(strrep(" ", indent), "```r\nvalue\n  ```\n## outside")
     expect_identical(fence_capture(strsplit(text, "", fixed = TRUE)[[1L]]),
@@ -254,6 +258,7 @@ test_that("a fence indented under a list item closes and shows its body unindent
 })
 
 test_that("tool code shows on the tool line when it fits, else as a fence never cut", {
+  skip_on_cran()
   fence_test_format(width = 40L)
   line = function(x) cli::ansi_strip(console_tool_line(x, width = 40L))
   call = function(code) list(id = "c1", name = "r", input = list(code = code))

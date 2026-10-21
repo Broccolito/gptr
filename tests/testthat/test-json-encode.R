@@ -1,6 +1,7 @@
 # JSON layer (Task 7; conventions section 6).
 
 test_that("json_encode() uses auto_unbox, null and full digits", {
+  skip_on_cran()
   expect_identical(
     json_encode(list(a = 1, b = "x", c = NULL, d = TRUE)),
     "{\"a\":1,\"b\":\"x\",\"c\":null,\"d\":true}"
@@ -23,6 +24,7 @@ test_that("json_verbatim() pieces are embedded unchanged", {
 })
 
 test_that("json_decode() never simplifies and never reads files", {
+  skip_on_cran()
   x = json_decode("{\"a\":[1,2],\"b\":{},\"c\":[],\"d\":null}")
   expect_identical(x$a, list(1L, 2L))
   expect_identical(x$b, json_obj())

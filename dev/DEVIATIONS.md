@@ -2969,8 +2969,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the whole suite (CI-19)".
 
 ## D-240 - Tests: CRAN runs the fast blocks (2026-10-20)
-- Rule: with `NOT_CRAN` unset, a `test_that()` block that took 25 ms or more in a local CRAN-mode run starts with
-  `skip_on_cran()`, except each file's fastest block and the `perm-*`, `auth-redact` and `auth-secrets` files, which
-  run in full; GitHub Actions runs the whole suite. win-builder needed 13 to 29 minutes for the earlier CRAN-mode
-  suite, against CRAN's 10-minute check budget.
-- Tests: tests/testthat (1,193 blocks in 133 files).
+- Rule: with `NOT_CRAN` unset, a `test_that()` block starts with `skip_on_cran()` when it took 25 ms or more in a
+  local CRAN-mode run or 50 ms or more on GitHub's windows-latest (R-devel or R-release), except each file's fastest
+  block; in the `perm-*`, `auth-redact` and `auth-secrets` files only blocks of 500 ms or more on Windows skip.
+  GitHub Actions runs the whole suite. win-builder needed 13 to 29 minutes for the CRAN-mode tests before this rule
+  and 6 with the local cut alone, against CRAN's 10-minute check budget.
+- Tests: tests/testthat (2,589 blocks in 170 files; a loop's blocks skip together).
