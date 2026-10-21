@@ -502,7 +502,7 @@ eval_is_own_call = function(cl) {
 #' @noRd
 eval_call_text = function(cl) {
   if (is.null(cl) || eval_is_own_call(cl)) return(NULL)
-  paste(deparse(cl, nlines = 1L, width.cutoff = 500L), collapse = "")
+  paste(deparse_code(cl, nlines = 1L, width.cutoff = 500L), collapse = "")
 }
 
 #' Did the harness time limit end the expression?
@@ -565,7 +565,7 @@ eval_format_calls = function(calls, max_calls = 20L, width = 120L) {
   out = character()
   for (i in keep) {
     cl = calls[[i]]
-    txt = paste(deparse(cl, width.cutoff = 500L, nlines = 2L), collapse = " ")
+    txt = paste(deparse_code(cl, width.cutoff = 500L, nlines = 2L), collapse = " ")
     if (nchar(txt) > width) txt = paste0(substr(txt, 1L, width - 3L), "...")
     sr = attr(cl, "srcref")
     loc = ""

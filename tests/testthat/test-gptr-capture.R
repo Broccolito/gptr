@@ -188,6 +188,13 @@ test_that("the capture leaves read call-site symbols by name and label each dot"
   expect_identical(dot_labels(list(), character()), character())
 })
 
+test_that("the labels of a long call chain are deparsed (CI-82)", {
+  chain = str2lang(paste0("f", strrep("(1)", 500L)))
+  withr::local_options(expressions = 1000L)
+  expect_match(dot_labels(list(chain), ""), "^[(f1)]{57}[.]{3}$")
+  expect_match(ident_label(chain), "^[(f1)]+$")
+})
+
 test_that("dot_sites() skips peter()'s own formals; the leaves tolerate an empty argument", {
   sc = quote(peter(big, prompt = p, model = m, envir = e, small, k = y))
   expect_identical(dot_sites(sc, 3L), c("big", "small", "y"))

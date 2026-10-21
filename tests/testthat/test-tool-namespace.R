@@ -422,6 +422,16 @@ test_that("arguments named member_fun, missing, substitute or list cannot shadow
                    list(x = "a + b", substitute = "identity"))
 })
 
+test_that("a long call chain as a default or a gated argument is deparsed (CI-82)", {
+  chain = str2lang(paste0("f", strrep("(1)", 500L)))
+  fn = function(x) 1
+  formals(fn)$x = chain
+  labels = function(x) ns_collect_input(environment(), "x", gate_only = TRUE)
+  withr::local_options(expressions = 1000L)
+  expect_match(ns_formals_text(fn), "^[(]x = [(f1)]+[)]$")
+  expect_match(eval(call("labels", chain))$x, "^[(f1)]{80}$")
+})
+
 test_that("a plugin namespace registered before a member of that name is refused once", {
   skip_on_cran()
   withr::defer(if (exists("mine2$", envir = ns_refused, inherits = FALSE)) {

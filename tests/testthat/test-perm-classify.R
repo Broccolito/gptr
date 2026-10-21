@@ -1124,3 +1124,9 @@ test_that("the directory git -C names is read", {
   expect_identical(lv("system('git -C . log')"), 0L)
   expect_identical(lv("system('git status')"), 0L)
 })
+
+test_that("the code text of a long call chain is deparsed (CI-82)", {
+  chain = str2lang(paste0("f", strrep("(1)", 500L)))
+  withr::local_options(expressions = 1000L)
+  expect_match(risk_code_text(chain)[1L], "^[(f1)]+$")
+})
