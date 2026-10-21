@@ -1111,6 +1111,106 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   recorded before the drift noted in D-135 item 6), input totals +143 per request; the two minimal cases unchanged.
   `run.R --check` OK; polyglot within 10%; `dev/bench/tests` PASS.
 
+## Task CI-76 - The parent-death witness waits until ps stops listing the killed parent (2026-10-21, #62)
+- Windows-check.yaml `windows-latest (release, shard 1/4)` on c80b703 (PR #56; run 39552770163,
+  attempt 1, job 119065497023, R 4.6.1) failed native-10 "a Windows worker exits within 10 s after
+  its acknowledged parent dies (IC-60)" at `test-subagent-worker.R:715`:
+  `parent_dead_before_cleanup` FALSE. Everything else in the witness passed: it completed in
+  5.96 s, all 20 pre-kill checks held, the worker was gone 0.10 s after the kill and cleanup
+  settled. It is 1 of 247 executions that reached that check since 2026-10-12 (release 1/145,
+  oldrel-4 0/102), and attempt 2 on the same sha passed.
+- Cause (inferred, not observed): `wpd_child_case()` kills the parent with `ps::ps_kill()`
+  (`TerminateProcess()`, which returns before the process has exited), polls until the worker reads
+  as gone, then reads the parent once. The worker's exit starts inside the parent's own exit: either
+  the processx job object closes with the parent's handles or the worker reads EPIPE while they are
+  torn down. So the worker can be gone while ps still lists the parent for a moment (as for CI-45),
+  and that single read then gives alive.
+- Fix (tests only): just before that read the helper calls `proc_wait_exit(list(parent_handle))`
+  with its default bound and poll (2 s, 20 ms), the wait `kill_all()` makes after its signals
+  (D-180 item 1, unchanged). `worker_exit_elapsed` is still measured before the wait, so the 10 s
+  bound and every expectation stay as they were; a parent still listed after 2 s fails as before.
+  No product code changed.
+- Red: the new test "the Windows witness reads its killed parent once ps no longer lists it (IC-60)"
+  runs on any OS. It evaluates the helper's own statements from `killed_at` through `parent_dead`
+  with `proc_handle_alive()` mocked (each process reads as running once, then gone), `ps_kill()`
+  stubbed and a virtual clock. On 221f4a8 it gives FAIL 1 (`parent_dead` FALSE). Green: it passes,
+  and `^subagent-worker$` gives FAIL 0 SKIP 1 PASS 161 (the Windows witness skips on macOS). The
+  block takes 42 ms in CRAN mode, so it starts with `skip_on_cran()` (D-240). Lint clean.
+- Reviews: skeptic: the worker's death may also come from EPIPE as the parent's handles are torn
+  down, so the cause is said to start inside the parent's exit rather than to be the job's kill.
+- Deviations: none. Open: hosted Windows has not run the fix yet, and at about 0.4% per execution
+  one green run proves nothing. The new test pins the order of the reads, not Windows' timing. A
+  parent that ps lists for more than 2 s, or a `proc_handle_alive()` NA (an unrecognised ps error),
+  still fails the check.
+
+## Task CI-77 - The six-stream wall starts when the requests came, not at the heads (2026-10-21, #62)
+- Windows-check.yaml `windows-latest (release, shard 3/4)` on c80b703 (PR #56; run 39552770163,
+  attempt 1, job 119065496949, R 4.6.1) failed INFRA-01 "six streams of 1.00-2.25 s finish within
+  10% of the slowest" (`test-http-reactor.R:674`) with a wall of 2.532 s against 2.475 s. The heads
+  were at 0, 0.227, 0.228 | 0.007, 0.275, 0.276 s, written 0.107, 0.223, 0.005 | 0.112, 0.265,
+  0.006 s after the mock read each request, and gptr delivered every end within 16 ms. Since
+  2026-10-12 the test failed in 7 of 257 hosted Windows executions, 6 of them on timing (one was a
+  ready.json open error), at about the same rate without and with CI-62's `92a2944` (4 of 174 and
+  2 of 83 timing failures).
+- Cause (inferred): the mock is single-threaded. It logged the second request of each mock and
+  then took about 0.2 s before scheduling its head, while the third waited. The test measured the
+  wall from the heads the mock wrote, so it charged the mock's own stall to gptr. What stalled is
+  not known: GC in the mock is not ruled out on Windows (locally its log, plan and schedule take
+  under 0.04 s with no GC time), and a forward wall-clock step between the read and the head write
+  fits the same numbers just as well.
+- Fix (tests only): the mock first polls its sockets without waiting and waits only when nothing is
+  ready, stamping `srv$idle` as each wait ends. Each request record gains `came`: the end of the
+  wait that saw the request or, if the request came while the mock was working, of the last wait
+  before it. It is never later than the request's arrival plus the select's wake-up, and never after
+  `time` (when the mock read it, unchanged); `mock_log()` returns it. `infra01_six()` (`:589-593` on
+  c80b703, `:605-609` on 221f4a8) anchors each stream at its request's `came` instead of its head
+  write: the wall runs from the first `came` to the latest `came` plus scheduled length plus gptr's
+  delivery latency. So the mock's lateness in writing a head is netted out, like its lateness in
+  writing a last piece, and a clock step after the requests came cancels out as well. The 2.475 s
+  bound and the latency check are unchanged; the failure message now gives each request's offset and
+  each head's delay after its request.
+- The proposed diff stamped `time` itself. test-s1-client.R's IC-64 rate check reads `time` as a
+  lower bound of when each request started, and on macOS with that diff a 0.2 s stall injected at
+  request 60 failed the check in 3 of 3 runs (least margin -0.03 s, against +0.14 s with read
+  stamps). So `came` is a field of its own, and `time` keeps its meaning for the other tests.
+- Red: the new test "INFRA-01: a request that comes while the mock works is logged at its last wait"
+  holds the mock in its first request's plan until a gate file exists while a second request comes,
+  then sends a third once the mock has waited again: the second must be stamped before the release
+  and the third after it. Run on its own, on 221f4a8 it gives FAIL 2 (`came` is not logged there),
+  and reading `time`, the only stamp there, FAIL 1 (the second request 0.041 s after the release;
+  3 of 3 runs). A mutant that takes `came` at the read gives FAIL 1 (0.028 s after the release) and
+  one that never renews `srv$idle` after a wait FAIL 1 (the third stamped 0.76 s before the
+  release), 5 of 5 runs each. Green: it passes 5 of 5; `^http-reactor$` FAIL 0 SKIP 2 PASS 231; the
+  17 files that start the mock server FAIL 0 SKIP 3 PASS 4607. In the investigation, a 0.35 s and
+  0.27 s stall injected before the first two heads failed the old measure (walls 2.527 and 2.537 s)
+  and passed the new one (2.251 and 2.252 s), while late requests (2.535 and 2.526 s) and serialised
+  streams (3.324 s) still failed. Stalls injected here (in the plan or after the schedule; 0.35 and
+  0.27 s, or 0.2 s each) did not give the hosted shape: each mock read its three requests in one
+  iteration, so the old measure passed too, and the new wall was 2.251 s in all four. Lint clean.
+- Reviews: skeptic corrections, kept here. Line numbers had drifted (`infra01_six()` is at
+  `:589-593` on c80b703). The stall exceeds the head spread that the bound allows
+  (2.475 - 2.25 = 0.225 s) only for the long mock (0.265 s; the short mock's 0.223 s does not), and
+  only the long streams set the wall. A wall-clock step is an equally possible cause, and the fix
+  neutralises it too. GC is not ruled out on Windows. A client's lateness in sending a request
+  inside a busy window is not counted, and the old measure hid it too. r1 4 findings, all applied: a
+  mutant that never renews `srv$idle` passed the gate test, which now requires the third request
+  (medium); the Open note below separates the runner pause from the late-head shape (low); `came`
+  was called a strict lower bound of the arrival, which holds only inside a busy window (low); the
+  measurement unit test still named its anchors `heads` (low).
+- Deviations: none new. The new anchor amends the INFRA-01 measurement of D-016 item 1 and D-063
+  item 2: the wall runs from the first request's `came`, not from the first head write, and each
+  stream ends at its request's `came` plus its scheduled length plus gptr's latency. The bound is
+  unchanged. Tests only, so the amendment is recorded here. Open: hosted Windows has not run the
+  fix. Of the 6 timing failures, 5 have stream 1 of each mock starting at once and streams 2 and 3
+  starting together 0.23 to 1.5 s later, with gptr's delivery within 16 ms (0.28 s once): heads
+  written late after their requests, which the new anchor nets out (inferred). The sixth, job
+  118506033270 (run 39386048610, wall 3.183 s), is a runner pause in which gptr delivered two long
+  streams' ends 0.46 and 0.89 s late, and it still fails, by design. So about 1 in 256 executions
+  may still fail, and the fix is judged by whether the late-head shape comes back over several
+  shard 3/4 runs, not by the overall 2.3%. The wall still counts gptr sending a request late while
+  the mock waits, and gptr's delivery; a request sent late while the mock is busy is stamped early,
+  so that lateness is not counted.
+
 ## Task CI-79 - The Windows writer-runtime cases give a lazy writer cold start the duplex budget (2026-10-21, #63)
 - Windows-check `windows-latest (release, shard 1/4)` on 176a3a2 (PR #61, run 39580403671, job
   119156456410) failed native-09 "Windows reactor shutdown settles an idle production writer": a
