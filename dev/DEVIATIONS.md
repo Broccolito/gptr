@@ -3071,6 +3071,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     decides whether console_history_add() adds; it never fails (D-243)"; test-console-ui.R "with gptr.history off
     nothing is kept and no notice says it was (D-243)"; test-console-typing.R "a question drains fd 0 first: lines
     steer, a partial line is kept in the history".
+  - An invalid approval answer is quoted on one row and the hint follows on its own, with the prompt's letters and
+    the feedback form: `Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` without a rule). Task 3
+    had named a `p` the prompt never shows and dropped the feedback form, the one hint that feedback can be given.
+    An empty answer, the usual end of a collision after the drain, gets the hint alone, not `Not an answer: ''`,
+    and still counts toward the 5 tries. The notices wrap at the approval rows' width (inside the console margin,
+    D-186). Tests: test-console-ui.R "invalid answers are explained and kept; five end in a refusal the model is
+    told", "a long invalid answer's notice wraps inside the approval's width (P28 B, E, F)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

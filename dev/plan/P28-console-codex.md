@@ -235,8 +235,11 @@ Decisions:
   `console_history_add()` (moved to `R/utils-options.R`), so `gptr_confirm()` keeps it in the
   history; a secret input keeps nothing.
 - An invalid answer and a pasted block are added to the history:
-  - `Not an answer: '<text>' (kept in history). Type y, a, p, n or ?.`, wrapped through
-    `console_wrap()`. This fixes the mid-word hard wraps in pty runs B, E and F.
+  - `Not an answer: '<text>' (kept in history).`, then the hint with the prompt's own letters
+    `Type y, a or n (n <text> says what to do instead), or ?.`; an empty answer gets the hint
+    alone (amended in review: the hint named a `p` the prompt never shows and had dropped the
+    feedback form). Both are wrapped through `console_wrap()` at the width of the prompt's rows.
+    This fixes the mid-word hard wraps in pty runs B, E and F.
   - `A pasted block is not an answer (kept in history).`
 - No answer is ever guessed into a steer.
 
@@ -502,6 +505,7 @@ Decisions:
   - The line wraps.
   - a and p are omitted when no rule is offered.
   - Who asks: `? sub-agent a: allow r?`.
+  - The invalid-answer hint (Task 3) names the same letters, `p` among them.
 - The answer prompt is `› ` at column 0, read with R's readline, echo on, Enter required.
 - Answers are unchanged:
   - `y`, `a`, `p`, `n`;

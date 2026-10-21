@@ -5319,9 +5319,11 @@ its part in its own commit, and Task 27 finalises them.
     of several lines, the REPL's own inputs too, is added as a `"""` block (`console_history_add()`), so Up then
     Enter sends it back as one input.
   - An invalid approval answer (IC-77 item 3) that is not empty goes to the history in an interactive session:
-    `  Not an answer: '<text, at most 40 characters>' (kept in history). Type y, a, p, n or ?.` (`y, n` where
-    nothing can be remembered; no ` (kept in history)` when nothing was kept). The approval's notices are
-    word-wrapped at the console width (`console_wrap()`).
+    `  Not an answer: '<text, at most 40 characters>' (kept in history).` (no ` (kept in history)` when nothing
+    was kept), then the hint with the prompt's own letters,
+    `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
+    empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
+    word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
 - IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 13-16 and 18-21 pending.
   - A question drains first (Task 2). On a terminal REPL, while a run of the call has a session,
     `console_before_message(kind = "prompt")` reads fd 0 with `console_typed(drain = TRUE)`:

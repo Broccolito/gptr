@@ -263,8 +263,9 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 
 #' Console permission(): the one-line prompt of NS-1, `?` for the detail view; every console
 #' prompt first ends partial answer lines and clears waiting rows (D-186); an invalid answer is
-#' explained (wrapped at the console width) and, in an interactive session, kept in the console
-#' history; five (`?` is none) end in a refusal whose feedback says so (D-188, D-243)
+#' quoted (kept in the console history in an interactive session) above a hint with the prompt's
+#' letters, an empty one gets the hint alone, both wrapped at the prompt rows' width; five (`?` is
+#' none) end in a refusal whose feedback says so (D-188, D-243)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
   console_before_message(kind = "prompt", tools = TRUE)
@@ -293,11 +294,13 @@ ui_console_permission = function(request, read = ui_console_read) {
       msg = paste0("  [a]lways is not offered: ", why, "; answer y, n or ?.")
     } else {
       kept = nzchar(a) && gptr_is_interactive() && console_history_add(a)
-      msg = paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
-                   if (kept) " (kept in history)", ". Type ", if (can) "y, a, p, n" else "y, n",
-                   " or ?.")
+      msg = c(if (nzchar(a)) {
+        paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
+               if (kept) " (kept in history)", ".")
+      }, paste0("  Type ", if (can) "y, a or n" else "y or n",
+                " (n <text> says what to do instead), or ?."))
     }
-    console_write(console_wrap(msg, cli::console_width()))
+    console_write(console_wrap(msg, max(20L, cli::console_width() - nchar(console_pad()))))
   }
   console_write("  No valid answer after 5 tries; refused.")
   ui_answer("deny", feedback = "no valid answer was given at the approval prompt")
