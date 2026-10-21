@@ -1397,3 +1397,48 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   unmocked block passes; `^tool-diff$` PASS 570. Lint clean.
 - Deviations: D-246 (second rule). Open: on Windows a hypervisor pause may still be charged to the
   process as CPU time; the file's other 5 s wall bounds (`:83`, `:260`, `:268`) had no failures.
+
+## Task CI-85 - The idle Windows writer cases give a retirement and cold start the duplex budget (2026-10-21, #68)
+- Windows-check run 39617294666 on `7cfd543` failed `windows-latest (oldrel-4, shard 1/4)` in
+  attempts 2 and 4 (1, 3 and 5 passed): native-08 "idle Windows writer retirement preserves target
+  stdin and later FIFO EOF" (job 119296531347, `test-proc-writer-retirement.R:501-525`) and
+  native-06 "two acknowledged idle Windows writers do not starve a third reading target" (job
+  119328715831, `test-proc-writer-idle-slots.R:114-116`). Each third write ended in
+  `gptr_error_timeout` (2 s) after 2.50 and 2.58 s, with accepted_bytes 0 and the third writer
+  alive (step, status and cause NULL): native-06 at stage startup, its writer started 1.08 to
+  1.66 s after the write was queued (the retirement plus start preparation); native-08 at stage
+  delivery, its writer ready 1.00 s after its start. These are the only failures among 74
+  complete hosted witnesses of the two cases since 2026-10-12; the 72 delivered third writes took
+  0.65 to 1.28 s (median 0.89 s).
+- Cause (the limit, not the code): with two idle writers at the cap, `proc_writer_start()` first
+  retires one (`proc_writer_stop()`, `kill_all()` with taskkill) and then cold-starts the third
+  writer, and IC-60's window opened when the write was queued (CI-79). So 2 s covered the
+  retirement and start preparation (1.08 to 1.66 s in native-06), a cold start (p99 1.97 s, max
+  5.24 s) and the first ACK. native-06's writer never became ready, so CI-75's read retry (PR #61)
+  cannot be involved there; native-08's witness cannot exclude it (a retried read keeps the writer
+  alive with no step or status), though its timeline fits the budget alone. Both failures came
+  from the 28 native-real jobs carrying #61's code (none in the 209 before).
+- A side-by-side hosted loop settles that: run 39643195277 (never-merged branch
+  `claude/writer-loop`, 8 jobs, R 4.6.1 and R 4.2.3) ran both cases 40 times per job with main's
+  writer (carrying #61) and with the writer of `412cf2c` (before #61) on the same runners. main's
+  writer failed 0 of 320 case runs, the older writer 1 (an `idle-restart` restart write,
+  `gptr_error_timeout`, R 4.2.3), and the third writes took the same time (median about 1.0 s, max
+  1.47 s against 1.59 s). So #61 does not raise the rate; the census split reflects one slow run.
+- Fix (tests only; D-246 amended to one rule): `idle_child_case()` and `idle_restart_child_case()`
+  set `gptr.stdin_timeout = 20`, the duplex budget, and `warm_idle_child_case()` (native-05) sets
+  it for its third write, whose title becomes "... a third write" (also in
+  `dev/ci/optional-integrations.R` and its test). native-08 drops `expect_lte(third_elapsed, 2)`
+  and `all(again_elapsed <= 2)`, since a later write retires and cold-starts too, and keeps
+  `expect_length(again_elapsed, 2L)`. Product code, IC-60 and the 60 s default are unchanged.
+  Starvation, the property under test, still fails: a write that never gets a writer times out at
+  20 s, inside the 30 s case deadline.
+- Red: a scratch replay through the real `reactor_drain_child()` (write queued at 0, writer started
+  at 1.08 s, ready at 2.08 s, ACK at 2.14 s), with each case's third-write budget read from
+  its last `gptr.stdin_timeout` setting: FAIL 3 (`gptr_error_timeout` for native-05, -06 and -08 at
+  2 s). Green: the replay PASS 6, and a write that gets no writer slot is pending at 19.99 s and
+  times out at 20 s (PASS 4); `^proc-writer-` PASS 930 SKIP 11 and `^proc-windows-backpressure$`
+  PASS 234 (the real cases skip off Windows); `dev/ci/test-optional-integrations.R` PASS 3823
+  (FAIL 1 on the renamed title before its registry entries changed). Lint clean. The replay is not
+  committed: it only restates the budget.
+- Deviations: D-246. Open: not yet run on hosted Windows; native-05 has not failed and changes only
+  to keep one rule; if native-08 recurs at stage delivery, suspect CI-75's read retry first.

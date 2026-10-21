@@ -3004,22 +3004,30 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   progress/fixes.md Task CI-75.
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
-- Rule: `rw_child_case()` (helper-proc-writer-runtime.R; native-09 cases ordered, failed, shutdown, orphan,
-  binary, acl) sets `gptr.stdin_timeout = 20`, the budget of the Windows duplex and cancellation cases
-  (helper-proc-backpressure.R, 2654a21), instead of 2; the binary case no longer admits the writer first under its
-  own 2 s (35536d4). IC-60's window opens when the write is queued, before the lazy writer starts, so each case
-  needed writer cold start (Rscript actor and PowerShell ACL verifier) plus the first ACK within 2 s. On hosted
-  windows-latest (2026-10-12 to 2026-10-21) a production writer cold start took p50 0.65 s, p99 1.97 s and at most
-  5.24 s (437 witnesses, 7 of them cut off before readiness by a 2 s window), and readiness to the first ACK p50
-  0.05 s, at most 0.57 s (166 base-only controls). Five cases in four jobs timed out with accepted_bytes 0 after
-  startups of 1.41 to 2.09 s with the writer alive (c5a2b8e, bc13aba, fa64ef2, 176a3a2 in PR #61 run 39580403671).
-  20 s is about 3.4 times 5.81 s, the largest cold start (5.24 s) plus the largest readiness-to-ACK (0.57 s), and
-  leaves a stall inside the 30 s case deadline; the writer's own ACL wait follows the same limit. The no-reader
-  timeout cases (native-04, native-09), the base-only cold controls and the deterministic IC-60 tests keep 2 s.
+- Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,
+  the budget of the Windows duplex and cancellation cases (helper-proc-backpressure.R, 2654a21), instead of 2:
+  `rw_child_case()` (helper-proc-writer-runtime.R; native-09 cases ordered, failed, shutdown, orphan, binary, acl),
+  whose binary case no longer admits the writer first under its own 2 s (35536d4), and the idle-writer cases, whose
+  write past the two-writer cap first retires an idle writer: `warm_idle_child_case()` (native-05, its third
+  write), `idle_child_case()` (native-06) and `idle_restart_child_case()` (native-08, without its 2 s bounds on the
+  third and later writes). Only the no-reader timeout cases (native-04, native-09), the base-only cold controls and
+  the deterministic IC-60 tests keep 2 s. IC-60's window opens when the write is queued, before the lazy writer
+  starts, so each case needed any retirement (`kill_all()`, taskkill included), writer cold start (Rscript actor
+  and PowerShell ACL verifier) and the first ACK within 2 s. On hosted windows-latest (2026-10-12 to 2026-10-21) a
+  production writer cold start took p50 0.65 s, p99 1.97 s and at most 5.24 s (437 witnesses, 7 of them cut off
+  before readiness by a 2 s window), and readiness to the first ACK p50 0.05 s, at most 0.57 s (166 base-only
+  controls). Five cases in four jobs timed out with accepted_bytes 0 after startups of 1.41 to 2.09 s with the
+  writer alive (c5a2b8e, bc13aba, fa64ef2, 176a3a2 in PR #61 run 39580403671), and on 7cfd543 (Windows-check run
+  39617294666) native-06 and native-08 did so after a retirement: native-06's writer started 1.08 to 1.66 s after
+  the write was queued (the retirement plus start preparation); the 72 delivered idle-case third writes took 0.65
+  to 1.28 s. 20 s is about 3.4 times 5.81 s, the largest cold start (5.24 s) plus the largest readiness-to-ACK
+  (0.57 s), 2.7 to 2.9 times with that interval added, and leaves a stall inside the 30 s case deadline, within
+  which a starved write still fails; the writer's own ACL wait follows the same limit.
 - Rule: "many hunks render in linear time" (test-tool-diff.R, P10 Task 3) bounds the diff's CPU time
   (`user.self + sys.self`) at 5 s instead of its wall time: a stalled hosted runner took 11.4 s once in 205
   Windows runs while the code needs 1.3 to 1.9 s there and is linear (2.0 times per doubling); CPU time still
   fails superlinear work.
 - Contract-visible: none (IC-60 and the 60 s `gptr.stdin_timeout` default unchanged).
-- Tests: helper-proc-writer-runtime.R `rw_child_case()`; test-tool-diff.R "many hunks render in linear time".
-  Evidence: progress/fixes.md Tasks CI-79 and CI-80.
+- Tests: helper-proc-writer-runtime.R `rw_child_case()`; test-proc-writer-idle-boundary.R (now "... a third
+  write", also in dev/ci/optional-integrations.R), test-proc-writer-idle-slots.R and test-proc-writer-retirement.R;
+  test-tool-diff.R "many hunks render in linear time". Evidence: progress/fixes.md Tasks CI-79, CI-80 and CI-85.

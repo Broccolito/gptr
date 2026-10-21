@@ -107,8 +107,9 @@ warm_idle_child_case = function(case, root, failure) {
       is.null(r$stdin[[as.character(target$get_pid())]])
   }, logical(1)))
   stopifnot(two_idle_acked)
-  options(gptr.stdin_timeout = 2)
-  stopifnot(identical(fun("gptr_opt")("stdin_timeout"), 2))
+  # A write past the cap retires an idle writer and cold-starts one: the duplex budget (D-246).
+  options(gptr.stdin_timeout = 20)
+  stopifnot(identical(fun("gptr_opt")("stdin_timeout"), 20))
   local({
     own = boxes[[3L]]
     key = as.character(targets[[3L]]$get_pid())
@@ -168,8 +169,7 @@ warm_idle_run = function() {
   runner("idle-warm-boundary")
 }
 
-testthat::test_that(
-  "two warm acknowledged Windows writers do not starve a third two-second write", {
+testthat::test_that("two warm acknowledged Windows writers do not starve a third write", {
   testthat::skip_on_cran()
   testthat::skip_if(.Platform$OS.type != "windows", "requires actual Windows writer runtime")
   x = warm_idle_run()
@@ -208,7 +208,7 @@ testthat::test_that(
   testthat::expect_true(x$result$targets_dead)
   testthat::expect_true(x$result$markers_removed)
   testthat::expect_true(x$result$writer_table_empty)
-  testthat::expect_identical(x$result$third_timeout, 2)
+  testthat::expect_identical(x$result$third_timeout, 20)
   testthat::expect_null(x$result$third_error)
   testthat::expect_identical(x$result$third_accepted_bytes, 6L)
   testthat::expect_true(x$result$third_delivered)

@@ -221,7 +221,7 @@ optional_titles = list(
     "canonical markers enumerate an owned family and preserve unrelated processes",
     "marker environment diagnostics distinguish casing from private value changes"),
   "test-proc-writer-idle-boundary.R" =
-    "two warm acknowledged Windows writers do not starve a third two-second write",
+    "two warm acknowledged Windows writers do not starve a third write",
   "test-proc-writer-retirement.R" = c(
     "idle writer eligibility requires exact identities and a clean acknowledged mailbox",
     "idle writer eligibility refuses queued unknown changed and unpublished states",
@@ -283,7 +283,7 @@ optional_platform_guard = function(file, name, windows) {
   if (identical(file, "test-proc-writer-idle-slots.R")) return(identical(name,
     "two acknowledged idle Windows writers do not starve a third reading target"))
   if (identical(file, "test-proc-writer-idle-boundary.R")) return(identical(name,
-    "two warm acknowledged Windows writers do not starve a third two-second write"))
+    "two warm acknowledged Windows writers do not starve a third write"))
   if (identical(file, "test-proc-writer-retirement.R")) return(identical(name,
     "idle Windows writer retirement preserves target stdin and later FIFO EOF"))
   if (identical(file, "test-subagent-worker.R")) return(identical(name,
