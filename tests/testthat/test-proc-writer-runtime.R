@@ -104,14 +104,62 @@ test_that("writer ACK validation rejects corrupt and regressing acceptance", {
   skip_on_cran()
   x = rw_local_state()
   path = file.path(x$st$dir, "ack-000000000001-000003")
+  range = "^The stdin writer acknowledgement is not empty or out of range[.]$"
   writeBin(as.raw(1), path)
-  expect_error(proc_writer_ack(x$st, x$b), class = "gptr_error_io")
+  expect_error(proc_writer_ack(x$st, x$b), range, class = "gptr_error_io")
   expect_identical(x$b$pos, 0L)
   unlink(path)
   x$st$pending$accepted = 4L
   file.create(path)
-  expect_error(proc_writer_ack(x$st, x$b), class = "gptr_error_io")
+  expect_error(proc_writer_ack(x$st, x$b), range, class = "gptr_error_io")
   expect_identical(x$b$pos, 0L)
+  unlink(path)
+  dir.create(path)
+  expect_error(proc_writer_ack(x$st, x$b), "^Invalid stdin writer acknowledgement[.]$",
+    class = "gptr_error_io")
+  expect_identical(x$b$pos, 0L)
+})
+
+test_that("writer parent-side publish checks keep distinct fixed causes", {
+  publish = function(setup = function(dir) NULL, ...) {
+    x = rw_local_state()
+    x$st$pending = NULL
+    setup(x$st$dir)
+    drain = proc_writer_drain
+    environment(drain) = list2env(list(proc_writer_start = function(...) x$st, ...),
+      new.env(parent = environment(drain)))
+    conditionMessage(tryCatch(drain(NULL, "42", x$b), error = identity))
+  }
+  expect_identical(publish(function(dir) dir.create(file.path(dir, "in-000000000001"))),
+    "The owned stdin mailbox changed before staging.")
+  expect_identical(publish(function(dir) file.create(file.path(dir, "in-000000000001.part"))),
+    "The owned stdin mailbox is not empty.")
+  expect_identical(publish(writeBin = function(object, con) stop("FAKE-stage-canary")),
+    "Could not stage child stdin.")
+  expect_identical(publish(writeBin = function(object, con) {
+    base::writeBin(object, con)
+    base::writeBin(charToRaw("GPTR_PROC_ffffffffffffffff"), file.path(dirname(con), "owner"))
+  }), "The owned stdin mailbox changed before publishing.")
+  expect_identical(publish(file.rename = function(from, to) FALSE),
+    "Could not publish child stdin.")
+})
+
+test_that("writer acknowledgement failure at target exit keeps its fixed cause", {
+  x = rw_local_state()
+  file.create(file.path(x$st$dir, "ack-000000000001-000009"))
+  x$b$waited = TRUE
+  x$b$p = structure(list(get_pid = function() 42L, get_input_connection = function() NULL),
+    class = "process")
+  r = new.env(parent = emptyenv())
+  r$stdin = new.env(parent = emptyenv())
+  r$stdin[["42"]] = x$b
+  testthat::local_mocked_bindings(is_windows = function() TRUE,
+    proc_writer_get = function(p) x$st, proc_writer_stop = function(p) TRUE)
+  reactor_stdin_drop(r, x$b$p, "The child exited before stdin was delivered.")
+  expect_identical(conditionMessage(x$b$error), "Invalid child stdin acknowledgement at exit.")
+  expect_identical(x$b$error$writer_cause,
+    "The stdin writer acknowledgement is not empty or out of range.")
+  expect_length(ls(r$stdin), 0L)
 })
 
 test_that("writer startup death fails IO before publishing any payload", {
@@ -401,7 +449,7 @@ test_that("full production writer bootstrap fits the unchanged Rscript limits", 
     target_pid = 5678L, target_create = 1728000001.25, shell = shell,
     args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
              "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker, .diagnostics = TRUE))),
-    supervise = TRUE, timeout = 2)
+    supervise = TRUE, timeout = 2, steps = proc_writer_steps)
   libraries = .libPaths()
   raw_libraries = serialize_leaf(libraries)
   plain_libraries = paste0("unserialize(as.raw(c(",
@@ -624,7 +672,7 @@ test_that("writer full compressed bootstrap fits a long Windows mailbox path", {
     target_pid = 5678L, target_create = 1728000001.25, shell = shell,
     args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
              "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker, .diagnostics = TRUE))),
-    supervise = TRUE, timeout = 2)
+    supervise = TRUE, timeout = 2, steps = proc_writer_steps)
   libraries = .libPaths()
   raw_libraries = serialize_leaf(libraries)
   plain_libraries = paste0("unserialize(as.raw(c(",
@@ -658,15 +706,46 @@ test_that("writer early-case diagnostics retain only bounded structural evidence
   expect_identical(x$accepted_bytes, 0L)
   expect_identical(x$writer_phases, list(decode = 0.1, identity = 0.2))
   expect_false(any(grepl("FAKE-writer-message-canary", unlist(x), fixed = TRUE)))
+  error$writer_step = "read"
+  error$writer_status = 19L
+  error$writer_cause = "The owned stdin mailbox changed."
+  error$writer_chunk_bytes = NA_real_
+  x = bp_case_failure(error)
+  expect_identical(x[c("step", "status", "cause", "chunk_bytes")],
+    list(step = "read", status = 19L, cause = "The owned stdin mailbox changed.",
+      chunk_bytes = NULL))
   error$writer_stage = "untrusted-stage-canary"
   error$expression_bytes = c(1, 2)
   error$startup_elapsed = NA_real_
   error$writer_phases = c(`FAKE-phase-canary` = 0.1)
+  error$writer_step = "FAKE-step-canary"
+  error$writer_status = c(1L, 2L)
+  error$writer_cause = "FAKE cause: C:/canary/path."
+  error$writer_chunk_bytes = "65536"
   x = bp_case_failure(error)
   expect_null(x$stage)
   expect_null(x$expression_bytes)
   expect_null(x$startup_elapsed)
   expect_null(x$writer_phases)
+  expect_null(x$step)
+  expect_null(x$status)
+  expect_null(x$cause)
+  expect_null(x$chunk_bytes)
+})
+
+test_that("a writer failed in its size or length step reports that chunk's size", {
+  x = rw_local_state()
+  testthat::local_mocked_bindings(proc_writer_get = function(p) x$st)
+  chunk = function(status) {
+    x$st$p$get_exit_status = function() status
+    proc_writer_failure(NULL)[c("writer_step", "writer_chunk_bytes")]
+  }
+  expect_identical(chunk(10L + match("size", proc_writer_steps)),
+    list(writer_step = "size", writer_chunk_bytes = NA_real_))
+  writeBin(as.raw(1:3), file.path(x$st$dir, "in-000000000001"))
+  expect_identical(chunk(10L + match("length", proc_writer_steps)),
+    list(writer_step = "length", writer_chunk_bytes = 3))
+  expect_identical(chunk(20L), list(writer_step = "validate_write", writer_chunk_bytes = NULL))
 })
 
 test_that("writer startup diagnostics accept only fixed monotonic stages and split lines", {

@@ -198,11 +198,12 @@ bp_observer_reason = function(stage, error) {
 
 # Retry, every 100 ms, a reason that owned files changing during a walk can raise (Windows lstat
 # reports st_ino 0 for an entry it cannot open, as when a pending deletion completes during the
-# observer's delete-pending check), or a walk stalled on a loaded runner can (the
-# snapshot or initial deadline), until the observer's 1 s deadline has passed since the first
-# failure. Each retry meets every bound unchanged; any other reason and a reason that outlasts
-# the deadline still end the observation. The last condition is kept, since the observer's
-# last_failure describes that snapshot.
+# observer's delete-pending check; a directory removed after its identity check fails the lookup
+# or listing that opens it, denied while its deletion is pending), or a walk stalled on a loaded
+# runner can (the snapshot or initial deadline), until the observer's 1 s deadline has passed
+# since the first failure. Each retry meets every bound unchanged; any other reason and a reason
+# that outlasts the deadline still end the observation. The last condition is kept, since the
+# observer's last_failure describes that snapshot.
 bp_observe = function(observe, retried) {
   first = NULL
   repeat {
@@ -212,7 +213,8 @@ bp_observe = function(observe, retried) {
     first = first %||% proc.time()[["elapsed"]]
     if (!isTRUE(reason %in% c("observer-metadata-invalid", "observer-snapshot-deadline",
         "observer-initial-deadline", "observer-parent-entry-absent", "observer-link-entry-absent",
-        "observer-entry-disappearance-uncertain")) ||
+        "observer-entry-disappearance-uncertain", "observer-parent-enumeration-unavailable",
+        "observer-directory-unreadable")) ||
         proc.time()[["elapsed"]] - first >= 1) stop(disk)
     retried(reason)
     Sys.sleep(0.1)
@@ -274,6 +276,9 @@ bp_case_failure = function(error) {
   number = function(x) {
     if (is.numeric(x) && length(x) == 1L && is.finite(x)) unname(x) else NULL
   }
+  text = function(x, pattern) {
+    if (is.character(x) && length(x) == 1L && isTRUE(grepl(pattern, x))) x else NULL
+  }
   classes = class(error)
   classes = utils::head(classes[grepl("^[A-Za-z][A-Za-z0-9_.]{0,63}$", classes)], 8L)
   stage = error$writer_stage
@@ -313,7 +318,10 @@ bp_case_failure = function(error) {
   }
   list(class = classes, stage = stage, expression_bytes = number(error$expression_bytes),
     startup_elapsed = number(error$startup_elapsed), accepted_bytes = number(error$accepted_bytes),
-    writer_phases = phases, writer_acl_phases = acl_phases)
+    writer_phases = phases, writer_acl_phases = acl_phases,
+    step = text(error$writer_step, "^[a-z_]{1,32}$"), status = number(error$writer_status),
+    cause = text(error$writer_cause, "^[A-Z][A-Za-z' ]{0,118}[.]$"),
+    chunk_bytes = number(error$writer_chunk_bytes))
 }
 
 # The diagnostic callback is absent in every ordinary test/check invocation.
