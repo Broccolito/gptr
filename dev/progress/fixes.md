@@ -1620,3 +1620,32 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: none. Open: the file's later `peter()` blocks still register any secret-looking
   variable of the host that setup.R does not blank (here Claude Code's
   `CLAUDE_CODE_MESSAGING_TOKEN`, first at `:988`) and leave it in the vault.
+
+## Task FIX-14 - fingerprint() leaves a list's elements editable in place (2026-10-21, #72)
+- Red: FAIL 2 in `^utils-hash$` (PASS 55): after `fingerprint()` of a list with a character
+  element, the next in-place edit copied the character and the numeric element (a new CRAN-run
+  `obj_address()` test, and a new tracemem row tracing a 40 MB numeric element). Installed builds:
+  main FAIL 1 with NOT_CRAN unset, FAIL 2 with it set. `env_snapshot()` fingerprints every binding.
+- Cause: `fingerprint_sample()`, called inside `fingerprint()`'s element loop, called `as_utf8()`.
+  Its replacement calls (`Encoding(y) = ...`, `x[mark] = y`) run R's `INCLNK_stack_commit()`, which
+  also links the loop variable's binding cell on the byte-code stack; the inline call's return
+  restores `R_BCProtCommitted` (`restore_bcEval_globals()`, in the R 4.4.3, 4.5.0, 4.6.1 and trunk
+  sources), so that link is never dropped, `R_CleanupEnvir()` stops at the cell when
+  `fingerprint()` returns, and its argument promise keeps the list referenced. Byte-compiled code
+  only: an installed package, or a JIT-compiled `as_utf8()` from its second call. A pure-R
+  reproduction needs a compiled `for` loop in the function that holds the object and a replacement
+  call in a callee (a `while` loop does not leak).
+- Fix: `fingerprint_sample()` pastes the sampled values without `as_utf8()`; `fingerprint()`'s doc
+  states the rule.
+- Encoding: `cli::hash_sha256()` hashes the bytes as given; `paste()` turns latin1 text into UTF-8
+  in a UTF-8 locale, so there fingerprints are unchanged and a latin1 and a UTF-8 spelling of a
+  text fingerprint alike (new test). In a non-UTF-8 locale `paste()` gives native text
+  (`caf<e9>` under LC_ALL=C), so the two spellings now differ there (the test skips).
+- Green: `^utils-hash$` PASS 57, LC_ALL=C PASS 54 SKIP 1; installed fix FAIL 0 (NOT_CRAN unset and
+  set); `^(utils-hash|env-snapshot|copy-)` PASS 354; `^(arch-layers|lint-rules|utils-encoding)$`
+  PASS 123. Lint clean.
+- Review: the orchestrator read the diff and tests; full suite (NOT_CRAN=true) FAIL 0, WARN 0, SKIP 64,
+  PASS 35170.
+- Deviations: none. Open: any compiled leaf whose `for` loop holds a user object and calls code
+  that makes a replacement call copies the same way (R behaviour, not reported upstream);
+  `d$s[1] = v` copies a data frame column whatever gptr does (`$<-.data.frame`).
