@@ -198,11 +198,12 @@ bp_observer_reason = function(stage, error) {
 
 # Retry, every 100 ms, a reason that owned files changing during a walk can raise (Windows lstat
 # reports st_ino 0 for an entry it cannot open, as when a pending deletion completes during the
-# observer's delete-pending check), or a walk stalled on a loaded runner can (the
-# snapshot or initial deadline), until the observer's 1 s deadline has passed since the first
-# failure. Each retry meets every bound unchanged; any other reason and a reason that outlasts
-# the deadline still end the observation. The last condition is kept, since the observer's
-# last_failure describes that snapshot.
+# observer's delete-pending check; a directory removed after its identity check fails the lookup
+# or listing that opens it, denied while its deletion is pending), or a walk stalled on a loaded
+# runner can (the snapshot or initial deadline), until the observer's 1 s deadline has passed
+# since the first failure. Each retry meets every bound unchanged; any other reason and a reason
+# that outlasts the deadline still end the observation. The last condition is kept, since the
+# observer's last_failure describes that snapshot.
 bp_observe = function(observe, retried) {
   first = NULL
   repeat {
@@ -212,7 +213,8 @@ bp_observe = function(observe, retried) {
     first = first %||% proc.time()[["elapsed"]]
     if (!isTRUE(reason %in% c("observer-metadata-invalid", "observer-snapshot-deadline",
         "observer-initial-deadline", "observer-parent-entry-absent", "observer-link-entry-absent",
-        "observer-entry-disappearance-uncertain")) ||
+        "observer-entry-disappearance-uncertain", "observer-parent-enumeration-unavailable",
+        "observer-directory-unreadable")) ||
         proc.time()[["elapsed"]] - first >= 1) stop(disk)
     retried(reason)
     Sys.sleep(0.1)

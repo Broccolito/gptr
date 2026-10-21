@@ -1189,3 +1189,55 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `gptr_error_timeout` with no writer step; the loop summary's class column shows it. The follow-up
   card "stdin-writer delivery timeout" (a startup-time `gptr_error_timeout` with `accepted_bytes` 0
   under the 2 s budget) is a different class and stays open; INFRA-01 is unrelated.
+
+## Task CI-78 - The sampler retries an observer walk that meets a directory being removed (2026-10-21, #61)
+- The native-04 loop on CI-75 (run 39574684025, 16 jobs, 1,200 duplex iterations on hosted Windows,
+  R 4.6.1 and R 4.2.3) had no delivery failure and one `resource_observation` (job 119137147326,
+  `native04-loop-oldrel-4-1`, R 4.2.3, iteration 6): the transfer completed (phases spawn, ready,
+  writing, complete; 20 samples), then a snapshot raised `observer-parent-enumeration-unavailable`
+  at `directory-identity` (entries 378, directories 15, max_depth 4, disappeared 0, bytes 17724,
+  0.016 s) with `observer_retries` 0, since `bp_observe()` did not retry that reason. R-CMD-check
+  run 39505627064 (job 118913688321, #56, oldrel-4) had failed native-04's duplex case at the same
+  phase as `observer-directory-unreadable` at `directory-enumeration` (entries 539, directories 17,
+  max_depth 5).
+- Cause (inferred; the witness keeps no Win32 code): on Windows the reason comes only from
+  `_windows_entry()` (`bp-disk-observer.py:135`), when `FindFirstFileW` on `<dir>\<name>` fails with
+  an error other than 2 or 3 (`:274` rewraps an `OSError`; `:289` is the POSIX branch).
+  `directory-identity` is `direct()`, whose `_listed()` looks the directory up component by
+  component from the volume root; each lookup opens the parent of the component it names, which the
+  same call lstat'ed just before, so only a directory that holds a subdirectory is opened. Opening a
+  directory whose deletion is pending fails with `STATUS_DELETE_PENDING`, which Win32 reports as
+  `ERROR_ACCESS_DENIED` (5), the denial the note at `:85` describes; once the removal completes the
+  lookup gives 3, which the walk treats as absence. In this tree the only removed directories that
+  hold a subdirectory are the case process's session tempdir and the `gptr` in it
+  (`tmp/Rtmp*/gptr/childenv`, `child_env()`'s empty startup files), which R deletes when that
+  process exits after phase complete. The witness fits: the loop's final snapshots that still hold
+  that tempdir show 15 directories, 421 to 434 entries and depth 4, so every directory had been
+  entered and the walk was in its last stretch, under `tmp`, which sorts last; and bytes 17724
+  charge every file but `result.rds` (such snapshots charge 17,712 to 17,725 bytes without it and
+  17,904 to 17,918 with it), so the root listing preceded the case's last write and its exit fell
+  inside this 16 ms snapshot. The writer's mailbox (`cache/R/gptr/procs/<marker>.stdin`, the depth-5
+  directory of the last good snapshot) was already gone (max_depth 4) and holds no subdirectory, so
+  its chunk and ack deletes and renames cannot raise this reason. `observer-directory-unreadable` is
+  the same removal met by `names()`' `scandir()` of the directory itself after its identity check
+  (denied while pending, absent after).
+- Fix (tests only): `bp_observe()` adds `observer-parent-enumeration-unavailable` and
+  `observer-directory-unreadable` to the reasons it retries every 100 ms until 1 s has passed since
+  the first failure (CI-70); a fresh snapshot after the removal no longer lists the directory. A
+  real denial outlasts the 1 s and stays one fatal sampling error with the last condition, as does
+  every other reason. The observer, its 1 s, entry, depth and byte limits, the RSS caps and the 30 s
+  and 45/60 s deadlines are unchanged. An observer-side check (a lookup denied under an exactly
+  delete-pending parent counted as absent) was rejected: that parent is still listed, so the walk's
+  next step raises `observer-metadata-invalid` or `-entry-disappearance-uncertain`, which R retries
+  anyway. In the same 1,200 iterations one `observer-metadata-invalid` and six snapshot deadlines
+  cleared at their first retry.
+- Red: `^proc-backpressure-sampling$` FAIL 13 PASS 556 with the old helper (the unit test's
+  transient set gains the two reasons; each fails its five checks, and the run of every transient in
+  a row fails three). Green: PASS 569;
+  `^(proc-backpressure-sampling|bp-declared-observer|bp-disk-observer)$` PASS 696 SKIP 6;
+  `^(proc-|bp-)` PASS 2482 SKIP 17; `dev/ci/test-optional-integrations.R` PASS 3823. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: hosted Windows has not run the fix, and the reason occurred once in 1,200
+  iterations, so one green run proves little. The Win32 code and the removed directory are inferred;
+  a real Windows control (a directory held delete-pending, like CI-73's file) would observe code 5
+  but is not added. The census's observer construction error is not examined here.
