@@ -747,7 +747,10 @@ test_that("a failed re-send closes the retry before on_fail; cancelling from ret
       mode$path = path
       mode$calls = 0L
       label = paste(path, if (cancel) "cancelled" else "failed")
-      st = retry_trace(mock_spec(always, first_byte_timeout = 1),
+      # only the path that waits on the silent server needs a short first-byte timeout; it leaves
+      # room for a slow 503 on a loaded runner (once 1 s did not, PR #61 run 39605697535)
+      wait = if (identical(path, "first_byte")) 3
+      st = retry_trace(mock_spec(always, first_byte_timeout = wait),
                        retry = list(max_attempts = 2L),
                        on_retry = if (cancel) cancel_at_end)
       if (cancel) {

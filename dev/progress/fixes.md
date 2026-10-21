@@ -1266,3 +1266,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   unmocked block passes; `^tool-diff$` PASS 570. Lint clean.
 - Deviations: D-246 (second rule). Open: on Windows a hypervisor pause may still be charged to the
   process as CPU time; the file's other 5 s wall bounds (`:83`, `:260`, `:268`) had no failures.
+
+## Task CI-81 - Only the re-send to the silent server gets a short first-byte timeout (2026-10-21, #64)
+- PR #61 run 39605697535 (job 119241185802, R 4.2.3, oldrel-4 shard 1/4) failed "a failed re-send
+  closes the retry before on_fail; cancelling from retry_end stops it" (`test-http-retry.R:759`):
+  the exhausted path expected `gptr_error_overloaded` and got `gptr_error_timeout_first_byte`. No
+  earlier failure of this test is in the saved Windows census logs (968 jobs to 2026-10-21T10:20Z).
+- Cause: every path ran with `first_byte_timeout = 1`, which only the first_byte path needs (its
+  re-send goes to a server that never answers). The reactor takes a transfer's timeouts once
+  (`R/http-reactor.R:818`), so the first attempt's 503 from the mock also had to start within 1 s;
+  on a loaded runner it did not, and a first-byte timeout is not retried, so the path failed early.
+- Fix (tests only): exhausted and start use the default first-byte timeout; the first_byte path
+  keeps a short one at 3 s, enough for a slow 503 and still short for the silent re-send. The mock
+  server already skips on CRAN.
+- Red: a scratch copy whose mock sends every reply's head after 1.2 s; the old block fails 14
+  expectations (exhausted and start end as `timeout_first_byte`). Green: the same copy passes all;
+  `^http-retry$` PASS 337. Lint clean.
+- Deviations: none (tests only; no product bound changed).
