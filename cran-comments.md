@@ -90,8 +90,8 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   oldrel-4), Ubuntu R-devel with `NOT_CRAN=false` (the tests as CRAN runs them), Ubuntu without
   Suggests and Ubuntu under `LC_ALL=C`.
 * R-hub: Windows R-devel and R-release, and Ubuntu R-devel with gcc 12.
-* win-builder: R-devel (2026-10-20 r90728) and R-release (4.6.1); the whole check took 524 s and
-  477 s.
+* win-builder: R-devel (2026-10-20 r90728), R-release (4.6.1) and R-oldrelease (4.5.3); the
+  whole check took 524 s, 477 s and 684 s.
 
 ## R CMD check results
 
