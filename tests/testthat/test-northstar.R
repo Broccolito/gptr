@@ -546,7 +546,6 @@ test_that("the composed standard prompt equals architecture 7.3 byte for byte (I
   writeLines("library(gptr)", doc)
   gptr_doc(doc)
   withr::defer(gptr_doc(FALSE))
-  skill_sync() # what a session start does before the prompt freezes
   view = gptr_prompt(preset = "standard")
   expect_identical(view$system$t0, ns_expected_t0())
   skills = regmatches(view$system$t1, regexpr("(?s)<skills>\n.*?\n</skills>", view$system$t1,
