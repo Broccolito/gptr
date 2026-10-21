@@ -164,10 +164,10 @@ policy_menu = function(cnd, pol) {
 }
 
 #' Queue pause-menu or typed text on the session (IC-49, IC-55: source "pause_menu" or "repl",
-#' IC-76) after the `input` event (source "steer"); a dim line at column 0 shows it queued (D-242):
-#' the queued glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`),
-#' cut to three rows; a steer on a CLI route adds `after the CLI's answer`. Inside an evaluation it
-#' has the console's colours.
+#' IC-76) after the `input` event (source "steer"), with its queue line (console_queue_line()).
+#' While a prompt of a REPL that is not piped runs, a follow-up, and text starting with / or !, is
+#' the next prompt instead (D-242): it waits in the reader's `typed` lines, and its `input` event
+#' comes when it is sent.
 #'
 #' P06 refuses an enqueue from the session's own tool frames, which are on the stack when the
 #' interrupt hit a tool; the item then waits in the console state for policy_flush().
@@ -178,22 +178,38 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
     console_notice("[gptr] nothing queued; continuing")
     return(invisible(FALSE))
   }
+  rs = console_repl_find()
+  if (!is.null(rs$sending) && !isTRUE(rs$stdin) &&
+        (identical(as, "follow_up") || grepl("^\\s*[/!]", text))) {
+    console_queue_line(s, text, "follow_up")
+    rs$reader$typed = c(rs$reader$typed, text)
+    return(invisible(TRUE))
+  }
   ev = ev_dispatch("input", ev_new("input", text = text, source = "steer"), session = s)
   if (identical(ev$action, "handled")) return(invisible(FALSE))
-  rlang::local_options(cli.num_colors = console_colors())
-  sym = console_style()
-  steer = identical(as, "steer")
-  on_cli = steer && identical(session_live(s)$run$model[["type"]], "cli")
-  console_write(sym$dim(console_person_rows(sym$queued, paste0(
-    if (steer) "steer" else "follow-up", sym$sep, ev$text,
-    if (on_cli) paste0(sym$sep, "after the CLI's answer")
-  ), n = 3L)))
+  console_queue_line(s, ev$text, as)
   st = console_state()
   st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, source = source,
                                        run = session_live(s)$run)))
   policy_flush()
   if (length(st$pending)) reactor_timer(at = reactor_now(), fn = policy_flush)
   invisible(TRUE)
+}
+
+#' The dim line at column 0 that shows a message queued for session `s` (D-242): the queued
+#' glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`), cut to
+#' three rows; a steer on a CLI route adds `after the CLI's answer`. Inside an evaluation it has
+#' the console's colours.
+#' @noRd
+console_queue_line = function(s, text, as) {
+  rlang::local_options(cli.num_colors = console_colors())
+  sym = console_style()
+  steer = identical(as, "steer")
+  on_cli = steer && identical(session_live(s)$run$model[["type"]], "cli")
+  console_write(sym$dim(console_person_rows(sym$queued, paste0(
+    if (steer) "steer" else "follow-up", sym$sep, text,
+    if (on_cli) paste0(sym$sep, "after the CLI's answer")
+  ), n = 3L)))
 }
 
 #' A line typed before a console question (readline_answer()): routed as a line typed during the

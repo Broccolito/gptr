@@ -143,19 +143,21 @@ runs steers it: the agent reads it at its next step, after the current tool resu
 lines typed or pasted together are one message. The terminal does not echo while an answer
 runs: a line shows once you press Enter, on a dim line naming its kind, and again as your own
 line when the agent reads it, so it never mixes into the answer.
-\code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}})
-queues them for when the agent would stop instead. \verb{/command} and \code{!code} lines typed then
-run at the next prompt; an interrupt drops them. On the CLI routes a steer reaches the model
-after the CLI's current response. The RStudio, Positron and R.app consoles, and type-ahead at
-R's own prompt during \code{peter("...")}, keep typed lines for the next input.
+With \code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}}) each is a follow-up instead: the next
+prompt, sent once the answer ends. \verb{/command} and \code{!code} lines typed then also run at the
+next prompt, in the order typed; an interrupt drops them. On the CLI routes a steer reaches
+the model after the CLI's current response. The RStudio, Positron and R.app consoles, and
+type-ahead at R's own prompt during \code{peter("...")}, keep typed lines for the next input.
 
 Tab completes R names and file paths after \code{!} in terminal R, R in an IDE's Terminal tab
 included; RStudio's console completes R code at the prompt too; radian and Positron's console
 offer no completion there.
 
 Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
-\verb{[s]teer} (delivered after the current tool results), \verb{[f]ollow-up}, \verb{[c]ontinue}, \verb{[a]bort}
-and, for a foreground call (including a chat turn) when available, \verb{[b]ackground};
+\verb{[s]teer} (delivered after the current tool results), \verb{[f]ollow-up} (in the chat, the next
+prompt, as is a \verb{/command} or \code{!code} line typed at either; in a \code{peter("...")} call, sent
+when the agent would otherwise stop), \verb{[c]ontinue}, \verb{[a]bort} and, for a foreground call
+(including a chat turn) when available, \verb{[b]ackground};
 a second Ctrl-C aborts. Backgrounding returns to the chat prompt; use
 \code{!!gptr::gptr_wait(gptr::gptr_last())} there to wait for completion. Returning to the prompt
 does not guarantee progress while the chat waits for input. Under Rscript, background runs

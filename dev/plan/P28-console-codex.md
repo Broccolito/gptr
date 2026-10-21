@@ -649,22 +649,33 @@ Decisions:
   - D-class lines, and lines routed at questions (Task 3), when `type_ahead = "follow_up"`;
   - pause-menu [f];
   - Tab in T (from Task 18).
-- After the run's status line, the REPL reads them first, echoes each as `peter> <text>`, and runs
-  each as its own run.
-- A draft starting with `/` or `!` is always a follow-up.
+- "In the REPL" means while one of its prompts runs (`rs$sending`) and it is not piped (`.stdin`,
+  `jsonl`). `policy_enqueue()` decides, so its callers (the typing task, a line a question reads
+  past, the pause menu) are unchanged. A held message prints its queue line
+  (`console_queue_line()`, Task 13's line), and its `input` event comes when it is sent.
+- In one batch, `console_typed_route()` puts the message after the held lines typed before its
+  first line.
+- After the run's status line, the REPL reads them first, echoes each as `peter> <text>` (a
+  message of several lines keeps its rows), and runs each as its own run.
+- A draft starting with `/` or `!` is always a follow-up. In the REPL this includes the pause
+  menu's [s].
 - Outside the REPL (a programmatic `peter()` paused with Ctrl-C), [f] keeps the session's
   follow-up FIFO, since there is no next prompt.
 - `gptr_steer(as =)` is unchanged.
 
 Tests (`test-console-typing.R`), RED first:
 - `type_ahead = "follow_up"` gives two runs and two status lines. Today it is one run.
-- `!x = 1`, then a follow-up `use x`, keep their order.
+- `!x = 1`, then a follow-up `use x`, then `!y = 2`, typed in one batch, keep their order.
+- The pause menu's [s] `!zz = 5` and [f] `then plot it` in the REPL are the next two prompts.
 - The test 'type_ahead = "follow_up" queues the line for when the agent would stop' is rewritten.
 
-Spec: 03 §6.2, IC-76.
+Spec: 03 §6.2 and §6.17, IC-76.
 
-Files: `R/console-repl.R` (`rd$typed`, `repl_read_logical()`), `R/console-interrupt.R` (pause-menu
-[f]), `tests/testthat/test-console-typing.R`.
+Files: `R/console-repl.R` (`console_reader()`, `console_typed_route()`, `?peter`),
+`R/console-interrupt.R` (`policy_enqueue()`, `console_queue_line()`),
+`tests/testthat/test-console-typing.R`, the follow-up sentences of
+`vignettes/interactive-console.Rmd` and the `type_ahead` row of `vignettes/configuration.Rmd`
+(and their `.orig`). Amended in Task 14.
 
 Commit: `feat(console): a follow-up is sent as the next prompt`.
 

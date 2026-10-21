@@ -140,22 +140,82 @@ test_that("on a CLI route the queue line says the steer is sent after the CLI's 
   expect_identical(roles, c("user", "assistant", "operator", "assistant"))
 })
 
-test_that("type_ahead = 'follow_up' queues the line for when the agent would stop", {
+test_that("type_ahead = 'follow_up' sends the line as the next prompt, its own run (D-242)", {
   skip_on_cran()
   local_console_test()
-  local_gptr_options(type_ahead = "follow_up")
+  local_gptr_options(type_ahead = "follow_up", verbose = 2L)
   fake = slow_first()
   local_typed(typed_once("then plot it", function() length(fake_requests(fake)) == 1L))
   res = typing_console(fake, c("go", "/exit"))
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
-  msgs = reqs[[2L]]$messages
-  expect_identical(msgs[[length(msgs) - 1L]]$role, "assistant")
+  roles = vapply(reqs[[2L]]$messages, function(m) m$role, "")
+  expect_identical(roles, c("user", "assistant", "user"))
+  # the source of a second prompt typed at `peter> `, which pipes the session on
   msg = last_message(reqs[[2L]])
-  expect_identical(msg$role, "user")
-  expect_identical(msg$source, "follow_up")
+  expect_identical(msg$source, "pipe")
   expect_identical(msg_text(msg), "then plot it")
-  expect_true(queue_line("follow-up", "then plot it") %in% res$out)
+  expect_length(session_data(res$s)$queue$follow_up, 0L)
+  # queued during run 1, echoed at the prompt after its status line, then run 2's status line
+  sym = console_style()
+  status = which(startsWith(res$out, paste0("  done", sym$sep)))
+  expect_length(status, 2L)
+  at = match(c(queue_line("follow-up", "then plot it"), "peter[auto]> then plot it"), res$out)
+  expect_identical(sort(c(at, status)), c(at[[1L]], status[[1L]], at[[2L]], status[[2L]]))
+  expect_false(paste0(sym$person, " then plot it") %in% res$out)
+})
+
+test_that("follow-ups wait with the /commands and !code typed around them, in order (D-242)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(type_ahead = "follow_up")
+  e = new.env()
+  fake = slow_first()
+  local_typed(typed_once(c("!x = 1", "use x", "!y = 2"),
+                         function() length(fake_requests(fake)) == 1L))
+  res = typing_console(fake, c("go", "/exit"), envir = e)
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(msg_text(last_message(reqs[[2L]])), "use x")
+  # `!x = 1` ran before the follow-up, so its note goes with it; `!y = 2` ran after it
+  sent = json_encode(last_message(reqs[[2L]]))
+  expect_match(sent, "> x = 1", fixed = TRUE)
+  expect_no_match(sent, "y = 2", fixed = TRUE)
+  expect_identical(c(e$x, e$y), c(1, 2))
+  at = match(paste0("peter[auto]> ", c("!x = 1", "use x", "!y = 2")), res$out)
+  expect_false(anyNA(at) || is.unsorted(at))
+})
+
+test_that("the pause menu's [f] in the REPL is the next prompt; a /, ! draft never steers", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(interactive = TRUE)
+  local_mocked_bindings(front_end = function() "terminal")
+  e = new.env()
+  fake = gptr_fake_provider(list(list(text = "first", delay = 0.6), "second"))
+  # Ctrl-C twice while the first answer streams: [s] `!zz = 5`, then [f] `then plot it`
+  pauses = 2L
+  local_typed(function() {
+    if (pauses > 0L && length(fake_requests(fake)) == 1L) {
+      pauses <<- pauses - 1L
+      withRestarts(signalCondition(structure(class = c("interrupt", "condition"),
+                                             list(message = "", call = NULL))),
+                   resume = function() NULL)
+    }
+    character()
+  })
+  res = typing_console(fake, c("go", "s", "!zz = 5", "f", "then plot it", "/exit"), envir = e)
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  roles = vapply(reqs[[2L]]$messages, function(m) m$role, "")
+  expect_identical(roles, c("user", "assistant", "user"))
+  expect_identical(msg_text(last_message(reqs[[2L]])), "then plot it")
+  expect_match(json_encode(last_message(reqs[[2L]])), "> zz = 5", fixed = TRUE)
+  expect_identical(e$zz, 5)
+  expect_true(all(c(queue_line("follow-up", "!zz = 5"), queue_line("follow-up", "then plot it"))
+                  %in% res$out))
+  at = match(paste0("peter[auto]> ", c("!zz = 5", "then plot it")), res$out)
+  expect_false(anyNA(at) || is.unsorted(at))
 })
 
 test_that("a line typed during a tool reaches the request right after its result (D-242)", {

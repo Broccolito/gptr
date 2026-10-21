@@ -3044,6 +3044,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   "the person's line is on the band; a queue line is dim and cut to three rows (D-245)", the CLI, follow-up and
   question-order cases and both pty cases; test-console-interrupt.R "steer and follow-up queue the text with source
   pause_menu (IC-55)". Pending: Tasks 14, 15.
+- Task 14: in the REPL a follow-up is the next prompt. While a prompt of a REPL that is not piped runs,
+  `policy_enqueue()` holds a follow-up (a typed line under `type_ahead = "follow_up"`, a line a question reads past,
+  the pause menu's [f]), and any text starting with `/` or `!` (the pause menu's [s] too, as D-242 says a `/` or `!`
+  draft is never a steer), in the reader's `typed` lines with the held `/command` and `!code` lines, in the order
+  typed; after the run's status line the REPL sends each as its own run, echoed at its prompt. Outside it
+  (`peter("...")` paused with Ctrl-C, `.stdin`, `jsonl`) a follow-up keeps the session's FIFO. Task 13's person's
+  line for a follow-up the run takes now shows only there. Contract-visible: 04 section 15.10 (IC-76); 03 sections
+  6.2 and 6.17. Tests: test-console-typing.R "type_ahead = 'follow_up' sends the line as the next prompt, its own
+  run (D-242)", "follow-ups wait with the /commands and !code typed around them, in order (D-242)", "the pause
+  menu's [f] in the REPL is the next prompt; a /, ! draft never steers". Pending: Task 15.
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

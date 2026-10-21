@@ -93,10 +93,10 @@ readline_limit = function() {
 #' at the end of piped input; `waiting()` -> the lines a paste left on a macOS terminal (none
 #' elsewhere, IC-75); `close()`; `flag` (TRUE when a line reached the readline limit); `held`,
 #' the lines a paste left after a block's closer, which the terminal reader returns first,
-#' unechoed (the terminal showed them); `typed`, the /command and !code lines typed during an
-#' answer, which it returns next, echoed after the prompt (IC-76). With `echo` the stdin reader
-#' writes the prompt and the escaped line (never a `secret` one) on `stream`, so a piped session
-#' reads like a terminal session.
+#' unechoed (the terminal showed them); `typed`, the /command and !code lines and the follow-ups
+#' typed during an answer, which it returns next, in order, echoed after the prompt (IC-76,
+#' D-242). With `echo` the stdin reader writes the prompt and the escaped line (never a `secret`
+#' one) on `stream`, so a piped session reads like a terminal session.
 #' @noRd
 console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())
@@ -136,7 +136,7 @@ console_reader = function(stdin = FALSE, echo = stdin) {
       if (length(rd$typed)) {
         x = rd$typed[[1L]]
         rd$typed = rd$typed[-1L]
-        console_write(paste0(prompt, console_escape(x, FALSE)))
+        console_write(paste0(prompt, console_escape(x)))
         return(x)
       }
       x = gptr_readline(prompt, rl)
@@ -596,7 +596,8 @@ console_typed = function(drain = FALSE) {
 #' Route the lines typed for a run of session `s` (IC-76, D-242): /command and !code lines, and the
 #' lines that continue a held !code line still incomplete (typed_code_open()), wait in the reader
 #' for the next prompt; the others become one message queued on `s` as the `type_ahead` setting
-#' says; a partial line `part` goes to the console history. When there is anything to route the
+#' says (a follow-up waits with the held lines, after those typed before its first line); a
+#' partial line `part` goes to the console history. When there is anything to route the
 #' rendering is paused first (console_render_pause()) and TRUE returned; the caller resumes it
 #' @noRd
 console_typed_route = function(rd, s, lines, part = "") {
@@ -608,11 +609,13 @@ console_typed_route = function(rd, s, lines, part = "") {
   if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(FALSE)
   console_render_pause()
   if (any(later)) {
-    rd$typed = c(rd$typed, lines[later])
     console_notice("[gptr] after this answer: ",
                    paste(console_escape(paste0("'", lines[later], "'"), FALSE), collapse = ", "))
   }
+  before = cumsum(!later) == 0L
+  rd$typed = c(rd$typed, lines[before])
   if (nzchar(trimws(text))) policy_enqueue(s, text, setting_get("type_ahead", s), source = "repl")
+  rd$typed = c(rd$typed, lines[later & !before])
   if (nzchar(trimws(part))) {
     console_notice(if (console_history_add(part)) {
       paste0("[gptr] kept in history (", console_style()$up, "): ")
@@ -1011,19 +1014,21 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' lines typed or pasted together are one message. The terminal does not echo while an answer
 #' runs: a line shows once you press Enter, on a dim line naming its kind, and again as your own
 #' line when the agent reads it, so it never mixes into the answer.
-#' `type_ahead = "follow_up"` ([gptr_config()])
-#' queues them for when the agent would stop instead. `/command` and `!code` lines typed then
-#' run at the next prompt; an interrupt drops them. On the CLI routes a steer reaches the model
-#' after the CLI's current response. The RStudio, Positron and R.app consoles, and type-ahead at
-#' R's own prompt during `peter("...")`, keep typed lines for the next input.
+#' With `type_ahead = "follow_up"` ([gptr_config()]) each is a follow-up instead: the next
+#' prompt, sent once the answer ends. `/command` and `!code` lines typed then also run at the
+#' next prompt, in the order typed; an interrupt drops them. On the CLI routes a steer reaches
+#' the model after the CLI's current response. The RStudio, Positron and R.app consoles, and
+#' type-ahead at R's own prompt during `peter("...")`, keep typed lines for the next input.
 #'
 #' Tab completes R names and file paths after `!` in terminal R, R in an IDE's Terminal tab
 #' included; RStudio's console completes R code at the prompt too; radian and Positron's console
 #' offer no completion there.
 #'
 #' Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
-#' `[s]teer` (delivered after the current tool results), `[f]ollow-up`, `[c]ontinue`, `[a]bort`
-#' and, for a foreground call (including a chat turn) when available, `[b]ackground`;
+#' `[s]teer` (delivered after the current tool results), `[f]ollow-up` (in the chat, the next
+#' prompt, as is a `/command` or `!code` line typed at either; in a `peter("...")` call, sent
+#' when the agent would otherwise stop), `[c]ontinue`, `[a]bort` and, for a foreground call
+#' (including a chat turn) when available, `[b]ackground`;
 #' a second Ctrl-C aborts. Backgrounding returns to the chat prompt; use
 #' `!!gptr::gptr_wait(gptr::gptr_last())` there to wait for completion. Returning to the prompt
 #' does not guarantee progress while the chat waits for input. Under Rscript, background runs

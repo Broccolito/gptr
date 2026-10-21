@@ -1218,10 +1218,13 @@ sources (the pipe, the pause menu, the REPL, `gptr_steer()` called outside a run
 user sent this message while you were working: <text>"; `ctx$send()` from a plugin becomes user-role data
 "Extension <name> sent this note (not from the user): <text>", sibling and child agents' text arrives as
 `<agent_report>` data, and a send from model code of the same session tree is refused [IC-55]. Follow-ups are
-taken one at a time when the agent would otherwise stop. Abort moves the queue to `dropped`. Enqueueing returns
-immediately. `session_unqueue()` takes back the newest user item (the console's Up) [D-242]; each item added,
-taken or withdrawn emits one `queue_update` that names it. There is no file-inbox channel in core (J-cran K-16); a
-front end that needs one is a plugin calling `gptr_steer()`.
+taken one at a time when the agent would otherwise stop. The console REPL keeps its own instead: while one of its
+prompts runs, a follow-up (a typed line under `type_ahead = "follow_up"`, the pause menu's [f]) and any `/command`
+or `!code` line wait in its reader with the held lines, in the order typed, and after the run's status line each
+is the next prompt, its own run; outside it (`peter("...")`, `.stdin`, `jsonl`) [f] uses the FIFO [D-242]. Abort
+moves the queue to `dropped`. Enqueueing returns immediately. `session_unqueue()` takes back the newest user item
+(the console's Up) [D-242]; each item added, taken or withdrawn emits one `queue_update` that names it. There is
+no file-inbox channel in core (J-cran K-16); a front end that needs one is a plugin calling `gptr_steer()`.
 
 **Interrupt policy** [18 §4.6, 02 §5.4, G3 (5)]. Runs execute inside
 `tryCatch(withCallingHandlers(<run>, interrupt = pause_menu), interrupt = abort_run)`. The pause menu uses R's
@@ -1930,11 +1933,12 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   prompt text; the body loses the opener's indentation and closes on a fence at least as long (CommonMark).
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
   stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
-  session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`, or `"follow_up"`); one batch (a
-  paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. The
-  terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only on
-  its dim queue line (`↳ steer · <text>`) and, when the run takes it, as the person's line `› <text>` at that step
-  boundary [D-242]; console questions read with the echo restored (D-221). A console question first drains fd 0
+  session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`), or, with `"follow_up"`, are the next
+  prompt [D-242]; one batch (a paste) is one message; `/command` and `!code` lines wait for the next prompt, in the
+  order typed with the follow-ups, and an interrupt drops them. The terminal does not echo during the call
+  (`stty -echo`, modes restored after it), so typed text shows only on its dim queue line (`↳ steer · <text>`)
+  and, when the run takes it, as the person's line `› <text>` at that step boundary [D-242]; console questions
+  read with the echo restored (D-221). A console question first drains fd 0
   (`stty -icanon min 0 time 0`, the modes restored after): typed lines are routed as above and a partial line
   goes to the console history with a notice, so the question starts empty [D-243]. IDE consoles, R.app and
   `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current

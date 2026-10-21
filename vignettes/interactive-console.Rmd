@@ -214,9 +214,9 @@ gptr shows it on a dim line that names its kind (`steer`), then as your own line
 when the agent reads it. Lines typed or pasted together are one message. The terminal does not
 echo while an answer runs: a typed line shows after Enter, on its dim line, and never mixes into
 the answer.
-`gptr_config(type_ahead = "follow_up", .scope = "user")` queues them for when the agent would
-otherwise stop instead. `/commands` and `!code` typed during an answer run at the next prompt;
-an interrupt drops them. On the CLI routes (`claude-cli`, `codex`) a steer reaches the model
+With `gptr_config(type_ahead = "follow_up", .scope = "user")` each is a follow-up instead: the
+next prompt, sent once the answer ends. `/commands` and `!code` typed during an answer also run
+at the next prompt, in the order typed; an interrupt drops them. On the CLI routes (`claude-cli`, `codex`) a steer reaches the model
 after the CLI's current response. The RStudio, Positron and R.app consoles hold typed input
 until R reads again, so there a line typed during an answer becomes the next prompt;
 type-ahead during `peter("...")` at R's prompt stays R's next input.
@@ -224,7 +224,9 @@ type-ahead during `peter("...")` at R's prompt stays R's next input.
 While an answer or tool runs in a supported terminal, Ctrl-C opens a pause menu:
 
 - **Steer** delivers a new instruction after the current tool results.
-- **Follow-up** queues a prompt for when the agent would otherwise stop.
+- **Follow-up** queues a prompt: in the chat it is the next prompt, sent once the answer ends;
+  in a `peter("...")` call it is sent when the agent would otherwise stop. In the chat a
+  `/command` or `!code` line typed at Steer or Follow-up runs at the next prompt.
 - **Continue** resumes the current work.
 - **Abort** stops it and retains the partial session.
 
