@@ -109,8 +109,10 @@ bench_case = function(fx, standins, tok) {
   s = session_new(refs[1], fx$mode %||% "manual", home = home, preset = fx$preset)
   sid = session_data(s)$id
   bench_standins(standins, sid, sections = unlist(fx$standins), only_missing = TRUE)
-  # <r_env> describes the machine: pinned to its stand-in, like <environment> to the fixture's
-  bench_standins(standins["sections"], sid, sections = "r_env")
+  # <r_env> describes the machine and <skills> its skill folders: pinned to their stand-ins, like
+  # <environment> to the fixture's
+  bench_standins(standins["sections"], sid,
+                 sections = c("r_env", intersect("skills", unlist(fx$standins))))
   if (!is.null(fx$environment)) {
     registry_add(bench_environment_block(fx$environment), source = "session", rank = 0L,
                  session = sid)

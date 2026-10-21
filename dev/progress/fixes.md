@@ -1093,3 +1093,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   query (retried) all give that reason, and one green run cannot tell a fix from a race that did not
   recur, so judge native-01 over several runs. No claim about the native-06 and native-07 failures
   (CI-23, CI-70).
+
+## Task CI-74 - A new-session preview syncs skills; the token benchmark pins the catalog (2026-10-20)
+- Cause: skills are discovered by `skill_sync()` in builtin:skills' `session_start` hook, which fires at a session's
+  first run. `gptr_prompt()` composes without that event, so in a fresh R session its preview had no `skills`
+  section, unlike the prompt the first run freezes; the IC-68 test in test-northstar.R passed only because an
+  earlier block had run a session. `bench_case()` also freezes without `session_start`, so the token baseline
+  measured no skills catalog either.
+- Fix: `skills_section_text()` syncs the skills of a top-level session before listing them (idempotent; a real
+  first run's frozen T0 and T1 are byte-identical before and after). The benchmark pins the `skills` stand-in (the
+  built-in catalog, the same text a fresh session lists) for the fixtures that name it, like `r_env` (CI-18), so
+  the developer's own skill folders never enter the prefix.
+- Red: test-skill-discover.R's preview test FAIL 2. Green: `skill-|northstar|prompt-|subagent-|arch-layers` PASS;
+  in CRAN mode `northstar|skill-discover` PASS 106. New `test-token-gates.R` test (a machine skill leaves ns02's
+  prefix unchanged) fails without the pin.
+- Baseline (`run.R --update`): the 12 standard cases' prefix and catalog +143 (catalog 399 -> 542, the value
+  recorded before the drift noted in D-135 item 6), input totals +143 per request; the two minimal cases unchanged.
+  `run.R --check` OK; polyglot within 10%; `dev/bench/tests` PASS.
