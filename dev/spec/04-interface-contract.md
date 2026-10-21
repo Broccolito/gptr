@@ -5073,6 +5073,8 @@ Ollama requires no Jev key and is not a structured-chat emulation fallback.
 Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier sections.
 
 **IC-75 Console input: paste joining and stale answers** (P26 Task 2, D-184; Task 19, D-220).
+P28 amends this item in §15.10 (pending; D-243): a stale answer is queued, not discarded, and invalid answers
+and pastes are kept in the console history.
 - Paste joining, macOS terminal only (`is_macos()` and R's own readline reading a tty: Unix, interactive,
   `cledit`, `stdin_tty()`): after a prompt, slash or `!code` line is read, the lines waiting on fd 0 join it,
   a dim `(pasted: Enter sends it as one message)` hint follows and one `... ` line is read (Enter sends, typed
@@ -5107,6 +5109,8 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   opener's length (CommonMark).
 
 **IC-76 Typed lines steer a running console call** (P26 Task 3, D-185).
+P28 amends this item in §15.10 (pending; D-242, D-243): a steer reaches the first step boundary and a follow-up
+is the next prompt, as D-242 states now; the notices and the follow-up delivery below are replaced.
 - Scope: `repl_terminal(rs)`: not `.stdin`, not Windows (processx cannot poll a console handle),
   `gptr_is_interactive()` and `stdin_tty()`; no `front_end()` term, so an IDE's Terminal tab qualifies while IDE
   consoles, R.app, RGui and Jupyter (no tty) do not. `console_send()` registers the package function
@@ -5142,6 +5146,8 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   model after the CLI's current response.
 
 **IC-77 Console controls and the asking agent** (P26 Task 6).
+P28 amends this item in §15.10 (pending; D-243, D-245): approvals ask under the call they gate, and the run
+totals line names the model and the context left.
 1. Console writer: an evaluation's `.gptr_message_write(text, stream, margin, k)` lifts its own
    capture sink when it is on top (never a user's), hands the text to
    `gptr_message_write(text, stream, margin, from = k - 1L)` (the next writer below, else the
@@ -5285,3 +5291,14 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   committed; `validationException` provider 400; others provider). HTTP errors before the stream are
   classified by P04 as for every adapter. `check_adapter()` replays binary `fixtures/sse/<api>/<case>.bin`
   fixtures unsplit.
+
+### 15.10 Codex-style console (IC-81, IC-82, 2026-10-21)
+
+Written by `dev/plan/P28-console-codex.md`; these items win over earlier sections. Pending: each P28 task writes
+its part in its own commit, and Task 27 finalises them.
+
+- IC-75 amended (D-243; P28 Task 3): pending.
+- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21): pending.
+- IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26): pending.
+- **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
+- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25): pending.

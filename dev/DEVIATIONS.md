@@ -2977,3 +2977,54 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   needed 13 to 29 minutes for the CRAN-mode tests before this rule and 3.3 with the block rule alone, which left the
   whole check at CRAN's 10-minute budget, because skipped blocks and sourced files still cost time.
 - Tests: tests/testthat.R (the list); 1,183 block skips in the listed files.
+
+## D-242 - P28 steering: a steer reaches the next step boundary, a follow-up is the next prompt (2026-10-21)
+- Rule: a message typed while the agent works is queued as one of two kinds, chosen per message. In a terminal
+  console `type_ahead` (`"steer"`, the default, or `"follow_up"`; D-185) decides what Enter sends and Tab sends the
+  other kind; in RStudio, Positron and Windows consoles and under TERM=dumb or ESS the setting alone decides.
+  A draft starting with `/` or `!` is always a follow-up.
+- Steer: held only until the first step boundary after it was sent: the response in flight ends without a tool
+  call, or the last tool call of that response returns. Every steer queued before a boundary is delivered there,
+  in order, each as the operator relay `The user sent this message while you were working: <text>` on the
+  agent's very next request; if the agent was about to stop, the loop makes one more request (after_turn polls
+  steers). A steer never interrupts a request or a tool and never waits for the run to end. The console reads
+  typed input at `turn_end`, before the loop polls steers; keys typed during an in-process `r` tool wait in the
+  terminal buffer and are read when it returns.
+- Follow-up: held until the whole run ends, then sent as the next prompt after the run's status line, as its own
+  run; it never joins the running run.
+- No call is skipped: the response's remaining calls still run, because a provider needs a result for every call
+  of a response and Codex 0.157.1 and Pi's current loop finish them (skipping would show the agent failures it did
+  not cause). In manual mode each remaining call is still asked; `n <text>` denies it with that text, and Ctrl-C
+  [a] stops everything.
+- Shown while queued: the live row's `n queued` and, with an empty draft, the newest message as
+  `↳ steer · <text>` (`follow-up` for the other kind); consoles without a live row print one `↳ <kind> · <text>`
+  line. Shown at delivery: a steer as the person's line `› <text>` at the boundary, before the next request's
+  output; a follow-up as `peter> <text>` at the next prompt.
+- Edit and withdraw: Up on an empty draft takes back the newest undelivered message of either kind into the
+  composer; Ctrl-U discards it. Nothing is lost: a steer the run could not take (it ended first or hit
+  `max_turns`) is the next prompt; after an abort or an error the queued text and the draft are listed once and
+  added to the console history, never sent.
+- CLI routes (claude-cli, codex): the boundary is the end of the CLI's answer, often the whole run, so a steer
+  behaves like an in-run follow-up and its queue line adds ` · after the CLI's answer`. Mid-turn delivery
+  (Claude Code's stream-json input, Codex's app-server steer) is a later plan. RStudio, Positron and Windows
+  consoles read nothing while busy: a line typed during a run steers only if a question reads it, else it is the
+  next prompt.
+- Amends D-185 and D-205 (their wording) and replaces IC-76's "follow-up ... is sent when the agent would stop"
+  and any text that treats steering as end-of-run delivery.
+- Contract-visible: IC-76 and IC-55 through 04 section 15.10; 03 section 6.2.
+- Tests: pending (P28 Tasks 4, 7, 13, 14, 15).
+
+## D-243 - P28 the composer, the live row and questions (2026-10-21)
+- Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue
+  and the draft; a question drains typed-ahead input, waits for typing to pause and keeps the draft; stale lines
+  are queued and invalid answers kept; approvals ask under the call they gate. Amends D-184, D-188 and D-222's
+  layout; D-221 stays for terminals without ANSI.
+
+## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
+- Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
+  natural language; `!`, `/` and `@` show what they do. Amends D-183.
+
+## D-245 - P28 the console output vocabulary (2026-10-21)
+- Pending (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three
+  tool kinds, R-only highlighting, whole transcript rows and a status line with the model and the context left.
+  Amends D-186, D-187 and D-206.
