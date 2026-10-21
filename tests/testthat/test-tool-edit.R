@@ -56,6 +56,7 @@ test_that("edit errors use Pi's texts and never write partially", {
   Sys.chmod(f, "0444")
   # Windows unlink() cannot delete a read-only file, so the temporary directory needs this
   withr::defer(Sys.chmod(f, "0644"))
+  skip_if(file.access(f, 2L) == 0L, "a read-only file is writable here (root)")
   expect_identical(err(edit_file(f, e1("hello", "w"))),
                    sprintf("Could not edit file: %s. Error code: EACCES.", f))
   expect_identical(rd(f), "hello\n")
