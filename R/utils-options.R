@@ -10,7 +10,7 @@ gptr_option_defaults = list(
   quiet = FALSE, interactive = NULL, project_root = NULL, unsafe_no_permissions = FALSE,
   verbose = NULL, ui = NULL, model = NULL, mode = NULL, preset = NULL, system1 = NULL,
   small_model = NULL, replay = NULL, record = NULL, interpolate = TRUE,
-  value_copy_max = 1048576, values_max_bytes = 67108864, max_turns = 50L,
+  value_copy_max = 2097152, values_max_bytes = 67108864, max_turns = 50L,
   max_turns_console = 200L, max_active = 8L, subagents.max_active = 8L,
   subagents.max_cli = 4L, subagents.max_workers = NULL, subagents.max_tasks = 8L,
   subagents.max_depth = 1L, max_nested_calls = 20L, connect_timeout = 20,
@@ -305,7 +305,7 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.max_turns` (integer, `50`): turns per programmatic run.
 #' - `gptr.max_turns_console` (integer, `200`): turns per console prompt.
 #' - `gptr.max_nested_calls` (integer, `20`): [peter()] calls per evaluation of model code.
-#' - `gptr.value_copy_max` (bytes, `1048576`): designated result values below this size are
+#' - `gptr.value_copy_max` (bytes, `2097152`): designated result values below this size are
 #'   copied; larger ones are kept by name.
 #' - `gptr.values_max_bytes` (bytes, `67108864`): value copies held per session.
 #' - `gptr.background_tools` (character, `"idle"`): `"idle"` or `"wait"` for experimental

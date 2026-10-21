@@ -432,7 +432,6 @@ test_that("a value is copied below value_copy_max unless its copy is none or out
 test_that("a themed ggplot2 plot the agent builds is the console's, copied, held small (D-247)", {
   skip_if_not_installed("ggplot2", "4.0.0")
   local_project()
-  local_gptr_options(value_copy_max = 2^21)    # the plot holds about 1 MB
   code = c(paste("p = ggplot2::ggplot(mtcars, ggplot2::aes(wt, mpg)) + ggplot2::geom_point() +",
                  "ggplot2::theme_minimal()"),
            "p = p + ggplot2::labs(title = 'mpg')")
