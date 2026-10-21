@@ -145,9 +145,11 @@ runs: a line shows once you press Enter, on a dim line naming its kind, and agai
 line when the agent reads it, so it never mixes into the answer.
 With \code{type_ahead = "follow_up"} (\code{\link[=gptr_config]{gptr_config()}}) each is a follow-up instead: the next
 prompt, sent once the answer ends. \verb{/command} and \code{!code} lines typed then also run at the
-next prompt, in the order typed; an interrupt drops them. On the CLI routes a steer reaches
-the model after the CLI's current response. The RStudio, Positron and R.app consoles, and
-type-ahead at R's own prompt during \code{peter("...")}, keep typed lines for the next input.
+next prompt, in the order typed. A steer the answer did not take is the next prompt too; after
+an interrupt or an error nothing queued is sent: it goes to the console history (Up recalls
+it). On the CLI routes a steer reaches the model after the CLI's current response. The
+RStudio, Positron and R.app consoles, and type-ahead at R's own prompt during \code{peter("...")},
+keep typed lines for the next input.
 
 Tab completes R names and file paths after \code{!} in terminal R, R in an IDE's Terminal tab
 included; RStudio's console completes R code at the prompt too; radian and Positron's console

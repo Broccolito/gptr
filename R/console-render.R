@@ -561,8 +561,8 @@ console_state = function() {
   the$console
 }
 
-#' Start tracking a run of a session: a record with its session, tool calls, entry count and
-#' usage row count
+#' Start tracking a run of a session: a record with its session, tool calls, entry count, usage
+#' row count and count of queue items dropped by aborts
 #' @noRd
 console_track = function(run_id, session) {
   rec = new.env(parent = emptyenv())
@@ -570,6 +570,7 @@ console_track = function(run_id, session) {
   rec$tools = new.env(parent = emptyenv())
   rec$n0 = length(session_data(session)$entries)
   rec$u0 = nrow(session_data(session)$usage)
+  rec$d0 = length(session_data(session)$dropped)
   rec$request_pending = FALSE
   rec$paused = FALSE
   assign(run_id, rec, envir = console_state()$active)
@@ -1161,15 +1162,17 @@ console_on_compact = function(event, ctx) {
 }
 
 #' agent_end: close the streams, show custom entries and the status line, forget the run; queued
-#' artifact lines (an interrupted tool) print last; a shown sub-agent says how it ended, `(k/N)`
-#' counting the settled children of its scheduled group (D-188), a failure with the first line of
-#' its reason, else its status (D-224)
+#' artifact lines (an interrupted tool) print last, then what the person queued and the run did
+#' not take (console_queue_left()); a shown sub-agent says how it ended, `(k/N)` counting the
+#' settled children of its scheduled group (D-188), a failure with the first line of its reason,
+#' else its status (D-224)
 #' @noRd
 console_on_agent_end = function(event, ctx) {
   on.exit(console_artifact_flush(), add = TRUE)
   rec = console_record(event)
   if (is.null(rec)) return(NULL)
   on.exit(console_drop(event$run), add = TRUE)
+  on.exit(console_queue_left(rec, event$status), add = TRUE)
   console_spinner_stop(rec)
   run = rec$child$run
   if (!is.null(run)) {
@@ -1210,6 +1213,45 @@ console_on_agent_end = function(event, ctx) {
   console_write(cli::col_grey(line))
   console_gap(rec, "prompt")
   NULL
+}
+
+#' What the person queued for a foreground run that ended and the run did not take (D-242). After
+#' a run that ended idle or at max_turns, its steers still queued and those held while a tool ran
+#' are the next prompts of the REPL whose prompt runs, after its held lines; elsewhere they stay
+#' queued for the session's next run. After any other end nothing is sent: the person's items its
+#' abort dropped, the steers still queued, the items held and the REPL's held lines go to the
+#' console history, listed once (console_keep())
+#' @noRd
+console_queue_left = function(rec, status) {
+  s = rec$session
+  rs = console_repl_prompt()
+  ended = status %in% c("idle", "max_turns")
+  if (!console_foreground(rec, tools = TRUE) || (ended && is.null(rs))) return(invisible(NULL))
+  st = console_state()
+  mine = vapply(st$pending, function(it) identical(it$s, s), NA)
+  left = c(console_unqueue(s), vapply(st$pending[mine], function(it) it$text, ""))
+  st$pending = st$pending[!mine]
+  if (ended) {
+    rs$reader$typed = c(rs$reader$typed, left)
+    return(invisible(NULL))
+  }
+  d = session_data(s)
+  dropped = Filter(function(it) it$source %in% queue_user_sources,
+                   d$dropped[seq_along(d$dropped) > rec$d0])
+  texts = c(vapply(dropped, function(it) it$text, ""), left, rs$reader$typed)
+  if (!is.null(rs)) rs$reader$typed = character()
+  console_keep(texts)
+}
+
+#' Take the person's steers off the queue of `s` (session_unqueue()): their texts, oldest first
+#' @noRd
+console_unqueue = function(s) {
+  texts = character()
+  repeat {
+    it = session_unqueue(s, "steer")
+    if (is.null(it)) return(texts)
+    texts = c(it$text, texts)
+  }
 }
 
 #' artifact_start: the NS-8 line `artifact  <id>  ->  <url>   (running in background)` (IC-71)

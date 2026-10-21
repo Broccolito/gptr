@@ -21,10 +21,10 @@ typed_once = function(lines, when) {
   }
 }
 
-# The REPL on a new session in mode auto with `answers` at its prompt: its output lines and its
-# session
+# The REPL on a new session in mode auto with `answers` at its prompt: its output lines, its
+# session and what went to the history
 typing_console = function(fake, answers, tools = NULL, envir = new.env()) {
-  local_readline(answers, .env = parent.frame())
+  box = local_readline(answers, .env = parent.frame())
   rs = repl_state(NULL, envir)
   rs$model = fake
   rs$mode = "auto"
@@ -33,7 +33,7 @@ typing_console = function(fake, answers, tools = NULL, envir = new.env()) {
   out = utils::capture.output({
     s = repl_main(rs)
   })
-  list(out = out, s = s)
+  list(out = out, s = s, kept = box$kept)
 }
 
 # stty on fd 0 recorded in `log`; the saved modes are "SAVED"
@@ -218,6 +218,26 @@ test_that("the pause menu's [f] in the REPL is the next prompt; a /, ! draft nev
   expect_false(anyNA(at) || is.unsorted(at))
 })
 
+test_that("a steer a run at max_turns did not take is the next prompt, run 2's user message", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(max_turns_console = 1L)
+  fake = gptr_fake_provider(list(c(fake_tool("r", code = "zz = 1"), list(delay = 0.3)), "second"))
+  local_typed(typed_once("use base R", function() length(fake_requests(fake)) == 1L))
+  res = NULL
+  err = utils::capture.output({
+    res = typing_console(fake, c("go", "/exit"))
+  }, type = "message")
+  expect_true(any(grepl("(max_turns)", err, fixed = TRUE)))
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  roles = vapply(reqs[[2L]]$messages, function(m) m$role, "")
+  expect_identical(roles, c("user", "assistant", "tool_result", "user"))
+  expect_identical(msg_text(last_message(reqs[[2L]])), "use base R")
+  expect_true("peter[auto]> use base R" %in% res$out)
+  expect_length(session_data(res$s)$queue$steer, 0L)
+})
+
 test_that("a line typed during a tool reaches the request right after its result (D-242)", {
   skip_on_cran()
   local_console_test()
@@ -350,9 +370,10 @@ test_that("lines typed in one batch (a paste) are one message", {
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("a\n\nb"))
 })
 
-test_that("an interrupted run drops the held lines and lists them", {
+test_that("an abort sends nothing queued: it goes to the history, listed once (D-242)", {
   skip_on_cran()
   local_console_test()
+  local_gptr_options(history = TRUE)
   e = new.env()
   fake = gptr_fake_provider(list(list(text = "first", delay = 5)))
   held = FALSE
@@ -360,25 +381,51 @@ test_that("an interrupted run drops the held lines and lists them", {
     if (!length(fake_requests(fake))) return(character())
     if (!held) {
       held <<- TRUE
-      return(c("/status", "!x = 1"))
+      return(c("/status", "!x = 1", "use base R"))
     }
     signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
     character()
   })
   res = typing_console(fake, c("go", "/exit"), envir = e)
   expect_true(any(grepl("[gptr] aborted", res$out, fixed = TRUE)))
-  expect_true(any(grepl("[gptr] dropped typed lines: '/status', '!x = 1'", res$out, fixed = TRUE)))
+  # the steer the abort dropped from the queue, then the held lines
+  expect_identical(res$kept, c("use base R", "/status", "!x = 1"))
+  notice = paste0("[gptr] kept in history (", console_style()$up, "): 'use base R', '/status', ",
+                  "'!x = 1'")
+  expect_identical(sum(grepl(notice, res$out, fixed = TRUE)), 1L)
+  expect_false(any(grepl("dropped", res$out, fixed = TRUE)))
+  expect_length(fake_requests(fake), 1L)
   expect_null(e$x)
   expect_false("peter[auto]> /status" %in% res$out)
 })
 
-test_that("Ctrl-C at an approval prompt aborts the run and drops the held lines", {
+test_that("after an error the queued steer is kept in the history, not sent with the next prompt", {
+  skip_on_cran()
   local_console_test()
-  local_gptr_options(interactive = TRUE)
+  local_gptr_options(history = TRUE)
+  fake = gptr_fake_provider(list(list(error = "bad request", status = 400L, delay = 0.3), "second"))
+  local_typed(typed_once("use base R", function() length(fake_requests(fake)) == 1L))
+  res = NULL
+  err = utils::capture.output({
+    res = typing_console(fake, c("go", "next", "/exit"))
+  }, type = "message")
+  expect_true(any(grepl("bad request", err, fixed = TRUE)))
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(msg_text(last_message(reqs[[2L]])), "next")
+  expect_no_match(json_encode(reqs[[2L]]$messages), "use base R", fixed = TRUE)
+  expect_identical(res$kept, "use base R")
+  expect_true(any(grepl("[gptr] kept in history (", res$out, fixed = TRUE)))
+})
+
+test_that("Ctrl-C at an approval prompt aborts the run and keeps the held lines in the history", {
+  local_console_test()
+  local_gptr_options(interactive = TRUE, history = TRUE)
   e = new.env()
   fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2", .text = "hmm")))
   local_typed(typed_once("!x = 1", function() length(fake_requests(fake)) == 1L))
   asks = 0L
+  kept = character()
   local_mocked_bindings(readline_answer = function(prompt, ...) {
     asks <<- asks + 1L
     if (identical(prompt, "> ")) {
@@ -387,12 +434,15 @@ test_that("Ctrl-C at an approval prompt aborts the run and drops the held lines"
     }
     if (asks == 1L) "go" else "/exit"
   }, gptr_readline = function(prompt = "", ...) readline_answer(prompt))
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
   rs = repl_state(NULL, e)
   rs$model = fake
   rs$mode = "manual"
   out = utils::capture.output(repl_main(rs))
   expect_true(any(grepl("[gptr] after this answer: '!x = 1'", out, fixed = TRUE)))
-  expect_true(any(grepl("[gptr] dropped typed lines: '!x = 1'", out, fixed = TRUE)))
+  expect_identical(kept, "!x = 1")
+  expect_true(any(grepl("[gptr] kept in history (", out, fixed = TRUE)))
   expect_null(e$x)
   expect_null(e$zz)
 })

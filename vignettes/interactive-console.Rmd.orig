@@ -203,7 +203,9 @@ echo while an answer runs: a typed line shows after Enter, on its dim line, and 
 the answer.
 With `gptr_config(type_ahead = "follow_up", .scope = "user")` each is a follow-up instead: the
 next prompt, sent once the answer ends. `/commands` and `!code` typed during an answer also run
-at the next prompt, in the order typed; an interrupt drops them. On the CLI routes (`claude-cli`, `codex`) a steer reaches the model
+at the next prompt, in the order typed. A steer the answer did not take (it ended first) is the
+next prompt too; after an interrupt or an error nothing you queued is sent: it goes to the
+console history, and Up recalls it. On the CLI routes (`claude-cli`, `codex`) a steer reaches the model
 after the CLI's current response. The RStudio, Positron and R.app consoles hold typed input
 until R reads again, so there a line typed during an answer becomes the next prompt;
 type-ahead during `peter("...")` at R's prompt stays R's next input.
@@ -215,7 +217,7 @@ While an answer or tool runs in a supported terminal, Ctrl-C opens a pause menu:
   in a `peter("...")` call it is sent when the agent would otherwise stop. In the chat a
   `/command` or `!code` line typed at Steer or Follow-up runs at the next prompt.
 - **Continue** resumes the current work.
-- **Abort** stops it and retains the partial session.
+- **Abort** stops it and retains the partial session; what you queued goes to the history, unsent.
 
 A foreground call, including a chat turn, can also offer **background** when that experimental
 capability is available. It returns to `peter>` while the run remains active. Another prompt

@@ -295,9 +295,12 @@ test_that("a steer typed while a tool runs reaches the request after the tool re
   expect_match(json_encode(msgs[[length(msgs)]]), "use mpg", fixed = TRUE)
 })
 
-test_that("a steer typed in a tool and then aborted is listed as dropped, never sent later", {
+test_that("a steer typed in a tool and then aborted is kept in the history, never sent later", {
   local_project()
-  local_gptr_options(unsafe_no_permissions = TRUE)
+  local_gptr_options(unsafe_no_permissions = TRUE, history = TRUE)
+  kept = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
   off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
     fake_interrupt()
     fake_interrupt()
@@ -313,7 +316,8 @@ test_that("a steer typed in a tool and then aborted is listed as dropped, never 
     run_wait(run_start(s, msg_user("an unrelated prompt")))
   })
   expect_identical(run$status, "aborted")
-  expect_true(any(grepl("[gptr] dropped queued messages: 'use mpg'", err, fixed = TRUE)))
+  expect_identical(kept, "use mpg")
+  expect_identical(sum(grepl("[gptr] kept in history (", err, fixed = TRUE)), 1L)
   expect_length(session_data(s)$queue$steer, 0L)
   reqs = fake_requests(fake)
   expect_no_match(json_encode(reqs[[length(reqs)]]$messages), "use mpg", fixed = TRUE)

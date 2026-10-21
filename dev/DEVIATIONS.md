@@ -3054,6 +3054,21 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   6.2 and 6.17. Tests: test-console-typing.R "type_ahead = 'follow_up' sends the line as the next prompt, its own
   run (D-242)", "follow-ups wait with the /commands and !code typed around them, in order (D-242)", "the pause
   menu's [f] in the REPL is the next prompt; a /, ! draft never steers". Pending: Task 15.
+- Task 15: nothing queued is lost. At the end of a foreground run the console's `agent_end` hook
+  (`console_queue_left()`) settles what the person queued and the run did not take: after status `idle` or
+  `max_turns` the user steers still queued (`session_unqueue()`) or held while a tool ran are the next prompts of
+  the REPL whose prompt runs, after its held lines (elsewhere they stay queued for the session's next run); after any
+  other end (an abort, an error, a block, the budget) nothing is sent, and the user items the abort dropped, the
+  steers still queued, the items held and the REPL's held lines go to the console history, listed once as
+  `[gptr] kept in history (↑): '<a>', '<b>'`, replacing `[gptr] dropped typed lines` and `[gptr] dropped queued
+  messages`. Follow-ups still in the session's FIFO (outside the REPL) stay queued after an error. The draft joins
+  the list once the composer holds it (Task 20). The console's `session_unqueue()` call is a contract edge of the
+  layering test. Contract-visible: 04 section 15.10 (IC-76); 03 sections 6.2 (also:
+  the pause menu writes to stdout) and 6.17. Tests: test-console-typing.R "a steer a run at max_turns did not take
+  is the next prompt, run 2's user message", "an abort sends nothing queued: it goes to the history, listed once
+  (D-242)", "after an error the queued steer is kept in the history, not sent with the next prompt", "Ctrl-C at an
+  approval prompt aborts the run and keeps the held lines in the history"; test-console-interrupt.R "a steer typed
+  in a tool and then aborted is kept in the history, never sent later".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

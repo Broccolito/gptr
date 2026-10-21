@@ -1222,16 +1222,21 @@ taken one at a time when the agent would otherwise stop. The console REPL keeps 
 prompts runs, a follow-up (a typed line under `type_ahead = "follow_up"`, the pause menu's [f]) and any `/command`
 or `!code` line wait in its reader with the held lines, in the order typed, and after the run's status line each
 is the next prompt, its own run; outside it (`peter("...")`, `.stdin`, `jsonl`) [f] uses the FIFO [D-242]. Abort
-moves the queue to `dropped`. Enqueueing returns immediately. `session_unqueue()` takes back the newest user item
-(the console's Up) [D-242]; each item added, taken or withdrawn emits one `queue_update` that names it. There is
-no file-inbox channel in core (J-cran K-16); a front end that needs one is a plugin calling `gptr_steer()`.
+moves the queue to `dropped`. Nothing the person queued is lost [D-242]: at the end of a foreground run that ended
+idle or at `max_turns`, the console makes its user steers still queued (or held while a tool ran) the REPL's next
+prompts; after any other end (an abort, an error) it sends none of it and adds the user items the abort dropped,
+the steers still queued, the items held and the REPL's held lines to the console history, listed once.
+Enqueueing returns immediately. `session_unqueue()` takes back the newest user item (the console's Up) [D-242];
+each item added, taken or withdrawn emits one `queue_update` that names it. There is no file-inbox channel in core
+(J-cran K-16); a front end that needs one is a plugin calling `gptr_steer()`.
 
 **Interrupt policy** [18 §4.6, 02 §5.4, G3 (5)]. Runs execute inside
 `tryCatch(withCallingHandlers(<run>, interrupt = pause_menu), interrupt = abort_run)`. The pause menu uses R's
 `resume` restart: `[s]teer`, `[f]ollow-up`, `[c]ontinue`, `[a]bort`, and `[b]ackground` (foreground calls
-only, experimental); a second Ctrl-C aborts. Menu output goes to stderr (the handler may run inside a tool's
-stdout capture) and tools record interruption with `on.exit()`, never with an exiting `tryCatch(interrupt =)`
-that would pre-empt the menu (G3 menu fixes). Where the resume restart is unavailable or unverified (Rgui,
+only, experimental); a second Ctrl-C aborts. Menu output goes to stdout through the console writer, which keeps
+it out of a tool's captured output (the handler may run inside it), and tools record interruption with `on.exit()`,
+never with an exiting `tryCatch(interrupt =)` that would pre-empt the menu (G3 menu fixes). Where the resume
+restart is unavailable or unverified (Rgui,
 IDE consoles), the policy falls back to abort-only. R in an IDE's terminal tab reads a tty and is terminal R
 (`front_end()` counts the inherited `RSTUDIO=1`/`POSITRON=1` only without one), so it has the pause menu and
 Ctrl-C [D-183]. Abort: `curl::multi_cancel()`, interrupt then `kill_all()`
@@ -1935,8 +1940,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
   session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`), or, with `"follow_up"`, are the next
   prompt [D-242]; one batch (a paste) is one message; `/command` and `!code` lines wait for the next prompt, in the
-  order typed with the follow-ups, and an interrupt drops them. The terminal does not echo during the call
-  (`stty -echo`, modes restored after it), so typed text shows only on its dim queue line (`↳ steer · <text>`)
+  order typed with the follow-ups; after an interrupt they go to the console history, unsent [D-242]. The
+  terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only on its
+  dim queue line (`↳ steer · <text>`)
   and, when the run takes it, as the person's line `› <text>` at that step boundary [D-242]; console questions
   read with the echo restored (D-221). A console question first drains fd 0
   (`stty -icanon min 0 time 0`, the modes restored after): typed lines are routed as above and a partial line

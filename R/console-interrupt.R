@@ -163,11 +163,19 @@ policy_menu = function(cnd, pol) {
   }
 }
 
+#' The REPL whose prompt runs, unless it is piped (`.stdin`, `jsonl`), or NULL: its reader's
+#' `typed` lines are the next prompts (D-242)
+#' @noRd
+console_repl_prompt = function() {
+  rs = console_repl_find()
+  if (!is.null(rs$sending) && !isTRUE(rs$stdin)) rs
+}
+
 #' Queue pause-menu or typed text on the session (IC-49, IC-55: source "pause_menu" or "repl",
 #' IC-76) after the `input` event (source "steer"), with its queue line (console_queue_line()).
-#' While a prompt of a REPL that is not piped runs, a follow-up, and text starting with / or !, is
-#' the next prompt instead (D-242): it waits in the reader's `typed` lines, and its `input` event
-#' comes when it is sent.
+#' While a REPL prompt runs (console_repl_prompt()), a follow-up, and text starting with / or !,
+#' is the next prompt instead (D-242): it waits in the reader's `typed` lines, and its `input`
+#' event comes when it is sent.
 #'
 #' P06 refuses an enqueue from the session's own tool frames, which are on the stack when the
 #' interrupt hit a tool; the item then waits in the console state for policy_flush().
@@ -178,9 +186,8 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
     console_notice("[gptr] nothing queued; continuing")
     return(invisible(FALSE))
   }
-  rs = console_repl_find()
-  if (!is.null(rs$sending) && !isTRUE(rs$stdin) &&
-        (identical(as, "follow_up") || grepl("^\\s*[/!]", text))) {
+  rs = console_repl_prompt()
+  if (!is.null(rs) && (identical(as, "follow_up") || grepl("^\\s*[/!]", text))) {
     console_queue_line(s, text, "follow_up")
     rs$reader$typed = c(rs$reader$typed, text)
     return(invisible(TRUE))
@@ -189,8 +196,7 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
   if (identical(ev$action, "handled")) return(invisible(FALSE))
   console_queue_line(s, ev$text, as)
   st = console_state()
-  st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, source = source,
-                                       run = session_live(s)$run)))
+  st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, source = source)))
   policy_flush()
   if (length(st$pending)) reactor_timer(at = reactor_now(), fn = policy_flush)
   invisible(TRUE)
@@ -231,7 +237,8 @@ console_typed_ahead = function(text) {
 
 #' Queue the pending console items once no tool executes on the stack: at the next reactor
 #' step or when the tool ends (the tool_execution_end hook), so before the next request
-#' (INFRA-12); an item whose run settled first is listed as dropped (03 section 6.2)
+#' (INFRA-12). The end of a foreground run settles its session's items first
+#' (console_queue_left()); any other item reaches its session's queue, for its next run (D-242)
 #' @noRd
 policy_flush = function() {
   st = console_state()
@@ -239,40 +246,26 @@ policy_flush = function() {
   items = st$pending
   st$pending = NULL
   for (it in items) {
-    if (!is.null(it$run) && !policy_active(it$run)) {
-      console_notice("[gptr] dropped queued messages: ",
-                     console_escape(paste0("'", it$text, "'"), FALSE))
-    } else {
-      tryCatch(session_enqueue(it$s, it$text, as = it$as, source = it$source),
-               error = function(e) {
-                 console_notice("[gptr] the queued message could not be delivered: ",
-                                console_escape(conditionMessage(e), FALSE), .error = TRUE)
-               })
-    }
+    tryCatch(session_enqueue(it$s, it$text, as = it$as, source = it$source),
+             error = function(e) {
+               console_notice("[gptr] the queued message could not be delivered: ",
+                              console_escape(conditionMessage(e), FALSE), .error = TRUE)
+             })
   }
   invisible(NULL)
 }
 
-#' Abort (exiting handler for `interrupt`): abort the runs present at the interrupt, list the
-#' queue items they dropped and, in mode "call", re-signal the interrupt
+#' Abort (exiting handler for `interrupt`): abort the runs present at the interrupt and, in mode
+#' "call", re-signal the interrupt; what the person queued goes to the history at each run's end
+#' (console_queue_left())
 #' @noRd
 policy_abort = function(cnd, pol) {
   targets = policy_targets(pol$abort_runs %||% pol$runs)
-  sessions = Filter(Negate(is.null), lapply(targets, function(t) t$session))
-  n0 = vapply(sessions, function(s) length(session_data(s)$dropped), 0L)
   suspendInterrupts({
     for (t in rev(targets)) if (policy_active(t$run)) run_abort(t$run, reason = "user")
   })
   console_render_pause()
   console_notice("[gptr] aborted; the session is kept.")
-  for (i in seq_along(sessions)) {
-    dropped = session_data(sessions[[i]])$dropped
-    texts = vapply(dropped[seq_along(dropped) > n0[[i]]], function(item) item$text, "")
-    if (length(texts)) {
-      console_notice("[gptr] dropped queued messages: ",
-                     paste(console_escape(paste0("'", texts, "'"), FALSE), collapse = ", "))
-    }
-  }
   if (identical(pol$mode, "call")) policy_resignal(cnd)
   invisible(NULL)
 }

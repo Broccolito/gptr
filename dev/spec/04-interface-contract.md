@@ -5327,7 +5327,7 @@ its part in its own commit, and Task 27 finalises them.
     `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
     empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
     word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
-- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 15-16 and 18-21 pending.
+- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 16 and 18-21 pending.
   - A question drains first (Task 2). On a terminal REPL, while a run of the call has a session,
     `console_before_message(kind = "prompt")` reads fd 0 with `console_typed(drain = TRUE)`:
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
@@ -5357,9 +5357,22 @@ its part in its own commit, and Task 27 finalises them.
     the session's FIFO; `console_typed_route()` puts a batch's message after the held lines typed before its
     first line. After the run's status line the REPL reads them first, in order: each is echoed at its prompt
     (`peter> <text>`; a message of several lines keeps its rows) and sent as its own run, a second prompt
-    (source `pipe`), whose `input` event comes then. An interrupt or abort drops them with the held lines
-    (Task 15 keeps them). Elsewhere (`peter("...")` paused with Ctrl-C, a question outside a REPL) a follow-up
-    still goes to the session's FIFO, taken when the agent would otherwise stop.
+    (source `pipe`), whose `input` event comes then; after an interrupt or abort they are kept, not sent
+    (Task 15). Elsewhere (`peter("...")` paused with Ctrl-C, a question outside a REPL) a follow-up still goes to
+    the session's FIFO, taken when the agent would otherwise stop.
+  - Nothing queued is lost (Task 15). `builtin_console`'s `agent_end` hook (`console_queue_left()`) settles what
+    the person queued for a foreground run (depth 0, not background) that the run did not take. After status
+    `idle` or `max_turns` (it ended first or hit the cap), the user steers still queued (taken with
+    `session_unqueue()`) and those `policy_flush()` still holds for the session are the next prompts of the REPL
+    whose prompt runs (not piped), appended to the reader's `typed` lines; elsewhere they stay queued for the
+    session's next run, and `policy_flush()` never drops an item. After any other status (`aborted`, `error`,
+    `blocked`, `budget`) nothing is sent: the user items the abort moved to `dropped`, the user steers still
+    queued, the items held, and the REPL's held lines (follow-ups, `/commands`, `!code`), in that order, go to
+    the console history (`console_history_add()`) and are listed once, `[gptr] kept in history (↑): '<a>', '<b>'`
+    (`Up` where the output is not UTF-8; with `gptr.history` off `[gptr] not kept (gptr.history is off): ...`).
+    These replace `[gptr] dropped typed lines: ...` and `[gptr] dropped queued messages: ...`. The draft joins this
+    list once the composer holds it (Task 20). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
+    layering test (12.2).
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Tasks 19 and 26 pending.
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
     keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by

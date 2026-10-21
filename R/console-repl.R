@@ -616,14 +616,22 @@ console_typed_route = function(rd, s, lines, part = "") {
   rd$typed = c(rd$typed, lines[before])
   if (nzchar(trimws(text))) policy_enqueue(s, text, setting_get("type_ahead", s), source = "repl")
   rd$typed = c(rd$typed, lines[later & !before])
-  if (nzchar(trimws(part))) {
-    console_notice(if (console_history_add(part)) {
-      paste0("[gptr] kept in history (", console_style()$up, "): ")
-    } else {
-      "[gptr] not kept (gptr.history is off): "
-    }, console_escape(paste0("'", part, "'"), FALSE))
-  }
+  if (nzchar(trimws(part))) console_keep(part)
   TRUE
+}
+
+#' Text the person typed that gptr will not send: added to the console history in order
+#' (console_history_add()) and listed in one notice, `[gptr] kept in history (<Up glyph>): '<a>',
+#' '<b>'`, or `[gptr] not kept (gptr.history is off): ...` (D-242, D-243)
+#' @noRd
+console_keep = function(texts) {
+  if (!length(texts)) return(invisible(NULL))
+  kept = all(vapply(texts, console_history_add, NA))
+  console_notice(if (kept) {
+    paste0("[gptr] kept in history (", console_style()$up, "): ")
+  } else {
+    "[gptr] not kept (gptr.history is off): "
+  }, paste(console_escape(paste0("'", texts, "'"), FALSE), collapse = ", "))
 }
 
 #' Is the last held `!code` line, with the held lines after it, incomplete R code? The next line
@@ -648,7 +656,7 @@ typed_code_open = function(held) {
 #' re-signalled interrupt ends here. A failed call keeps its session (the condition's `$session`,
 #' else a new gptr_last()); a stray run left by an early interrupt is aborted. On a terminal the
 #' call's console_typed() task reads typed lines, with the echo off until the call ends (IC-76);
-#' an interrupt or an aborted run (Ctrl-C at a question) drops the lines it held.
+#' the end of its run settles the lines it held (console_queue_left()).
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
 console_send = function(rs, text) {
@@ -686,12 +694,6 @@ console_send = function(rs, text) {
   }
   if (!is.null(s)) rs$session = s
   if (identical(res$status, "interrupt") && !is.null(rs$session)) console_abort_stray(rs$session)
-  typed = rs$reader$typed
-  if ((identical(res$status, "interrupt") || identical(s$status, "aborted")) && length(typed)) {
-    rs$reader$typed = character()
-    console_notice("[gptr] dropped typed lines: ",
-                   paste(console_escape(paste0("'", typed, "'"), FALSE), collapse = ", "))
-  }
   res
 }
 
@@ -1016,9 +1018,11 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' line when the agent reads it, so it never mixes into the answer.
 #' With `type_ahead = "follow_up"` ([gptr_config()]) each is a follow-up instead: the next
 #' prompt, sent once the answer ends. `/command` and `!code` lines typed then also run at the
-#' next prompt, in the order typed; an interrupt drops them. On the CLI routes a steer reaches
-#' the model after the CLI's current response. The RStudio, Positron and R.app consoles, and
-#' type-ahead at R's own prompt during `peter("...")`, keep typed lines for the next input.
+#' next prompt, in the order typed. A steer the answer did not take is the next prompt too; after
+#' an interrupt or an error nothing queued is sent: it goes to the console history (Up recalls
+#' it). On the CLI routes a steer reaches the model after the CLI's current response. The
+#' RStudio, Positron and R.app consoles, and type-ahead at R's own prompt during `peter("...")`,
+#' keep typed lines for the next input.
 #'
 #' Tab completes R names and file paths after `!` in terminal R, R in an IDE's Terminal tab
 #' included; RStudio's console completes R code at the prompt too; radian and Positron's console

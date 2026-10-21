@@ -133,7 +133,7 @@ working directory restored. Plan-specific rules:
 | `R/agent-run.R`, `R/agent-loop.R` (doc only) | 4, 5 |
 | `R/session-object.R`, `R/ext-events.R` | 5 |
 | `R/agent-dispatch.R` | 6 |
-| `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 17, 26 |
+| `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 26 |
 | `R/auth-oauth.R` (input prompts) | 12 |
 | `R/console-ui.R` | 2, 3, 8, 12, 19 |
 | `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 18, 21, 22, 24, 25, 26 |
@@ -150,6 +150,7 @@ working directory restored. Plan-specific rules:
 | `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11, 12 |
 | `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
+| `tests/testthat/helper-arch.R` (the console's contract edges) | 15 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
 | `dev/spec/03-architecture.md`, `dev/spec/04-interface-contract.md`, `dev/spec/05-plan-decomposition.md`, `dev/DEVIATIONS.md`, `?peter`, vignettes, README | 1, then each task's own sections, 27 |
 | `dev/dogfood/p28-console.R` (new), `dev/progress/P28.md` | 1, 28, every task |
@@ -682,28 +683,40 @@ Commit: `feat(console): a follow-up is sent as the next prompt`.
 ### Task 15: Nothing queued is lost (D-242)
 
 Decisions:
-- At `agent_end` with status idle or `max_turns`, user steers still queued are taken with
-  `session_unqueue()` and become follow-ups for the next prompt. This covers runs that ended
-  first or hit the cap, and items `policy_flush()` held past the run.
-- After an abort or an error, these are not sent:
-  - held follow-ups;
-  - held steers;
-  - steers in the FIFO;
-  - the draft.
-  They are listed once, `[gptr] kept in history (↑): '<a>', '<b>'`, and added to the history in
-  order. Nothing is auto-sent after an abort.
+- At `agent_end` of a foreground run (`console_queue_left()`) with status idle or `max_turns`, user
+  steers still queued are taken with `session_unqueue()` and, with the steers `policy_flush()` still
+  holds for the session, become follow-ups for the next prompt: in the REPL whose prompt runs (not
+  piped) they are appended to the reader's `typed` lines, after the held lines. This covers runs that
+  ended first or hit the cap. Elsewhere they stay queued for the session's next run, and
+  `policy_flush()` never drops an item.
+- After any other end (an abort, an error, a block or the budget), these are not sent:
+  - the user items the abort moved to `dropped` (steers and follow-ups);
+  - user steers still in the FIFO, and the items held while a tool ran;
+  - held follow-ups, with the held `/cmd` and `!code` lines (the REPL's `typed` lines).
+  They are listed once, `[gptr] kept in history (↑): '<a>', '<b>'`, and added to the history in that
+  order (`console_keep()`, which the partial-line notice also uses). Nothing is auto-sent after an
+  abort. Follow-ups in the FIFO (outside the REPL) stay queued after an error.
+- The draft joins this list once the composer holds it (Task 20). Until then gptr holds no draft: a
+  partial line stays in the terminal.
 - The notices `dropped typed lines` and `dropped queued messages` are deleted.
 
 Tests (`test-console-typing.R`, `test-console-interrupt.R`), RED first:
-- An abort keeps the texts in the history mock. Today they are dropped.
+- An abort keeps the texts in the history mock, the dropped steer first, then the held lines, in one
+  notice. Today they are dropped.
+- After an error the queued steer is kept, not sent with the next prompt.
 - A `max_turns` leftover steer is sent as the next prompt, as the user message of run 2.
+- Rewritten: Ctrl-C at an approval keeps the held line, and a steer typed in a tool and then aborted
+  is kept, never sent later.
 
-Spec: 03 §6.2 (abort keeps queued text; the pause menu writes to stdout, fixing the doc drift),
-IC-76.
+Spec: 03 §6.2 (abort keeps queued text; the pause menu writes to stdout, fixing the doc drift) and
+§6.17, IC-76.
 
-Files: `R/console-interrupt.R` (`policy_flush()`, abort path), `R/console-render.R`
-(`console_on_agent_end()`), `R/console-repl.R`, `tests/testthat/test-console-typing.R`,
-`tests/testthat/test-console-interrupt.R`.
+Files: `R/console-interrupt.R` (`policy_flush()`, `policy_abort()`, `console_repl_prompt()`),
+`R/console-render.R` (`console_on_agent_end()`, `console_queue_left()`), `R/console-repl.R`
+(`console_send()`, `console_keep()`, `?peter`), `tests/testthat/test-console-typing.R`,
+`tests/testthat/test-console-interrupt.R`, `tests/testthat/helper-arch.R` (the console's
+`session_unqueue()` edge), the interrupt sentences of `vignettes/interactive-console.Rmd` (and its
+`.orig`). Amended in Task 15.
 
 Commit: `fix(console): queued messages are never dropped`.
 
@@ -865,7 +878,7 @@ Decisions:
 - The pause menu keeps its letters (`[s]teer, [f]ollow-up, [c]ontinue, [a]bort, [b]ackground`).
   It is read with readline at `› ` with the saved modes.
 - [s] and [f] read their text and queue it exactly as Enter and Tab do.
-- The draft is redrawn after the menu.
+- The draft is redrawn after the menu. After [a] it joins Task 15's kept list (`console_keep()`).
 
 Tests (`test-console-typing.R`), RED first: pty G, a partial draft then Ctrl-C [c], keeps the
 draft. Today it is lost.
