@@ -1144,3 +1144,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   within 2 s (none failed at stage startup since 2654a21, in about 300 runs), and the acl case's
   PowerShell readback has 5 s (a 3.20 s PowerShell start and a 5.00 s ACL step were witnessed in a
   duplex case at 3a8315f).
+
+## Task CI-80 - The many-hunks diff bound counts CPU time, not wall time (2026-10-21, #63)
+- The CI-79 job (176a3a2, PR #61, run 39580403671, job 119156456410) also failed "many hunks render
+  in linear time" (`test-tool-diff.R:182`): 11.4 s >= 5. It is the only failure in 205 hosted
+  Windows runs since 2026-10-14 (none in 624 Ubuntu, 100 Ubuntu serial and 101 macOS runs). Hosted
+  Windows otherwise took 1.27 to 1.86 s (11 windows-by-file runs, a fresh R per file); in the failed
+  run the file's other 5 s bounds passed seconds later, the job's step times were normal, and the
+  rerun (job 119173100470) passed.
+- Cause: a runner stall caught by an absolute wall-clock bound. `diff_lines()` is linear (1.97 to
+  2.14 times the time and 2.00 times the allocated bytes per doubling, 25k to 400k lines locally),
+  single-threaded and without children; in-suite and fresh-session times match (0.63 and 0.66 s).
+- Fix (tests only): the bound stays at 5 s but counts the call's CPU time (`user.self + sys.self`),
+  which a stalled runner does not add and superlinear work does; the failure message also names the
+  elapsed time. An allocation-ratio bound was rejected: Rprofmem misses superlinear work without
+  large allocations (a stack pop that scans the whole match vector took 3.25 times as long per
+  doubling at the same 2.00 byte ratio). D-246 records the change from the plan's wall-clock bound.
+- Red: a scratch check mocks a 6 s `Sys.sleep()` (stall) or a 6 s busy loop (slow code) into
+  `diff_ops()`; with the wall-clock bound the stall fails ("Expected elapsed time (CPU 0.83 s) < 5").
+  Green: the stall passes, the busy loop fails ("Expected CPU time (elapsed 6.67 s) < 5"), and the
+  unmocked block passes; `^tool-diff$` PASS 570. Lint clean.
+- Deviations: D-246 (second rule). Open: on Windows a hypervisor pause may still be charged to the
+  process as CPU time; the file's other 5 s wall bounds (`:83`, `:260`, `:268`) had no failures.
