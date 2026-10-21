@@ -3031,3 +3031,79 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: helper-proc-writer-runtime.R `rw_child_case()`; test-proc-writer-idle-boundary.R (now "... a third
   write", also in dev/ci/optional-integrations.R), test-proc-writer-idle-slots.R and test-proc-writer-retirement.R;
   test-tool-diff.R "many hunks render in linear time". Evidence: progress/fixes.md Tasks CI-79, CI-80 and CI-85.
+
+## D-247 - P26 One honest size for every object (2026-10-21)
+- Rule: `env_snap_size(x, home, shared)` (new L0 file `utils-size.R`) is the one size: the workspace snapshot and
+  its `<workspace>` and changes lines, `gptr_describe()` headers (now also of environments, R6 objects, functions,
+  formulas, lm/glm, ggplot and patchwork), the overwrite note and `gptr.protect_size`, `$values`, the value policy
+  and `gptr.values_max_bytes`, `dot_facts()`, `value_ref`, fan-out facts, the `gptr.artifact_max_bytes` gate, and
+  checkpoint images (held bytes, `gptr.undo_max_bytes`; `gptr_checkpoints()` `held_mb` and `disk_mb` count 2^20
+  bytes a megabyte, as the other surfaces, not 1e6; capture plans read the snapshot's sizes against
+  `gptr.undo_capture_max`). It walks attributes (S4 slots, S7 properties), list elements, closure environments and
+  environment bindings (no promise forced, no active binding called) and counts R's allocation of each part once by
+  address and each string once by content: a vector its header and elements at its stored length (`object.size()`;
+  `length()` dispatches: survival's `Surv` reports its rows, `bit::bit()` its bits; a compact sequence its
+  serialized state), an environment 56 bytes a binding, an attribute 56. Not counted: code (a closure's formals,
+  body and srcref, whose srcfile holds a sourced file's lines and parse data; calls and formulas count
+  `object.size()`), top-level environments, the home, the frames of running calls and their enclosures, and the
+  environments of an S7 class copy (`duplicate()` never copies one). S7 stores a deep duplicate of its class in
+  every object (`sys.function()`), so each copy counts; the first copy of a class is walked, later ones count as
+  much. With `shared` (the current value) an image counts only the parts and strings the current value does not
+  reach. A list or environment of more than 64 items walks its first and last items, then the others until they
+  cost 10,000 parts and it has 8 samples (not the item that spent the budget); the rest count as the samples' mean
+  bytes plus their distinct strings over their number; when walking `shared`, the unwalked items are marked seen.
+  Past 100 levels or 100,000 parts a part counts `object.size()`, an environment too, so a chain of thousands of
+  environments cannot overflow the node stack. Replaces D-189's NA sizes (environments, functions, external
+  pointers, compact sequences, S7 objects) and the median rank of unsized values, and the depth-4 `object.size()`
+  checkpoint walk. NA remains only for promises, active bindings and missing arguments.
+- Rule: `env_compact_seq()` (moved to `utils-size.R`) reads nine elements and confirms with `serialize()` (only an
+  unexpanded compact sequence writes its state): `x = 1:1e6; x[5e5] = 0L` was a "(sequence)" with a wrong
+  minimum. The workspace shape drops "(sequence)" and the `gptr_describe()` header "(compact sequence)"; the size
+  (133 B) says it, and the header's check serialized a sequence-like vector a second time.
+- Rule: a bound value is deep-copied when its size is below `gptr.value_copy_max` and its `object.size()` (what
+  `duplicate()` can allocate: every list path, compact sequences written out) below `gptr.values_max_bytes`; the
+  copy is kept when it is a new object holding below `gptr.value_copy_max` of its own (`env_snap_size(copy, home,
+  value)`), else the value is held by name. So an environment, R6 object or external pointer is held by name
+  (formerly "copy", though `duplicate()` returned it as is and the harness found it changed after an edit), as are
+  `seq_len(2e6)` (a copy writes 7.6 MB) and `rep(list(x), 3)`, and `rep(list(x), 1e3)` is never duplicated. The
+  fix branch's rule that a value of unknown size is copied and counts 0 bytes, and its long-sequence exception,
+  are gone; `gptr.value` entries always carry `bytes`.
+- Rule: `gptr.value_copy_max` defaults to 2 MiB (2097152; was 1 MiB). A themed plot with labels, facets or
+  closure scales is 1.00 to 1.02 MB, about 50 KB of it ggplot2's ggproto objects, and its copy 914 to 922 KB, so
+  it is copied like other plots.
+- Rule: snapshot sizes are reused only while the fingerprint holds too, so a list edited in place is re-sized.
+  `describe_binding()` describes with its home on the call stack, so its sizes leave the home out as the
+  snapshot's do (holding the home in package state instead pinned the object: tracemem).
+- Measured (R 4.6.1, ggplot2 4.0.3, S7 0.2.2; fidelity harness, 37 cases at the console and through `peter()`;
+  truth: `lobstr::obj_size()` and the bytes not shared with namespaces; the value mode judged at the build's
+  `gptr.value_copy_max`): defect rows 134 on main, 15 on this branch at the 2 MiB default: 5 are lobstr's own
+  undercount of an ALTREP wrapper's attributes (`vcfR::extract.gt()`; `object.size()` agrees with this rule), 3
+  srcref rows and 5 "serializes differently" rows unrelated to sizes (held deep copies `identical()` to the value:
+  a tibble, two Seurat objects, and `df_big` and a data frame of plots, whose compact `id` column the copy writes
+  out), and 2 environments held by name (this rule). The two themed plots just over 1 MiB (1.02 and 1.00 MB), held
+  by name at 1 MiB, are copied (922 and 914 KB) and survive the edit. A themed plot is 998 KB (unshared 928 KB;
+  `object.size()` 15.8 MB) and is copied; seven themed plots 6.2 MB (6.1 MB; 111 MB), so their edit is undoable
+  again and their overwrite level 2, not 3; every checkpoint image within 1 KB of the truth but a formula's (896 B
+  against 280 B) and a patchwork's (2.5 KB against 0 B); pinfsc50's `@fix` edit 1.3 MB (was 8.7 MB). The judges'
+  stress objects (lists of 7 to 200 plots, plots made in a function whose frame holds 3e4 records, records, JSON,
+  `strsplit()`, `split()`, 2,000 model fits, `rep(list(x), 6e4)`, a long list ending in a 76 MB vector, an
+  environment of 1e5 bindings, a 3,000-deep list) size within 0.6x to 1.2x of `lobstr::obj_size()`
+  (`object.size()`: up to 8,000x) in at most 0.3 s, their checkpoint images within 1.3x in at most 0.6 s; a
+  deferred string vector (`as.character(1:1e6)`, an lm's names) is materialised by sizing, as by `object.size()`,
+  and then counted in full.
+- Measured per call: a themed plot 25 ms, seven 28 ms, pinfsc50 17 ms, the pbmc_small pipeline 2 ms, a 1e6-row
+  data frame 5 ms, a 1e7 double 0 ms, a 1e5-element list 38 to 46 ms (its checkpoint form 320 ms), a 1e6-element
+  named vector 0.2 s (`object.size()` reads its names twice); a workspace of these six: first snapshot 107 ms,
+  later ones 7 ms.
+- Left as is: sizes are per object (strings and environments two bindings share count in both); package objects a
+  user object reaches directly count (ggproto objects: about 50 KB a plot); code is not counted; memory behind
+  external pointers is not seen; a deferred string vector is materialised when sized, as by `object.size()`; past
+  the budget a list's tail is an estimate, and past 100 levels an environment counts 56 bytes; a bare
+  `gptr_describe(x)` outside a run counts a non-global home its closures reach; an environment changed in place
+  keeps its size until its shape changes; a held copy can exceed the value's size where `duplicate()` writes out a
+  compact sequence (`df_big`: 1.9 MB held for 1.5 MB), up to `gptr.value_copy_max`.
+- Contract-visible: 03 §3.2 (`utils-size.R`), §5.1 value policy (2 MiB), §6.4 R4, §7.5; 04 §3.1
+  `gptr.value_copy_max` (`2097152`), §6.6 `gptr_return()` and `gptr_risk()`, §7.8 `dot_facts()`, §7.9
+  `env_snapshot()` and `workspace_lines()`; `?gptr_options`, `?gptr_risk`, `?gptr_artifacts`, `?gptr_rewind`.
+- Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture, session-object (a
+  ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence: progress/fixes.md Task FIX-13.
