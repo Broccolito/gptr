@@ -1397,3 +1397,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   unmocked block passes; `^tool-diff$` PASS 570. Lint clean.
 - Deviations: D-246 (second rule). Open: on Windows a hypervisor pause may still be charged to the
   process as CPU time; the file's other 5 s wall bounds (`:83`, `:260`, `:268`) had no failures.
+
+## Task CI-83 - The observer retry test's mixed sequence stays inside the retry deadline (2026-10-21, #65)
+- main 7cfd543 (PR #61 merged) failed macos-latest (release) in run 39617294607:
+  "backpressure observation retries fixed transient observer reasons for one deadline"
+  (`test-proc-backpressure-sampling.R:686-688`) ended its eighth transient as the error, with 8 calls
+  and 7 retries instead of 9 and 8.
+- Cause: CI-78 added two reasons to the "repeated transients in any order" case, so it chained 8
+  failures. `bp_observe()` sleeps 0.1 s per retry and stops retrying 1 s after the first failure;
+  eight in a row need at least 0.7 s of sleep plus each call's time, and a slow runner crossed 1 s.
+  The code is right; the test needed the margin.
+- Fix (tests only): the mixed sequence uses four reasons in a new order (8, 1, 7, 2); each of the
+  eight reasons is still retried and checked on its own above it. No bound changes.
+- Red: a scratch copy whose fake observer takes 50 ms per call; the old block fails 3 expectations
+  exactly as on macOS, the new one none. Green: `^proc-backpressure-sampling$` PASS 569. Lint clean.
+- Deviations: none.
