@@ -52,8 +52,11 @@ test_that("Authors@R credits the maintainer and contributors; COPYRIGHTS credits
   authors = eval(parse(text = desc_fields()[["Authors@R"]]))
   families = unlist(authors$family)
   roles = authors$role
-  expect_setequal(families, c("Gu", "Zhu", "Bellucci"))
+  expect_identical(families, c("Gu", "Zhu", "Bellucci"))
   expect_setequal(roles[[which(families == "Gu")]], c("aut", "cre", "cph"))
+  expect_identical(authors[[3L]]$comment[["ORCID"]], "0000-0002-2635-1699")
+  expect_identical(unlist(authors$email),
+                   c("wanjun.gu@ucsf.edu", "tianluz2013@gmail.com", "Gianmarco.Bellucci@ucsf.edu"))
   expect_identical(unname(desc_fields()[["Copyright"]]), "file inst/COPYRIGHTS")
   path = source_file(file.path("inst", "COPYRIGHTS"))
   if (is.null(path)) path = system.file("COPYRIGHTS", package = "gptr")

@@ -2912,8 +2912,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: `Authors@R` lists the maintainer and the contributors Tianlu Zhu (UI/UX polishing and CI/CD) and
   Gianmarco Bellucci (testing). Mario Zechner, whose pi agent inspired gptr and whose MIT-licensed text
   gptr's tool descriptions and templates derive from, is credited in `inst/COPYRIGHTS` (through
-  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are), in the README acknowledgements
-  and on the site's Authors page, instead of as `ctb, cph` (amends cran-4 in spec 06).
+  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are) and in the README
+  acknowledgements on the site's home page, instead of as `ctb, cph` (amends cran-4 in spec 06). The site's
+  Authors page lists only these three people, each linked to the email in `Authors@R`; Gianmarco Bellucci's
+  entry carries his ORCID (2026-10-20).
 - Tests: test-zzz.R (IC-72), dev/release/tests/test-pkgdown.R.
 
 ## D-237 - License: the Apache License 2.0 replaces MIT (2026-10-20)
