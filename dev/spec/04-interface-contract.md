@@ -4625,6 +4625,7 @@ working: <text>`. `extension` items are user-role data `Extension <name> sent th
 <text>`; `agent` items are delivered as `<agent_report from="<name>">...</agent_report>` user-role data, never
 as steers. `ctx$send()` and `gptr_steer()` called from model-evaluated code of the same session tree are refused
 with `gptr_error_permission`. Test: a child agent's text never appears in an operator message.
+P28 amends this item in §15.10 (D-242): a step boundary delivers every queued steer, each as its own message.
 
 **IC-56 Pending-plan hand-off.** (safe-19) The plan is handed only to the **next** `peter()` call of the same R
 process and environment within one hour, and only when that call is top-level (not nested, not in a run, not in
@@ -5298,6 +5299,10 @@ totals line names the model and the context left.
 Written by `dev/plan/P28-console-codex.md`; these items win over earlier sections. Pending: each P28 task writes
 its part in its own commit, and Task 27 finalises them.
 
+- IC-55 amended (D-242; P28 Task 4): each poll of the steer FIFO (run start, after `turn_end`) takes every queued
+  steer, in order, and `queue_item_message()` makes each its own message, so a step boundary delivers them all to
+  the next request: consecutive operator relays after the complete tool results, which every adapter serialises
+  as it does any run of operator messages. Follow-ups are still taken one at a time.
 - IC-75 amended (D-243; P28 Task 3): a stale line is kept, never discarded, and no answer is ever turned into a
   steer.
   - `readline_answer(prompt, keep)` hands each line it reads past (not blank) to `keep`. The console questions

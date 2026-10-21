@@ -3012,7 +3012,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Amends D-185 and D-205 (their wording) and replaces IC-76's "follow-up ... is sent when the agent would stop"
   and any text that treats steering as end-of-run delivery.
 - Contract-visible: IC-76 and IC-55 through 04 section 15.10; 03 section 6.2.
-- Tests: pending (P28 Tasks 4, 7, 13, 14, 15).
+- Task 4: `run_take(run, "steer")` takes the whole steer FIFO, each item its own message; follow-ups are still
+  taken one at a time. This replaces P06's adaptation of report 02's oracles L11-L13 ("gptr has no 'all' mode"):
+  steers now arrive as in Pi's `all` mode, and `loop.json` and their tests say so. Tests: test-agent-run.R "every
+  steer queued during a tool call reaches the next request, in order (D-242)", "a steer sent during a final
+  answer adds one request to the same run (D-242)", "a steer sent during the first of two calls waits for both
+  results; no call is skipped"; test-provider-transform.R "two relays after the tool results serialise in each
+  native adapter (D-242)"; test-agent-loop.R L11-L13. Pending: Tasks 7, 13, 14, 15.
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

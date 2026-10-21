@@ -919,8 +919,8 @@ run_input = function(input) {
              expected = "a message from msg_user() or a list of messages")
 }
 
-#' Without input: the first queued item (steers first) opens the turn; with an empty queue the run
-#' continues from the leaf when the path awaits a response, else there is nothing to run
+#' Without input: the queued steers, else the first follow-up, open the turn; with an empty queue
+#' the run continues from the leaf when the path awaits a response, else there is nothing to run
 #' @noRd
 run_initial_input = function(run, input) {
   if (!is.null(input)) return(input)
@@ -1045,18 +1045,19 @@ run_step = function(run) {
 #' @noRd
 run_halted = function(run) isTRUE(run$settled) || isTRUE(run$signal$aborted)
 
-#' Take one queued item and turn it into a message (IC-55); steers become relays once the run has
-#' made a request
+#' Take every queued steer, or the first follow-up, and turn each into a message (IC-55, D-242);
+#' steers become relays once the run has made a request
 #' @noRd
 run_take = function(run, which) {
   d = session_data(run$shell)
   q = d$queue
-  if (!length(q[[which]])) return(list())
-  item = q[[which]][[1L]]
-  q[[which]] = q[[which]][-1L]
+  n = if (identical(which, "steer")) length(q$steer) else min(1L, length(q$follow_up))
+  if (!n) return(list())
+  items = q[[which]][seq_len(n)]
+  q[[which]] = q[[which]][-seq_len(n)]
   d$queue = q
   run_emit(run, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
-  list(queue_item_message(item, which, relay = isTRUE(run$requested)))
+  lapply(items, queue_item_message, which, relay = isTRUE(run$requested))
 }
 
 #' The loop's finish_turn hook: a blocked gate or an abort ends the run

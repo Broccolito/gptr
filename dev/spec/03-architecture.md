@@ -1211,13 +1211,15 @@ which drop out at settlement; run state lives in sessions (INFRA-15). Nested run
 running session (gateway route f), the console pause menu, a line typed in a terminal console while an answer
 runs [IC-76], `gptr_steer()` (SDK and front ends), `ctx$send()`
 (plugins, hooks and sibling agents). Consumer: the loop polls at run start, after `turn_end` and after tool
-preflight; a steer is delivered only after the **complete** tool-result message. Only user sources (the pipe, the
-pause menu, the REPL, `gptr_steer()` called outside a run) become the operator relay "The user sent this message
-while you were working: <text>"; `ctx$send()` from a plugin becomes user-role data "Extension <name> sent this note
-(not from the user): <text>", sibling and child agents' text arrives as `<agent_report>` data, and a send from
-model code of the same session tree is refused [IC-55]. Follow-ups are taken one at a time when the agent would
-otherwise stop. Abort moves the queue to `dropped`. Enqueueing returns immediately. There is no file-inbox
-channel in core (J-cran K-16); a front end that needs one is a plugin calling `gptr_steer()`.
+preflight; each poll takes every queued steer, in order, each its own message, so a step boundary delivers them
+all to the next request [D-242]; a steer is delivered only after the **complete** tool-result message. Only user
+sources (the pipe, the pause menu, the REPL, `gptr_steer()` called outside a run) become the operator relay "The
+user sent this message while you were working: <text>"; `ctx$send()` from a plugin becomes user-role data
+"Extension <name> sent this note (not from the user): <text>", sibling and child agents' text arrives as
+`<agent_report>` data, and a send from model code of the same session tree is refused [IC-55]. Follow-ups are
+taken one at a time when the agent would otherwise stop. Abort moves the queue to `dropped`. Enqueueing returns
+immediately. There is no file-inbox channel in core (J-cran K-16); a front end that needs one is a plugin calling
+`gptr_steer()`.
 
 **Interrupt policy** [18 §4.6, 02 §5.4, G3 (5)]. Runs execute inside
 `tryCatch(withCallingHandlers(<run>, interrupt = pause_menu), interrupt = abort_run)`. The pause menu uses R's

@@ -145,7 +145,7 @@ working directory restored. Plan-specific rules:
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
 | `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*}.R` | their tasks |
 | `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19 |
-| `tests/testthat/test-agent-{run,dispatch}.R`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
+| `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
 | `dev/spec/03-architecture.md`, `dev/spec/04-interface-contract.md`, `dev/spec/05-plan-decomposition.md`, `dev/DEVIATIONS.md`, `?peter`, vignettes, README | 1, then each task's own sections, 27 |
 | `dev/dogfood/p28-console.R` (new), `dev/progress/P28.md` | 1, 28, every task |
@@ -274,10 +274,15 @@ Pinning tests (green before and after):
 - Two consecutive relays after tool results serialise in the anthropic, openai-completions,
   openai-responses and bedrock fakes.
 
+Rewritten (amended in Task 4): report 02's oracles L11-L13 (`test-agent-loop.R`, `loop.json`) pinned
+one steer per request ("gptr has no 'all' mode"). They now expect both steers in REQ2, as in Pi's
+`all` mode, and the follow-up in REQ3.
+
 Spec: 03 §6.2 (all steers at a boundary), 04 IC-55 note.
 
 Files: `R/agent-run.R` (`run_take()`), `R/agent-loop.R` (doc), `tests/testthat/test-agent-run.R`,
-`tests/testthat/test-provider-transform.R`.
+`tests/testthat/test-provider-transform.R`, `tests/testthat/test-agent-loop.R`,
+`tests/testthat/fixtures/oracles/report02/loop.json`.
 
 Commit: `fix(agent): every queued steer reaches the next step boundary`.
 
