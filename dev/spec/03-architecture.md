@@ -1950,9 +1950,10 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   collapse; `NO_COLOR` removes colours and styles only. Rscript (verbosity 1), knitr, jsonl and
   tests (verbosity 0) and non-dynamic outputs (pipes, Jupyter) keep the plain layout (no margin,
   block gaps, table alignment or notice wrapping). Styling adds
-  italics within one token (`*x*`; an unmatched `*` prints), dim link URLs, quotes and rules, bold headings (H1 underlined); R lines
-  that parse are highlighted by `cli::code_highlight()`, other R lines and known languages by a
-  light highlighter (strings, numbers, comments). The console UI itself ends partial lines and
+  italics within one token (`*x*`; an unmatched `*` prints), dim link URLs, quotes and rules, bold headings (H1 underlined); R
+  that parses is highlighted by `cli::code_highlight()` in the user's `cli.code_theme`, else in the style table's
+  R theme (reserved words red; strings, numbers and constants blue; calls bold; comments dim) [IC-82, D-245];
+  other R and other languages are shown as written. The console UI itself ends partial lines and
   clears waiting rows, keeping their task, before it prompts (D-186).
   Fenced code stays Markdown in every mode: fence lines as written (dim when styled), the body
   verbatim, unwrapped and de-indented by the opener's indentation (CommonMark: a fence indented

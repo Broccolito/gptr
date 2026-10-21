@@ -3107,3 +3107,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   may not show (D-245)", "console_style() gives the logo accents by depth and the band by background (D-245)",
   "the background comes from COLORFGBG's last field, read once (D-245)", "NO_COLOR keeps the glyphs and drops
   every SGR (D-245)", "no U+25CF dot and no Braille spinner anywhere in R/ (D-245)".
+- Task 9: R code is highlighted in the logo palette. The style table gains the R code theme (`code`): reserved
+  words red; strings, numbers and constants blue; calls bold; comments dim; operators and brackets in ink.
+  `console_code()` highlights R in answer fences and tool calls above 1 colour with
+  `cli::code_highlight(code, getOption("cli.code_theme") %||% console_style()$code)`, so a user's theme wins.
+  `code_light()`, the Solarized highlighter of other languages and of R lines that do not parse, is deleted;
+  those are shown as written. Visible now: at 256 colours `function` is `38;5;167` and strings `38;5;67`, not
+  cli's default theme (Solarized Dark in a terminal, the editor theme in RStudio); operators and brackets are no
+  longer coloured; python, json and other fences show their body in ink between dim fences. The plan named a separate `gptr_code_theme()`; cli takes a theme as
+  colour names, so it would have repeated the depth rule and the two hex values (plan amended). Contract-visible:
+  04 §15.10 IC-82, 03 §6.17. Tests: test-console-render.R "R code is highlighted in the logo palette and other
+  code is plain (D-245)".

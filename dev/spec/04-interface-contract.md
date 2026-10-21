@@ -5341,7 +5341,7 @@ its part in its own commit, and Task 27 finalises them.
     console questions only; its stale lines go to the history (IC-75).
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26): pending.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
-- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Tasks 9, 11, 17 and 25 pending.
+- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Tasks 11, 17 and 25 pending.
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
     every console glyph comes from it. The glyphs come from the logo's cursor shapes: the person's chevron, a tool
     call's thin strip, the agent's block. ASCII applies where `cli::is_utf8_output()` is FALSE, and in Windows
@@ -5378,3 +5378,9 @@ its part in its own commit, and Task 27 finalises them.
     keeps the glyphs and drops every SGR. The background (`console_background()`) is read once into
     `the$background`: `"dark"` or `"light"` from the last field of `COLORFGBG` (0-6 or 8 dark, 7 or 9-15 light),
     else NA, and an unknown background has no band. Task 25 adds the terminal probe.
+  - R code (Task 9): R in answer fences and in tool calls is highlighted by `console_code()` above 1 colour only,
+    with `cli::code_highlight(code, getOption("cli.code_theme") %||% console_style()$code)`, so a user's
+    `cli.code_theme` wins. The style table's theme (`code`) is in the accents: reserved words and `function` red;
+    strings, numbers and constants (`TRUE`, `NA`, `NULL`) blue; calls bold; comments dim; operators, brackets and
+    symbols in ink. At 256 colours `function` is `38;5;167` and `"s"` `38;5;67`; at 16 colours `31` and `34`. R
+    that does not parse and every other language are shown as written, between dim fences.

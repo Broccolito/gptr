@@ -65,7 +65,7 @@ test_that("the output does not depend on chunking in the four console modes (acc
   skip_on_cran()
   withr::local_seed(42)
   # highlighting decides per complete line; cli's parser is slow for 800 renders
-  local_mocked_bindings(code_highlight = function(code) code, .package = "cli")
+  local_mocked_bindings(code_highlight = function(code, ...) code, .package = "cli")
   for (dynamic in c(FALSE, TRUE)) {
     for (colours in c(1L, 256L)) {
       withr::local_options(cli.num_colors = colours, cli.dynamic = dynamic, gptr.verbose = 2L)
@@ -216,24 +216,41 @@ test_that("italics, link URLs, quotes, rules and headings are styled only with c
   }
 })
 
-test_that("complete R lines use cli's highlighter and other code a light one (D-186)", {
+test_that("R code is highlighted in the logo palette and other code is plain (D-245)", {
   skip_on_cran()
-  withr::local_options(cli.num_colors = 256L, cli.dynamic = FALSE)
-  whole = "x = f(1, 'a')"
-  expect_false(identical(as.character(cli::code_highlight(whole)), whole))
-  for (lang in c("r", "R", "{r, echo=FALSE}", "r title")) {
-    out = render_chunks(paste0("```", lang, "\n", whole, "\np = g('b',\n```"), 80L)
-    expect_match(out[[2L]], cli::code_highlight(whole), fixed = TRUE)
-    expect_match(out[[3L]], code_light("p = g('b',", "r"), fixed = TRUE)
-    expect_match(out[[3L]], "\033\\[[0-9;]+m'b'")
+  withr::local_options(cli.dynamic = FALSE)
+  code = c("f = function(x) if (x) \"s\" else NULL  # c", "y = mean(1L, na.rm = TRUE)")
+  # reserved words red; strings, numbers and constants blue; calls bold; comments dim; the rest ink
+  lit = function(red, blue) {
+    r = function(x) paste0("\033[", red, "m", x, "\033[39m")
+    b = function(x) paste0("\033[", blue, "m", x, "\033[39m")
+    c(paste0("f = ", r("function"), "(x) ", r("if"), " (x) ", b("\"s\""), " ", r("else"), " ",
+             b("NULL"), "  \033[2m# c\033[22m"),
+      paste0("y = \033[1mmean\033[22m(", b("1L"), ", na.rm = ", b("TRUE"), ")"))
   }
-  py = render_chunks("```python\nx = 'a'  # c 1\n```", 80L)[[2L]]
-  expect_match(py, "\033\\[[0-9;]+m'a'")
-  expect_match(py, "\033\\[[0-9;]+m# c 1")
-  expect_identical(cli::ansi_strip(py), "x = 'a'  # c 1")
-  expect_match(render_chunks("```json\n{\"a\": 1}\n```", 80L)[[2L]],
-               "\033\\[[0-9;]+m\"a\".*\033\\[[0-9;]+m1")
-  expect_identical(render_chunks("```text\n'a' 1\n```", 80L)[[2L]], "'a' 1")
+  want = list(`16777216` = lit("38;2;184;84;80", "38;2;85;126;168"),
+              `256` = lit("38;5;167", "38;5;67"), `16` = lit("31", "34"), `1` = code)
+  for (n in names(want)) {
+    withr::local_options(cli.num_colors = as.integer(n))
+    for (lang in c("r", "R", "{r, echo=FALSE}", "r title")) {
+      out = render_chunks(paste0("```", lang, "\n", paste(code, collapse = "\n"), "\n```"), 80L)
+      expect_identical(out[2:3], want[[n]], info = paste(n, lang))
+    }
+    expect_identical(console_call_line(list(name = "r", input = list(code = code)), 80L)[3:4],
+                     want[[n]], info = n)
+  }
+  withr::local_options(cli.num_colors = 256L)
+  # R that does not parse and other languages: ink between dim fences
+  expect_identical(render_chunks("```r\np = g('b',\n```", 80L)[[2L]], "p = g('b',")
+  for (lang in c("python", "json", "text", "")) {
+    expect_identical(render_chunks(paste0("```", lang, "\nx = 'a'  # c 1\n```"), 80L),
+                     c(paste0("\033[2m```", lang, "\033[22m"), "x = 'a'  # c 1",
+                       "\033[2m```\033[22m"), info = lang)
+  }
+  # a user's cli.code_theme wins
+  withr::local_options(cli.code_theme = list(reserved = "#00ff00"))
+  expect_identical(render_chunks("```r\nfunction(x) 's'\n```", 80L)[[2L]],
+                   "\033[38;5;46mfunction\033[39m(x) 's'")
 })
 
 test_that("fenced lines stream as they arrive and a line that fits is redrawn (D-187)", {
@@ -262,8 +279,7 @@ test_that("fenced lines stream as they arrive and a line that fits is redrawn (D
     if (colours == 1L) {
       expect_false(grepl("\r", bytes, fixed = TRUE))
     } else {
-      expect_match(bytes, paste0("x = mean(y)\r  ", cli::code_highlight("x = mean(y)"), "\n"),
-                   fixed = TRUE)
+      expect_match(bytes, "x = mean(y)\r  x = \033[1mmean\033[22m(y)\n", fixed = TRUE)
     }
   }
 })

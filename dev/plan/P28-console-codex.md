@@ -419,30 +419,33 @@ Commit: `feat(console): one style table from the logo's cursor vocabulary`.
 ### Task 9: R code in the logo palette; other code plain (D-245)
 
 Decisions:
-- `gptr_code_theme()` maps:
+- The style table's `code` entry (`console_style()$code`, Task 8) is the R code theme. It maps:
   - reserved words and `function`: red;
   - strings, numbers and constants: blue;
   - calls: `"bold"`;
   - comments: `"dim"`;
   - operators and brackets: ink.
-  Red and blue are chosen by depth, as in Task 8.
-- R in tool calls and in answer fences is highlighted with
-  `cli::code_highlight(code, code_theme = getOption("cli.code_theme") %||% gptr_code_theme())`, so
-  a user's theme wins.
+  Red and blue are chosen by depth, as in Task 8. (Amended in Task 9: an entry of the style table,
+  not a separate `gptr_code_theme()`. cli takes a theme as colour names, so a separate function
+  would repeat the depth rule and the two hex values.)
+- R in tool calls and in answer fences is highlighted by `console_code()` with
+  `cli::code_highlight(code, code_theme = getOption("cli.code_theme") %||% console_style()$code)`,
+  so a user's theme wins.
 - Highlighting runs only when `cli::num_ansi_colors() > 1`. Code that does not parse is shown
   plain.
 - `code_light()` (Solarized) is deleted. Other languages are shown in ink with dim fences.
 
 Tests (`test-console-render.R`), RED first:
-- An r fence at 256 colours holds `38;5;167` on `function` and `38;5;67` on `"s"`; at 16 colours,
-  `31` and `34`.
+- An r fence and an r tool call's fence at 256 colours hold `38;5;167` on `function` and `38;5;67`
+  on `"s"`; at 16 colours, `31` and `34`.
 - A python fence holds no SGR.
 - A user `cli.code_theme` wins.
 
 Spec: IC-82, 03 §6.17.
 
-Files: `R/console-render.R` (`gptr_code_theme()`, `code_light()` deleted),
-`tests/testthat/test-console-render.R`.
+Files: `R/console-render.R` (`console_style()$code`, `console_code()`, `code_light()` deleted),
+`tests/testthat/test-console-render.R`, `tests/testthat/test-console-fences.R` (its
+`code_highlight` mock takes the theme).
 
 Commit: `feat(console): R code highlighted in the logo palette`.
 

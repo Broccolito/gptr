@@ -3,7 +3,7 @@ fence_test_format = function(colours = 256L, width = 80L, .env = parent.frame())
   withr::local_options(cli.num_colors = colours, cli.width = width, cli.dynamic = FALSE,
     .local_envir = .env)
   testthat::local_mocked_bindings(is_utf8_output = function() FALSE,
-    code_highlight = function(code) code, .package = "cli", .env = .env)
+    code_highlight = function(code, ...) code, .package = "cli", .env = .env)
 }
 
 fence_capture = function(chunks, colours = 256L, width = 80L) {

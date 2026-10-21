@@ -7,9 +7,9 @@
 #' The console's style table (IC-82, D-245): the glyphs of the logo's cursor vocabulary (the
 #' person's chevron, a tool call's thin strip, the agent's block), the logo's red and a darker
 #' logo blue (basic red and blue below 256 colours; cli drops them at 1 colour, `NO_COLOR`), dim,
-#' and the input band where the background is known and 256 colours show it. ASCII where the
-#' output is not UTF-8 and in Windows consoles outside Windows Terminal and RStudio (Rgui among
-#' them), whose fonts lack U+258E and U+21B3 (WGL4).
+#' the input band where the background is known and 256 colours show it, and the R code theme
+#' in those accents. ASCII where the output is not UTF-8 and in Windows consoles outside Windows
+#' Terminal and RStudio (Rgui among them), whose fonts lack U+258E and U+21B3 (WGL4).
 #' @noRd
 console_style = function() {
   ascii = !cli::is_utf8_output() ||
@@ -22,13 +22,17 @@ console_style = function() {
          bullet = "\u2022", nested = "\u25e6", sep = " \u00b7 ", ellipsis = "\u2026")
   }
   deep = cli::num_ansi_colors() >= 256L
+  red = if (deep) "#b85450" else "red"
+  blue = if (deep) "#557ea8" else "blue"
   bands = c(dark = "\033[48;5;237m", light = "\033[48;5;254m")
   bg = console_background()
   c(glyphs, list(
-    red = cli::make_ansi_style(if (deep) "#b85450" else "red"),
-    blue = cli::make_ansi_style(if (deep) "#557ea8" else "blue"),
+    red = cli::make_ansi_style(red),
+    blue = cli::make_ansi_style(blue),
     dim = cli::style_dim,
-    band = if (deep && !is.na(bg)) bands[[bg]] else ""
+    band = if (deep && !is.na(bg)) bands[[bg]] else "",
+    code = list(reserved = red, string = blue, number = blue, null = blue, call = "bold",
+                comment = "dim")
   ))
 }
 
@@ -350,8 +354,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
         } else if (opening || closing) {
           fence_marker(line)
         } else {
-          code = style && nzchar(trimws(line))
-          fence_end(line, if (code) console_code(line, st$fence_lang) else line)
+          fence_end(line, console_code(line, st$fence_lang))
         }
         st$col = 0L
         st$ws = 0L
@@ -441,33 +444,13 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   r
 }
 
-#' Highlight complete code lines: R through `cli::code_highlight()` (the user's code theme),
-#' R that does not parse alone and other languages through code_light()
+#' Code lines as shown: R highlighted where colours show, in the user's `cli.code_theme` or else
+#' the style table's (IC-82); R that does not parse and other languages as written
 #' @noRd
 console_code = function(lines, lang) {
-  if (!grepl("^\\{?[rR]([ ,}]|$)", lang)) return(code_light(lines, lang))
-  tryCatch(as.character(cli::code_highlight(lines)),
-           cli_parse_failure = function(e) code_light(lines, "r"), error = function(e) lines)
-}
-
-#' Strings, numbers and end-of-line comments of a known language in the colours of cli's
-#' default code theme (Solarized, readable on dark and light backgrounds); others verbatim
-#' @noRd
-code_light = function(lines, lang) {
-  com = switch(tolower(lang), r = , python = , py = , bash = , sh = , shell = , zsh = , yaml = ,
-               yml = , toml = , ruby = , perl = , make = , dockerfile = "#", js = ,
-               javascript = , ts = , typescript = , c = , cpp = , java = , go = , rust = ,
-               swift = , kotlin = , scala = "//", sql = , lua = , haskell = "--", json = "", NULL)
-  if (is.null(com)) return(lines)
-  pat = paste0("\"(\\\\.|[^\"\\\\])*\"|'(\\\\.|[^'\\\\])*'|\\b[0-9]+(\\.[0-9]+)?\\b",
-               if (nzchar(com)) paste0("|", com, ".*$"))
-  m = gregexpr(pat, lines, perl = TRUE)
-  regmatches(lines, m) = lapply(regmatches(lines, m), function(tok) {
-    col = ifelse(nzchar(com) & startsWith(tok, com), "#657B83",
-                 ifelse(grepl("^[\"']", tok), "#2AA198", "#D33682"))
-    vapply(seq_along(tok), function(i) cli::make_ansi_style(col[[i]])(tok[[i]]), "")
-  })
-  lines
+  if (cli::num_ansi_colors() < 2L || !grepl("^\\{?[rR]([ ,}]|$)", lang)) return(lines)
+  theme = getOption("cli.code_theme") %||% console_style()$code
+  tryCatch(as.character(cli::code_highlight(lines, theme)), error = function(e) lines)
 }
 
 #' Print a complete text through the markdown renderer (one shot)
