@@ -673,7 +673,8 @@ test_that("backpressure observation retries fixed transient observer reasons for
   second = observer_error("observer-byte-limit")
   transient = c("observer-metadata-invalid", "observer-snapshot-deadline",
                 "observer-initial-deadline", "observer-parent-entry-absent",
-                "observer-link-entry-absent", "observer-entry-disappearance-uncertain")
+                "observer-link-entry-absent", "observer-entry-disappearance-uncertain",
+                "observer-parent-enumeration-unavailable", "observer-directory-unreadable")
   for (reason in transient) {
     expect_identical(observe(list(observer_error(reason))), sample)
     expect_identical(seen$calls, 2L)
@@ -683,7 +684,7 @@ test_that("backpressure observation retries fixed transient observer reasons for
   }
   # Repeated transients that clear within the deadline, in any order, complete the sample.
   expect_identical(observe(lapply(transient, observer_error)), sample)
-  expect_identical(seen$calls, 7L)
+  expect_identical(seen$calls, 9L)
   expect_identical(seen$retried, transient)
   expect_identical(observe(c(lapply(transient[1:2], observer_error), list(second))), second)
   expect_identical(seen$calls, 3L)
