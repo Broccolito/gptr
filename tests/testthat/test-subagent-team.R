@@ -584,7 +584,8 @@ test_that("sub-agent prompts name the asker and reach only the console (D-188)",
   })
   expect_identical(s$text, "parent done")
   for (k in c("a", "b")) {
-    expect_true(paste0("  sub-agent ", k, " > r  cm = 1; pp = 2; cm + pp") %in% out)
+    at = grep(paste0("^  \\? sub-agent ", k, ": allow r\\?"), out)
+    expect_identical(out[at - 1L], "  | r  cm = 1; pp = 2; cm + pp")
     expect_true(paste0("  # sub-agent ", k, " (fake/fake-1) started") %in% out)
   }
   done = grep("^  # sub-agent [ab] done \\([12]/2\\) . [0-9]+ turns? . [0-9]+ s$", out,
@@ -595,7 +596,7 @@ test_that("sub-agent prompts name the asker and reach only the console (D-188)",
     identical(x$type, "message") && identical(x$message$role, "tool_result")
   }, session_data(s)$entries)
   text = msg_text(res[[1L]]$message)
-  for (bit in c("cm = 1", "sub-agent", "[1] 3", "allow?")) {
+  for (bit in c("cm = 1", "sub-agent", "[1] 3", "allow r?")) {
     expect_false(grepl(bit, text, fixed = TRUE), info = bit)
   }
   expect_false(any(c("cm", "pp") %in% ls(e)))

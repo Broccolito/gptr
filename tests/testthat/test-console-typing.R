@@ -184,7 +184,7 @@ test_that("a line typed during a tool steers when the next call's question follo
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("use base R instead"))
   # routed before the question is drawn
   expect_lt(grep("[gptr] steering: 'use base R instead'", out, fixed = TRUE),
-            match("  r  zz = 2", out))
+            grep("? Allow r?", out, fixed = TRUE))
 })
 
 test_that("/commands and !code typed during a run run after the answer; text still steers", {
@@ -274,7 +274,7 @@ test_that("Ctrl-C at an approval prompt aborts the run and drops the held lines"
   asks = 0L
   local_mocked_bindings(readline_answer = function(prompt, ...) {
     asks <<- asks + 1L
-    if (startsWith(prompt, "  allow?")) {
+    if (identical(prompt, "> ")) {
       signalCondition(structure(class = c("interrupt", "condition"),
                                 list(message = "", call = NULL)))
     }
@@ -498,7 +498,7 @@ test_that("a terminal: typed text shows once, in its notice; questions and the n
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("steer me\r")
-  expect_true(pty$wait("allow?"))
+  expect_true(pty$wait("Allow r?"))
   pty$pending()
   pty$send("y\r")
   expect_true(pty$wait("STEERED"))
@@ -511,7 +511,8 @@ test_that("a terminal: typed text shows once, in its notice; questions and the n
   expect_identical(pty$seen("steer me"), 1L)
   expect_identical(pty$seen("[gptr] steering: 'steer me'"), 1L)
   # the answer to approve and the next prompt are shown: readline echoes with the modes restored
-  expect_identical(c(pty$seen("[?]: y"), pty$seen("peter> TWO")), c(1L, 1L))
+  expect_identical(c(pty$seen(paste0("? more\r", pty_asked(), "y")), pty$seen("peter> TWO")),
+                   c(1L, 1L))
   # the screen's rows (escapes dropped, a row redrawn after "\r" kept as redrawn) without the
   # notice: the streamed answer reads as the undisturbed one of the second prompt
   rows = strsplit(gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$all), "\n", fixed = TRUE)[[1L]]
@@ -560,7 +561,7 @@ test_that("a question drains fd 0 first: lines steer, a partial line is kept in 
     reqs = fake_requests(fake)
     expect_length(reqs, 2L)
     expect_identical(msg_text(last_message(reqs[[2L]])), relay("steer me"))
-    expect_lt(grep(notice[[k]], out, fixed = TRUE), match("  r  zz = 2", out))
+    expect_lt(grep(notice[[k]], out, fixed = TRUE), grep("? Allow r?", out, fixed = TRUE))
     # the drain's modes are restored before the question reads
     expect_identical(tty$log, c("-g", "-echo", "-g", drain, "SAVED", "SAVED"))
   }
@@ -592,8 +593,8 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   pty$send("use base R")
   expect_true(pty$wait("[gptr] kept in history ("))
   expect_true(pty$wait("): 'use base R'"))
-  expect_true(pty$wait("allow? "))
-  expect_true(endsWith(pty$pending(), "[?]: "))
+  expect_true(pty$wait("Allow r?"))
+  expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
   expect_true(pty$wait("REQ tool_result: "))
   expect_true(pty$wait("peter> "))
@@ -605,8 +606,8 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   pty$send("C\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("no wait, plot it first")
-  expect_true(pty$wait("allow? "))
-  expect_true(endsWith(pty$pending(), "[?]: "))
+  expect_true(pty$wait("Allow r?"))
+  expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
   expect_true(pty$wait("REQ tool_result: "))
   expect_true(pty$wait("peter> "))
@@ -614,8 +615,8 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   pty$send("H\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
-  expect_true(pty$wait("Choose ("))
-  expect_true(endsWith(pty$pending(), "your own answer): "))
+  expect_true(pty$wait("Choose a number, or type your own answer"))
+  expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("1\r")
   expect_true(pty$wait("REQ tool_result: The user answered: - q1: ggplot2 END"))
   expect_true(pty$wait("peter> "))
@@ -647,8 +648,7 @@ test_that("a terminal: a line arriving just as a question is drawn steers the ru
   pty$send("steer me\r")
   expect_true(pty$wait("[gptr] steering: 'steer me'"))
   # the question is asked again, empty; a person answers it later than 0.1 s
-  expect_true(pty$wait("allow? "))
-  expect_true(endsWith(pty$pending(), "[?]: "))
+  expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
   expect_true(pty$wait(paste0("REQ operator: ", relay("steer me"))))
   expect_true(pty$wait("peter> "))
@@ -674,12 +674,11 @@ test_that("a macOS terminal: a block pasted at a question comes back as one prom
   ))
   expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("P\r")
-  expect_true(pty$wait("allow? "))
+  expect_true(pty$wait("Allow r?"))
   pty$pending()
   pty$send("y\rpasted two\rpasted three\r")
   expect_true(pty$wait("A pasted block is not an answer (kept in history)."))
-  expect_true(pty$wait("allow? "))
-  pty$pending()
+  expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("n\r")
   expect_true(pty$wait("REQ tool_result: "))
   expect_true(pty$wait("peter> "))

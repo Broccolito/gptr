@@ -146,23 +146,25 @@ test_that("the console menu consumes a CLI choice before normal chat input", {
     out = utils::capture.output(peter())
   }, type = "message")
   text = paste(c(err, out), collapse = "\n")
-  expect_match(text, "1: Codex CLI", fixed = TRUE)
-  expect_match(text, "2: Claude Code CLI", fixed = TRUE)
+  expect_match(text, "1  Codex CLI", fixed = TRUE)
+  expect_match(text, "2  Claude Code CLI", fixed = TRUE)
   expect_match(text, "Welcome to Peter", fixed = TRUE)
   expect_match(text, "Saved in your user settings", fixed = TRUE)
   expect_match(text, "does not verify billing or online access", fixed = TRUE)
-  expect_match(text, "3: Manual setup (API or Ollama)", fixed = TRUE)
+  expect_match(text, "3  Manual setup (API or Ollama)", fixed = TRUE)
   expect_match(text, "Default provider saved: claude-cli", fixed = TRUE)
-  expect_match(text, "Welcome to Peter.\nChoose a default model provider.", fixed = TRUE)
+  expect_match(text, "? Welcome to Peter.\n  Choose a default model provider.", fixed = TRUE)
   expect_false(grepl("<U+000A>", text, fixed = TRUE))
   expect_false(grepl("login:", text, fixed = TRUE))
-  rows = out[grepl("^[[:space:]]+[12]: ", out)]
+  rows = out[grepl("^[[:space:]]+[12]  ", out)]
   expect_length(rows, 2L)
   expect_true(all(grepl("Signed in", rows, fixed = TRUE)))
   expect_identical(regexpr("Signed in", rows, fixed = TRUE)[1L],
                    regexpr("Signed in", rows, fixed = TRUE)[2L])
-  first = which(grepl("^[[:space:]]+1: ", out))
-  expect_identical(out[first - 1L], "")
+  # the question's frame (D-243): its details under the title, then the numbered choices
+  first = which(grepl("^[[:space:]]+1  ", out))
+  expect_identical(out[first - 1L],
+                   "  Manual setup shows API and Ollama commands, then returns to R.")
   expect_match(text, "model claude-cli/default", fixed = TRUE)
   expect_identical(settings_read("user")$model, "claude-cli/default")
   expect_length(box$answers, 0L)

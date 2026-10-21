@@ -41,6 +41,10 @@ local_console_stdin = function(lines, .env = parent.frame()) {
                                   .env = .env)
 }
 
+# The end of a question in a pty child (D-243): its last row, then the person's chevron as the
+# prompt, `>` where the child's output, in this process's locale, is not UTF-8
+pty_asked = function() paste0("\n", if (l10n_info()[["UTF-8"]]) "\u203a" else ">", " ")
+
 # Terminal R in a pty (80x24, TERM `term`, echo on as in a terminal unless `echo` is FALSE) that
 # loads gptr and sources `child`, the child's code (its options too). `send(x)` types; `wait(x)`
 # reads until `x` is shown and consumes the output through it, so the next wait() looks after it;

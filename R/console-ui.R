@@ -107,22 +107,44 @@ ui_who = function(request) {
   if (!rlang::is_string(a) || identical(a, "main")) "" else paste0("sub-agent ", ui_escape(a))
 }
 
-#' The lines of the one-line prompt: who asks and the first line, fitted to the console (D-187),
-#' (+N more lines), the flagged calls one per line, fitted, at most 5 (D-222), and why an
-#' `ask_human` request asks in every mode
+#' The rows that open a console question (D-243): `?` (blue) and the title in bold, a title's
+#' further lines under its text; escaped
+#' @noRd
+ui_question = function(title) {
+  lines = console_lines(title)
+  lead = c(paste0(console_style()$blue("?"), " "), rep("  ", length(lines)))
+  paste0(lead[seq_along(lines)], cli::style_bold(lines))
+}
+
+#' The lines of an approval (D-243): the call line (`  | r  x = 1`, fitted to the console before
+#' (+N more lines), D-187) unless the console's last printed call line is this request's, the
+#' flagged calls one per line, fitted, at most 5 (D-222), why an `ask_human` request asks in
+#' every mode, and the question with its keys (a and p only with a rule), wrapped between them
 #' @noRd
 ui_permission_lines = function(request) {
+  sym = console_style()
   lines = ui_request_lines(request)
   lines = lines[nzchar(trimws(lines))]
   more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)") else ""
-  who = ui_who(request)
-  first = paste0("  ", if (nzchar(who)) paste0(who, " > "), ui_escape(request$tool %||% "tool"),
-                 "  ", c(lines, "")[1L])
+  tool = ui_escape(request$tool %||% "tool")
+  first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ", c(lines, "")[1L])
+  shown = rlang::is_string(request$tool_call_id) &&
+    identical(console_state()$last_call, c(request$session, request$tool_call_id))
   width = max(20L, cli::console_width() - nchar(console_pad()))
   fl = ui_flagged(request$risk)
   n = NROW(fl)
   why = request$reason
-  c(paste0(cli::ansi_strtrim(first, max(20L, width - nchar(more))), more),
+  who = ui_who(request)
+  can = is.null(ui_no_rule(request))
+  keys = c("y", if (can) c("a", "p"), "n", "?")
+  what = c("yes", if (can) c("always (session)", "always (project)"), "no", "more")
+  # no-break spaces keep a key with its words when the line wraps
+  opts = paste0(cli::style_bold(keys), sym$dim(paste0(gsub(" ", "\u00a0", paste0(" ", what)),
+                                                      c(rep(sym$sep, length(keys) - 1L), ""))),
+                collapse = "")
+  q = if (nzchar(who)) paste0(who, ": allow ", tool, "?") else paste0("Allow ", tool, "?")
+  ask = paste0("  ", ui_question(q), "\u00a0\u00a0", opts)
+  c(if (!shown) paste0(cli::ansi_strtrim(first, max(20L, width - nchar(more))), more),
     if (n) {
       k = seq_len(min(n, 5L))
       rows = paste0(c("     flagged: ", rep(strrep(" ", 14L), 4L))[k], "[", fl$level[k], " ",
@@ -133,7 +155,8 @@ ui_permission_lines = function(request) {
     },
     if (identical(request$tier, "ask_human") && rlang::is_string(why) && nzchar(why)) {
       paste0("     asks in every mode: ", ui_escape(why))
-    })
+    },
+    gsub("\u00a0", " ", console_wrap(ask, width), fixed = TRUE))
 }
 
 #' The detail view shown for `?`: the code as a plain fence (it also feeds the RStudio dialog),
@@ -219,24 +242,28 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
   if (length(idx) && !anyNA(idx)) unique(idx) else NA_integer_
 }
 
-#' Console select(): numbered choices; NA = cancelled; attr "other" = free text
+#' Console select() (D-243): `? <title>`, its details dim under it, the numbered choices, a dim
+#' hint and the person's chevron at column 0; NA = cancelled; attr "other" = free text
 #' Title line feeds are intentional (also for ask questions); labels and details stay escaped.
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
                              allow_other = FALSE, read = ui_console_read) {
+  rlang::local_options(cli.num_colors = console_colors())
   # in a run in the console margin console_before_message() writes the block's separator
   run = console_before_message(kind = "prompt", tools = TRUE)
   pad = console_pad()
+  sym = console_style()
   labels = as.character(unlist(choices))
-  console_write(c(if (!run || !nzchar(pad)) "",
-                   gsub("(^|\n)", paste0("\\1", pad), console_escape(title)),
-                   ui_escape(if (length(details)) paste0("  | ", details)), "",
-                   ui_escape(sprintf("  %d: %s", seq_along(labels), labels)), ""))
-  hint = c(if (multiple) "numbers separated by commas" else "a number",
-           if (allow_other) "or type your own answer",
-           if (length(default)) paste0("Enter = ", paste(labels[default], collapse = ", ")))
+  hint = paste0("Choose ", paste(c(if (multiple) "numbers separated by commas" else "a number",
+                                   if (allow_other) "or type your own answer"), collapse = ", "),
+                if (length(default)) paste0("; Enter = ", paste(labels[default], collapse = ", ")))
+  console_write(c(if (!run || !nzchar(pad)) "", paste0(pad, ui_question(title)),
+                  if (length(details)) paste0(pad, "  ", sym$dim(ui_escape(details))),
+                  paste0(pad, "  ", cli::style_bold(format(seq_along(labels))), "  ",
+                         ui_escape(labels)),
+                  paste0(pad, sym$dim(ui_escape(hint)))))
   for (attempt in seq_len(5L)) {
-    ans = read(ui_escape(paste0(pad, "Choose (", paste(hint, collapse = "; "), "): ")))
+    ans = read(paste0(sym$person, " "))
     if (is.na(ans)) return(NA_integer_)
     if (!nzchar(trimws(ans)) && length(default)) return(as.integer(default))
     idx = ui_parse_choice(ans, labels, multiple)
@@ -247,40 +274,50 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
   NA_integer_
 }
 
-#' Console input(); NA = cancelled; a secret is asked through RStudio's masked dialog there
+#' Console input() (D-243): `? <prompt>`, a dim `Enter = <default>` and the person's chevron;
+#' NA = cancelled; a secret is asked through RStudio's masked dialog there
 #' @noRd
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
+  rlang::local_options(cli.num_colors = console_colors())
   console_before_message(kind = "prompt", tools = TRUE)
   if (isTRUE(secret) && ui_rstudio()) {
     ans = tryCatch(rstudioapi::askForPassword(prompt), error = function(e) NULL)
     return(if (rlang::is_string(ans)) as_utf8(ans) else NA_character_)
   }
-  ans = read(ui_escape(paste0(console_pad(), prompt,
-                              if (nzchar(default)) paste0(" [", default, "]"), ": ")),
-             secret = isTRUE(secret))
+  pad = console_pad()
+  sym = console_style()
+  hint = if (nzchar(default)) paste0(pad, sym$dim(ui_escape(paste0("Enter = ", default))))
+  console_write(c(paste0(pad, ui_question(prompt)), hint))
+  ans = read(paste0(sym$person, " "), secret = isTRUE(secret))
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
 
-#' Console permission(): the one-line prompt of NS-1, `?` for the detail view; every console
-#' prompt first ends partial answer lines and clears waiting rows (D-186); an invalid answer is
-#' quoted (kept in the console history in an interactive session) above a hint with the prompt's
-#' letters, an empty one gets the hint alone, both wrapped at the prompt rows' width; five (`?` is
-#' none) end in a refusal whose feedback says so (D-188, D-243)
+#' Console permission(): the approval of NS-1 under the call it gates, read after the person's
+#' chevron (D-243), `?` for the detail view; every console prompt first ends partial answer lines
+#' and clears waiting rows (D-186); a remembered answer adds a dim line naming the rule; an
+#' invalid answer is quoted (kept in the console history in an interactive session) above a hint
+#' with the question's keys, an empty one gets the hint alone, both wrapped at the prompt rows'
+#' width; five (`?` is none) end in a refusal whose feedback says so (D-188, D-243)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
+  rlang::local_options(cli.num_colors = console_colors())
   console_before_message(kind = "prompt", tools = TRUE)
   why = ui_no_rule(request)
   can = is.null(why)
-  opts = if (can) "[y]es / [a]lways / [n]o / [?]" else "[y]es / [n]o / [?]"
   console_write(ui_permission_lines(request))
+  sym = console_style()
   bad = 0L
   while (bad < 5L) {
-    a = trimws(read(paste0("  allow? ", opts, ": ")))
+    a = trimws(read(paste0(sym$person, " ")))
     if (is.na(a)) return(ui_answer("abort"))
     low = tolower(a)
     if (low %in% c("y", "yes")) return(ui_answer("allow"))
-    if (can && low %in% c("a", "always")) return(ui_answer("allow", "session"))
-    if (can && low %in% c("p", "project")) return(ui_answer("allow", "project"))
+    if (can && low %in% c("a", "always", "p", "project")) {
+      scope = if (low %in% c("a", "always")) "session" else "project"
+      console_write(sym$dim(paste0("    allowed ", ui_escape(request$suggested_rule), " for this ",
+                                   scope)))
+      return(ui_answer("allow", scope))
+    }
     if (grepl("^no?(\\s|$)", low)) {
       fb = trimws(sub("^no?", "", a, ignore.case = TRUE))
       return(ui_answer("deny", feedback = if (nzchar(fb)) fb))
@@ -291,13 +328,13 @@ ui_console_permission = function(request, read = ui_console_read) {
     }
     bad = bad + 1L
     if (low %in% c("a", "always", "p", "project")) {
-      msg = paste0("  [a]lways is not offered: ", why, "; answer y, n or ?.")
+      msg = paste0("  a and p are not offered: ", why, "; answer y, n or ?.")
     } else {
       kept = nzchar(a) && gptr_is_interactive() && console_history_add(a)
       msg = c(if (nzchar(a)) {
         paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
                if (kept) " (kept in history)", ".")
-      }, paste0("  Type ", if (can) "y, a or n" else "y or n",
+      }, paste0("  Type ", if (can) "y, a, p or n" else "y or n",
                 " (n <text> says what to do instead), or ?."))
     }
     console_write(console_wrap(msg, max(20L, cli::console_width() - nchar(console_pad()))))

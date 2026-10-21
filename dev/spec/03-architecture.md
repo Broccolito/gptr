@@ -1475,20 +1475,31 @@ arguments the tool sees and is recorded.
 
 #### 6.8.3 The prompt
 
-One line (NS-1): the tool and the call's first line, cut to the console width (less the margin) before `(+N more
-lines)`, the flagged calls one per line (highest level first, each cut to the width, at most 5, then `(+N more; ?
-shows all)`), then `allow? [y]es / [a]lways / [n]o / [?]`, with C0/C1 controls, bidi and zero-width
-characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. `a` adds a session rule covering exactly the
-flagged calls (`r(fn:FindNeighbors,FindClusters)`), offered only when the request suggests one; `?`
-opens the detail view (code, flagged calls with levels,
-paths, "cannot be undone" when no checkpoint is possible, and "always in this project", written to the user-level
-project file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; Ctrl-C aborts
-the run. Never `askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1].
-A sub-agent's prompt names it (`  sub-agent alpha > r  cm = 1`; a nested `peter()` by its quoted prompt and number) and an
-`ask_human` prompt adds `asks in every mode: <reason>`. Every console prompt first ends partial lines and clears the
-waiting row, and its lines reach the console even from inside the parent's `r` evaluation (never its tool result).
-An invalid answer is explained (`a` where nothing can be remembered says why); five (`?` is none) end in a refusal
-whose feedback tells the model that no valid answer was given [IC-77; D-188].
+An approval asks under the call it gates (NS-1) [D-243]. The call line (`  ▎ r  <first line>`, the strip red and the
+name bold, cut to the console width less the margin before `(+N more lines)`) is printed only when the console's
+last printed call line is not the request's (its session and `tool_call_id`, §7.11): a background ask, a nested
+member call inside `r` code, a sub-agent's call; a question and the tool block it is asked in are one block (no
+blank line between the call, its ask and its result lines). Then come the flagged calls one per line (highest level
+first, each cut to the width, at most 5, then `(+N more; ? shows all)`), an `ask_human` request's
+`asks in every mode: <reason>`, and the question line
+`  ? Allow r?  y yes · a always (session) · p always (project) · n no · ? more` (`?` blue, the question and the keys
+bold, what they do dim; wrapped between the options at the width), with C0/C1 controls, bidi and zero-width
+characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after
+the person's chevron `› ` (ASCII `> `) at column 0, with R's readline, echo on and Enter required; no single key
+answers. `a` adds a session rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`) and `p`
+the same rule for the project, both offered only when the request suggests one; a remembered answer adds one dim
+line, `    allowed r(fn:FindNeighbors,FindClusters) for this session` (or `project`). `?` opens the detail view (code,
+flagged calls with levels, paths, "cannot be undone" when no checkpoint is possible, and "always in this project",
+written to the user-level project file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project
+tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; Ctrl-C aborts the run. Never
+`askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1]. A sub-agent's question names it
+(`  ? sub-agent alpha: allow r?`; a nested `peter()` by its quoted prompt and number). Choices and inputs (the `ask`
+tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices
+(`    1  dplyr`, the number bold), a dim hint (`Choose a number, or type your own answer; Enter = base`; an input's
+`Enter = <default>`), then `› `. Every console prompt first ends partial lines and clears the waiting row, and its
+lines reach the console, in its colours, even from inside the parent's `r` evaluation (never its tool result). An
+invalid answer is explained (`a` or `p` where nothing can be remembered says why); five (`?` is none) end in a
+refusal whose feedback tells the model that no valid answer was given [IC-77; D-188].
 
 #### 6.8.4 Nested gating
 
@@ -1940,11 +1951,12 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
   lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
   width - 4; one blank line separates text, tool, notice, prompt and status blocks (and two
-  prompts, and two text blocks in a row [D-208]) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
+  prompts, and two text blocks in a row [D-208], but not a question from the tool block it is asked in
+  [D-243]) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
   the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
   row, R GUIs included; the pause-menu notice excepted, D-225); the margin is that of the console an
-  evaluation started from, also for prompts and notices drawn inside it, and a sub-agent line drawn
-  there has that console's colours, though the evaluation's options say 1 colour (D-245). There nested lists keep their
+  evaluation started from, also for prompts and notices drawn inside it, and a sub-agent line or a
+  question drawn there has that console's colours, though the evaluation's options say 1 colour (D-245). There nested lists keep their
   indentation, pipe tables are aligned
   (when malformed or too wide, verbatim and unwrapped like fenced code so a copied table stays valid,
   each row printed as it ends once the rows so far rule alignment out)
@@ -1970,7 +1982,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   at the width, also indented (a word wider than it is cut); an error shows its message in red in at most
   6 rows, then an ellipsis, an `r` error then its object changes; an edit's diff has `+` lines blue
   and `-` lines red (file headers dim), at most 12; `write` shows the path relative
-  to the project and the byte count (D-223); a call of a second or more adds ` · 3.0 s`; the one-line approval prompt (6.8.3) is cut to the
+  to the project and the byte count (D-223); a call of a second or more adds ` · 3.0 s`; an approval's call line (6.8.3) is cut to the
   console width before its `+N more lines`, and the `?` detail shows the code as a plain fence of
   at most 40 lines. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied
   block shows the cut (D-207). Console output draws no box characters (D-187).
@@ -2534,9 +2546,9 @@ Prices: Sonnet 5.5 at $2 input / $10 output per million tokens, 1-hour cache wri
    sends one `r` call composing the three steps (the `<r_session>` composition rule), with `note =
    "resolution 0.8 because 0.4 merged the two monocyte groups"`.
 5. Dispatcher: validation; `gptr_risk()` sees `pbmc` overwritten above `gptr.protect_size` -> level 3;
-   `manual` -> ask; the console shows `r  pbmc = FindNeighbors(pbmc, dims = 1:30) ...  allow? [y]es / [a]lways
-   / [n]o / [?]`; `?` would say "cannot be undone: pbmc 5.1 GB exceeds gptr.undo_spill_max" (no pre-image, so
-   no copy). `y`.
+   `manual` -> ask; under the call line `▎ r  pbmc = FindNeighbors(pbmc, dims = 1:30)` the console asks
+   `? Allow r?  y yes · a always (session) · p always (project) · n no · ? more`; `?` would say "cannot be undone:
+   pbmc 5.1 GB exceeds gptr.undo_spill_max" (no pre-image, so no copy). `y` at `› `.
 6. FIFO -> `eval_r()` in `globalenv()`, teed to the console; Seurat mutates `pbmc` in memory with no gptr
    copy (the copy-safety suite pins this). Ctrl-C would open the pause menu; a steer typed there is delivered
    after this tool result. Result: collapsed progress output plus `~ pbmc <Seurat> modified` and `+ markers

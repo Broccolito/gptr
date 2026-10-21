@@ -3053,6 +3053,27 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   so Task 12 attaches an approval to the call line the console printed; matching on name and input fails for
   parallel, nested and sub-agent calls. Contract-visible: 04 section 7.11. Tests: test-agent-dispatch.R "the
   request record carries the call id; a nested member call its own".
+- Task 12: approvals ask under the call they gate. The console keeps the session and call ids of the last call line
+  it printed, and an approval prints the call line (`▎ r  x = 1`, strip red, name bold) only when they are not its
+  own: the audit's duplicated call (`● r  zz = 1`, then `r  zz = 1` above the question) is gone, while a background
+  ask, a nested member call in `r` code and a sub-agent's call still show what they gate. The question replaces
+  `allow? [y]es / [a]lways / [n]o / [?]`:
+  `? Allow r?  y yes · a always (session) · p always (project) · n no · ? more` (`?` blue, keys bold, words dim;
+  `p` is now shown; it wraps between options, a key never apart from its words), and a sub-agent's ask reads
+  `? sub-agent a: allow r?` (the call line no longer carries `sub-agent a > `).
+  Every console question reads its answer after `› ` (ASCII `> `) at column 0; choices and inputs take the same
+  frame (`? <title>` bold, details dim, `    1  dplyr` with the number bold, a dim `Choose a number, ...` hint
+  replacing `Choose (...): `; an input's dim `Enter = <default>` replacing `[default]: `), so the OAuth inputs
+  drop their trailing `: `. A remembered answer adds `    allowed <rule> for this session` (or `project`), dim:
+  the plan's `allowed r for this session` would have read as every `r` call being allowed, while only the
+  suggested rule is (plan amended). `a` or `p` with no rule says `a and p are not offered: <why>`, and the
+  invalid-answer hint names `y, a, p or n`. A question and the tool block it is asked in are one block, so no
+  blank line separates a call, its ask and its result lines; questions drawn inside an evaluation take the
+  console's colours, as Task 11's sub-agent lines do. Contract-visible: 04 §15.10 IC-77, 03 §6.8.3, §6.17 and
+  NS-1 (§10.1). Tests: test-console-ui.R "an approval asks under the call it gates; a call not shown is printed
+  (D-243)", "the question line names the keys, a and p only with a rule, and wraps (D-243)", "questions share one
+  frame: ? and the title, numbered choices, a dim hint, the chevron", "a remembered answer adds one dim line
+  naming the rule and its scope (D-243)".
 - Review fixes of Tasks 2-7 (2026-10-21):
   - A console history entry of several lines that is not a `"""` block or a fence is added as a `"""` block
     (`console_history_add()`), so Up then Enter sends a block pasted at a question, or at the prompt, back as one

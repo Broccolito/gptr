@@ -1139,7 +1139,7 @@ test_that("the console UI ends a partial answer line before it prompts (D-186)",
                                          delta = "partial "), ctx)
     ans = ui_console_permission(req, read = function(...) "y")
   })
-  expect_identical(out, c("partial", "  r  x = 1"))
+  expect_identical(out, c("partial", "  | r  x = 1", "  ? Allow r?  y yes - n no - ? more"))
   expect_identical(ans$decision, "allow")
   expect_false("permission_request" %in% vapply(console_hooks(), function(h) h$event, ""))
 })
@@ -1171,7 +1171,8 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
     res = eval_r("ans = tool(ask)", home, plots = "none", tee = FALSE)
   })
   # the held word continues after the prompt (D-186), never in the tool result
-  expect_identical(out, c("Fanning out", "  sub-agent a > r  x = 1"))
+  expect_identical(out, c("Fanning out", "  | r  x = 1",
+                          "  ? sub-agent a: allow r?  y yes - n no - ? more"))
   expect_identical(home$ans$decision, "allow")
   expect_false(grepl("HELDWORD|x = 1", text(res)))
   withr::local_options(cli.dynamic = TRUE)
@@ -1204,8 +1205,8 @@ test_that("inside an evaluation the console margin follows the person's console 
   out = utils::capture.output(eval_r("p = pad(); k = pick()", home, plots = "none", tee = FALSE))
   expect_identical(home$p, "  ")
   expect_identical(home$k, 1L)
-  expect_identical(prompts, "  Choose (a number): ")
-  expect_true("  Which format?" %in% out)
+  expect_identical(prompts, "> ")
+  expect_true("  ? Which format?" %in% out)
 })
 
 test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no quiet (D-188)", {

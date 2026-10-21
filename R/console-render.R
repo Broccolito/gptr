@@ -531,7 +531,8 @@ console_spinner = function(label = "thinking") {
 # interrupt policy needs the session of a run (04 gives no accessor from a run to its session).
 
 #' The console's process state (`the$console`, owned by P14): `active` (run id -> record);
-#' `artifacts` (NS-8 lines) and `pending` (pause-menu items) held while a tool executes
+#' `artifacts` (NS-8 lines) and `pending` (pause-menu items) held while a tool executes;
+#' `last_call`, the session and call ids of the last call line printed (D-243)
 #' @noRd
 console_state = function() {
   if (is.null(the$console)) {
@@ -678,11 +679,13 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
 
 #' One blank line between a run's blocks (text, tool, notice, prompt, waiting row, status) where
 #' lines keep the margin, written on a finished line; blocks of one kind group, except prompts,
+#' a question and the tool block it is asked in are one (it asks under the call it gates, D-243),
 #' and a block replacing a cleared waiting row needs none
 #' @noRd
 console_gap = function(rec, kind) {
   same = identical(rec$last, kind) && !identical(kind, "prompt")
-  if (!same && !identical(rec$last, "wait") && nzchar(console_pad())) console_cat("\n")
+  join = paste(rec$last, kind) %in% c("tool prompt", "prompt tool")
+  if (!same && !join && !identical(rec$last, "wait") && nzchar(console_pad())) console_cat("\n")
   rec$last = kind
   invisible(NULL)
 }
@@ -1057,7 +1060,8 @@ console_on_message_end = function(event, ctx) {
   NULL
 }
 
-#' tool_execution_start: the call's lines (verbosity 2) or a progress message (verbosity 1)
+#' tool_execution_start: the call's lines (verbosity 2), whose ids its approval reads (D-243), or
+#' a progress message (verbosity 1)
 #' @noRd
 console_on_tool_start = function(event, ctx) {
   rec = console_record(event)
@@ -1071,7 +1075,11 @@ console_on_tool_start = function(event, ctx) {
     assign(paste0("t", call$id), call, envir = rec$tools)
     console_pause_one(rec)
     console_gap(rec, "tool")
-    console_write(console_tool_line(call, NULL, rec$session))
+    lines = console_tool_line(call, NULL, rec$session)
+    console_write(lines)
+    if (length(lines)) {
+      assign("last_call", c(session_data(rec$session)$id, call$id), console_state())
+    }
   }
   NULL
 }

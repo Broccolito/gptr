@@ -133,7 +133,8 @@ working directory restored. Plan-specific rules:
 | `R/agent-run.R`, `R/agent-loop.R` (doc only) | 4, 5 |
 | `R/session-object.R`, `R/ext-events.R` | 5 |
 | `R/agent-dispatch.R` | 6 |
-| `R/console-render.R` | 7, 8, 9, 10, 11, 13, 17, 26 |
+| `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 17, 26 |
+| `R/auth-oauth.R` (input prompts) | 12 |
 | `R/console-ui.R` | 2, 3, 8, 12, 19 |
 | `R/console-repl.R` | 2, 3, 7, 8, 14, 15, 18, 21, 22, 24, 25, 26 |
 | `R/console-interrupt.R` | 3, 13, 14, 15, 20 |
@@ -144,9 +145,9 @@ working directory restored. Plan-specific rules:
 | `R/eval-core.R` (an evaluation holds the console's colours) | 11 |
 | `R/gptr-config.R` (`type_ahead` description) | 18 |
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
-| `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream}.R` | their tasks |
-| `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines), `fixtures/cli/claude-toolstream.ndjson` (rows) | 8, 10, 11 |
-| `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11 |
+| `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream,setup}.R`, `helper-console-input.R` | their tasks |
+| `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines), `fixtures/cli/claude-toolstream.ndjson` (rows) | 8, 10, 11, 12 |
+| `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11, 12 |
 | `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
@@ -534,13 +535,21 @@ Decisions:
 - `ui_permission_lines()` omits the call line when the console's last printed call line has the
   request's `tool_call_id` (Task 6). Otherwise it prints it: background asks, nested member
   calls, and non-foreground sub-agents.
+  - The console keeps the session and call ids of the last call line it printed
+    (`console_state()$last_call`, set by `console_on_tool_start()`), so ids repeated across sessions
+    never match. The call line it prints is `  ▎ r  <first line>  (+N more lines)`, as the console's
+    act line. Who asks moves to the question (amended in Task 12).
+  - A question and the tool block it is asked in are one block (`console_gap()`): no blank line
+    between a call line, its ask and its result lines (amended in Task 12).
 - Flagged rows (at most 5, then `(+N more; ? shows all)`) and the `asks in every mode:` reason
   stay.
 - The question line is at column 2:
   `? Allow <tool>?  y yes · a always (session) · p always (project) · n no · ? more`
   - `?` is blue, the question bold, key letters bold and descriptions dim.
-  - The line wraps.
-  - a and p are omitted when no rule is offered.
+  - The line wraps between the options: no-break spaces keep a key with its words, and are
+    written as spaces.
+  - a and p are omitted when no rule is offered; typed anyway, they get
+    `a and p are not offered: <why>; answer y, n or ?.`.
   - Who asks: `? sub-agent a: allow r?`.
   - The invalid-answer hint (Task 3) names the same letters, `p` among them.
 - The answer prompt is `› ` at column 0, read with R's readline, echo on, Enter required.
@@ -549,27 +558,42 @@ Decisions:
   - `n <text>` denies with feedback;
   - `?` shows the detail view;
   - Ctrl-C aborts.
-- A remembered answer adds one dim line: `allowed r for this session` or `... this project`.
-- Ask-tool questions use the same frame:
+- A remembered answer adds one dim line naming the rule it adds:
+  `    allowed r(fn:write.csv) for this session` or `... this project`. (Amended in Task 12: the plan
+  said `allowed r for this session`, which reads as every `r` call being allowed.)
+- Ask-tool questions, and every console choice and input, use the same frame:
   - `? <title>` (bold);
+  - details dim under it (they were `  | ` rows, and `|` is now the ASCII tool strip);
   - numbered choices `    1  dplyr` (number bold);
-  - the hint (dim);
+  - the hint (dim): `Choose a number, or type your own answer; Enter = base`; an input's
+    `Enter = <default>`;
   - the `› ` prompt.
+  The OAuth inputs drop the `: ` that ended their prompts (amended in Task 12).
+- Questions drawn inside an evaluation (a sub-agent's or a nested call's) take the console's
+  colours, `rlang::local_options(cli.num_colors = console_colors())`, as Task 11's sub-agent lines
+  do (amended in Task 12).
 - No single-key answers and no terminal title. Codex 0.157.1 approved on `y` and appended `es`
   to the draft; gptr never takes single keys.
 
 Tests (`test-console-ui.R`), RED first:
-- After a printed call, no second call line appears.
-- The options text and wrapping are exact.
+- After a printed call, no second call line appears; a sub-agent's call in the parent's `r` code
+  is printed by its ask.
+- The options text and wrapping are exact, and the bytes at 256 colours.
 - The sub-agent prefix.
-- The select frame.
+- The select frame, and the input frame.
 - The remembered-scope line.
+- The tests that expect the old prompt text are rewritten (amended in Task 12): the rest of
+  `test-console-ui.R`, `test-console-{typing,render,wait,repl,setup}.R`, `test-cli-claude.R` and
+  `test-subagent-team.R`; the pty cases wait for `Allow r?` and end with `pty_asked()`
+  (`helper-console-input.R`), the chevron the child's locale shows.
 
-Spec: IC-77, 03 §6.8.3 and NS-1.
+Spec: IC-77, 03 §6.8.3, §6.17 and NS-1 (§10.1).
 
-Files: `R/console-ui.R` (`ui_permission_lines()`, `ui_console_permission()`, `ui_console_select()`,
-`ui_console_input()`), `R/console-render.R` (last printed call id),
-`tests/testthat/test-console-ui.R`.
+Files: `R/console-ui.R` (`ui_question()`, `ui_permission_lines()`, `ui_console_permission()`,
+`ui_console_select()`, `ui_console_input()`), `R/console-render.R` (`console_state()`,
+`console_on_tool_start()`: the last printed call ids; `console_gap()`), `R/auth-oauth.R` (the input
+prompts), the tests above, and the approval sentences of `vignettes/interactive-console.Rmd` and
+`vignettes/teams-and-background.Rmd` (and their `.orig`). Amended in Task 12.
 
 Commit: `feat(console): approvals ask under the call they gate`.
 

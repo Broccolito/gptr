@@ -5339,7 +5339,29 @@ its part in its own commit, and Task 27 finalises them.
     invalid answer, a denial (`no ...`) or an ask-tool answer. `gptr_confirm()` (L0, also asked during a
     run, e.g. by `egress_check()` for a nested call's provider) is not drained, so this holds for the
     console questions only; its stale lines go to the history (IC-75).
-- IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26): pending.
+- IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Tasks 19 and 26 pending.
+  - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
+    keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by
+    `console_on_tool_start()`); `ui_permission_lines(request)` prints the call line (`  ▎ r  <first line>`, strip
+    red, name bold, cut before `(+N more lines)`) only when they are not the request's (`session`,
+    `tool_call_id`, §7.11): a background ask, a nested member call in `r` code, a sub-agent's call. The flagged
+    rows and `asks in every mode: <reason>` follow, then the question line
+    `  ? Allow r?  y yes · a always (session) · p always (project) · n no · ? more` (`?` blue, the question and the
+    keys bold, what they do dim; `a` and `p` only with a `suggested_rule`), word-wrapped at the approval rows'
+    width with each key kept with its words. Who asks: `  ? sub-agent <agent>: allow r?`.
+  - Every console question (`ui_console_permission()`, `ui_console_select()`, `ui_console_input()`) reads its
+    answer after the person's chevron, `console_style()$person` and a space (`› `, ASCII `> `), at column 0, with
+    R's readline (echo on, Enter required); answers are unchanged. A choice shows `? <title>` (bold), its details
+    dim under it, the choices `    1  dplyr` (numbers bold, right-aligned), then a dim hint
+    (`Choose a number, or type your own answer; Enter = base`; `Choose numbers separated by commas` for several);
+    an input `? <prompt>` and a dim `Enter = <default>`. Questions drawn inside an evaluation take the console's
+    colours (`console_colors()`), as sub-agent lines do.
+  - A remembered answer adds one dim line, `    allowed <suggested_rule> for this session` (or `project`). `a` or
+    `p` where nothing can be remembered: `  a and p are not offered: <why>; answer y, n or ?.`; the invalid-answer
+    hint names the question's keys: `  Type y, a, p or n (n <text> says what to do instead), or ?.` (`y or n`
+    without a rule).
+  - A question and the tool block it is asked in are one block (`console_gap()`): no blank line between a call
+    line, its ask and its result lines.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
 - **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Tasks 17 and 25 pending.
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and

@@ -801,8 +801,9 @@ test_that("a sub-agent asking in a served r call ends the streamed line, not the
   local_cli_cleanup(s)
   # the served call's tool line (D-192) ends the streamed line, its held word too, before the
   # prompts
-  asks = grep("^  sub-agent [ab] > r  gptr_mcp_serve", out)
+  asks = grep("^  \\? sub-agent [ab]: allow r\\?", out)
   expect_length(asks, 2L)
+  expect_identical(sum(out == "  | r  gptr_mcp_serve(tools = 'r')"), 2L)
   expect_identical(match("Fanning out HELDWORD", out) + 1L, match("  | r", out))
   expect_true(all(asks > match("  | r", out)))
   expect_true(any(grepl("^  # sub-agent [ab] done ", out)))

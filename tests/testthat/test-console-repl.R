@@ -614,7 +614,9 @@ test_that("piped .stdin: a nested prompt and its echo reach stdout from an untee
                         "risk = list(level = 1L), suggested_rule = 'r(level<=1)', agent = 'a'))"),
                  home, plots = "none", tee = FALSE)
   })
-  expect_identical(out, c("  sub-agent a > r  x = 1", "  allow? [y]es / [a]lways / [n]o / [?]: y"))
+  expect_identical(out, c("  | r  x = 1", paste0("  ? sub-agent a: allow r?  y yes - a always ",
+                                                 "(session) - p always (project) -"),
+                          "  n no - ? more", "> y"))
   expect_identical(home$ans$decision, "allow")
   expect_false(any(grepl("allow", vapply(res$events, function(e) e$text %||% "", ""))))
 })
@@ -627,7 +629,7 @@ test_that("the stdin UI never echoes a secret answer", {
     got = c(ui$input("Token", secret = TRUE), ui$input("Name"))
   })
   expect_identical(got, c("FAKE-TOKEN-123", "plain"))
-  expect_identical(out, c("Token: ", "Name: plain"))
+  expect_identical(out, c("? Token", "> ", "? Name", "> plain"))
 })
 
 test_that("a scripted .stdin console session (acceptance 2)", {
@@ -863,8 +865,8 @@ test_that("approvals of a .stdin session are answered from the same stdin", {
   }, type = "message")
   expect_identical(e$y, 2)
   expect_identical(res$text, "made y")
-  expect_true(any(grepl("allow? [y]es", out, fixed = TRUE)))
-  expect_true("  r  y = 2" %in% out)
+  expect_true(any(grepl("? Allow r?  y yes", out, fixed = TRUE)))
+  expect_true("  | r  y = 2" %in% out)
   expect_null(getOption("gptr.ui"))
   expect_null(getOption("gptr.interactive"))
 })

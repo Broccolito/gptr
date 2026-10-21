@@ -39,8 +39,8 @@ test_that("console select preserves title line feeds but escapes other controls 
   }, "2")
   expect_identical(out$result, 2L)
   text = paste(out$shown, collapse = "\n")
-  expect_match(text, "First line\nSecond line<U+001B>[2J", fixed = TRUE)
-  expect_match(text, "1: One<U+000A>Injected", fixed = TRUE)
+  expect_match(text, "? First line\n  Second line<U+001B>[2J", fixed = TRUE)
+  expect_match(text, "1  One<U+000A>Injected", fixed = TRUE)
   expect_false(grepl("\033", text, fixed = TRUE))
 })
 
@@ -49,7 +49,46 @@ test_that("a console select outside a run opens its own block in the margin (D-1
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   out = console_try(function() ui_console_select("Rewind to", c("a", "b")), "1")
-  expect_identical(out$shown, c("", "  Rewind to", "", "  1: a", "  2: b", ""))
+  expect_identical(out$shown, c("", "  ? Rewind to", "    1  a", "    2  b", "  Choose a number"))
+})
+
+test_that("questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  prompts = character()
+  read = function(prompt, ...) {
+    prompts <<- c(prompts, prompt)
+    ""
+  }
+  k = NULL
+  out = utils::capture.output({
+    k = ui_console_select("Which package?", c("dplyr", "base"), default = 2L, allow_other = TRUE,
+                          read = read)
+  })
+  expect_identical(k, 2L)
+  expect_identical(out, c("", "  ? Which package?", "    1  dplyr", "    2  base",
+                          "  Choose a number, or type your own answer; Enter = base"))
+  # ten choices or more align their numbers; several answers are numbers separated by commas
+  out = utils::capture.output({
+    k = ui_console_select("Pick", letters[1:10], multiple = TRUE, read = function(...) "1, 10")
+  })
+  expect_identical(k, c(1L, 10L))
+  expect_identical(out[c(3L, 12L, 13L)], c("     1  a", "    10  j",
+                                           "  Choose numbers separated by commas"))
+  out = utils::capture.output({
+    k = ui_console_input("Name?", default = "fit", read = read)
+  })
+  expect_identical(k, "fit")
+  expect_identical(out, c("  ? Name?", "  Enter = fit"))
+  # the answer is read after the person's chevron at column 0 (D-245 glyphs)
+  expect_identical(prompts, rep("\u203a ", 2L))
+  # ? blue, the title bold, the numbers bold, the hint dim
+  withr::local_options(cli.num_colors = 256L)
+  out = utils::capture.output(ui_console_select("Pick", c("a", "b"), read = function(...) "1"))
+  expect_identical(out[2:5], c("  \033[38;5;67m?\033[39m \033[1mPick\033[22m",
+                               "    \033[1m1\033[22m  a", "    \033[1m2\033[22m  b",
+                               "  \033[2mChoose a number\033[22m"))
 })
 
 test_that("the one-line prompt shows the first line, +N more lines and the flagged calls", {
@@ -60,7 +99,7 @@ test_that("the one-line prompt shows the first line, +N more lines and the flagg
   req = ui_request(paste0("note = 1 # \u001b[2J\u202e\nwrite.csv(df, 'out.csv')\n",
                           "# \u001b[2J clear\nunlink('data', recursive = TRUE)"))
   lines = ui_permission_lines(req)
-  expect_identical(lines[1L], "  r  note = 1 # <U+001B>[2J<U+202E>  (+3 more lines)")
+  expect_identical(lines[1L], "  | r  note = 1 # <U+001B>[2J<U+202E>  (+3 more lines)")
   expect_identical(lines[2:3], c("     flagged: [3 file_delete] unlink(\"data\", recursive = TRUE)",
                                  "              [2 file_write] write.csv(df, \"out.csv\")"))
   expect_false(any(grepl("[\u0001-\u0008\u000b-\u001f\u007f\u202e]", lines, perl = TRUE)))
@@ -69,14 +108,15 @@ test_that("the one-line prompt shows the first line, +N more lines and the flagg
   expect_false(any(grepl("\u001b", detail, fixed = TRUE)))
   expect_true(any(grepl("[3] file_delete", detail, fixed = TRUE)))
   w = list(tool = "write", input = list(path = "notes.md"), risk = list(level = 2L))
-  expect_identical(ui_permission_lines(w), "  write  notes.md")
+  expect_identical(ui_permission_lines(w), c("  | write  notes.md",
+                                             "  ? Allow write?  y yes - n no - ? more"))
 })
 
 test_that("the prompt's first line fits the console, keeping +N more lines (D-187)", {
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   req = ui_request(paste0("x = c(", strrep("1, ", 30L), "1)\ny = 2"))
   first = ui_permission_lines(req)[1L]
-  expect_identical(first, "  r  x = c(1, 1, 1, ...  (+1 more lines)")
+  expect_identical(first, "  | r  x = c(1, 1, 1...  (+1 more lines)")
   withr::local_options(cli.dynamic = TRUE)
   local_gptr_options(verbose = 2L)
   expect_identical(nchar(ui_permission_lines(req)[1L]), 38L)
@@ -88,7 +128,7 @@ test_that("flagged calls fit one per line, highest level first, at most 5 (#33)"
   root = local_project()
   code = c(sprintf("writeLines('%s', 'f%d.txt')", strrep("x", 30L), 1:7), "unlink('data')")
   lines = ui_permission_lines(ui_request(paste(code, collapse = "\n")))
-  expect_length(lines, 7L)
+  expect_length(lines, 8L)
   expect_true(all(nchar(lines) <= 40L))
   expect_identical(lines[2L], "     flagged: [3 file_delete] unlink(...")
   expect_identical(lines[3L], "              [2 file_write] writeLin...")
@@ -101,14 +141,14 @@ test_that("a path tool's prompt shows the path relative to the project; no empty
   # a tool's own risk record, as the dispatcher passes it: no label
   w = list(tool = "write", input = list(path = file.path(root, "R", "io.R")),
            risk = list(level = 2L, categories = "write", paths = "R/io.R"))
-  expect_identical(ui_permission_lines(w), "  write  R/io.R")
+  expect_identical(ui_permission_lines(w)[1L], "  | write  R/io.R")
   detail = ui_permission_detail(w)
   expect_identical(detail[1:4], c("  gptr wants to use write (level 2)", "  ```", "  R/io.R",
                                   "  ```"))
   expect_match(ui_permission_detail(ui_request("x = 1"))[1L], "(level 1: local)", fixed = TRUE)
 })
 
-test_that("[a]lways is offered only with a suggested rule; a and p say why not (#33)", {
+test_that("a and p are offered only with a suggested rule; a and p say why not (#33)", {
   skip_on_cran()
   root = local_project()
   e = new.env()
@@ -119,7 +159,7 @@ test_that("[a]lways is offered only with a suggested rule; a and p say why not (
   out = console_try(function() ui_console_permission(req), c("?", "a", "p", "y"))
   expect_identical(out$result, list(decision = "allow", remember = NULL, feedback = NULL))
   expect_false(any(grepl("[a] always", out$shown, fixed = TRUE)))
-  expect_identical(sum(out$shown == paste0("  [a]lways is not offered: no rule covers these ",
+  expect_identical(sum(out$shown == paste0("  a and p are not offered: no rule covers these ",
                                            "calls; answer y, n or ?.")), 2L)
   expect_null(ui_answer_norm(list(decision = "allow", remember = "session"), req)$remember)
 })
@@ -164,6 +204,80 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
   expect_identical(out$asked, 2L)
 })
 
+test_that("the question line names the keys, a and p only with a rule, and wraps (D-243)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  root = local_project()
+  req = ui_request("x = 1", rule = "r(level<=1)")
+  q = function(r) utils::tail(ui_permission_lines(r), 1L)
+  expect_identical(q(req), paste0("  ? Allow r?  y yes \u00b7 a always (session) \u00b7 ",
+                                  "p always (project) \u00b7 n no \u00b7 ? more"))
+  expect_identical(q(ui_request("x = 1")), "  ? Allow r?  y yes \u00b7 n no \u00b7 ? more")
+  # a key never leaves its words: the line wraps between the options, inside the margin
+  testthat::local_reproducible_output(width = 50, crayon = FALSE, unicode = TRUE)
+  local_mocked_bindings(console_pad = function() "  ")
+  expect_identical(utils::tail(ui_permission_lines(req), 2L),
+                   c("  ? Allow r?  y yes \u00b7 a always (session) \u00b7",
+                     "  p always (project) \u00b7 n no \u00b7 ? more"))
+  # ? blue, the question bold, the keys bold, what they do dim; the call's strip red
+  withr::local_options(cli.num_colors = 256L)
+  expect_identical(ui_permission_lines(ui_request("x = 1")),
+                   c("  \u001b[38;5;167m\u258e\u001b[39m \u001b[1mr\u001b[22m  x = 1",
+                     paste0("  \033[38;5;67m?\033[39m \033[1mAllow r?\033[22m  \033[1my\033[22m",
+                            "\u001b[2m yes \u00b7 \u001b[22m\u001b[1mn\u001b[22m",
+                            "\u001b[2m no \u00b7 \u001b[22m",
+                            "\033[1m?\033[22m\033[2m more\033[22m")))
+})
+
+test_that("an approval asks under the call it gates; a call not shown is printed (D-243)", {
+  skip_on_cran()
+  local_project()
+  sub = local_fake_provider(function(request) {
+    if (length(request$last_results)) "child done" else fake_tool("r", code = "x = 1")
+  }, name = "sub")
+  fake = local_fake_provider(function(request) {
+    if (length(request$last_results)) return("parent done")
+    fake_tool("r", code = "res = peter('count', model = sub)")
+  }, name = "main")
+  prompts = character()
+  local_gptr_options(mode = "manual", interactive = TRUE, verbose = 2L, quiet = FALSE,
+                     ui = ui_console_spec(function(prompt, ...) {
+                       prompts <<- c(prompts, prompt)
+                       "y"
+                     }))
+  e = new.env()
+  e$sub = sub
+  out = utils::capture.output(peter("go", model = fake, envir = e))
+  opts = "  y yes - a always (session) - p always (project) - n no - ? more"
+  # the parent's call line, printed at its start, is not repeated: its ask follows it
+  at = grep("res = peter(", out, fixed = TRUE)
+  expect_identical(out[at], "  | r  res = peter('count', model = sub)")
+  expect_identical(out[at + 2L], paste0("  ? Allow r?", opts))
+  # the sub-agent's call runs in the parent's r code, where no call line is shown: its ask
+  # prints it, and the question names who asks (wrapped at 80 columns)
+  at = match("  | r  x = 1", out)
+  expect_identical(out[at + 1:2],
+                   c("  ? sub-agent 'count' #1: allow r?  y yes - a always (session) -",
+                     "  p always (project) - n no - ? more"))
+  expect_identical(prompts, c("> ", "> "))
+})
+
+test_that("a remembered answer adds one dim line naming the rule and its scope (D-243)", {
+  skip_on_cran()
+  root = local_project()
+  req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
+  out = console_try(function() ui_console_permission(req), "a")
+  expect_identical(utils::tail(out$shown, 1L), "    allowed r(fn:write.csv) for this session")
+  out = console_try(function() ui_console_permission(req), "project")
+  expect_identical(utils::tail(out$shown, 1L), "    allowed r(fn:write.csv) for this project")
+  expect_false(any(grepl("allowed", console_try(function() ui_console_permission(req), "y")$shown,
+                         fixed = TRUE)))
+  withr::local_options(cli.num_colors = 256L)
+  out = console_try(function() ui_console_permission(req), "a")
+  expect_identical(utils::tail(out$shown, 1L),
+                   "\033[2m    allowed r(fn:write.csv) for this session\033[22m")
+})
+
 test_that("lines typed or pasted before the approval prompt never answer it (IC-75)", {
   root = local_project()
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
@@ -204,7 +318,7 @@ test_that("during a run a line typed before the approval prompt is queued, then 
   out = utils::capture.output(repl_main(rs))
   expect_identical(e$zz, 2)
   expect_identical(queued, list(list(text = "use base R", as = "steer", source = "repl")))
-  expect_identical(sum(startsWith(rl$prompts, "  allow?")), 2L)
+  expect_identical(sum(rl$prompts == "> "), 2L)
   expect_identical(rl$kept, character())
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
@@ -276,7 +390,7 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   rs$mode = "manual"
   out = utils::capture.output(repl_main(rs))
   expect_null(e$zz)
-  expect_identical(sum(startsWith(fd0$prompts, "  allow?")), 2L)
+  expect_identical(sum(fd0$prompts == "> "), 2L)
   expect_identical(sum(out == "  A pasted block is not an answer (kept in history)."), 1L)
   expect_identical(kept, '"""\ny\npasted line two\npasted line three\n"""')
   expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
@@ -291,16 +405,19 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
   skip_on_cran()
   root = local_project()
   req = ui_request("x = 1")
-  expect_identical(ui_permission_lines(req)[1L], "  r  x = 1")
-  expect_identical(ui_permission_lines(c(req, agent = "main"))[1L], "  r  x = 1")
-  expect_identical(ui_permission_lines(c(req, agent = "alpha"))[1L], "  sub-agent alpha > r  x = 1")
-  expect_identical(ui_permission_lines(c(req, agent = "'Sum\033...'"))[1L],
-                   "  sub-agent 'Sum<U+001B>...' > r  x = 1")
+  q = function(r) utils::tail(ui_permission_lines(r), 1L)
+  expect_identical(ui_permission_lines(req),
+                   c("  | r  x = 1", "  ? Allow r?  y yes - n no - ? more"))
+  expect_identical(q(c(req, agent = "main")), "  ? Allow r?  y yes - n no - ? more")
+  expect_identical(ui_permission_lines(c(req, agent = "alpha")),
+                   c("  | r  x = 1", "  ? sub-agent alpha: allow r?  y yes - n no - ? more"))
+  expect_identical(q(c(req, agent = "'Sum\033...'")),
+                   "  ? sub-agent 'Sum<U+001B>...': allow r?  y yes - n no - ? more")
   expect_match(ui_permission_detail(c(req, agent = "alpha"))[1L],
                "^  sub-agent alpha wants to use r \\(level")
   expect_match(ui_permission_detail(req)[1L], "^  gptr wants to use r")
   crit = ui_request("q('no')", tier = "ask_human")
-  expect_identical(utils::tail(ui_permission_lines(crit), 1L),
+  expect_identical(utils::tail(ui_permission_lines(crit), 2L)[1L],
                    paste0("     asks in every mode: ", crit$reason))
   expect_false(any(grepl("every mode", ui_permission_lines(req), fixed = TRUE)))
 })
@@ -327,7 +444,7 @@ test_that("nested calls with the same prompt are told apart by their number (#36
   expect_identical(s$text, "parent done")
   who = "sub-agent 'You are annotating one cluster...' #"
   for (k in c("1", "2")) {
-    expect_true(paste0("  ", who, k, " > r  x = 1") %in% out, info = k)
+    expect_true(any(startsWith(out, paste0("  ? ", who, k, ": allow r?"))), info = k)
     expect_true(paste0("  # ", who, k, " (sub/sub-1) started") %in% out, info = k)
     expect_true(any(startsWith(out, paste0("  # ", who, k, " done"))), info = k)
   }
@@ -340,7 +457,7 @@ test_that("invalid answers are explained and kept; five end in a refusal the mod
   crit = ui_request("q('no')", tier = "ask_human")
   out = console_try(function() ui_console_permission(crit), c("a", "p", "y"))
   expect_identical(out$result$decision, "allow")
-  expect_identical(sum(grepl("[a]lways is not offered: level-4 and control actions",
+  expect_identical(sum(grepl("a and p are not offered: level-4 and control actions",
                              out$shown, fixed = TRUE)), 2L)
   expect_identical(out$kept, character())
   req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
@@ -348,7 +465,7 @@ test_that("invalid answers are explained and kept; five end in a refusal the mod
   expect_identical(out$result, list(decision = "deny", remember = NULL,
                                     feedback = "no valid answer was given at the approval prompt"))
   # the hint names the prompt's own letters and how to deny with feedback
-  hint = "  Type y, a or n (n <text> says what to do instead), or ?."
+  hint = "  Type y, a, p or n (n <text> says what to do instead), or ?."
   expect_identical(c(sum(out$shown == "  Not an answer: 'zz' (kept in history)."),
                      sum(out$shown == hint)), c(5L, 5L))
   expect_identical(out$kept, rep("zz", 5L))
@@ -390,10 +507,10 @@ test_that("a long invalid answer's notice wraps inside the approval's width (P28
   a = "please use base R graphics for this plot"
   req = ui_request("zz = 1", rule = "r(level<=1)")
   out = console_try(function() ui_console_permission(req), c(a, "y"))
-  rows = out$shown[seq(grep("Not an answer", out$shown, fixed = TRUE), length.out = 3L)]
+  rows = out$shown[seq(grep("Not an answer", out$shown, fixed = TRUE), length.out = 4L)]
   expect_identical(rows, c("  Not an answer: 'please use base R graphics for this",
                            "  plot' (kept in history).",
-                           "  Type y, a or n (n <text> says what to do instead), or ?."))
+                           "  Type y, a, p or n (n <text> says what to do instead),", "  or ?."))
   expect_lte(max(nchar(out$shown)), 58L)
   expect_identical(out$kept, a)
 })

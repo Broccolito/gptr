@@ -187,8 +187,8 @@ test_that("a prompt clears the waiting row, keeps its task and a later tick redr
     expect_identical(redraw[[1L]], "")
   }
   clear = paste0("\r", strrep(" ", 79L), "\r")
-  expect_true(startsWith(seen[[1L]], paste0(clear, "  r  gptr_mcp_serve()")))
-  expect_true(startsWith(seen[[2L]], paste0(clear, "  Pick one")))
+  expect_true(startsWith(seen[[1L]], paste0(clear, "  | r  gptr_mcp_serve()")))
+  expect_true(startsWith(seen[[2L]], paste0(clear, "  ? Pick one")))
 })
 
 test_that("consecutive prompts in a run stay separated by a blank line (D-186)", {
@@ -207,10 +207,10 @@ test_that("consecutive prompts in a run stay separated by a blank line (D-186)",
   out = utils::capture.output(invisible(ui_questions_via(
     function(...) ui_console_select(..., read = read),
     function(...) ui_console_input(..., read = read), qs)))
-  for (title in c("  First?", "  Second?", "  Name?: 1")) {
+  for (title in c("  ? First?", "  ? Second?", "  ? Name?")) {
     expect_identical(out[[which(out == title) - 1L]], "")
   }
-  expect_identical(sum(!nzchar(out)), 7L)
+  expect_identical(sum(!nzchar(out)), 3L)
 })
 
 test_that("a CLI tool line keeps the waiting row while its request is pending (D-186)", {
