@@ -389,12 +389,14 @@ test_that("text encodings and long glob words are read safely (D-061)", {
   pc = latin$path_class[latin$fn == "redirect"]
   expect_true(pc %in% c("workspace", "unknown"))
   expect_identical(flags_level(latin), if (identical(pc, "workspace")) 2L else 3L)
-  # a long glob word is read in linear time (a path too long for R to expand is unknown)
-  x = paste0("cat ", strrep("a*[", 3000L))
+  # a long glob word is read in linear time (a path too long for R to expand is unknown; Windows
+  # expands it)
+  w = strrep("a*[", 3000L)
   t0 = proc.time()[["elapsed"]]
-  f = risk_command(x, root)
+  f = risk_command(paste0("cat ", w), root)
   expect_lt(proc.time()[["elapsed"]] - t0, 10)
-  expect_identical(flags_level(f), 1L)
+  long = risk_path_class(file.path(root, gsub("*", "x", w, fixed = TRUE)), root)
+  expect_identical(flags_level(f), if (long == "unknown") 1L else 0L)
   expect_no_warning(gptr_risk(sprintf("readLines('%s/.env')", strrep("a", 5000)), root = root))
   expect_identical(risk_glob_rx("a*[b]c["), "^a.*[b]c\\[\\z")
   expect_identical(risk_glob_rx("[!]"), "^\\[!\\]\\z")
