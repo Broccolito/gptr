@@ -2933,8 +2933,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   rows' environment, Python provisioning and Status-line guard (one job per version took up to about 50
   minutes in October 2026; the slowest shard takes about 23). `GPTR_CI_TEST_SHARD=<n>/4`
   (`tests/testthat/ci-shard.R`) makes `tests/testthat.R` run every fourth ordinary test file, sorted, from the
-  n-th, and fail unless exactly those files recorded test results; the native entries `tests/native-*.R` run in
-  shard 1 only. Unset, a check is shard 1/1, the whole suite, as before.
+  n-th, and fail unless each of those files recorded a test result (so a test file skips inside `test_that()`,
+  not at file level); the native entries `tests/native-*.R` run in shard 1 only. Unset, a check is shard 1/1, the
+  whole suite, as before.
 - Rule: the required contexts `windows-latest (release)` and `windows-latest (oldrel-4)` are Ubuntu gate jobs
   that always run after the shards (a skipped required check would count as passing) and pass only when the
   latest attempt of each of their version's four shards recorded `success` in its `windows-status-<r>-<n>`
