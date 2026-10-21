@@ -1046,7 +1046,7 @@ run_step = function(run) {
 run_halted = function(run) isTRUE(run$settled) || isTRUE(run$signal$aborted)
 
 #' Take every queued steer, or the first follow-up, and turn each into a message (IC-55, D-242);
-#' steers become relays once the run has made a request
+#' steers become relays once the run has made a request; one `queue_update` names each item
 #' @noRd
 run_take = function(run, which) {
   d = session_data(run$shell)
@@ -1056,7 +1056,7 @@ run_take = function(run, which) {
   items = q[[which]][seq_len(n)]
   q[[which]] = q[[which]][-seq_len(n)]
   d$queue = q
-  run_emit(run, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+  for (item in items) queue_emit(run$shell, "take", which, item, .run = run)
   lapply(items, queue_item_message, which, relay = isTRUE(run$requested))
 }
 

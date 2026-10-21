@@ -889,8 +889,34 @@ session_enqueue = function(s, text, as = c("steer", "follow_up"), source = "api_
               source = source, t = as.numeric(Sys.time()))
   q[[as]][[length(q[[as]]) + 1L]] = item
   d$queue = q
-  session_emit(s, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+  queue_emit(s, "add", as, item)
   invisible(s)
+}
+
+#' Take back the newest queued item of `which` that came from a user source, or NULL; extension
+#' and agent items stay (D-242)
+#' @noRd
+session_unqueue = function(s, which = "steer") {
+  check_class(s, "gptr_session", "s")
+  which = check_choice(which, c("steer", "follow_up"), "which")
+  d = session_data(s)
+  q = d$queue
+  i = Position(function(item) item$source %in% queue_user_sources, q[[which]], right = TRUE)
+  if (is.na(i)) return(NULL)
+  item = q[[which]][[i]]
+  q[[which]] = q[[which]][-i]
+  d$queue = q
+  queue_emit(s, "withdraw", which, item)
+  item
+}
+
+#' Emit `queue_update` for one item that entered (`add`) or left (`take`, `withdraw`) the queue:
+#' its kind, redacted text and source, then the counts the queue now holds (04 section 10.4)
+#' @noRd
+queue_emit = function(s, op, which, item, .run = NULL) {
+  q = session_data(s)$queue
+  session_emit(s, "queue_update", op = op, which = which, text = item$text, source = item$source,
+               steer = length(q$steer), follow_up = length(q$follow_up), .run = .run)
 }
 
 #' Check the attachments of a queue item before it enters the queue (the loop dequeues before it

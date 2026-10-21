@@ -42,7 +42,7 @@ ev_table = rbind(
   ev_row("tool_execution_end", "notify", "tool_call_id, tool_name, is_error, elapsed, details"),
   ev_row("tool_result", "patch", "tool_name, tool_call_id, input, content, details, is_error",
          "list(content, details, is_error)"),
-  ev_row("queue_update", "notify", "steer, follow_up"),
+  ev_row("queue_update", "notify", "op, which, text, source, steer, follow_up"),
   ev_row("retry_start", "notify", "attempt, delay, class", origin = "gptr"),
   ev_row("retry_end", "notify", "attempt, ok", origin = "gptr"),
   ev_row("session_before_compact", "first_decision", "reason, tokens",

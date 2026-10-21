@@ -1405,6 +1405,29 @@ test_that("every steer queued during a tool call reaches the next request, in or
                          c("use TPM", "and log2")))
 })
 
+test_that("queue_update names each item the run takes, after it left the queue (D-242)", {
+  skip_on_cran()
+  local_permissive()
+  local_tool("self", function(input, ctx) {
+    session_enqueue(ctx$session, "use TPM", as = "steer", source = "pipe")
+    session_enqueue(ctx$session, "and log2", as = "steer", source = "repl")
+    "sent"
+  })
+  local_fake_provider(list(fake_tool("self"), "ack"))
+  ev = local_events("queue_update")
+  s = test_session()
+  session_enqueue(s, "go", as = "follow_up")
+  session_run(s, NULL)
+  took = Filter(function(e) identical(e$op, "take"), ev(s))
+  expect_identical(lapply(took, `[`, c("op", "which", "text", "source", "steer", "follow_up")),
+                   list(list(op = "take", which = "follow_up", text = "go", source = "api_user",
+                             steer = 0L, follow_up = 0L),
+                        list(op = "take", which = "steer", text = "use TPM", source = "pipe",
+                             steer = 0L, follow_up = 0L),
+                        list(op = "take", which = "steer", text = "and log2", source = "repl",
+                             steer = 0L, follow_up = 0L)))
+})
+
 test_that("a steer sent during a final answer adds one request to the same run (D-242)", {
   skip_on_cran()
   local_permissive()

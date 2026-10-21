@@ -1218,8 +1218,9 @@ user sent this message while you were working: <text>"; `ctx$send()` from a plug
 "Extension <name> sent this note (not from the user): <text>", sibling and child agents' text arrives as
 `<agent_report>` data, and a send from model code of the same session tree is refused [IC-55]. Follow-ups are
 taken one at a time when the agent would otherwise stop. Abort moves the queue to `dropped`. Enqueueing returns
-immediately. There is no file-inbox channel in core (J-cran K-16); a front end that needs one is a plugin calling
-`gptr_steer()`.
+immediately. `session_unqueue()` takes back the newest user item (the console's Up) [D-242]; each item added,
+taken or withdrawn emits one `queue_update` that names it. There is no file-inbox channel in core (J-cran K-16); a
+front end that needs one is a plugin calling `gptr_steer()`.
 
 **Interrupt policy** [18 §4.6, 02 §5.4, G3 (5)]. Runs execute inside
 `tryCatch(withCallingHandlers(<run>, interrupt = pause_menu), interrupt = abort_run)`. The pause menu uses R's

@@ -2527,6 +2527,7 @@ row = usage_row(msg, session = s$id, agent = "main", parent_id = NA_character_, 
 | `session_set_model(s, ref, reason = "user")` | resolves `ref`, appends `model_change`, emits `model_select` | P08, P14 |
 | `session_set_mode(s, mode, source = "user")` | appends `gptr.mode_change`; the next user message (idle) or an operator message after the current tool results (running) carries the new `<mode>` block | P08, P11, P14 |
 | `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())` | the queue behind `gptr_steer()`; `source` in `pipe`, `pause_menu`, `repl`, `api_user`, `extension`, `agent`; only user sources become operator relays; a call from model code of the same session tree is refused (IC-55) | P08, P14, P19 |
+| `session_unqueue(s, which = "steer")` | removes and returns the newest `which` item from a user source (`pipe`, `pause_menu`, `repl`, `api_user`), or `NULL`; extension and agent items stay; emits `queue_update` op `withdraw` (D-242) | P28 |
 | `session_value_set(s, label, value, name = NULL, forced_home = NULL)` | the §5.1 value policy of `03`; appends `gptr.value` | P08 (`gptr_return()`), P15 (replay `value=`), P19 (child values) |
 | `session_value_get(s, turn = NULL)` | the value (or `NULL`), resolving names in the kept home | P06 accessors, P19 |
 | `live_all()` | list of live sessions of this process | P06, P21 |
@@ -3525,7 +3526,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `permission_request` | gptr | first decision, **error = deny** | the §7.11 permission request record | `list(decision = "allow" \| "deny", reason)` | P06 |
 | `tool_execution_start`, `tool_execution_update`, `tool_execution_end` | pi | notify | `tool_call_id`, `tool_name`, `input` (start), `text` (update), `is_error`, `elapsed`, `details` summary (end); the end of a call served in a live run (§8.5) carries the result's `content` and full `details`; a provider's informational events (§8.5) carry `informational = TRUE` and IC-53 does not track them | - | P06 |
 | `tool_result` | pi | patch chain | `tool_name`, `tool_call_id`, `input`, `content`, `details`, `is_error` | `list(content, details, is_error)` (any subset) | P06 |
-| `queue_update` | pi | notify | `steer` int, `follow_up` int | - | P06 |
+| `queue_update` | pi | notify | one event per item added, taken by the run or withdrawn: `op` (`add`, `take`, `withdraw`), `which` (`steer`, `follow_up`), `text` (the item's redacted text), `source` (IC-55), then `steer` int, `follow_up` int (what the queue holds after the change) | - | P06, P28 |
 | `retry_start`, `retry_end` | gptr | notify | `attempt`, `delay`, `class`; end: `ok` | - | P06 (from P04) |
 | `session_before_compact` | pi | first decision | `reason` (`threshold`, `cold`, `overflow`, `manual`), `tokens` | `list(cancel = TRUE)` or `list(result = <compactor result>)` | P07 |
 | `session_compact` | pi | notify | `strategy`, `tokens_before`, `summary_tokens` | - | P07 |

@@ -3018,7 +3018,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   steer queued during a tool call reaches the next request, in order (D-242)", "a steer sent during a final
   answer adds one request to the same run (D-242)", "a steer sent during the first of two calls waits for both
   results; no call is skipped"; test-provider-transform.R "two relays after the tool results serialise in each
-  native adapter (D-242)"; test-agent-loop.R L11-L13. Pending: Tasks 7, 13, 14, 15.
+  native adapter (D-242)"; test-agent-loop.R L11-L13.
+- Task 5: `queue_update` names its item (`op` `add`, `take` or `withdraw`, `which`, the redacted `text`, `source`)
+  besides the counts, one event per item; `session_unqueue(s, which)` takes back the newest user item for the
+  console's Up and Task 15's leftovers. Tests: test-session-object.R "queue_update names the item it adds ...",
+  "session_unqueue() takes back the newest user item and emits withdraw (D-242)", "session_unqueue() returns NULL
+  on an empty queue and emits nothing"; test-agent-run.R "queue_update names each item the run takes, after it
+  left the queue (D-242)". Pending: Tasks 7, 13, 14, 15.
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue
