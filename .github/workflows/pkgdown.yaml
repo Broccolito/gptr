@@ -69,8 +69,11 @@ jobs:
             exists('site_render', inherits = FALSE), exists('site_build_args', inherits = FALSE))
           site_stage('.', file.path(Sys.getenv('RUNNER_TEMP'), 'gptr-pages-package'))
           RSCRIPT
+      - uses: ./.github/actions/system-libraries
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
         timeout-minutes: 10
+        env:
+          PKG_SYSREQS: 'false'
         with:
           working-directory: ${{ runner.temp }}/gptr-pages-package
           dependencies: '"hard"'

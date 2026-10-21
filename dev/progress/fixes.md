@@ -1397,3 +1397,37 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   unmocked block passes; `^tool-diff$` PASS 570. Lint clean.
 - Deviations: D-246 (second rule). Open: on Windows a hypervisor pause may still be charged to the
   process as CPU time; the file's other 5 s wall bounds (`:83`, `:260`, `:268`) had no failures.
+
+## Task CI-86 - Linux CI installs its system libraries without pak's Chromium PPA (2026-10-21, #69)
+- Since about 14:30Z on 2026-10-21 Ubuntu jobs failed in `setup-r-dependencies`: pak maps chromote's
+  and gptr's own SystemRequirements (a Chrome-family browser) to `chromium`, so it runs
+  `add-apt-repository -y ppa:xtradeb/apps` and `apt-get install chromium`, and
+  ppa.launchpadcontent.net answered 503 ("E: Failed to fetch .../chromium_155.0.8059.79-...deb 503
+  Service Unavailable", then "System command 'sudo' failed"). Run 39617294607 (main) lost 4 Linux
+  jobs this way, run 39638712528 (PR #67) 6; the rest passed only while the PPA answered. pkgdown
+  (run 39617294897) and the dispatch workflows add the same PPA.
+- Fix: `.github/actions/system-libraries` holds Plan-gates' apt list and dpkg verification. Every
+  Linux job that installs R dependencies, except rhub.yaml's, runs it before `setup-r-dependencies`,
+  which gets `PKG_SYSREQS: 'false'`: R-CMD-check (Ubuntu rows, no-suggests, c-locale, cran-mode,
+  copy-safety, connections, bench), Plan-gates, pkgdown, Optional-integrations, rscript-native,
+  callr-native-environment, windows-by-file's optional Linux row and Exact-tarball's producer,
+  Ubuntu check rows and dependency-profiles (from the controller checkout, sparse in the first two,
+  since the nominated source may predate the action). On macOS and Windows rows the action is
+  skipped and `PKG_SYSREQS` is inert (pak's sysreqs support Linux only); job names are unchanged;
+  jobs with smaller profiles (no-suggests, pkgdown) now install the whole list. chromote searches
+  `google-chrome` first, which the ubuntu-latest image provides, so CHROMOTE_CHROME stays unset.
+- Coverage: every pak install list in the failing runs and the latest Linux runs of the dispatch
+  workflows is in the list except `chromium` and `libfreetype6-dev` (transitional to the listed
+  `libfreetype-dev`); devtools jobs also asked for `git` (preinstalled) and `libx11-dev` (installed
+  with `libmagick++-dev`, Plan-gates run 39371724850).
+- Checks: every workflow and action parses with `yaml::read_yaml`; `^zzz$` PASS 145;
+  `dev/ci/test-optional-dependencies.py` OK; the action's script passes `bash -n`.
+- Deviations: none. Open: not yet run on hosted runners; a new dependency's library must be added to
+  the list (Plan-gates' `pak::sysreqs_check_installed()` reports it for its profile); rhub.yaml
+  (r-hub/actions/setup-deps in its Ubuntu containers and on the `linux` VM platform) still adds
+  ppa:xtradeb/apps, as in run 39566663196, and the action (sudo, noble package names) cannot run in
+  r-hub's root containers; the source_sha nominated to Plan-gates, Optional-integrations,
+  rscript-native, callr-native-environment and windows-by-file (optional) must contain
+  `.github/actions/system-libraries` (this commit or later), as Optional-integrations and
+  windows-by-file already need for `optional-dependencies`; Exact-tarball takes the action from its
+  controller checkout.

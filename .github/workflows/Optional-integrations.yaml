@@ -71,7 +71,11 @@ jobs:
           r-version: release
           Ncpus: 1
           use-public-rspm: true
+      - uses: ./.github/actions/system-libraries
+        if: runner.os == 'Linux'
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        env:
+          PKG_SYSREQS: 'false'
         with:
           extra-packages: any::pkgload any::testthat any::repr any::reticulate any::chromote any::lintr
           needs: check
