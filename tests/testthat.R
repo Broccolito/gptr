@@ -20,9 +20,19 @@ if (.Platform$OS.type == "windows" && identical(Sys.getenv("NOT_CRAN"), "true"))
     stopifnot(length(files) > length(native), !anyDuplicated(files), all(native %in% files))
     stopifnot(all(grepl("^test-[A-Za-z0-9_-]+[.][rR]$", files)))
     ordinary = setdiff(files, native)
-    names = sub("[.][rR]$", "", sub("^test[-_]", "", ordinary))
+    source("testthat/ci-shard.R", local = TRUE)
+    selected = ci_shard_files(ordinary)
+    names = sub("[.][rR]$", "", sub("^test[-_]", "", selected))
     stopifnot(all(grepl("^[A-Za-z0-9_-]+$", names)), !anyDuplicated(names))
-    test_check("gptr", filter = paste0("^(", paste(names, collapse = "|"), ")$"))
+    result = test_check("gptr", filter = paste0("^(", paste(names, collapse = "|"), ")$"))
+    # A CI shard fails unless each of its files recorded a test result
+    if (nzchar(Sys.getenv("GPTR_CI_TEST_SHARD"))) {
+      missing = setdiff(selected, as.data.frame(result)$file)
+      if (length(missing)) {
+        stop("CI shard files that recorded no test result (a file-level skip() records none): ",
+             toString(missing))
+      }
+    }
   })
 } else {
   test_check("gptr")

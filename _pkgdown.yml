@@ -31,10 +31,12 @@ navbar:
         href: gptr-cheatsheet.pdf
 
 authors:
-  after: >-
-    **Acknowledgements.** Mario Zechner's [pi](https://github.com/earendil-works/pi) coding
-    agent inspired gptr; its tool descriptions, edit semantics and prompt-template grammar
-    are derived from pi (MIT license; see `inst/COPYRIGHTS`).
+  Wanjun Gu:
+    href: mailto:wanjun.gu@ucsf.edu
+  Tianlu Zhu:
+    href: mailto:tianluz2013@gmail.com
+  Gianmarco Bellucci:
+    href: mailto:Gianmarco.Bellucci@ucsf.edu
 
 reference:
 - title: "Ask Peter"

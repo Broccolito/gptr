@@ -4802,8 +4802,9 @@ cran-comments); the other plans' pages add their technical terms in Step 3.
 - Consumes: every script of this plan; `spelling::spell_check_package()`,
   `spelling::spell_check_files()`, `urlchecker::url_check()`, `devtools::check()`,
   `devtools::check_win_devel()`, `devtools::submit_cran()` (development tools; if one is not
-  installed, the step stops for the maintainer); P01's GitHub Actions workflow
-  `.github/workflows/R-CMD-check.yaml` (the CI matrix).
+  installed, the step stops for the maintainer); the GitHub Actions workflows
+  `.github/workflows/R-CMD-check.yaml` (P01) and `.github/workflows/Windows-check.yaml` (D-239),
+  the CI matrix.
 - Produces: the submitted package gptr 1.0.0.
 
 - [ ] **Step 1: Write the failing test**
@@ -4986,13 +4987,14 @@ If Step 3 fixed roxygen in owner files, add those `R/` files to the `git add` li
 These steps act outside this machine (CI, win-builder, CRAN); **an implementing agent asks the
 maintainer before each of them**:
 
-1. Push the release branch and wait for P01's workflow `R-CMD-check` to finish. Run:
-   `gh run list --workflow R-CMD-check.yaml --limit 1 --json headSha,status,conclusion` and
-   `git rev-parse HEAD`. Expected: the latest run has `status` `completed` and `conclusion`
-   `success`, which a matrix run has only when every job of the matrix passed (macOS, Windows,
-   Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C`, and P01's `bench` job; 05
-   P25 acceptance 1), and its `headSha` equals `git rev-parse HEAD`, the commit of Step 5 that
-   passed the final gate of Step 4.
+1. Push the release branch and wait for the workflows `R-CMD-check` and `Windows-check` to
+   finish. Run: `gh run list --workflow R-CMD-check.yaml --limit 1 --json headSha,status,conclusion`,
+   the same command with `--workflow Windows-check.yaml`, and `git rev-parse HEAD`. Expected: each
+   latest run has `status` `completed` and `conclusion` `success`, which a matrix run has only when
+   every job passed (macOS, Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C` and
+   P01's `bench` job; the four shards each of Windows release and oldrel-4 and their two gates,
+   D-239; 05 P25 acceptance 1), and its `headSha` equals `git rev-parse HEAD`, the commit of Step 5
+   that passed the final gate of Step 4.
 2. Run: `Rscript --vanilla -e 'devtools::check_win_devel()'`. Expected (by email to the
    maintainer, about 30 minutes later; 05 P25 acceptance 2): `Status: 1 NOTE`, the note being
    the incoming-feasibility NOTE naming the maintainer.
@@ -5031,7 +5033,7 @@ commands run from `/Users/wanjun/Desktop/gptr`.
 | # | Acceptance check (05 P25) | Proved by | Command | Expected |
 |---|---|---|---|---|
 | 1 | `devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")` gives 0 errors, 0 warnings and no NOTE apart from the incoming-feasibility NOTE naming the maintainer (an update of gptr 0.7.0; IC-72) | Task 15 Step 4 (local run) | `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'` | `0 errors \| 0 warnings \| 1 note`; the note: `Maintainer: 'Wanjun Gu <wanjun.gu@ucsf.edu>'` |
-| 1 | ... on the full CI matrix (macOS, Windows, Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C`) | Task 15 Step 6, item 1 (P01's workflow) | `gh run list --workflow R-CMD-check.yaml --limit 1 --json headSha,status,conclusion`; `git rev-parse HEAD` | the latest run `completed`, conclusion `success` on every job, `headSha` equal to `HEAD` |
+| 1 | ... on the full CI matrix (macOS, Windows, Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C`) | Task 15 Step 6, item 1 (the workflows `R-CMD-check` and `Windows-check`) | `gh run list --workflow R-CMD-check.yaml --limit 1 --json headSha,status,conclusion`; the same with `--workflow Windows-check.yaml`; `git rev-parse HEAD` | both latest runs `completed`, conclusion `success` on every job, `headSha` equal to `HEAD` |
 | 2 | `devtools::check_win_devel()`: Status OK apart from the maintainer NOTE | Task 15 Step 6, item 2 | `Rscript --vanilla -e 'devtools::check_win_devel()'` | the emailed result reads `Status: 1 NOTE`, the maintainer NOTE |
 | 3 | `urlchecker::url_check()` reports nothing actionable | Task 15 Step 4 | `Rscript --vanilla -e 'urlchecker::url_check()'` | `All URLs are correct!` |
 | 3 | `spelling::spell_check_package()` reports nothing actionable | Task 15 Steps 3-4; `test-gptr-release.R` "no unknown words" | `Rscript --vanilla -e 'print(spelling::spell_check_package())'` | `No spelling errors found.` |
