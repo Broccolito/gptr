@@ -71,9 +71,12 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   `HOME`, `R_USER_*_DIR` and `TMPDIR` at a temporary directory that is deleted afterwards,
   blanks provider key variables and sets replay mode. With `NOT_CRAN` unset that directory is
   under `tempdir()`, tests that start a local server (a mock provider, an MCP server or a Shiny
-  app) or gptr worker processes are skipped, and the suite needs no network; it takes about 2.5
-  minutes (`Running 'testthat.R' [133s/147s]` in the local check). Live provider tests run only
-  when `GPTR_LIVE_TESTS` is `"true"`.
+  app) or gptr worker processes are skipped, and the suite needs no network. To keep the check
+  short, CRAN also skips every test block that took 25 ms or more locally, except each file's
+  fastest block and the permission, redaction and secret tests, which run in full; GitHub
+  Actions runs the whole suite. The CRAN-mode tests take about a minute here (`Running
+  'testthat.R' [57s/60s]` in the local check). Live provider tests run only when
+  `GPTR_LIVE_TESTS` is `"true"`.
 * The 14 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
 * Under `R CMD check` every pool of child processes is capped at two.
@@ -96,7 +99,7 @@ checking, and the installed size.
 
 ## Installed size
 
-The installed size is 6.7 Mb: R 5.0 Mb and doc 1.2 Mb. R is the byte-compiled code of 122 R
+The installed size is 6.8 Mb: R 5.1 Mb and doc 1.2 Mb. R is the byte-compiled code of 122 R
 files, with no data sets and no compiled code; doc holds the 14 HTML vignettes. Current R
 versions report the size as INFO; R 4.2 reports it as a NOTE.
 
