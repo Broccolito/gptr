@@ -72,10 +72,10 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   blanks provider key variables and sets replay mode. With `NOT_CRAN` unset that directory is
   under `tempdir()`, tests that start a local server (a mock provider, an MCP server or a Shiny
   app) or gptr worker processes are skipped, and the suite needs no network. To keep the check
-  short, CRAN also skips every test block that took 25 ms or more locally, except each file's
-  fastest block and the permission, redaction and secret tests, which run in full; GitHub
-  Actions runs the whole suite. The CRAN-mode tests take about a minute here (`Running
-  'testthat.R' [57s/60s]` in the local check). Live provider tests run only when
+  short, `tests/testthat.R` runs on CRAN a fixed list of 65 test files (the permission,
+  redaction and secret tests and the files with the most coverage) without their slowest
+  blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 15 s here (`Running
+  'testthat.R' [15s/15s]` in the local check). Live provider tests run only when
   `GPTR_LIVE_TESTS` is `"true"`.
 * The 14 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
@@ -86,13 +86,17 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 * Local: macOS 26.7 (aarch64), R 4.6.1: `R CMD check --as-cran` on the built tarball with
   `NOT_CRAN` unset, including the PDF manual.
 * GitHub Actions, `R CMD check --as-cran`, each job failing on any warning: macOS (release),
-  Windows (release, oldrel-4), Ubuntu (devel, release, oldrel-1, oldrel-4), Ubuntu R-devel with
-  `NOT_CRAN=false` (the tests as CRAN runs them), Ubuntu without Suggests and Ubuntu under
-  `LC_ALL=C`.
+  Windows (release, oldrel-4; four test shards each), Ubuntu (devel, release, oldrel-1,
+  oldrel-4), Ubuntu R-devel with `NOT_CRAN=false` (the tests as CRAN runs them), Ubuntu without
+  Suggests and Ubuntu under `LC_ALL=C`.
+* R-hub: Windows R-devel and R-release, and Ubuntu R-devel with gcc 12.
+* win-builder: R-devel (2026-10-20 r90728) and R-release (4.6.1); the whole check took 524 s and
+  477 s.
 
 ## R CMD check results
 
-0 errors | 0 warnings | 0 notes
+0 errors | 0 warnings | 0 notes in every environment above, apart from the installed-size NOTE
+of R 4.2 (oldrel-4; see below).
 
 The local check also reports two INFO lines: 'repr', which gptr enhances, was not available for
 checking, and the installed size.
