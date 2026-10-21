@@ -1,6 +1,6 @@
 # R-CMD-check.yaml's Windows rows (release, oldrel-4), each split into four serial R CMD check
 # shards. The required contexts windows-latest (release) and windows-latest (oldrel-4) are gates
-# that pass only when all four shards of their R version passed.
+# that pass only when the latest attempt of each of the four shards of their R version passed.
 on:
   push:
     branches: [main]
@@ -158,13 +158,16 @@ jobs:
             check/gptr.Rcheck/tests/testthat.Rout*
           if-no-files-found: error
           retention-days: 5
-      - name: Mark this shard as passed
+      # The gate reads the newest status per shard, so a failed re-run replaces an earlier pass
+      - name: Record this shard's status for its gate
+        if: always()
         shell: bash
-        run: echo ok > windows-ok-${{ matrix.r }}-${{ matrix.shard }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        run: echo '${{ job.status }}' > windows-status-${{ matrix.r }}-${{ matrix.shard }}
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: windows-ok-${{ matrix.r }}-${{ matrix.shard }}
-          path: windows-ok-${{ matrix.r }}-${{ matrix.shard }}
+          name: windows-status-${{ matrix.r }}-${{ matrix.shard }}
+          path: windows-status-${{ matrix.r }}-${{ matrix.shard }}
           retention-days: 5
 
   gates:
@@ -181,13 +184,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          pattern: windows-ok-${{ matrix.r }}-*
+          pattern: windows-status-${{ matrix.r }}-*
           merge-multiple: true
-      - name: Fail unless all four shards of this R version passed
+      - name: Fail unless the latest attempt of each shard of this R version passed
         run: |
           missing=""
           for n in 1 2 3 4; do
-            [ -f "windows-ok-${{ matrix.r }}-$n" ] || missing="$missing $n/4"
+            grep -qsx success "windows-status-${{ matrix.r }}-$n" || missing="$missing $n/4"
           done
           if [ -n "$missing" ]; then
             echo "::error::These windows-latest (${{ matrix.r }}) shards did not pass:$missing"

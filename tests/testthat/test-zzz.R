@@ -277,11 +277,16 @@ test_that("each required Windows context gates the four shards of its own R vers
   expect_identical(shards$env$GPTR_CI_TEST_SHARD, "${{ matrix.shard }}/4")
   # A skipped required check counts as passing, so the gate always runs and fails closed
   expect_identical(gate[c("needs", "if")], list(needs = "shards", `if` = "always()"))
-  marker = shards$steps[[length(shards$steps)]]
-  expect_null(marker[["if"]])
-  expect_identical(marker$with$name, "windows-ok-${{ matrix.r }}-${{ matrix.shard }}")
-  expect_identical(gate$steps[[1L]]$with$pattern, "windows-ok-${{ matrix.r }}-*")
+  # Each attempt of a shard records its status, so a failed re-run replaces an earlier pass
+  record = rev(shards$steps)[1:2]
+  expect_identical(vapply(record, function(s) s[["if"]] %||% "", ""), c("always()", "always()"))
+  expect_identical(record[[2L]]$run,
+                   "echo '${{ job.status }}' > windows-status-${{ matrix.r }}-${{ matrix.shard }}")
+  expect_identical(record[[1L]]$with$name, "windows-status-${{ matrix.r }}-${{ matrix.shard }}")
+  expect_identical(gate$steps[[1L]]$with$pattern, "windows-status-${{ matrix.r }}-*")
   expect_match(gate$steps[[2L]]$run, "for n in 1 2 3 4;", fixed = TRUE)
+  expect_match(gate$steps[[2L]]$run, 'grep -qsx success "windows-status-${{ matrix.r }}-$n"',
+               fixed = TRUE)
   # read_yaml reads yes as TRUE, but R keeps package sources only for the string "yes"
   expect_true("      R_KEEP_PKG_SOURCE: yes" %in% readLines(path))
 })

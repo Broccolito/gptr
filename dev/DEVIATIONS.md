@@ -2936,9 +2936,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   n-th, and fail unless exactly those files recorded test results; the native entries `tests/native-*.R` run in
   shard 1 only. Unset, a check is shard 1/1, the whole suite, as before.
 - Rule: the required contexts `windows-latest (release)` and `windows-latest (oldrel-4)` are Ubuntu gate jobs
-  that always run after the shards (a skipped required check would count as passing) and pass only when each of
-  their version's four shards uploaded its `windows-ok-<r>-<n>` marker. The shards install no Rtools (nothing
-  compiles) and set `R_QPDF` to the image's qpdf, which R 4.2 does not find.
+  that always run after the shards (a skipped required check would count as passing) and pass only when the
+  latest attempt of each of their version's four shards recorded `success` in its `windows-status-<r>-<n>`
+  artifact. Every attempt records its job status, so a failed re-run replaces an earlier pass, and "Re-run failed
+  jobs" keeps the passed shards' records. The shards install no Rtools (nothing compiles) and set `R_QPDF` to
+  the image's qpdf, which R 4.2 does not find.
 - Contract-visible: none. Amends architecture section 3.5, spec 05 P01, 00-index section 5.1 and P25 Task 15:
   both workflows must pass.
 - Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "Windows CI shards run
