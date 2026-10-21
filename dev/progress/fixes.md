@@ -1598,3 +1598,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `.github/actions/system-libraries` (this commit or later), as Optional-integrations and
   windows-by-file already need for `optional-dependencies`; Exact-tarball takes the action from its
   controller checkout.
+
+## Task CI-87 - The codex turn test keeps its fake keys out of the process vault (2026-10-21, #71)
+- `dev/ci/isolated-check.R test '^(cli-codex|perm-classify)$'` failed "secret rules come from P03's
+  secret_scan()" (`test-perm-classify.R:723`): `gptr_risk("k = Sys.getenv('OPENAI_API_KEY')")`
+  had `secret_guard` TRUE. Each file alone passed.
+- Cause (the test, not the code): "a codex turn: exact argv, ..." (`test-cli-codex.R:942`) sets fake
+  `OPENAI_API_KEY` and `CODEX_API_KEY` with `withr::local_envvar()` and runs `peter()`.
+  `session_new()` registers secret-looking environment variables (`secret_discover_env()`,
+  `R/session-object.R:94`, as contract 04's `session_new` row requires), and the vault belongs to
+  the process, so both names stayed registered after the variables were restored, and the
+  classifier read `OPENAI_API_KEY` as a registered (guarded) secret. A testthat state inspector over
+  `secrets_state()$reg` showed this block, and no other, adding the two names. The codex CLI is the
+  fake one, so an installed Codex CLI plays no part. The whole suite hid the leak: files between the
+  two (console-render, mcp-client, ...) reset the vault with `local_vault()`. CRAN skips the block.
+- Fix (tests only): the block calls `local_vault()`, and a new block after it checks that neither
+  fake key is registered. Ambient discovery at session start is unchanged.
+- Red: `^cli-codex$` FAIL 1 PASS 511 (the new check); `^(cli-codex|perm-classify)$` FAIL 2 PASS
+  1400. Green: `^cli-codex$` PASS 512; `^(cli-codex|perm-classify)$` PASS 1402;
+  `^(cli-|perm-|auth-)` PASS 3856 SKIP 3. Lint clean.
+- Deviations: none. Open: the file's later `peter()` blocks still register any secret-looking
+  variable of the host that setup.R does not blank (here Claude Code's
+  `CLAUDE_CODE_MESSAGING_TOKEN`, first at `:988`) and leave it in the vault.

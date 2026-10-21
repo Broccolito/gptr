@@ -943,6 +943,7 @@ codex_argv_relay = function(argv) {
 
 test_that("a codex turn: exact argv, a 200 KB prompt on stdin intact, no token in env", {
   skip_on_cran()
+  local_vault()
   local_gptr_options(quiet = FALSE)
   f = local_fake_cli("codex", "text")
   withr::local_envvar(OPENAI_API_KEY = "sk-p20fake-openai-0000000000000000",
@@ -980,6 +981,10 @@ test_that("a codex turn: exact argv, a 200 KB prompt on stdin intact, no token i
   m = s$messages[[length(s$messages)]]
   expect_identical(m$route, "plan-cli")
   expect_equal(m$usage$cache_read, 24448)
+})
+
+test_that("the codex turn's fake keys do not stay registered in the process vault", {
+  expect_false(any(c("OPENAI_API_KEY", "CODEX_API_KEY") %in% secret_registered_names()))
 })
 
 test_that("the next turn resumes the Codex thread with -c sandbox_mode=", {
