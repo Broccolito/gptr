@@ -168,23 +168,26 @@ Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), erro
 | `run.R --check` | last line `OK: 4 static prefixes and <n> golden transcripts within the baseline tolerances`, with n = 2 (M1), 4 (M2), 5 (M3), 7 (M4), 14 (M5); M3 and M4 are the counts of fixture files the plans create |
 | `check()` | `0 errors \| 0 warnings \| 1 note`: the incoming-feasibility NOTE naming the maintainer (it may also mention the `.9000` version component); gptr 0.7.0 is on CRAN, so there is no "New submission" NOTE |
 
-Then the CI matrix (ask the maintainer first). P01's `.github/workflows/R-CMD-check.yaml` runs on
-pushes to `main` and on pull requests only, so a pushed feature branch needs an open pull request:
+Then the CI matrix (ask the maintainer first). P01's `.github/workflows/R-CMD-check.yaml` and,
+since D-239, `.github/workflows/Windows-check.yaml` run on pushes to `main` and on pull requests
+only, so a pushed feature branch needs an open pull request:
 
 ```bash
 git push -u origin gptr-1.0                                # origin = the GitHub remote
 gh pr create --draft --fill --base main --head gptr-1.0   # once; later pushes re-run CI
 gh run list --workflow R-CMD-check.yaml --branch gptr-1.0 --limit 1 --json headSha,status,conclusion
+gh run list --workflow Windows-check.yaml --branch gptr-1.0 --limit 1 --json headSha,status,conclusion
 git rev-parse HEAD
 ```
 
-Expected: `status` `completed`, `conclusion` `success`, `headSha` equal to `HEAD`. The jobs:
-`R-CMD-check` (macOS release; Windows release and oldrel-4; Ubuntu devel, release, oldrel-1,
-oldrel-4), `no-suggests`, `c-locale` (`LC_ALL=C`), `copy-safety` (release, devel), `connections`
+Expected, for both workflows: `status` `completed`, `conclusion` `success`, `headSha` equal to
+`HEAD`. The jobs: `R-CMD-check` (macOS release; Ubuntu devel, release, oldrel-1, oldrel-4),
+`no-suggests`, `c-locale` (`LC_ALL=C`), `copy-safety` (release, devel), `connections`
 (`_R_CHECK_CONNECTIONS_LEFT_OPEN_=true`) and `bench` (token ratchet; P24 appends three steps,
-including the INFRA suite under 60 s). Before P07 the `bench` job prints that `run.R` does not exist
-yet, and before P08 `copy-safety` prints that no `test-copy-*.R` suite exists. Then tag the
-milestone.
+including the INFRA suite under 60 s); in `Windows-check.yaml`, four shards each of Windows release
+and oldrel-4 and their gates `windows-latest (release)` and `windows-latest (oldrel-4)`. Before P07
+the `bench` job prints that `run.R` does not exist yet, and before P08 `copy-safety` prints that no
+`test-copy-*.R` suite exists. Then tag the milestone.
 
 ### 5.2 Milestone-specific checks
 

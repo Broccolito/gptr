@@ -161,7 +161,8 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
     `^_pkgdown\.yml$`, `^vignettes/.*\.Rmd\.orig$`, `^\.gptr$`, `^README\.Rmd$`, `^LICENSE\.md$`, `^CLAUDE\.md$`,
     `^AGENTS\.md$`, `^\.claude$`, Rproj entries); `.gitignore`; `dev/style.R` (`gptr_style()`, conventions §4).
   - `.github/workflows/R-CMD-check.yaml`: r-lib check-standard (macOS, Windows, Ubuntu release, devel,
-    oldrel-1), oldrel-4, `_R_CHECK_FORCE_SUGGESTS_=false` no-suggests job, an `LC_ALL=C` job, a
+    oldrel-1; the Windows rows run in `Windows-check.yaml`, D-239), oldrel-4,
+    `_R_CHECK_FORCE_SUGGESTS_=false` no-suggests job, an `LC_ALL=C` job, a
     copy-safety job running `devtools::test(filter = "copy")` on R-release and R-devel, a job running
     `devtools::test()` with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true` (IC-59), and a `bench` job that installs
     rtiktoken and runs `Rscript --vanilla dev/bench/tokens/run.R --check` once P07 adds the runner (IC-73).

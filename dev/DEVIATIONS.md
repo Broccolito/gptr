@@ -2926,3 +2926,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (2026-10-20). inst/COPYRIGHTS also gains the MIT notice of typesafe-ai/system-one-adapter-python, whose
   prompt and schema `R/s1-emulate.R` follows.
 - Tests: test-zzz.R (IC-72), dev/release/tests (site-stage, examples, precompute), dev/ci/test-exact-source.py.
+
+## D-239 - CI: Windows R CMD check runs as four shards per R version behind per-version gates (2026-10-21)
+- Rule: the Windows rows of `R-CMD-check.yaml` (release, oldrel-4) move to `.github/workflows/Windows-check.yaml`,
+  where each runs as four serial `R CMD check --as-cran` shards `windows-latest (<r>, shard <n>/4)` with the
+  rows' environment, Python provisioning and Status-line guard (one job per version took up to about 50
+  minutes in October 2026; the slowest shard takes about 23). `GPTR_CI_TEST_SHARD=<n>/4`
+  (`tests/testthat/ci-shard.R`) makes `tests/testthat.R` run every fourth ordinary test file, sorted, from the
+  n-th, and fail unless exactly those files recorded test results; the native entries `tests/native-*.R` run in
+  shard 1 only. Unset, a check is shard 1/1, the whole suite, as before.
+- Rule: the required contexts `windows-latest (release)` and `windows-latest (oldrel-4)` are Ubuntu gate jobs
+  that always run after the shards (a skipped required check would count as passing) and pass only when each of
+  their version's four shards uploaded its `windows-ok-<r>-<n>` marker. The shards install no Rtools (nothing
+  compiles) and set `R_QPDF` to the image's qpdf, which R 4.2 does not find.
+- Contract-visible: none. Amends architecture section 3.5, spec 05 P01, 00-index section 5.1 and P25 Task 15:
+  both workflows must pass.
+- Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "the hosted jobs have
+  time for the whole suite (CI-19)"; dev/ci/windows/test-windows-check.R (partition, native guards, gates).
