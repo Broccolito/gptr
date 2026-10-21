@@ -798,7 +798,7 @@ test_that("a macOS terminal: a paste is one turn, a fence echoes once, Ctrl-D ne
   pty$send("SLOW\r")
   Sys.sleep(1)
   pty$send("x\rhalf\004")
-  expect_true(pty$wait("[gptr] steering: 'x"))
+  expect_true(pty$wait(queue_line("steer", "x", utf8 = FALSE)))
   expect_true(pty$wait("peter> "))
   expect_identical(pty$seen("GOT SLOW END"), 2L)
   # with echo on, as in a terminal, the tty echoes the rest of a paste once, when it is read; a

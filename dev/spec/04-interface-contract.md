@@ -2823,7 +2823,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), a hook on `turn_end`, emitted just before the loop polls steers, that runs `console_typed()` (a terminal REPL reads what was typed and queues it), so a line sent before a step boundary reaches it (D-242), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
+| `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), a hook on `turn_end`, emitted just before the loop polls steers, that runs `console_typed()` (a terminal REPL reads what was typed and queues it), so a line sent before a step boundary reaches it (D-242), a hook on `queue_update` that prints a user's message the run takes as the person's line `› <text>` at that boundary (D-242), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
 | `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
 | `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu (`[s]teer`, `[f]ollow-up`, `[c]ontinue`, `[a]bort`, `[b]ackground` for foreground calls when P21 is loaded) writes to stderr and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Rgui, IDE consoles) | P06, P08 |
 | `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)`, `finish()`, `reset_line()`; chunk-invariant; writes whole rows only, each at its line end or its wrap (`reset_line()` and `finish()` end the held partial row; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
@@ -5327,7 +5327,7 @@ its part in its own commit, and Task 27 finalises them.
     `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
     empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
     word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
-- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 13-16 and 18-21 pending.
+- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 14-16 and 18-21 pending.
   - A question drains first (Task 2). On a terminal REPL, while a run of the call has a session,
     `console_before_message(kind = "prompt")` reads fd 0 with `console_typed(drain = TRUE)`:
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
@@ -5339,6 +5339,18 @@ its part in its own commit, and Task 27 finalises them.
     invalid answer, a denial (`no ...`) or an ask-tool answer. `gptr_confirm()` (L0, also asked during a
     run, e.g. by `egress_check()` for a nested call's provider) is not drained, so this holds for the
     console questions only; its stale lines go to the history (IC-75).
+  - Queued and delivered messages (Task 13). Queueing (`policy_enqueue()`: typed lines, a line a question reads
+    past, the pause menu's [s] and [f]) prints one dim line at column 0, `↳ steer · <text>` or
+    `↳ follow-up · <text>` (ASCII `-> steer - <text>`); on a CLI route (model type `"cli"`) a steer adds
+    ` · after the CLI's answer`. The text is escaped and wrapped inside the console width (width - 1), later rows
+    under the text, and cut to three rows, the last ending in `…`; inside an evaluation the line has the
+    console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
+    `builtin_console` hooks `queue_update` (§7.14): an item from a user source (IC-55) that a foreground run
+    takes (`op = "take"`, verbosity 2) is the person's line `› <text>` at column 0 (ASCII `>`), escaped and
+    wrapped the same way but whole, printed at the step boundary, before the next request's output, as its own
+    block (a blank line before and after where lines keep the margin). Each row is on the band
+    (`console_style()$band`, row, `\033[K\033[0m`) where the band is known (IC-82). Task 18 stops the queue
+    line in T class, where the live row shows the queue.
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Tasks 19 and 26 pending.
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
     keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by

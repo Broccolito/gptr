@@ -1932,8 +1932,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
   session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`, or `"follow_up"`); one batch (a
   paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. The
-  terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only in its
-  notice; console questions read with the echo restored (D-221). A console question first drains fd 0
+  terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only on
+  its dim queue line (`↳ steer · <text>`) and, when the run takes it, as the person's line `› <text>` at that step
+  boundary [D-242]; console questions read with the echo restored (D-221). A console question first drains fd 0
   (`stty -icanon min 0 time 0`, the modes restored after): typed lines are routed as above and a partial line
   goes to the console history with a notice, so the question starts empty [D-243]. IDE consoles, R.app and
   `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current
@@ -1950,9 +1951,10 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   Where the renderer is active (verbosity 2 on a dynamic TTY; `capture.output()` of an
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
   lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
-  width - 4; one blank line separates text, tool, notice, prompt and status blocks (and two
-  prompts, and two text blocks in a row [D-208], but not a question from the tool block it is asked in
-  [D-243]) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
+  width - 4, while the person's lines (an answer, a queued or delivered message) start at column 0; one blank
+  line separates text, tool, notice, prompt, the person's lines and status blocks (and two prompts, and two text
+  blocks in a row [D-208], but not a question from the tool block it is asked in [D-243]) and follows the input
+  and status lines. Separators are written on finished lines only, so a block overwrites
   the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
   row, R GUIs included; the pause-menu notice excepted, D-225); the margin is that of the console an
   evaluation started from, also for prompts and notices drawn inside it, and a sub-agent line or a

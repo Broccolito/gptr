@@ -3031,7 +3031,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   first. `console_typed()` now checks `repl_terminal()` itself, so outside a terminal REPL it reads nothing.
   Contract-visible: 04 section 7.14. Tests: test-console-typing.R "a line typed during a tool reaches the request
   right after its result (D-242)". Review fix: the hook's own `policy_flush()` was dropped; it did nothing, as
-  items held while a tool ran are flushed at its `tool_execution_end`. Pending: Tasks 13, 14, 15.
+  items held while a tool ran are flushed at its `tool_execution_end`.
+- Task 13: queueing prints one dim line at column 0 in every class for now, `↳ steer · <text>` or
+  `↳ follow-up · <text>` (ASCII `-> steer - <text>`; a CLI route's steer adds ` · after the CLI's answer`), escaped,
+  wrapped with later rows under the text and cut to three rows ending in `…`, in place of the notices
+  `[gptr] steering: ...` and `[gptr] follow-up queued: ...`; the pause menu's [s] and [f] print the same line.
+  `builtin_console` hooks `queue_update`: a user's item that a foreground run takes is the person's line
+  `› <text>` at column 0, whole, on the band where it is known (`console_style()$band`; Task 25 adds the probe), at
+  the boundary and before the next request's output, a block of its own. A follow-up the run still takes (until
+  Task 14) shows the same way. Contract-visible: 04 sections 7.14 and 15.10 (IC-76); 03 section 6.17. Tests:
+  test-console-typing.R "a delivered steer is the person's line at its boundary, before the next text (D-242)",
+  "the person's line is on the band; a queue line is dim and cut to three rows (D-245)", the CLI, follow-up and
+  question-order cases and both pty cases; test-console-interrupt.R "steer and follow-up queue the text with source
+  pause_menu (IC-55)". Pending: Tasks 14, 15.
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

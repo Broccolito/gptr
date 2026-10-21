@@ -73,21 +73,69 @@ test_that("a line typed while an answer runs steers the same run (IC-76, IC-55 s
   expect_identical(msg_text(msg), relay("use base R"))
   expect_identical(res$s$turns, 1L)
   expect_length(session_data(res$s)$queue$steer, 0L)
-  expect_true(any(grepl("[gptr] steering: 'use base R'; it reaches the agent at its next step",
-                        res$out, fixed = TRUE)))
+  expect_true(queue_line("steer", "use base R") %in% res$out)
+  expect_false(any(grepl("[gptr] steering", res$out, fixed = TRUE)))
 })
 
-test_that("on a CLI route the steering notice says it is sent after the CLI's response", {
+test_that("a delivered steer is the person's line at its boundary, before the next text (D-242)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  fake = slow_first()
+  local_typed(typed_once(c("use base R", "and log2"),
+                         function() length(fake_requests(fake)) == 1L))
+  res = typing_console(fake, c("go", "/exit"))
+  sym = console_style()
+  queued = which(res$out == queue_line("steer", "use base R"))
+  shown = which(res$out == paste0(sym$person, " use base R"))
+  expect_length(queued, 1L)
+  expect_length(shown, 1L)
+  # a message of two lines: the later rows under the text, at column 0 as the person's
+  expect_identical(res$out[c(queued, shown) + 1L],
+                   paste0(strrep(" ", nchar(c(sym$queued, sym$person)) + 1L), "and log2"))
+  expect_true(all(c(queued, which(res$out == "first")) < shown) &&
+                shown < which(res$out == "second"))
+})
+
+test_that("the person's line is on the band; a queue line is dim and cut to three rows (D-245)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.num_colors = 256L, cli.width = 40L)
+  old = the$background
+  the$background = "dark"
+  withr::defer(assign("background", old, envir = the))
+  long = paste(rep("use base R", 12L), collapse = " ")
+  fake = slow_first()
+  local_typed(typed_once(long, function() length(fake_requests(fake)) == 1L))
+  res = typing_console(fake, c("go", "/exit"))
+  sym = console_style()
+  plain = cli::ansi_strip(res$out)
+  q = which(startsWith(plain, queue_line("steer", "use")))
+  expect_length(q, 1L)
+  queued = res$out[q + 0:2]
+  expect_true(all(startsWith(queued, "\033[2m")))
+  expect_false(startsWith(res$out[[q + 3L]], "\033[2m"))
+  expect_true(endsWith(cli::ansi_strip(queued[[3L]]), sym$ellipsis))
+  # the delivered message whole, every row on the band, the later rows under the text
+  shown = res$out[startsWith(res$out, "\033[48;5;237m")]
+  expect_gt(length(shown), 3L)
+  expect_true(all(endsWith(shown, "\033[K\033[0m")))
+  lead = substr(cli::ansi_strip(shown), 1L, 2L)
+  expect_identical(lead, c(paste0(sym$person, " "), rep("  ", length(shown) - 1L)))
+  expect_identical(paste(substring(cli::ansi_strip(shown), 3L), collapse = " "), long)
+  expect_true(all(cli::ansi_nchar(c(queued, shown), type = "width") <= 39L))
+})
+
+test_that("on a CLI route the queue line says the steer is sent after the CLI's answer", {
   skip_on_cran()
   local_console_test()
   f = local_fake_cli("claude", "toolstream")
   local_typed(typed_once("use base R", function() length(fake_log(f, "turn")) == 1L))
   res = typing_console(f$model, c("go", "/exit"))
   local_cli_cleanup(res$s)
-  expect_true(any(grepl(
-    "[gptr] steering: 'use base R'; it is sent after the CLI's current response", res$out,
-    fixed = TRUE
-  )))
+  expect_true(paste0(queue_line("steer", "use base R"), console_style()$sep,
+                     "after the CLI's answer") %in% res$out)
   roles = vapply(res$s$messages, function(m) m$role, "")
   expect_identical(roles, c("user", "assistant", "operator", "assistant"))
 })
@@ -107,8 +155,7 @@ test_that("type_ahead = 'follow_up' queues the line for when the agent would sto
   expect_identical(msg$role, "user")
   expect_identical(msg$source, "follow_up")
   expect_identical(msg_text(msg), "then plot it")
-  expect_true(any(grepl("[gptr] follow-up queued: 'then plot it'; it is sent when the agent",
-                        res$out, fixed = TRUE)))
+  expect_true(queue_line("follow-up", "then plot it") %in% res$out)
 })
 
 test_that("a line typed during a tool reaches the request right after its result (D-242)", {
@@ -183,7 +230,7 @@ test_that("a line typed during a tool steers when the next call's question follo
   expect_identical(e$zz, 2)
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("use base R instead"))
   # routed before the question is drawn
-  expect_lt(grep("[gptr] steering: 'use base R instead'", out, fixed = TRUE),
+  expect_lt(match(queue_line("steer", "use base R instead"), out),
             grep("? Allow r?", out, fixed = TRUE))
 })
 
@@ -482,7 +529,7 @@ test_that("the fd-0 reader returns complete lines, survives Ctrl-D and a /dev/nu
   expect_true(all(as.numeric(sub(".* in ([0-9.]+) s", "\\1", got)) < 0.5))
 })
 
-test_that("a terminal: typed text shows once, in its notice; questions and the next prompt echo", {
+test_that("a terminal: typed text shows when queued and delivered, never in the answer (D-242)", {
   skip_on_cran()
   skip_on_os("windows")
   pty = local_pty_r(c(
@@ -508,16 +555,21 @@ test_that("a terminal: typed text shows once, in its notice; questions and the n
   expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(pty$seen("steer me"), 1L)
-  expect_identical(pty$seen("[gptr] steering: 'steer me'"), 1L)
+  # once in its queue line, once as the person's line at the boundary
+  utf8 = l10n_info()[["UTF-8"]]
+  queued = queue_line("steer", "steer me", utf8)
+  shown = paste0(if (utf8) "\u203a" else ">", " steer me")
+  expect_identical(c(pty$seen("steer me"), pty$seen(queued), pty$seen(shown)), c(2L, 1L, 1L))
   # the answer to approve and the next prompt are shown: readline echoes with the modes restored
   expect_identical(c(pty$seen(paste0("? more\r", pty_asked(), "y")), pty$seen("peter> TWO")),
                    c(1L, 1L))
   # the screen's rows (escapes dropped, a row redrawn after "\r" kept as redrawn) without the
-  # notice: the streamed answer reads as the undisturbed one of the second prompt
+  # queue line: the streamed answer reads as the undisturbed one of the second prompt
   rows = strsplit(gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$all), "\n", fixed = TRUE)[[1L]]
   text = paste(sub("^.*\r", "", sub("\r$", "", rows)), collapse = " ")
-  text = gsub("\\[gptr\\] steering:.*?next step", "", gsub("\\s+", " ", text), perl = TRUE)
+  text = gsub(queued, "", gsub("\\s+", " ", text), fixed = TRUE)
+  # the person's line follows the first answer, before the agent's next request
+  expect_true(grepl(paste0("END ", shown, " "), text, fixed = TRUE))
   answers = gsub(" ", "", regmatches(text, gregexpr("BEGIN.*?END", text, perl = TRUE))[[1L]])
   expect_length(answers, 2L)
   expect_identical(answers[[1L]], answers[[2L]])
@@ -646,7 +698,7 @@ test_that("a terminal: a line arriving just as a question is drawn steers the ru
   pty$send("D\r")
   expect_true(pty$wait("DRAWN"))
   pty$send("steer me\r")
-  expect_true(pty$wait("[gptr] steering: 'steer me'"))
+  expect_true(pty$wait(queue_line("steer", "steer me", l10n_info()[["UTF-8"]])))
   # the question is asked again, empty; a person answers it later than 0.1 s
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")

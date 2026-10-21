@@ -136,7 +136,7 @@ working directory restored. Plan-specific rules:
 | `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 17, 26 |
 | `R/auth-oauth.R` (input prompts) | 12 |
 | `R/console-ui.R` | 2, 3, 8, 12, 19 |
-| `R/console-repl.R` | 2, 3, 7, 8, 14, 15, 18, 21, 22, 24, 25, 26 |
+| `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 18, 21, 22, 24, 25, 26 |
 | `R/console-interrupt.R` | 3, 13, 14, 15, 20 |
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
 | `R/console-complete.R` (new) | 22, 23 |
@@ -601,26 +601,43 @@ Commit: `feat(console): approvals ask under the call they gate`.
 
 Decisions:
 - `builtin_console` subscribes `queue_update`. A `"take"` of a user-source item prints `› <text>`
-  at column 0: escaped, wrapped, and on the band from Task 25. It is printed when the loop takes
-  the item, before the next request's output.
+  at column 0: escaped, wrapped, and on the band (`console_style()$band`, known from `COLORFGBG`
+  since Task 8; Task 25 adds the probe). It is printed when the loop takes the item, before the
+  next request's output, at verbosity 2 for a foreground run, as a block of its own
+  (`console_gap()` kind `"person"`). A follow-up the run still takes (until Task 14) shows the same
+  way.
 - In every class for now, queueing prints one dim line at column 0:
   - `↳ steer · <text>` or `↳ follow-up · <text>`; ASCII `-> steer - <text>`;
   - on CLI routes, a steer adds ` · after the CLI's answer`;
-  - the text is escaped and cut to three rows ending in `…`.
+  - the text is escaped and cut to three rows ending in `…`;
+  - inside an evaluation (the pause menu during `r` code) it has the console's colours.
+- Both lines come from `console_person_rows()`: the glyph, then the text wrapped at the console
+  width less one, later rows under the text. The queue line's cut also trims a row wider than that
+  (one long word), so it never takes more than three rows.
 - These lines replace the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...`. The
   pause menu's [s] and [f] use the same lines.
 - Task 18 stops printing the `↳` line in T class, where the live row shows the queue.
 
 Tests (`test-console-typing.R`, `test-console-interrupt.R`), RED first:
-- The `›` cell precedes REQ2's streamed text.
-- The queue lines replace the notice strings.
+- The `›` cell precedes REQ2's streamed text; a message of two lines keeps its later row under the
+  text.
+- At 256 colours and a dark background each `›` row is on the band, and the queue line of a long
+  steer is dim and cut to three rows at width 40.
+- The queue lines replace the notice strings (`queue_line()`, helper-console-input.R).
 - The pause menu's [s] prints the same line.
+- Rewritten: the pty case 'a terminal: typed text shows once, in its notice' (now once queued and
+  once delivered, never in the answer), pty D, the macOS paste case in `test-console-repl.R`, and
+  the `!code` case in `test-console-ui.R`.
 
-Spec: IC-76 texts, 04 §7.14.
+Spec: IC-76 texts, 04 §7.14, 03 §6.17.
 
-Files: `R/console-render.R` (`console_hooks()`, `console_on_queue_update()`),
-`R/console-interrupt.R` (`policy_enqueue()`), `tests/testthat/test-console-typing.R`,
-`tests/testthat/test-console-interrupt.R`.
+Files: `R/console-render.R` (`console_hooks()`, `console_on_queue_update()`,
+`console_person_rows()`), `R/console-interrupt.R` (`policy_enqueue()`),
+`tests/testthat/test-console-typing.R`, `tests/testthat/test-console-interrupt.R`,
+`tests/testthat/test-console-ui.R`, `tests/testthat/test-console-repl.R`,
+`tests/testthat/helper-console-input.R`, the steering sentences of
+`vignettes/interactive-console.Rmd` (and its `.orig`) and `?peter` (`R/console-repl.R`).
+Amended in Task 13.
 
 Commit: `feat(console): a delivered steer shows as the person's line at its boundary`.
 

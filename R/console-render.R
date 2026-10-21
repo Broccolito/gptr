@@ -78,6 +78,25 @@ console_write = function(lines) {
   invisible(NULL)
 }
 
+#' The person's rows at column 0 (D-242): `glyph`, a space and the escaped `text`, wrapped inside
+#' the console width with the later rows under the text; for a finite `n`, cut to `n` rows of
+#' that width, the cut marked with an ellipsis
+#' @noRd
+console_person_rows = function(glyph, text, n = Inf) {
+  lead = paste0(glyph, " ")
+  width = max(20L, cli::console_width() - 1L - nchar(lead))
+  rows = console_wrap(console_lines(text), width)
+  if (is.finite(n)) {
+    ell = console_style()$ellipsis
+    more = length(rows) > n
+    rows = cli::ansi_strtrim(utils::head(rows, n), width, ellipsis = ell)
+    if (more) {
+      rows[[n]] = paste0(cli::ansi_strtrim(rows[[n]], width - nchar(ell), ellipsis = ""), ell)
+    }
+  }
+  paste0(ifelse(seq_along(rows) == 1L, lead, strrep(" ", nchar(lead))), rows)
+}
+
 #' Every console write: through gptr_message_write(), so it is plain stdout outside an evaluation
 #' and reaches the console, never the captured output, inside one (D-188)
 #' @noRd
@@ -677,10 +696,10 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
   invisible(found)
 }
 
-#' One blank line between a run's blocks (text, tool, notice, prompt, waiting row, status) where
-#' lines keep the margin, written on a finished line; blocks of one kind group, except prompts,
-#' a question and the tool block it is asked in are one (it asks under the call it gates, D-243),
-#' and a block replacing a cleared waiting row needs none
+#' One blank line between a run's blocks (text, tool, notice, prompt, the person's lines, waiting
+#' row, status) where lines keep the margin, written on a finished line; blocks of one kind group,
+#' except prompts, a question and the tool block it is asked in are one (it asks under the call it
+#' gates, D-243), and a block replacing a cleared waiting row needs none
 #' @noRd
 console_gap = function(rec, kind) {
   same = identical(rec$last, kind) && !identical(kind, "prompt")
@@ -1241,6 +1260,22 @@ console_on_shutdown = function(event, ctx) {
   NULL
 }
 
+#' queue_update: a user's message the loop takes (a steer at its step boundary) is the person's line
+#' at column 0, the person's glyph and the text (ASCII `> <text>`), on the band, before the next
+#' request's output (D-242)
+#' @noRd
+console_on_queue_update = function(event, ctx) {
+  rec = console_record(event)
+  if (is.null(rec) || !identical(event$op, "take") || !(event$source %in% queue_user_sources) ||
+      !console_render_on(rec)) return(NULL)
+  sym = console_style()
+  rows = console_person_rows(sym$person, event$text)
+  console_pause_one(rec)
+  console_gap(rec, "person")
+  console_write(if (nzchar(sym$band)) paste0(sym$band, rows, "\033[K\033[0m") else rows)
+  NULL
+}
+
 #' turn_end, emitted just before the loop polls steers: a terminal REPL reads what was typed (also
 #' during an in-process tool), so a line sent before this step boundary reaches it (D-242)
 #' @noRd
@@ -1260,6 +1295,7 @@ console_hooks = function() {
     gptr_hook("tool_execution_start", console_on_tool_start),
     gptr_hook("tool_execution_end", console_on_tool_end),
     gptr_hook("turn_end", console_on_turn_end),
+    gptr_hook("queue_update", console_on_queue_update),
     gptr_hook("retry_start", console_on_retry),
     gptr_hook("session_compact", console_on_compact),
     gptr_hook("agent_end", console_on_agent_end),

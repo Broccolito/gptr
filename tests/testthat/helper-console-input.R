@@ -45,6 +45,13 @@ local_console_stdin = function(lines, .env = parent.frame()) {
 # prompt, `>` where the child's output, in this process's locale, is not UTF-8
 pty_asked = function() paste0("\n", if (l10n_info()[["UTF-8"]]) "\u203a" else ">", " ")
 
+# The first row of the line that shows a queued message (D-242), in console_style()'s glyphs;
+# `utf8 = l10n_info()[["UTF-8"]]` gives a pty child's
+queue_line = function(kind, text, utf8 = cli::is_utf8_output()) {
+  sym = withr::with_options(list(cli.unicode = utf8), console_style())
+  paste0(sym$queued, " ", kind, sym$sep, text)
+}
+
 # Terminal R in a pty (80x24, TERM `term`, echo on as in a terminal unless `echo` is FALSE) that
 # loads gptr and sources `child`, the child's code (its options too). `send(x)` types; `wait(x)`
 # reads until `x` is shown and consumes the output through it, so the next wait() looks after it;

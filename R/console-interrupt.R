@@ -164,7 +164,10 @@ policy_menu = function(cnd, pol) {
 }
 
 #' Queue pause-menu or typed text on the session (IC-49, IC-55: source "pause_menu" or "repl",
-#' IC-76) after the `input` event (source "steer"); the notice shows the text
+#' IC-76) after the `input` event (source "steer"); a dim line at column 0 shows it queued (D-242):
+#' the queued glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`),
+#' cut to three rows; a steer on a CLI route adds `after the CLI's answer`. Inside an evaluation it
+#' has the console's colours.
 #'
 #' P06 refuses an enqueue from the session's own tool frames, which are on the stack when the
 #' interrupt hit a tool; the item then waits in the console state for policy_flush().
@@ -177,17 +180,14 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
   }
   ev = ev_dispatch("input", ev_new("input", text = text, source = "steer"), session = s)
   if (identical(ev$action, "handled")) return(invisible(FALSE))
-  shown = console_escape(paste0("'", ev$text, "'"))
-  if (identical(as, "steer")) {
-    console_notice("[gptr] steering: ", shown,
-                   if (identical(session_live(s)$run$model[["type"]], "cli")) {
-                     "; it is sent after the CLI's current response"
-                   } else {
-                     "; it reaches the agent at its next step"
-                   })
-  } else {
-    console_notice("[gptr] follow-up queued: ", shown, "; it is sent when the agent would stop")
-  }
+  rlang::local_options(cli.num_colors = console_colors())
+  sym = console_style()
+  steer = identical(as, "steer")
+  on_cli = steer && identical(session_live(s)$run$model[["type"]], "cli")
+  console_write(sym$dim(console_person_rows(sym$queued, paste0(
+    if (steer) "steer" else "follow-up", sym$sep, ev$text,
+    if (on_cli) paste0(sym$sep, "after the CLI's answer")
+  ), n = 3L)))
   st = console_state()
   st$pending = c(st$pending, list(list(s = s, text = ev$text, as = as, source = source,
                                        run = session_live(s)$run)))
