@@ -298,6 +298,22 @@ test_that("console_history_add() never fails", {
   expect_null(console_history_add("a prompt"))
 })
 
+test_that("a history entry of several lines is a \"\"\" block, so Up then Enter sends one prompt", {
+  added = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) added <<- c(added, stamp),
+                        .package = "utils")
+  for (x in c("y\npasted two", "!f = function() {\n1\n}", '"""\na\n"""', "```py\nx\n```",
+              "one line")) {
+    console_history_add(x)
+  }
+  expect_identical(added, c('"""\ny\npasted two\n"""', '"""\n!f = function() {\n1\n}\n"""',
+                            '"""\na\n"""', "```py\nx\n```", "one line"))
+  # the REPL reads such an entry back as the logical input it was
+  rd = stdin_reader(strsplit(paste(added[1:2], collapse = "\n"), "\n", fixed = TRUE)[[1L]])
+  expect_identical(repl_read_logical(rd, "peter> "), "y\npasted two")
+  expect_identical(repl_read_logical(rd, "peter> "), "!f = function() {\n1\n}")
+})
+
 # ---------------------------------------------------------------- Task 5: !expr, notes, mentions
 
 # The console's context blocks for this test unless builtin:console registered them already

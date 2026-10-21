@@ -140,9 +140,12 @@ readline_answer = function(prompt, keep = console_history_add) {
   x
 }
 
-#' Add a line to the console history (report 18: utils::timestamp(); never fails)
+#' Add a line to the console history (report 18: utils::timestamp(); never fails); text of several
+#' lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it
+#' back as the one input it was (D-243)
 #' @noRd
 console_history_add = function(x) {
+  if (grepl("\n", x, fixed = TRUE) && !grepl('^\\s*("""|```)', x)) x = paste0('"""\n', x, '\n"""')
   tryCatch(utils::timestamp(stamp = x, prefix = "", suffix = "", quiet = TRUE),
            error = function(e) NULL)
   invisible(NULL)

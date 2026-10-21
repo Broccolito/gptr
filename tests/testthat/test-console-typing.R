@@ -739,3 +739,51 @@ test_that("a terminal: a line arriving just as a question is drawn steers the ru
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("Not an answer"), 0L)
 })
+
+test_that("a macOS terminal: a block pasted at a question comes back as one prompt", {
+  skip_on_cran()
+  skip_if_not(is_macos(), "paste joining reads a macOS terminal")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = TRUE)",
+    "fake = gptr_fake_provider(function(req) {",
+    "  m = req$messages[[length(req$messages)]]",
+    "  if (identical(req$last_user, 'P') && identical(m$role, 'user')) {",
+    "    return(list(tool = 'r', input = list(code = 'zz = 1')))",
+    "  }",
+    "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
+  ))
+  expect_true(pty$wait("peter> ", timeout = 120))
+  pty$send("P\r")
+  expect_true(pty$wait("allow? "))
+  pty$pending()
+  pty$send("y\rpasted two\rpasted three\r")
+  expect_true(pty$wait("A pasted block is not an answer (kept in history)."))
+  expect_true(pty$wait("allow? "))
+  pty$pending()
+  pty$send("n\r")
+  expect_true(pty$wait("REQ tool_result: "))
+  expect_true(pty$wait("peter> "))
+  # Up then Enter sends the block as one message: one request, one answer
+  pty$send("\033[A")
+  pty$pending()
+  pty$send("\r")
+  expect_true(pty$wait("REQ user: y pasted two pasted three END", timeout = 10))
+  expect_true(pty$wait("peter> "))
+  # so does a block pasted at the prompt
+  pty$send("a\rb\rc\r")
+  expect_true(pty$wait("Enter sends it as one message"))
+  pty$send("\r")
+  expect_true(pty$wait("REQ user: a b c END"))
+  expect_true(pty$wait("peter> "))
+  pty$send("\033[A")
+  pty$pending()
+  pty$send("\r")
+  expect_true(pty$wait("REQ user: a b c END", timeout = 10))
+  expect_true(pty$wait("peter> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(c(pty$seen("REQ user: y END"), pty$seen("REQ user: ")), c(0L, 3L))
+})

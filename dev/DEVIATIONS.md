@@ -3052,6 +3052,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   so Task 12 attaches an approval to the call line the console printed; matching on name and input fails for
   parallel, nested and sub-agent calls. Contract-visible: 04 section 7.11. Tests: test-agent-dispatch.R "the
   request record carries the call id; a nested member call its own".
+- Review fixes of Tasks 2-7 (2026-10-21):
+  - A console history entry of several lines that is not a `"""` block or a fence is added as a `"""` block
+    (`console_history_add()`), so Up then Enter sends a block pasted at a question, or at the prompt, back as one
+    input; before, each of its lines was its own prompt. Tests: test-console-repl.R "a history entry of several
+    lines is a """ block, so Up then Enter sends one prompt"; test-console-typing.R "a macOS terminal: a block
+    pasted at a question comes back as one prompt".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
