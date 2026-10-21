@@ -274,6 +274,9 @@ bp_case_failure = function(error) {
   number = function(x) {
     if (is.numeric(x) && length(x) == 1L && is.finite(x)) unname(x) else NULL
   }
+  text = function(x, pattern) {
+    if (is.character(x) && length(x) == 1L && isTRUE(grepl(pattern, x))) x else NULL
+  }
   classes = class(error)
   classes = utils::head(classes[grepl("^[A-Za-z][A-Za-z0-9_.]{0,63}$", classes)], 8L)
   stage = error$writer_stage
@@ -313,7 +316,10 @@ bp_case_failure = function(error) {
   }
   list(class = classes, stage = stage, expression_bytes = number(error$expression_bytes),
     startup_elapsed = number(error$startup_elapsed), accepted_bytes = number(error$accepted_bytes),
-    writer_phases = phases, writer_acl_phases = acl_phases)
+    writer_phases = phases, writer_acl_phases = acl_phases,
+    step = text(error$writer_step, "^[a-z_]{1,32}$"), status = number(error$writer_status),
+    cause = text(error$writer_cause, "^[A-Z][A-Za-z' ]{0,118}[.]$"),
+    chunk_bytes = number(error$writer_chunk_bytes))
 }
 
 # The diagnostic callback is absent in every ordinary test/check invocation.

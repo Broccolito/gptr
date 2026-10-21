@@ -750,23 +750,37 @@ proc_writer_acl = function(dir, marker, .diagnostics = FALSE) {
   ), collapse = "\n")
 }
 
+#' Fixed writer steps: a failed step exits with status 10 plus its index, clear of R's own 1
+#' and 2 and Windows' native abort status 3
+#' @noRd
+proc_writer_steps = c("startup", "validate_startup", "validate_create", "create",
+  "validate_rename", "rename", "alive", "validate_read", "read", "validate_write", "write",
+  "unlink", "size", "length")
+
 #' Standalone writer body: only this child can block in the native Windows WriteFile
+#'
+#' A warning fails its step, so no free text reaches stderr at exit.
 #' @noRd
 proc_writer_main = function(meta) {
+  options(warn = 2L)
+  step = "startup"
+  on.exit(if (nzchar(step)) quit(status = 10L + match(step, meta$steps)))
   stage = function(name) {
     cat("GPTR_STDIN_STAGE ", name, " ", sprintf("%.6f", proc.time()[["elapsed"]]), "\n",
         sep = "", file = stderr())
     flush(stderr())
   }
-  safe = function(paths = character()) {
+  safe = function(name, paths = character()) {
+    step <<- paste0("validate_", name)
     stopifnot(meta$valid(meta$dir, meta$canonical, meta$marker, paths))
+    step <<- name
   }
   atomic = function(name) {
     tmp = file.path(meta$dir, paste0(name, ".part"))
     dest = file.path(meta$dir, name)
-    safe(c(tmp, dest))
+    safe("create", c(tmp, dest))
     stopifnot(!file.exists(tmp), !file.exists(dest), file.create(tmp))
-    safe(c(tmp, dest))
+    safe("rename", c(tmp, dest))
     stopifnot(file.rename(tmp, dest))
   }
   identity = function(pid, time) {
@@ -783,7 +797,7 @@ proc_writer_main = function(meta) {
   acl = processx::process$new(meta$shell, meta$args, stdin = NULL, stdout = "|",
     stderr = NULL, env = Sys.getenv(), cleanup_tree = TRUE, supervise = meta$supervise,
     windows_hide_window = TRUE)
-  on.exit(if (acl$is_alive()) acl$kill_tree(), add = TRUE)
+  on.exit(if (acl$is_alive()) acl$kill_tree(), add = TRUE, after = FALSE)
   stage("acl_wait")
   acl_state = list(bytes = 0L, tail = "", phases = numeric())
   acl_stage = function(name) {
@@ -805,30 +819,35 @@ proc_writer_main = function(meta) {
   acl_stage(if (status_ok) "exit_ok" else "exit_failed")
   stopifnot(status_ok, alive(), !nzchar(acl_state$tail), length(acl_state$phases) == 6L)
   stage("acl_done")
-  safe()
+  safe("startup")
   stage("validated")
   con = processx::conn_create_fd(1L, close = FALSE)
   atomic("ready")
   stage("ready")
   index = 1
   repeat {
+    step = "alive"
     stopifnot(alive())
     path = file.path(meta$dir, sprintf("in-%012.0f", index))
     close = file.path(meta$dir, "close")
-    safe(c(path, close))
+    safe("read", c(path, close))
     if (!file.exists(path)) {
       if (file.exists(close)) break
       Sys.sleep(0.05)
       next
     }
+    step = "size"
     size = file.size(path)
     stopifnot(is.finite(size), size > 0, size <= 65536)
+    step = "read"
     bytes = readBin(path, "raw", n = 65537L)
+    step = "length"
     stopifnot(length(bytes) == size)
     pos = 0L
     while (pos < size) {
+      step = "alive"
       stopifnot(alive())
-      safe(path)
+      safe("write", path)
       rest = processx::conn_write(con, bytes[(pos + 1L):size])
       stopifnot(is.raw(rest), length(rest) <= size - pos)
       written = size - pos - length(rest)
@@ -837,11 +856,15 @@ proc_writer_main = function(meta) {
         next
       }
       pos = pos + written
-      if (pos == size) stopifnot(unlink(path) == 0L)
+      if (pos == size) {
+        step = "unlink"
+        stopifnot(unlink(path) == 0L)
+      }
       atomic(sprintf("ack-%012.0f-%06.0f", index, pos))
     }
     index = index + 1
   }
+  step = ""
   invisible(NULL)
 }
 
@@ -973,7 +996,7 @@ proc_writer_start = function(p, limit) {
     target_create = as.numeric(ps::ps_create_time(target$handle)), shell = shell,
     args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
              "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker, .diagnostics = TRUE))),
-    supervise = supervise_default(), timeout = limit)
+    supervise = supervise_default(), timeout = limit, steps = proc_writer_steps)
   code = proc_writer_code(meta)
   command = rscript_path()
   args = c("--vanilla", "--default-packages=NULL", "-e", code)
@@ -1030,7 +1053,11 @@ proc_writer_start = function(p, limit) {
   st
 }
 
-#' Bounded construction/startup evidence, never native stderr or condition messages
+#' Bounded construction/startup evidence, never native stderr or arbitrary condition messages
+#'
+#' The cause keeps only a fixed gptr message (letters, spaces and apostrophes); the writer's exit
+#' status names its failed step and is NULL while it still runs. A size, read or length failure
+#' also records that chunk file's byte size (NA when absent).
 #' @noRd
 proc_writer_failure = function(p, error = NULL) {
   st = proc_writer_get(p)
@@ -1044,9 +1071,18 @@ proc_writer_failure = function(p, error = NULL) {
   if (is.null(bytes) && !is.null(st)) bytes = number(st$expression_bytes)
   elapsed = if (is.null(st)) NULL else number(if (isTRUE(st$private)) st$startup_elapsed else
     reactor_now() - st$startup_t0)
+  status = tryCatch(st$p$get_exit_status(), error = function(error) NULL)
+  step = match(status, 10L + seq_along(proc_writer_steps))
+  step = if (isTRUE(step > 0L)) proc_writer_steps[[step]]
+  chunk = if (isTRUE(step %in% c("size", "read", "length")))
+    file.size(file.path(st$dir, sprintf("in-%012.0f", st$index)))
+  cause = if (inherits(error, "gptr_error")) conditionMessage(error)
+  if (!isTRUE(grepl("^[A-Z][A-Za-z' ]{0,118}[.]$", cause))) cause = NULL
   list(writer_stage = stage, expression_bytes = bytes, startup_elapsed = elapsed,
        writer_phases = if (is.null(st)) NULL else as.list(st$phases),
-       writer_acl_phases = if (is.null(st)) NULL else as.list(st$acl_phases))
+       writer_acl_phases = if (is.null(st)) NULL else as.list(st$acl_phases),
+       writer_step = step, writer_status = status, writer_cause = cause,
+       writer_chunk_bytes = chunk)
 }
 
 #' Read only a bounded structural protocol from the prompt-free actor's own stderr
@@ -1144,7 +1180,8 @@ proc_writer_ack = function(st, b) {
       pos = as.numeric(sub(".*-", "", basename(acks[[length(acks)]])))
       if (anyNA(sizes) || any(sizes != 0) || !is.finite(pos) ||
           pos < st$pending$accepted || pos > st$pending$size) {
-        gptr_abort("Invalid stdin writer acknowledgement.", "io", operation = "write", path = NULL)
+        gptr_abort("The stdin writer acknowledgement is not empty or out of range.",
+                   "io", operation = "write", path = NULL)
       }
       b$pos = b$pos + pos - st$pending$accepted
       if (pos > st$pending$accepted) b$last = reactor_now()
@@ -1208,13 +1245,21 @@ proc_writer_drain = function(r, key, b) {
     size = min(65536L, length(b$bytes) - b$pos)
     path = file.path(st$dir, sprintf("in-%012.0f", st$index))
     tmp = paste0(path, ".part")
-    if (!proc_writer_valid(st$dir, st$canonical, st$marker, c(path, tmp)) ||
-        file.exists(path) || file.exists(tmp)) {
+    if (!proc_writer_valid(st$dir, st$canonical, st$marker, c(path, tmp))) {
+      gptr_abort("The owned stdin mailbox changed before staging.",
+                 "io", operation = "write", path = NULL)
+    }
+    if (file.exists(path) || file.exists(tmp)) {
       gptr_abort("The owned stdin mailbox is not empty.", "io", operation = "write", path = NULL)
     }
-    writeBin(b$bytes[b$pos + seq_len(size)], tmp)
-    if (!proc_writer_valid(st$dir, st$canonical, st$marker, c(path, tmp)) ||
-        !file.rename(tmp, path)) {
+    tryCatch(writeBin(b$bytes[b$pos + seq_len(size)], tmp), error = function(error) {
+      gptr_abort("Could not stage child stdin.", "io", operation = "write", path = NULL)
+    })
+    if (!proc_writer_valid(st$dir, st$canonical, st$marker, c(path, tmp))) {
+      gptr_abort("The owned stdin mailbox changed before publishing.",
+                 "io", operation = "write", path = NULL)
+    }
+    if (!file.rename(tmp, path)) {
       gptr_abort("Could not publish child stdin.", "io", operation = "write", path = NULL)
     }
     st$pending = list(size = size, accepted = 0L)
