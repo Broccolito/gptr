@@ -87,13 +87,15 @@ test_that("a dynamic spinner starts immediately and survives buffered text", {
   expect_null(w$rec$spinner)
 })
 
-test_that("the first rendered output ends the waiting row, even a style alone (D-186)", {
+test_that("the first whole row ends the waiting row, not a style or a partial row (D-245)", {
   testthat::local_reproducible_output(width = 80, crayon = TRUE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   w = wait_record()
   utils::capture.output(invisible(wait_request(w)))
-  utils::capture.output(invisible(wait_delta(w, "# Hea")))
+  expect_identical(utils::capture.output(invisible(wait_delta(w, "# Hea"))), character())
+  expect_false(is.null(w$rec$spinner))
+  utils::capture.output(invisible(wait_delta(w, "ding\n")))
   expect_null(w$rec$task)
   expect_null(w$rec$spinner)
 })

@@ -144,7 +144,7 @@ working directory restored. Plan-specific rules:
 | `R/gptr-config.R` (`type_ahead` description) | 18 |
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
 | `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress}.R` | their tasks |
-| `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines) | 8 |
+| `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines), `fixtures/cli/claude-toolstream.ndjson` (rows) | 8, 10 |
 | `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
@@ -458,15 +458,24 @@ Decisions:
 - One mode everywhere, so no half line ever sits where the live row is drawn.
 
 Tests (`test-console-render.R`), RED first:
-- Nothing is written for a row before it is complete. Today partial words are written.
+- Nothing is written for a row before it is complete. Today partial rows are written, and in the
+  margin a fenced line's characters.
 - The four-mode chunk-invariance test and the verbosity 0/1/2 equivalence stay green.
 - 'fenced lines stream as they arrive' and 'a line ended by other output continues' are rewritten
-  to whole rows.
+  to whole rows. So are (amended in Task 10):
+  - 'a fenced line broken by other output': it is written once, after that output;
+  - the waiting-row tests, 'the spinner runs as a reactor task until the first rendered text' and
+    test-console-wait.R's 'the first rendered output ends the waiting row, even a style alone':
+    the waiting row stays until the first whole row.
 
-Spec: 04 §7.14 (`render_markdown_stream` commits whole rows).
+Spec: 04 §7.14 (`render_markdown_stream` commits whole rows), 03 §6.17 (the Rendering item and
+the fenced-code sentence).
 
-Files: `R/console-render.R` (`render_markdown_stream()`), `tests/testthat/test-console-render.R`,
-`tests/testthat/test-console-fences.R`.
+Files: `R/console-render.R` (`render_markdown_stream()`, `console_stream_output()`'s description),
+`tests/testthat/test-console-render.R`, `tests/testthat/test-console-wait.R`,
+`tests/testthat/test-cli-claude.R` and `tests/testthat/fixtures/cli/claude-toolstream.ndjson`: the
+fixture's three deltas become three rows, so the #31 streaming test still sees them arrive apart.
+(Amended in Task 10: `test-console-fences.R` needs no change.)
 
 Commit: `refactor(console): the transcript is written in whole rows`.
 

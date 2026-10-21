@@ -51,6 +51,18 @@ screen_rows = function(bytes) {
   rows
 }
 
+# What each step of a stream writes, finish() last: a step is a delta for write() or a function
+# of the renderer
+render_writes = function(steps, width = 40L) {
+  steps = c(as.list(steps), function(r) r$finish())
+  out = character(length(steps))
+  i = 0L
+  local_mocked_bindings(console_cat = function(text) out[[i]] <<- paste0(out[[i]], text))
+  r = render_markdown_stream(width)
+  for (i in seq_along(steps)) if (is.function(steps[[i]])) steps[[i]](r) else r$write(steps[[i]])
+  out
+}
+
 # Every construct of the renderer, nested lists, a fence indented under an item (D-187), a
 # table, a rule and two languages (D-186)
 render_rich = paste0(
@@ -76,6 +88,29 @@ test_that("the output does not depend on chunking in the four console modes (acc
       expect_true(all(same))
     }
   }
+})
+
+test_that("the transcript is written in whole rows, each at its line end or its wrap (D-245)", {
+  skip_on_cran()
+  withr::local_seed(45)
+  local_mocked_bindings(code_highlight = function(code, ...) code, .package = "cli")
+  for (dynamic in c(FALSE, TRUE)) {
+    for (colours in c(1L, 256L)) {
+      withr::local_options(cli.num_colors = colours, cli.dynamic = dynamic, gptr.verbose = 2L)
+      ref = paste(render_writes(render_rich), collapse = "")
+      for (i in seq_len(20L)) {
+        out = render_writes(random_chunks(render_rich, 9L))
+        expect_true(all(!nzchar(out) | endsWith(out, "\n")))
+        expect_identical(paste(out, collapse = ""), ref)
+      }
+    }
+  }
+  # the wrap is at the width less the margin's four columns
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE)
+  expect_identical(render_writes(c("Hello wor", "ld and ", "more\n", "alpha beta gamma delta ",
+                                   "epsilon"), 24L),
+                   c("", "", "  Hello world and more\n", "  alpha beta gamma\n", "",
+                     "  delta epsilon\n"))
 })
 
 test_that("plain contexts print exactly what they printed before the console layout (D-186)", {
@@ -135,18 +170,12 @@ test_that("blank lines collapse and nested lists keep their indentation (D-186)"
                      "     \u25e6 y", "", "  end"))
 })
 
-test_that("a line ended by other output continues at the margin, nesting kept (D-186)", {
+test_that("a row ended by other output is written then and continues at the margin, nesting kept", {
   withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
-  out = utils::capture.output({
-    r = render_markdown_stream(40L)
-    r$write("keeps streaming ")
-    r$reset_line()
-    r$write("slowly on.\n- a\n  ")
-    r$reset_line()
-    r$write("- b")
-    r$finish()
-  })
-  expect_identical(out, c("  keeps streaming", "  slowly on.", "  - a", "    - b"))
+  reset = function(r) r$reset_line()
+  expect_identical(render_writes(list("keeps streaming ", reset, "slowly on.\n- a\n  ", reset,
+                                      "- b")),
+                   c("", "  keeps streaming\n", "  slowly on.\n  - a\n", "", "", "    - b\n"))
 })
 
 test_that("pipe tables are aligned on an interactive console and stay valid Markdown (D-186)", {
@@ -253,38 +282,21 @@ test_that("R code is highlighted in the logo palette and other code is plain (D-
                    "\033[38;5;46mfunction\033[39m(x) 's'")
 })
 
-test_that("fenced lines stream as they arrive and a line that fits is redrawn (D-187)", {
+test_that("a fenced line is written once, whole and highlighted, at its line end (D-245)", {
   skip_on_cran()
   withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)
-  long = "zz = c('a line too long to be redrawn')"
+  long = "zz = c('a line longer than the row, never wrapped')"
   for (colours in c(1L, 256L)) {
     withr::local_options(cli.num_colors = colours)
-    con = rawConnection(raw(), "w")
-    sink(con)
-    tryCatch({
-      r = render_markdown_stream(40L)
-      r$write("```r\nx = mean(")
-      partial = rawToChar(rawConnectionValue(con))
-      r$write(paste0("y)\n", long, "\n\tif (a) b\n```\n"))
-      r$finish()
-    }, finally = sink())
-    bytes = rawToChar(rawConnectionValue(con))
-    close(con)
-    expect_identical(cli::ansi_strip(partial), "  ```r\n  x = mean(")
-    expect_identical(screen_rows(cli::ansi_strip(bytes)),
-                     c("  ```r", "  x = mean(y)", paste0("  ", long), "  \tif (a) b", "  ```"))
-    expect_false(grepl(paste0("\r  ", long), bytes, fixed = TRUE))
-    # a TAB has no display width in nchar(), so a line holding one is never redrawn
-    expect_false(grepl("\tif (a) b\r", bytes, fixed = TRUE))
-    if (colours == 1L) {
-      expect_false(grepl("\r", bytes, fixed = TRUE))
-    } else {
-      expect_match(bytes, "x = mean(y)\r  x = \033[1mmean\033[22m(y)\n", fixed = TRUE)
-    }
+    out = render_writes(c("```r\nx = mean(", paste0("y)\n", long, "\n```\n")))
+    expect_identical(cli::ansi_strip(out),
+                     c("  ```r\n", paste0("  x = mean(y)\n  ", long, "\n  ```\n"), ""))
+    expect_false(any(grepl("\r", out, fixed = TRUE)))
+    if (colours > 1L) expect_match(out[[2L]], "  x = \033[1mmean\033[22m(y)\n", fixed = TRUE)
   }
 })
 
-test_that("a fenced line broken by other output is shown whole after it (D-187)", {
+test_that("a fenced line broken by other output is written once, after it (D-245)", {
   withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L, cli.num_colors = 256L)
   out = utils::capture.output({
     r = render_markdown_stream(60L)
@@ -294,9 +306,8 @@ test_that("a fenced line broken by other output is shown whole after it (D-187)"
     r$write("bar)\n```\n")
     r$finish()
   })
-  expect_identical(screen_rows(paste0(cli::ansi_strip(out), "\n", collapse = "")),
-                   c("  ```python", "  if x:", "      y = foo(", "  (a notice)",
-                     "      y = foo(bar)", "  ```"))
+  expect_identical(cli::ansi_strip(out),
+                   c("  ```python", "  if x:", "  (a notice)", "      y = foo(bar)", "  ```"))
 })
 
 test_that("prose lines respect the width and bullets hang (UTF-8 locale)", {
@@ -1012,7 +1023,7 @@ test_that("custom entries of a run are shown through renderer records (IC-69)", 
   expect_identical(out[[1L]], "NOTE: kept <U+001B> safe")
 })
 
-test_that("the spinner runs as a reactor task until the first rendered text", {
+test_that("the spinner runs as a reactor task until the first rendered row (D-245)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -1025,12 +1036,14 @@ test_that("the spinner runs as a reactor task until the first rendered text", {
                                        model = "fake/fake-1", request_id = "q1",
                                        tokens_est = 10), ctx)
   expect_false(is.null(rec$task))
+  for (delta in c("x", " y")) {
+    utils::capture.output(console_on_message_update(
+      hook_event("message_update", s, index = 1L, kind = "text", delta = delta), ctx))
+    expect_false(is.null(rec$task))
+    expect_false(is.null(rec$spinner))
+  }
   utils::capture.output(console_on_message_update(
-    hook_event("message_update", s, index = 1L, kind = "text", delta = "x"), ctx))
-  expect_false(is.null(rec$task))
-  expect_false(is.null(rec$spinner))
-  utils::capture.output(console_on_message_update(
-    hook_event("message_update", s, index = 1L, kind = "text", delta = " "), ctx))
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "\n"), ctx))
   expect_null(rec$task)
   expect_null(rec$spinner)
   console_drop("u0000test")

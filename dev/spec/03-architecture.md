@@ -1927,7 +1927,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   goes to the console history with a notice, so the question starts empty [D-243]. IDE consoles, R.app and
   `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current
   response.
-- **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
+- **Rendering**: chunk-invariant, width-aware markdown stream renderer, written in whole rows, each at its line
+  end or its wrap, the partial row held [D-245]; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.
   Glyphs and colours come from one style table, `console_style()` [IC-82, D-245]: the logo's cursor shapes (`›`
@@ -1957,9 +1958,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   clears waiting rows, keeping their task, before it prompts (D-186).
   Fenced code stays Markdown in every mode: fence lines as written (dim when styled), the body
   verbatim, unwrapped and de-indented by the opener's indentation (CommonMark: a fence indented
-  under a list item closes), so a copied block is Markdown whose body runs; in the margin code
-  characters appear as they stream and a line without a TAB that fit one row is redrawn
-  highlighted. A tool call shows its code on its line when it fits, else as a fence of at most
+  under a list item closes), so a copied block is Markdown whose body runs; a fenced line is
+  written once, whole and highlighted, at its line end.
+  A tool call shows its code on its line when it fits, else as a fence of at most
   20 lines (info string `r` only for the r tool); result lines are indented four spaces and wrap
   at the width, also indented (a word wider than it is cut); an error shows its message in at most
   6 rows, then an ellipsis, an `r` error then its object changes; `write` shows the path relative

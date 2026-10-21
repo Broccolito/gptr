@@ -100,11 +100,11 @@ console_notice = function(..., .error = FALSE) {
 #' as written (dim), the body unwrapped and de-indented by the opener's indentation (D-187).
 #' Where console_pad() gives a margin (D-186) lines get two columns on both sides, nested list
 #' indentation is kept, pipe tables are aligned, blank lines collapse to one between blocks (none
-#' before or after a reply) and code characters appear as they arrive, a line that fits one row
-#' redrawn highlighted; elsewhere the plain mode only wraps at `width` display columns. A word is
-#' held until the next blank or line end, so the output does not depend on how the text was
-#' chunked at a fixed width. When width is omitted, each write and final flush sample the current
-#' console width; an explicit width stays fixed.
+#' before or after a reply); elsewhere the plain mode only wraps at `width` display columns. Rows
+#' are written whole, each at its line end or its wrap, so no half row sits where the waiting row
+#' is drawn (D-245). A word is held until the next blank or line end, so the output does not
+#' depend on how the text was chunked at a fixed width. When width is omitted, each write and
+#' final flush sample the current console width; an explicit width stays fixed.
 #' @noRd
 render_markdown_stream = function(width = cli::console_width(), before_output = NULL) {
   auto_width = missing(width)
@@ -117,6 +117,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   set_width(width)
   st$buf = ""
   st$cr = ""
+  st$row = ""
   st$col = 0L
   st$bol = TRUE
   st$out = FALSE
@@ -128,7 +129,6 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   st$fence_n = 0L
   st$fence_lang = ""
   st$fence_indent = 0L
-  st$shown = 0L
   st$table = character()
   st$cells = list()
   st$table_raw = FALSE
@@ -142,7 +142,8 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     st$on[[name]] = !st$on[[name]]
     restyle()
   }
-  # The margin opens every non-empty row; a pending blank line is written only before more text
+  # The margin opens every non-empty row; a pending blank line is written only before more text.
+  # A row is held until its line end
   emit = function(x) {
     if (!nzchar(x)) return(invisible())
     if (st$bol && !startsWith(x, "\n")) {
@@ -151,6 +152,10 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     }
     st$bol = endsWith(x, "\n")
     st$out = TRUE
+    st$row = paste0(st$row, x)
+    if (!st$bol) return(invisible())
+    x = st$row
+    st$row = ""
     if (is.function(before_output)) before_output(x)
     console_cat(x)
     invisible()
@@ -174,9 +179,8 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     if (length(st$table)) table_flush()
     if (!st$bol) {
       newline()
-      # a held inter-word blank of the ended line would read as indentation of the next one;
-      # a broken fenced line is shown whole again
-      if (st$fence) st$shown = 0L else st$buf = sub("^[ \t]+$", "", st$buf)
+      # a held inter-word blank of the ended line would read as indentation of the next one
+      st$buf = sub("^[ \t]+$", "", st$buf)
     }
     st$blank = FALSE
     st$out = FALSE
@@ -246,27 +250,6 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     }
     NULL
   }
-  # In the margin a fenced line's characters appear as they arrive
-  fence_stream = function(line) {
-    add = substring(line, st$shown + 1L)
-    if (!lay || !nzchar(add)) return(invisible())
-    emit(add)
-    st$shown = nchar(line)
-    st$col = st$col + vis_width(add)
-    st$line_start = FALSE
-  }
-  # An ended fenced line in its style `out`: a streamed one is redrawn when it filled one row
-  # (a TAB has no width in nchar(), so a line with one is never redrawn)
-  fence_end = function(line, out) {
-    streamed = st$shown > 0L
-    st$shown = 0L
-    if (!streamed) {
-      emit(paste0(out, "\n"))
-    } else {
-      fit = style && st$col <= st$width && !grepl("\t", line, fixed = TRUE)
-      emit(if (fit) paste0("\r", pad, out, "\n") else "\n")
-    }
-  }
   fence_marker = function(line) {
     st$fence = !st$fence
     if (st$fence) {
@@ -274,7 +257,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
       st$fence_lang = trimws(substring(line, st$fence_n + 1L))
       st$fence_indent = st$ws
     }
-    fence_end(line, paste0(sgr("2"), line, sgr("22")))
+    emit(paste0(sgr("2"), line, sgr("22"), "\n"))
   }
   # A block of pipe-table rows is held while it can be aligned: a delimiter second row, one cell
   # count and a fitting width. From the row that rules this out the block prints verbatim as
@@ -333,10 +316,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
       if (st$fence || table_row || (st$line_start && startsWith(text, "```"))) {
         nl = regexpr("\n", text, fixed = TRUE)
         line = if (nl < 0L) text else substr(text, 1L, nl - 1L)
-        if (st$fence) {
-          line = sub(paste0("^ {0,", st$fence_indent, "}"), "", line)
-          fence_stream(line)
-        }
+        if (st$fence) line = sub(paste0("^ {0,", st$fence_indent, "}"), "", line)
         if (nl < 0L) {
           if (final) {
             text = paste0(text, "\n")
@@ -354,7 +334,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
         } else if (opening || closing) {
           fence_marker(line)
         } else {
-          fence_end(line, console_code(line, st$fence_lang))
+          emit(paste0(console_code(line, st$fence_lang), "\n"))
         }
         st$col = 0L
         st$ws = 0L
@@ -740,8 +720,7 @@ console_render_resume = function(runs) {
   invisible(NULL)
 }
 
-#' A record-only callback: any rendered output (a style alone too) ends the waiting row and
-#' opens a text block
+#' A record-only callback: a rendered row ends the waiting row and opens a text block
 #' @noRd
 console_stream_output = function(rec) {
   force(rec)

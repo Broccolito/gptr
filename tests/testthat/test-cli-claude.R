@@ -847,7 +847,7 @@ test_that("the answer after a served call streams as its deltas arrive, printed 
   })
   s = peter("Compute, then answer", model = f$model, envir = new.env(), mode = "auto")
   local_cli_cleanup(s)
-  # the fixture sends its three deltas 0.4 s apart: printed whole, they would appear at once
+  # the fixture sends its three rows 0.4 s apart: printed whole, they would appear at once
   first = match(TRUE, grepl("Streamed", seen$text, fixed = TRUE))
   last = match(TRUE, grepl("third.", seen$text, fixed = TRUE))
   expect_false(is.na(first) || is.na(last))

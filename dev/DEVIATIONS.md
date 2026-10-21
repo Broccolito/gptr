@@ -3118,3 +3118,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   colour names, so it would have repeated the depth rule and the two hex values (plan amended). Contract-visible:
   04 §15.10 IC-82, 03 §6.17. Tests: test-console-render.R "R code is highlighted in the logo palette and other
   code is plain (D-245)".
+- Task 10: the transcript is written in whole rows. `render_markdown_stream()` holds the partial row and writes
+  each row whole, at its line end or at its wrap (width - 4 in the margin), as Codex's newline-gated stream does;
+  `reset_line()` and `finish()` end the held row, so other output still follows the text before it. A fenced line
+  is written once, whole and highlighted, at its line end: the margin's streaming of a fenced line's characters
+  and the `\r` redraw of one that fit a row are gone (amends D-187), and a fenced line broken by other output is
+  written once, after that output, not half before it and whole after. One mode everywhere. Visible now: the
+  waiting row stays until the answer's first whole row, not its first word or style, and an answer appears row
+  by row. The claude-cli fixture of the #31 streaming test sends its three deltas as three rows. Contract-visible:
+  04 §7.14, 03 §6.17. Tests: test-console-render.R "the transcript is written in whole rows, each at its line end
+  or its wrap (D-245)", "a row ended by other output is written then and continues at the margin, nesting kept",
+  "a fenced line is written once, whole and highlighted, at its line end (D-245)", "a fenced line broken by other
+  output is written once, after it (D-245)", "the spinner runs as a reactor task until the first rendered row
+  (D-245)"; test-console-wait.R "the first whole row ends the waiting row, not a style or a partial row
+  (D-245)".
