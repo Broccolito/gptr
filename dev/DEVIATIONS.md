@@ -3132,3 +3132,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   output is written once, after it (D-245)", "the spinner runs as a reactor task until the first rendered row
   (D-245)"; test-console-wait.R "the first whole row ends the waiting row, not a style or a partial row
   (D-245)".
+- Task 11: tool calls are cursor strips by kind. `console_tool_kind(name, spec)` gives `read` for a tool annotated
+  read-only (`read_only`, which a trusted MCP server's `readOnlyHint` becomes), `agent` for Codex's collab call
+  (`codex_agent`; gptr's own sub-agents are `peter()` calls in `r`), else `act`. A read is one dim line
+  (`▎ read  R/plot.R`) with no result line unless it fails; an act has a red strip and its name bold, an MCP call
+  shown as `server/tool` with its arguments dim; an agent call has the blue block. Result lines are dim, the
+  elapsed time after the separator (`+ fit · 1.2 s`, `done · 3.0 s`, from a second as before, not ` (1.2 s)`),
+  errors in the logo red, an edit's diff `+` blue and `-` red with its file headers dim (amends 6e7e859, where a
+  successful removal was plain and `+++ b/` green). A sub-agent's lines read `▌ sub-agent a (haiku) started` and
+  `▌ sub-agent a done (1/3) · 4 turns · 12 s`, the block blue (the model moves before `started`). They are drawn
+  inside the agent's `r` evaluation, whose options say 1 colour, so the evaluation now holds the console's colours
+  (`.gptr_console_colors`, read by `console_colors()`) beside its margin, and the line is styled in them. The plan
+  named a CLI route's Read, Grep, Glob, LS, Bash, Edit and Write; none reaches the console (the claude CLI runs
+  with `--tools ""` and calls gptr's own tools over MCP, whose annotations decide; Codex reports shells, file
+  changes, web searches and MCP calls, all act, and its collab call), so the kinds read only the annotation and
+  `codex_agent` (plan amended). Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests: test-console-render.R "tool
+  calls are cursor strips tinted by kind (D-245)"; test-console-message-stream.R "an edit's diff is red and blue
+  while a failed edit says error: (D-245)".

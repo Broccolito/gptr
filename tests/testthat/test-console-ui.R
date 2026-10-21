@@ -325,11 +325,11 @@ test_that("nested calls with the same prompt are told apart by their number (#36
     s = peter("annotate", model = fake, envir = e)
   })
   expect_identical(s$text, "parent done")
-  who = "  sub-agent 'You are annotating one cluster...' #"
+  who = "sub-agent 'You are annotating one cluster...' #"
   for (k in c("1", "2")) {
-    expect_true(paste0(who, k, " > r  x = 1") %in% out, info = k)
-    expect_true(paste0(who, k, " started (sub/sub-1)") %in% out, info = k)
-    expect_true(any(startsWith(out, paste0(who, k, " done"))), info = k)
+    expect_true(paste0("  ", who, k, " > r  x = 1") %in% out, info = k)
+    expect_true(paste0("  # ", who, k, " (sub/sub-1) started") %in% out, info = k)
+    expect_true(any(startsWith(out, paste0("  # ", who, k, " done"))), info = k)
   }
 })
 

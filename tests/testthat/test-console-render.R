@@ -511,6 +511,82 @@ test_that("no U+25CF dot and no Braille spinner anywhere in R/ (D-245)", {
   }
 })
 
+# ---------------------------------------------------------------- P28 Task 11: tool kinds
+
+test_that("tool calls are cursor strips tinted by kind (D-245)", {
+  skip_on_cran()
+  local_project()
+  local_mocked_bindings(is_windows = function() FALSE)
+  spec = function(name) tryCatch(registry_get("tool", name), error = function(e) NULL)
+  kinds = c(read = "read", grep = "read", ls = "read", ask = "read", r = "act", edit = "act",
+            write = "act", codex_shell = "act", mcp__github__search_issues = "act",
+            codex_agent = "agent")
+  expect_identical(vapply(names(kinds), function(n) console_tool_kind(n, spec(n)), ""), kinds)
+  # a trusted MCP server's readOnlyHint arrives as read_only
+  hint = gptr_spec("tool", "mcp__docs__search", description = "Search the docs.",
+                   parameters = list(type = "object", properties = list()),
+                   execute = function(input, ctx) "ok", annotations = list(readOnlyHint = TRUE))
+  expect_identical(console_tool_kind(hint$name, hint), "read")
+  calls = list(list(id = "c1", name = "read", input = list(path = "R/plot.R")),
+               list(id = "c2", name = "r", input = list(code = "zz = 1")),
+               list(id = "c3", name = "mcp__github__search_issues", input = list(q = "bug")),
+               list(id = "c4", name = "codex_agent", input = json_obj()))
+  fit = c(msg_tool_result("c2", "r", "", details = list(objects = list(added = "fit"))),
+          list(elapsed = 1.2))
+  diff = msg_tool_result("c5", "edit", "ok", details = list(
+    diff = c("--- a/x.R", "+++ b/x.R", "@@ -1 +1 @@", "-a", "+b")))
+  shown = function() {
+    list(calls = vapply(calls, console_tool_line, "", width = 80L),
+         results = c(console_tool_line(calls[[2L]], fit),
+                     console_tool_line(list(name = "codex_shell"),
+                                       list(is_error = FALSE, elapsed = 3)),
+                     console_tool_line(list(name = "edit"), diff)),
+         # a read shows no result line unless it fails
+         read = console_tool_line(calls[[1L]], c(msg_tool_result("c1", "read", "text"),
+                                                 list(elapsed = 3))),
+         failed = console_tool_line(calls[[1L]], msg_tool_result("c1", "read", "no such file",
+                                                                 is_error = TRUE)))
+  }
+  want = function(tool, agent, sep, red = identity, blue = identity, dim = identity,
+                  bold = identity) {
+    list(calls = c(paste0("  ", dim(paste0(tool, " read  R/plot.R"))),
+                   paste0("  ", red(tool), " ", bold("r"), "  zz = 1"),
+                   paste0("  ", red(tool), " ", bold("github/search_issues"), "  ",
+                          dim("{\"q\":\"bug\"}")),
+                   paste0("  ", blue(agent), " codex_agent")),
+         results = c(dim(paste0("    + fit", sep, "1.2 s")), dim(paste0("    done", sep, "3.0 s")),
+                     dim(c("    --- a/x.R", "    +++ b/x.R", "    @@ -1 +1 @@")), red("    -a"),
+                     blue("    +b")),
+         read = character(), failed = red("    error: no such file"))
+  }
+  sgr = function(on, off) function(x) paste0("\033[", on, "m", x, "\033[", off, "m")
+  at256 = list(red = sgr("38;5;167", 39), blue = sgr("38;5;67", 39), dim = sgr(2, 22),
+               bold = sgr(1, 22))
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 256L)
+  expect_identical(shown(), do.call(want, c(list("\u258e", "\u258c", " \u00b7 "), at256)))
+  withr::local_options(cli.unicode = FALSE)
+  expect_identical(shown(), do.call(want, c(list("|", "#", " - "), at256)))
+  withr::local_options(cli.num_colors = NULL, crayon.enabled = NULL, cli.default_num_colors = 256L,
+                       cli.unicode = TRUE)
+  withr::local_envvar(NO_COLOR = "1", R_CLI_NUM_COLORS = NA)
+  expect_identical(shown(), want("\u258e", "\u258c", " \u00b7 "))
+  # a sub-agent's lines start with the agent's blue block, its model after its label, also from
+  # the agent's r code, whose evaluation says 1 colour: the console's depth holds there
+  withr::local_options(cli.num_colors = 256L)
+  withr::local_envvar(NO_COLOR = NA)
+  local_gptr_options(mode = "auto", verbose = 1L, quiet = FALSE)
+  e = new.env()
+  e$kid = local_fake_provider(function(request) "ok", name = "kid")
+  code = "res = peter('each', list(a = 1), model = kid, parallel = 1)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  block = paste0("  ", at256$blue("\u258c"), " sub-agent a ")
+  kids = grep("sub-agent a ", out, value = TRUE, fixed = TRUE)
+  expect_identical(kids[[1L]], paste0(block, "(kid/kid-1) started"))
+  done = paste0(block, "done (1/1) \u00b7 1 turn \u00b7 ")
+  expect_identical(substr(kids[[2L]], 1L, nchar(done)), done)
+})
+
 # ---------------------------------------------------------------- Task 2: renderer hooks
 
 # A real, idle session that never ran (its prompt waits in the queue): the hooks only read it
@@ -680,7 +756,7 @@ test_that("tool lines escape the preview and summarise the result (acceptance 7)
                elapsed = 2.5, details = list()),
     hook_event("message_end", s, role = "tool_result", message = result)))
   expect_identical(out, c("  | r", "```r", "x = 1 # <U+001B>[31mred", "y = 2", "```",
-                          "    + x, y (2.5 s)"))
+                          "    + x, y - 2.5 s"))
   expect_false(any(grepl("\033", out, fixed = TRUE)))
 })
 
@@ -1156,11 +1232,11 @@ test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no q
   expect_false(console_child_shown(kid))
   local_gptr_options(verbose = 1L, quiet = TRUE)
   expect_false(console_child_shown(kid))
-  # two columns, as the prompts, with or without the console margin
+  # two columns, as the prompts, with or without the console margin, after the agent's block
   withr::local_options(cli.dynamic = TRUE)
   local_gptr_options(verbose = 2L)
   expect_identical(utils::capture.output(console_child_line(list(child = list(label = "a")), "x")),
-                   "  sub-agent a x")
+                   "  # sub-agent a x")
 })
 
 test_that("a failed sub-agent line counts it and gives its reason's first line, cut (#36)", {
@@ -1177,9 +1253,9 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
   out = utils::capture.output(tryCatch(peter("each", list(a = 1, b = 2), model = fake,
                                              parallel = 1), error = function(e) NULL))
   failed = grep("failed", out, value = TRUE)
-  expect_identical(failed[[1L]], paste0("  sub-agent a failed (1/2): No credential found for ",
-                                        "provider fake. Set FAKE_A..."))
-  expect_match(failed[[2L]], "^  sub-agent b failed \\(2/2\\): No credential found for")
+  expect_identical(failed[[1L]], paste0("  # sub-agent a failed (1/2): No credential found for ",
+                                        "provider fake. Set FAKE..."))
+  expect_match(failed[[2L]], "^  # sub-agent b failed \\(2/2\\): No credential found for")
   # without a reason, the status
   local_gptr_options(verbose = 0L)
   s = render_session()
@@ -1188,7 +1264,7 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
   rec$child = list(label = "c", run = list(started = Sys.time()))
   expect_identical(utils::capture.output(invisible(console_on_agent_end(
     hook_event("agent_end", s, status = "aborted", usage = NULL, turns = 1L),
-    session_live(s)$ctx))), "  sub-agent c failed: aborted")
+    session_live(s)$ctx))), "  # sub-agent c failed: aborted")
 })
 
 test_that("a foreground run separates text, tool and status blocks once (D-186)", {

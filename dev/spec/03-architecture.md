@@ -1943,7 +1943,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   prompts, and two text blocks in a row [D-208]) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
   the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
   row, R GUIs included; the pause-menu notice excepted, D-225); the margin is that of the console an
-  evaluation started from, also for prompts and notices drawn inside it. There nested lists keep their
+  evaluation started from, also for prompts and notices drawn inside it, and a sub-agent line drawn
+  there has that console's colours, though the evaluation's options say 1 colour (D-245). There nested lists keep their
   indentation, pipe tables are aligned
   (when malformed or too wide, verbatim and unwrapped like fenced code so a copied table stays valid,
   each row printed as it ends once the rows so far rule alignment out)
@@ -1960,11 +1961,16 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   verbatim, unwrapped and de-indented by the opener's indentation (CommonMark: a fence indented
   under a list item closes), so a copied block is Markdown whose body runs; a fenced line is
   written once, whole and highlighted, at its line end.
-  A tool call shows its code on its line when it fits, else as a fence of at most
-  20 lines (info string `r` only for the r tool); result lines are indented four spaces and wrap
-  at the width, also indented (a word wider than it is cut); an error shows its message in at most
-  6 rows, then an ellipsis, an `r` error then its object changes; `write` shows the path relative
-  to the project and the byte count (D-223); the one-line approval prompt (6.8.3) is cut to the
+  A tool call is a cursor strip by its kind (`console_tool_kind()`, IC-82, D-245): a read (a tool
+  annotated read-only) is one dim line, `▎ read  R/plot.R`, with no result line unless it fails; an
+  act (every other tool) has a red strip and its name bold, an MCP call named `server/tool` with its
+  arguments dim; a sub-agent call (Codex's collab call) has the agent's blue block. It shows its
+  code on its line when it fits, else as a fence of at most
+  20 lines (info string `r` only for the r tool); result lines are indented four spaces, dim, and wrap
+  at the width, also indented (a word wider than it is cut); an error shows its message in red in at most
+  6 rows, then an ellipsis, an `r` error then its object changes; an edit's diff has `+` lines blue
+  and `-` lines red (file headers dim), at most 12; `write` shows the path relative
+  to the project and the byte count (D-223); a call of a second or more adds ` · 3.0 s`; the one-line approval prompt (6.8.3) is cut to the
   console width before its `+N more lines`, and the `?` detail shows the code as a plain fence of
   at most 40 lines. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied
   block shows the cut (D-207). Console output draws no box characters (D-187).
@@ -1973,8 +1979,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   whatever `tee` is; prompts and sub-agent lines first end partial lines, also while a tool
   executes (conditions raised inside a tool leave the waiting row alone). Children never render;
   a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
-  (`  sub-agent a started (kid/kid-1)`, `  sub-agent a done (1/2) · 2 turns · 12 s` or
-  `failed (1/2): <first line of the reason>`, cut to the console width; `(k/N)` for a team, fan-out or
+  (`  ▌ sub-agent a (kid/kid-1) started`, `  ▌ sub-agent a done (1/2) · 2 turns · 12 s` or
+  `failed (1/2): <first line of the reason>`, after the agent's blue block [D-245], cut to the console width; `(k/N)` for a team, fan-out or
   `gptr_parallel()` group; a nested `peter()` by its quoted prompt and its number among the parent run's
   children, `'Summarise ...' #2`, D-224). Model code that wraps such calls in `capture.output()` or `sink()`
   still captures prompts and lines (D-188). A run's status line counts its own requests and adds what its

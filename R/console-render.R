@@ -597,13 +597,17 @@ console_child_shown = function(run) {
     !isTRUE(top$opts$background) && verbosity() >= 1L && !isTRUE(getOption("gptr.quiet"))
 }
 
-#' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), cut to
+#' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), after
+#' the agent's blue block in the console's colours, also from the agent's r code (D-245), cut to
 #' the console width (D-224)
 #' @noRd
 console_child_line = function(rec, text) {
   console_before_message(tools = TRUE)
-  console_write(cli::ansi_strtrim(paste0("  sub-agent ", rec$child$label, " ", text),
-                                  cli::console_width()))
+  old = options(cli.num_colors = console_colors())
+  on.exit(options(old), add = TRUE)
+  sym = console_style()
+  console_write(cli::ansi_strtrim(paste0("  ", sym$blue(sym$agent), " sub-agent ",
+                                         rec$child$label, " ", text), cli::console_width()))
 }
 
 #' Render this record on stdout now?
@@ -783,15 +787,34 @@ console_preview = function(input) {
   strsplit(text, "\n", fixed = TRUE)[[1L]]
 }
 
-#' The default start of a tool call: "  * r  x = 1" when it fits `width`; code that does not
-#' follows as a Markdown fence of at most 20 lines that are never cut, `r` for the r tool (D-187),
-#' a cut one ending in a `# ... +N more lines` line inside the fence (D-207)
+#' The kind of a tool call (IC-82, D-245): "read" for a tool annotated read-only (an MCP
+#' server's `readOnlyHint` arrives as `read_only`), "agent" for a sub-agent call (Codex's
+#' collab call; gptr's own sub-agents are `peter()` calls), else "act"
 #' @noRd
-console_call_line = function(call, width) {
+console_tool_kind = function(name, spec) {
+  if (isTRUE(spec$annotations$read_only)) return("read")
+  if (identical(name, "codex_agent")) "agent" else "act"
+}
+
+#' The default start of a tool call, a cursor strip by its kind (D-245): `  | r  x = 1` with the
+#' strip (`console_style()$tool`) red and the name bold, an MCP call as `server/tool` with its
+#' arguments dim; the whole line dim for a read; the agent's blue block for a sub-agent call. Code
+#' that does not fit `width` follows as a Markdown fence of at most 20 lines that are never cut,
+#' `r` for the r tool (D-187), a cut one ending in a `# ... +N more lines` line inside the fence
+#' (D-207)
+#' @noRd
+console_call_line = function(call, width, kind = "act") {
   lines = console_escape(console_preview(call$input), FALSE)
   sym = console_style()
-  head = paste0("  ", sym$tool, " ", console_escape(call$name %||% "?", FALSE))
-  one = paste0(head, "  ", c(lines, "")[[1L]])
+  mcp = startsWith(call$name %||% "", "mcp__")
+  name = console_escape(sub("^mcp__(.+?)__", "\\1/", call$name %||% "?", perl = TRUE), FALSE)
+  head = switch(kind, read = paste0(sym$tool, " ", name),
+                agent = paste0(sym$blue(sym$agent), " ", name),
+                paste0(sym$red(sym$tool), " ", cli::style_bold(name)))
+  arg = c(lines, "")[[1L]]
+  if (nzchar(arg)) arg = paste0("  ", if (mcp && kind == "act") sym$dim(arg) else arg)
+  tone = if (identical(kind, "read")) sym$dim else identity
+  one = paste0("  ", tone(paste0(head, arg)))
   if (!is.character(call$input$code) ||
       (length(lines) < 2L && cli::ansi_nchar(one, type = "width") <= width)) {
     return(as.character(cli::ansi_strtrim(one, width)))
@@ -800,22 +823,23 @@ console_call_line = function(call, width) {
   fence = doc_rmd_fence("```", code)
   more = length(lines) - length(code)
   lang = if (grepl("(^|__)r$", call$name %||% "")) "r" else ""
-  body = c(cli::style_dim(paste0(fence, lang)), console_code(code, lang),
-           if (more > 0L) {
-             cli::style_dim(paste0("# ", sym$ellipsis, " +", more, " more lines"))
-           },
-           cli::style_dim(fence))
-  c(head, paste0(console_pad(), body))
+  body = c(sym$dim(paste0(fence, lang)), console_code(code, lang),
+           if (more > 0L) sym$dim(paste0("# ", sym$ellipsis, " +", more, " more lines")),
+           sym$dim(fence))
+  c(paste0("  ", tone(head)), paste0(console_pad(), body))
 }
 
-#' The default result lines of a tool call: an error's message, wrapped to at most 6 rows, then
-#' the object changes of `r` (also after an error), the diff of `edit`, the project-relative path
-#' of `write`, else the elapsed time when it took a second or more
+#' The default result lines of a tool call, indented 4 and dim (D-245): an error's message in red,
+#' wrapped to at most 6 rows, then the object changes of `r` (also after an error); nothing else
+#' for a read; the diff of `edit` (`+` lines blue, `-` lines red, its file headers dim), the
+#' project-relative path of `write`, else `done`; each with `<sep><elapsed>` when it took a second
+#' or more
 #' @noRd
-console_result_lines = function(call, result, width) {
+console_result_lines = function(call, result, width, kind = "act") {
+  sym = console_style()
   pad = "    "
   el = result$elapsed
-  secs = if (isTRUE(el >= 1)) sprintf(" (%.1f s)", el) else ""
+  secs = if (isTRUE(el >= 1)) paste0(sym$sep, sprintf("%.1f s", el)) else ""
   d = result$details %||% list()
   obj = d$objects
   parts = if (identical(call$name, "r")) c(
@@ -830,22 +854,26 @@ console_result_lines = function(call, result, width) {
     if (!length(err)) err = "failed"
     err[[1L]] = paste0("error: ", err[[1L]], secs)
     rows = console_wrap(paste0(pad, err), width)
-    more = if (length(rows) > 6L) paste0(pad, console_style()$ellipsis)
-    return(c(cli::col_red(c(utils::head(rows, 6L), more)), changes))
+    more = if (length(rows) > 6L) paste0(pad, sym$ellipsis)
+    return(c(sym$red(c(utils::head(rows, 6L), more)), if (length(changes)) sym$dim(changes)))
   }
-  if (!is.null(changes)) return(paste0(changes, secs))
+  if (identical(kind, "read")) return(character())
+  if (!is.null(changes)) return(sym$dim(paste0(changes, secs)))
   if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
     shown = utils::head(d$diff, 12L)
-    lines = paste0("    ", console_escape(shown, FALSE))
-    lines = ifelse(startsWith(shown, "+"), cli::col_green(lines), lines)
+    lines = paste0(pad, console_escape(shown, FALSE))
+    sign = substr(shown, 1L, 1L)
+    sign[grepl("^(--- a/|[+]{3} b/)", shown)] = ""
+    lines = ifelse(sign == "+", sym$blue(lines),
+                   ifelse(sign == "-", sym$red(lines), sym$dim(lines)))
     more = length(d$diff) - 12L
-    return(c(lines, if (more > 0L) paste0("    (+", more, " more lines)")))
+    return(c(lines, if (more > 0L) sym$dim(paste0(pad, "(+", more, " more lines)"))))
   }
   if (identical(call$name, "write") && rlang::is_string(d$path)) {
     bytes = if (is.numeric(d$bytes)) paste0(" (", format(d$bytes, big.mark = ","), " bytes)")
-    return(paste0(pad, "wrote ", console_escape(path_rel(d$path), FALSE), bytes, secs))
+    return(sym$dim(paste0(pad, "wrote ", console_escape(path_rel(d$path), FALSE), bytes, secs)))
   }
-  if (nzchar(secs)) paste0(pad, "done", secs) else character()
+  if (nzchar(secs)) sym$dim(paste0(pad, "done", secs)) else character()
 }
 
 #' The console lines of a tool call (`result = NULL`) or of its result, fitted to `width`: the
@@ -856,14 +884,14 @@ console_result_lines = function(call, result, width) {
 #' `call` is `list(id, name, input)`, `result` the tool-result message plus `elapsed`.
 #' @noRd
 console_tool_line = function(call, result = NULL, session = NULL, width = cli::console_width()) {
-  out = tryCatch({
-    spec = registry_get("tool", call$name, session = session)
-    if (is.function(spec$render)) spec$render(call, result, width)
-  }, error = function(e) NULL)
+  spec = tryCatch(registry_get("tool", call$name, session = session), error = function(e) NULL)
+  out = tryCatch(if (is.function(spec$render)) spec$render(call, result, width),
+                 error = function(e) NULL)
   width = max(20L, as.integer(width) - nchar(console_pad()))
-  if (!is.character(out) && is.null(result)) return(console_call_line(call, width))
+  kind = console_tool_kind(call$name, spec)
+  if (!is.character(out) && is.null(result)) return(console_call_line(call, width, kind))
   out = if (is.character(out)) console_escape(out, FALSE) else
-    console_result_lines(call, result, width)
+    console_result_lines(call, result, width, kind)
   as.character(cli::ansi_strtrim(console_wrap(out, width), width))
 }
 
@@ -913,7 +941,7 @@ console_on_agent_start = function(event, ctx) {
   if (console_child_shown(run)) {
     rec$child = list(label = console_escape(agent_label(run), FALSE), run = run)
     model = live$adapter$worker_spec$model %||% session_data(s)$model
-    console_child_line(rec, paste0("started (", console_escape(model, FALSE), ")"))
+    console_child_line(rec, paste0("(", console_escape(model, FALSE), ") started"))
   }
   NULL
 }

@@ -96,21 +96,33 @@ gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() 
   invisible(NULL)
 }
 
+#' What an evaluation on the stack holds about the console it started from (eval_one()'s
+#' `.gptr_console_pad` and `.gptr_console_colors`), or NULL outside one
+#' @noRd
+console_eval_value = function(name) {
+  k = sys.nframe() - 1L
+  while (k >= 1L) {
+    x = get0(name, envir = sys.frame(k), inherits = FALSE)
+    if (!is.null(x)) return(x)
+    k = k - 1L
+  }
+  NULL
+}
+
 #' The left margin of console output (D-186): two columns where the console renderer is active
 #' (verbosity 2+ on a dynamic console, so also in capture.output() of an interactive call), else
 #' none, so Rscript, knitr, jsonl and tests keep the plain layout. Inside an evaluation, whose
 #' options say no dynamic console, the margin of the console it started from
-#' (`.gptr_console_pad`)
 #' @noRd
 console_pad = function() {
-  k = sys.nframe() - 1L
-  while (k >= 1L) {
-    pad = get0(".gptr_console_pad", envir = sys.frame(k), inherits = FALSE)
-    if (is.character(pad)) return(pad)
-    k = k - 1L
-  }
-  if (verbosity() >= 2L && cli::is_dynamic_tty()) "  " else ""
+  console_eval_value(".gptr_console_pad") %||%
+    (if (verbosity() >= 2L && cli::is_dynamic_tty()) "  " else "")
 }
+
+#' The colours of console output: inside an evaluation, whose options say 1 colour, those of the
+#' console it started from (D-245)
+#' @noRd
+console_colors = function() console_eval_value(".gptr_console_colors") %||% cli::num_ansi_colors()
 
 #' Notice lines inside the console margin; a line that does not fit is word-wrapped at the
 #' content width and keeps its indentation (D-186); unchanged without a margin

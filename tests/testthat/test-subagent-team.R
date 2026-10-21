@@ -585,9 +585,10 @@ test_that("sub-agent prompts name the asker and reach only the console (D-188)",
   expect_identical(s$text, "parent done")
   for (k in c("a", "b")) {
     expect_true(paste0("  sub-agent ", k, " > r  cm = 1; pp = 2; cm + pp") %in% out)
-    expect_true(paste0("  sub-agent ", k, " started (fake/fake-1)") %in% out)
+    expect_true(paste0("  # sub-agent ", k, " (fake/fake-1) started") %in% out)
   }
-  done = grep("^  sub-agent [ab] done \\([12]/2\\) . [0-9]+ turns? . [0-9]+ s$", out, value = TRUE)
+  done = grep("^  # sub-agent [ab] done \\([12]/2\\) . [0-9]+ turns? . [0-9]+ s$", out,
+              value = TRUE)
   expect_identical(sort(sub("^.*done \\(([0-9/]+)\\).*$", "\\1", done)), c("1/2", "2/2"))
   # neither the prompts, the lines nor the children's own output reach the parent model
   res = Filter(function(x) {
@@ -649,9 +650,9 @@ test_that("a foreground fan-out, team or gptr_parallel shows a line per sub-agen
   }
   out = run_all()
   for (k in c("p", "q", "a", "x", "y")) {
-    expect_true(paste0("  sub-agent ", k, " started (fake/fake-1)") %in% out, info = k)
+    expect_true(paste0("  # sub-agent ", k, " (fake/fake-1) started") %in% out, info = k)
   }
-  done = grep("^  sub-agent [pqaxy] done \\([12]/[12]\\) . 1 turn . [0-9]+ s$", out, value = TRUE)
+  done = grep("^  # sub-agent [pqaxy] done \\([12]/[12]\\) . 1 turn . [0-9]+ s$", out, value = TRUE)
   expect_identical(sort(sub("^.*done \\(([0-9/]+)\\).*$", "\\1", done)),
                    c("1/1", "1/2", "1/2", "2/2", "2/2"))
   # a worker child names the model its worker calls, not its proxy's worker/worker
@@ -661,8 +662,8 @@ test_that("a foreground fan-out, team or gptr_parallel shows a line per sub-agen
   })
   out = utils::capture.output(peter("each", list(w = 1), parallel = 1,
                                     .opts = list(backend = "worker")))
-  expect_true("  sub-agent w started (fake/fake-1)" %in% out)
-  expect_true(any(grepl("^  sub-agent w done \\(1/1\\)", out)))
+  expect_true("  # sub-agent w (fake/fake-1) started" %in% out)
+  expect_true(any(grepl("^  # sub-agent w done \\(1/1\\)", out)))
   local_gptr_options(verbose = 0L)
   expect_false(any(grepl("sub-agent", run_all(), fixed = TRUE)))
   local_gptr_options(verbose = 1L, quiet = TRUE)

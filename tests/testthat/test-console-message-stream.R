@@ -37,12 +37,11 @@ test_that("actual failure notices have an explicit stderr route", {
   expect_identical(err, "synthetic failure")
 })
 
-test_that("successful edit removals stay plain while actual tool errors are marked", {
+test_that("an edit's diff is red and blue while a failed edit says error: (D-245)", {
   withr::local_options(cli.num_colors = 256L)
   result = list(is_error = FALSE, details = list(diff = c("-old", "+new")))
   lines = console_result_lines(list(name = "edit"), result)
-  expect_identical(lines[[1L]], "    -old")
-  expect_identical(cli::ansi_strip(lines[[2L]]), "    +new")
+  expect_identical(lines, c("\033[38;5;167m    -old\033[39m", "\033[38;5;67m    +new\033[39m"))
   result$is_error = TRUE
   result$content = list(block_text("failed"))
   expect_match(cli::ansi_strip(console_result_lines(list(name = "edit"), result, 80L)),

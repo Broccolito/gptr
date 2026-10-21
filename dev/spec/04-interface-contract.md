@@ -5341,7 +5341,7 @@ its part in its own commit, and Task 27 finalises them.
     console questions only; its stale lines go to the history (IC-75).
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26): pending.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
-- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Tasks 11, 17 and 25 pending.
+- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Tasks 17 and 25 pending.
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
     every console glyph comes from it. The glyphs come from the logo's cursor shapes: the person's chevron, a tool
     call's thin strip, the agent's block. ASCII applies where `cli::is_utf8_output()` is FALSE, and in Windows
@@ -5384,3 +5384,22 @@ its part in its own commit, and Task 27 finalises them.
     strings, numbers and constants (`TRUE`, `NA`, `NULL`) blue; calls bold; comments dim; operators, brackets and
     symbols in ink. At 256 colours `function` is `38;5;167` and `"s"` `38;5;67`; at 16 colours `31` and `34`. R
     that does not parse and every other language are shown as written, between dim fences.
+  - Tool calls (Task 11): `console_tool_kind(name, spec)` gives `"read"` for a tool annotated read-only
+    (`annotations$read_only`; a trusted MCP server's `readOnlyHint` arrives as it), `"agent"` for a sub-agent call
+    (Codex's collab call, `codex_agent`; gptr's own sub-agents are `peter()` calls in `r`), else `"act"`. The
+    tool name is always printed, so a kind never relies on colour alone.
+
+    | kind | line | style |
+    |---|---|---|
+    | read | `▎ read  R/plot.R` | the whole line dim; no result line unless it fails |
+    | act | `▎ r  zz = 1`, or the name over a fence of at most 20 lines; an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold; an MCP call's arguments dim |
+    | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started`, `▌ sub-agent a done (1/3) · 4 turns · 12 s` | block blue |
+
+    Result lines are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`: the time when the call took a second or
+    more). An error is red, at most 6 rows. An edit's diff has `+` lines blue and `-` lines red (removals were
+    plain before), at most 12; its file headers (`--- a/`, `+++ b/`) and other lines are dim. A tool's `render()`
+    (IC-69) still wins. At 256 colours the act strip is `38;5;167` and the block `38;5;67`; `NO_COLOR` keeps the
+    glyphs; ASCII shows `|` and `#`. A sub-agent's lines are drawn inside the agent's `r` evaluation, whose options
+    say 1 colour, so they take the colours of the console it started from: `eval_one()` holds
+    `.gptr_console_colors` beside `.gptr_console_pad`, and `console_colors()` reads it (else
+    `cli::num_ansi_colors()`), as `console_pad()` reads the margin.

@@ -805,7 +805,7 @@ test_that("a sub-agent asking in a served r call ends the streamed line, not the
   expect_length(asks, 2L)
   expect_identical(match("Fanning out HELDWORD", out) + 1L, match("  | r", out))
   expect_true(all(asks > match("  | r", out)))
-  expect_true(any(grepl("^  sub-agent [ab] done ", out)))
+  expect_true(any(grepl("^  # sub-agent [ab] done ", out)))
   text = fake_log(f, "mcp")[[1]]$text
   expect_match(text, "child done", fixed = TRUE)
   for (bit in c("HELDWORD", "flagged", "sub-agent", "every mode")) {

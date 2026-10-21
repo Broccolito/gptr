@@ -140,11 +140,13 @@ working directory restored. Plan-specific rules:
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
-| `R/utils-conditions.R` (`gptr_message_write()` clears and redraws the live row) | 17 |
+| `R/utils-conditions.R` (`console_colors()`; `gptr_message_write()` clears and redraws the live row) | 11, 17 |
+| `R/eval-core.R` (an evaluation holds the console's colours) | 11 |
 | `R/gptr-config.R` (`type_ahead` description) | 18 |
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
-| `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress}.R` | their tasks |
-| `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines), `fixtures/cli/claude-toolstream.ndjson` (rows) | 8, 10 |
+| `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream}.R` | their tasks |
+| `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines), `fixtures/cli/claude-toolstream.ndjson` (rows) | 8, 10, 11 |
+| `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11 |
 | `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
@@ -483,11 +485,15 @@ Commit: `refactor(console): the transcript is written in whole rows`.
 
 Decisions:
 - `console_tool_kind(name, spec)` returns one of three kinds:
-  - `"read"`: `annotations$read_only` or MCP `readOnlyHint`, and a CLI route's Read, Grep, Glob or
-    LS;
-  - `"agent"`: the sub-agent tools;
-  - `"act"`: everything else (r, shells, edit, write, other MCP and plugin tools, a CLI route's
-    Bash, Edit and Write).
+  - `"read"`: `annotations$read_only` (a trusted MCP server's `readOnlyHint` arrives as it);
+  - `"agent"`: Codex's collab call, `codex_agent` (gptr's own sub-agents are `peter()` calls in `r`,
+    shown by their lines);
+  - `"act"`: everything else (r, shells, edit, write, other MCP and plugin tools, Codex's shells,
+    file changes and web searches).
+  (Amended in Task 11: no CLI route's Read, Grep, Glob, LS, Bash, Edit or Write reaches the
+  console. The claude CLI runs with `--tools ""` and calls gptr's own tools over MCP, whose
+  annotations decide; Codex reports shells, file changes, web searches, MCP calls and its collab
+  call.)
 - How each kind is shown:
 
 | kind | line | style |
@@ -498,18 +504,27 @@ Decisions:
 
 - The tool name is always printed, so a kind never relies on colour alone.
 - An MCP call shows its arguments dim: `▎ github/search_issues  {"q":"bug"}`.
-- Results are indented 4 and dim (`+ fit · 0.2 s`, `done · 3.0 s`). Errors are red, at most 6
-  rows.
-- Diffs: `+` lines blue and `-` lines red, at most 12.
+- Results are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`; the time from a second, as
+  before). Errors are red, at most 6 rows.
+- Diffs: `+` lines blue and `-` lines red, at most 12; the file headers (`--- a/`, `+++ b/`) dim.
 - IC-69 `render()` still wins.
+- A sub-agent's lines are drawn inside the agent's `r` evaluation, whose options say 1 colour, so
+  the evaluation holds the console's colours beside its margin (`.gptr_console_colors`, read by
+  `console_colors()`) and the line is styled in them (amended in Task 11).
 
 Tests (`test-console-render.R`), RED first: each kind gives its exact bytes at 256 colours, under
-`NO_COLOR` and in ASCII. Today every kind prints `● `.
+`NO_COLOR` and in ASCII, and so do the result lines; a sub-agent started by the agent's r code
+has the blue block. Today every kind prints an unstyled `▎ ` (`● ` before Task 8).
 
 Spec: IC-82, 03 §6.17.
 
 Files: `R/console-render.R` (`console_tool_kind()`, `console_call_line()`, `console_result_lines()`,
-`console_child_line()`), `tests/testthat/test-console-render.R`.
+`console_tool_line()`, `console_child_line()`, `console_on_agent_start()`), `R/utils-conditions.R`
+(`console_colors()`, and `console_eval_value()`, which `console_pad()` shares), `R/eval-core.R`,
+`tests/testthat/test-console-render.R`, and the tests that expect the old lines
+(`test-console-{message-stream,ui}.R`, `test-subagent-team.R`, `test-gptr-gateway.R`,
+`test-cli-claude.R`), and the sub-agent line in `vignettes/teams-and-background.Rmd` (and `.orig`).
+Amended in Task 11.
 
 Commit: `feat(console): tool calls as cursor strips tinted by kind`.
 
