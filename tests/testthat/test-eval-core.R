@@ -277,6 +277,13 @@ test_that("an infinite recursion becomes an error result instead of escaping", {
   expect_false(exists("after", envir = e, inherits = FALSE))
 })
 
+test_that("the condition call and traceback of a long call chain are deparsed (CI-82)", {
+  chain = str2lang(paste0("f", strrep("(1)", 500L)))
+  withr::local_options(expressions = 1000L)
+  expect_match(eval_call_text(chain), "^[(f1)]+$")
+  expect_match(eval_format_calls(list(chain)), "^ 1: [(f1)]{117}[.]{3}$")
+})
+
 test_that("sinks, options, hooks and the time limit are restored after errors and interrupts", {
   skip_on_cran()
   e = new.env()

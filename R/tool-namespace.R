@@ -155,7 +155,7 @@ ns_formals_text = function(fun, dots = TRUE) {
   if (!dots) f = f[names(f) != "..."]
   parts = vapply(seq_along(f), function(i) {
     if (identical(f[[i]], quote(expr = ))) return(names(f)[i])
-    paste0(names(f)[i], " = ", paste(deparse(f[[i]], width.cutoff = 500L), collapse = " "))
+    paste0(names(f)[i], " = ", paste(deparse_code(f[[i]], width.cutoff = 500L), collapse = " "))
   }, "")
   paste0("(", paste(parts, collapse = ", "), ")")
 }
@@ -257,7 +257,7 @@ ns_collect_input = function(frame, arg_names, gate_only = FALSE) {
       input[[nm]] = if (is.atomic(expr) && length(expr) == 1L) {
         expr
       } else {
-        substr(paste(deparse(expr, width.cutoff = 60L), collapse = " "), 1L, 80L)
+        substr(paste(deparse_code(expr, width.cutoff = 60L), collapse = " "), 1L, 80L)
       }
       next
     }

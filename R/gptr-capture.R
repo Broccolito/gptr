@@ -104,7 +104,7 @@ dot_labels = function(exprs, nms) {
     } else if (sym && nzchar(as.character(exprs[[i]]))) {
       as.character(exprs[[i]])
     } else if (!sym && (is.language(exprs[[i]]) || dot_is_literal(exprs[[i]]))) {
-      d = paste(deparse(exprs[[i]], width.cutoff = 60L, nlines = 1L), collapse = "")
+      d = paste(deparse_code(exprs[[i]], width.cutoff = 60L, nlines = 1L), collapse = "")
       if (nchar(d) > 60L) paste0(substr(d, 1L, 57L), "...") else d
     } else {
       paste0("..", i)
@@ -614,7 +614,9 @@ ident_noun = function(arg) {
 
 #' One-line deparse of an identifier expression
 #' @noRd
-ident_label = function(expr) paste(deparse(expr, width.cutoff = 60L, nlines = 1L), collapse = "")
+ident_label = function(expr) {
+  paste(deparse_code(expr, width.cutoff = 60L, nlines = 1L), collapse = "")
+}
 
 #' Checks character identifiers (a mode is exactly one of the four, contract 6.1). Messages never
 #' repeat the value (contract 1.1)

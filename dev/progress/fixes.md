@@ -1415,6 +1415,56 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `^http-retry$` PASS 337. Lint clean.
 - Deviations: none (tests only; no product bound changed).
 
+## Task CI-82 - Deparsed user and model code passes `backtick`, so a call chain cannot recurse (2026-10-21, #66)
+- Windows-check on main `412cf2c` (run 39605492452 attempt 1, job 119240498955, oldrel-4 shard 3/4,
+  R 4.2.3) aborted R with "evaluation nested too deeply" and then an `Rcpp::exception` from
+  `sys.nframe()`: 1 abort in 499 hosted Windows runs. The log names no test; a local profile of
+  shard 3 places its only recursion that deep in `test-env-history.R:184-194`, which logs a
+  3,000-head chain `f(1)(1)...(1)` through `user_log_callback()`, whose `user_log_line()` called
+  `deparse(expr, width.cutoff = 500L, nlines = 120L)` with `backtick` defaulted.
+- Cause: base `deparse()`'s default `backtick = mode(expr) %in% c("call", "expression", "(",
+  "function")` calls `mode()`, which for a call returns `switch(deparse(x[[1L]])[1L], ...)`, so
+  `deparse()`, `%in%` and `mode()` recurse once per head (an estimated 2,900 R frames there; R 4.2.3
+  and 4.6.1 define both alike). On an 8 MB C stack this ends at the C stack check; on Windows' 64 MB
+  Rterm stack at `options(expressions)`, which `user_log_text()` catches. When the later package's
+  Windows `WM_TIMER` handler (armed once later, httpuv or chromote has run) fires at that depth, its
+  `at_top_level()` evaluates `sys.nframe()` through `R_tryEval()`, which fails, and `Rcpp::stop()`
+  escapes `DispatchMessage()`, so `std::terminate()` aborts R (from the job log and later's source).
+  A user's Windows session with later loaded can abort the same way.
+- Fix: `deparse_code()` (`R/utils-text.R`) calls `deparse()` with `backtick = is.call(expr) ||
+  is.expression(expr) || is.function(expr)`, the value the default computes, so the text is the same
+  and `mode()` is never called. Every `deparse()` of language gptr did not build goes through it (15
+  sites): `user_log_line()`, `eval_call_text()`, `eval_format_calls()`, `risk_code_text()`,
+  `risk_scan()`'s labels, `dot_labels()`, `ident_label()`, `gptr_describe()`'s function, default,
+  formula and model-formula text, `ns_formals_text()`, `ns_collect_input()`, `home_label()` and the
+  sidecar's call identity in `doc_sidecar_data()`. Left as they are: `artifact-app.R` (a name that
+  already passes `backtick = TRUE`, and data names as strings) and `proc-spawn.R` (gptr's own
+  functions). `user_log_text()`'s note drops long call chains: 20,000 heads now deparse in 0.16 s
+  on an 8 MB stack.
+- Tests: under `options(expressions = 1000)`, a 500-head chain is deparsed at each site family, one
+  new test each in eval-core, perm-classify (`risk_code_text()`), gptr-capture, env-describe,
+  tool-namespace and session-live; the env-history test now expects the cut 3,000-head text, not the
+  "cannot be deparsed" note. The default reaches that limit at 197 heads (about 5 evaluation levels
+  per head). `risk_scan()`'s labels and the sidecar's call identity rest on the rule and the
+  identity check instead: without the JIT, `risk_scan()`'s own walk nests about as deep per head as
+  the default (4 against 5 evaluation levels), and the sidecar's 64-level bound keeps it far below
+  any limit.
+- Identity: old and new outputs are `identical()` on an 81-item corpus (non-syntactic names,
+  operators, `%op%`, formulas, `\(x)`, closures, builtins, specials, symbols, expressions, the empty
+  symbol, atomic values) under each argument set the sites pass: 651 `deparse()` comparisons and 816
+  site outputs, including 11 errors the old code raised on odd inputs.
+- Red: the new tests on main `7cfd543`: FAIL 7 PASS 2261 (six "evaluation nested too deeply"
+  errors; the env-history log holds the note). Green: the same files PASS 2271;
+  `^(env-history|eval-|perm-|risk|gptr-capture|doc-|console-render)` PASS 4901 SKIP 2;
+  `^(env-describe|tool-namespace|session-live|session-object|gptr-gateway|agent-run|env-snapshot|`
+  `prompt-compact|s1-route|arch-layers|lint-rules)$` PASS 3059. Lint clean.
+- Deviations: none (output unchanged). Open: hosted Windows has not run the fix. Other R recursion
+  that reaches `options(expressions)` on Windows with later loaded, such as `risk_scan()`'s walk on
+  deeply nested code (caught by `risk_classify_r()`), still meets later's timer handler. Past about
+  60,000 heads on an 8 MB stack (about 8 times that on Windows' 64 MB), `deparse_code()` overflows
+  R's unchecked C deparser instead of failing catchably in `mode()`; `user_log` caps chains at 5,000
+  heads, and `gptr_risk()` already overflows on such code on main.
+
 ## Task CI-83 - The observer retry test's mixed sequence stays inside the retry deadline (2026-10-21, #65)
 - main 7cfd543 (PR #61 merged) failed macos-latest (release) in run 39617294607:
   "backpressure observation retries fixed transient observer reasons for one deadline"
