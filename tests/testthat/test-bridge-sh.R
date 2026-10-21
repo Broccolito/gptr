@@ -2,6 +2,7 @@
 # interpreter kind, background jobs, builtin:bridges.
 
 test_that("simple command lines split into words and shell syntax does not", {
+  skip_on_cran()
   expect_identical(bridge_split("git status --porcelain"), c("git", "status", "--porcelain"))
   expect_identical(bridge_split("echo 'quoted words' plain"), c("echo", "quoted words", "plain"))
   expect_identical(bridge_split("printf \"a b\""), c("printf", "a b"))
@@ -18,6 +19,7 @@ test_that("simple command lines split into words and shell syntax does not", {
 })
 
 test_that("argv vectors, simple lines and shell lines resolve differently", {
+  skip_on_cran()
   r = bridge_resolve(c("git", "status"))
   expect_identical(r[c("command", "args", "via")], list(command = "git", args = "status",
                                                         via = "argv"))
@@ -35,6 +37,7 @@ test_that("argv vectors, simple lines and shell lines resolve differently", {
 })
 
 test_that("validated JSON arrays flatten back to character vectors", {
+  skip_on_cran()
   expect_identical(bridge_chr(list("git", "status")), c("git", "status"))
   expect_identical(bridge_chr("ls"), "ls")
   expect_null(bridge_chr(NULL))
@@ -44,6 +47,7 @@ test_that("validated JSON arrays flatten back to character vectors", {
 })
 
 test_that("views keep head and tail within the budget and name the out id", {
+  skip_on_cran()
   lines = sprintf("line %05d of the output with some words", 1:20000)
   v = bridge_view_lines(lines, 300L, id = "o1a2b3c")
   expect_lte(est_tokens(v, "r_output"), 300)
@@ -65,6 +69,7 @@ test_that("views keep head and tail within the budget and name the out id", {
 })
 
 test_that("the print budget is the option, capped at 0.6 x the r budget inside a run", {
+  skip_on_cran()
   expect_identical(bridge_budget(NULL), 1500L)
   expect_identical(bridge_budget(120), 120L)
   local_gptr_options(helper_output_tokens = 900L)
@@ -325,6 +330,7 @@ test_that("a registered value is redacted before the digest label or cmd is cut"
 })
 
 test_that("the interpreter validator normalises extensions and rejects bad fields", {
+  skip_on_cran()
   sp = interpreter_validate(list(kind = "interpreter", name = "tcl", ext = ".TCL",
                                  programs = "tclsh"))
   expect_identical(sp$ext, "tcl")
@@ -412,6 +418,7 @@ test_that("shell scripts run with bash or sh and #! lines with the program they 
 })
 
 test_that("program lookup skips WindowsApps aliases, also under Windows 8.3 short names", {
+  skip_on_cran()
   d = withr::local_tempdir()
   tool = file.path(d, c("WindowsApps", "bin"), "gptr-p22-tool.exe")
   for (f in tool) {
@@ -589,6 +596,7 @@ tool_results = function(s, name) {
 }
 
 test_that("builtin:bridges registers sh, script, bg and jobs as peter$ members only", {
+  skip_on_cran()
   for (nm in c("sh", "script", "bg", "jobs")) {
     spec = registry_get("tool", nm)
     expect_s3_class(spec, "gptr_tool")
@@ -638,6 +646,7 @@ test_that("the members run through the gateway with the contract defaults", {
 })
 
 test_that("member risks follow the command classifier; script and bg are at least 3", {
+  skip_on_cran()
   sh = registry_get("tool", "sh")
   expect_identical(as.integer(sh$risk(list(cmd = "rm -rf data"), NULL)$level), 3L)
   expect_identical(as.integer(sh$risk(list(cmd = c("git", "status")), NULL)$level), 0L)
@@ -655,12 +664,14 @@ test_that("member risks follow the command classifier; script and bg are at leas
 })
 
 test_that("r code calling peter$sh() is classified by the command it runs (acceptance 3)", {
+  skip_on_cran()
   expect_identical(gptr_risk("peter$sh(\"rm -rf data\")")$level, 3L)
   expect_identical(gptr_risk("peter$sh(c(\"git\", \"status\"))")$level, 0L)
   expect_identical(gptr_risk("x = paste(\"rm\", f); peter$sh(x)")$level, 3L)
 })
 
 test_that("the shell line of <r_session> is registered byte for byte", {
+  skip_on_cran()
   frag = registry_get("prompt_section", "shell")
   expect_identical(frag$text, shell_line)
   expect_identical(frag$parent, "r_session")
@@ -670,6 +681,7 @@ test_that("the shell line of <r_session> is registered byte for byte", {
 })
 
 test_that("-builtin:bridges removes the shell line from <r_session> and the members", {
+  skip_on_cran()
   local_without_builtin("bridges")
   t0 = gptr_prompt(preset = "standard")$system$t0
   expect_false(grepl("There is no shell tool", t0, fixed = TRUE))

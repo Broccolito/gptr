@@ -89,6 +89,7 @@ test_that("SDK-dispatched successful R uses approved code and the existing secre
 })
 
 test_that("failed, plan, non-recording and idle served R do not add executable history", {
+  skip_on_cran()
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", mode = "auto")
   local_mcp_record_probe()

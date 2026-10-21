@@ -296,6 +296,7 @@ test_that("the fixture plugin registers one record of every kind but the MCP ser
 })
 
 test_that("a run uses the provider, adapter, tool, gate, context and cost records", {
+  skip_on_cran()
   local_vault()
   local_project()
   # A compactor record is used only when the `compactor` setting selects it (P07

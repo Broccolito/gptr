@@ -14,6 +14,7 @@ source_root = function() {
 }
 
 test_that("`the` holds P01's fields and %||% is the null default", {
+  skip_on_cran()
   expect_true(is.environment(the))
   for (field in c("on_load", "on_unload", "once", "out", "services", "redactor", "load_errors")) {
     expect_true(exists(field, envir = the, inherits = FALSE), label = field)

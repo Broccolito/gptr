@@ -1116,9 +1116,9 @@ egress_can_ask = function(safety = egress_safety()) {
   gptr_can_prompt()
 }
 
-#' The question shown before the first automatic context goes to a provider (gptr_confirm()
-#' appends the ` [y/N] ` hint itself); it names the effective endpoint when there is one, and the
-#' model `asker` of a sub-agent that model code starts
+#' The question shown before the first automatic context or System 1 input goes to a provider
+#' (gptr_confirm() appends the ` [y/N] ` hint itself); it names the effective endpoint when there
+#' is one, and the model `asker` of a sub-agent that model code starts
 #' @noRd
 egress_question = function(id, origin = NULL, asker = NULL) {
   to = if (is.null(origin)) id else paste0(id, " (", origin, ")")
@@ -1128,8 +1128,11 @@ egress_question = function(id, origin = NULL, asker = NULL) {
     paste0("The agent's code starts a sub-agent on ", asker, ", which sends its prompt to ", to)
   }
   paste0(lead, " together with automatic context: the workspace listing (object names, classes ",
-         "and sizes), a description of the R environment, project instructions and descriptions ",
-         "of the objects you attach. Allow this for ", id, " from now on?")
+         "and sizes), the objects you added, changed or removed and the R expressions you ran ",
+         "since the previous prompt (with the output of !code lines in peter()'s console), a ",
+         "description of the R environment, project instructions and descriptions of the objects ",
+         "you attach, and the inputs of System 1 questions (each vector element or data frame ",
+         "row). Allow this for ", id, " from now on?")
 }
 
 #' Records `egress.<id> = "ack"` in the user settings file by one read-modify-write under its
@@ -1180,8 +1183,8 @@ egress_check = function(provider_id, provider = provider_get(provider_id),
   gptr_abort(c(paste0("gptr has not been told that it may send session context to ", pid, where,
                       "."),
                st$why,
-               paste0("Acknowledge it once with ", how,
-                      ", or pass .opts = list(context = \"none\").")),
+               paste0("Acknowledge it once with ", how, ", or, except for a System 1 question, ",
+                      "pass .opts = list(context = \"none\").")),
              "egress", provider = pid, how_to_ack = how)
 }
 
@@ -1519,21 +1522,24 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' where its protections end. [gptr_egress] describes what is sent to model providers.
 #'
 #' @section Everything happens because you asked:
-#' Nothing runs when the package is loaded. A model is contacted only when you call [peter()] (or
-#' a function that you give a prompt), and model-written code is evaluated only in the
+#' When the package is loaded, it only stops the child processes that an earlier gptr session
+#' left running after it was killed or crashed, and removes their records in
+#' `tools::R_user_dir("gptr", "cache")`. A model is contacted only when you call [peter()] (or a
+#' function that you give a prompt), and model-written code is evaluated only in the
 #' environment you pass as `envir` (by default the frame that called [peter()]); gptr never
-#' assigns into the global environment by itself. Files are written only inside a `.gptr/`
-#' directory you created with [gptr_init()] or confirmed interactively, inside
-#' `tools::R_user_dir("gptr")`, inside the session temporary directory, into documents you bound
-#' with [gptr_doc()] or confirmed, and by tool calls that the permission mode allowed. In a
-#' non-interactive run without such consent nothing is written outside the session temporary
-#' directory.
+#' assigns into the global environment by itself. Files are written only into paths you pass to
+#' a gptr function (for example `to` in [gptr_export()] or `paths` in [gptr_scrub()] with
+#' `dry_run = FALSE`), inside the project's `.gptr/` directory once it exists (see
+#' [gptr_init()]), inside `tools::R_user_dir("gptr")`, inside the session temporary directory,
+#' into files you bound with [gptr_doc()] or confirmed, and by tool calls that the permission
+#' mode allowed.
 #'
 #' @section Permission modes:
-#' Every tool call passes a permission gate. The default mode is `manual`: only actions that the
-#' classifier knows to be read-only run without asking; every other action, including any change
-#' to a file or an object, asks first with a one-line prompt. `edits` also allows file edits
-#' inside the project and still asks before R code that is not known to be read-only; `auto`
+#' Every tool call passes a permission gate. The default mode is `manual`: actions that the
+#' static classifier labels read-only run without asking; every other action it recognizes,
+#' including a change to a file or an object, asks first with a one-line prompt. The classifier
+#' is advisory, not a security boundary (see below). `edits` also allows file edits inside the
+#' project and still asks before R code that is not known to be read-only; `auto`
 #' asks only for level-4 actions (for example deleting the project directory or a file outside the
 #' project, where a system temporary directory such as `/tmp` counts as outside, or changing gptr's
 #' own configuration) and for reads of registered secrets; `yolo`, which only you can select (a
@@ -1623,8 +1629,9 @@ NULL
 
 #' Data egress: what gptr sends to model providers
 #'
-#' gptr sends data to a model provider only when you run a prompt with that provider's model.
-#' The package itself collects nothing: there is no telemetry, no usage reporting and no network
+#' gptr sends data to a model provider only when you run a prompt with that provider's model, or
+#' when model code that the permission mode allowed starts a sub-agent with that model. The package
+#' itself collects nothing: there is no telemetry, no usage reporting and no network
 #' access when the package loads. This page lists what a request contains so that you can decide
 #' what may leave your machine.
 #'
@@ -1637,7 +1644,9 @@ NULL
 #' - With summary context, a budgeted description of each attached object (its class,
 #'   dimensions, column names and types and a few values); a small object can appear in full.
 #' - Automatic context: a short listing of the objects in the evaluation environment (names,
-#'   classes and sizes), the R version, platform and available packages, and the project
+#'   classes and sizes); the objects you added, changed or removed and the top-level R
+#'   expressions you ran since the previous prompt (with the output of `!code` lines in the
+#'   [peter()] console); the R version, platform and available packages; and the project
 #'   instruction files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`).
 #' - Tool results: the printed output of R code the model ran, the parts of files it read, and
 #'   images of plots it made. In `manual` mode every action that is not known to be read-only
@@ -1652,19 +1661,21 @@ NULL
 #' Registered secrets are replaced by markers before anything is sent.
 #'
 #' @section Limiting automatic context:
-#' `.opts = list(context = "names")` sends workspace object names and attached-object headers,
-#' and `.opts = list(context = "none")` suppresses workspace and attached-object descriptions.
+#' `.opts = list(context = "names")` sends workspace object names, the workspace changes and
+#' attached-object headers, and `.opts = list(context = "none")` suppresses the workspace
+#' listing, the workspace changes and attached-object descriptions.
 #' Prompts, tool results and native typed decision inputs have their own paths. Attach only the
 #' objects the task needs. The `plan` mode permits actions classified as read-only so you can
 #' inspect a proposed workflow before allowing changes to your workspace.
 #'
 #' @section Acknowledgment:
 #' The first time you use a provider (or a command-line route such as `claude_code` or `codex`)
-#' in an interactive session, gptr shows what automatic context is sent and records your
+#' in an interactive session, gptr shows what is sent and records your
 #' acknowledgment in your user settings. A non-interactive run with a provider that was never
 #' acknowledged stops with a `gptr_error_egress` condition. Record the acknowledgment once with
 #' `gptr_config(egress = list(anthropic = "ack"), .scope = "user")` (this replaces the stored
-#' list, so name every provider you use), or run with `.opts = list(context = "none")`. Offline
+#' list, so name every provider you use), or, except for System 1 questions, run with
+#' `.opts = list(context = "none")`. Offline
 #' providers such as [gptr_fake_provider()] and local providers on a loopback address need no
 #' acknowledgment. An Ollama server can forward requests to cloud models, so Ollama is exempt only
 #' while its local-only inference is on (the default; see `providers` in [gptr_config()]).

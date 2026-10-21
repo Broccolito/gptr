@@ -83,9 +83,9 @@ works on the objects already in memory.
   prompt. The terminal does not echo them into the answer; each shows once in its notice. On
   the CLI routes a steer is sent after the CLI's current response.
 * A block pasted at the `peter>` prompt of a macOS terminal is sent as one message, and a line
-  typed or pasted before a question (an approval, a choice, `gptr_confirm()`) never answers it.
-  A block pasted at an approval or a choice is dropped, not read as the answer, and pasted
-  fences and `"""` blocks are read at once.
+  typed or pasted before a question (an approval, a choice or a yes/no confirmation) never
+  answers it. A block pasted at an approval or a choice is dropped, not read as the answer, and
+  pasted fences and `"""` blocks are read at once.
 * R in the Terminal tab of RStudio or Positron is treated as a terminal (completion, pause menu,
   interrupt key), and `!code` completes R code at `peter>` there and in RStudio's console.
 * The console keeps answers, tool calls, notices and prompts in a two-column margin with one

@@ -140,6 +140,7 @@ describe_facts = function() {
 }
 
 test_that("describers keep at least 90% of G2's facts at 150 tokens and stay in budget", {
+  skip_on_cran()
   e = s4_where()
   obj = describe_fixture(e)
   withr::defer({
@@ -162,6 +163,7 @@ test_that("describers keep at least 90% of G2's facts at 150 tokens and stay in 
 })
 
 test_that("Seurat-like meta.data dims and columns, Dates, sparse dims, formulas, nested names", {
+  skip_on_cran()
   e = s4_where()
   obj = describe_fixture(e)
   withr::defer({
@@ -197,6 +199,7 @@ test_that("an S7 object is described without a size (D-189)", {
 })
 
 test_that("levels: a small budget gives the header, a large one more detail", {
+  skip_on_cran()
   lo = gptr_describe(mtcars, budget = 20L)
   hi = gptr_describe(mtcars, budget = 600L)
   expect_equal(lo[1], "<data.frame> 32 x 11, 7 KB")
@@ -216,6 +219,7 @@ test_that("describe_value truncates a third-party method that ignores the budget
 })
 
 test_that("describe_binding never forces promises, catches errors and falls back to the default", {
+  skip_on_cran()
   e = new.env()
   delayedAssign("lazy", stop("forced!"), assign.env = e)
   makeActiveBinding("act", function() stop("called!"), e)
@@ -237,6 +241,7 @@ test_that("describe_binding never forces promises, catches errors and falls back
 })
 
 test_that("ggplot, DBI, Arrow and SingleCellExperiment describers need no package calls", {
+  skip_on_cran()
   geom = structure(list(), class = c("GeomPoint", "Geom"))
   gg = structure(list(data = mtcars, layers = list(list(geom = geom)),
                       mapping = list(x = quote(wt), y = quote(mpg))), class = c("gg", "ggplot"))
@@ -269,6 +274,7 @@ test_that("a patchwork is described by its plots (#45)", {
 })
 
 test_that("a session is described by kind, model, status, turns and cost (#45)", {
+  skip_on_cran()
   local_project()
   s = session_new("fake/fake-1", "auto", home = new.env())
   d = session_data(s)
@@ -280,6 +286,7 @@ test_that("a session is described by kind, model, status, turns and cost (#45)",
 })
 
 test_that("describer methods call no package outside Imports (IC-71)", {
+  skip_on_cran()
   allowed = c("base", "methods", "utils", "stats", "rlang")
   ns = environment(gptr_describe)
   pkgs_of = function(e, acc) {
@@ -304,6 +311,7 @@ test_that("describer methods call no package outside Imports (IC-71)", {
 # Adaptations beyond the plan's tests (see dev/progress/P09.md, Task 3)
 
 test_that("list, matrix and data frame columns are described by class and shape", {
+  skip_on_cran()
   df = data.frame(a = 1:3)
   df$l = list(1, 2:3, "x")
   df$m = matrix(1:6, 3)
@@ -325,6 +333,7 @@ test_that("long strings are cut to 40 characters in examples and rows", {
 })
 
 test_that("names, levels and strings that are not valid UTF-8 are shown with byte escapes", {
+  skip_on_cran()
   bad = "\xe9t\xe9"
   lst = stats::setNames(list(1, bad), c(bad, "b"))
   df = stats::setNames(data.frame(1, bad), c(bad, "b"))
@@ -380,6 +389,7 @@ test_that("an essentially perfect linear fit is described without a warning", {
 })
 
 test_that("a forced level is a whole number of at least 1; larger levels give the richest", {
+  skip_on_cran()
   expect_error(gptr_describe(mtcars, level = 0), class = "gptr_error_invalid_argument")
   expect_error(gptr_describe(mtcars, level = NA), class = "gptr_error_invalid_argument")
   expect_equal(gptr_describe(mtcars, level = 9L), gptr_describe(mtcars, level = 4L))
@@ -395,6 +405,7 @@ test_that("the harness cuts a first line that alone overruns the budget", {
 })
 
 test_that("the harness replaces an empty, NA or non-text method result with the default", {
+  skip_on_cran()
   ns = environment(gptr_describe)
   bad = list(empty = function(x, budget = 150L, ...) character(),
              null = function(x, budget = 150L, ...) NULL,

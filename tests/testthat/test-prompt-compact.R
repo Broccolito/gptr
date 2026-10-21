@@ -2,6 +2,7 @@
 # compactor and INFRA-26 (Task 13).
 
 test_that("compact_threshold follows architecture 6.11", {
+  skip_on_cran()
   expect_equal(compact_threshold(32768, 4096), 16384)
   expect_equal(compact_threshold(131072, 8192), 101072)
   expect_equal(compact_threshold(200000, 8192), 170000)
@@ -60,6 +61,7 @@ fake_assistant = function(content, stop_reason = "stop") {
 }
 
 test_that("compact_assigned_names finds every assignment form with the code as written", {
+  skip_on_cran()
   arrow = paste0("<", "-")
   y_code = paste("y", arrow, "f(2)")
   a = compact_assigned_names(paste("x = 1", y_code, "names(z) = c('a')", "assign('w', 3)",
@@ -71,6 +73,7 @@ test_that("compact_assigned_names finds every assignment form with the code as w
 })
 
 test_that("extract_state collects the harness state of a transcript", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   msg_entry(s, msg_user("cluster the cells"))
@@ -104,6 +107,7 @@ test_that("extract_state collects the harness state of a transcript", {
 })
 
 test_that("a failed r call contributes no objects", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   msg_entry(s, msg_tool_result("c1", "r", "Error", is_error = TRUE,
@@ -112,6 +116,7 @@ test_that("a failed r call contributes no objects", {
 })
 
 test_that("the state of an earlier compaction is merged under the newer one", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   old = compact_state_empty()
@@ -165,6 +170,7 @@ test_that("the checkpoint body follows G4 section 3.6", {
 })
 
 test_that("objects stay oldest first across reassignment and compaction; oldest dropped", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   old = compact_state_empty()
@@ -190,6 +196,7 @@ test_that("objects stay oldest first across reassignment and compaction; oldest 
 })
 
 test_that("shapes come from the session's workspace snapshot; unforced bindings give ?", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   expect_identical(compact_shapes(NULL), list())
@@ -239,6 +246,7 @@ test_that("a compaction state read back from the session file merges the same wa
 # ---- Task 12 review round 1 ---------------------------------------------------------------------
 
 test_that("the user message list stays within its budget, long first and newest included", {
+  skip_on_cran()
   long1 = paste(rep("alpha", 5000), collapse = " ")
   long2 = paste(rep("omega", 5000), collapse = " ")
   out = compact_user_messages(c(long1, strrep("m", 200), long2))
@@ -348,6 +356,7 @@ test_that("the compaction request is G4's text with an optional focus", {
 })
 
 test_that("compact_run appends one compaction entry built from the checkpoint reply", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = "- rule"))
   x = compact_session(list("## Goal\n- cluster pbmc\n## Progress\n- done"), mode = "manual")
   s = x$s
@@ -399,6 +408,7 @@ test_that("compact_run appends one compaction entry built from the checkpoint re
 })
 
 test_that("the checkpoint request does not replace the guard's view of the model", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -411,6 +421,7 @@ test_that("the checkpoint request does not replace the guard's view of the model
 })
 
 test_that("a cold compaction the kernel requests as threshold is recorded as cold", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -420,6 +431,7 @@ test_that("a cold compaction the kernel requests as threshold is recorded as col
 })
 
 test_that("after a compaction the request starts with the reused project block", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = "- rule"))
   x = compact_session(list("## Goal\n- g"), mode = "manual")
   s = x$s
@@ -436,6 +448,7 @@ test_that("after a compaction the request starts with the reused project block",
 })
 
 test_that("a project block over the re-injection budget is dropped and recorded (IC-71)", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = "- rule"))
   x = compact_session(list("## Goal\n- g"), mode = "manual")
   s = x$s
@@ -452,6 +465,7 @@ test_that("a project block over the re-injection budget is dropped and recorded 
 })
 
 test_that("a session_before_compact hook can cancel or supply the result", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -475,6 +489,7 @@ test_that("a session_before_compact hook can cancel or supply the result", {
 })
 
 test_that("a checkpoint reply that calls a tool is rejected and asked again", {
+  skip_on_cran()
   x = compact_session(list(fake_tool("r", code = "1"), "## Goal\n- second try"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -484,6 +499,7 @@ test_that("a checkpoint reply that calls a tool is rejected and asked again", {
 })
 
 test_that("an error reply is not retried; the checkpoint keeps the harness state", {
+  skip_on_cran()
   x = compact_session(list(fake_error("overloaded", status = 400L), "never asked"))
   s = x$s
   msg_entry(s, msg_user("keep this request"))
@@ -496,6 +512,7 @@ test_that("an error reply is not retried; the checkpoint keeps the harness state
 })
 
 test_that("compact_should applies the threshold, the growth rule and the cold rule", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -516,6 +533,7 @@ test_that("compact_should applies the threshold, the growth rule and the cold ru
 })
 
 test_that("a CLI turn's total is no context size; a CLI route never compacts by itself (D-202)", {
+  skip_on_cran()
   off = gptr_register(pcli_fake_provider("claude"))
   withr::defer(off())
   x = compact_session(list("AIC 154.12 is the best.",
@@ -550,12 +568,14 @@ test_that("a CLI turn's total is no context size; a CLI route never compacts by 
 })
 
 test_that("the checkpoint compactor and the compaction services are registered", {
+  skip_on_cran()
   expect_identical(registry_get("compactor", "checkpoint")$compact, compact_checkpoint)
   expect_identical(ext_service_get("compact.should"), compact_should)
   expect_identical(ext_service_get("compact.run"), compact_run)
 })
 
 test_that("INFRA-26: an overflow triggers exactly one compaction and one retry", {
+  skip_on_cran()
   x = compact_session(list(list(overflow = TRUE), "## Goal\n- checkpoint", "done"))
   s = x$s
   session_run(s, msg_user("hello"), list(max_turns = 3L))
@@ -565,6 +585,7 @@ test_that("INFRA-26: an overflow triggers exactly one compaction and one retry",
 })
 
 test_that("INFRA-26: a second overflow after the retry surfaces as an error", {
+  skip_on_cran()
   x = compact_session(list(list(overflow = TRUE), "## Goal\n- checkpoint", list(overflow = TRUE)))
   s = x$s
   session_run(s, msg_user("hello"), list(max_turns = 3L))
@@ -576,6 +597,7 @@ test_that("INFRA-26: a second overflow after the retry surfaces as an error", {
 # ---- Task 13 adaptations ------------------------------------------------------------------------
 
 test_that("compaction events carry the event envelope of contract 4.5", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -611,6 +633,7 @@ test_that("compaction events carry the event envelope of contract 4.5", {
 })
 
 test_that("inside a run the checkpoint request uses the run's model and safety record", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -646,6 +669,7 @@ test_that("inside a run the checkpoint request uses the run's model and safety r
 })
 
 test_that("a router session outside a run asks router.call for the compaction model", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -662,6 +686,7 @@ test_that("a router session outside a run asks router.call for the compaction mo
 })
 
 test_that("a checkpoint request that cannot start leaves the harness state alone", {
+  skip_on_cran()
   x = compact_session(list("never asked"))
   s = x$s
   msg_entry(s, msg_user("keep this request"))
@@ -678,6 +703,7 @@ test_that("a checkpoint request that cannot start leaves the harness state alone
 })
 
 test_that("an empty checkpoint reply is asked again", {
+  skip_on_cran()
   x = compact_session(list(list(text = ""), "## Goal\n- second try"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -687,6 +713,7 @@ test_that("an empty checkpoint reply is asked again", {
 })
 
 test_that("the continuation line repeats a long latest request whole", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   # keep_recent = 0: the continuation line is the only copy of the unanswered request the model
@@ -709,6 +736,7 @@ test_that("the continuation line repeats a long latest request whole", {
 })
 
 test_that("a compaction without a resolvable model records its token count as unknown", {
+  skip_on_cran()
   x = compact_session(list("never asked"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -744,6 +772,7 @@ test_that("a compaction without a resolvable model records its token count as un
 })
 
 test_that("a malformed hook result runs the compactor; harness details fields win", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -775,6 +804,7 @@ test_that("a malformed hook result runs the compactor; harness details fields wi
 })
 
 test_that("a failing plugin compactor falls back to the checkpoint compactor", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -804,6 +834,7 @@ test_that("a failing plugin compactor falls back to the checkpoint compactor", {
 })
 
 test_that("compact_should takes unknown counts as no evidence; compact_run checks its reason", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -818,6 +849,7 @@ test_that("compact_should takes unknown counts as no evidence; compact_run check
 # ---- Task 13 review fixes (round 1) -------------------------------------------------------------
 
 test_that("tool additions and section patches are re-announced after a compaction", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g", "## Goal\n- again"))
   s = x$s
   prompt_freeze(s, list(interactive = FALSE))
@@ -868,6 +900,7 @@ test_that("tool additions and section patches are re-announced after a compactio
 })
 
 test_that("an overflow compaction inside a run asks the router for its model (IC-69)", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -908,6 +941,7 @@ test_that("an overflow compaction inside a run asks the router for its model (IC
 })
 
 test_that("a result whose state is not a list keeps the harness state", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("keep me"))
@@ -932,6 +966,7 @@ test_that("a result whose state is not a list keeps the harness state", {
 })
 
 test_that("a run aborted while the checkpoint reply is awaited cancels it and records nothing", {
+  skip_on_cran()
   # Review round 3: a real P06 abort settles the run, and run_settle() clears live$run, so the
   # halted state is read from the run the compaction started under
   x = compact_session(list("first answer", "second answer"))
@@ -974,6 +1009,7 @@ test_that("a run aborted while the checkpoint reply is awaited cancels it and re
 })
 
 test_that("the compaction's usage sums every checkpoint attempt", {
+  skip_on_cran()
   x = compact_session(list(list(text = "", usage = fake_usage(100, 5)),
                            list(text = "## Goal\n- ok", usage = fake_usage(120, 7))))
   s = x$s
@@ -988,6 +1024,7 @@ test_that("the compaction's usage sums every checkpoint attempt", {
 })
 
 test_that("operator messages a result keeps (first_kept_entry_id) are not announced twice", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -1015,6 +1052,7 @@ test_that("operator messages a result keeps (first_kept_entry_id) are not announ
 # ---- Task 13 review fixes (round 3) -------------------------------------------------------------
 
 test_that("the continuation repeats the images of the latest request", {
+  skip_on_cran()
   # keep_recent = 0: at a threshold compaction the new prompt exists only in the compaction, so
   # its image must ride with the continuation line, also through a later compaction
   x = compact_session(list("first answer", "## Goal\n- g", "second answer", "## Goal\n- again"))
@@ -1056,6 +1094,7 @@ test_that("the continuation repeats the images of the latest request", {
 })
 
 test_that("only the latest request's images are repeated; tokens_after counts images", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   img = block_image("AAAA", source = "user", width = 768L, height = 512L)
@@ -1083,6 +1122,7 @@ test_that("only the latest request's images are repeated; tokens_after counts im
 })
 
 test_that("a reason given as the whole choice vector is recorded as its first choice", {
+  skip_on_cran()
   x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -1098,6 +1138,7 @@ test_that("a reason given as the whole choice vector is recorded as its first ch
 })
 
 test_that("a checkpoint reply without a usage record makes the summed usage unknown", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
@@ -1136,6 +1177,7 @@ test_that("a checkpoint reply without a usage record makes the summed usage unkn
 # ---- Finite-cap growth protection with an unknown context window (IC-71) ------------------------
 
 test_that("unknown-window threshold compaction waits for measured finite-cap growth", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   local_gptr_options(compact_at = 1500)
@@ -1160,6 +1202,7 @@ test_that("unknown-window threshold compaction waits for measured finite-cap gro
 })
 
 test_that("unknown-window growth requires finite post-checkpoint and current counts", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   local_gptr_options(compact_at = 1500)
@@ -1184,6 +1227,7 @@ test_that("unknown-window growth requires finite post-checkpoint and current cou
 })
 
 test_that("finite-cap growth produces one durable checkpoint charge at the boundary", {
+  skip_on_cran()
   local_project()
   x = compact_session(list("## Goal\n- keep the result"))
   s = x$s
@@ -1217,6 +1261,7 @@ test_that("finite-cap growth produces one durable checkpoint charge at the bound
 })
 
 test_that("finite-cap waiting leaves known-window cold and disabled-cap rules intact", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   local_gptr_options(compact_at = 1500, compact_cold_min = 1000)
@@ -1241,6 +1286,7 @@ test_that("finite-cap waiting leaves known-window cold and disabled-cap rules in
 })
 
 test_that("unknown-window growth compares checkpoint and current counts on one calibrated basis", {
+  skip_on_cran()
   x = compact_session()
   s = x$s
   d = session_data(s)

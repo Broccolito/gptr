@@ -59,6 +59,7 @@ test_that("an unknown tool is an error result", {
 })
 
 test_that("throw, warn-as-error, time limit and interrupt give paired events (INFRA-10)", {
+  skip_on_cran()
   local_permissive()
   failing_tools()
   orders = list(c("throw", "warn2", "slowloop", "spin"), c("spin", "throw", "warn2", "slowloop"),

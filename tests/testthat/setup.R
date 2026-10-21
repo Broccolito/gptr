@@ -5,6 +5,8 @@
 local({
   linux = identical(Sys.info()[["sysname"]], "Linux")
   # Chromium adds a Unix socket suffix; nested CI roots can exceed sun_path's 108-byte limit.
+  # CRAN allows writes only under tempdir() and skips every Chromium test.
+  short_root = linux && identical(Sys.getenv("NOT_CRAN"), "true")
   evidence = Sys.getenv("GPTR_TEST_ROOT_EVIDENCE", unset = "")
   diagnostic = linux && nzchar(evidence)
   if (diagnostic) {
@@ -17,7 +19,7 @@ local({
     state$unlink_condition_classes = list()
     state$last_priority_reached = FALSE
   }
-  root = withr::local_tempdir("gptr-tests-", tmpdir = if (linux) "/tmp" else tempdir(),
+  root = withr::local_tempdir("gptr-tests-", tmpdir = if (short_root) "/tmp" else tempdir(),
                             .local_envir = testthat::teardown_env(), clean = !diagnostic)
   if (diagnostic) {
     # This replaces only local_tempdir's original callback, in the same registration slot.
@@ -66,7 +68,7 @@ local({
   )
   paths = stats::setNames(file.path(root, dirs), names(dirs))
   for (path in paths) dir.create(path, recursive = TRUE, showWarnings = FALSE)
-  if (linux) {
+  if (short_root) {
     socket = file.path(paths[["temp"]], "org.chromium.Chromium.XXXXXX", "SingletonSocket")
     stopifnot(nchar(socket, type = "bytes") <= 107L)
   }

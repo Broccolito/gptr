@@ -60,6 +60,7 @@ test_that("diff_lines() renders unified hunks without file headers (GNU conventi
 })
 
 test_that("edit scripts are valid on generated inputs", {
+  skip_on_cran()
   alphabet = c("a", "b", "c", "d", "e")
   for (i in 1:200) {
     n = (i * 7L) %% 30L

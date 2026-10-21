@@ -102,6 +102,7 @@ test_that("checkpoint GC permits a blob directory linked inside its owned store"
 })
 
 test_that("discovered project instructions cannot read escaped or guarded link targets", {
+  skip_on_cran()
   files = c("AGENTS.override.md", "AGENTS.md", "CLAUDE.md", "CLAUDE.local.md",
             ".gptr/vignette.Rmd")
   for (rel in files) for (target in c("outside", "guarded")) local({

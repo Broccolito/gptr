@@ -443,6 +443,15 @@ test_that("the skills section appears only when read is active", {
   expect_match(skills_section_text(ctx(c("read", "r"))), hpr_line, fixed = TRUE)
 })
 
+test_that("a preview of a new session lists the skills a session start would sync", {
+  local_project()
+  res_prune("skills:", character())
+  withr::defer(res_prune("skills:", character()))
+  view = gptr_prompt(preset = "standard")
+  expect_true("skills" %in% view$sections$name)
+  expect_match(view$system$t1, hpr_line, fixed = TRUE)
+})
+
 test_that("builtin:skills registers the section and the services, and no search source", {
   sec = Filter(function(s) identical(s[["name"]], "skills"), registry_all("prompt_section"))
   expect_length(sec, 1L)

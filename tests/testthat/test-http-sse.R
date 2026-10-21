@@ -15,6 +15,7 @@ split_at = function(bytes, cuts) {
 }
 
 test_that("sse_splitter parses LF streams with event, data, id and retry", {
+  skip_on_cran()
   b = charToRaw("event: ping\ndata: {\"a\":1}\nid: 7\nretry: 1500\n\ndata: x\n\n")
   ev = sse_all(list(b))
   expect_length(ev, 2L)
@@ -73,6 +74,7 @@ test_that("data stays byte-exact UTF-8 and is marked UTF-8", {
 })
 
 test_that("random re-chunking, including splits inside characters and CRLF pairs, is invariant", {
+  skip_on_cran()
   txt = "caf\u00e9 \u65e5\u672c \U0001f600 na\u00efve"
   lines = character()
   for (i in 1:60) {
@@ -132,6 +134,7 @@ test_that("20,000 deltas are split, decoded and accumulated in under 1 s of CPU 
 })
 
 test_that("ndjson_splitter returns complete lines, strips CR and keeps the tail for flush", {
+  skip_on_cran()
   s = ndjson_splitter()
   expect_identical(s$push(charToRaw("{\"a\":1}\r\n{\"b\"")), "{\"a\":1}")
   expect_identical(s$push(charToRaw(":2}\n\n{\"c\":3}")), "{\"b\":2}")

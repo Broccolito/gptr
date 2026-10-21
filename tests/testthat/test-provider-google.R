@@ -26,6 +26,7 @@ gem_chunk = function(parts, finish = NULL, usage = NULL, rid = "rx") {
 # ---- the normaliser (Task 8) -------------------------------------------------------------------
 
 test_that("thought signatures stay on the part they arrived on (09 section 2.1)", {
+  skip_on_cran()
   msg = replay_case(api, google_normaliser, "thought_tools")$message
   expect_identical(msg$content[[1L]]$signature, "CiQBjz1rX3NpZ1RoaW5r")
   expect_identical(msg$content[[3L]]$thought_signature, "CiQBjz1rX3NpZ0NhbGw=")
@@ -37,6 +38,7 @@ test_that("thought signatures stay on the part they arrived on (09 section 2.1)"
 })
 
 test_that("blocked prompts, unknown finish reasons and truncation end in one error event", {
+  skip_on_cran()
   for (case in c("blocked", "unknown_finish", "truncated")) {
     ev = replay_case(api, google_normaliser, case)$events
     expect_one_terminal(ev)
@@ -74,6 +76,7 @@ test_that("missing or duplicate function-call ids are generated", {
 })
 
 test_that("unreported or null usage stays unknown; fields left out keep P05's zero (IC-74)", {
+  skip_on_cran()
   usage_of = function(...) {
     r = gem_run(c(...))
     expect_identical(r$message$stop_reason, "stop")
@@ -110,6 +113,7 @@ test_that("unreported or null usage stays unknown; fields left out keep P05's ze
 })
 
 test_that("non-string finish reasons and signatures are never used as text (04 4.2)", {
+  skip_on_cran()
   r = gem_run(gem_chunk('[{"text":"x"}]', "2"))
   expect_identical(r$message$stop_reason, "error")
   expect_identical(r$message$raw_stop_reason, "2")
@@ -135,6 +139,7 @@ test_that("non-string finish reasons and signatures are never used as text (04 4
 })
 
 test_that("error chunks: retry before any delta, final after one, every shape read (09 2.1)", {
+  skip_on_cran()
   info = function(x) google_error_info(x)[c("class", "status", "retry")]
   rate = list(class = "rate_limit", status = 429L, retry = TRUE)
   expect_identical(info(list(code = 429L, status = "RESOURCE_EXHAUSTED")), rate)
@@ -199,6 +204,7 @@ test_that("error chunks: retry before any delta, final after one, every shape re
 })
 
 test_that("parts that are not objects, nameless calls and non-object args stay harmless", {
+  skip_on_cran()
   r = gem_run(gem_chunk(paste0('[5,"x",null,{"text":7},{"functionCall":{"args":[1,2]}},',
                                '{"functionCall":"f"},{"text":"ok"}]'), '"STOP"', rid = "r-9"))
   expect_identical(types_of(r$events)[[length(r$events)]], "done")
@@ -219,6 +225,7 @@ test_that("parts that are not objects, nameless calls and non-object args stay h
 })
 
 test_that("a repeated call id is regenerated, and a generated id never repeats one in use", {
+  skip_on_cran()
   ids = function(...) {
     r = gem_run(c(...))
     expect_identical(r$message$stop_reason, "tool_use")
@@ -259,6 +266,7 @@ test_that("a signature on an empty text part after thinking opens an empty signe
 })
 
 test_that("model helpers: Gemini versions, thinking levels, call ids, signatures, budgets", {
+  skip_on_cran()
   expect_identical(google_major("gemini-3.8-flash"), 3L)
   expect_identical(google_major("Gemini-2.5-Pro"), 2L)
   expect_identical(google_major("gemini-live-3.1-flash"), 3L)
@@ -287,6 +295,7 @@ test_that("model helpers: Gemini versions, thinking levels, call ids, signatures
 # ---- the request body and the built-in (Task 9) ------------------------------------------------
 
 test_that("Gemini bodies: systemInstruction, tools, toolConfig, generationConfig, contents", {
+  skip_on_cran()
   model = test_model(api, provider = "google", id = "gemini-3.8-flash")
   req = google_build(model, ctx_fixture(list(first_message())),
                      list(base_url = "https://generativelanguage.googleapis.com/v1beta",
@@ -317,6 +326,7 @@ test_that("the default cache policy gives Gemini no markers: implicit caching (a
 })
 
 test_that("thought signatures replay byte for byte to the same model only (acceptance 2)", {
+  skip_on_cran()
   dir = sse_dir(api)
   model = adp_fixture_model(api, dir)
   msg = replay_case(api, google_normaliser, "thought_tools")$message
@@ -340,6 +350,7 @@ test_that("thought signatures replay byte for byte to the same model only (accep
 })
 
 test_that("Anthropic -> Responses -> Gemini: no foreign opaque data, valid body (INFRA-08)", {
+  skip_on_cran()
   model = test_model(api, provider = "google", id = "gemini-3.8-flash")
   resp = replay_case("openai-responses", responses_normaliser, "reasoning_tools")$message
   h = handoff_entries(list(msg_user("And the row count?", timestamp = 5), resp,
@@ -372,6 +383,7 @@ test_that("Anthropic -> Responses -> Gemini: no foreign opaque data, valid body 
 })
 
 test_that("tool-result images ride in functionResponse.parts on Gemini 3 (09 section 2.1)", {
+  skip_on_cran()
   model = test_model(api, provider = "google", id = "gemini-3.8-flash")
   asst = msg_assistant(list(block_tool_call("fc_1", "r", list(code = "plot(1)"))), api = api,
                        provider = "google", model = "gemini-3.8-flash", stop_reason = "tool_use")
@@ -450,6 +462,7 @@ test_that("end to end on the mock server: a Gemini stream (skip on CRAN)", {
 })
 
 test_that("build() takes headers from the record provider_stream() resolved (04 10.1, D-023)", {
+  skip_on_cran()
   # D-023 items 1 and 3: a session-scoped provider (`model = <spec>`) is invisible to the global
   # lookup, so its headers come from opts$provider or the session's own record, merged by name:
   # the adapter's headers and credential win, and a record never adds a second key
@@ -479,6 +492,7 @@ test_that("build() takes headers from the record provider_stream() resolved (04 
 })
 
 test_that("a model without tool calling gets no tools or toolConfig (IC-74, 07 section 1)", {
+  skip_on_cran()
   # 07-local-ollama.md section 1: tool calling is enabled only when the model supports it
   # (D-029.1, D-032.2 for this adapter); the history's calls and results are still sent
   forced = list(type = "tool", name = "read")
@@ -508,6 +522,7 @@ test_that("a model without tool calling gets no tools or toolConfig (IC-74, 07 s
 })
 
 test_that("a text-only model gets the omission note in the tool output, no image content", {
+  skip_on_cran()
   # D-023 item 4 and D-029.3 for this adapter: the note stands in the result's own output and no
   # "Tool result image:" content follows with nothing attached
   note = "(image omitted: this model does not accept images)"
@@ -532,6 +547,7 @@ test_that("a text-only model gets the omission note in the tool output, no image
 })
 
 test_that("a forced any is mode ANY; returns = never forces a call; params and errors (IC-69)", {
+  skip_on_cran()
   # IC-71: a forced choice only when the model allows it and `returns` is not set (auto, the
   # closing instruction and validation); IC-69: only the declared request params reach the body
   model = test_model(api, provider = "google", id = "gemini-3.8-flash")

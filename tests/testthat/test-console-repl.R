@@ -28,6 +28,7 @@ test_that("the stdin reader echoes the prompt and the escaped line when asked", 
 })
 
 test_that("close() closes the stdin connection once (IC-59)", {
+  skip_on_cran()
   n0 = nrow(showConnections())
   local_console_stdin("x")
   rd = console_reader(stdin = TRUE)
@@ -55,6 +56,7 @@ test_that("a fenced block is R code and ! code continues while incomplete", {
 })
 
 test_that("a fence is R code only for an r, R, {r...} or empty info string (CommonMark)", {
+  skip_on_cran()
   rd = stdin_reader(c("```", "x = 1", "```", "```{r, echo = FALSE}", "y = 2", "```",
                       "  ```R", "  if (TRUE) {", "    z = 3", "  }", "  ```",
                       "````r", "```", "````", "```python", "print({x})", "  ```"))
@@ -152,6 +154,7 @@ test_that("a pasted !code block is one R input; the next typed line is read alon
 })
 
 test_that("a pasted fence or \"\"\" block is read from the waiting lines, never at '... '", {
+  skip_on_cran()
   rl = local_readline(c("```r", '"""', ""))
   w = local_waiting(list(c("b1 = 1", "b2 = 2", "b1 + b2", "```", "next"), character(),
                          c("q one", "", "q two", '"""', "after", "more")))
@@ -172,6 +175,7 @@ test_that("a pasted fence or \"\"\" block is read from the waiting lines, never 
 })
 
 test_that("a block typed by hand reads line by line; a paste without its closer goes on", {
+  skip_on_cran()
   rl = local_readline(c("```r", "x = 1", "```", '"""', '"""', "```", "typed", "```"))
   w = local_waiting(list(character(), character(), "pasted", character(), "a = 1"))
   rd = console_reader(stdin = FALSE)
@@ -250,6 +254,7 @@ test_that("console_typed_lines() reads what fd 0 holds without blocking and neve
 })
 
 test_that("repl_state() takes the console call's identifiers, options and objects", {
+  skip_on_cran()
   e = new.env()
   call = list(ids = list(model = "fake/fake-1", mode = "auto", skills = "stats", tools = NULL,
                          plugins = NULL, extensions = NULL),
@@ -315,6 +320,7 @@ last_user_blocks = function(req) {
 }
 
 test_that("notes keep the newest within the token budget and cut one long note", {
+  skip_on_cran()
   notes = c("> a\n#> [1] 1", "> b\n#> [1] 2")
   text = console_notes_text(notes, 300L)
   expect_match(text, "^The user ran this R code in the session")
@@ -333,6 +339,7 @@ test_that("notes keep the newest within the token budget and cut one long note",
 })
 
 test_that("@mentions: files become <file> blocks, bound names become objects", {
+  skip_on_cran()
   root = local_project(files = list("data/notes.txt" = c("line one", "line two")))
   e = new.env()
   e$tbl = data.frame(a = 1:3)
@@ -352,6 +359,7 @@ test_that("a binary @file is announced, not inlined", {
 })
 
 test_that("a long @file is marked truncated even when the first cut line is blank", {
+  skip_on_cran()
   root = local_project(files = list("long.R" = c(paste0("l", 1:40), "", paste0("m", 1:10))))
   block = repl_mentions("see @long.R", new.env())$files
   expect_match(block, "<file path=\"long.R\" truncated=\"true\">\nl1\n", fixed = TRUE)
@@ -359,6 +367,7 @@ test_that("a long @file is marked truncated even when the first cut line is blan
 })
 
 test_that("!code runs in the REPL environment and leaves a note; !!code does not", {
+  skip_on_cran()
   local_project()
   e = new.env()
   e$x = matrix(1:6, 2)
@@ -373,6 +382,7 @@ test_that("!code runs in the REPL environment and leaves a note; !!code does not
 })
 
 test_that("!code errors are shown on stderr and noted", {
+  skip_on_cran()
   local_project()
   rs = repl_state(NULL, new.env())
   err = utils::capture.output(invisible(utils::capture.output(
@@ -382,6 +392,7 @@ test_that("!code errors are shown on stderr and noted", {
 })
 
 test_that("the input event (source passthrough) can handle or transform !code", {
+  skip_on_cran()
   local_project()
   e = new.env()
   rs = repl_state(NULL, e)
@@ -398,6 +409,7 @@ test_that("the input event (source passthrough) can handle or transform !code", 
 })
 
 test_that("!code is announced on the console:direct channel", {
+  skip_on_cran()
   local_project()
   got = new.env(parent = emptyenv())
   off = gptr_register(gptr_hook("console:direct", function(event, ctx) {
@@ -414,6 +426,7 @@ test_that("!code is announced on the console:direct channel", {
 })
 
 test_that("console_send() makes an ordinary gateway call and continues the session", {
+  skip_on_cran()
   local_project()
   local_no_fd0()
   local_console_blocks()
@@ -441,6 +454,7 @@ test_that("console_send() makes an ordinary gateway call and continues the sessi
 })
 
 test_that("console_send() attaches @objects by name and @files as a block", {
+  skip_on_cran()
   local_project(files = list("a.R" = "fit = lm(mpg ~ wt, data = mtcars)"))
   local_no_fd0()
   local_console_blocks()
@@ -458,6 +472,7 @@ test_that("console_send() attaches @objects by name and @files as a block", {
 })
 
 test_that("console_send() keeps the session of a failed call and reports the error", {
+  skip_on_cran()
   local_project()
   local_no_fd0()
   fake = gptr_fake_provider(list(list(error = "bad key", status = 401L, after = 0L)))
@@ -471,6 +486,7 @@ test_that("console_send() keeps the session of a failed call and reports the err
 })
 
 test_that("!code runs through the eval.r service (the evaluator kind, IC-69)", {
+  skip_on_cran()
   local_project()
   old = the$services
   withr::defer({
@@ -489,6 +505,7 @@ test_that("!code runs through the eval.r service (the evaluator kind, IC-69)", {
 })
 
 test_that("the console call's arguments reach the first prompt, also on a piped session", {
+  skip_on_cran()
   local_project()
   s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
   call = list(ids = list(mode = "auto"), args = list(), context = list())
@@ -503,6 +520,7 @@ test_that("the console call's arguments reach the first prompt, also on a piped 
 })
 
 test_that("console_send() passes max_turns from gptr.max_turns_console", {
+  skip_on_cran()
   local_project()
   local_no_fd0()
   fake = gptr_fake_provider(list("ok"))
@@ -559,6 +577,7 @@ test_that("the stdin UI answers selections and approvals from the reader", {
 })
 
 test_that("piped .stdin: a nested prompt and its echo reach stdout from an untee'd eval (D-188)", {
+  skip_on_cran()
   rd = stdin_reader("y", echo = TRUE)
   home = new.env()
   home$ui = ui_console_spec(rd$read, "console_stdin")
@@ -585,6 +604,7 @@ test_that("the stdin UI never echoes a secret answer", {
 })
 
 test_that("a scripted .stdin console session (acceptance 2)", {
+  skip_on_cran()
   local_console_test()
   local_scripted_ui()
   fake = gptr_fake_provider(list("first answer", "second answer"))
@@ -620,6 +640,7 @@ test_that("a scripted .stdin console session (acceptance 2)", {
 })
 
 test_that("the end of piped input leaves the REPL like /exit", {
+  skip_on_cran()
   local_console_test()
   local_scripted_ui()
   local_console_stdin("only line")
@@ -632,6 +653,7 @@ test_that("the end of piped input leaves the REPL like /exit", {
 })
 
 test_that("in IRkernel peter() without a prompt starts the console on gptr_readline() (acc. 7)", {
+  skip_on_cran()
   local_console_test()
   local_gptr_options(model = "fake/fake-1")
   withr::local_options(gptr.interactive = NULL, jupyter.in_kernel = TRUE)
@@ -657,6 +679,7 @@ test_that("in IRkernel peter() without a prompt starts the console on gptr_readl
 })
 
 test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
+  skip_on_cran()
   local_console_test()
   ctrl_c = function(prompt = "", ...) {
     signalCondition(structure(class = c("interrupt", "condition"),
@@ -677,6 +700,7 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
 })
 
 test_that("a line at the readline limit is reported at once and not sent", {
+  skip_on_cran()
   local_console_test()
   box = new.env(parent = emptyenv())
   box$answers = c(strrep("a", readline_limit()), "/exit")
@@ -694,6 +718,7 @@ test_that("a line at the readline limit is reported at once and not sent", {
 })
 
 test_that("a pasted three-line block is one console turn (acceptance)", {
+  skip_on_cran()
   local_console_test()
   withr::local_options(gptr.interactive = TRUE)
   fake = gptr_fake_provider(list("one answer"))
@@ -706,6 +731,7 @@ test_that("a pasted three-line block is one console turn (acceptance)", {
 })
 
 test_that("the lines pasted after a fence are one console turn after the code (acceptance)", {
+  skip_on_cran()
   local_console_test()
   withr::local_options(gptr.interactive = TRUE)
   fake = gptr_fake_provider(list("one answer"))
@@ -813,6 +839,7 @@ test_that("background sessions that wait for approval are announced once (IC-57)
 })
 
 test_that("an error is printed on stderr and the REPL goes on", {
+  skip_on_cran()
   local_console_test()
   local_scripted_ui()
   fake = gptr_fake_provider(list(list(error = "bad key", status = 401L, after = 0L),
@@ -827,6 +854,7 @@ test_that("an error is printed on stderr and the REPL goes on", {
 })
 
 test_that("approvals of a .stdin session are answered from the same stdin", {
+  skip_on_cran()
   local_console_test()
   withr::local_options(gptr.interactive = NULL, gptr.ui = NULL)
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "y = 2")), "made y"))
@@ -848,6 +876,7 @@ test_that("approvals of a .stdin session are answered from the same stdin", {
 })
 
 test_that("the frontend comes from .opts$frontend or the setting frontend (IC-69)", {
+  skip_on_cran()
   local_console_test()
   off = gptr_register(gptr_spec("frontend", "probe", run = function(session, ...) "probe ran"))
   withr::defer(off())
@@ -859,6 +888,7 @@ test_that("the frontend comes from .opts$frontend or the setting frontend (IC-69
 })
 
 test_that("the console echoes an interpolated prompt at verbosity 2", {
+  skip_on_cran()
   local_console_test()
   local_scripted_ui()
   local_gptr_options(verbose = 2L)

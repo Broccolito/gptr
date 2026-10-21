@@ -12,6 +12,7 @@ test_that("res_norm lower-cases and maps _ and . to - (IC-42)", {
 })
 
 test_that("res_match prefers exact names and flags ambiguous normalised ones", {
+  skip_on_cran()
   expect_identical(res_match("my-skill", c("my-skill", "my_skill"), "skill"), "my-skill")
   expect_identical(res_match("single_cell", c("single-cell", "other"), "skill"), "single-cell")
   expect_identical(res_match("none", c("a", "b"), "skill"), character())
@@ -21,6 +22,7 @@ test_that("res_match prefers exact names and flags ambiguous normalised ones", {
 })
 
 test_that("frontmatter_parse follows Pi's rules: BOM, CRLF, trimmed body", {
+  skip_on_cran()
   txt = paste0(intToUtf8(0xFEFFL), "---\r\nname: crlf\r\ndescription: BOM and CRLF\r\n",
                "---\r\n\r\nbody line\r\n")
   fm = frontmatter_parse(txt)
@@ -47,6 +49,7 @@ test_that("folded scalars parse and unquoted colons are repaired (report 05 sect
 })
 
 test_that("string keys keep their source text against YAML 1.1 coercion (IC-71)", {
+  skip_on_cran()
   fm = frontmatter_parse(paste("---", "name: on", "version: 1.0", "description: yes",
                                "argument-hint: 12", "model: null",
                                "disable-model-invocation: true", "---", "", sep = "\n"))
@@ -66,6 +69,7 @@ test_that("frontmatter never evaluates !expr tags", {
 })
 
 test_that("fm_chr_list accepts comma strings, space strings and arrays", {
+  skip_on_cran()
   expect_identical(fm_chr_list("Read, Grep"), c("Read", "Grep"))
   expect_identical(fm_chr_list("a b"), c("a", "b"))
   expect_identical(fm_chr_list(list("x", "y")), c("x", "y"))
@@ -91,6 +95,7 @@ test_that("res_register rewrites a group only when its signature changes", {
 })
 
 test_that("res_cached parses a file again only after it changes", {
+  skip_on_cran()
   f = withr::local_tempfile(fileext = ".md")
   writeLines("one", f)
   count = new.env()
@@ -108,6 +113,7 @@ test_that("res_cached parses a file again only after it changes", {
 })
 
 test_that("res_project_dirs walks from the working directory up to the project root", {
+  skip_on_cran()
   p = local_project()
   dir.create(file.path(p, ".agents", "skills"), recursive = TRUE)
   dir.create(file.path(p, "sub", ".claude", "skills"), recursive = TRUE)
@@ -120,6 +126,7 @@ test_that("res_project_dirs walks from the working directory up to the project r
 })
 
 test_that("plugin_type_paths honours Claude manifest component keys and refuses escapes", {
+  skip_on_cran()
   b = withr::local_tempdir()
   write_file(file.path(b, "extra-skills", "x", "SKILL.md"), "---\nname: x\ndescription: X.\n---\n")
   write_file(file.path(b, "cmds", "st.md"), "Status of $1")
@@ -200,6 +207,7 @@ test_that("res_register skips the NULL of an invalid spec without a diagnostic (
 # Task 2 review round 1 (D-074): R yaml's NA spellings stay text in the string keys.
 
 test_that("frontmatter string keys keep R yaml's NA spellings as text (IC-71, D-074)", {
+  skip_on_cran()
   fm = frontmatter_parse(c("---", "name: .na.character", "description: .na", "version: .na.real",
                            "model: .na.integer", "license: .na.character", "---", "Body"))
   expect_null(fm$error)
@@ -223,6 +231,7 @@ fm_alias_chain = function(levels) {
 }
 
 test_that("frontmatter whose YAML aliases expand too far is an error string (D-074)", {
+  skip_on_cran()
   small = frontmatter_parse(c("---", "name: x", "description: d", "base: &b [read, r]",
                               "allowed-tools: *b", "also: *b", "---", "x"))
   expect_null(small$error)
@@ -239,6 +248,7 @@ test_that("frontmatter whose YAML aliases expand too far is an error string (D-0
 })
 
 test_that("fm_chr_list takes only flat values and never flattens nested lists (D-074)", {
+  skip_on_cran()
   expect_identical(fm_chr_list(list("read", 1L, NULL)), c("read", "1"))
   expect_identical(fm_chr_list(c("a", "b")), c("a", "b"))
   expect_null(fm_chr_list(list(list("a", "b"), "c")))
@@ -251,6 +261,7 @@ test_that("fm_chr_list takes only flat values and never flattens nested lists (D
 # Task 2 review round 4 (D-074 item 9): text that would make yaml slow never reaches yaml.
 
 test_that("frontmatter YAML that would make yaml slow is refused before yaml runs (D-074)", {
+  skip_on_cran()
   fm = function(...) c("---", "name: x", "description: d", ..., "---", "Body")
   ok = frontmatter_parse(fm(paste0("note: ", strrep("z", 15000L)), "tools: [read, r]",
                             "metadata: {a: [1, [2, [3]]], b: {c: d}}", "base: &b {k: 1}",
@@ -283,6 +294,7 @@ test_that("frontmatter YAML that would make yaml slow is refused before yaml run
 # key or merge is spelt.
 
 test_that("frontmatter with more than 4 references to its anchors never reaches yaml (D-074)", {
+  skip_on_cran()
   fm = function(...) c("---", "name: x", "description: d", ..., "---", "Body")
   four = c("a0: &a0 [a, b]", "a1: &a1 [*a0, *a0, *a0, *a0]")
   ok = frontmatter_parse(fm(four))
@@ -324,6 +336,7 @@ test_that("frontmatter with more than 4 references to its anchors never reaches 
 # references to anchors in all reach yaml.
 
 test_that("frontmatter with more than 4 merge keys, tags and aliases never reaches yaml (D-074)", {
+  skip_on_cran()
   fm = function(...) c("---", "name: x", "description: d", ..., "---", "Body")
   ok = frontmatter_parse(fm("note: Wow! Use it! Really!! (yes!)", "a: !!str 1.0",
                             "m: {<<: {k: 1}, j: 2}", "t: {!!merge x: {k: 2}}",
@@ -360,6 +373,7 @@ test_that("frontmatter with more than 4 merge keys, tags and aliases never reach
 # Task 9: plugin resolution.
 
 test_that("plugin_resolve finds a directory plugin by path and a project plugin by name", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"),
              '{"name": "dirplug", "version": "0.2.0", "gptr": {"api": ">= 1.0, < 2"}}')
@@ -393,6 +407,7 @@ test_that("plugin_resolve finds Claude bundles by path and installed Claude plug
 })
 
 test_that("plugin_resolve rejects unknown names and ambiguous normalised names", {
+  skip_on_cran()
   expect_error(plugin_resolve("no-such-plugin-p17"), class = "gptr_error_invalid_argument")
   expect_error(plugin_resolve("./no/such/dir"), class = "gptr_error_invalid_argument")
   files = list()
@@ -410,6 +425,7 @@ test_that("plugin_from_package reads DESCRIPTION fields without loading the pack
 # Task 9 adaptations (D-088): behaviour the plan-literal code lacked.
 
 test_that("a plugin manifest that is not a JSON object is a diagnostic, never an error (D-088)", {
+  skip_on_cran()
   bodies = c(string = '"hello"', number = "42", array = "[1, 2]", null = "null", broken = "{")
   for (k in names(bodies)) {
     d = file.path(withr::local_tempdir(), paste0("p17-man-", k))
@@ -430,6 +446,7 @@ test_that("a plugin manifest that is not a JSON object is a diagnostic, never an
 })
 
 test_that("installed Claude plugins use the newest existing path and skip bad entries (D-088)", {
+  skip_on_cran()
   old = withr::local_tempdir()
   mid = withr::local_tempdir()
   write_file(file.path(mid, ".claude-plugin", "plugin.json"), '{"name": "p17-ship"}')
@@ -471,6 +488,7 @@ test_that("a ~ path is expanded with user_home(), never R's own expansion (IC-63
 })
 
 test_that("a package plugin is read from its installed DESCRIPTION without loading it", {
+  skip_on_cran()
   lib = withr::local_tempdir()
   write_file(file.path(lib, "p17fakeplug", "DESCRIPTION"),
              c("Package: p17fakeplug", "Version: 0.3.1", "Config/gptr/plugin: true",
@@ -497,6 +515,7 @@ test_that("a package plugin is read from its installed DESCRIPTION without loadi
 })
 
 test_that("an installed Claude plugin without a manifest name is named by its key (D-088)", {
+  skip_on_cran()
   cache = file.path(withr::local_tempdir(), "cache", "mk")
   skill = "---\nname: s\ndescription: S.\n---\nx"
   docs = file.path(cache, "doc-skills", "3b600518a637")
@@ -560,6 +579,7 @@ command_ext = function(name, value) {
 }
 
 test_that("a .claude-plugin bundle contributes a skill, a command, an agent and an MCP entry", {
+  skip_on_cran()
   b = claude_fixture(withr::local_tempdir())
   sid = "s00000000a7"
   expect_true(plugin_enable(b, 0L, session = sid))
@@ -594,6 +614,7 @@ test_that("plugin_mcp_specs reads .mcp.json and a manifest mcpServers path of Cl
 })
 
 test_that("project plugin code and resources are ignored until gptr_trust()", {
+  skip_on_cran()
   files = list()
   files[[".gptr/plugins/localplug/plugin.json"]] = '{"name": "localplug"}'
   files[[".gptr/plugins/localplug/extensions/hi.R"]] = command_ext("p17-hi-local", "\"hi\"")
@@ -611,6 +632,7 @@ test_that("project plugin code and resources are ignored until gptr_trust()", {
 })
 
 test_that("an unmet API requirement disables the plugin with a diagnostic", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "future-plug", "gptr": {"api": ">= 2.0"}}')
   write_file(file.path(d, "extensions", "f.R"), command_ext("p17-future", "NULL"))
@@ -635,6 +657,7 @@ test_that("missing rDepends disable a plugin", {
 })
 
 test_that("plugin_enable is idempotent and is the plugin.enable service", {
+  skip_on_cran()
   b = claude_fixture(withr::local_tempdir())
   sid = "s00000000e7"
   plugin_enable(b, 0L, session = sid)
@@ -652,6 +675,7 @@ test_that("plugin_enable is idempotent and is the plugin.enable service", {
 })
 
 test_that("a plugin whose records were removed (its package unloaded) is enabled again", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "revive-plug"}')
   write_file(file.path(d, "skills", "revive-skill", "SKILL.md"),
@@ -668,6 +692,7 @@ test_that("a plugin whose records were removed (its package unloaded) is enabled
 })
 
 test_that("named extensions resolve from .gptr/extensions of a trusted project", {
+  skip_on_cran()
   files = list()
   files[[".gptr/extensions/p17_named.R"]] = command_ext("p17-named", "\"named\"")
   proj = local_project(trust = TRUE, files = files)
@@ -677,6 +702,7 @@ test_that("named extensions resolve from .gptr/extensions of a trusted project",
 })
 
 test_that("a plugin passed with plugins = is invisible to the next peter() call (IC-69)", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "scoped-plug"}')
   write_file(file.path(d, "skills", "scoped-skill", "SKILL.md"),
@@ -691,6 +717,7 @@ test_that("a plugin passed with plugins = is invisible to the next peter() call 
 })
 
 test_that("after gptr_reload() declarative records are rebuilt once and code is not rerun", {
+  skip_on_cran()
   d = withr::local_tempdir()
   count = file.path(d, "count")
   write_file(file.path(d, "plugin.json"),
@@ -713,6 +740,7 @@ test_that("after gptr_reload() declarative records are rebuilt once and code is 
 })
 
 test_that("NS-10: skills = c(single_cell, plotting) and plugins = clinical_trials (e2e)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   skill = function(name, desc, body) {
     paste(c("---", paste0("name: ", name), paste0("description: ", desc), "---", body),
@@ -766,6 +794,7 @@ test_that("NS-10: skills = c(single_cell, plotting) and plugins = clinical_trial
 })
 
 test_that("a ~ extension path is expanded with user_home() (IC-63)", {
+  skip_on_cran()
   alt = withr::local_tempdir()
   write_file(file.path(alt, "p17_home.R"), command_ext("p17-home", "\"home\""))
   write_file(file.path(alt, "p17_bad.R"), "x = 1")
@@ -779,6 +808,7 @@ test_that("a ~ extension path is expanded with user_home() (IC-63)", {
 })
 
 test_that("a malformed manifest disables the plugin before anything is registered", {
+  skip_on_cran()
   check = function(ext) {
     d = withr::local_tempdir()
     withr::defer(plugin_forget(d))
@@ -795,6 +825,7 @@ test_that("a malformed manifest disables the plugin before anything is registere
 })
 
 test_that("an activated lazy plugin is lazy again when enabled after gptr_reload()", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"),
              '{"name": "relazy-plug", "extension": {"provides": {"command": ["p17-relazy"]}}}')
@@ -870,6 +901,7 @@ local_toy_install = function(env = parent.frame()) {
 }
 
 test_that("a failing factory rolls back and is reported in the diagnostics (acceptance 3)", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"),
              '{"name": "badplug", "extension": {"activation": "eager"}}')
@@ -889,6 +921,7 @@ test_that("a failing factory rolls back and is reported in the diagnostics (acce
 })
 
 test_that("a lazy directory plugin runs its extension files only on first use", {
+  skip_on_cran()
   d = withr::local_tempdir()
   flag = file.path(d, "ran")
   manifest = c("{\"name\": \"lazyplug\", \"extension\": {\"activation\": \"lazy\",",
@@ -912,6 +945,7 @@ test_that("a lazy directory plugin runs its extension files only on first use", 
 })
 
 test_that("gptr_plugins lists enabled plugins with the contract columns", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "listed-plug", "version": "0.3.0"}')
   write_file(file.path(d, "skills", "listed-skill", "SKILL.md"),
@@ -932,6 +966,7 @@ test_that("gptr_plugins lists enabled plugins with the contract columns", {
 })
 
 test_that("gptr_plugins lists settings plugins and candidates, and a plugin enabled twice once", {
+  skip_on_cran()
   files = list()
   files[[".gptr/plugins/proj-plug/plugin.json"]] = '{"name": "proj-plug"}'
   local_project(files = files)
@@ -1006,6 +1041,7 @@ test_that("declarations reach the frozen prompt before activation; first use act
 # Task 12: settings plugins, extension directories, resources_discover, session start.
 
 test_that("settings plugins and user extension files are enabled by plugins_sync()", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "settings-plug", "version": "0.3.0"}')
   write_file(file.path(d, "skills", "settings-skill", "SKILL.md"),
@@ -1032,6 +1068,7 @@ test_that("settings plugins and user extension files are enabled by plugins_sync
 })
 
 test_that("a project's extension files load at rank 1 only when it is trusted", {
+  skip_on_cran()
   files = list()
   files[[".gptr/extensions/p17-proj-ext.R"]] = command_ext("p17-proj-ext", "\"project\"")
   local_project(trust = FALSE, files = files)
@@ -1047,6 +1084,7 @@ test_that("a project's extension files load at rank 1 only when it is trusted", 
 })
 
 test_that("resources_discover adds skill paths at start-up and after gptr_reload()", {
+  skip_on_cran()
   root = withr::local_tempdir()
   write_file(file.path(root, "disc-skill", "SKILL.md"),
              c("---", "name: disc-skill", "description: Found through a hook.", "---", "x"))
@@ -1077,6 +1115,7 @@ test_that("resources_discover adds skill paths at start-up and after gptr_reload
 })
 
 test_that("the session_start hooks enable plugins before syncing", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "hook-plug"}')
@@ -1089,6 +1128,7 @@ test_that("the session_start hooks enable plugins before syncing", {
 })
 
 test_that("session start enables settings plugins and syncs skills (e2e)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "start-plug"}')
@@ -1107,6 +1147,7 @@ test_that("session start enables settings plugins and syncs skills (e2e)", {
 })
 
 test_that("a session's plugin entries are forgotten at session_shutdown", {
+  skip_on_cran()
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "ended-plug"}')
   sid = "s00000000c9"

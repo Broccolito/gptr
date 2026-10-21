@@ -376,6 +376,7 @@ test_that("usage row scalar fields cannot recycle into multiple accounting rows"
 })
 
 test_that("empty price tables preserve cold timezone state and their Date schema", {
+  skip_on_cran()
   # Serialize the exact function bodies into base scope so R starts without timezone warming.
   scope = new.env(parent = baseenv())
   for (name in c("%||%", "price_threshold", "prices_df")) {

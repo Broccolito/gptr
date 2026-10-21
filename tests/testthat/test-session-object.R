@@ -759,6 +759,7 @@ test_that("gptr_fork(at =) cuts at a turn, at 0 or at an entry id", {
 })
 
 test_that("a listener on the fork never fires for the source; nothing live is shared", {
+  skip_on_cran()
   x = fork_source()
   f = gptr_fork(x$s)
   fired = new.env()
@@ -777,6 +778,7 @@ test_that("a listener on the fork never fires for the source; nothing live is sh
 })
 
 test_that("a running source is cut at its last closed boundary", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("A", list(hang = TRUE)))
   s = test_session()
@@ -845,6 +847,7 @@ test_that("the fork keeps the values of the turns it copies", {
 })
 
 test_that("model code cannot fork another session without a human approval (IC-53)", {
+  skip_on_cran()
   local_permissive()
   other = test_session()
   box = new.env()
@@ -862,6 +865,7 @@ test_that("model code cannot fork another session without a human approval (IC-5
 })
 
 test_that("an approved ask_human is a one-shot token for one control call", {
+  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   local_service("ui.get", function(session = NULL) {
     list(has_ui = function() TRUE, permission = function(request) list(decision = "allow"))
@@ -921,6 +925,7 @@ test_that("a cut at the end of a turn keeps the entries that close the turn, suc
 })
 
 test_that("a cut inside a turn keeps only the values recorded before the cut", {
+  skip_on_cran()
   x = fork_source()
   session_value_set(x$s, "answer", "two")
   session_value_set(x$s, "answer", "three")
@@ -972,6 +977,7 @@ test_that("session_before_fork sees the source and the cut; a cancel without a r
 })
 
 test_that("the source's listeners are never copied to the fork (INFRA-14)", {
+  skip_on_cran()
   x = fork_source()
   fired = new.env()
   fired$ids = character()
@@ -1006,6 +1012,7 @@ test_that("a detached copy is forked from its own state unless another process h
 })
 
 test_that("the IC-53 refusal names the export, the tool, the control level and the session", {
+  skip_on_cran()
   local_permissive()
   other = test_session()
   box = new.env()
@@ -1095,6 +1102,7 @@ test_that("session_replay_new() returns the live session holding the header's id
 })
 
 test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded turn", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list("first answer", "second answer"))
@@ -1332,6 +1340,7 @@ test_that("a reconstruction that fails part-way leaves no session and no file be
 })
 
 test_that("a reconstructed session stays reconstructed when it is rebuilt from its file", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list("continued"))

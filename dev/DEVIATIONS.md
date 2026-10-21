@@ -2912,8 +2912,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: `Authors@R` lists the maintainer and the contributors Tianlu Zhu (UI/UX polishing and CI/CD) and
   Gianmarco Bellucci (testing). Mario Zechner, whose pi agent inspired gptr and whose MIT-licensed text
   gptr's tool descriptions and templates derive from, is credited in `inst/COPYRIGHTS` (through
-  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are), in the README acknowledgements
-  and on the site's Authors page, instead of as `ctb, cph` (amends cran-4 in spec 06).
+  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are) and in the README
+  acknowledgements on the site's home page, instead of as `ctb, cph` (amends cran-4 in spec 06). The site's
+  Authors page lists only these three people, each linked to the email in `Authors@R`; Gianmarco Bellucci's
+  entry carries his ORCID (2026-10-20).
 - Tests: test-zzz.R (IC-72), dev/release/tests/test-pkgdown.R.
 
 ## D-237 - License: the Apache License 2.0 replaces MIT (2026-10-20)
@@ -2926,6 +2928,25 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (2026-10-20). inst/COPYRIGHTS also gains the MIT notice of typesafe-ai/system-one-adapter-python, whose
   prompt and schema `R/s1-emulate.R` follows.
 - Tests: test-zzz.R (IC-72), dev/release/tests (site-stage, examples, precompute), dev/ci/test-exact-source.py.
+
+## D-238 - P11 unresolved read paths, process output files and background processes ask first (2026-10-20)
+- Rule: a read whose path the classifier cannot resolve (`unknown`, `wildcard`) is level 1, as `outside` is;
+  `file()`, `gzfile()`, `bzfile()` and `xzfile()` fold to their description path, and an unknown SQL or Python
+  string literal stays 0. A `stdout` or `stderr` file of a process call (system2, processx::run, callr) is a
+  `file_write` row classified by its path. `wait` other than TRUE, or a lone shell `&`, adds a level-2 `process`
+  row; so does `&>`, which dash and POSIX sh read as `&` then `>` (stricter than bash). system2()'s `stdout` or
+  `stderr` "|" or "2>&1" is a file name. md5sum, dir.exists, file.access and file_test read their path argument,
+  and `tools::Rd2txt(out =)` is a file_write. A `file://` word is its local path, `path_norm()` resolves `~name`
+  to that user's home, and a `git -C` directory is read. A function passed to aggregate() or reorder() is walked
+  as each of their S3 methods matches the call, as are the `ties` of approx, approxfun, spline, splinefun and
+  stepfun and the `fn` and `gr` of optim and optimHess (both now listed read-only, as stepfun is). The
+  CRAN-readiness audit found that manual mode ran these at level 0 without asking.
+- Level changes: computed read paths (`read.csv(here::here(...))`, `readLines(system.file(...))`), `$VAR`
+  operands and option values, and paths the locale cannot translate now ask; plan mode refuses `peter$read()` of
+  a computed path; `command -v git &>/dev/null` 0 -> 2; md5sum, dir.exists, file.access and file_test outside
+  the project 0 -> 1; `Rd2txt("x.Rd", "keep.txt")` and `aggregate(len ~ supp, data = d, file.create)` 0 -> 2.
+  Reported to the maintainer 2026-10-20.
+- Tests: test-perm-classify.R (new blocks; three D-061 cases move from 0 to 1), test-auth-secrets.R.
 
 ## D-239 - CI: Windows R CMD check runs as four shards per R version behind per-version gates (2026-10-20)
 - Rule: the Windows rows of `R-CMD-check.yaml` (release, oldrel-4) move to `.github/workflows/Windows-check.yaml`,
@@ -2946,3 +2967,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "Windows CI shards run
   each ordinary test file once ...", "each required Windows context gates ...", "the hosted jobs have time for
   the whole suite (CI-19)".
+
+## D-240 - Tests: CRAN runs a fixed list of fast tests (2026-10-20)
+- Rule: with `NOT_CRAN` not `"true"`, `tests/testthat.R` runs only a fixed list of 65 test files: the `perm-*`,
+  `auth-redact` and `auth-secrets` files and those keeping more than five running blocks under the block rule. In
+  those files a `test_that()` block starts with `skip_on_cran()` when it took 25 ms or more in a local CRAN-mode run
+  or 50 ms or more on GitHub's windows-latest (R-devel or R-release), except the file's fastest block; in the
+  security files only blocks of 500 ms or more on Windows skip. GitHub Actions runs the whole suite. win-builder
+  needed 13 to 29 minutes for the CRAN-mode tests before this rule and 3.3 with the block rule alone, which left the
+  whole check at CRAN's 10-minute budget, because skipped blocks and sourced files still cost time.
+- Tests: tests/testthat.R (the list); 1,183 block skips in the listed files.
