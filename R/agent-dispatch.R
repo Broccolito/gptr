@@ -684,7 +684,8 @@ perm_grant_control = function(run, risk) {
   invisible(fns)
 }
 
-#' The permission request record (04 section 7.11); `agent` says who asks (D-188)
+#' The permission request record (04 section 7.11); `agent` says who asks (D-188), `tool_call_id`
+#' which call (a nested member call its own, `<outer id>/<k>`)
 #' @noRd
 perm_request_record = function(call, run, out, risk, tier) {
   d = run_data(run)
@@ -694,8 +695,9 @@ perm_request_record = function(call, run, out, risk, tier) {
     NULL
   }
   rule = out$suggested_rule
-  list(tool = call$name, input = call$input, summary = perm_summary(call), risk = risk,
-       reason = perm_reason(out$reason), suggested_rule = if (rlang::is_string(rule)) rule,
+  list(tool = call$name, tool_call_id = call$id, input = call$input, summary = perm_summary(call),
+       risk = risk, reason = perm_reason(out$reason),
+       suggested_rule = if (rlang::is_string(rule)) rule,
        undo_note = if (rlang::is_string(note)) note, session = d$id, turn = d$turns,
        nested = isTRUE(call$nested), tier = tier, agent = agent_label(run))
 }

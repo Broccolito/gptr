@@ -2766,7 +2766,8 @@ retained. Permission approval displays keep the separate IC-53 escaping rules.
 (IC-53). IC-77 adds `agent = chr(1)`, who asks: `"main"`, a sub-agent's name, or for a nested
 `peter()` call the first line of its prompt quoted and cut to 30 characters, then ` #k`, its place among the
 parent run's children (`run$children`), so loop iterations differ (D-224); the `permission_request` event carries
-the event's own `agent` label instead.
+the event's own `agent` label instead. P28 Task 6 adds `tool_call_id = chr(1)`, the id of the call asked about:
+a nested member call inside `r` carries its own, `<outer id>/<k>`, as its `tool_execution_start` does (D-243).
 
 Example calls:
 

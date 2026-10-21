@@ -3042,6 +3042,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   prompt never answers it nor steers (IC-75)", "invalid answers are explained and kept; five end in a refusal
   the model is told", "a long invalid answer's notice wraps inside the width (P28 B, E, F)"; test-console-typing.R
   "a terminal: a line arriving just as a question is drawn steers the run (P28 D)".
+- Task 6: the permission request record carries `tool_call_id` (a nested member call its own `<outer id>/<k>`),
+  so Task 12 attaches an approval to the call line the console printed; matching on name and input fails for
+  parallel, nested and sub-agent calls. Contract-visible: 04 section 7.11. Tests: test-agent-dispatch.R "the
+  request record carries the call id; a nested member call its own".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

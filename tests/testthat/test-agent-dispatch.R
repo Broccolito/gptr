@@ -644,6 +644,28 @@ test_that("the request record names the asking agent; a nested call by its promp
   expect_identical(seen$agents, c("main", "alpha", "nested"))
 })
 
+test_that("the request record carries the call id; a nested member call its own", {
+  local_gptr_options(interactive = TRUE)
+  ui = new.env()
+  local_service("ui.get", function(session = NULL) {
+    list(has_ui = function() TRUE, permission = function(request) {
+      ui$ids = c(ui$ids, request$tool_call_id)
+      list(decision = if (identical(request$tool, "outer")) "allow" else "deny")
+    })
+  })
+  seen = new.env()
+  local_hook("permission_request", function(event, ctx) {
+    seen$ids = c(seen$ids, event$tool_call_id)
+    NULL
+  })
+  local_policy("mode", function(call, ctx) list(decision = "ask", reason = "level 2"))
+  local_tool("inner", function(input, ctx) "x")
+  local_tool("outer", function(input, ctx) dispatch_nested("inner", json_obj(), ctx))
+  dispatch(test_session(), list(tc("outer")))
+  expect_identical(ui$ids, c("c_outer", "c_outer/1"))
+  expect_identical(seen$ids, ui$ids)
+})
+
 test_that("a UI answer that is not a list is not an approval", {
   local_gptr_options(interactive = TRUE)
   ui = new.env()
