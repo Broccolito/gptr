@@ -50,8 +50,8 @@ user_log_scan = function(expr) {
 }
 
 #' One log entry: the deparsed expression on one line, valid UTF-8 (IC-62), at most 120 characters
-#' deparse() errors on some parsed input (non-UTF-8 backtick names, long call chains) become a
-#' note; this frame holds only `expr`, never the callback's `value`.
+#' deparse() errors on some parsed input (non-UTF-8 backtick names) become a note; this frame
+#' holds only `expr`, never the callback's `value`.
 #' @noRd
 user_log_text = function(expr) {
   tryCatch(user_log_line(expr), error = function(e) "<expression that cannot be deparsed>")
@@ -62,7 +62,7 @@ user_log_text = function(expr) {
 #' or `else`, and after the trailing space deparse() leaves at a break inside a statement.
 #' @noRd
 user_log_line = function(expr) {
-  raw = deparse(expr, width.cutoff = 500L, nlines = 120L)
+  raw = deparse_code(expr, width.cutoff = 500L, nlines = 120L)
   lines = trimws(raw)
   n = length(lines)
   if (n > 1L) {

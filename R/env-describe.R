@@ -605,9 +605,9 @@ gptr_describe.gptr_session = function(x, budget = 150L, ..., level = NULL) {
 #' @export
 gptr_describe.function = function(x, budget = 150L, ..., level = NULL) {
   src = attr(x, "srcref")
-  body_lines = if (!is.null(src)) as.character(src) else deparse(x)
+  body_lines = if (!is.null(src)) as.character(src) else deparse_code(x)
   fm = formals(x)
-  dflt = vapply(seq_along(fm), function(i) paste(deparse(fm[[i]]), collapse = ""), "")
+  dflt = vapply(seq_along(fm), function(i) paste(deparse_code(fm[[i]]), collapse = ""), "")
   args = ifelse(nzchar(dflt), paste(names(fm), "=", dflt), names(fm))
   sig = sprintf("<function> function(%s); %d lines", paste(args, collapse = ", "),
                 length(body_lines))
@@ -617,7 +617,7 @@ gptr_describe.function = function(x, budget = 150L, ..., level = NULL) {
 #' @rdname gptr_describe
 #' @export
 gptr_describe.formula = function(x, budget = 150L, ..., level = NULL) {
-  dsc_pick(list(paste("<formula>", paste(deparse(x, width.cutoff = 500L), collapse = " "))),
+  dsc_pick(list(paste("<formula>", paste(deparse_code(x, width.cutoff = 500L), collapse = " "))),
            budget, level)
 }
 
@@ -625,7 +625,7 @@ gptr_describe.formula = function(x, budget = 150L, ..., level = NULL) {
 #' @export
 gptr_describe.lm = function(x, budget = 150L, ..., level = NULL) {
   cf = stats::coef(x)
-  fml = paste(deparse(stats::formula(x), width.cutoff = 500L), collapse = " ")
+  fml = paste(deparse_code(stats::formula(x), width.cutoff = 500L), collapse = " ")
   h = sprintf("<%s> %s; n = %d; %d coefficients", paste(class(x), collapse = "/"), fml,
               as.integer(stats::nobs(x)), length(cf))
   fit = if (inherits(x, "glm")) {

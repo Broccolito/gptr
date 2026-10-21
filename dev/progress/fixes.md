@@ -1398,6 +1398,173 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-246 (second rule). Open: on Windows a hypervisor pause may still be charged to the
   process as CPU time; the file's other 5 s wall bounds (`:83`, `:260`, `:268`) had no failures.
 
+## Task CI-81 - Only the re-send to the silent server gets a short first-byte timeout (2026-10-21, #64)
+- PR #61 run 39605697535 (job 119241185802, R 4.2.3, oldrel-4 shard 1/4) failed "a failed re-send
+  closes the retry before on_fail; cancelling from retry_end stops it" (`test-http-retry.R:759`):
+  the exhausted path expected `gptr_error_overloaded` and got `gptr_error_timeout_first_byte`. No
+  earlier failure of this test is in the saved Windows census logs (968 jobs to 2026-10-21T10:20Z).
+- Cause: every path ran with `first_byte_timeout = 1`, which only the first_byte path needs (its
+  re-send goes to a server that never answers). The reactor takes a transfer's timeouts once
+  (`R/http-reactor.R:818`), so the first attempt's 503 from the mock also had to start within 1 s;
+  on a loaded runner it did not, and a first-byte timeout is not retried, so the path failed early.
+- Fix (tests only): exhausted and start use the default first-byte timeout; the first_byte path
+  keeps a short one at 3 s, enough for a slow 503 and still short for the silent re-send. The mock
+  server already skips on CRAN.
+- Red: a scratch copy whose mock sends every reply's head after 1.2 s; the old block fails 14
+  expectations (exhausted and start end as `timeout_first_byte`). Green: the same copy passes all;
+  `^http-retry$` PASS 337. Lint clean.
+- Deviations: none (tests only; no product bound changed).
+
+## Task CI-82 - Deparsed user and model code passes `backtick`, so a call chain cannot recurse (2026-10-21, #66)
+- Windows-check on main `412cf2c` (run 39605492452 attempt 1, job 119240498955, oldrel-4 shard 3/4,
+  R 4.2.3) aborted R with "evaluation nested too deeply" and then an `Rcpp::exception` from
+  `sys.nframe()`: 1 abort in 499 hosted Windows runs. The log names no test; a local profile of
+  shard 3 places its only recursion that deep in `test-env-history.R:184-194`, which logs a
+  3,000-head chain `f(1)(1)...(1)` through `user_log_callback()`, whose `user_log_line()` called
+  `deparse(expr, width.cutoff = 500L, nlines = 120L)` with `backtick` defaulted.
+- Cause: base `deparse()`'s default `backtick = mode(expr) %in% c("call", "expression", "(",
+  "function")` calls `mode()`, which for a call returns `switch(deparse(x[[1L]])[1L], ...)`, so
+  `deparse()`, `%in%` and `mode()` recurse once per head (an estimated 2,900 R frames there; R 4.2.3
+  and 4.6.1 define both alike). On an 8 MB C stack this ends at the C stack check; on Windows' 64 MB
+  Rterm stack at `options(expressions)`, which `user_log_text()` catches. When the later package's
+  Windows `WM_TIMER` handler (armed once later, httpuv or chromote has run) fires at that depth, its
+  `at_top_level()` evaluates `sys.nframe()` through `R_tryEval()`, which fails, and `Rcpp::stop()`
+  escapes `DispatchMessage()`, so `std::terminate()` aborts R (from the job log and later's source).
+  A user's Windows session with later loaded can abort the same way.
+- Fix: `deparse_code()` (`R/utils-text.R`) calls `deparse()` with `backtick = is.call(expr) ||
+  is.expression(expr) || is.function(expr)`, the value the default computes, so the text is the same
+  and `mode()` is never called. Every `deparse()` of language gptr did not build goes through it (15
+  sites): `user_log_line()`, `eval_call_text()`, `eval_format_calls()`, `risk_code_text()`,
+  `risk_scan()`'s labels, `dot_labels()`, `ident_label()`, `gptr_describe()`'s function, default,
+  formula and model-formula text, `ns_formals_text()`, `ns_collect_input()`, `home_label()` and the
+  sidecar's call identity in `doc_sidecar_data()`. Left as they are: `artifact-app.R` (a name that
+  already passes `backtick = TRUE`, and data names as strings) and `proc-spawn.R` (gptr's own
+  functions). `user_log_text()`'s note drops long call chains: 20,000 heads now deparse in 0.16 s
+  on an 8 MB stack.
+- Tests: under `options(expressions = 1000)`, a 500-head chain is deparsed at each site family, one
+  new test each in eval-core, perm-classify (`risk_code_text()`), gptr-capture, env-describe,
+  tool-namespace and session-live; the env-history test now expects the cut 3,000-head text, not the
+  "cannot be deparsed" note. The default reaches that limit at 197 heads (about 5 evaluation levels
+  per head). `risk_scan()`'s labels and the sidecar's call identity rest on the rule and the
+  identity check instead: without the JIT, `risk_scan()`'s own walk nests about as deep per head as
+  the default (4 against 5 evaluation levels), and the sidecar's 64-level bound keeps it far below
+  any limit.
+- Identity: old and new outputs are `identical()` on an 81-item corpus (non-syntactic names,
+  operators, `%op%`, formulas, `\(x)`, closures, builtins, specials, symbols, expressions, the empty
+  symbol, atomic values) under each argument set the sites pass: 651 `deparse()` comparisons and 816
+  site outputs, including 11 errors the old code raised on odd inputs.
+- Red: the new tests on main `7cfd543`: FAIL 7 PASS 2261 (six "evaluation nested too deeply"
+  errors; the env-history log holds the note). Green: the same files PASS 2271;
+  `^(env-history|eval-|perm-|risk|gptr-capture|doc-|console-render)` PASS 4901 SKIP 2;
+  `^(env-describe|tool-namespace|session-live|session-object|gptr-gateway|agent-run|env-snapshot|`
+  `prompt-compact|s1-route|arch-layers|lint-rules)$` PASS 3059. Lint clean.
+- Deviations: none (output unchanged). Open: hosted Windows has not run the fix. Other R recursion
+  that reaches `options(expressions)` on Windows with later loaded, such as `risk_scan()`'s walk on
+  deeply nested code (caught by `risk_classify_r()`), still meets later's timer handler. Past about
+  60,000 heads on an 8 MB stack (about 8 times that on Windows' 64 MB), `deparse_code()` overflows
+  R's unchecked C deparser instead of failing catchably in `mode()`; `user_log` caps chains at 5,000
+  heads, and `gptr_risk()` already overflows on such code on main.
+
+## Task CI-83 - The observer retry test's mixed sequence stays inside the retry deadline (2026-10-21, #65)
+- main 7cfd543 (PR #61 merged) failed macos-latest (release) in run 39617294607:
+  "backpressure observation retries fixed transient observer reasons for one deadline"
+  (`test-proc-backpressure-sampling.R:686-688`) ended its eighth transient as the error, with 8 calls
+  and 7 retries instead of 9 and 8.
+- Cause: CI-78 added two reasons to the "repeated transients in any order" case, so it chained 8
+  failures. `bp_observe()` sleeps 0.1 s per retry and stops retrying 1 s after the first failure;
+  eight in a row need at least 0.7 s of sleep plus each call's time, and a slow runner crossed 1 s.
+  The code is right; the test needed the margin.
+- Fix (tests only): the mixed sequence uses four reasons in a new order (8, 1, 7, 2); each of the
+  eight reasons is still retried and checked on its own above it. No bound changes.
+- Red: a scratch copy whose fake observer takes 50 ms per call; the old block fails 3 expectations
+  exactly as on macOS, the new one none. Green: `^proc-backpressure-sampling$` PASS 569. Lint clean.
+- Deviations: none.
+
+## Task CI-84 - Reactor tasks end with their worker or codex exec, not at their next poll (2026-10-21, #67)
+- PR #64 run 39617443293 (attempt 1, job 119282269044, oldrel-4, R 4.2.3, two parallel test
+  processes) failed 10 of 18 blocks of `test-compaction-wait.R` with `cp_wait_clock()`:
+  `!length(ls(r$tasks)) is not TRUE` (`:42`, every block starts on an idle reactor). Main 7cfd543
+  passed oldrel-4 (run 39617294607); no other of the 33 failed R-CMD-check jobs since 2026-10-19 has
+  it.
+- Leaker: `test-cli-codex.R` "a fake CLI joins two inline agents and two workers on one reactor
+  (INFRA-16)", the file's last test that pumps the reactor (the log's last lines before the failures
+  are from cli-codex and cli-claude). It left one worker's abort guard (`worker_spawn()`) and
+  nothing else: no transfer, watcher, run or timer. Nothing in compaction-wait pumps before that
+  check, so every block failed. The guard polled every 0.1 s and ended only at its first poll after
+  the exit; the proxy request's generator polls every 0.05 s, so the run settles and the team's pump
+  returns a few ms after the exit is handled. Whether the guard polled in between depends on how
+  long that handling takes: here `kill_all()` of an exited child walks 1259 processes in 33 to 63 ms
+  per child.
+- Evidence: per-test snapshots of the 38 earlier files in one session, and three concurrent copies
+  of the cli and compaction files under 20 busy loops, ended every file idle. INFRA-16 alone left a
+  task in 0 of 6 runs; with an exited child's `kill_all()` returning at once, as on a small runner,
+  and the task calls traced, 2 of 6 left the second worker's guard (`t22`, `t86`); fixed, 0 of 5.
+- The codex relay task (`pcli_codex_relay()`) ended the same way, at its first 0.02 s poll after the
+  turn; INFRA-16 leaves it, one task and nothing else, if its codex agent settles last. The log
+  cannot tell the two apart.
+- Fix: `worker_cleanup()`, which both ends (`worker_on_exit()`, `worker_kill()`) call, cancels the
+  guard first; the guard no longer checks `st$exited`. `pcli_codex_end()`, every end of a codex
+  exec, cancels the relay and removes its mailbox before the terminal event; the relay no longer
+  checks `s$done` (a finished turn is never current). `cp_wait_clock()` names each task an earlier
+  test left by the start of its body instead of the bare `stopifnot()`.
+- Red: the new "a worker's exit ends its abort guard before the guard polls again" (a mocked
+  `proc_rscript()` starts a 0 s Rscript; the guard's registration is read as the exit is handled)
+  failed 3 of 3 and left `t2`; "the relay mailbox is answered in order" now checks the mailbox and
+  task are gone as `turn.completed` returns, and failed both and left `t2`. Each run before
+  `test-compaction-wait.R` in one process failed 10 of 18 blocks, now naming the task: "an earlier
+  test left reactor tasks:" `{ if (isTRUE(st$exited)) return(FALSE) ...` and
+  `{ if (s$done || !pcli_turn_current(s)) ...`. Green: both pass, and 0 of 18.
+  `^(cli-|subagent-|compaction-|auth-|console-setup$|provider-registry$|arch)` PASS 5094 SKIP 4;
+  `^(agent-|reactor|http-|proc-|team|tool-)` PASS 6158 SKIP 13; the whole suite with two parallel
+  workers (`TESTTHAT_PARALLEL=true`) PASS 35153 SKIP 64. Lint clean.
+- Deviations: none (no contract or user-visible change). Open: a codex exec P05 lets go of without
+  its normaliser (`stream_abort()`, `stream_detach()`) still ends its relay at the next poll.
+
+## Task CI-85 - The idle Windows writer cases give a retirement and cold start the duplex budget (2026-10-21, #68)
+- Windows-check run 39617294666 on `7cfd543` failed `windows-latest (oldrel-4, shard 1/4)` in
+  attempts 2 and 4 (1, 3 and 5 passed): native-08 "idle Windows writer retirement preserves target
+  stdin and later FIFO EOF" (job 119296531347, `test-proc-writer-retirement.R:501-525`) and
+  native-06 "two acknowledged idle Windows writers do not starve a third reading target" (job
+  119328715831, `test-proc-writer-idle-slots.R:114-116`). Each third write ended in
+  `gptr_error_timeout` (2 s) after 2.50 and 2.58 s, with accepted_bytes 0 and the third writer
+  alive (step, status and cause NULL): native-06 at stage startup, its writer started 1.08 to
+  1.66 s after the write was queued (the retirement plus start preparation); native-08 at stage
+  delivery, its writer ready 1.00 s after its start. These are the only failures among 74
+  complete hosted witnesses of the two cases since 2026-10-12; the 72 delivered third writes took
+  0.65 to 1.28 s (median 0.89 s).
+- Cause (the limit, not the code): with two idle writers at the cap, `proc_writer_start()` first
+  retires one (`proc_writer_stop()`, `kill_all()` with taskkill) and then cold-starts the third
+  writer, and IC-60's window opened when the write was queued (CI-79). So 2 s covered the
+  retirement and start preparation (1.08 to 1.66 s in native-06), a cold start (p99 1.97 s, max
+  5.24 s) and the first ACK. native-06's writer never became ready, so CI-75's read retry (PR #61)
+  cannot be involved there; native-08's witness cannot exclude it (a retried read keeps the writer
+  alive with no step or status), though its timeline fits the budget alone. Both failures came
+  from the 28 native-real jobs carrying #61's code (none in the 209 before).
+- A side-by-side hosted loop settles that: run 39643195277 (never-merged branch
+  `claude/writer-loop`, 8 jobs, R 4.6.1 and R 4.2.3) ran both cases 40 times per job with main's
+  writer (carrying #61) and with the writer of `412cf2c` (before #61) on the same runners. main's
+  writer failed 0 of 320 case runs, the older writer 1 (an `idle-restart` restart write,
+  `gptr_error_timeout`, R 4.2.3), and the third writes took the same time (median about 1.0 s, max
+  1.47 s against 1.59 s). So #61 does not raise the rate; the census split reflects one slow run.
+- Fix (tests only; D-246 amended to one rule): `idle_child_case()` and `idle_restart_child_case()`
+  set `gptr.stdin_timeout = 20`, the duplex budget, and `warm_idle_child_case()` (native-05) sets
+  it for its third write, whose title becomes "... a third write" (also in
+  `dev/ci/optional-integrations.R` and its test). native-08 drops `expect_lte(third_elapsed, 2)`
+  and `all(again_elapsed <= 2)`, since a later write retires and cold-starts too, and keeps
+  `expect_length(again_elapsed, 2L)`. Product code, IC-60 and the 60 s default are unchanged.
+  Starvation, the property under test, still fails: a write that never gets a writer times out at
+  20 s, inside the 30 s case deadline.
+- Red: a scratch replay through the real `reactor_drain_child()` (write queued at 0, writer started
+  at 1.08 s, ready at 2.08 s, ACK at 2.14 s), with each case's third-write budget read from
+  its last `gptr.stdin_timeout` setting: FAIL 3 (`gptr_error_timeout` for native-05, -06 and -08 at
+  2 s). Green: the replay PASS 6, and a write that gets no writer slot is pending at 19.99 s and
+  times out at 20 s (PASS 4); `^proc-writer-` PASS 930 SKIP 11 and `^proc-windows-backpressure$`
+  PASS 234 (the real cases skip off Windows); `dev/ci/test-optional-integrations.R` PASS 3823
+  (FAIL 1 on the renamed title before its registry entries changed). Lint clean. The replay is not
+  committed: it only restates the budget.
+- Deviations: D-246. Open: not yet run on hosted Windows; native-05 has not failed and changes only
+  to keep one rule; if native-08 recurs at stage delivery, suspect CI-75's read retry first.
+
 ## Task CI-86 - Linux CI installs its system libraries without pak's Chromium PPA (2026-10-21, #69)
 - Since about 14:30Z on 2026-10-21 Ubuntu jobs failed in `setup-r-dependencies`: pak maps chromote's
   and gptr's own SystemRequirements (a Chrome-family browser) to `chromium`, so it runs

@@ -183,6 +183,13 @@ test_that("Seurat-like meta.data dims and columns, Dates, sparse dims, formulas,
   expect_match(nested, "resolution: <numeric> length 1 = 0.8", fixed = TRUE)
 })
 
+test_that("a function whose default is a long call chain is described (CI-82)", {
+  fn = function(x) 1
+  formals(fn)$x = str2lang(paste0("f", strrep("(1)", 500L)))
+  withr::local_options(expressions = 1000L)
+  expect_match(gptr_describe(fn), "^<function> function[(]x = [(f1)]+ [.]{3}$")
+})
+
 test_that("ALTREP 1:1e9 is described without materialising", {
   x = 1:1e9
   t0 = proc.time()[["elapsed"]]

@@ -122,6 +122,7 @@ test_that("the relay mailbox is answered in order; tools/call through the run's 
   dir = withr::local_tempdir()
   opts = stub_opts(run = "r0000000009")
   opts$state$codex_relay = dir
+  tasks = ls(reactor_get()$tasks)
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
   init = relay_ask(dir, list(jsonrpc = "2.0", id = 1L, method = "initialize"))
   expect_identical(json_decode(init)$id, 1L)
@@ -138,10 +139,11 @@ test_that("the relay mailbox is answered in order; tools/call through the run's 
   expect_identical(res$result$content[[1L]]$text, "[1] 24")
   expect_identical(vapply(opts$log$dispatched, function(m) m$method, ""),
                    c("initialize", "notifications/initialized", "tools/call"))
-  # the end of the turn removes the mailbox (the relay exits) and the task
-  unlink(file.path(dir, "resp"))
+  # the end of the turn removes the mailbox (the relay exits) and the task at once: the run's
+  # last pump may return before the task polls again
   expect_true(push_obj(n, list(type = "turn.completed")))
-  expect_true(reactor_pump(until = function() !dir.exists(dir), timeout = 5))
+  expect_false(dir.exists(dir))
+  expect_length(setdiff(ls(reactor_get()$tasks), tasks), 0L)
 })
 
 test_that("a relayed tools/call whose turn ended is never evaluated (D-104)", {

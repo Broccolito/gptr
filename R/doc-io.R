@@ -652,7 +652,7 @@ doc_sidecar_data = function(rec) {
       if (!is.null(call0) && !doc_sidecar_value_ok(call0, call = TRUE)) {
         stop("Unsupported call identity structure")
       }
-      text = if (!is.null(call0)) paste(deparse(doc_call_norm(call0)), collapse = "\n")
+      text = if (!is.null(call0)) paste(deparse_code(doc_call_norm(call0)), collapse = "\n")
       if (!is.null(call0) && !identical(doc_sidecar_call(text), doc_call_norm(call0))) {
         stop("Unsupported call identity")
       }

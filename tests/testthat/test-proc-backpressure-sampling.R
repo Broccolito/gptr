@@ -682,10 +682,12 @@ test_that("backpressure observation retries fixed transient observer reasons for
     expect_identical(observe(list(observer_error(reason), second)), second)
     expect_identical(seen$calls, 2L)
   }
-  # Repeated transients that clear within the deadline, in any order, complete the sample.
-  expect_identical(observe(lapply(transient, observer_error)), sample)
-  expect_identical(seen$calls, 9L)
-  expect_identical(seen$retried, transient)
+  # Repeated transients that clear within the deadline, in any order, complete the sample; four
+  # retries sleep 0.4 s of the 1 s deadline, so a slow runner cannot reach it (CI-83)
+  mixed = transient[c(8L, 1L, 7L, 2L)]
+  expect_identical(observe(lapply(mixed, observer_error)), sample)
+  expect_identical(seen$calls, 5L)
+  expect_identical(seen$retried, mixed)
   expect_identical(observe(c(lapply(transient[1:2], observer_error), list(second))), second)
   expect_identical(seen$calls, 3L)
   expect_identical(seen$retried, transient[1:2])

@@ -1892,7 +1892,7 @@ risk_check_code = function(code) {
 #' @noRd
 risk_code_text = function(code) {
   if (is.character(code)) return(as_utf8(code))
-  unlist(lapply(as.list(as.expression(code)), deparse, width.cutoff = 500L))
+  unlist(lapply(as.list(as.expression(code)), deparse_code, width.cutoff = 500L))
 }
 
 #' Parse code as P09's evaluator does (CR line ends read as LF), keeping srcrefs for line numbers
@@ -2323,7 +2323,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     calls$line <<- c(calls$line, line)
   }
   text = function(e) {
-    t = deparse(e, width.cutoff = 80L, nlines = 1L)[1L]
+    t = deparse_code(e, width.cutoff = 80L, nlines = 1L)[1L]
     if (nchar(t) > 80L) paste0(substr(t, 1L, 77L), "...") else t
   }
   # A user function's code, read one level deeper (FALSE when too deep).

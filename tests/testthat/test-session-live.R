@@ -20,6 +20,16 @@ test_that("a function frame is never kept as the home (R2)", {
   expect_identical(session_data(g)$home_label, "globalenv")
 })
 
+test_that("the frame of a call whose head is a long call chain is labelled (CI-82)", {
+  h = function(x) {
+    if (x) return(h)
+    withr::local_options(expressions = 1000L)
+    home_label(environment())
+  }
+  chain = str2lang(paste0("h(TRUE)", strrep("(TRUE)", 498L), "(FALSE)"))
+  expect_match(eval(chain), "^frame of [(hTRUE)]+[(][)]$")
+})
+
 test_that("an eval() target is kept as the home, a function frame under eval() is not (R2)", {
   e = new.env()
   s = eval(quote(test_session(home = e)), e)
