@@ -2941,5 +2941,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   compiles) and set `R_QPDF` to the image's qpdf, which R 4.2 does not find.
 - Contract-visible: none. Amends architecture section 3.5, spec 05 P01, 00-index section 5.1 and P25 Task 15:
   both workflows must pass.
-- Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "the hosted jobs have
-  time for the whole suite (CI-19)"; dev/ci/windows/test-windows-check.R (partition, native guards, gates).
+- Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "Windows CI shards run
+  each ordinary test file once ...", "each required Windows context gates ...", "the hosted jobs have time for
+  the whole suite (CI-19)".

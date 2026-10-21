@@ -135,9 +135,6 @@ jobs:
         with:
           extra-packages: any::rcmdcheck
           needs: check
-      - name: Test the shard partition and the gate workflow (once, in release shard 1)
-        if: matrix.r == 'release' && matrix.shard == 1
-        run: Rscript --vanilla -e 'testthat::test_dir("dev/ci/windows", stop_on_failure = TRUE)'
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
