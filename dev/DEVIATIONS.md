@@ -3024,7 +3024,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   console's Up and Task 15's leftovers. Tests: test-session-object.R "queue_update names the item it adds ...",
   "session_unqueue() takes back the newest user item and emits withdraw (D-242)", "session_unqueue() returns NULL
   on an empty queue and emits nothing"; test-agent-run.R "queue_update names each item the run takes, after it
-  left the queue (D-242)". Pending: Tasks 7, 13, 14, 15.
+  left the queue (D-242)".
+- Task 7: `builtin_console` hooks `turn_end`, which after_turn emits just before it polls steers; the hook runs
+  `console_typed()` and `policy_flush()`, so a line typed before a step boundary (also during an in-process tool,
+  when R reads nothing) reaches it without the 0.1 s typing task ticking first. `console_typed()` now checks
+  `repl_terminal()` itself, so outside a terminal REPL it reads nothing. Contract-visible: 04 section 7.14. Tests:
+  test-console-typing.R "a line typed during a tool reaches the request right after its result (D-242)".
+  Pending: Tasks 13, 14, 15.
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

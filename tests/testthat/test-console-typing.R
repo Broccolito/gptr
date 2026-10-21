@@ -111,7 +111,7 @@ test_that("type_ahead = 'follow_up' queues the line for when the agent would sto
                         res$out, fixed = TRUE)))
 })
 
-test_that("a line typed during a tool reaches the request right after its result", {
+test_that("a line typed during a tool reaches the request right after its result (D-242)", {
   skip_on_cran()
   local_console_test()
   box = new.env(parent = emptyenv())
@@ -122,6 +122,11 @@ test_that("a line typed during a tool reaches the request right after its result
   })
   fake = gptr_fake_provider(list(fake_tool("slow"), "after"))
   local_typed(typed_once("and also use mtcars", function() isTRUE(box$ran)))
+  # the periodic typing task never ticks: the step boundary itself reads fd 0
+  task = reactor_task
+  local_mocked_bindings(reactor_task = function(fn, run = NULL) {
+    if (identical(fn, console_typed)) "never" else task(fn, run)
+  })
   typing_console(fake, c("go", "/exit"), tools = list(slow))
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)

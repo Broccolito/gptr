@@ -571,14 +571,15 @@ console_call_release = function(rs) {
 #' The reactor task of a terminal prompt (IC-76): every 0.1 s, the lines typed while a session
 #' of this call runs. /command and !code lines, and the lines that continue a held !code line
 #' still incomplete (typed_code_open()), wait in the reader for the next prompt; the others become
-#' one message queued on the session as the `type_ahead` setting says. Nothing is read while no
-#' session runs (the next prompt reads it). With `drain` (before a question) fd 0 is read in
-#' tty_drain_mode(), so the partial line the question would take as its answer is read too; it
-#' goes to the console history.
+#' one message queued on the session as the `type_ahead` setting says. Nothing is read outside a
+#' terminal REPL or while no session runs (the next prompt reads it). With `drain` (before a
+#' question) fd 0 is read in tty_drain_mode(), so the partial line the question would take as its
+#' answer is read too; it goes to the console history.
 #' @noRd
 console_typed = function(drain = FALSE) {
-  rd = console_repl_find()$reader
-  if (is.null(rd)) return(FALSE)
+  rs = console_repl_find()
+  rd = rs$reader
+  if (is.null(rd) || !repl_terminal(rs)) return(FALSE)
   pol = policy_find()
   target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
   if (is.null(target)) return(0.1)

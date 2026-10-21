@@ -668,8 +668,7 @@ console_spinner_stop = function(rec) {
 #' answer (IC-76).
 #' @noRd
 console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
-  rs = if (identical(kind, "prompt")) console_repl_find()
-  if (!is.null(rs) && repl_terminal(rs)) console_typed(drain = TRUE)
+  if (identical(kind, "prompt")) console_typed(drain = TRUE)
   recs = if (is.null(runs)) {
     as.list(console_state()$active)
   } else {
@@ -1220,6 +1219,16 @@ console_on_shutdown = function(event, ctx) {
   NULL
 }
 
+#' turn_end, emitted just before the loop polls steers: a terminal REPL reads what was typed (also
+#' during an in-process tool) and the pending items are queued, so a line sent before this step
+#' boundary reaches it (D-242)
+#' @noRd
+console_on_turn_end = function(event, ctx) {
+  console_typed()
+  policy_flush()
+  NULL
+}
+
 #' The renderer hooks builtin_console() registers (04 section 7.14)
 #' @noRd
 console_hooks = function() {
@@ -1230,6 +1239,7 @@ console_hooks = function() {
     gptr_hook("message_end", console_on_message_end),
     gptr_hook("tool_execution_start", console_on_tool_start),
     gptr_hook("tool_execution_end", console_on_tool_end),
+    gptr_hook("turn_end", console_on_turn_end),
     gptr_hook("retry_start", console_on_retry),
     gptr_hook("session_compact", console_on_compact),
     gptr_hook("agent_end", console_on_agent_end),

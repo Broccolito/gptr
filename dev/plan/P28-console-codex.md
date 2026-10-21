@@ -135,7 +135,7 @@ working directory restored. Plan-specific rules:
 | `R/agent-dispatch.R` | 6 |
 | `R/console-render.R` | 7, 8, 9, 10, 11, 13, 17, 26 |
 | `R/console-ui.R` | 2, 3, 12, 19 |
-| `R/console-repl.R` | 2, 3, 14, 15, 18, 21, 22, 24, 25, 26 |
+| `R/console-repl.R` | 2, 3, 7, 14, 15, 18, 21, 22, 24, 25, 26 |
 | `R/console-interrupt.R` | 3, 13, 14, 15, 20 |
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
 | `R/console-complete.R` (new) | 22, 23 |
@@ -336,6 +336,8 @@ Decisions:
 - This covers keys typed during an in-process `r` tool, which today reach the next boundary only
   if the 0.1 s task happens to tick in between.
 - Front end only. D class benefits now; T class from Task 18.
+- `console_typed()` checks `repl_terminal()` itself (amended in Task 7), so the hook reads nothing outside a
+  terminal REPL (`.stdin`, jsonl, IDE consoles) and `console_before_message()` drops its own check.
 
 Tests (`test-console-typing.R`), RED first: the fake provider with one slow in-process tool, a
 mocked fd 0 that yields `and also use mtcars` only after the tool ran, and the periodic typing
@@ -344,8 +346,8 @@ REQ3 or not at all.
 
 Spec: 04 §7.14 hook list.
 
-Files: `R/console-render.R` (`console_hooks()`, new `console_on_turn_end()`),
-`tests/testthat/test-console-typing.R`.
+Files: `R/console-render.R` (`console_hooks()`, new `console_on_turn_end()`), `R/console-repl.R`
+(`console_typed()`), `tests/testthat/test-console-typing.R`.
 
 Commit: `fix(console): the step boundary reads typed input before steers are polled`.
 
