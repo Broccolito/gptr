@@ -196,15 +196,21 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
   invisible(TRUE)
 }
 
-#' A line typed before a console question (readline_answer()): queued on the session a run of
-#' this call has, as the `type_ahead` setting says (source "repl"), else added to the console
-#' history; never an answer (IC-75, D-243)
+#' A line typed before a console question (readline_answer()): routed as a line typed during the
+#' run of this call (console_typed_route(): /command and !code wait for the next prompt, the
+#' others are queued as `type_ahead` says; the question resumes nothing), else added to the
+#' console history; never an answer (IC-75, D-243). Without a REPL reader it is queued.
 #' @noRd
 console_typed_ahead = function(text) {
   target = Find(function(t) !is.null(t$session), policy_targets(policy_find()$runs))
   if (is.null(target)) return(console_history_add(text))
-  policy_enqueue(target$session, text, setting_get("type_ahead", target$session),
-                 source = "repl")
+  rd = console_repl_find()$reader
+  if (is.null(rd)) {
+    policy_enqueue(target$session, text, setting_get("type_ahead", target$session),
+                   source = "repl")
+  } else {
+    console_typed_route(rd, target$session, text)
+  }
 }
 
 #' Queue the pending console items once no tool executes on the stack: at the next reactor

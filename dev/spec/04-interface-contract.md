@@ -5309,7 +5309,10 @@ its part in its own commit, and Task 27 finalises them.
   steer.
   - `readline_answer(prompt, keep)` hands each line it reads past (not blank) to `keep`. The console questions
     (`ui_console_read()`, the terminal branch of `console_ask()`) pass `console_typed_ahead()`: while a run of the
-    call has a session (`policy_targets()`), `policy_enqueue(session, text, <type_ahead>, source = "repl")`, else
+    call has a session (`policy_targets()`), the line is routed as `console_typed()` routes typed lines
+    (`console_typed_route()`: a `/command` or `!code` line, or one continuing held code, waits in the REPL's reader
+    for the next prompt with `[gptr] after this answer: '<line>'`; other text is
+    `policy_enqueue(session, text, <type_ahead>, source = "repl")`, also without a REPL reader), else
     `console_history_add()`. The question is then read again. `gptr_confirm()` keeps the line in the history and a
     secret input keeps nothing. Every add here obeys `gptr.history` (`console_history_add()` returns FALSE when it
     is off), and a notice says `(kept in history)` only for a line that was added. In IDE consoles, which hold lines typed during a run until R reads, this is the

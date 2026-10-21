@@ -226,7 +226,9 @@ Decisions:
 - `readline_answer()` no longer discards a line returned in under 0.1 s (the existing stale rule,
   `the$readline_secs`, now the pure predicate `answer_stale(secs)`):
   - During a run, the line goes through `policy_enqueue(session, text, setting_get("type_ahead"),
-    source = "repl")` and the question is read again (still at most 100 reads).
+    source = "repl")` and the question is read again (still at most 100 reads). A `/command` or
+    `!code` line is routed as `console_typed()` routes it (amended in review): it waits in the
+    reader for the next prompt and is never a steer (D-242).
   - Outside a run, the line goes to the history.
 - This is the only lever in L consoles: RStudio and Windows hold typed lines until R reads.
 - Layering (amended in Task 3): `readline_answer()` is in L0, which may not call the console (03 §2.2).

@@ -134,8 +134,9 @@ the next prompt, so a two-line paste without a final newline answers with its fi
 Elsewhere (Homebrew or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted
 lines arrive one at a time; wrap a multi-line paste in \verb{"""}. Lines typed, pasted or run from a
 script before a question (an approval, a choice, the pause menu) appeared never answer it:
-while an answer runs they are queued for the agent as \code{type_ahead} says (below), otherwise
-they go to the console history. Answer after the prompt.
+while an answer runs they are queued for the agent as \code{type_ahead} says (below; a /command or
+!code line waits for the next prompt), otherwise they go to the console history. Answer after
+the prompt.
 
 In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
 runs steers it: the agent reads it at its next step, after the current tool results, and

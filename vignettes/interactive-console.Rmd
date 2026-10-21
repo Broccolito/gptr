@@ -135,8 +135,8 @@ the next prompt, so a two-line paste without a final newline answers with its fi
 Homebrew or conda R, Linux terminals, RStudio, R.app, Positron and Windows deliver pasted lines
 one at a time, so wrap a multi-line paste in `"""` there. Lines typed, pasted or run from a
 script before a question appears (an approval, a choice, the pause menu) never answer it: while
-an answer runs they are queued for the agent as `type_ahead` says, otherwise they go to the
-console history. Answer after the prompt.
+an answer runs they are queued for the agent as `type_ahead` says (a `/command` or `!code` line
+waits for the next prompt), otherwise they go to the console history. Answer after the prompt.
 
 ```text
 peter> """

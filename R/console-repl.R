@@ -569,12 +569,10 @@ console_call_release = function(rs) {
 }
 
 #' The reactor task of a terminal prompt (IC-76): every 0.1 s, the lines typed while a session
-#' of this call runs. /command and !code lines, and the lines that continue a held !code line
-#' still incomplete (typed_code_open()), wait in the reader for the next prompt; the others become
-#' one message queued on the session as the `type_ahead` setting says. Nothing is read outside a
-#' terminal REPL or while no session runs (the next prompt reads it). With `drain` (before a
-#' question) fd 0 is read in tty_drain_mode(), so the partial line the question would take as its
-#' answer is read too; it goes to the console history.
+#' of this call runs, routed by console_typed_route(). Nothing is read outside a terminal REPL or
+#' while no session runs (the next prompt reads it). With `drain` (before a question) fd 0 is read
+#' in tty_drain_mode(), so the partial line the question would take as its answer is read too; it
+#' goes to the console history.
 #' @noRd
 console_typed = function(drain = FALSE) {
   rs = console_repl_find()
@@ -591,22 +589,30 @@ console_typed = function(drain = FALSE) {
     part = lines[[length(lines)]]
     lines = lines[-length(lines)]
   }
+  if (console_typed_route(rd, target$session, lines, part)) console_render_resume(pol$runs)
+  0.1
+}
+
+#' Route the lines typed for a run of session `s` (IC-76, D-242): /command and !code lines, and the
+#' lines that continue a held !code line still incomplete (typed_code_open()), wait in the reader
+#' for the next prompt; the others become one message queued on `s` as the `type_ahead` setting
+#' says; a partial line `part` goes to the console history. When there is anything to route the
+#' rendering is paused first (console_render_pause()) and TRUE returned; the caller resumes it
+#' @noRd
+console_typed_route = function(rd, s, lines, part = "") {
   later = logical(length(lines))
   for (i in seq_along(lines)) {
     later[[i]] = grepl("^\\s*[/!]", lines[[i]]) || typed_code_open(c(rd$typed, lines[later]))
   }
   text = paste(lines[!later], collapse = "\n")
-  if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(0.1)
+  if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(FALSE)
   console_render_pause()
   if (any(later)) {
     rd$typed = c(rd$typed, lines[later])
     console_notice("[gptr] after this answer: ",
                    paste(console_escape(paste0("'", lines[later], "'"), FALSE), collapse = ", "))
   }
-  if (nzchar(trimws(text))) {
-    policy_enqueue(target$session, text, setting_get("type_ahead", target$session),
-                   source = "repl")
-  }
+  if (nzchar(trimws(text))) policy_enqueue(s, text, setting_get("type_ahead", s), source = "repl")
   if (nzchar(trimws(part))) {
     console_notice(if (console_history_add(part)) {
       paste0("[gptr] kept in history (", console_symbols()$up, "): ")
@@ -614,8 +620,7 @@ console_typed = function(drain = FALSE) {
       "[gptr] not kept (gptr.history is off): "
     }, console_escape(paste0("'", part, "'"), FALSE))
   }
-  console_render_resume(pol$runs)
-  0.1
+  TRUE
 }
 
 #' Is the last held `!code` line, with the held lines after it, incomplete R code? The next line
@@ -997,8 +1002,9 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' Elsewhere (Homebrew or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted
 #' lines arrive one at a time; wrap a multi-line paste in `"""`. Lines typed, pasted or run from a
 #' script before a question (an approval, a choice, the pause menu) appeared never answer it:
-#' while an answer runs they are queued for the agent as `type_ahead` says (below), otherwise
-#' they go to the console history. Answer after the prompt.
+#' while an answer runs they are queued for the agent as `type_ahead` says (below; a /command or
+#' !code line waits for the next prompt), otherwise they go to the console history. Answer after
+#' the prompt.
 #'
 #' In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
 #' runs steers it: the agent reads it at its next step, after the current tool results, and

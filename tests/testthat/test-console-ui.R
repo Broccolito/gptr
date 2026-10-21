@@ -214,6 +214,27 @@ test_that("during a run a line typed before the approval prompt is queued, then 
   expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
 })
 
+test_that("during a run a !code or /command line typed before a question waits for the prompt", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(interactive = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  rl = local_readline(c("go", "!zz2 = 5", "y", "/exit"), secs = c(1, 0.01, 1, 1))
+  e = new.env()
+  fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  rs$mode = "manual"
+  out = utils::capture.output(repl_main(rs))
+  # as console_typed() routes it (IC-76, D-242): never a steer, run at the next prompt
+  expect_identical(c(e$zz, e$zz2), c(2, 5))
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_false(any(grepl("zz2", vapply(reqs[[2L]]$messages, msg_text, ""), fixed = TRUE)))
+  expect_true("[gptr] after this answer: '!zz2 = 5'" %in% out)
+  expect_false(any(grepl("steering", out, fixed = TRUE)))
+})
+
 test_that("a block pasted at the approval prompt never answers it nor steers (IC-75)", {
   skip_on_cran()
   local_console_test()
