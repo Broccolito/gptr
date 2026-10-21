@@ -30,6 +30,14 @@ navbar:
       - text: PDF
         href: gptr-cheatsheet.pdf
 
+authors:
+  Wanjun Gu:
+    href: mailto:wanjun.gu@ucsf.edu
+  Tianlu Zhu:
+    href: mailto:tianluz2013@gmail.com
+  Gianmarco Bellucci:
+    href: mailto:Gianmarco.Bellucci@ucsf.edu
+
 reference:
 - title: "Ask Peter"
   contents:

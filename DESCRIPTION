@@ -4,8 +4,9 @@ Version: 1.0.0
 Authors@R: c(
     person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0002-7342-7000")),
-    person("Tianlu", "Zhu", role = "ctb", comment = "UI/UX polishing and CI/CD"),
-    person("Gianmarco", "Bellucci", role = "ctb",
+    person("Tianlu", "Zhu", , "tianluz2013@gmail.com", role = "ctb",
+           comment = "UI/UX polishing and CI/CD"),
+    person("Gianmarco", "Bellucci", , "Gianmarco.Bellucci@ucsf.edu", role = "ctb",
            comment = c("Testing", ORCID = "0000-0002-2635-1699"))
   )
 Description: Runs large language model agents inside the running 'R'
