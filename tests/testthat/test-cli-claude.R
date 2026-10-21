@@ -803,8 +803,8 @@ test_that("a sub-agent asking in a served r call ends the streamed line, not the
   # prompts
   asks = grep("^  sub-agent [ab] > r  gptr_mcp_serve", out)
   expect_length(asks, 2L)
-  expect_identical(match("Fanning out HELDWORD", out) + 1L, match("  * r", out))
-  expect_true(all(asks > match("  * r", out)))
+  expect_identical(match("Fanning out HELDWORD", out) + 1L, match("  | r", out))
+  expect_true(all(asks > match("  | r", out)))
   expect_true(any(grepl("^  sub-agent [ab] done ", out)))
   text = fake_log(f, "mcp")[[1]]$text
   expect_match(text, "child done", fixed = TRUE)
@@ -824,7 +824,7 @@ test_that("a claude-cli r call shows its tool line and result line at the consol
               mode = "auto")
   })
   local_cli_cleanup(s)
-  call = match("  * r  answer = mean(big_vector) * 2; answer", out)
+  call = match("  | r  answer = mean(big_vector) * 2; answer", out)
   result = grep("^    error: object 'big_vector' not found", out)
   answer = grep("^The tool said:", out)
   expect_false(is.na(call))

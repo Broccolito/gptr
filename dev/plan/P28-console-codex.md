@@ -134,16 +134,17 @@ working directory restored. Plan-specific rules:
 | `R/session-object.R`, `R/ext-events.R` | 5 |
 | `R/agent-dispatch.R` | 6 |
 | `R/console-render.R` | 7, 8, 9, 10, 11, 13, 17, 26 |
-| `R/console-ui.R` | 2, 3, 12, 19 |
-| `R/console-repl.R` | 2, 3, 7, 14, 15, 18, 21, 22, 24, 25, 26 |
+| `R/console-ui.R` | 2, 3, 8, 12, 19 |
+| `R/console-repl.R` | 2, 3, 7, 8, 14, 15, 18, 21, 22, 24, 25, 26 |
 | `R/console-interrupt.R` | 3, 13, 14, 15, 20 |
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
 | `R/console-complete.R` (new) | 22, 23 |
-| `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 8, 18, 25 |
+| `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
 | `R/utils-conditions.R` (`gptr_message_write()` clears and redraws the live row) | 17 |
 | `R/gptr-config.R` (`type_ahead` description) | 18 |
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
-| `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*}.R` | their tasks |
+| `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress}.R` | their tasks |
+| `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines) | 8 |
 | `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
@@ -373,7 +374,7 @@ Decisions:
 | agent (working row, sub-agents) | `▌` (U+258C) | `#` |
 | queued message | `↳` (U+21B3) | `->` |
 | the Up key (history recall) | `↑` (U+2191) | `Up` (`^` reads as Ctrl) |
-| question | `?` | `?` |
+| question | `?` | `?` (the same in both, so `console_style()` does not hold it) |
 | bullets | `•`, `◦` | `-` |
 | separator | ` · ` | ` - ` |
 | ellipsis | `…` | `...` |
@@ -392,8 +393,10 @@ Decisions:
 - The band is `\033[48;5;237m` on a dark background or `\033[48;5;254m` on a light one. It needs
   at least 256 colours and a known background, and is otherwise empty. These are raw grey-ramp
   cells, because cli maps greys into the colour cube.
-- `the$background` is `"dark"`, `"light"` or NA. It comes from `COLORFGBG` here; Task 25 adds the
-  probe.
+- `the$background` is `"dark"`, `"light"` or NA. It comes from `COLORFGBG` here
+  (`console_background()`, read once); Task 25 adds the probe.
+- The waiting row (`console_spinner()`) shows the agent's static block in place of its Braille
+  frames (amended in Task 8), so none is left in `R/`; Task 17 replaces the row.
 - Codex parity: Codex's composer fill is 12% white on dark and 4% black on light. Index 237 is
   its nearest cell on #1c1c1c.
 
@@ -405,8 +408,11 @@ Tests (`test-console-render.R`), RED first:
 
 Spec: IC-82 glyph and palette tables, 03 §6.17.
 
-Files: `R/console-render.R` (`console_style()`), `R/utils-options.R` (`console_class()`), every
-caller of `console_symbols()`, `tests/testthat/test-console-render.R`.
+Files: `R/console-render.R` (`console_style()`, `console_background()`), every caller of
+`console_symbols()` and `cli::symbol$ellipsis` (`R/console-render.R`, `R/console-repl.R`,
+`R/console-ui.R`), `tests/testthat/test-console-render.R`, and the tests that expect the old glyphs
+(`test-console-{spinner-width,fences,jupyter-progress}.R`, `test-cli-{codex,claude}.R`). Amended in
+Task 8: `console_class()` moves to Task 17, its first caller.
 
 Commit: `feat(console): one style table from the logo's cursor vocabulary`.
 
@@ -688,14 +694,15 @@ Decisions:
 Tests (`test-console-input.R`, `test-console-wait.R`, `test-console-spinner-*.R`), RED first:
 - Exact rows per class and width (80, 40, 30).
 - A notice write is wrapped in clear and redraw.
-- The spinner text 'thinking (Ns, Ctrl-C to steer or stop)' and the Braille frames go.
+- The spinner text 'thinking (Ns, Ctrl-C to steer or stop)' goes (Task 8 replaced its Braille
+  frames).
 
 Spec: IC-82 live-row format, 04 §7.14.
 
 Files: `R/console-input.R` (`console_live()`), `R/console-render.R` (`console_spinner()` deleted),
-`R/utils-conditions.R` (`gptr_message_write()`), `tests/testthat/test-console-input.R`,
-`tests/testthat/test-console-wait.R`, `tests/testthat/test-console-spinner-gui.R`,
-`tests/testthat/test-console-spinner-width.R`.
+`R/utils-options.R` (`console_class()`), `R/utils-conditions.R` (`gptr_message_write()`),
+`tests/testthat/test-console-input.R`, `tests/testthat/test-console-wait.R`,
+`tests/testthat/test-console-spinner-gui.R`, `tests/testthat/test-console-spinner-width.R`.
 
 Commit: `feat(console): one live row at the bottom for status, queue and input`.
 

@@ -47,7 +47,7 @@ test_that("IRkernel normal tool and successful completion progress is stdout", {
   rec = jupyter_progress_session()
   captured = jupyter_progress_capture(jupyter_progress_normal(rec))
   expect_identical(captured$output, c("gptr: thinking", "gptr: r  dim(dat)",
-                                     "gptr: done | 1 request | 15 tokens | unknown cost"))
+                                     "gptr: done - 1 request - 15 tokens - unknown cost"))
   expect_identical(captured$messages, character())
   expect_null(console_record(list(run = "ujupyter-progress")))
 })
@@ -78,7 +78,7 @@ test_that("IRkernel tool failure and abnormal completion remain stderr messages"
   })
   expect_identical(captured$output, character())
   expect_identical(captured$messages, c("gptr: r failed\n",
-    "gptr: error: synthetic failure | 0 requests | 0 tokens | $0.0000\n"))
+    "gptr: error: synthetic failure - 0 requests - 0 tokens - $0.0000\n"))
   expect_null(console_record(list(run = "ujupyter-progress")))
 })
 
@@ -89,7 +89,7 @@ test_that("nonkernel and knitr progress keeps its existing stderr route", {
     captured = jupyter_progress_capture(jupyter_progress_normal(rec))
     expect_identical(captured$output, character())
     expect_identical(captured$messages, c("gptr: thinking\n", "gptr: r  dim(dat)\n",
-      "gptr: done | 1 request | 15 tokens | unknown cost\n"))
+      "gptr: done - 1 request - 15 tokens - unknown cost\n"))
     expect_null(console_record(list(run = "ujupyter-progress")))
   }
 })

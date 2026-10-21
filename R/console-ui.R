@@ -158,7 +158,7 @@ ui_permission_detail = function(request) {
           },
           paste0("  ", c(paste0(fence, if (grepl("(^|__)r$", request$tool %||% "")) "r"), shown,
                          if (length(lines) > 40L) {
-                           paste0("# ", cli::symbol$ellipsis, " +", length(lines) - 40L,
+                           paste0("# ", console_style()$ellipsis, " +", length(lines) - 40L,
                                   " more lines")
                          },
                          fence)))

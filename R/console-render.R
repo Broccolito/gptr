@@ -4,18 +4,43 @@
 # item 24), its line ends normalised and then escaped (IC-53 item 8). Untrusted text is written
 # with cat() after console_escape(), never as a cli or glue format string (rule C1).
 
-#' Symbols of the console with ASCII fallbacks (report 18 section 6: symbols vanish when the
-#' output is not UTF-8)
+#' The console's style table (IC-82, D-245): the glyphs of the logo's cursor vocabulary (the
+#' person's chevron, a tool call's thin strip, the agent's block), the logo's red and a darker
+#' logo blue (basic red and blue below 256 colours; cli drops them at 1 colour, `NO_COLOR`), dim,
+#' and the input band where the background is known and 256 colours show it. ASCII where the
+#' output is not UTF-8 and in Windows consoles outside Windows Terminal and RStudio (Rgui among
+#' them), whose fonts lack U+258E and U+21B3 (WGL4).
 #' @noRd
-console_symbols = function() {
-  if (cli::is_utf8_output()) {
-    list(bullet = "\u2022 ", nested = "\u25e6 ", tool = "\u25cf ", sep = " \u00b7 ", up = "\u2191",
-         frames = c("\u280b", "\u2819", "\u2839", "\u2838", "\u283c", "\u2834", "\u2826",
-                    "\u2827", "\u2807", "\u280f"))
+console_style = function() {
+  ascii = !cli::is_utf8_output() ||
+    (is_windows() && !nzchar(Sys.getenv("WT_SESSION")) && front_end() != "rstudio")
+  glyphs = if (ascii) {
+    list(person = ">", tool = "|", agent = "#", queued = "->", up = "Up", bullet = "-",
+         nested = "-", sep = " - ", ellipsis = "...")
   } else {
-    list(bullet = "- ", nested = "- ", tool = "* ", sep = " | ", up = "Up",
-         frames = c("-", "\\", "|", "/"))
+    list(person = "\u203a", tool = "\u258e", agent = "\u258c", queued = "\u21b3", up = "\u2191",
+         bullet = "\u2022", nested = "\u25e6", sep = " \u00b7 ", ellipsis = "\u2026")
   }
+  deep = cli::num_ansi_colors() >= 256L
+  bands = c(dark = "\033[48;5;237m", light = "\033[48;5;254m")
+  bg = console_background()
+  c(glyphs, list(
+    red = cli::make_ansi_style(if (deep) "#b85450" else "red"),
+    blue = cli::make_ansi_style(if (deep) "#557ea8" else "blue"),
+    dim = cli::style_dim,
+    band = if (deep && !is.na(bg)) bands[[bg]] else ""
+  ))
+}
+
+#' The terminal's background, "dark", "light" or NA, read once into `the$background`: the last
+#' field of COLORFGBG, 0-6 or 8 dark, 7 or 9-15 light (IC-82)
+#' @noRd
+console_background = function() {
+  if (is.null(the$background)) {
+    i = suppressWarnings(as.integer(sub(".*;", "", Sys.getenv("COLORFGBG"))))
+    the$background = if (i %in% c(0:6, 8L)) "dark" else if (i %in% 0:15) "light" else NA_character_
+  }
+  the$background
 }
 
 #' The key that interrupts R in this front end (Esc in Rgui, R.app and the IDE consoles; report
@@ -82,7 +107,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   style = cli::num_ansi_colors() > 1L
   pad = console_pad()
   lay = nzchar(pad)
-  sym = console_symbols()
+  sym = console_style()
   st = new.env(parent = emptyenv())
   set_width = function(w) st$width = max(20L, as.integer(w) - 2L * nchar(pad))
   set_width(width)
@@ -199,7 +224,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     }
     if (tok %in% c("-", "*", "+")) {
       st$indent = n + 2L
-      mark = if (!style) "- " else if (n > 0L) sym$nested else sym$bullet
+      mark = if (!style) "- " else paste0(if (n > 0L) sym$nested else sym$bullet, " ")
       return(list(text = paste0(lead, mark), width = st$indent))
     }
     if (grepl("^[0-9]+[.)]$", tok)) {
@@ -489,23 +514,22 @@ console_think_line = function(rec, width = cli::console_width()) {
   st
 }
 
-#' The waiting indicator (report 18 A.6 wait_indicator()), ticked by its caller
+#' The waiting indicator (report 18 A.6 wait_indicator()), ticked by its caller: the agent's
+#' static block, the label and the seconds waited (D-245)
 #'
 #' Uses "\r" redraws inside the console margin; an ANSI terminal erases to the line end, so the
 #' cursor stays after the text, other consoles pad the row with spaces. `tick()` is a no-op when
 #' stdout is not a dynamic terminal, so tests, pipes and knitr never see it.
 #' @noRd
 console_spinner = function(label = "thinking") {
-  frames = console_symbols()$frames
+  sym = console_style()
   utf8 = isTRUE(l10n_info()[["UTF-8"]])
-  if (!utf8) frames = c("-", "\\", "|", "/")
   key = console_interrupt_key()
   action = if (console_menu_available()) "steer or stop" else "stop"
   sp = new.env(parent = emptyenv())
   sp$dynamic = cli::is_dynamic_tty()
   sp$ansi = cli::is_ansi_tty()
   sp$pad = console_pad()
-  sp$i = 0L
   sp$t0 = as.numeric(Sys.time())
   sp$shown = FALSE
   sp$last = 0
@@ -514,13 +538,11 @@ console_spinner = function(label = "thinking") {
     now = as.numeric(Sys.time())
     if (now - sp$last < 0.08) return(invisible())
     sp$last = now
-    sp$i = sp$i %% length(frames) + 1L
     width = max(0L, as.integer(cli::console_width()) - 1L)
-    text = sprintf("%s%s %s (%.0fs, %s to %s)", sp$pad, frames[[sp$i]], label, now - sp$t0, key,
+    text = sprintf("%s%s %s (%.0fs, %s to %s)", sp$pad, sym$agent, label, now - sp$t0, key,
                    action)
     if (!utf8) text = enc2native(text)
-    text = if (width) cli::ansi_strtrim(text, width,
-      ellipsis = if (utf8) cli::symbol$ellipsis else "...") else ""
+    text = if (width) cli::ansi_strtrim(text, width, ellipsis = sym$ellipsis) else ""
     # Reserve the last column to avoid wrapping; padding erases the tail of a shorter frame.
     padding = strrep(" ", max(0L, width - cli::ansi_nchar(text, type = "width")))
     console_cat(paste0("\r", text, if (sp$ansi) "\033[K" else padding))
@@ -805,7 +827,8 @@ console_preview = function(input) {
 #' @noRd
 console_call_line = function(call, width) {
   lines = console_escape(console_preview(call$input), FALSE)
-  head = paste0("  ", console_symbols()$tool, console_escape(call$name %||% "?", FALSE))
+  sym = console_style()
+  head = paste0("  ", sym$tool, " ", console_escape(call$name %||% "?", FALSE))
   one = paste0(head, "  ", c(lines, "")[[1L]])
   if (!is.character(call$input$code) ||
       (length(lines) < 2L && cli::ansi_nchar(one, type = "width") <= width)) {
@@ -817,7 +840,7 @@ console_call_line = function(call, width) {
   lang = if (grepl("(^|__)r$", call$name %||% "")) "r" else ""
   body = c(cli::style_dim(paste0(fence, lang)), console_code(code, lang),
            if (more > 0L) {
-             cli::style_dim(paste0("# ", cli::symbol$ellipsis, " +", more, " more lines"))
+             cli::style_dim(paste0("# ", sym$ellipsis, " +", more, " more lines"))
            },
            cli::style_dim(fence))
   c(head, paste0(console_pad(), body))
@@ -845,7 +868,7 @@ console_result_lines = function(call, result, width) {
     if (!length(err)) err = "failed"
     err[[1L]] = paste0("error: ", err[[1L]], secs)
     rows = console_wrap(paste0(pad, err), width)
-    more = if (length(rows) > 6L) paste0(pad, cli::symbol$ellipsis)
+    more = if (length(rows) > 6L) paste0(pad, console_style()$ellipsis)
     return(c(cli::col_red(c(utils::head(rows, 6L), more)), changes))
   }
   if (!is.null(changes)) return(paste0(changes, secs))
@@ -897,7 +920,7 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL)
   parts = c(word, paste0(n, if (n == 1L) " request" else " requests"),
             paste(format_count(unlist(usage[intersect(cols, names(usage))])), "tokens"),
             format_cost(usage$cost), if (length(kids)) paste("sub-agents", format_cost(kids)))
-  paste0("  ", paste(parts, collapse = console_symbols()$sep))
+  paste0("  ", paste(parts, collapse = console_style()$sep))
 }
 
 #' Show the custom entries appended during a run through `renderer` records (IC-69)
@@ -1138,7 +1161,7 @@ console_on_agent_end = function(event, ctx) {
       sprintf(" (%d/%d)", sum(vapply(g$runs, function(r) isTRUE(r$settled), NA)), g$n)
     }
     n = event$turns %||% 0L
-    sep = console_symbols()$sep
+    sep = console_style()$sep
     console_child_line(rec, if (identical(event$status, "idle")) {
       paste0("done", k, sep, n, if (n == 1L) " turn" else " turns", sep,
              sprintf("%.0f s", as.numeric(Sys.time()) - as.numeric(run$started)))

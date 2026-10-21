@@ -393,6 +393,97 @@ test_that("the interrupt key follows the front end", {
   expect_identical(console_interrupt_key(), "Ctrl-C")
 })
 
+# ---------------------------------------------------------------- P28 Task 8: the style table
+
+# The terminal background console_style() reads, set for the calling test only
+local_background = function(value, .env = parent.frame()) {
+  old = the$background
+  the$background = value
+  withr::defer(assign("background", old, envir = the), envir = .env)
+}
+
+test_that("console_style() holds the logo's cursor glyphs, ASCII where they may not show (D-245)", {
+  utf8 = list(person = "\u203a", tool = "\u258e", agent = "\u258c", queued = "\u21b3",
+              up = "\u2191", bullet = "\u2022", nested = "\u25e6", sep = " \u00b7 ",
+              ellipsis = "\u2026")
+  ascii = list(person = ">", tool = "|", agent = "#", queued = "->", up = "Up", bullet = "-",
+               nested = "-", sep = " - ", ellipsis = "...")
+  glyphs = function() console_style()[names(utf8)]
+  local_mocked_bindings(is_windows = function() FALSE)
+  withr::local_options(cli.unicode = TRUE)
+  expect_identical(glyphs(), utf8)
+  withr::local_options(cli.unicode = FALSE)
+  expect_identical(glyphs(), ascii)
+  # U+258E and U+21B3 are not in WGL4: Windows consoles outside Windows Terminal and RStudio
+  withr::local_options(cli.unicode = TRUE)
+  local_mocked_bindings(is_windows = function() TRUE, front_end = function() "rgui")
+  withr::local_envvar(WT_SESSION = NA)
+  expect_identical(glyphs(), ascii)
+  withr::local_envvar(WT_SESSION = "8e2c")
+  expect_identical(glyphs(), utf8)
+  withr::local_envvar(WT_SESSION = NA)
+  local_mocked_bindings(front_end = function() "rstudio")
+  expect_identical(glyphs(), utf8)
+})
+
+test_that("console_style() gives the logo accents by depth and the band by background (D-245)", {
+  local_background(NULL)
+  want = list(
+    `16777216` = c("\033[38;2;184;84;80mx\033[39m", "\033[38;2;85;126;168mx\033[39m"),
+    `256` = c("\033[38;5;167mx\033[39m", "\033[38;5;67mx\033[39m"),
+    `16` = c("\033[31mx\033[39m", "\033[34mx\033[39m"),
+    `1` = c("x", "x"))
+  band = c(dark = "\033[48;5;237m", light = "\033[48;5;254m")
+  for (n in names(want)) {
+    withr::local_options(cli.num_colors = as.integer(n))
+    dim = if (n == "1") "x" else "\033[2mx\033[22m"
+    for (bg in c("dark", "light", NA)) {
+      the$background = bg
+      st = console_style()
+      expect_identical(c(st$red("x"), st$blue("x"), st$dim("x")), c(want[[n]], dim), info = n)
+      expect_identical(st$band, if (n %in% c("16777216", "256") && !is.na(bg)) band[[bg]] else "",
+                       info = paste(n, bg))
+    }
+  }
+})
+
+test_that("the background comes from COLORFGBG's last field, read once (D-245)", {
+  local_background(NULL)
+  fgbg = c("15;0", "0;15", "15;default;8", "0;7", "0;16", "default;default", "")
+  want = c("dark", "light", "dark", "light", NA, NA, NA)
+  for (i in seq_along(fgbg)) {
+    the$background = NULL
+    withr::local_envvar(COLORFGBG = fgbg[[i]])
+    expect_identical(console_background(), want[[i]], info = fgbg[[i]])
+  }
+  withr::local_envvar(COLORFGBG = "0;15")
+  expect_identical(console_background(), NA_character_)
+})
+
+test_that("NO_COLOR keeps the glyphs and drops every SGR (D-245)", {
+  local_background("dark")
+  withr::local_options(cli.num_colors = NULL, crayon.enabled = NULL, cli.default_num_colors = 256L,
+                       cli.unicode = TRUE)
+  withr::local_envvar(NO_COLOR = NA, R_CLI_NUM_COLORS = NA)
+  local_mocked_bindings(is_windows = function() FALSE)
+  st = console_style()
+  expect_identical(c(st$red("x"), st$band), c("\033[38;5;167mx\033[39m", "\033[48;5;237m"))
+  withr::local_envvar(NO_COLOR = "1")
+  st = console_style()
+  expect_identical(c(st$tool, st$agent, st$red("x"), st$blue("x"), st$dim("x"), st$band),
+                   c("\u258e", "\u258c", "x", "x", "x", ""))
+})
+
+test_that("no U+25CF dot and no Braille spinner anywhere in R/ (D-245)", {
+  dir = arch_source_dir()
+  skip_if(is.null(dir), "the package sources under R/ were not found")
+  for (path in list.files(dir, pattern = "[.][Rr]$", full.names = TRUE)) {
+    text = readLines(path, encoding = "UTF-8", warn = FALSE)
+    expect_false(any(grepl("\\\\u(25[cC][fF]|28[0-9a-fA-F]{2})|[\u25cf\u2800-\u28ff]", text,
+                           perl = TRUE)), info = basename(path))
+  }
+})
+
 # ---------------------------------------------------------------- Task 2: renderer hooks
 
 # A real, idle session that never ran (its prompt waits in the queue): the hooks only read it
@@ -447,7 +538,7 @@ test_that("a foreground run streams its answer and ends with a status line (verb
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Hello")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L)))
-  expect_identical(out, c("Hello **world** {x}", "  done | 0 requests | 0 tokens | $0.0000"))
+  expect_identical(out, c("Hello **world** {x}", "  done - 0 requests - 0 tokens - $0.0000"))
   expect_null(console_record(list(run = "u0000test")))
 })
 
@@ -543,7 +634,7 @@ test_that("same-block chunks stay contiguous and tools follow the complete text 
                input = list(code = "1 + 1")),
     hook_event("message_update", s, index = 2L, kind = "text", delta = "Second ending"),
     hook_event("message_end", s, role = "assistant", message = assistant_msg("ignored"))))
-  expect_identical(out, c("First tail", "  * r  1 + 1", "Second ending"))
+  expect_identical(out, c("First tail", "  | r  1 + 1", "Second ending"))
 })
 
 test_that("tool lines escape the preview and summarise the result (acceptance 7)", {
@@ -561,7 +652,7 @@ test_that("tool lines escape the preview and summarise the result (acceptance 7)
     hook_event("tool_execution_end", s, tool_call_id = "c1", tool_name = "r", is_error = FALSE,
                elapsed = 2.5, details = list()),
     hook_event("message_end", s, role = "tool_result", message = result)))
-  expect_identical(out, c("  * r", "```r", "x = 1 # <U+001B>[31mred", "y = 2", "```",
+  expect_identical(out, c("  | r", "```r", "x = 1 # <U+001B>[31mred", "y = 2", "```",
                           "    + x, y (2.5 s)"))
   expect_false(any(grepl("\033", out, fixed = TRUE)))
 })
@@ -633,10 +724,10 @@ test_that("the end of a call served to a CLI route prints its result line (D-192
     hook_event("tool_execution_end", s, tool_call_id = "mcp_5", tool_name = "r", is_error = TRUE,
                elapsed = 0.1, details = list(objects = list(added = "res"), plots = 0L),
                content = list(list(type = "text", text = "Error: boom")))))
-  expect_identical(out, c("  * r  mean(big_vector)",
+  expect_identical(out, c("  | r  mean(big_vector)",
                           "    error: Error: object 'big_vector' not found",
-                          "  * r  answer = 42", "    + answer",
-                          "  * r  res = 1; stop('boom')", "    error: Error: boom", "    + res"))
+                          "  | r  answer = 42", "    + answer",
+                          "  | r  res = 1; stop('boom')", "    error: Error: boom", "    + res"))
 })
 
 test_that("on a CLI route verbosity 2 shows each thinking block's first line, dim (D-192)", {
@@ -657,9 +748,9 @@ test_that("on a CLI route verbosity 2 shows each thinking block's first line, di
                input = list(code = "1 + 1")),
     hook_event("message_update", s, index = 3L, kind = "text", delta = "Done."),
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Done.")))
-  expect_identical(render_events(s, events), c("  * r  1 + 1", "Done."))
+  expect_identical(render_events(s, events), c("  | r  1 + 1", "Done."))
   local_cli_run(s)
-  plain = c("  Planning", "  step 2 is a line far longer than fo...", "  * r  1 + 1", "Done.")
+  plain = c("  Planning", "  step 2 is a line far longer than fo...", "  | r  1 + 1", "Done.")
   expect_identical(render_events(s, events), plain)
   withr::local_options(cli.num_colors = 256L)
   out = render_events(s, events)
@@ -830,7 +921,7 @@ test_that("verbosity 1 reports tool calls and the end as progress messages", {
   expect_message(
     console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = NULL, turns = 2L),
                          ctx),
-    "gptr: done | 0 requests", fixed = TRUE)
+    "gptr: done - 0 requests", fixed = TRUE)
 })
 
 test_that("the status line names an unusual end and sums the usage rows", {
@@ -838,19 +929,19 @@ test_that("the status line names an unusual end and sums the usage rows", {
   usage = data.frame(input = c(1000, 200), output = c(50, 10), cache_read = c(0, 900),
                      cost = c(0.001, 0.0005))
   expect_identical(console_status_line("idle", NULL, usage),
-                   "  done | 2 requests | 2.2k tokens | $0.0015")
+                   "  done - 2 requests - 2.2k tokens - $0.0015")
   expect_identical(console_status_line("aborted", "aborted (user)", NULL),
-                   "  aborted: aborted (user) | 0 requests | 0 tokens | $0.0000")
+                   "  aborted: aborted (user) - 0 requests - 0 tokens - $0.0000")
   expect_identical(console_status_line("idle", NULL, data.frame(input = 999950)),
-                   "  done | 1 request | 1.0M tokens | $0.0000")
+                   "  done - 1 request - 1.0M tokens - $0.0000")
   usage$cost[[2L]] = NA
   usage$output[[1L]] = NA
   expect_identical(console_status_line("idle", NULL, usage, c(0.5, NA)), paste(
-    "  done | 2 requests | unknown tokens | $0.0010 + 1 request of unknown cost | sub-agents",
+    "  done - 2 requests - unknown tokens - $0.0010 + 1 request of unknown cost - sub-agents",
     "$0.5000 + 1 request of unknown cost"))
   usage$cost[[1L]] = NA
   expect_identical(console_status_line("idle", NULL, usage, NA_real_),
-                   "  done | 2 requests | unknown tokens | unknown cost | sub-agents unknown cost")
+                   "  done - 2 requests - unknown tokens - unknown cost - sub-agents unknown cost")
 })
 
 test_that("the status line counts the run's requests and adds its sub-agents' cost (#38)", {
@@ -878,10 +969,10 @@ test_that("the status line counts the run's requests and adds its sub-agents' co
   usage_add(kid, row("q-kid", session_data(kid)$id, 0.5))
   own = rbind(row("q1", d$id, 0.001), row("q2", d$id, 0.002))
   for (i in 1:2) usage_add(s, own[i, ])
-  expect_message(end(own), "gptr: done | 2 requests | 220 tokens | $0.0030 | sub-agents $0.5000",
+  expect_message(end(own), "gptr: done - 2 requests - 220 tokens - $0.0030 - sub-agents $0.5000",
                  fixed = TRUE)
   console_on_agent_start(hook_event("agent_start", s), ctx)
-  expect_message(end(own[1L, ]), "^gptr: done \\| 1 request \\| 110 tokens \\| \\$0\\.0010\\s*$")
+  expect_message(end(own[1L, ]), "^gptr: done - 1 request - 110 tokens - \\$0\\.0010\\s*$")
 })
 
 test_that("custom entries of a run are shown through renderer records (IC-69)", {
@@ -1123,10 +1214,10 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Answer")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L))
-  rows = list(c("", "  First tail", "", "  * r  1 + 1", "    + value", "", "  Second ending", "",
-                "  done | 0 requests | 0 tokens | $0.0000", ""),
+  rows = list(c("", "  First tail", "", "  | r  1 + 1", "    + value", "", "  Second ending", "",
+                "  done - 0 requests - 0 tokens - $0.0000", ""),
               c("", "  [gptr] a notice", "", "  Answer", "",
-                "  done | 0 requests | 0 tokens | $0.0000", ""))
+                "  done - 0 requests - 0 tokens - $0.0000", ""))
   # an R GUI spaces the blocks exactly as a terminal does
   for (fe in c("terminal", "rgui")) {
     for (i in 1:2) {
@@ -1166,7 +1257,7 @@ test_that("a streamed reply is printed verbatim and never evaluated (acceptance 
   expect_true("Use {Sys.setenv(GPTR_PWNED = \"1\")} with care." %in% out)
   expect_identical(Sys.getenv("GPTR_PWNED"), "")
   expect_false(res$visible)
-  expect_match(out[[length(out)]], "^  done \\| 1 request \\| ")
+  expect_match(out[[length(out)]], "^  done - 1 request - ")
 })
 
 test_that("nothing is rendered at verbosity 0 (knitr, testthat)", {
@@ -1187,7 +1278,7 @@ test_that("tool calls of a run show escaped previews and results (acceptance 7)"
                                  "done"))
   e = new.env(parent = globalenv())
   out = utils::capture.output(peter("go", model = fake, envir = e, mode = auto))
-  expect_true("  * r  z = 1 # <U+001B>[31mred" %in% out)
+  expect_true("  | r  z = 1 # <U+001B>[31mred" %in% out)
   # the elapsed time follows when the call took a second or more (a first call on a slow runner)
   expect_match(out, "^    \\+ z( \\([0-9.]+ s\\))?$", all = FALSE)
   expect_false(any(grepl("\033", out, fixed = TRUE)))

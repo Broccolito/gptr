@@ -3095,3 +3095,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Pending (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three
   tool kinds, R-only highlighting, whole transcript rows and a status line with the model and the context left.
   Amends D-186, D-187 and D-206.
+- Task 8: one style table, `console_style()`, replaces `console_symbols()`. It holds the logo's cursor glyphs (`›`
+  the person, `▎` a tool call, `▌` the agent, `↳` a queued message, `↑` the Up key, the bullets, ` · ` and `…`),
+  ASCII where the output is not UTF-8 and in Windows consoles outside Windows Terminal and RStudio (U+258E and
+  U+21B3 are not in WGL4); the logo red `#b85450` and the darker blue `#557ea8` at 256 colours or more, cli's red
+  and blue below; dim; and the input band (`48;5;237` dark, `48;5;254` light) where 256 colours show it and
+  `COLORFGBG` gives the background (`the$background`, read once). Visible now: a tool call starts with `▎` (ASCII
+  `|`), not U+25CF (`*`); the waiting row shows a static `▌` (ASCII `#`), not Braille frames (`- \ | /`); the
+  ASCII separator is ` - `, not ` | `, since `|` is now the ASCII strip. Contract-visible: 04 §15.10 IC-82, 03
+  §2.2 rule 5 and §6.17. Tests: test-console-render.R "console_style() holds the logo's cursor glyphs, ASCII where they
+  may not show (D-245)", "console_style() gives the logo accents by depth and the band by background (D-245)",
+  "the background comes from COLORFGBG's last field, read once (D-245)", "NO_COLOR keeps the glyphs and drops
+  every SGR (D-245)", "no U+25CF dot and no Braille spinner anywhere in R/ (D-245)".

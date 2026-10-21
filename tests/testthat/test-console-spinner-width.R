@@ -36,7 +36,7 @@ test_that("wide spinner text and its stop hint retain the original appearance", 
     cli.width = 80L)
   local_mocked_bindings(front_end = function() "terminal")
   sp = console_spinner()
-  expected = sprintf("\r%s thinking (0s, Ctrl-C to %s)", console_symbols()$frames[[1L]],
+  expected = sprintf("\r%s thinking (0s, Ctrl-C to %s)", console_style()$agent,
     if (console_menu_available()) "steer or stop" else "stop")
   out = sub(" +$", "", spinner_tick_output(sp))
   out = sub("\\([0-9]+s,", "(0s,", out)
@@ -49,7 +49,7 @@ test_that("an ANSI terminal erases to the line end and keeps the cursor after th
   local_mocked_bindings(front_end = function() "terminal")
   sp = console_spinner()
   out = spinner_tick_output(sp)
-  expect_match(out, "^\r  [-\\\\|/] thinking \\([0-9]+s, Ctrl-C to [a-z ]+\\)\033\\[K$")
+  expect_match(out, "^\r  # thinking \\([0-9]+s, Ctrl-C to [a-z ]+\\)\033\\[K$")
   expect_identical(utils::capture.output(invisible(sp$clear())), "\r\033[K")
 })
 

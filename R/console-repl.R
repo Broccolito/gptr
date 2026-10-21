@@ -615,7 +615,7 @@ console_typed_route = function(rd, s, lines, part = "") {
   if (nzchar(trimws(text))) policy_enqueue(s, text, setting_get("type_ahead", s), source = "repl")
   if (nzchar(trimws(part))) {
     console_notice(if (console_history_add(part)) {
-      paste0("[gptr] kept in history (", console_symbols()$up, "): ")
+      paste0("[gptr] kept in history (", console_style()$up, "): ")
     } else {
       "[gptr] not kept (gptr.history is off): "
     }, console_escape(paste0("'", part, "'"), FALSE))

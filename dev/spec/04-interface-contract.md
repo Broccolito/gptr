@@ -5341,4 +5341,40 @@ its part in its own commit, and Task 27 finalises them.
     console questions only; its stale lines go to the history (IC-75).
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26): pending.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
-- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25): pending.
+- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Tasks 9, 11, 17 and 25 pending.
+  - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
+    every console glyph comes from it. The glyphs come from the logo's cursor shapes: the person's chevron, a tool
+    call's thin strip, the agent's block. ASCII applies where `cli::is_utf8_output()` is FALSE, and in Windows
+    consoles outside Windows Terminal (`WT_SESSION` unset) and RStudio, Rgui among them: U+258E and U+21B3 are not
+    in WGL4.
+
+    | role (`console_style()` name) | UTF-8 | ASCII |
+    |---|---|---|
+    | person (`person`) | `›` (U+203A) | `>` |
+    | tool call (`tool`) | `▎` (U+258E) | `\|` |
+    | agent: the waiting row, sub-agents (`agent`) | `▌` (U+258C), static | `#` |
+    | queued message (`queued`) | `↳` (U+21B3) | `->` |
+    | the Up key (`up`) | `↑` (U+2191) | `Up` (cli's `^` reads as Ctrl) |
+    | bullets (`bullet`, `nested`) | `•`, `◦` | `-` |
+    | separator (`sep`) | ` · ` | ` - ` |
+    | ellipsis (`ellipsis`) | `…` | `...` |
+
+    A question is `?` in both. No U+25CF, Braille, box drawing, dingbats or emoji; the waiting row's glyph does not
+    move.
+  - The palette: the logo's red `#b85450` and `#557ea8`, the logo's blue `#6c8ebf` one step darker (cli's
+    256-colour cell for `#6c8ebf`, 110, is 2.3:1 on white; cell 67 is above 3.7:1 on white and on `#1c1c1c`). Ink
+    is never written: the terminal's own foreground is the ink.
+
+    | style | 256 colours or more | 8 or 16 colours | 1 colour (`NO_COLOR`) |
+    |---|---|---|---|
+    | `red` | `cli::make_ansi_style("#b85450")`: `38;5;167` (truecolor `38;2;184;84;80`) | cli's `"red"`, `31` | none |
+    | `blue` | `cli::make_ansi_style("#557ea8")`: `38;5;67` (truecolor `38;2;85;126;168`) | cli's `"blue"`, `34` | none |
+    | `dim` | `cli::style_dim`, `2` | `2` | none |
+    | `band`, dark background | `\033[48;5;237m` | `""` | `""` |
+    | `band`, light background | `\033[48;5;254m` | `""` | `""` |
+
+    Below 256 colours cli maps both blues to grey `90`, so basic red and blue are named there. The band cells are
+    raw grey-ramp cells, because cli maps greys into the colour cube; truecolor gets the same cells. `NO_COLOR`
+    keeps the glyphs and drops every SGR. The background (`console_background()`) is read once into
+    `the$background`: `"dark"` or `"light"` from the last field of `COLORFGBG` (0-6 or 8 dark, 7 or 9-15 light),
+    else NA, and an unknown background has no band. Task 25 adds the terminal probe.

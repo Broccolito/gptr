@@ -248,7 +248,8 @@ Rules that keep this honest:
    the `peter$out()` store and every in-flight cache live in sessions and runs; `gptr_usage()` aggregates [G3 (2)].
    The console input layer also keeps the seconds its last `readline()` waited (`readline_secs`: process-level
    input timing, not run state [IC-75]) and the terminal modes a console call saved before it turned the echo off
-   (`tty_modes`, cleared when the call ends [IC-76]).
+   (`tty_modes`, cleared when the call ends [IC-76]); the console's style table reads the terminal's background
+   once (`background` [IC-82]).
 
 ### 2.3 Execution model
 
@@ -1929,6 +1930,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.
+  Glyphs and colours come from one style table, `console_style()` [IC-82, D-245]: the logo's cursor shapes (`›`
+  the person, `▎` a tool call, `▌` the agent, whose waiting row does not move, `↳` a queued message), ASCII where
+  the output is not UTF-8 and in Windows consoles outside Windows Terminal and RStudio; the logo's red and a
+  darker logo blue (basic red and blue below 256 colours), dim, and an input band where `COLORFGBG` gives the
+  background; no Braille or U+25CF.
   Where the renderer is active (verbosity 2 on a dynamic TTY; `capture.output()` of an
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
   lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
