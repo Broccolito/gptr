@@ -13,6 +13,9 @@ test_that("dot_facts() reads class, shape, size and small text only [leaf]", {
   expect_identical(g$text, "hello")
   expect_false(dot_facts(NA_character_)$is_chr1)
   expect_null(dot_facts(strrep("a", 70000))$text)
+  expect_identical(f$bytes, env_snap_size(mtcars))
+  plt = structure(1L, class = c("pkg::plot", "S7_object"), S7_class = function() NULL)
+  expect_identical(dot_facts(plt)$bytes, env_snap_size(plt))
 })
 
 test_that("dot_sites() marks call-site symbols and leaves forwarded dots to ...elt() (IC-41)", {

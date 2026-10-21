@@ -407,6 +407,49 @@ test_that("held copies and boxes are trimmed to gptr.values_max_bytes, the lates
   expect_identical(s$value, rep(5, 500))
 })
 
+test_that("a value is copied below value_copy_max unless its copy is none or outgrows it (D-247)", {
+  home = new.env()
+  home$x = rnorm(1e4)                           # 78 KB: copied
+  home$plts = rep(list(structure(list(), class = c("pkg::plot", "S7_object"),   # 78 KB once,
+                                 S7_class = structure(function() NULL, pad = numeric(1e4)))), 3)
+  home$shared = rep(list(rnorm(1e5)), 3)        # 782 KB, but a copy holds 2.3 MB
+  home$idx = seq_len(2e6)                       # a compact sequence: a copy writes out 7.6 MB
+  home$env = new.env()                          # duplicate() returns the environment itself
+  home$big = rep(list(rnorm(1e5)), 100)         # object.size() 76 MB: never duplicated
+  s = test_session(home = home)
+  nms = c("x", "plts", "shared", "idx", "env", "big")
+  for (nm in nms) session_value_set(s, nm, home[[nm]], name = nm)
+  expect_identical(s$values$mode, c("copy", "copy", "name", "name", "name", "name"))
+  expect_identical(s$values$bytes, vapply(nms, function(nm) env_snap_size(home[[nm]], home), 1,
+                                          USE.NAMES = FALSE))
+  expect_lt(s$values$bytes[[2L]], 1e5)          # object.size() 235 KB
+  held = vapply(session_data(s)$values, function(v) !is.null(v$value), NA)
+  expect_identical(held, c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE))
+  entries = Filter(function(e) identical(e$custom_type, "gptr.value"), session_data(s)$entries)
+  expect_identical(entries[[2L]]$data$bytes, s$values$bytes[[2L]])
+})
+
+test_that("a themed ggplot2 plot the agent builds is the console's, copied, held small (D-247)", {
+  skip_if_not_installed("ggplot2", "4.0.0")
+  local_project()
+  local_gptr_options(value_copy_max = 2^21)    # the plot holds about 1 MB
+  code = c(paste("p = ggplot2::ggplot(mtcars, ggplot2::aes(wt, mpg)) + ggplot2::geom_point() +",
+                 "ggplot2::theme_minimal()"),
+           "p = p + ggplot2::labs(title = 'mpg')")
+  local_fake_provider(list(fake_tool("r", code = code[1L]),
+                           fake_tool("r", code = paste0(code[2L], "; gptr_return(p)")), "done"))
+  agent = new.env(parent = globalenv())
+  s = peter("plot mpg", model = "fake/fake-1", mode = "auto", envir = agent)
+  console = new.env(parent = globalenv())
+  eval(parse(text = code), console)
+  expect_true(identical(serialize(agent$p, NULL), serialize(console$p, NULL)))
+  expect_lt(gptr_checkpoints(s)$held_mb, 0.1)
+  expect_identical(s$values$mode, "copy")
+  expect_gt(s$values$bytes, 5e5)                # object.size() 16 MB
+  expect_lt(s$values$bytes, 2e6)
+  expect_lt(s$values$bytes, as.numeric(utils::object.size(agent$p)) / 10)
+})
+
 test_that("session_value_get(turn =) returns the value of that turn or NULL", {
   s = test_session()
   d = session_data(s)

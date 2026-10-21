@@ -15,7 +15,7 @@ dot_facts = function(x) {
        is_chr1 = chr && n == 1L && !is.na(x) && (!is.object(x) || inherits(x, c("glue", "AsIs"))),
        length = n,
        dim = dim(x),
-       bytes = as.numeric(utils::object.size(x)),
+       bytes = env_snap_size(x),
        text = if (chr && n <= 65536L && sum(nchar(x, type = "bytes"), na.rm = TRUE) <= 65536L) {
          as_utf8(paste0(x))
        } else {

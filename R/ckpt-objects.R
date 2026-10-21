@@ -241,7 +241,7 @@ ckpt_uncreate = function(store, envir, name, frag = "", turn = NA_integer_) {
   redo
 }
 
-#' Container kind for defusing and the unshared-bytes walk: "list", "s4" or "leaf"
+#' Container kind for defusing: "list", "s4" or "leaf"
 #' @noRd
 ckpt_leaf_children = function(x) {
   if (is.environment(x)) return("leaf")
@@ -309,56 +309,11 @@ ckpt_obj_sweep = function(store) {
   invisible(orphan)
 }
 
-#' Collect the addresses of x and its children down to depth d
-#'
-#' `for (el in x)` visits a list's own components; `length()` dispatches (a POSIXlt or a vctrs
-#' record reports its record count), so indexing up to it would run past the components.
+#' Bytes of image `key` not shared with the current value of `name` (env_snap_size()'s rule)
 #' @noRd
-ckpt_addr_collect = function(x, d, seen) {
-  assign(rlang::obj_address(x), TRUE, envir = seen)
-  if (d <= 0L) return(invisible())
-  k = ckpt_leaf_children(x)
-  if (k == "list") {
-    for (el in x) ckpt_addr_collect(el, d - 1L, seen)
-  }
-  if (k == "s4") {
-    for (sl in methods::slotNames(x)) ckpt_addr_collect(attr(x, sl, exact = TRUE), d - 1L, seen)
-  }
-  invisible()
-}
-
-#' Add the bytes of the parts of x not in `seen` to `acc$bytes` (walked as ckpt_addr_collect())
-#' @noRd
-ckpt_unshared_walk = function(x, d, seen, acc) {
-  if (exists(rlang::obj_address(x), envir = seen, inherits = FALSE)) return(invisible())
-  k = ckpt_leaf_children(x)
-  if (d <= 0L || k == "leaf") {
-    acc$bytes = acc$bytes + as.numeric(utils::object.size(x))
-    return(invisible())
-  }
-  acc$bytes = acc$bytes + 64
-  if (k == "list") {
-    for (el in x) ckpt_unshared_walk(el, d - 1L, seen, acc)
-  }
-  if (k == "s4") {
-    for (sl in methods::slotNames(x)) {
-      ckpt_unshared_walk(attr(x, sl, exact = TRUE), d - 1L, seen, acc)
-    }
-  }
-  invisible()
-}
-
-#' Bytes of image `key` not shared with the current value of `name` (G7 estimator, depth 4)
-#' @noRd
-ckpt_unshared_bytes = function(store, key, envir, name, depth = 4L) {
-  seen = new.env(parent = emptyenv())
-  acc = new.env(parent = emptyenv())
-  acc$bytes = 0
-  if (exists(name, envir = envir, inherits = FALSE)) {
-    ckpt_addr_collect(get(name, envir = envir, inherits = FALSE), depth, seen)
-  }
-  ckpt_unshared_walk(get(key, envir = store$slots, inherits = FALSE), depth, seen, acc)
-  acc$bytes
+ckpt_unshared_bytes = function(store, key, envir, name) {
+  env_snap_size(get(key, envir = store$slots, inherits = FALSE), envir,
+                get0(name, envir = envir, inherits = FALSE))
 }
 
 #' A new per-session checkpoint state; its finalizer releases the images (G7 c06b)
@@ -450,7 +405,8 @@ ckpt_predicted = function(names, tg) {
 }
 
 #' The capture plan of each binding (G7 section 3.4 step 3): "ref", "copy", "disk", "none" (the
-#' gptr_preimage() method refused) or "skip" (over the budget). Unknown sizes count as 0 bytes.
+#' gptr_preimage() method refused) or "skip" (over the budget). A missing argument (no size)
+#' counts 0 bytes.
 #' @noRd
 ckpt_capture_how = function(bytes, predicted, mode, spill_ok, lim) {
   bytes[is.na(bytes)] = 0

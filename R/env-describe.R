@@ -108,7 +108,9 @@ describe_binding = function(name, envir, budget = 150L) {
     box$envir = NULL
   }, add = TRUE)
   if (env_snap_missing(box, name)) return(paste0(label, ": <missing>"))
-  d = describe_boxed(box, budget)
+  # evaluated with the home on the call stack, whose frames env_snap_size() leaves out, so sizes
+  # leave the home out as the workspace's do (package state holding it pinned the object)
+  d = eval(as.call(list(describe_boxed, box, budget)), envir)
   d[1L] = paste0(label, ": ", d[1L])
   d
 }
@@ -310,7 +312,8 @@ dsc_leaf_gg = function(x) {
   list(nrow = if (inherits(data, "data.frame")) .row_names_info(data, 2L) else NA_integer_,
        ncol = if (inherits(data, "data.frame")) length(data) else NA_integer_,
        mapping = names(get_part(x, "mapping")), geoms = geoms,
-       plots = if (inherits(x, "patchwork")) dsc_gg_plots(x) else NA_integer_)
+       plots = if (inherits(x, "patchwork")) dsc_gg_plots(x) else NA_integer_,
+       bytes = dsc_bytes(env_snap_size(x)))
 }
 
 #' Plots of a patchwork (a leaf): its own plot unless that is patchwork's empty filler, and each of
@@ -339,15 +342,13 @@ dsc_header = function(f) {
   } else {
     paste("length", env_fmt_n(f$length))
   }
-  size = if (isTRUE(f$compact)) {
-    " (compact sequence)"
-  } else if (is.na(f$size)) {
-    ""
-  } else {
-    paste0(", ", env_fmt_bytes(f$size))
-  }
-  sprintf("<%s> %s%s", paste(f$class, collapse = "/"), shape, size)
+  sprintf("<%s> %s%s%s", paste(f$class, collapse = "/"), shape, dsc_bytes(f$size),
+          if (isTRUE(f$compact)) " (compact sequence)" else "")
 }
+
+#' ", <size>" for a header line
+#' @noRd
+dsc_bytes = function(b) paste0(", ", env_fmt_bytes(b))
 
 #' `n` and its noun, plural unless `n` is 1
 #' @noRd
@@ -470,7 +471,7 @@ dsc_fmt_s4 = function(f, slots, sl) {
   pkg = attr(f$class, "package")
   h = sprintf("<S4 %s%s>%s; slots: %s", f$class[1L],
               if (is.null(pkg)) "" else paste0(" from ", pkg),
-              if (is.na(f$size)) "" else paste0(" ", env_fmt_bytes(f$size)),
+              paste0(" ", env_fmt_bytes(f$size)),
               paste(slots, collapse = ", "))
   shape = vapply(sl, function(s) {
     if (length(s$dim)) {
@@ -572,11 +573,11 @@ gptr_describe.environment = function(x, budget = 150L, ..., level = NULL) {
 #' @noRd
 dsc_describe_env = function(x, f, budget, level) {
   e = dsc_leaf_env(x)
-  h = sprintf("<%s>%s with %s (%s, %d active, %s)",
+  h = sprintf("<%s>%s with %s (%s, %d active, %s)%s",
               paste(f$class, collapse = "/"),
               if (nzchar(e$label)) paste0(" '", e$label, "'") else "",
               dsc_count(length(e$names), "binding"), dsc_count(sum(e$fun), "function"),
-              sum(e$act), dsc_count(sum(e$lazy), "unevaluated promise"))
+              sum(e$act), dsc_count(sum(e$lazy), "unevaluated promise"), dsc_bytes(f$size))
   fields = e$names[!e$fun]
   methods = e$names[e$fun]
   l2 = c(h,
@@ -609,16 +610,16 @@ gptr_describe.function = function(x, budget = 150L, ..., level = NULL) {
   fm = formals(x)
   dflt = vapply(seq_along(fm), function(i) paste(deparse_code(fm[[i]]), collapse = ""), "")
   args = ifelse(nzchar(dflt), paste(names(fm), "=", dflt), names(fm))
-  sig = sprintf("<function> function(%s); %d lines", paste(args, collapse = ", "),
-                length(body_lines))
+  sig = sprintf("<function> function(%s); %d lines%s", paste(args, collapse = ", "),
+                length(body_lines), dsc_bytes(env_snap_size(x)))
   dsc_pick(list(sig, c(sig, paste0("  ", utils::head(body_lines, 8L)))), budget, level)
 }
 
 #' @rdname gptr_describe
 #' @export
 gptr_describe.formula = function(x, budget = 150L, ..., level = NULL) {
-  dsc_pick(list(paste("<formula>", paste(deparse_code(x, width.cutoff = 500L), collapse = " "))),
-           budget, level)
+  dsc_pick(list(paste0("<formula> ", paste(deparse_code(x, width.cutoff = 500L), collapse = " "),
+                      dsc_bytes(env_snap_size(x)))), budget, level)
 }
 
 #' @rdname gptr_describe
@@ -626,8 +627,8 @@ gptr_describe.formula = function(x, budget = 150L, ..., level = NULL) {
 gptr_describe.lm = function(x, budget = 150L, ..., level = NULL) {
   cf = stats::coef(x)
   fml = paste(deparse_code(stats::formula(x), width.cutoff = 500L), collapse = " ")
-  h = sprintf("<%s> %s; n = %d; %d coefficients", paste(class(x), collapse = "/"), fml,
-              as.integer(stats::nobs(x)), length(cf))
+  h = sprintf("<%s> %s; n = %d; %d coefficients%s", paste(class(x), collapse = "/"), fml,
+              as.integer(stats::nobs(x)), length(cf), dsc_bytes(env_snap_size(x)))
   fit = if (inherits(x, "glm")) {
     sprintf("family %s(%s); deviance %.4g; AIC %.4g", x$family$family, x$family$link,
             x$deviance, x$aic)
@@ -736,10 +737,11 @@ gptr_describe.DBIConnection = function(x, budget = 150L, ..., level = NULL) {
 gptr_describe.ggplot = function(x, budget = 150L, ..., level = NULL) {
   g = dsc_leaf_gg(x)
   if (!is.na(g$plots)) {
-    return(dsc_pick(list(paste("<patchwork> of", dsc_count(g$plots, "plot"))), budget, level))
+    return(dsc_pick(list(paste0("<patchwork> of ", dsc_count(g$plots, "plot"), g$bytes)), budget,
+                    level))
   }
-  h = sprintf("<ggplot> %s (%s)", dsc_count(length(g$geoms), "layer"),
-              paste(g$geoms, collapse = ", "))
+  h = sprintf("<ggplot> %s (%s)%s", dsc_count(length(g$geoms), "layer"),
+              paste(g$geoms, collapse = ", "), g$bytes)
   l2 = c(h, sprintf("  data: %s x %s; mapping: %s", env_fmt_n(g$nrow), env_fmt_n(g$ncol),
                     paste(g$mapping, collapse = ", ")))
   dsc_pick(list(h, l2), budget, level)

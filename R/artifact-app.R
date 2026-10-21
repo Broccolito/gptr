@@ -316,7 +316,7 @@ artifact_data_facts = function(name, envir) {
   if (!nzchar(name) || !exists(name, envir = envir, inherits = TRUE)) return(NULL)
   obj = get(name, envir = envir, inherits = TRUE)
   list(class = class(obj)[1L], dim = as.integer(dim(obj) %||% length(obj)),
-       size = as.numeric(utils::object.size(obj)))
+       size = env_snap_size(obj, envir))
 }
 
 #' Serialise one data object through the leaf function save_rds() (rule R7); returns the file's
@@ -331,7 +331,7 @@ artifact_data_save = function(name, envir, file) {
 #' loader R/gptr_data.R, which shiny sources before app.R (contract 11.6, IC-63)
 #'
 #' Names are free-form (`a/b` becomes data/001.rds; the mapping is in artifact.json). The total
-#' `object.size()` is checked against `gptr.artifact_max_bytes` before anything is written.
+#' size (env_snap_size()) is checked against `gptr.artifact_max_bytes` before anything is written.
 #' `envir` is read only through leaf functions and never kept (rules R1, R2).
 #' @return The `data` records of artifact.json: list(name, file, class, dim, bytes) per object.
 #' @noRd
