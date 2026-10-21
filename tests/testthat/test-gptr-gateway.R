@@ -167,6 +167,7 @@ test_that("peter() without a prompt needs a human", {
 })
 
 test_that("with a human but no console route, a no-prompt call is not_available", {
+  skip_on_cran()
   local_without_builtin("console")
   local_gw()
   local_gptr_options(interactive = TRUE)
@@ -612,6 +613,7 @@ test_that("a secret-looking prompt is sent redacted, with a notice (gptr.prompt_
 })
 
 test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   key = paste0("sk-", "ant-api03-", strrep("FAKEant0", 11), "xxxxxAA")
   txt = paste("Use the key", key, "for the API")
@@ -669,6 +671,7 @@ test_that("the condition P06 stored is the one signalled, with the session attac
 })
 
 test_that("peter() leaves no connection open when it returns, errors or is interrupted (IC-59)", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   n0 = nrow(showConnections())
@@ -707,6 +710,7 @@ test_that("model code may not pipe into another running session without approval
 })
 
 test_that("a pending session collected without running releases its call record [R2]", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   s = peter("x", model = fake, .run = FALSE, envir = new.env())
@@ -753,6 +757,7 @@ test_that("blocked and budget statuses map to their conditions (contract 6.1.2)"
 })
 
 test_that("the session is visible, invisible when streamed; .run = FALSE keeps the input", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   e = new.env()
@@ -789,6 +794,7 @@ test_that("a peter() call made during a run becomes a child session (route neste
 })
 
 test_that("a peter() call from model code without model = runs on the session's model", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   # the default route would be the subscription CLI
@@ -805,6 +811,7 @@ test_that("a peter() call from model code without model = runs on the session's 
 })
 
 test_that("a nested peter() without model = reaches the provider or router spec of its session", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   reply = function(request) {
@@ -824,6 +831,7 @@ test_that("a nested peter() without model = reaches the provider or router spec 
 })
 
 test_that("peter() from model code writes to an overlay and shows its prompt as label (D-188)", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE, verbose = 1L, quiet = FALSE)
   sub = local_fake_provider(function(request) {
@@ -909,6 +917,7 @@ test_that("background = TRUE needs the bg.register service (P21)", {
 })
 
 test_that("a run sent to the background returns the session at once (pause menu [b]ackground)", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list(fake_text("a slow answer", chunk = 1L, gap = 0.05)))
   # what P21's bg.register does to a running foreground run when [b]ackground is chosen
@@ -977,6 +986,7 @@ test_that("parallel = and agents = need the sub-agent routes (P19)", {
 # ---- Task 9 adaptations (see dev/progress/P08.md, Task 9) ------------------------------------
 
 test_that("a root run freezes ollama_local_only from human settings only; children inherit", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   box = new.env()

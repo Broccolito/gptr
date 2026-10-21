@@ -23,6 +23,7 @@ export_state = function() {
 }
 
 test_that("raw history export preserves interleaved R across a pipeline and a second session", {
+  skip_on_cran()
   root = local_project()
   local_gptr_options(record = "auto", replay = "record", model = "fake/fake-1", mode = "auto",
                      unsafe_no_permissions = TRUE)

@@ -486,11 +486,11 @@ subagent_shape = function(x) {
 }
 
 #' The one list-like context item of a fan-out call: its index and shape; any other number of
-#' list-like items, or `.opts$context = "none"` (which would drop each child's element), is
+#' list-like items, or the context mode "none" (which would drop each child's element), is
 #' `gptr_error_invalid_argument`
 #' @noRd
 subagent_fanout_item = function(call) {
-  if (identical(call$args$opts$context, "none")) {
+  if (identical(context_mode(call$args$opts), "none")) {
     gptr_abort(paste0("parallel = sends each child its element as attached context; use ",
                       ".opts = list(context = \"names\")."),
                "invalid_argument", arg = ".opts",

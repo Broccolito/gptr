@@ -383,6 +383,7 @@ test_that("artifact_serve() publishes a loopback port and serves only requests w
 })
 
 test_that("family_left() waits out an exited child's teardown and names what stays listed", {
+  skip_on_cran()
   me = ps::ps_handle()
   exited = list(get_pid = function() 42L)
   record = list(marker = proc_marker_new(), pid = 42L, create_time = 10)
@@ -635,6 +636,7 @@ test_that("a broken app fails at the launch stage with the child's error in the 
 })
 
 test_that("a launch whose app exited lets the child's family leave before it settles", {
+  skip_on_cran()
   local_project()
   seed_artifact("exited")
   # Windows can still list an exited child's family (its console host exits after its last

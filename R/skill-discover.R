@@ -140,7 +140,8 @@ skill_parse_cached = function(path) res_cached(path, skill_parse, "skill")
 #' A relative entry is resolved against the project root, so it names project content and is
 #' returned under `project` (trust-gated like `.gptr/skills`, IC-52; D-074). Absolute entries and
 #' `~`, `~/...` entries (`~` expanded through `user_home()`, IC-63) are the user's own
-#' directories. `path_norm()` expands no other `~name` form, so such an entry is relative too.
+#' directories. A `~name` entry is not one of these, so it is relative: it is joined to the
+#' project root before `path_norm()`.
 #' @noRd
 skill_setting_paths = function() {
   p = as.character(unlist(setting_get("skills", default = list())[["paths"]], use.names = FALSE))
@@ -439,10 +440,13 @@ skill_body = function(name, session = NULL) {
        dir = spec[["dir"]], name = spec[["name"]])
 }
 
-#' Text of the `skills` prompt section (T1, order 820): only when `read` is active
+#' Text of the `skills` prompt section (T1, order 820): only when `read` is active. A top-level
+#' session syncs the skills first, as its session start does, so a preview composed before any
+#' run lists the same skills
 #' @noRd
 skills_section_text = function(ctx) {
   if (!("read" %in% ctx$input$tool_names)) return(NULL)
+  if (!skill_child_session(ctx)) skill_sync()
   txt = skill_catalog(ctx$session, skills_budget())
   if (nzchar(txt)) txt else NULL
 }

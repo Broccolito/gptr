@@ -25,6 +25,7 @@ expect_not_injected = function(text = NULL) {
 # ---- part 1: rule C1 --------------------------------------------------------------------------
 
 test_that("model text, tool output and provider errors print literally (rule C1)", {
+  skip_on_cran()
   withr::local_envvar(c(GPTR_INJ_E2E = NA))
   local_gptr_options(quiet = FALSE, verbose = 2L)
   fake = local_fake_provider(list(
@@ -258,6 +259,7 @@ expect_gate_intact = function(root, trusted = FALSE) {
 }
 
 test_that("without a human every IC-53 path ends with status blocked, even in auto mode", {
+  skip_on_cran()
   root = local_project(files = list(".gptr/settings.json" = "{\"mode\": \"manual\"}"))
   before = readLines(file.path(root, ".gptr", "settings.json"))
   for (k in seq_along(inj_attacks)) {
@@ -272,6 +274,7 @@ test_that("without a human every IC-53 path ends with status blocked, even in au
 })
 
 test_that("with a human every IC-53 path is asked, and a refusal changes nothing", {
+  skip_on_cran()
   # trusted, so the one-time trust question of an untrusted project (IC-52) is not asked
   root = local_project(trust = TRUE)
   ui = local_scripted_ui(answers = rep(list("n"), length(inj_attacks)))

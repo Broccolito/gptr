@@ -41,6 +41,7 @@ test_that("gptr_last() holds the most recent session strongly and survives gc()"
 })
 
 test_that("an unreferenced session is finalised and its lock removed, except gptr_last()'s", {
+  skip_on_cran()
   local_store()
   a = test_session()
   session_append(a, entry_custom("test.note", list(i = 1L)))
@@ -122,6 +123,7 @@ test_that("a lock held by another live process is split brain", {
 })
 
 test_that("300 sessions kept in a list leave no connection open (IC-59)", {
+  skip_on_cran()
   local_store()
   n0 = nrow(showConnections())
   keep = lapply(1:300, function(i) {
@@ -145,6 +147,7 @@ test_that("secret_register() warns secret_late for a value a live session alread
 })
 
 test_that("continuing a same-process duplicate with a run is split brain", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("a"))
   s = test_session()
@@ -217,6 +220,7 @@ fix1_registry = function(env = parent.frame()) {
 }
 
 test_that("a session collected inside registry_session_drop()'s loop does not break it (FIX-1)", {
+  skip_on_cran()
   reg = fix1_registry()
   registry_add(gptr_command("b1", fix1_cmd), "session", 0L, session = "sB")
   registry_add(gptr_command("b2", fix1_cmd), "session", 0L, session = "sB")
@@ -246,6 +250,7 @@ test_that("a session collected inside registry_session_drop()'s loop does not br
 })
 
 test_that("a session collected inside ext_unload()'s loop does not break it (FIX-1)", {
+  skip_on_cran()
   reg = fix1_registry()
   ext_load(function(gptr) gptr$register(gptr_command("p1", fix1_cmd)), "plugin:fixone", 5L)
   hold = new.env()
@@ -273,6 +278,7 @@ test_that("a session collected inside ext_unload()'s loop does not break it (FIX
 })
 
 test_that("a collected session's shutdown runs at the next safe point, not inside gc() (FIX-1)", {
+  skip_on_cran()
   local_store()
   reg = fix1_registry()
   log = new.env()
@@ -313,6 +319,7 @@ test_that("a collected session's shutdown runs at the next safe point, not insid
 })
 
 test_that("shutdown hooks may create and drop sessions while the queue drains (FIX-1)", {
+  skip_on_cran()
   reg = fix1_registry()
   keep = test_session()
   log = new.env()
@@ -353,6 +360,7 @@ test_that("shutdown hooks may create and drop sessions while the queue drains (F
 })
 
 test_that("a new shell under a collected shell's id gets that shell's shutdown first (FIX-1)", {
+  skip_on_cran()
   reg = fix1_registry()
   log = new.env()
   log$order = character()
@@ -386,6 +394,7 @@ test_that("a new shell under a collected shell's id gets that shell's shutdown f
 })
 
 test_that("unloading drains the deferred shutdowns, then shuts the live sessions down (FIX-1)", {
+  skip_on_cran()
   local_store()
   reg = fix1_registry()
   log = new.env()

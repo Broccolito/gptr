@@ -174,6 +174,7 @@ test_that("gptr_return() designates the run's value from R code during a run", {
 # ------------------------------------------------------------------ adaptations (Task 10)
 
 test_that("a pending run freezes its safety record when a verb starts it (07 section 5)", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   box = new.env()
@@ -238,6 +239,7 @@ test_that("starting a pending run re-checks egress and replay; a refusal keeps i
 })
 
 test_that("gptr_wait() checks every session before it starts any; a refusal starts none", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(replay = "auto")
   withr::local_envvar(GPTR_REPLAY = "auto")

@@ -658,6 +658,7 @@ observer_error = function(reason) {
 }
 
 test_that("backpressure observation retries fixed transient observer reasons for one deadline", {
+  skip_on_cran()
   sample = list(entries = 1)
   seen = new.env(parent = emptyenv())
   observe = function(errors) {

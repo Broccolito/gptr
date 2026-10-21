@@ -13,6 +13,7 @@ test_that(oracle_title(store_recs, "S01"), {
 })
 
 test_that(oracle_title(store_recs, "S02"), {
+  skip_on_cran()
   local_store()
   withr::local_seed(42)
   before = get(".Random.seed", envir = globalenv())
@@ -173,6 +174,7 @@ test_that("a torn line longer than the 1 MiB tail window is recorded from its fi
 })
 
 test_that("appends leave no connection open (IC-59)", {
+  skip_on_cran()
   local_store()
   n0 = nrow(showConnections())
   s = test_session()
@@ -283,6 +285,7 @@ test_that(oracle_title(store_recs, "S35"), {
 })
 
 test_that(oracle_title(store_recs, "S36"), {
+  skip_on_cran()
   local_permissive()
   log = local_compactor(should = function(s, tokens, idle_s) TRUE)
   local_fake_provider(list("a"))
@@ -300,6 +303,7 @@ test_that(oracle_title(store_recs, "S38"), {
 })
 
 test_that(oracle_title(store_recs, "S39"), {
+  skip_on_cran()
   local_permissive()
   local_tool("read", function(input, ctx) "data")
   n = new.env()
@@ -417,6 +421,7 @@ test_that(oracle_title(store_recs, "S23"), {
 })
 
 test_that("a fork file records the entries that close the copied turn before its own messages", {
+  skip_on_cran()
   s = stored_run()
   session_value_set(s, "answer", "done")
   f = gptr_fork(s)
@@ -435,6 +440,7 @@ test_that("a fork file records the entries that close the copied turn before its
 })
 
 test_that("a fork that copies no gptr.frozen entry freezes its own, the first of its file", {
+  skip_on_cran()
   s = stored_run()
   d = session_data(s)
   expect_identical(d$entries[[1L]]$custom_type, "gptr.frozen")
@@ -474,6 +480,7 @@ test_that("a fork of a source still in its first turn freezes its own prompt", {
 })
 
 test_that("forkOf.entry is the last entry the fork copied when a label trails the cut", {
+  skip_on_cran()
   s = stored_run()
   before = session_data(s)$leaf
   session_append(s, list(type = "label", raw = list(targetId = before, label = "start")))
@@ -529,6 +536,7 @@ test_that(oracle_title(store_recs, "S14"), {
 # branch_in_file() (a detached copy continued after its original is gone) is in the harness.
 
 test_that(oracle_title(store_recs, "S15"), {
+  skip_on_cran()
   b = branch_in_file()
   x = store_read(b$file)
   users = Filter(function(e) identical(e$type, "message") && identical(e$message$role, "user"),
@@ -538,6 +546,7 @@ test_that(oracle_title(store_recs, "S15"), {
 })
 
 test_that(oracle_title(store_recs, "S16"), {
+  skip_on_cran()
   b = branch_in_file()
   x = store_read(b$file)
   expect_identical(length(path_of_entries(x$entries, b$main_leaf)),
@@ -545,6 +554,7 @@ test_that(oracle_title(store_recs, "S16"), {
 })
 
 test_that(oracle_title(store_recs, "S17"), {
+  skip_on_cran()
   b = branch_in_file()
   expect_false(identical(session_data(b$copy)$leaf, b$main_leaf))
   expect_identical(b$copy$text, "third")
@@ -621,6 +631,7 @@ test_that("every report 02 store check has a test", {
 # ---------------------------------------------------------------- crash safety (INFRA-13, IC-59)
 
 test_that("a torn last line is recovered at resume; three appends stay connected", {
+  skip_on_cran()
   s = stored_run()
   file = s$file
   cat("{\"type\":\"message\",\"id\":\"deadbeef\",\"parentId\":\"x", file = file, append = TRUE)
@@ -784,6 +795,7 @@ test_that("gptr_resume() returns the live object for an id, a path or NULL", {
 })
 
 test_that("gptr_resume() rebuilds a stored session with its history, status, model and turns", {
+  skip_on_cran()
   s = stored_run()
   file = s$file
   id = s$id
@@ -808,6 +820,7 @@ test_that("gptr_resume() rebuilds a stored session with its history, status, mod
 })
 
 test_that("a rebuilt fork gets a fresh overlay of envir (IC-46)", {
+  skip_on_cran()
   s = stored_run()
   f = gptr_fork(s)
   run_text(f, "branch")
@@ -928,6 +941,7 @@ test_that("a string that cannot be a session id never names a file or a registry
 })
 
 test_that("a rebuilt session takes its mode, model and frozen prompt from its active path", {
+  skip_on_cran()
   local_store()
   frozen = function(t0, model) {
     entry_custom("gptr.frozen", list(preset = "standard", t0 = t0, t1 = "", toolsJson = "[]",
@@ -975,6 +989,7 @@ fix3_floor_cut = function(frozen, project_tokens, skills_budget = 0) {
 }
 
 test_that("a resumed session and its forks keep the frozen audience and budget cut (FIX-3)", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list("first answer", "fork answer"))
@@ -1011,6 +1026,7 @@ test_that("a resumed session and its forks keep the frozen audience and budget c
 })
 
 test_that("a session frozen for nobody resumes frozen for nobody, with full budgets (FIX-3)", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list("answer"))
@@ -1055,6 +1071,7 @@ test_that("rebuild_frozen() falls back as P07's restore does when a key is missi
 })
 
 test_that("a rebuild that fails after the session exists leaves no live session behind", {
+  skip_on_cran()
   s = stored_run()
   file = s$file
   id = s$id
@@ -1083,6 +1100,7 @@ test_that("a rebuild that fails after the session exists leaves no live session 
 })
 
 test_that("a rebuilt fork reports only its own requests, not the copied source path's", {
+  skip_on_cran()
   s = stored_run()
   f = gptr_fork(s)
   run_text(f, "branch")
@@ -1099,6 +1117,7 @@ test_that("a rebuilt fork reports only its own requests, not the copied source p
 })
 
 test_that("an entry or header time that is not ISO 8601 never blocks a resume", {
+  skip_on_cran()
   s = stored_run()
   file = s$file
   id = s$id

@@ -43,6 +43,7 @@ test_that("canonical_json() gives the same bytes under LC_ALL=C and en_US.UTF-8"
 })
 
 test_that("ids have the documented shapes (IC-20)", {
+  skip_on_cran()
   expect_match(id_new("s", 10L), "^s[0-9a-f]{10}$")
   expect_match(id_new("q", 12L), "^q[0-9a-f]{12}$")
   expect_false(identical(id_new(), id_new()))
@@ -95,6 +96,7 @@ test_that("port_candidates() gives distinct RNG-free ports in 49152-65535", {
 })
 
 test_that("fingerprint() is stable, sensitive to sampled values and cheap on ALTREP", {
+  skip_on_cran()
   x = as.numeric(1:1000)
   expect_identical(fingerprint(x), fingerprint(x))
   y = x

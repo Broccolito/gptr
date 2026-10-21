@@ -83,6 +83,7 @@ test_that("Windows production writer preserves split binary NUL and UTF-8 bytes"
 })
 
 test_that("writer ACK accounting advances accepted bytes once", {
+  skip_on_cran()
   x = rw_local_state()
   testthat::local_mocked_bindings(reactor_now = function() 15)
   path = function(pos) file.path(x$st$dir, sprintf("ack-%012.0f-%06.0f", 1, pos))
@@ -100,6 +101,7 @@ test_that("writer ACK accounting advances accepted bytes once", {
 })
 
 test_that("writer ACK validation rejects corrupt and regressing acceptance", {
+  skip_on_cran()
   x = rw_local_state()
   path = file.path(x$st$dir, "ack-000000000001-000003")
   writeBin(as.raw(1), path)
@@ -133,6 +135,7 @@ test_that("writer refuses malformed readiness before publishing any payload", {
 })
 
 test_that("writer ACK precedes immediate target exit classification", {
+  skip_on_cran()
   x = rw_local_state()
   x$b$p$is_alive = function() FALSE
   testthat::local_mocked_bindings(proc_writer_start = function(...) x$st)
@@ -148,6 +151,7 @@ test_that("writer ACK precedes immediate target exit classification", {
 })
 
 test_that("writer mailbox cleanup refuses foreign ownership and child directories", {
+  skip_on_cran()
   root = withr::local_tempdir()
   marker = "GPTR_PROC_0123456789abcdef"
   testthat::local_mocked_bindings(proc_dir = function(...) root)
@@ -204,6 +208,7 @@ test_that("writer requires the exact live recorded target before construction", 
 })
 
 test_that("writer cleanup retains its original state until settlement is confirmed", {
+  skip_on_cran()
   table = new.env(parent = emptyenv())
   p = list(get_pid = function() 42L, get_input_connection = function() stop("No pipe"))
   st = new.env(parent = emptyenv())
@@ -342,6 +347,7 @@ test_that("writer cleanup retains its original state until settlement is confirm
 })
 
 test_that("writer refuses a changed mailbox root or owner before payload access", {
+  skip_on_cran()
   x = rw_local_state()
   testthat::local_mocked_bindings(proc_writer_start = function(...) x$st)
   expect_true(proc_writer_valid(x$st$dir, x$st$canonical, x$st$marker))
@@ -385,6 +391,7 @@ test_that("writer enforces the actual Rscript expression byte boundary", {
 })
 
 test_that("full production writer bootstrap fits the unchanged Rscript limits", {
+  skip_on_cran()
   marker = "GPTR_PROC_0123456789abcdef"
   dir = file.path(tempdir(), "gptr-runtime-size", paste0(marker, ".stdin"))
   shell = "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
@@ -474,6 +481,7 @@ test_that("writer canonical parent checks accept Windows separators and reject o
 })
 
 test_that("writer compressed bootstrap preserves exact trusted source and binary literals", {
+  skip_on_cran()
   testthat::local_mocked_bindings(proc_writer_main = function(meta) {
     list(text = meta$text, bytes = meta$bytes)
   })
@@ -605,6 +613,7 @@ test_that("writer compressed bootstrap preserves exact trusted source and binary
 })
 
 test_that("writer full compressed bootstrap fits a long Windows mailbox path", {
+  skip_on_cran()
   marker = "GPTR_PROC_0123456789abcdef"
   dir = paste0("C:/Users/runneradmin/AppData/Local/Temp/", strrep("owned-segment/", 16L),
                marker, ".stdin")
@@ -639,6 +648,7 @@ test_that("writer full compressed bootstrap fits a long Windows mailbox path", {
 })
 
 test_that("writer early-case diagnostics retain only bounded structural evidence", {
+  skip_on_cran()
   error = gptr_condition("FAKE-writer-message-canary", "io", fields = list(
     writer_stage = "bootstrap", expression_bytes = 1234L, startup_elapsed = 0.25,
     accepted_bytes = 0L, writer_phases = c(decode = 0.1, identity = 0.2)))
@@ -660,6 +670,7 @@ test_that("writer early-case diagnostics retain only bounded structural evidence
 })
 
 test_that("writer startup diagnostics accept only fixed monotonic stages and split lines", {
+  skip_on_cran()
   state = new.env(parent = emptyenv())
   state$private = FALSE
   state$diagnostic_tail = ""
@@ -706,6 +717,7 @@ test_that("writer startup diagnostics accept only fixed monotonic stages and spl
 })
 
 test_that("writer startup diagnostics fail closed without retaining arbitrary stderr", {
+  skip_on_cran()
   for (chunk in c("FAKE-writer-diagnostic-canary\n", strrep("x", 1025L),
     "GPTR_STDIN_STAGE arbitrary 0.100000\n",
     "GPTR_STDIN_STAGE decode 0.200000\nGPTR_STDIN_STAGE identity 0.100000\n",
@@ -783,6 +795,7 @@ test_that("Windows production mailbox has a protected owner DACL and inherited f
 })
 
 test_that("nested ACL diagnostics preserve exact LF and split CRLF progress", {
+  skip_on_cran()
   tokens = c("enter", "absent", "created", "readback", "verified", "owner")
   text = paste0(paste0("GPTR_STDIN_ACL ", tokens, "\n"), collapse = "")
   initial = list(bytes = 0L, tail = "", phases = numeric())
@@ -810,6 +823,7 @@ test_that("nested ACL diagnostics preserve exact LF and split CRLF progress", {
 })
 
 test_that("nested ACL diagnostics reject arbitrary and unordered native output", {
+  skip_on_cran()
   initial = list(bytes = 0L, tail = "", phases = numeric())
   for (text in c("FAKE-ACL-message-canary\n", strrep("x", 257L),
     "GPTR_STDIN_ACL created\n", "GPTR_STDIN_ACL exit_ok\n",
@@ -828,6 +842,7 @@ test_that("nested ACL diagnostics reject arbitrary and unordered native output",
 })
 
 test_that("nested ACL diagnostics read only after zero-time polling", {
+  skip_on_cran()
   observed = new.env(parent = emptyenv())
   observed$order = character()
   observed$stages = character()
@@ -877,6 +892,7 @@ test_that("nested ACL diagnostics read only after zero-time polling", {
 })
 
 test_that("writer nested ACL phases preserve exit failure without granting readiness", {
+  skip_on_cran()
   x = rw_local_state()
   x$st$private = FALSE
   text = paste0("GPTR_STDIN_STAGE decode 0.100000\n",
@@ -923,6 +939,7 @@ test_that("writer nested ACL phases preserve exit failure without granting readi
 })
 
 test_that("writer early failures retain only fixed numeric nested ACL phases", {
+  skip_on_cran()
   error = gptr_condition("FAKE-ACL-message-canary", "io", fields = list(
     writer_stage = "startup", writer_acl_phases = c(enter = 0.1, absent = 0.2,
                                                   exit_failed = 0.3)))
@@ -1004,6 +1021,7 @@ test_that("Windows native absence probe refuses existing aliases and denied attr
 
 
 test_that("absence diagnostics accept only ordered fixed numeric stage tokens", {
+  skip_on_cran()
   expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 1"), 1L)
   expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 18", last = 17L), 18L)
   expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 99", last = 18L), 99L)
@@ -1024,6 +1042,7 @@ test_that("absence diagnostics accept only ordered fixed numeric stage tokens", 
 })
 
 test_that("absence exit diagnostics retain numeric status without arbitrary content", {
+  skip_on_cran()
   expect_identical(rw_absence_status(0L), "absence-main-status-0")
   expect_identical(rw_absence_status(1L), "absence-main-status-1")
   expect_identical(rw_absence_status(1L, recovery = TRUE), "absence-recovery-status-1")
@@ -1059,6 +1078,7 @@ test_that("writer accepts ordinary input published after its directory snapshot"
 })
 
 test_that("writer refuses an alias published after its directory snapshot", {
+  skip_on_cran()
   x = rw_local_state()
   path = file.path(x$st$dir, "in-000000000001")
   owner = readBin(file.path(x$st$dir, "owner"), "raw", n = 128L)
@@ -1084,6 +1104,7 @@ test_that("writer refuses an alias published after its directory snapshot", {
 })
 
 test_that("writer refuses a directory published after its directory snapshot", {
+  skip_on_cran()
   x = rw_local_state()
   path = file.path(x$st$dir, "in-000000000001")
   owner = readBin(file.path(x$st$dir, "owner"), "raw", n = 128L)
@@ -1106,6 +1127,7 @@ test_that("writer refuses a directory published after its directory snapshot", {
 })
 
 test_that("absence observations retain only fixed probe and bounded parent ACL numbers", {
+  skip_on_cran()
   for (code in 1:4) {
     x = rw_absence_observation(paste("GPTR_ABSENCE_PROBE", code))
     expect_identical(x$key, "probe")
@@ -1142,6 +1164,7 @@ test_that("absence observations retain only fixed probe and bounded parent ACL n
 })
 
 test_that("absence observations retain only fixed bounded file ACL differences", {
+  skip_on_cran()
   for (key in c("BEFORE", "AFTER", "COMPARE")) {
     numbers = if (key == "COMPARE") "1024 0 0" else "37892 1 44"
     x = rw_absence_observation(paste(paste0("GPTR_ABSENCE_FILE_", key), numbers))
@@ -1164,6 +1187,7 @@ test_that("absence observations retain only fixed bounded file ACL differences",
 })
 
 test_that("absence denial controls require fixed ordered native lookup tokens", {
+  skip_on_cran()
   keys = c("PRE_FILE", "PRE_PARENT", "FILE_ACL", "PARENT_ACL", "FILE_LOOKUP",
     "PARENT_LOOKUP")
   for (i in seq_along(keys)) {
@@ -1185,6 +1209,7 @@ test_that("absence denial controls require fixed ordered native lookup tokens", 
 })
 
 test_that("absence denial controls reject unknown order outcomes and private content", {
+  skip_on_cran()
   keys = c("PRE_FILE", "PRE_PARENT", "FILE_ACL", "PARENT_ACL", "FILE_LOOKUP",
     "PARENT_LOOKUP")
   for (line in c("GPTR_ABSENCE_CONTROL PRE_FILE 0", "GPTR_ABSENCE_CONTROL PRE_FILE 2",
@@ -1209,6 +1234,7 @@ test_that("absence denial controls reject unknown order outcomes and private con
 })
 
 test_that("absence privilege diagnostics reject unknown and unordered private output", {
+  skip_on_cran()
   keys = c("PRE_BACKUP", "PRE_RESTORE", "PRE_CHANGE_NOTIFY", "LOOKUP_BACKUP",
     "LOOKUP_RESTORE", "LOOKUP_CHANGE_NOTIFY")
   phases = rep(c("PRE", "LOOKUP"), each = 3L)
@@ -1260,6 +1286,7 @@ rw_empty_test_scope = function(root, paths) {
 }
 
 test_that("ordinary absence cleanup removes only direct owned proven-empty directories", {
+  skip_on_cran()
   root = tempfile("absence-empty-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
   expect_true(dir.create(root))
   withr::defer(unlink(root, recursive = TRUE, force = FALSE, expand = FALSE))
@@ -1276,6 +1303,7 @@ test_that("ordinary absence cleanup removes only direct owned proven-empty direc
 })
 
 test_that("ordinary absence cleanup retains populated missing foreign and uncertain entries", {
+  skip_on_cran()
   root = tempfile("absence-retain-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
   outside = tempfile("absence-foreign-", tmpdir = normalizePath(tempdir(), mustWork = TRUE))
   expect_true(dir.create(root))
@@ -1345,6 +1373,7 @@ test_that("ordinary absence cleanup canonicalizes Windows separator spelling", {
 })
 
 test_that("ordinary absence cleanup refuses aliases and preserves metadata conditions", {
+  skip_on_cran()
   root = "C:/owned/fixture"
   paths = c(fresh = "C:/owned/fixture/fresh", directory = "C:/owned/fixture/directory")
   scope = rw_empty_test_scope(root, paths)

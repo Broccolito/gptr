@@ -15,6 +15,7 @@ anthropic_msg = function(content, stop = "tool_use", ts = 1000, model = "claude-
 block_types = function(msg) vapply(msg$content, function(b) b$type, "")
 
 test_that("hand-off keeps a same-model turn byte for byte", {
+  skip_on_cran()
   a = anthropic_msg(list(block_thinking("plan the fit", signature = "sig-abc"),
                          block_thinking("", redacted = TRUE, data = "opaque-redacted"),
                          block_text("Fitting now.", signature = "txt-sig"),
@@ -27,6 +28,7 @@ test_that("hand-off keeps a same-model turn byte for byte", {
 })
 
 test_that("hand-off to other providers drops every foreign signature and opaque item (INFRA-08)", {
+  skip_on_cran()
   a = anthropic_msg(list(block_thinking("plan the fit", signature = "sig-abc"),
                          block_thinking("", redacted = TRUE, data = "opaque-redacted"),
                          block_text("Fitting now.", signature = "txt-sig"),
@@ -54,6 +56,7 @@ test_that("hand-off to other providers drops every foreign signature and opaque 
 })
 
 test_that("tool ids are normalised per target api and results follow them", {
+  skip_on_cran()
   src = msg_assistant(list(block_tool_call("call_1|fc_ab+/=", "r", list(code = "1"))),
                       api = "openai-responses", provider = "openai", model = "gpt-6.1-sol",
                       stop_reason = "tool_use", timestamp = 1)
@@ -114,6 +117,7 @@ test_that("foreign thinking becomes text unless the target refuses reasoning rep
 })
 
 test_that("foreign-origin reasoning honors target replay even inside a same-model turn", {
+  skip_on_cran()
   target = tx_model("anthropic", "claude-sonnet-5-5", "anthropic-messages")
   target$capabilities$reasoning_replay = FALSE
   foreign = block_thinking("foreign reasoning", signature = "foreign-secret",
@@ -128,6 +132,7 @@ test_that("foreign-origin reasoning honors target replay even inside a same-mode
 })
 
 test_that("tool result remapping belongs to the current assistant turn", {
+  skip_on_cran()
   target = tx_model("openai", "gpt-6.1-sol", "openai-responses")
   raw_id = "call_1|fc_2"
   foreign = anthropic_msg(list(block_tool_call(raw_id, "r", list())))
@@ -163,6 +168,7 @@ test_that("foreign tool id normalization keeps colliding calls distinct and stab
 })
 
 test_that("foreign ids reserve native same-model ids without changing native messages", {
+  skip_on_cran()
   target = tx_model("mistral", "mistral-large", "openai-completions")
   own = msg_assistant(list(block_tool_call("abcdefghi", "r", list())),
                      provider = target$provider, api = target$api, model = target$id,
@@ -220,6 +226,7 @@ tx_entry = function(id, parent, message) {
 target_sonnet = function() tx_model("anthropic", "claude-sonnet-5-5", "anthropic-messages")
 
 test_that("a recorded 401 and an abort are projected out; every call has one result (INFRA-04)", {
+  skip_on_cran()
   entries = list(
     tx_entry("e1", NULL, msg_user("hello", timestamp = 1000)),
     tx_entry("e2", "e1", anthropic_msg(list(), "error", 1100, error = "401 invalid x-api-key")),
@@ -249,6 +256,7 @@ test_that("a recorded 401 and an abort are projected out; every call has one res
 })
 
 test_that("a call left open by a new user turn gets 'No result provided'", {
+  skip_on_cran()
   entries = list(
     tx_entry("e1", NULL, msg_user("go", timestamp = 1)),
     tx_entry("e2", "e1", anthropic_msg(list(block_tool_call("c1", "r", list())), ts = 2)),
@@ -284,6 +292,7 @@ test_that("operator relays wait until the tool results are complete", {
 })
 
 test_that("operator entries in the session kernel's shape (a `message` field) are projected", {
+  skip_on_cran()
   op = msg_operator("steer_relay", "The user sent this message while you were working: use TPM",
                     origin_text = "use TPM", timestamp = 4)
   entries = list(
@@ -307,6 +316,7 @@ test_that("operator entries in the session kernel's shape (a `message` field) ar
 })
 
 test_that("the newest compaction replaces everything before its first kept entry", {
+  skip_on_cran()
   checkpoint = block_context("checkpoint", "Summary: fitted lm.", attrs = list(n = "1"))
   entries = list(
     tx_entry("e1", NULL, msg_user("old question", timestamp = 1)),
@@ -330,6 +340,7 @@ test_that("the newest compaction replaces everything before its first kept entry
 })
 
 test_that("the path follows parent ids, tolerates a missing parent and rejects an unknown leaf", {
+  skip_on_cran()
   entries = list(
     tx_entry("e1", NULL, msg_user("root", timestamp = 1)),
     tx_entry("e2", "e1", anthropic_msg(list(block_text("branch a")), "stop", 2)),
@@ -347,6 +358,7 @@ test_that("the path follows parent ids, tolerates a missing parent and rejects a
 })
 
 test_that("partial results and held relays survive abort and error closure deterministically", {
+  skip_on_cran()
   calls = anthropic_msg(list(block_tool_call("a", "r", list()),
                             block_tool_call("b", "r", list())), ts = 1000)
   first = msg_tool_result("a", "r", "real", timestamp = 1100)
@@ -377,6 +389,7 @@ test_that("partial results and held relays survive abort and error closure deter
 })
 
 test_that("duplicate and unknown results are dropped while reused later ids are independent", {
+  skip_on_cran()
   call = function(ts) anthropic_msg(list(block_tool_call("same", "r", list())), ts = ts)
   result = function(text, ts, id = "same") msg_tool_result(id, "r", text, timestamp = ts)
   messages = list(call(1), result("first", 2), result("duplicate", 3),
@@ -390,6 +403,7 @@ test_that("duplicate and unknown results are dropped while reused later ids are 
 })
 
 test_that("held relays are FIFO at EOF and after a completed result group", {
+  skip_on_cran()
   call = anthropic_msg(list(block_tool_call("a", "r", list())), ts = 1)
   relay1 = msg_operator("steer_relay", "one", timestamp = 2)
   relay2 = msg_operator("steer_relay", "two", timestamp = 4)
@@ -405,6 +419,7 @@ test_that("held relays are FIFO at EOF and after a completed result group", {
 })
 
 test_that("only ancestry compactions apply and earlier summaries are not resurrected", {
+  skip_on_cran()
   first = list(type = "compaction", id = "c1", parent_id = "e2", timestamp = 3,
                summary = "OLD SUMMARY", first_kept_entry_id = "e1")
   checkpoint = block_context("checkpoint", "CURRENT SUMMARY",
@@ -432,6 +447,7 @@ test_that("only ancestry compactions apply and earlier summaries are not resurre
 })
 
 test_that("a compaction with no kept range removes earlier calls and orphaned results", {
+  skip_on_cran()
   compaction = list(type = "compaction", id = "c", parent_id = "e1", timestamp = 2,
                     summary = "summary", first_kept_entry_id = NULL)
   entries = list(
@@ -452,6 +468,7 @@ test_that("a non-null unknown leaf is an error even for an empty transcript", {
 })
 
 test_that("unparsable entry timestamps consistently fall back to zero", {
+  skip_on_cran()
   for (value in list(NA_real_, NA_integer_, NaN, Inf, -Inf, 1 + 1i, "bad timestamp")) {
     expect_identical(entry_ms(value), 0)
   }

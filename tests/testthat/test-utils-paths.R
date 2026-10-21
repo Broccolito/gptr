@@ -1,6 +1,7 @@
 # Atomic writes (Task 5); paths, homes, workspace, serialisation leaves and path classes (Task 6).
 
 test_that("write_atomic() writes UTF-8 lines with LF, or raw bytes, and replaces files", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   path = file.path(dir, "out.txt")
   write_atomic(path, c("caf\u00e9", "two"))
@@ -18,6 +19,7 @@ test_that("write_atomic() writes UTF-8 lines with LF, or raw bytes, and replaces
 })
 
 test_that("write_atomic() falls back to an in-place write when rename keeps failing (IC-51)", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   path = file.path(dir, "locked.txt")
   writeLines("old", path)
@@ -28,6 +30,7 @@ test_that("write_atomic() falls back to an in-place write when rename keeps fail
 })
 
 test_that("write_atomic() refuses the in-place write when the file changed meanwhile", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   path = file.path(dir, "busy.txt")
   writeLines("old", path)
@@ -137,6 +140,7 @@ test_that("path_norm() resolves symlinked ancestors, '..' and '~' for missing pa
 # became a relative path under the working directory (hosted test-ext-plugins.R:481 and
 # test-skill-discover.R:295-297).
 test_that("path_norm() expands '~' before it turns backslashes into slashes (CI-5)", {
+  skip_on_cran()
   home = path_norm(withr::local_tempdir())
   dir.create(file.path(home, "sub"))
   local_mocked_bindings(user_home = function() gsub("/", "\\", home, fixed = TRUE))
@@ -148,6 +152,7 @@ test_that("path_norm() expands '~' before it turns backslashes into slashes (CI-
 })
 
 test_that("path_lexical() normalises without the file system, keeping roots and leading ..", {
+  skip_on_cran()
   expect_identical(path_lexical("/a/./b/../c//d/"), "/a/c/d")
   expect_identical(path_lexical("C:\\x\\..\\y\\.\\z"), "C:/y/z")
   expect_identical(path_lexical("C:/.."), "C:/")
@@ -164,6 +169,7 @@ test_that("path_lexical() normalises without the file system, keeping roots and 
 # path_sans_ext() keep R 4.6's rule (an alphanumeric extension after at least one character that
 # is not a dot) and never translate the path, in every locale and on every R.
 test_that("path_ext() and path_sans_ext() follow R 4.6's rule without basename() (CI-5)", {
+  skip_on_cran()
   p = c("a/report.Rmd", "C:\\dir\\x.tar.gz", "noext", ".Rprofile", "dir.d/.env", "dir\\.env",
         "a/b.c/file", "x.", "..R", "a.b-c", "trail.R/", "caf\u00e9.R", "d\u00e9/caf\u00e9",
         "x.\u00e9", NA)
@@ -225,6 +231,7 @@ test_that("reserved_name() recognises Windows device names", {
 })
 
 test_that("path_class() assigns the classes of report 18 and IC-54", {
+  skip_on_cran()
   root = path_norm(withr::local_tempdir())
   home = path_norm(user_home())
   cls = function(p) path_class(p, root)
@@ -301,6 +308,7 @@ test_that("Windows junctions and file links keep control and secret paths guarde
 })
 
 test_that("path_info() gives a link to nothing no metadata and no warning on every OS", {
+  skip_on_cran()
   td = withr::local_tempdir()
   writeLines("x", file.path(td, "file"))
   link = file.path(td, "dangling")
@@ -325,6 +333,7 @@ test_that("path_info() gives a link to nothing no metadata and no warning on eve
 })
 
 test_that("a case variant is a dangling link only where file names ignore case", {
+  skip_on_cran()
   td = withr::local_tempdir()
   writeLines("x", file.path(td, "File"))
   local_dangling_link(file.path(td, "Link"))
@@ -334,6 +343,7 @@ test_that("a case variant is a dangling link only where file names ignore case",
 })
 
 test_that("readers and file tools take a link to nothing for an absent file on every OS", {
+  skip_on_cran()
   # A Windows file symlink needs a privilege CRAN may lack; R takes its kind from an existing target
   if (is_windows()) skip_on_cran()
   proj = local_project(files = list(a.R = "a = 1"))

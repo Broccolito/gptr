@@ -1,5 +1,7 @@
 # Clone the actual launcher and readiness check; replace only executable/process/clock leaves.
 artifact_launch_fixture = function() {
+  # On Linux the launch needs a short tempdir() for Chromium's socket; CRAN's may be longer.
+  skip_on_cran()
   namespace = environment(artifact_browser)
   scope = new.env(parent = namespace)
   scope$artifact_state = new.env(parent = emptyenv())

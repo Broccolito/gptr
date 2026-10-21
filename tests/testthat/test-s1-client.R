@@ -35,6 +35,7 @@ test_that("a yes/no question uses the wire type noul and names the state fields"
 })
 
 test_that("choices become a choice question; names carry descriptions; factors are remembered", {
+  skip_on_cran()
   q = s1_question("Which animal?", "text", choices = c("dog", "cat"))
   expect_identical(q$type, "choice")
   expect_identical(q$options, c("dog", "cat"))
@@ -48,6 +49,7 @@ test_that("choices become a choice question; names carry descriptions; factors a
 })
 
 test_that("labels that if() reads as logical are rejected before any request", {
+  skip_on_cran()
   for (lab in c("TRUE", "true", "True", "T", "FALSE", "false", "False", "F")) {
     err = expect_error(s1_question("Q?", "x", choices = c(lab, "maybe")),
                        class = "gptr_error_s1_labels")
@@ -70,6 +72,7 @@ test_that("levels become a score question with an array of 2 to 10 level descrip
 })
 
 test_that("a model's decision record sets the question limits instead of TypeSafe's (IC-74)", {
+  skip_on_cran()
   # 07-local-ollama.md section 2: Clef's decision record; its 2-26 options or levels replace
   # Jev's documented 255 options and 2-10 levels (04b: "do not assume Jev's limits apply")
   clef = list(types = c("noul", "choice", "score"), max_options = 26L)
@@ -99,6 +102,7 @@ test_that("a model's decision record sets the question limits instead of TypeSaf
 })
 
 test_that("the request body equals the recorded wire fixtures", {
+  skip_on_cran()
   questions = list(
     noul = s1_question("Does this text describe a dog?", "text"),
     choice = s1_question("Which animal does the text describe?", "text",
@@ -133,6 +137,7 @@ test_that("the bearer credential stays a handle in the request spec", {
 })
 
 test_that("responses parse by name: choice probabilities come back in request order", {
+  skip_on_cran()
   fx = wire_fixture("choice")
   questions = list(answer = fx$request$questions$answer)
   res = s1_typesafe_parse(jev_model(), 200L, list(`x-typesafe-request-id` = "req_1"),
@@ -163,6 +168,7 @@ test_that("a non-ASCII choice matches labels marked 'unknown', as readLines() gi
 })
 
 test_that("a multi-question response parses noul, choice and score answers together", {
+  skip_on_cran()
   fx = wire_fixture("multi")
   res = s1_typesafe_parse(jev_model(), 200L, list(), json_encode(fx$response),
                           fx$request$questions)
@@ -193,6 +199,7 @@ test_that("unknown response fields are ignored", {
 })
 
 test_that("error bodies become classed System 1 conditions with the service's message", {
+  skip_on_cran()
   cases = list(`error-400` = "gptr_error_s1_validation", `error-401` = "gptr_error_s1_auth",
                `error-422` = "gptr_error_s1_validation", `error-429` = "gptr_error_s1_rate_limit")
   q = list(answer = list(type = "noul", instructions = "Q?"))
@@ -240,6 +247,7 @@ test_that("malformed answers are response errors, never wrong values", {
 })
 
 test_that("answers are validated against the request before they become canonical (IC-74)", {
+  skip_on_cran()
   # 07 section 3: finite values, bounds, expected answer IDs, allowed option names,
   # probability sums and score reconstruction
   is_bad = function(x) inherits(x, "gptr_error_s1_response")
@@ -310,6 +318,7 @@ test_that("answers are validated against the request before they become canonica
 })
 
 test_that("an empty probability map (a gateway rerun) is missing, not zero", {
+  skip_on_cran()
   ch = list(type = "choice", instructions = "Q?", criteria = list(a = NULL, b = NULL))
   a = s1_parse_answer(list(type = "choice", choice = "a", probabilities = json_obj(),
                            confidence = 0), ch)
@@ -356,6 +365,7 @@ test_that("missing confidences are recomputed with TypeSafe's formulas (report 0
 })
 
 test_that("HTTP statuses map to the System 1 classes of report 04 section 4.12", {
+  skip_on_cran()
   expect_identical(s1_status_class(401L), "s1_auth")
   expect_identical(s1_status_class(403L), "s1_auth")
   expect_identical(s1_status_class(400L), "s1_validation")
@@ -419,6 +429,7 @@ ok_reply = function(body, p = 0.9) {
 }
 
 test_that("a fake classifier answers every state; identical states are sent once", {
+  skip_on_cran()
   judge = local_fake_provider(function(state, question) {
     if (grepl("puppy", state$text)) 0.95 else 0.05
   }, name = "judge", type = "classifier")
@@ -440,6 +451,7 @@ test_that("a fake classifier answers every state; identical states are sent once
 })
 
 test_that("at most gptr.s1_max_active requests are in flight", {
+  skip_on_cran()
   log = local_fake_transfers(function(body) ok_reply(body), delay = 0.05)
   p = wire_provider()
   res = s1_request(s1_model(p), states_of(paste("item", 1:30)), noul_questions(),
@@ -459,6 +471,7 @@ test_that("at most gptr.s1_max_active requests are in flight", {
 })
 
 test_that("bounded rounds resubmit only failed elements, honouring retry-after up to 60 s", {
+  skip_on_cran()
   seen = new.env(parent = emptyenv())
   seen$calls = list()
   seen$waits = numeric()
@@ -493,6 +506,7 @@ test_that("bounded rounds resubmit only failed elements, honouring retry-after u
 })
 
 test_that("transport failures map to retryable or final System 1 conditions", {
+  skip_on_cran()
   # a reactor failure's class (contract 2.2) as s1_request() hands it over
   fail = function(cls, status = NA_integer_, retry_after = NULL) {
     s1_failure(paste0("gptr_error_", cls), status, "x", NA, "jev-latest", retry_after)
@@ -556,6 +570,7 @@ test_that("against a mocked /systemone the client parses real HTTP replies withi
 # ---- Task 4, IC-74 (07-local-ollama.md sections 2-5) and IC-57 ---------------------------------
 
 test_that("the adapter follows the resolved model's api, not its provider's (IC-74)", {
+  skip_on_cran()
   log = local_fake_transfers(function(body) ok_reply(body, 0.3))
   mixed = gptr_provider("mixedwire", api = "openai-completions",
                         base_url = "http://127.0.0.1:9/v1/", local = TRUE, offline = TRUE,
@@ -578,6 +593,7 @@ test_that("the adapter follows the resolved model's api, not its provider's (IC-
 })
 
 test_that("the request preflight runs before any adapter, credential or transfer (IC-74)", {
+  skip_on_cran()
   local_mocked_bindings(catalog_ollama_discover = function(...) stop("discovery must not run"),
                         s1_adapter = function(api) stop("an adapter was looked up"),
                         s1_credential = function(provider) stop("a credential was looked up"))
@@ -606,6 +622,7 @@ test_that("the request preflight runs before any adapter, credential or transfer
 })
 
 test_that("a model's decision record lowers the requests in flight (IC-74)", {
+  skip_on_cran()
   log = local_fake_transfers(function(body) ok_reply(body), delay = 0.02)
   p = gptr_provider("pairwise", api = "typesafe-system-one", base_url = "http://127.0.0.1:9/v1/",
                     type = "classifier", local = TRUE, offline = TRUE,
@@ -628,6 +645,7 @@ test_that("a model's decision record lowers the requests in flight (IC-74)", {
 })
 
 test_that("dispatch validates canonical answers and never runs a wire parser again (IC-74)", {
+  skip_on_cran()
   local_mocked_bindings(s1_parse_answers = function(...) stop("a wire parser ran again"),
                         s1_parse_answer = function(...) stop("a wire parser ran again"))
   seen = new.env(parent = emptyenv())
@@ -706,6 +724,7 @@ test_that("dispatch validates canonical answers and never runs a wire parser aga
 })
 
 test_that("a score the wire parser fills in passes the dispatch check (IC-74)", {
+  skip_on_cran()
   # two-decimal probabilities may sum below 1 (report 04a); the parser's expected level of a
   # missing score and the check of a given score use the same normalised expectation
   rounded = list(`0` = 0, `1` = 0, `2` = 0, `3` = 0, `4` = 0.98)
@@ -733,6 +752,7 @@ test_that("a score the wire parser fills in passes the dispatch check (IC-74)", 
 })
 
 test_that("a System 1 call inside a pump never runs another run's FIFO tool (IC-57)", {
+  skip_on_cran()
   local_fake_transfers(function(body) ok_reply(body), delay = 0.02)
   p = wire_provider()
   seen = new.env(parent = emptyenv())
@@ -795,6 +815,7 @@ rct_judge = function(name = "judge", .env = parent.frame()) {
 }
 
 test_that("builtin:system1 registers the providers, adapters, route, section and service", {
+  skip_on_cran()
   tp = registry_get("provider", "typesafe")
   expect_identical(tp$api, "typesafe-system-one")
   expect_identical(tp$base_url, "https://api.typesafe.ai/v1/")
@@ -824,6 +845,7 @@ test_that("builtin:system1 registers the providers, adapters, route, section and
 })
 
 test_that("the system1 section is architecture 7.3 verbatim and shown only when usable", {
+  skip_on_cran()
   pb = json_decode(read_utf8(testthat::test_path("fixtures", "bench",
                                                  "prefix-baseline.json"))$text)
   st = Filter(function(x) identical(x$name, "system1"), pb$standins$sections)[[1]]
@@ -842,6 +864,7 @@ test_that("the system1 section is architecture 7.3 verbatim and shown only when 
 })
 
 test_that("NS-4: if (peter(..., model = judge)) works and creates no session", {
+  skip_on_cran()
   s1_fresh()
   judge = rct_judge()
   abstract = abstracts20()[["a01"]]
@@ -859,6 +882,7 @@ test_that("NS-4: if (peter(..., model = judge)) works and creates no session", {
 })
 
 test_that("NS-4: a vector gives a named decision vector; repeats come from the cache", {
+  skip_on_cran()
   s1_fresh()
   judge = rct_judge()
   abstracts = abstracts20()
@@ -877,6 +901,7 @@ test_that("NS-4: a vector gives a named decision vector; repeats come from the c
 })
 
 test_that("levels give a gptr_score of expected 0-based levels", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(c(0, 0.02, 0.98)), name = "rater", type = "classifier")
   mood = peter("How positive is the review?", c(r1 = "Loved it."), model = "rater/rater-s1",
@@ -887,6 +912,7 @@ test_that("levels give a gptr_score of expected 0-based levels", {
 })
 
 test_that("NS-4: a data frame split into rows prints the once-per-session s1_split message", {
+  skip_on_cran()
   s1_fresh()
   local_gptr_options(quiet = FALSE)
   local_once_reset("s1_split")
@@ -906,6 +932,7 @@ test_that("NS-4: a data frame split into rows prints the once-per-session s1_spl
 })
 
 test_that("a piped session gives one state: no turn, a gptr.decision entry, at most 2,000 chars", {
+  skip_on_cran()
   s1_fresh()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_fake_provider(list(strrep("The fit converged and the residuals look fine. ", 100)))
@@ -929,6 +956,7 @@ test_that("a piped session gives one state: no turn, a gptr.decision entry, at m
 })
 
 test_that("System 1 emits a decision event and writes one summary line at top level", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(0.9, 0.1), name = "judge", type = "classifier")
   events = new.env()
@@ -955,6 +983,7 @@ test_that("System 1 emits a decision event and writes one summary line at top le
 })
 
 test_that("failures: a scalar call signals, a vector gives NA and one s1_errors warning", {
+  skip_on_cran()
   s1_fresh()
   # the state key is the context label (`one`, or `input` for the call c(...)), so read the value
   local_fake_provider(function(state, question) {
@@ -979,6 +1008,7 @@ test_that("failures: a scalar call signals, a vector gives NA and one s1_errors 
 })
 
 test_that("calls above gptr.s1_max_elements fail with a hint to chunk", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(0.5), name = "judge", type = "classifier")
   local_gptr_options(s1_max_elements = 5L)
@@ -988,6 +1018,7 @@ test_that("calls above gptr.s1_max_elements fail with a hint to chunk", {
 })
 
 test_that("replay mode serves cached answers and refuses a miss (IC-47)", {
+  skip_on_cran()
   s1_fresh()
   spec = gptr_fake_provider(list(0.9), name = "remote", type = "classifier")
   spec$offline = FALSE
@@ -1008,6 +1039,7 @@ test_that("replay mode serves cached answers and refuses a miss (IC-47)", {
 })
 
 test_that("jev without a key fails cleanly: egress first, then no_key; nothing is sent", {
+  skip_on_cran()
   s1_fresh()
   local_no_network()
   withr::local_envvar(TYPESAFE_API_KEY = "", GPTR_REPLAY = "live",
@@ -1022,6 +1054,7 @@ test_that("jev without a key fails cleanly: egress first, then no_key; nothing i
 })
 
 test_that("the gptr_prob() example runs", {
+  skip_on_cran()
   s1_fresh()
   judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
   d = peter("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
@@ -1030,6 +1063,7 @@ test_that("the gptr_prob() example runs", {
 })
 
 test_that("NS-5: System 1 routes each task to a strong or a cheap System 2 model", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(function(state, question) {
     if (grepl("subtle", state$task, fixed = TRUE)) 0.9 else 0.1

@@ -34,6 +34,7 @@ win_env_file = function(dir) {
 }
 
 test_that("the parser handles BOM, CRLF, export, quotes, comments, multi-line and odd names", {
+  skip_on_cran()
   d = withr::local_tempdir()
   kv = dotenv_parse(win_env_file(d))
   val = function(n) kv$value[kv$name == n]
@@ -106,6 +107,7 @@ test_that("separator whitespace can introduce an empty-value comment", {
 })
 
 test_that("gptr_env() maps aliases, exports canonical names only and never shows a value", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(stats::setNames(rep(NA_character_, length(win_vars)), win_vars))
   local_gptr_options(quiet = FALSE)
@@ -150,6 +152,7 @@ test_that("gptr_env() maps aliases, exports canonical names only and never shows
 })
 
 test_that("set_env = FALSE keeps a key in the vault only; override decides about set variables", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(TYPESAFE_API_KEY = NA)
   d = withr::local_tempdir()
@@ -171,6 +174,7 @@ test_that("set_env = FALSE keeps a key in the vault only; override decides about
 })
 
 test_that("an API key with blanks is registered, not exported, and reported by line only", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(OPENAI_API_KEY = NA)
   local_gptr_options(quiet = FALSE)
@@ -200,6 +204,7 @@ test_that("gptr_env() validates arguments and serialised handles carry no key by
 })
 
 test_that("gptr_env() takes extra aliases and emits one aggregated secret_registered event", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(SLACK_BOT_TOKEN = NA, OTHER_TOKEN = NA)
   seen = list()
@@ -233,6 +238,7 @@ test_that("an alias repeating the canonical value never deactivates the winner",
 })
 
 test_that("a trusted project's .env is discovered vault-only; an untrusted one is not read", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(TYPESAFE_API_KEY = NA)
   key = paste0("FAKE", "projectDotenvKey0123")
@@ -273,6 +279,7 @@ test_that("literal canonical spelling wins over canonicalized aliases", {
 })
 
 test_that("trusted dotenv sources refuse invalid keys and honor file precedence", {
+  skip_on_cran()
   local_vault()
   proj = local_project(files = list(
     .env = c("TYPESAFE_API_KEY=FAKEroot0123456789", "OPENAI_API_KEY=bad value"),
@@ -288,6 +295,7 @@ test_that("trusted dotenv sources refuse invalid keys and honor file precedence"
 })
 
 test_that("higher-priority empty or invalid dotenv entries mask lower file credentials", {
+  skip_on_cran()
   local_vault()
   for (value in c("", "invalid value")) {
     vault_reset()

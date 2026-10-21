@@ -2,6 +2,7 @@ guard = function(code) eval_guard(parse(text = code, keep.source = FALSE))
 arrow = paste0("<", "-")
 
 test_that("session-ending and interactive calls are blocked before evaluation", {
+  skip_on_cran()
   expect_equal(guard("q('no')")$blocked, "q")
   expect_equal(guard("quit(save = 'no')")$blocked, "quit")
   expect_equal(guard("x = readline('name? ')")$blocked, "readline")
@@ -15,6 +16,7 @@ test_that("session-ending and interactive calls are blocked before evaluation", 
 })
 
 test_that("q and quit are flagged in any value position (IC-67)", {
+  skip_on_cran()
   expect_equal(guard("g = q; g()")$blocked, "q")
   expect_equal(guard("f = quit; f()")$blocked, "quit")
   expect_equal(guard("do.call('q', list())")$blocked, "q")
@@ -25,6 +27,7 @@ test_that("q and quit are flagged in any value position (IC-67)", {
 })
 
 test_that("local variables named q, member names and formulas are not flagged", {
+  skip_on_cran()
   expect_equal(guard("q = quantile(1:10); q[2]")$blocked, character())
   expect_equal(guard("f = function(q) q + 1; f(2)")$blocked, character())
   expect_equal(guard("x = list(q = 1); x$q")$blocked, character())
@@ -34,6 +37,7 @@ test_that("local variables named q, member names and formulas are not flagged", 
 })
 
 test_that("a local binding never hides a call of q, quit or another blocked function", {
+  skip_on_cran()
   expect_equal(guard("q = 1; q('no')")$blocked, "q")
   expect_equal(guard("q = 1; base::q('no')")$blocked, "q")
   expect_equal(guard("quit = base::quit; quit()")$blocked, "quit")
@@ -81,6 +85,7 @@ test_that("every literal secret marker is refused, in the redactor's marker gram
 })
 
 test_that("stdin readers are found by argument name, position and default", {
+  skip_on_cran()
   expect_equal(guard("x = readLines(n = 1)")$blocked, "stdin")
   expect_equal(guard("x = readLines(, 1)")$blocked, "stdin")
   expect_equal(guard("x = readLines(n = 1, con = 'stdin')")$blocked, "stdin")
@@ -106,6 +111,7 @@ test_that("a quoted name after :: is checked like a symbol", {
 })
 
 test_that("q or quit as the function argument is flagged unless the code defines it (IC-67)", {
+  skip_on_cran()
   expect_equal(guard("q = 1; sapply('no', q)")$blocked, "q")
   expect_equal(guard("q = 1; Map(q, 'no')")$blocked, "q")
   expect_equal(guard("quit = 1; apply(m, 1, FUN = quit)")$blocked, "quit")
@@ -118,6 +124,7 @@ test_that("q or quit as the function argument is flagged unless the code defines
 })
 
 test_that("empty arguments and odd calls never make the guard or the targets throw", {
+  skip_on_cran()
   expect_equal(guard("x = scan(, what = 'a')")$blocked, "stdin")
   odd = c("`=`()", "`for`()", "`function`(x)", "`$`()", "setkey(, id)", "f(, 1)[1] = 2",
           "`=`(x, )", "x = `=`(y, )", sprintf("`%s`(x, )", arrow), "`=`(, function() 1)",

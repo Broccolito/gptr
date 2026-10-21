@@ -1066,8 +1066,13 @@ doc_blocks_ipynb = function(text) {
 #'   `oldest`, `path`. `prune` and `clear`: the number of files removed, invisibly.
 #' @export
 #' @examples
+#' proj = tempfile("proj")
+#' dir.create(file.path(proj, ".gptr"), recursive = TRUE)
+#' old = options(gptr.project_root = proj)
 #' gptr_cache()
 #' gptr_cache("prune", "tmp")
+#' options(old)
+#' unlink(proj, recursive = TRUE)
 gptr_cache = function(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tmp")) {
   action = check_choice(action, c("info", "prune", "clear"), "action")
   kind = check_choice(kind, c("all", "s1", "s2", "tmp"), "kind")

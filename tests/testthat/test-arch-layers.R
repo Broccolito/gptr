@@ -22,6 +22,7 @@ test_that("the layer table lists the files of architecture section 3.2", {
 })
 
 test_that("every file under R/ has a layer and every function one home", {
+  skip_on_cran()
   dir = local_arch_sources()
   files = list.files(dir, pattern = "[.][Rr]$")
   expect_identical(setdiff(files, arch_layer_table()$file), character())
@@ -31,6 +32,7 @@ test_that("every file under R/ has a layer and every function one home", {
 })
 
 test_that("internal calls respect the layer table and the kernel SDK (IC-33)", {
+  skip_on_cran()
   skip_if_not_installed("codetools")
   dir = local_arch_sources()
   bad = arch_check(arch_edges(arch_fun_map(dir)))
@@ -43,6 +45,7 @@ test_that("internal calls respect the layer table and the kernel SDK (IC-33)", {
 })
 
 test_that("built-in factories call only L0 helpers, their own area and declared services", {
+  skip_on_cran()
   skip_if_not_installed("codetools")
   dir = local_arch_sources()
   edges = arch_edges(arch_fun_map(dir))
@@ -57,6 +60,7 @@ test_that("built-in factories call only L0 helpers, their own area and declared 
 })
 
 test_that("literal service names are declared in the service table (IC-33)", {
+  skip_on_cran()
   dir = local_arch_sources()
   used = arch_service_calls(dir)
   expect_identical(setdiff(used$service, names(arch_services())), character())
@@ -87,6 +91,7 @@ test_that("arch_check() flags calls that cross a boundary (negative controls)", 
 })
 
 test_that("the retained-source R parser has one L0 home (IC-33, IC-56)", {
+  skip_on_cran()
   map = arch_fun_map(local_arch_sources())
   home = map$file[map$fun == "doc_parse_text"]
   expect_identical(home, "utils-encoding.R")

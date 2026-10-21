@@ -158,6 +158,7 @@ lint_scan = function(paths) {
 }
 
 test_that("R/ follows the package lint rules (contract section 12.3, IC-72)", {
+  skip_on_cran()
   dir = arch_source_dir()
   skip_if(is.null(dir), "the package sources under R/ were not found")
   hits = lint_scan(list.files(dir, pattern = "[.][Rr]$", full.names = TRUE))

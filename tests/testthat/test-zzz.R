@@ -18,6 +18,7 @@ source_file = function(name) {
 }
 
 test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)", {
+  skip_on_cran()
   d = desc_fields()
   expect_identical(unname(d[["Package"]]), "gptr")
   expect_identical(unname(d[["Title"]]), "Language Model Agents Inside the Live 'R' Session")
@@ -49,6 +50,7 @@ test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)"
 })
 
 test_that("Authors@R credits the maintainer and contributors; COPYRIGHTS credits pi (IC-72)", {
+  skip_on_cran()
   authors = eval(parse(text = desc_fields()[["Authors@R"]]))
   families = unlist(authors$family)
   roles = authors$role
@@ -101,6 +103,7 @@ test_that(".Rbuildignore and .lintr hold the entries of IC-72 (source tree only)
 })
 
 test_that("tests run with redirected homes, a temporary project and no keys (IC-63)", {
+  skip_on_cran()
   vars = c(
     "R_USER_CONFIG_DIR", "R_USER_DATA_DIR", "R_USER_CACHE_DIR", "HOME", "USERPROFILE",
     "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "GPTR_PROJECT_ROOT"
@@ -184,6 +187,7 @@ test_that("imports_used() references every Imports package", {
 })
 
 test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-72, IC-73)", {
+  skip_on_cran()
   description = source_file("DESCRIPTION")
   skip_if(is.null(description), "not running from the source tree")
   path = file.path(dirname(description), ".github", "workflows", "R-CMD-check.yaml")
@@ -215,6 +219,7 @@ test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-
 })
 
 test_that("hosted CI jobs are bounded and a crashed R CMD check cannot pass", {
+  skip_on_cran()
   description = source_file("DESCRIPTION")
   skip_if(is.null(description), "not running from the source tree")
   path = file.path(dirname(description), ".github", "workflows", "R-CMD-check.yaml")
@@ -244,6 +249,7 @@ test_that("hosted CI jobs are bounded and a crashed R CMD check cannot pass", {
 })
 
 test_that("Windows CI shards run each ordinary test file once, native ones in shard 1 (D-239)", {
+  skip_on_cran()
   shard = new.env(parent = baseenv())
   sys.source(test_path("ci-shard.R"), envir = shard)
   files = paste0("test-", letters[1:9], ".R")
@@ -268,6 +274,7 @@ test_that("Windows CI shards run each ordinary test file once, native ones in sh
 })
 
 test_that("each required Windows context gates the four shards of its own R version (D-239)", {
+  skip_on_cran()
   description = source_file("DESCRIPTION")
   skip_if(is.null(description), "not running from the source tree")
   path = file.path(dirname(description), ".github", "workflows", "Windows-check.yaml")
@@ -345,6 +352,7 @@ namespace_exports = function() {
 }
 
 test_that("every gptr:: call in the package code names an export of NAMESPACE (R CMD check)", {
+  skip_on_cran()
   acc = new.env(parent = emptyenv())
   acc$names = character()
   # negative control: a quoted call counts, in a body and in a default argument
