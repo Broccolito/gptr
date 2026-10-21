@@ -10,14 +10,18 @@ test_that("pkgdown_yaml() lists every page once, secondary group members never",
   expect_true(all(c("peter", "gptr_login", "gptr_sessions", "gptr_export",
                     "gptr_security") %in% listed))
   expect_setequal(unlist(lapply(parsed$articles, `[[`, "contents")), rel_vignettes())
-  menu = vapply(parsed$navbar$components$cheatsheet$menu, `[[`, "", "href")
-  expect_identical(menu, c("cheatsheet.html", "gptr-cheatsheet.pdf"))
+  expect_identical(parsed$navbar$components$cheatsheet,
+                   list(text = "Cheatsheet", href = "cheatsheet.html"))
   # the Authors page links the three authors to their emails and carries no other text
   expect_identical(names(parsed$authors), c("Wanjun Gu", "Tianlu Zhu", "Gianmarco Bellucci"))
   expect_identical(unname(vapply(parsed$authors, `[[`, "", "href")),
                    c("mailto:wanjun.gu@ucsf.edu", "mailto:tianluz2013@gmail.com",
                      "mailto:Gianmarco.Bellucci@ucsf.edu"))
-  expect_true(all(file.exists(file.path(gptr_root(), "pkgdown", "assets", menu))))
+  # the PDF is reached through the HTML sheet's Download PDF link
+  assets = file.path(gptr_root(), "pkgdown", "assets")
+  sheet = readLines(file.path(assets, "cheatsheet.html"), warn = FALSE)
+  expect_true(any(grepl('href="gptr-cheatsheet.pdf"', sheet, fixed = TRUE)))
+  expect_true(file.exists(file.path(assets, "gptr-cheatsheet.pdf")))
 })
 
 test_that("pkgdown_extra() and pkgdown_problems() keep the index complete", {

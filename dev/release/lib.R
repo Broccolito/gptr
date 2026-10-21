@@ -768,9 +768,8 @@ pkgdown_yaml = function(extra = character(), root = ".") {
     '    link-color-dark: "#7d9dcb"', '    link-hover-color-dark: "#efede7"',
     "", "navbar:", "  structure:",
     "    left: [intro, reference, articles, cheatsheet, tutorials, news]",
-    "  components:", "    cheatsheet:", "      text: Cheatsheet", "      menu:",
-    "      - text: HTML", "        href: cheatsheet.html",
-    "      - text: PDF", "        href: gptr-cheatsheet.pdf",
+    "  components:", "    cheatsheet:",
+    "      text: Cheatsheet", "      href: cheatsheet.html",
     "", "authors:", authors, "", "reference:",
     unlist(Map(section, names(ref), ref), use.names = FALSE), "", "articles:",
     unlist(Map(section, names(articles), articles), use.names = FALSE))

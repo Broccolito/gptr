@@ -24,11 +24,7 @@ navbar:
   components:
     cheatsheet:
       text: Cheatsheet
-      menu:
-      - text: HTML
-        href: cheatsheet.html
-      - text: PDF
-        href: gptr-cheatsheet.pdf
+      href: cheatsheet.html
 
 authors:
   Wanjun Gu:
