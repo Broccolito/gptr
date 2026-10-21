@@ -33,6 +33,7 @@ test_that("owned artifact disconnect settles its loop before signalling and wait
 })
 
 test_that("artifact owner uncertainty and endpoint changes cannot signal a process", {
+  skip_on_cran()
   for (which in c("local", "alive", "endpoint")) {
     x = artifact_owner_fixture()
     if (which == "local") x$state$local = NA
@@ -245,6 +246,7 @@ test_that(
 })
 
 test_that("artifact close errors and interrupts preserve exact conditions and retry ownership", {
+  skip_on_cran()
   for (which in c("query_error", "socket_error", "loop_error", "pump_error",
                  "process_error", "wait_error")) {
     for (kind in c("error", "interrupt")) {
@@ -274,6 +276,7 @@ test_that("artifact close errors and interrupts preserve exact conditions and re
 })
 
 test_that("artifact owner construction and loop callbacks preserve seeded and absent caller RNG", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     for (which in c("open", "close", "replaced", "launch")) {
       for (failed in c(FALSE, TRUE)) {
@@ -333,6 +336,7 @@ test_that("artifact owner construction and loop callbacks preserve seeded and ab
 })
 
 test_that("Mac artifact browsers merge display timing without replacing user features", {
+  skip_on_cran()
   cases = list(
     list(args = character(), expected = c("--use-mock-keychain",
       "--enable-features=CADisplayLinkInGpu")),

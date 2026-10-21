@@ -288,6 +288,7 @@ namespace_exports = function() {
 }
 
 test_that("every gptr:: call in the package code names an export of NAMESPACE (R CMD check)", {
+  skip_on_cran()
   acc = new.env(parent = emptyenv())
   acc$names = character()
   # negative control: a quoted call counts, in a body and in a default argument

@@ -204,6 +204,7 @@ test_that("writer requires the exact live recorded target before construction", 
 })
 
 test_that("writer cleanup retains its original state until settlement is confirmed", {
+  skip_on_cran()
   table = new.env(parent = emptyenv())
   p = list(get_pid = function() 42L, get_input_connection = function() stop("No pipe"))
   st = new.env(parent = emptyenv())
@@ -474,6 +475,7 @@ test_that("writer canonical parent checks accept Windows separators and reject o
 })
 
 test_that("writer compressed bootstrap preserves exact trusted source and binary literals", {
+  skip_on_cran()
   testthat::local_mocked_bindings(proc_writer_main = function(meta) {
     list(text = meta$text, bytes = meta$bytes)
   })
@@ -706,6 +708,7 @@ test_that("writer startup diagnostics accept only fixed monotonic stages and spl
 })
 
 test_that("writer startup diagnostics fail closed without retaining arbitrary stderr", {
+  skip_on_cran()
   for (chunk in c("FAKE-writer-diagnostic-canary\n", strrep("x", 1025L),
     "GPTR_STDIN_STAGE arbitrary 0.100000\n",
     "GPTR_STDIN_STAGE decode 0.200000\nGPTR_STDIN_STAGE identity 0.100000\n",
@@ -1004,6 +1007,7 @@ test_that("Windows native absence probe refuses existing aliases and denied attr
 
 
 test_that("absence diagnostics accept only ordered fixed numeric stage tokens", {
+  skip_on_cran()
   expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 1"), 1L)
   expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 18", last = 17L), 18L)
   expect_identical(rw_absence_stage("GPTR_ABSENCE_STAGE 99", last = 18L), 99L)
@@ -1106,6 +1110,7 @@ test_that("writer refuses a directory published after its directory snapshot", {
 })
 
 test_that("absence observations retain only fixed probe and bounded parent ACL numbers", {
+  skip_on_cran()
   for (code in 1:4) {
     x = rw_absence_observation(paste("GPTR_ABSENCE_PROBE", code))
     expect_identical(x$key, "probe")
@@ -1142,6 +1147,7 @@ test_that("absence observations retain only fixed probe and bounded parent ACL n
 })
 
 test_that("absence observations retain only fixed bounded file ACL differences", {
+  skip_on_cran()
   for (key in c("BEFORE", "AFTER", "COMPARE")) {
     numbers = if (key == "COMPARE") "1024 0 0" else "37892 1 44"
     x = rw_absence_observation(paste(paste0("GPTR_ABSENCE_FILE_", key), numbers))
@@ -1164,6 +1170,7 @@ test_that("absence observations retain only fixed bounded file ACL differences",
 })
 
 test_that("absence denial controls require fixed ordered native lookup tokens", {
+  skip_on_cran()
   keys = c("PRE_FILE", "PRE_PARENT", "FILE_ACL", "PARENT_ACL", "FILE_LOOKUP",
     "PARENT_LOOKUP")
   for (i in seq_along(keys)) {
@@ -1185,6 +1192,7 @@ test_that("absence denial controls require fixed ordered native lookup tokens", 
 })
 
 test_that("absence denial controls reject unknown order outcomes and private content", {
+  skip_on_cran()
   keys = c("PRE_FILE", "PRE_PARENT", "FILE_ACL", "PARENT_ACL", "FILE_LOOKUP",
     "PARENT_LOOKUP")
   for (line in c("GPTR_ABSENCE_CONTROL PRE_FILE 0", "GPTR_ABSENCE_CONTROL PRE_FILE 2",
@@ -1209,6 +1217,7 @@ test_that("absence denial controls reject unknown order outcomes and private con
 })
 
 test_that("absence privilege diagnostics reject unknown and unordered private output", {
+  skip_on_cran()
   keys = c("PRE_BACKUP", "PRE_RESTORE", "PRE_CHANGE_NOTIFY", "LOOKUP_BACKUP",
     "LOOKUP_RESTORE", "LOOKUP_CHANGE_NOTIFY")
   phases = rep(c("PRE", "LOOKUP"), each = 3L)

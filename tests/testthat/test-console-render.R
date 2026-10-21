@@ -79,6 +79,7 @@ test_that("the output does not depend on chunking in the four console modes (acc
 })
 
 test_that("plain contexts print exactly what they printed before the console layout (D-186)", {
+  skip_on_cran()
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "display widths need a UTF-8 locale (report 18)")
   withr::local_options(cli.num_colors = 1L, gptr.verbose = 2L)
   before = c(
@@ -103,6 +104,7 @@ test_that("plain contexts print exactly what they printed before the console lay
 })
 
 test_that("an interactive console keeps a two-column margin at 40 columns (D-186)", {
+  skip_on_cran()
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "display widths need a UTF-8 locale (report 18)")
   for (colours in c(1L, 256L)) {
     withr::local_options(cli.num_colors = colours, cli.dynamic = TRUE, gptr.verbose = 2L)
@@ -212,6 +214,7 @@ test_that("italics, link URLs, quotes, rules and headings are styled only with c
 })
 
 test_that("complete R lines use cli's highlighter and other code a light one (D-186)", {
+  skip_on_cran()
   withr::local_options(cli.num_colors = 256L, cli.dynamic = FALSE)
   whole = "x = f(1, 'a')"
   expect_false(identical(as.character(cli::code_highlight(whole)), whole))
@@ -231,6 +234,7 @@ test_that("complete R lines use cli's highlighter and other code a light one (D-
 })
 
 test_that("fenced lines stream as they arrive and a line that fits is redrawn (D-187)", {
+  skip_on_cran()
   withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)
   long = "zz = c('a line too long to be redrawn')"
   for (colours in c(1L, 256L)) {
@@ -427,6 +431,7 @@ test_that("console_hooks() subscribes the events of contract 7.14", {
 })
 
 test_that("a foreground run streams its answer and ends with a status line (verbosity 2)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -442,6 +447,7 @@ test_that("a foreground run streams its answer and ends with a status line (verb
 })
 
 test_that("nothing is printed at verbosity 0 or for a background session", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   s = render_session()
   events = list(
@@ -460,6 +466,7 @@ test_that("nothing is printed at verbosity 0 or for a background session", {
 })
 
 test_that("a compaction during a foreground run prints one dim notice with its counts (D-202)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -483,6 +490,7 @@ test_that("a compaction during a foreground run prints one dim notice with its c
 })
 
 test_that("an answer without deltas is printed whole at message_end", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -493,6 +501,7 @@ test_that("an answer without deltas is printed whole at message_end", {
 })
 
 test_that("whole replies join only text blocks with canonical line breaks", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   local_vault()
@@ -515,6 +524,7 @@ test_that("whole replies join only text blocks with canonical line breaks", {
 })
 
 test_that("same-block chunks stay contiguous and tools follow the complete text tail", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -532,6 +542,7 @@ test_that("same-block chunks stay contiguous and tools follow the complete text 
 })
 
 test_that("tool lines escape the preview and summarise the result (acceptance 7)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -551,6 +562,7 @@ test_that("tool lines escape the preview and summarise the result (acceptance 7)
 })
 
 test_that("an error result shows the lines of its message", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -593,6 +605,7 @@ test_that("result lines keep a failed call's objects, project paths and whole er
 })
 
 test_that("the end of a call served to a CLI route prints its result line (D-192)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -621,6 +634,7 @@ test_that("the end of a call served to a CLI route prints its result line (D-192
 })
 
 test_that("on a CLI route verbosity 2 shows each thinking block's first line, dim (D-192)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -650,6 +664,7 @@ test_that("on a CLI route verbosity 2 shows each thinking block's first line, di
 })
 
 test_that("a thinking line cut at the width ends with an ellipsis", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = TRUE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -667,6 +682,7 @@ test_that("a thinking line cut at the width ends with an ellipsis", {
 })
 
 test_that("on a CLI route the waiting row keeps its clock around each thinking line (D-192)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   withr::local_options(cli.dynamic = TRUE)
   local_gptr_options(verbose = 2L)
@@ -732,6 +748,7 @@ test_that("artifact_start prints the NS-8 line (acceptance 7)", {
 })
 
 test_that("an artifact_start fired while a tool executes prints after tool_execution_end", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   st = console_state()
@@ -773,6 +790,7 @@ test_that("an artifact_start fired while a tool executes prints after tool_execu
 })
 
 test_that("a run's events while a tool executes print nothing (P09 captures that output)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   s = render_session()
   ctx = session_live(s)$ctx
@@ -793,6 +811,7 @@ test_that("a run's events while a tool executes print nothing (P09 captures that
 })
 
 test_that("verbosity 1 reports tool calls and the end as progress messages", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 1L, quiet = FALSE)
   s = render_session()
@@ -829,6 +848,7 @@ test_that("the status line names an unusual end and sums the usage rows", {
 })
 
 test_that("the status line counts the run's requests and adds its sub-agents' cost (#38)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 1L, quiet = FALSE)
   s = render_session()
@@ -859,6 +879,7 @@ test_that("the status line counts the run's requests and adds its sub-agents' co
 })
 
 test_that("custom entries of a run are shown through renderer records (IC-69)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   off = gptr_register(gptr_spec("renderer", "demo.note",
@@ -879,6 +900,7 @@ test_that("custom entries of a run are shown through renderer records (IC-69)", 
 })
 
 test_that("the spinner runs as a reactor task until the first rendered text", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   withr::local_options(cli.dynamic = TRUE)
   local_gptr_options(verbose = 2L)
@@ -902,6 +924,7 @@ test_that("the spinner runs as a reactor task until the first rendered text", {
 })
 
 test_that("the console UI ends a partial answer line before it prompts (D-186)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -920,6 +943,7 @@ test_that("the console UI ends a partial answer line before it prompts (D-186)",
 })
 
 test_that("a prompt or pause in a tool's evaluation ends partial lines on the console (D-188)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   s = render_session()
@@ -983,6 +1007,7 @@ test_that("inside an evaluation the console margin follows the person's console 
 })
 
 test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no quiet (D-188)", {
+  skip_on_cran()
   local_gptr_options(verbose = 1L, quiet = FALSE)
   s = render_session()
   root = structure(new.env(), class = "gptr_run")
@@ -1013,6 +1038,7 @@ test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no q
 })
 
 test_that("a failed sub-agent line counts it and gives its reason's first line, cut (#36)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_project()
   local_gptr_options(mode = "auto", verbose = 1L, quiet = FALSE)
@@ -1040,6 +1066,7 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
 })
 
 test_that("a foreground run separates text, tool and status blocks once (D-186)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -1120,6 +1147,7 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
 # ---------------------------------------------------------------- Task 7: end-to-end rendering
 
 test_that("a streamed reply is printed verbatim and never evaluated (acceptance 3, rule C1)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(verbose = 2L, record = "off")
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
@@ -1136,6 +1164,7 @@ test_that("a streamed reply is printed verbatim and never evaluated (acceptance 
 })
 
 test_that("nothing is rendered at verbosity 0 (knitr, testthat)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(verbose = 0L, record = "off")
   out = utils::capture.output(invisible(peter("hi", model = gptr_fake_provider(list("quiet")),
@@ -1144,6 +1173,7 @@ test_that("nothing is rendered at verbosity 0 (knitr, testthat)", {
 })
 
 test_that("tool calls of a run show escaped previews and results (acceptance 7)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(verbose = 2L, record = "off")
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)

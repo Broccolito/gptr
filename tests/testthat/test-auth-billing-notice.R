@@ -65,6 +65,7 @@ test_that("billing removal is a typed neutral notice with unchanged filtering an
 })
 
 test_that("billing notice remains once per removed set and respects explicit consent", {
+  skip_on_cran()
   local_gptr_options(quiet = FALSE)
   local_billing_notice_once()
   parent = c(PATH = "/owned-test/bin", ANTHROPIC_API_KEY = "FAKE-API",

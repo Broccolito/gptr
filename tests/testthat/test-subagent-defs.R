@@ -189,6 +189,7 @@ test_that("a tools value that is not a list of names is diagnosed, not dropped s
 agent_text = function(...) paste(agent_lines(...), collapse = "\n")
 
 test_that("gptr_agents lists project and user agents and the project wins", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/reviewer-x.md"]] = agent_text("reviewer-x", "Project reviewer",
@@ -211,6 +212,7 @@ test_that("gptr_agents lists project and user agents and the project wins", {
 })
 
 test_that("untrusted project agents lose model and tools and never shadow", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/helper-x.md"]] = agent_text("helper-x", "Project helper",
@@ -231,6 +233,7 @@ test_that("untrusted project agents lose model and tools and never shadow", {
 })
 
 test_that("non-interactive auto and edits runs omit untrusted project agents (IC-52)", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/helper-y.md"]] = agent_text("helper-y", "Project helper")
@@ -246,6 +249,7 @@ test_that("non-interactive auto and edits runs omit untrusted project agents (IC
 })
 
 test_that("agent_def.get backs gptr_agent(name) and gptr_agent(file = )", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/stats-rev.md"]] = agent_text("stats-rev", "Statistical reviewer",
@@ -273,6 +277,7 @@ test_that("a file of an untrusted project loses model and tools through gptr_age
 })
 
 test_that("builtin:agents syncs on session start and registers the service", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/hooked.md"]] = agent_text("hooked", "Synced by the hook")
@@ -296,6 +301,7 @@ agent_session_start = function(depth, mode) {
 }
 
 test_that("agent_def.get re-syncs after trust, project or file changes", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/stale-a.md"]] = agent_text("stale-a", "Project agent",
@@ -320,6 +326,7 @@ test_that("agent_def.get re-syncs after trust, project or file changes", {
 })
 
 test_that("an untrusted project agent never shadows an agent that other code registered", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   off = gptr_register(gptr_agent("ext-x", description = "Registered by the user",
                                  system = "Good."))
@@ -341,6 +348,7 @@ test_that("an untrusted project agent never shadows an agent that other code reg
 })
 
 test_that("an untrusted project agent never shadows a name equal after normalisation (IC-42)", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/norm.md"]] = agent_text("norm_y", "Project copy", body = "Evil.")
@@ -356,6 +364,7 @@ test_that("an untrusted project agent never shadows a name equal after normalisa
 })
 
 test_that("only .pi agent directories are flat, wherever the project lies", {
+  skip_on_cran()
   base = withr::local_tempdir()
   root = path_norm(file.path(base, ".pi", "proj"))
   dir.create(file.path(root, ".gptr", "agents", "sub"), recursive = TRUE)
@@ -385,6 +394,7 @@ test_that("only .pi agent directories are flat, wherever the project lies", {
 })
 
 test_that("a name lookup serves no untrusted project agent when nobody can confirm (IC-52)", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/omit-x.md"]] = agent_text("omit-x", "Project helper", body = "Do evil.")
@@ -404,6 +414,7 @@ test_that("a name lookup serves no untrusted project agent when nobody can confi
 })
 
 test_that("the session_start hook syncs top-level sessions in their own mode only", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/hook-u.md"]] = agent_text("hook-u", "Untrusted helper")
@@ -417,6 +428,7 @@ test_that("the session_start hook syncs top-level sessions in their own mode onl
 })
 
 test_that("an untrusted project agent never shadows a registered agent after normalisation", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   local_gptr_options(interactive = TRUE)
   off = gptr_register(gptr_agent("ext-x", description = "Registered by the user",
@@ -439,6 +451,7 @@ test_that("an untrusted project agent never shadows a registered agent after nor
 })
 
 test_that("omitting untrusted project agents gives one notice per project (IC-52)", {
+  skip_on_cran()
   withr::defer(res_prune("agents:", character()))
   files = list()
   files[[".gptr/agents/note-x.md"]] = agent_text("note-x", "Project helper")

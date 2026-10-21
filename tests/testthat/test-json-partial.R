@@ -11,6 +11,7 @@ show_json = function(x) {
 }
 
 test_that("partial values follow partial-json Allow.ALL semantics (report 03 cases)", {
+  skip_on_cran()
   cases = list(
     c("{", "{}"),
     c("{\"", "{}"),
@@ -68,6 +69,7 @@ test_that("the scanner yields the final object for every prefix split (05 P01 ac
 })
 
 test_that("incremental pushes agree with one-shot parsing of every prefix", {
+  skip_on_cran()
   full = "{\"code\": \"x = c(1, 2)\\nprint(x)\", \"record\": true, \"note\": \"sum\"}"
   bytes = charToRaw(full)
   for (k in seq_along(bytes)) {
@@ -94,6 +96,7 @@ test_that("complete(), text() and preview() report the scanner state", {
 })
 
 test_that("a raw delta that ends inside a multi-byte character never makes value() fail", {
+  skip_on_cran()
   full = charToRaw("{\"note\": \"caf\u00e9 \u4e2d\"}")
   for (k in seq_len(length(full) - 1L)) {
     scanner = partial_json()
@@ -114,6 +117,7 @@ test_that("raw control characters inside strings are repaired", {
 })
 
 test_that("20,000 small deltas are scanned in linear time", {
+  skip_on_cran()
   big = paste0("{\"content\": \"", strrep("x = c(1, 2, 3)\\n", 5000), "\"}")
   bytes = charToRaw(big)
   cuts = unique(as.integer(seq(0, length(bytes), length.out = 20001)))

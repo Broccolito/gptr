@@ -6,6 +6,7 @@ artifact_browser_fixture = function(local = TRUE) {
 }
 
 test_that("artifact browser cleanup uses graceful close before confirming its local process", {
+  skip_on_cran()
   x = artifact_browser_fixture()
   expect_invisible(x$close())
   expect_identical(x$state$events[[1L]], "websocket")
@@ -23,6 +24,7 @@ test_that("artifact browser cleanup uses graceful close before confirming its lo
 })
 
 test_that("artifact browser cleanup retains its owner after a process-close error", {
+  skip_on_cran()
   for (kind in c("error", "interrupt")) {
     x = artifact_browser_fixture()
     original = if (kind == "error") simpleError("controlled process close") else
@@ -69,6 +71,7 @@ test_that("the private Linux test temp root fits Chromium's Unix socket limit", 
 
 test_that(
   "artifact browser cleanup refuses unknown owners and retains a live owner after waiting", {
+  skip_on_cran()
   for (alive in list(TRUE, NA, 0, NULL)) {
     x = artifact_browser_fixture()
     x$state$alive = alive
@@ -136,6 +139,7 @@ test_that("artifact browser cache refuses unknown ownership without constructing
 })
 
 test_that("artifact browser cache replaces a dead owner only after successful socket cleanup", {
+  skip_on_cran()
   x = artifact_browser_fixture()
   x$state$alive = FALSE
   original = simpleError("controlled dead socket close")
@@ -178,6 +182,7 @@ test_that("a dead browser settles only its retained child loop before closing th
 })
 
 test_that("browser loop queries and callbacks retain their original conditions and owner", {
+  skip_on_cran()
   for (stage in c("loop_error", "pump_error")) {
     for (kind in c("error", "interrupt")) {
       x = artifact_browser_fixture()
@@ -200,6 +205,7 @@ test_that("browser loop queries and callbacks retain their original conditions a
 })
 
 test_that("browser construction preserves seeded and absent RNG on return and unwind", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     for (outcome in c("return", "error", "interrupt")) {
       local({
@@ -237,6 +243,7 @@ test_that("browser construction preserves seeded and absent RNG on return and un
 })
 
 test_that("browser close preserves caller RNG and callback effects on success and unwind", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     for (stage in c("return", "process_error", "pump_error", "socket_error")) {
       for (kind in c("error", "interrupt")) {
@@ -302,6 +309,7 @@ test_that("remote browser socket cleanup preserves caller RNG without a local pr
 
 
 test_that("browser cleanup accepts delayed callbacks within its existing shutdown deadline", {
+  skip_on_cran()
   started = 1
   target = started + 0.2
   expect_lt(target - started, 0.2)
@@ -383,6 +391,7 @@ test_that("browser cleanup advances a fractional grace remainder on a coarse clo
 })
 
 test_that("browser cleanup retains ownership after deadline or clock failure", {
+  skip_on_cran()
   for (mode in c("deadline", "stalled", "nonfinite", "backward")) {
     x = artifact_browser_fixture()
     if (mode %in% c("deadline", "nonfinite")) {
@@ -503,6 +512,7 @@ test_that("owned socket-close errors and interrupts retain the connection before
 })
 
 test_that("socket-first cleanup leaves borrowed dead and mismatched owners protected", {
+  skip_on_cran()
   control = artifact_browser_fixture()
   expect_invisible(control$close())
   expect_identical(control$state$cdp_calls, 0L)

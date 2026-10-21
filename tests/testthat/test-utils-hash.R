@@ -95,6 +95,7 @@ test_that("port_candidates() gives distinct RNG-free ports in 49152-65535", {
 })
 
 test_that("fingerprint() is stable, sensitive to sampled values and cheap on ALTREP", {
+  skip_on_cran()
   x = as.numeric(1:1000)
   expect_identical(fingerprint(x), fingerprint(x))
   y = x

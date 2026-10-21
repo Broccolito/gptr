@@ -8,6 +8,7 @@ prefix_estimate = function(fr) {
 }
 
 test_that("each preset's estimated prefix is within 5% of prefix-baseline.json", {
+  skip_on_cran()
   pb = prefix_fixture()
   expect_setequal(names(pb$estimate), names(pb$cases))
   for (nm in names(pb$cases)) {
@@ -24,6 +25,7 @@ test_that("the measured o200k baselines are the architecture 12.1 totals (IC-68)
 })
 
 test_that("every section is within its budget", {
+  skip_on_cran()
   st = prefix_fixture()$standins$sections
   budgets = vapply(st, function(x) as.numeric(x$budget), 0)
   names(budgets) = vapply(st, function(x) x$name, "")
@@ -45,6 +47,7 @@ test_that("every section is within its budget", {
 })
 
 test_that("the standard composition is architecture 7.3 byte for byte (with stand-ins)", {
+  skip_on_cran()
   rd = prefix_fixture()$expected$rendered
   fr = compose_case("standard_interactive")
   st = prefix_fixture()$standins$sections
@@ -61,6 +64,7 @@ test_that("the standard composition is architecture 7.3 byte for byte (with stan
 })
 
 test_that("the composed T0 and skills equal the text block of architecture 7.3", {
+  skip_on_cran()
   p = test_path("..", "..", "dev", "spec", "03-architecture.md")
   skip_if_not(file.exists(p), "dev/ is not available (built package)")
   a = readLines(p, encoding = "UTF-8", warn = FALSE)
@@ -93,6 +97,7 @@ test_that("the composed T0 and skills equal the text block of architecture 7.3",
 })
 
 test_that("no composed prompt or shipped skill mentions str( (IC-67)", {
+  skip_on_cran()
   rx = "(^|[^A-Za-z0-9_.])str\\("
   for (nm in c("minimal", "standard_interactive")) {
     expect_false(grepl(rx, compose_case(nm)$t0), label = nm)

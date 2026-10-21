@@ -42,6 +42,7 @@ test_that("the r schema is frozen in one of four variants (IC-68)", {
 })
 
 test_that("specified R input guidance reaches every preset and both CLI transports", {
+  skip_on_cran()
   rule = "Keep object names/arguments; replace inputs on request"
   instruction = paste("Use only the R tool. Fit stats::lm(mpg ~ wt + hp, data = analysis_input),",
                       "save it as fit, then call gptr::gptr_return(fit).")
@@ -92,6 +93,7 @@ test_that("the r spec reproduces P07's stand-in in each of its four variants (IC
 })
 
 test_that("the r tool evaluates in ctx$envir outside a run and fills the details record", {
+  skip_on_cran()
   e = new.env()
   e$keep = 1
   res = r_tool_execute(list(code = "x = 41\nx + 1", note = "one decision"),
@@ -308,6 +310,7 @@ test_that("a fuzzy edit returns the message and a diff; an exact edit the messag
 })
 
 test_that("the r schema frozen without a bound document has no record or note (IC-68)", {
+  skip_on_cran()
   local_gptr_options(unsafe_no_permissions = TRUE)
   fake = local_fake_provider(list("Hello."))
   s = peter("Say hello", model = fake, envir = new.env(), mode = "auto")
@@ -322,6 +325,7 @@ test_that("the r schema frozen without a bound document has no record or note (I
 # ---- added by the implementation (P10 Task 11; dev/DEVIATIONS.md D-136) ----
 
 test_that("images from peter$plot() count against gptr.r_output_tokens too (IC-67)", {
+  skip_on_cran()
   local_nested_dispatch()
   local_gptr_options(r_output_tokens = 1500L)
   withr::local_pdf(NULL)

@@ -109,6 +109,7 @@ test_that("Peter export keeps calls active and recorded code inert exactly once"
 })
 
 test_that("history export keeps quoted notes and UTF-8 output inert and bounded", {
+  skip_on_cran()
   local_project()
   accent = intToUtf8(0xe9L)
   literal_cases = list(
@@ -185,6 +186,7 @@ test_that("history export keeps quoted notes and UTF-8 output inert and bounded"
 })
 
 test_that("raw export refuses ambiguous calls and unresolved session semantics", {
+  skip_on_cran()
   local_project()
   expect_identical(doc_export_chain(str2lang("peter(\"one\", )")), 0L)
   expect_identical(doc_export_chain(str2lang("peter(, \"one\")")), 0L)
@@ -208,6 +210,7 @@ test_that("raw export refuses ambiguous calls and unresolved session semantics",
 })
 
 test_that("history export rejects missing stale edited undone and secret-marked records", {
+  skip_on_cran()
   local_project()
   target = file.path(getwd(), "refused.R")
   headers = list(list(prompt = prompt_hash("different")), list(sha = "00000000"),
@@ -319,6 +322,7 @@ test_that("history export validates file arguments and fixed source limits", {
 
 
 test_that("Peter export places feedback between separate pipeline operands without duplication", {
+  skip_on_cran()
   root = local_project()
   prelude = c("library(gptr)", "# User data and notes.", "user = c(2, 3)", "hits = 0L")
   pipeline = c("s = peter(\"one\") |>", "  peter(", "    \"two\"",
@@ -451,6 +455,7 @@ test_that("raw prompt comments wrap losslessly while source and executable code 
 })
 
 test_that("raw prompt wrapping preserves width boundaries and long unbroken Unicode tokens", {
+  skip_on_cran()
   local_project()
   prompts = c(strrep("a", 59L), strrep("a", 60L),
     strrep("caf\u00e9\U0001f642", 2048L))

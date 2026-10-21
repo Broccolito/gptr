@@ -73,6 +73,7 @@ test_that("idle writer eligibility requires exact identities and a clean acknowl
 })
 
 test_that("idle writer eligibility refuses queued unknown changed and unpublished states", {
+  skip_on_cran()
   changes = list(
     function(x) x$state$private = FALSE,
     function(x) x$state$pending = list(size = 1L, accepted = 0L),
@@ -120,6 +121,7 @@ test_that("retiring an acknowledged writer preserves the target input connection
 })
 
 test_that("unsettled retirement keeps its cap slot marker and target input", {
+  skip_on_cran()
   x = retirement_state()
   x$state$retiring = TRUE
   x$settled = FALSE

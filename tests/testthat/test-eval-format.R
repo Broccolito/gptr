@@ -73,6 +73,7 @@ test_that("blocked and empty results have short texts", {
 })
 
 test_that("long output keeps head and tail with a peter$out() notice", {
+  skip_on_cran()
   res = eval_r("invisible(lapply(1:5000, function(i) cat('line', i, '\\n')))", new.env())
   out = format_eval_result(res, 400L)
   expect_true(out$truncated)
@@ -110,6 +111,7 @@ test_that("format_eval_result validates its arguments", {
 })
 
 test_that("a 50-plot evaluation lists 3 attached plots and the stored rest", {
+  skip_on_cran()
   skip_if_not(isTRUE(capabilities("png")) || requireNamespace("ragg", quietly = TRUE))
   res = eval_r("for (i in 1:50) plot(i)", new.env())
   out = format_eval_result(res, 4000L)

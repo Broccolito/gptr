@@ -179,6 +179,7 @@ test_that("names deparse() rejects in a UTF-8 locale are logged as a note", {
 })
 
 test_that("a call chain that exhausts deparse()'s C stack check does not make the callback throw", {
+  skip_on_cran()
   local_history()
   # f(1)(1)...(1) evaluates at the top level when f returns itself. At 3,000 calls it is under
   # the 5,000-call cap, and deparse() of it as a whole expression fails its C stack check
@@ -194,6 +195,7 @@ test_that("a call chain that exhausts deparse()'s C stack check does not make th
 # defaults are walked too.
 
 test_that("default arguments are walked for peter() calls and for depth", {
+  skip_on_cran()
   local_history()
   expect_equal(user_log_scan(str2lang("g = function(x = peter('p')) x")), "gptr")
   expect_equal(user_log_scan(str2lang("function(a, b = function(c = gptr::peter('p')) c) a")),

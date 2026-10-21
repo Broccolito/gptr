@@ -79,6 +79,7 @@ artifact_capture_run = function(probe, server_error = character()) {
 }
 
 test_that("screenshot errors retain collected page state and close the exact session", {
+  skip_on_cran()
   original = simpleError("synthetic screenshot timeout")
   probe = artifact_capture_probe(function() stop(original),
     errors = list(list(id = "plot", message = "synthetic output failure")),

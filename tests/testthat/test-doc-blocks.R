@@ -251,6 +251,7 @@ test_that("non-ASCII prompts and call texts keep their bytes in a C locale (IC-6
 })
 
 test_that("the scanner remembers the 16 most recently used long texts and shifts lines", {
+  skip_on_cran()
   old = the$doc_pending
   withr::defer(assign("doc_pending", old, envir = the))
   the$doc_pending = NULL
@@ -501,6 +502,7 @@ test_that("turn entries follow P06's turn stamps", {
 })
 
 test_that("a turn's block holds recorded code, outputs, decision, value and header facts", {
+  skip_on_cran()
   arrow = paste0("<", "-")
   s = doc_test_session(list(doc_test_turn(paste("n_rows", arrow, "nrow(mtcars)\nn_rows"),
                                           note = "count rows", outputs = "[1] 32",
@@ -525,6 +527,7 @@ test_that("a turn's block holds recorded code, outputs, decision, value and head
 })
 
 test_that("the output of a dropped expression is dropped with it when outputs are per expression", {
+  skip_on_cran()
   code = "fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(fit)\npeter$out(\"o1a2b3c\", lines = 1)"
   s = doc_test_session(list(doc_test_turn(code, outputs = list(character(), character(),
                                                                 "[1] \"line\""))))
@@ -539,6 +542,7 @@ test_that("the output of a dropped expression is dropped with it when outputs ar
 })
 
 test_that("child answers map to the block's direct peter() calls by prompt, not creation order", {
+  skip_on_cran()
   code = paste0("subs = lapply(1:2, function(i) peter(paste(\"part\", i)))\n",
                 "total = peter(\"Summarise the parts\")")
   s = doc_test_session(list(doc_test_turn(code)))
@@ -560,6 +564,7 @@ test_that("child answers map to the block's direct peter() calls by prompt, not 
 })
 
 test_that("failed and unrecorded calls are left out and plan-mode turns give one Plan line", {
+  skip_on_cran()
   s = doc_test_session(list(doc_test_turn("stop('x')", status = "error", id = "c1"),
                             doc_test_turn("head(mtcars)", record = FALSE, id = "c2",
                                           prompt = "b")))
@@ -590,6 +595,7 @@ test_that("steers and follow-ups delivered during the turn are recorded as comme
 })
 
 test_that("secret markers become Sys.getenv() and an unreplayable one flags the block", {
+  skip_on_cran()
   # entries are redacted at ingress (P06), so recorded code holds markers, never values
   s = doc_test_session(list(doc_test_turn("k = \"[secret:DOC_TEST_KEY]\"\nn = nchar(k)")))
   lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
@@ -620,6 +626,7 @@ test_that("an overlay fork's block is wrapped in local() on its gptr_resume(bloc
 })
 
 test_that("a team block has one line per child, child overlays and export assignments", {
+  skip_on_cran()
   team = doc_test_session(list(), kind = "team")
   td = session_data(team)
   kid = function(name, model, text, exports = character(), code = NULL) {
@@ -702,6 +709,7 @@ test_that("only a literal that is exactly a secret marker becomes Sys.getenv() (
 })
 
 test_that("an emptied chunk drops all its output, even flat; digests and paths stay", {
+  skip_on_cran()
   s = doc_test_session(list(doc_test_turn("peter$out(\"o1a2b3c\", lines = 1)", note = "show it",
                                           outputs = "[1] \"line\"")))
   site = list(format = "r", template = "count rows")
@@ -719,6 +727,7 @@ test_that("an emptied chunk drops all its output, even flat; digests and paths s
 })
 
 test_that("a local model keeps its tag and unknown usage is never summed (IC-74)", {
+  skip_on_cran()
   site = list(format = "r", template = "count rows")
   turn = doc_test_turn("x = 1")
   turn[[4L]]$message$provider = "ollama"
@@ -740,6 +749,7 @@ test_that("a local model keeps its tag and unknown usage is never summed (IC-74)
 })
 
 test_that("wrapped code keeps multi-line strings; team children without text or with secrets", {
+  skip_on_cran()
   expect_identical(doc_wrap_local(c("x = \"a", "b\"", "y = 1")),
                    c("local({", "  x = \"a", "b\"", "  y = 1",
                      paste0("}, envir = gptr_resume(block = \"", doc_block_token, "\")$envir)")))
@@ -821,6 +831,7 @@ doc_file_site = function(path, prompt = "count rows") {
 }
 
 test_that("doc_upsert() writes nothing without consent and inserts, replaces and is idempotent", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   writeLines(c("library(gptr)", "peter(\"count rows\")", "z = 1"), f)
@@ -855,6 +866,7 @@ test_that("doc_upsert() writes nothing without consent and inserts, replaces and
 })
 
 test_that("a hand-edited block is kept unless regenerating, and hooks can block or patch", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -883,6 +895,7 @@ test_that("a hand-edited block is kept unless regenerating, and hooks can block 
 })
 
 test_that("a successful write appends gptr.doc_block and caches the answers in S2", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -941,6 +954,7 @@ test_that("a lock held by another live process records nothing", {
 })
 
 test_that("a format error writes nothing and falls back to the console transcript", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -958,6 +972,7 @@ test_that("a format error writes nothing and falls back to the console transcrip
 # ---- Task 9 adaptations (contract 4.6, 11.5, 10.2 row 18; IC-47, IC-74; dev/DEVIATIONS.md D-107)
 
 test_that("a block a document_write hook patched carries the sha of its body as written", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1025,6 +1040,7 @@ test_that("a patched header keeps the hook's text and only its sha changes (11.5
 })
 
 test_that("a block written to the console transcript instead is recorded under the transcript", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1050,6 +1066,7 @@ test_that("a block written to the console transcript instead is recorded under t
 })
 
 test_that("a child without an answer is not cached in S2", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")

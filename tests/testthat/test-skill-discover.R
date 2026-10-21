@@ -50,6 +50,7 @@ test_that("a SKILL.md with name: on and version: 1.0 keeps both as strings (IC-7
 })
 
 test_that("a 37-skill corpus in the styles of report 05 parses completely", {
+  skip_on_cran()
   root = withr::local_tempdir()
   for (i in 1:21) {
     md = c("---", sprintf("name: folded-%02d", i), "description: >",
@@ -101,6 +102,7 @@ test_that("skill_walk skips dot-directories, node_modules and files inside a ski
 })
 
 test_that("gptr_skills lists project and user skills; the project wins a name", {
+  skip_on_cran()
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "shared", skill_md("shared", "Project version."))
   write_skill(file.path(p, ".claude", "skills"), "proj-only", skill_md("proj-only", "Project."))
@@ -171,6 +173,7 @@ test_that("skill_parse treats NA fields as missing and turns a failure into a di
 # Task 2 review round 2 (D-074 item 4): a relative skills.paths entry is project content.
 
 test_that("a relative skills.paths entry is a project root and follows project trust (IC-52)", {
+  skip_on_cran()
   p = local_project(trust = FALSE)
   write_skill(file.path(p, "tools", "skills"), "rel-skill", skill_md("rel-skill", "Relative."))
   abs_root = withr::local_tempdir()
@@ -369,6 +372,7 @@ test_that("the catalog starts with the verbatim header and lists the built-in sk
 })
 
 test_that("trusted project skills enter the catalog; untrusted ones never do (IC-52)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = FALSE)
   write_skill(file.path(p, ".gptr", "skills"), "proj-skill",
@@ -388,6 +392,7 @@ test_that("trusted project skills enter the catalog; untrusted ones never do (IC
 })
 
 test_that("over budget, least recently used descriptions go first, then entries", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   root = file.path(p, ".gptr", "skills")
@@ -409,6 +414,7 @@ test_that("over budget, least recently used descriptions go first, then entries"
 })
 
 test_that("skill.body resolves normalised names and returns the body and directory", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   f = write_skill(file.path(p, ".gptr", "skills"), "single-cell",
@@ -424,6 +430,7 @@ test_that("skill.body resolves normalised names and returns the body and directo
 })
 
 test_that("skills = single_cell and high_performance_r resolve after normalisation (IC-42)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "single-cell",
@@ -436,6 +443,7 @@ test_that("skills = single_cell and high_performance_r resolve after normalisati
 })
 
 test_that("the skills section appears only when read is active", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   skill_sync()
   ctx = function(tools) list(input = list(tool_names = tools), session = NULL)
@@ -457,6 +465,7 @@ test_that("builtin:skills registers the section and the services, and no search 
 })
 
 test_that("a new session carries the catalog in T1 and preloads skills = (e2e)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "single-cell",
@@ -473,6 +482,7 @@ test_that("a new session carries the catalog in T1 and preloads skills = (e2e)",
 })
 
 test_that("an untrusted project's skill is not in the catalog of a session (e2e)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = FALSE)
   write_skill(file.path(p, ".gptr", "skills"), "sneaky-skill",
@@ -488,6 +498,7 @@ test_that("an untrusted project's skill is not in the catalog of a session (e2e)
 # the catalog budget follows its documented order.
 
 test_that("skill.body re-checks a synced project skill after its trust is removed (IC-52)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "proj-skill",
@@ -500,6 +511,7 @@ test_that("skill.body re-checks a synced project skill after its trust is remove
 })
 
 test_that("skill.body never serves the skill of a project the working directory left", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   a = local_project(trust = TRUE)
   write_skill(file.path(a, ".gptr", "skills"), "dup-skill",
@@ -519,6 +531,7 @@ test_that("skill.body never serves the skill of a project the working directory 
 })
 
 test_that("skill.body of a skill whose SKILL.md was removed after the sync is unknown", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   f = write_skill(file.path(p, ".gptr", "skills"), "gone-skill",
@@ -530,6 +543,7 @@ test_that("skill.body of a skill whose SKILL.md was removed after the sync is un
 })
 
 test_that("a skills = preload re-checks trust before the session syncs (e2e, IC-52)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "proj-skill",
@@ -543,6 +557,7 @@ test_that("a skills = preload re-checks trust before the session syncs (e2e, IC-
 })
 
 test_that("the catalog budget is gptr.skills_budget, else skills.budget, else 1500", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   withr::local_options(gptr.skills_budget = NULL)
   expect_identical(skills_budget(), 1500L)
@@ -562,6 +577,7 @@ test_that("the catalog budget is gptr.skills_budget, else skills.budget, else 15
 # would write now, for nested projects and for skills a project shadows (IC-52; 04 section 10.1).
 
 test_that("skill.body never serves a nested project's skill from the outer project (IC-52)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   a = local_project(trust = TRUE)
   b = file.path(a, "pkg")
@@ -587,6 +603,7 @@ test_that("skill.body never serves a nested project's skill from the outer proje
 })
 
 test_that("skill.body serves the current project's skill over a registered user skill", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   user_root = file.path(gptr_user_dir("config"), "skills")
   write_skill(user_root, "dup-skill", skill_md("dup-skill", "User copy.", body = "USER BODY"))
@@ -603,6 +620,7 @@ test_that("skill.body serves the current project's skill over a registered user 
 })
 
 test_that("a skills = preload and the T1 catalog agree on a skill the project shadows (e2e)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   user_root = file.path(gptr_user_dir("config"), "skills")
   write_skill(user_root, "dup-skill", skill_md("dup-skill", "User copy.", body = "USER BODY"))
@@ -623,6 +641,7 @@ test_that("a skills = preload and the T1 catalog agree on a skill the project sh
 })
 
 test_that("skill.body does not sync again while the registry holds the current skills", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   shared = withr::local_tempdir("gptr-shared-")

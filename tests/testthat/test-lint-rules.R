@@ -170,6 +170,7 @@ test_that("R/ follows the package lint rules (contract section 12.3, IC-72)", {
 })
 
 test_that("each lint rule catches its violation (negative controls)", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   bad = c(
     "f01 = function() gptr:::the",
@@ -209,6 +210,7 @@ test_that("each lint rule catches its violation (negative controls)", {
 })
 
 test_that("the file and function exemptions of the rules hold", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   writeLines(c(
     "save_rds = function(object, file) saveRDS(object, file, ascii = FALSE, compress = FALSE)",

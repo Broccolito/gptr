@@ -327,6 +327,7 @@ test_that("a run uses the provider, adapter, tool, gate, context and cost record
 })
 
 test_that("the router record sends each request to the model record it picks", {
+  skip_on_cran()
   local_project()
   s = peter("hello router", model = "s11router", envir = new.env())
   expect_true(s11_used("router"))
@@ -338,6 +339,7 @@ test_that("the router record sends each request to the model record it picks", {
 })
 
 test_that("the preset record decides the tool array", {
+  skip_on_cran()
   local_project()
   peter("hello preset", model = "s11prov/s11-model", .opts = list(preset = "s11preset"),
        envir = new.env())
@@ -348,6 +350,7 @@ test_that("the preset record decides the tool array", {
 })
 
 test_that("the ui record answers the permission ask of a manual run", {
+  skip_on_cran()
   local_project()
   local_gptr_options(ui = "s11ui", interactive = TRUE)
   # An r call that creates an object is always asked in manual mode (level >= 1).
@@ -357,6 +360,7 @@ test_that("the ui record answers the permission ask of a manual run", {
 })
 
 test_that("the frontend record runs a call without a prompt", {
+  skip_on_cran()
   local_project()
   local_gptr_options(interactive = TRUE)
   # run(session, ...) gets the call's session: the piped one (P14's console route)
@@ -366,6 +370,7 @@ test_that("the frontend record runs a call without a prompt", {
 })
 
 test_that("the console dispatches the command and the prompt template", {
+  skip_on_cran()
   local_project()
   local_scripted_ui()
   inputs = c("/s11cmd", "/s11tmpl hello", "/exit")
@@ -384,6 +389,7 @@ test_that("the console dispatches the command and the prompt template", {
 })
 
 test_that("the setting record validates gptr_config() and namespaced .opts", {
+  skip_on_cran()
   local_project()
   gptr_config(`s11fixture.level` = 2L, .scope = "session")
   expect_identical(gptr_config()[["s11fixture.level"]], 2L)
@@ -393,6 +399,7 @@ test_that("the setting record validates gptr_config() and namespaced .opts", {
 })
 
 test_that("data records take effect: redaction, aliases, child env, risk, kind, service, route", {
+  skip_on_cran()
   expect_match(gptr_redact("id S11-123456 end"), "[secret:S11_ID]", fixed = TRUE)
   s11_mark("redaction_rule")
   f = withr::local_tempfile(fileext = ".env")
@@ -421,6 +428,7 @@ test_that("data records take effect: redaction, aliases, child env, risk, kind, 
 })
 
 test_that("the store and evaluator records serve a run", {
+  skip_on_cran()
   local_project()
   gptr_config(store = "s11store", evaluator = "s11eval", .scope = "session")
   withr::defer(gptr_config(store = NULL, evaluator = NULL, .scope = "session"))
@@ -432,6 +440,7 @@ test_that("the store and evaluator records serve a run", {
 })
 
 test_that("the agent record runs through the backend record", {
+  skip_on_cran()
   local_project()
   team = peter("delegate this", agents = list(helper = agent("s11agent")), envir = new.env())
   expect_identical(team$kind, "team")
@@ -454,6 +463,7 @@ test_that("the artifact type record builds and checks an artifact", {
 })
 
 test_that("the doc format and renderer records write a bound document", {
+  skip_on_cran()
   skip_if_not_installed("knitr")
   root = local_project()
   local_gptr_options(quiet = FALSE, verbose = 2L)

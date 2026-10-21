@@ -30,6 +30,7 @@ py_init_test_mocks = function(main, initialized, initialize, .env = parent.frame
 }
 
 test_that("Python setup restores known R environment keys after new and existing initialization", {
+  skip_on_cran()
   skip_if_not_installed("reticulate")
   for (initialized in c(FALSE, TRUE)) {
     local({
@@ -254,6 +255,7 @@ test_that("Python setup preserves the caller's absent or configured uv option", 
 })
 
 test_that("Python setup preserves its uv option before the original error or interrupt", {
+  skip_on_cran()
   skip_if_not_installed("reticulate")
   for (type in c("error", "interrupt")) {
     for (stage in c("import", "helper")) {
@@ -348,6 +350,7 @@ test_that("Python setup preserves the caller's absent or configured Matrix callb
 })
 
 test_that("Python setup preserves its Matrix callback before the original error or interrupt", {
+  skip_on_cran()
   skip_if_not_installed("reticulate")
   callback = function(condition) invisible(NULL)
   for (type in c("error", "interrupt")) {

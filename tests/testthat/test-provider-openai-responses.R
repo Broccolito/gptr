@@ -391,6 +391,7 @@ test_that("reasoning items, phase and fc_ ids replay byte for byte to the same m
 })
 
 test_that("a handed-off Anthropic conversation: no foreign opaque data, valid body (INFRA-08)", {
+  skip_on_cran()
   model = test_model(api, provider = "openai", id = "gpt-6-sol")
   plan = list(anchors = c("t0", "t1", "project"), tail_ttl = "5m", key = "gptr:0123456789ab")
   h = handoff_entries()
@@ -483,6 +484,7 @@ test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", 
 })
 
 test_that("returns = through the run loop on Responses: instruction and validation (INFRA-25)", {
+  skip_on_cran()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_scripted_provider(api)
   local_count_tool()
@@ -520,6 +522,7 @@ resp_breakpoints = function(body) {
 }
 
 test_that("build() takes compat and headers from the record provider_stream() resolved (04 10.1)", {
+  skip_on_cran()
   # D-023, D-027 item 3: a session-scoped provider (`model = <spec>`) is invisible to the global
   # lookup, so its compat (the explicit cache mode) and headers come from opts$provider or the
   # session's own record; record headers never repeat or replace the adapter's

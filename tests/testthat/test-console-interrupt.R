@@ -87,6 +87,7 @@ test_that("continue resumes the interrupted computation", {
 })
 
 test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
+  skip_on_cran()
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   log = local_menu_answers(c("s", "use only mpg", "f", "then plot it"))
@@ -109,6 +110,7 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
 })
 
 test_that("in the console margin the menu's prompts keep it, as its notices do (D-186)", {
+  skip_on_cran()
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   local_gptr_options(verbose = 2L)
@@ -122,6 +124,7 @@ test_that("in the console margin the menu's prompts keep it, as its notices do (
 })
 
 test_that("pause-menu text passes the input event with source steer", {
+  skip_on_cran()
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   off = gptr_register(gptr_hook("input", function(event, ctx) {
@@ -134,6 +137,7 @@ test_that("pause-menu text passes the input event with source steer", {
 })
 
 test_that("abort in mode repl aborts the runs and returns NULL", {
+  skip_on_cran()
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   aborted = local_abort_log()
@@ -151,6 +155,7 @@ test_that("abort in mode repl aborts the runs and returns NULL", {
 })
 
 test_that("abort in mode call re-signals the interrupt so loops stop", {
+  skip_on_cran()
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   aborted = local_abort_log()
@@ -167,6 +172,7 @@ test_that("abort in mode call re-signals the interrupt so loops stop", {
 })
 
 test_that("a second Ctrl-C while the menu waits aborts", {
+  skip_on_cran()
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   aborted = local_abort_log()
@@ -192,6 +198,7 @@ test_that("a line typed before the pause menu appeared never answers it (IC-75)"
 })
 
 test_that("the policy is abort-only where resuming is unverified (RStudio, Rgui, Jupyter)", {
+  skip_on_cran()
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   aborted = local_abort_log()
@@ -210,6 +217,7 @@ test_that("the policy is abort-only where resuming is unverified (RStudio, Rgui,
 })
 
 test_that("nested policies show one menu and the inner runs join the outer one", {
+  skip_on_cran()
   s = policy_session()
   outer_run = local_tracked(stand_in_run("u0000run1"), s)
   inner_run = local_tracked(stand_in_run("u0000run2"), s)
@@ -232,6 +240,7 @@ test_that("nested policies show one menu and the inner runs join the outer one",
 })
 
 test_that("[b]ackground hands a foreground run to bg.register (P21) and resumes", {
+  skip_on_cran()
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   old = the$services
@@ -260,6 +269,7 @@ test_that("[b]ackground hands a foreground run to bg.register (P21) and resumes"
 })
 
 test_that("a steer typed while a tool runs is queued once no tool is on the stack", {
+  skip_on_cran()
   s = policy_session()
   tool_run = stand_in_run("u0000tool")
   local({
@@ -274,6 +284,7 @@ test_that("a steer typed while a tool runs is queued once no tool is on the stac
 })
 
 test_that("a steer typed while a tool runs reaches the request after the tool result", {
+  skip_on_cran()
   local_project()
   local_gptr_options(unsafe_no_permissions = TRUE)
   off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
@@ -292,6 +303,7 @@ test_that("a steer typed while a tool runs reaches the request after the tool re
 })
 
 test_that("a steer typed in a tool and then aborted is listed as dropped, never sent later", {
+  skip_on_cran()
   local_project()
   local_gptr_options(unsafe_no_permissions = TRUE)
   off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
@@ -316,6 +328,7 @@ test_that("a steer typed in a tool and then aborted is listed as dropped, never 
 })
 
 test_that("a steer typed in a tool that pumps the reactor reaches the next request", {
+  skip_on_cran()
   local_project()
   local_gptr_options(unsafe_no_permissions = TRUE)
   off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
@@ -344,6 +357,7 @@ test_that("a steer typed in a tool that pumps the reactor reaches the next reque
 })
 
 test_that("a [b]ackground refusal is a notice and the menu asks again", {
+  skip_on_cran()
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   old = the$services

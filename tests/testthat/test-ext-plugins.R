@@ -283,6 +283,7 @@ test_that("frontmatter YAML that would make yaml slow is refused before yaml run
 # key or merge is spelt.
 
 test_that("frontmatter with more than 4 references to its anchors never reaches yaml (D-074)", {
+  skip_on_cran()
   fm = function(...) c("---", "name: x", "description: d", ..., "---", "Body")
   four = c("a0: &a0 [a, b]", "a1: &a1 [*a0, *a0, *a0, *a0]")
   ok = frontmatter_parse(fm(four))
@@ -324,6 +325,7 @@ test_that("frontmatter with more than 4 references to its anchors never reaches 
 # references to anchors in all reach yaml.
 
 test_that("frontmatter with more than 4 merge keys, tags and aliases never reaches yaml (D-074)", {
+  skip_on_cran()
   fm = function(...) c("---", "name: x", "description: d", ..., "---", "Body")
   ok = frontmatter_parse(fm("note: Wow! Use it! Really!! (yes!)", "a: !!str 1.0",
                             "m: {<<: {k: 1}, j: 2}", "t: {!!merge x: {k: 2}}",
@@ -410,6 +412,7 @@ test_that("plugin_from_package reads DESCRIPTION fields without loading the pack
 # Task 9 adaptations (D-088): behaviour the plan-literal code lacked.
 
 test_that("a plugin manifest that is not a JSON object is a diagnostic, never an error (D-088)", {
+  skip_on_cran()
   bodies = c(string = '"hello"', number = "42", array = "[1, 2]", null = "null", broken = "{")
   for (k in names(bodies)) {
     d = file.path(withr::local_tempdir(), paste0("p17-man-", k))
@@ -497,6 +500,7 @@ test_that("a package plugin is read from its installed DESCRIPTION without loadi
 })
 
 test_that("an installed Claude plugin without a manifest name is named by its key (D-088)", {
+  skip_on_cran()
   cache = file.path(withr::local_tempdir(), "cache", "mk")
   skill = "---\nname: s\ndescription: S.\n---\nx"
   docs = file.path(cache, "doc-skills", "3b600518a637")
@@ -768,6 +772,7 @@ test_that("NS-10: skills = c(single_cell, plotting) and plugins = clinical_trial
 })
 
 test_that("a ~ extension path is expanded with user_home() (IC-63)", {
+  skip_on_cran()
   alt = withr::local_tempdir()
   write_file(file.path(alt, "p17_home.R"), command_ext("p17-home", "\"home\""))
   write_file(file.path(alt, "p17_bad.R"), "x = 1")
@@ -1091,6 +1096,7 @@ test_that("the session_start hooks enable plugins before syncing", {
 })
 
 test_that("session start enables settings plugins and syncs skills (e2e)", {
+  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "start-plug"}')

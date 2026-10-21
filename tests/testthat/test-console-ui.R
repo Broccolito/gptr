@@ -79,6 +79,7 @@ test_that("the prompt's first line fits the console, keeping +N more lines (D-18
 })
 
 test_that("flagged calls fit one per line, highest level first, at most 5 (#33)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   root = local_project()
   code = c(sprintf("writeLines('%s', 'f%d.txt')", strrep("x", 30L), 1:7), "unlink('data')")
@@ -168,6 +169,7 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
 })
 
 test_that("a block pasted at the approval prompt never answers it nor steers (IC-75)", {
+  skip_on_cran()
   local_console_test()
   local_gptr_options(interactive = TRUE)
   # fd 0 as one buffer: the rest of a paste whose first line answers the question waits there
@@ -344,6 +346,7 @@ test_that("the rstudio UI has no UI outside RStudio and then denies", {
 })
 
 test_that("the scripted UI answers in order, logs and fails closed when empty (12.2)", {
+  skip_on_cran()
   root = local_project()
   local_permission_rules()
   st = local_scripted_ui(list("y", list(decision = "deny", feedback = "use a temp file"), 2L,
@@ -364,6 +367,7 @@ test_that("the scripted UI answers in order, logs and fails closed when empty (1
 })
 
 test_that("answering [a]lways adds a session rule covering exactly the flagged calls", {
+  skip_on_cran()
   root = local_project()
   local_permission_rules()
   st = local_scripted_ui(list("a", "p", "a"))

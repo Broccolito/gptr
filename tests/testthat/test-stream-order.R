@@ -42,6 +42,7 @@ stream_order_finish = function(run) {
 stream_order_text = function(events) paste(vapply(events, function(ev) ev$delta, ""), collapse = "")
 
 test_that("a text block's held tail is emitted at its end before the next block", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   updates = local_events("message_update")
   run = stream_order_run()
@@ -54,6 +55,7 @@ test_that("a text block's held tail is emitted at its end before the next block"
 })
 
 test_that("thinking finishes visibly before the answer without a second thinking header", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 3L)
   updates = local_events("message_update")
@@ -70,6 +72,7 @@ test_that("thinking finishes visibly before the answer without a second thinking
 })
 
 test_that("more than nine completed blocks keep their numeric provider order", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   updates = local_events("message_update")
   run = stream_order_run()
@@ -82,6 +85,7 @@ test_that("more than nine completed blocks keep their numeric provider order", {
 })
 
 test_that("completion without block ends flushes open tails in provider order", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   updates = local_events("message_update")
   run = stream_order_run()
@@ -94,6 +98,7 @@ test_that("completion without block ends flushes open tails in provider order", 
 })
 
 test_that("block end and request completion never emit a held tail twice", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   updates = local_events("message_update")
   run = stream_order_run()
@@ -109,6 +114,7 @@ test_that("block end and request completion never emit a held tail twice", {
 })
 
 test_that("a synthetic secret split across deltas stays redacted when its block closes", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   updates = local_events("message_update")
   run = stream_order_run()
@@ -127,6 +133,7 @@ test_that("a synthetic secret split across deltas stays redacted when its block 
 })
 
 test_that("cancelling a streamed answer displays the complete safe partial tail", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   updates = local_events("message_update")
@@ -146,6 +153,7 @@ test_that("cancelling a streamed answer displays the complete safe partial tail"
 })
 
 test_that("cancellation flushes a held synthetic secret safely and only once", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   updates = local_events("message_update")
@@ -199,6 +207,7 @@ test_that("adjacent text blocks cannot reconstruct a synthetic secret on the con
 })
 
 test_that("text tails finish before thinking headers and the next text block", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 3L)
   run = stream_order_run()

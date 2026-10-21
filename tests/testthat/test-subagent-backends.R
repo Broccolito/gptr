@@ -12,6 +12,7 @@ test_that("children only tighten the inherited mode", {
 })
 
 test_that("pool limits follow the gptr.subagents.* options (IC-71)", {
+  skip_on_cran()
   local_gptr_options(subagents.max_active = 3L, subagents.max_cli = 5L,
                      subagents.max_tasks = 6L, subagents.max_depth = 9L,
                      subagents.max_workers = 3L)
@@ -174,6 +175,7 @@ test_that("an inline child runs in an overlay of the caller's environment", {
 })
 
 test_that("children only tighten the mode they inherit", {
+  skip_on_cran()
   local_fake_provider(list(fake_text("ok")))
   parent = local_parent()
   h = subagent_start(list(agent = test_agent("a", model = "fake/fake-1", mode = "plan"),
@@ -212,6 +214,7 @@ test_that("each inline child draws from its own RNG stream; the user's seed is k
 })
 
 test_that("an agent's system text is a T1 section of its minimal prompt", {
+  skip_on_cran()
   local_fake_provider(list(fake_text("ok")))
   parent = local_parent()
   h = subagent_start(list(agent = test_agent("a", model = "fake/fake-1",
@@ -225,6 +228,7 @@ test_that("an agent's system text is a T1 section of its minimal prompt", {
 })
 
 test_that("parallel children may not write outside their overlay", {
+  skip_on_cran()
   local_fake_provider(list(fake_tool("r", code = "n <<- 1"), fake_text("ok")))
   parent = local_parent()
   e = new.env()
@@ -238,6 +242,7 @@ test_that("parallel children may not write outside their overlay", {
 })
 
 test_that("exports move from the overlay to the target when the child is idle", {
+  skip_on_cran()
   local_fake_provider(list(fake_tool("r", code = "fit = 42"), fake_text("ok")))
   parent = local_parent()
   e = new.env()
@@ -252,6 +257,7 @@ test_that("exports move from the overlay to the target when the child is idle", 
 })
 
 test_that("a settled child is recorded on its parent: entry and event (contract 4.6, 10.4)", {
+  skip_on_cran()
   local_fake_provider(list(fake_text("ok")))
   parent = local_parent()
   seen = new.env()
@@ -281,6 +287,7 @@ test_that("a settled child is recorded on its parent: entry and event (contract 
 })
 
 test_that("the nesting limit and unknown backends are refused", {
+  skip_on_cran()
   local_fake_provider(list(fake_text("ok")))
   parent = local_parent()
   local_gptr_options(subagents.max_depth = 1L)
@@ -309,6 +316,7 @@ test_that("frames are told apart from kept environments [R2]", {
 })
 
 test_that("a model given as a provider spec is registered for the child only", {
+  skip_on_cran()
   fake = gptr_fake_provider(list("from the spec"), name = "spec1")
   parent = local_parent()
   h = subagent_start(list(agent = test_agent("a"), model = fake, prompt = "x", parent = parent,
@@ -320,6 +328,7 @@ test_that("a model given as a provider spec is registered for the child only", {
 })
 
 test_that("a router model is guarded per routed request, as in peter() (IC-69)", {
+  skip_on_cran()
   local_fake_provider(list(fake_text("routed")))
   off = gptr_register(gptr_router("pick", route = function(request, ctx) "fake/fake-1"))
   withr::defer(off())
@@ -461,6 +470,7 @@ test_that("INFRA-16: two inline agents and two workers interleave on one reactor
 # ---- Task 10: the shipped skill and agent definitions --------------------------------------------
 
 test_that("reviewer and explorer are shipped agent definitions (03 section 3.3)", {
+  skip_on_cran()
   for (nm in c("reviewer", "explorer")) {
     path = system.file("gptr", "agents", paste0(nm, ".md"), package = "gptr")
     expect_true(nzchar(path))

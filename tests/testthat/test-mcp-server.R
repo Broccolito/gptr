@@ -13,6 +13,7 @@ r_call = function(code, id = 1L, modern = TRUE) {
 }
 
 test_that("the dispatcher answers both eras and never throws", {
+  skip_on_cran()
   x = local_served_session()
   s = x$session
   init = mcp_dispatch_local(mcp_test_msg("initialize", list(protocolVersion = "2025-06-18"),
@@ -46,6 +47,7 @@ test_that("the dispatcher answers both eras and never throws", {
 })
 
 test_that("a served r call evaluates in the session's environment with its mode (idle gate)", {
+  skip_on_cran()
   x = local_served_session("auto")
   res = mcp_dispatch_local(r_call("a = 1\nnrow(d)"), x$session)$result
   expect_false(res$isError)
@@ -64,6 +66,7 @@ test_that("a served r call evaluates in the session's environment with its mode 
 })
 
 test_that("objects made through peter() and a served r call capture the session home (D-189)", {
+  skip_on_cran()
   fake = local_fake_provider(list(fake_tool("r", code = "f = y ~ x"), fake_text("ok")))
   e = new.env()
   s = peter("make f", model = fake, envir = e, mode = "auto")
@@ -75,6 +78,7 @@ test_that("objects made through peter() and a served r call capture the session 
 })
 
 test_that("the CLI routes are served the session's frozen tool array (IC-79)", {
+  skip_on_cran()
   rows = gptr_tool("nrow_of", "Rows of a data frame in the session.",
                    parameters = list(type = "object", required = I("name"),
                                      properties = list(name = list(type = "string"))),
@@ -112,6 +116,7 @@ test_that("the CLI routes are served the session's frozen tool array (IC-79)", {
 })
 
 test_that("a served call inside a run passes the run's tool_call hooks (IC-79)", {
+  skip_on_cran()
   probe = gptr_tool("hookprobe", "Calls the MCP dispatcher the way the CLI adapters do.",
                     parameters = list(type = "object",
                                       properties = list(code = list(type = "string"))),
@@ -160,6 +165,7 @@ serve_in_run = function(serve, .env = parent.frame()) {
 }
 
 test_that("a call served in a live run is reported as a tool call of the run (D-192)", {
+  skip_on_cran()
   seen = serve_in_run(function(event, ctx) {
     mcp_dispatch_local(r_call("stop('no answer')", id = 4L), ctx$session)
     mcp_dispatch_local(r_call("answer = 21 * 2", id = 5L), ctx$session)$result
@@ -180,6 +186,7 @@ test_that("a call served in a live run is reported as a tool call of the run (D-
 })
 
 test_that("a plot served in a live run is drawn on the person's device, without a run on none", {
+  skip_on_cran()
   shown = new.env()
   shown$n = 0L
   screen = function(...) {
@@ -208,6 +215,7 @@ test_that("a plot served in a live run is drawn on the person's device, without 
 })
 
 test_that("a call served to a CLI route is checkpointed; each change is undone once (#24)", {
+  skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
   seen = new.env()
@@ -236,6 +244,7 @@ test_that("a call served to a CLI route is checkpointed; each change is undone o
 })
 
 test_that("IC-53 covers a call served to a CLI route: control guard and one-shot grants (D-192)", {
+  skip_on_cran()
   guarded = gptr_tool("guarded", "Reaches a control export the way model code can.",
                       parameters = list(type = "object", properties = json_obj()),
                       annotations = list(read_only = TRUE),
@@ -303,6 +312,7 @@ test_that("a nested run's served calls are its tool calls; a yolo control export
 })
 
 test_that("a served tool runs as the loop runs it: frame, source and its state (IC-79)", {
+  skip_on_cran()
   counter = gptr_tool("counter", "Counts.",
                       parameters = list(type = "object", properties = json_obj()),
                       annotations = list(read_only = TRUE),
@@ -329,6 +339,7 @@ test_that("a served tool runs as the loop runs it: frame, source and its state (
 })
 
 test_that("a fork's served calls evaluate in its overlay; a plan-mode parent stays in plan", {
+  skip_on_cran()
   x = local_served_session("auto")
   f = gptr_fork(x$session)
   res = mcp_dispatch_local(r_call("y_child = 42"), f)$result
@@ -365,6 +376,7 @@ test_that("a served call asks a person only while a pump runs (IC-57)", {
 })
 
 test_that("inside a running session the claude route gates through perm_check once", {
+  skip_on_cran()
   probe = gptr_tool("probe", "Calls the MCP dispatcher the way the claude adapter does.",
                     parameters = list(type = "object",
                                       properties = list(code = list(type = "string"))),
@@ -389,6 +401,7 @@ test_that("inside a running session the claude route gates through perm_check on
 })
 
 test_that("inside a running plan-mode session served r calls run in the run's scratch overlay", {
+  skip_on_cran()
   probe = gptr_tool("planprobe", "Calls the MCP dispatcher the way the claude adapter does.",
                     parameters = list(type = "object",
                                       properties = list(code = list(type = "string"))),

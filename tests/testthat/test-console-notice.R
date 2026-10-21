@@ -29,6 +29,7 @@ local_notice_once = function(.env = parent.frame()) {
 }
 
 test_that("a CLI notice clears before delivery and the pending spinner resumes", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -70,6 +71,7 @@ test_that("a CLI notice clears before delivery and the pending spinner resumes",
 })
 
 test_that("once and quiet notices do not clear an otherwise pending redraw", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -207,6 +209,7 @@ test_that("background and nested conditions do not write foreground clear bytes"
 })
 
 test_that("real R-tool capture contains no spinner clear bytes or altered warnings", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE, warn = 1L)

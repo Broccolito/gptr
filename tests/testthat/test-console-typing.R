@@ -157,6 +157,7 @@ local_fd0 = function(answers, .env = parent.frame()) {
 }
 
 test_that("a line typed during a tool steers when the next call's question follows it", {
+  skip_on_cran()
   local_console_test()
   local_gptr_options(interactive = TRUE)
   fd0 = local_fd0(c("go", "y", "/exit"))
@@ -261,6 +262,7 @@ test_that("an interrupted run drops the held lines and lists them", {
 })
 
 test_that("Ctrl-C at an approval prompt aborts the run and drops the held lines", {
+  skip_on_cran()
   local_console_test()
   local_gptr_options(interactive = TRUE)
   e = new.env()

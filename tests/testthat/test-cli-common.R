@@ -550,6 +550,7 @@ test_that("a CLI turn without reported usage records unknown usage, never zeros 
 })
 
 test_that("the child table holds adapter states weakly", {
+  skip_on_cran()
   st = new.env()
   pcli_track("s00000000aa", st)
   expect_identical(pcli_tracked("s00000000aa"), st)
@@ -639,6 +640,7 @@ test_that("a watched child is stopped through P05's glue: no watcher and no job 
 })
 
 test_that("the wire log gets one redacted line per CLI turn start and terminal event", {
+  skip_on_cran()
   local_project()
   local_gptr_options(wire_log = TRUE)
   n0 = nrow(showConnections())
@@ -811,6 +813,7 @@ test_that("builtin:cli registers the codex route and its adapter", {
 })
 
 test_that("gptr_providers() lists both plan routes without starting a process", {
+  skip_on_cran()
   pcli_cache_clear()
   withr::defer(pcli_cache_clear())
   local_mocked_bindings(proc_run = function(...) stop("spawned a process"),

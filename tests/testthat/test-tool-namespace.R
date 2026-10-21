@@ -191,6 +191,7 @@ test_that("an execute-only spec gets formals from its schema", {
 })
 
 test_that("ns_resolve() finds user members and errors on unknown names listing the members", {
+  skip_on_cran()
   local_spec(double_spec())
   expect_identical(ns_resolve("double_it")(21), 42)
   expect_true("double_it" %in% ns_names(""))
@@ -205,6 +206,7 @@ test_that("ns_resolve() finds user members and errors on unknown names listing t
 })
 
 test_that("plugin members live under their namespace; gptr_ns nodes are lazy and read-only", {
+  skip_on_cran()
   local_spec(gptr_tool("summarise", "Summarise a vector. Returns a list.",
                        fun = function(x) list(n = length(x)),
                        exposure = "r", namespace = "demo"), source = "plugin:demo", rank = 5L)
@@ -430,6 +432,7 @@ test_that("a plugin namespace registered before a member of that name is refused
 })
 
 test_that("ns_catalog() lists plugin r members and trims descriptions, never names, over budget", {
+  skip_on_cran()
   expect_identical(ns_catalog(NULL), "")
   expect_null(ns_plugins_section(NULL))
   for (i in 1:40) {
@@ -460,6 +463,7 @@ test_that("ns_catalog() lists plugin r members and trims descriptions, never nam
 })
 
 test_that("a lazy plugin is catalogued, completed and searched through its declarations", {
+  skip_on_cran()
   decl = list(signature = "search(condition: string)",
               description = "Search recruiting clinical trials. Returns a data frame.")
   id = registry_add(ext_placeholder("tool", "lazyns/search", "plugin:lazyns", declaration = decl),
@@ -544,6 +548,7 @@ test_that("the BM25 port reproduces Pi's tokens, ranking and scores (report 06 s
 })
 
 test_that("peter$search() ranks members, plugin tools and search_source documents", {
+  skip_on_cran()
   local_spec(double_spec())
   local_spec(gptr_tool("trial_lookup", "Look up clinical trials by indication.",
                        fun = function(indication) 1,
@@ -575,6 +580,7 @@ test_that("peter$search() ranks members, plugin tools and search_source document
 })
 
 test_that("peter$help() shows a member's schema, else the R help page, within the budget", {
+  skip_on_cran()
   params = list(type = "object", required = I("indication"),
                 properties = list(indication = list(type = "string", description = "Disease"),
                                   phase = list(enum = c("1", "2", "3"))))
@@ -604,6 +610,7 @@ test_that("peter$help() shows a member's schema, else the R help page, within th
 })
 
 test_that("peter$search() offers only what resolves; documents sharing an id keep their own kind", {
+  skip_on_cran()
   withr::defer(if (exists("taken9$", envir = ns_refused, inherits = FALSE)) {
     rm("taken9$", envir = ns_refused)
   })
@@ -634,6 +641,7 @@ test_that("peter$search() offers only what resolves; documents sharing an id kee
 })
 
 test_that("search sources get a gptr_ctx; a failing source is skipped with a diagnostic", {
+  skip_on_cran()
   seen = new.env()
   local_spec(gptr_spec("search_source", "ctx9", docs = function(ctx) {
     seen$ctx = ctx
@@ -652,6 +660,7 @@ test_that("search sources get a gptr_ctx; a failing source is skipped with a dia
 })
 
 test_that("skills and MCP tools are searched from their catalog texts", {
+  skip_on_cran()
   local_bootstrap_service("skill.catalog", function(session, budget) {
     paste(c("<skills>",
             "Skills hold specialized instructions. Read SKILL.md with the read tool.",
@@ -691,6 +700,7 @@ test_that("skills and MCP tools are searched from their catalog texts", {
 })
 
 test_that("peter$help() shows only members that resolve, a primitive's arguments, and no error", {
+  skip_on_cran()
   local_spec(gptr_tool("hush9", "Secret internals of the plugin.", fun = function(x) x,
                        exposure = "hidden", namespace = "trials9"),
              source = "plugin:trials9", rank = 5L)
@@ -778,6 +788,7 @@ test_that("peter$plot() attaches the current plot or a stored one to the running
 })
 
 test_that("file members return R values; an image read inside r is attached", {
+  skip_on_cran()
   td = withr::local_tempdir()
   writeBin(charToRaw("a\nb\n"), file.path(td, "x.txt"))
   v = member_read(file.path(td, "x.txt"))
@@ -843,6 +854,7 @@ caps = c("read", "edit", "write", "grep", "find", "ls")
 members = c(caps, "help", "search", "describe", "plot", "out")
 
 test_that("builtin:tools registers one spec per capability, direct and member form (IC-37)", {
+  skip_on_cran()
   reg = gptr_registry("tool")
   for (cap in caps) {
     rows = reg[reg$name == cap & reg$source == "builtin:tools", , drop = FALSE]
@@ -908,6 +920,7 @@ test_that("the direct schemas serialise byte for byte as contract section 9.2 (P
 })
 
 test_that("the specs preserve P07's stand-ins apart from read's path and line guidance", {
+  skip_on_cran()
   sb = jsonlite::fromJSON(test_path("fixtures", "bench", "prefix-baseline.json"),
                           simplifyVector = FALSE)$standins
   for (t in sb$tools) {
@@ -1008,6 +1021,7 @@ test_that("accessing a member performs no I/O and opens no connection", {
 })
 
 test_that("direct tools return Pi's texts", {
+  skip_on_cran()
   td = withr::local_tempdir()
   f = file.path(td, "a.R")
   r = tool_write_execute(list(path = f, content = "x = 1\ny = 2\n"), NULL)
@@ -1102,6 +1116,7 @@ test_that("inside r an envelope, member argument names and out lines pass the sc
 })
 
 test_that("risk levels follow contract 9.4 and the control and instructions classes (IC-54)", {
+  skip_on_cran()
   root = local_project(files = list("R/a.R" = "x = 1", "AGENTS.md" = "rules"))
   lvl = function(fun, path) fun(list(path = path), NULL)$level
   expect_identical(lvl(tool_risk_read, "R/a.R"), 0L)

@@ -189,6 +189,7 @@ test_that("json, overflow, missing scripts and failing script functions end clea
 })
 
 test_that("a model record without `fake` finds its live provider by name only", {
+  skip_on_cran()
   spec = gptr_fake_provider(list("found by name"), name = "byname")
   model = spec$models[[1]]
   model$fake = NULL

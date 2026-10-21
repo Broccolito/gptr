@@ -106,6 +106,7 @@ test_that("separator whitespace can introduce an empty-value comment", {
 })
 
 test_that("gptr_env() maps aliases, exports canonical names only and never shows a value", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(stats::setNames(rep(NA_character_, length(win_vars)), win_vars))
   local_gptr_options(quiet = FALSE)

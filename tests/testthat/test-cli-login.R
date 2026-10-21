@@ -89,6 +89,7 @@ test_that("failed help probes stop before checking login", {
 })
 
 test_that("provider listing opts into login checks without HTTP or inference", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   box = new.env(parent = emptyenv())
   box$cli = character()

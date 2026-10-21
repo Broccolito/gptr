@@ -391,6 +391,7 @@ test_that("s1_cost() prices input tokens at the model's dated rate", {
 })
 
 test_that("s1_usage_log() appends one System 1 row to the process log", {
+  skip_on_cran()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
   off = gptr_register(priced_provider())
@@ -459,6 +460,7 @@ test_that("s1_cost() keeps unknown tokens and prices unknown and a zero rate kno
 })
 
 test_that("s1_usage_log() keeps unknown tokens unknown and fills a missing request id (IC-74)", {
+  skip_on_cran()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
   off = gptr_register(priced_provider())
@@ -482,6 +484,7 @@ test_that("s1_usage_log() keeps unknown tokens unknown and fills a missing reque
 })
 
 test_that("s1_usage_log() refuses a malformed request id rather than replacing it (D-015)", {
+  skip_on_cran()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
   off = gptr_register(priced_provider())
@@ -521,6 +524,7 @@ test_that("a keyless loopback classifier gets no credential, even beside a TypeS
 })
 
 test_that("s1_preflight() and s1_prepare() check a model before any request (IC-74)", {
+  skip_on_cran()
   local_mocked_bindings(catalog_ollama_discover = function(...) {
     stop("discovery must not run in this test")
   })

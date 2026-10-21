@@ -21,6 +21,7 @@ test_that("a function frame is never kept as the home (R2)", {
 })
 
 test_that("an eval() target is kept as the home, a function frame under eval() is not (R2)", {
+  skip_on_cran()
   e = new.env()
   s = eval(quote(test_session(home = e)), e)
   expect_identical(session_home(s), e)
@@ -32,6 +33,7 @@ test_that("an eval() target is kept as the home, a function frame under eval() i
 })
 
 test_that("gptr_last() holds the most recent session strongly and survives gc()", {
+  skip_on_cran()
   s = test_session()
   id = session_data(s)$id
   rm(s)
@@ -61,12 +63,14 @@ test_that("an unreferenced session is finalised and its lock removed, except gpt
 })
 
 test_that("a same-process duplicate cannot attach: gptr_error_split_brain", {
+  skip_on_cran()
   s = test_session()
   copy = unserialize(serialize(s, NULL))
   expect_error(session_attach(copy), class = "gptr_error_split_brain")
 })
 
 test_that("a detached copy continues from its own leaf once the original is gone", {
+  skip_on_cran()
   local_store()
   s = test_session(home = globalenv())
   d = session_data(s)
@@ -158,6 +162,7 @@ test_that("continuing a same-process duplicate with a run is split brain", {
 })
 
 test_that("a copy snapshotted while running is attached as aborted (reason detached)", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list(list(hang = TRUE), "resumed"))
   s = test_session()

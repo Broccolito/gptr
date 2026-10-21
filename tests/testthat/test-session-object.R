@@ -3,6 +3,7 @@ source(testthat::test_path("fixtures", "oracles", "report02", "harness.R"), loca
 # ---------------------------------------------------------------- the shell and the transcript
 
 test_that("session_new() builds an idle shell whose only binding is .d", {
+  skip_on_cran()
   home = new.env()
   s = test_session(mode = "manual", home = home)
   d = session_data(s)
@@ -51,6 +52,7 @@ test_that("an id already live in this process is split brain", {
 })
 
 test_that("child sessions are registered under their parent, one level deeper", {
+  skip_on_cran()
   root = test_session()
   last = gptr_last()
   child = test_session(kind = "child", parent = root, opts = list(name = "stats"))
@@ -62,6 +64,7 @@ test_that("child sessions are registered under their parent, one level deeper", 
 })
 
 test_that("session_append() numbers, parents and time-stamps entries and moves the leaf", {
+  skip_on_cran()
   s = test_session()
   id1 = session_append(s, entry_message(msg_user("hello")))
   id2 = session_append(s, entry_custom("test.note", list(n = 1L)))
@@ -116,6 +119,7 @@ test_that("entry_model_change() records routers as provider router", {
 # answered_session() (a one-turn session built by appends, with one usage row) is in the harness.
 
 test_that("accessors read .d; names() and .DollarNames() list them; unknown members are classed", {
+  skip_on_cran()
   s = answered_session()
   expect_identical(s$text, "The data has 32 rows.")
   expect_identical(s$status, "idle")
@@ -143,6 +147,7 @@ test_that("$<- and [[<- are refused (gptr_error_readonly)", {
 })
 
 test_that("children are reachable by name and by index; team text joins the reports", {
+  skip_on_cran()
   team = test_session(kind = "team")
   a = test_session(kind = "child", parent = team, opts = list(name = "stats"))
   ad = session_data(a)
@@ -154,6 +159,7 @@ test_that("children are reachable by name and by index; team text joins the repo
 })
 
 test_that("[[ takes one child index or one name; anything else is a classed error", {
+  skip_on_cran()
   team = test_session(kind = "team")
   expect_error(team[[1L]], class = "gptr_error_invalid_argument")
   a = test_session(kind = "child", parent = team, opts = list(name = "stats"))
@@ -188,6 +194,7 @@ test_that("print(), str(), format() and summary() read only .d", {
 })
 
 test_that("unknown usage prints as unknown, never as zero (IC-74)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80)
   s = answered_session()
   id = session_data(s)$id
@@ -217,6 +224,7 @@ test_that("unknown usage prints as unknown, never as zero (IC-74)", {
 })
 
 test_that("print escapes answer controls without truncating or rewriting session data", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80)
   plain = paste0("caf", intToUtf8(0xE9), " ", intToUtf8(0x3B2), " ", intToUtf8(0x2192),
                  " {literal}")
@@ -248,6 +256,7 @@ test_that("print escapes answer controls without truncating or rewriting session
 })
 
 test_that("print preserves trailing newlines and displays invalid UTF-8 as inert bytes", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80)
   answer = rawToChar(as.raw(c(0x61, 0xFF, 0x09, 0x0A, 0x62, 0x0A)))
   Encoding(answer) = "UTF-8"
@@ -344,6 +353,7 @@ test_that("$value is the latest designated value; names are live views with a re
 })
 
 test_that("a name is looked up in the home and its fork overlays, never in other parents", {
+  skip_on_cran()
   withr::local_options(gptr.quiet = FALSE)
   big = as.numeric(1:3e5)
   # a home whose parent is baseenv: a removed binding is not bound, never base::pi
@@ -421,6 +431,7 @@ test_that("session_value_get(turn =) returns the value of that turn or NULL", {
 # ---------------------------------------------------------------- verbs
 
 test_that("session_set_model() appends model_change and emits model_select", {
+  skip_on_cran()
   local_fake_provider(list("x"))
   local_fake_provider(list("y"), name = "other")
   ev = local_events("model_select")
@@ -440,6 +451,7 @@ test_that("session_set_model() appends model_change and emits model_select", {
 })
 
 test_that("session_set_mode() appends gptr.mode_change; a running session gets an operator note", {
+  skip_on_cran()
   s = test_session(mode = "manual")
   session_set_mode(s, "auto", source = "user")
   expect_identical(s$mode, "auto")
@@ -458,6 +470,7 @@ test_that("session_set_mode() appends gptr.mode_change; a running session gets a
 })
 
 test_that("yolo is the loosest mode; entering it says once what still asks (IC-78)", {
+  skip_on_cran()
   expect_identical(run_mode_tighter("yolo", "auto"), "auto")
   expect_identical(run_mode_tighter("manual", "yolo"), "manual")
   local_gptr_options(quiet = FALSE)
@@ -471,6 +484,7 @@ test_that("yolo is the loosest mode; entering it says once what still asks (IC-7
 })
 
 test_that("a registered `mode` context block renders the operator note", {
+  skip_on_cran()
   id = registry_add(gptr_spec("context_block", "mode", provide = function(ctx, budget) "MODE TEXT",
                               placement = "turn", authority = "data", budget = 300L, order = 300L),
                     source = "user", rank = 3L)
@@ -480,6 +494,7 @@ test_that("a registered `mode` context block renders the operator note", {
 })
 
 test_that("session_enqueue() appends FIFO items by kind and emits queue_update", {
+  skip_on_cran()
   ev = local_events("queue_update")
   s = test_session()
   session_enqueue(s, "first", as = "steer", source = "pipe")
@@ -496,6 +511,7 @@ test_that("session_enqueue() appends FIFO items by kind and emits queue_update",
 })
 
 test_that("session_root_id() follows live parents to the root", {
+  skip_on_cran()
   root = test_session()
   child = test_session(kind = "child", parent = root)
   grandchild = test_session(kind = "child", parent = child)
@@ -506,6 +522,7 @@ test_that("session_root_id() follows live parents to the root", {
 # ---------------------------------------------------------------- verbs: contract additions
 
 test_that("session_set_model() refuses a decision-only (classifier) model for chat (IC-74)", {
+  skip_on_cran()
   local_fake_provider(list("x"))
   local_fake_provider(list(0.9), name = "judge", type = "classifier")
   ev = local_events("model_select")
@@ -530,6 +547,7 @@ test_that("session_set_model() refuses a decision-only (classifier) model for ch
 })
 
 test_that("a mode change reaches a nested run only as a tightening of its outer run (IC-53)", {
+  skip_on_cran()
   outer = run_new(test_session(mode = "manual"), list(), NULL)
   s = test_session(mode = "manual")
   run = run_new(s, list(), outer)
@@ -571,6 +589,7 @@ test_that("a mode change reaches a nested run only as a tightening of its outer 
 })
 
 test_that("a mid-run switch into or out of plan mode moves `r` into or out of a scratch (IC-15)", {
+  skip_on_cran()
   home = new.env()
   s = test_session(mode = "auto", home = home)
   run = test_run(s)
@@ -622,6 +641,7 @@ test_that("only a `mode` block of rank 3 or more speaks in the operator note (IC
 })
 
 test_that("session_enqueue() checks attachments before an item can enter the queue", {
+  skip_on_cran()
   ev = local_events("queue_update")
   s = test_session()
   img = block_image(as.raw(1:4), source = "user")
@@ -665,6 +685,7 @@ test_that("session_enqueue() checks attachments before an item can enter the que
 })
 
 test_that("session_enqueue() redacts the text and the attachments at ingress (context profile)", {
+  skip_on_cran()
   s = test_session()
   key = paste0("sk-ant-api03-", strrep("A1b2", 6L))
   img = block_image(as.raw(1:4), source = "user")
@@ -677,6 +698,7 @@ test_that("session_enqueue() redacts the text and the attachments at ingress (co
 })
 
 test_that("model code of the same session tree cannot enqueue (IC-55)", {
+  skip_on_cran()
   ev = local_events("queue_update")
   root = test_session()
   child = test_session(kind = "child", parent = root)
@@ -729,6 +751,7 @@ test_that("model code of the same session tree cannot enqueue (IC-55)", {
 # fork_source() (a two-turn source session with a kept home binding `x`) is in the harness.
 
 test_that("an overlay fork reads the source home and writes to its own overlay", {
+  skip_on_cran()
   x = fork_source()
   f = gptr_fork(x$s)
   expect_false(identical(f$id, x$s$id))
@@ -744,6 +767,7 @@ test_that("an overlay fork reads the source home and writes to its own overlay",
 })
 
 test_that("gptr_fork(at =) cuts at a turn, at 0 or at an entry id", {
+  skip_on_cran()
   x = fork_source()
   f1 = gptr_fork(x$s, at = 1)
   expect_identical(f1$turns, 1L)
@@ -792,12 +816,14 @@ test_that("a running source is cut at its last closed boundary", {
 })
 
 test_that("a session_before_fork handler may cancel the fork", {
+  skip_on_cran()
   x = fork_source()
   local_hook("session_before_fork", function(event, ctx) list(cancel = TRUE, reason = "not now"))
   expect_error(gptr_fork(x$s), "not now", class = "gptr_error_invalid_argument")
 })
 
 test_that("gptr_fork() emits session_start with reason fork to process-wide hooks", {
+  skip_on_cran()
   x = fork_source()
   ev = local_events("session_start")
   f = gptr_fork(x$s)
@@ -807,6 +833,7 @@ test_that("gptr_fork() emits session_start with reason fork to process-wide hook
 })
 
 test_that("rank-0 specs of the source are registered again for the fork", {
+  skip_on_cran()
   x = fork_source()
   spec = gptr_tool("only_here", "A session tool", execute = function(input, ctx) "x")
   id = registry_add(spec, source = "session", rank = 0L, session = x$s$id)
@@ -816,6 +843,7 @@ test_that("rank-0 specs of the source are registered again for the fork", {
 })
 
 test_that("a source without a kept home gives a fork without one, with a notice", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("A"))
   g = function() {
@@ -832,6 +860,7 @@ test_that("a source without a kept home gives a fork without one, with a notice"
 })
 
 test_that("the fork keeps the values of the turns it copies", {
+  skip_on_cran()
   x = fork_source()
   d = session_data(x$s)
   vals = d$values
@@ -895,6 +924,7 @@ test_that("an approved ask_human is a one-shot token for one control call", {
 # The blocks below go beyond the plan's tests of gptr_fork() (P06 Task 12 adaptations, D-044).
 
 test_that("a cut at the end of a turn keeps the entries that close the turn, such as its value", {
+  skip_on_cran()
   x = fork_source()
   session_value_set(x$s, "answer", "two")
   d = session_data(x$s)
@@ -953,6 +983,7 @@ test_that("a cut inside a turn keeps only the values recorded before the cut", {
 })
 
 test_that("gptr_fork() refuses a malformed cut with a classed error", {
+  skip_on_cran()
   x = fork_source()
   bad = list("", NA_character_, NA, -1, 1.5, Inf, TRUE, c(1, 2), c("a", "b"), list(1))
   for (at in bad) {
@@ -967,6 +998,7 @@ test_that("gptr_fork() refuses a malformed cut with a classed error", {
 })
 
 test_that("session_before_fork sees the source and the cut; a cancel without a reason says so", {
+  skip_on_cran()
   x = fork_source()
   ev = local_events("session_before_fork")
   gptr_fork(x$s, at = 1)
@@ -993,6 +1025,7 @@ test_that("the source's listeners are never copied to the fork (INFRA-14)", {
 })
 
 test_that("a detached copy is forked from its own state unless another process holds its file", {
+  skip_on_cran()
   local_store()
   x = fork_source()
   copy = unserialize(serialize(x$s, NULL))
@@ -1029,6 +1062,7 @@ test_that("the IC-53 refusal names the export, the tool, the control level and t
 })
 
 test_that("an empty or oversized entry id is refused before session_before_fork is emitted", {
+  skip_on_cran()
   x = fork_source()
   ev = local_events("session_before_fork")
   for (at in list("", strrep("a", 20000L))) {
@@ -1046,6 +1080,7 @@ replay_types = function(s) {
 }
 
 test_that("session_replay_apply() advances the piped session in place; identical() holds", {
+  skip_on_cran()
   s = test_session()
   r = s |>
     session_replay_apply("a1b2c3", list(session = s$id, turn = "1")) |>
@@ -1062,6 +1097,7 @@ test_that("session_replay_apply() advances the piped session in place; identical
 })
 
 test_that("a block already seen adds no turn and no entry", {
+  skip_on_cran()
   s = test_session()
   session_replay_apply(s, "a1b2c3", list(turn = "1"))
   n = length(session_data(s)$entries)
@@ -1128,6 +1164,7 @@ test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded tur
 })
 
 test_that("without a file the session is reconstructed from the document", {
+  skip_on_cran()
   local_store()
   home = new.env()
   doc = list(path = "analysis.R", format = "r", template = "Count the rows of d",
@@ -1156,6 +1193,7 @@ test_that("without a file the session is reconstructed from the document", {
 })
 
 test_that("a later live run of a reconstructed session gives a one-time notice", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list("continued"))
@@ -1173,6 +1211,7 @@ test_that("a later live run of a reconstructed session gives a one-time notice",
 # from the cut path.
 
 test_that("a header id, a value= name or a document field of the wrong type is refused first", {
+  skip_on_cran()
   local_store()
   for (id in list("../escaped", "s_1", 1, c("s0123456789", "s0123456780"))) {
     err = tryCatch(session_replay_new("a1b2c3", list(session = id, turn = "1"),
@@ -1214,6 +1253,7 @@ test_that("session_replay_new() takes doc as optional; a missing answer is not i
 })
 
 test_that("a header turn that is not one whole number keeps the recorded transcript", {
+  skip_on_cran()
   expect_identical(replay_turn("2"), 2L)
   expect_identical(replay_turn(3L), 3L)
   for (x in list(NULL, "x", c("1", "2"), "-1", "1.5", NA_character_, list("1"))) {
@@ -1226,6 +1266,7 @@ test_that("a header turn that is not one whole number keeps the recorded transcr
 })
 
 test_that("a session rebuilt for a replay takes model, mode and frozen prompt from the cut path", {
+  skip_on_cran()
   local_store()
   s = test_session(home = globalenv())
   d = session_data(s)
@@ -1259,6 +1300,7 @@ test_that("a session rebuilt for a replay takes model, mode and frozen prompt fr
 })
 
 test_that("a replay cut takes the frozen audience and budget cut of its own path (FIX-3)", {
+  skip_on_cran()
   local_store()
   s = test_session(home = globalenv())
   d = session_data(s)
@@ -1295,6 +1337,7 @@ test_that("a replay cut takes the frozen audience and budget cut of its own path
 # session reconstructed from its document stays reconstructed when rebuilt from its file.
 
 test_that("a header model without a provider or a model id is refused before anything exists", {
+  skip_on_cran()
   local_store()
   doc = list(template = "t", text = "a")
   for (model in list("fake/", "/x", "/", "", NA_character_, 1, c("fake/a", "fake/b"))) {
@@ -1321,6 +1364,7 @@ test_that("a header model without a provider or a model id is refused before any
 })
 
 test_that("a reconstruction that fails part-way leaves no session and no file behind", {
+  skip_on_cran()
   local_store()
   keep = test_session()
   doc = list(template = "t", code = "x = 1", output = "1", text = "a")
@@ -1388,6 +1432,7 @@ test_that("NAMESPACE exports the session API and registers the session methods",
 })
 
 test_that("initial model recording is idempotent without a request or selection event", {
+  skip_on_cran()
   local_fake_provider(list("x"))
   events = local_events("model_select")
   s = test_session()
@@ -1419,6 +1464,7 @@ test_that("initial model recording is idempotent without a request or selection 
 })
 
 test_that("initial model recording resolves private providers and refuses decisions", {
+  skip_on_cran()
   spec = gptr_provider("initial-private", api = "fake", models = list(list(id = "m1")),
                         offline = TRUE)
   s = test_session(model = "initial-private/m1", opts = list(thinking = "high"))

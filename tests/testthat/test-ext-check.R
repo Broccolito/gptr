@@ -11,6 +11,7 @@ test_that("tool conformance distinguishes handler errors from malformed results"
 })
 
 test_that("factory checks count only the current invocation's records", {
+  skip_on_cran()
   local_registry()
   registry_add(gptr_command("borrowed", function(args, ctx) "x"), "plugin:gptr-check", 5L)
   result = gptr_check(function(gptr) NULL)
@@ -24,6 +25,7 @@ test_that("factory checks count only the current invocation's records", {
 })
 
 test_that("nested factories cannot satisfy the checked outer factory's declarations", {
+  skip_on_cran()
   local_registry()
   nested = function(gptr) {
     ext_load(function(inner) {
@@ -85,6 +87,7 @@ test_that("package manifests cannot omit or malform a declared factory", {
 })
 
 test_that("package entries resolve the declared exported function exactly", {
+  skip_on_cran()
   local_registry()
   root = withr::local_tempdir()
   dir.create(file.path(root, "gptr"))
@@ -114,6 +117,7 @@ test_that("package entries resolve the declared exported function exactly", {
 })
 
 test_that("conformance permits current captured API reads while keeping writes stale", {
+  skip_on_cran()
   reg = local_registry()
   api = ext_api_new("plugin:reads")
   policy = gptr_policy("reads", function(call, ctx) {
@@ -235,6 +239,7 @@ valid_specs = function() {
 }
 
 test_that("gptr_check() passes a valid spec of every kind (acceptance 3)", {
+  skip_on_cran()
   local_registry()
   specs = valid_specs()
   expect_setequal(vapply(specs, function(s) s$kind, ""), kind_names())
@@ -397,6 +402,7 @@ test_that("factories: load, register, no action at load, and every registered sp
 })
 
 test_that("installed plugin packages: manifest, API, provides and bare identifiers (IC-42)", {
+  skip_on_cran()
   local_registry()
   root = withr::local_tempdir()
   dir.create(file.path(root, "gptr"))
@@ -479,6 +485,7 @@ test_that("the contract 6.7 example passes", {
 })
 
 test_that("checks see the live registry's records and services but never change them", {
+  skip_on_cran()
   reg = local_registry()
   old = the$services
   withr::defer(assign("services", old, envir = the))
@@ -507,6 +514,7 @@ test_that("checks see the live registry's records and services but never change 
 })
 
 test_that("a session finalized during a check keeps its deferred shutdown (D-085)", {
+  skip_on_cran()
   reg = local_registry()
   seen = new.env(parent = emptyenv())
   seen$reasons = character()

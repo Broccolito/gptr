@@ -243,6 +243,7 @@ test_that("call_value() checks its index and refuses value items once released",
 })
 
 test_that("gateway_args() reads described choices by their labels and wants single strings", {
+  skip_on_cran()
   ok = function(...) {
     a = list(NULL, NULL, NULL, 0.5, NULL, NULL, FALSE, NULL, NULL, list(), TRUE, FALSE)
     b = list(...)
@@ -269,6 +270,7 @@ test_that("gateway_args() reads described choices by their labels and wants sing
 })
 
 test_that("gateway_opts() wants one string per choice switch and checks every core entry", {
+  skip_on_cran()
   expect_error(gateway_opts(list(context = c("summary", "names", "none"))),
                class = "gptr_error_invalid_argument")
   expect_error(gateway_opts(list(thinking = catalog_thinking_levels)),
@@ -308,6 +310,7 @@ test_that(".opts$images takes paths, plots and character vectors, never a direct
 })
 
 test_that(".opts$system1_images takes raw PNG, JPEG or WebP records only (IC-74)", {
+  skip_on_cran()
   png = list(data = as.raw(c(0x89, 0x50, 0x4E, 0x47)), mime = "image/png")
   jpg = list(mime = "image/jpeg", data = as.raw(c(0xFF, 0xD8, 0xFF)))
   webp = list(data = charToRaw("RIFF0000WEBP"), mime = "image/webp")
@@ -364,6 +367,7 @@ test_that("per-call options never reach the protected settings or safety record 
 # ------------------------------------------------------------------ identifiers (Task 6)
 
 test_that("resolve_identifier() follows the table of contract 6.1.3", {
+  skip_on_cran()
   e = new.env()
   e$m = "haiku"
   e$hard = TRUE
@@ -442,6 +446,7 @@ test_that("agents take their list names; model and skills resolve as identifiers
 # ---- Task 6 adaptation tests (contract 1.1, 6.1, 6.1.3, IC-42, IC-71, IC-74, rule R3)
 
 test_that("agents written with gptr_agent() or gptr::gptr_agent() take their list names (IC-42)", {
+  skip_on_cran()
   e = new.env()
   a = resolve_agents(quote(list(stats = gptr_agent(model = opus),
                                 lit = gptr::gptr_agent(description = "Literature",
@@ -476,6 +481,7 @@ test_that("agents written with gptr_agent() or gptr::gptr_agent() take their lis
 })
 
 test_that("P02 refuses each of P06's session accessors as an agent name (IC-71)", {
+  skip_on_cran()
   nms = session_accessors
   expect_true(all(c("text", "value", "usage", "children", "editor_text") %in% nms))
   for (nm in nms) {
@@ -484,6 +490,7 @@ test_that("P02 refuses each of P06's session accessors as an agent name (IC-71)"
 })
 
 test_that("an invalid mode is refused without echoing its value (contract 1.1)", {
+  skip_on_cran()
   e = new.env()
   e$x = "mode-from-a-variable"
   bang = quote(!!x)
@@ -556,6 +563,7 @@ test_that("ident_force_needed() and ident_value() force unknown bound symbols an
 })
 
 test_that("the alias and agent masks are detached from the caller afterwards (rule R3)", {
+  skip_on_cran()
   e = new.env()
   e$hard = FALSE
   e$grab = function() {

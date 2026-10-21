@@ -327,6 +327,7 @@ test_that("a timeout stops a busy loop with status timeout", {
 })
 
 test_that("a plot yields one 768x512 PNG image block and no Rplots.pdf", {
+  skip_on_cran()
   skip_if_not(isTRUE(capabilities("png")) || requireNamespace("ragg", quietly = TRUE))
   dir = withr::local_tempdir()
   withr::local_dir(dir)
@@ -344,6 +345,7 @@ test_that("a plot yields one 768x512 PNG image block and no Rplots.pdf", {
 })
 
 test_that("a 50-plot loop attaches 3 images and keeps the rest in one out entry", {
+  skip_on_cran()
   skip_if_not(isTRUE(capabilities("png")) || requireNamespace("ragg", quietly = TRUE))
   res = eval_r("for (i in 1:50) plot(i)", new.env())
   expect_length(res$images, 3L)
@@ -606,6 +608,7 @@ test_that("a message sink on the capture connection is undone before that connec
 })
 
 test_that("a visible value is printed with the print methods visible from envir", {
+  skip_on_cran()
   # As at the console (R's PrintValueEnv()): print(x) is evaluated in a child of the home, so a
   # method defined in a function-frame home or an overlay prints `x`, `(x)` and `f(x)` alike
   # (review round 1)

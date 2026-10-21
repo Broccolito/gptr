@@ -60,6 +60,7 @@ test_that("a sourced top-level call is located through its srcref and owns its b
 })
 
 test_that("without srcrefs the source() frame locates the statement, unless switched off", {
+  skip_on_cran()
   proj = local_project()
   local_no_running_document()
   f = file.path(proj, "analysis.R")
@@ -78,6 +79,7 @@ test_that("without srcrefs the source() frame locates the statement, unless swit
 })
 
 test_that("pipelines, block-nested calls and dynamic prompts are told apart", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "a.R")
   ph = prompt_hash("outer")
@@ -96,6 +98,7 @@ test_that("pipelines, block-nested calls and dynamic prompts are told apart", {
 })
 
 test_that("Quarto and Jupyter locations come from their environment variables", {
+  skip_on_cran()
   # test_path() is relative to tests/testthat, which local_project() leaves: resolve it first
   fixture = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
   proj = local_project()
@@ -178,6 +181,7 @@ test_that("an interactive console asks once where to record and remembers the an
 # ---- Task 8 additions (contract 7.15, 11.5; IC-52; dev/DEVIATIONS.md D-103) ---------------------
 
 test_that("each step of a pipeline that repeats a prompt is located as itself (ambiguity 28)", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "chain.R")
   writeLines(c("x = 1",
@@ -194,6 +198,7 @@ test_that("each step of a pipeline that repeats a prompt is located as itself (a
 })
 
 test_that("an Rscript run counts executions per call, and a repeated prompt per pipeline step", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "run.R")
   writeLines(c("a = peter(\"count rows\")",
@@ -274,6 +279,7 @@ test_that("an IDE call is located in the editor buffer at or above the cursor", 
 })
 
 test_that("a transcript entry that is not an object is ignored and remembered targets are valid", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(transcript = "ask", interactive = FALSE)
   settings_write("user_project", list(transcript = "a.R"))
@@ -558,6 +564,7 @@ nb_test_write = function(path, cells) {
 }
 
 test_that("each step of a pipeline that repeats a prompt in a notebook owns its agent cell", {
+  skip_on_cran()
   proj = local_project()
   agent = function(id, prompt, k) {
     nb_test_cell(paste0("gptr-", id), "n = 1",
@@ -593,6 +600,7 @@ test_that("each step of a pipeline that repeats a prompt in a notebook owns its 
 })
 
 test_that("a computed prompt equal to a literal prompt elsewhere is located as its own call", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "run.R")
   writeLines(c("q = \"count rows\"", "a = peter(q)", "b = peter(\"count rows\")"), f)
@@ -626,6 +634,7 @@ test_that("a computed prompt equal to a literal prompt elsewhere is located as i
 # No peter() call is written in this test's code: without srcrefs in the sourced file, the srcref
 # finder searches the frames below, and the test_that() statement of this file is one of them
 test_that("in one statement, a computed prompt equal to a literal prompt is located as itself", {
+  skip_on_cran()
   proj = local_project()
   local_no_running_document()
   g = file.path(proj, "chain.R")
@@ -642,6 +651,7 @@ test_that("in one statement, a computed prompt equal to a literal prompt is loca
 })
 
 test_that("a computed prompt equal to a literal prompt is located in its IDE line and cell", {
+  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "ide.R")
   buffer = c("q = \"count rows\"", "a = peter(q)", "b = peter(\"count rows\")")
@@ -682,6 +692,7 @@ test_that("a computed prompt equal to a literal prompt is located in its IDE lin
 })
 
 test_that("a script sourced with chdir = TRUE is found from the directory it was sourced from", {
+  skip_on_cran()
   proj = local_project()
   local_no_running_document()
   dir.create(file.path(proj, "sub", "sub"), recursive = TRUE)

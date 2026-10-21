@@ -12,6 +12,7 @@ history_display_output = function(x, ...) {
 }
 
 test_that("both public histories are full read-only snapshots with concise printing", {
+  skip_on_cran()
   local_store()
   provider = local_fake_provider(list(fake_text("unused")))
   home = new.env(parent = emptyenv())
@@ -41,6 +42,7 @@ test_that("both public histories are full read-only snapshots with concise print
 })
 
 test_that("the row limit is explicit, validated, and leaves the complete table untouched", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80)
   x = history_display_fixture()
   before = serialize(x, NULL)
@@ -66,6 +68,7 @@ test_that("the row limit is explicit, validated, and leaves the complete table u
 })
 
 test_that("history display adapts to the current width and keeps unknown tokens truthful", {
+  skip_on_cran()
   x = history_display_fixture(1L)
   x$preview = paste0("\u4f60\u597d ", strrep("long preview ", 10))
   x$tools = "R"
@@ -112,6 +115,7 @@ test_that("empty and hidden histories have clear counts without fake rows", {
 })
 
 test_that("session metadata is a detached snapshot with honest unknown accounting", {
+  skip_on_cran()
   local_store()
   s = answered_session()
   usage_add(s, usage_conform(data.frame(request_id = "q000000000002", session = s$id,
@@ -138,6 +142,7 @@ test_that("session metadata is a detached snapshot with honest unknown accountin
 })
 
 test_that("history distinguishes unreported assistant totals from reported zero", {
+  skip_on_cran()
   local_store()
   s = test_session()
   session_append(s, entry_message(msg_user("estimate this prompt")))

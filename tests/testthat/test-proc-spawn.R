@@ -44,6 +44,7 @@ marker_tree_is = function(marker, pid) {
 }
 
 test_that("wait_until() returns once its condition holds and reads it once per poll", {
+  skip_on_cran()
   seen = new.env(parent = emptyenv())
   seen$calls = 0L
   # TRUE then FALSE, as the macOS exec chain hides a marker tree: a second read reports FALSE
@@ -56,6 +57,7 @@ test_that("wait_until() returns once its condition holds and reads it once per p
 })
 
 test_that("R children must come from rscript_path(), never a PATH lookup", {
+  skip_on_cran()
   expect_error(proc_resolve("Rscript", "--version"), class = "gptr_error_invalid_argument")
   expect_error(proc_resolve("R"), class = "gptr_error_invalid_argument")
   expect_error(proc_resolve("gptr-no-such-program-xyz"), class = "gptr_error_spawn")
@@ -242,6 +244,7 @@ test_that("a killed parent leaves a grandchild that the next load's sweep remove
 })
 
 test_that("spawn validates arguments and complete environments before creating a process", {
+  skip_on_cran()
   for (bad in list(1, list("x"), c("x", NA_character_))) {
     expect_error(proc_spawn(rscript_path(), args = bad), class = "gptr_error_invalid_argument")
   }
@@ -349,6 +352,7 @@ test_that("proc_run echo redacts registered values spanning output polls", {
 })
 
 test_that("proc_run echo ends lines at CRLF, so a Windows child's output is redacted as LF", {
+  skip_on_cran()
   local_vault()
   secret_register("FAKEfirstLine\nFAKEsecondLine", "SPLIT_TEST_TOKEN")
   emitted = character()
@@ -777,6 +781,7 @@ test_that("unverifiable self creation time retains recovery without authorizing 
 })
 
 test_that("self marker rejection preserves corrupt-record and foreign-parent policy", {
+  skip_on_cran()
   fixture = local_self_marker()
   path = fixture$path
   state = new.env(parent = emptyenv())

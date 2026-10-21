@@ -227,6 +227,7 @@ test_that("reserved_name() recognises Windows device names", {
 })
 
 test_that("path_class() assigns the classes of report 18 and IC-54", {
+  skip_on_cran()
   root = path_norm(withr::local_tempdir())
   home = path_norm(user_home())
   cls = function(p) path_class(p, root)
@@ -336,6 +337,7 @@ test_that("a case variant is a dangling link only where file names ignore case",
 })
 
 test_that("readers and file tools take a link to nothing for an absent file on every OS", {
+  skip_on_cran()
   # A Windows file symlink needs a privilege CRAN may lack; R takes its kind from an existing target
   if (is_windows()) skip_on_cran()
   proj = local_project(files = list(a.R = "a = 1"))

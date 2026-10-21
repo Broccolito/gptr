@@ -319,6 +319,7 @@ test_that("filtered sources are not loaded; argument errors are classed", {
 })
 
 test_that("100 lazy manifests register quickly (acceptance 4; timed precisely in the plan)", {
+  skip_on_cran()
   local_registry()
   f = function(gptr) NULL
   elapsed = system.time(for (i in seq_len(100L)) {

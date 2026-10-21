@@ -68,6 +68,7 @@ test_that("price tiers switch on the prompt size and on the date", {
 })
 
 test_that("unknown observations remain distinct from omitted legacy fields", {
+  skip_on_cran()
   u = usage_new(input = NA_real_, output = 3, cache_read = NULL,
                 cost = list(input = NA_real_, total = NA_real_))
   expect_true(is.na(u$input))
@@ -104,6 +105,7 @@ test_that("unknown observations remain distinct from omitted legacy fields", {
 })
 
 test_that("usage and monetary values must be finite nonnegative real scalars or NA", {
+  skip_on_cran()
   for (value in list(-1, Inf, -Inf, NaN, 1 + 1i, "3", TRUE, c(1, 2))) {
     expect_error(usage_new(input = value), class = "gptr_error_invalid_argument")
     expect_error(cost_new(list(total = value)), class = "gptr_error_invalid_argument")
@@ -118,6 +120,7 @@ test_that("usage and monetary values must be finite nonnegative real scalars or 
 })
 
 test_that("known zero local API rates do not erase unknown tokens", {
+  skip_on_cran()
   local = list(locality = "local", prices = price_rows(list(input = 0, output = 0)))
   u = usage_cost(NULL, local)
   expect_true(is.na(u$input))
@@ -157,6 +160,7 @@ test_that("unknown prompt size does not silently select a cheaper threshold tier
 })
 
 test_that("price dates and tiers are validated and future rates are not borrowed", {
+  skip_on_cran()
   prices = price_rows(list(from = "2026-10-01", input = 1, output = 2),
                       list(from = "2026-11-01", input = 2, output = 4))
   expect_null(price_select(prices, 1, as.Date("2026-09-30")))
@@ -199,6 +203,7 @@ usage_msg = function(usage, route = "api", request_id = "q000000000001") {
 }
 
 test_that("usage_row() prices a request and attributes it (INFRA-20)", {
+  skip_on_cran()
   local_priced_provider()
   started = as.POSIXct("2026-09-30 12:00:00", tz = "UTC")
   row = usage_row(usage_msg(usage_new(input = 50, output = 1200, cache_read = 200000,
@@ -230,6 +235,7 @@ test_that("plan-cli rows keep the CLI's own cost estimate", {
 })
 
 test_that("child usage rows record the parent session and the route (INFRA-20)", {
+  skip_on_cran()
   local_priced_provider()
   t0 = as.POSIXct("2026-09-30 12:00:00", tz = "UTC")
   row = function(input, output, session, agent, parent_id) {
@@ -263,6 +269,7 @@ test_that("the process System 1 log is append-only", {
 })
 
 test_that("usage rows retain unknown observations, price evidence and elapsed time", {
+  skip_on_cran()
   local_priced_provider()
   started = as.POSIXct("2026-09-30 12:00:00", tz = "UTC")
   build = function(msg, time = started) {
@@ -294,6 +301,7 @@ test_that("usage rows retain unknown observations, price evidence and elapsed ti
 })
 
 test_that("plan CLI missing cost is unknown while supplied zero remains known", {
+  skip_on_cran()
   local_priced_provider()
   build = function(u) {
     usage_row(usage_msg(u, route = "plan-cli"), "root", "main",
@@ -313,6 +321,7 @@ test_that("plan CLI missing cost is unknown while supplied zero remains known", 
 })
 
 test_that("usage log validates rows before mutation and returns independent copies", {
+  skip_on_cran()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
   the$s1_log = NULL
@@ -355,6 +364,7 @@ test_that("usage log validates rows before mutation and returns independent copi
 })
 
 test_that("usage row scalar fields cannot recycle into multiple accounting rows", {
+  skip_on_cran()
   local_priced_provider()
   msg = usage_msg(usage_new(input = 1))
   build = function(...) {

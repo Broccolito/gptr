@@ -290,6 +290,7 @@ test_that("steering relays retain text blocks; follow-ups keep attachments", {
 loop_recs = oracle("loop")
 
 test_that(oracle_title(loop_recs, "L01"), {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("Hello from gptr!"))
   s = test_session()
@@ -298,6 +299,7 @@ test_that(oracle_title(loop_recs, "L01"), {
 })
 
 test_that(oracle_title(loop_recs, "L02"), {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list(fake_text("Hello from gptr! A longer answer.", chunk = 8L)))
   updates = local_events("message_update")
@@ -309,6 +311,7 @@ test_that(oracle_title(loop_recs, "L02"), {
 })
 
 test_that(oracle_title(loop_recs, "L03"), {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("Hello"))
   s = test_session()
@@ -317,6 +320,7 @@ test_that(oracle_title(loop_recs, "L03"), {
 })
 
 test_that(oracle_title(loop_recs, "L04"), {
+  skip_on_cran()
   local_permissive()
   add_tool()
   local_tool("boom", function(input, ctx) stop("kaboom: file not found"))
@@ -331,6 +335,7 @@ test_that(oracle_title(loop_recs, "L04"), {
 })
 
 test_that(oracle_title(loop_recs, "L05"), {
+  skip_on_cran()
   local_permissive()
   add_tool()
   local_fake_provider(list(fake_tools(list(name = "add", input = list(a = 2, b = 3)),
@@ -346,6 +351,7 @@ test_that(oracle_title(loop_recs, "L05"), {
 })
 
 test_that(oracle_title(loop_recs, "L06"), {
+  skip_on_cran()
   local_permissive()
   local_tool("boom", function(input, ctx) stop("kaboom: file not found"))
   local_fake_provider(list(fake_tool("boom"), "ok"))
@@ -357,6 +363,7 @@ test_that(oracle_title(loop_recs, "L06"), {
 })
 
 test_that(oracle_title(loop_recs, "L07"), {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list(fake_tool("nope"), "ok"))
   s = test_session()
@@ -365,6 +372,7 @@ test_that(oracle_title(loop_recs, "L07"), {
 })
 
 test_that(oracle_title(loop_recs, "L08"), {
+  skip_on_cran()
   local_permissive()
   ran = new.env()
   ran$yes = FALSE
@@ -382,6 +390,7 @@ test_that(oracle_title(loop_recs, "L08"), {
 })
 
 test_that(oracle_title(loop_recs, "L09"), {
+  skip_on_cran()
   local_permissive()
   add_tool()
   fake = local_fake_provider(list(fake_tools(list(name = "add", input = list(a = 1, b = 2)),
@@ -392,6 +401,7 @@ test_that(oracle_title(loop_recs, "L09"), {
 })
 
 test_that(oracle_title(loop_recs, "L10"), {
+  skip_on_cran()
   local_permissive()
   add_tool()
   fake = local_fake_provider(list(fake_tools(list(name = "add", input = list(a = 1, b = 1)),
@@ -406,6 +416,7 @@ test_that(oracle_title(loop_recs, "L10"), {
 })
 
 test_that(oracle_title(loop_recs, "L11"), {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   steer_during_slow(box)
@@ -417,6 +428,7 @@ test_that(oracle_title(loop_recs, "L11"), {
 })
 
 test_that(oracle_title(loop_recs, "L12"), {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   steer_during_slow(box)
@@ -430,6 +442,7 @@ test_that(oracle_title(loop_recs, "L12"), {
 })
 
 test_that(oracle_title(loop_recs, "L13"), {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   steer_during_slow(box)
@@ -443,6 +456,7 @@ test_that(oracle_title(loop_recs, "L13"), {
 })
 
 test_that(oracle_title(loop_recs, "L14"), {
+  skip_on_cran()
   local_permissive()
   ran = new.env()
   ran$yes = FALSE
@@ -461,6 +475,7 @@ test_that(oracle_title(loop_recs, "L14"), {
 })
 
 test_that(oracle_title(loop_recs, "L15"), {
+  skip_on_cran()
   local_permissive()
   add_tool()
   local_hook("tool_call", function(event, ctx) {
@@ -474,6 +489,7 @@ test_that(oracle_title(loop_recs, "L15"), {
 })
 
 test_that(oracle_title(loop_recs, "L16"), {
+  skip_on_cran()
   local_permissive()
   local_tool("stopper", function(input, ctx) {
     res = gptr_tool_result("final")
@@ -488,6 +504,7 @@ test_that(oracle_title(loop_recs, "L16"), {
 })
 
 test_that(oracle_title(loop_recs, "L17"), {
+  skip_on_cran()
   local_permissive()
   add_tool()
   local_hook("tool_result", function(event, ctx) {
@@ -500,6 +517,7 @@ test_that(oracle_title(loop_recs, "L17"), {
 })
 
 test_that(oracle_title(loop_recs, "L18"), {
+  skip_on_cran()
   local_permissive()
   x = interrupting_run()
   expect_identical(x$res, "interrupted")
@@ -508,6 +526,7 @@ test_that(oracle_title(loop_recs, "L18"), {
 })
 
 test_that(oracle_title(loop_recs, "L19"), {
+  skip_on_cran()
   local_permissive()
   x = interrupting_run()
   tr = tool_results(x$s)
@@ -517,6 +536,7 @@ test_that(oracle_title(loop_recs, "L19"), {
 })
 
 test_that(oracle_title(loop_recs, "L20"), {
+  skip_on_cran()
   local_permissive()
   x = interrupting_run()
   expect_null(session_live(x$s)$run)
@@ -530,6 +550,7 @@ test_that(oracle_title(loop_recs, "L20"), {
 })
 
 test_that(oracle_title(loop_recs, "L21"), {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list(fake_error("400 invalid request: bad parameter", status = 400L)))
   s = test_session()
@@ -542,6 +563,7 @@ test_that(oracle_title(loop_recs, "L21"), {
 })
 
 test_that(oracle_title(loop_recs, "L22"), {
+  skip_on_cran()
   local_permissive()
   add_tool()
   fake = local_fake_provider(list(fake_tool("add", a = 1, b = 1)))
@@ -554,6 +576,7 @@ test_that(oracle_title(loop_recs, "L22"), {
 })
 
 test_that(oracle_title(loop_recs, "L23"), {
+  skip_on_cran()
   local_permissive()
   local_hook("message_end", function(event, ctx) stop("listener bug"))
   local_fake_provider(list("fine"))
@@ -564,6 +587,7 @@ test_that(oracle_title(loop_recs, "L23"), {
 })
 
 test_that(oracle_title(loop_recs, "L24"), {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("re", function(input, ctx) {

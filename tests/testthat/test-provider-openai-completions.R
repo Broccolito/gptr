@@ -156,6 +156,7 @@ test_that("Mistral thinking arrives as content items and becomes a thinking bloc
 # ---- additions beyond the plan (IC-74 and contract typing) -------------------------------------
 
 test_that("an Ollama chat stream keeps reasoning, tool calls, usage and the output limit (IC-74)", {
+  skip_on_cran()
   # 07-local-ollama.md section 6, P12 row: Ollama chat goes through openai-completions; streaming,
   # tool support and reasoning/output limits of capable models (report 04b: the reasoning field
   # can use up the budget and end with finish_reason "length" and no content)
@@ -245,6 +246,7 @@ test_that("non-string finish reasons are never matched by position (04 4.2)", {
 })
 
 test_that("the compat record comes from the provider record provider_stream() resolved (04 10.1)", {
+  skip_on_cran()
   # a provider passed as `model = <spec>` is a session-scoped record the global lookup never sees
   rec = function(id, finish) {
     gptr_provider(id, api = "openai-completions", base_url = "http://127.0.0.1:9/v1",
@@ -575,6 +577,7 @@ test_that("end to end on the mock server: a Chat Completions stream (skip on CRA
 })
 
 test_that("build() takes compat and headers from the record provider_stream() resolved (04 10.1)", {
+  skip_on_cran()
   # D-023, D-027 item 3: a session-scoped provider (`model = <spec>`) is invisible to the global
   # lookup, so its compat and headers come from opts$provider or the session's own record
   model = test_model(api, provider = "p12-corp", id = "corp-large")

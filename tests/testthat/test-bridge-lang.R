@@ -16,6 +16,7 @@ test_that("objects passed by name take the label of their expression", {
 })
 
 test_that("peter$sql() uses the one DBI connection in the calling frame", {
+  skip_on_cran()
   skip_if_not_installed("DBI")
   skip_if_not_installed("RSQLite")
   f = function(missing_arg) {
@@ -49,6 +50,7 @@ test_that("peter$sql() uses the one DBI connection in the calling frame", {
 })
 
 test_that("name = registers data frames in an in-memory duckdb under their labels", {
+  skip_on_cran()
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
   log = local_bridge_events()
@@ -71,6 +73,7 @@ test_that("name = registers data frames in an in-memory duckdb under their label
 })
 
 test_that("a SQL result prints within the helper budget and keeps every row", {
+  skip_on_cran()
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
   wide = as.data.frame(matrix(seq_len(200 * 40), nrow = 200))
@@ -279,6 +282,7 @@ lang_line = paste("- Other languages: peter$py(code); peter$sql(query, name = df
                   "peter$knit(engine, code).")
 
 test_that("builtin:lang registers py, sql and knit as peter$ members only", {
+  skip_on_cran()
   for (nm in c("py", "sql", "knit")) {
     spec = registry_get("tool", nm)
     expect_s3_class(spec, "gptr_tool")

@@ -415,6 +415,7 @@ test_that("!code is announced on the console:direct channel", {
 })
 
 test_that("console_send() makes an ordinary gateway call and continues the session", {
+  skip_on_cran()
   local_project()
   local_no_fd0()
   local_console_blocks()
@@ -442,6 +443,7 @@ test_that("console_send() makes an ordinary gateway call and continues the sessi
 })
 
 test_that("console_send() attaches @objects by name and @files as a block", {
+  skip_on_cran()
   local_project(files = list("a.R" = "fit = lm(mpg ~ wt, data = mtcars)"))
   local_no_fd0()
   local_console_blocks()
@@ -459,6 +461,7 @@ test_that("console_send() attaches @objects by name and @files as a block", {
 })
 
 test_that("console_send() keeps the session of a failed call and reports the error", {
+  skip_on_cran()
   local_project()
   local_no_fd0()
   fake = gptr_fake_provider(list(list(error = "bad key", status = 401L, after = 0L)))
@@ -490,6 +493,7 @@ test_that("!code runs through the eval.r service (the evaluator kind, IC-69)", {
 })
 
 test_that("the console call's arguments reach the first prompt, also on a piped session", {
+  skip_on_cran()
   local_project()
   s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
   call = list(ids = list(mode = "auto"), args = list(), context = list())
@@ -504,6 +508,7 @@ test_that("the console call's arguments reach the first prompt, also on a piped 
 })
 
 test_that("console_send() passes max_turns from gptr.max_turns_console", {
+  skip_on_cran()
   local_project()
   local_no_fd0()
   fake = gptr_fake_provider(list("ok"))
@@ -622,6 +627,7 @@ test_that("a scripted .stdin console session (acceptance 2)", {
 })
 
 test_that("the end of piped input leaves the REPL like /exit", {
+  skip_on_cran()
   local_console_test()
   local_scripted_ui()
   local_console_stdin("only line")
@@ -634,6 +640,7 @@ test_that("the end of piped input leaves the REPL like /exit", {
 })
 
 test_that("in IRkernel peter() without a prompt starts the console on gptr_readline() (acc. 7)", {
+  skip_on_cran()
   local_console_test()
   local_gptr_options(model = "fake/fake-1")
   withr::local_options(gptr.interactive = NULL, jupyter.in_kernel = TRUE)
@@ -696,6 +703,7 @@ test_that("a line at the readline limit is reported at once and not sent", {
 })
 
 test_that("a pasted three-line block is one console turn (acceptance)", {
+  skip_on_cran()
   local_console_test()
   withr::local_options(gptr.interactive = TRUE)
   fake = gptr_fake_provider(list("one answer"))
@@ -708,6 +716,7 @@ test_that("a pasted three-line block is one console turn (acceptance)", {
 })
 
 test_that("the lines pasted after a fence are one console turn after the code (acceptance)", {
+  skip_on_cran()
   local_console_test()
   withr::local_options(gptr.interactive = TRUE)
   fake = gptr_fake_provider(list("one answer"))
@@ -815,6 +824,7 @@ test_that("background sessions that wait for approval are announced once (IC-57)
 })
 
 test_that("an error is printed on stderr and the REPL goes on", {
+  skip_on_cran()
   local_console_test()
   local_scripted_ui()
   fake = gptr_fake_provider(list(list(error = "bad key", status = 401L, after = 0L),
@@ -829,6 +839,7 @@ test_that("an error is printed on stderr and the REPL goes on", {
 })
 
 test_that("approvals of a .stdin session are answered from the same stdin", {
+  skip_on_cran()
   local_console_test()
   withr::local_options(gptr.interactive = NULL, gptr.ui = NULL)
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "y = 2")), "made y"))
@@ -861,6 +872,7 @@ test_that("the frontend comes from .opts$frontend or the setting frontend (IC-69
 })
 
 test_that("the console echoes an interpolated prompt at verbosity 2", {
+  skip_on_cran()
   local_console_test()
   local_scripted_ui()
   local_gptr_options(verbose = 2L)

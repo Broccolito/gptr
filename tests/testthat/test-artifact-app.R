@@ -18,6 +18,7 @@ ok_app = c(
 )
 
 test_that("artifact ids follow contract 11.6 and refuse Windows reserved names", {
+  skip_on_cran()
   expect_identical(artifact_id_check("marker-explorer"), "marker-explorer")
   expect_identical(artifact_id_check(strrep("a", 63)), strrep("a", 63))
   bad = c("con", "aux", "nul", "prn", "com1", "lpt9", "Marker", "-x", "a b", "a/b", "a.b",
@@ -38,6 +39,7 @@ test_that("artifacts live under the workspace root", {
 })
 
 test_that("artifact.json round-trips versions, checks and a null port", {
+  skip_on_cran()
   local_project()
   meta = artifact_meta_new("demo", "Demo")
   rec = list(name = "d", file = "data/001.rds", class = "data.frame", dim = I(c(3L, 2L)),
@@ -91,6 +93,7 @@ test_that("the handle formats as the NS-8 line with its checks, and prints it", 
 })
 
 test_that("static checks accept a well-formed app, also ending in shiny::shinyApp()", {
+  skip_on_cran()
   skip_if_not_installed("shiny")
   res = artifact_static_check(ok_app)
   expect_true(res$ok)
@@ -121,6 +124,7 @@ test_that("static checks reject empty code and parse errors at the parse stage",
 })
 
 test_that("static checks name each forbidden pattern", {
+  skip_on_cran()
   skip_if_not_installed("shiny")
   with_line = function(line) c(ok_app[1:5], line, ok_app[6])
   msg = function(code) {
@@ -952,6 +956,7 @@ test_that("the artifacts section is architecture 7.3 verbatim and needs shiny", 
 })
 
 test_that("peter$app() refuses reserved ids, unknown kinds and a missing working copy", {
+  skip_on_cran()
   local_project()
   expect_error(peter$app("con"), class = "gptr_error_invalid_argument")
   cnd = expect_error(peter$app("x", kind = "nope", launch = FALSE),
@@ -968,6 +973,7 @@ test_that("peter$app() refuses reserved ids, unknown kinds and a missing working
 })
 
 test_that("a second peter$app() after an edit creates v002 without touching v001", {
+  skip_on_cran()
   skip_if_not_installed("shiny")
   local_project()
   markers = data.frame(gene = c("CD14", "LYZ"), p = c(0.01, 0.2))
@@ -1179,6 +1185,7 @@ test_that("an artifact constructor failure retains its captured child for cleanu
 
 
 test_that("artifact constructor cleanup cannot replace its original error or interrupt", {
+  skip_on_cran()
   local_project()
   seed_artifact("original")
   original_error = structure(list(message = "controlled constructor failure", call = NULL),
@@ -1315,6 +1322,7 @@ test_that("artifact cooperative wait and kill share one grace deadline", {
 })
 
 test_that("artifact stop keeps the request condition before fallback cleanup conditions", {
+  skip_on_cran()
   original = list(
     structure(list(message = "fixed stop wait error", call = NULL),
       class = c("artifact_stop_wait_test", "error", "condition")),

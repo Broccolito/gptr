@@ -281,6 +281,7 @@ test_that("unchecked document writes keep intentional replacement semantics", {
 })
 
 test_that("checked document writes detect edits between rename attempts", {
+  skip_on_cran()
   project = local_project()
   path = file.path(project, "job.R")
   writeLines("original = 1", path)
@@ -372,6 +373,7 @@ local_doc_pending = function(.env = parent.frame()) {
 }
 
 test_that("deferred blocks wait in a sidecar and are written when the process exits", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   st = local_doc_pending()
@@ -403,6 +405,7 @@ test_that("deferred blocks wait in a sidecar and are written when the process ex
 })
 
 test_that("a dead process's sidecar is recovered without overwriting a user edit (IC-51)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -434,6 +437,7 @@ test_that("a dead process's sidecar is recovered without overwriting a user edit
 })
 
 test_that("a run of the same document under Rscript adopts a dead sidecar until exit", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   st = local_doc_pending()
@@ -456,6 +460,7 @@ test_that("a run of the same document under Rscript adopts a dead sidecar until 
 })
 
 test_that("an open notebook is never written; its blocks wait for gptr_doc(sync = TRUE) (IC-50)", {
+  skip_on_cran()
   # test_path() is relative to tests/testthat, which local_project() leaves: resolve it first
   src = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
   local_project()
@@ -532,6 +537,7 @@ doc_io_nb_write = function(path, sources) {
 }
 
 test_that("a sidecar of an earlier process that had this pid is a dead one (pid reuse, IC-51)", {
+  skip_on_cran()
   skip_if(is.na(proc_self()$create_time), "no process creation time on this platform")
   local_project()
   local_gptr_options(record = "auto")
@@ -594,6 +600,7 @@ test_that("the lock of a deferred run is released at exit even when no block was
 })
 
 test_that("the script this Rscript process runs is never written before it exits (IC-51)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
   local_doc_pending()
@@ -630,6 +637,7 @@ test_that("the script this Rscript process runs is never written before it exits
 })
 
 test_that("a pending notebook block another R process synced is not queued again (IC-50)", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -665,6 +673,7 @@ test_that("a pending notebook block another R process synced is not queued again
 })
 
 test_that("a kernel that cannot name its notebook never syncs the notebooks it may run (IC-50)", {
+  skip_on_cran()
   src = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
   proj = local_project()
   local_gptr_options(record = "auto")
@@ -732,6 +741,7 @@ test_that("a deferred block needs write consent and keeps a local model's tag (I
 })
 
 test_that("a sidecar is replaced whole, so a write cut short keeps the earlier upserts (IC-51)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -775,6 +785,7 @@ doc_io_plant = function(f, rec) {
 }
 
 test_that("a sidecar is used only for the document it is named for (IC-51, IC-52)", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -829,6 +840,7 @@ test_that("a sidecar is used only for the document it is named for (IC-51, IC-52
 })
 
 test_that("a sidecar that is not this user's private file is never read (IC-52)", {
+  skip_on_cran()
   skip_on_os("windows")
   proj = local_project()
   local_gptr_options(record = "auto")
@@ -878,6 +890,7 @@ test_that("a sidecar that is not this user's private file is never read (IC-52)"
 })
 
 test_that("this run's block wins over a dead run's block for the same call (IC-51)", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   st = local_doc_pending()
@@ -921,6 +934,7 @@ test_that("this run's block wins over a dead run's block for the same call (IC-5
 })
 
 test_that("a document's sidecar is found from any working directory (IC-51)", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -950,6 +964,7 @@ test_that("a document's sidecar is found from any working directory (IC-51)", {
 # ---- Task 10 review round 2 (D-109 items 12-15) ------------------------------------------------
 
 test_that("a sync never writes the script of a run that is still alive (IC-51)", {
+  skip_on_cran()
   skip_if(is.na(proc_self()$create_time), "no process creation time on this platform")
   proj = local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
@@ -986,6 +1001,7 @@ test_that("a sync never writes the script of a run that is still alive (IC-51)",
 })
 
 test_that("a notebook cell run again keeps only the block shown last (IC-50)", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -1020,6 +1036,7 @@ test_that("a notebook cell run again keeps only the block shown last (IC-50)", {
 })
 
 test_that("a sync counts only the blocks it writes (IC-50, IC-51)", {
+  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -1039,6 +1056,7 @@ test_that("a sync counts only the blocks it writes (IC-50, IC-51)", {
 })
 
 test_that("a kernel keeps its notebook open after setwd() and opens no script (IC-50)", {
+  skip_on_cran()
   src = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
   proj = local_project()
   local_gptr_options(record = "auto")
@@ -1168,6 +1186,7 @@ test_that("RStudio buffers are edited by id, saved when clean, the cursor moved 
 })
 
 test_that("Positron writes a clean buffer on disk and edits only the active editor", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1222,6 +1241,7 @@ test_that("transcript appends need consent and pass the document_write event", {
 # ---- Task 11 adaptations (dev/DEVIATIONS.md D-117) -----------------------------------------------
 
 test_that("an editor's empty line after the final newline is clean unless the file has none", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1499,6 +1519,7 @@ doc_io_legacy_path = function(path) {
 }
 
 test_that("new sidecars are closed JSON data with explicit line arrays", {
+  skip_on_cran()
   local_project()
   local_doc_pending()
   f = file.path(getwd(), "json.R")
@@ -1554,6 +1575,7 @@ test_that("Windows leaves legacy sidecars pending without any RDS read", {
 })
 
 test_that("legacy recovery settles once without deleting its preserved bytes", {
+  skip_on_cran()
   skip_on_os("windows")
   local_project()
   local_gptr_options(record = "auto")
@@ -1590,6 +1612,7 @@ test_that("legacy recovery settles once without deleting its preserved bytes", {
 })
 
 test_that("JSON recovery validates the closed schema before using any record", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
@@ -1633,6 +1656,7 @@ test_that("JSON recovery validates the closed schema before using any record", {
 })
 
 test_that("JSON notebook recovery keeps computed call anchors and owned metadata", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   st = local_doc_pending()
@@ -1670,6 +1694,7 @@ test_that("JSON notebook recovery keeps computed call anchors and owned metadata
 })
 
 test_that("JSON notebook recovery keeps each repeated-prompt pipeline step", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   st = local_doc_pending()
@@ -1702,6 +1727,7 @@ test_that("JSON notebook recovery keeps each repeated-prompt pipeline step", {
 })
 
 test_that("unsupported notebook metadata cannot replace a durable JSON sidecar", {
+  skip_on_cran()
   local_project()
   nb = file.path(getwd(), "meta.ipynb")
   doc_io_nb_write(nb, 'peter("one")')
@@ -1721,6 +1747,7 @@ test_that("unsupported notebook metadata cannot replace a durable JSON sidecar",
 })
 
 test_that("JSON recovery rejects nonscalar consumed notebook metadata", {
+  skip_on_cran()
   local_project()
   nb = file.path(getwd(), "bad-meta.ipynb")
   doc_io_nb_write(nb, 'peter("one"); peter("two")')
@@ -1868,6 +1895,7 @@ test_that("sidecar presence uses directory entries when link targets cannot be p
 })
 
 test_that("unknown or malformed POSIX owner identity never deserializes legacy sidecars", {
+  skip_on_cran()
   skip_on_os("windows")
   local_project()
   f = file.path(getwd(), "owner.R")
@@ -1953,6 +1981,7 @@ doc_io_default_bounds = function() {
 }
 
 test_that("aggregate JSON tokens and depth are bounded before decoding unknown roots", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "structure.R")
   writeLines('peter("first")', f)
@@ -2000,6 +2029,7 @@ test_that("aggregate JSON tokens and depth are bounded before decoding unknown r
 })
 
 test_that("upsert and total line bounds precede numeric preservation after bounded decode", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "arrays.R")
   writeLines('peter("first")', f)

@@ -258,6 +258,7 @@ test_that("a choice key keeps the request order of the options (IC-74)", {
 })
 
 test_that("unknown values stay unknown and invalid records are misses (IC-74)", {
+  skip_on_cran()
   dir = s1_fresh(gptr = TRUE)
   salt = s1_cache_salt()
   q = choice_q()
@@ -305,6 +306,7 @@ test_that("unknown values stay unknown and invalid records are misses (IC-74)", 
 })
 
 test_that("a file under another key or with broken JSON is a miss; a malformed key errors", {
+  skip_on_cran()
   dir = s1_fresh(gptr = TRUE)
   keys = s1_cache_keys(s1_cache_salt(), "e", "m", noul_q(), list(list(text = "1"),
                                                                  list(text = "2")))

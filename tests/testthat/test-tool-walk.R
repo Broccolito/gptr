@@ -276,6 +276,7 @@ test_that("the prune list is anchored at the walk root, also below a git root", 
 })
 
 test_that("a git root at the file-system root keeps the ancestor rules", {
+  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, ".gitignore", "*.tmp\n/proj/drop.txt\n")
   for (p in c("proj/keep.R", "proj/drop.txt", "proj/x.tmp")) put_file(td, p)

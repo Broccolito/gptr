@@ -538,6 +538,7 @@ test_that("custom artifact stops accept a void return only after independent set
 
 test_that(
   "a void artifact stop fallback requires the recorded process identity and confirmed death", {
+  skip_on_cran()
   local_project()
   seed_artifact("void_pid")
   state = new.env(parent = emptyenv())

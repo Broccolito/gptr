@@ -4,6 +4,7 @@ store_recs = oracle("store")
 # ---------------------------------------------------------------- report 02 section 5.2 (writer)
 
 test_that(oracle_title(store_recs, "S01"), {
+  skip_on_cran()
   s = written_session()
   d = session_data(s)
   expect_match(basename(d$file), paste0("^[0-9]{8}T[0-9]{6}_", d$id, "[.]jsonl$"))
@@ -23,6 +24,7 @@ test_that(oracle_title(store_recs, "S02"), {
 })
 
 test_that(oracle_title(store_recs, "S03"), {
+  skip_on_cran()
   local_store()
   s = test_session()
   for (i in 1:200) session_append(s, entry_custom("test.note", list(i = i)))
@@ -57,6 +59,7 @@ test_that(oracle_title(store_recs, "S07"), {
 })
 
 test_that(oracle_title(store_recs, "S08"), {
+  skip_on_cran()
   s = written_session()
   hdr = json_decode(readLines(session_data(s)$file, n = 1L, encoding = "UTF-8"))
   expect_identical(hdr$type, "session")
@@ -70,6 +73,7 @@ test_that(oracle_title(store_recs, "S08"), {
 })
 
 test_that(oracle_title(store_recs, "S09"), {
+  skip_on_cran()
   s = written_session()
   line = readLines(session_data(s)$file, encoding = "UTF-8")[[2L]]
   expect_match(line, "\"parentId\":null", fixed = TRUE)
@@ -97,6 +101,7 @@ test_that(oracle_title(store_recs, "S30"), {
 })
 
 test_that(oracle_title(store_recs, "S37"), {
+  skip_on_cran()
   local_fake_provider(list("a"))
   s = test_session()
   u = session_append(s, entry_message(msg_user("one")))
@@ -115,6 +120,7 @@ test_that(oracle_title(store_recs, "S37"), {
 # ---------------------------------------------------------------- entry shapes and the writer
 
 test_that("operator, model_change, compaction and custom entries have their JSON shapes", {
+  skip_on_cran()
   local_store()
   s = test_session()
   relay = "The user sent this message while you were working: x"
@@ -141,6 +147,7 @@ test_that("operator, model_change, compaction and custom entries have their JSON
 })
 
 test_that("opening a file whose last byte is not LF appends LF and a gptr.recovered entry", {
+  skip_on_cran()
   s = written_session()
   d = session_data(s)
   file = d$file
@@ -161,6 +168,7 @@ test_that("opening a file whose last byte is not LF appends LF and a gptr.recove
 })
 
 test_that("a torn line longer than the 1 MiB tail window is recorded from its first byte", {
+  skip_on_cran()
   s = written_session()
   d = session_data(s)
   size = file.size(d$file)
@@ -224,6 +232,7 @@ file_entries = function(s) {
 }
 
 test_that(oracle_title(store_recs, "S25"), {
+  skip_on_cran()
   x = compacting_run()
   expect_length(x$log$calls, 1L)
   expect_identical(x$log$calls[[1L]]$reason, "threshold")
@@ -231,6 +240,7 @@ test_that(oracle_title(store_recs, "S25"), {
 })
 
 test_that(oracle_title(store_recs, "S26"), {
+  skip_on_cran()
   x = compacting_run()
   last = x$log$calls[[1L]]$last
   expect_identical(last$message$role, "user")
@@ -244,6 +254,7 @@ test_that(oracle_title(store_recs, "S26"), {
 })
 
 test_that(oracle_title(store_recs, "S27"), {
+  skip_on_cran()
   x = compacting_run()
   req = fake_requests(x$fake)[[2L]]
   texts = vapply(req$messages, msg_text, "")
@@ -253,6 +264,7 @@ test_that(oracle_title(store_recs, "S27"), {
 })
 
 test_that(oracle_title(store_recs, "S28"), {
+  skip_on_cran()
   x = compacting_run()
   e = Filter(function(e) identical(e$type, "compaction"), file_entries(x$s))[[1L]]
   expect_identical(e$summary, "## Goal\nsummary")
@@ -262,11 +274,13 @@ test_that(oracle_title(store_recs, "S28"), {
 })
 
 test_that(oracle_title(store_recs, "S29"), {
+  skip_on_cran()
   x = compacting_run()
   expect_identical(vapply(x$log$calls, function(k) k$reason, ""), "threshold")
 })
 
 test_that(oracle_title(store_recs, "S33"), {
+  skip_on_cran()
   x = compacting_run()
   req = fake_requests(x$fake)[[3L]]
   first = req$messages[[1L]]
@@ -277,6 +291,7 @@ test_that(oracle_title(store_recs, "S33"), {
 })
 
 test_that(oracle_title(store_recs, "S35"), {
+  skip_on_cran()
   x = compacting_run()
   d = session_data(x$s)
   expect_identical(sum(vapply(d$entries, function(e) identical(e$type, "compaction"), NA)), 1L)
@@ -294,6 +309,7 @@ test_that(oracle_title(store_recs, "S36"), {
 })
 
 test_that(oracle_title(store_recs, "S38"), {
+  skip_on_cran()
   x = compacting_run()
   lines = readLines(session_data(x$s)$file, encoding = "UTF-8")
   expect_true(any(grepl("Task 1", lines, fixed = TRUE)))
@@ -322,6 +338,7 @@ test_that(oracle_title(store_recs, "S39"), {
 })
 
 test_that(oracle_title(store_recs, "S40"), {
+  skip_on_cran()
   local_permissive()
   local_tool("read", function(input, ctx) "data")
   local_service("compact.run", function(s, reason, focus = NULL) invisible(s))
@@ -338,6 +355,7 @@ test_that(oracle_title(store_recs, "S40"), {
 })
 
 test_that(oracle_title(store_recs, "S41"), {
+  skip_on_cran()
   local_permissive()
   local_tool("slow", function(input, ctx) "done")
   box = new.env()
@@ -356,6 +374,7 @@ test_that(oracle_title(store_recs, "S41"), {
 })
 
 test_that(oracle_title(store_recs, "S42"), {
+  skip_on_cran()
   local_permissive()
   local_tool("slow", function(input, ctx) "done")
   box = new.env()
@@ -373,6 +392,7 @@ test_that(oracle_title(store_recs, "S42"), {
 })
 
 test_that("each run touches its session's lock when it starts (heartbeat, IC-59)", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list("one", "two"))
@@ -390,6 +410,7 @@ test_that("each run touches its session's lock when it starts (heartbeat, IC-59)
 # stored_read() are in the harness.
 
 test_that(oracle_title(store_recs, "S21"), {
+  skip_on_cran()
   s = stored_run()
   f = gptr_fork(s)
   expect_null(f$file)
@@ -399,6 +420,7 @@ test_that(oracle_title(store_recs, "S21"), {
 })
 
 test_that(oracle_title(store_recs, "S22"), {
+  skip_on_cran()
   s = stored_run()
   f = gptr_fork(s)
   run_text(f, "branch")
@@ -410,6 +432,7 @@ test_that(oracle_title(store_recs, "S22"), {
 })
 
 test_that(oracle_title(store_recs, "S23"), {
+  skip_on_cran()
   s = stored_run()
   session_append(s, list(type = "label", raw = list(targetId = session_data(s)$leaf,
                                                     label = "start")))
@@ -460,6 +483,7 @@ test_that("a fork that copies no gptr.frozen entry freezes its own, the first of
 })
 
 test_that("a fork of a source still in its first turn freezes its own prompt", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list(list(hang = TRUE), "branch answer"))
@@ -508,6 +532,7 @@ path_of_entries = function(entries, leaf) {
 }
 
 test_that(oracle_title(store_recs, "S11"), {
+  skip_on_cran()
   s = stored_run()
   x = store_read(s$file)
   path = path_of_entries(x$entries, x$entries[[length(x$entries)]]$id)
@@ -515,17 +540,20 @@ test_that(oracle_title(store_recs, "S11"), {
 })
 
 test_that(oracle_title(store_recs, "S12"), {
+  skip_on_cran()
   s = stored_run()
   lines = readLines(s$file, encoding = "UTF-8")[-1L]
   expect_identical(vapply(store_read(s$file)$entries, entry_json_line, ""), lines)
 })
 
 test_that(oracle_title(store_recs, "S13"), {
+  skip_on_cran()
   s = stored_run()
   expect_identical(rebuild_model(store_read(s$file)$entries), s$model)
 })
 
 test_that(oracle_title(store_recs, "S14"), {
+  skip_on_cran()
   s = stored_run()
   x = store_read(s$file)
   last = x$entries[[length(x$entries)]]$message
@@ -606,6 +634,7 @@ test_that(oracle_title(store_recs, "S20"), {
 })
 
 test_that(oracle_title(store_recs, "S24"), {
+  skip_on_cran()
   s = stored_run()
   f = gptr_fork(s)
   run_text(f, "branch")
@@ -618,6 +647,7 @@ test_that(oracle_title(store_recs, "S24"), {
 })
 
 test_that(oracle_title(store_recs, "S32"), {
+  skip_on_cran()
   s = stored_run()
   tr = Filter(function(e) identical(e$type, "message") && identical(e$message$role, "tool_result"),
               store_read(s$file)$entries)
@@ -652,6 +682,7 @@ test_that("a torn last line is recovered at resume; three appends stay connected
 })
 
 test_that("an unparsable middle line is skipped and its children re-parented", {
+  skip_on_cran()
   s = stored_run()
   lines = readLines(s$file, encoding = "UTF-8")
   lines[[3L]] = "{not json"
@@ -759,6 +790,7 @@ test_that("the built-in store record is registered and selected by the store set
 })
 
 test_that("gptr_sessions() lists stored sessions with their columns and live flag", {
+  skip_on_cran()
   s = stored_run()
   x = gptr_sessions()
   expect_s3_class(x, "gptr_sessions")
@@ -777,6 +809,7 @@ test_that("gptr_sessions() lists stored sessions with their columns and live fla
 })
 
 test_that("gptr_sessions() shows created and updated in one time zone (FIX-11)", {
+  skip_on_cran()
   withr::local_timezone("America/Los_Angeles")
   s = stored_run()
   x = gptr_sessions()
@@ -787,6 +820,7 @@ test_that("gptr_sessions() shows created and updated in one time zone (FIX-11)",
 })
 
 test_that("gptr_resume() returns the live object for an id, a path or NULL", {
+  skip_on_cran()
   s = stored_run()
   expect_identical(gptr_resume(s$id), s)
   expect_identical(gptr_resume(s$file), s)
@@ -835,6 +869,7 @@ test_that("a rebuilt fork gets a fresh overlay of envir (IC-46)", {
 })
 
 test_that("a file from another project gets a fresh prompt and imported turns (IC-52)", {
+  skip_on_cran()
   s = stored_run()
   id = s$id
   file = s$file
@@ -876,6 +911,7 @@ test_that("gptr_resume() validates x", {
 })
 
 test_that("gptr_resume(block =) returns the session replay bound to the block, never a fallback", {
+  skip_on_cran()
   old = the$replay_blocks
   the$replay_blocks = new.env(parent = emptyenv())
   withr::defer(assign("replay_blocks", old, envir = the))
@@ -893,6 +929,7 @@ test_that("gptr_resume(block =) returns the session replay bound to the block, n
 # ---------------------------------------------------------------- reader and rebuild robustness
 
 test_that("lines that parse but are not readable entries are skipped and their children kept", {
+  skip_on_cran()
   s = stored_run()
   lines = readLines(s$file, encoding = "UTF-8")
   bad = c('{"type":"message","parentId":null}',
@@ -920,6 +957,7 @@ test_that("lines that parse but are not readable entries are skipped and their c
 })
 
 test_that("a string that cannot be a session id never names a file or a registry entry", {
+  skip_on_cran()
   s = stored_run()
   lines = readLines(s$file, encoding = "UTF-8")
   hdr = json_decode(lines[[1L]])

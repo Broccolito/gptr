@@ -78,6 +78,7 @@ test_that("notebook session display redacts synthetic credentials without changi
 })
 
 test_that("many inline spans preserve mixed widths, escaped openers and UTF-8 prose", {
+  skip_on_cran()
   piece = "\u03b1 <p> `x[1] < 2` & ``a`b[2]``"
   safe_piece = "\u03b1 &lt;p&gt; `x[1] < 2` &amp; ``a`b[2]``"
   text = paste(rep(piece, 500L), collapse = " ")
@@ -92,6 +93,7 @@ test_that("many inline spans preserve mixed widths, escaped openers and UTF-8 pr
 })
 
 test_that("pending notebook code publishes one MIME bundle while source and sidecar stay intact", {
+  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   st = doc_state()

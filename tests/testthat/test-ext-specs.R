@@ -25,6 +25,7 @@ test_that("classifier callback validation keeps the IC-74 and chat signatures se
 })
 
 test_that("IC-74 model decision metadata is typed separately from capability flags", {
+  skip_on_cran()
   local_registry()
   decision = list(types = c("noul", "choice", "score"), images = TRUE,
     server_min = "0.35.1", max_questions = 64L, max_options = 26L,
@@ -310,6 +311,7 @@ test_that("tool specs: name rule, execute or fun, schema from formals, fun match
 })
 
 test_that("kind-specific rules: skill, command, setting, redaction, alias, risk, ui, preset", {
+  skip_on_cran()
   local_registry()
   expect_error(gptr_spec("skill", "Bad", description = "d"), class = "gptr_error_invalid_spec")
   expect_error(gptr_spec("skill", "ok", description = strrep("x", 1025L)),
@@ -438,6 +440,7 @@ test_that("every example of contract 6.8 runs and returns its class (IC-35)", {
 })
 
 test_that("constructors pick the first choice and report missing or wrong arguments", {
+  skip_on_cran()
   local_registry()
   t = gptr_tool("t", "A tool", execute = function(input, ctx) "x")
   expect_equal(t$exposure, "direct")
@@ -573,6 +576,7 @@ test_that("preformed result images obey the canonical block_image boundary", {
 # every name and version rule anchors at the very end of the string with `\z`.
 
 test_that("name and version rules refuse a trailing newline (PCRE $ matches before one)", {
+  skip_on_cran()
   local_registry()
   specs = function(s) {
     list(

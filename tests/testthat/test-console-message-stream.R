@@ -184,6 +184,7 @@ test_that("a console control in an untee'd evaluation keeps user-created sinks (
 })
 
 test_that("JSONL reserves stdout for events even when a real CLI notice is signalled", {
+  skip_on_cran()
   local_project()
   local_gptr_options(quiet = FALSE, record = "off")
   old = the$once

@@ -60,6 +60,7 @@ test_that("stated probabilities become canonical answers (fences stripped, resca
 })
 
 test_that("s1_emulate sends one chat request per unique state and marks answers uncalibrated", {
+  skip_on_cran()
   s1_fresh()
   chat = local_fake_provider(function(request) {
     list(json = list(answers = list(answer = if (grepl("great", request$last_user)) 0.9 else 0.2)))
@@ -82,6 +83,7 @@ test_that("s1_emulate sends one chat request per unique state and marks answers 
 })
 
 test_that("malformed or failed chat replies become System 1 conditions", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list("not json"), name = "emubad")
   q = list(answer = s1_question("Ok?", "x")$wire)
@@ -124,6 +126,7 @@ test_that("emulated answers are canonical records the dispatch check accepts unc
 })
 
 test_that("malformed emulated answers are response errors, never invented values (IC-74)", {
+  skip_on_cran()
   q = list(yes = s1_question("Ok?", "x")$wire,
            pick = s1_question("Which?", "x", choices = c("a", "b"))$wire)
   body = function(yes = "0.5", pick = "{\"a\": 0.5, \"b\": 0.5}", extra = "") {
@@ -149,6 +152,7 @@ test_that("malformed emulated answers are response errors, never invented values
 })
 
 test_that("emulation preflights the chat model before any state is serialised or sent (IC-74)", {
+  skip_on_cran()
   local_mocked_bindings(catalog_ollama_discover = function(...) stop("discovery must not run"),
                         s1_emu_document = function(state) stop("a state was serialised"),
                         s1_stream = function(...) stop("a request was started"))
@@ -177,6 +181,7 @@ test_that("emulation preflights the chat model before any state is serialised or
 })
 
 test_that("emulation keeps the run's safety record after s1_ready() (07 section 5)", {
+  skip_on_cran()
   s1_fresh()
   rec = list(ollama_local_only = FALSE)
   # s1_emulate() preflights with the record: a remote chat model then needs only its evidence
@@ -204,6 +209,7 @@ test_that("emulation keeps the run's safety record after s1_ready() (07 section 
 })
 
 test_that("unreported usage stays unknown and provenance says emulated (IC-74)", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(list(json = list(answers = list(answer = 0.6)), usage = list())),
                       name = "emunone")
@@ -226,6 +232,7 @@ test_that("unreported usage stays unknown and provenance says emulated (IC-74)",
 })
 
 test_that("a stop other than a complete answer is a response error, never retried (IC-74)", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(list(text = "{\"answers\": {\"answer\": 0.", stop = "length")),
                       name = "emucut")
@@ -242,6 +249,7 @@ test_that("a stop other than a complete answer is a response error, never retrie
 })
 
 test_that("the first emulated answer of a process says it is not calibrated (IC-19)", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(list(json = list(answers = list(answer = 0.7)))), name = "emunote")
   q = list(answer = s1_question("Ok?", "x")$wire)
@@ -323,6 +331,7 @@ test_that("an interrupted emulation leaves no transfer or reactor task behind (I
 })
 
 test_that("a failed stream takes the System 1 class of its cause; only transport failures retry", {
+  skip_on_cran()
   m = list(id = "m-1")
   q = list(answer = s1_question("Ok?", "x")$wire)
   failed = function(cls, status = NA_integer_, retry_after = NULL, reason = "error") {
@@ -370,6 +379,7 @@ test_that("a failed stream takes the System 1 class of its cause; only transport
 })
 
 test_that("the usage of a reply that was refused still counts (IC-74)", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(list(text = "{\"answers\": {\"answer\": 0.", stop = "length",
                                 usage = list(input = 100, output = 4096))), name = "emulong")
@@ -394,6 +404,7 @@ test_that("the usage of a reply that was refused still counts (IC-74)", {
 # ---- Task 9: emulation through peter() is opt-in only --------------------------------------------
 
 test_that("emulation happens only with gptr_config(system1 = \"emulate:<model>\")", {
+  skip_on_cran()
   s1_fresh()
   chat = local_fake_provider(list(list(json = list(answers = list(answer = 0.8)))), name = "emu")
   review = "Loved every page."

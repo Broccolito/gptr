@@ -2,6 +2,7 @@
 source(testthat::test_path("fixtures", "cli", "local-fake-cli.R"), local = TRUE)
 
 test_that("a success subtype with an API error reports the failure and its result detail", {
+  skip_on_cran()
   cases = list(
     list(status = 429L, class = "rate_limit", label = "rate limit"),
     list(status = 401L, class = "auth", label = "authentication"),

@@ -135,6 +135,7 @@ test_that("reactor_cancel() removes timers, tasks and FIFO items", {
 })
 
 test_that("failing timers, tasks and tools become diagnostics and the pump continues", {
+  skip_on_cran()
   st = new.env()
   st$ok = FALSE
   st$diag = character()
@@ -412,6 +413,7 @@ test_that("the wire log is off by default and stays inside the workspace or temp
 })
 
 test_that("wire metadata is redacted before JSON escaping and absent fields are omitted", {
+  skip_on_cran()
   local_gptr_options(wire_log = TRUE)
   for (value in c('wire-quoted-"-0123456789', "wire-backslash-\\-0123456789",
                    "wire-newline-\n-0123456789")) {
@@ -826,6 +828,7 @@ test_that("a failing on_bytes callback fails the transfer with gptr_error_intern
 })
 
 test_that("a key handle bound to another origin fails the transfer before any connection", {
+  skip_on_cran()
   h = secret_register("sk-origin-test-0123456789abcdef", "GPTR_TEST_ORIGIN_KEY",
                       origin = "https://api.example.test")
   st = new.env()
@@ -857,6 +860,7 @@ test_that("a transfer queued by a callback that runs during admission is not los
 })
 
 test_that("HTTP registration validates retry controls and metadata before queueing", {
+  skip_on_cran()
   r = reactor_get()
   before = reactor_ids(r$transfers)
   withr::defer(reactor_cancel(setdiff(reactor_ids(r$transfers), before)))

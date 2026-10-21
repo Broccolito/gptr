@@ -55,6 +55,7 @@ test_that("invalid questions are refused without asking (18 section 3.6)", {
 })
 
 test_that("answers come back as 18's result text and in details (18 section 3.6)", {
+  skip_on_cran()
   st = local_scripted_ui(list(list(fmt = "Table", obj = structure("use a forest plot",
                                                                     other = TRUE),
                                    cols = c("a", "b"))))

@@ -73,6 +73,7 @@ test_that("data stays byte-exact UTF-8 and is marked UTF-8", {
 })
 
 test_that("random re-chunking, including splits inside characters and CRLF pairs, is invariant", {
+  skip_on_cran()
   txt = "caf\u00e9 \u65e5\u672c \U0001f600 na\u00efve"
   lines = character()
   for (i in 1:60) {

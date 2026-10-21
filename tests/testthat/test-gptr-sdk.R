@@ -1,6 +1,7 @@
 # test-gptr-sdk.R -- the session SDK verbs on the fake provider (plan P08).
 
 test_that("gptr_step() starts a pending session; with nothing queued it is a no-op", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("Plan: ..."))
   s = peter("Plan the analysis", model = fake, .run = FALSE, envir = new.env())
@@ -17,6 +18,7 @@ test_that("gptr_step() starts a pending session; with nothing queued it is a no-
 })
 
 test_that("gptr_step(turns = 1) stops after one turn; turns = Inf runs to settlement", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   noop = test_tool("noop", function(ctx) "ok")
@@ -31,6 +33,7 @@ test_that("gptr_step(turns = 1) stops after one turn; turns = Inf runs to settle
 })
 
 test_that("the call record of a pending session is held until its run settles [R2]", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   s = peter("x", model = fake, .run = FALSE, envir = new.env())
@@ -43,6 +46,7 @@ test_that("the call record of a pending session is held until its run settles [R
 })
 
 test_that("gptr_wait() starts queued sessions and waits for all of them", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("a"))
   runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),
@@ -53,6 +57,7 @@ test_that("gptr_wait() starts queued sessions and waits for all of them", {
 })
 
 test_that("gptr_wait() on one failed session signals its condition", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list(fake_error("bad request", status = 400L)))
   s = peter("x", model = fake, .run = FALSE, envir = new.env())
@@ -61,6 +66,7 @@ test_that("gptr_wait() on one failed session signals its condition", {
 })
 
 test_that("gptr_wait() returns at the timeout; gptr_cancel() then aborts the run", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list(list(hang = TRUE)))
   s = peter("long task", model = fake, .run = FALSE, envir = new.env())
@@ -73,6 +79,7 @@ test_that("gptr_wait() returns at the timeout; gptr_cancel() then aborts the run
 })
 
 test_that("gptr_steer() queues a follow-up delivered when the agent would stop", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("first", "second"))
   s = peter("Summarise mtcars", model = fake, .run = FALSE, envir = new.env())
@@ -84,6 +91,7 @@ test_that("gptr_steer() queues a follow-up delivered when the agent would stop",
 })
 
 test_that("gptr_steer() redacts with the context profile and queues an api_user item", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   s = peter("x", model = fake, .run = FALSE, envir = new.env())
@@ -102,6 +110,7 @@ test_that("gptr_steer() redacts with the context profile and queues an api_user 
 })
 
 test_that("the verbs validate their arguments", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   s = peter("x", model = fake, .run = FALSE, envir = new.env())
@@ -116,6 +125,7 @@ test_that("the verbs validate their arguments", {
 })
 
 test_that("model code may not steer or cancel another session, nor add listeners (IC-53)", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   s = peter("x", model = fake, .run = FALSE, envir = new.env())
@@ -129,6 +139,7 @@ test_that("model code may not steer or cancel another session, nor add listeners
 })
 
 test_that("gptr_on() registers a session listener and returns its remover", {
+  skip_on_cran()
   local_gw()
   # bound first: a local_*() helper called inside the `model =` expression would attach its
   # cleanup to the gateway's alias mask (it is evaluated there), not to this test
@@ -160,6 +171,7 @@ test_that("gptr_return() outside a run returns its argument invisibly (IC-48)", 
 })
 
 test_that("gptr_return() designates the run's value from R code during a run", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   designate = test_tool("designate", function(ctx) {
@@ -210,6 +222,7 @@ test_that("a pending run freezes its safety record when a verb starts it (07 sec
 })
 
 test_that("starting a pending run re-checks egress and replay; a refusal keeps it pending", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(replay = "auto")
   withr::local_envvar(GPTR_REPLAY = "auto")
@@ -268,6 +281,7 @@ test_that("gptr_wait() checks every session before it starts any; a refusal star
 })
 
 test_that("a follow-up on a session without a kept home runs in the verb's caller [R2]", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   box = new.env()
@@ -293,6 +307,7 @@ test_that("a follow-up on a session without a kept home runs in the verb's calle
 })
 
 test_that("gptr_return() keeps a name bound in the kept home by name (03 5.1)", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   home = new.env()
@@ -312,6 +327,7 @@ test_that("gptr_return() keeps a name bound in the kept home by name (03 5.1)", 
 })
 
 test_that("one approved gptr_cancel() call may cancel a list of other sessions (IC-53)", {
+  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   a = peter("a", model = fake, .run = FALSE, envir = new.env())

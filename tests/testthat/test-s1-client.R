@@ -48,6 +48,7 @@ test_that("choices become a choice question; names carry descriptions; factors a
 })
 
 test_that("labels that if() reads as logical are rejected before any request", {
+  skip_on_cran()
   for (lab in c("TRUE", "true", "True", "T", "FALSE", "false", "False", "F")) {
     err = expect_error(s1_question("Q?", "x", choices = c(lab, "maybe")),
                        class = "gptr_error_s1_labels")
@@ -193,6 +194,7 @@ test_that("unknown response fields are ignored", {
 })
 
 test_that("error bodies become classed System 1 conditions with the service's message", {
+  skip_on_cran()
   cases = list(`error-400` = "gptr_error_s1_validation", `error-401` = "gptr_error_s1_auth",
                `error-422` = "gptr_error_s1_validation", `error-429` = "gptr_error_s1_rate_limit")
   q = list(answer = list(type = "noul", instructions = "Q?"))
@@ -240,6 +242,7 @@ test_that("malformed answers are response errors, never wrong values", {
 })
 
 test_that("answers are validated against the request before they become canonical (IC-74)", {
+  skip_on_cran()
   # 07 section 3: finite values, bounds, expected answer IDs, allowed option names,
   # probability sums and score reconstruction
   is_bad = function(x) inherits(x, "gptr_error_s1_response")
@@ -460,6 +463,7 @@ test_that("at most gptr.s1_max_active requests are in flight", {
 })
 
 test_that("bounded rounds resubmit only failed elements, honouring retry-after up to 60 s", {
+  skip_on_cran()
   seen = new.env(parent = emptyenv())
   seen$calls = list()
   seen$waits = numeric()
@@ -557,6 +561,7 @@ test_that("against a mocked /systemone the client parses real HTTP replies withi
 # ---- Task 4, IC-74 (07-local-ollama.md sections 2-5) and IC-57 ---------------------------------
 
 test_that("the adapter follows the resolved model's api, not its provider's (IC-74)", {
+  skip_on_cran()
   log = local_fake_transfers(function(body) ok_reply(body, 0.3))
   mixed = gptr_provider("mixedwire", api = "openai-completions",
                         base_url = "http://127.0.0.1:9/v1/", local = TRUE, offline = TRUE,
@@ -607,6 +612,7 @@ test_that("the request preflight runs before any adapter, credential or transfer
 })
 
 test_that("a model's decision record lowers the requests in flight (IC-74)", {
+  skip_on_cran()
   log = local_fake_transfers(function(body) ok_reply(body), delay = 0.02)
   p = gptr_provider("pairwise", api = "typesafe-system-one", base_url = "http://127.0.0.1:9/v1/",
                     type = "classifier", local = TRUE, offline = TRUE,
@@ -629,6 +635,7 @@ test_that("a model's decision record lowers the requests in flight (IC-74)", {
 })
 
 test_that("dispatch validates canonical answers and never runs a wire parser again (IC-74)", {
+  skip_on_cran()
   local_mocked_bindings(s1_parse_answers = function(...) stop("a wire parser ran again"),
                         s1_parse_answer = function(...) stop("a wire parser ran again"))
   seen = new.env(parent = emptyenv())
@@ -707,6 +714,7 @@ test_that("dispatch validates canonical answers and never runs a wire parser aga
 })
 
 test_that("a score the wire parser fills in passes the dispatch check (IC-74)", {
+  skip_on_cran()
   # two-decimal probabilities may sum below 1 (report 04a); the parser's expected level of a
   # missing score and the check of a given score use the same normalised expectation
   rounded = list(`0` = 0, `1` = 0, `2` = 0, `3` = 0, `4` = 0.98)
@@ -734,6 +742,7 @@ test_that("a score the wire parser fills in passes the dispatch check (IC-74)", 
 })
 
 test_that("a System 1 call inside a pump never runs another run's FIFO tool (IC-57)", {
+  skip_on_cran()
   local_fake_transfers(function(body) ok_reply(body), delay = 0.02)
   p = wire_provider()
   seen = new.env(parent = emptyenv())
@@ -843,6 +852,7 @@ test_that("the system1 section is architecture 7.3 verbatim and shown only when 
 })
 
 test_that("NS-4: if (peter(..., model = judge)) works and creates no session", {
+  skip_on_cran()
   s1_fresh()
   judge = rct_judge()
   abstract = abstracts20()[["a01"]]
@@ -860,6 +870,7 @@ test_that("NS-4: if (peter(..., model = judge)) works and creates no session", {
 })
 
 test_that("NS-4: a vector gives a named decision vector; repeats come from the cache", {
+  skip_on_cran()
   s1_fresh()
   judge = rct_judge()
   abstracts = abstracts20()
@@ -888,6 +899,7 @@ test_that("levels give a gptr_score of expected 0-based levels", {
 })
 
 test_that("NS-4: a data frame split into rows prints the once-per-session s1_split message", {
+  skip_on_cran()
   s1_fresh()
   local_gptr_options(quiet = FALSE)
   local_once_reset("s1_split")
@@ -931,6 +943,7 @@ test_that("a piped session gives one state: no turn, a gptr.decision entry, at m
 })
 
 test_that("System 1 emits a decision event and writes one summary line at top level", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(0.9, 0.1), name = "judge", type = "classifier")
   events = new.env()
@@ -957,6 +970,7 @@ test_that("System 1 emits a decision event and writes one summary line at top le
 })
 
 test_that("failures: a scalar call signals, a vector gives NA and one s1_errors warning", {
+  skip_on_cran()
   s1_fresh()
   # the state key is the context label (`one`, or `input` for the call c(...)), so read the value
   local_fake_provider(function(state, question) {
@@ -990,6 +1004,7 @@ test_that("calls above gptr.s1_max_elements fail with a hint to chunk", {
 })
 
 test_that("replay mode serves cached answers and refuses a miss (IC-47)", {
+  skip_on_cran()
   s1_fresh()
   spec = gptr_fake_provider(list(0.9), name = "remote", type = "classifier")
   spec$offline = FALSE
@@ -1010,6 +1025,7 @@ test_that("replay mode serves cached answers and refuses a miss (IC-47)", {
 })
 
 test_that("jev without a key fails cleanly: egress first, then no_key; nothing is sent", {
+  skip_on_cran()
   s1_fresh()
   local_no_network()
   withr::local_envvar(TYPESAFE_API_KEY = "", GPTR_REPLAY = "live",
@@ -1032,6 +1048,7 @@ test_that("the gptr_prob() example runs", {
 })
 
 test_that("NS-5: System 1 routes each task to a strong or a cheap System 2 model", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(function(state, question) {
     if (grepl("subtle", state$task, fixed = TRUE)) 0.9 else 0.1

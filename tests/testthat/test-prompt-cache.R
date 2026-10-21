@@ -18,6 +18,7 @@ p07_reply = function(s, text) {
 # ---- Task 10: request assembly and cache plans --------------------------------------------------
 
 test_that("request_build returns the adapter context of contract 8.1", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = "- rule"))
   s = p07_session("manual")
   p07_first_turn(s)
@@ -45,6 +46,7 @@ test_that("request_build returns the adapter context of contract 8.1", {
 })
 
 test_that("the request carries the running call's returns schema and the target's thinking", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   live = session_live(s)
@@ -62,6 +64,7 @@ test_that("the request carries the running call's returns schema and the target'
 })
 
 test_that("the extra tail is appended after the projected transcript", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   req = request_build(s, model_resolve("fake/fake-1"), extra = msg_user("please summarise"))
@@ -73,6 +76,7 @@ test_that("the extra tail is appended after the projected transcript", {
 })
 
 test_that("queued operator messages are appended before the request is assembled", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   prompt_pending_add(s, msg_operator("reminder", "a harness fact"))
@@ -85,6 +89,7 @@ test_that("queued operator messages are appended before the request is assembled
 })
 
 test_that("the element view of a later request extends the earlier one", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   target = model_resolve("fake/fake-1")
@@ -120,6 +125,7 @@ test_that("cache plans anchor T0 and the project block per provider", {
 })
 
 test_that("the tail TTL switches to 1 h after a 241 s gap and not after 239 s", {
+  skip_on_cran()
   expect_identical(prompt_cache_ttl_next("5m", last = 0, now = 241), "1h")
   expect_identical(prompt_cache_ttl_next("5m", last = 0, now = 239), "5m")
   expect_identical(prompt_cache_ttl_next("1h", last = 0, now = 1), "1h")
@@ -162,6 +168,7 @@ test_that("prompt_request_estimate assigns tokens to ledger components", {
 # `.d$refreeze` set (P06 rebuild_fill()); a request built before the session's first run (for
 # example a compaction) must not restore and send that prompt.
 test_that("a session with a pending refreeze is frozen afresh by request_build (IC-52)", {
+  skip_on_cran()
   s = p07_session()
   fr = prompt_freeze(s, list(interactive = FALSE, preset = "minimal"))
   d = session_data(s)
@@ -181,6 +188,7 @@ test_that("a session with a pending refreeze is frozen afresh by request_build (
 # P06's run_target() clamps the session's level to the run's model; a target without a level
 # (a direct call, a compaction) gets the same clamp, never a level the model does not offer.
 test_that("without a target level the session's level is clamped to the target's levels", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   d = session_data(s)
@@ -205,6 +213,7 @@ test_that("without a target level the session's level is clamped to the target's
 # request.build. Images already elided on the path must be projected, hashed and estimated as
 # the omission text P06 sends, not at full image cost on every later request.
 test_that("images elided on the path are projected and estimated as sent (IC-67)", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   call = block_tool_call("c1", "r", list(code = "plot(1)"))
@@ -258,6 +267,7 @@ count_breaks = function(.env = parent.frame()) {
 }
 
 test_that("the prefix guard stays quiet for appends and flags a rewritten prompt", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   target = model_resolve("fake/fake-1")
@@ -279,6 +289,7 @@ test_that("the prefix guard stays quiet for appends and flags a rewritten prompt
 })
 
 test_that("an edited transcript entry is detected and gptr.check_prefix acts", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   target = model_resolve("fake/fake-1")
@@ -300,6 +311,7 @@ test_that("an edited transcript entry is detected and gptr.check_prefix acts", {
 })
 
 test_that("stated breaks and rewinds do not count as prefix breaks", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   target = model_resolve("fake/fake-1")
@@ -316,6 +328,7 @@ test_that("stated breaks and rewinds do not count as prefix breaks", {
 })
 
 test_that("a session_tree event resets the guard", {
+  skip_on_cran()
   s = p07_session()
   p07_first_turn(s)
   target = model_resolve("fake/fake-1")
@@ -328,6 +341,7 @@ test_that("a session_tree event resets the guard", {
 })
 
 test_that("cache_break carries the event envelope of contract 4.5 in and outside a run", {
+  skip_on_cran()
   # Review round 1: the payload lacked run, agent and turn (04 sections 4.5 and 10.4)
   local_fake_provider(list("one", "two"))
   s = session_new("fake/fake-1", "auto", home = new.env())

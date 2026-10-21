@@ -22,6 +22,7 @@ abort_stream_delta = function(run, text) {
 }
 
 test_that("abort labels a redactor tail received after a pause without printing it twice", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   run = abort_stream_run()
@@ -39,6 +40,7 @@ test_that("abort labels a redactor tail received after a pause without printing 
 })
 
 test_that("continuing a pause never adds an abort-tail label", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   run = abort_stream_run()
@@ -54,6 +56,7 @@ test_that("continuing a pause never adds an abort-tail label", {
 })
 
 test_that("a synthetic secret split across pause and resume stays protected", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   run = abort_stream_run()
@@ -76,6 +79,7 @@ test_that("a synthetic secret split across pause and resume stays protected", {
 })
 
 test_that("aborting an in-flight request records unknown usage once", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   run = abort_stream_run()
   abort_stream_delta(run, "Partial answer")
@@ -92,6 +96,7 @@ test_that("aborting an in-flight request records unknown usage once", {
 })
 
 test_that("aborting preserves explicitly known partial usage and CLI cost", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   run = abort_stream_run()
   msg = run$acc$message()
@@ -110,6 +115,7 @@ test_that("aborting preserves explicitly known partial usage and CLI cost", {
 })
 
 test_that("missing fields of partial usage are unknown rather than legacy zeros", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   run = abort_stream_run()
   msg = run$acc$message()
@@ -123,6 +129,7 @@ test_that("missing fields of partial usage are unknown rather than legacy zeros"
 })
 
 test_that("partial API counters do not establish the final request charge", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   run = abort_stream_run()
   msg = run$acc$message()
@@ -137,6 +144,7 @@ test_that("partial API counters do not establish the final request charge", {
 })
 
 test_that("abort keeps an existing request usage row and does not duplicate it", {
+  skip_on_cran()
   local_gptr_options(verbose = 0L)
   run = abort_stream_run()
   msg = run$acc$message()

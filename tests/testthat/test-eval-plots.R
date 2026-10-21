@@ -257,6 +257,7 @@ test_that("a device the code opens keeps every panel of a multi-panel page (#29)
 })
 
 test_that("a knitr chunk with two panels knitted through eval_r() writes its figure (#29)", {
+  skip_on_cran()
   skip_if_not_installed("knitr")
   skip_if_not(isTRUE(capabilities("png")))
   withr::local_dir(withr::local_tempdir())

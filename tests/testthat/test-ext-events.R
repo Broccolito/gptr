@@ -24,6 +24,7 @@ test_that("the catalogue lists the 46 events of contract 10.4 with their semanti
 })
 
 test_that("Claude, Codex, pre-IC-03 and unported names are refused with a hint", {
+  skip_on_cran()
   err = expect_error(ev_check_name("PreToolUse"), class = "gptr_error_invalid_argument")
   expect_match(conditionMessage(err), "did you mean 'tool_call'?", fixed = TRUE)
   expect_equal(err$arg, "event")
@@ -264,6 +265,7 @@ test_that("document_write: lines patch, block stops, a throwing hook blocks", {
 })
 
 test_that("sensitive hooks fail closed for ambiguous or malformed decisions", {
+  skip_on_cran()
   cases = list(
     tool_call = list(list(decision = "allow", decision = "block"), list(reason = "stop"),
       list(decision = "modify", input = list("bad")),

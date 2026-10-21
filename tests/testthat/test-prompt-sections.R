@@ -10,6 +10,7 @@ pending_of = function(s) get0("prompt_pending", envir = session_live(s)$memo, in
 # has no record in a non-empty registry. These tests read the stack directly through
 # prompt_input_get(); Task 3 checks ctx$input end to end.
 test_that("the rendering input is bound only while rendering, innermost first", {
+  skip_on_cran()
   s = p07_session()
   ctx = prompt_ctx(s)
   expect_null(prompt_input_get(ctx))
@@ -60,6 +61,7 @@ test_that("prompt_path walks from the root to the leaf", {
 })
 
 test_that("prompt_path leaves sibling branches out and survives torn lines and cycles", {
+  skip_on_cran()
   tests_of = function(s) {
     p = Filter(function(e) identical(e$custom_type, "gptr.test"), prompt_path(s))
     vapply(p, function(e) as.character(e$data$x), "")
@@ -128,6 +130,7 @@ test_that("prompt_specs keeps the winning record of each name, in order", {
 })
 
 test_that("operator messages wait in the session memo until they are flushed", {
+  skip_on_cran()
   s = p07_session()
   prompt_pending_add(s, msg_operator("reminder", "a note"))
   q = pending_of(s)
@@ -253,6 +256,7 @@ test_that("preset tools functions are called as P02 validates them (positional h
 })
 
 test_that("a session's rank-0 preset is found through preset_tools(session =) (IC-69)", {
+  skip_on_cran()
   s = p07_session()
   sid = prompt_sid(s)
   id = registry_add(gptr_spec("preset", "p07_domain", tools = c("read", "r")), "session", 0L,
@@ -292,6 +296,7 @@ section_of = function(t0, name) {
 }
 
 test_that("rendered P07 sections are byte-identical to architecture 7.3 (with stand-ins)", {
+  skip_on_cran()
   rd = prefix_fixture()$expected$rendered
   inter = compose_case("standard_interactive")
   expect_identical(section_of(inter$t0, "tools"), rd$tools_standard_ask)
@@ -314,6 +319,7 @@ test_that("rendered P07 sections are byte-identical to architecture 7.3 (with st
 })
 
 test_that("the readonly preset has no edit or write rules (IC-68)", {
+  skip_on_cran()
   rd = prefix_fixture()$expected$rendered
   s = p07_session("plan", "readonly")
   prompt_standins_register(prefix_fixture()$standins, session_data(s)$id, exclusive = TRUE)
@@ -324,6 +330,7 @@ test_that("the readonly preset has no edit or write rules (IC-68)", {
 })
 
 test_that("the extended preset uses the full r_performance text and the extra tools", {
+  skip_on_cran()
   s = p07_session("auto", "extended")
   prompt_standins_register(prefix_fixture()$standins, session_data(s)$id, exclusive = TRUE)
   fr = prompt_compose(s, list(interactive = FALSE))
@@ -333,6 +340,7 @@ test_that("the extended preset uses the full r_performance text and the extra to
 })
 
 test_that("the r schema is frozen in the variant for the document and the human (IC-68)", {
+  skip_on_cran()
   arr = function(fr) {
     a = json_decode(fr$tools_json)
     names(a[[which(vapply(a, function(x) x$name, "") == "r")]]$input_schema$properties)
@@ -343,6 +351,7 @@ test_that("the r schema is frozen in the variant for the document and the human 
 })
 
 test_that("{s1} is replaced by the configured System 1 alias", {
+  skip_on_cran()
   fr = compose_case("standard_all")
   expect_match(fr$t0, "System 1 decisions are peter(..., model = jev)", fixed = TRUE)
   expect_false(grepl("{s1}", fr$t0, fixed = TRUE))
@@ -359,6 +368,7 @@ test_that("fragments are inserted at the marker, or the marker line is dropped",
 })
 
 test_that("a section over its budget is truncated with a diagnostic", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   registry_add(gptr_prompt_section("house", paste(rep("Use SI units in every table.", 40),
@@ -372,6 +382,7 @@ test_that("a section over its budget is truncated with a diagnostic", {
 })
 
 test_that("SYSTEM text, .opts$system and session_start sections replace or remove sections", {
+  skip_on_cran()
   s = p07_session()
   fr = prompt_compose(s, list(interactive = FALSE, system = "You are a terse assistant."))
   expect_true(startsWith(fr$t0, "You are a terse assistant.\n\n"))
@@ -386,6 +397,7 @@ test_that("SYSTEM text, .opts$system and session_start sections replace or remov
 })
 
 test_that("the user's SYSTEM.md replaces the core; the project's needs trust", {
+  skip_on_cran()
   p07_project(list(".gptr/SYSTEM.md" = "Project system prompt."))
   s = p07_session()
   expect_false(grepl("Project system prompt.", prompt_compose(s)$t0, fixed = TRUE))
@@ -394,6 +406,7 @@ test_that("the user's SYSTEM.md replaces the core; the project's needs trust", {
 })
 
 test_that("the tool array skips unavailable and missing tools and adds plugin direct tools", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   prompt_standins_register(prefix_fixture()$standins, sid, exclusive = TRUE)
@@ -436,6 +449,7 @@ test_that("the default estimator is registered and keeps its prior when calibrat
 # preset equal to the configured one is not an explicit choice: the user's tools.presets mapping
 # and the shipped defaults (IC-73) apply to it; `opts$preset` and any other session preset win.
 test_that("a session created without a preset gets tools.presets and the shipped default (IC-73)", {
+  skip_on_cran()
   local_gptr_options(tools = list(presets = list("fake/*" = "minimal")))
   s = p07_session()
   expect_identical(session_data(s)$preset, "standard")
@@ -460,6 +474,7 @@ test_that("a session created without a preset gets tools.presets and the shipped
 })
 
 test_that("the tools.disable setting also leaves out plugin direct tools", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   prompt_standins_register(prefix_fixture()$standins, sid, exclusive = TRUE)
@@ -499,6 +514,7 @@ test_that("prompt_tools_always() declares lazy direct tools; namespaced ones sta
 })
 
 test_that("a tool whose available() or parameters() fails is left out with a diagnostic", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   prompt_standins_register(prefix_fixture()$standins, sid, exclusive = TRUE)
@@ -524,6 +540,7 @@ test_that("a tool whose available() or parameters() fails is left out with a dia
 })
 
 test_that("a session's own rank-0 preset composes with its tools (IC-69)", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   prompt_standins_register(prefix_fixture()$standins, sid, exclusive = TRUE)
@@ -540,6 +557,7 @@ test_that("a session's own rank-0 preset composes with its tools (IC-69)", {
 # (preamble, tools and rules) and is the user's text, so the preamble's 120-token budget does not
 # cut it; a named `preamble` override is a section override and keeps the section's budget.
 test_that("a custom system prompt replaces the core without the preamble's budget (Pi's rule)", {
+  skip_on_cran()
   fx = prefix_fixture()$standins
   local_project()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
@@ -567,6 +585,7 @@ test_that("a custom system prompt replaces the core without the preamble's budge
 })
 
 test_that("an empty SYSTEM.md or .opts$system replaces nothing; an empty override omits", {
+  skip_on_cran()
   fx = prefix_fixture()$standins
   local_project()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
@@ -589,6 +608,7 @@ test_that("an empty SYSTEM.md or .opts$system replaces nothing; an empty overrid
 # preset record's decision, so an excluded section keeps out of the prompt (never a stray T0
 # section that breaks the tiers).
 test_that("an override of a section the preset excludes keeps it out of the prompt", {
+  skip_on_cran()
   s = p07_session(preset = "minimal")
   prompt_standins_register(prefix_fixture()$standins, session_data(s)$id, sections = "r_env",
                            exclusive = TRUE)
@@ -606,6 +626,7 @@ test_that("an override of a section the preset excludes keeps it out of the prom
 })
 
 test_that("a named override replaces or removes an r_session fragment", {
+  skip_on_cran()
   frags = prefix_fixture()$standins$fragments
   shell = frags[[which(vapply(frags, function(f) f$name, "") == "shell")]]$text
   s = p07_session()
@@ -630,6 +651,7 @@ test_that("a named override replaces or removes an r_session fragment", {
 # ---- Task 7: freeze, the gptr.frozen entry and the compaction floor check -----------------------
 
 test_that("prompt_freeze stores the frozen prompt once and appends gptr.frozen first", {
+  skip_on_cran()
   s = p07_session()
   d = session_data(s)
   fr = prompt_freeze(s, list(interactive = FALSE))
@@ -652,6 +674,7 @@ test_that("prompt_freeze stores the frozen prompt once and appends gptr.frozen f
 })
 
 test_that("a resumed session restores the frozen prompt from its gptr.frozen entry", {
+  skip_on_cran()
   s = p07_session()
   fr = prompt_freeze(s, list(interactive = FALSE))
   d = session_data(s)
@@ -669,6 +692,7 @@ test_that("a resumed session restores the frozen prompt from its gptr.frozen ent
 })
 
 test_that("a model with an 8K window is refused for the standard preset (IC-71)", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = paste(rep("- Always check the data dictionary.", 400),
                                        collapse = "\n")))
   # manual mode: the untrusted project's instructions are sent (not withheld), so they count
@@ -698,6 +722,7 @@ test_that("the floor check cuts re-injection budgets before it refuses (IC-71)",
 })
 
 test_that("a 200K window passes the floor check with the full re-injection budgets", {
+  skip_on_cran()
   s = p07_session()
   fr = prompt_freeze(s, list(interactive = FALSE))
   expect_identical(fr$reinject, list(project = Inf, skills = 10000))
@@ -725,6 +750,7 @@ local_no_skill_block = function(.env = parent.frame()) {
 }
 
 test_that("the floor counts the project instructions the frozen audience will be sent (IC-52)", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
   local_tiny_model()
   local_no_skill_block()
@@ -748,6 +774,7 @@ test_that("the floor counts the project instructions the frozen audience will be
 })
 
 test_that("cut re-injection budgets are recorded in gptr.frozen and survive a restore (IC-71)", {
+  skip_on_cran()
   p07_project(list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
   local_tiny_model()
   local_no_skill_block()
@@ -783,6 +810,7 @@ trials_tool = function() {
 }
 
 test_that("session_add_tools declares tools by value when the adapter supports it (IC-69)", {
+  skip_on_cran()
   s = p07_session()
   before = prompt_freeze(s, list(interactive = FALSE))$tools_json
   local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
@@ -797,6 +825,7 @@ test_that("session_add_tools declares tools by value when the adapter supports i
 })
 
 test_that("without tool_addition the tools become namespaced r members with a note", {
+  skip_on_cran()
   s = p07_session()
   prompt_freeze(s, list(interactive = FALSE))
   local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
@@ -813,6 +842,7 @@ test_that("without tool_addition the tools become namespaced r members with a no
 })
 
 test_that("a spec that already is a peter$ member keeps its name when added", {
+  skip_on_cran()
   s = p07_session()
   prompt_freeze(s, list(interactive = FALSE))
   local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
@@ -842,6 +872,7 @@ test_that("section patches are queued as operator messages (Pi's wording)", {
 # "tool_addition", TRUE); the Responses adapter also needs tool_call), so P07 announces tools by
 # value under the same rule; otherwise the declarations would be dropped and the tool lost.
 test_that("tools are declared by value only when the adapter and the model take them (IC-74)", {
+  skip_on_cran()
   s = p07_session()
   expect_true(prompt_tool_addition(s))
   rec = model_resolve("fake/fake-1", strict = FALSE)
@@ -870,6 +901,7 @@ test_that("tools are declared by value only when the adapter and the model take 
 })
 
 test_that("hidden specs are never announced; namespaced and fun-only members stay members", {
+  skip_on_cran()
   s = p07_session()
   prompt_freeze(s, list(interactive = FALSE))
   sid = session_data(s)$id
@@ -896,6 +928,7 @@ test_that("hidden specs are never announced; namespaced and fun-only members sta
 })
 
 test_that("a spec that cannot be added is skipped with a diagnostic; the others are announced", {
+  skip_on_cran()
   s = p07_session()
   prompt_freeze(s, list(interactive = FALSE))
   sid = session_data(s)$id
@@ -926,6 +959,7 @@ test_that("a tool made a member keeps the spec's other fields", {
 # P06's run_freeze() runs the session_start hooks (which may call ctx$add_tools()) before the
 # freeze, and the freeze declares a session's direct tools, so a message would declare them twice.
 test_that("tools added before the first freeze join the frozen prompt, not a message", {
+  skip_on_cran()
   s = p07_session()
   local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
   session_add_tools(s, trials_tool())
@@ -951,6 +985,7 @@ test_that("tools added before the first freeze join the frozen prompt, not a mes
 # includes namespaced r members, since whether the frozen prompt lists them (P10's plugins
 # section) depends on the preset, the run options and the session_start overrides of the freeze.
 test_that("tools added before the freeze that it does not declare are announced", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
@@ -981,6 +1016,7 @@ test_that("tools added before the freeze that it does not declare are announced"
 # on a continuation), and a changed declaration under a declared name is refused: the frozen
 # array never changes, and a rank-0 tie would keep running the first spec (P02).
 test_that("a tool the model already has is not declared again; a changed one is refused", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
@@ -1043,6 +1079,7 @@ test_that("a tool the model already has is not declared again; a changed one is 
 })
 
 test_that("a tool another rank-0 record of the session wins over is refused, not announced", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   prompt_freeze(s, list(interactive = FALSE))
@@ -1063,6 +1100,7 @@ test_that("a tool another rank-0 record of the session wins over is refused, not
 # session.add_tools. The tool that runs is the one passed, so it is announced, not refused, and it
 # is not registered a second time.
 test_that("a tool another rank-0 record of the session already provides is announced", {
+  skip_on_cran()
   f = function(input, ctx) "plug"
   plug = function(s, suffix) {
     sid = session_data(s)$id
@@ -1106,6 +1144,7 @@ test_that("a tool another rank-0 record of the session already provides is annou
 # Review round 2 (finding 2): the minimal preset has no plugins section, so a namespaced member
 # added before the freeze is announced by the member note.
 test_that("namespaced members added before the freeze are announced under any preset", {
+  skip_on_cran()
   s = p07_session(preset = "minimal")
   sid = session_data(s)$id
   local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
@@ -1126,6 +1165,7 @@ test_that("namespaced members added before the freeze are announced under any pr
 # of earlier tool_change messages, so after a switch to such a model only the frozen array counts
 # as declared, and a tool that an earlier message declared is offered again as a member.
 test_that("after a switch to a model without tool additions, re-added tools become members", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
@@ -1148,6 +1188,7 @@ test_that("after a switch to a model without tool additions, re-added tools beco
 # Review round 2 (finding 4): the member signature is built before the spec is registered, so a
 # schema it cannot read leaves the tool out entirely (D-075 item 5).
 test_that("a member whose signature cannot be built is not registered", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   prompt_freeze(s, list(interactive = FALSE))
@@ -1168,6 +1209,7 @@ test_that("a member whose signature cannot be built is not registered", {
 # ---- Task 9: gptr_prompt() ----------------------------------------------------------------------
 
 test_that("gptr_prompt() previews a preset without a session", {
+  skip_on_cran()
   v = gptr_prompt(preset = "minimal")
   expect_s3_class(v, "gptr_prompt_view")
   expect_named(v, c("system", "tools_json", "first_message", "sections", "total_tokens"))
@@ -1181,6 +1223,7 @@ test_that("gptr_prompt() previews a preset without a session", {
 })
 
 test_that("gptr_prompt() shows a session's frozen prompt and first message", {
+  skip_on_cran()
   s = p07_session()
   fr = prompt_freeze(s, list(interactive = FALSE))
   session_append(s, list(type = "message",
@@ -1217,6 +1260,7 @@ test_that("printing a prompt view shows each part and returns it invisibly", {
 # restoring that entry (prompt_freeze(), Task 7), so the view shows the restored prompt rather
 # than a fresh composition, and leaves .d$frozen and the transcript as they were.
 test_that("gptr_prompt() shows a prompt kept only in gptr.frozen and writes nothing", {
+  skip_on_cran()
   s = p07_session()
   fr = prompt_freeze(s, list(interactive = FALSE, preset = "minimal"))
   d = session_data(s)
@@ -1236,6 +1280,7 @@ test_that("gptr_prompt() shows a prompt kept only in gptr.frozen and writes noth
 # .d$frozen empty and sets .d$refreeze) freezes a fresh composition at its next run and never
 # restores the gptr.frozen entry on its path, so the view shows that composition.
 test_that("gptr_prompt() of a session with a pending refreeze shows the fresh composition", {
+  skip_on_cran()
   s = p07_session()
   fr = prompt_freeze(s, list(interactive = FALSE, preset = "minimal"))
   d = session_data(s)
@@ -1259,6 +1304,7 @@ test_that("gptr_prompt() of a session with a pending refreeze shows the fresh co
 # A preview of a session's first message neither consumes a pending plan nor queues the
 # operator-authority blocks the real first message would queue as reminders.
 test_that("a preview of a session queues no operator message and stores nothing", {
+  skip_on_cran()
   off = gptr_register(gptr_context_block("p07_note", function(ctx, budget) "Note.",
                                          placement = "first", authority = "operator"))
   withr::defer(off())
@@ -1275,6 +1321,7 @@ test_that("a preview of a session queues no operator message and stores nothing"
 # preset = is validated against the presets the session sees, its own rank-0 records included
 # (IC-69), as the composition resolves them.
 test_that("gptr_prompt() accepts a session's own rank-0 preset (IC-69)", {
+  skip_on_cran()
   s = p07_session()
   sid = session_data(s)$id
   id = registry_add(gptr_spec("preset", "p07_own", tools = c("read", "r")), "session", 0L,
@@ -1287,6 +1334,7 @@ test_that("gptr_prompt() accepts a session's own rank-0 preset (IC-69)", {
 # ---- Finite-cap floor protection with an unknown context window (IC-71) -------------------------
 
 test_that("an unknown window honors a finite compaction floor before provider transfer", {
+  skip_on_cran()
   local_project()
   fake = local_fake_provider(list("unused"))
   s = session_new("fake/fake-1", "auto", home = new.env(), preset = "minimal")

@@ -198,6 +198,7 @@ doc_test_block = function(id, prompt, body, ...) {
 }
 
 test_that("chunks are divided and labelled as knitr does", {
+  skip_on_cran()
   ch = doc_rmd_chunks(doc_knitr_probe)
   expect_identical(ch$label, doc_knitr_labels)
   # a chunk is ended by its own fence only; a begin line with that fence opens the next chunk
@@ -237,6 +238,7 @@ test_that("option labels keep YAML quoting and non-ASCII text in any locale", {
 })
 
 test_that("an unterminated chunk is never written into or after", {
+  skip_on_cran()
   text = c("```{r ask}", "peter(\"go\")", "```{r other}", "x = 1", "```")
   expect_identical(doc_rmd_chunks(text)$closed, c(FALSE, TRUE))
   site = doc_test_site("a.Rmd", text, "go", "rmd")
@@ -261,6 +263,7 @@ test_that("an unterminated chunk is never written into or after", {
 })
 
 test_that("each peter() statement of a chunk owns its own agent chunk", {
+  skip_on_cran()
   text = c("```{r ask}", "peter(\"load data\")", "peter(\"plot it\")", "```", "",
            "```{r gptr-aaa111}", doc_test_block("aaa111", "load data", "d = 1"), "```", "",
            "```{r gptr-bbb222}", doc_test_block("bbb222", "plot it", "plot(d)"), "```")
@@ -297,6 +300,7 @@ test_that("each peter() statement of a chunk owns its own agent chunk", {
 })
 
 test_that("an agent chunk's fence outgrows the fence lines of its block", {
+  skip_on_cran()
   text = doc_fixture_lines("report.qmd")
   site = doc_test_site("report.qmd", text, "count letters in this prompt", "qmd")
   body = c("md = \"", "```{r}", "x", "```", "\"")
@@ -358,6 +362,7 @@ test_that("an indented chunk keeps its prefix through insert, rewrite and eval: 
 })
 
 test_that("a qmd chunk's eval option is read and written only among its leading option lines", {
+  skip_on_cran()
   text = doc_fixture_lines("report.qmd")
   site = doc_test_site("report.qmd", text, "count letters in this prompt", "qmd")
   body = c("qmd = \"", "```{r}", "#| label: x", "#| eval: false", "x", "```", "\"",
@@ -430,6 +435,7 @@ test_that("a Python-written notebook round-trips byte for byte", {
 })
 
 test_that("an agent cell is inserted after the calling cell, idempotently, keeping outputs", {
+  skip_on_cran()
   text = doc_fixture_lines("floats.ipynb")
   nb = nb_parse(text)
   ph = prompt_hash("summarise the mpg column")
@@ -574,6 +580,7 @@ test_that("text that is not an nbformat 4 notebook is refused as a doc_write err
 })
 
 test_that("cell source is split as nbformat splits it and read back line for line", {
+  skip_on_cran()
   # Python 3.14: "a\rb\x0cc\u2028d\r\ne\x1cf\x85g\n".splitlines(True)
   expect_identical(nb_source_split("a\rb\fc\u2028d\r\ne\u001cf\u0085g\n"),
                    list("a\r", "b\f", "c\u2028", "d\r\n", "e\u001c", "f\u0085", "g\n"))
@@ -592,6 +599,7 @@ test_that("cell source is split as nbformat splits it and read back line for lin
 })
 
 test_that("each peter() call of a calling cell owns its own agent cell; nested calls own none", {
+  skip_on_cran()
   text = nb_test_text(c("a = peter(\"load data\")\n", "b = peter(\"plot it\")"))
   sa = nb_test_site("load data")
   sb = nb_test_site("plot it")
@@ -641,6 +649,7 @@ test_that("notebook blocks round-trip exactly through inert and live", {
 })
 
 test_that("notebooks before nbformat 4.5 get agent cells without an id, found by metadata", {
+  skip_on_cran()
   text = doc_fixture_lines("floats.ipynb")
   old = text[!grepl("^   \"id\": ", text)]
   old[old == " \"nbformat_minor\": 5"] = " \"nbformat_minor\": 4"
@@ -661,6 +670,7 @@ test_that("notebooks before nbformat 4.5 get agent cells without an id, found by
 })
 
 test_that("an agent cell that a later save gives an ordinary id is still found by metadata", {
+  skip_on_cran()
   text = doc_fixture_lines("floats.ipynb")
   old = text[!grepl("^   \"id\": ", text)]
   old[old == " \"nbformat_minor\": 5"] = " \"nbformat_minor\": 4"
@@ -757,6 +767,7 @@ test_that("the documents section is the text of architecture 7.3 and needs a bou
 })
 
 test_that("blocks are made inert on disk and revived, through the document_write event", {
+  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   body = "x = 1"
@@ -788,6 +799,7 @@ test_that("blocks are made inert on disk and revived, through the document_write
 # ---- Task 13 adaptations (dev/DEVIATIONS.md D-122) ----------------------------------------------
 
 test_that("an open notebook and the running script are never written; inert marks are queued", {
+  skip_on_cran()
   site = nb_test_site("summarise the mpg column")
   text = doc_ipynb_upsert(doc_fixture_lines("floats.ipynb"), site,
                           nb_test_block("7f3a21", site, "a = 1"), "7f3a21")

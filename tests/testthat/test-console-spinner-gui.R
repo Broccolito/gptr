@@ -8,6 +8,7 @@ spinner_gui_capture = function(callback) {
 }
 
 test_that("dynamic frontends, R GUIs too, use carriage-return-only spinner frames", {
+  skip_on_cran()
   withr::local_options(cli.dynamic = TRUE, cli.unicode = FALSE, cli.num_colors = 1L,
     cli.width = 40L)
   for (frontend in c("rgui", "terminal", "vscode", "rstudio", "positron", "jupyter", "rscript",

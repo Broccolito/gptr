@@ -135,6 +135,7 @@ test_that("non-string finish reasons and signatures are never used as text (04 4
 })
 
 test_that("error chunks: retry before any delta, final after one, every shape read (09 2.1)", {
+  skip_on_cran()
   info = function(x) google_error_info(x)[c("class", "status", "retry")]
   rate = list(class = "rate_limit", status = 429L, retry = TRUE)
   expect_identical(info(list(code = 429L, status = "RESOURCE_EXHAUSTED")), rate)
@@ -259,6 +260,7 @@ test_that("a signature on an empty text part after thinking opens an empty signe
 })
 
 test_that("model helpers: Gemini versions, thinking levels, call ids, signatures, budgets", {
+  skip_on_cran()
   expect_identical(google_major("gemini-3.8-flash"), 3L)
   expect_identical(google_major("Gemini-2.5-Pro"), 2L)
   expect_identical(google_major("gemini-live-3.1-flash"), 3L)
@@ -340,6 +342,7 @@ test_that("thought signatures replay byte for byte to the same model only (accep
 })
 
 test_that("Anthropic -> Responses -> Gemini: no foreign opaque data, valid body (INFRA-08)", {
+  skip_on_cran()
   model = test_model(api, provider = "google", id = "gemini-3.8-flash")
   resp = replay_case("openai-responses", responses_normaliser, "reasoning_tools")$message
   h = handoff_entries(list(msg_user("And the row count?", timestamp = 5), resp,

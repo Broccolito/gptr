@@ -37,6 +37,7 @@ test_that("grep sorts by path and skips binary and .gitignore'd files", {
 })
 
 test_that("grep options: ignore case, literal, CRLF anchors, UTF-8 and PCRE classes", {
+  skip_on_cran()
   td = grep_fixture()
   txt = function(...) grep_tool_text(search_grep(...))
   expect_identical(txt("alpha", td, ignore_case = TRUE),
@@ -86,6 +87,7 @@ test_that("grep reproduces Pi's limit and context texts (tools.test.ts)", {
 })
 
 test_that("grep notices: limit, long lines centred on the match, regex errors, missing paths", {
+  skip_on_cran()
   td = grep_fixture()
   expect_match(grep_tool_text(search_grep("line", td, limit = 3L)),
                "[3 matches limit reached. Use limit=6 for more, or refine pattern]", fixed = TRUE)
@@ -248,6 +250,7 @@ test_that("non-ASCII file and directory names are searched, found and listed in 
 # positive lookaround (atomic: `(?=(\s*))\1`) dropped a matching file before the per-line matcher
 # ran (ripgrep -P reports every row below).
 test_that("the whole-file prefilter never drops a file the per-line matcher matches", {
+  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "eol.R", "x = c(1,\n  2)\n")
   put_file(td, "hash.R", "y = 1\n#comment\n")
@@ -379,6 +382,7 @@ test_that("a skipped file over 20 MB is reported with or without rows, in the te
 # reports ws.R:1 for the first seven). A fixed pattern is literal, so it keeps the prefilter, also
 # with ignore_case.
 test_that("the prefilter is off when ignorable pattern text precedes a possessive +", {
+  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "ws.R", "a  \nb\n")
   for (p in c("a\\s*\\E+$", "a\\s*\\Q\\E+$", "a\\s*\\Q\\E\\Q\\E+$", "a\\s*(?#c)+$",

@@ -3,6 +3,7 @@ source(testthat::test_path("fixtures", "oracles", "report02", "harness.R"), loca
 # ---------------------------------------------------------------- run records (04 section 7.6)
 
 test_that("run_new() builds a queued gptr_run with the contract fields", {
+  skip_on_cran()
   home = new.env()
   s = test_session(mode = "edits", home = home)
   run = run_new(s, list(agent = "main"), NULL)
@@ -121,6 +122,7 @@ test_that("session_emit() outside a run names no run and the main agent", {
 })
 
 test_that("the agent-area accessors reach the run's session for the L2 dispatcher", {
+  skip_on_cran()
   s = test_session()
   sid = session_data(s)$id
   run = run_new(s, list(), NULL)
@@ -289,6 +291,7 @@ test_that(oracle_title(recovery_recs, "R16"), {
 })
 
 test_that(oracle_title(recovery_recs, "R17"), {
+  skip_on_cran()
   s = projection_session()
   d = session_data(s)
   pr = project_messages(d$entries, d$leaf, model_resolve("fake/fake-1"))
@@ -358,6 +361,7 @@ test_that("an estimated usage proves no silent overflow", {
 })
 
 test_that("the recovery classifier never throws on malformed records", {
+  skip_on_cran()
   msgs = list(NULL, "text", list(stop_reason = "error", error_message = c("a", "b")),
               list(stop_reason = "error", error_message = NA_character_),
               list(stop_reason = "error", error_message = 1),
@@ -442,6 +446,7 @@ test_that("the fake provider's terminal error records classify as the contract s
 # ---------------------------------------------------------------- request shaping
 
 test_that("the fallback freeze appends gptr.frozen and emits session_start (reason new)", {
+  skip_on_cran()
   local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
                            "context.turn"))
   local_without_builtin(c("tools", "r"))
@@ -495,6 +500,7 @@ test_that("session_start reasons follow the session's origin", {
 })
 
 test_that("run_target() resolves the model once and applies a pending ctx$set_model() switch", {
+  skip_on_cran()
   local_fake_provider(list("x"))
   local_fake_provider(list("y"), name = "other")
   s = test_session()
@@ -510,6 +516,7 @@ test_that("run_target() resolves the model once and applies a pending ctx$set_mo
 })
 
 test_that("run_target() resolves a provider registered for the session only (model = <spec>)", {
+  skip_on_cran()
   s = test_session()
   d = session_data(s)
   spec = gptr_provider("loc", api = "fake", models = list(list(id = "m0"), list(id = "m1")),
@@ -556,6 +563,7 @@ test_that("a failing router falls back to the default model with a diagnostic", 
 })
 
 test_that("the fallback request projects the transcript and carries the frozen tools", {
+  skip_on_cran()
   local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
                            "context.turn"))
   local_without_builtin(c("tools", "r"))
@@ -678,6 +686,7 @@ test_that("context_tokens() is the last reported total plus the multiplier times
 # ---------------------------------------------------- request shaping: IC-67, IC-69, IC-74
 
 test_that("a colon tag is part of a session model id; a suffix is thinking only when known", {
+  skip_on_cran()
   s = test_session()
   d = session_data(s)
   spec = gptr_provider("loc", api = "fake",
@@ -705,6 +714,7 @@ test_that("run_target() refuses a decision-only model before any request (IC-74)
 })
 
 test_that("an unusable router answer falls back to the default chat model (IC-69, IC-74)", {
+  skip_on_cran()
   local_fake_provider(list("x"))
   local_fake_provider(list("y"), name = "other")
   local_fake_provider(list("z"), name = "judge", type = "classifier")
@@ -749,6 +759,7 @@ test_that("a router fallback refuses a decision-only default model (IC-74)", {
 })
 
 test_that("a router switch is recorded against the branch's last model, also across runs", {
+  skip_on_cran()
   local_fake_provider(list("x"))
   local_fake_provider(list("y"), name = "other")
   pick = new.env()
@@ -769,6 +780,7 @@ test_that("a router switch is recorded against the branch's last model, also acr
 })
 
 test_that("router and ctx$set_model() thinking levels are clamped to the model's levels", {
+  skip_on_cran()
   local_fake_provider(list("x"))
   local_service("router.call", function(s, reason) list(model = "fake/fake-1", thinking = "max"))
   s = session_new("router:cheapest", "auto", home = new.env())
@@ -780,6 +792,7 @@ test_that("router and ctx$set_model() thinking levels are clamped to the model's
 })
 
 test_that("the fallback freeze evaluates function parameters and available() (04 section 9.1)", {
+  skip_on_cran()
   local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
                            "context.turn"))
   local_without_builtin("r")
@@ -820,6 +833,7 @@ test_that("an elided image is elided in every copy at once (IC-67)", {
 })
 
 test_that("the fallback request and the context projection count elided images as omitted", {
+  skip_on_cran()
   local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
                            "context.turn"))
   local_fake_provider(list("x"))
@@ -848,6 +862,7 @@ test_that("the fallback request and the context projection count elided images a
 })
 
 test_that("context_tokens() anchors on provider-reported totals only and counts every block", {
+  skip_on_cran()
   s = test_session()
   d = session_data(s)
   t0 = strrep("system ", 50)
@@ -933,6 +948,7 @@ test_that("a returns schema that cannot be applied is a notice, not an error", {
 # ---------------------------------------------------------------- the run engine
 
 test_that("session_run() returns the identical session; each run is one prompt turn", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("one", "two"))
   s = test_session()
@@ -944,6 +960,7 @@ test_that("session_run() returns the identical session; each run is one prompt t
 })
 
 test_that("run_start() is non-blocking; run_wait() settles; the run carries its contract fields", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("done"))
   s = test_session()
@@ -959,6 +976,7 @@ test_that("run_start() is non-blocking; run_wait() settles; the run carries its 
 })
 
 test_that("agent events are paired and ordered", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("done"))
   ev = local_events(c("agent_start", "turn_start", "message_start", "message_end", "turn_end",
@@ -975,6 +993,7 @@ test_that("agent events are paired and ordered", {
 })
 
 test_that("turn_end carries the tool-result messages, never the tools' R values (R1)", {
+  skip_on_cran()
   local_permissive()
   local_tool("val", function(input, ctx) gptr_tool_result("made", value = as.numeric(1:10)))
   ev = local_events("turn_end")
@@ -989,6 +1008,7 @@ test_that("turn_end carries the tool-result messages, never the tools' R values 
 
 test_that("the first run freezes the prompt: gptr.frozen is the first entry (fallback before P07)",
           {
+  skip_on_cran()
   local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
                            "context.turn"))
   local_permissive()
@@ -1000,6 +1020,7 @@ test_that("the first run freezes the prompt: gptr.frozen is the first entry (fal
 })
 
 test_that("a busy session refuses a second run", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list(list(hang = TRUE)))
   s = test_session()
@@ -1010,6 +1031,7 @@ test_that("a busy session refuses a second run", {
 })
 
 test_that("an empty input, an empty queue and a finished answer is refused", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("done"))
   s = test_session()
@@ -1018,6 +1040,7 @@ test_that("an empty input, an empty queue and a finished answer is refused", {
 })
 
 test_that("queued items start an idle session's run (input = NULL)", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("done"))
   s = test_session()
@@ -1029,6 +1052,7 @@ test_that("queued items start an idle session's run (input = NULL)", {
 })
 
 test_that("run_start(s, NULL) continues from the leaf after an abort", {
+  skip_on_cran()
   local_permissive()
   fake = local_fake_provider(list(list(hang = TRUE), "resumed answer"))
   s = test_session()
@@ -1043,6 +1067,7 @@ test_that("run_start(s, NULL) continues from the leaf after an abort", {
 })
 
 test_that("run_current() and run_eval_env() inside a tool; the home is reset at settlement", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("peek", function(input, ctx) {
@@ -1061,6 +1086,7 @@ test_that("run_current() and run_eval_env() inside a tool; the home is reset at 
 })
 
 test_that("plan mode evaluates in a scratch overlay that is discarded (IC-15)", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("peek", function(input, ctx) {
@@ -1077,6 +1103,7 @@ test_that("plan mode evaluates in a scratch overlay that is discarded (IC-15)", 
 })
 
 test_that("a function-frame home is used for the run but never kept (R2)", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("peek", function(input, ctx) {
@@ -1118,6 +1145,7 @@ test_that("run_abort() records the partial answer, moves the queue to dropped an
 })
 
 test_that("an abort while a tool waits in the FIFO cancels the job; the session can be collected", {
+  skip_on_cran()
   local_permissive()
   local_tool("queued", function(input, ctx) "never runs")
   local_fake_provider(list(fake_tool("queued"), "never"))
@@ -1135,6 +1163,7 @@ test_that("an abort while a tool waits in the FIFO cancels the job; the session 
 })
 
 test_that("an interrupt aborts the run and is re-signalled; no connection is left open", {
+  skip_on_cran()
   local_permissive()
   local_store()
   n0 = nrow(showConnections())
@@ -1154,6 +1183,7 @@ test_that("an interrupt aborts the run and is re-signalled; no connection is lef
 })
 
 test_that("no connection is left open after a run returns or errors (IC-59)", {
+  skip_on_cran()
   local_permissive()
   local_store()
   n0 = nrow(showConnections())
@@ -1166,6 +1196,7 @@ test_that("no connection is left open after a run returns or errors (IC-59)", {
 })
 
 test_that("a nested run tightens the mode, inherits the snapshot and links to the outer run", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("sub", function(input, ctx) {
@@ -1226,6 +1257,7 @@ test_that("gptr.max_nested_calls caps peter() calls of one evaluation; a group c
 })
 
 test_that("tools plus returns = <schema> give a typed $value and keep the tool calls (INFRA-25)", {
+  skip_on_cran()
   local_permissive()
   local_tool("count", function(input, ctx) "32")
   local_fake_provider(list(fake_tool("count"), list(json = list(n = 32L))))
@@ -1237,6 +1269,7 @@ test_that("tools plus returns = <schema> give a typed $value and keep the tool c
 })
 
 test_that("a router session calls router.call before each request (IC-69)", {
+  skip_on_cran()
   # P07's compactor would ask the router for its compaction model first (reason "compaction")
   local_without_services(c("compact.should", "compact.run"))
   local_permissive()
@@ -1257,6 +1290,7 @@ test_that("a router session calls router.call before each request (IC-69)", {
 })
 
 test_that("a prefix break stops the run only under gptr.check_prefix = \"error\"", {
+  skip_on_cran()
   local_permissive()
   local_service("prefix.guard", function(s, target, view) {
     gptr_abort("Prompt-cache prefix broken at t1", "internal", detail = "test break")
@@ -1276,6 +1310,7 @@ test_that("a prefix break stops the run only under gptr.check_prefix = \"error\"
 })
 
 test_that("two concurrent sessions keep separate usage and tool context (INFRA-15)", {
+  skip_on_cran()
   local_permissive()
   seen = new.env()
   local_tool("who", function(input, ctx) {
@@ -1300,6 +1335,7 @@ test_that("two concurrent sessions keep separate usage and tool context (INFRA-1
 
 test_that("a tool piping into its own running session enqueues a steer delivered after its result",
           {
+  skip_on_cran()
   local_permissive()
   local_tool("self", function(input, ctx) {
     session_enqueue(ctx$session, "use TPM", as = "steer", source = "pipe")
@@ -1315,6 +1351,7 @@ test_that("a tool piping into its own running session enqueues a steer delivered
 })
 
 test_that("a mode change during a run reaches the model as an operator message after the results", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("switch", function(input, ctx) {
@@ -1330,6 +1367,7 @@ test_that("a mode change during a run reaches the model as an operator message a
 })
 
 test_that("a run sent to the background ends the foreground wait (P21)", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list(list(hang = TRUE)))
   s = test_session()
@@ -1344,6 +1382,7 @@ test_that("a run sent to the background ends the foreground wait (P21)", {
 })
 
 test_that("a UI answering abort to a permission request aborts the run", {
+  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   local_service("ui.get", function(session = NULL) {
     list(has_ui = function() TRUE, permission = function(request) list(decision = "abort"))
@@ -1369,6 +1408,7 @@ flaky = function() {
 }
 
 test_that(oracle_title(recovery_recs, "R19"), {
+  skip_on_cran()
   local_permissive()
   local_fast_retry()
   fake = local_fake_provider(flaky())
@@ -1380,6 +1420,7 @@ test_that(oracle_title(recovery_recs, "R19"), {
 })
 
 test_that(oracle_title(recovery_recs, "R20"), {
+  skip_on_cran()
   local_permissive()
   local_fast_retry()
   fake = local_fake_provider(flaky())
@@ -1388,6 +1429,7 @@ test_that(oracle_title(recovery_recs, "R20"), {
 })
 
 test_that(oracle_title(recovery_recs, "R21"), {
+  skip_on_cran()
   local_permissive()
   local_fast_retry()
   local_fake_provider(flaky())
@@ -1397,6 +1439,7 @@ test_that(oracle_title(recovery_recs, "R21"), {
 })
 
 test_that(oracle_title(recovery_recs, "R22"), {
+  skip_on_cran()
   local_permissive()
   local_fast_retry()
   ev = local_events(c("retry_start", "retry_end"))
@@ -1412,6 +1455,7 @@ test_that(oracle_title(recovery_recs, "R22"), {
 })
 
 test_that(oracle_title(recovery_recs, "R23"), {
+  skip_on_cran()
   local_permissive()
   ev = local_events("retry_start")
   fake = local_fake_provider(list(fake_error("insufficient_quota", status = 400L)))
@@ -1423,6 +1467,7 @@ test_that(oracle_title(recovery_recs, "R23"), {
 })
 
 test_that(oracle_title(recovery_recs, "R24"), {
+  skip_on_cran()
   local_permissive()
   local_fast_retry()
   ev = local_events("retry_end")
@@ -1436,6 +1481,7 @@ test_that(oracle_title(recovery_recs, "R24"), {
 })
 
 test_that(oracle_title(recovery_recs, "R25"), {
+  skip_on_cran()
   local_permissive()
   n = new.env()
   n$calls = 0L
@@ -1454,6 +1500,7 @@ test_that(oracle_title(recovery_recs, "R25"), {
 })
 
 test_that(oracle_title(recovery_recs, "R26"), {
+  skip_on_cran()
   local_permissive()
   n = new.env()
   n$calls = 0L
@@ -1474,6 +1521,7 @@ test_that(oracle_title(recovery_recs, "R26"), {
 })
 
 test_that("without a compactor the first overflow is terminal", {
+  skip_on_cran()
   local_without_services(c("compact.should", "compact.run"))
   local_permissive()
   fake = local_fake_provider(list(list(overflow = TRUE)))
@@ -1490,6 +1538,7 @@ test_that("every report 02 recovery check has a test", {
 # ---------------------------------------------------------------- the engine under IC-74 and IC-57
 
 test_that("a reported usage keeps its unknown counts; only an unreported one is estimated", {
+  skip_on_cran()
   expect_false(run_usage_reported(NULL))
   expect_false(run_usage_reported(usage_as(NULL)))
   expect_false(run_usage_reported(usage_new()))
@@ -1522,6 +1571,7 @@ test_that("a reported usage keeps its unknown counts; only an unreported one is 
 })
 
 test_that("an overflow condition carries the provider's prompt count, never gptr's estimate", {
+  skip_on_cran()
   expect_identical(run_overflow_tokens(list(usage = usage_new(input = 5000, output = 0))), 5000)
   expect_identical(run_overflow_tokens(list(usage = usage_new(input = 5000, estimated = TRUE))),
                    NA_real_)
@@ -1539,6 +1589,7 @@ test_that("an overflow condition carries the provider's prompt count, never gptr
 })
 
 test_that("a decision-only model or a refused request preflight ends the run before any request", {
+  skip_on_cran()
   local_permissive()
   judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
   s = test_session(model = "judge/judge-s1")
@@ -1600,6 +1651,7 @@ test_that("a pump nested in a hook runs only its own run's tools, never another 
 })
 
 test_that("a streaming redactor that failed closed drops its held text; the reply is recorded", {
+  skip_on_cran()
   local_permissive()
   limit = function(...) {
     gptr_abort("Streaming redaction exceeded its holding limit.", "redaction_limit", limit = 1L)
@@ -1619,6 +1671,7 @@ test_that("a streaming redactor that failed closed drops its held text; the repl
 # ---------------------------------------------------------------- settlement when the store fails
 
 test_that("a store failure while a run settles ends it with status error; the session is free", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   box$fail = TRUE
@@ -1651,6 +1704,7 @@ test_that("a store failure while a run settles ends it with status error; the se
 })
 
 test_that("a store failure while storing the `returns` value settles the run with status error", {
+  skip_on_cran()
   local_permissive()
   testthat::local_mocked_bindings(session_value_set = function(...) {
     gptr_abort("the session store failed: read-only file", "internal", detail = "read-only file")
@@ -1665,6 +1719,7 @@ test_that("a store failure while storing the `returns` value settles the run wit
 
 test_that("a store failure while a run settles keeps its own terminal condition, with a diagnostic",
           {
+  skip_on_cran()
   local_permissive()
   testthat::local_mocked_bindings(plugin_state_persist = function(s) {
     gptr_abort("the session store failed: disk full", "internal", detail = "disk full")
@@ -1682,6 +1737,7 @@ test_that("a store failure while a run settles keeps its own terminal condition,
 })
 
 test_that("an abort whose partial answer cannot be stored still settles and re-signals", {
+  skip_on_cran()
   local_permissive()
   append = session_append
   testthat::local_mocked_bindings(session_append = function(s, entry) {
@@ -1715,6 +1771,7 @@ test_that("an abort whose partial answer cannot be stored still settles and re-s
 })
 
 test_that("an abort before the stream's start event records the run's model, not 'unknown'", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list(list(hang = TRUE, delay = 5)))
   s = test_session()
@@ -1758,6 +1815,7 @@ test_that("outside a run the members read the session", {
 })
 
 test_that("inside a tool the members see the run; update emits tool_execution_update", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("probe", function(input, ctx) {
@@ -1799,6 +1857,7 @@ test_that("send() enqueues extension notes, never operator relays (IC-55)", {
 })
 
 test_that("send() from model code of the same session tree is refused (IC-55)", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("r", function(input, ctx) {
@@ -1842,6 +1901,7 @@ test_that("append_entry() writes a custom entry named <plugin>.<type>", {
 })
 
 test_that("abort() inside a tool stops the run after the call with the given reason", {
+  skip_on_cran()
   local_permissive()
   local_tool("stopper", function(input, ctx) {
     ctx_kernel()$abort(ctx, "plugin stop")
@@ -1858,6 +1918,7 @@ test_that("abort() inside a tool stops the run after the call with the given rea
 })
 
 test_that("state() is one environment per session and plugin, persisted when JSON-able", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("ok"))
   s = test_session()
@@ -1907,6 +1968,7 @@ test_that("a process-level ctx reads the process defaults and refuses the sessio
 })
 
 test_that("set_model() records the thinking level with the model and refuses bad input at once", {
+  skip_on_cran()
   local_fake_provider(list("a"))
   s = test_session()
   ctx = session_live(s)$ctx
@@ -1974,6 +2036,7 @@ test_that("send() labels its own queue item when a queue_update hook enqueues an
 })
 
 test_that("abort() from a tool_call hook ends the call unrun, then settles the run", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   box$status = character()
@@ -2001,6 +2064,7 @@ test_that("abort() from a tool_call hook ends the call unrun, then settles the r
 })
 
 test_that("aborted() and run() still see a run that was aborted while its tool executes", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("long", function(input, ctx) {
@@ -2034,6 +2098,7 @@ test_that("state() starts empty when the stored state of a plugin is not a named
 # before the request starts, the refusals inside a run.
 
 test_that("set_model() during the run's last reply switches the model when the run settles", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("done"))
   local_fake_provider(list(), name = "other")
@@ -2051,6 +2116,7 @@ test_that("set_model() during the run's last reply switches the model when the r
 })
 
 test_that("a pending switch that fails when the run settles is a diagnostic, not a failed run", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("done"))
   local_fake_provider(list(), name = "other")
@@ -2073,6 +2139,7 @@ test_that("a pending switch that fails when the run settles is a diagnostic, not
 })
 
 test_that("abort() from a before_request hook settles the run before any transfer starts", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_hook("before_request", function(event, ctx) {
@@ -2095,6 +2162,7 @@ test_that("abort() from a before_request hook settles the run before any transfe
 
 test_that("inside a run set_model() refuses a decision-only model; a second abort keeps the reason",
           {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("a"))
   local_fake_provider(list(0.9), name = "cls", type = "classifier")
@@ -2122,6 +2190,7 @@ test_that("inside a run set_model() refuses a decision-only model; a second abor
 # ---------------------------------------------------------------- interrupts during startup
 
 test_that("an interrupt during startup aborts the registered run and preserves the condition", {
+  skip_on_cran()
   local_permissive()
   fake = local_fake_provider(list("never requested"))
   s = test_session()
@@ -2157,6 +2226,7 @@ test_that("an interrupt during startup aborts the registered run and preserves t
 })
 
 test_that("an interrupt after startup wiring cancels only that run's reactor work", {
+  skip_on_cran()
   local_permissive()
   fake = local_fake_provider(list("never requested"))
   s = test_session(home = new.env())
@@ -2197,6 +2267,7 @@ test_that("an interrupt after startup wiring cancels only that run's reactor wor
 })
 
 test_that("a startup interrupt remains original when abort cleanup errors or interrupts", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("never requested"))
   abort = run_abort

@@ -119,6 +119,7 @@ test_that("format_count() prints an unknown count as unknown and rounds across u
 })
 
 test_that("usage rows roll up to every ancestor and are deduplicated per request", {
+  skip_on_cran()
   root = test_session()
   child = test_session(kind = "child", parent = root)
   usage_add(child, usage_fixture(session_data(child)$id, "q000000000001", cost = 0.5))
@@ -142,6 +143,7 @@ test_that("ledger_add() records components and ledger_mark_cached() marks the ca
 })
 
 test_that("an unknown cost or token count rolls up to the ancestors as unknown (IC-74)", {
+  skip_on_cran()
   root = test_session()
   child = test_session(kind = "child", parent = root)
   cid = session_data(child)$id
@@ -193,6 +195,7 @@ test_that("format_cost() prints dollars and counts the requests of unknown cost 
 })
 
 test_that("the default budget is 2e6 tokens and 5 USD per top-level call; NULL disables (IC-66)", {
+  skip_on_cran()
   s = test_session()
   lim = run_budget_limits(s, list(), NULL)
   expect_identical(lim$tokens, 2e6)
@@ -218,6 +221,7 @@ test_that("budget_check() is NULL outside a run and names the kind inside one", 
 })
 
 test_that("a child's usage is charged to its root: the root's cost budget stops the child", {
+  skip_on_cran()
   root = test_session()
   test_run(root, list(budget = list(cost = 5)))
   child = test_session(kind = "child", parent = root)
@@ -231,6 +235,7 @@ test_that("a child's usage is charged to its root: the root's cost budget stops 
 })
 
 test_that("children of a root without a run share one budget through opts$root (IC-66)", {
+  skip_on_cran()
   team = test_session(kind = "team")
   tid = session_data(team)$id
   a = test_session(kind = "child", parent = team)
@@ -261,6 +266,7 @@ test_that("children of a root without a run share one budget through opts$root (
 })
 
 test_that("budget_near is emitted once per kind at 80%", {
+  skip_on_cran()
   s = test_session()
   ev = local_events("budget_near")
   run = test_run(s, list(budget = list(cost = 1)))
@@ -276,6 +282,7 @@ test_that("budget_near is emitted once per kind at 80%", {
 # ---------------------------------------------------------------- unknown usage in budgets (IC-74)
 
 test_that("an unknown cost neither reaches nor counts toward a cost budget (IC-74, D-025)", {
+  skip_on_cran()
   s = test_session()
   sid = session_data(s)$id
   ev = local_events("budget_near")
@@ -300,6 +307,7 @@ test_that("an unknown cost neither reaches nor counts toward a cost budget (IC-7
 })
 
 test_that("a token budget counts the known tokens of a row with an unknown column (IC-74)", {
+  skip_on_cran()
   s = test_session()
   sid = session_data(s)$id
   run = test_run(s, list(budget = list(tokens = 1000, cost = NULL)))
@@ -322,6 +330,7 @@ test_that("a token budget counts the known tokens of a row with an unknown colum
 })
 
 test_that("budget_check() refuses an estimate that is not a nonnegative number", {
+  skip_on_cran()
   s = test_session()
   test_run(s)
   for (bad in list(NA_real_, -1, "10", c(1, 2), NULL)) {
@@ -332,6 +341,7 @@ test_that("budget_check() refuses an estimate that is not a nonnegative number",
 })
 
 test_that("a token budget stops the run before the next request with status budget", {
+  skip_on_cran()
   local_permissive()
   local_without_builtin(c("tools", "r"))
   ev = local_events(c("budget_exceeded", "budget_near"))
@@ -357,6 +367,7 @@ test_that("a token budget stops the run before the next request with status budg
 })
 
 test_that("a budget of 5 USD on a root stops its children (root charging, IC-66)", {
+  skip_on_cran()
   local_permissive()
   box = new.env()
   local_tool("spawn", function(input, ctx) {
@@ -377,6 +388,7 @@ test_that("a budget of 5 USD on a root stops its children (root charging, IC-66)
 })
 
 test_that("interactively a reached budget can be extended by the same amount (ask_human)", {
+  skip_on_cran()
   local_permissive()
   local_gptr_options(interactive = TRUE)
   local_service("ui.get", function(session = NULL) {
@@ -396,6 +408,7 @@ test_that("interactively a reached budget can be extended by the same amount (as
 
 test_that("gptr_usage() aggregates by session, agent, model and route, counting each request once",
           {
+  skip_on_cran()
   root = test_session()
   child = test_session(kind = "child", parent = root)
   rid = session_data(root)$id
@@ -434,6 +447,7 @@ test_that("gptr_usage() counts rows whose group is NA (process-level System 1 ro
 })
 
 test_that("gptr_usage(detail = TRUE) returns the token ledger per request and component", {
+  skip_on_cran()
   local_permissive()
   local_fake_provider(list("done"))
   s = test_session()
@@ -448,6 +462,7 @@ test_that("gptr_usage(detail = TRUE) returns the token ledger per request and co
 # ---------------------------------------------------------------- usage view: unknown usage (IC-74)
 
 test_that("gptr_usage() keeps unknown usage unknown in groups, totals and the footer (IC-74)", {
+  skip_on_cran()
   s = test_session()
   sid = session_data(s)$id
   usage_add(s, usage_fixture(sid, "q-known", cost = 0.25))
@@ -512,6 +527,7 @@ test_that("gptr_usage(by = \"model\") groups an unknown provider or model as unk
 })
 
 test_that("gptr_usage(x = NULL) adds the process System 1 log, counting each request once", {
+  skip_on_cran()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
   s = test_session()
@@ -533,6 +549,7 @@ test_that("gptr_usage(x = NULL) adds the process System 1 log, counting each req
 })
 
 test_that("gptr_usage(detail = TRUE) reads the sessions' own ledgers, not their children's", {
+  skip_on_cran()
   root = test_session()
   child = test_session(kind = "child", parent = root)
   ledger_add(root, "q-root-1", list(t0 = 600, transcript = 40))

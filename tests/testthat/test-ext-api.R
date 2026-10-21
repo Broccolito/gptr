@@ -31,6 +31,7 @@ test_that("register() commits outside a factory and returns an unregister functi
 })
 
 test_that("register_<kind>() is gptr_spec() sugar for every kind, including plugin kinds", {
+  skip_on_cran()
   local_registry()
   api = ext_api_new("plugin:demo")
   for (k in kind_names()) expect_true(is.function(api[[paste0("register_", k)]]))
@@ -81,6 +82,7 @@ test_that("api_satisfies() implements the requirement grammar (report G1 3.5)", 
 })
 
 test_that("API requirements reject empty clauses and integer overflow with typed errors", {
+  skip_on_cran()
   for (requirement in c("1.0,", ">= 1.0, < 2, ", "1.0, < 2", ">= 1.0, 1.0", "1.0, 1.0",
                          ">= 1.2147483648", strrep("9", 400))) {
     err = expect_error(api_require(requirement, "plugin:probe"),
@@ -139,6 +141,7 @@ test_that("gptr$state is shared by a plugin source and private to each user-leve
 })
 
 test_that("ctx members whose plan is not loaded signal gptr_error_not_available", {
+  skip_on_cran()
   local_registry()
   local_no_bootstrap_services()
   ctx = ctx_new(NULL)
@@ -166,6 +169,7 @@ test_that("ctx members whose plan is not loaded signal gptr_error_not_available"
 })
 
 test_that("ctx members call the P06 kernel with the ctx first, lazily at call time", {
+  skip_on_cran()
   local_registry()
   local_no_bootstrap_services()
   s = new.env()
@@ -250,6 +254,7 @@ test_that("ctx$envir calls the member's function, not R's binding read (R >= 4.6
 })
 
 test_that("ctx services: ui, risk, secret, tokens, eval, describe, decide, add_tools, input", {
+  skip_on_cran()
   local_registry()
   local_no_bootstrap_services()
   ctx = ctx_new("s1")
@@ -393,6 +398,7 @@ test_that("malformed context identities cannot silently become process context",
 
 
 test_that("package-created API methods discard source references without changing their frame", {
+  skip_on_cran()
   reg = local_registry()
   constructor = eval(parse(text = deparse(api_build, width.cutoff = 500L),
     keep.source = TRUE)[[1L]], envir = environment(api_build))

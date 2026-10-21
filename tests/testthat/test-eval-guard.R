@@ -118,6 +118,7 @@ test_that("q or quit as the function argument is flagged unless the code defines
 })
 
 test_that("empty arguments and odd calls never make the guard or the targets throw", {
+  skip_on_cran()
   expect_equal(guard("x = scan(, what = 'a')")$blocked, "stdin")
   odd = c("`=`()", "`for`()", "`function`(x)", "`$`()", "setkey(, id)", "f(, 1)[1] = 2",
           "`=`(x, )", "x = `=`(y, )", sprintf("`%s`(x, )", arrow), "`=`(, function() 1)",

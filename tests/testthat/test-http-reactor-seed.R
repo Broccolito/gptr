@@ -30,6 +30,7 @@ later_pump_pure = function(callback, loaded = TRUE) {
 }
 
 test_that("an owned later pump restores ambient RNG while callback results and writes survive", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     local({
       withr::local_preserve_seed()
@@ -61,6 +62,7 @@ test_that("an owned later pump restores ambient RNG while callback results and w
 })
 
 test_that("an owned later pump keeps independent agent RNG advancement", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     local({
       withr::local_preserve_seed()

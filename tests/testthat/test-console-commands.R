@@ -140,6 +140,7 @@ test_that("/help lists the commands and the input syntax", {
 })
 
 test_that("in the console margin command output wraps inside it; listings fit its width", {
+  skip_on_cran()
   local_console_commands()
   local_project()
   peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
@@ -193,6 +194,7 @@ test_that("/model and /mode before the first prompt set the first prompt's argum
 })
 
 test_that("/model checks a reference before the first prompt; provider names resolve", {
+  skip_on_cran()
   local_console_commands()
   rs = repl_state(NULL, new.env())
   bad = run_command(rs, "/model codex-clu")
@@ -215,6 +217,7 @@ test_that("/model checks a reference before the first prompt; provider names res
 })
 
 test_that("/model and /status name the model a CLI's default runs (#44)", {
+  skip_on_cran()
   local_console_commands()
   off = gptr_register(pcli_fake_provider("claude"))
   withr::defer(off())
@@ -239,6 +242,7 @@ test_that("/model and /status name the model a CLI's default runs (#44)", {
 })
 
 test_that("/mode on a session appends the mode change for the next turn", {
+  skip_on_cran()
   local_console_commands()
   s = idle_session()
   rs = repl_state(s, new.env())
@@ -251,6 +255,7 @@ test_that("/mode on a session appends the mode change for the next turn", {
 })
 
 test_that("/status, /tools and /env describe the console", {
+  skip_on_cran()
   local_console_commands()
   e = new.env()
   e$counts = matrix(1:4, 2)
@@ -271,6 +276,7 @@ test_that("/status, /tools and /env describe the console", {
 })
 
 test_that("/clear starts a new conversation and keeps model and mode", {
+  skip_on_cran()
   local_console_commands()
   s = idle_session()
   rs = repl_state(s, new.env())
@@ -282,6 +288,7 @@ test_that("/clear starts a new conversation and keeps model and mode", {
 })
 
 test_that("/cost, /context, /fork and /resume work on a session that ran", {
+  skip_on_cran()
   local_console_commands()
   local_project()
   s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
@@ -302,6 +309,7 @@ test_that("/cost, /context, /fork and /resume work on a session that ran", {
 })
 
 test_that("/cost lists the agents and one total that keeps the known cost (#38)", {
+  skip_on_cran()
   local_console_commands()
   local_project()
   s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
@@ -335,6 +343,7 @@ test_that("/context on a CLI route says the CLI keeps its own transcript (#38)",
 })
 
 test_that("commands of later plans answer when their plan is absent", {
+  skip_on_cran()
   local_console_commands()
   s = idle_session()
   rs = repl_state(s, new.env())
@@ -347,6 +356,7 @@ test_that("commands of later plans answer when their plan is absent", {
 })
 
 test_that("/retry sends the undone prompt again, and nothing when the rewind is cancelled", {
+  skip_on_cran()
   local_console_commands()
   local_project()
   e = new.env()

@@ -20,6 +20,7 @@ test_that("gptr_preimage() keeps value objects by reference and refuses referenc
 })
 
 test_that("the data.table method copies only predicted := and set() targets within budget", {
+  skip_on_cran()
   skip_if_not_installed("data.table")
   dt = data.table::data.table(a = 1:3)
   ctx = list(predicted = "modify", bytes = 100, budget = 1e9)
@@ -150,6 +151,7 @@ test_that("the sweep releases captures that no index row owns", {
 })
 
 test_that("a collected checkpoint state releases its images (finalizer, G7 c06b)", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000008")
   e = new.env()
   e$x = seq(0, 1, length.out = 10)

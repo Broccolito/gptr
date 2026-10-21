@@ -28,6 +28,7 @@ marker_tree_is = function(marker, pid) {
 }
 
 test_that("wait_until() returns once its condition holds and reads it once per poll", {
+  skip_on_cran()
   seen = new.env(parent = emptyenv())
   seen$calls = 0L
   # TRUE then FALSE, as the macOS exec chain hides a marker tree: a second read reports FALSE
@@ -185,6 +186,7 @@ write_proc_fixture = function(rec, marker = rec$marker) {
 }
 
 test_that("boundary: malformed marker records never reach process operations", {
+  skip_on_cran()
   local_proc_state()
   calls = character()
   local_mocked_bindings(proc_tree = function(marker) {
@@ -389,6 +391,7 @@ test_that("boundary: a kill counts as signalled only for the handles ps_kill() r
 })
 
 test_that("boundary: stale process cleanup cannot release or kill a reused PID record", {
+  skip_on_cran()
   local_proc_state()
   signalled = character()
   local_mocked_bindings(proc_create_time = function(pid) 10, .package = "gptr")

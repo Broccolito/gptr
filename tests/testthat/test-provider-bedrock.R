@@ -215,6 +215,7 @@ test_that("a CRC mismatch in the prelude or the message is refused", {
 # ---- the ConverseStream normaliser -------------------------------------------------------------
 
 test_that("text and a tool call stream as events; stop reason and usage come from the stream", {
+  skip_on_cran()
   r = bedrock_replay(converse_tool())
   expect_identical(r$types, c("start", "text_start", "text_delta", "text_end", "toolcall_start",
                               "toolcall_delta", "toolcall_delta", "toolcall_end", "done"))
@@ -290,6 +291,7 @@ test_that("reasoning deltas are a signed thinking block; a guardrail stop is a r
 # ---- the Converse request body -----------------------------------------------------------------
 
 test_that("the body maps system, messages, tools, tool results, images and inference config", {
+  skip_on_cran()
   model = test_model(api, reasoning = FALSE)
   turn = msg_assistant(list(block_text("Reading."),
                             block_tool_call("toolu_1|fc_2", "read", list(path = "a.R"))),
@@ -382,6 +384,7 @@ test_that("without tools to send, past tool calls and results are text (no toolC
 # ---- signing: build() and http_handle() --------------------------------------------------------
 
 test_that("with a key pair the request is signed for service bedrock and the record's region", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(AWS_ACCESS_KEY_ID = aws_key_id, AWS_SECRET_ACCESS_KEY = aws_secret,
                       AWS_SESSION_TOKEN = aws_token)
@@ -444,6 +447,7 @@ test_that("a key pair loaded into the vault only, through aliases, signs the req
 })
 
 test_that("a worker sub-agent gets the key id and session token with the secret key", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(AWS_ACCESS_KEY_ID = aws_key_id, AWS_SECRET_ACCESS_KEY = aws_secret,
                       AWS_SESSION_TOKEN = aws_token)
@@ -483,6 +487,7 @@ test_that("http_handle() calls spec$sign per attempt with values for the URL's o
 # ---- the agent loop and redaction --------------------------------------------------------------
 
 test_that("a recorded ConverseStream runs a tool through the agent loop (scripted wire)", {
+  skip_on_cran()
   local_vault()
   local_gptr_options(unsafe_no_permissions = TRUE)
   withr::local_envvar(AWS_ACCESS_KEY_ID = aws_key_id, AWS_SECRET_ACCESS_KEY = aws_secret,
@@ -510,6 +515,7 @@ test_that("a recorded ConverseStream runs a tool through the agent loop (scripte
 })
 
 test_that("request specs hold handles only, never the secret key or the session token", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(AWS_ACCESS_KEY_ID = aws_key_id, AWS_SECRET_ACCESS_KEY = aws_secret,
                       AWS_SESSION_TOKEN = aws_token)

@@ -135,6 +135,7 @@ test_that("reset parsing rejects impossible offsets and nonfinite or negative du
 })
 
 test_that("retry limits and attempt counters reject malformed configuration", {
+  skip_on_cran()
   for (attempt in list(NA_real_, Inf, -1, 0, 1.5, TRUE, "2", c(1, 2))) {
     expect_error(retry_backoff(attempt), class = "gptr_error_invalid_argument")
   }
@@ -238,6 +239,7 @@ test_that("fractional static rates permit one request and refill without moving 
 })
 
 test_that("static rates and provider identities reject invalid values without mutation", {
+  skip_on_cran()
   st = ratelimit_set("rl-validation", list(requests_per_s = 2))
   for (value in list(0, -1, Inf, NA_real_, NaN, 1 + 1i, "2", TRUE, c(1, 2))) {
     expect_error(ratelimit_set("rl-validation", list(requests_per_s = value)),
@@ -620,6 +622,7 @@ test_that("cancellation from committed suppresses both retry and terminal delive
 })
 
 test_that("stream retry hints validate delays and preserve nonretryable classes", {
+  skip_on_cran()
   st = new.env()
   local_mocked_bindings(reactor_failure = function(r, tr, cl, status, ...) {
     st$classification = cl

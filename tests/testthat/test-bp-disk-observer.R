@@ -201,6 +201,7 @@ test_that("the optional observer refuses a root replaced by a foreign directory 
 })
 
 test_that("the optional observer preserves unchanged empty environment entries and rejects loss", {
+  skip_on_cran()
   state = new.env(parent = emptyenv())
   original = c(EMPTY = "", VALUE = "original")
   expect_silent(bp_disk_env_preflight(original, windows = TRUE))

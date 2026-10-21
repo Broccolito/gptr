@@ -67,6 +67,7 @@ test_that("est_multiplier() updates by EWMA only for large enough estimates", {
 })
 
 test_that("image dimensions reject non-finite and complex values with typed errors", {
+  skip_on_cran()
   for (value in list(Inf, -Inf, NaN, NA_real_, 1 + 1i)) {
     for (api in c("anthropic", "openai-responses", "google-generative-ai")) {
       expect_error(est_image_tokens(value, 512, api), class = "gptr_error_invalid_argument")

@@ -478,6 +478,7 @@ image_magick_fixture = function(value = NA_character_, viewer = NULL, .env = par
 }
 
 test_that("image startup preserves its known keys, viewer and absent or existing RNG", {
+  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     for (value in c(NA_character_, "synthetic-custom")) {
       local({

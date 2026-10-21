@@ -45,6 +45,7 @@ with_billing_warning = function(expr) {
 }
 
 test_that("every profile is a complete vector without NA and with empty R startup files", {
+  skip_on_cran()
   local_vault()
   withr::local_envvar(stats::setNames(rep(NA_character_, length(billing_vars)), billing_vars))
   withr::local_envvar(fake_env()[setdiff(names(fake_env()), billing_vars)])

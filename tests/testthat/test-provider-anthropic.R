@@ -29,10 +29,12 @@ native_adapters = list(
 # ---- the normaliser (Task 1) -----------------------------------------------------------------
 
 test_that("native adapter fixtures give the golden events and final messages (INFRA-02)", {
+  skip_on_cran()
   for (k in names(native_adapters)) expect_all_golden(k, native_adapters[[k]]$parse)
 })
 
 test_that("every anthropic fixture has one start first and one terminal event last", {
+  skip_on_cran()
   for (case in c("text", "thinking_tools", "error_midstream", "truncated", "refusal",
                  "server_tool")) {
     expect_one_terminal(replay_case(api, anthropic_normaliser, case)$events)
@@ -40,6 +42,7 @@ test_that("every anthropic fixture has one start first and one terminal event la
 })
 
 test_that("native adapter events do not depend on how the bytes are chunked (INFRA-23)", {
+  skip_on_cran()
   for (k in names(native_adapters)) {
     for (case in native_adapters[[k]]$chunks) {
       expect_chunk_invariant(k, native_adapters[[k]]$parse, case)
@@ -645,6 +648,7 @@ test_that("credentials stay handles: x-api-key, or Bearer with the oauth beta", 
 })
 
 test_that("provider headers come from the record provider_stream() resolved (04 10.1, 10.2)", {
+  skip_on_cran()
   # a provider passed as `model = <spec>` is a session-scoped (rank 0) record that the global
   # lookup never sees; its non-secret headers must still reach the wire
   probe = function(org, id = "p12-probe") {
@@ -787,6 +791,7 @@ test_that("provider_stream() puts the returns schema on the wire (INFRA-25)", {
 })
 
 test_that("returns = through the run loop: a typed value and the tool calls kept (INFRA-25)", {
+  skip_on_cran()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_scripted_provider(api)
   local_count_tool()
@@ -836,6 +841,7 @@ test_that("end to end on the mock server: streaming, retry and abort (skip on CR
 # ---- conformance: check_adapter() and the check.adapter service (Task 3) -----------------------
 
 test_that("check_adapter() passes for anthropic-messages on its fixtures (acceptance 2)", {
+  skip_on_cran()
   res = check_adapter(adapter_get(api), fixtures = sse_dir(api))
   expect_s3_class(res, "gptr_check")
   expect_identical(names(res), c("target", "check", "ok", "message"))
@@ -851,6 +857,7 @@ test_that("check_adapter() passes for anthropic-messages on its fixtures (accept
 })
 
 test_that("check_adapter() fails a normaliser that throws and a forced tool_choice", {
+  skip_on_cran()
   good = adapter_get(api)
   broken = good
   broken$parse = function(model, opts) {
@@ -873,6 +880,7 @@ test_that("check_adapter() fails a normaliser that throws and a forced tool_choi
 })
 
 test_that("check_adapter() fails when events differ from the golden file", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   file.copy(list.files(sse_dir(api), full.names = TRUE), dir)
   path = file.path(dir, "text.events.json")
@@ -885,6 +893,7 @@ test_that("check_adapter() fails when events differ from the golden file", {
 })
 
 test_that("check_adapter() reports missing fixtures, skips inprocess adapters, asks classifiers", {
+  skip_on_cran()
   res = check_adapter(adapter_get(api), fixtures = withr::local_tempdir())
   expect_false(res$ok[res$check == "adapter.fixtures"])
   fake = check_adapter(adapter_get("fake"))
@@ -908,6 +917,7 @@ test_that("check_adapter() reports missing fixtures, skips inprocess adapters, a
 })
 
 test_that("the check.adapter service makes gptr_check() replay the fixtures (acceptance 2)", {
+  skip_on_cran()
   expect_true(ext_service_has("check.adapter"))
   a = adapter_get(api)
   res = gptr_check(a)
@@ -916,6 +926,7 @@ test_that("the check.adapter service makes gptr_check() replay the fixtures (acc
 })
 
 test_that("check_adapter() fails a normaliser that warns or messages; nothing reaches the caller", {
+  skip_on_cran()
   # 04 section 8.1: normalisers never signal R conditions after start, warnings included
   noisy = adapter_get(api)
   noisy$parse = function(model, opts) {
@@ -969,6 +980,7 @@ test_that("check_adapter() fails a normaliser that warns or messages; nothing re
 })
 
 test_that("check_adapter() explains a failing build() and an empty replay; checks `fixtures`", {
+  skip_on_cran()
   expect_match(check_adapter(adapter_get("fake"))$message, "nothing to replay", fixed = TRUE)
   failing = adapter_get(api)
   failing$build = function(model, context, opts) stop("no body")
@@ -1012,6 +1024,7 @@ cls_cases = function(dir) {
 cls_rows = function(res, case) res$check[startsWith(res$check, paste0("adapter.", case, "."))]
 
 test_that("check_adapter() replays classifier wire fixtures through classify$parse (IC-74)", {
+  skip_on_cran()
   for (cls_api in c("typesafe-system-one", "ollama-system-one")) {
     dir = cls_dir(cls_api)
     res = check_adapter(adapter_get(cls_api), fixtures = dir)
@@ -1050,6 +1063,7 @@ test_that("check_adapter() replays classifier wire fixtures through classify$par
 })
 
 test_that("gptr_check() runs the classifier conformance of the built-in classifier adapters", {
+  skip_on_cran()
   for (cls_api in c("typesafe-system-one", "ollama-system-one")) {
     # the default directory: fixtures/jev or fixtures/ollama under testthat's working directory
     res = gptr_check(adapter_get(cls_api))
@@ -1063,6 +1077,7 @@ test_that("gptr_check() runs the classifier conformance of the built-in classifi
 })
 
 test_that("check_adapter() fails classifier parsers that keep a wire shape or order, or signal", {
+  skip_on_cran()
   cls_api = "typesafe-system-one"
   dir = cls_dir(cls_api)
   real = adapter_get(cls_api)
@@ -1164,6 +1179,7 @@ test_that("check_adapter() fails classifier parsers that keep a wire shape or or
 })
 
 test_that("a classifier golden or fixture that differs fails only its own case", {
+  skip_on_cran()
   cls_api = "ollama-system-one"
   dir = withr::local_tempdir()
   file.copy(list.files(cls_dir(cls_api), full.names = TRUE), dir)
@@ -1210,6 +1226,7 @@ test_that("a classifier golden or fixture that differs fails only its own case",
 })
 
 test_that("classifier usage meets its golden: unreported counts stay NA (IC-74)", {
+  skip_on_cran()
   # review round 1: `.result` takes any count, so `<case>.usage.json` states the usage
   # (null: unreported, NA) and `.golden_usage` compares it
   of = function(res, row) res$ok[res$check == row]
@@ -1345,6 +1362,7 @@ test_that("inprocess classifiers: P01's fake classifier answers fixture states c
 })
 
 test_that("s1-emulate replays fixture states; its calibration notice fails no case (IC-19)", {
+  skip_on_cran()
   # review round 1: classify$run of s1-emulate says once per process that its answers are not
   # calibrated (IC-19; test-s1-emulate.R), through gptr_inform(), the channel of notices (04
   # section 1.5). Conformance records and muffles such a notice, whatever the session's once

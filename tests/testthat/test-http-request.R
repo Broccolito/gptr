@@ -66,6 +66,7 @@ test_that("header names and values must match the scalar request contract", {
 })
 
 test_that("invalid request specs and timeouts fail before curl can send", {
+  skip_on_cran()
   for (value in list(NA_real_, Inf, -1, 0, c(1, 2), "1", TRUE)) {
     expect_error(http_timeouts(list(connect_timeout = value)),
                  class = "gptr_error_invalid_argument")

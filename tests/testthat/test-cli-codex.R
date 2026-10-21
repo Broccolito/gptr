@@ -1243,6 +1243,7 @@ test_that("Windows control entry membership retains fixed names without followin
 })
 
 test_that("Windows reparse digests use only the trusted query and stripped helper environment", {
+  skip_on_cran()
   withr::local_envvar(c(GPTR_TEST_API_KEY = "synthetic-control-secret"))
   seen = new.env(parent = emptyenv())
   seen$calls = 0L
@@ -1274,6 +1275,7 @@ test_that("Windows reparse digests use only the trusted query and stripped helpe
 })
 
 test_that("Windows reparse probes reject unavailable executables and uncertain results", {
+  skip_on_cran()
   good = list(status = 0L, timed_out = FALSE,
     stdout = "Reparse Tag Value : 0xa000000c\n0000: 00 01\n", stderr = "")
   state = new.env(parent = emptyenv())

@@ -14,6 +14,7 @@ template_expand_input = function(text, lookup) {
 }
 
 test_that("Pi's 67 template tests pass (report 05 section 5.1)", {
+  skip_on_cran()
   o = pi_oracle()
   n = 0L
   for (case in o$substitute) {
@@ -75,6 +76,7 @@ test_that("arguments split on the command pattern's ASCII whitespace in every lo
 })
 
 test_that("a long pasted argument is split in linear time (D-084)", {
+  skip_on_cran()
   long = strrep("x", 100000L)
   elapsed = system.time({
     got = template_args_parse(paste0("\"", long, "\" ", long))
@@ -115,6 +117,7 @@ test_that("template_parse reads description, argument-hint and the body", {
 })
 
 test_that("template_sync registers templates and one command per template", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   p = local_project(trust = TRUE)
   dir.create(file.path(p, ".gptr", "prompts"), showWarnings = FALSE)
@@ -129,6 +132,7 @@ test_that("template_sync registers templates and one command per template", {
 })
 
 test_that("a template that code registers is a command unless a file template shadows it", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   withr::defer(res_prune("templates:", character()))
   ids = c(registry_add(gptr_spec("prompt_template", "p17-codet", text = "Code $1"),
@@ -160,6 +164,7 @@ test_that("an untrusted project's templates are not registered", {
 })
 
 test_that("a template never shadows a command registered by something else", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   off = gptr_register(gptr_command("p17-busy", function(args, ctx) "real"))
   withr::defer(off())
@@ -175,6 +180,7 @@ test_that("a template never shadows a command registered by something else", {
 })
 
 test_that("builtin:prompts ships /review and /explain as commands", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   template_sync()
   expect_match(registry_get("command", "review")$handler("analysis.R", NULL)$prompt,
@@ -205,6 +211,7 @@ test_that("Claude plugin commands are /<plugin>:<cmd>, also reachable as /<plugi
 })
 
 test_that("the session_start hook of builtin:prompts syncs top-level sessions only", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   res_prune("prompts:", character())
   expect_null(registry_get("command", "review"))
@@ -217,6 +224,7 @@ test_that("the session_start hook of builtin:prompts syncs top-level sessions on
 # Task 6 adaptations (D-133)
 
 test_that("a command registered after the sync wins over same-named templates (D-133)", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   p = local_project(trust = TRUE)
   dir.create(file.path(p, ".gptr", "prompts"), showWarnings = FALSE)
@@ -237,6 +245,7 @@ test_that("a command registered after the sync wins over same-named templates (D
 })
 
 test_that("a template gets its command once the command of its name is removed (D-133)", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   off = gptr_register(gptr_command("p17-gone", function(args, ctx) "real"))
   withr::defer(off())
@@ -254,6 +263,7 @@ test_that("a template gets its command once the command of its name is removed (
 })
 
 test_that("a project template runs only while a sync would register it (D-133)", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   p = local_project(trust = TRUE)
   dir.create(file.path(p, ".gptr", "prompts"), showWarnings = FALSE)
@@ -278,6 +288,7 @@ test_that("a project template runs only while a sync would register it (D-133)",
 })
 
 test_that("a project template is not run from another trusted project (D-133)", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   a = local_project(trust = TRUE)
   dir.create(file.path(a, ".gptr", "prompts"), showWarnings = FALSE)
@@ -291,6 +302,7 @@ test_that("a project template is not run from another trusted project (D-133)", 
 })
 
 test_that("a plugin's code commands win over templates, its template commands do not (D-133)", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   ids = c(registry_add(gptr_command("p17-code", function(args, ctx) "code"),
                        source = "plugin:p17-fake", rank = 5L),
@@ -338,6 +350,7 @@ test_that("only files are template files (D-133)", {
 # Task 6 review round 1 (D-133): ownership by record id; ASCII whitespace in template names
 
 test_that("a filtered template command does not hide a later command (D-133)", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   template_sync()
   expect_identical(registry_get("command", "review")[["template"]], "review")
@@ -353,6 +366,7 @@ test_that("a filtered template command does not hide a later command (D-133)", {
 })
 
 test_that("a filtered template command does not keep a user template running (D-133)", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   user = file.path(gptr_user_dir("config"), "prompts")
   dir.create(user, recursive = TRUE, showWarnings = FALSE)
@@ -368,6 +382,7 @@ test_that("a filtered template command does not keep a user template running (D-
 })
 
 test_that("a template record removed elsewhere does not hide a later command (D-133)", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   user = file.path(gptr_user_dir("config"), "prompts")
   dir.create(user, recursive = TRUE, showWarnings = FALSE)
@@ -400,6 +415,7 @@ test_that("a template name may not hold ASCII whitespace, in every locale (D-133
 })
 
 test_that("only enabled process-level commands of others hold a template's name (D-133)", {
+  skip_on_cran()
   withr::defer(res_prune("prompts:", character()))
   old = registry_env()$filters$session
   withr::defer(registry_filters_set(old, "session"))

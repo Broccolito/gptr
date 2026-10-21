@@ -291,6 +291,7 @@ test_that("both .env files P03 discovers are trust-gated (IC-52)", {
 })
 
 test_that("a gated file rewritten at the same size with its old mtime still voids trust", {
+  skip_on_cran()
   skip_on_os("windows")
   proj = local_gw()
   p = file.path(proj, ".gptr", "settings.json")
@@ -330,6 +331,7 @@ test_that("gptr's own write does not restore a trust that a foreign change voide
 })
 
 test_that("a trust.json gptr cannot read trusts nothing and is never rewritten", {
+  skip_on_cran()
   proj = local_gw()
   p = trust_file(create = TRUE)
   for (txt in c("[1, 2]", "{\"version\": 1, \"projects\": [\"x\"]}", "{\"projects\": {},}")) {
@@ -373,6 +375,7 @@ test_that("trust.json keeps other projects and fields; each changed file is list
 })
 
 test_that("a malformed project_trust answer has no opinion; each new fingerprint gets a notice", {
+  skip_on_cran()
   proj = local_gw()
   p = file.path(proj, ".gptr", "settings.json")
   writeLines("{}", p)
@@ -560,6 +563,7 @@ test_that("project files and options() never relax providers.<id>.local_only (IC
 })
 
 test_that("the user file and the session relax local_only; projects and options tighten it", {
+  skip_on_cran()
   proj = local_gw()
   settings_write("user", list(providers = list(ollama = list(local_only = FALSE))))
   expect_false(settings_local_only("ollama"))
@@ -585,6 +589,7 @@ test_that("the user file and the session relax local_only; projects and options 
 })
 
 test_that("a project base URL needs trust and a one-time confirmation (contract 11.2)", {
+  skip_on_cran()
   proj = local_gw()
   p = file.path(proj, ".gptr", "settings.json")
   mine = "https://llm.user.example/v1"
@@ -699,6 +704,7 @@ test_that("print(<gptr_config>) shows nulls and redacts secret-looking values", 
 # Task 3 review round 1.
 
 test_that("a registered setting spec cannot relax local_only or widen egress (IC-74)", {
+  skip_on_cran()
   proj = local_gw()
   for (d in c(TRUE, FALSE)) {
     off = gptr_register(gptr_spec("setting", "providers.ollama.local_only", default = d))
@@ -830,6 +836,7 @@ test_that("an interactive yes records the acknowledgement at user scope", {
 })
 
 test_that("the egress question asked inside a run names the sub-agent and its model", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(interactive = TRUE)
   corp = gptr_fake_provider(list("x"), name = "corp")
@@ -866,6 +873,7 @@ test_that("the egress question asked inside a run names the sub-agent and its mo
 })
 
 test_that("egress_check() follows a local provider's effective endpoint (IC-74)", {
+  skip_on_cran()
   local_gw()
   # the shipped loopback servers need no acknowledgement
   expect_invisible(egress_check("ollama"))
@@ -890,6 +898,7 @@ test_that("egress_check() follows a local provider's effective endpoint (IC-74)"
 })
 
 test_that("a loopback Ollama needs the acknowledgement once local-only is relaxed (IC-74)", {
+  skip_on_cran()
   local_gw()
   expect_invisible(egress_check("ollama"))
   settings_write("user", list(providers = list(ollama = list(local_only = FALSE))))
@@ -921,6 +930,7 @@ test_that("a loopback Ollama needs the acknowledgement once local-only is relaxe
 })
 
 test_that("replay_guard() and egress_check() never discover or contact a provider (IC-74)", {
+  skip_on_cran()
   local_gw()
   withr::local_envvar(GPTR_REPLAY = "replay", `_R_CHECK_PACKAGE_NAME_` = NA)
   withr::local_options(gptr.replay = NULL)
@@ -951,6 +961,7 @@ test_that("replay_guard() and egress_check() never discover or contact a provide
 })
 
 test_that("acknowledgements are keyed by the provider's own id; the hint is plain code", {
+  skip_on_cran()
   local_gw()
   off = gptr_register(gptr_provider("corp", api = "openai-completions",
                                     base_url = "https://llm.corp.example/v1",
@@ -1016,6 +1027,7 @@ test_that("egress_check() never asks inside a run nobody can answer (IC-43)", {
 })
 
 test_that("inside a run egress_check() asks only when the run's snapshot allows it (IC-53)", {
+  skip_on_cran()
   local_gw()
   local_gptr_options(interactive = TRUE)
   seen = new.env()
@@ -1218,6 +1230,7 @@ test_that("with a human, gptr_init() asks to create the workspace and then about
 # Task 7 adaptations (see dev/progress/P08.md, Task 7).
 
 test_that("a project never relaxes the protected local-only control by gptr_config() (IC-74)", {
+  skip_on_cran()
   local_gw()
   # .scope = NULL is the project here: a project cannot turn local-only inference off (07 s. 5)
   cnd = expect_error(gptr_config(providers = list(ollama = list(local_only = FALSE))),
@@ -1290,6 +1303,7 @@ test_that("gptr_config(filters = ) refuses a malformed filter before writing (04
 })
 
 test_that("gptr_config() names the setting it refuses and wants one scope", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   for (key in c("small_model", "system1")) {
     args = stats::setNames(list(3, "session"), c(key, ".scope"))
@@ -1359,6 +1373,7 @@ test_that("with a human, gptr_init() adds the .Rbuildignore line on a yes and ke
 # choice setting takes one value.
 
 test_that("gptr_init() keeps the trust that held across its own settings.json write (IC-52)", {
+  skip_on_cran()
   proj = local_gw()
   gptr_trust(proj, TRUE)
   gptr_init(proj)
@@ -1402,6 +1417,7 @@ test_that("gptr_init() does not carry trust over a gated file changed beside its
 })
 
 test_that("a choice setting takes one of its values, never the whole set", {
+  skip_on_cran()
   local_gw(workspace = FALSE)
   choice = Filter(function(x) identical(x$type, "choice"), settings_core())
   for (x in choice) {

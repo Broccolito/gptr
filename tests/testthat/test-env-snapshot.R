@@ -213,6 +213,7 @@ test_that("a function-frame home with unsupplied arguments or empty dots is list
 })
 
 test_that("change lines of a very large diff fit the budget quickly", {
+  skip_on_cran()
   many = list(added = character(), modified = sprintf("object_%05d", 1:20000),
               removed = character())
   t0 = proc.time()[["elapsed"]]
@@ -427,6 +428,7 @@ test_that("the loaded registry holds the workspace records (P02)", {
 block_kinds = function(blocks) vapply(blocks, function(b) b$kind %||% "", "")
 
 test_that("block providers and the agent_end hook of a session share one baseline", {
+  skip_on_cran()
   local_fake_provider(list("ok"))
   user_log_stop()
   withr::defer(user_log_stop())
@@ -529,6 +531,7 @@ test_that("the eval.r service runs the evaluator the evaluator setting names (IC
 })
 
 test_that("a call's first message sends <attached> after <workspace>, and turns again (IC-38)", {
+  skip_on_cran()
   local_fake_provider(list("ok"))
   user_log_stop()
   withr::defer(user_log_stop())
@@ -554,6 +557,7 @@ sent_texts = function(fake) {
 }
 
 test_that("a context setting of \"none\" sends no workspace, changes or attached block", {
+  skip_on_cran()
   local_gw()
   user_log_stop()
   withr::defer(user_log_stop())
@@ -571,6 +575,7 @@ test_that("a context setting of \"none\" sends no workspace, changes or attached
 })
 
 test_that("a context setting of \"names\" lists workspace names only", {
+  skip_on_cran()
   local_gw()
   user_log_stop()
   withr::defer(user_log_stop())

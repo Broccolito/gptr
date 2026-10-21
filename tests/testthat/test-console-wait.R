@@ -70,6 +70,7 @@ test_that("verbosity zero and background requests produce no waiting feedback", 
 })
 
 test_that("a dynamic spinner starts immediately and survives buffered text", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -130,6 +131,7 @@ test_that("an abort-only IDE console advertises its stop key without promising s
 })
 
 test_that("continue and queued pause messages restore a pending request's spinner", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, interactive = TRUE, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -157,6 +159,7 @@ test_that("continue and queued pause messages restore a pending request's spinne
 })
 
 test_that("a prompt clears the waiting row, keeps its task and a later tick redraws (D-186)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -190,6 +193,7 @@ test_that("a prompt clears the waiting row, keeps its task and a later tick redr
 })
 
 test_that("consecutive prompts in a run stay separated by a blank line (D-186)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)

@@ -22,6 +22,7 @@ test_that("declared Windows measurement requires only the exact owned declaratio
 })
 
 test_that("declared measurement omits only the natively classified entry and charges other bytes", {
+  skip_on_cran()
   walk = function(expression) {
     if (missing(expression)) return(list())
     found = list()
@@ -123,6 +124,7 @@ test_that("declared measurement omits only the natively classified entry and cha
 
 
 test_that("ordinary Windows markers use one persistent full nofollow observer", {
+  skip_on_cran()
   assignments = as.list(body(bp_run))[2:5]
   selected = as.call(c(list(as.name("{")), assignments))
   choose = function(windows, flag, declaration) {

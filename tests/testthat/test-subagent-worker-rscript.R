@@ -128,6 +128,7 @@ test_that("watcher or job registration failure settles before deleting the worke
 })
 
 test_that("unsettled worker cleanup retains ownership and permits a confirmed retry", {
+  skip_on_cran()
   values = list(FALSE, NA, structure(list(message = "kill failed", call = NULL),
                                      class = c("error", "condition")),
                  structure(list(message = "kill interrupted", call = NULL),
@@ -220,6 +221,7 @@ test_that("natural worker exit keeps recovery files until the process tree settl
 })
 
 test_that("failed watcher cancellation cannot complete worker cleanup before a retry", {
+  skip_on_cran()
   values = list(structure(list(message = "cancel failed", call = NULL),
                            class = c("error", "condition")),
                  structure(list(message = "cancel interrupted", call = NULL),

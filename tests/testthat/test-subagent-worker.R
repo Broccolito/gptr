@@ -138,6 +138,7 @@ test_that("exports are saved by name only on success", {
 })
 
 test_that("the registry of the parent is re-registered, a fake provider made again (IC-69)", {
+  skip_on_cran()
   local_project()
   s = session_new("wfake/wfake-1", "auto", home = new.env())
   sid = session_data(s)$id
@@ -165,6 +166,7 @@ test_that("bare filters, as IC-69 writes them, count as session filters", {
 })
 
 test_that("parent plugins are re-enabled by package name, else by path (IC-69)", {
+  skip_on_cran()
   local_project()
   s = session_new("fake/fake-1", "auto", home = new.env())
   sid = session_data(s)$id
@@ -192,6 +194,7 @@ test_that("parent plugins are re-enabled by package name, else by path (IC-69)",
 })
 
 test_that("the result line of a worker session carries status, text, usage and turns", {
+  skip_on_cran()
   local_project()
   s = session_new("fake/fake-1", "auto", home = new.env())
   out = worker_outcome(s)
@@ -384,6 +387,7 @@ test_that("a stopped worker ends its open request as aborted, never error (IC-60
 })
 
 test_that("the user's abort of a forwarded request aborts the proxy run", {
+  skip_on_cran()
   local_team_fake(list("never"))
   local_scripted_ui(list("abort"))
   local_mocked_bindings(worker_spawn = function(st) {
@@ -402,6 +406,7 @@ test_that("the user's abort of a forwarded request aborts the proxy run", {
 })
 
 test_that("a worker is shipped the parent's context mode, which it cannot read itself", {
+  skip_on_cran()
   local_team_fake(list("never"))
   local_gptr_options(context = "none")
   local_mocked_bindings(worker_spawn = function(st) stop("not spawned"))
@@ -509,6 +514,7 @@ test_that("the worker registry ships the filters of each scope by name (IC-69)",
 })
 
 test_that("an explicit worker for a remote model is refused in replay mode before it starts", {
+  skip_on_cran()
   local_project()
   local_gptr_options(mode = "auto", replay = "replay")
   off = gptr_register(gptr_provider("wremote", api = "openai-completions",
@@ -743,6 +749,7 @@ test_that(
 
 
 test_that("unknown worker cost stays unknown through the result wire without warnings", {
+  skip_on_cran()
   local_project()
   session = session_new("fake/fake-1", "auto", home = new.env())
   data = session_data(session)

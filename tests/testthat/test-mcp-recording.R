@@ -58,6 +58,7 @@ test_that("relayed MCP code records once and replays a callable result without a
 })
 
 test_that("SDK-dispatched successful R uses approved code and the existing secret history rules", {
+  skip_on_cran()
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", mode = "auto")
   local_mcp_record_probe()

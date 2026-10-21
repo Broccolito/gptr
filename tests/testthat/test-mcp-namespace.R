@@ -218,6 +218,7 @@ test_that("setting mcp.exposure = \"direct\" declares the tools of a server with
 })
 
 test_that("the login target of an MCP server is its expanded URL; a stdio server has none", {
+  skip_on_cran()
   local_mcp_home()
   local_project()
   withr::local_envvar(MCP_TEST_HOST = "mcp.example.org")

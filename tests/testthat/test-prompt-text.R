@@ -43,6 +43,7 @@ test_that("P07's section texts equal architecture 7.3 byte for byte", {
 })
 
 test_that("mode blocks and non-interactive suffixes equal architecture 7.4 and contract 9.3", {
+  skip_on_cran()
   a = spec_lines("spec", "03-architecture.md")
   i = grep("^### 7.4 Mode blocks", a)
   for (nm in c("plan", "manual", "edits", "auto")) {
@@ -65,6 +66,7 @@ test_that("mode blocks and non-interactive suffixes equal architecture 7.4 and c
 })
 
 test_that("minimal variants and the extended r_performance equal contract 9.3", {
+  skip_on_cran()
   c4 = spec_lines("spec", "04-interface-contract.md")
   k = grep("^`preamble`, minimal variant:", c4)
   expect_identical(prompt_text("preamble_short"), c4[k + 3L])
@@ -99,6 +101,7 @@ test_that("the compaction request and checkpoint texts equal G4 section 3.6", {
 })
 
 test_that("texts are ASCII and never mention str( (IC-67)", {
+  skip_on_cran()
   for (nm in names(prompt_texts())) {
     x = prompt_texts()[[nm]]
     expect_false(any(grepl("[^\\x01-\\x7f]", x, perl = TRUE)), label = nm)

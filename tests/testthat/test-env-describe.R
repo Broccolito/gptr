@@ -140,6 +140,7 @@ describe_facts = function() {
 }
 
 test_that("describers keep at least 90% of G2's facts at 150 tokens and stay in budget", {
+  skip_on_cran()
   e = s4_where()
   obj = describe_fixture(e)
   withr::defer({
@@ -162,6 +163,7 @@ test_that("describers keep at least 90% of G2's facts at 150 tokens and stay in 
 })
 
 test_that("Seurat-like meta.data dims and columns, Dates, sparse dims, formulas, nested names", {
+  skip_on_cran()
   e = s4_where()
   obj = describe_fixture(e)
   withr::defer({
@@ -280,6 +282,7 @@ test_that("a session is described by kind, model, status, turns and cost (#45)",
 })
 
 test_that("describer methods call no package outside Imports (IC-71)", {
+  skip_on_cran()
   allowed = c("base", "methods", "utils", "stats", "rlang")
   ns = environment(gptr_describe)
   pkgs_of = function(e, acc) {

@@ -117,6 +117,7 @@ test_that("gptr_register() adds a user record, re-validates, and returns an unre
 })
 
 test_that("gptr_register() is refused from model code during a run unless granted (IC-53)", {
+  skip_on_cran()
   reg = local_registry()
   off_policy = gptr_register(gptr_policy("no_installs", function(call, ctx) NULL))
   reg$executing = c(c7 = "u1")
@@ -216,6 +217,7 @@ test_that("registry_recs() skips ids whose record is gone (FIX-1)", {
 })
 
 test_that("a deferred session_shutdown waits for the next registry entry (FIX-1)", {
+  skip_on_cran()
   # earlier tests' dead sessions are collected first, so their shutdowns are not queued here
   invisible(gc())
   reg = local_registry()
