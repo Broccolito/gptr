@@ -587,7 +587,8 @@ test_that("a question drains fd 0 first: lines steer, a partial line is kept in 
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("steer me"))
-  expect_lt(grep("[gptr] kept your unfinished line; ", out, fixed = TRUE),
+  # the notice quotes the kept line (typed with the echo off) and names the key (D-245 glyphs)
+  expect_lt(grep("[gptr] kept in history (Up): 'use base R'", out, fixed = TRUE),
             match("  r  zz = 2", out))
   # the drain's modes are restored before the question reads
   expect_identical(tty$log, c("-g", "-echo", "-g", drain, "SAVED", "SAVED"))
@@ -674,7 +675,8 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   pty$send("B\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
-  expect_true(pty$wait("[gptr] kept your unfinished line; "))
+  expect_true(pty$wait("[gptr] kept in history ("))
+  expect_true(pty$wait("): 'use base R'"))
   expect_true(pty$wait("allow? "))
   expect_true(endsWith(pty$pending(), "[?]: "))
   pty$send("y\r")
@@ -704,7 +706,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(c(pty$seen("kept your unfinished line"), pty$seen("Not an answer"),
+  expect_identical(c(pty$seen("[gptr] kept in history ("), pty$seen("Not an answer"),
                      pty$seen("Permission denied"), pty$seen("(typed)")), c(3L, 0L, 0L, 0L))
 })
 

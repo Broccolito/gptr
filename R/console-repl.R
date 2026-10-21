@@ -609,8 +609,8 @@ console_typed = function(drain = FALSE) {
   }
   if (nzchar(trimws(part))) {
     console_history_add(part)
-    console_notice("[gptr] kept your unfinished line; ", cli::symbol$arrow_up,
-                   " recalls it at the next prompt")
+    console_notice("[gptr] kept in history (", console_symbols()$up, "): ",
+                   console_escape(paste0("'", part, "'"), FALSE))
   }
   console_render_resume(pol$runs)
   0.1

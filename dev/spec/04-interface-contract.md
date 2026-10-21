@@ -5327,9 +5327,10 @@ its part in its own commit, and Task 27 finalises them.
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
     the saved modes (on exit). Complete lines are routed as before. A trailing partial line (attr
     `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()`,
-    whatever `gptr.history` says, with `[gptr] kept your unfinished line; ↑ recalls it at the next
-    prompt`. The question's `readline()` therefore starts empty: typed-ahead text is never an
-    invalid answer, a denial (`no ...`) or an ask-tool answer.
+    whatever `gptr.history` says, with `[gptr] kept in history (↑): '<line>'` (`Up` where the output
+    is not UTF-8): the echo is off while a run streams, so the notice quotes it. The question's
+    `readline()` therefore starts empty: typed-ahead text is never an invalid answer, a denial
+    (`no ...`) or an ask-tool answer.
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26): pending.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
 - **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25): pending.

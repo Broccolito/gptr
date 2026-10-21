@@ -3058,6 +3058,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     input; before, each of its lines was its own prompt. Tests: test-console-repl.R "a history entry of several
     lines is a """ block, so Up then Enter sends one prompt"; test-console-typing.R "a macOS terminal: a block
     pasted at a question comes back as one prompt".
+  - The partial line a question's drain keeps is quoted, as every queue notice quotes its text, and no position is
+    promised: `[gptr] kept in history (↑): '<line>'`, Task 15's form. The arrow is `Up` where the output is not
+    UTF-8, never cli's `^`, which reads as Ctrl (`console_symbols()$up`, Task 8's table). Tests: test-console-typing.R
+    "a question drains fd 0 first: lines steer, a partial line is kept in the history", "a terminal: a question
+    never takes the line typed ahead of it (P28 B, C, H)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

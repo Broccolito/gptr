@@ -197,7 +197,9 @@ Decisions:
   3. Restore the saved modes.
   The mode change is one mockable wrapper, `tty_drain_mode()` (§7.1 row).
 - Complete lines are routed as today. A trailing partial line goes to `console_history_add()`,
-  with `[gptr] kept your unfinished line; ↑ recalls it at the next prompt`.
+  with `[gptr] kept in history (↑): '<line>'` (amended in review: the echo is off while a run
+  streams, so the notice quotes what was kept, and it promises no position; Task 15 uses the
+  same form).
 - In T class, Task 19 later replaces the history route with the composer draft. D class keeps it.
 - These pty cases must pass on the Linux NOT_CRAN lane before Task 19 builds on the drain. On
   Linux the release of a partial line on leaving ICANON is reasoned from n_tty, not yet run.
@@ -363,6 +365,7 @@ Decisions:
 | tool call | `▎` (U+258E) | `\|` |
 | agent (working row, sub-agents) | `▌` (U+258C) | `#` |
 | queued message | `↳` (U+21B3) | `->` |
+| the Up key (history recall) | `↑` (U+2191) | `Up` (`^` reads as Ctrl) |
 | question | `?` | `?` |
 | bullets | `•`, `◦` | `-` |
 | separator | ` · ` | ` - ` |
