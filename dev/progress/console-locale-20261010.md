@@ -1,4 +1,4 @@
-# Thinking indicator in non-UTF-8 consoles (2026-10-10)
+# Thinking indicator in non-UTF-8 consoles, 2026-10-10
 
 The hosted Linux C-locale job exposed an actual width failure: the Unicode label and
 spinner frame expanded into native `<U+...>` text after fitting. A first native conversion

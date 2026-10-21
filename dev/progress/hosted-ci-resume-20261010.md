@@ -1,4 +1,4 @@
-# Hosted CI resume — 2026-10-10
+# Hosted CI resume, 2026-10-10
 
 ## Scope and identity
 
@@ -13,7 +13,8 @@ Credentials and raw workflow environment/command lines are not copied into this 
 
 At **23:38:27 UTC**, remote `main` was exactly
 `68017d0bebc7b44adb564029fbc423e5dda65e9a`. The open PR inventory was empty.
-Sources: [main commit](https://github.com/Broccolito/gptr/commit/68017d0bebc7b44adb564029fbc423e5dda65e9a),
+Sources:
+[main commit](https://github.com/Broccolito/gptr/commit/68017d0bebc7b44adb564029fbc423e5dda65e9a),
 [open PR inventory](https://github.com/Broccolito/gptr/pulls),
 [exact-head workflow](https://github.com/Broccolito/gptr/actions/runs/38094110006).
 The inventory and run statuses below are timestamped snapshots, not promises about later state.
@@ -24,7 +25,7 @@ At **23:59 UTC**, the run was final: **3 successful gates and 10 failed jobs**.
 Both Windows versions had completed; their completion fixture correction is verified below.
 
 | Job | Verified state | Evidence |
-| --- | --- | --- |
+|---|---|---|
 | copy-safety, release | completed / success | job 114336455891 |
 | copy-safety, devel | completed / success | job 114336455958 |
 | token benchmark | completed / success | job 114336456005 |
@@ -50,7 +51,7 @@ mcp_serve_r (mcp-server.R) -> r_doc_outputs (tool-r.R)
 ```
 
 | Check | Pass | Fail | Counted warnings | Skips | Check status |
-| --- | ---: | ---: | ---: | ---: | --- |
+|---|---|---|---|---|---|
 | Ubuntu release | 24,419 | 1 | 0 | 36 | 1 ERROR |
 | Ubuntu no Suggests | 24,415 | 1 | 0 | 37 | 1 ERROR |
 | Ubuntu LC_ALL=C | 24,389 | 1 | 0 | 42 | 1 ERROR |
@@ -91,7 +92,8 @@ the only final gate diagnostic is `the test suite had 1 failed test(s)`. Source 
 connection tables even after a failed suite and adds a distinct diagnostic for any difference.
 That diagnostic is absent, so the failed job does not show a leaked R connection. It emits two
 unhandled Chromote shutdown promise messages outside counted test warnings.
-Sources: [connection job](https://github.com/Broccolito/gptr/actions/runs/38094110006/job/114336455971),
+Sources:
+[connection job](https://github.com/Broccolito/gptr/actions/runs/38094110006/job/114336455971),
 [gate implementation](https://github.com/Broccolito/gptr/blob/68017d0bebc7b44adb564029fbc423e5dda65e9a/dev/ci/check-connections.R).
 
 ### Temp ownership and Windows correction
@@ -149,7 +151,7 @@ Source: [CRAN Repository Policy](https://cran.r-project.org/web/packages/policie
 The R manual describes `_R_CHECK_TIMINGS_=0` and `--timings` as ways to measure test,
 example, vignette and install cost. Hosted source-retention sizes, a direct-source local
 install, and the next built tarball must remain separate observations.
-Source: [Writing R Extensions — check timing](https://cran.r-project.org/doc/manuals/r-release/R-exts.html#Check-timing).
+Source: [Writing R Extensions: check timing](https://cran.r-project.org/doc/manuals/r-release/R-exts.html#Check-timing).
 
 No final rebuilt tarball or CRAN submission is verified by this remote investigation.
 The current workflow deliberately passes `--no-manual` and disables CRAN incoming checks;
@@ -186,10 +188,11 @@ Root then approved the implementation in
 [.github/workflows/Exact-tarball.yaml](/Users/wgu/Desktop/gptr/.github/workflows/Exact-tarball.yaml).
 The existing automatic push/PR gates remain unchanged; root owns commit, push and dispatch.
 
-The draft adds one dispatch-only producer and one consumer matrix:
 Architecture independently reviewed both the draft and final tracked workflow and found no
-concrete blocker; no Actions or R job was launched during those reviews. It also enables timing and retained
-vignette output, declares the check core limit and caps testthat workers at two.
+concrete blocker; no Actions or R job was launched during those reviews.
+
+The draft adds one dispatch-only producer and one consumer matrix. It also enables timing and
+retained vignette output, declares the check core limit and caps testthat workers at two:
 
 1. A required full lowercase source SHA is validated before checkout, then compared against
    the actual checkout commit. A fresh Ubuntu/current-release runner uses the existing R/Pandoc
@@ -286,7 +289,8 @@ manifest was generated, and **no normal-source artifact was uploaded or adopted 
 The failed run and its producer diagnostics artifact (ID 11686856078) are preserved.
 The normal-build stdout is separately retained without environment/command lines in ignored
 [producer build output](/Users/wgu/Desktop/gptr/dev/.validation/ci-exact-tarball-20261010/producer-38097167397-build-output.log).
-Source: [producer job](https://github.com/Broccolito/gptr/actions/runs/38097167397/job/114345345087).
+Source:
+[producer job](https://github.com/Broccolito/gptr/actions/runs/38097167397/job/114345345087).
 
 A tiny Python witness executes only the workflow's actual archive-path assertion loop against
 19 synthetic names. Before the fix it passed 17 and failed the two legitimate fixture paths;
@@ -371,6 +375,7 @@ The five macOS directory names are `com.apple.intelligenceflow.intelligenceconte
 reported by these completed checks. At **00:24 UTC**, the run had six successful jobs and
 seven still running, including both Windows versions. The previously witnessed IC-33
 failure was absent on the three completed package checks above; pending jobs are not passed.
+
 ### Additional `3d92b05` results at 00:33 UTC (2026-10-11)
 
 The normal push matrix now has ten successful jobs, one failed job and two Windows jobs
@@ -410,7 +415,8 @@ snapshot, so this source-checkout result is not same-byte archive proof or full-
 
 ### Completed Windows and exact-archive update at 00:56 UTC
 
-Normal source-checkout run [38096135973](https://github.com/Broccolito/gptr/actions/runs/38096135973)
+Normal source-checkout run
+[38096135973](https://github.com/Broccolito/gptr/actions/runs/38096135973)
 is now final: 12 jobs succeeded and the already diagnosed C-locale spinner job failed. Windows
 release [114344316125](https://github.com/Broccolito/gptr/actions/runs/38096135973/job/114344316125)
 completed on actual R 4.6.1 UCRT with **PASS 24184 / FAIL 0 / WARN 0 / SKIP 91**, **Status: OK**.
@@ -461,8 +467,10 @@ was made, and no pending matrix member is counted passed.
 
 ### Exact `3d92b05` Mac/Linux release results at 01:20 UTC
 
-Mac release [114348035668](https://github.com/Broccolito/gptr/actions/runs/38097885912/job/114348035668)
-and Linux release [114348035696](https://github.com/Broccolito/gptr/actions/runs/38097885912/job/114348035696)
+Mac release
+[114348035668](https://github.com/Broccolito/gptr/actions/runs/38097885912/job/114348035668)
+and Linux release
+[114348035696](https://github.com/Broccolito/gptr/actions/runs/38097885912/job/114348035696)
 both completed successfully on actual R 4.6.1. Mac reports macOS Tahoe 26.6.2; Linux reports
 Ubuntu 24.04.5 LTS. Each check has **zero errors/warnings and Status: 1 NOTE**, solely HTML
 manual validation being skipped because of the runner's Tidy availability. Mac says its
@@ -580,7 +588,7 @@ with14 Rmd/14HTML guides. This is the hosted producer artifact, not the separate
 certified local normal039 archive.
 
 | Consumer job | Failed assertions | Test warnings | Skips | Passed assertions |
-|---|---:|---:|---:|---:|
+|---|---|---|---|---|
 | Windows release114361569133, R4.6.1ucrt | 3 | 16 | 96 | 24,784 |
 | Windows devel114361569142, R-devel2026-10-09r90655ucrt | 4 | 16 | 96 | 24,783 |
 
@@ -616,7 +624,7 @@ matrix pass, current-head validation, rerun, dispatch or local R work is claimed
 
 ### Exact `03963e0` Linux release failures, read-only diagnosis
 
-Job114361569198 reports4 failed assertions, zero test warnings,38 skips and25,089
+Job114361569198 reports4 failed assertions, zero test warnings, 38 skips and25,089
 passed assertions, Status1ERROR. Archive verification, manuals and vignette
 rebuilds passed. Two failures are the same old notebook stdout-capture oracles.
 The other two are `test-doc-io.R:1538` (missing legacy-pending notice) and1896
@@ -640,10 +648,10 @@ at the last bounded status read. Older failure records remain failed.
 
 Frozen preparation: ignored
 `dev/.validation/ci-windows-38102472275/{LINUX-TRIAGE.md,doc-io-linux-mock-paths.patch}`.
-Patch SHA256`f317f29d231823dc83dd88c08ec6c121a3b780e83d2e4f8892ead4d491eb21cb`;
+Patch SHA256 `f317f29d231823dc83dd88c08ec6c121a3b780e83d2e4f8892ead4d491eb21cb`;
 Linux diagnostic artifact11690155986 SHA256
 `91026cb7b22094a7db22b806a4b505132aa6e8d54143b8486658c85ec1aac84b`.
 Root reviewed the narrow mock-order/fixed-path delta; no runtime/security change
 or local execution was made. At19:46 PDT load224.51, CPU3.57%idle, physical
-RAM127GiB used/291MiB unused, swap31,460MiB used and disk127GiB maintained the
+RAM 127GiB used/291MiB unused, swap31,460MiB used and disk 127GiB maintained the
 local resource hold. The shared Ollama model remains untouched as requested.

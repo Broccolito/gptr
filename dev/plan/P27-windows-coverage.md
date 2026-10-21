@@ -115,7 +115,7 @@ Commits: `d43511f`, `607777a`, `439d00c`, `e761a8a`, `ea3abc9`, `6541910` (super
 ### Task 5: The wire log and scrub through Windows links (CI-37, CI-38, CI-48, CI-52, CI-68, D-231)
 
 Decisions:
-- `path_dangling()` is no followed metadata plus a readlink target on POSIX, as on `main`, and a
+- `path_dangling()` means no followed metadata plus a readlink target on POSIX, as on `main`, and a
   listed entry (`path_listed()`) on Windows, where readlink has none; `resolve_link_target()` asks
   it on every OS, and `local_dangling_link()` is the one fixture.
 - `wire_log_path()` refuses a dangling link (`path_dangling()`) at or above the log path.
@@ -203,10 +203,10 @@ Decisions:
   apart; `bp_run()` constructs through `bp_observe()`, which retries the initial deadline as it
   retries the snapshot deadline, and the entry limit stays fatal.
 - The observer charges a non-reparse regular file whose lstat gives `st_ino` 0 as an ordinary file
-  only when `NtQueryAttributesFile` on the same literal path returns exactly `STATUS_DELETE_PENDING`;
-  every other `st_ino`-0 entry stays `observer-metadata-invalid`. A Windows-only case in
-  `test-bp-disk-observer.R` makes a real delete-pending file and is that file's one platform guard
-  in the Optional-integrations registry.
+  only when `NtQueryAttributesFile` on the same literal path returns exactly
+  `STATUS_DELETE_PENDING`; every other `st_ino`-0 entry stays `observer-metadata-invalid`. A
+  Windows-only case in `test-bp-disk-observer.R` makes a real delete-pending file and is that
+  file's one platform guard in the Optional-integrations registry.
 - Two tests that abort a hanging fake request pump until the run streams (at most 30 s), not for a
   fixed 0.2 s, so the provider has read the request before the abort.
 

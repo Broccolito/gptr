@@ -156,7 +156,7 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Deviations: none. Open: `progress/infra.md` (from tooling.md) and `HANDOFF.md` (validation
   commands) still say the runner clears credentials; keys are cleared by `setup.R` for tests only.
 
-## REN-1, REN-2 - rename the entry point to peter() (2026-10-05)
+## REN-1, REN-2 - Rename the entry point to peter() (2026-10-05)
 - Green: full suite FAIL 0, PASS 22392; `prompt-text|bench-context` PASS 135; lint clean; token
   bench `--check` OK (1262/2335/2813/2956); cross-plan 0 errors (warn 77 as before), 764 R blocks
   0 problems, no lints; residue greps only deliberate keeps; `check --as-cran` 0/0/0, examples run.
@@ -189,7 +189,8 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   type ended the turn), test of `can_use_tool` denied after abort (red FAIL 8 with the guard
   mutated), redundant empty-PATH return. Declined: 04 section 7.20 and 00-index row 315 (outside
   lane; Open).
-- Deviations: D-144. Open: 04 section 7.20 and 00-index row 315 still name the aliases (outside lane).
+- Deviations: D-144. Open: 04 section 7.20 and 00-index row 315 still name the aliases (outside
+  lane).
 
 ## P02-S - Extension core (2026-10-05)
 - X-1 `helper-ext.R`; X-2 comments; X-3 one load transaction; X-4 `registry_enabled()` (lazy
@@ -227,7 +228,8 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   `run.R --check` OK; budget loops identical on 3,000 random cases. Lint clean. Neighbours (19
   filters) PASS 8840.
 - Reviews: r1 5 findings (0/0/2 + 3 nits): D-041/D-048/D-051/D-116 edited in place, index-cache
-  test restores the cache, D-147 tightened, test moved, 3 `rlang::is_string()`; re-green same counts.
+  test restores the cache, D-147 tightened, test moved, 3 `rlang::is_string()`; re-green same
+  counts.
 - Deviations: D-147. Open: F10, F12-F15 specifics lost (only the dedupes above applied); 04 section
   7.1 `write_atomic` row not amended (outside lane).
 
@@ -254,15 +256,16 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   session-live|arch-layers|lint-rules|eval-|http-|copy-|cli-common|ext-check|gptr-config|agent-run` green.
 - Reviews: R1 minor (provider key name no longer checked; fixed test-first, FAIL 1 then green), nit
   (counts, Open list; fixed).
-- Deviations: D-150. Open: F17/F18 specifics lost (shared decision 1 sites only); test-session-live.R,
-  test-artifact-registry.R, test-artifact-app.R keep vault_reset() (lanes simp-core, art-bench).
+- Deviations: D-150. Open: F17/F18 specifics lost (shared decision 1 sites only);
+  test-session-live.R, test-artifact-registry.R, test-artifact-app.R keep vault_reset() (lanes
+  simp-core, art-bench).
 
 ## P17-S - Skills, templates, plugins (2026-10-05)
-- S01 three SKILL.md copies of the guard tests; S02 skill and template roots on `res_roots()` (untrusted
-  project skill roots rank 7, as D-134), `res_foreign_names("command")`; S04 aliases and wrappers; S05
-  (D-151); S07 `template_expand_input()` in the test file; S12 `res_dir_specs()`, `res_md_files()`; S19
-  `plugin_from_dir(path, name, kind)`; S20 `res_group_fresh()`; `api_satisfies()`; is_string (R -237,
-  tests -91; plan ~247).
+- S01 three SKILL.md copies of the guard tests; S02 skill and template roots on `res_roots()`
+  (untrusted project skill roots rank 7, as D-134), `res_foreign_names("command")`; S04 aliases and
+  wrappers; S05 (D-151); S07 `template_expand_input()` in the test file; S12 `res_dir_specs()`,
+  `res_md_files()`; S19 `plugin_from_dir(path, name, kind)`; S20 `res_group_fresh()`;
+  `api_satisfies()`; is_string (R -237, tests -91; plan ~247).
 - Red: FAIL 17 (merged alias refusal, aliases within the cap accepted, `res_md_files` missing). Green:
   PASS 871 (895 before: -8 plugin_api_ok, -15 duplicated, -2 fm_size_ok, +1 unparseable API); `LC_ALL=C`
   skill-templates 166. Lint clean. Neighbours: `arch-layers|lint-rules|zzz|ext-|gptr-config`,
@@ -272,43 +275,48 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Deviations: D-151 (D-074, D-088 edited in place). Open: none.
 
 ## FIX5-LINT - R 4.6 file_ext ban (2026-10-05)
-- `spec_result_images()`, `gateway_image_blocks()` use `path_ext()`; test-lint-rules.R token rule `file_ext`
-  forbids `file_ext`/`file_path_sans_ext` in R/, called or passed; `r46_*`, `local_r46_file_ext()` and the
-  test-utils-paths comparison with tools (R-version dependent without them) gone; `local_name_locale()` kept.
+- `spec_result_images()`, `gateway_image_blocks()` use `path_ext()`; test-lint-rules.R token rule
+  `file_ext` forbids `file_ext`/`file_path_sans_ext` in R/, called or passed; `r46_*`,
+  `local_r46_file_ext()` and the test-utils-paths comparison with tools (R-version dependent without
+  them) gone; `local_name_locale()` kept.
 - Red: FAIL 1 (`lint-rules`: ext-specs.R:1311, gptr-gateway.R:695). Green: plan filter PASS 1391 (-2
   tools-comparison expectations). Lint clean. Neighbours: `arch-layers|doc-replay|doc-formats|ext-api|
   ext-check|gptr-sdk|tool-namespace` green; cross-plan 0 errors.
-- Reviews: round 1 minor (a passed `tools::file_ext` escaped the call rule; now a token rule, red: f22's
-  value reference uncaught) and nit (P11 Task 3 literal added to Open) fixed; nit (stage own hunks) noted.
-- Deviations: D-111 edited in place (FIX-5 closed). Open: P22 Task 3 `tools::file_ext(path)` and P11 Task 3
-  (plan line 2981) `tools::file_ext(full)` literals fail the rule; plan text kept (`path_ext()` is in no
-  plan: cross-plan undefined_function), implementers use it.
+- Reviews: round 1 minor (a passed `tools::file_ext` escaped the call rule; now a token rule, red:
+  f22's value reference uncaught) and nit (P11 Task 3 literal added to Open) fixed; nit (stage own
+  hunks) noted.
+- Deviations: D-111 edited in place (FIX-5 closed). Open: P22 Task 3 `tools::file_ext(path)` and P11
+  Task 3 (plan line 2981) `tools::file_ext(full)` literals fail the rule; plan text kept
+  (`path_ext()` is in no plan: cross-plan undefined_function), implementers use it.
 
 ## LOCK - One IC-71 short lock (2026-10-05)
-- `lock_with()`, `lock_stale()` in `R/auth-store.R` lock the credential store, settings and trust files
-  and (P18) the OAuth refresh and `mcp.json`; `auth_lock()`, `auth_lock_stale()`, `file_lock()`,
-  `file_unlock()`, `lock_stamp()`, `oauth_lock_with()` gone (R -94, tests -4; plan ~65).
+- `lock_with()`, `lock_stale()` in `R/auth-store.R` lock the credential store, settings and trust
+  files and (P18) the OAuth refresh and `mcp.json`; `auth_lock()`, `auth_lock_stale()`,
+  `file_lock()`, `file_unlock()`, `lock_stamp()`, `oauth_lock_with()` gone (R -94, tests -4; plan
+  ~65).
 - Red: FAIL 3 (`lock_with` missing twice; a live holder's lock older than 30 s not stale). Green:
   `auth-store|auth-oauth|gptr-config` PASS 606 (-2 duplicate file_lock() expectations). Lint clean.
   Neighbours (20 filters: `auth-|gptr-|mcp-|doc-`, settings and auth-store users, `arch-layers|
   lint-rules`) PASS 7626; cross-plan 0 errors, warn 82 (+2 recorded as P18 L1), no lints.
 - Reviews: none yet.
-- Deviations: D-153 (D-091 item 2 edited; 04 IC-71 safe-17 amended). Open: `doc-io.R` adopts it in P15-S.
+- Deviations: D-153 (D-091 item 2 edited; 04 IC-71 safe-17 amended). Open: `doc-io.R` adopts it in
+  P15-S.
 
 ## P06-S1 - Kernel duplication (2026-10-05)
 - F2 plan-size `usage_conform()`; F3 no re-checks after ingress (loop, queue items, retry delay); F4
-  `ext_policy_decide()` keeps the answer's fields; F6 `path_custom()`, `entry_model_ref()`; F7 `msg_failed()`,
-  `msg_calls()`, `msg_final()`; F8 one emitter; F10 `run_compact()`, `run_apply_pending_model()`; F11 is_string;
-  F13 `store_close()`, `store_pkg_version()` gone; F14 `tool_call_hook()`; F15; F16; F17 two folds (R -150,
-  tests -78; plan ~292).
+  `ext_policy_decide()` keeps the answer's fields; F6 `path_custom()`, `entry_model_ref()`; F7
+  `msg_failed()`, `msg_calls()`, `msg_final()`; F8 one emitter; F10 `run_compact()`,
+  `run_apply_pending_model()`; F11 is_string; F13 `store_close()`, `store_pkg_version()` gone; F14
+  `tool_call_hook()`; F15; F16; F17 two folds (R -150, tests -78; plan ~292).
 - Red: none (refactor). Green: `agent-|session-|copy-session` PASS 2167 incl. L01-L24, S-oracles (2142 own +
   25 of cli-sub's new test-agent-background.R; 2198 before: -35 refusals, -16 re-checks, -5 folded). Lint
   clean. Neighbours: `arch-layers|lint-rules|ext-|copy-|zzz|aaa-state`, `gptr-|prompt-|context-|doc-|s1-|
   provider-usage|tool-|cli-common|bench-context` green.
-- Reviews: round 1 clear, 1 minor + 1 nit: `rebuild_mode()` uses `path_custom()`; D-154 Tests line names the
-  retry refusal loop; gateway copies left to simp-gw (Open).
-- Deviations: D-154 (D-021, D-059 edited; 04 section 7.6 amended). Open: F13/F17 specifics lost (only the
-  items above applied); simp-gw: `gateway_last_custom()` and the `router_call()` loop can use `path_custom()`.
+- Reviews: round 1 clear, 1 minor + 1 nit: `rebuild_mode()` uses `path_custom()`; D-154 Tests line
+  names the retry refusal loop; gateway copies left to simp-gw (Open).
+- Deviations: D-154 (D-021, D-059 edited; 04 section 7.6 amended). Open: F13/F17 specifics lost
+  (only the items above applied); simp-gw: `gateway_last_custom()` and the `router_call()` loop can
+  use `path_custom()`.
 
 ## URL - One URL parser (2026-10-05)
 - `url_parse()` (L0, raw path and query) serves `origin_of()`, `url_origin()`, `url_for_log()`, the
@@ -322,71 +330,85 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Deviations: D-155. Open: `R/s1-ollama.R` (no stage-1 lane) renamed only.
 
 ## P06-S2 - Estimator and replay rebuild (2026-10-05)
-- F5 (shared decision 5): `request_fallback()` and `context_tokens()` use P07's `prompt_request_estimate()`
-  (`entry_messages()`, `entry_compaction_cut()`; image default 768x512); `images_omit()` serves `images_elide()`,
-  `prompt_request_context()`; the P06 estimator helpers, `compaction_kept()`, `image_id()`, `image_omitted_text()`
-  gone. F9 `session_undo()` (was `rebuild_undo()`, `replay_undo()`), `path_fields()` (R -91, tests +2; plan ~53).
-- Red: FAIL 4 (`agent-run`: 768x512 image, code-class tool call). Green: `agent-run|session-` PASS 1599 incl.
-  FIX-3; token bench `--check` OK. Lint clean. Neighbours: `prompt-|context-|bench|arch-layers|lint-rules`,
-  `agent-|copy-|ext-check|provider-transform|zzz|aaa-state`, `doc-|gptr-|s1-route|cli-common|subagent` green.
+- F5 (shared decision 5): `request_fallback()` and `context_tokens()` use P07's
+  `prompt_request_estimate()` (`entry_messages()`, `entry_compaction_cut()`; image default 768x512);
+  `images_omit()` serves `images_elide()`, `prompt_request_context()`; the P06 estimator helpers,
+  `compaction_kept()`, `image_id()`, `image_omitted_text()` gone. F9 `session_undo()` (was
+  `rebuild_undo()`, `replay_undo()`), `path_fields()` (R -91, tests +2; plan ~53).
+- Red: FAIL 4 (`agent-run`: 768x512 image, code-class tool call). Green: `agent-run|session-` PASS
+  1599 incl. FIX-3; token bench `--check` OK. Lint clean. Neighbours:
+  `prompt-|context-|bench|arch-layers|lint-rules`,
+  `agent-|copy-|ext-check|provider-transform|zzz|aaa-state`,
+  `doc-|gptr-|s1-route|cli-common|subagent` green.
 - Reviews: none yet.
-- Deviations: D-036 item 8, D-050 item 4, D-056 item 2 edited in place. Open: only two named tests changed numbers
-  (third name lost); D-081's re-estimate after a new elision unchanged.
+- Deviations: D-036 item 8, D-050 item 4, D-056 item 2 edited in place. Open: only two named tests
+  changed numbers (third name lost); D-081's re-estimate after a new elision unchanged.
 
 ## P15-S - Documents duplication (2026-10-05)
-- F1 numbers as read; F2 `doc_block_get()`, `doc_dedent()`; F3 `doc_located()`; F4 `doc_rewrite()`; F5 one
-  `doc_call_cands()`; F6 one `doc_owner()`, `nb_agent_run()`; F7 `doc_marker_replace()`; F8 `proc_create_time()`,
-  `pid_alive()`; F9 `doc_setting()`; F10 `doc_keep()`, `doc_file_arg()`, one site lookup; F11 one literal
-  encoder, `doc_unquote()`; F13 switch default; wrappers, is_string; `helper-doc.R`,
-  `doc_record()` with `call_new()`; F12/F17 merged tests (md5, IDE final newline, gptr_source files)
-  (R -475, tests -262; plan ~657).
+- F1 numbers as read; F2 `doc_block_get()`, `doc_dedent()`; F3 `doc_located()`; F4 `doc_rewrite()`;
+  F5 one `doc_call_cands()`; F6 one `doc_owner()`, `nb_agent_run()`; F7 `doc_marker_replace()`; F8
+  `proc_create_time()`, `pid_alive()`; F9 `doc_setting()`; F10 `doc_keep()`, `doc_file_arg()`, one
+  site lookup; F11 one literal encoder, `doc_unquote()`; F13 switch default; wrappers, is_string;
+  `helper-doc.R`, `doc_record()` with `call_new()`; F12/F17 merged tests (md5, IDE final newline,
+  gptr_source files) (R -475, tests -262; plan ~657).
 - Red: none (refactor); the new notebook-number test fails on HEAD (`1.50` -> `1.5`). Green: `doc-` PASS 1808
   (1832 before: Python repr, fax and duplicate expectations out), `LC_ALL=C` 1743; token bench `--check` OK.
   Lint clean. Neighbours: `arch-layers|lint-rules|auth-redact|ext-check|ext-specs|tool-r|utils-options|
   utils-paths|s1-route|gptr-gateway|gptr-capture|prompt-sections|bench-context|zzz` PASS 2738.
-- Reviews: round 1 changes_required: F15 reverted (knitr labels `//| `/`%%| ` chunks, so `#| `-only shifted
-  later R chunks' unnamed numbers; probe `{dot}` chunk back, red first); an unmarked notebook double is
-  refused (`reason = "notebook"`), regex warnings caught; lock and sidecar stamps use
-  `proc_create_time(Sys.getpid())` (fork; red first); DEVIATIONS other-lane hunks left to the committer.
-- Deviations: D-158 (D-062, D-070, D-071, D-107, D-109 edited). Open: doc locks keep their own rule (IC-71's
-  30 s age would break the Rscript run lock held until exit, D-109 item 2), so no `lock_with()`;
-  `doc_control_guard()` stays (`session_control_check()` is L3, outside IC-33's SDK and helper-arch.R);
-  F15 not adopted (any rule but xfun's comment table shifts knitr's unnamed-chunk numbers);
-  F16 sidecar per-upsert check kept (dropping it applies a sidecar's other-format upsert); computed-prompt
-  locate tests unmerged (three finders' mocks); 04 section 11.5 text.
+- Reviews: round 1 changes_required: F15 reverted (knitr labels `//| `/`%%| ` chunks, so `#| `-only
+  shifted later R chunks' unnamed numbers; probe `{dot}` chunk back, red first); an unmarked
+  notebook double is refused (`reason = "notebook"`), regex warnings caught; lock and sidecar stamps
+  use `proc_create_time(Sys.getpid())` (fork; red first); DEVIATIONS other-lane hunks left to the
+  committer.
+- Deviations: D-158 (D-062, D-070, D-071, D-107, D-109 edited). Open: doc locks keep their own rule
+  (IC-71's 30 s age would break the Rscript run lock held until exit, D-109 item 2), so no
+  `lock_with()`; `doc_control_guard()` stays (`session_control_check()` is L3, outside IC-33's SDK
+  and helper-arch.R); F15 not adopted (any rule but xfun's comment table shifts knitr's
+  unnamed-chunk numbers); F16 sidecar per-upsert check kept (dropping it applies a sidecar's
+  other-format upsert); computed-prompt locate tests unmerged (three finders' mocks); 04 section
+  11.5 text.
 
 ## TEST-H - Shared test helpers of completed plans (2026-10-05)
-- `helper-fake.R`: `local_gw()`, `local_settings()`, `fake_run()`, `test_tool()`; `helper-ext.R`: `local_service()`
-  (registry kind), `local_bootstrap_service()` (`the$services`; the tool tests' calls renamed),
-  `local_no_bootstrap_services()`; `helper-mock-server.R`: `mock_spec()`; new `helper-p07.R` (`p07_session()`,
-  `p07_project()`, `block_kinds()`, `wrap()`, the stand-ins, `compose_case()`); compaction's own session helper is
-  `compact_session()`; three "(Task n: create)" headers gone (tests -192; plan ~155).
+- `helper-fake.R`: `local_gw()`, `local_settings()`, `fake_run()`, `test_tool()`; `helper-ext.R`:
+  `local_service()` (registry kind), `local_bootstrap_service()` (`the$services`; the tool tests'
+  calls renamed), `local_no_bootstrap_services()`; `helper-mock-server.R`: `mock_spec()`; new
+  `helper-p07.R` (`p07_session()`, `p07_project()`, `block_kinds()`, `wrap()`, the stand-ins,
+  `compose_case()`); compaction's own session helper is `compact_session()`; three "(Task n:
+  create)" headers gone (tests -192; plan ~155).
 - Red: none (refactor). Green: touched files PASS 7567 (7567 before). Lint clean. Neighbours: `env-snapshot|
   gptr-capture|copy-gateway|lint-rules|arch-layers|ext-|zzz|context-prefix|prompt-text|provider-(fake|message)`
   PASS 2724 (2724 before); token bench `--check` OK.
-- Reviews: round 1 changes_required: `test-s1-route.R`'s `local_router_service()` copy removed (calls use
-  `local_bootstrap_service()`); inline `p07_project()`/`block_kinds()` bodies in `test-prompt-compact.R`,
-  `test-prompt-sections.R` and `test-context-prefix.R` replaced by the helpers.
+- Reviews: round 1 changes_required: `test-s1-route.R`'s `local_router_service()` copy removed
+  (calls use `local_bootstrap_service()`); inline `p07_project()`/`block_kinds()` bodies in
+  `test-prompt-compact.R`, `test-prompt-sections.R` and `test-context-prefix.R` replaced by the
+  helpers.
 - Deviations: none. Open: P11 plan literal (line 3625) defines its own `fake_run(id)` (lane perm).
 
 ## P18-S - MCP plan text and RPC builders (2026-10-05)
-- `mcp_rpc_ok()`, `mcp_rpc_err()` moved verbatim to `R/json-encode.R` (L0); `pcli_jsonrpc_error()` gone, its callers
-  use `mcp_rpc_err()` (same lists); `mcp_map_chr()` comment trimmed. Plan text: P18 Task 3 literal and Produces, Task 6
-  on `mcp_map_chr()` (`mcp_chr()`, `mcp_named_chr()` gone), P20 Task 6 (R -8, plans +1; plan ~20).
-- Red: none (refactor). Green: `mcp-client|cli-claude|cli-common|json-` PASS 1281 (SKIP 1: P18 dispatcher not
-  loaded; re-run after review), `^(arch-layers|lint-rules)$` PASS 19. Lint clean. Neighbours:
-  `cli-|provider-registry|zzz` PASS 1570; cross-plan 0 errors, warn 86 (+2 recorded as P18 R1), 767 R blocks 0
-  problems, no lints.
-- Reviews: R1 clear, 1 minor + 2 nits. Fixed: P20's interfaces table lists P18's `mcp_rpc_err()`; D-090 item 6
-  no longer says "every config value". Not ours: the D-154/D-155 evidence-line hunk (P06-S1); left unstaged.
-- Deviations: D-090 item 6 edited in place. Open: `stream_mcp_dispatch()` (`R/provider-registry.R`, no stage-1 lane)
-  still builds its JSON-RPC error inline; `progress/P18.md` Task 3's Open line on `mcp_chr()` is superseded.
+- `mcp_rpc_ok()`, `mcp_rpc_err()` moved verbatim to `R/json-encode.R` (L0); `pcli_jsonrpc_error()`
+  gone, its callers use `mcp_rpc_err()` (same lists); `mcp_map_chr()` comment trimmed. Plan text:
+  P18 Task 3 literal and Produces, Task 6 on `mcp_map_chr()` (`mcp_chr()`, `mcp_named_chr()` gone),
+  P20 Task 6 (R -8, plans +1; plan ~20).
+- Red: none (refactor). Green: `mcp-client|cli-claude|cli-common|json-` PASS 1281 (SKIP 1: P18
+  dispatcher not loaded; re-run after review), `^(arch-layers|lint-rules)$` PASS 19. Lint clean.
+  Neighbours: `cli-|provider-registry|zzz` PASS 1570; cross-plan 0 errors, warn 86 (+2 recorded as
+  P18 R1), 767 R blocks 0 problems, no lints.
+- Reviews: R1 clear, 1 minor + 2 nits. Fixed: P20's interfaces table lists P18's `mcp_rpc_err()`;
+  D-090 item 6 no longer says "every config value". Not ours: the D-154/D-155 evidence-line hunk
+  (P06-S1); left unstaged.
+- Deviations: D-090 item 6 edited in place. Open: `stream_mcp_dispatch()` (`R/provider-registry.R`,
+  no stage-1 lane) still builds its JSON-RPC error inline; `progress/P18.md` Task 3's Open line on
+  `mcp_chr()` is superseded.
 
 ## CLEAN-1 - Delete the stale 'before plan X' test guards (2026-10-06)
-- The six guards became `local_without_builtin()` filters (moved to `helper-ext.R`; contract 10.1: the fallbacks
-  stay reachable, no other test covers them); 7 always-true guards, `skip_without_run_engine()`, a stale comment gone.
-- Red: none (test-only); before SKIP 6, PASS 718. Green: `^(gptr-gateway|catalog-models)$` SKIP 0, PASS 733;
-  `^(arch-layers|lint-rules)$` 19; helper users and neighbours 1245 + 2473 + 2592 + 2374 (SKIP 3: installed, live).
-- Reviews: r1 clear; minor (duplicate of `local_without_builtin()`) fixed; nits fixed (`test-skill-templates.R`).
-- Deviations: none. Open: dead "if absent" branches that are not skips: `test-tool-namespace.R` `members`
-  search_source (3), `test-tool-r.R` risk.classify line, `test-console-commands.R` `local_console_commands()`.
+- The six guards became `local_without_builtin()` filters (moved to `helper-ext.R`; contract 10.1:
+  the fallbacks stay reachable, no other test covers them); 7 always-true guards,
+  `skip_without_run_engine()`, a stale comment gone.
+- Red: none (test-only); before SKIP 6, PASS 718. Green: `^(gptr-gateway|catalog-models)$` SKIP 0,
+  PASS 733; `^(arch-layers|lint-rules)$` 19; helper users and neighbours 1245 + 2473 + 2592 + 2374
+  (SKIP 3: installed, live).
+- Reviews: r1 clear; minor (duplicate of `local_without_builtin()`) fixed; nits fixed
+  (`test-skill-templates.R`).
+- Deviations: none. Open: dead "if absent" branches that are not skips: `test-tool-namespace.R`
+  `members` search_source (3), `test-tool-r.R` risk.classify line, `test-console-commands.R`
+  `local_console_commands()`.

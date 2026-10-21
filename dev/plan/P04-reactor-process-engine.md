@@ -1,33 +1,131 @@
 # P04 Reactor and process engine Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build gptr's own transport and process layer: one process-wide reactor that drives every HTTP stream and every child pipe, over a process engine, process supervision, byte-level SSE/NDJSON splitters, bounded retries and a per-provider rate limiter (S-10; INFRA-01/05/06/16/21/23/28).
+**Goal:** Build gptr's own transport and process layer: one process-wide reactor that drives every
+HTTP stream and every child pipe, over a process engine, process supervision, byte-level SSE/NDJSON
+splitters, bounded retries and a per-provider rate limiter (S-10; INFRA-01/05/06/16/21/23/28).
 
-**Architecture:** Six L0 files. `http-reactor.R` holds the process reactor (`the$reactor`, class `gptr_reactor`): a curl multi pool polled together with child pipes through `processx::poll()`, timers, tasks, the one-at-a-time tool FIFO with the IC-57 re-entrancy rules, admission and the opt-in wire log; `http-request.R` turns adapter request specs into curl handles (the only place secret handles are materialised), `http-sse.R` splits byte streams and `http-retry.R` classifies failures and keeps the per-provider limiter. `proc-spawn.R` starts children (UTF-8 pipes, `os_bytes()` argv, Windows shell rules) and feeds their stdin through the reactor; `proc-supervise.R` checks liveness, kills process trees, sweeps orphans at load and keeps the job table behind the exported `gptr_jobs()`.
+**Architecture:** Six L0 files. `http-reactor.R` holds the process reactor (`the$reactor`, class
+`gptr_reactor`): a curl multi pool polled together with child pipes through `processx::poll()`,
+timers, tasks, the one-at-a-time tool FIFO with the IC-57 re-entrancy rules, admission and the
+opt-in wire log; `http-request.R` turns adapter request specs into curl handles (the only place
+secret handles are materialised), `http-sse.R` splits byte streams and `http-retry.R` classifies
+failures and keeps the per-provider limiter. `proc-spawn.R` starts children (UTF-8 pipes,
+`os_bytes()` argv, Windows shell rules) and feeds their stdin through the reactor;
+`proc-supervise.R` checks liveness, kills process trees, sweeps orphans at load and keeps the job
+table behind the exported `gptr_jobs()`.
 
-**Tech Stack:** R (>= 4.2.0); curl (multi interface), processx (`process`, `poll()`, `curl_fds()`), ps (liveness, trees), jsonlite; later (Suggests, called only when its namespace is loaded); testthat 3e with withr.
+**Tech Stack:** R (>= 4.2.0); curl (multi interface), processx (`process`, `poll()`, `curl_fds()`),
+ps (liveness, trees), jsonlite; later (Suggests, called only when its namespace is loaded); testthat
+3e with withr.
 
-**Spec:** dev/spec/03-architecture.md (§2.2-2.3, §3.2, §6.1, §6.6, §6.7, §6.18), dev/spec/04-interface-contract.md (§1.1-1.2, §2.2, §3.1, §5.12-5.13, §6.5 `gptr_jobs()`, §7.0, §7.4, §8.1-8.3, §10.4 `retry_start`/`retry_end`, §12.2, §15.5 IC-57, IC-59, IC-60, IC-64), dev/spec/05-plan-decomposition.md (P04).
+**Spec:** dev/spec/03-architecture.md (sections 2.2-2.3, 3.2, 6.1, 6.6, 6.7, 6.18),
+dev/spec/04-interface-contract.md (sections 1.1-1.2, 2.2, 3.1, 5.12-5.13, 6.5 `gptr_jobs()`, 7.0,
+7.4, 8.1-8.3, 10.4 `retry_start`/`retry_end`, 12.2, 15.5 IC-57, IC-59, IC-60, IC-64),
+dev/spec/05-plan-decomposition.md (P04).
 
-**Depends on:** P01 Foundation, P03 Secrets and redaction (and P02 through P03: `registry_get()`, `registry_diagnostic()`). **Milestone:** M0 (the last M0 plan: it runs the M0 exit check).
+**Depends on:** P01 Foundation, P03 Secrets and redaction (and P02 through P03: `registry_get()`,
+`registry_diagnostic()`). **Milestone:** M0 (the last M0 plan: it runs the M0 exit check).
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (`<<-` only for closure state), native `|>`, ASCII-only sources, `pkg::fun()` calls, conditions only through `gptr_abort()`/`gptr_warn()`/`gptr_inform()`, testthat 3e, no network or real keys in tests, one commit per task ending with the attribution line the harness specifies (conventions §10). Plan-specific requirements, with values copied from the spec:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (`<<-` only for closure state),
+native `|>`, ASCII-only sources, `pkg::fun()` calls, conditions only through
+`gptr_abort()`/`gptr_warn()`/`gptr_inform()`, testthat 3e, no network or real keys in tests, one
+commit per task ending with the attribution line the harness specifies (conventions section 10).
+Plan-specific requirements, with values copied from the spec:
 
-- **Owned files and layer.** `R/proc-spawn.R`, `R/proc-supervise.R`, `R/http-reactor.R`, `R/http-request.R`, `R/http-sse.R`, `R/http-retry.R`, their mirrored tests, and the generated `NAMESPACE` and `man/gptr_jobs.Rd`. All six files are layer L0: they call base R, Imports and L0 only, and reach upper layers only through callbacks those layers register (03 §2.2). `the` fields owned: `reactor` (the process reactor) and `jobs` (the process and job tables) (04 §7.0).
-- **Dependencies.** No Import or Suggests is added (conventions §8). Imports used: curl, processx, ps, jsonlite, stats. Suggests used: later (only `if (isNamespaceLoaded("later")) later::run_now(0)`), withr and testthat (tests). pkgload is not a dependency: `pkgload::load_all()` appears only inside the text of a child script generated by one test when it runs from the source tree (IC-71).
-- **Options** (04 §3.1, read through `gptr_opt()`): `gptr.max_active` `int(1)` `8L` "concurrent HTTP transfers (global); nothing else"; `gptr.connect_timeout` `num(1)` `20`; `gptr.first_byte_timeout` `num(1)` `120`; `gptr.idle_timeout` `num(1)` `90`; `gptr.max_retry_delay` `num(1)` `60` "a longer `retry-after` fails fast"; `gptr.max_attempts` `int(1)` `4L` "transport attempts per request"; `gptr.wire_log` `lgl(1) | chr(1)` `FALSE` "`TRUE` = `<workspace root>/cache/tmp/wire-<session id>.jsonl` (one file per session, IC-65); a path must be inside the workspace root or `tempdir()`; each line is written open-append-close"; `gptr.supervise` `lgl(1) | NULL` `NULL` "resolved by `supervise_default()`: `NULL` = `!check_running()` (IC-60)"; `gptr.stdin_timeout` `num(1)` `60` "seconds to drain a pending stdin write to a child (IC-60)".
-- **Curl handles** (04 §8.2, IC-64): every handle sets `pipewait = 0L`, `followlocation = 0L`, `connecttimeout`, "no total timeout"; the reactor enforces the first-byte and idle timers. 04 also lists `low_speed_limit = 1`, `low_speed_time = idle + 30` "as a backstop"; this plan leaves libcurl's low-speed check off because it averages bytes per second and ends a trickle stream after `idle + 30` s, contradicting INFRA-05 ("A 10-minute stream sending one byte every 10 s completes", 03 §6.18 row 05, report 10a) and "no total timeout" (ambiguity 5; measured). The pool is `curl::new_pool(total_con = 100L, host_con = 100L, multiplex = TRUE)`. Curl callbacks only queue events; the reactor delivers them to `on_headers`/`on_bytes`/`on_done`/`on_fail` after `curl::multi_run()` returns, so callbacks may pump the reactor (ambiguity 19).
-- **Pump iteration** (04 §8.2, IC-57): admit queued transfers; `processx::poll(c(processx::curl_fds(curl::multi_fdset(pool)), <pipes>), ms = min(next timer, slice_ms))`; `curl::multi_run(timeout = 0)`; read ready pipes (at most 512 chunks per call, lines up to 16 MiB) and drain pending stdin buffers; fire due timers; run tasks; `later::run_now(0)` only at depth 1, or at depth > 1 when `allow_runs` holds a CLI child served by the MCP server; run at most one FIFO tool whose run is in `allow_runs`. `allow_runs` defaults to `NULL` (all runs) only when no pump is on the stack (04's "`run_current()` is `NULL`": every tool executes inside a pump), else to `character()`. The pump is the only blocking wait in gptr; R interrupts propagate out of it. A transfer, task or child watcher whose callback is running (a pump nested inside it) is skipped by nested pumps, so nothing is delivered re-entrantly or out of order and `on_exit` runs once.
-- **Retry** (04 §8.2): "retry 408, 409, 429, 5xx, 529 and network errors; `retry-after-ms`, then `retry-after`, capped by `gptr.max_retry_delay` (above it: no retry, class `retry_after`); otherwise `0.5 * 2^i` seconds with time-derived jitter, capped at 8; Anthropic's spend-cap 429 (`enforced_spend_limit_reached`) is never retried (class `spend_cap`); 401/403 are `auth`". Only before a delta is committed. HTTP-dates go through `parse_http_date()` (`month.abb`, UTC); unparsable values fall back to backoff. A 3xx is `gptr_error_redirect`, never followed and never retried (IC-64). Never `set.seed()`, `sample()` or `runif()`.
-- **Conditions** (04 §2.2). Created, not signalled, and handed to `on_fail(cnd)`: `gptr_error_auth`, `gptr_error_rate_limit` (+ `retry_after`), `gptr_error_spend_cap`, `gptr_error_retry_after` (+ `retry_after`), `gptr_error_overloaded`, `gptr_error_network` (+ `curl_code`), `gptr_error_redirect` (+ `location_origin`), each with parent `gptr_error_provider` (fields `provider`, `model`, `status`, `request_id`, `error_type`, `session`); `gptr_error_timeout_first_byte`, `gptr_error_timeout_idle`, `gptr_error_timeout_connect` (parent `gptr_error_timeout`; fields `seconds`, `provider`). Signalled: `gptr_error_timeout` (`seconds`, `what`) by `write_all()`, `gptr_error_spawn` (`command`) and `gptr_error_invalid_argument` (`arg`, `expected`).
-- **SSE** (04 §8.3, IC-64): LF, CRLF and lone CR line ends (a CR at the end of a chunk held until the next chunk), a leading BOM stripped, comment lines dropped, `data:` lines joined with `"\n"`, the **last** `event:` field wins, `id` and `retry` parsed, boundaries found with `grepRaw()` on raw bytes, the incomplete tail carried, each complete event decoded with `rawToChar()` and marked UTF-8, a final unterminated event flushed (`flush()` returns that one event, or `NULL`). Cost target: 20,000 deltas in under 1 s of CPU.
-- **Processes** (04 §7.4, IC-59, IC-60): `processx::process$new(..., encoding = "UTF-8")`; argv, wd and env through `os_bytes()`; R children only through `rscript_path()`; `supervise = supervise_default()`; `.cmd`/`.bat` run as `cmd.exe /d /c call <shim> args` refusing `% ^ & | < > " !` CR LF in any argument; never `processx::run()`; stdin written non-blockingly (`write_input()` writes at most about 8 KB per call) and drained by the reactor within `gptr.stdin_timeout`; tree markers under `R_user_dir("gptr", "cache")/procs/` and a mandatory orphan sweep at load; `kill_all()` = interrupt, wait `grace`, `kill_tree()`, Windows `taskkill /F /T /PID`, `$kill()`; every child-process pool capped at 2 under `check_running()`; a requested stop maps a later exit to `stopped` or `aborted`, never `error`; liveness only through `pid_alive()` (`ps::ps_is_running(ps::ps_handle(pid))` plus the creation time), never `tools::pskill()`.
-- **Job table** (04 §5.12, §6.5, IC-12, IC-36): kinds `session`, `bg`, `artifact`, `mcp_serve`, `worker`, `cli`; `gptr_jobs(kill = FALSE)` returns `c("gptr_jobs", "gptr_listing", "data.frame")` with columns `id`, `kind`, `name`, `pid`, `status`, `started`. It is this plan's only export.
-- **Ids and records** (IC-20): transfer, task, timer and FIFO ids are `t<integer>`; request ids `q` + 12 hex (`id_new("q", 12L)`). Wire-log lines carry `ts`, `request_id`, `provider`, `model`, `url` (origin and path), `status`, `bytes`, `seconds`, `event`, never headers or bodies, redacted with `redact(profile = "persist")`.
-- **Tests** (conventions §7): every test that starts a process calls `skip_on_cran()` (P01's `local_mock_server()` skips on CRAN itself); children start only through `rscript_path()`; `pkgload::load_all()` appears only inside generated child-script text; no wall-clock assertion is tighter than 5 s (conventions §7) except the targets the spec itself names: INFRA-01 (first delta within 0.35 s, gaps under 0.35 s, six streams within 10% of the slowest) and INFRA-23 (under 1 s of CPU).
+- **Owned files and layer.** `R/proc-spawn.R`, `R/proc-supervise.R`, `R/http-reactor.R`,
+  `R/http-request.R`, `R/http-sse.R`, `R/http-retry.R`, their mirrored tests, and the generated
+  `NAMESPACE` and `man/gptr_jobs.Rd`. All six files are layer L0: they call base R, Imports and L0
+  only, and reach upper layers only through callbacks those layers register (03 section 2.2). `the`
+  fields owned: `reactor` (the process reactor) and `jobs` (the process and job tables) (04
+  section 7.0).
+- **Dependencies.** No Import or Suggests is added (conventions section 8). Imports used: curl,
+  processx, ps, jsonlite, stats. Suggests used: later (only
+  `if (isNamespaceLoaded("later")) later::run_now(0)`), withr and testthat (tests). pkgload is not a
+  dependency: `pkgload::load_all()` appears only inside the text of a child script generated by one
+  test when it runs from the source tree (IC-71).
+- **Options** (04 section 3.1, read through `gptr_opt()`): `gptr.max_active` `int(1)` `8L`
+  "concurrent HTTP transfers (global); nothing else"; `gptr.connect_timeout` `num(1)` `20`;
+  `gptr.first_byte_timeout` `num(1)` `120`; `gptr.idle_timeout` `num(1)` `90`;
+  `gptr.max_retry_delay` `num(1)` `60` "a longer `retry-after` fails fast"; `gptr.max_attempts`
+  `int(1)` `4L` "transport attempts per request"; `gptr.wire_log` `lgl(1) | chr(1)` `FALSE`
+  "`TRUE` = `<workspace root>/cache/tmp/wire-<session id>.jsonl` (one file per session, IC-65); a
+  path must be inside the workspace root or `tempdir()`; each line is written open-append-close";
+  `gptr.supervise` `lgl(1) | NULL` `NULL` "resolved by `supervise_default()`: `NULL` =
+  `!check_running()` (IC-60)"; `gptr.stdin_timeout` `num(1)` `60` "seconds to drain a pending stdin
+  write to a child (IC-60)".
+- **Curl handles** (04 section 8.2, IC-64): every handle sets `pipewait = 0L`,
+  `followlocation = 0L`, `connecttimeout`, "no total timeout"; the reactor enforces the first-byte
+  and idle timers. 04 also lists `low_speed_limit = 1`, `low_speed_time = idle + 30` "as a
+  backstop"; this plan leaves libcurl's low-speed check off because it averages bytes per second and
+  ends a trickle stream after `idle + 30` s, contradicting INFRA-05 ("A 10-minute stream sending one
+  byte every 10 s completes", 03 section 6.18 row 05, report 10a) and "no total timeout" (ambiguity
+  5; measured). The pool is `curl::new_pool(total_con = 100L, host_con = 100L, multiplex = TRUE)`.
+  Curl callbacks only queue events; the reactor delivers them to
+  `on_headers`/`on_bytes`/`on_done`/`on_fail` after `curl::multi_run()` returns, so callbacks may
+  pump the reactor (ambiguity 19).
+- **Pump iteration** (04 section 8.2, IC-57): admit queued transfers;
+  `processx::poll(c(processx::curl_fds(curl::multi_fdset(pool)), <pipes>), ms = min(next timer, slice_ms))`;
+  `curl::multi_run(timeout = 0)`; read ready pipes (at most 512 chunks per call, lines up to 16 MiB)
+  and drain pending stdin buffers; fire due timers; run tasks; `later::run_now(0)` only at depth 1,
+  or at depth > 1 when `allow_runs` holds a CLI child served by the MCP server; run at most one FIFO
+  tool whose run is in `allow_runs`. `allow_runs` defaults to `NULL` (all runs) only when no pump is
+  on the stack (04's "`run_current()` is `NULL`": every tool executes inside a pump), else to
+  `character()`. The pump is the only blocking wait in gptr; R interrupts propagate out of it. A
+  transfer, task or child watcher whose callback is running (a pump nested inside it) is skipped by
+  nested pumps, so nothing is delivered re-entrantly or out of order and `on_exit` runs once.
+- **Retry** (04 section 8.2): "retry 408, 409, 429, 5xx, 529 and network errors; `retry-after-ms`,
+  then `retry-after`, capped by `gptr.max_retry_delay` (above it: no retry, class `retry_after`);
+  otherwise `0.5 * 2^i` seconds with time-derived jitter, capped at 8; Anthropic's spend-cap 429
+  (`enforced_spend_limit_reached`) is never retried (class `spend_cap`); 401/403 are `auth`". Only
+  before a delta is committed. HTTP-dates go through `parse_http_date()` (`month.abb`, UTC);
+  unparsable values fall back to backoff. A 3xx is `gptr_error_redirect`, never followed and never
+  retried (IC-64). Never `set.seed()`, `sample()` or `runif()`.
+- **Conditions** (04 section 2.2). Created, not signalled, and handed to `on_fail(cnd)`:
+  `gptr_error_auth`, `gptr_error_rate_limit` (+ `retry_after`), `gptr_error_spend_cap`,
+  `gptr_error_retry_after` (+ `retry_after`), `gptr_error_overloaded`, `gptr_error_network` (+
+  `curl_code`), `gptr_error_redirect` (+ `location_origin`), each with parent `gptr_error_provider`
+  (fields `provider`, `model`, `status`, `request_id`, `error_type`, `session`);
+  `gptr_error_timeout_first_byte`, `gptr_error_timeout_idle`, `gptr_error_timeout_connect` (parent
+  `gptr_error_timeout`; fields `seconds`, `provider`). Signalled: `gptr_error_timeout` (`seconds`,
+  `what`) by `write_all()`, `gptr_error_spawn` (`command`) and `gptr_error_invalid_argument` (`arg`,
+  `expected`).
+- **SSE** (04 section 8.3, IC-64): LF, CRLF and lone CR line ends (a CR at the end of a chunk held
+  until the next chunk), a leading BOM stripped, comment lines dropped, `data:` lines joined with
+  `"\n"`, the **last** `event:` field wins, `id` and `retry` parsed, boundaries found with
+  `grepRaw()` on raw bytes, the incomplete tail carried, each complete event decoded with
+  `rawToChar()` and marked UTF-8, a final unterminated event flushed (`flush()` returns that one
+  event, or `NULL`). Cost target: 20,000 deltas in under 1 s of CPU.
+- **Processes** (04 section 7.4, IC-59, IC-60): `processx::process$new(..., encoding = "UTF-8")`;
+  argv, wd and env through `os_bytes()`; R children only through `rscript_path()`;
+  `supervise = supervise_default()`; `.cmd`/`.bat` run as `cmd.exe /d /c call <shim> args` refusing
+  `% ^ & | < > " !` CR LF in any argument; never `processx::run()`; stdin written non-blockingly
+  (`write_input()` writes at most about 8 KB per call) and drained by the reactor within
+  `gptr.stdin_timeout`; tree markers under `R_user_dir("gptr", "cache")/procs/` and a mandatory
+  orphan sweep at load; `kill_all()` = interrupt, wait `grace`, `kill_tree()`, Windows
+  `taskkill /F /T /PID`, `$kill()`; every child-process pool capped at 2 under `check_running()`; a
+  requested stop maps a later exit to `stopped` or `aborted`, never `error`; liveness only through
+  `pid_alive()` (`ps::ps_is_running(ps::ps_handle(pid))` plus the creation time), never
+  `tools::pskill()`.
+- **Job table** (04 sections 5.12, 6.5, IC-12, IC-36): kinds `session`, `bg`, `artifact`,
+  `mcp_serve`, `worker`, `cli`; `gptr_jobs(kill = FALSE)` returns
+  `c("gptr_jobs", "gptr_listing", "data.frame")` with columns `id`, `kind`, `name`, `pid`, `status`,
+  `started`. It is this plan's only export.
+- **Ids and records** (IC-20): transfer, task, timer and FIFO ids are `t<integer>`; request ids
+  `q` + 12 hex (`id_new("q", 12L)`). Wire-log lines carry `ts`, `request_id`, `provider`, `model`,
+  `url` (origin and path), `status`, `bytes`, `seconds`, `event`, never headers or bodies, redacted
+  with `redact(profile = "persist")`.
+- **Tests** (conventions section 7): every test that starts a process calls `skip_on_cran()` (P01's
+  `local_mock_server()` skips on CRAN itself); children start only through `rscript_path()`;
+  `pkgload::load_all()` appears only inside generated child-script text; no wall-clock assertion is
+  tighter than 5 s (conventions section 7) except the targets the spec itself names: INFRA-01 (first
+  delta within 0.35 s, gaps under 0.35 s, six streams within 10% of the slowest) and INFRA-23 (under
+  1 s of CPU).
 
 ## File Structure
 
@@ -62,9 +160,27 @@ Tasks, in order (each leaves the package consistent and its tests green):
 11. HTTP transfers on the reactor
 12. Bounded retries on the reactor
 
-How to read the test commands: red-phase commands call `testthat::set_max_fails(Inf)` first so that testthat prints its summary line instead of stopping after ten failures. The expected summary lines were measured (re-measured in both review rounds of 2026-10-01, task by task, red and green) on macOS (R 4.4.3, testthat 3.3.2, curl 7.0.0, processx 3.8.6, ps 1.9.3, later 1.4.8, with the `de_DE.UTF-8` locale installed) in a scratch package that holds this plan's code exactly as written below, P01's own sources as P01's plan writes them (`R/aaa-state.R`, `R/utils-conditions.R`, `R/utils-encoding.R`, `R/utils-options.R`, `R/utils-paths.R`, `R/utils-hash.R`, `R/utils-text.R`, `R/utils-tokens.R`, `R/json-encode.R`, `R/zzz.R`, `tests/testthat/setup.R`, `helper-fake.R`, `helper-mock-server.R` and `fixtures/mock_server.R`), and stand-ins only for the five P02/P03 functions this plan calls (`registry_get()`, `registry_diagnostic()`, `secret_register()`, `secret_value()`, `redact()`, shaped as 04 sections 7.2-7.3). Tests that use `local_mock_server()` rely on P01's server answering every path under its returned `url` (which carries the per-run token), so request URLs are `paste0(srv$url, "/v1/messages")`.
+How to read the test commands: red-phase commands call `testthat::set_max_fails(Inf)` first so that
+testthat prints its summary line instead of stopping after ten failures. The expected summary lines
+were measured (re-measured in both review rounds of 2026-10-01, task by task, red and green) on
+macOS (R 4.4.3, testthat 3.3.2, curl 7.0.0, processx 3.8.6, ps 1.9.3, later 1.4.8, with the
+`de_DE.UTF-8` locale installed) in a scratch package that holds this plan's code exactly as written
+below, P01's own sources as P01's plan writes them (`R/aaa-state.R`, `R/utils-conditions.R`,
+`R/utils-encoding.R`, `R/utils-options.R`, `R/utils-paths.R`, `R/utils-hash.R`, `R/utils-text.R`,
+`R/utils-tokens.R`, `R/json-encode.R`, `R/zzz.R`, `tests/testthat/setup.R`, `helper-fake.R`,
+`helper-mock-server.R` and `fixtures/mock_server.R`), and stand-ins only for the five P02/P03
+functions this plan calls (`registry_get()`, `registry_diagnostic()`, `secret_register()`,
+`secret_value()`, `redact()`, shaped as 04 sections 7.2-7.3). Tests that use `local_mock_server()`
+rely on P01's server answering every path under its returned `url` (which carries the per-run
+token), so request URLs are `paste0(srv$url, "/v1/messages")`.
 
-Later tasks change earlier code in two ways only: "Append to the end of `R/<file>.R`" adds new functions after the existing ones, and "replace the definitions of `f()` and `g()` (each with its roxygen block)" swaps a whole function for the version shown, which always has the same name and arguments. `R/http-reactor.R` is built this way: Task 6 writes the core with small versions of `reactor_io()`, `reactor_wait_ms()`, `reactor_cancel_id()` and `reactor_shutdown()` that know only timers, tasks and the FIFO; Task 8 replaces them with versions that also poll child pipes, and Task 11 with the final versions that also drive curl.
+Later tasks change earlier code in two ways only: "Append to the end of `R/<file>.R`" adds new
+functions after the existing ones, and "replace the definitions of `f()` and `g()` (each with its
+roxygen block)" swaps a whole function for the version shown, which always has the same name and
+arguments. `R/http-reactor.R` is built this way: Task 6 writes the core with small versions of
+`reactor_io()`, `reactor_wait_ms()`, `reactor_cancel_id()` and `reactor_shutdown()` that know only
+timers, tasks and the FIFO; Task 8 replaces them with versions that also poll child pipes, and Task
+11 with the final versions that also drive curl.
 
 ### Task 1: SSE and NDJSON splitters
 
@@ -74,9 +190,21 @@ Later tasks change earlier code in two ways only: "Append to the end of `R/<file
 
 **Interfaces:**
 - Consumes: `json_decode(text)` (P01 `json-encode.R`; tests only).
-- Produces (04 §8.3; consumers P05 `provider_stream()`, P12, P13, P18, P20): `sse_splitter()` -> environment with `push(raw)` returning a list of events `list(event = chr(1) | NULL, data = chr(1), id = chr(1) | NULL, retry = num(1) | NULL)` and `flush()` returning the final unterminated event (one event list) or `NULL` (P05's `provider_stream()` pushes a non-`NULL` result as one more event); `ndjson_splitter()` -> environment with `push(raw)` returning chr of complete non-empty lines (UTF-8 marked, trailing CR removed) and `flush()`.
+- Produces (04 section 8.3; consumers P05 `provider_stream()`, P12, P13, P18, P20):
+  `sse_splitter()` -> environment with `push(raw)` returning a list of events
+  `list(event = chr(1) | NULL, data = chr(1), id = chr(1) | NULL, retry = num(1) | NULL)` and
+  `flush()` returning the final unterminated event (one event list) or `NULL` (P05's
+  `provider_stream()` pushes a non-`NULL` result as one more event); `ndjson_splitter()` ->
+  environment with `push(raw)` returning chr of complete non-empty lines (UTF-8 marked, trailing CR
+  removed) and `flush()`.
 
-The splitter adapts report 21 §2.6 (the vectorised `sse_new_r2()` of its verification log) with the IC-64 fixes: line ends normalised on raw bytes (CRLF and lone CR become LF; a CR in the last byte of a chunk is held because it may be the first half of a CRLF pair), a BOM stripped even when it is split across chunks, and a general SSE-specification path for blocks with comments, `id`, `retry`, repeated fields or colon-less fields. Two fast paths cover what providers actually send (one event per block; `event:` plus `data:` lines only), which is what keeps 20,000 deltas under 1 s of CPU.
+The splitter adapts report 21 section 2.6 (the vectorised `sse_new_r2()` of its verification log)
+with the IC-64 fixes: line ends normalised on raw bytes (CRLF and lone CR become LF; a CR in the
+last byte of a chunk is held because it may be the first half of a CRLF pair), a BOM stripped even
+when it is split across chunks, and a general SSE-specification path for blocks with comments, `id`,
+`retry`, repeated fields or colon-less fields. Two fast paths cover what providers actually send
+(one event per block; `event:` plus `data:` lines only), which is what keeps 20,000 deltas under 1 s
+of CPU.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -229,7 +357,8 @@ test_that("ndjson_splitter returns complete lines, strips CR and keeps the tail 
 
 Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-sse")'`
 
-Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`; every failure is `Error in sse_splitter(): could not find function "sse_splitter"` (one is `"ndjson_splitter"`).
+Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`; every failure is
+`Error in sse_splitter(): could not find function "sse_splitter"` (one is `"ndjson_splitter"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -551,12 +680,25 @@ git commit -m "feat(http): add byte-level SSE and NDJSON splitters"
 
 **Files:**
 - Create: `R/http-request.R`
-- Test: `tests/testthat/test-http-request.R` (create; Task 11 appends the INFRA-05 and redirect tests)
+- Test: `tests/testthat/test-http-request.R` (create; Task 11 appends the INFRA-05 and redirect
+  tests)
 
 **Interfaces:**
 - Consumes: `secret_value(handle, origin)` (P03 `auth-secrets.R`: `chr(1)`, `gptr_error_untrusted` for another origin; its only callers are this file and `auth-childenv.R`); `as_utf8(x)`, `gptr_opt(name)`, `` `%||%` `` (P01); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` (P03), `local_gptr_options(..., .env = parent.frame())` (P01 `helper-fake.R`).
-- Produces (internal, used by the reactor; `url_origin()` also by later plans that compare origins): `url_origin(url)` -> `chr(1)` `scheme://host[:port]` lower-cased with default ports dropped, or `NA`; `url_for_log(url)` -> origin and path only; `http_headers(headers, origin)` -> named list of chr(1); `http_timeouts(spec)` -> `list(connect, first_byte, idle)`; `http_timeout_check(t_start, t_first, t_last, timeouts, now)` -> `NULL` or `list(class, seconds, what)`; `http_timeout_next(t_start, t_first, t_last, timeouts)`; `http_handle(spec)` -> `curl_handle`.
-- Request spec fields read (04 §8.1): `url`, `method` (default POST with a body, else GET), `headers`, `body` (chr(1) UTF-8 text or raw), and the optional `connect_timeout`, `first_byte_timeout`, `idle_timeout` (seconds; P05's `provider_stream()` copies them from the adapter `opts`, which default to the options, into every spec; a spec without them uses the options). A header value is chr(1), a `gptr_secret` handle, or an unnamed list of chr(1) pieces and handles joined in order (`list("Bearer ", handle)`), so bearer credentials stay handles until this file.
+- Produces (internal, used by the reactor; `url_origin()` also by later plans that compare origins):
+  `url_origin(url)` -> `chr(1)` `scheme://host[:port]` lower-cased with default ports dropped, or
+  `NA`; `url_for_log(url)` -> origin and path only; `http_headers(headers, origin)` -> named list of
+  chr(1); `http_timeouts(spec)` -> `list(connect, first_byte, idle)`;
+  `http_timeout_check(t_start, t_first, t_last, timeouts, now)` -> `NULL` or
+  `list(class, seconds, what)`; `http_timeout_next(t_start, t_first, t_last, timeouts)`;
+  `http_handle(spec)` -> `curl_handle`.
+- Request spec fields read (04 section 8.1): `url`, `method` (default POST with a body, else GET),
+  `headers`, `body` (chr(1) UTF-8 text or raw), and the optional `connect_timeout`,
+  `first_byte_timeout`, `idle_timeout` (seconds; P05's `provider_stream()` copies them from the
+  adapter `opts`, which default to the options, into every spec; a spec without them uses the
+  options). A header value is chr(1), a `gptr_secret` handle, or an unnamed list of chr(1) pieces
+  and handles joined in order (`list("Bearer ", handle)`), so bearer credentials stay handles until
+  this file.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -609,7 +751,8 @@ test_that("layered timeouts: first byte, then idle; no total timeout", {
 
 Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-request")'`
 
-Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 0 ]` with `could not find function "url_origin"`, `"http_headers"` and `"http_timeouts"`.
+Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 0 ]` with `could not find function "url_origin"`,
+`"http_headers"` and `"http_timeouts"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -772,10 +915,29 @@ git commit -m "feat(http): build curl handles from request specs with layered ti
 - Test: `tests/testthat/test-http-retry.R` (create; Tasks 9 and 12 append)
 
 **Interfaces:**
-- Consumes: `raw_to_utf8(x, fallback = "CP1252")`, `as_utf8(x)`, `json_decode(text)`, `gptr_opt(name)`, `gptr_abort(message, class, ..., .data = NULL, call = NULL)` (P01); `redact(x, profile = "persist")` (P03); `url_origin(url)` (Task 2).
-- Produces: `retry_classify(status, headers, body = NULL, curl_error = NULL)` -> `list(retry = lgl(1), delay = num(1) | NULL, class = chr, retry_after = num(1) | NULL, message = chr(1))` (04 §8.2; `class` holds the `gptr_abort()` suffixes, most specific first); `parse_http_date(x)` -> seconds since the epoch or `NA`; internal `retry_after_seconds(headers)`, `retry_backoff(attempt)`, `transport_error(message, class, ...)` (a classed, unsignalled `gptr_error_*` condition built by `gptr_abort()`; P12 and P13 may use it for their own "created, not signalled" failures), `retry_headers()`, `retry_header()`, `retry_body_error()` (the `{"error": ...}` bodies of the native providers and the FastAPI `detail` bodies of the System One API, so a System 1 HTTP failure carries the service's message; P13 ambiguity 17), `retry_detail_entry()`, `parse_rfc3339()`, `parse_duration()`.
+- Consumes: `raw_to_utf8(x, fallback = "CP1252")`, `as_utf8(x)`, `json_decode(text)`,
+  `gptr_opt(name)`, `gptr_abort(message, class, ..., .data = NULL, call = NULL)` (P01);
+  `redact(x, profile = "persist")` (P03); `url_origin(url)` (Task 2).
+- Produces: `retry_classify(status, headers, body = NULL, curl_error = NULL)` ->
+  `list(retry = lgl(1), delay = num(1) | NULL, class = chr, retry_after = num(1) | NULL, message = chr(1))`
+  (04 section 8.2; `class` holds the `gptr_abort()` suffixes, most specific first);
+  `parse_http_date(x)` -> seconds since the epoch or `NA`; internal `retry_after_seconds(headers)`,
+  `retry_backoff(attempt)`, `transport_error(message, class, ...)` (a classed, unsignalled
+  `gptr_error_*` condition built by `gptr_abort()`; P12 and P13 may use it for their own "created,
+  not signalled" failures), `retry_headers()`, `retry_header()`, `retry_body_error()` (the
+  `{"error": ...}` bodies of the native providers and the FastAPI `detail` bodies of the System One
+  API, so a System 1 HTTP failure carries the service's message; P13 ambiguity 17),
+  `retry_detail_entry()`, `parse_rfc3339()`, `parse_duration()`.
 
-Rules come from report 07 §2.11 (the Anthropic error table and the spend-cap 429), report 02 §5.3 (`provider_retry_delay_ms()`) and the report 02 fact-check that `strptime()` follows `LC_TIME`, hence the `month.abb` parser. A redirect message names only the Location origin, never its path or query (IC-64). Non-2xx bodies never reach an adapter's parser (P13's `classify$parse` included), so `retry_body_error()` also reads the FastAPI `detail` bodies of the TypeSafe System One API (report 04a: `{"detail": {"error_type", "message"}}`, the 422 `{"detail": [{"loc", "msg"}]}` and `{"detail": "text"}`) and a top-level `{"message", "error_type"}`: a System 1 HTTP failure then carries the service's own explanation in `message` (P13 ambiguity 17). The classification itself depends only on the status, the headers and the spend-cap code.
+Rules come from report 07 section 2.11 (the Anthropic error table and the spend-cap 429), report 02
+section 5.3 (`provider_retry_delay_ms()`) and the report 02 fact-check that `strptime()` follows
+`LC_TIME`, hence the `month.abb` parser. A redirect message names only the Location origin, never
+its path or query (IC-64). Non-2xx bodies never reach an adapter's parser (P13's `classify$parse`
+included), so `retry_body_error()` also reads the FastAPI `detail` bodies of the TypeSafe System One
+API (report 04a: `{"detail": {"error_type", "message"}}`, the 422 `{"detail": [{"loc", "msg"}]}` and
+`{"detail": "text"}`) and a top-level `{"message", "error_type"}`: a System 1 HTTP failure then
+carries the service's own explanation in `message` (P13 ambiguity 17). The classification itself
+depends only on the status, the headers and the spend-cap code.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -919,7 +1081,9 @@ test_that("RFC 3339 and duration resets parse without the locale", {
 
 Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-retry")'`
 
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]` with `could not find function "parse_http_date"`, `"retry_after_seconds"`, `"retry_classify"`, `"transport_error"`, `"parse_rfc3339"` and `object 'retry_backoff' not found`.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]` with `could not find function "parse_http_date"`,
+`"retry_after_seconds"`, `"retry_classify"`, `"transport_error"`, `"parse_rfc3339"` and
+`object 'retry_backoff' not found`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1167,7 +1331,8 @@ transport_error = function(message, class, ...) {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "http-retry")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 63 ]` (where the `de_DE.UTF-8` locale is not installed: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 60 ]`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 63 ]` (where the `de_DE.UTF-8` locale is not installed:
+`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 60 ]`).
 
 - [ ] **Step 5: Commit**
 
@@ -1183,10 +1348,30 @@ git commit -m "feat(http): classify transport failures, parse HTTP dates, bounde
 - Test: `tests/testthat/test-proc-supervise.R` (create; Task 5 appends)
 
 **Interfaces:**
-- Consumes: `the`, `on_load(expr)` (P01 `aaa-state.R`); `gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)`, `write_atomic(path, content)`, `read_utf8(path)`, `id_new(prefix = "", n = 10L)`, `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `check_running()` (P01); tests: `rscript_path()` (P01).
-- Produces: `pid_alive(pid, create_time = NULL)` -> `lgl(1)` (04 §7.4; consumers P06 locks, P15, P23); `kill_all(p, grace = 2)` -> `invisible(lgl(1))` (P18, P19, P20, P22, P23); internal `proc_create_time(pid)`, `proc_self()`, `proc_dir(create = FALSE)`, `proc_marker_new()`, `proc_mark(p, marker, command)`, `proc_record(pid)`, `proc_unmark(marker)`, `proc_tree(marker)`, `proc_release(p)`, `proc_prune()`, `proc_sweep()` (run at every load through `on_load()`), `proc_pool_cap(n)` (the IC-60 cap of 2 under `check_running()`, for the CLI, MCP stdio, bridge and worker pools of P18-P22), `proc_is_windows()`, `jobs_env()`.
+- Consumes: `the`, `on_load(expr)` (P01 `aaa-state.R`);
+  `gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)`,
+  `write_atomic(path, content)`, `read_utf8(path)`, `id_new(prefix = "", n = 10L)`,
+  `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `check_running()` (P01); tests:
+  `rscript_path()` (P01).
+- Produces: `pid_alive(pid, create_time = NULL)` -> `lgl(1)` (04 section 7.4; consumers P06 locks,
+  P15, P23); `kill_all(p, grace = 2)` -> `invisible(lgl(1))` (P18, P19, P20, P22, P23); internal
+  `proc_create_time(pid)`, `proc_self()`, `proc_dir(create = FALSE)`, `proc_marker_new()`,
+  `proc_mark(p, marker, command)`, `proc_record(pid)`, `proc_unmark(marker)`, `proc_tree(marker)`,
+  `proc_release(p)`, `proc_prune()`, `proc_sweep()` (run at every load through `on_load()`),
+  `proc_pool_cap(n)` (the IC-60 cap of 2 under `check_running()`, for the CLI, MCP stdio, bridge and
+  worker pools of P18-P22), `proc_is_windows()`, `jobs_env()`.
 
-The kill recipe is report G5's engine with its fact-check items 3-4: `kill_tree()` misses SIP-protected binaries on macOS (their environment cannot be read), `$kill()` signals the whole process group (processx starts children with `setsid()`), and on Windows `taskkill /F /T /PID` must run while the process still lives. SIGTERM skips finalizers (verified for IC-60) and grandchildren survive a SIGKILL of their parent (report 15 §2.11), so each child carries a `GPTR_PROC_<16 hex>=YES` environment marker recorded in `R_user_dir("gptr", "cache")/procs/<marker>.json`; the next load kills the trees whose recorded parent (pid and creation time) is gone, and also the recorded child itself when its recorded creation time is known and still matches, which covers binaries whose environment ps cannot read; a record without a creation time is never killed by pid (the pid may have been reused by an unrelated process).
+The kill recipe is report G5's engine with its fact-check items 3-4: `kill_tree()` misses
+SIP-protected binaries on macOS (their environment cannot be read), `$kill()` signals the whole
+process group (processx starts children with `setsid()`), and on Windows `taskkill /F /T /PID` must
+run while the process still lives. SIGTERM skips finalizers (verified for IC-60) and grandchildren
+survive a SIGKILL of their parent (report 15 section 2.11), so each child carries a
+`GPTR_PROC_<16 hex>=YES` environment marker recorded in
+`R_user_dir("gptr", "cache")/procs/<marker>.json`; the next load kills the trees whose recorded
+parent (pid and creation time) is gone, and also the recorded child itself when its recorded
+creation time is known and still matches, which covers binaries whose environment ps cannot read; a
+record without a creation time is never killed by pid (the pid may have been reused by an unrelated
+process).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1311,9 +1496,12 @@ test_that("proc_sweep() never kills by pid when the recorded creation time is un
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "proc-supervise")'`
+Run:
+`Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "proc-supervise")'`
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 1 ]` with `could not find function "proc_create_time"`, `"proc_pool_cap"`, `"proc_marker_new"`, `"kill_all"` and `"proc_self"` (the two sweep tests); the one pass is the grandchild check of "kill_all() leaves no descendant".
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 1 ]` with `could not find function "proc_create_time"`,
+`"proc_pool_cap"`, `"proc_marker_new"`, `"kill_all"` and `"proc_self"` (the two sweep tests); the
+one pass is the grandchild check of "kill_all() leaves no descendant".
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1582,8 +1770,21 @@ git commit -m "feat(proc): add pid_alive(), tree markers, kill_all() and the orp
 - Generated: `NAMESPACE`, `man/gptr_jobs.Rd`
 
 **Interfaces:**
-- Consumes: `check_choice(x, choices, arg)`, `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_function(x, arg, null = FALSE, args = NULL)`, `check_flag(x, arg, null = FALSE)`, `new_listing(df, class, footer = NULL)`, `on_load(expr)`, `on_unload(fun)` (P01); `jobs_env()`, `proc_unmark()` (Task 4).
-- Produces (04 §6.5, §7.4, IC-12, IC-36): `job_add(kind, id, name, pid = NA, stop, status = function() "running")` -> `invisible(id)`; `job_remove(id)` -> `invisible(lgl(1))`; `job_list(kind = NULL)` -> df `id`, `kind`, `name`, `pid`, `status`, `started` (built by the internal `job_frame(recs)`, which `gptr_jobs(kill = TRUE)` also uses, so a job whose stop removes its own row, as P21's sessions do, is still reported); exported `gptr_jobs(kill = FALSE)` -> `gptr_jobs` listing (with `kill = TRUE`, invisibly, the table of what was stopped). Consumers: P18 (`mcp_serve`), P19 (`worker`), P20 (`cli`), P21 (`session` rows, status `running`/`waiting`), P22 (`bg`), P23 (`artifact`). The stored `stop` sets `stop_requested` first, so an exit after a requested stop reads `stopped` (`bg`, `artifact`, `mcp_serve`) or `aborted` (`session`, `worker`, `cli`), never `error` (IC-60); a job whose own status is still `running` or `waiting` keeps it.
+- Consumes: `check_choice(x, choices, arg)`, `check_string(x, arg, null = FALSE, empty = FALSE)`,
+  `check_function(x, arg, null = FALSE, args = NULL)`, `check_flag(x, arg, null = FALSE)`,
+  `new_listing(df, class, footer = NULL)`, `on_load(expr)`, `on_unload(fun)` (P01); `jobs_env()`,
+  `proc_unmark()` (Task 4).
+- Produces (04 sections 6.5, 7.4, IC-12, IC-36):
+  `job_add(kind, id, name, pid = NA, stop, status = function() "running")` -> `invisible(id)`;
+  `job_remove(id)` -> `invisible(lgl(1))`; `job_list(kind = NULL)` -> df `id`, `kind`, `name`,
+  `pid`, `status`, `started` (built by the internal `job_frame(recs)`, which
+  `gptr_jobs(kill = TRUE)` also uses, so a job whose stop removes its own row, as P21's sessions do,
+  is still reported); exported `gptr_jobs(kill = FALSE)` -> `gptr_jobs` listing (with `kill = TRUE`,
+  invisibly, the table of what was stopped). Consumers: P18 (`mcp_serve`), P19 (`worker`), P20
+  (`cli`), P21 (`session` rows, status `running`/`waiting`), P22 (`bg`), P23 (`artifact`). The
+  stored `stop` sets `stop_requested` first, so an exit after a requested stop reads `stopped`
+  (`bg`, `artifact`, `mcp_serve`) or `aborted` (`session`, `worker`, `cli`), never `error` (IC-60);
+  a job whose own status is still `running` or `waiting` keeps it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1667,9 +1868,11 @@ test_that("proc_unload() stops every job", {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "proc-supervise")'`
+Run:
+`Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "proc-supervise")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 30 ]` with `could not find function "job_add"` (four tests) and `could not find function "gptr_jobs"`.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 30 ]` with `could not find function "job_add"` (four
+tests) and `could not find function "gptr_jobs"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1831,7 +2034,8 @@ Then regenerate the documentation:
 
 Run: `Rscript --vanilla -e 'devtools::document()'`
 
-Expected: `Writing 'NAMESPACE'` and `Writing 'gptr_jobs.Rd'`; `NAMESPACE` now contains `export(gptr_jobs)`.
+Expected: `Writing 'NAMESPACE'` and `Writing 'gptr_jobs.Rd'`; `NAMESPACE` now contains
+`export(gptr_jobs)`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1854,10 +2058,32 @@ git commit -m "feat(proc): add the job table and gptr_jobs()"
 
 **Interfaces:**
 - Consumes: `the`, `on_load(expr)`, `on_unload(fun)`, `` `%||%` `` (P01 `aaa-state.R`); `check_number()`, `check_function()`, `check_strings()` (P01); `registry_diagnostic(source, event, class, message)` (P02 `ext-registry.R`).
-- Produces (04 §8.2): `reactor_get()` -> the `gptr_reactor` environment; `reactor_now()` -> `num(1)` monotonic seconds; `reactor_timer(at, fn, run = NULL)` -> id; `reactor_task(fn, run = NULL)` -> id (`fn()` returning `FALSE` ends the task; a number delays the next call by that many seconds; a task whose call is still running is never called again by a pump nested inside it); `reactor_enqueue_tool(run, fn)` -> `invisible(id)`; `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)` -> `invisible(lgl(1))`; `reactor_cancel(ids)` -> `invisible(int(1))`; `reactor_run_add(run)`, `reactor_run_remove(run)`. Internal helpers other plans may use: `reactor_depth()` (pump depth, 0 outside), `reactor_tool_run()` (the run id whose FIFO tool executes innermost, or `NULL`; P06 may build `run_current()` on it), `reactor_allow_runs()` (`NULL` outside a pump and in the outermost pump, else the innermost nested pump's `allow_runs`: P18's MCP handler refuses requests of other runs with `-32002`, IC-57), `reactor_served(run, served = TRUE)` (P18/P20 mark a run that waits for a CLI child served by gptr's MCP server, so a nested pump for it keeps calling `later::run_now(0)`; IC-57), `later_run_now()`. A run is given as a `gptr_run` environment (fields `id`, `session`), a list with `id`, or an id string.
-- Later tasks replace four small functions of this file with fuller versions: `reactor_io()` and `reactor_wait_ms()` (Tasks 8 and 11), `reactor_cancel_id()` and `reactor_shutdown()` (Tasks 8 and 11).
+- Produces (04 section 8.2): `reactor_get()` -> the `gptr_reactor` environment; `reactor_now()` ->
+  `num(1)` monotonic seconds; `reactor_timer(at, fn, run = NULL)` -> id;
+  `reactor_task(fn, run = NULL)` -> id (`fn()` returning `FALSE` ends the task; a number delays the
+  next call by that many seconds; a task whose call is still running is never called again by a pump
+  nested inside it); `reactor_enqueue_tool(run, fn)` -> `invisible(id)`;
+  `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)` ->
+  `invisible(lgl(1))`; `reactor_cancel(ids)` -> `invisible(int(1))`; `reactor_run_add(run)`,
+  `reactor_run_remove(run)`. Internal helpers other plans may use: `reactor_depth()` (pump depth, 0
+  outside), `reactor_tool_run()` (the run id whose FIFO tool executes innermost, or `NULL`; P06 may
+  build `run_current()` on it), `reactor_allow_runs()` (`NULL` outside a pump and in the outermost
+  pump, else the innermost nested pump's `allow_runs`: P18's MCP handler refuses requests of other
+  runs with `-32002`, IC-57), `reactor_served(run, served = TRUE)` (P18/P20 mark a run that waits
+  for a CLI child served by gptr's MCP server, so a nested pump for it keeps calling
+  `later::run_now(0)`; IC-57), `later_run_now()`. A run is given as a `gptr_run` environment (fields
+  `id`, `session`), a list with `id`, or an id string.
+- Later tasks replace four small functions of this file with fuller versions: `reactor_io()` and
+  `reactor_wait_ms()` (Tasks 8 and 11), `reactor_cancel_id()` and `reactor_shutdown()` (Tasks 8 and
+  11).
 
-Design: report 15 §2.3-2.4 and §4.2 (one reactor, cooperative state machines, R tools one at a time from a FIFO) with IC-57. `reactor_pump()` must stay an ordinary top-level function: P21's `bg_reactor_busy()` finds it on the call stack with `identical(sys.function(i), reactor_pump)`. The layering rule forbids an L0 file to call P06's `run_current()`, so the `allow_runs` default comes from the reactor's own depth: every tool (FIFO or not) executes inside a pump, so `run_current()` is non-`NULL` only at depth >= 1, and a pump started while another pump is on the stack defaults to `character()` (it runs FIFO tools only of the runs it names).
+Design: report 15 sections 2.3-2.4 and 4.2 (one reactor, cooperative state machines, R tools one at
+a time from a FIFO) with IC-57. `reactor_pump()` must stay an ordinary top-level function: P21's
+`bg_reactor_busy()` finds it on the call stack with `identical(sys.function(i), reactor_pump)`. The
+layering rule forbids an L0 file to call P06's `run_current()`, so the `allow_runs` default comes
+from the reactor's own depth: every tool (FIFO or not) executes inside a pump, so `run_current()` is
+non-`NULL` only at depth >= 1, and a pump started while another pump is on the stack defaults to
+`character()` (it runs FIFO tools only of the runs it names).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2104,7 +2330,10 @@ test_that("reactor_allow_runs() is NULL in the outermost pump and the nested run
 
 Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-reactor")'`
 
-Expected: `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 0 ]` with `could not find function "reactor_get"` (and `"reactor_now"`, `"reactor_task"`, `"reactor_timer"`, `"reactor_enqueue_tool"`, `"reactor_run_add"`, `"reactor_pump"`, `"reactor_allow_runs"`) and, for the two tests that mock it, `Can't find binding for later_run_now`.
+Expected: `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 0 ]` with `could not find function "reactor_get"` (and
+`"reactor_now"`, `"reactor_task"`, `"reactor_timer"`, `"reactor_enqueue_tool"`, `"reactor_run_add"`,
+`"reactor_pump"`, `"reactor_allow_runs"`) and, for the two tests that mock it,
+`Can't find binding for later_run_now`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2553,10 +2782,30 @@ git commit -m "feat(http): add the process reactor with timers, tasks, tool FIFO
 - Test: `tests/testthat/test-proc-spawn.R` (create; Task 8 appends)
 
 **Interfaces:**
-- Consumes: `check_string()`, `check_strings()`, `check_flag()`, `check_number()`, `check_choice()`, `gptr_abort()`, `supervise_default()`, `os_bytes(x)`, `as_utf8(x)`, `raw_to_utf8(x, fallback = "CP1252")`, `msg_verbatim(x, stream = c("stdout", "stderr"))` (P01); `proc_marker_new()`, `proc_mark()`, `kill_all()`, `proc_is_windows()` (Task 4); `reactor_now()` (Task 6); tests: `rscript_path()`, `read_utf8()`, `json_decode()` (P01), `proc_record()`, `proc_dir()`, `proc_tree()`, `proc_sweep()`, `pid_alive()` (Task 4).
-- Produces (04 §7.4): `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "|", stderr = "|", cleanup_tree = TRUE, supervise = supervise_default())` -> `processx::process` (consumers P18, P19, P20, P22); `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` -> `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))` (P20, P22); `shell_resolve(cmd)` -> `list(command, args)` (P22); `line_reader(p, stream = "stdout", max_line = 16 * 1024^2)` -> environment with `read()`, `partial()` and `eof()` (P18, P19, P20). Internal: `proc_resolve(command, args)` -> `list(command, args, batch)`, `shell_resolve_os(cmd, windows, which, getenv, exists)` (the injectable core, so the Windows rules are tested on every OS), `shell_ps_encode(cmd)`.
+- Consumes: `check_string()`, `check_strings()`, `check_flag()`, `check_number()`, `check_choice()`,
+  `gptr_abort()`, `supervise_default()`, `os_bytes(x)`, `as_utf8(x)`,
+  `raw_to_utf8(x, fallback = "CP1252")`, `msg_verbatim(x, stream = c("stdout", "stderr"))` (P01);
+  `proc_marker_new()`, `proc_mark()`, `kill_all()`, `proc_is_windows()` (Task 4); `reactor_now()`
+  (Task 6); tests: `rscript_path()`, `read_utf8()`, `json_decode()` (P01), `proc_record()`,
+  `proc_dir()`, `proc_tree()`, `proc_sweep()`, `pid_alive()` (Task 4).
+- Produces (04 section 7.4):
+  `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "|", stderr = "|", cleanup_tree = TRUE, supervise = supervise_default())` ->
+  `processx::process` (consumers P18, P19, P20, P22);
+  `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` ->
+  `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))`
+  (P20, P22); `shell_resolve(cmd)` -> `list(command, args)` (P22);
+  `line_reader(p, stream = "stdout", max_line = 16 * 1024^2)` -> environment with `read()`,
+  `partial()` and `eof()` (P18, P19, P20). Internal: `proc_resolve(command, args)` ->
+  `list(command, args, batch)`, `shell_resolve_os(cmd, windows, which, getenv, exists)` (the
+  injectable core, so the Windows rules are tested on every OS), `shell_ps_encode(cmd)`.
 
-Source: report G5's process engine and its fact-check items 1-4, 16-18 and 24 (processx's `run()` corrupts non-ASCII output in a C locale through `cat()` and aborts on interrupt; PowerShell `-EncodedCommand` takes base64 of UTF-16LE and needs `exit $LASTEXITCODE`; BatBadBut is CVE-2024-24576 and CVE-2024-27980; the Windows command line holds 32,767 characters). The code-page fallback applies to redirected files (`proc_run()`): a process created with `encoding = "UTF-8"` has invalid UTF-8 bytes of its piped output dropped by processx itself (verified with processx 3.8.6), so output that may be in a legacy code page must go through files.
+Source: report G5's process engine and its fact-check items 1-4, 16-18 and 24 (processx's `run()`
+corrupts non-ASCII output in a C locale through `cat()` and aborts on interrupt; PowerShell
+`-EncodedCommand` takes base64 of UTF-16LE and needs `exit $LASTEXITCODE`; BatBadBut is
+CVE-2024-24576 and CVE-2024-27980; the Windows command line holds 32,767 characters). The code-page
+fallback applies to redirected files (`proc_run()`): a process created with `encoding = "UTF-8"` has
+invalid UTF-8 bytes of its piped output dropped by processx itself (verified with processx 3.8.6),
+so output that may be in a legacy code page must go through files.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3084,7 +3333,8 @@ line_reader = function(p, stream = "stdout", max_line = 16 * 1024^2) {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "proc-spawn")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 53 ]` (on Windows the SIGTERM test is skipped: `SKIP 1`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 53 ]` (on Windows the SIGTERM test is skipped:
+`SKIP 1`).
 
 - [ ] **Step 5: Commit**
 
@@ -3101,10 +3351,23 @@ git commit -m "feat(proc): add proc_spawn(), proc_run(), shell_resolve() and lin
 - Test: `tests/testthat/test-http-reactor.R` (append), `tests/testthat/test-proc-spawn.R` (append)
 
 **Interfaces:**
-- Consumes: `line_reader()` (Task 7), `kill_all()`, `proc_release()` (Task 4), `registry_diagnostic()` (P02), `gptr_opt()`, `as_utf8()`, `gptr_abort()` (P01); tests: `local_gptr_options()` (P01).
-- Produces (04 §7.4, §8.2, IC-60): `reactor_proc(proc, on_line, on_exit, run = NULL, stream = "stdout", on_stderr = NULL)` -> watcher id (`on_line(line)` per complete UTF-8 line with one trailing `\r` stripped, `on_stderr(line)`, `on_exit(status)` once after the process exited and both pipes reached end of stream; `reactor_cancel(id)` kills the child with `kill_all()` without calling `on_exit`); `write_all(p, data)` -> `invisible(p)` (chr as `charToRaw(as_utf8(x))`, raw as is; `gptr_error_invalid_argument` when `p` has no stdin pipe; inside a pump it only queues; outside it pumps with `allow_runs = character()` until drained and signals `gptr_error_timeout` with `what = "stdin"` after `gptr.stdin_timeout` seconds without progress); internal `write_close(p)` (closes stdin once the queued bytes are written; P20's codex route closes stdin after the prompt).
+- Consumes: `line_reader()` (Task 7), `kill_all()`, `proc_release()` (Task 4),
+  `registry_diagnostic()` (P02), `gptr_opt()`, `as_utf8()`, `gptr_abort()` (P01); tests:
+  `local_gptr_options()` (P01).
+- Produces (04 sections 7.4, 8.2, IC-60):
+  `reactor_proc(proc, on_line, on_exit, run = NULL, stream = "stdout", on_stderr = NULL)` -> watcher
+  id (`on_line(line)` per complete UTF-8 line with one trailing `\r` stripped, `on_stderr(line)`,
+  `on_exit(status)` once after the process exited and both pipes reached end of stream;
+  `reactor_cancel(id)` kills the child with `kill_all()` without calling `on_exit`);
+  `write_all(p, data)` -> `invisible(p)` (chr as `charToRaw(as_utf8(x))`, raw as is;
+  `gptr_error_invalid_argument` when `p` has no stdin pipe; inside a pump it only queues; outside it
+  pumps with `allow_runs = character()` until drained and signals `gptr_error_timeout` with
+  `what = "stdin"` after `gptr.stdin_timeout` seconds without progress); internal `write_close(p)`
+  (closes stdin once the queued bytes are written; P20's codex route closes stdin after the prompt).
 
-The deadline counts from the last byte the child accepted, so a slow but reading child is never cut off. Inside a pump nobody waits on `write_all()`, so a stalled buffer there is dropped, the child's stdin is closed (it sees EOF) and a registry diagnostic records it.
+The deadline counts from the last byte the child accepted, so a slow but reading child is never cut
+off. Inside a pump nobody waits on `write_all()`, so a stalled buffer there is dropped, the child's
+stdin is closed (it sees EOF) and a registry diagnostic records it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3274,13 +3537,16 @@ test_that("write_all() times out on a child that reads nothing and refuses one w
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-reactor|proc-spawn")'`
+Run:
+`Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-reactor|proc-spawn")'`
 
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 108 ]`; seven failures are `could not find function "reactor_proc"`, one is `could not find function "write_all"`.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 108 ]`; seven failures are
+`could not find function "reactor_proc"`, one is `could not find function "write_all"`.
 
 - [ ] **Step 3: Write the implementation**
 
-In `R/http-reactor.R`, replace the definitions of `reactor_io()`, `reactor_wait_ms()`, `reactor_cancel_id()` and `reactor_shutdown()` (each with its roxygen block) by:
+In `R/http-reactor.R`, replace the definitions of `reactor_io()`, `reactor_wait_ms()`,
+`reactor_cancel_id()` and `reactor_shutdown()` (each with its roxygen block) by:
 
 ```r
 #' Wait for the next event: timers, tasks, the FIFO and child pipes
@@ -3602,10 +3868,24 @@ git commit -m "feat(proc): watch child pipes on the reactor and drain stdin with
 - Test: `tests/testthat/test-http-retry.R` (append)
 
 **Interfaces:**
-- Consumes: `registry_get(kind, name, session = NULL)` (P02; the provider record's `rate = list(requests_per_s, tokens_per_s)`, IC-64); `reactor_get()`, `reactor_now()` (Task 6); `retry_headers()`, `retry_header()`, `retry_after_seconds()`, `parse_rfc3339()`, `parse_duration()` (Task 3); `gptr_opt()` (P01); tests: `local_gptr_options()` (P01).
-- Produces (04 §8.2): `ratelimit_update(provider, headers)` (reads `anthropic-ratelimit-{requests,tokens,input-tokens,output-tokens}-{remaining,reset}`, `x-ratelimit-{remaining,reset}-{requests,tokens}` and `retry-after(-ms)`); `ratelimit_admit(provider)` -> `lgl(1)` (consumes one unit when `TRUE`; never waits); internal `ratelimit_get(provider)`, `ratelimit_set(provider, rate)` (settings and catalog overrides of the static rate, IC-64), `ratelimit_next(provider)` (the reactor time at which admission could change, so the pump sleeps instead of spinning), `ratelimit_static()`, `ratelimit_reset_in()`, `ratelimit_refill()`.
+- Consumes: `registry_get(kind, name, session = NULL)` (P02; the provider record's
+  `rate = list(requests_per_s, tokens_per_s)`, IC-64); `reactor_get()`, `reactor_now()` (Task 6);
+  `retry_headers()`, `retry_header()`, `retry_after_seconds()`, `parse_rfc3339()`,
+  `parse_duration()` (Task 3); `gptr_opt()` (P01); tests: `local_gptr_options()` (P01).
+- Produces (04 section 8.2): `ratelimit_update(provider, headers)` (reads
+  `anthropic-ratelimit-{requests,tokens,input-tokens,output-tokens}-{remaining,reset}`,
+  `x-ratelimit-{remaining,reset}-{requests,tokens}` and `retry-after(-ms)`);
+  `ratelimit_admit(provider)` -> `lgl(1)` (consumes one unit when `TRUE`; never waits); internal
+  `ratelimit_get(provider)`, `ratelimit_set(provider, rate)` (settings and catalog overrides of the
+  static rate, IC-64), `ratelimit_next(provider)` (the reactor time at which admission could change,
+  so the pump sleeps instead of spinning), `ratelimit_static()`, `ratelimit_reset_in()`,
+  `ratelimit_refill()`.
 
-The limiter state lives in the reactor (`r$limits`), one per provider and process, which makes System 1 admission process-wide (IC-64). A `retry-after` parks the provider for at most `gptr.max_retry_delay`: a longer server request already fails the request that carried it (`retry_classify()`), and later requests then meet the server's own answer instead of waiting an hour in the queue.
+The limiter state lives in the reactor (`r$limits`), one per provider and process, which makes
+System 1 admission process-wide (IC-64). A `retry-after` parks the provider for at most
+`gptr.max_retry_delay`: a longer server request already fails the request that carried it
+(`retry_classify()`), and later requests then meet the server's own answer instead of waiting an
+hour in the queue.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3674,7 +3954,8 @@ test_that("static rates come from the provider record through the registry", {
 
 Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-retry")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 63 ]` with `could not find function "ratelimit_update"` (four tests) and `could not find function "ratelimit_get"`.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 63 ]` with `could not find function "ratelimit_update"`
+(four tests) and `could not find function "ratelimit_get"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3860,7 +4141,11 @@ git commit -m "feat(http): add the per-provider rate limiter fed by headers and 
 
 **Interfaces:**
 - Consumes: `gptr_opt()`, `ws_path(..., create_parent = TRUE)`, `workspace_root(create = TRUE)`, `path_key(path)`, `as_utf8()`, `json_encode()`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `` `%||%` `` (P01); `redact(x, profile = "persist")` (P03); `url_for_log()` (Task 2); `reactor_now()` (Task 6); tests: `secret_register()` (P03), `json_decode()` (P01), `local_gptr_options()` (P01).
-- Produces (04 §8.2 "Wire log", INFRA-28, IC-59, IC-65): internal `wire_log_path(session)` -> path or `NULL` (off); `wire_log(tr, event, status = NULL)` (one redacted JSON line with `ts` (seconds since the epoch, contract 1.2), `request_id`, `provider`, `model`, `url`, `status`, `bytes`, `seconds`, `event`; absent values are omitted); `wire_log_append(path, line)` (open, append, flush and close inside `suspendInterrupts()`).
+- Produces (04 section 8.2 "Wire log", INFRA-28, IC-59, IC-65): internal `wire_log_path(session)` ->
+  path or `NULL` (off); `wire_log(tr, event, status = NULL)` (one redacted JSON line with `ts`
+  (seconds since the epoch, contract section 1.2), `request_id`, `provider`, `model`, `url`,
+  `status`, `bytes`, `seconds`, `event`; absent values are omitted); `wire_log_append(path, line)`
+  (open, append, flush and close inside `suspendInterrupts()`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4023,10 +4308,48 @@ git commit -m "feat(http): add the opt-in per-session redacted wire log"
 - Test: `tests/testthat/test-http-reactor.R` (append), `tests/testthat/test-http-request.R` (append)
 
 **Interfaces:**
-- Consumes: `http_handle()`, `http_timeouts()`, `http_timeout_check()`, `http_timeout_next()`, `url_origin()`, `url_for_log()` (Task 2); `retry_classify()`, `retry_headers()`, `retry_header()`, `transport_error()` (Task 3); `ratelimit_admit()`, `ratelimit_update()`, `ratelimit_next()` (Task 9); `wire_log()` (Task 10); `id_new()`, `gptr_opt()`, `check_list()`, `check_string()`, `check_function()` (P01); tests: `local_mock_server(scenario, ..., .env = parent.frame())` with the scenarios `stream` (`n`, `interval`), `hold_headers`, `stall`, `bytes_per_10s` (`duration`) and `redirect` (P01 `helper-mock-server.R`), `sse_splitter()` (Task 1), `proc_spawn()`, `reactor_proc()` (Tasks 7-8), `secret_register()` (P03), `local_gptr_options()` (P01).
-- Produces (04 §8.2): `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)` -> transfer id. Callbacks: `on_headers(status, headers)` once per attempt that received a 2xx head (normally once; a second call follows an in-stream retry and means "start over"); `on_bytes(raw)` per body chunk of a 2xx response; `on_done(status, headers)` at the end; `on_fail(cnd)` with a classed, unsignalled condition (non-2xx bodies are read fully, redacted and classified by `retry_classify()`). Exactly one of `on_done`/`on_fail` runs unless the transfer is cancelled. `retry` = `list(max_attempts = gptr.max_attempts, committed = function() lgl(1), on_retry = NULL)`, where the optional `on_retry(type, info)` receives `"retry_start"` (`attempt`, `delay`, `class`) and `"retry_end"` (`attempt`, `ok`) which P05's `provider_stream()` forwards to `emit` as the `retry_start`/`retry_end` events of 04 §10.4; without `committed` a transfer counts as committed once a 2xx byte reached `on_bytes`. Optional spec fields: `request_id`, `model`, `session_id` (wire log and condition fields) and the three timeouts (Task 2). Internal: `reactor_active()`, `reactor_admit()`, `reactor_start()`, `reactor_curl_event()`, `reactor_deliver()`, `reactor_deliver_one()`, `reactor_head()`, `reactor_head_notify()`, `reactor_on_data()`, `reactor_on_done()`, `reactor_on_fail()`, `reactor_check_transfers()`, `reactor_abandon()`, `reactor_failure()`, `reactor_fail_final()`, `reactor_forget()`, `reactor_cancel_transfer()`, `reactor_multi_run()`, `reactor_curl_cancel()` (libcurl refuses every multi API call inside its own callbacks, so the curl callbacks only queue events and `reactor_deliver()` runs `on_headers`, `on_bytes`, `on_done` and `on_fail` after `curl::multi_run()` returns: a callback may cancel, retry, start transfers or pump the reactor; a transfer whose callback is running is skipped by nested pumps, so its events are never delivered re-entrantly or out of order; events of an abandoned attempt are dropped).
+- Consumes: `http_handle()`, `http_timeouts()`, `http_timeout_check()`, `http_timeout_next()`,
+  `url_origin()`, `url_for_log()` (Task 2); `retry_classify()`, `retry_headers()`, `retry_header()`,
+  `transport_error()` (Task 3); `ratelimit_admit()`, `ratelimit_update()`, `ratelimit_next()` (Task
+  9); `wire_log()` (Task 10); `id_new()`, `gptr_opt()`, `check_list()`, `check_string()`,
+  `check_function()` (P01); tests: `local_mock_server(scenario, ..., .env = parent.frame())` with
+  the scenarios `stream` (`n`, `interval`), `hold_headers`, `stall`, `bytes_per_10s` (`duration`)
+  and `redirect` (P01 `helper-mock-server.R`), `sse_splitter()` (Task 1), `proc_spawn()`,
+  `reactor_proc()` (Tasks 7-8), `secret_register()` (P03), `local_gptr_options()` (P01).
+- Produces (04 section 8.2):
+  `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)` ->
+  transfer id. Callbacks: `on_headers(status, headers)` once per attempt that received a 2xx head
+  (normally once; a second call follows an in-stream retry and means "start over"); `on_bytes(raw)`
+  per body chunk of a 2xx response; `on_done(status, headers)` at the end; `on_fail(cnd)` with a
+  classed, unsignalled condition (non-2xx bodies are read fully, redacted and classified by
+  `retry_classify()`). Exactly one of `on_done`/`on_fail` runs unless the transfer is cancelled.
+  `retry` =
+  `list(max_attempts = gptr.max_attempts, committed = function() lgl(1), on_retry = NULL)`, where
+  the optional `on_retry(type, info)` receives `"retry_start"` (`attempt`, `delay`, `class`) and
+  `"retry_end"` (`attempt`, `ok`) which P05's `provider_stream()` forwards to `emit` as the
+  `retry_start`/`retry_end` events of 04 section 10.4; without `committed` a transfer counts as
+  committed once a 2xx byte reached `on_bytes`. Optional spec fields: `request_id`, `model`,
+  `session_id` (wire log and condition fields) and the three timeouts (Task 2). Internal:
+  `reactor_active()`, `reactor_admit()`, `reactor_start()`, `reactor_curl_event()`,
+  `reactor_deliver()`, `reactor_deliver_one()`, `reactor_head()`, `reactor_head_notify()`,
+  `reactor_on_data()`, `reactor_on_done()`, `reactor_on_fail()`, `reactor_check_transfers()`,
+  `reactor_abandon()`, `reactor_failure()`, `reactor_fail_final()`, `reactor_forget()`,
+  `reactor_cancel_transfer()`, `reactor_multi_run()`, `reactor_curl_cancel()` (libcurl refuses every
+  multi API call inside its own callbacks, so the curl callbacks only queue events and
+  `reactor_deliver()` runs `on_headers`, `on_bytes`, `on_done` and `on_fail` after
+  `curl::multi_run()` returns: a callback may cancel, retry, start transfers or pump the reactor; a
+  transfer whose callback is running is skipped by nested pumps, so its events are never delivered
+  re-entrantly or out of order; events of an abandoned attempt are dropped).
 
-This task delivers INFRA-01 and INFRA-05. Admission never waits: a transfer that the global `gptr.max_active` or its provider's limiter cannot admit stays queued, and the pump sleeps until the limiter's next change. The first-byte and idle timers are enforced by the pump after every `curl::multi_run()` (`gptr_error_timeout_first_byte`/`_idle`, never retried); connection failures come back through curl's `fail` callback and are classified. A callback that pumps the reactor (a `message_update` or `message_end` hook calling System 1, for example) works: the verified failure mode of calling curl from inside its own callbacks ("API function called from within callback", which failed the outer stream with `gptr_error_internal` in the first draft of this plan) cannot occur, because callbacks run only after `curl::multi_run()` has returned.
+This task delivers INFRA-01 and INFRA-05. Admission never waits: a transfer that the global
+`gptr.max_active` or its provider's limiter cannot admit stays queued, and the pump sleeps until the
+limiter's next change. The first-byte and idle timers are enforced by the pump after every
+`curl::multi_run()` (`gptr_error_timeout_first_byte`/`_idle`, never retried); connection failures
+come back through curl's `fail` callback and are classified. A callback that pumps the reactor (a
+`message_update` or `message_end` hook calling System 1, for example) works: the verified failure
+mode of calling curl from inside its own callbacks ("API function called from within callback",
+which failed the outer stream with `gptr_error_internal` in the first draft of this plan) cannot
+occur, because callbacks run only after `curl::multi_run()` has returned.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4326,13 +4649,16 @@ test_that("IC-64: a redirect is never followed and never carries the key", {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-reactor|http-request")'`
+Run:
+`Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-reactor|http-request")'`
 
-Expected: `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 107 ]`; every failure is `could not find function "reactor_http"`.
+Expected: `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 107 ]`; every failure is
+`could not find function "reactor_http"`.
 
 - [ ] **Step 3: Write the implementation**
 
-In `R/http-reactor.R`, replace the definitions of `reactor_io()`, `reactor_wait_ms()`, `reactor_cancel_id()` and `reactor_shutdown()` (each with its roxygen block) by:
+In `R/http-reactor.R`, replace the definitions of `reactor_io()`, `reactor_wait_ms()`,
+`reactor_cancel_id()` and `reactor_shutdown()` (each with its roxygen block) by:
 
 ```r
 #' Wait for the next event and do the I/O: admission, curl, child pipes, stdin buffers
@@ -4834,7 +5160,8 @@ reactor_curl_cancel = function(r, h) {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "http-reactor|http-request")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 166 ]` (the run takes about 90 s: the INFRA-05 slow stream lasts 60 s).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 166 ]` (the run takes about 90 s: the INFRA-05 slow
+stream lasts 60 s).
 
 - [ ] **Step 5: Commit**
 
@@ -4850,8 +5177,18 @@ git commit -m "feat(http): run HTTP transfers on the reactor with admission and 
 - Test: `tests/testthat/test-http-retry.R` (append)
 
 **Interfaces:**
-- Consumes: `retry_backoff()` (Task 3), `reactor_timer()` (Task 6), `reactor_fail_final()`, `wire_log()` (Tasks 10-11), `gptr_opt()` (P01); tests: `local_mock_server()` scenarios `status` (`status`, `retry_after`, `succeed_after`: the first `succeed_after` requests get `status`, later ones a stream), `spend_cap`, `overload` (`attempts`) and `stream`, whose `log()` has a numeric-convertible `time` column (P01), `ratelimit_update()`, `ratelimit_get()` (Task 9), `sse_splitter()` (Task 1).
-- Produces: `reactor_failure()` with the INFRA-06 retry (04 §8.2: "when a failure is retryable and `committed()` is `FALSE`, the reactor waits (`retry_start`/`retry_end` events; interruptible timer, never a sleep inside a callback) and re-sends the same spec"); internal `reactor_retry(id, info)` -> `invisible(lgl(1))`, the transport side of the adapters' `opts$retry(info)` with `info = list(class, status, retry_after)` (04 §8.1): P05 wires `opts$retry = function(info) reactor_retry(<transfer id>, info)`.
+- Consumes: `retry_backoff()` (Task 3), `reactor_timer()` (Task 6), `reactor_fail_final()`,
+  `wire_log()` (Tasks 10-11), `gptr_opt()` (P01); tests: `local_mock_server()` scenarios `status`
+  (`status`, `retry_after`, `succeed_after`: the first `succeed_after` requests get `status`, later
+  ones a stream), `spend_cap`, `overload` (`attempts`) and `stream`, whose `log()` has a
+  numeric-convertible `time` column (P01), `ratelimit_update()`, `ratelimit_get()` (Task 9),
+  `sse_splitter()` (Task 1).
+- Produces: `reactor_failure()` with the INFRA-06 retry (04 section 8.2: "when a failure is
+  retryable and `committed()` is `FALSE`, the reactor waits (`retry_start`/`retry_end` events;
+  interruptible timer, never a sleep inside a callback) and re-sends the same spec"); internal
+  `reactor_retry(id, info)` -> `invisible(lgl(1))`, the transport side of the adapters'
+  `opts$retry(info)` with `info = list(class, status, retry_after)` (04 section 8.1): P05 wires
+  `opts$retry = function(info) reactor_retry(<transfer id>, info)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5123,7 +5460,8 @@ reactor_retry = function(id, info) {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "http-retry")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 126 ]` (the INFRA-21 fan-out waits for its 7 s budget window).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 126 ]` (the INFRA-21 fan-out waits for its 7 s budget
+window).
 
 - [ ] **Step 5: Commit**
 
@@ -5134,14 +5472,15 @@ git commit -m "feat(http): retry transfers with Retry-After, bounded backoff and
 
 ## Plan acceptance
 
-Run every command from the repository root after Task 12. "Green" means `FAIL 0` and `WARN 0`; the only allowed skips are the ones named.
+Run every command from the repository root after Task 12. "Green" means `FAIL 0` and `WARN 0`; the
+only allowed skips are the ones named.
 
 | # | Acceptance check (05, P04) | Proved by | Command | Expected |
 |---|---|---|---|---|
 | 1 | `devtools::test(filter = "http\|proc")` is green (mock-server tests skip on CRAN) | all six test files (Tasks 1-12) | `Rscript --vanilla -e 'devtools::test(filter = "http\|proc")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 473 ]` (skips allowed: `de_DE.UTF-8` not installed (1), Windows for the SIGTERM test (1); under `NOT_CRAN=false` every process and mock-server test skips) |
 | 2 | INFRA-01: first text delta within 0.35 s of the mock writing it, every inter-delta gap under 0.35 s; six streams of 1.00-2.25 s finish within 10% of the slowest | Task 11, `test-http-reactor.R`: "INFRA-01: deltas reach the callback as the mock writes them", "INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest" | `Rscript --vanilla -e 'devtools::test(filter = "http-reactor")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 127 ]` |
 | 3 | INFRA-05: held headers -> `gptr_error_timeout_first_byte`; one byte every 10 s for 60 s completes; a stall -> `gptr_error_timeout_idle` | Task 11, `test-http-request.R`: the three "INFRA-05" tests (the 60 s stream runs with `gptr.idle_timeout = 15`, so it also proves that no low-speed abort ends it after idle + 30 s); Task 2 unit tests of the timer arithmetic | `Rscript --vanilla -e 'devtools::test(filter = "http-request")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 39 ]` (about 70 s) |
-| 4 | INFRA-06/21: `retry-after: 2` retried after about 2 s; `retry-after: 3600` fails at once naming the delay; a spend-cap 429 is not retried; with low remaining-request headers a 20-transfer fan-out never exceeds the budget | Task 12, `test-http-retry.R`: "INFRA-06: retry-after: 2 ...", "INFRA-06: retry-after: 3600 ...", "INFRA-06: a spend-cap 429 is never retried", "INFRA-06: 5xx is retried ...", "INFRA-06: an overload before the first delta ..." (architecture 6.18 row 06), "INFRA-21: a 20-transfer fan-out ..."; Task 3 (`retry_classify()` table); Task 9 (limiter) | `Rscript --vanilla -e 'devtools::test(filter = "http-retry")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 126 ]` (`SKIP 1` where `de_DE.UTF-8` is missing) |
+| 4 | INFRA-06/21: `retry-after: 2` retried after about 2 s; `retry-after: 3600` fails at once naming the delay; a spend-cap 429 is not retried; with low remaining-request headers a 20-transfer fan-out never exceeds the budget | Task 12, `test-http-retry.R`: "INFRA-06: retry-after: 2 ...", "INFRA-06: retry-after: 3600 ...", "INFRA-06: a spend-cap 429 is never retried", "INFRA-06: 5xx is retried ...", "INFRA-06: an overload before the first delta ..." (architecture section 6.18 row 06), "INFRA-21: a 20-transfer fan-out ..."; Task 3 (`retry_classify()` table); Task 9 (limiter) | `Rscript --vanilla -e 'devtools::test(filter = "http-retry")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 126 ]` (`SKIP 1` where `de_DE.UTF-8` is missing) |
 | 5 | INFRA-23: 20,000 deltas consumed in under 1 s of CPU; random re-chunking including splits inside multi-byte characters gives identical events | Task 1, `test-http-sse.R`: "20,000 deltas are split, decoded and accumulated in under 1 s of CPU (INFRA-23)", "random re-chunking, including splits inside characters and CRLF pairs, is invariant" | `Rscript --vanilla -e 'devtools::test(filter = "http-sse")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 62 ]` |
 | 6a | Under `LC_ALL=C` a child printing `"café"` and a CJK string is decoded byte-exact through redirected files | Task 7, `test-proc-spawn.R`: "proc_run() decodes redirected output byte-exact under LC_ALL=C" | `Rscript --vanilla -e 'devtools::test(filter = "proc-spawn")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 66 ]` (Windows: `SKIP 1`) |
 | 6b | ... and through the pipe path read by `reactor_proc()` | Task 8, `test-http-reactor.R`: "reactor_proc() decodes the pipe path byte-exact under LC_ALL=C" | as row 2 | as row 2 |
@@ -5157,7 +5496,12 @@ Run every command from the repository root after Task 12. "Green" means `FAIL 0`
 | 7g | `nrow(showConnections())` is unchanged after the wire log wrote 100 lines | Task 10: "INFRA-28: the wire log writes redacted lines open-append-close" | as row 2 | as row 2 |
 | 8 | M0 exit: `devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")` clean on the full CI matrix including Windows, and `R CMD INSTALL` succeeds with the built-ins' top-level `on_load()` declarations (IC-32) | the whole of P01-P04; this plan's `on_load()` calls are in `proc-supervise.R` (`proc_sweep()`, `on_unload(proc_unload)`) and `http-reactor.R` (`on_unload(reactor_shutdown)`) | see below | see below |
 
-Architecture 6.18 rows owned by P04 are covered by the same tests: row 01 (row 2 above), row 05 (row 3), row 06 including "overload before the first delta retried; after deltas surfaced" (Task 12, "INFRA-06: an overload before the first delta is retried; after deltas it fails"), row 16's P04 part (Task 11, "one pump drives an HTTP stream and a child process together"), row 21 (row 4), row 23 (row 5), row 28 (Task 10 and Task 11, "the wire log records the start and the end of a real transfer").
+Architecture 6.18 rows owned by P04 are covered by the same tests: row 01 (row 2 above), row 05 (row
+3), row 06 including "overload before the first delta retried; after deltas surfaced" (Task 12,
+"INFRA-06: an overload before the first delta is retried; after deltas it fails"), row 16's P04 part
+(Task 11, "one pump drives an HTTP stream and a child process together"), row 21 (row 4), row 23
+(row 5), row 28 (Task 10 and Task 11, "the wire log records the start and the end of a real
+transfer").
 
 M0 exit commands (once P01-P04 are complete):
 
@@ -5171,25 +5515,37 @@ Expected: exits 0; `NAMESPACE` contains `export(gptr_jobs)` next to P01-P03's ex
 lib=$(mktemp -d) && R CMD INSTALL --library="$lib" . && Rscript --vanilla -e "library(gptr, lib.loc = '$lib'); print(gptr_jobs())"
 ```
 
-Expected: `* DONE (gptr)` (into a temporary library, never the user library), then an empty `gptr_jobs` listing; the install evaluates the top-level `on_load()` calls of `R/proc-supervise.R` and `R/http-reactor.R`, which collate after `R/aaa-state.R` (IC-32).
+Expected: `* DONE (gptr)` (into a temporary library, never the user library), then an empty
+`gptr_jobs` listing; the install evaluates the top-level `on_load()` calls of `R/proc-supervise.R`
+and `R/http-reactor.R`, which collate after `R/aaa-state.R` (IC-32).
 
 ```bash
 Rscript --vanilla -e 'devtools::test(filter = "http|proc|lint|arch")'
 ```
 
-Expected: `FAIL 0 | WARN 0`; P01's `test-lint-rules.R` and `test-arch-layers.R` find no `<-`, no `:::`, no non-ASCII byte, no `processx::run(`, no `tools::pskill(`, no `sample(`/`runif(`/`set.seed(`, and no call from these L0 files to a layer above L0 (the calls to `registry_get()`, `registry_diagnostic()` (P02, `ext` is L0), `secret_value()` and `redact()` (P03, `auth` is L0) are allowed).
+Expected: `FAIL 0 | WARN 0`; P01's `test-lint-rules.R` and `test-arch-layers.R` find no `<-`, no
+`:::`, no non-ASCII byte, no `processx::run(`, no `tools::pskill(`, no
+`sample(`/`runif(`/`set.seed(`, and no call from these L0 files to a layer above L0 (the calls to
+`registry_get()`, `registry_diagnostic()` (P02, `ext` is L0), `secret_value()` and `redact()` (P03,
+`auth` is L0) are allowed).
 
 ```bash
 Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'
 ```
 
-Expected: no lint printed; exit 0. The namespace is loaded first, as in P01's acceptance A3: on a development tree that is not installed (the install above went to a temporary library), lintr's `object_usage_linter` cannot resolve gptr's internal functions and would report every call to a P01-P04 helper as "no visible global function definition".
+Expected: no lint printed; exit 0. The namespace is loaded first, as in P01's acceptance A3: on a
+development tree that is not installed (the install above went to a temporary library), lintr's
+`object_usage_linter` cannot resolve gptr's internal functions and would report every call to a
+P01-P04 helper as "no visible global function definition".
 
 ```bash
 Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'
 ```
 
-Expected: `0 errors | 0 warnings | 1 note`, the note being the incoming-feasibility NOTE naming the maintainer; then push the branch and confirm that the CI matrix of P01 (macOS, Windows, Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C`, copy-safety, connections-left-open) is green.
+Expected: `0 errors | 0 warnings | 1 note`, the note being the incoming-feasibility NOTE naming the
+maintainer; then push the branch and confirm that the CI matrix of P01 (macOS, Windows, Ubuntu
+release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C`, copy-safety, connections-left-open) is
+green.
 
 ## Self-review
 
@@ -5258,91 +5614,257 @@ The plan was searched for "TBD", "TODO", "implement later", "fill in", "appropri
 
 ### Ambiguities in 04 and the reading this plan implements
 
-1. **`allow_runs` default.** 04 8.2 and IC-57 define the default through `run_current()` (P06, layer L3), which an L0 file may not call (architecture 2.2). Every tool, FIFO or not, executes inside a pump (P06 runs tools from its `run_drive()` task or the FIFO), and P06's `run_current()` is non-`NULL` for every executing tool, so "`run_current()` is not `NULL`" implies "a pump is on the stack". The default is therefore `NULL` at depth 0 and `character()` whenever another pump is on the stack. This reproduces 04 whenever a tool executes (including non-FIFO tools such as an MCP call, which the first draft's FIFO-only test missed) and is stricter in one case 04 leaves open: a pump nested in a timer, task, `later` or stream callback outside any tool runs no FIFO tool unless it names the runs (IC-57's first sentence: "A nested pump (depth > 1) runs FIFO tools only of the runs it was given in `allow_runs`"). Every caller in P06-P08 and P21 that needs FIFO tools passes `allow_runs` explicitly. The default applies only when `allow_runs` is missing; an explicit `NULL` still means "all runs". `reactor_tool_run()` stays available for P06.
-2. **`sse_splitter()$flush()`.** 04 8.3 says "the final unterminated event, if any": `flush()` returns one event list or `NULL` (the tail after the last blank line can hold at most one event), which is how P05's `provider_stream()` uses it. `ndjson_splitter()$flush()` returns chr (zero or one line).
-3. **`retry_start`/`retry_end` events.** 04 8.2 says the reactor's wait emits them, but an L0 file cannot emit run events. `reactor_http()`'s `retry` list takes an optional `on_retry(type, info)` (`"retry_start"`: `attempt`, `delay`, `class`; `"retry_end"`: `attempt`, `ok`); P05's `provider_stream()` passes one that forwards both notes to `emit`, where P06's `run_on_event()` records them (P05 plan, Task 10 and its ambiguity 10).
-4. **In-stream retries.** 04 8.1's `opts$retry(info)` is "the transport's". This plan provides the transport primitive `reactor_retry(id, info)` (Task 12), which the architecture 6.18 row 06 test ("overload before the first delta retried; after deltas surfaced") exercises. P05 wires `opts$retry = function(info) reactor_retry(<transfer id>, info)` (its ambiguity 10), so an in-stream retry keeps the transfer id P06 cancels by and passes this plan's backoff, wire log and `on_retry` notes.
-5. **Timeouts per request, and no libcurl low-speed abort.** 04 8.1 passes `first_byte_timeout`, `idle_timeout`, `connect_timeout` in the adapter `opts`, but `reactor_http()` has no `opts` argument. `http_timeouts()` reads optional spec fields of the same names and otherwise the options; adapters (P12) that want per-provider timeouts copy them from `opts` into the spec. 04 8.2 also lists `low_speed_limit = 1`, `low_speed_time = idle + 30` "as a backstop", next to "no total timeout". libcurl averages the transfer speed, so these values end every stream slower than 1 byte/s after `idle + 30` s: measured with curl 7.0.0, a mock sending one byte every 10 s with `gptr.idle_timeout = 12` failed with "Operation too slow ... the last 42 seconds" at 44 s; with the defaults a trickle stream dies at 120 s. That contradicts INFRA-05's accept test (report 10a; 03 6.18 row 05: "A 10-minute stream sending one byte every 10 s completes") and 04's own "no total timeout", and it protects nothing: curl transfers progress only inside `reactor_pump()`, which checks the first-byte and idle timers right after every `curl::multi_run()`. Reading (03 wins over 04's numbers): the handles set no low-speed limit. The INFRA-05 trickle test runs with `gptr.idle_timeout = 15`, so its 60 s stream would have been cut at 45 s by the 04 values. `retry_classify()` still maps libcurl's "Operation too slow"/"timed out" messages, in case a user sets the option elsewhere.
-6. **Header values.** 04 8.1 says headers are "named list of chr(1) or handles"; a bearer credential needs a prefix, so a value may also be an unnamed list of chr(1) pieces and handles joined in order (`list("Bearer ", handle)`). Handles are materialised only for the URL's own origin (`url_origin()`, compared by P03's `secret_value()`).
-7. **Spec labels.** The optional spec fields `request_id`, `model` and `session_id` label the wire log and the condition fields; without them the reactor makes a request id with `id_new("q", 12L)` and takes the session from `run$session`.
-8. **`reactor_task()` return values.** 04 says the task runs "until it returns `FALSE`"; a numeric return additionally delays the next call by that many seconds (a failing task is removed and becomes a diagnostic). P05's `inprocess` glue keeps its own clock for a generator's `wait` and returns `TRUE`; a task whose call is still running (a pump nested inside it) is skipped until it returns (review round 2).
-9. **`line_reader()`** also has `eof()` (used by `reactor_proc()` to report an exit only after both pipes reached end of stream).
-10. **`write_close(p)`** is an internal addition (close stdin once the queued bytes are written), for P20's codex route and P05's `close_stdin`.
-11. **Orphan sweep at load.** 04 7.1 says `zzz.R` does "no disk, no network, no processes at load", while IC-60 (section 15, which wins) makes the orphan sweep at load mandatory. `proc_sweep()` only lists `R_user_dir("gptr", "cache")/procs/` (it creates nothing) and kills only trees whose recorded parent process is gone.
-12. **Stop status by kind.** IC-60 says a requested stop maps to `stopped` for "artifacts, bridges" and `aborted` for "children". Reading: `artifact`, `bg` and `mcp_serve` -> `stopped`; `session`, `worker`, `cli` -> `aborted`; a status function that still says `running` or `waiting` is shown as is.
-13. **`new_listing(df, class)`.** 5.12 names the classes `c("gptr_<name>", ...)`; this plan passes the full name `"gptr_jobs"` (as P05's plan does for its listings). P01's plan settles it: `new_listing()` prepends `gptr_` only when the name does not start with it, so `"gptr_jobs"` and `"jobs"` give the same class.
-14. **`curl_code`.** curl's `fail` callback gives only a message, so `gptr_error_network` carries `curl_code = NA`; the message names the libcurl error.
-15. **`gptr_error_process`** (04 2.2, "a child exited non-zero with `check = TRUE`") is not signalled here: `proc_run()` has no `check` argument in 04 7.4, so callers (P22) decide.
-16. **Mock-server scenario parameters** (04 12.2 names the scenarios, not all parameters). The tests use `stream` (`n`, `interval`), `hold_headers`, `stall`, `bytes_per_10s` (`duration`), `status` (`status`, `retry_after`, `succeed_after`: the first `succeed_after` requests get `status`, later ones a stream), `spend_cap`, `overload` (`attempts`), `redirect` (a 307 whose `Location` is the second origin; `log()` lists requests to both origins, so one row means the redirect was not followed). P01 must implement these parameter names.
-17. **`gptr.wire_log` as a path.** A string ending in `.jsonl` names one file; any other string names a directory holding one file per session; a path outside the workspace root and `tempdir()` falls back to the default location with a one-time notice.
-18. **Tasks never make the pump spin.** 04 8.2 runs a task "once per iteration" and computes the wait from timers and `slice_ms` only. A task that asks to run again (`TRUE`/`NULL`) therefore counts as due 5 ms ahead, never now: P06's `run_drive()` and P05's abort watcher return `TRUE` for the whole of a request, and a zero wait would keep a CPU core busy for every `peter()` call. Generators that need a precise pause return a number.
-19. **Callbacks run outside libcurl.** libcurl refuses every multi API call inside its own callbacks (verified with curl 7.0.0: `curl::multi_cancel()`, `curl::multi_add()` and a nested `curl::multi_run()` signal "API function called from within callback"). The first draft ran `on_bytes`/`on_done` inside curl's callbacks, so a callback that pumped the reactor (a `message_update`/`message_end` hook calling System 1 or `peter()`, which IC-57's nested pumps allow) failed the outer stream with `gptr_error_internal` (reproduced). The curl callbacks now only queue events per transfer; `reactor_deliver()` runs after `curl::multi_run()` returns and hands them to the transfer's callbacks in arrival order. While a transfer's callback runs, the transfer is busy: nested pumps neither deliver its later events nor check its timers (its bytes may be waiting in its queue), so events never arrive re-entrantly or out of order. Removals are therefore immediate (`curl::multi_cancel()` is never called inside `multi_run()`), and events of an abandoned attempt are dropped. P05's `opts$retry`, which calls `reactor_retry()` from inside `on_bytes`, is safe for the same reason. Tasks and process watchers get the same rule (review round 2): a task or watcher whose callback is running is skipped by nested pumps. Test: "callbacks may pump the reactor: nested transfers run, the outer stream stays ordered".
-20. **Static `tokens_per_s`.** IC-64 feeds the provider record's static `rate` into the limiter. `reactor_http()` has no per-request token estimate (04 8.2), so `requests_per_s` drives the static bucket and `tokens_per_s` is kept with the rate without gating; header-derived token windows (`*-tokens-remaining`) do gate.
-21. **Unknown creation times.** `pid_alive(pid, create_time)` compares creation times only when `create_time` is a number; NULL, NA or the JSON string `"NA"` (P01's `json_encode()` writes a missing number that way into a marker file) mean "unknown" and never "pid reused", so the orphan sweep cannot mistake a live parent for a dead one. The opposite direction is guarded too: the sweep kills a recorded child by pid only when its creation time is known and matches, so an unknown time can never make it kill an unrelated process that reused the pid (test "proc_sweep() never kills by pid when the recorded creation time is unknown").
-22. **`write_all()` without a pipe.** processx refuses `write_input()` on a child started without `stdin = "|"`; `write_all()` signals `gptr_error_invalid_argument` (`arg = "p"`) instead of dropping the bytes.
-23. **Re-entrancy of tasks and child watchers (review round 2).** 04 8.2 runs a task "once per iteration" and calls `on_exit(status)` "once", and IC-57 allows nested pumps inside any callback. Read together: a nested pump skips a task whose call is still running and a child watcher whose callback is running, exactly as Task 11 skips a busy transfer. Without this a pump nested in an `inprocess` generator's task re-entered the generator (its events interleaved), and a pump nested in `on_line` delivered the child's later lines re-entrantly and called `on_exit` twice (both reproduced). Consequence for consumers (P18's stdio MCP client, P20): a callback must not wait inside itself for a later line of the same child or a later chunk of the same transfer; it schedules that work with `reactor_timer(reactor_now(), fn)`.
-24. **`ts` of a wire-log line.** 04 8.2 names the field `ts`; 04 1.2 defines `ts` as `num(1)` seconds since the epoch (and `timestamp` as the ISO 8601 form of JSONL entries). The wire log writes `ts` as epoch seconds with millisecond precision.
+1. **`allow_runs` default.** 04 section 8.2 and IC-57 define the default through `run_current()`
+   (P06, layer L3), which an L0 file may not call (architecture section 2.2). Every tool, FIFO or
+   not, executes inside a pump (P06 runs tools from its `run_drive()` task or the FIFO), and P06's
+   `run_current()` is non-`NULL` for every executing tool, so "`run_current()` is not `NULL`"
+   implies "a pump is on the stack". The default is therefore `NULL` at depth 0 and `character()`
+   whenever another pump is on the stack. This reproduces 04 whenever a tool executes (including
+   non-FIFO tools such as an MCP call, which the first draft's FIFO-only test missed) and is
+   stricter in one case 04 leaves open: a pump nested in a timer, task, `later` or stream callback
+   outside any tool runs no FIFO tool unless it names the runs (IC-57's first sentence: "A nested
+   pump (depth > 1) runs FIFO tools only of the runs it was given in `allow_runs`"). Every caller in
+   P06-P08 and P21 that needs FIFO tools passes `allow_runs` explicitly. The default applies only
+   when `allow_runs` is missing; an explicit `NULL` still means "all runs". `reactor_tool_run()`
+   stays available for P06.
+2. **`sse_splitter()$flush()`.** 04 section 8.3 says "the final unterminated event, if any":
+   `flush()` returns one event list or `NULL` (the tail after the last blank line can hold at most
+   one event), which is how P05's `provider_stream()` uses it. `ndjson_splitter()$flush()` returns
+   chr (zero or one line).
+3. **`retry_start`/`retry_end` events.** 04 section 8.2 says the reactor's wait emits them, but an
+   L0 file cannot emit run events. `reactor_http()`'s `retry` list takes an optional
+   `on_retry(type, info)` (`"retry_start"`: `attempt`, `delay`, `class`; `"retry_end"`: `attempt`,
+   `ok`); P05's `provider_stream()` passes one that forwards both notes to `emit`, where P06's
+   `run_on_event()` records them (P05 plan, Task 10 and its ambiguity 10).
+4. **In-stream retries.** 04 section 8.1's `opts$retry(info)` is "the transport's". This plan
+   provides the transport primitive `reactor_retry(id, info)` (Task 12), which the architecture
+   section 6.18 row 06 test ("overload before the first delta retried; after deltas surfaced")
+   exercises. P05 wires `opts$retry = function(info) reactor_retry(<transfer id>, info)` (its
+   ambiguity 10), so an in-stream retry keeps the transfer id P06 cancels by and passes this plan's
+   backoff, wire log and `on_retry` notes.
+5. **Timeouts per request, and no libcurl low-speed abort.** 04 section 8.1 passes
+   `first_byte_timeout`, `idle_timeout`, `connect_timeout` in the adapter `opts`, but
+   `reactor_http()` has no `opts` argument. `http_timeouts()` reads optional spec fields of the same
+   names and otherwise the options; adapters (P12) that want per-provider timeouts copy them from
+   `opts` into the spec. 04 section 8.2 also lists `low_speed_limit = 1`,
+   `low_speed_time = idle + 30` "as a backstop", next to "no total timeout". libcurl averages the
+   transfer speed, so these values end every stream slower than 1 byte/s after `idle + 30` s:
+   measured with curl 7.0.0, a mock sending one byte every 10 s with `gptr.idle_timeout = 12` failed
+   with "Operation too slow ... the last 42 seconds" at 44 s; with the defaults a trickle stream
+   dies at 120 s. That contradicts INFRA-05's accept test (report 10a; 03 section 6.18 row 05: "A
+   10-minute stream sending one byte every 10 s completes") and 04's own "no total timeout", and it
+   protects nothing: curl transfers progress only inside `reactor_pump()`, which checks the
+   first-byte and idle timers right after every `curl::multi_run()`. Reading (03 wins over 04's
+   numbers): the handles set no low-speed limit. The INFRA-05 trickle test runs with
+   `gptr.idle_timeout = 15`, so its 60 s stream would have been cut at 45 s by the 04 values.
+   `retry_classify()` still maps libcurl's "Operation too slow"/"timed out" messages, in case a user
+   sets the option elsewhere.
+6. **Header values.** 04 section 8.1 says headers are "named list of chr(1) or handles"; a bearer
+   credential needs a prefix, so a value may also be an unnamed list of chr(1) pieces and handles
+   joined in order (`list("Bearer ", handle)`). Handles are materialised only for the URL's own
+   origin (`url_origin()`, compared by P03's `secret_value()`).
+7. **Spec labels.** The optional spec fields `request_id`, `model` and `session_id` label the wire
+   log and the condition fields; without them the reactor makes a request id with `id_new("q", 12L)`
+   and takes the session from `run$session`.
+8. **`reactor_task()` return values.** 04 says the task runs "until it returns `FALSE`"; a numeric
+   return additionally delays the next call by that many seconds (a failing task is removed and
+   becomes a diagnostic). P05's `inprocess` glue keeps its own clock for a generator's `wait` and
+   returns `TRUE`; a task whose call is still running (a pump nested inside it) is skipped until it
+   returns (review round 2).
+9. **`line_reader()`** also has `eof()` (used by `reactor_proc()` to report an exit only after both
+   pipes reached end of stream).
+10. **`write_close(p)`** is an internal addition (close stdin once the queued bytes are written),
+    for P20's codex route and P05's `close_stdin`.
+11. **Orphan sweep at load.** 04 section 7.1 says `zzz.R` does "no disk, no network, no processes at
+    load", while IC-60 (section 15, which wins) makes the orphan sweep at load mandatory.
+    `proc_sweep()` only lists `R_user_dir("gptr", "cache")/procs/` (it creates nothing) and kills
+    only trees whose recorded parent process is gone.
+12. **Stop status by kind.** IC-60 says a requested stop maps to `stopped` for "artifacts, bridges"
+    and `aborted` for "children". Reading: `artifact`, `bg` and `mcp_serve` -> `stopped`; `session`,
+    `worker`, `cli` -> `aborted`; a status function that still says `running` or `waiting` is shown
+    as is.
+13. **`new_listing(df, class)`.** 5.12 names the classes `c("gptr_<name>", ...)`; this plan passes
+    the full name `"gptr_jobs"` (as P05's plan does for its listings). P01's plan settles it:
+    `new_listing()` prepends `gptr_` only when the name does not start with it, so `"gptr_jobs"` and
+    `"jobs"` give the same class.
+14. **`curl_code`.** curl's `fail` callback gives only a message, so `gptr_error_network` carries
+    `curl_code = NA`; the message names the libcurl error.
+15. **`gptr_error_process`** (04 section 2.2, "a child exited non-zero with `check = TRUE`") is not
+    signalled here: `proc_run()` has no `check` argument in 04 section 7.4, so callers (P22) decide.
+16. **Mock-server scenario parameters** (04 section 12.2 names the scenarios, not all parameters).
+    The tests use `stream` (`n`, `interval`), `hold_headers`, `stall`, `bytes_per_10s` (`duration`),
+    `status` (`status`, `retry_after`, `succeed_after`: the first `succeed_after` requests get
+    `status`, later ones a stream), `spend_cap`, `overload` (`attempts`), `redirect` (a 307 whose
+    `Location` is the second origin; `log()` lists requests to both origins, so one row means the
+    redirect was not followed). P01 must implement these parameter names.
+17. **`gptr.wire_log` as a path.** A string ending in `.jsonl` names one file; any other string
+    names a directory holding one file per session; a path outside the workspace root and
+    `tempdir()` falls back to the default location with a one-time notice.
+18. **Tasks never make the pump spin.** 04 section 8.2 runs a task "once per iteration" and computes
+    the wait from timers and `slice_ms` only. A task that asks to run again (`TRUE`/`NULL`)
+    therefore counts as due 5 ms ahead, never now: P06's `run_drive()` and P05's abort watcher
+    return `TRUE` for the whole of a request, and a zero wait would keep a CPU core busy for every
+    `peter()` call. Generators that need a precise pause return a number.
+19. **Callbacks run outside libcurl.** libcurl refuses every multi API call inside its own callbacks
+    (verified with curl 7.0.0: `curl::multi_cancel()`, `curl::multi_add()` and a nested
+    `curl::multi_run()` signal "API function called from within callback"). The first draft ran
+    `on_bytes`/`on_done` inside curl's callbacks, so a callback that pumped the reactor (a
+    `message_update`/`message_end` hook calling System 1 or `peter()`, which IC-57's nested pumps
+    allow) failed the outer stream with `gptr_error_internal` (reproduced). The curl callbacks now
+    only queue events per transfer; `reactor_deliver()` runs after `curl::multi_run()` returns and
+    hands them to the transfer's callbacks in arrival order. While a transfer's callback runs, the
+    transfer is busy: nested pumps neither deliver its later events nor check its timers (its bytes
+    may be waiting in its queue), so events never arrive re-entrantly or out of order. Removals are
+    therefore immediate (`curl::multi_cancel()` is never called inside `multi_run()`), and events of
+    an abandoned attempt are dropped. P05's `opts$retry`, which calls `reactor_retry()` from inside
+    `on_bytes`, is safe for the same reason. Tasks and process watchers get the same rule (review
+    round 2): a task or watcher whose callback is running is skipped by nested pumps. Test:
+    "callbacks may pump the reactor: nested transfers run, the outer stream stays ordered".
+20. **Static `tokens_per_s`.** IC-64 feeds the provider record's static `rate` into the limiter.
+    `reactor_http()` has no per-request token estimate (04 section 8.2), so `requests_per_s` drives
+    the static bucket and `tokens_per_s` is kept with the rate without gating; header-derived token
+    windows (`*-tokens-remaining`) do gate.
+21. **Unknown creation times.** `pid_alive(pid, create_time)` compares creation times only when
+    `create_time` is a number; NULL, NA or the JSON string `"NA"` (P01's `json_encode()` writes a
+    missing number that way into a marker file) mean "unknown" and never "pid reused", so the orphan
+    sweep cannot mistake a live parent for a dead one. The opposite direction is guarded too: the
+    sweep kills a recorded child by pid only when its creation time is known and matches, so an
+    unknown time can never make it kill an unrelated process that reused the pid (test "proc_sweep()
+    never kills by pid when the recorded creation time is unknown").
+22. **`write_all()` without a pipe.** processx refuses `write_input()` on a child started without
+    `stdin = "|"`; `write_all()` signals `gptr_error_invalid_argument` (`arg = "p"`) instead of
+    dropping the bytes.
+23. **Re-entrancy of tasks and child watchers (review round 2).** 04 section 8.2 runs a task "once
+    per iteration" and calls `on_exit(status)` "once", and IC-57 allows nested pumps inside any
+    callback. Read together: a nested pump skips a task whose call is still running and a child
+    watcher whose callback is running, exactly as Task 11 skips a busy transfer. Without this a pump
+    nested in an `inprocess` generator's task re-entered the generator (its events interleaved), and
+    a pump nested in `on_line` delivered the child's later lines re-entrantly and called `on_exit`
+    twice (both reproduced). Consequence for consumers (P18's stdio MCP client, P20): a callback
+    must not wait inside itself for a later line of the same child or a later chunk of the same
+    transfer; it schedules that work with `reactor_timer(reactor_now(), fn)`.
+24. **`ts` of a wire-log line.** 04 section 8.2 names the field `ts`; 04 section 1.2 defines `ts` as
+    `num(1)` seconds since the epoch (and `timestamp` as the ISO 8601 form of JSONL entries). The
+    wire log writes `ts` as epoch seconds with millisecond precision.
 
 ### Executed validation
 
-- Every `r` block of this plan was extracted into the scratch directory and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: 30 blocks, all parse. `getParseData()` finds no `LEFT_ASSIGN` token (neither `<-` nor `<<-` is used; closure state lives in environments), the blocks contain no `%>%`, no `:::`, no non-ASCII byte and no line over 100 characters.
-- Review of 2026-10-01: a scratch package (never the repository) was assembled from P01's own code as P01's plan writes it (`R/aaa-state.R`, `R/utils-conditions.R`, `R/utils-encoding.R`, `R/utils-options.R`, `R/zzz.R`, `R/utils-paths.R`, `R/json-encode.R`, `R/utils-hash.R`, `R/utils-text.R`, `R/utils-tokens.R`, `tests/testthat/setup.R`, `helper-fake.R`, `helper-mock-server.R`, `fixtures/mock_server.R`, extracted from the P01 plan), stand-ins for the five P02/P03 functions (`registry_get()`, `registry_diagnostic()`, `secret_register()`, `secret_value()`, `redact()`, shaped as 04 sections 7.2-7.3) and this plan's blocks. Every task was built in order and run red (its tests on the previous tasks' code) and green; the summaries in Steps 2 and 4 and in "Plan acceptance" are those runs. The first draft's expected lines were off in most steps (for example Task 6 green said 39, measured 44; Task 12 green said 111, measured 117; the total said 417).
-- Defects reproduced on the first draft before fixing them: a nested pump started inside `on_bytes` failed the outer stream with `gptr_error_internal` "API function called from within callback" (ambiguity 19); with `gptr.idle_timeout = 12` the `bytes_per_10s` mock stream (one byte per 10 s) died at 44 s with "Operation too slow ... the last 42 seconds" (ambiguity 5); a marker file with an unknown creation time made `proc_sweep()` kill an unrelated process by pid (ambiguity 21); a pump nested in a timer callback ran a queued FIFO tool (ambiguity 1); `line_reader()` let processx's "Invalid multi-byte character at end of stream ignored" warning escape. Each has a test that fails on the first draft and passes now.
-- The final state gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 464 ]` for `devtools::test(filter = "http|proc")`, including the INFRA-01, INFRA-05 (60 s trickle stream with a 15 s idle timer), INFRA-06, INFRA-21 and INFRA-23 tests against P01's mock server and the SIGTERM sweep test.
-- `lintr::lint()` with the linters of the repository `.lintr` (`linters_with_defaults()` plus `assignment_linter(operator = c("=", "<<-"))`, `line_length_linter(100)`, `object_name_linter("snake_case")`) over the six R files and six test files: 0 lints. `object_usage_linter` was left out because file-level linting cannot see the P01-P03 functions; instead `codetools::checkUsage()` ran over the 130 top-level objects of the six files inside the loaded scratch package and found no undefined function or variable.
-- Review round 2 (2026-10-01): the scratch package was rebuilt from the current P01 plan (its mock server now logs raw header bytes at the second origin of `redirect`) and this plan's blocks; the unchanged first-round code gave `PASS 452`. Three defects were reproduced on it with tests that fail there and pass after the fix: a pump nested in a task re-entered the task; a pump nested in `on_line` re-entered the watcher and called `on_exit` twice (`"exit 0" "exit 0"`); a transfer queued by an `on_fail` that runs during admission was dropped (the pump timed out). Every task was then re-measured red and green (`r2/measure.sh` in the scratch directory: Tasks 6, 8, 10 and 11 changed, the others are as before) and the final state gave `PASS 464` (`test-http-reactor.R` 127, `test-http-request.R` 39, `test-http-retry.R` 117, `test-http-sse.R` 62, `test-proc-spawn.R` 66, `test-proc-supervise.R` 53). P01's package lint rules (`lint_scan()` of `test-lint-rules.R`, run over the six R files) report nothing, and the generated `man/gptr_jobs.Rd` renders the Options section as an itemised list.
-- Cross-plan consolidation (2026-10-01): `retry_body_error()` gained the FastAPI `detail` shapes and the helper `retry_detail_entry()`, and `test-http-retry.R` gained the test "retry_classify() keeps the service's message from FastAPI detail bodies (report 04a)" (9 expectations). Task 3's code and test file were re-run with `testthat::test_file()` under stand-ins for the P01/P03 helpers: red (no implementation) 8 failing tests; on the previous `retry_body_error()` 5 of the 9 new expectations fail; green 63 expectations. The other `http-retry` lines and the totals above are the round-2 measurements plus these 9 (Task 9: 63/84, Task 12: 104/126, acceptance row 1: 473).
-- Not executable here: the real P02-P03 code (stand-ins were used); the M0 `R CMD check` of acceptance 8, which needs P01-P03 in the repository; Windows (the Windows branches are logic-tested on every OS through `shell_resolve_os()` and `proc_resolve()`).
+- Every `r` block of this plan was extracted into the scratch directory and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: 30 blocks, all parse. `getParseData()`
+  finds no `LEFT_ASSIGN` token (neither `<-` nor `<<-` is used; closure state lives in
+  environments), the blocks contain no `%>%`, no `:::`, no non-ASCII byte and no line over 100
+  characters.
+- Review of 2026-10-01: a scratch package (never the repository) was assembled from P01's own code
+  as P01's plan writes it (`R/aaa-state.R`, `R/utils-conditions.R`, `R/utils-encoding.R`,
+  `R/utils-options.R`, `R/zzz.R`, `R/utils-paths.R`, `R/json-encode.R`, `R/utils-hash.R`,
+  `R/utils-text.R`, `R/utils-tokens.R`, `tests/testthat/setup.R`, `helper-fake.R`,
+  `helper-mock-server.R`, `fixtures/mock_server.R`, extracted from the P01 plan), stand-ins for the
+  five P02/P03 functions (`registry_get()`, `registry_diagnostic()`, `secret_register()`,
+  `secret_value()`, `redact()`, shaped as 04 sections 7.2-7.3) and this plan's blocks. Every task
+  was built in order and run red (its tests on the previous tasks' code) and green; the summaries in
+  Steps 2 and 4 and in "Plan acceptance" are those runs. The first draft's expected lines were off
+  in most steps (for example Task 6 green said 39, measured 44; Task 12 green said 111, measured
+  117; the total said 417).
+- Defects reproduced on the first draft before fixing them: a nested pump started inside `on_bytes`
+  failed the outer stream with `gptr_error_internal` "API function called from within callback"
+  (ambiguity 19); with `gptr.idle_timeout = 12` the `bytes_per_10s` mock stream (one byte per 10 s)
+  died at 44 s with "Operation too slow ... the last 42 seconds" (ambiguity 5); a marker file with
+  an unknown creation time made `proc_sweep()` kill an unrelated process by pid (ambiguity 21); a
+  pump nested in a timer callback ran a queued FIFO tool (ambiguity 1); `line_reader()` let
+  processx's "Invalid multi-byte character at end of stream ignored" warning escape. Each has a test
+  that fails on the first draft and passes now.
+- The final state gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 464 ]` for
+  `devtools::test(filter = "http|proc")`, including the INFRA-01, INFRA-05 (60 s trickle stream with
+  a 15 s idle timer), INFRA-06, INFRA-21 and INFRA-23 tests against P01's mock server and the
+  SIGTERM sweep test.
+- `lintr::lint()` with the linters of the repository `.lintr` (`linters_with_defaults()` plus
+  `assignment_linter(operator = c("=", "<<-"))`, `line_length_linter(100)`,
+  `object_name_linter("snake_case")`) over the six R files and six test files: 0 lints.
+  `object_usage_linter` was left out because file-level linting cannot see the P01-P03 functions;
+  instead `codetools::checkUsage()` ran over the 130 top-level objects of the six files inside the
+  loaded scratch package and found no undefined function or variable.
+- Review round 2 (2026-10-01): the scratch package was rebuilt from the current P01 plan (its mock
+  server now logs raw header bytes at the second origin of `redirect`) and this plan's blocks; the
+  unchanged first-round code gave `PASS 452`. Three defects were reproduced on it with tests that
+  fail there and pass after the fix: a pump nested in a task re-entered the task; a pump nested in
+  `on_line` re-entered the watcher and called `on_exit` twice (`"exit 0" "exit 0"`); a transfer
+  queued by an `on_fail` that runs during admission was dropped (the pump timed out). Every task was
+  then re-measured red and green (`r2/measure.sh` in the scratch directory: Tasks 6, 8, 10 and 11
+  changed, the others are as before) and the final state gave `PASS 464` (`test-http-reactor.R` 127,
+  `test-http-request.R` 39, `test-http-retry.R` 117, `test-http-sse.R` 62, `test-proc-spawn.R` 66,
+  `test-proc-supervise.R` 53). P01's package lint rules (`lint_scan()` of `test-lint-rules.R`, run
+  over the six R files) report nothing, and the generated `man/gptr_jobs.Rd` renders the Options
+  section as an itemised list.
+- Cross-plan consolidation (2026-10-01): `retry_body_error()` gained the FastAPI `detail` shapes and
+  the helper `retry_detail_entry()`, and `test-http-retry.R` gained the test "retry_classify() keeps
+  the service's message from FastAPI detail bodies (report 04a)" (9 expectations). Task 3's code and
+  test file were re-run with `testthat::test_file()` under stand-ins for the P01/P03 helpers: red
+  (no implementation) 8 failing tests; on the previous `retry_body_error()` 5 of the 9 new
+  expectations fail; green 63 expectations. The other `http-retry` lines and the totals above are
+  the round-2 measurements plus these 9 (Task 9: 63/84, Task 12: 104/126, acceptance row 1: 473).
+- Not executable here: the real P02-P03 code (stand-ins were used); the M0 `R CMD check` of
+  acceptance 8, which needs P01-P03 in the repository; Windows (the Windows branches are
+  logic-tested on every OS through `shell_resolve_os()` and `proc_resolve()`).
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 00-conventions, 04 (with section 15), 05 (P04), 03 sections 6.1, 6.7 and 6.18, research 10a INFRA-05 and G5's verification log, and the P01, P02, P03, P05, P06 and P21 plans. Every code block was run in a scratch package built from P01's real code (see "Executed validation"); every "applied" row below has a test that fails on the first draft and passes now.
+Adversarial review of 2026-10-01 against 00-conventions, 04 (with section 15), 05 (P04), 03
+sections 6.1, 6.7 and 6.18, research 10a INFRA-05 and G5's verification log, and the P01, P02, P03,
+P05, P06 and P21 plans. Every code block was run in a scratch package built from P01's real code
+(see "Executed validation"); every "applied" row below has a test that fails on the first draft and
+passes now.
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
 | 1 | major | Task 11, `reactor_start()`, `reactor_multi_run()` | User callbacks ran inside libcurl's own callbacks. A callback that pumps the reactor (a `message_update`/`message_end` hook calling System 1 or `peter()`, which IC-57's nested pumps allow) made libcurl refuse the nested `curl::multi_add()`/`curl::multi_run()` ("API function called from within callback"), and the outer stream failed with `gptr_error_internal` (reproduced). | applied | Curl callbacks now only queue events per transfer (`reactor_curl_event()`); `reactor_deliver()` runs `on_headers`/`on_bytes`/`on_done`/`on_fail` after `curl::multi_run()` returns; a transfer whose callback runs is busy, so nested pumps neither deliver its events (no re-entrant or out-of-order delivery) nor check its timers nor let its passed deadline make them spin (`reactor_wait_ms()`); `on_headers`/`retry_end` notification moved to delivery (`reactor_head_notify()`); the deferred-cancel machinery (`in_curl`, `cancel_later`, `reactor_cancel_pending()`) is gone because cancels never happen inside `multi_run()` any more; a failing `curl::multi_add()` fails the transfer instead of escaping the pump. New test "callbacks may pump the reactor: nested transfers run, the outer stream stays ordered"; ambiguity 19 rewritten. |
-| 2 | major | Task 2 `http_handle()`; Global Constraints | `low_speed_limit = 1`, `low_speed_time = idle + 30` (04 8.2) average bytes per second, so every stream slower than 1 byte/s dies after idle + 30 s: measured "Operation too slow ... the last 42 seconds" at 44 s with a one-byte-per-10-s mock and `gptr.idle_timeout = 12`; with the defaults at 120 s. That violates INFRA-05 ("A 10-minute stream sending one byte every 10 s completes", 10a; 03 6.18 row 05) and 04's own "no total timeout"; the 60 s acceptance test hid it. | applied | The handles set no low-speed limit (the reactor checks both timers after every `multi_run()`, so the backstop protected nothing); the INFRA-05 trickle test runs with `gptr.idle_timeout = 15`, so its 60 s stream would have been cut at 45 s by the old values; Global Constraints, File Structure and ambiguity 5 record the 04/03 conflict and the reading. |
+| 2 | major | Task 2 `http_handle()`; Global Constraints | `low_speed_limit = 1`, `low_speed_time = idle + 30` (04 section 8.2) average bytes per second, so every stream slower than 1 byte/s dies after idle + 30 s: measured "Operation too slow ... the last 42 seconds" at 44 s with a one-byte-per-10-s mock and `gptr.idle_timeout = 12`; with the defaults at 120 s. That violates INFRA-05 ("A 10-minute stream sending one byte every 10 s completes", 10a; 03 section 6.18 row 05) and 04's own "no total timeout"; the 60 s acceptance test hid it. | applied | The handles set no low-speed limit (the reactor checks both timers after every `multi_run()`, so the backstop protected nothing); the INFRA-05 trickle test runs with `gptr.idle_timeout = 15`, so its 60 s stream would have been cut at 45 s by the old values; Global Constraints, File Structure and ambiguity 5 record the 04/03 conflict and the reading. |
 | 3 | major | Task 4 `proc_sweep()` | The sweep killed the recorded child by pid whenever `pid_alive(pid, create_time)` was TRUE, and an unknown creation time (the JSON string "NA" in a marker file) counts as a match, so after a crash the next load could kill an unrelated process that had reused the pid (reproduced with a bystander process). | applied | Kill by pid only when the recorded creation time is known and matches; killing by marker is unchanged. New test "proc_sweep() never kills by pid when the recorded creation time is unknown"; ambiguity 21 extended. |
-| 4 | major | Task 6 `reactor_pump()` default `allow_runs` | 04 8.2/IC-57 default is `NULL` only when `run_current()` is NULL. The draft used the FIFO tool stack, but P06's `run_current()` is non-NULL for every executing tool (FIFO or not), so a pump nested in a non-FIFO tool (an MCP call) or in a timer/task/stream callback defaulted to "all runs" and could run a sibling's queued R tool (reproduced with a timer). The ambiguity claimed both conditions were the same. | applied | A missing `allow_runs` is `NULL` at depth 0, else `character()` (every tool executes inside a pump, so this covers 04's condition and IC-57's first sentence); callers that need FIFO tools already pass `allow_runs` (P06, P07, P08, P21, `write_all()`). New test "a pump nested in a reactor callback runs no FIFO tool unless allow_runs names it"; ambiguity 1 rewritten. |
+| 4 | major | Task 6 `reactor_pump()` default `allow_runs` | 04 section 8.2/IC-57 default is `NULL` only when `run_current()` is NULL. The draft used the FIFO tool stack, but P06's `run_current()` is non-NULL for every executing tool (FIFO or not), so a pump nested in a non-FIFO tool (an MCP call) or in a timer/task/stream callback defaulted to "all runs" and could run a sibling's queued R tool (reproduced with a timer). The ambiguity claimed both conditions were the same. | applied | A missing `allow_runs` is `NULL` at depth 0, else `character()` (every tool executes inside a pump, so this covers 04's condition and IC-57's first sentence); callers that need FIFO tools already pass `allow_runs` (P06, P07, P08, P21, `write_all()`). New test "a pump nested in a reactor callback runs no FIFO tool unless allow_runs names it"; ambiguity 1 rewritten. |
 | 5 | minor | Task 6 | IC-57 requires the MCP handler (P18) to answer requests of runs outside the nested pump's `allow_runs` with `-32002`, but the pump's `allow_runs` was private to the reactor. | applied | `reactor_pump()` keeps an `allow_stack`; new internal `reactor_allow_runs()` (NULL outside a pump and in the outermost pump, else the nested pump's runs) and its test. |
 | 6 | minor | Task 7 `line_reader()` | processx drops a trailing byte that is not UTF-8 with the warning "Invalid multi-byte character at end of stream ignored"; the warning escaped the pump (a WARN in tests, an error that loses the chunk under `options(warn = 2)`). | applied | Reads are wrapped in `suppressWarnings()`; new test "line_reader() drops bytes that are not UTF-8 without a warning". |
-| 7 | minor | Task 5 `gptr_jobs()` roxygen | 04 3.1: the owner plan documents its options for `?gptr_options`; P04's nine options were documented nowhere (P03 uses an Options section on its export). | applied | `@section Options:` on `gptr_jobs()` lists the nine options with their defaults. |
+| 7 | minor | Task 5 `gptr_jobs()` roxygen | 04 section 3.1: the owner plan documents its options for `?gptr_options`; P04's nine options were documented nowhere (P03 uses an Options section on its export). | applied | `@section Options:` on `gptr_jobs()` lists the nine options with their defaults. |
 | 8 | minor | Steps 2 and 4 of Tasks 4-12; Plan acceptance | Most expected summary lines were wrong even for the draft's own code (Task 4 green 26 vs 27, Task 6 red FAIL 10 vs 12 and green 39 vs 44, Task 7 green 51 vs 52, Task 8 green 114 vs 120, Task 10 green 66 vs 69, Task 12 green 111 vs 117, total 417); Task 12's red description named three tests instead of four. | applied | Every red and green line re-measured task by task after the fixes (total `PASS 452`); Task 12's red description lists the four failing tests and the error of the first. |
 | 9 | minor | Tasks 2 and 11 text | "P05 copies them (the timeouts) from the adapter `opts`" is untrue: P05's plan passes the options only in `opts`. | applied | Reworded: an adapter that wants per-provider timeouts copies them into the spec; P05's does not, so the options apply. |
 | 10 | minor | Task 11 test "IC-64: a redirect is never followed ..." | The key-bytes grep over the mock log was vacuous: P01's mock redacts key headers in its log. | applied | Replaced by `expect_identical(lg$path, "/v1/messages")`: one logged request on the first origin's path proves the second origin got nothing. |
 | 11 | minor | Task 4 `pid_alive()` roxygen | P06's lock check passes a POSIXct creation time; the doc said num(1) only. | applied | Doc says a POSIXct is accepted (the code already converts with `as.numeric()`). |
 | 12 | minor | Task 3 `transport_error()` | Should use P01's `gptr_condition()` instead of `tryCatch(gptr_abort(...))`. | rejected | `gptr_condition()` is not in 04, and a plan may rely only on 04's names; the `tryCatch()` is the innermost handler, so no outer or global handler sees the transient signal. |
-| 13 | minor | Task 11/12 `retry_start`/`retry_end` | 04 8.2 says the reactor's wait emits these events, but P05's plan passes no `on_retry`, so transport retries emit nothing. | rejected | An L0 file cannot emit run events; the `on_retry` hook is P04's side (ambiguity 3) and the wiring belongs to P05/P06. |
-| 14 | minor | Task 4 `on_load(proc_sweep())` | 04 7.1 says `zzz.R` does no disk or process work at load. | rejected | IC-60 (section 15, which wins) makes the sweep at load mandatory; it only lists `R_user_dir("gptr", "cache")/procs/` and creates nothing (ambiguity 11). |
-| 15 | minor | Task 10/12 wire log | A retried attempt writes an `event = "retry"` line, which is neither a request start nor a terminal event (04 8.2). | rejected | Every attempt is a request on the wire with its own start line; ending it with a line keeps the log complete for INFRA-28 and adds no header or body. |
-| 16 | minor | Task 7 code-page fallback (G5 verification item 24) | On Windows, argv-form console programs may write in the OEM code page, which the CP1252 fallback mis-decodes. | rejected | 04 7.4 fixes `raw_to_utf8()`'s CP1252 fallback (P01) for redirected files and processx drops undecodable pipe bytes; OEM handling is an open question of report G5, not a contract item. |
+| 13 | minor | Task 11/12 `retry_start`/`retry_end` | 04 section 8.2 says the reactor's wait emits these events, but P05's plan passes no `on_retry`, so transport retries emit nothing. | rejected | An L0 file cannot emit run events; the `on_retry` hook is P04's side (ambiguity 3) and the wiring belongs to P05/P06. |
+| 14 | minor | Task 4 `on_load(proc_sweep())` | 04 section 7.1 says `zzz.R` does no disk or process work at load. | rejected | IC-60 (section 15, which wins) makes the sweep at load mandatory; it only lists `R_user_dir("gptr", "cache")/procs/` and creates nothing (ambiguity 11). |
+| 15 | minor | Task 10/12 wire log | A retried attempt writes an `event = "retry"` line, which is neither a request start nor a terminal event (04 section 8.2). | rejected | Every attempt is a request on the wire with its own start line; ending it with a line keeps the log complete for INFRA-28 and adds no header or body. |
+| 16 | minor | Task 7 code-page fallback (G5 verification item 24) | On Windows, argv-form console programs may write in the OEM code page, which the CP1252 fallback mis-decodes. | rejected | 04 section 7.4 fixes `raw_to_utf8()`'s CP1252 fallback (P01) for redirected files and processx drops undecodable pipe bytes; OEM handling is an open question of report G5, not a contract item. |
 
 ### Review round 2 (2026-10-01)
 
-Second adversarial review against the same documents plus the current P01, P02, P03, P05, P06, P13 and P21 plans (P01's mock server and P05's transport wiring changed after round 1). The scratch package was rebuilt from the current P01 code; every "applied" row with a test was reproduced on the round-1 code (the test fails there) and passes now; Steps 2 and 4 of every task and "Plan acceptance" were re-measured (final `PASS 464`).
+Second adversarial review against the same documents plus the current P01, P02, P03, P05, P06, P13
+and P21 plans (P01's mock server and P05's transport wiring changed after round 1). The scratch
+package was rebuilt from the current P01 code; every "applied" row with a test was reproduced on the
+round-1 code (the test fails there) and passes now; Steps 2 and 4 of every task and "Plan
+acceptance" were re-measured (final `PASS 464`).
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| 17 | major | Task 8 `reactor_read_procs()`, `reactor_pollables()` | A pump nested inside `on_line` (a `process_jsonl` normaliser whose events reach a hook that calls System 1, which IC-57 allows) read the same child's later lines and delivered them re-entrantly, and both the nested and the outer pass reported the exit: `on_exit` ran twice (reproduced: `"line 4 " "exit 0" "exit 0"`), against 04 8.2 "`on_exit(status)` once". | applied | A watcher is busy while its callbacks run: nested pumps skip it in `reactor_read_procs()` and leave its pipes out of `reactor_pollables()` (its unread output would make their polls return at once); delivery moved to the new `reactor_read_proc()`, which stops as soon as a callback cancelled the watcher and reports the exit only while the watcher is registered. New test "a pump nested in on_line never re-enters the watcher and on_exit comes once, last"; `reactor_proc()` roxygen states that a callback must not wait for the same child's next line; ambiguity 23. |
+| 17 | major | Task 8 `reactor_read_procs()`, `reactor_pollables()` | A pump nested inside `on_line` (a `process_jsonl` normaliser whose events reach a hook that calls System 1, which IC-57 allows) read the same child's later lines and delivered them re-entrantly, and both the nested and the outer pass reported the exit: `on_exit` ran twice (reproduced: `"line 4 " "exit 0" "exit 0"`), against 04 section 8.2 "`on_exit(status)` once". | applied | A watcher is busy while its callbacks run: nested pumps skip it in `reactor_read_procs()` and leave its pipes out of `reactor_pollables()` (its unread output would make their polls return at once); delivery moved to the new `reactor_read_proc()`, which stops as soon as a callback cancelled the watcher and reports the exit only while the watcher is registered. New test "a pump nested in on_line never re-enters the watcher and on_exit comes once, last"; `reactor_proc()` roxygen states that a callback must not wait for the same child's next line; ambiguity 23. |
 | 18 | major | Task 6 `reactor_run_tasks()` | A task whose call pumps the reactor (an `inprocess` generator whose emitted events reach a hook that calls System 1) was called again by the nested pump before it returned (reproduced), so a generator's batches could interleave; P05's `stream_inprocess_step()` has no guard of its own. | applied | Tasks carry a `busy` mark set by the new `reactor_run_task()` (cleared by `on.exit()`, also on an interrupt); nested pumps skip busy tasks and `reactor_next_due()` ignores them. New test "a task is never re-entered by a pump nested inside its own call"; Global Constraints and ambiguity 23 state the rule for transfers, tasks and watchers alike. |
 | 19 | major | Task 11 `reactor_admit()` | `reactor_start()` runs `on_fail` synchronously when a transfer cannot start (a key handle bound to another origin, a failing `curl::multi_add()`). A transfer queued by that callback (a fallback request) was appended to `r$queue`, which `reactor_admit()` then overwrote with its own list: it stayed `queued` forever (reproduced: the pump timed out). | applied | The queue is rebuilt after the loop from every id still in state `queued`, and the active count is re-read after each start (a failed start may have started transfers). New test "a transfer queued by a callback that runs during admission is not lost". |
 | 20 | minor | Task 2 Interfaces; Task 6 Interfaces; Task 11 Interfaces and `reactor_http()` roxygen; ambiguities 3, 4, 8, 19; names table | Statements about P05 were stale: P05's plan now copies the three timeouts from `opts` into every spec, passes `on_retry` and forwards the notes to `emit`, wires `opts$retry` to `reactor_retry()`, and keeps its own clock for an `inprocess` generator's `wait` (no numeric task return). Round-1 rows 9 and 13 reasoned from the older P05. | applied | Each statement corrected; the names table lists P05's use of the internals `reactor_retry()`, `write_close()`, `ratelimit_get()`, `ratelimit_set()` and gains rows for P06 and P13. |
-| 21 | minor | Task 10 `wire_log()` | `ts` was an ISO 8601 string; 04 1.2 defines `ts` as `num(1)` seconds since the epoch (the ISO form is `timestamp`). | applied | `ts = round(as.numeric(Sys.time()), 3)`; the INFRA-28 test asserts a double close to now; ambiguity 24. |
+| 21 | minor | Task 10 `wire_log()` | `ts` was an ISO 8601 string; 04 section 1.2 defines `ts` as `num(1)` seconds since the epoch (the ISO form is `timestamp`). | applied | `ts = round(as.numeric(Sys.time()), 3)`; the INFRA-28 test asserts a double close to now; ambiguity 24. |
 | 22 | minor | Task 11 test "IC-64: a redirect is never followed and never carries the key" | The comment said P01's mock redacts key headers in its log; the current P01 mock logs raw header bytes at the second origin (IC-64). | applied | Comment corrected; `expect_false(any(grepl(key, lg$headers, fixed = TRUE)))` added next to the one-request check. |
 | 23 | minor | Task 11 test helper `run_request()` | Same name as P06's internal `run_request(run)`; the file-local definition shadows it inside `test-http-request.R`, which is harmless but misleading. | applied | Renamed `request_until_done()`. |
 | 24 | minor | Task 5 `gptr_jobs()` roxygen | The Options section was a run of lines that markdown roxygen joins into one paragraph. | applied | An itemised list (checked in the generated `man/gptr_jobs.Rd`). |
 | 25 | minor | Task 6 test "reactor_cancel() removes timers, tasks and FIFO items" | A local variable named `c` shadowed `base::c()` on the line that called `c()`. | applied | Renamed `timer`, `task`, `tool`. |
 | 26 | minor | Tasks 1 and 7, `sse_splitter()` and `line_reader()` | Re-scanning the carried tail on every chunk is quadratic in the size of one event or line. | rejected | Provider events are small (Anthropic and OpenAI deltas, Gemini chunks) and INFRA-23's bound is met; a 1 MB event in 16 KB chunks scans about 32 MB (milliseconds). An offset cache would complicate the CR hold-back for no measured benefit. |
-| 27 | minor | Task 4 `kill_all()` order | G5 says `taskkill /T` must run while the parent lives, yet `kill_tree()` runs first and usually kills the parent. | rejected | The order is 04 7.4's ("interrupt, wait `grace`, `kill_tree()`, Windows `taskkill /F /T /PID`, then `$kill()`") and G5's own prototype; on Windows ps reads every process's environment, so `kill_tree()` finds descendants by marker and `taskkill` covers a parent it could not kill. |
-| 28 | minor | Tasks 8 and 11 `reactor_cancel_id()` for watchers | `kill_all()` with the default 2 s grace blocks the pump. | rejected | 04 8.2 specifies "interrupt, grace, `kill_all()`" for process watchers; the wait ends as soon as the child exits. |
+| 27 | minor | Task 4 `kill_all()` order | G5 says `taskkill /T` must run while the parent lives, yet `kill_tree()` runs first and usually kills the parent. | rejected | The order is 04 section 7.4's ("interrupt, wait `grace`, `kill_tree()`, Windows `taskkill /F /T /PID`, then `$kill()`") and G5's own prototype; on Windows ps reads every process's environment, so `kill_tree()` finds descendants by marker and `taskkill` covers a parent it could not kill. |
+| 28 | minor | Tasks 8 and 11 `reactor_cancel_id()` for watchers | `kill_all()` with the default 2 s grace blocks the pump. | rejected | 04 section 8.2 specifies "interrupt, grace, `kill_all()`" for process watchers; the wait ends as soon as the child exits. |
 | 29 | minor | Task 3 `retry_classify()` | A 304 Not Modified is reported as a refused redirect. | rejected | IC-64 makes every 3xx the `redirect` class; P05's ETag refresh reads `cnd$status` (304) and handles it (names table). |
 
 ## Cross-plan consolidation log
 
-Issues raised by the cross-plan checkers (2026-10-01), verified against 04 (§8.1, §8.2, §2.2), 05 (P04, M0 exit), P01 (acceptance A3 and its note, decision 5) and P13 (Task 4, ambiguity 17, review row 7).
+Issues raised by the cross-plan checkers (2026-10-01), verified against 04 (sections 8.1, 8.2, 2.2),
+05 (P04, M0 exit), P01 (acceptance A3 and its note, decision 5) and P13 (Task 4, ambiguity 17,
+review row 7).
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| C1 | obligations | minor | Task 3 `retry_body_error()` | applied (corrected) | Valid: the reactor sends every non-2xx response to `on_fail()` after `retry_classify()`, so P13's `classify$parse` never sees the body, and `retry_body_error()` read only `{"error": ...}`; a TypeSafe System One failure lost the service's explanation. 04 §8.2 leaves the body parsing to `retry_classify()` (`message = chr(1)`), so this is no deviation from 04 and the retry table is unchanged. The proposed snippet read `detail.type`, but report 04a's body (P13's fixtures) is `{"detail": {"error_type", "message"}}`; the change reads `error_type` (then `type`), also the 422 `{"detail": [{"loc", "msg"}]}` array (new helper `retry_detail_entry()`, entries joined with "; "), `{"detail": "text"}` and a top-level `{"message", "error_type"}` (the shapes of P13's `s1_http_error()`); `{"error": ...}` bodies keep precedence. New test "retry_classify() keeps the service's message from FastAPI detail bodies (report 04a)" (9 expectations; 5 fail on the previous code). Counts updated: Task 3 red `FAIL 8`, green 63 (60 without `de_DE.UTF-8`); Task 9 red `PASS 63`, green 84; Task 12 red `PASS 104`, green 126; acceptance rows 1 (473) and 4 (126). Task 3 Interfaces and prose name the shapes. |
+| C1 | obligations | minor | Task 3 `retry_body_error()` | applied (corrected) | Valid: the reactor sends every non-2xx response to `on_fail()` after `retry_classify()`, so P13's `classify$parse` never sees the body, and `retry_body_error()` read only `{"error": ...}`; a TypeSafe System One failure lost the service's explanation. 04 section 8.2 leaves the body parsing to `retry_classify()` (`message = chr(1)`), so this is no deviation from 04 and the retry table is unchanged. The proposed snippet read `detail.type`, but report 04a's body (P13's fixtures) is `{"detail": {"error_type", "message"}}`; the change reads `error_type` (then `type`), also the 422 `{"detail": [{"loc", "msg"}]}` array (new helper `retry_detail_entry()`, entries joined with "; "), `{"detail": "text"}` and a top-level `{"message", "error_type"}` (the shapes of P13's `s1_http_error()`); `{"error": ...}` bodies keep precedence. New test "retry_classify() keeps the service's message from FastAPI detail bodies (report 04a)" (9 expectations; 5 fail on the previous code). Counts updated: Task 3 red `FAIL 8`, green 63 (60 without `de_DE.UTF-8`); Task 9 red `PASS 63`, green 84; Task 12 red `PASS 104`, green 126; acceptance rows 1 (473) and 4 (126). Task 3 Interfaces and prose name the shapes. |
 | C2 | obligations | minor | M0 exit commands (`lintr::lint_package()`) | applied | Valid: on the uninstalled tree (the M0 install goes to a temporary library) `object_usage_linter` reports every internal call, so "no lints" could not hold; P01 A3 and P22 already use the loaded form. Command replaced by `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`, expected "no lint printed; exit 0", with P01's reason. |
 | C3 | trace | minor | M0 exit commands (`lintr::lint_package()`) | applied (same change as C2) | Duplicate of C2; the one replacement covers both. |

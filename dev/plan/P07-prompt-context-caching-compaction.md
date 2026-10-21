@@ -9,15 +9,34 @@
 > reconcile the affected steps before implementation. No implementation has
 > been performed as part of this design update.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give every gptr session a frozen, cache-anchored, append-only context (system prompt, tool array, first message, per-turn blocks, compaction checkpoints) whose token cost is measured against committed baselines.
+**Goal:** Give every gptr session a frozen, cache-anchored, append-only context (system prompt, tool
+array, first message, per-turn blocks, compaction checkpoints) whose token cost is measured against
+committed baselines.
 
-**Architecture:** `prompt-sections.R` composes registered `prompt_section` and `preset` records into two frozen system blocks (T0, T1) and a once-serialised tool array, stored in `.d$frozen` and in a `gptr.frozen` entry; `prompt-context.R` renders `context_block` records into the first user message (with the project block as the second cache anchor) and deduplicated turn blocks; `prompt-cache.R` assembles every request for a target model from the frozen prompt plus the projected transcript, attaches the gap-based cache plan and guards the byte prefix; `prompt-compact.R` decides when to compact and writes an in-conversation checkpoint whose compaction entry reuses the project block byte for byte. The session kernel (P06) reaches all of it only through the services of contract section 7.0 (`prompt.freeze`, `context.first`, `context.turn`, `request.build`, `prefix.guard`, `compact.should`, `compact.run`, `ctx.input`, `session.add_tools`).
+**Architecture:** `prompt-sections.R` composes registered `prompt_section` and `preset` records into
+two frozen system blocks (T0, T1) and a once-serialised tool array, stored in `.d$frozen` and in a
+`gptr.frozen` entry; `prompt-context.R` renders `context_block` records into the first user message
+(with the project block as the second cache anchor) and deduplicated turn blocks; `prompt-cache.R`
+assembles every request for a target model from the frozen prompt plus the projected transcript,
+attaches the gap-based cache plan and guards the byte prefix; `prompt-compact.R` decides when to
+compact and writes an in-conversation checkpoint whose compaction entry reuses the project block
+byte for byte. The session kernel (P06) reaches all of it only through the services of contract
+section 7.0 (`prompt.freeze`, `context.first`, `context.turn`, `request.build`, `prefix.guard`,
+`compact.should`, `compact.run`, `ctx.input`, `session.add_tools`).
 
-**Tech Stack:** base R (>= 4.2.0); jsonlite (through P01's `json_encode()`/`json_decode()`); rlang (`obj_address()`); ps (`ps_system_memory()`); cli (through P01); testthat 3e and withr in tests; rtiktoken only in the development runner `dev/bench/tokens/run.R` (not a dependency).
+**Tech Stack:** base R (>= 4.2.0); jsonlite (through P01's `json_encode()`/`json_decode()`); rlang
+(`obj_address()`); ps (`ps_system_memory()`); cli (through P01); testthat 3e and withr in tests;
+rtiktoken only in the development runner `dev/bench/tokens/run.R` (not a dependency).
 
-**Spec:** dev/spec/03-architecture.md (§2.2-2.4, §3.2, §5.1-5.4, §6.4, §6.11, §7.1-7.5, §12.1-12.8), dev/spec/04-interface-contract.md (§1.1-1.5, §2.1-2.2, §3.1, §4.1-4.9, §5.1, §5.11, §6.6 `gptr_prompt()`, §7.0-7.7, §8.1-8.4, §9.1-9.3, §10.1-10.7, §11.1-11.4, §12.1-12.4, §15: IC-33, IC-34, IC-37, IC-38, IC-52, IC-53, IC-55, IC-67, IC-68, IC-69, IC-71, IC-73), dev/spec/05-plan-decomposition.md (P07).
+**Spec:** dev/spec/03-architecture.md (sections 2.2-2.4, 3.2, 5.1-5.4, 6.4, 6.11, 7.1-7.5,
+12.1-12.8), dev/spec/04-interface-contract.md (sections 1.1-1.5, 2.1-2.2, 3.1, 4.1-4.9, 5.1, 5.11,
+6.6 `gptr_prompt()`, 7.0-7.7, 8.1-8.4, 9.1-9.3, 10.1-10.7, 11.1-11.4, 12.1-12.4, section 15: IC-33,
+IC-34, IC-37, IC-38, IC-52, IC-53, IC-55, IC-67, IC-68, IC-69, IC-71, IC-73),
+dev/spec/05-plan-decomposition.md (P07).
 
 **Depends on:** P06 (and through it P01-P05). **Milestone:** M1.
 
@@ -25,39 +44,174 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow; `<<-` only for closure state), the native `|>` (never `%>%`), ASCII-only R sources (non-ASCII as `\u` escapes), `pkg::fun()` calls, conditions only through `gptr_abort()`/`gptr_warn()`/`gptr_inform()` with messages built by concatenation (never glue-interpolated), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed global state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line your harness specifies (conventions §10). Plan-specific requirements, copied from the specification:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow; `<<-` only
+for closure state), the native `|>` (never `%>%`), ASCII-only R sources (non-ASCII as `\u` escapes),
+`pkg::fun()` calls, conditions only through `gptr_abort()`/`gptr_warn()`/`gptr_inform()` with
+messages built by concatenation (never glue-interpolated), no `:::` in `R/`, no `.GlobalEnv`, no
+`withr::` in `R/`, every changed global state restored with `on.exit(..., add = TRUE)`, testthat 3e,
+no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one
+commit per task whose message ends with the attribution line your harness specifies (conventions
+section 10). Plan-specific requirements, copied from the specification:
 
-- Owned files (05 P07): `R/prompt-sections.R`, `R/prompt-text.R`, `R/prompt-context.R`, `R/prompt-cache.R`, `R/prompt-compact.R`; their tests `tests/testthat/test-prompt-sections.R`, `test-prompt-text.R`, `test-prompt-context.R`, `test-prompt-cache.R`, `test-prompt-compact.R`; `tests/testthat/test-context-prefix.R`; `tests/testthat/test-bench-context.R`; `tests/testthat/fixtures/bench/prefix-baseline.json` (with its stand-in loader `fixtures/bench/standins.R`); `dev/bench/tokens/run.R` and the NS-2/NS-3 golden transcripts (`dev/bench/tokens/fixtures/*.json`, `dev/bench/tokens/baseline.csv`) (IC-73); plus `NAMESPACE` and `man/gptr_prompt.Rd` through `Rscript --vanilla -e 'devtools::document()'`.
-- Layer (03 §3.2): all five files are L3. They call L0-L2 functions, P06's kernel SDK (`session_data()`, `session_live()`, `session_home()`, `session_append()`; IC-33) and later plans only through services (`trust.get`, `doc.site`, `plan.pending`, `router.call`) with the fallbacks of 04 §7.0. Nothing prints except `print.gptr_prompt_view()` (04 §1.5).
-- Export (04 §6.6, §14.1): `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)`; "`x`: `<session>` (its frozen system blocks, tool array and first message) or `NULL` (what a new session would freeze now with the current settings, `preset` or the default preset). Returns a `gptr_prompt_view` (§5.11); `tokens = TRUE` adds per-section estimates. No model call. Conditions: `invalid_argument`." Class `gptr_prompt_view` = "list(system = list(t0, t1), tools_json, first_message (chr), sections df(name, tier, tokens), total_tokens); `print` shows each part with its token estimate". Example: `gptr_prompt(preset = "minimal")`.
-- Internal signatures (04 §7.7): `prompt_freeze(s, opts = list())`, `preset_tools(preset, human, model = NULL, modifiers = character(), mode = NULL)`, `session_add_tools(s, specs)`, `prompt_texts()`, `context_first_message(s, input)`, `context_turn_blocks(s, input)`, `request_build(s, target, extra = NULL)` -> `list(context, view, tokens_est, components)`, `prefix_guard(s, target, view)`, `compact_threshold(window, max_output, r_cap = 4000)`, `compact_should(s, tokens, idle_s)`, `extract_state(entries)`, `builtin_prompt(gptr)`, `builtin_context(gptr)`, `builtin_compaction(gptr)`; plus `compact_run(s, reason, focus = NULL)` (the `compact.run` service).
-- Services provided (04 §7.0): `prompt.freeze` = `function(s, opts) frozen list`; `context.first`, `context.turn` = `function(s, input) list of context blocks`; `request.build` = `function(s, target, extra = NULL) list(context, view, tokens_est, components)`; `prefix.guard` = `function(s, target, view) invisible(NULL)`; `compact.should` = `function(s, tokens, idle_s) lgl(1)`; `compact.run` = `function(s, reason, focus = NULL) invisible(s)`; `ctx.input` = `function(ctx) list or NULL`; `session.add_tools` = `function(s, specs) invisible(s)`. Each is registered with `on_load(ext_service_set(<name>, <fun>, provided_by = "P07", builtin = <"prompt" | "context" | "compaction">))`.
-- Built-ins (04 §10.3): `builtin:prompt` ("the §9.3 sections it owns, the four `preset` records, the gap `cache_policy`, the default `estimator`, the `session.add_tools` service"), `builtin:context` ("context blocks `project_instructions` (100), `environment` (200), `mode` (300), `plan` (400)"), `builtin:compaction` ("compactor `checkpoint`"), each declared with `on_load(ext_declare_builtin("<name>", builtin_<name>))`.
-- Sections (04 §9.3): `preamble` T0 100 budget 120; `tools` T0 200 250; `rules` T0 300 450; `r_session` T0 400 500; `r_performance` T0 450 "150 / 450"; `modes` T0 700 120; `context` T0 750 160; `addendum` T1 800 1,000. "the `preamble` untagged, every other section wrapped as `<name>\n...\n</name>`, sections joined by one blank line"; "`{s1}` is replaced by the configured System 1 alias (`jev`)"; mid-session changes are "`Updated system prompt section "<name>":\n\n<section>` or `Removed system prompt section "<name>".`"; "`.gptr/SYSTEM.md` (trusted), the user's `SYSTEM.md` or `.opts$system` (a string) replace `preamble`, `tools` and `rules` (Pi's rule); a named `.opts$system` list overrides named sections (`NULL` removes)".
-- Presets (04 §7.7, IC-68, IC-69): "`minimal` = `read`, `r`, `edit`, `write`; `standard` = minimal + `ask` when `human`, or when `mode` is `manual` without a human (NS-12, IC-68); `readonly` = `read`, `r` (+ `ask`); `extended` = standard + `grep`, `find`, `ls`"; "section predicates read the preset record, never its name"; array order (04 §9.1) "`read`, `r`, `edit`, `write`, `ask` (when available), then `grep`, `find`, `ls` (extended preset), then plugin direct tools sorted by name, then direct MCP tools (`mcp__<server>__<tool>`) sorted by name"; shipped `tools.presets` `{"google/gemini-3*": "extended", "anthropic/claude-haiku-4-5*": "extended"}` "applied only when the catalog's `cache_min` exceeds the projected standard prefix (o200k estimate times the provider prior) and the session is expected to pass break-even (interactive sessions and fan-out children)" (IC-73); provider priors "OpenAI 1.00, Claude 4.7+ 1.35, Gemini 1.10" (03 §12.5).
-- Context blocks (03 §7.4, 04 §4.1.1, IC-38, IC-52): first-message order `<project_instructions>`, `<environment>`, `<mode>`, `<plan>`, `<workspace>`, `<attached>`, `<skill_content>`, prompt; "the project block gets `anchor = TRUE`"; instruction files "user-level `AGENTS.md` (gptr home), then for each directory from the project root down to cwd the first of `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md` (plus `CLAUDE.local.md`), then `.gptr/vignette.Rmd`" with "YAML front matter and HTML comments stripped from vignette.Rmd, chunks kept verbatim and never executed"; budgets `<project_instructions>` "6,000 (warn), 64 KiB hard cap", `<environment>` 100, `<mode>` 150, `<plan>` 1,500 (03 §12.2); "In an untrusted project, project instructions render as `<project_instructions trusted="false">`"; "Non-interactive + untrusted + mode `auto` or `edits`: project instructions ... are omitted with a notice"; "a block whose text hash equals the last emitted text of the same name in this session is skipped"; "until P09 registers the `attached` and `workspace` blocks, attached objects render as a one-line `name <class>`".
-- Mode blocks (03 §7.4, 04 §9.3): the four texts verbatim; non-interactive suffix "No one can answer questions or approvals in this run, so actions that need approval stop the run. State your assumptions instead of asking." (with `gptr.noninteractive_ask = "deny"`: "so actions that need approval are refused."); in `manual`: "No one can answer questions or approvals in this run: actions that need approval, and questions asked with the ask tool, stop the run. Ask only when no reasonable assumption lets you continue."
-- Caching (03 §6.11, D-19): "Anthropic BP1 at the end of T0 (1 h), BP2 on the project block (1 h), top-level automatic caching for the tail; OpenAI Responses: developer message with explicit breakpoints on T0, T1 and the project block, implicit tail, `prompt_cache_key = "gptr:" + 12 hex of the project root`; Gemini implicit"; "The tail uses the 5-minute TTL, switching to 1 hour after any inter-request gap longer than 240 s"; the request context fields of 04 §8.1 (`system`, `tools_json`, `tools`, `messages`, `cache_plan` = `list(anchors, tail_ttl, key)`, `params` = `list(max_tokens, thinking, effort, tool_choice, returns, temperature)`, `session_id`, `request_id`).
-- Prefix guard (03 §6.11, 04 §7.7): "compares with the previous request to the same (provider, model); on a break emits `cache_break`, appends `gptr.cache_break` and acts per `gptr.check_prefix`; resets on `session_tree`"; event payload `provider`, `model`, `first_diff`, `entry`, `culprit`; entry data `{provider, model, firstDiff, entry, culprit}`; warning class `cache_break` "only when `options(gptr.check_prefix = "warn")`".
-- Compaction (03 §6.11, IC-71): "`threshold = min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output + 2 * r_cap), gptr.compact_at = 200000)`, plus the cold rule (idle beyond the tail TTL and context >= 100k: compact first)"; "The checkpoint request is sent in-conversation (a cache read; `max_tokens = 2048`; a tool-calling reply is rejected) with G4's verbatim `<compaction_request>` prompt"; "the compaction entry holds the reused project and environment blocks, a `<checkpoint>` (model summary plus harness-extracted state ...), the mode and a fresh workspace block; `keep_recent = 0`"; checkpoint budgets "user messages 2,000; objects 800; decisions 300", skills "5,000 per skill, 10,000 re-injected after compaction"; floor check "static prefix + project instructions + re-injection budgets + 634 ... re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `preset = "minimal"` or `context = "names"`; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window"; events `session_before_compact` (first decision; payload `reason` (one of `threshold`, `cold`, `overflow`, `manual`) and `tokens`; returns `list(cancel = TRUE)` or `list(result = <compactor result>)`) and `session_compact` (notify; `strategy`, `tokens_before`, `summary_tokens`); compactor result `list(blocks, summary, state, first_kept_entry_id, usage, details)`.
-- Options owned (04 §3.1): `gptr.compact_at` (`200000`; the cap), `gptr.compact_cold_min` (`100000`), `gptr.cache_ttl` (`"gap"`, `"5m"`, `"1h"`), `gptr.cache_gap` (`240`), `gptr.check_prefix` (`"event"`, `"warn"`, `"error"`), all read with `gptr_opt()`. Settings keys owned (04 §11.2): `preset` (`"standard"`), `tools` (`{enable, disable, presets}`), `context` (`"summary"`), `cache` (`{ttl: "gap"}`), `compactor` (`"checkpoint"`), `compact_at` (`200000`), read with `setting_get()`.
-- Entries written (04 §4.6): `gptr.frozen` `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model}` ("first entry of every session, so resume reproduces the byte-exact prefix"), `gptr.cache_break`, `gptr.operator` custom messages (`kind` `tool_change`, `section_patch`, `reminder`), and `compaction` entries (`summary`, `first_kept_entry_id`, `tokens_before`, `details`, `usage`, `gptr = {blocks, state, n}`). Operator messages are appended in the session kernel's in-memory shape `list(type = "custom_message", custom_type = "gptr.operator", message = <operator msg>)` (P06 `entry_message()`): P06's store writes exactly that shape as the Pi line `{customType, content, display, details: {kind, toolAdd, originText}}` and rebuilds it at resume, and P05's `project_messages()` projects it; a flat entry without `message` would be written as an empty line. P07 reads operator entries in both the kernel shape and the flat Pi shape.
-- Texts (IC-67, IC-68): P07-owned texts are byte-identical to 03 §7.3-7.4 as amended; "no shipped text mentions `str(`"; "`<rules>` = the `guidelines` of the active direct tools in array order ..., then P07's three closing lines"; "`<r_session>` is P07's core text with fragments" inserted at `{{fragments}}` (`prompt_section(parent = "r_session")`).
-- Baselines (03 §12.1, §12.7; IC-68, IC-73): "with a fixed T1 fixture (`<r_env>` plus the two built-in skills, 542 tokens) ..., the preset estimates are within 5% of `prefix-baseline.json` (initial values: 1,271 / 2,360 / 2,844 / 2,987 measured o200k tokens, stored with the estimator's figures)"; golden-transcript gates "prefix +2%, input and output totals +5%, request count and image tokens +0, describer facts no loss, catalogs +5%; failure raises `gptr_error_token_regression`" (fields `fixture`, `metric`, `baseline`, `value`).
-- Conditions (04 §2.2): `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_internal` (`detail`), warning `gptr_warning_cache_break`, message `gptr_message_notice`.
-- Tests (conventions §7, 04 §12): the fake provider and P01's helpers `local_fake_provider()`, `fake_requests()`, `fake_tool()`, `fake_error()`, `local_project()`, `local_gptr_options()`; hooks in tests are registered with `gptr_register(gptr_hook(...))` and removed with the returned function. PASS counts below are those of a tree with P01-P07 only (M1); FAIL must be 0 in every green run.
+- Owned files (05 P07): `R/prompt-sections.R`, `R/prompt-text.R`, `R/prompt-context.R`,
+  `R/prompt-cache.R`, `R/prompt-compact.R`; their tests `tests/testthat/test-prompt-sections.R`,
+  `test-prompt-text.R`, `test-prompt-context.R`, `test-prompt-cache.R`, `test-prompt-compact.R`;
+  `tests/testthat/test-context-prefix.R`; `tests/testthat/test-bench-context.R`;
+  `tests/testthat/fixtures/bench/prefix-baseline.json` (with its stand-in loader
+  `fixtures/bench/standins.R`); `dev/bench/tokens/run.R` and the NS-2/NS-3 golden transcripts
+  (`dev/bench/tokens/fixtures/*.json`, `dev/bench/tokens/baseline.csv`) (IC-73); plus `NAMESPACE`
+  and `man/gptr_prompt.Rd` through `Rscript --vanilla -e 'devtools::document()'`.
+- Layer (03 section 3.2): all five files are L3. They call L0-L2 functions, P06's kernel SDK
+  (`session_data()`, `session_live()`, `session_home()`, `session_append()`; IC-33) and later plans
+  only through services (`trust.get`, `doc.site`, `plan.pending`, `router.call`) with the fallbacks
+  of 04 section 7.0. Nothing prints except `print.gptr_prompt_view()` (04 section 1.5).
+- Export (04 sections 6.6, 14.1): `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)`; "`x`:
+  `<session>` (its frozen system blocks, tool array and first message) or `NULL` (what a new session
+  would freeze now with the current settings, `preset` or the default preset). Returns a
+  `gptr_prompt_view` (§5.11); `tokens = TRUE` adds per-section estimates. No model call. Conditions:
+  `invalid_argument`." Class `gptr_prompt_view` = "list(system = list(t0, t1), tools_json,
+  first_message (chr), sections df(name, tier, tokens), total_tokens); `print` shows each part with
+  its token estimate". Example: `gptr_prompt(preset = "minimal")`.
+- Internal signatures (04 section 7.7): `prompt_freeze(s, opts = list())`,
+  `preset_tools(preset, human, model = NULL, modifiers = character(), mode = NULL)`,
+  `session_add_tools(s, specs)`, `prompt_texts()`, `context_first_message(s, input)`,
+  `context_turn_blocks(s, input)`, `request_build(s, target, extra = NULL)` ->
+  `list(context, view, tokens_est, components)`, `prefix_guard(s, target, view)`,
+  `compact_threshold(window, max_output, r_cap = 4000)`, `compact_should(s, tokens, idle_s)`,
+  `extract_state(entries)`, `builtin_prompt(gptr)`, `builtin_context(gptr)`,
+  `builtin_compaction(gptr)`; plus `compact_run(s, reason, focus = NULL)` (the `compact.run`
+  service).
+- Services provided (04 section 7.0): `prompt.freeze` = `function(s, opts) frozen list`;
+  `context.first`, `context.turn` = `function(s, input) list of context blocks`; `request.build` =
+  `function(s, target, extra = NULL) list(context, view, tokens_est, components)`; `prefix.guard` =
+  `function(s, target, view) invisible(NULL)`; `compact.should` =
+  `function(s, tokens, idle_s) lgl(1)`; `compact.run` =
+  `function(s, reason, focus = NULL) invisible(s)`; `ctx.input` = `function(ctx) list or NULL`;
+  `session.add_tools` = `function(s, specs) invisible(s)`. Each is registered with
+  `on_load(ext_service_set(<name>, <fun>, provided_by = "P07", builtin = <"prompt" | "context" | "compaction">))`.
+- Built-ins (04 section 10.3): `builtin:prompt` ("the §9.3 sections it owns, the four `preset`
+  records, the gap `cache_policy`, the default `estimator`, the `session.add_tools` service"),
+  `builtin:context` ("context blocks `project_instructions` (100), `environment` (200), `mode`
+  (300), `plan` (400)"), `builtin:compaction` ("compactor `checkpoint`"), each declared with
+  `on_load(ext_declare_builtin("<name>", builtin_<name>))`.
+- Sections (04 section 9.3): `preamble` T0 100 budget 120; `tools` T0 200 250; `rules` T0 300 450;
+  `r_session` T0 400 500; `r_performance` T0 450 "150 / 450"; `modes` T0 700 120; `context` T0 750
+  160; `addendum` T1 800 1,000. "the `preamble` untagged, every other section wrapped as
+  `<name>\n...\n</name>`, sections joined by one blank line"; "`{s1}` is replaced by the configured
+  System 1 alias (`jev`)"; mid-session changes are
+  "`Updated system prompt section "<name>":\n\n<section>` or
+  `Removed system prompt section "<name>".`"; "`.gptr/SYSTEM.md` (trusted), the user's `SYSTEM.md`
+  or `.opts$system` (a string) replace `preamble`, `tools` and `rules` (Pi's rule); a named
+  `.opts$system` list overrides named sections (`NULL` removes)".
+- Presets (04 section 7.7, IC-68, IC-69): "`minimal` = `read`, `r`, `edit`, `write`; `standard` =
+  minimal + `ask` when `human`, or when `mode` is `manual` without a human (NS-12, IC-68);
+  `readonly` = `read`, `r` (+ `ask`); `extended` = standard + `grep`, `find`, `ls`"; "section
+  predicates read the preset record, never its name"; array order (04 section 9.1) "`read`, `r`,
+  `edit`, `write`, `ask` (when available), then `grep`, `find`, `ls` (extended preset), then plugin
+  direct tools sorted by name, then direct MCP tools (`mcp__<server>__<tool>`) sorted by name";
+  shipped `tools.presets`
+  `{"google/gemini-3*": "extended", "anthropic/claude-haiku-4-5*": "extended"}` "applied only when
+  the catalog's `cache_min` exceeds the projected standard prefix (o200k estimate times the provider
+  prior) and the session is expected to pass break-even (interactive sessions and fan-out children)"
+  (IC-73); provider priors "OpenAI 1.00, Claude 4.7+ 1.35, Gemini 1.10" (03 section 12.5).
+- Context blocks (03 section 7.4, 04 section 4.1.1, IC-38, IC-52): first-message order
+  `<project_instructions>`, `<environment>`, `<mode>`, `<plan>`, `<workspace>`, `<attached>`,
+  `<skill_content>`, prompt; "the project block gets `anchor = TRUE`"; instruction files "user-level
+  `AGENTS.md` (gptr home), then for each directory from the project root down to cwd the first of
+  `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md` (plus `CLAUDE.local.md`), then
+  `.gptr/vignette.Rmd`" with "YAML front matter and HTML comments stripped from vignette.Rmd, chunks
+  kept verbatim and never executed"; budgets `<project_instructions>` "6,000 (warn), 64 KiB hard
+  cap", `<environment>` 100, `<mode>` 150, `<plan>` 1,500 (03 section 12.2); "In an untrusted
+  project, project instructions render as `<project_instructions trusted="false">`";
+  "Non-interactive + untrusted + mode `auto` or `edits`: project instructions ... are omitted with a
+  notice"; "a block whose text hash equals the last emitted text of the same name in this session is
+  skipped"; "until P09 registers the `attached` and `workspace` blocks, attached objects render as a
+  one-line `name <class>`".
+- Mode blocks (03 section 7.4, 04 section 9.3): the four texts verbatim; non-interactive suffix "No
+  one can answer questions or approvals in this run, so actions that need approval stop the run.
+  State your assumptions instead of asking." (with `gptr.noninteractive_ask = "deny"`: "so actions
+  that need approval are refused."); in `manual`: "No one can answer questions or approvals in this
+  run: actions that need approval, and questions asked with the ask tool, stop the run. Ask only
+  when no reasonable assumption lets you continue."
+- Caching (03 section 6.11, D-19): "Anthropic BP1 at the end of T0 (1 h), BP2 on the project block
+  (1 h), top-level automatic caching for the tail; OpenAI Responses: developer message with explicit
+  breakpoints on T0, T1 and the project block, implicit tail,
+  `prompt_cache_key = "gptr:" + 12 hex of the project root`; Gemini implicit"; "The tail uses the
+  5-minute TTL, switching to 1 hour after any inter-request gap longer than 240 s"; the request
+  context fields of 04 section 8.1 (`system`, `tools_json`, `tools`, `messages`, `cache_plan` =
+  `list(anchors, tail_ttl, key)`, `params` =
+  `list(max_tokens, thinking, effort, tool_choice, returns, temperature)`, `session_id`,
+  `request_id`).
+- Prefix guard (03 section 6.11, 04 section 7.7): "compares with the previous request to the same
+  (provider, model); on a break emits `cache_break`, appends `gptr.cache_break` and acts per
+  `gptr.check_prefix`; resets on `session_tree`"; event payload `provider`, `model`, `first_diff`,
+  `entry`, `culprit`; entry data `{provider, model, firstDiff, entry, culprit}`; warning class
+  `cache_break` "only when `options(gptr.check_prefix = "warn")`".
+- Compaction (03 section 6.11, IC-71):
+  "`threshold = min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output + 2 * r_cap), gptr.compact_at = 200000)`,
+  plus the cold rule (idle beyond the tail TTL and context >= 100k: compact first)"; "The checkpoint
+  request is sent in-conversation (a cache read; `max_tokens = 2048`; a tool-calling reply is
+  rejected) with G4's verbatim `<compaction_request>` prompt"; "the compaction entry holds the
+  reused project and environment blocks, a `<checkpoint>` (model summary plus harness-extracted
+  state ...), the mode and a fresh workspace block; `keep_recent = 0`"; checkpoint budgets "user
+  messages 2,000; objects 800; decisions 300", skills "5,000 per skill, 10,000 re-injected after
+  compaction"; floor check "static prefix + project instructions + re-injection budgets + 634 ...
+  re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused
+  for the preset with `gptr_error_invalid_argument` suggesting `preset = "minimal"` or
+  `context = "names"`; after a threshold compaction, further threshold compactions wait until the
+  context grew by 20% of the window"; events `session_before_compact` (first decision; payload
+  `reason` (one of `threshold`, `cold`, `overflow`, `manual`) and `tokens`; returns
+  `list(cancel = TRUE)` or `list(result = <compactor result>)`) and `session_compact` (notify;
+  `strategy`, `tokens_before`, `summary_tokens`); compactor result
+  `list(blocks, summary, state, first_kept_entry_id, usage, details)`.
+- Options owned (04 section 3.1): `gptr.compact_at` (`200000`; the cap), `gptr.compact_cold_min`
+  (`100000`), `gptr.cache_ttl` (`"gap"`, `"5m"`, `"1h"`), `gptr.cache_gap` (`240`),
+  `gptr.check_prefix` (`"event"`, `"warn"`, `"error"`), all read with `gptr_opt()`. Settings keys
+  owned (04 section 11.2): `preset` (`"standard"`), `tools` (`{enable, disable, presets}`),
+  `context` (`"summary"`), `cache` (`{ttl: "gap"}`), `compactor` (`"checkpoint"`), `compact_at`
+  (`200000`), read with `setting_get()`.
+- Entries written (04 section 4.6): `gptr.frozen`
+  `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model}` ("first
+  entry of every session, so resume reproduces the byte-exact prefix"), `gptr.cache_break`,
+  `gptr.operator` custom messages (`kind` `tool_change`, `section_patch`, `reminder`), and
+  `compaction` entries (`summary`, `first_kept_entry_id`, `tokens_before`, `details`, `usage`,
+  `gptr = {blocks, state, n}`). Operator messages are appended in the session kernel's in-memory
+  shape `list(type = "custom_message", custom_type = "gptr.operator", message = <operator msg>)`
+  (P06 `entry_message()`): P06's store writes exactly that shape as the Pi line
+  `{customType, content, display, details: {kind, toolAdd, originText}}` and rebuilds it at resume,
+  and P05's `project_messages()` projects it; a flat entry without `message` would be written as an
+  empty line. P07 reads operator entries in both the kernel shape and the flat Pi shape.
+- Texts (IC-67, IC-68): P07-owned texts are byte-identical to 03 section 7.3-7.4 as amended; "no
+  shipped text mentions `str(`"; "`<rules>` = the `guidelines` of the active direct tools in array
+  order ..., then P07's three closing lines"; "`<r_session>` is P07's core text with fragments"
+  inserted at `{{fragments}}` (`prompt_section(parent = "r_session")`).
+- Baselines (03 sections 12.1, 12.7; IC-68, IC-73): "with a fixed T1 fixture (`<r_env>` plus the two
+  built-in skills, 542 tokens) ..., the preset estimates are within 5% of `prefix-baseline.json`
+  (initial values: 1,271 / 2,360 / 2,844 / 2,987 measured o200k tokens, stored with the estimator's
+  figures)"; golden-transcript gates "prefix +2%, input and output totals +5%, request count and
+  image tokens +0, describer facts no loss, catalogs +5%; failure raises
+  `gptr_error_token_regression`" (fields `fixture`, `metric`, `baseline`, `value`).
+- Conditions (04 section 2.2): `gptr_error_invalid_argument` (`arg`, `expected`),
+  `gptr_error_internal` (`detail`), warning `gptr_warning_cache_break`, message
+  `gptr_message_notice`.
+- Tests (conventions section 7, 04 section 12): the fake provider and P01's helpers
+  `local_fake_provider()`, `fake_requests()`, `fake_tool()`, `fake_error()`, `local_project()`,
+  `local_gptr_options()`; hooks in tests are registered with `gptr_register(gptr_hook(...))` and
+  removed with the returned function. PASS counts below are those of a tree with P01-P07 only (M1);
+  FAIL must be 0 in every green run.
 
 ### Earlier-plan names this plan calls (exactly as in 04)
 
 | Plan | Names (04 section) |
 |---|---|
-| P01 | `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `gptr_warn()`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)` (§2.1); `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_flag(x, arg, null = FALSE)`, `check_class(x, class, arg, null = FALSE)` (§1.1); `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`, `ext_service_has(name)`, `gptr_opt(name)`, `setting_get(key, session = NULL, default = NULL)`, `gptr_can_prompt()`, `front_end()`, `hash_sha256(x)`, `id_new(prefix = "", n = 10L)`, `as_utf8(x)`, `read_utf8(path)`, `project_root(path = getwd())`, `user_home()`, `path_key(path)`, `gptr_user_dir(which, create = FALSE)`, `workspace_dir(path = getwd())`, `path_norm(path)`, `path_rel(path, root = project_root())`, `est_tokens(x, class)`, `est_image_tokens(width, height, api = "anthropic")`, `est_multiplier(state, estimated, reported, prior)`, `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `json_verbatim(text)`, `json_obj()`, `schema_signature(name, schema, description = NULL, prefix = "")` (§7.1); `block_text()`, `block_context(kind, text, attrs = list(), anchor = FALSE)`, `block_tool_call()`, `block_thinking()`, `block_image()`, `msg_user(content, source = "prompt", timestamp = NULL)`, `msg_assistant()`, `msg_tool_result()`, `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`, `msg_text(msg)`, `msg_verbatim(x, stream = c("stdout", "stderr"))` (§4.1-4.2, §2.1); test helpers (§12.2) |
-| P02 | `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)`, `registry_names(kind, session = NULL)`, `registry_generation()`, `registry_diagnostic(source, event, class, message)`, `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, `ctx_new(session, run = NULL)` (§7.2); `gptr_spec(kind, name, ...)`, `gptr_tool()`, `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`, `gptr_hook(event, handler, matcher = NULL)`, `gptr_register(spec)`, `gptr_registry(kind = NULL, diagnostics = FALSE)` (§6.7-6.8); API members `gptr$register(spec)`, `gptr$on(event, handler, matcher = NULL)` (§10.5); `ctx$input`, `ctx$get(kind, name)`, `ctx$session` (§10.6) |
-| P04 | `reactor_now()`, `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`, `reactor_cancel(ids)` (§8.2) |
-| P05 | `model_resolve(ref, strict = TRUE)`, `model_default(role = c("chat", "small", "system1"))`, `adapter_get(api)`, `project_messages(entries, leaf, target)`, `provider_stream(model, context, opts, emit, done, run = NULL)` (§7.5) |
-| P06 | `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())`, `session_data(s)`, `session_live(s)` (live record fields `ctx`, `memo`, `adapter`), `session_home(s)`, `session_append(s, entry)`, `session_set_model(s, ref, reason = "user")`, `session_set_mode(s, mode, source = "user")`, `session_run(s, input, opts = list())` (tests) (§7.6) |
+| P01 | `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `gptr_warn()`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)` (section 2.1); `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_flag(x, arg, null = FALSE)`, `check_class(x, class, arg, null = FALSE)` (section 1.1); `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`, `ext_service_has(name)`, `gptr_opt(name)`, `setting_get(key, session = NULL, default = NULL)`, `gptr_can_prompt()`, `front_end()`, `hash_sha256(x)`, `id_new(prefix = "", n = 10L)`, `as_utf8(x)`, `read_utf8(path)`, `project_root(path = getwd())`, `user_home()`, `path_key(path)`, `gptr_user_dir(which, create = FALSE)`, `workspace_dir(path = getwd())`, `path_norm(path)`, `path_rel(path, root = project_root())`, `est_tokens(x, class)`, `est_image_tokens(width, height, api = "anthropic")`, `est_multiplier(state, estimated, reported, prior)`, `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `json_verbatim(text)`, `json_obj()`, `schema_signature(name, schema, description = NULL, prefix = "")` (section 7.1); `block_text()`, `block_context(kind, text, attrs = list(), anchor = FALSE)`, `block_tool_call()`, `block_thinking()`, `block_image()`, `msg_user(content, source = "prompt", timestamp = NULL)`, `msg_assistant()`, `msg_tool_result()`, `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`, `msg_text(msg)`, `msg_verbatim(x, stream = c("stdout", "stderr"))` (sections 4.1-4.2, 2.1); test helpers (section 12.2) |
+| P02 | `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)`, `registry_names(kind, session = NULL)`, `registry_generation()`, `registry_diagnostic(source, event, class, message)`, `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, `ctx_new(session, run = NULL)` (section 7.2); `gptr_spec(kind, name, ...)`, `gptr_tool()`, `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`, `gptr_hook(event, handler, matcher = NULL)`, `gptr_register(spec)`, `gptr_registry(kind = NULL, diagnostics = FALSE)` (section 6.7-6.8); API members `gptr$register(spec)`, `gptr$on(event, handler, matcher = NULL)` (section 10.5); `ctx$input`, `ctx$get(kind, name)`, `ctx$session` (section 10.6) |
+| P04 | `reactor_now()`, `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`, `reactor_cancel(ids)` (section 8.2) |
+| P05 | `model_resolve(ref, strict = TRUE)`, `model_default(role = c("chat", "small", "system1"))`, `adapter_get(api)`, `project_messages(entries, leaf, target)`, `provider_stream(model, context, opts, emit, done, run = NULL)` (section 7.5) |
+| P06 | `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())`, `session_data(s)`, `session_live(s)` (live record fields `ctx`, `memo`, `adapter`), `session_home(s)`, `session_append(s, entry)`, `session_set_model(s, ref, reason = "user")`, `session_set_mode(s, mode, source = "user")`, `session_run(s, input, opts = list())` (tests) (section 7.6) |
 
-P01's `aaa-state.R` also provides the internal null-default operator `%||%` (IC-32), used throughout.
+P01's `aaa-state.R` also provides the internal null-default operator `%||%` (IC-32), used
+throughout.
 
 ---
 
@@ -84,7 +238,7 @@ P01's `aaa-state.R` also provides the internal null-default operator `%||%` (IC-
 | `dev/bench/tokens/run.R` | create (Task 16) | the golden-transcript runner (`--check`, `--update`) |
 | `NAMESPACE`, `man/gptr_prompt.Rd` | generated (Task 9) | by `devtools::document()` |
 
-## Tasks (overview)
+## Tasks
 
 1. Verbatim prompt texts (`prompt-text.R`)
 2. Rendering input and shared helpers (`prompt-sections.R`)
@@ -113,9 +267,22 @@ P01's `aaa-state.R` also provides the internal null-default operator `%||%` (IC-
 
 **Interfaces:**
 - Consumes: `gptr_abort(message, class, ..., .data = NULL, call = NULL)` (P01).
-- Produces: `prompt_texts()` -> named list of the verbatim texts (04 §7.7: "named list of the verbatim section and mode-block texts of §9.3"; consumers P07, P11 for the plan mode block, P24); `prompt_text(name)` -> one entry or `gptr_error_internal`; `prompt_front_end_label(fe)` -> the `Front end:` label of `<environment>`. Entry names used by later tasks and plans: `preamble`, `preamble_short`, `tools_footer`, `rules_closing`, `rules_minimal`, `r_session` (with the `{{fragments}}` marker line), `r_performance`, `r_performance_full`, `modes`, `context`, `mode_plan`, `mode_manual`, `mode_edits`, `mode_auto`, `noninteractive_stop`, `noninteractive_deny`, `noninteractive_manual`, `section_updated`, `section_removed`, `compaction_request` (with `{focus}`), `checkpoint_intro`, `checkpoint_continue`, `tools_added`, `members_added`, `section_truncated`, `block_truncated`, `file_truncated`, `file_removed`, `checkpoint_no_summary`.
+- Produces: `prompt_texts()` -> named list of the verbatim texts (04 section 7.7: "named list of the
+  verbatim section and mode-block texts of §9.3"; consumers P07, P11 for the plan mode block, P24);
+  `prompt_text(name)` -> one entry or `gptr_error_internal`; `prompt_front_end_label(fe)` -> the
+  `Front end:` label of `<environment>`. Entry names used by later tasks and plans: `preamble`,
+  `preamble_short`, `tools_footer`, `rules_closing`, `rules_minimal`, `r_session` (with the
+  `{{fragments}}` marker line), `r_performance`, `r_performance_full`, `modes`, `context`,
+  `mode_plan`, `mode_manual`, `mode_edits`, `mode_auto`, `noninteractive_stop`,
+  `noninteractive_deny`, `noninteractive_manual`, `section_updated`, `section_removed`,
+  `compaction_request` (with `{focus}`), `checkpoint_intro`, `checkpoint_continue`, `tools_added`,
+  `members_added`, `section_truncated`, `block_truncated`, `file_truncated`, `file_removed`,
+  `checkpoint_no_summary`.
 
-The texts are the specification's strings split into `paste0()` chunks so no source line exceeds 100 characters. The byte-for-byte tests read `dev/spec/` and `dev/research/G4-...md` directly (they skip in a built package, where `dev/` is excluded), so a transcription error cannot hide behind a copy in a fixture.
+The texts are the specification's strings split into `paste0()` chunks so no source line exceeds 100
+characters. The byte-for-byte tests read `dev/spec/` and `dev/research/G4-...md` directly (they skip
+in a built package, where `dev/` is excluded), so a transcription error cannot hide behind a copy in
+a fixture.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -246,7 +413,8 @@ test_that("front ends have model-facing labels", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-text")'`
-Expected: all 8 tests fail with `could not find function "prompt_text"` (or `"prompt_texts"`, `"prompt_front_end_label"`).
+Expected: all 8 tests fail with `could not find function "prompt_text"` (or `"prompt_texts"`,
+`"prompt_front_end_label"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -506,10 +674,42 @@ git commit -m "feat(prompt): verbatim prompt texts"
 - Test: `tests/testthat/test-prompt-sections.R`
 
 **Interfaces:**
-- Consumes: `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`, `ext_service_has(name)`, `est_tokens(x, class)`, `as_utf8(x)`, `read_utf8(path)` (P01); `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)`, `ctx_new(session, run = NULL)` (P02); `model_resolve(ref, strict = TRUE)` (P05); `session_data(s)`, `session_live(s)`, `session_append(s, entry)` (P06), and in the tests P06's store writer `entry_to_json(e)` (`session-store.R`; the JSON shape of an entry, 04 §4.6); the services `trust.get` (`function(path = getwd()) lgl(1)`, fallback `FALSE`) and `doc.site` (`function(session) list(path, format) or NULL`).
-- Produces: the service `ctx.input` = `prompt_input_get(ctx)` -> the rendering input bound for `ctx` or `NULL` (04 §7.0); `with_prompt_input(ctx, input, fun)`; the helpers used by every other P07 task: `prompt_ctx(s)`, `prompt_sid(s)`, `prompt_memo(s)`, `prompt_path(s)`, `prompt_model(ref)`, `prompt_trusted(root)`, `prompt_doc(s)`, `prompt_estimator(session_id)`, `prompt_est(x, class = "prose", session_id = NULL)`, `prompt_strip_bom(x)`, `prompt_read_file(path)`, `prompt_truncate(text, budget, notice, class, session_id)`, `prompt_specs(kind, session_id)`, `prompt_operator_entry(msg)` (the kernel shape `list(type = "custom_message", custom_type = "gptr.operator", message = msg)`), `prompt_entry_operator(e)` (the operator message of an entry in the kernel or the flat Pi shape, else `NULL`), `prompt_operator_text(op)`, `prompt_pending_add(s, msg)`, `prompt_pending_flush(s)`.
+- Consumes: `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`,
+  `ext_service_get(name)`, `ext_service_has(name)`, `est_tokens(x, class)`, `as_utf8(x)`,
+  `read_utf8(path)` (P01); `registry_get(kind, name, session = NULL)`,
+  `registry_all(kind, session = NULL)`, `ctx_new(session, run = NULL)` (P02);
+  `model_resolve(ref, strict = TRUE)` (P05); `session_data(s)`, `session_live(s)`,
+  `session_append(s, entry)` (P06), and in the tests P06's store writer `entry_to_json(e)`
+  (`session-store.R`; the JSON shape of an entry, 04 section 4.6); the services `trust.get`
+  (`function(path = getwd()) lgl(1)`, fallback `FALSE`) and `doc.site`
+  (`function(session) list(path, format) or NULL`).
+- Produces: the service `ctx.input` = `prompt_input_get(ctx)` -> the rendering input bound for `ctx`
+  or `NULL` (04 section 7.0); `with_prompt_input(ctx, input, fun)`; the helpers used by every other
+  P07 task: `prompt_ctx(s)`, `prompt_sid(s)`, `prompt_memo(s)`, `prompt_path(s)`,
+  `prompt_model(ref)`, `prompt_trusted(root)`, `prompt_doc(s)`, `prompt_estimator(session_id)`,
+  `prompt_est(x, class = "prose", session_id = NULL)`, `prompt_strip_bom(x)`,
+  `prompt_read_file(path)`, `prompt_truncate(text, budget, notice, class, session_id)`,
+  `prompt_specs(kind, session_id)`, `prompt_operator_entry(msg)` (the kernel shape
+  `list(type = "custom_message", custom_type = "gptr.operator", message = msg)`),
+  `prompt_entry_operator(e)` (the operator message of an entry in the kernel or the flat Pi shape,
+  else `NULL`), `prompt_operator_text(op)`, `prompt_pending_add(s, msg)`, `prompt_pending_flush(s)`.
 
-`ctx$input` (04 §10.6) is an active binding of P02's `ctx` that calls the `ctx.input` service. P07 keeps the input on a transient stack popped by `on.exit()`, so a section, block, tool schema or compactor sees its input only while it renders (INFRA-15: no run state outlives a call). The service is registered with `builtin = "prompt"`, and P01's `service_lookup()` serves a bootstrap service only while `service_builtin_active()` holds: once the registry lists records (the built-ins of P03, P05 and P06 are loaded), a built-in without a record of source `builtin:<name>` counts as filtered out. `builtin:prompt` is declared in Task 3, so until then `ext_service_get("ctx.input")` signals `gptr_error_not_available` and `ctx$input` is `NULL`; this task's tests read the stack through `prompt_input_get(ctx)`, and Task 3 adds the end-to-end `ctx$input` test. Operator messages (tool additions, section patches, operator-authority blocks) wait in the session's live memo until the next request is built (G4 §5.4 `tr_operator()`), so they always follow the latest user or tool-result message. They are appended in the session kernel's shape (`message` field), because P06's store serialises a `custom_message` entry from its `message` (an entry without it is written as a bare `{type, id, parentId, timestamp}` line and its content is lost at resume); the session kernel itself writes steering relays and mid-run mode notes in that shape, so every P07 reader goes through `prompt_entry_operator()`.
+`ctx$input` (04 section 10.6) is an active binding of P02's `ctx` that calls the `ctx.input`
+service. P07 keeps the input on a transient stack popped by `on.exit()`, so a section, block, tool
+schema or compactor sees its input only while it renders (INFRA-15: no run state outlives a call).
+The service is registered with `builtin = "prompt"`, and P01's `service_lookup()` serves a bootstrap
+service only while `service_builtin_active()` holds: once the registry lists records (the built-ins
+of P03, P05 and P06 are loaded), a built-in without a record of source `builtin:<name>` counts as
+filtered out. `builtin:prompt` is declared in Task 3, so until then `ext_service_get("ctx.input")`
+signals `gptr_error_not_available` and `ctx$input` is `NULL`; this task's tests read the stack
+through `prompt_input_get(ctx)`, and Task 3 adds the end-to-end `ctx$input` test. Operator messages
+(tool additions, section patches, operator-authority blocks) wait in the session's live memo until
+the next request is built (G4 section 5.4 `tr_operator()`), so they always follow the latest user or
+tool-result message. They are appended in the session kernel's shape (`message` field), because
+P06's store serialises a `custom_message` entry from its `message` (an entry without it is written
+as a bare `{type, id, parentId, timestamp}` line and its content is lost at resume); the session
+kernel itself writes steering relays and mid-run mode notes in that shape, so every P07 reader goes
+through `prompt_entry_operator()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -648,7 +848,9 @@ test_that("trust and the bound document fall back before P08 and P15 exist", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-sections")'`
-Expected: 9 failures, for example `could not find function "prompt_ctx"`, `could not find function "prompt_truncate"`, `could not find function "prompt_specs"`, `could not find function "prompt_entry_operator"`.
+Expected: 9 failures, for example `could not find function "prompt_ctx"`,
+`could not find function "prompt_truncate"`, `could not find function "prompt_specs"`,
+`could not find function "prompt_entry_operator"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -935,10 +1137,27 @@ git commit -m "feat(prompt): rendering input and shared prompt helpers"
 - Test: `tests/testthat/test-prompt-sections.R` (append)
 
 **Interfaces:**
-- Consumes: `gptr_abort()`, `setting_get(key, session = NULL, default = NULL)` (P01); `registry_get()`, `registry_names(kind, session = NULL)`, `gptr_spec(kind, name, ...)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API member `gptr$register(spec)` (P02); `local_gptr_options()` (P01, tests).
-- Produces: the four `preset` records `minimal`, `standard`, `readonly`, `extended` (kind `preset`: `tools` chr or `function(human, model, mode)`, `sections` named lgl or `function(name)`, `preamble` `"standard"` or `"short"`; IC-69); `preset_tools(preset, human, model = NULL, modifiers = character(), mode = NULL)` -> chr in array order (04 §7.7; consumers P07, P11); `preset_record(name, session_id)`, `preset_includes(rec, name)`, `prompt_tool_order(names)`, `preset_user_mapping(model, session)`, `preset_name(preset, model, session)`, `preset_shipped_applies(model, mrec, static, human, kind)`, `presets_shipped`; `builtin_prompt(gptr)` and its declaration `on_load(ext_declare_builtin("prompt", builtin_prompt))`, whose `builtin:prompt` records make P01's `service_builtin_active("prompt")` true, so the `ctx.input` service of Task 2 is served from this task on (tested end to end through `ctx$input` here).
+- Consumes: `gptr_abort()`, `setting_get(key, session = NULL, default = NULL)` (P01);
+  `registry_get()`, `registry_names(kind, session = NULL)`, `gptr_spec(kind, name, ...)`,
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API member
+  `gptr$register(spec)` (P02); `local_gptr_options()` (P01, tests).
+- Produces: the four `preset` records `minimal`, `standard`, `readonly`, `extended` (kind `preset`:
+  `tools` chr or `function(human, model, mode)`, `sections` named lgl or `function(name)`,
+  `preamble` `"standard"` or `"short"`; IC-69);
+  `preset_tools(preset, human, model = NULL, modifiers = character(), mode = NULL)` -> chr in array
+  order (04 section 7.7; consumers P07, P11); `preset_record(name, session_id)`,
+  `preset_includes(rec, name)`, `prompt_tool_order(names)`, `preset_user_mapping(model, session)`,
+  `preset_name(preset, model, session)`, `preset_shipped_applies(model, mrec, static, human, kind)`,
+  `presets_shipped`; `builtin_prompt(gptr)` and its declaration
+  `on_load(ext_declare_builtin("prompt", builtin_prompt))`, whose `builtin:prompt` records make
+  P01's `service_builtin_active("prompt")` true, so the `ctx.input` service of Task 2 is served from
+  this task on (tested end to end through `ctx$input` here).
 
-`builtin_prompt()` starts with the presets only; Tasks 4, 10 and 11 replace its body as they add registrations (each replacement is shown in full). The shipped `tools.presets` defaults need the composed prefix to judge break-even, so `prompt_compose()` (Task 4) applies them; `preset_tools()` applies the user's `tools.presets` mapping when `preset` is `NULL`, then `+name`/`-name` modifiers and the settings `tools.enable`/`tools.disable`.
+`builtin_prompt()` starts with the presets only; Tasks 4, 10 and 11 replace its body as they add
+registrations (each replacement is shown in full). The shipped `tools.presets` defaults need the
+composed prefix to judge break-even, so `prompt_compose()` (Task 4) applies them; `preset_tools()`
+applies the user's `tools.presets` mapping when `preset` is `NULL`, then `+name`/`-name` modifiers
+and the settings `tools.enable`/`tools.disable`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1012,7 +1231,11 @@ test_that("ctx$input reaches the ctx.input service once builtin:prompt is loaded
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-sections")'`
-Expected: the six new tests fail (8 failures), for example `Expected all(c("minimal", "standard", "readonly", "extended") %in% registry_names("preset")) to be TRUE`, `could not find function "preset_tools"` and, in the `ctx$input` test, `The gptr service 'ctx.input' is not available: it is provided by P07, which is not loaded or is disabled.` (class `gptr_error_not_available`: no `builtin:prompt` record exists yet).
+Expected: the six new tests fail (8 failures), for example
+`Expected all(c("minimal", "standard", "readonly", "extended") %in% registry_names("preset")) to be TRUE`,
+`could not find function "preset_tools"` and, in the `ctx$input` test,
+`The gptr service 'ctx.input' is not available: it is provided by P07, which is not loaded or is disabled.`
+(class `gptr_error_not_available`: no `builtin:prompt` record exists yet).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1200,16 +1423,47 @@ git commit -m "feat(prompt): preset records and preset_tools()"
 
 **Files:**
 - Modify: `R/prompt-sections.R` (append; replace `builtin_prompt()`)
-- Create: `tests/testthat/fixtures/bench/standins.R`, `tests/testthat/fixtures/bench/prefix-baseline.json`
+- Create: `tests/testthat/fixtures/bench/standins.R`,
+  `tests/testthat/fixtures/bench/prefix-baseline.json`
 - Test: `tests/testthat/test-prompt-sections.R` (append)
 
 **Interfaces:**
-- Consumes: `registry_names()`, `registry_diagnostic(source, event, class, message)`, `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, `gptr_spec()`, `gptr_tool()`, `gptr_registry(kind = NULL, diagnostics = FALSE)` (tests), `ctx$get(kind, name)`, `ctx$input` (P02); `json_encode()`, `json_decode()`, `json_obj()`, `hash_sha256()`, `setting_get()`, `gptr_can_prompt()`, `project_root()`, `gptr_user_dir(which, create = FALSE)`, `est_multiplier(state, estimated, reported, prior)` (P01); `model_default(role)` (P05); `session_data()` (P06).
-- Produces: `prompt_compose(s, opts = list())` -> the frozen list `list(preset, model, t0, t1, tools_json, tool_names, sections = df(name, tier, hash, tokens), human, document, reinject)` (no side effects; used by `prompt_freeze()` and `gptr_prompt()`); the P07 sections `preamble`, `tools`, `rules`, `r_session`, `r_performance`, `modes`, `context`, `addendum` (IC-68); the `estimator` record `default` (`estimate(x, class)`, `calibrate(state, estimated, reported)`); `prompt_static_tokens(frozen, session_id)`; `prompt_section_wrap(name, txt)`, `prompt_section_input(...)`, `prompt_tool_decl(sp, ctx, input)`, `prompt_schema_formals(fun)` (Task 8); `prompt_standins_register(fx, session_id, sections, only_missing, exclusive)` and `prefix_fixture()` (tests and the Task 16 runner).
+- Consumes: `registry_names()`, `registry_diagnostic(source, event, class, message)`,
+  `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`,
+  `gptr_spec()`, `gptr_tool()`, `gptr_registry(kind = NULL, diagnostics = FALSE)` (tests),
+  `ctx$get(kind, name)`, `ctx$input` (P02); `json_encode()`, `json_decode()`, `json_obj()`,
+  `hash_sha256()`, `setting_get()`, `gptr_can_prompt()`, `project_root()`,
+  `gptr_user_dir(which, create = FALSE)`, `est_multiplier(state, estimated, reported, prior)` (P01);
+  `model_default(role)` (P05); `session_data()` (P06).
+- Produces: `prompt_compose(s, opts = list())` -> the frozen list
+  `list(preset, model, t0, t1, tools_json, tool_names, sections = df(name, tier, hash, tokens), human, document, reinject)`
+  (no side effects; used by `prompt_freeze()` and `gptr_prompt()`); the P07 sections `preamble`,
+  `tools`, `rules`, `r_session`, `r_performance`, `modes`, `context`, `addendum` (IC-68); the
+  `estimator` record `default` (`estimate(x, class)`, `calibrate(state, estimated, reported)`);
+  `prompt_static_tokens(frozen, session_id)`; `prompt_section_wrap(name, txt)`,
+  `prompt_section_input(...)`, `prompt_tool_decl(sp, ctx, input)`, `prompt_schema_formals(fun)`
+  (Task 8); `prompt_standins_register(fx, session_id, sections, only_missing, exclusive)` and
+  `prefix_fixture()` (tests and the Task 16 runner).
 
-Rendering rules (04 §9.3, 03 §7.3): sections render in ascending `order`; a section whose preset record excludes it (`preset_includes()`), whose function returns `NULL` or that errors (a diagnostic) is omitted; fragments (`parent = "<section>"`) are inserted at the `{{fragments}}` marker in `order` and the marker line disappears when there are none; `{s1}` becomes the System 1 alias; a section over its budget is cut at a line boundary with the notice `[... section truncated to <n> tokens]` and a diagnostic. The tool array holds the preset's tools plus every un-namespaced spec with `exposure = "direct"` and an `execute` (IC-37), in array order; a tool whose `available(ctx)` is `FALSE` or that is not registered is left out (the latter with a diagnostic). `parameters` functions are evaluated once with `ctx$input` (the `r` schema variants of IC-68). SYSTEM.md, `.opts$system` (from `opts$system` or `opts$call$args$opts$system`) and the `session_start` collect result (`opts$start$sections`) override sections (Pi's rule).
+Rendering rules (04 section 9.3, 03 section 7.3): sections render in ascending `order`; a section
+whose preset record excludes it (`preset_includes()`), whose function returns `NULL` or that errors
+(a diagnostic) is omitted; fragments (`parent = "<section>"`) are inserted at the `{{fragments}}`
+marker in `order` and the marker line disappears when there are none; `{s1}` becomes the System 1
+alias; a section over its budget is cut at a line boundary with the notice
+`[... section truncated to <n> tokens]` and a diagnostic. The tool array holds the preset's tools
+plus every un-namespaced spec with `exposure = "direct"` and an `execute` (IC-37), in array order; a
+tool whose `available(ctx)` is `FALSE` or that is not registered is left out (the latter with a
+diagnostic). `parameters` functions are evaluated once with `ctx$input` (the `r` schema variants of
+IC-68). SYSTEM.md, `.opts$system` (from `opts$system` or `opts$call$args$opts$system`) and the
+`session_start` collect result (`opts$start$sections`) override sections (Pi's rule).
 
-The stand-ins (`fixtures/bench/standins.R` + the `standins` member of `prefix-baseline.json`) are copies of the specification's texts owned by later plans: the direct tools' schemas (04 §9.2), snippets and guidelines, the five `r_session` fragments and the `documents`, `artifacts`, `system1`, `skills` and `r_env` sections of 03 §7.3 (the T1 fixture of 542 o200k tokens). With them P07 can check its composition of 03 §7.3 before the owners exist. `exclusive = TRUE` hides every other section for that session so the check does not depend on which later plans are installed.
+The stand-ins (`fixtures/bench/standins.R` + the `standins` member of `prefix-baseline.json`) are
+copies of the specification's texts owned by later plans: the direct tools' schemas (04
+section 9.2), snippets and guidelines, the five `r_session` fragments and the `documents`,
+`artifacts`, `system1`, `skills` and `r_env` sections of 03 section 7.3 (the T1 fixture of 542 o200k
+tokens). With them P07 can check its composition of 03 section 7.3 before the owners exist.
+`exclusive = TRUE` hides every other section for that session so the check does not depend on which
+later plans are installed.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1306,7 +1560,8 @@ prefix_fixture = function() {
 }
 ```
 
-Create `tests/testthat/fixtures/bench/prefix-baseline.json` (Task 15 inserts the baseline members `preset`, `estimate`, `estimator` and `sections` at its top):
+Create `tests/testthat/fixtures/bench/prefix-baseline.json` (Task 15 inserts the baseline members
+`preset`, `estimate`, `estimator` and `sections` at its top):
 
 ```json
 {
@@ -1883,7 +2138,10 @@ test_that("the default estimator is registered and keeps its prior when calibrat
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-sections")'`
-Expected: the new tests fail (12 failures), for example `could not find function "prompt_compose"`, `could not find function "prompt_insert_fragments"`, `could not find function "prompt_schema_formals"`, and the estimator test with `registry_get("estimator", "default")` returning `NULL`.
+Expected: the new tests fail (12 failures), for example `could not find function "prompt_compose"`,
+`could not find function "prompt_insert_fragments"`,
+`could not find function "prompt_schema_formals"`, and the estimator test with
+`registry_get("estimator", "default")` returning `NULL`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2255,7 +2513,10 @@ prompt_register_sections = function(gptr) {
 }
 ```
 
-Then, in `R/prompt-sections.R`, replace the block added at the end of Task 3 that starts with the roxygen line ``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` and ends with the closing brace of `builtin_prompt = function(gptr) { ... }` (the `on_load(ext_declare_builtin("prompt", builtin_prompt))` line after it stays unchanged) with:
+Then, in `R/prompt-sections.R`, replace the block added at the end of Task 3 that starts with the
+roxygen line
+``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` and ends with the closing brace of `builtin_prompt = function(gptr) { ... }` (the `on_load(ext_declare_builtin("prompt", builtin_prompt))`
+line after it stays unchanged) with:
 
 ```r
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
@@ -2292,10 +2553,46 @@ git commit -m "feat(prompt): tool array and system prompt composition"
 - Test: `tests/testthat/test-prompt-context.R`
 
 **Interfaces:**
-- Consumes: `block_context(kind, text, attrs = list(), anchor = FALSE)`, `block_text()`, `msg_operator()`, `msg_user()` (tests), `hash_sha256()`, `gptr_inform(message, class, ..., .once = NULL)`, `gptr_opt()`, `setting_get()`, `gptr_can_prompt()`, `front_end()`, `project_root()`, `path_rel()`, `path_norm()`, `path_key()`, `user_home()`, `gptr_user_dir()`, `workspace_dir()` (P01); `registry_get()`, `registry_names()`, `registry_diagnostic()`, `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`, `gptr_register()` (tests), `ctx$input`, `ctx$session` (P02); `session_data()`, `session_home()`, `session_append()` and `session_set_mode(s, mode, source = "user")` (tests) (P06); the service `plan.pending` (`function(envir_address, consume = TRUE) chr(1) or NULL`, P11; absent before P11); `rlang::obj_address()`, `ps::ps_system_memory()`.
-- Produces: `context_first_message(s, input)` and `context_turn_blocks(s, input)` (04 §7.7) and their services `context.first` and `context.turn` (`function(s, input) list of context blocks`); `builtin_context(gptr)` registering `project_instructions` (first, order 100, budget 16,000 with the 6,000 notice and the 64 KiB cap), `project_instructions_update` (turn, 150), `environment` (first, 200, budget 100), `mode` (both, 300, budget 150), `plan` (both, 400, budget 1,500); `context_block_by_name(s, name, input)` (Tasks 7, 13); `context_mode_body(mode, human, deny = FALSE)` (Task 13); `context_instruction_files(root, cwd)`; `context_vignette_includes(text, root, loaded)` (the `@<file>` lines of `.gptr/vignette.Rmd`, which P08's `gptr_init()` template advertises: "To reuse an existing file, write its name on a line of its own: @AGENTS.md").
+- Consumes: `block_context(kind, text, attrs = list(), anchor = FALSE)`, `block_text()`,
+  `msg_operator()`, `msg_user()` (tests), `hash_sha256()`,
+  `gptr_inform(message, class, ..., .once = NULL)`, `gptr_opt()`, `setting_get()`,
+  `gptr_can_prompt()`, `front_end()`, `project_root()`, `path_rel()`, `path_norm()`, `path_key()`,
+  `user_home()`, `gptr_user_dir()`, `workspace_dir()` (P01); `registry_get()`, `registry_names()`,
+  `registry_diagnostic()`,
+  `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`,
+  `gptr_register()` (tests), `ctx$input`, `ctx$session` (P02); `session_data()`, `session_home()`,
+  `session_append()` and `session_set_mode(s, mode, source = "user")` (tests) (P06); the service
+  `plan.pending` (`function(envir_address, consume = TRUE) chr(1) or NULL`, P11; absent before P11);
+  `rlang::obj_address()`, `ps::ps_system_memory()`.
+- Produces: `context_first_message(s, input)` and `context_turn_blocks(s, input)` (04 section 7.7)
+  and their services `context.first` and `context.turn`
+  (`function(s, input) list of context blocks`); `builtin_context(gptr)` registering
+  `project_instructions` (first, order 100, budget 16,000 with the 6,000 notice and the 64 KiB cap),
+  `project_instructions_update` (turn, 150), `environment` (first, 200, budget 100), `mode` (both,
+  300, budget 150), `plan` (both, 400, budget 1,500); `context_block_by_name(s, name, input)` (Tasks
+  7, 13); `context_mode_body(mode, human, deny = FALSE)` (Task 13);
+  `context_instruction_files(root, cwd)`; `context_vignette_includes(text, root, loaded)` (the
+  `@<file>` lines of `.gptr/vignette.Rmd`, which P08's `gptr_init()` template advertises: "To reuse
+  an existing file, write its name on a line of its own: @AGENTS.md").
 
-`input` is `list(call, turn, prompt, start, preview)`: `call` is P08's `gptr_call` (its `context` items `list(label, kind, name, slot, facts = list(class, ...))` drive the one-line `attached` stand-in until P09 registers `attached`; its `envir` keys the pending plan), `start` is the merged `session_start` collect result (its `blocks` follow the registered blocks), `preview = TRUE` (from `gptr_prompt()`) never consumes the pending plan. A provider receives `ctx$input` = `list(call, turn, prompt, placement, last_hash, opts, mode, human, document, preview)` (04 §10.2 row 13 plus P07's fields). The user-level `AGENTS.md` is the user's own file: it is never marked `trusted="false"` and never withheld; project files are (IC-52). A changed instruction file is announced once in the next user message as a `project_instructions_update` block (IC-52, G4 §4.2), so the anchored first message is never re-rendered; the comparison uses the sha256 of the rendered block, and a project block that a compaction's re-injection budget dropped (recorded by Task 13 in the compaction's `details$dropped`) counts as seen, so it is not re-sent in full on the next turn unless the file changed. A line `@<file>` in `vignette.Rmd` includes that project file, once (G4 §4.2: "deduplication by normalised path prevents double inclusion"). The `mode` provider falls back to the session's own `mode` and frozen audience when it is called without a rendering input, because the session kernel calls it that way for a mid-run mode change (P06 `mode_block_text()`), and the turn-block deduplication also reads the kernel's operator mode notes and the operator-authority reminders, in either entry shape.
+`input` is `list(call, turn, prompt, start, preview)`: `call` is P08's `gptr_call` (its `context`
+items `list(label, kind, name, slot, facts = list(class, ...))` drive the one-line `attached`
+stand-in until P09 registers `attached`; its `envir` keys the pending plan), `start` is the merged
+`session_start` collect result (its `blocks` follow the registered blocks), `preview = TRUE` (from
+`gptr_prompt()`) never consumes the pending plan. A provider receives `ctx$input` =
+`list(call, turn, prompt, placement, last_hash, opts, mode, human, document, preview)` (04
+section 10.2 row 13 plus P07's fields). The user-level `AGENTS.md` is the user's own file: it is
+never marked `trusted="false"` and never withheld; project files are (IC-52). A changed instruction
+file is announced once in the next user message as a `project_instructions_update` block (IC-52, G4
+section 4.2), so the anchored first message is never re-rendered; the comparison uses the sha256 of
+the rendered block, and a project block that a compaction's re-injection budget dropped (recorded by
+Task 13 in the compaction's `details$dropped`) counts as seen, so it is not re-sent in full on the
+next turn unless the file changed. A line `@<file>` in `vignette.Rmd` includes that project file,
+once (G4 section 4.2: "deduplication by normalised path prevents double inclusion"). The `mode`
+provider falls back to the session's own `mode` and frozen audience when it is called without a
+rendering input, because the session kernel calls it that way for a mid-run mode change (P06
+`mode_block_text()`), and the turn-block deduplication also reads the kernel's operator mode notes
+and the operator-authority reminders, in either entry shape.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2630,7 +2927,9 @@ test_that("the context blocks and services are P07's", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-context")'`
-Expected: every test fails (22 failures), for example `could not find function "context_instruction_files"`, `could not find function "context_first_message"`.
+Expected: every test fails (22 failures), for example
+`could not find function "context_instruction_files"`,
+`could not find function "context_first_message"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3193,7 +3492,8 @@ on_load(ext_declare_builtin("context", builtin_context, after = "prompt"))
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-context")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 68 ]` (the two `attached` tests skip once P09 registers its own `attached` block)
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 68 ]` (the two `attached` tests skip once P09 registers
+its own `attached` block)
 
 - [ ] **Step 5: Commit**
 
@@ -3211,10 +3511,17 @@ git commit -m "feat(prompt): context blocks and the first user message"
 - Test: `tests/testthat/test-prompt-compact.R`
 
 **Interfaces:**
-- Consumes: `setting_get(key, session = NULL, default = NULL)`, `gptr_opt(name)`, `local_gptr_options()` (tests) (P01).
-- Produces: `compact_threshold(window, max_output, r_cap = 4000)` (04 §7.7) -> `num(1)`, used by the floor check (Task 7) and the trigger (Task 13).
+- Consumes: `setting_get(key, session = NULL, default = NULL)`, `gptr_opt(name)`,
+  `local_gptr_options()` (tests) (P01).
+- Produces: `compact_threshold(window, max_output, r_cap = 4000)` (04 section 7.7) -> `num(1)`, used
+  by the floor check (Task 7) and the trigger (Task 13).
 
-The contract formula is `min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output + 2 * r_cap), gptr.compact_at)`. The cap comes from the setting `compact_at` (option `gptr.compact_at`, default 200,000). R options cannot hold `NULL`, so `Inf` or `NA` disables the cap. An unknown window returns the cap and an unknown `max_output` counts as 0. For windows below about 16K the second term is negative, so every preset is refused there by the Task 7 floor check.
+The contract formula is
+`min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output + 2 * r_cap), gptr.compact_at)`.
+The cap comes from the setting `compact_at` (option `gptr.compact_at`, default 200,000). R options
+cannot hold `NULL`, so `Inf` or `NA` disables the cap. An unknown window returns the cap and an
+unknown `max_output` counts as 0. For windows below about 16K the second term is negative, so every
+preset is refused there by the Task 7 floor check.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3297,13 +3604,26 @@ git commit -m "feat(prompt): compaction threshold"
 - Test: `tests/testthat/test-prompt-sections.R` (append)
 
 **Interfaces:**
-- Consumes: `prompt_compose()`, `prompt_static_tokens()` (Task 4); `context_block_by_name()` (Task 5); `compact_threshold()` (Task 6); `gptr_opt("r_output_tokens")`, `gptr_abort()`, `gptr_can_prompt()` (P01); `registry_get()` (P02); `session_data()`, `session_append()` (P06).
-- Produces: `prompt_freeze(s, opts = list())` (04 §7.7) and the service `prompt.freeze` (`function(s, opts) frozen list`); the `gptr.frozen` custom entry; `prompt_frozen_restore(s)`, `prompt_floor_check(frozen, project_tokens, skills_budget = 0)`.
+- Consumes: `prompt_compose()`, `prompt_static_tokens()` (Task 4); `context_block_by_name()` (Task
+  5); `compact_threshold()` (Task 6); `gptr_opt("r_output_tokens")`, `gptr_abort()`,
+  `gptr_can_prompt()` (P01); `registry_get()` (P02); `session_data()`, `session_append()` (P06).
+- Produces: `prompt_freeze(s, opts = list())` (04 section 7.7) and the service `prompt.freeze`
+  (`function(s, opts) frozen list`); the `gptr.frozen` custom entry; `prompt_frozen_restore(s)`,
+  `prompt_floor_check(frozen, project_tokens, skills_budget = 0)`.
 
-`prompt_freeze()` stores `.d$frozen` once. On a resumed session (`.d$frozen` empty, a `gptr.frozen` entry on the path) it restores the byte-identical prompt from the entry instead of recomposing; `opts$refreeze = TRUE` forces a fresh freeze (IC-52: a resumed foreign file). The session kernel calls it at the first run before appending the first user message, so `gptr.frozen` is the session's first entry (04 §11.4). The floor check (IC-71) compares the post-compaction floor with the threshold and cuts the re-injection budgets (`frozen$reinject`, read by the checkpoint compactor of Task 13) or refuses the model with `gptr_error_invalid_argument` before anything is stored.
+`prompt_freeze()` stores `.d$frozen` once. On a resumed session (`.d$frozen` empty, a `gptr.frozen`
+entry on the path) it restores the byte-identical prompt from the entry instead of recomposing;
+`opts$refreeze = TRUE` forces a fresh freeze (IC-52: a resumed foreign file). The session kernel
+calls it at the first run before appending the first user message, so `gptr.frozen` is the session's
+first entry (04 section 11.4). The floor check (IC-71) compares the post-compaction floor with the
+threshold and cuts the re-injection budgets (`frozen$reinject`, read by the checkpoint compactor of
+Task 13) or refuses the model with `gptr_error_invalid_argument` before anything is stored.
 
-An unknown model window still permits a finite `compact_at` floor check: compare the same static/project/skill estimate with the effective threshold, retain the existing 25% re-injection cut, and report an insufficient finite cap as `arg = "compact_at"` with an actionable cap message. An unknown window and disabled/infinite cap remains unchecked. This pre-user freeze estimate does not include arbitrary later user text.
-
+An unknown model window still permits a finite `compact_at` floor check: compare the same
+static/project/skill estimate with the effective threshold, retain the existing 25% re-injection
+cut, and report an insufficient finite cap as `arg = "compact_at"` with an actionable cap message.
+An unknown window and a disabled/infinite cap remain unchecked. This pre-user freeze estimate does
+not include arbitrary later user text.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3389,7 +3709,8 @@ test_that("a 200K window passes the floor check with the full re-injection budge
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-sections")'`
-Expected: the five new tests fail, for example `could not find function "prompt_freeze"` and `could not find function "prompt_floor_check"`.
+Expected: the five new tests fail, for example `could not find function "prompt_freeze"` and
+`could not find function "prompt_floor_check"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3541,10 +3862,26 @@ git commit -m "feat(prompt): frozen prompt and the compaction floor check"
 - Test: `tests/testthat/test-prompt-sections.R` (append)
 
 **Interfaces:**
-- Consumes: `prompt_tool_decl()`, `prompt_section_input()`, `prompt_section_wrap()`, `preset_record()`, `prompt_pending_add()`, `prompt_model()`, `prompt_trusted()` (Tasks 2-4); `schema_signature(name, schema, description = NULL, prefix = "")`, `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`, `project_root()` (P01); `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_diagnostic()`, `gptr_tool()` (P02); `adapter_get(api)` (P05).
-- Produces: `session_add_tools(s, specs)` (04 §7.7) and the service `session.add_tools` (`function(s, specs) invisible(s)`; consumers `ctx$add_tools()`, P08's continuations with `tools =`, `plugins =`, `extensions =`); `prompt_section_patch(s, name, text = NULL)`; `prompt_tool_addition(s)`, `prompt_member_spec(sp)`, `prompt_session_input(s)`.
+- Consumes: `prompt_tool_decl()`, `prompt_section_input()`, `prompt_section_wrap()`,
+  `preset_record()`, `prompt_pending_add()`, `prompt_model()`, `prompt_trusted()` (Tasks 2-4);
+  `schema_signature(name, schema, description = NULL, prefix = "")`,
+  `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`,
+  `project_root()` (P01); `registry_add(spec, source, rank, session = NULL, state = "active")`,
+  `registry_diagnostic()`, `gptr_tool()` (P02); `adapter_get(api)` (P05).
+- Produces: `session_add_tools(s, specs)` (04 section 7.7) and the service `session.add_tools`
+  (`function(s, specs) invisible(s)`; consumers `ctx$add_tools()`, P08's continuations with
+  `tools =`, `plugins =`, `extensions =`); `prompt_section_patch(s, name, text = NULL)`;
+  `prompt_tool_addition(s)`, `prompt_member_spec(sp)`, `prompt_session_input(s)`.
 
-"registers `specs` at rank 0 for `s`; an operator `tool_change` message with their declarations when the adapter declares `tool_addition`, else they become `r` members announced in an operator note; the frozen array never changes (IC-69)". A spec that already is a member (it has a `fun` and no namespace, IC-37: for example the built-in `edit` and `write` that P11 adds through `ctx$add_tools()` when plan mode switches to `auto`) keeps its name `peter$<name>()`; a spec with only an `execute` becomes a member of the namespace `tools` (`peter$tools$<name>()`, registered under the key `tools/<name>`, P02 `spec_key()`); the note lists one `schema_signature()` line each. A section patch is Pi's wording as an operator `section_patch` message; like tool changes it waits for the next request (Task 10 flushes the queue).
+"registers `specs` at rank 0 for `s`; an operator `tool_change` message with their declarations when
+the adapter declares `tool_addition`, else they become `r` members announced in an operator note;
+the frozen array never changes (IC-69)". A spec that already is a member (it has a `fun` and no
+namespace, IC-37: for example the built-in `edit` and `write` that P11 adds through
+`ctx$add_tools()` when plan mode switches to `auto`) keeps its name `peter$<name>()`; a spec with
+only an `execute` becomes a member of the namespace `tools` (`peter$tools$<name>()`, registered
+under the key `tools/<name>`, P02 `spec_key()`); the note lists one `schema_signature()` line each.
+A section patch is Pi's wording as an operator `section_patch` message; like tool changes it waits
+for the next request (Task 10 flushes the queue).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3619,7 +3956,9 @@ test_that("section patches are queued as operator messages (Pi's wording)", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-sections")'`
-Expected: the five new tests fail: `local_mocked_bindings()` cannot find the binding `prompt_tool_addition`, `ext_service_get("session.add_tools")` signals `gptr_error_not_available`, and `could not find function "prompt_section_patch"`.
+Expected: the five new tests fail: `local_mocked_bindings()` cannot find the binding
+`prompt_tool_addition`, `ext_service_get("session.add_tools")` signals `gptr_error_not_available`,
+and `could not find function "prompt_section_patch"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3762,10 +4101,22 @@ git commit -m "feat(prompt): tool additions and section patches"
 - Test: `tests/testthat/test-prompt-sections.R` (append)
 
 **Interfaces:**
-- Consumes: `prompt_compose()`, `prompt_path()`, `prompt_est()`, `prompt_sid()` (Tasks 2, 4); `context_first_message()` (Task 5); `check_class(x, class, arg, null = FALSE)`, `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_flag(x, arg, null = FALSE)`, `gptr_abort()`, `msg_verbatim(x, stream = c("stdout", "stderr"))` (P01); `registry_get()`, `registry_names()` (P02); `session_data()` (P06).
-- Produces: the export `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)` returning a `gptr_prompt_view` = `list(system = list(t0, t1), tools_json, first_message, sections = df(name, tier, tokens), total_tokens)` with attributes `preset` and `tool_names` (04 §5.11 fixes the five fields); `print.gptr_prompt_view(x, ...)` (S3 method, documented on the same page).
+- Consumes: `prompt_compose()`, `prompt_path()`, `prompt_est()`, `prompt_sid()` (Tasks 2, 4);
+  `context_first_message()` (Task 5); `check_class(x, class, arg, null = FALSE)`,
+  `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_flag(x, arg, null = FALSE)`,
+  `gptr_abort()`, `msg_verbatim(x, stream = c("stdout", "stderr"))` (P01); `registry_get()`,
+  `registry_names()` (P02); `session_data()` (P06).
+- Produces: the export `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)` returning a
+  `gptr_prompt_view` =
+  `list(system = list(t0, t1), tools_json, first_message, sections = df(name, tier, tokens), total_tokens)`
+  with attributes `preset` and `tool_names` (04 section 5.11 fixes the five fields);
+  `print.gptr_prompt_view(x, ...)` (S3 method, documented on the same page).
 
-For a session, `gptr_prompt(s)` shows its frozen blocks and the text of its first user message (context blocks included); with `preset =` or for a session that has not frozen yet, it composes what would be frozen now, with `context_first_message(..., preview = TRUE)` (a preview never consumes a pending plan). `preset` is validated against the registered `preset` records (IC-69), not a fixed vector.
+For a session, `gptr_prompt(s)` shows its frozen blocks and the text of its first user message
+(context blocks included); with `preset =` or for a session that has not frozen yet, it composes
+what would be frozen now, with `context_first_message(..., preview = TRUE)` (a preview never
+consumes a pending plan). `preset` is validated against the registered `preset` records (IC-69), not
+a fixed vector.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3826,7 +4177,8 @@ test_that("printing a prompt view shows each part and returns it invisibly", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-sections")'`
-Expected: the four new tests fail (6 failures): `could not find function "gptr_prompt"`, and the three `expect_error()` calls of the validation test report an error of unexpected class.
+Expected: the four new tests fail (6 failures): `could not find function "gptr_prompt"`, and the
+three `expect_error()` calls of the validation test report an error of unexpected class.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3928,7 +4280,8 @@ print.gptr_prompt_view = function(x, ...) {
 Then regenerate the documentation:
 
 Run: `Rscript --vanilla -e 'devtools::document()'`
-Expected: `Writing 'NAMESPACE'` and `Writing 'gptr_prompt.Rd'`; `NAMESPACE` gains `export(gptr_prompt)` and `S3method(print,gptr_prompt_view)`.
+Expected: `Writing 'NAMESPACE'` and `Writing 'gptr_prompt.Rd'`; `NAMESPACE` gains
+`export(gptr_prompt)` and `S3method(print,gptr_prompt_view)`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -3936,7 +4289,9 @@ Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-sections")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 177 ]`
 
 Run: `Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); v = gptr_prompt(preset = "minimal"); print(v$sections)'`
-Expected: the example code runs offline without an error and prints the sections `preamble`, `tools`, `rules`, `modes`, `context` with their token estimates (before P10 registers the tools the array is `[]` and a `missing_tool` diagnostic is recorded).
+Expected: the example code runs offline without an error and prints the sections `preamble`,
+`tools`, `rules`, `modes`, `context` with their token estimates (before P10 registers the tools the
+array is `[]` and a `missing_tool` diagnostic is recorded).
 
 - [ ] **Step 5: Commit**
 
@@ -3955,10 +4310,45 @@ git commit -m "feat(prompt): gptr_prompt() view of the frozen prompt"
 - Test: `tests/testthat/test-prompt-cache.R`
 
 **Interfaces:**
-- Consumes: `prompt_freeze()` (Task 7), `prompt_pending_flush()`, `prompt_path()`, `prompt_memo()`, `prompt_estimator()` (Task 2), `context_first_message()` (Task 5, tests); `json_encode()`, `json_verbatim(text)`, `hash_sha256()`, `id_new(prefix = "", n = 10L)`, `gptr_opt()`, `setting_get()`, `project_root()`, `path_key()`, `est_image_tokens(width, height, api = "anthropic")` (P01); `registry_get()`, `registry_generation()`, `gptr_spec()` (P02); `reactor_now()` (P04); `adapter_get(api)`, `project_messages(entries, leaf, target)`, `model_resolve()` (tests) (P05); `session_data()`, `session_live()` (the live record's `run`, whose `opts` are read-only for other plans, 04 §7.6), `session_append()` (P06).
-- Produces: `request_build(s, target, extra = NULL)` -> `list(context, view, tokens_est, components)` (04 §7.7) and the service `request.build`; the adapter context of 04 §8.1 (`system = list(t0, t1)`, `tools_json` (a `json_verbatim`), `tools` (specs in array order), `messages`, `cache_plan = list(anchors, tail_ttl, key)`, `params = list(max_tokens, thinking, effort, tool_choice = "auto", returns, temperature)`, `session_id`, `request_id` = `q` + 12 hex); `components` with the 04 §4.3 ledger names `t0`, `t1`, `tools`, `project`, `environment`, `workspace`, `attached`, `transcript`, `tool_results`, `images`, `other`; the `cache_policy` record `default` (`plan(parts, caps, session)` -> `list(anchors, tail_ttl, key)`); `prompt_request_context()`, `prompt_request_elements()`, `prompt_request_view()`, `prompt_request_estimate()`, `prompt_message_json()`, `prompt_prefix_epoch()`, `prompt_cache_ttl_next()`, `prompt_cache_gap_state()` (Tasks 11, 13, 14).
+- Consumes: `prompt_freeze()` (Task 7), `prompt_pending_flush()`, `prompt_path()`, `prompt_memo()`,
+  `prompt_estimator()` (Task 2), `context_first_message()` (Task 5, tests); `json_encode()`,
+  `json_verbatim(text)`, `hash_sha256()`, `id_new(prefix = "", n = 10L)`, `gptr_opt()`,
+  `setting_get()`, `project_root()`, `path_key()`,
+  `est_image_tokens(width, height, api = "anthropic")` (P01); `registry_get()`,
+  `registry_generation()`, `gptr_spec()` (P02); `reactor_now()` (P04); `adapter_get(api)`,
+  `project_messages(entries, leaf, target)`, `model_resolve()` (tests) (P05); `session_data()`,
+  `session_live()` (the live record's `run`, whose `opts` are read-only for other plans, 04
+  section 7.6), `session_append()` (P06).
+- Produces: `request_build(s, target, extra = NULL)` ->
+  `list(context, view, tokens_est, components)` (04 section 7.7) and the service `request.build`;
+  the adapter context of 04 section 8.1 (`system = list(t0, t1)`, `tools_json` (a `json_verbatim`),
+  `tools` (specs in array order), `messages`, `cache_plan = list(anchors, tail_ttl, key)`,
+  `params = list(max_tokens, thinking, effort, tool_choice = "auto", returns, temperature)`,
+  `session_id`, `request_id` = `q` + 12 hex); `components` with the 04 section 4.3 ledger names
+  `t0`, `t1`, `tools`, `project`, `environment`, `workspace`, `attached`, `transcript`,
+  `tool_results`, `images`, `other`; the `cache_policy` record `default`
+  (`plan(parts, caps, session)` -> `list(anchors, tail_ttl, key)`); `prompt_request_context()`,
+  `prompt_request_elements()`, `prompt_request_view()`, `prompt_request_estimate()`,
+  `prompt_message_json()`, `prompt_prefix_epoch()`, `prompt_cache_ttl_next()`,
+  `prompt_cache_gap_state()` (Tasks 11, 13, 14).
 
-A request is a pure function of the frozen prompt, the append-only transcript and the target: `request_build()` freezes when needed, appends the queued operator messages to the transcript, projects the transcript for the target (`project_messages()`), appends `extra` (the compaction request) without storing it, asks the `cache_policy` record for the api (else `default`) for the plan, and estimates the input per ledger component. The canonical elements are `tools`, `t0`, `t1` and one JSON text per message (the R record without `details`, which is never sent); the `view` holds their sha256 hashes, the count of stated breaks (`epoch`: compactions, image elisions, rewinds) and the registry generation. Anchors (03 §6.11): Anthropic and OpenRouter `t0` plus the project block (else `t1`), OpenAI `t0`, `t1` and the project block, Gemini, `none` and adapters that declare no `cache` capability none (04 §8.1: missing capabilities mean `NULL`). `params$returns` is the running call's `returns =` schema, read from the session's active run (`session_live(s)$run$opts$returns`, a read-only `gptr_run` field of 04 §7.6): the service has no run argument and P06's `run_build()` does not refill it, so without this a `returns =` call would lose its schema once P07 is loaded; `params$thinking` is `target$thinking` (set by a router or the session) else `.d$thinking`. The tail TTL stays `"5m"` until a gap between requests exceeds `gptr.cache_gap` (240 s), then `"1h"` for the session; `gptr.cache_ttl` (or setting `cache.ttl`) `"5m"`/`"1h"` pins it.
+A request is a pure function of the frozen prompt, the append-only transcript and the target:
+`request_build()` freezes when needed, appends the queued operator messages to the transcript,
+projects the transcript for the target (`project_messages()`), appends `extra` (the compaction
+request) without storing it, asks the `cache_policy` record for the api (else `default`) for the
+plan, and estimates the input per ledger component. The canonical elements are `tools`, `t0`, `t1`
+and one JSON text per message (the R record without `details`, which is never sent); the `view`
+holds their sha256 hashes, the count of stated breaks (`epoch`: compactions, image elisions,
+rewinds) and the registry generation. Anchors (03 section 6.11): Anthropic and OpenRouter `t0` plus
+the project block (else `t1`), OpenAI `t0`, `t1` and the project block, Gemini, `none` and adapters
+that declare no `cache` capability none (04 section 8.1: missing capabilities mean `NULL`).
+`params$returns` is the running call's `returns =` schema, read from the session's active run
+(`session_live(s)$run$opts$returns`, a read-only `gptr_run` field of 04 section 7.6): the service
+has no run argument and P06's `run_build()` does not refill it, so without this a `returns =` call
+would lose its schema once P07 is loaded; `params$thinking` is `target$thinking` (set by a router or
+the session) else `.d$thinking`. The tail TTL stays `"5m"` until a gap between requests exceeds
+`gptr.cache_gap` (240 s), then `"1h"` for the session; `gptr.cache_ttl` (or setting `cache.ttl`)
+`"5m"`/`"1h"` pins it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4158,7 +4548,9 @@ test_that("prompt_request_estimate assigns tokens to ledger components", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-cache")'`
-Expected: every test fails (11 failures), for example `could not find function "request_build"`, `could not find function "prompt_cache_plan_gap"`, `could not find function "prompt_request_estimate"`.
+Expected: every test fails (11 failures), for example `could not find function "request_build"`,
+`could not find function "prompt_cache_plan_gap"`,
+`could not find function "prompt_request_estimate"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4408,7 +4800,10 @@ prompt_register_cache = function(gptr) {
 }
 ```
 
-Then, in `R/prompt-sections.R`, replace the `builtin_prompt()` block of Task 4 (from the roxygen line ``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` to the closing brace of the function; the `on_load(ext_declare_builtin("prompt", builtin_prompt))` line stays) with:
+Then, in `R/prompt-sections.R`, replace the `builtin_prompt()` block of Task 4 (from the roxygen
+line
+``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` to the closing brace of the function; the `on_load(ext_declare_builtin("prompt", builtin_prompt))`
+line stays) with:
 
 ```r
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
@@ -4446,10 +4841,25 @@ git commit -m "feat(prompt): request assembly and gap-based cache plans"
 - Test: `tests/testthat/test-prompt-cache.R` (append)
 
 **Interfaces:**
-- Consumes: `request_build()` (Task 10), `prompt_memo()` (Task 2); `gptr_opt("check_prefix")`, `gptr_warn(message, class, ..., .data = NULL, .once = NULL)`, `gptr_abort()` (P01); `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, the API member `gptr$on(event, handler, matcher = NULL)`, `gptr_hook()` and `gptr_register()` (tests) (P02); `session_data()`, `session_append()` (P06).
-- Produces: `prefix_guard(s, target, view)` (04 §7.7) and the service `prefix.guard` (`function(s, target, view) invisible(NULL)`); `prefix_reset(s)`; `prompt_view_key(target)` (the memo key of a model's last view, used by Task 13); the `session_tree` hook of `builtin:prompt` (`prompt_register_guard(gptr)`); the event `cache_break` (payload `provider`, `model`, `first_diff`, `entry`, `culprit`) and the entry `gptr.cache_break` `{provider, model, firstDiff, entry, culprit}`.
+- Consumes: `request_build()` (Task 10), `prompt_memo()` (Task 2); `gptr_opt("check_prefix")`,
+  `gptr_warn(message, class, ..., .data = NULL, .once = NULL)`, `gptr_abort()` (P01);
+  `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, the API member
+  `gptr$on(event, handler, matcher = NULL)`, `gptr_hook()` and `gptr_register()` (tests) (P02);
+  `session_data()`, `session_append()` (P06).
+- Produces: `prefix_guard(s, target, view)` (04 section 7.7) and the service `prefix.guard`
+  (`function(s, target, view) invisible(NULL)`); `prefix_reset(s)`; `prompt_view_key(target)` (the
+  memo key of a model's last view, used by Task 13); the `session_tree` hook of `builtin:prompt`
+  (`prompt_register_guard(gptr)`); the event `cache_break` (payload `provider`, `model`,
+  `first_diff`, `entry`, `culprit`) and the entry `gptr.cache_break`
+  `{provider, model, firstDiff, entry, culprit}`.
 
-The guard keeps the last view per model reference in the session's memo. A new view that extends the old one element by element is quiet; the first request to a model, a request after a stated break (the `epoch` changed) and a request after a rewind (`session_tree` resets the stored views) are not compared. On a break it names the first differing element (`tools`, `t0`, `t1` or `message <n>`) and the culprit (the frozen prompt changed, or a transcript entry changed; plus the registry generations when they differ), then acts per `gptr.check_prefix`: `"event"` (default) only records, `"warn"` also signals `gptr_warning_cache_break`, `"error"` signals `gptr_error_internal`.
+The guard keeps the last view per model reference in the session's memo. A new view that extends the
+old one element by element is quiet; the first request to a model, a request after a stated break
+(the `epoch` changed) and a request after a rewind (`session_tree` resets the stored views) are not
+compared. On a break it names the first differing element (`tools`, `t0`, `t1` or `message <n>`) and
+the culprit (the frozen prompt changed, or a transcript entry changed; plus the registry generations
+when they differ), then acts per `gptr.check_prefix`: `"event"` (default) only records, `"warn"`
+also signals `gptr_warning_cache_break`, `"error"` signals `gptr_error_internal`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4547,7 +4957,8 @@ test_that("a session_tree event resets the guard", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-cache")'`
-Expected: the four new tests fail, for example `could not find function "prefix_guard"` and `could not find function "prefix_reset"`.
+Expected: the four new tests fail, for example `could not find function "prefix_guard"` and
+`could not find function "prefix_reset"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4637,7 +5048,10 @@ prompt_register_guard = function(gptr) {
 }
 ```
 
-Then, in `R/prompt-sections.R`, replace the `builtin_prompt()` block of Task 10 (from the roxygen line ``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` to the closing brace of the function; the `on_load(...)` line stays) with:
+Then, in `R/prompt-sections.R`, replace the `builtin_prompt()` block of Task 10 (from the roxygen
+line
+``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` to the closing brace of the function; the `on_load(...)`
+line stays) with:
 
 ```r
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
@@ -4675,10 +5089,31 @@ git commit -m "feat(prompt): prefix guard with cache_break"
 - Test: `tests/testthat/test-prompt-compact.R` (append)
 
 **Interfaces:**
-- Consumes: `prompt_est()`, `prompt_truncate()`, `prompt_entry_operator()`, `prompt_operator_text()`, `prompt_operator_entry()` (tests), `prompt_path()` (tests) (Task 2); `prompt_text()` (Task 1); `msg_text(msg)`, `msg_user()`, `msg_assistant()`, `msg_tool_result()`, `msg_operator()`, `block_tool_call()`, `block_text()` (P01); `session_data()` (the workspace `snapshot` field of 04 §5.1), `session_new()` and `session_append()` (tests) (P06).
-- Produces: `extract_state(entries)` (04 §7.7; consumers P07, P16) -> `list(user, objects, decisions, read, modified, skills, plan)` for the entries of the active path (root to leaf); `compact_assigned_names(code)`, `compact_state_empty()`, `compact_state_merge(a, b)`, `compact_user_messages(msgs, budget = 2000)`, `compact_shapes(s)`, `compact_objects(objs, shapes = list(), budget = 800)`, `compact_checkpoint_body(summary, st, shapes = list())` (Task 13).
+- Consumes: `prompt_est()`, `prompt_truncate()`, `prompt_entry_operator()`,
+  `prompt_operator_text()`, `prompt_operator_entry()` (tests), `prompt_path()` (tests) (Task 2);
+  `prompt_text()` (Task 1); `msg_text(msg)`, `msg_user()`, `msg_assistant()`, `msg_tool_result()`,
+  `msg_operator()`, `block_tool_call()`, `block_text()` (P01); `session_data()` (the workspace
+  `snapshot` field of 04 section 5.1), `session_new()` and `session_append()` (tests) (P06).
+- Produces: `extract_state(entries)` (04 section 7.7; consumers P07, P16) ->
+  `list(user, objects, decisions, read, modified, skills, plan)` for the entries of the active path
+  (root to leaf); `compact_assigned_names(code)`, `compact_state_empty()`,
+  `compact_state_merge(a, b)`, `compact_user_messages(msgs, budget = 2000)`, `compact_shapes(s)`,
+  `compact_objects(objs, shapes = list(), budget = 800)`,
+  `compact_checkpoint_body(summary, st, shapes = list())` (Task 13).
 
-The harness, not the model, writes what must survive (G4 §4.4.3, prototype `compaction.R` in G4 §5.5): every user message in the user's words (prompts, pipes, steers, follow-ups, REPL input, replayed and imported turns, and the original text of steering relays; extension and agent notes are not the user's), the objects assigned by successful `r` calls with the code as written (`=`, the left arrow, the super-assignment arrow, `->`, `assign("x", ...)`, replacement calls and data.table `:=`; at most 100 characters), the `note` decisions, the files read and modified (a modified file is no longer listed as read), the activated skills (`skill_content` blocks and `read` of a `skill:<name>/` pseudo-path) and the latest `<proposed_plan>`. The state of the previous compaction entry is merged under the new one (iterative compaction). The checkpoint body is G4 §3.6's format: the intro line, `<summary>`, `<user_messages>` (the first and the newest messages within 2,000 tokens), `<r_objects>` (`name <class shape>: code`, oldest dropped first beyond 800 tokens; shapes from the session's last workspace snapshot, else `?`), `<decisions>` (300 tokens), `<files>`, `<active_skills>` and the plan.
+The harness, not the model, writes what must survive (G4 section 4.4.3, prototype `compaction.R` in
+G4 section 5.5): every user message in the user's words (prompts, pipes, steers, follow-ups, REPL
+input, replayed and imported turns, and the original text of steering relays; extension and agent
+notes are not the user's), the objects assigned by successful `r` calls with the code as written
+(`=`, the left arrow, the super-assignment arrow, `->`, `assign("x", ...)`, replacement calls and
+data.table `:=`; at most 100 characters), the `note` decisions, the files read and modified (a
+modified file is no longer listed as read), the activated skills (`skill_content` blocks and `read`
+of a `skill:<name>/` pseudo-path) and the latest `<proposed_plan>`. The state of the previous
+compaction entry is merged under the new one (iterative compaction). The checkpoint body is G4
+section 3.6's format: the intro line, `<summary>`, `<user_messages>` (the first and the newest
+messages within 2,000 tokens), `<r_objects>` (`name <class shape>: code`, oldest dropped first
+beyond 800 tokens; shapes from the session's last workspace snapshot, else `?`), `<decisions>` (300
+tokens), `<files>`, `<active_skills>` and the plan.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4808,7 +5243,8 @@ test_that("the checkpoint body follows G4 section 3.6", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-compact")'`
-Expected: the seven new tests fail, for example `could not find function "compact_assigned_names"`, `could not find function "extract_state"`, `could not find function "compact_checkpoint_body"`.
+Expected: the seven new tests fail, for example `could not find function "compact_assigned_names"`,
+`could not find function "extract_state"`, `could not find function "compact_checkpoint_body"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5040,13 +5476,65 @@ git commit -m "feat(prompt): harness state extraction for checkpoints"
 - Test: `tests/testthat/test-prompt-compact.R` (append)
 
 **Interfaces:**
-- Consumes: `request_build()`, `prompt_request_context()`, `prompt_request_estimate()`, `prompt_cache_gap_state()` (Task 10), `prefix_guard()`, `prompt_view_key()` (Task 11), `prompt_memo()` (Task 2), `extract_state()`, `compact_checkpoint_body()`, `compact_shapes()` (Task 12), `compact_threshold()` (Task 6), `context_mode_body()`, `context_block_by_name()` (Task 5), `prompt_ctx()`, `prompt_sid()`, `prompt_path()`, `prompt_model()`, `prompt_est()`, `with_prompt_input()` (Task 2), `prompt_text()` (Task 1); `block_context()`, `block_text()`, `msg_user()`, `msg_text()`, `gptr_opt()`, `setting_get()`, `gptr_can_prompt()`, `gptr_abort()`, `ext_service_has()`, `ext_service_get()`, `hash_sha256()` (P01); `registry_get()`, `registry_diagnostic()`, `ev_dispatch()`, `gptr_spec()`, `ext_declare_builtin()` (P02); `reactor_pump()`, `reactor_cancel(ids)` (P04); `provider_stream(model, context, opts, emit, done, run = NULL)` (P05; 04 §7.5 names P07's compaction as a consumer); `session_data()`, `session_live()`, `session_append()`, `session_run(s, input, opts = list())` (tests) (P06); the service `router.call` (`function(s, reason) list(model, thinking, state)`, P08) for router models.
-- Produces: `compact_should(s, tokens, idle_s)` (service `compact.should`; `lgl(1)`, and when `TRUE` the attribute `reason` = `"threshold"` or `"cold"` for the caller's `compact.run`), `compact_run(s, reason, focus = NULL)` (service `compact.run`; `invisible(s)`), the `compactor` record `checkpoint` (`should(session, ctx)`, `compact(session, ctx)` -> `list(blocks, summary, state, first_kept_entry_id, usage, details)`), `builtin_compaction(gptr)`, the events `session_before_compact` and `session_compact`, and `compaction` entries (`summary`, `first_kept_entry_id` = `NULL` (`keep_recent = 0`), `tokens_before`, `details` = `list(request_id, dropped (only when the re-injection budget dropped project blocks: file label -> sha256), reason, strategy, tokens_after)`, `usage`, `gptr = list(blocks, state, n)`); `compact_request_text(focus = NULL)` (Task 14).
+- Consumes: `request_build()`, `prompt_request_context()`, `prompt_request_estimate()`,
+  `prompt_cache_gap_state()` (Task 10), `prefix_guard()`, `prompt_view_key()` (Task 11),
+  `prompt_memo()` (Task 2), `extract_state()`, `compact_checkpoint_body()`, `compact_shapes()` (Task
+  12), `compact_threshold()` (Task 6), `context_mode_body()`, `context_block_by_name()` (Task 5),
+  `prompt_ctx()`, `prompt_sid()`, `prompt_path()`, `prompt_model()`, `prompt_est()`,
+  `with_prompt_input()` (Task 2), `prompt_text()` (Task 1); `block_context()`, `block_text()`,
+  `msg_user()`, `msg_text()`, `gptr_opt()`, `setting_get()`, `gptr_can_prompt()`, `gptr_abort()`,
+  `ext_service_has()`, `ext_service_get()`, `hash_sha256()` (P01); `registry_get()`,
+  `registry_diagnostic()`, `ev_dispatch()`, `gptr_spec()`, `ext_declare_builtin()` (P02);
+  `reactor_pump()`, `reactor_cancel(ids)` (P04);
+  `provider_stream(model, context, opts, emit, done, run = NULL)` (P05; 04 section 7.5 names P07's
+  compaction as a consumer); `session_data()`, `session_live()`, `session_append()`,
+  `session_run(s, input, opts = list())` (tests) (P06); the service `router.call`
+  (`function(s, reason) list(model, thinking, state)`, P08) for router models.
+- Produces: `compact_should(s, tokens, idle_s)` (service `compact.should`; `lgl(1)`, and when `TRUE`
+  the attribute `reason` = `"threshold"` or `"cold"` for the caller's `compact.run`),
+  `compact_run(s, reason, focus = NULL)` (service `compact.run`; `invisible(s)`), the `compactor`
+  record `checkpoint` (`should(session, ctx)`, `compact(session, ctx)` ->
+  `list(blocks, summary, state, first_kept_entry_id, usage, details)`), `builtin_compaction(gptr)`,
+  the events `session_before_compact` and `session_compact`, and `compaction` entries (`summary`,
+  `first_kept_entry_id` = `NULL` (`keep_recent = 0`), `tokens_before`, `details` =
+  `list(request_id, dropped (only when the re-injection budget dropped project blocks: file label -> sha256), reason, strategy, tokens_after)`,
+  `usage`, `gptr = list(blocks, state, n)`); `compact_request_text(focus = NULL)` (Task 14).
 
-The trigger (03 §6.11, IC-71): the threshold of Task 6 for the session's model (a router model asks `router.call` with reason `"compaction"`), except that after a threshold compaction the next threshold compaction waits until the context grew by 20% of the window beyond `details$tokens_after`; the cold rule fires when the idle time exceeds the tail TTL (300 s, or 3,600 s once the tail is `"1h"`) and the context is at least `gptr.compact_cold_min`. The compactor's `should()` and `compact()` receive their inputs through `ctx$input` (`tokens`, `idle_s`; `reason`, `focus`, `tokens`, `target`). The checkpoint request is the unchanged transcript plus one `<compaction_request>` user message with the frozen tools and `max_tokens = 2048`, sent in-conversation through `provider_stream()` and waited for with a nested `reactor_pump(allow_runs = character())` (IC-57: it never runs a sibling's queued tool); a reply that calls a tool or stops on `length` is asked again once, an error reply is not retried and the checkpoint then carries the harness state alone. The new first message is: the project and environment blocks of the current first message reused byte for byte (the project blocks within `frozen$reinject$project`; a dropped block is recorded in `details$dropped` as file label -> sha256 of the block, carried over from the previous compaction, so Task 5's update block re-announces it only when the file changes), the `<checkpoint>`, the current `<mode>`, a fresh `<workspace>` (P09's block when registered), the newest `<skill_content>` per skill within 5,000 each and `frozen$reinject$skills` in all, and `Continue from the checkpoint. The latest request was: <text>`. A failing plugin compactor falls back to the built-in with a diagnostic; `session_before_compact` handlers can cancel or supply the result. The checkpoint request never carries the running call's `returns =` schema (the reply is free text), and it is guarded like any request but leaves the model's stored view as it was (the next request extends the request before it, so a cancelled or failed compaction is not a false `cache_break`). The session kernel calls `compact.run(s, "threshold")` for every `TRUE` of `compact.should` (P06 `run_compact_check()`; the service returns `lgl(1)`), so `compact_should()` remembers its reason in the session memo and `compact_run()` records a cold compaction as `"cold"`.
+The trigger (03 section 6.11, IC-71): the threshold of Task 6 for the session's model (a router
+model asks `router.call` with reason `"compaction"`), except that after a threshold compaction the
+next threshold compaction waits until the context grew by 20% of the window beyond
+`details$tokens_after`; the cold rule fires when the idle time exceeds the tail TTL (300 s, or 3,600
+s once the tail is `"1h"`) and the context is at least `gptr.compact_cold_min`. The compactor's
+`should()` and `compact()` receive their inputs through `ctx$input` (`tokens`, `idle_s`; `reason`,
+`focus`, `tokens`, `target`). The checkpoint request is the unchanged transcript plus one
+`<compaction_request>` user message with the frozen tools and `max_tokens = 2048`, sent
+in-conversation through `provider_stream()` and waited for with a nested
+`reactor_pump(allow_runs = character())` (IC-57: it never runs a sibling's queued tool); a reply
+that calls a tool or stops on `length` is asked again once, an error reply is not retried and the
+checkpoint then carries the harness state alone. The new first message is: the project and
+environment blocks of the current first message reused byte for byte (the project blocks within
+`frozen$reinject$project`; a dropped block is recorded in `details$dropped` as file label -> sha256
+of the block, carried over from the previous compaction, so Task 5's update block re-announces it
+only when the file changes), the `<checkpoint>`, the current `<mode>`, a fresh `<workspace>` (P09's
+block when registered), the newest `<skill_content>` per skill within 5,000 each and
+`frozen$reinject$skills` in all, and `Continue from the checkpoint. The latest request was: <text>`.
+A failing plugin compactor falls back to the built-in with a diagnostic; `session_before_compact`
+handlers can cancel or supply the result. The checkpoint request never carries the running call's
+`returns =` schema (the reply is free text), and it is guarded like any request but leaves the
+model's stored view as it was (the next request extends the request before it, so a cancelled or
+failed compaction is not a false `cache_break`). The session kernel calls
+`compact.run(s, "threshold")` for every `TRUE` of `compact.should` (P06 `run_compact_check()`; the
+service returns `lgl(1)`), so `compact_should()` remembers its reason in the session memo and
+`compact_run()` records a cold compaction as `"cold"`.
 
-When the model window is unknown but the effective cap is finite, a prior threshold checkpoint waits for 20% growth of that cap. Both its stored `tokens_after` and the current count must be finite, and the prior count must be nonnegative. Compare the stored estimate after applying the same current session estimator multiplier used by `context_tokens()`; a calibration change alone is not growth. A missing multiplier defaults to 1 as in `context_tokens()`, while a nonfinite/nonpositive multiplier or nonfinite product supplies no growth evidence; missing/invalid counts do not invent a zero baseline. Known-window waiting, the initial threshold decision, cold/manual/overflow paths and budgets retain their meanings.
-
+When the model window is unknown but the effective cap is finite, a prior threshold checkpoint waits
+for 20% growth of that cap. Both its stored `tokens_after` and the current count must be finite, and
+the prior count must be nonnegative. Compare the stored estimate after applying the same current
+session estimator multiplier used by `context_tokens()`; a calibration change alone is not growth. A
+missing multiplier defaults to 1 as in `context_tokens()`, while a nonfinite/nonpositive multiplier
+or nonfinite product supplies no growth evidence; missing/invalid counts do not invent a zero
+baseline. Known-window waiting, the initial threshold decision, cold/manual/overflow paths and
+budgets retain their meanings.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5263,7 +5751,10 @@ test_that("INFRA-26: a second overflow after the retry surfaces as an error", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-compact")'`
-Expected: the new tests fail, for example `could not find function "compact_request_text"`, `could not find function "compact_run"`, `could not find function "compact_should"`; the two INFRA-26 tests end with zero compaction entries (P06's overflow recovery finds no `compact.run` service yet).
+Expected: the new tests fail, for example `could not find function "compact_request_text"`,
+`could not find function "compact_run"`, `could not find function "compact_should"`; the two
+INFRA-26 tests end with zero compaction entries (P06's overflow recovery finds no `compact.run`
+service yet).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5661,10 +6152,32 @@ git commit -m "feat(prompt): checkpoint compactor and compaction services"
 - Test: `tests/testthat/test-context-prefix.R`
 
 **Interfaces:**
-- Consumes: `request_build()`, `prompt_request_elements()` (Task 10), `prefix_guard()` (Task 11), `compact_run()`, `compact_request_text()` (Task 13), `session_add_tools()` (Task 8), `context_first_message()`, `context_turn_blocks()` (Task 5), `prompt_freeze()` (Task 7), `prompt_operator_entry()`, `prompt_pending_add()`, `prompt_path()` (Task 2); `block_thinking()`, `block_tool_call()`, `block_text()`, `block_context()`, `msg_user()`, `msg_assistant()`, `msg_tool_result()`, `msg_operator()`, `local_fake_provider()`, `local_project()` (P01); `gptr_tool()` (P02); `model_resolve()` (P05); `session_new()`, `session_data()`, `session_append()`, `session_set_model()`, `session_set_mode()` (P06).
-- Produces: `prompt_request_body(elements, open = FALSE)` -> the canonical request body (`{"tools":...,"system":[t0,t1],"messages":[...]}`; with `open = TRUE` the message array stays open), used by this test and available to adapters and the Task 16 runner.
+- Consumes: `request_build()`, `prompt_request_elements()` (Task 10), `prefix_guard()` (Task 11),
+  `compact_run()`, `compact_request_text()` (Task 13), `session_add_tools()` (Task 8),
+  `context_first_message()`, `context_turn_blocks()` (Task 5), `prompt_freeze()` (Task 7),
+  `prompt_operator_entry()`, `prompt_pending_add()`, `prompt_path()` (Task 2); `block_thinking()`,
+  `block_tool_call()`, `block_text()`, `block_context()`, `msg_user()`, `msg_assistant()`,
+  `msg_tool_result()`, `msg_operator()`, `local_fake_provider()`, `local_project()` (P01);
+  `gptr_tool()` (P02); `model_resolve()` (P05); `session_new()`, `session_data()`,
+  `session_append()`, `session_set_model()`, `session_set_mode()` (P06).
+- Produces: `prompt_request_body(elements, open = FALSE)` -> the canonical request body
+  (`{"tools":...,"system":[t0,t1],"messages":[...]}`; with `open = TRUE` the message array stays
+  open), used by this test and available to adapters and the Task 16 runner.
 
-The scenario is G4 §5.7's 20-turn session (report G4 §5.9, `test_prefix.R`) adapted to the gptr kernel: four fake models (`fa` .. `fd`), thinking blocks with signatures on every assistant message, tool calls with results, an idle mode change (a turn block), a steering relay after a tool result, a skill activation (`<skill_content>`), a mid-session tool addition (`session_add_tools()`), switches to other models and back, a mid-run mode change (an operator message), an in-conversation checkpoint request and a compaction, and more turns after it. The property (acceptance 3): every pair of consecutive requests to the same model without a compaction between them is a byte prefix (the earlier body without its closing `]}` starts the later body), including pairs across model switches; across the compaction the tools, T0, T1 and the anchored project block are identical and the checkpoint request extends the request before it. G4's own scenario has 33 such adjacent same-target pairs (its fact-check); this adaptation produces 40 requests, 36 same-target pairs and 35 of them without a compaction between them, all byte prefixes. The negative controls (the system prompt re-rendered mid-session, a tool result edited in place) are detected by the pairs and by the prefix guard's `gptr.cache_break` entries.
+The scenario is G4 section 5.7's 20-turn session (report G4 section 5.9, `test_prefix.R`) adapted to
+the gptr kernel: four fake models (`fa` .. `fd`), thinking blocks with signatures on every assistant
+message, tool calls with results, an idle mode change (a turn block), a steering relay after a tool
+result, a skill activation (`<skill_content>`), a mid-session tool addition (`session_add_tools()`),
+switches to other models and back, a mid-run mode change (an operator message), an in-conversation
+checkpoint request and a compaction, and more turns after it. The property (acceptance 3): every
+pair of consecutive requests to the same model without a compaction between them is a byte prefix
+(the earlier body without its closing `]}` starts the later body), including pairs across model
+switches; across the compaction the tools, T0, T1 and the anchored project block are identical and
+the checkpoint request extends the request before it. G4's own scenario has 33 such adjacent
+same-target pairs (its fact-check); this adaptation produces 40 requests, 36 same-target pairs and
+35 of them without a compaction between them, all byte prefixes. The negative controls (the system
+prompt re-rendered mid-session, a tool result edited in place) are detected by the pairs and by the
+prefix guard's `gptr.cache_break` entries.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5980,10 +6493,25 @@ git commit -m "test(prompt): 20-turn byte-prefix property"
 - Test: `tests/testthat/test-bench-context.R`
 
 **Interfaces:**
-- Consumes: `prompt_compose()`, `prompt_est()`, `prompt_texts()`, `prompt_text()`, `prompt_standins_register()`, `prefix_fixture()` (Tasks 1, 2, 4); `gptr_registry(diagnostics = TRUE)`, `registry_get()` (P02); `local_fake_provider()`, `project_root()` (P01); `session_new()`, `session_data()` (P06).
-- Produces: the committed baselines of `prefix-baseline.json` (04 §12.4: `{"preset": {"minimal": 1271, "standard_core": 2360, "standard_all": 2844, "standard_interactive": 2987}, "sections": {...}, "estimator": "..."}`, plus `estimate`, the estimator's figures for the same compositions); `test-bench-context.R`, the CRAN-safe static budget suite of 03 §12.7.
+- Consumes: `prompt_compose()`, `prompt_est()`, `prompt_texts()`, `prompt_text()`,
+  `prompt_standins_register()`, `prefix_fixture()` (Tasks 1, 2, 4);
+  `gptr_registry(diagnostics = TRUE)`, `registry_get()` (P02); `local_fake_provider()`,
+  `project_root()` (P01); `session_new()`, `session_data()` (P06).
+- Produces: the committed baselines of `prefix-baseline.json` (04 section 12.4:
+  `{"preset": {"minimal": 1271, "standard_core": 2360, "standard_all": 2844, "standard_interactive": 2987}, "sections": {...}, "estimator": "..."}`,
+  plus `estimate`, the estimator's figures for the same compositions); `test-bench-context.R`, the
+  CRAN-safe static budget suite of 03 section 12.7.
 
-`preset` holds the o200k tokens measured with rtiktoken 0.0.7 on the exact compositions (03 §12.1: minimal 615 + 656 = 1,271; standard core non-interactive 615 + 1,203 + 542 = 2,360; standard non-interactive with every section and a document 666 + 1,636 + 542 = 2,844; standard interactive with every section and a document 792 + 1,653 + 542 = 2,987); the scratch reproduction of this plan measured exactly these totals from the Task 4 composition. `estimate` holds `est_tokens()` of the same compositions (tool array as `json`, T0 and T1 as `prose`), which the test ratchets within 5%; `sections` holds the measured o200k tokens of each P07 section for reference. A text change that moves an estimate by more than 5% fails the test: re-measure with `Rscript --vanilla dev/bench/tokens/run.R` (Task 16) and update both figures in the same commit as the text.
+`preset` holds the o200k tokens measured with rtiktoken 0.0.7 on the exact compositions (03
+section 12.1: minimal 615 + 656 = 1,271; standard core non-interactive 615 + 1,203 + 542 = 2,360;
+standard non-interactive with every section and a document 666 + 1,636 + 542 = 2,844; standard
+interactive with every section and a document 792 + 1,653 + 542 = 2,987); the scratch reproduction
+of this plan measured exactly these totals from the Task 4 composition. `estimate` holds
+`est_tokens()` of the same compositions (tool array as `json`, T0 and T1 as `prose`), which the test
+ratchets within 5%; `sections` holds the measured o200k tokens of each P07 section for reference. A
+text change that moves an estimate by more than 5% fails the test: re-measure with
+`Rscript --vanilla dev/bench/tokens/run.R` (Task 16) and update both figures in the same commit as
+the text.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6108,11 +6636,15 @@ test_that("no shipped prompt text or skill mentions str( (IC-67)", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "bench-context")'`
-Expected: 2 failures: `expect_setequal(names(pb$estimate), names(pb$cases))` errors with "`object` must be a vector, not `NULL`", and `unlist(prefix_fixture()$preset)` is `NULL` instead of the four totals.
+Expected: 2 failures: `expect_setequal(names(pb$estimate), names(pb$cases))` errors with "`object`
+must be a vector, not `NULL`", and `unlist(prefix_fixture()$preset)` is `NULL` instead of the four
+totals.
 
 - [ ] **Step 3: Write the implementation**
 
-In `tests/testthat/fixtures/bench/prefix-baseline.json`, replace the first line (the lone `{` before `"cases"`) with the following lines, so that the four baseline members come first and `"cases"` follows the comma after `"sections"`:
+In `tests/testthat/fixtures/bench/prefix-baseline.json`, replace the first line (the lone `{` before
+`"cases"`) with the following lines, so that the four baseline members come first and `"cases"`
+follows the comma after `"sections"`:
 
 ```text
 {
@@ -6145,7 +6677,11 @@ In `tests/testthat/fixtures/bench/prefix-baseline.json`, replace the first line 
   },
 ```
 
-The file then begins `{ "preset": {...}, "estimate": {...}, "estimator": "...", "sections": {...}, "cases": {...}, "standins": {...}, "expected": {...} }`. Check it parses: `Rscript --vanilla -e 'str(names(jsonlite::fromJSON("tests/testthat/fixtures/bench/prefix-baseline.json")))'` prints `chr [1:7] "preset" "estimate" "estimator" "sections" "cases" "standins" "expected"`.
+The file then begins
+`{ "preset": {...}, "estimate": {...}, "estimator": "...", "sections": {...}, "cases": {...}, "standins": {...}, "expected": {...} }`.
+Check it parses:
+`Rscript --vanilla -e 'str(names(jsonlite::fromJSON("tests/testthat/fixtures/bench/prefix-baseline.json")))'`
+prints `chr [1:7] "preset" "estimate" "estimator" "sections" "cases" "standins" "expected"`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -6164,19 +6700,54 @@ git commit -m "test(prompt): static prefix baselines per preset"
 ### Task 16: The golden-transcript runner with NS-2 and NS-3
 
 **Files:**
-- Create: `dev/bench/tokens/fixtures/ns02-mixed-model.json`, `dev/bench/tokens/fixtures/ns03-pipe-steering.json`
+- Create: `dev/bench/tokens/fixtures/ns02-mixed-model.json`,
+  `dev/bench/tokens/fixtures/ns03-pipe-steering.json`
 - Create: `dev/bench/tokens/baseline.csv`
 - Create: `dev/bench/tokens/run.R`
 
 **Interfaces:**
-- Consumes (through `pkgload::load_all(export_all = TRUE)`): `prompt_freeze()`, `context_first_message()`, `context_turn_blocks()`, `request_build()`, `prompt_standins_register()` (from `tests/testthat/fixtures/bench/standins.R`) (P07); `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))`, `est_tokens()`, `est_image_tokens()`, `json_encode()`, `block_text()`, `block_tool_call()`, `block_image()`, `msg_user()`, `msg_assistant()`, `msg_tool_result()`, `gptr_abort()` (P01); `gptr_register()`, `registry_add()`, `gptr_context_block()` (P02); `model_resolve()` (P05); `session_new()`, `session_data()`, `session_append()`, `session_set_model()` (P06); `rtiktoken::get_token_count(x, "o200k_base")` (development tool, not a dependency).
-- Produces: `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` (03 §12.7, IC-73; P01's CI `bench` job runs `--check`); `dev/bench/tokens/results.csv`; the baseline rows `ns02-mixed-model` and `ns03-pipe-steering`; `bench_case(fx, standins, tok)`, `bench_compare(res, base)` (signals `gptr_error_token_regression` with `fixture`, `metric`, `baseline`, `value`); `bench_static(pb, tok)` and `bench_check_static(static, pb)`, which re-measure the o200k static prefix of the four `prefix-baseline.json` cases on every run and hold them to the committed `preset` totals (1,271 / 2,360 / 2,844 / 2,987) with the prefix gate (+2%), so acceptance 2's "measured o200k tokens" are checked by the `bench` job and not only recorded. P10, P13, P15, P18, P19, P22 and P23 add their NS fixtures and baseline rows with `--update <id>`; P24 covers every other gate.
+- Consumes (through `pkgload::load_all(export_all = TRUE)`): `prompt_freeze()`,
+  `context_first_message()`, `context_turn_blocks()`, `request_build()`,
+  `prompt_standins_register()` (from `tests/testthat/fixtures/bench/standins.R`) (P07);
+  `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))`, `est_tokens()`,
+  `est_image_tokens()`, `json_encode()`, `block_text()`, `block_tool_call()`, `block_image()`,
+  `msg_user()`, `msg_assistant()`, `msg_tool_result()`, `gptr_abort()` (P01); `gptr_register()`,
+  `registry_add()`, `gptr_context_block()` (P02); `model_resolve()` (P05); `session_new()`,
+  `session_data()`, `session_append()`, `session_set_model()` (P06);
+  `rtiktoken::get_token_count(x, "o200k_base")` (development tool, not a dependency).
+- Produces: `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` (03 section 12.7,
+  IC-73; P01's CI `bench` job runs `--check`); `dev/bench/tokens/results.csv`; the baseline rows
+  `ns02-mixed-model` and `ns03-pipe-steering`; `bench_case(fx, standins, tok)`,
+  `bench_compare(res, base)` (signals `gptr_error_token_regression` with `fixture`, `metric`,
+  `baseline`, `value`); `bench_static(pb, tok)` and `bench_check_static(static, pb)`, which
+  re-measure the o200k static prefix of the four `prefix-baseline.json` cases on every run and hold
+  them to the committed `preset` totals (1,271 / 2,360 / 2,844 / 2,987) with the prefix gate (+2%),
+  so acceptance 2's "measured o200k tokens" are checked by the `bench` job and not only recorded.
+  P10, P13, P15, P18, P19, P22 and P23 add their NS fixtures and baseline rows with `--update <id>`;
+  P24 covers every other gate.
 
-Each fixture scripts one north-star session (02-north-star-examples.md, NS-2 and NS-3): the project files, the objects of the home environment, the pinned `<environment>` text (the only volatile block), the stand-in sections to use when their owners are not loaded (`artifacts`, `system1`, `skills`, `r_env`: the 03 §12.1 row "standard, interactive (+ ask), no document", 741 + 1,467 + 542 = 2,750 o200k tokens), and per turn the prompt, its source, the attached objects, an optional model switch and the scripted replies with their tool results. The runner drives the real context assembly (freeze, first message, turn blocks, `request_build()` before every scripted reply) with the fake provider registered only so the model references resolve; no provider is called and nothing leaves the process. Metrics per fixture: `requests`; `prefix` (o200k of the tool array, T0 and T1); `input_total` (the sum over requests of the prefix plus the o200k of every message's text payload plus image tokens); `output_total`; `image_tokens`; `catalog` (o200k of T1); `facts` (the fixture's `facts` found in the first message's `<attached>` blocks); `est_prefix` and `est_input_total` (the estimator's figures, recorded but not gated). Gates (03 §12.7): prefix +2%, input and output totals +5%, requests and image tokens +0, catalog +5%, facts no loss; a lower value always passes.
+Each fixture scripts one north-star session (02-north-star-examples.md, NS-2 and NS-3): the project
+files, the objects of the home environment, the pinned `<environment>` text (the only volatile
+block), the stand-in sections to use when their owners are not loaded (`artifacts`, `system1`,
+`skills`, `r_env`: the 03 section 12.1 row "standard, interactive (+ ask), no document", 741 +
+1,467 + 542 = 2,750 o200k tokens), and per turn the prompt, its source, the attached objects, an
+optional model switch and the scripted replies with their tool results. The runner drives the real
+context assembly (freeze, first message, turn blocks, `request_build()` before every scripted reply)
+with the fake provider registered only so the model references resolve; no provider is called and
+nothing leaves the process. Metrics per fixture: `requests`; `prefix` (o200k of the tool array, T0
+and T1); `input_total` (the sum over requests of the prefix plus the o200k of every message's text
+payload plus image tokens); `output_total`; `image_tokens`; `catalog` (o200k of T1); `facts` (the
+fixture's `facts` found in the first message's `<attached>` blocks); `est_prefix` and
+`est_input_total` (the estimator's figures, recorded but not gated). Gates (03 section 12.7): prefix
++2%, input and output totals +5%, requests and image tokens +0, catalog +5%, facts no loss; a lower
+value always passes.
 
 - [ ] **Step 1: Write the fixtures and the baseline**
 
-Check the development tool first: `Rscript --vanilla -e 'cat(requireNamespace("rtiktoken", quietly = TRUE), "\n")'` must print `TRUE`. If it prints `FALSE`, stop and ask the maintainer to install rtiktoken (CRAN) into their library; do not install it from a plan step (conventions §1).
+Check the development tool first:
+`Rscript --vanilla -e 'cat(requireNamespace("rtiktoken", quietly = TRUE), "\n")'` must print `TRUE`.
+If it prints `FALSE`, stop and ask the maintainer to install rtiktoken (CRAN) into their library; do
+not install it from a plan step (conventions section 1).
 
 Create `dev/bench/tokens/fixtures/ns02-mixed-model.json`:
 
@@ -6372,7 +6943,8 @@ Create `dev/bench/tokens/fixtures/ns03-pipe-steering.json`:
 }
 ```
 
-Create `dev/bench/tokens/baseline.csv` (the o200k figures were measured with rtiktoken on the P07 composition with the stand-ins; the `est_*` columns are informational):
+Create `dev/bench/tokens/baseline.csv` (the o200k figures were measured with rtiktoken on the P07
+composition with the stand-ins; the `est_*` columns are informational):
 
 ```text
 "case","requests","prefix","input_total","output_total","image_tokens","catalog","facts","est_prefix","est_input_total"
@@ -6768,12 +7340,14 @@ git commit -m "chore(bench): golden-transcript token runner with NS-2 and NS-3"
 
 ## Plan acceptance
 
-Run every command from the repository root after Task 16. PASS counts are those of a tree with P01-P07 (M1); with later plans installed they differ, but FAIL and WARN stay 0.
+Run every command from the repository root after Task 16. PASS counts are those of a tree with
+P01-P07 (M1); with later plans installed they differ, but FAIL and WARN stay 0.
 
 **Commands**
 
 - C1: `Rscript --vanilla -e 'devtools::test(filter = "prompt|context-prefix|bench-context")'`
-  Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 579 ]` (89 prompt-text + 177 prompt-sections + 68 prompt-context + 93 prompt-compact + 65 prompt-cache + 15 context-prefix + 72 bench-context).
+  Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 579 ]` (89 prompt-text + 177 prompt-sections + 68
+  prompt-context + 93 prompt-compact + 65 prompt-cache + 15 context-prefix + 72 bench-context).
 - C2: `Rscript --vanilla -e 'devtools::test(filter = "context-prefix")'`
   Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 15 ]`
 - C3: `Rscript --vanilla -e 'devtools::test(filter = "prompt-compact")'`
@@ -6787,15 +7361,21 @@ Run every command from the repository root after Task 16. PASS counts are those 
 - C7: `Rscript --vanilla -e 'devtools::test(filter = "bench-context")'`
   Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 72 ]`
 - C8: `Rscript --vanilla dev/bench/tokens/run.R --check` (needs rtiktoken)
-  Expected: the static-prefix and metrics tables of Task 16 and `OK: 4 static prefixes and 2 golden transcripts within the baseline tolerances`.
-- C9: `Rscript --vanilla -e 'devtools::document()'` exits 0 and leaves `NAMESPACE` and `man/` unchanged; `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'` prints no lints and exits 0 (the namespace is loaded first, as in P01's acceptance A3: on an uninstalled tree lintr's `object_usage_linter` cannot see internal functions and reports every call to one).
+  Expected: the static-prefix and metrics tables of Task 16 and
+  `OK: 4 static prefixes and 2 golden transcripts within the baseline tolerances`.
+- C9: `Rscript --vanilla -e 'devtools::document()'` exits 0 and leaves `NAMESPACE` and `man/`
+  unchanged;
+  `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`
+  prints no lints and exits 0 (the namespace is loaded first, as in P01's acceptance A3: on an
+  uninstalled tree lintr's `object_usage_linter` cannot see internal functions and reports every
+  call to one).
 
 **Checks**
 
-| # | Acceptance check (05 P07, with its review amendments) | Proven by | Command |
+| # | Acceptance check (05 P07, with its review amendments) | Proved by | Command |
 |---|---|---|---|
 | 1 | the P07 test filter is green | Tasks 1-15 | C1 |
-| 2a | P07-owned rendered sections are byte-identical to 03 §7.3 as amended (the other owners' texts are compared in their plans and composed in P24) | Task 1: `P07's section texts equal architecture 7.3 byte for byte`, `mode blocks and non-interactive suffixes equal architecture 7.4 and contract 9.3`, `minimal variants and the extended r_performance equal contract 9.3`, `the compaction request and checkpoint texts equal G4 section 3.6`; Task 4: `rendered P07 sections are byte-identical to architecture 7.3 (with stand-ins)`; Task 15: `the standard composition is architecture 7.3 byte for byte (with stand-ins)`, `the composed T0 and skills equal the text block of architecture 7.3` (the spec-reading tests skip only in a built package, where `dev/` is absent) | C1 |
+| 2a | P07-owned rendered sections are byte-identical to 03 section 7.3 as amended (the other owners' texts are compared in their plans and composed in P24) | Task 1: `P07's section texts equal architecture 7.3 byte for byte`, `mode blocks and non-interactive suffixes equal architecture 7.4 and contract 9.3`, `minimal variants and the extended r_performance equal contract 9.3`, `the compaction request and checkpoint texts equal G4 section 3.6`; Task 4: `rendered P07 sections are byte-identical to architecture 7.3 (with stand-ins)`; Task 15: `the standard composition is architecture 7.3 byte for byte (with stand-ins)`, `the composed T0 and skills equal the text block of architecture 7.3` (the spec-reading tests skip only in a built package, where `dev/` is absent) | C1 |
 | 2b | each section is within its budget | Task 15: `every section is within its budget` | C7 |
 | 2c | with the fixed T1 fixture (`<r_env>` plus the two built-in skills, 542 tokens) the preset estimates are within 5% of `prefix-baseline.json` (initial values 1,271 / 2,360 / 2,844 / 2,987 measured o200k tokens, stored with the estimator's figures; IC-68) | Task 15: `each preset's estimated prefix is within 5% of prefix-baseline.json`, `the measured o200k baselines are the architecture 12.1 totals (IC-68)`; Task 16: `bench_static()`/`bench_check_static()` re-measure the four compositions with rtiktoken o200k against those totals (prefix gate +2%; measured 1,271 / 2,360 / 2,844 / 2,987 exactly) | C7, C8 |
 | 2d | no shipped text mentions `str(` (IC-67) | Task 1: `texts are ASCII and never mention str( (IC-67)`; Task 15: `no shipped prompt text or skill mentions str( (IC-67)` | C1 |
@@ -6808,7 +7388,7 @@ Run every command from the repository root after Task 16. PASS counts are those 
 | 6d | a session in an untrusted project renders `<project_instructions trusted="false">` | Task 5: `an untrusted project renders trusted="false"; a trusted one does not (IC-52)`, `untrusted project files are withheld non-interactively in auto; the user's stay` | C5 |
 | 6e | a model with an 8K window and a large project block is refused for the standard preset with the suggestion | Task 7: `a model with an 8K window is refused for the standard preset (IC-71)` (class `gptr_error_invalid_argument`, message containing `preset = "minimal"`) | C6 |
 | 6f | `Rscript --vanilla dev/bench/tokens/run.R --check` passes on NS-2 and NS-3 | Task 16 | C8 |
-| - | documentation and lint (conventions §2, §4) | Task 9; every task | C9 |
+| - | documentation and lint (conventions sections 2, 4) | Task 9; every task | C9 |
 
 ---
 
@@ -6824,7 +7404,7 @@ Run every command from the repository root after Task 16. PASS counts are those 
 | section patches (`Updated system prompt section ...` / `Removed ...`) | 8 |
 | `builtin:prompt` registering P07's sections, the presets, the gap `cache_policy`, the default `estimator`, the `session.add_tools` service | 3, 4, 8, 10, 11 |
 | `gptr_prompt()` | 9 |
-| `prompt-text.R`: the verbatim texts of 03 §7.3-7.4 | 1 |
+| `prompt-text.R`: the verbatim texts of 03 section 7.3-7.4 | 1 |
 | `prompt-context.R`: project instructions root to cwd, `vignette.Rmd` last and additive (its `@<file>` lines included once) | 5 |
 | `<environment>`, `<mode>` (with the suffixes), `<plan>` | 5 |
 | first-message rendering reused after compaction | 5 (anchor), 13 (reuse), 14 (proof) |
@@ -6853,99 +7433,238 @@ Every acceptance check of 05 P07 maps to a task and a command in "Plan acceptanc
 
 ### Placeholder scan
 
-The plan was searched for the placeholder patterns of the writing-plans standard (unfinished-work markers, deferred implementation, vague error-handling or edge-case steps, references to another task instead of code, steps that describe without showing code): none remain. Every code block is the complete file content or the complete appended part; the three `builtin_prompt()` replacements (Tasks 4, 10, 11) show the whole new definition and name the exact block they replace. The only runtime-dependent figures (elapsed seconds, the `est_*` columns of the runner) are marked as such.
+The plan was searched for the placeholder patterns of the writing-plans standard (unfinished-work
+markers, deferred implementation, vague error-handling or edge-case steps, references to another
+task instead of code, steps that describe without showing code): none remain. Every code block is
+the complete file content or the complete appended part; the three `builtin_prompt()` replacements
+(Tasks 4, 10, 11) show the whole new definition and name the exact block they replace. The only
+runtime-dependent figures (elapsed seconds, the `est_*` columns of the runner) are marked as such.
 
 ### Type and name consistency with 04
 
-- Export and class: `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)`; `gptr_prompt_view` has exactly the five fields of 04 §5.11 (`system = list(t0, t1)`, `tools_json`, `first_message`, `sections` with `name`, `tier`, `tokens`, `total_tokens`).
-- Internal signatures of 04 §7.7 are used verbatim: `prompt_freeze(s, opts = list())`, `preset_tools(preset, human, model = NULL, modifiers = character(), mode = NULL)`, `session_add_tools(s, specs)`, `prompt_texts()`, `context_first_message(s, input)`, `context_turn_blocks(s, input)`, `request_build(s, target, extra = NULL)`, `prefix_guard(s, target, view)`, `compact_threshold(window, max_output, r_cap = 4000)`, `compact_should(s, tokens, idle_s)`, `extract_state(entries)`, `builtin_prompt(gptr)`, `builtin_context(gptr)`, `builtin_compaction(gptr)`, and the `compact.run` signature `function(s, reason, focus = NULL)`.
-- Service names of 04 §7.0: `prompt.freeze`, `context.first`, `context.turn`, `request.build`, `prefix.guard`, `compact.should`, `compact.run`, `ctx.input`, `session.add_tools`; consumed services `trust.get`, `doc.site`, `plan.pending`, `router.call` with their fallbacks.
-- Kinds and fields of 04 §10.2: `prompt_section` (`text`, `tier`, `order`, `budget`, `parent`), `context_block` (`provide`, `placement`, `authority`, `budget`, `order`), `preset` (`tools`, `sections`, `preamble`), `cache_policy` (`plan(parts, caps, session)` -> `list(anchors, tail_ttl, key)`), `estimator` (`estimate`, `calibrate`), `compactor` (`should`, `compact`).
-- Records: `block_context()` blocks (`kind`, `attrs`, `text`, `anchor`); operator messages as `custom_message` entries with `custom_type = "gptr.operator"` in the session kernel's in-memory shape (`message` = the operator record of 04 §4.2; P06's store writes it as the 04 §4.6 line `{customType, content, display, details: {kind, toolAdd, originText}}`, and P05's `project_messages()` projects it), read back in that shape or the flat Pi shape; `compaction` entries with the §4.8 names `first_kept_entry_id`, `tokens_before`; `gptr.frozen` and `gptr.cache_break` data with their camelCase keys; the request context of 04 §8.1; the ledger component names of 04 §4.3.
-- Events: `session_before_compact`, `session_compact`, `cache_break` (04 §10.4 payloads), `session_tree` (hook).
-- Options and settings: `gptr.compact_at`, `gptr.compact_cold_min`, `gptr.cache_ttl`, `gptr.cache_gap`, `gptr.check_prefix`, `gptr.r_output_tokens`, `gptr.noninteractive_ask`; settings `preset`, `tools`, `cache`, `compactor`, `compact_at`, `system1`, `model`, `mode`.
-- Conditions: `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_internal` (`detail`), `gptr_warning_cache_break`, `gptr_message_notice`.
-- Cross-checked against the written plans P01-P06 in `dev/plan/` (review of 2026-10-01): every earlier-plan name in the table under Global Constraints exists there with the signature quoted; P06's `run_freeze()` passes `run$opts` plus `start`, `interactive` and `refreeze` to `prompt.freeze`, its `run_build()` calls `request.build(s, target, NULL)` and refills only `request_id`, `session_id` and the elided messages, its `run_compact_check()` calls `compact.run(s, "threshold")` for any `TRUE` of `compact.should`, its overflow recovery calls `compact.run(run$shell, "overflow")` once, and its `mode_block_text()` calls the `mode` block's `provide(live$ctx, budget)` without a rendering input; P02 keys namespaced tools `<namespace>/<name>`; P01's `msg_verbatim()` writes through `cli::cli_verbatim()`. The plan's code handles each of these (see the review log).
+- Export and class: `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)`; `gptr_prompt_view` has
+  exactly the five fields of 04 section 5.11 (`system = list(t0, t1)`, `tools_json`,
+  `first_message`, `sections` with `name`, `tier`, `tokens`, `total_tokens`).
+- Internal signatures of 04 section 7.7 are used verbatim: `prompt_freeze(s, opts = list())`,
+  `preset_tools(preset, human, model = NULL, modifiers = character(), mode = NULL)`,
+  `session_add_tools(s, specs)`, `prompt_texts()`, `context_first_message(s, input)`,
+  `context_turn_blocks(s, input)`, `request_build(s, target, extra = NULL)`,
+  `prefix_guard(s, target, view)`, `compact_threshold(window, max_output, r_cap = 4000)`,
+  `compact_should(s, tokens, idle_s)`, `extract_state(entries)`, `builtin_prompt(gptr)`,
+  `builtin_context(gptr)`, `builtin_compaction(gptr)`, and the `compact.run` signature
+  `function(s, reason, focus = NULL)`.
+- Service names of 04 section 7.0: `prompt.freeze`, `context.first`, `context.turn`,
+  `request.build`, `prefix.guard`, `compact.should`, `compact.run`, `ctx.input`,
+  `session.add_tools`; consumed services `trust.get`, `doc.site`, `plan.pending`, `router.call` with
+  their fallbacks.
+- Kinds and fields of 04 section 10.2: `prompt_section` (`text`, `tier`, `order`, `budget`,
+  `parent`), `context_block` (`provide`, `placement`, `authority`, `budget`, `order`), `preset`
+  (`tools`, `sections`, `preamble`), `cache_policy` (`plan(parts, caps, session)` ->
+  `list(anchors, tail_ttl, key)`), `estimator` (`estimate`, `calibrate`), `compactor` (`should`,
+  `compact`).
+- Records: `block_context()` blocks (`kind`, `attrs`, `text`, `anchor`); operator messages as
+  `custom_message` entries with `custom_type = "gptr.operator"` in the session kernel's in-memory
+  shape (`message` = the operator record of 04 section 4.2; P06's store writes it as the 04
+  section 4.6 line `{customType, content, display, details: {kind, toolAdd, originText}}`, and P05's
+  `project_messages()` projects it), read back in that shape or the flat Pi shape; `compaction`
+  entries with the section 4.8 names `first_kept_entry_id`, `tokens_before`; `gptr.frozen` and
+  `gptr.cache_break` data with their camelCase keys; the request context of 04 section 8.1; the
+  ledger component names of 04 section 4.3.
+- Events: `session_before_compact`, `session_compact`, `cache_break` (04 section 10.4 payloads),
+  `session_tree` (hook).
+- Options and settings: `gptr.compact_at`, `gptr.compact_cold_min`, `gptr.cache_ttl`,
+  `gptr.cache_gap`, `gptr.check_prefix`, `gptr.r_output_tokens`, `gptr.noninteractive_ask`; settings
+  `preset`, `tools`, `cache`, `compactor`, `compact_at`, `system1`, `model`, `mode`.
+- Conditions: `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_internal` (`detail`),
+  `gptr_warning_cache_break`, `gptr_message_notice`.
+- Cross-checked against the written plans P01-P06 in `dev/plan/` (review of 2026-10-01): every
+  earlier-plan name in the table under Global Constraints exists there with the signature quoted;
+  P06's `run_freeze()` passes `run$opts` plus `start`, `interactive` and `refreeze` to
+  `prompt.freeze`, its `run_build()` calls `request.build(s, target, NULL)` and refills only
+  `request_id`, `session_id` and the elided messages, its `run_compact_check()` calls
+  `compact.run(s, "threshold")` for any `TRUE` of `compact.should`, its overflow recovery calls
+  `compact.run(run$shell, "overflow")` once, and its `mode_block_text()` calls the `mode` block's
+  `provide(live$ctx, budget)` without a rendering input; P02 keys namespaced tools
+  `<namespace>/<name>`; P01's `msg_verbatim()` writes through `cli::cli_verbatim()`. The plan's code
+  handles each of these (see the review log).
 
 ### Decisions where 04 is silent or ambiguous (recorded, not invented API)
 
-1. `session_start` collect results reach P07 as `opts$start` (to `prompt_freeze()`, whose `sections` override sections) and `input$start` (to `context_first_message()`, whose `blocks` follow the registered blocks). 04 §7.7 says the freeze includes them but not how they are passed.
-2. The session kernel must call `prompt.freeze` before appending the first user message so that `gptr.frozen` is the first entry (04 §11.4); P07's tests freeze first. `opts$refreeze = TRUE` forces a fresh freeze for the IC-52 resume case.
-3. The compactor kind's `should(session, ctx)`/`compact(session, ctx)` have no argument for the tokens, idle time, reason or focus, so P07 passes them through `ctx$input`; `compact_should()` returns `lgl(1)` carrying the attribute `reason` (`threshold`/`cold`) and also remembers it in the session memo (`prompt_should`), because the session kernel passes `"threshold"` to `compact.run` for every `TRUE` (04 §7.0 types the service as `lgl(1)`); `compact_run()` then records a cold compaction as `"cold"`.
-4. `.d$frozen` carries, besides the fields of 04 §5.1, `preset`, `model`, `human`, `document` and `reinject`; the `gptr.frozen` data carries the extra key `human` (readers ignore unknown keys, 04 §11). `gptr_prompt_view` keeps exactly its five fields and carries `preset` and `tool_names` as attributes.
-5. `prompt_texts()` also holds the short notices P07 writes (truncation notices, tool-addition notes, the continuation line, the no-summary note) besides the §9.3 texts.
-6. `r_performance_full` is 04 §9.3's extended text minus the clause "str() makes the next in-place edit of a large object copy it" (IC-67 forbids any shipped text mentioning `str(`).
-7. `builtin:context` also registers `project_instructions_update` (turn, order 150): 04 §4.1.1 lists the kind and IC-52 requires project-file updates as user-role blocks, while 04 §10.3 names only four blocks.
-8. The user-level `AGENTS.md` is the user's own file: never `trusted="false"`, never withheld (IC-52 speaks of project instructions).
-9. Options cannot hold `NULL`, so `Inf` or `NA` in `gptr.compact_at` disables the cap (04 §3.1 says "`NULL` disables the cap").
-10. The `setting` specs of P07's keys (`preset`, `tools`, `context`, `cache`, `compactor`, `compact_at`) are registered by P08's `builtin:gateway` ("the core `setting` specs", IC-24); P07 only reads them with `setting_get()`.
-11. The shipped `tools.presets` defaults are applied by `prompt_compose()` (at freeze), because the break-even test needs the composed prefix; `preset_tools()` applies the user's mapping when `preset` is `NULL`, then the modifiers and `tools.enable`/`tools.disable`.
-12. P07's live-only state (queued operator messages, the tail-TTL state, the prefix-guard views) lives in the session's live `memo` under keys starting with `prompt_` (04 §5.1 describes `memo` as the serialisation cache); operator messages are appended by `request_build()` before it projects the transcript (G4 `tr_operator()` semantics).
-13. The rendering stack behind `ctx.input` is a private package environment `prompt_frames` holding only transient entries popped by `on.exit()` (not a `the` field; 04 §7.0 lists no P07 field).
-14. `extract_state(entries)` takes the entries of the active path (root to leaf), as `prompt_path()` returns them; P16 must pass path entries.
-15. The `<plan>` block's `from` attribute is read from an attribute `from` of the `plan.pending` result when P11 sets one, else `"plan"`.
-16. `.opts$system` is read from `opts$system` or `opts$call$args$opts$system` (the run options of 04 §7.6 list `call` but not `system`).
-17. Tools added without `tool_addition` support that have only an `execute` become members of the namespace `tools` (`peter$tools$<name>()`, registry key `tools/<name>`); a spec that already has a `fun` and no namespace is already the member `peter$<name>()` (IC-37) and keeps that name.
-18. Tests register hooks with `gptr_register(gptr_hook(...))` (rank 3, removed by the returned function) instead of `hook_add(..., session =)`, whose `session` argument type 04 does not fix.
-19. `fixtures/bench/standins.R` and `dev/bench/tokens/baseline.csv` are not named in 05's ownership list; they live in P07's fixture directory and bench directory (04 §12.4 gives both to P07). `prefix-baseline.json` extends the 04 §12.4 shape with `estimate`, `cases`, `standins` and `expected`.
-20. The golden runner's `input_total` counts the o200k tokens of the messages' text payloads (not the wire JSON of any adapter, which P12 owns), a stable proxy across plans.
-21. Acceptance 3 quotes "33 of 33 in G4's scenario" (G4's adjacent same-target pairs); the gptr adaptation yields 35 of 35 pairs without a compaction, plus one compaction pair.
-22. By the contract formula every window below `max(16384, max_output + 2 * r_cap)` gives a negative threshold, so such models are refused for every preset; the hint therefore differs for `minimal`.
-23. The `project_instructions` block's `budget` is 16,000 estimated tokens (about the 64 KiB hard cap of 03 §12.2, which is applied per file before it) and a one-time notice is shown above 6,000 tokens ("6,000 (warn)"); `project_instructions_update` uses the same budget.
-24. Operator messages are appended as `list(type = "custom_message", custom_type = "gptr.operator", message = <operator msg>)`, the session kernel's in-memory shape (04 §4.6 fixes only the JSON line; P06's store writes that line from `message` and drops a flat entry's content), and every reader accepts the flat Pi shape too.
-25. `request_build()` takes `params$returns` from the session's active run (`session_live(s)$run$opts$returns`): the `request.build` signature of 04 §7.0 has no run argument and P06's `run_build()` does not refill it. The checkpoint request clears it.
-26. The `mode` block provider falls back to the session's `mode` and frozen audience when `ctx$input` is `NULL`, because P06's `mode_block_text()` calls it that way.
-27. `.gptr/vignette.Rmd` lines of the form `@<file>` include that project file once (P08's template text and G4 §4.2); paths outside the project root and missing files drop the line.
-28. The checkpoint request is guarded by the prefix guard but leaves the model's stored view unchanged (it is a branch the next request does not extend).
-29. An adapter that declares no `cache` capability gets no anchors (04 §8.1: missing capabilities mean `NULL`); the fake adapter declares `cache = "none"`.
-30. The 05/IC-68 acceptance "preset estimates within 5% of prefix-baseline.json (initial values ... measured o200k tokens, stored with the estimator's figures)" is read as: the file stores the measured o200k totals (`preset`) and the estimator's figures (`estimate`); `test-bench-context.R` (CRAN-safe, no tokenizer) holds each composition's estimate within 5% of `estimate` and asserts `preset` equals 03 §12.1, and `dev/bench/tokens/run.R` (the `bench` job, rtiktoken) re-measures the o200k compositions against `preset` with the +2% prefix gate. The estimator overstates the JSON tool array, so its figures differ from o200k by up to 29% (minimal: 1,638 vs 1,271) and cannot be held within 5% of the o200k totals themselves.
+1. `session_start` collect results reach P07 as `opts$start` (to `prompt_freeze()`, whose `sections`
+   override sections) and `input$start` (to `context_first_message()`, whose `blocks` follow the
+   registered blocks). 04 section 7.7 says the freeze includes them but not how they are passed.
+2. The session kernel must call `prompt.freeze` before appending the first user message so that
+   `gptr.frozen` is the first entry (04 section 11.4); P07's tests freeze first.
+   `opts$refreeze = TRUE` forces a fresh freeze for the IC-52 resume case.
+3. The compactor kind's `should(session, ctx)`/`compact(session, ctx)` have no argument for the
+   tokens, idle time, reason or focus, so P07 passes them through `ctx$input`; `compact_should()`
+   returns `lgl(1)` carrying the attribute `reason` (`threshold`/`cold`) and also remembers it in
+   the session memo (`prompt_should`), because the session kernel passes `"threshold"` to
+   `compact.run` for every `TRUE` (04 section 7.0 types the service as `lgl(1)`); `compact_run()`
+   then records a cold compaction as `"cold"`.
+4. `.d$frozen` carries, besides the fields of 04 section 5.1, `preset`, `model`, `human`, `document`
+   and `reinject`; the `gptr.frozen` data carries the extra key `human` (readers ignore unknown
+   keys, 04 section 11). `gptr_prompt_view` keeps exactly its five fields and carries `preset` and
+   `tool_names` as attributes.
+5. `prompt_texts()` also holds the short notices P07 writes (truncation notices, tool-addition
+   notes, the continuation line, the no-summary note) besides the section 9.3 texts.
+6. `r_performance_full` is 04 section 9.3's extended text minus the clause "str() makes the next
+   in-place edit of a large object copy it" (IC-67 forbids any shipped text mentioning `str(`).
+7. `builtin:context` also registers `project_instructions_update` (turn, order 150): 04
+   section 4.1.1 lists the kind and IC-52 requires project-file updates as user-role blocks, while
+   04 section 10.3 names only four blocks.
+8. The user-level `AGENTS.md` is the user's own file: never `trusted="false"`, never withheld (IC-52
+   speaks of project instructions).
+9. Options cannot hold `NULL`, so `Inf` or `NA` in `gptr.compact_at` disables the cap (04
+   section 3.1 says "`NULL` disables the cap").
+10. The `setting` specs of P07's keys (`preset`, `tools`, `context`, `cache`, `compactor`,
+    `compact_at`) are registered by P08's `builtin:gateway` ("the core `setting` specs", IC-24); P07
+    only reads them with `setting_get()`.
+11. The shipped `tools.presets` defaults are applied by `prompt_compose()` (at freeze), because the
+    break-even test needs the composed prefix; `preset_tools()` applies the user's mapping when
+    `preset` is `NULL`, then the modifiers and `tools.enable`/`tools.disable`.
+12. P07's live-only state (queued operator messages, the tail-TTL state, the prefix-guard views)
+    lives in the session's live `memo` under keys starting with `prompt_` (04 section 5.1 describes
+    `memo` as the serialisation cache); operator messages are appended by `request_build()` before
+    it projects the transcript (G4 `tr_operator()` semantics).
+13. The rendering stack behind `ctx.input` is a private package environment `prompt_frames` holding
+    only transient entries popped by `on.exit()` (not a `the` field; 04 section 7.0 lists no P07
+    field).
+14. `extract_state(entries)` takes the entries of the active path (root to leaf), as `prompt_path()`
+    returns them; P16 must pass path entries.
+15. The `<plan>` block's `from` attribute is read from an attribute `from` of the `plan.pending`
+    result when P11 sets one, else `"plan"`.
+16. `.opts$system` is read from `opts$system` or `opts$call$args$opts$system` (the run options of 04
+    section 7.6 list `call` but not `system`).
+17. Tools added without `tool_addition` support that have only an `execute` become members of the
+    namespace `tools` (`peter$tools$<name>()`, registry key `tools/<name>`); a spec that already has
+    a `fun` and no namespace is already the member `peter$<name>()` (IC-37) and keeps that name.
+18. Tests register hooks with `gptr_register(gptr_hook(...))` (rank 3, removed by the returned
+    function) instead of `hook_add(..., session =)`, whose `session` argument type 04 does not fix.
+19. `fixtures/bench/standins.R` and `dev/bench/tokens/baseline.csv` are not named in 05's ownership
+    list; they live in P07's fixture directory and bench directory (04 section 12.4 gives both to
+    P07). `prefix-baseline.json` extends the 04 section 12.4 shape with `estimate`, `cases`,
+    `standins` and `expected`.
+20. The golden runner's `input_total` counts the o200k tokens of the messages' text payloads (not
+    the wire JSON of any adapter, which P12 owns), a stable proxy across plans.
+21. Acceptance 3 quotes "33 of 33 in G4's scenario" (G4's adjacent same-target pairs); the gptr
+    adaptation yields 35 of 35 pairs without a compaction, plus one compaction pair.
+22. By the contract formula every window below `max(16384, max_output + 2 * r_cap)` gives a negative
+    threshold, so such models are refused for every preset; the hint therefore differs for
+    `minimal`.
+23. The `project_instructions` block's `budget` is 16,000 estimated tokens (about the 64 KiB hard
+    cap of 03 section 12.2, which is applied per file before it) and a one-time notice is shown
+    above 6,000 tokens ("6,000 (warn)"); `project_instructions_update` uses the same budget.
+24. Operator messages are appended as
+    `list(type = "custom_message", custom_type = "gptr.operator", message = <operator msg>)`, the
+    session kernel's in-memory shape (04 section 4.6 fixes only the JSON line; P06's store writes
+    that line from `message` and drops a flat entry's content), and every reader accepts the flat Pi
+    shape too.
+25. `request_build()` takes `params$returns` from the session's active run
+    (`session_live(s)$run$opts$returns`): the `request.build` signature of 04 section 7.0 has no run
+    argument and P06's `run_build()` does not refill it. The checkpoint request clears it.
+26. The `mode` block provider falls back to the session's `mode` and frozen audience when
+    `ctx$input` is `NULL`, because P06's `mode_block_text()` calls it that way.
+27. `.gptr/vignette.Rmd` lines of the form `@<file>` include that project file once (P08's template
+    text and G4 section 4.2); paths outside the project root and missing files drop the line.
+28. The checkpoint request is guarded by the prefix guard but leaves the model's stored view
+    unchanged (it is a branch the next request does not extend).
+29. An adapter that declares no `cache` capability gets no anchors (04 section 8.1: missing
+    capabilities mean `NULL`); the fake adapter declares `cache = "none"`.
+30. The 05/IC-68 acceptance "preset estimates within 5% of prefix-baseline.json (initial values ...
+    measured o200k tokens, stored with the estimator's figures)" is read as: the file stores the
+    measured o200k totals (`preset`) and the estimator's figures (`estimate`);
+    `test-bench-context.R` (CRAN-safe, no tokenizer) holds each composition's estimate within 5% of
+    `estimate` and asserts `preset` equals 03 section 12.1, and `dev/bench/tokens/run.R` (the
+    `bench` job, rtiktoken) re-measures the o200k compositions against `preset` with the +2% prefix
+    gate. The estimator overstates the JSON tool array, so its figures differ from o200k by up to
+    29% (minimal: 1,638 vs 1,271) and cannot be held within 5% of the o200k totals themselves.
 
 ### Executed validation
 
 - Every ```r block of this plan (34) was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'` (0 errors); `getParseData()` finds no left-arrow assignment and no `%>%` in any of them.
-- Review of 2026-10-01, against the real earlier plans instead of stand-ins: a scratch package was assembled from the R files of P01-P05 (as assembled and tested by the P05 review), P06's seven R files (as assembled by the P06 review) and the five P07 files, test files, fixtures and `dev/bench/tokens/` files extracted from this plan by its "Create/Append/replace" instructions (the three `builtin_prompt()` replacements applied), with `dev/spec` and `dev/research` linked in. `devtools::load_all()` registers the four presets, the eight P07 sections, the five context blocks, the `checkpoint` compactor and the `default` cache policy with no load error. `devtools::test(filter = "prompt|context-prefix|bench-context")` gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 577 ]` (89 + 175 + 68 + 93 + 65 + 15 + 72), including both INFRA-26 tests on P06's real `session_run()` and the 20-turn scenario (35 of 35 pairs, no `gptr.cache_break`); the per-task counts of Step 4 are the cumulative counts of each task's tests in that run, and the red phase of Task 5 gave the 22 failures of its Step 2. Before the fixes of the review log the same run failed 8 expectations (the `tools/trials` lookup, the print capture, the scenario's false cache break) and the cross-plan defects of the log had no failing test.
-- P01's `test-arch-layers.R` and `test-lint-rules.R` were run on that package: the lint rules pass for every file, and the layering checks report no duplicate function, no layer or kernel-SDK violation, no built-in factory violation and no undeclared service involving a `prompt-*` file (the two failures of that run come from other plans' files).
-- `Rscript --vanilla dev/bench/tokens/run.R --check` (rtiktoken 0.0.7 from the private library) printed the tables of Task 16 Step 4: the four static compositions measure exactly 1,271 / 2,360 / 2,844 / 2,987 o200k tokens (03 §12.1) and NS-2/NS-3 equal `baseline.csv`; both regression examples of Step 4 print the expected `gptr_error_token_regression` output.
-- `lintr::lint()` with the repository `.lintr` (P01's: `assignment_linter(operator = c("=", "<<-"))`, `line_length_linter(100)`, `object_name_linter`) reports nothing on the P07 files besides `object_usage_linter` notes; all lines are at most 100 characters and ASCII.
-- Cross-plan consolidation (see the log at the end), run in task order instead of on the finished tree: a scratch package with the P01-P06 files of the P12 review package and only Task 1's `prompt-text.R` plus Task 2's `prompt-sections.R` and test. The former Task 2 test failed there (`ctx$input` read `NULL` inside `with_prompt_input()`, and `ext_service_get("ctx.input")` signalled `gptr_error_not_available`, because no `builtin:prompt` record existed yet); the revised Task 2 test gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 37 ]`. With Task 3's tests appended, the red run gave the 8 failures of its Step 2 (the `ctx$input` test failing with `gptr_error_not_available`); with Task 3's code appended, `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 64 ]`. The later prompt-sections counts (112 / 137 / 155 / 177) and C1's 579 are the earlier run's counts with that net change of +2.
+- Review of 2026-10-01, against the real earlier plans instead of stand-ins: a scratch package was
+  assembled from the R files of P01-P05 (as assembled and tested by the P05 review), P06's seven R
+  files (as assembled by the P06 review) and the five P07 files, test files, fixtures and
+  `dev/bench/tokens/` files extracted from this plan by its "Create/Append/replace" instructions
+  (the three `builtin_prompt()` replacements applied), with `dev/spec` and `dev/research` linked in.
+  `devtools::load_all()` registers the four presets, the eight P07 sections, the five context
+  blocks, the `checkpoint` compactor and the `default` cache policy with no load error.
+  `devtools::test(filter = "prompt|context-prefix|bench-context")` gave
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 577 ]` (89 + 175 + 68 + 93 + 65 + 15 + 72), including both
+  INFRA-26 tests on P06's real `session_run()` and the 20-turn scenario (35 of 35 pairs, no
+  `gptr.cache_break`); the per-task counts of Step 4 are the cumulative counts of each task's tests
+  in that run, and the red phase of Task 5 gave the 22 failures of its Step 2. Before the fixes of
+  the review log the same run failed 8 expectations (the `tools/trials` lookup, the print capture,
+  the scenario's false cache break) and the cross-plan defects of the log had no failing test.
+- P01's `test-arch-layers.R` and `test-lint-rules.R` were run on that package: the lint rules pass
+  for every file, and the layering checks report no duplicate function, no layer or kernel-SDK
+  violation, no built-in factory violation and no undeclared service involving a `prompt-*` file
+  (the two failures of that run come from other plans' files).
+- `Rscript --vanilla dev/bench/tokens/run.R --check` (rtiktoken 0.0.7 from the private library)
+  printed the tables of Task 16 Step 4: the four static compositions measure exactly 1,271 / 2,360 /
+  2,844 / 2,987 o200k tokens (03 section 12.1) and NS-2/NS-3 equal `baseline.csv`; both regression
+  examples of Step 4 print the expected `gptr_error_token_regression` output.
+- `lintr::lint()` with the repository `.lintr` (P01's:
+  `assignment_linter(operator = c("=", "<<-"))`, `line_length_linter(100)`, `object_name_linter`)
+  reports nothing on the P07 files besides `object_usage_linter` notes; all lines are at most 100
+  characters and ASCII.
+- Cross-plan consolidation (see the log at the end), run in task order instead of on the finished
+  tree: a scratch package with the P01-P06 files of the P12 review package and only Task 1's
+  `prompt-text.R` plus Task 2's `prompt-sections.R` and test. The former Task 2 test failed there
+  (`ctx$input` read `NULL` inside `with_prompt_input()`, and `ext_service_get("ctx.input")`
+  signalled `gptr_error_not_available`, because no `builtin:prompt` record existed yet); the revised
+  Task 2 test gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 37 ]`. With Task 3's tests appended, the red
+  run gave the 8 failures of its Step 2 (the `ctx$input` test failing with
+  `gptr_error_not_available`); with Task 3's code appended,
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 64 ]`. The later prompt-sections counts (112 / 137 / 155 / 177)
+  and C1's 579 are the earlier run's counts with that net change of +2.
 
 ---
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (§15 first), 05 (P07), the written plans P01-P06, P08, P11 and the research reports, with every code block extracted, assembled into a scratch package on top of the real P01-P06 code and run (see "Executed validation"). Severity: blocker = the implemented package would be wrong or a step cannot pass; major = a contract, cross-plan or acceptance defect or a test that fails or proves nothing; minor = a local correctness, coverage or documentation defect.
+Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (section 15 first), 05 (P07), the
+written plans P01-P06, P08, P11 and the research reports, with every code block extracted, assembled
+into a scratch package on top of the real P01-P06 code and run (see "Executed validation").
+Severity: blocker = the implemented package would be wrong or a step cannot pass; major = a
+contract, cross-plan or acceptance defect or a test that fails or proves nothing; minor = a local
+correctness, coverage or documentation defect.
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
 | 1 | blocker | Task 2 `prompt_operator_entry()` (every operator message P07 appends: tool additions, section patches, operator-authority reminders) | P07 appended a flat `custom_message` entry (`content`, `details`, no `message`). P06's store writes a `custom_message` line from `e$message` (else `e$raw`), so these entries reached the session file as bare `{type, id, parentId, timestamp}` lines: their content was lost at resume and fork, and P06's `path_messages()` skipped them in memory. | applied | `prompt_operator_entry()` now returns the kernel shape `list(type = "custom_message", custom_type = "gptr.operator", message = msg)`; new readers `prompt_entry_operator()` (kernel and flat Pi shapes) and `prompt_operator_text()`; the Task 2 test checks P06's JSON line (`customType`, `details$kind`, `content`) and a new test covers both shapes; Global Constraints, Task 2 notes and self-review decision 24 updated. |
-| 2 | major | Task 12 `extract_state()` | Steering relays were read only from the flat shape (`e$details$kind`), but P06 writes relays (and rebuilds every resumed operator entry) with a `message` field, so the user's steering words were dropped from the checkpoint's `<user_messages>` (G4 §4.4.3, 03 §6.11 "user messages including steering"). | applied | Reads relays through `prompt_entry_operator()`; the test appends a kernel-shaped and a flat relay and expects both texts. |
+| 2 | major | Task 12 `extract_state()` | Steering relays were read only from the flat shape (`e$details$kind`), but P06 writes relays (and rebuilds every resumed operator entry) with a `message` field, so the user's steering words were dropped from the checkpoint's `<user_messages>` (G4 section 4.4.3, 03 section 6.11 "user messages including steering"). | applied | Reads relays through `prompt_entry_operator()`; the test appends a kernel-shaped and a flat relay and expects both texts. |
 | 3 | major | Task 5 `context_provide_mode()` | P06's `mode_block_text()` calls the `mode` block's `provide(live$ctx, budget)` without a rendering input when the mode changes during a run; the provider read only `ctx$input`, so the operator note always said "Manual mode is on" with the non-interactive suffix, whatever the new mode. | applied | Falls back to `session_data(ctx$session)$mode` and the frozen audience; new test calls the provider the way P06 does. |
 | 4 | major | Task 5 `context_last_hashes()` | Operator mode notes were recognised only in the flat shape, so a mode P06 had already announced mid-run was re-sent as a `<mode>` turn block (IC-38 deduplication). Operator-authority blocks were queued one reminder per block and never deduplicated. | applied | Reads both shapes; operator-authority blocks of one spec are queued as one reminder whose text hashes like the blocks and is recognised by its tag; tests: a kernel-shaped mode note suppresses the turn block, an unchanged operator block is not queued again. |
-| 5 | major | Task 10 `prompt_request_context()` | `params$returns` was always `NULL` and `params$thinking` ignored `target$thinking`; P06's `run_build()` refills only ids and elided messages, so once P07 is loaded a `returns =` schema (INFRA-25) never reached the adapter and a router's thinking level was lost. | applied | `returns` is read from the session's active run (`session_live(s)$run$opts$returns`, read-only run fields of 04 §7.6), `thinking = target$thinking %||% .d$thinking`; the checkpoint request clears `returns`; tests for both. Decision 25. |
+| 5 | major | Task 10 `prompt_request_context()` | `params$returns` was always `NULL` and `params$thinking` ignored `target$thinking`; P06's `run_build()` refills only ids and elided messages, so once P07 is loaded a `returns =` schema (INFRA-25) never reached the adapter and a router's thinking level was lost. | applied | `returns` is read from the session's active run (`session_live(s)$run$opts$returns`, read-only run fields of 04 section 7.6), `thinking = target$thinking %||% .d$thinking`; the checkpoint request clears `returns`; tests for both. Decision 25. |
 | 6 | major | Task 8 test "without tool_addition the tools become namespaced r members" | Looked the member up as `registry_get("tool", "trials")`, but P02 keys namespaced tools `"<namespace>/<name>"`: 3 expectations failed on the real P02. | applied | Looks up `"tools/trials"`; Task 8 prose names the key. |
 | 7 | major | Task 9 test "printing a prompt view" | `utils::capture.output()` does not see `msg_verbatim()` (`cli::cli_verbatim()`) output inside testthat: 4 expectations failed on the real P01. | applied | Captures with `cli::cli_fmt()`. |
 | 8 | major | Task 14 scenario and Task 13 `compact_ask_once()` | The scenario guarded a simulated checkpoint request whose extra message carries a different time stamp from the one `compact_run()` sends, so the positive run logged a false `gptr.cache_break` (failed with P01's real time stamps). `compact_ask_once()` also left the checkpoint request's view stored, so a cancelled or failed compaction made the next ordinary request a false break. | applied | `scn_record(guard = FALSE)` for the simulated body (the prefix comparison of acceptance 3 is unchanged); `compact_ask_once()` guards the checkpoint request and then restores the model's previous view (new `prompt_view_key()` in Task 11); new Task 13 test. Decision 28. |
-| 9 | major | Task 5 instruction loading | P08's `gptr_init()` template tells users "To reuse an existing file, write its name on a line of its own: @AGENTS.md" and G4 §4.2 requires deduplication by normalised path; nothing implemented `@file` lines, so the model saw a literal `@AGENTS.md` and other referenced files were never read. | applied | `context_vignette_includes()`: a `@<path>` line includes that project file once; already loaded files, paths outside the project root and missing files drop the line; new test. Decision 27. |
+| 9 | major | Task 5 instruction loading | P08's `gptr_init()` template tells users "To reuse an existing file, write its name on a line of its own: @AGENTS.md" and G4 section 4.2 requires deduplication by normalised path; nothing implemented `@file` lines, so the model saw a literal `@AGENTS.md` and other referenced files were never read. | applied | `context_vignette_includes()`: a `@<path>` line includes that project file once; already loaded files, paths outside the project root and missing files drop the line; new test. Decision 27. |
 | 10 | minor | Task 13 `compact_checkpoint()` / Task 5 `context_provide_update()` | A project block dropped by the re-injection cut (IC-71) was re-announced in full as `project_instructions_update` on the next turn (it was missing from the compaction's blocks), defeating the cut on small windows. | applied | The compaction records dropped blocks in `details$dropped` (label -> sha256, carried across compactions); the update block compares sha256 hashes and treats dropped blocks as seen; tests in Tasks 5 and 13. |
 | 11 | minor | Task 8 `session_add_tools()` | Without `tool_addition`, specs that already are members (`fun`, no namespace; P11 adds the built-in `edit`/`write` after plan -> auto) were re-registered as `peter$tools$edit` duplicates with a misleading note. | applied | Such specs keep `peter$<name>`; new test. Decision 17 updated. |
-| 12 | minor | Task 13 `compact_should()`/`compact_run()` | P06's `run_compact_check()` passes `"threshold"` for every `TRUE`, so cold compactions were dispatched and recorded as threshold (04 §10.4 reason values). | applied | `compact_should()` remembers its reason in the session memo and `compact_run()` records `"cold"`; new test. Decision 3 updated. |
-| 13 | minor | Task 10 `prompt_cache_plan_gap()` | A missing `cache` capability defaulted to Anthropic anchors; 04 §8.1 says missing capabilities mean `NULL`. | applied | Defaults to none; expectation added. Decision 29. |
+| 12 | minor | Task 13 `compact_should()`/`compact_run()` | P06's `run_compact_check()` passes `"threshold"` for every `TRUE`, so cold compactions were dispatched and recorded as threshold (04 section 10.4 reason values). | applied | `compact_should()` remembers its reason in the session memo and `compact_run()` records `"cold"`; new test. Decision 3 updated. |
+| 13 | minor | Task 10 `prompt_cache_plan_gap()` | A missing `cache` capability defaulted to Anthropic anchors; 04 section 8.1 says missing capabilities mean `NULL`. | applied | Defaults to none; expectation added. Decision 29. |
 | 14 | minor | Task 7 test "a model with an 8K window" | Ran in `auto` without a human, where the untrusted project's AGENTS.md is withheld, so the "large project block" of acceptance 6 never entered the floor. | applied | Runs in `manual`. |
-| 15 | minor | Task 16 / acceptance 2 | The measured o200k totals 1,271 / 2,360 / 2,844 / 2,987 were stored but never re-measured by any automated check (the CRAN-safe test compares the estimator with its own stored figures). | applied | `bench_static()` and `bench_check_static()` in `run.R` re-measure the four compositions with rtiktoken on every `--check` (prefix gate +2%; measured exactly the 03 §12.1 totals); Step 4 output, C8 and acceptance rows 2c and 3 updated. Decision 30. |
-| 16 | minor | Global Constraints, Compaction bullet | Listed `tokens` as a value of `reason`; it is a separate payload field (04 §10.4). | applied | Wording fixed. |
+| 15 | minor | Task 16 / acceptance 2 | The measured o200k totals 1,271 / 2,360 / 2,844 / 2,987 were stored but never re-measured by any automated check (the CRAN-safe test compares the estimator with its own stored figures). | applied | `bench_static()` and `bench_check_static()` in `run.R` re-measure the four compositions with rtiktoken on every `--check` (prefix gate +2%; measured exactly the 03 section 12.1 totals); Step 4 output, C8 and acceptance rows 2c and 3 updated. Decision 30. |
+| 16 | minor | Global Constraints, Compaction bullet | Listed `tokens` as a value of `reason`; it is a separate payload field (04 section 10.4). | applied | Wording fixed. |
 | 17 | minor | Self-review, Step 2/Step 4 counts | The self-review said P01, P02 and P06 had no written plans and that validation used stand-ins; counts were those of the stand-in run. | applied | Cross-check bullet and "Executed validation" rewritten for the real-code run; PASS counts now 38 / 62 / 110 / 68 / 135 / 153 / 175 / 52 / 65 / 93 and 577 in all; red counts Task 2: 9, Task 5: 22, Task 8: five tests, Task 10: 11. |
-| 18 | major (raised) | P06 `run_request()` | P06 wraps the `prefix.guard` service in `tryCatch(error = <diagnostic>)`, so `options(gptr.check_prefix = "error")` cannot stop a run. | rejected | Not a P07 defect: P07's guard signals `gptr_error_internal` as 04 §7.7 and G4 §4.3.5 require; whether the kernel rethrows is P06's decision (P06 plan, `run_request()`). |
-| 19 | major (raised) | Task 15 `test-bench-context.R` | 03 §12.7 reads as "each preset's estimate within 5% of the measured o200k totals", while the test compares estimates with stored estimator figures. | rejected | 05 and IC-68 say the file stores the measured totals "with the estimator's figures"; the estimator overstates the JSON tool array (minimal 1,638 vs 1,271 o200k), so an estimate cannot be held within 5% of o200k. The test ratchets the estimate, asserts the o200k totals equal 03 §12.1, and finding 15 adds the o200k re-measurement (decision 30). |
+| 18 | major (raised) | P06 `run_request()` | P06 wraps the `prefix.guard` service in `tryCatch(error = <diagnostic>)`, so `options(gptr.check_prefix = "error")` cannot stop a run. | rejected | Not a P07 defect: P07's guard signals `gptr_error_internal` as 04 section 7.7 and G4 section 4.3.5 require; whether the kernel rethrows is P06's decision (P06 plan, `run_request()`). |
+| 19 | major (raised) | Task 15 `test-bench-context.R` | 03 section 12.7 reads as "each preset's estimate within 5% of the measured o200k totals", while the test compares estimates with stored estimator figures. | rejected | 05 and IC-68 say the file stores the measured totals "with the estimator's figures"; the estimator overstates the JSON tool array (minimal 1,638 vs 1,271 o200k), so an estimate cannot be held within 5% of o200k. The test ratchets the estimate, asserts the o200k totals equal 03 section 12.1, and finding 15 adds the o200k re-measurement (decision 30). |
 | 20 | minor (raised) | Task 3 `preset_shipped_applies()` | IC-73 says "fan-out children", the code accepts every session of kind `child` (also team members and nested calls). | rejected | P06's session kinds do not mark fan-out elements apart from other children; every child session reuses the parent's frozen prefix, which is the break-even rationale of IC-73. |
 
 ---
 
 ## Cross-plan consolidation log
 
-Cross-plan check of 2026-10-01 (lenses: interfaces, obligations, trace) against 04 (§15 first), 03, 05 and the written plans P01, P02 and P08. Each finding was checked against the cited plan text, and the interfaces finding was also reproduced in a scratch package run in task order (see "Executed validation").
+Cross-plan check of 2026-10-01 (lenses: interfaces, obligations, trace) against 04 (section 15
+first), 03, 05 and the written plans P01, P02 and P08. Each finding was checked against the cited
+plan text, and the interfaces finding was also reproduced in a scratch package run in task order
+(see "Executed validation").
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| X1 | interfaces | major | Task 2 test "ctx$input is bound only while rendering, innermost first"; `on_load(ext_service_set("ctx.input", prompt_input_get, provided_by = "P07", builtin = "prompt"))`; `builtin:prompt` first declared in Task 3 | applied | Valid. P01's `service_lookup()` serves a bootstrap service only while `service_builtin_active()` holds. Once the registry lists records (the built-ins of P03, P05 and P06), a built-in with no `builtin:<name>` record counts as filtered out. In Task 2, therefore, P02's `ctx$input` (through `ext_service_try()`) read `NULL` and `ext_service_get("ctx.input")` signalled `gptr_error_not_available`, the failure reproduced in the scratch run. P08 handles the same rule the same way (its review finding 1). Changes: the Task 2 test, renamed "the rendering input is bound only while rendering, innermost first", now reads the stack through `prompt_input_get(ctx)`, drops the `ext_service_get()` expectation and carries a comment explaining why. Task 3 adds the test "ctx$input reaches the ctx.input service once builtin:prompt is loaded" (3 expectations). The Task 2 note and the Task 3 interface list explain the rule. The ownership `builtin = "prompt"` is unchanged (04 §7.0, §10.3). Counts: Task 2 PASS 38 -> 37; Task 3 red step "six new tests fail (8 failures)" and PASS 62 -> 64; Tasks 4/7/8/9 PASS 110/135/153/175 -> 112/137/155/177; C6 175 -> 177; C1 577 -> 579. The spec-coverage row names Task 3. |
+| X1 | interfaces | major | Task 2 test "ctx$input is bound only while rendering, innermost first"; `on_load(ext_service_set("ctx.input", prompt_input_get, provided_by = "P07", builtin = "prompt"))`; `builtin:prompt` first declared in Task 3 | applied | Valid. P01's `service_lookup()` serves a bootstrap service only while `service_builtin_active()` holds. Once the registry lists records (the built-ins of P03, P05 and P06), a built-in with no `builtin:<name>` record counts as filtered out. In Task 2, therefore, P02's `ctx$input` (through `ext_service_try()`) read `NULL` and `ext_service_get("ctx.input")` signalled `gptr_error_not_available`, the failure reproduced in the scratch run. P08 handles the same rule the same way (its review finding 1). Changes: the Task 2 test, renamed "the rendering input is bound only while rendering, innermost first", now reads the stack through `prompt_input_get(ctx)`, drops the `ext_service_get()` expectation and carries a comment explaining why. Task 3 adds the test "ctx$input reaches the ctx.input service once builtin:prompt is loaded" (3 expectations). The Task 2 note and the Task 3 interface list explain the rule. The ownership `builtin = "prompt"` is unchanged (04 sections 7.0, 10.3). Counts: Task 2 PASS 38 -> 37; Task 3 red step "six new tests fail (8 failures)" and PASS 62 -> 64; Tasks 4/7/8/9 PASS 110/135/153/175 -> 112/137/155/177; C6 175 -> 177; C1 577 -> 579. The spec-coverage row names Task 3. |
 | X2 | obligations | minor | Plan acceptance C9 | applied | Valid. A bare `lintr::lint_package()` on an uninstalled tree reports every internal call through `object_usage_linter` (P01 decision 5 and its A3 note). P07's own validation saw those notes. C9 now runs `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`, the form of P01 A3, P03, P04 and P22, and expects no lints and exit status 0. |
 | X3 | trace | minor | Plan acceptance C9 | applied (same change as X2) | Duplicate of X2. The one replacement covers both. |

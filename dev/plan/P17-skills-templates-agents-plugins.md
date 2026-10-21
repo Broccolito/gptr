@@ -1,41 +1,124 @@
 # P17 Skills, Templates, Agent Files and Plugins Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Declarative extensibility for gptr (REQ-28, REQ-29, REQ-31): Agent Skills with a compact budgeted catalog activated through `read`, Pi's prompt templates as `/name args` commands, Claude-compatible agent definition files, and plugin packages, plugin directories and `.claude-plugin` bundles, all discovered without running code and gated by project trust.
+**Goal:** Declarative extensibility for gptr (REQ-28, REQ-29, REQ-31): Agent Skills with a compact
+budgeted catalog activated through `read`, Pi's prompt templates as `/name args` commands,
+Claude-compatible agent definition files, and plugin packages, plugin directories and
+`.claude-plugin` bundles, all discovered without running code and gated by project trust.
 
-**Architecture:** `R/ext-plugins.R` (layer L0) holds what every resource type shares: lenient YAML frontmatter that keeps string keys verbatim (IC-71), name normalisation (IC-42), parse caches, registry "resource groups", the places resources come from (project, user, gptr's own `inst/gptr/`, attached packages, enabled plugins), and the plugin machinery (resolution, trust gating, declarative registration, lazy code through P02's `ext_load()`, `gptr_plugins()`). Three layer-L4 built-ins sit on top: `builtin:skills` (`R/skill-discover.R`: discovery, the T1 `skills` section, the `skill.catalog`/`skill.body` services), `builtin:prompts` (`R/skill-templates.R`: Pi's template grammar and one `command` spec per template) and `builtin:agents` (`R/subagent-defs.R`: agent files, the tool-name map, `gptr_agents()`, the `agent_def.get` service). The L0 file reaches the L4 parsers only through resource handlers the built-ins install with `res_handler_set()`, and trust only through P08's `trust.get` service (IC-33); discovery runs in the built-ins' `session_start` hooks of top-level sessions, so nothing touches the disk at package load.
+**Architecture:** `R/ext-plugins.R` (layer L0) holds what every resource type shares: lenient YAML
+frontmatter that keeps string keys verbatim (IC-71), name normalisation (IC-42), parse caches,
+registry "resource groups", the places resources come from (project, user, gptr's own `inst/gptr/`,
+attached packages, enabled plugins), and the plugin machinery (resolution, trust gating, declarative
+registration, lazy code through P02's `ext_load()`, `gptr_plugins()`). Three layer-L4 built-ins sit
+on top: `builtin:skills` (`R/skill-discover.R`: discovery, the T1 `skills` section, the
+`skill.catalog`/`skill.body` services), `builtin:prompts` (`R/skill-templates.R`: Pi's template
+grammar and one `command` spec per template) and `builtin:agents` (`R/subagent-defs.R`: agent files,
+the tool-name map, `gptr_agents()`, the `agent_def.get` service). The L0 file reaches the L4 parsers
+only through resource handlers the built-ins install with `res_handler_set()`, and trust only
+through P08's `trust.get` service (IC-33); discovery runs in the built-ins' `session_start` hooks of
+top-level sessions, so nothing touches the disk at package load.
 
-**Tech Stack:** base R (>= 4.2.0); yaml (frontmatter, `eval.expr = FALSE` with per-tag handlers); jsonlite through P01's `json_decode()`/`json_encode()`; P02's registry, `ext_load()` and event dispatch; testthat 3e and withr in tests; P01's test helpers (`local_project()`, `local_gptr_options()`, `local_fake_provider()`, `fake_requests()`, `fake_tool()`).
+**Tech Stack:** base R (>= 4.2.0); yaml (frontmatter, `eval.expr = FALSE` with per-tag handlers);
+jsonlite through P01's `json_decode()`/`json_encode()`; P02's registry, `ext_load()` and event
+dispatch; testthat 3e and withr in tests; P01's test helpers (`local_project()`,
+`local_gptr_options()`, `local_fake_provider()`, `fake_requests()`, `fake_tool()`).
 
-**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2, 3.3, 6.10, 7.3 (`<skills>` text and section catalogue), 11.1-11.4, 12.2-12.3), dev/spec/04-interface-contract.md (sections 1.1, 2.2, 3.1, 5.4, 5.5, 5.12, 6.1 (`skills`, `plugins`, `extensions`, `agents`), 6.3 (`gptr_skills()`, `gptr_agents()`, `gptr_plugins()`), 6.7-6.8 (`gptr_agent()`), 7.0 (services), 7.1, 7.2, 7.8 (`trust_get()`, `resolve_identifier()`), 7.17, 9.3 (`skills` section), 10.1-10.8, 11.1, 11.2, 11.12, 11.13, 12.2, 12.4; section 15: IC-33, IC-34, IC-36, IC-42, IC-52, IC-54, IC-63, IC-67, IC-68, IC-69, IC-71), dev/spec/05-plan-decomposition.md (P17).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2, 3.3, 6.10, 7.3 (`<skills>` text and
+section catalogue), 11.1-11.4, 12.2-12.3), dev/spec/04-interface-contract.md (sections 1.1, 2.2,
+3.1, 5.4, 5.5, 5.12, 6.1 (`skills`, `plugins`, `extensions`, `agents`), 6.3 (`gptr_skills()`,
+`gptr_agents()`, `gptr_plugins()`), 6.7-6.8 (`gptr_agent()`), 7.0 (services), 7.1, 7.2, 7.8
+(`trust_get()`, `resolve_identifier()`), 7.17, 9.3 (`skills` section), 10.1-10.8, 11.1, 11.2, 11.12,
+11.13, 12.2, 12.4; section 15: IC-33, IC-34, IC-36, IC-42, IC-52, IC-54, IC-63, IC-67, IC-68, IC-69,
+IC-71), dev/spec/05-plan-decomposition.md (P17).
 
-**Depends on:** P08, P10 (and through them P01-P07, P09). **Milestone:** M3 (the last plan of M3: its acceptance item 5 runs the M3 exit check once P14-P16 are complete).
+**Depends on:** P08, P10 (and through them P01-P07, P09). **Milestone:** M3 (the last plan of M3:
+its acceptance item 5 runs the M3 exit check once P14-P16 are complete).
 
 ---
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (the left arrow never appears in code), the native `|>` pipe, ASCII-only `R/` sources with `\u` escapes, `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions, no `:::`, no `.GlobalEnv`, state restored with `on.exit(..., add = TRUE)`, `withr::` only in tests, every `readLines()` with `encoding = "UTF-8"`, testthat 3e, no network in tests, lines of at most 100 characters. Plan-specific requirements, copied from the specification:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (the left arrow never appears in
+code), the native `|>` pipe, ASCII-only `R/` sources with `\u` escapes, `pkg::fun()` calls,
+`gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions, no `:::`, no `.GlobalEnv`, state
+restored with `on.exit(..., add = TRUE)`, `withr::` only in tests, every `readLines()` with
+`encoding = "UTF-8"`, testthat 3e, no network in tests, lines of at most 100 characters.
+Plan-specific requirements, copied from the specification:
 
-- Exports (04 §6.3, §14.1): `gptr_skills(scope = c("all", "project", "user", "packages"))`, `gptr_agents(scope = c("all", "project", "user", "packages"))`, `gptr_plugins(installed = FALSE)`. "Project resources are listed even in untrusted projects (read-only discovery; the `source` column shows `project (untrusted)`). No side effects. Conditions: `invalid_argument`."
-- Listing classes (04 §5.12), built with P01's `new_listing(df, class)`: `gptr_skills` columns `name`, `description`, `source`, `path`, `tokens`, `visible`; `gptr_agents` columns `name`, `description`, `model`, `backend`, `source`, `path`; `gptr_plugins` columns `name`, `version`, `api`, `kind` (`package`, `directory`, `claude-plugin`), `enabled`, `state`, `provides`, `tokens`, `path`. `gptr_plugins()` states: `lazy`, `active`, `disabled`, `failed`.
-- Internal functions (04 §7.17), exact signatures: `builtin_skills(gptr)`, `builtin_prompts(gptr)`, `builtin_agents(gptr)`, `skill_discover(scope = "all")`, `skill_parse(path)`, `template_expand(text, args)`, `agent_file_parse(path)`, `tool_name_map(names)`, `plugin_resolve(name)` -> `list(kind = "package" | "directory" | "claude-plugin", name, path, manifest)` or `gptr_error_invalid_argument`, `plugin_enable(name, rank, session = NULL)` -> `invisible(lgl(1))`.
-- Services (04 §7.0): `skill.catalog` = `function(session, budget) chr(1)`; `skill.body` = `function(name) list(text, dir)`; `agent_def.get` = `function(name, file = NULL) <spec:agent>`; `plugin.enable` = `function(name, rank, session = NULL) invisible(lgl(1))`; all `provided_by = "P17"`, each owned by a P17 built-in (IC-34). Consumed: `trust.get` = `function(path = getwd()) lgl(1)`, "fallback `FALSE`" (P08, IC-33).
-- Built-ins (04 §10.3): `builtin:skills`, `builtin:prompts`, `builtin:agents`, declared with `on_load(ext_declare_builtin("<name>", builtin_<name>))`, rank 6, replaceable.
-- Section (04 §9.3): `skills`, tier `T1`, order `820`, budget `1,500`, "visible skills and `read` active". Header line verbatim (03 §7.3): `Skills hold specialized instructions. When a task matches a skill's description, read its SKILL.md with the read tool before starting; paths inside it are relative to the skill (read skill:<name>/<path>).`; one line per skill `- <name>: <description, at most 160 characters> [skill:<name>/SKILL.md]` (IC-68).
-- Option (04 §3.1): `gptr.skills_budget` `int(1)` default `1500L` ("skill catalog tokens"); settings keys (04 §11.2): `plugins` `[chr]` default `[]`; `skills` `{paths: [chr], budget: int}` default `{budget: 1500}` (both registered as core settings by P08).
-- Event (04 §10.4): P17 emits `resources_discover` (collect; payload `cwd`, `reason` = `"startup"` or `"reload"`; handlers return `list(skill_paths, prompt_paths, agent_paths)`).
-- Ranks and sources (04 §10.1): trusted project resources and `.gptr/extensions/*.R` rank 1 source `project`; user directories, user settings `plugins` and the user's `extensions/` rank 3 source `user`; plugins rank 5 source `plugin:<name>`; built-ins rank 6 source `builtin:<name>`; call arguments rank 0, scoped to their session (IC-69).
-- Frontmatter (04 §11.13, IC-71): `SKILL.md` needs `name` (`^[a-z0-9][a-z0-9-]*$`) and `description` (at most 1,024 characters; "catalog shows at most 160"); agent `.md` needs `name` and `description`, optional `model`, `tools`, `skills`, `backend`, `preset`, `max_turns`, `mode`, `returns`; templates take `description`, `argument-hint`, `model`, `allowed-tools`. "Scalars of the string keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) keep their source text." YAML failures "are diagnostics, never errors".
-- Tool-name map (04 §7.17): `Read` -> `read`, `Write` -> `write`, `Edit`/`MultiEdit` -> `edit`, `Bash`/`PowerShell` -> `r`, `Grep` -> `grep`, `Glob` -> `find`, `LS` -> `ls`, `Task`/`Agent` -> dropped, `mcp__<s>__<t>` kept.
-- Template grammar (04 §7.17): `$ARGUMENTS`, `$ARGUMENTS[N]`, `$N`, `${@:N}` (plus Pi's `$@`, `${N:-default}`, `${@:N:L}`).
-- Plugin manifest (04 §11.12): `inst/gptr/plugin.json` (packages) or `plugin.json` (directories) with `name`, `version`, `gptr.api`, `skills`, `prompts`, `agents`, `mcpServers`, `extension` (`entry`, `activation`, `provides`, `declarations`), `rDepends`; `DESCRIPTION` fields `Config/gptr/plugin: true`, `Config/gptr/api`. `.claude-plugin/plugin.json` bundles are consumed unmodified for `skills/`, `commands/` (templates `/<plugin>:<cmd>`), `agents/` (tool-name map) and `.mcp.json` (placeholders `${CLAUDE_PLUGIN_ROOT}`, `${GPTR_PLUGIN_ROOT}`); hooks are v1.x.
-- Trust (IC-52): "Only skills from user directories, installed packages and trusted projects enter the T1 catalog"; untrusted project agents lose their `model` and `tools` fields (04 §6.2) and are "omitted with a notice" in non-interactive `auto`/`edits` runs; project plugin code and `.gptr/extensions/` run only when `trust_get()` is `TRUE`.
-- Names (IC-42): skill, plugin, extension and agent names compare after `tolower(gsub("[._]", "-", x))`; "an ambiguous match is `gptr_error_invalid_identifier` listing the candidates".
-- Paths (IC-63): every user and foreign-harness directory goes through P01's `user_home()` (never `path.expand("~")`).
-- Conditions (04 §2.2): `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_invalid_identifier` (parent `invalid_argument`; `arg`, `class`), `gptr_error_untrusted` (`what`, `path`, `origin`), `gptr_error_invalid_spec`; warning `gptr_warning_plugin` (field `diagnostic`); messages `gptr_message_notice`.
-- Shipped files (05 P17): `inst/gptr/plugin.json`, `inst/gptr/skills/high-performance-r/` (the skill "says `str()` copies large objects", IC-67, and no shipped text recommends `str(`), `inst/gptr/prompts/review.md`, `explain.md`; fixture `tests/testthat/fixtures/oracles/pi-templates/`.
+- Exports (04 sections 6.3, 14.1): `gptr_skills(scope = c("all", "project", "user", "packages"))`,
+  `gptr_agents(scope = c("all", "project", "user", "packages"))`, `gptr_plugins(installed = FALSE)`.
+  "Project resources are listed even in untrusted projects (read-only discovery; the `source` column
+  shows `project (untrusted)`). No side effects. Conditions: `invalid_argument`."
+- Listing classes (04 section 5.12), built with P01's `new_listing(df, class)`: `gptr_skills`
+  columns `name`, `description`, `source`, `path`, `tokens`, `visible`; `gptr_agents` columns
+  `name`, `description`, `model`, `backend`, `source`, `path`; `gptr_plugins` columns `name`,
+  `version`, `api`, `kind` (`package`, `directory`, `claude-plugin`), `enabled`, `state`,
+  `provides`, `tokens`, `path`. `gptr_plugins()` states: `lazy`, `active`, `disabled`, `failed`.
+- Internal functions (04 section 7.17), exact signatures: `builtin_skills(gptr)`,
+  `builtin_prompts(gptr)`, `builtin_agents(gptr)`, `skill_discover(scope = "all")`,
+  `skill_parse(path)`, `template_expand(text, args)`, `agent_file_parse(path)`,
+  `tool_name_map(names)`, `plugin_resolve(name)` ->
+  `list(kind = "package" | "directory" | "claude-plugin", name, path, manifest)` or
+  `gptr_error_invalid_argument`, `plugin_enable(name, rank, session = NULL)` -> `invisible(lgl(1))`.
+- Services (04 section 7.0): `skill.catalog` = `function(session, budget) chr(1)`; `skill.body` =
+  `function(name) list(text, dir)`; `agent_def.get` = `function(name, file = NULL) <spec:agent>`;
+  `plugin.enable` = `function(name, rank, session = NULL) invisible(lgl(1))`; all
+  `provided_by = "P17"`, each owned by a P17 built-in (IC-34). Consumed: `trust.get` =
+  `function(path = getwd()) lgl(1)`, "fallback `FALSE`" (P08, IC-33).
+- Built-ins (04 section 10.3): `builtin:skills`, `builtin:prompts`, `builtin:agents`, declared with
+  `on_load(ext_declare_builtin("<name>", builtin_<name>))`, rank 6, replaceable.
+- Section (04 section 9.3): `skills`, tier `T1`, order `820`, budget `1,500`, "visible skills and
+  `read` active". Header line verbatim (03 section 7.3):
+  `Skills hold specialized instructions. When a task matches a skill's description, read its SKILL.md with the read tool before starting; paths inside it are relative to the skill (read skill:<name>/<path>).`;
+  one line per skill `- <name>: <description, at most 160 characters> [skill:<name>/SKILL.md]`
+  (IC-68).
+- Option (04 section 3.1): `gptr.skills_budget` `int(1)` default `1500L` ("skill catalog tokens");
+  settings keys (04 section 11.2): `plugins` `[chr]` default `[]`; `skills`
+  `{paths: [chr], budget: int}` default `{budget: 1500}` (both registered as core settings by P08).
+- Event (04 section 10.4): P17 emits `resources_discover` (collect; payload `cwd`, `reason` =
+  `"startup"` or `"reload"`; handlers return `list(skill_paths, prompt_paths, agent_paths)`).
+- Ranks and sources (04 section 10.1): trusted project resources and `.gptr/extensions/*.R` rank 1
+  source `project`; user directories, user settings `plugins` and the user's `extensions/` rank 3
+  source `user`; plugins rank 5 source `plugin:<name>`; built-ins rank 6 source `builtin:<name>`;
+  call arguments rank 0, scoped to their session (IC-69).
+- Frontmatter (04 section 11.13, IC-71): `SKILL.md` needs `name` (`^[a-z0-9][a-z0-9-]*$`) and
+  `description` (at most 1,024 characters; "catalog shows at most 160"); agent `.md` needs `name`
+  and `description`, optional `model`, `tools`, `skills`, `backend`, `preset`, `max_turns`, `mode`,
+  `returns`; templates take `description`, `argument-hint`, `model`, `allowed-tools`. "Scalars of
+  the string keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) keep their
+  source text." YAML failures "are diagnostics, never errors".
+- Tool-name map (04 section 7.17): `Read` -> `read`, `Write` -> `write`, `Edit`/`MultiEdit` ->
+  `edit`, `Bash`/`PowerShell` -> `r`, `Grep` -> `grep`, `Glob` -> `find`, `LS` -> `ls`,
+  `Task`/`Agent` -> dropped, `mcp__<s>__<t>` kept.
+- Template grammar (04 section 7.17): `$ARGUMENTS`, `$ARGUMENTS[N]`, `$N`, `${@:N}` (plus Pi's `$@`,
+  `${N:-default}`, `${@:N:L}`).
+- Plugin manifest (04 section 11.12): `inst/gptr/plugin.json` (packages) or `plugin.json`
+  (directories) with `name`, `version`, `gptr.api`, `skills`, `prompts`, `agents`, `mcpServers`,
+  `extension` (`entry`, `activation`, `provides`, `declarations`), `rDepends`; `DESCRIPTION` fields
+  `Config/gptr/plugin: true`, `Config/gptr/api`. `.claude-plugin/plugin.json` bundles are consumed
+  unmodified for `skills/`, `commands/` (templates `/<plugin>:<cmd>`), `agents/` (tool-name map) and
+  `.mcp.json` (placeholders `${CLAUDE_PLUGIN_ROOT}`, `${GPTR_PLUGIN_ROOT}`); hooks are v1.x.
+- Trust (IC-52): "Only skills from user directories, installed packages and trusted projects enter
+  the T1 catalog"; untrusted project agents lose their `model` and `tools` fields (04 section 6.2)
+  and are "omitted with a notice" in non-interactive `auto`/`edits` runs; project plugin code and
+  `.gptr/extensions/` run only when `trust_get()` is `TRUE`.
+- Names (IC-42): skill, plugin, extension and agent names compare after
+  `tolower(gsub("[._]", "-", x))`; "an ambiguous match is `gptr_error_invalid_identifier` listing
+  the candidates".
+- Paths (IC-63): every user and foreign-harness directory goes through P01's `user_home()` (never
+  `path.expand("~")`).
+- Conditions (04 section 2.2): `gptr_error_invalid_argument` (`arg`, `expected`),
+  `gptr_error_invalid_identifier` (parent `invalid_argument`; `arg`, `class`),
+  `gptr_error_untrusted` (`what`, `path`, `origin`), `gptr_error_invalid_spec`; warning
+  `gptr_warning_plugin` (field `diagnostic`); messages `gptr_message_notice`.
+- Shipped files (05 P17): `inst/gptr/plugin.json`, `inst/gptr/skills/high-performance-r/` (the skill
+  "says `str()` copies large objects", IC-67, and no shipped text recommends `str(`),
+  `inst/gptr/prompts/review.md`, `explain.md`; fixture
+  `tests/testthat/fixtures/oracles/pi-templates/`.
 
 ## File Structure
 
@@ -57,9 +140,12 @@
 | `tests/testthat/test-subagent-defs.R` | create (Task 7), extend (Task 8) | tests of `R/subagent-defs.R` |
 | `NAMESPACE`, `man/gptr_skills.Rd`, `man/gptr_plugins.Rd` | regenerate (Tasks 2, 8, 11) | `Rscript --vanilla -e 'devtools::document()'` (`gptr_agents()` shares the `gptr_skills` page) |
 
-Layering (03 §2.2, IC-33): `ext-plugins.R` is L0 and calls only base R, Imports, other L0 files (P01, P02) and services; the three L4 files call the extension API, L0 helpers, their own area (`skill-*` share area `skill`; `subagent-defs.R` is area `subagent`, so it never calls a `skill_*` function) and the kernel SDK's `session_data()`. No file prints; notices go through `gptr_inform()`.
+Layering (03 section 2.2, IC-33): `ext-plugins.R` is L0 and calls only base R, Imports, other L0
+files (P01, P02) and services; the three L4 files call the extension API, L0 helpers, their own area
+(`skill-*` share area `skill`; `subagent-defs.R` is area `subagent`, so it never calls a `skill_*`
+function) and the kernel SDK's `session_data()`. No file prints; notices go through `gptr_inform()`.
 
-Tasks:
+## Tasks
 
 1. Shared resource layer: names, frontmatter, caches, groups and places (`R/ext-plugins.R`, part 1)
 2. Skill parsing, the bounded walk and `gptr_skills()` (`R/skill-discover.R`, part 1)
@@ -68,27 +154,62 @@ Tasks:
 5. Pi's template grammar and its 67-assertion oracle (`R/skill-templates.R`, part 1)
 6. Template files, template commands and `builtin:prompts` (`R/skill-templates.R`, part 2)
 7. The tool-name map and agent files (`R/subagent-defs.R`, part 1)
-8. Agent discovery, `gptr_agents()`, `agent_def.get` and `builtin:agents` (`R/subagent-defs.R`, part 2)
+8. Agent discovery, `gptr_agents()`, `agent_def.get` and `builtin:agents` (`R/subagent-defs.R`,
+   part 2)
 9. Plugin resolution (`R/ext-plugins.R`, part 2)
-10. Enabling plugins: declarative resources, code, trust and session scope (`R/ext-plugins.R`, part 3)
-11. `gptr_plugins()`, rollback, lazy activation and the toy plugin package (`R/ext-plugins.R`, part 4)
-12. Settings plugins, extension directories, `resources_discover` and the session hooks (`R/ext-plugins.R`, part 5; hooks of the three built-ins)
+10. Enabling plugins: declarative resources, code, trust and session scope (`R/ext-plugins.R`,
+    part 3)
+11. `gptr_plugins()`, rollback, lazy activation and the toy plugin package (`R/ext-plugins.R`,
+    part 4)
+12. Settings plugins, extension directories, `resources_discover` and the session hooks
+    (`R/ext-plugins.R`, part 5; hooks of the three built-ins)
 
-Test commands follow conventions §2. `devtools::test()` sets `NOT_CRAN=true`, so the `skip_on_cran()` tests (the toy plugin package is installed into a temporary library with `R CMD INSTALL`) run there and skip under `R CMD check --as-cran`.
+Test commands follow conventions section 2. `devtools::test()` sets `NOT_CRAN=true`, so the
+`skip_on_cran()` tests (the toy plugin package is installed into a temporary library with
+`R CMD INSTALL`) run there and skip under `R CMD check --as-cran`.
 
 ---
 
 ### Task 1: Shared resource layer: names, frontmatter, caches, groups and places
 
 **Files:**
+
 - Create: `R/ext-plugins.R`
 - Test: `tests/testthat/test-ext-plugins.R` (create)
 
 **Interfaces:**
-- Consumes (P01, 04 §7.1): `the`, `` `%||%` ``, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `as_utf8(x)`, `read_utf8(path)` (-> `list(text, eol, bom, encoding, final_newline)`), `path_norm(path)`, `path_key(path)`, `project_root(path = getwd())`, `ext_service_has(name)`, `ext_service_get(name)`. (P02, 04 §7.2, §6.7): `gptr_spec(kind, name, ...)`, `gptr_command(name, handler, description = NULL, complete = NULL)`, `gptr_registry(kind = NULL, diagnostics = FALSE)`, `gptr_api()`, `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`, `registry_get(kind, name, session = NULL)`, `registry_generation()`, `registry_diagnostic(source, event, class, message)`. (P08, IC-33): the `trust.get` service `function(path = getwd()) lgl(1)`, fallback `FALSE`. Test helpers (P01, 04 §12.2): `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`.
-- Produces (internal; used by Tasks 2-12, and `frontmatter_read()`/`fm_chr_list()` by P19's agent loading through `agent_file_parse()`): `res_state()` (P17's process state `the$resources`: `handlers`, `groups`, `parse`, `plugins`, `loaded`, `used`, `tick`, `sync_gen`, `discovered`); `res_norm(x)` (IC-42 normalisation); `res_match(name, candidates, what)` (exact, then normalised; ambiguous -> `gptr_error_invalid_identifier` with field `candidates`); `res_session_id(session)`; `frontmatter_parse(text)` and `frontmatter_read(path)` -> `list(meta, body, repaired, error, has_frontmatter)`; `fm_chr_list(x, split = "[,[:space:]]+")`; `res_cached(path, parser, key)`; `res_spec(kind, name, fields, diag_source = "user")`; `res_register(group, specs, source, rank, sig)`, `res_unregister(group)`, `res_prune(prefix, keep)`; `res_handler_set(type, fun)`, `res_handler_get(type)`; `res_touch(name)`, `res_last_used(names)`; `trust_ok(path = project_root())`; `res_inside(path, root = project_root())`; `res_project_dirs(subs)`; `res_builtin_dir(type)`; `res_attached_dirs(type)`; `plugin_rel(root, x)`; `plugin_type_paths(p, type)`; `res_plugin_dirs(type)`; `plugin_api_ok(req, have = NULL)`; `rdepends_missing(deps)`.
 
-`R/ext-plugins.R` is layer L0 (03 §3.2), so it calls base R, yaml, P01 and P02 and reaches trust only through the `trust.get` service. Frontmatter follows Pi's `utils/frontmatter.ts` (report 05 section 5.2): a BOM is dropped, CRLF and CR become LF, frontmatter exists only when the text starts with `---` and ends at the first `"\n---"`, and the body is trimmed. YAML is read with `yaml::yaml.load(eval.expr = FALSE)` (an `!expr` tag is never evaluated); a parse error is retried once after the agentskills.io repair (quote unquoted values that contain a colon), which is how report 05's loader kept all 37 real skills. IC-71: the string keys are read a second time with handlers for every YAML 1.1 scalar tag that return the source text, so `name: on` stays `"on"` and `version: 1.0` stays `"1.0"` (verified with yaml 2.3.12; the handler table is the tag list of `yaml::yaml.load()`). A *resource group* (for example `skills:user`) is one batch of registry records rewritten only when the signature of its files or the registry generation changes, which is how `gptr_reload()` (P02 bumps the generation) makes P17 re-discover without a P02 -> P17 call. Places: project directories are searched from the working directory up to `project_root()`; gptr's own resources come from `system.file("gptr", <type>, package = "gptr")`; attached packages contribute `inst/gptr/<type>` (and btw-style `inst/skills` for skills, 04 §7.17).
+- Consumes (P01, 04 section 7.1): `the`, `` `%||%` ``, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `as_utf8(x)`, `read_utf8(path)` (-> `list(text, eol, bom, encoding, final_newline)`), `path_norm(path)`, `path_key(path)`, `project_root(path = getwd())`, `ext_service_has(name)`, `ext_service_get(name)`. (P02, 04 §7.2, §6.7): `gptr_spec(kind, name, ...)`, `gptr_command(name, handler, description = NULL, complete = NULL)`, `gptr_registry(kind = NULL, diagnostics = FALSE)`, `gptr_api()`, `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`, `registry_get(kind, name, session = NULL)`, `registry_generation()`, `registry_diagnostic(source, event, class, message)`. (P08, IC-33): the `trust.get` service `function(path = getwd()) lgl(1)`, fallback `FALSE`. Test helpers (P01, 04 §12.2): `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`.
+- Produces (internal; used by Tasks 2-12, and `frontmatter_read()`/`fm_chr_list()` by P19's agent
+  loading through `agent_file_parse()`): `res_state()` (P17's process state `the$resources`:
+  `handlers`, `groups`, `parse`, `plugins`, `loaded`, `used`, `tick`, `sync_gen`, `discovered`);
+  `res_norm(x)` (IC-42 normalisation); `res_match(name, candidates, what)` (exact, then normalised;
+  ambiguous -> `gptr_error_invalid_identifier` with field `candidates`); `res_session_id(session)`;
+  `frontmatter_parse(text)` and `frontmatter_read(path)` ->
+  `list(meta, body, repaired, error, has_frontmatter)`; `fm_chr_list(x, split = "[,[:space:]]+")`;
+  `res_cached(path, parser, key)`; `res_spec(kind, name, fields, diag_source = "user")`;
+  `res_register(group, specs, source, rank, sig)`, `res_unregister(group)`,
+  `res_prune(prefix, keep)`; `res_handler_set(type, fun)`, `res_handler_get(type)`;
+  `res_touch(name)`, `res_last_used(names)`; `trust_ok(path = project_root())`;
+  `res_inside(path, root = project_root())`; `res_project_dirs(subs)`; `res_builtin_dir(type)`;
+  `res_attached_dirs(type)`; `plugin_rel(root, x)`; `plugin_type_paths(p, type)`;
+  `res_plugin_dirs(type)`; `plugin_api_ok(req, have = NULL)`; `rdepends_missing(deps)`.
+
+`R/ext-plugins.R` is layer L0 (03 section 3.2), so it calls base R, yaml, P01 and P02 and reaches
+trust only through the `trust.get` service. Frontmatter follows Pi's `utils/frontmatter.ts` (report
+05 section 5.2): a BOM is dropped, CRLF and CR become LF, frontmatter exists only when the text
+starts with `---` and ends at the first `"\n---"`, and the body is trimmed. YAML is read with
+`yaml::yaml.load(eval.expr = FALSE)` (an `!expr` tag is never evaluated); a parse error is retried
+once after the agentskills.io repair (quote unquoted values that contain a colon), which is how
+report 05's loader kept all 37 real skills. IC-71: the string keys are read a second time with
+handlers for every YAML 1.1 scalar tag that return the source text, so `name: on` stays `"on"` and
+`version: 1.0` stays `"1.0"` (verified with yaml 2.3.12; the handler table is the tag list of
+`yaml::yaml.load()`). A *resource group* (for example `skills:user`) is one batch of registry
+records rewritten only when the signature of its files or the registry generation changes, which is
+how `gptr_reload()` (P02 bumps the generation) makes P17 re-discover without a P02 -> P17 call.
+Places: project directories are searched from the working directory up to `project_root()`; gptr's
+own resources come from `system.file("gptr", <type>, package = "gptr")`; attached packages
+contribute `inst/gptr/<type>` (and btw-style `inst/skills` for skills, 04 section 7.17).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -271,7 +392,8 @@ test_that("res_prune removes stale groups and copes with none", {
 Rscript --vanilla -e 'devtools::test(filter = "ext-plugins")'
 ```
 
-Expected: every test errors, the first with `could not find function "res_norm"`; the summary is `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 0 ]`.
+Expected: every test errors, the first with `could not find function "res_norm"`; the summary is
+`[ FAIL 15 | WARN 0 | SKIP 0 | PASS 0 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -832,15 +954,46 @@ git commit -m "feat(plugins): add the shared resource layer: names, frontmatter,
 ### Task 2: Skill parsing, the bounded walk and `gptr_skills()`
 
 **Files:**
+
 - Create: `R/skill-discover.R`
 - Test: `tests/testthat/test-skill-discover.R` (create)
 - Regenerate: `NAMESPACE`, `man/gptr_skills.Rd`
 
 **Interfaces:**
-- Consumes: Task 1 (`frontmatter_read()`, `fm_chr_list()`, `res_cached()`, `res_spec()`, `res_project_dirs()`, `res_builtin_dir()`, `res_attached_dirs()`, `res_plugin_dirs()`, `res_prefix()`, `trust_ok()`, `res_state()`); P01 `check_choice(x, choices, arg)`, `est_tokens(x, class)`, `new_listing(df, class, footer = NULL)`, `gptr_user_dir(which, create = FALSE)`, `user_home()`, `setting_get(key, session = NULL, default = NULL)`, `path_norm()`, `project_root()`; P02 `registry_diagnostic()`, `gptr_registry()`; P08 `gptr_trust(path = ".", trust = NULL)` (through `local_project(trust = TRUE)`).
-- Produces (04 §6.3, §7.17): the export `gptr_skills(scope = c("all", "project", "user", "packages"))` -> `gptr_skills` listing (`name`, `description`, `source`, `path`, `tokens`, `visible`); `skill_discover(scope = "all")` -> data frame (the listing columns plus `origin`, `rank`, `reg`, `trusted`, `dmi`); `skill_parse(path)` -> a `skill` spec (`description`, `path`, `dir`, `source`, `disable_model_invocation`, `allowed_tools`, `tokens`, plus `version`) or `NULL` with a diagnostic; `skill_walk(root, max_depth = 4L, max_dirs = 2000L)`; `skill_line(name, desc)` (the catalog line of IC-68); `skill_roots()`; `skill_collect()` -> `list(rows, specs)`.
 
-Roots (04 §7.17, report 16 section 4.8, IC-63), in precedence order: the project's `.gptr/skills`, `.agents/skills`, `.claude/skills` (nearest directory first, rank 1, listed as `project` or `project (untrusted)`); the user's `R_user_dir("gptr", "config")/skills`, `~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`, `~/.pi/agent/skills` (all under `user_home()`) and the `skills.paths` setting (rank 3); gptr's own `inst/gptr/skills` (rank 6, `builtin`); attached packages (rank 5, `package:<pkg>`); enabled plugins (their rank, `plugin:<name>`); `resources_discover` paths (rank 5). The walk is breadth first, depth 4, at most 2,000 directories, skips dot-directories, `node_modules`, `renv`, `packrat`, `__pycache__`, and does not descend into a directory that holds a `SKILL.md`. Pi's name rules (report 05 section 3.6) only warn, except that the `skill` kind itself refuses names outside `^[a-z0-9][a-z0-9-]*$` (P02's validator), so such a skill is skipped with a diagnostic. A row is `visible` when it is trusted, not `disable-model-invocation`, and the winner of its name (lowest rank, then discovery order); untrusted project skills are listed but never visible (IC-52). Report 05's 37 real skills are not in the repository (they were the researcher's local folders), so the corpus test builds 37 skills in the four styles the report found: folded block scalars, quoted values, unquoted values with colons (repaired) and BOM + CRLF files.
+- Consumes: Task 1 (`frontmatter_read()`, `fm_chr_list()`, `res_cached()`, `res_spec()`,
+  `res_project_dirs()`, `res_builtin_dir()`, `res_attached_dirs()`, `res_plugin_dirs()`,
+  `res_prefix()`, `trust_ok()`, `res_state()`); P01 `check_choice(x, choices, arg)`,
+  `est_tokens(x, class)`, `new_listing(df, class, footer = NULL)`,
+  `gptr_user_dir(which, create = FALSE)`, `user_home()`,
+  `setting_get(key, session = NULL, default = NULL)`, `path_norm()`, `project_root()`; P02
+  `registry_diagnostic()`, `gptr_registry()`; P08 `gptr_trust(path = ".", trust = NULL)` (through
+  `local_project(trust = TRUE)`).
+- Produces (04 sections 6.3, 7.17): the export
+  `gptr_skills(scope = c("all", "project", "user", "packages"))` -> `gptr_skills` listing (`name`,
+  `description`, `source`, `path`, `tokens`, `visible`); `skill_discover(scope = "all")` -> data
+  frame (the listing columns plus `origin`, `rank`, `reg`, `trusted`, `dmi`); `skill_parse(path)` ->
+  a `skill` spec (`description`, `path`, `dir`, `source`, `disable_model_invocation`,
+  `allowed_tools`, `tokens`, plus `version`) or `NULL` with a diagnostic;
+  `skill_walk(root, max_depth = 4L, max_dirs = 2000L)`; `skill_line(name, desc)` (the catalog line
+  of IC-68); `skill_roots()`; `skill_collect()` -> `list(rows, specs)`.
+
+Roots (04 section 7.17, report 16 section 4.8, IC-63), in precedence order: the project's
+`.gptr/skills`, `.agents/skills`, `.claude/skills` (nearest directory first, rank 1, listed as
+`project` or `project (untrusted)`); the user's `R_user_dir("gptr", "config")/skills`,
+`~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`, `~/.pi/agent/skills` (all under
+`user_home()`) and the `skills.paths` setting (rank 3); gptr's own `inst/gptr/skills` (rank 6,
+`builtin`); attached packages (rank 5, `package:<pkg>`); enabled plugins (their rank,
+`plugin:<name>`); `resources_discover` paths (rank 5). The walk is breadth first to depth 4 over at
+most 2,000 directories, skips dot-directories, `node_modules`, `renv`, `packrat` and `__pycache__`,
+and does not descend into a directory that holds a `SKILL.md`. Pi's name rules (report 05 section
+3.6) only warn, except that the `skill` kind itself refuses names outside `^[a-z0-9][a-z0-9-]*$`
+(P02's validator), so such a skill is skipped with a diagnostic. A row is `visible` when it is
+trusted, not `disable-model-invocation`, and the winner of its name (lowest rank, then discovery
+order); untrusted project skills are listed but never visible (IC-52). Report 05's 37 real skills
+are not in the repository (they were the researcher's local folders), so the corpus test builds 37
+skills in the four styles the report found: folded block scalars, quoted values, unquoted values
+with colons (repaired) and BOM + CRLF files.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -985,7 +1138,8 @@ test_that("gptr_skills validates its scope", {
 Rscript --vanilla -e 'devtools::test(filter = "skill-discover")'
 ```
 
-Expected: every test fails, the first with `could not find function "skill_parse"`; the summary is `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`.
+Expected: every test fails, the first with `could not find function "skill_parse"`; the summary is
+`[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1268,6 +1422,7 @@ git commit -m "feat(skills): parse SKILL.md leniently, walk skill roots and list
 ### Task 3: The built-in high-performance-r skill and gptr's manifest
 
 **Files:**
+
 - Create: `inst/gptr/plugin.json`
 - Create: `inst/gptr/skills/high-performance-r/SKILL.md`
 - Create: `inst/gptr/skills/high-performance-r/references/parallel-and-pipelines.md`
@@ -1275,10 +1430,28 @@ git commit -m "feat(skills): parse SKILL.md leniently, walk skill roots and list
 - Test: `tests/testthat/test-skill-discover.R` (append)
 
 **Interfaces:**
-- Consumes: Task 2 (`skill_parse()`, `skill_line()`, `gptr_skills()`); P01 `json_decode(text)`, `read_utf8(path)`.
-- Produces: the shipped skill `high-performance-r`, whose catalog line is exactly the one of 03 §7.3: `- high-performance-r: Fast data work in R: data.table, arrow, duckdb, collapse or qs2 when installed; large CSV/Parquet, grouping, sorting, parallel work, single-cell objects. [skill:high-performance-r/SKILL.md]`; gptr's own manifest (03 §3.3: "its declarative resources are discovered exactly like any plugin package's"), naming the `skills`, `prompts` and `agents` directories (`inst/gptr/agents/` is P19's; P23 and P19 add `shiny-bslib` and `gptr-orchestration` to `inst/gptr/skills/`).
 
-The skill is report 19 section 3.4 (SKILL.md plus two references), with the fixes of that report's verification log (the mirai recipe uses `.args = list(k = 2)` and `[.stop]`; `qd_save()` drops language objects; the duckplyr limit is 1e6 cells) and five changes required here: every recipe uses `=` and `|>` (S-9); IC-67: the "Look before you load or print" rule names `peter$describe(x)` and states that `str` on a large object leaves a sticky reference so the next in-place edit copies it, and no text contains `str(` (P07's prompt test scans shipped skills for it); the description is the catalog text of 03 §7.3 (quoted, because it contains `: `); non-ASCII characters inside R strings are written as `\u00ef` escapes, so the files are ASCII; and rule 4 states the `dyn.load()` crash only as far as report 19's verification log does (reproduced on R 4.4; that R 4.6.1 fixes it is LIKELY, row 12). The cross-references name the pseudo-paths the model reads (`read skill:high-performance-r/references/...`, IC-68). All 18 R blocks parse (the test below); report 19 ran them in fresh R processes.
+- Consumes: Task 2 (`skill_parse()`, `skill_line()`, `gptr_skills()`); P01 `json_decode(text)`,
+  `read_utf8(path)`.
+- Produces: the shipped skill `high-performance-r`, whose catalog line is exactly the one of 03
+  section 7.3:
+  `- high-performance-r: Fast data work in R: data.table, arrow, duckdb, collapse or qs2 when installed; large CSV/Parquet, grouping, sorting, parallel work, single-cell objects. [skill:high-performance-r/SKILL.md]`;
+  gptr's own manifest (03 section 3.3: "its declarative resources are discovered exactly like any
+  plugin package's"), naming the `skills`, `prompts` and `agents` directories (`inst/gptr/agents/`
+  is P19's; P23 and P19 add `shiny-bslib` and `gptr-orchestration` to `inst/gptr/skills/`).
+
+The skill is report 19 section 3.4 (SKILL.md plus two references), with the fixes of that report's
+verification log (the mirai recipe uses `.args = list(k = 2)` and `[.stop]`; `qd_save()` drops
+language objects; the duckplyr limit is 1e6 cells) and five changes required here: every recipe uses
+`=` and `|>` (S-9); IC-67: the "Look before you load or print" rule names `peter$describe(x)` and
+states that `str` on a large object leaves a sticky reference so the next in-place edit copies it,
+and no text contains `str(` (P07's prompt test scans shipped skills for it); the description is the
+catalog text of 03 section 7.3 (quoted, because it contains `: `); non-ASCII characters inside R
+strings are written as `\u00ef` escapes, so the files are ASCII; and rule 4 states the `dyn.load()`
+crash only as far as report 19's verification log does (reproduced on R 4.4; that R 4.6.1 fixes it
+is LIKELY, row 12). The cross-references name the pseudo-paths the model reads
+(`read skill:high-performance-r/references/...`, IC-68). All 18 R blocks parse (the test below);
+report 19 ran them in fresh R processes.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1345,7 +1518,9 @@ test_that("gptr's manifest declares its resource directories", {
 Rscript --vanilla -e 'devtools::test(filter = "skill-discover")'
 ```
 
-Expected: the four new tests fail (`nzchar(f)` is not TRUE, `txt` does not have length 3, `n >= 15L` is not TRUE, and `read_utf8("")` errors with `gptr_error_invalid_argument`); the summary is `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 36 ]`.
+Expected: the four new tests fail (`nzchar(f)` is not TRUE, `txt` does not have length 3, `n >= 15L`
+is not TRUE, and `read_utf8("")` errors with `gptr_error_invalid_argument`); the summary is
+`[ FAIL 8 | WARN 0 | SKIP 0 | PASS 36 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1787,14 +1962,51 @@ git commit -m "feat(skills): ship the high-performance-r skill and gptr's plugin
 ### Task 4: Skill sync, the compact catalog, `skill.body` and `builtin:skills`
 
 **Files:**
+
 - Modify: `R/skill-discover.R` (append)
 - Test: `tests/testthat/test-skill-discover.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-3; P01 `gptr_opt(name)`, `setting_get()`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `check_string()`, `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`; P02 `registry_all(kind, session = NULL)`, `registry_names(kind, session = NULL)`, `registry_get(kind, name, session = NULL)`, `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, the API object's `register(spec)` and `on(event, handler, matcher = NULL)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`; P06 kernel SDK `session_data(s)` (field `depth`); P07 the section input `ctx$input$tool_names` (04 §10.2 row 14); P08 `resolve_identifier(expr, arg, envir)` (test of IC-42) and `peter()`; test helpers `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`, `fake_requests(spec)`.
-- Produces (04 §7.0, §7.17, §9.3): `builtin_skills(gptr)` registering the `skills` prompt section (`T1`, order `820L`, budget `1500L`) and a `session_start` hook (no `search_source`: P10's `peter$search()` indexes skills through the `skill.catalog` service, 04 §7.0, and a second source would list every skill twice); the services `skill.catalog` = `skill_catalog(session = NULL, budget = skills_budget())` -> chr(1) and `skill.body` = `skill_body(name, session = NULL)` -> `list(text, dir, name)` (both `builtin = "skills"`); `skill_sync()`; `skills_budget()`; `skill_find(name, session = NULL)`; `skill_dir_specs(paths, p, labels = NULL)` (the `skills` resource handler for plugins, installed with `res_handler_set()`); `skill_child_session(ctx)` (shared with `R/skill-templates.R`); `skills_on_session_start(event, ctx)`.
 
-Registration: trusted project skills at rank 1 (source `project`), user skills at rank 3 (`user`), attached packages at rank 5 (`plugin:<pkg>`), gptr's own at rank 6 (`builtin:skills`), one resource group per source; untrusted project skills are never registered and a one-time notice says so; plugin skills are registered by `plugin_enable()` (Task 10). The sync runs in the `session_start` hook of top-level sessions (children reuse what their root synced) and as a fallback inside `skill_body()`, because P08 builds `skills =` preloads before the run freezes. The catalog (G2 (b), IC-68) is the verbatim header plus one `- name: description [skill:name/SKILL.md]` line per model-invocable registered skill (name order, description at most 160 characters); over the budget (`gptr.skills_budget` when set, else the `skills.budget` setting, else 1,500), descriptions of the least recently used skills are dropped first (a skill counts as used when `skill_body()` returns it, which is what preloads and P10's `read skill:<name>/...` call), then whole entries, with a closing `(<n> more skills: peter$search("words") finds them)` line. `skill_body()` returns the body without frontmatter plus a line naming the `skill:<name>/<path>` pseudo-paths, and `dir`, the skill directory P10's `read` resolves pseudo-paths against; an untrusted project's skill signals `gptr_error_untrusted` (`what = "skill"`, `path`, `origin = "project"`). P08's `name_norm()` lives in an L6 file, so name matching here uses Task 1's `res_norm()`, the same rule.
+- Consumes: Tasks 1-3; P01 `gptr_opt(name)`, `setting_get()`,
+  `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `check_string()`, `on_load(expr)`,
+  `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`; P02
+  `registry_all(kind, session = NULL)`, `registry_names(kind, session = NULL)`,
+  `registry_get(kind, name, session = NULL)`,
+  `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`,
+  the API object's `register(spec)` and `on(event, handler, matcher = NULL)`,
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`; P06 kernel SDK
+  `session_data(s)` (field `depth`); P07 the section input `ctx$input$tool_names` (04 section 10.2
+  row 14); P08 `resolve_identifier(expr, arg, envir)` (test of IC-42) and `peter()`; test helpers
+  `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`,
+  `fake_requests(spec)`.
+- Produces (04 sections 7.0, 7.17, 9.3): `builtin_skills(gptr)` registering the `skills` prompt
+  section (`T1`, order `820L`, budget `1500L`) and a `session_start` hook (no `search_source`: P10's
+  `peter$search()` indexes skills through the `skill.catalog` service, 04 section 7.0, and a second
+  source would list every skill twice); the services `skill.catalog` =
+  `skill_catalog(session = NULL, budget = skills_budget())` -> chr(1) and `skill.body` =
+  `skill_body(name, session = NULL)` -> `list(text, dir, name)` (both `builtin = "skills"`);
+  `skill_sync()`; `skills_budget()`; `skill_find(name, session = NULL)`;
+  `skill_dir_specs(paths, p, labels = NULL)` (the `skills` resource handler for plugins, installed
+  with `res_handler_set()`); `skill_child_session(ctx)` (shared with `R/skill-templates.R`);
+  `skills_on_session_start(event, ctx)`.
+
+Registration: trusted project skills at rank 1 (source `project`), user skills at rank 3 (`user`),
+attached packages at rank 5 (`plugin:<pkg>`), gptr's own at rank 6 (`builtin:skills`), one resource
+group per source; untrusted project skills are never registered and a one-time notice says so;
+plugin skills are registered by `plugin_enable()` (Task 10). The sync runs in the `session_start`
+hook of top-level sessions (children reuse what their root synced) and as a fallback inside
+`skill_body()`, because P08 builds `skills =` preloads before the run freezes. The catalog (G2 (b),
+IC-68) is the verbatim header plus one `- name: description [skill:name/SKILL.md]` line per
+model-invocable registered skill (name order, description at most 160 characters); over the budget
+(`gptr.skills_budget` when set, else the `skills.budget` setting, else 1,500), descriptions of the
+least recently used skills are dropped first (a skill counts as used when `skill_body()` returns it,
+as preloads and P10's `read skill:<name>/...` calls do), then whole entries, with a closing
+`(<n> more skills: peter$search("words") finds them)` line. `skill_body()` returns the body without
+frontmatter plus a line naming the `skill:<name>/<path>` pseudo-paths, and `dir`, the skill
+directory P10's `read` resolves pseudo-paths against; an untrusted project's skill signals
+`gptr_error_untrusted` (`what = "skill"`, `path`, `origin = "project"`). P08's `name_norm()` lives
+in an L6 file, so name matching here uses Task 1's `res_norm()`, the same rule.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1937,7 +2149,10 @@ test_that("an untrusted project's skill is not in the catalog of a session (e2e)
 Rscript --vanilla -e 'devtools::test(filter = "skill-discover")'
 ```
 
-Expected: the earlier 64 expectations pass; the new tests fail, first with `could not find function "skill_sync"`, the services test because `skill.catalog` is not available, and the two end-to-end tests because the session has no `skill.body` service (`gptr_error_not_available`) and no `<skills>` section in `t1`.
+Expected: the earlier 64 expectations pass; the new tests fail, first with
+`could not find function "skill_sync"`, the services test because `skill.catalog` is not available,
+and the two end-to-end tests because the session has no `skill.body` service
+(`gptr_error_not_available`) and no `<skills>` section in `t1`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2170,15 +2385,34 @@ git commit -m "feat(skills): add the compact skill catalog, skill.body and built
 ### Task 5: Pi's template grammar and its 67-assertion oracle
 
 **Files:**
+
 - Create: `R/skill-templates.R`
 - Create: `tests/testthat/fixtures/oracles/pi-templates/templates.json`
 - Test: `tests/testthat/test-skill-templates.R` (create)
 
 **Interfaces:**
-- Consumes: P01 `as_utf8(x)`, `check_string(x, arg, null = FALSE, empty = FALSE)`, `json_decode(text)`, `read_utf8(path)`; testthat `test_path()`.
-- Produces (04 §7.17): `template_expand(text, args = character())` (`args` is the raw string after the command, split with Pi's quoting rules, or a character vector of arguments); `template_args_parse(x)` (Pi `parseCommandArgs()`); `template_substitute(content, args = character())` (Pi `substituteArgs()`); `template_expand_input(text, lookup)` (Pi `expandPromptTemplate()`: `/name args` when `lookup` knows `name`, else the input unchanged); `template_re`.
 
-This is report 05 section 5.1's verified port of Pi's `prompt-templates.ts` (MIT; `substituteArgs`, `parseCommandArgs`, the command pattern `^/([^\s]+)(?:\s+([\s\S]*))?$`), converted to the house style. Substitution is one left-to-right pass of one regular expression, so argument values and defaults are never re-scanned (`"${3:-$ARGUMENTS}"` stays literal). Placeholders: `${N:-default}`, `${@:-default}`, `${ARGUMENTS:-default}` (the default applies when the argument is missing or empty), `${@:N}` and `${@:N:L}` (1-based slices; `0` is treated as `1`), Claude's 0-based `$ARGUMENTS[N]`, and `$ARGUMENTS`, `$@`, `$N` (`$0` and out-of-range indexes give `""`). Matching runs on UTF-8 bytes with `useBytes = TRUE` and pieces are re-marked UTF-8, so the result is byte-identical in a C locale. The fixture holds the 67 assertions report 05 ported from Pi's `test/prompt-templates.test.ts` (47 substitutions, 14 argument parses, 6 expansions with the `review` template), written as ASCII JSON with `\u` escapes; it was regenerated from that report's prototype and compared case by case (67 of 67 identical).
+- Consumes: P01 `as_utf8(x)`, `check_string(x, arg, null = FALSE, empty = FALSE)`,
+  `json_decode(text)`, `read_utf8(path)`; testthat `test_path()`.
+- Produces (04 section 7.17): `template_expand(text, args = character())` (`args` is the raw string
+  after the command, split with Pi's quoting rules, or a character vector of arguments);
+  `template_args_parse(x)` (Pi `parseCommandArgs()`);
+  `template_substitute(content, args = character())` (Pi `substituteArgs()`);
+  `template_expand_input(text, lookup)` (Pi `expandPromptTemplate()`: `/name args` when `lookup`
+  knows `name`, else the input unchanged); `template_re`.
+
+This is report 05 section 5.1's verified port of Pi's `prompt-templates.ts` (MIT; `substituteArgs`,
+`parseCommandArgs`, the command pattern `^/([^\s]+)(?:\s+([\s\S]*))?$`), converted to the house
+style. Substitution is one left-to-right pass of one regular expression, so argument values and
+defaults are never re-scanned (`"${3:-$ARGUMENTS}"` stays literal). Placeholders: `${N:-default}`,
+`${@:-default}`, `${ARGUMENTS:-default}` (the default applies when the argument is missing or
+empty), `${@:N}` and `${@:N:L}` (1-based slices; `0` is treated as `1`), Claude's 0-based
+`$ARGUMENTS[N]`, and `$ARGUMENTS`, `$@`, `$N` (`$0` and out-of-range indexes give `""`). Matching
+runs on UTF-8 bytes with `useBytes = TRUE` and pieces are re-marked UTF-8, so the result is
+byte-identical in a C locale. The fixture holds the 67 assertions report 05 ported from Pi's
+`test/prompt-templates.test.ts` (47 substitutions, 14 argument parses, 6 expansions with the
+`review` template), written as ASCII JSON with `\u` escapes; it was regenerated from that report's
+prototype and compared case by case (67 of 67 identical).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2327,7 +2561,8 @@ test_that("substitution keeps UTF-8 bytes in any locale", {
 Rscript --vanilla -e 'devtools::test(filter = "skill-templates")'
 ```
 
-Expected: the four tests error, the first with `could not find function "template_substitute"`; the summary is `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`.
+Expected: the four tests error, the first with `could not find function "template_substitute"`; the
+summary is `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2474,7 +2709,8 @@ template_expand_input = function(text, lookup) {
 Rscript --vanilla -e 'devtools::test(filter = "skill-templates")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`. Also run it in a C locale, where the UTF-8 cases must still be byte-identical:
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`. Also run it in a C locale, where the UTF-8 cases
+must still be byte-identical:
 
 ```bash
 LC_ALL=C Rscript --vanilla -e 'devtools::test(filter = "skill-templates")'
@@ -2494,15 +2730,50 @@ git commit -m "feat(prompts): port Pi's template grammar with its 67-assertion o
 ### Task 6: Template files, template commands and `builtin:prompts`
 
 **Files:**
+
 - Modify: `R/skill-templates.R` (append)
 - Create: `inst/gptr/prompts/review.md`, `inst/gptr/prompts/explain.md`
 - Test: `tests/testthat/test-skill-templates.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1, 4 and 5 (`frontmatter_read()`, `fm_chr_list()`, `res_spec()`, `res_cached()`, `res_register()`, `res_unregister()`, `res_prune()`, `res_state()`, `res_project_dirs()`, `res_builtin_dir()`, `res_attached_dirs()`, `res_prefix()`, `res_file_sig()`, `res_handler_set()`, `trust_ok()`, `skill_child_session()`, `template_expand()`); P01 `gptr_user_dir()`, `path_norm()`; P02 `gptr_spec()`, `gptr_command()`, `gptr_register(spec)`, `registry_names()`, `registry_get()`, `registry_all()`, `registry_generation()`, `registry_diagnostic()`, `ext_declare_builtin()`.
-- Produces (04 §7.17, IC-31): `builtin_prompts(gptr)` (a `session_start` hook); `template_parse(path, name = NULL)` -> a `prompt_template` spec (`text`, `description`, `argument_hint`, `source`, plus `path`, `model`, `allowed_tools`) or `NULL` with a diagnostic; `template_command(tpl)` -> a `command` spec whose `handler(args, ctx)` returns `list(prompt = template_expand(text, args))` (plus the field `template` naming the template), so P14's console only dispatches commands; `template_specs(files, labels = NULL, prefix = NULL, source = NULL)`; `template_files(dir)`; `template_roots()`; `template_sync()`; the resource handlers `prompts` (`template_dir_specs(paths, p, labels = NULL)`, templates with `source = "plugin:<name>"`) and `commands` (`template_command_specs(paths, p, labels = NULL)`, Claude plugin commands named `<plugin>:<cmd>`, 04 §11.12, plus one dispatcher command `<plugin>` built by `template_plugin_dispatcher(plugin, specs)` with `template_dispatch_handler(plugin, texts)`, because P14's `command_parse()` turns `/<plugin>:<cmd> args` into the command `<plugin>` with the arguments `<cmd> args`); `prompts_on_session_start(event, ctx)`; the shipped templates `/review` and `/explain`.
 
-Template files follow Pi's `prompt-templates.ts` (report 05 section 3.7): the name is the file name without `.md`; the description is the frontmatter `description`, else the first non-empty body line cut to 60 characters plus `...`; only direct `*.md` children of a directory are templates. Roots: a trusted project's `.gptr/prompts` (rank 1; 04 §10.1 registers only *trusted* project resources), the user's `R_user_dir("gptr", "config")/prompts` (rank 3), gptr's `inst/gptr/prompts` (rank 6), attached packages' `inst/gptr/prompts` (rank 5) and `resources_discover` paths. A template whose name is already a command registered by something else (a console command of P14, a plugin's command) keeps its `prompt_template` record but gets no command, with a `collision` diagnostic: commands win over templates, as in Pi's dispatch order (report 05 section 4.8). Claude plugin commands are named `<plugin>:<cmd>` (04 §11.12); P14's console parses `/<name>:<sub> args` as the command `<name>` with the arguments `<sub> args` (its `/skill:<name>` grammar, P14 `command_parse()`), so each Claude plugin with commands also gets one command named after the plugin that runs `<cmd>` with the rest of the arguments; both spellings work. Each template's `source` field names where it came from (`project`, `user`, `builtin:prompts`, `plugin:<name>`). The two shipped templates contain no `str(` and only ASCII.
+- Consumes: Tasks 1, 4 and 5 (`frontmatter_read()`, `fm_chr_list()`, `res_spec()`, `res_cached()`,
+  `res_register()`, `res_unregister()`, `res_prune()`, `res_state()`, `res_project_dirs()`,
+  `res_builtin_dir()`, `res_attached_dirs()`, `res_prefix()`, `res_file_sig()`, `res_handler_set()`,
+  `trust_ok()`, `skill_child_session()`, `template_expand()`); P01 `gptr_user_dir()`, `path_norm()`;
+  P02 `gptr_spec()`, `gptr_command()`, `gptr_register(spec)`, `registry_names()`, `registry_get()`,
+  `registry_all()`, `registry_generation()`, `registry_diagnostic()`, `ext_declare_builtin()`.
+- Produces (04 section 7.17, IC-31): `builtin_prompts(gptr)` (a `session_start` hook);
+  `template_parse(path, name = NULL)` -> a `prompt_template` spec (`text`, `description`,
+  `argument_hint`, `source`, plus `path`, `model`, `allowed_tools`) or `NULL` with a diagnostic;
+  `template_command(tpl)` -> a `command` spec whose `handler(args, ctx)` returns
+  `list(prompt = template_expand(text, args))` (plus the field `template` naming the template), so
+  P14's console only dispatches commands;
+  `template_specs(files, labels = NULL, prefix = NULL, source = NULL)`; `template_files(dir)`;
+  `template_roots()`; `template_sync()`; the resource handlers `prompts`
+  (`template_dir_specs(paths, p, labels = NULL)`, templates with `source = "plugin:<name>"`) and
+  `commands` (`template_command_specs(paths, p, labels = NULL)`, Claude plugin commands named
+  `<plugin>:<cmd>`, 04 section 11.12, plus one dispatcher command `<plugin>` built by
+  `template_plugin_dispatcher(plugin, specs)` with `template_dispatch_handler(plugin, texts)`,
+  because P14's `command_parse()` turns `/<plugin>:<cmd> args` into the command `<plugin>` with the
+  arguments `<cmd> args`); `prompts_on_session_start(event, ctx)`; the shipped templates `/review`
+  and `/explain`.
+
+Template files follow Pi's `prompt-templates.ts` (report 05 section 3.7): the name is the file name
+without `.md`; the description is the frontmatter `description`, else the first non-empty body line
+cut to 60 characters plus `...`; only direct `*.md` children of a directory are templates. Roots: a
+trusted project's `.gptr/prompts` (rank 1; 04 section 10.1 registers only *trusted* project
+resources), the user's `R_user_dir("gptr", "config")/prompts` (rank 3), gptr's `inst/gptr/prompts`
+(rank 6), attached packages' `inst/gptr/prompts` (rank 5) and `resources_discover` paths. A template
+whose name is already a command registered by something else (a console command of P14, a plugin's
+command) keeps its `prompt_template` record but gets no command, with a `collision` diagnostic:
+commands win over templates, as in Pi's dispatch order (report 05 section 4.8). Claude plugin
+commands are named `<plugin>:<cmd>` (04 section 11.12); P14's console parses `/<name>:<sub> args` as
+the command `<name>` with the arguments `<sub> args` (its `/skill:<name>` grammar, P14
+`command_parse()`), so each Claude plugin with commands also gets one command named after the plugin
+that runs `<cmd>` with the rest of the arguments; both spellings work. Each template's `source`
+field names where it came from (`project`, `user`, `builtin:prompts`, `plugin:<name>`). The two
+shipped templates contain no `str(` and only ASCII.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2613,7 +2884,8 @@ test_that("the session_start hook of builtin:prompts syncs top-level sessions on
 Rscript --vanilla -e 'devtools::test(filter = "skill-templates")'
 ```
 
-Expected: the 77 expectations of Task 5 pass; the new tests error, first with `could not find function "template_parse"`.
+Expected: the 77 expectations of Task 5 pass; the new tests error, first with
+`could not find function "template_parse"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2911,14 +3183,34 @@ git commit -m "feat(prompts): register templates as /name commands and ship /rev
 ### Task 7: The tool-name map and agent files
 
 **Files:**
+
 - Create: `R/subagent-defs.R`
 - Test: `tests/testthat/test-subagent-defs.R` (create)
 
 **Interfaces:**
-- Consumes: Task 1 (`frontmatter_read()`, `fm_chr_list()`, `res_spec()`, `res_cached()`); P01 `path_norm()`, `` `%||%` ``; P02 `gptr_spec("agent", ...)` and its validator (04 §10.2 row 21: `description` chr(1), `model`, `tools`, `skills`, `system` chr(1), `backend` chr(1) default `"auto"`, `preset` default `"minimal"`, `max_turns` int(1), `mode` in `plan`, `manual`, `edits`, `auto`, `returns` list, `file` chr(1); names equal to a session accessor are refused, IC-71), `registry_diagnostic()`, `gptr_registry()`.
-- Produces (04 §7.17): `tool_name_map(names)` -> chr (unknown names dropped and listed in the attribute `unknown`); `agent_file_parse(path)` -> an `agent` spec (the `gptr_agent()` fields plus `source` and `trusted`) or `NULL` (no frontmatter or no `name`: documentation, no diagnostic; invalid: diagnostic); `agent_mode(x)`; `agent_parse_cached(path)`; `agent_untrust(spec)`; `agent_files(dir, recursive = TRUE)`; `agent_dir_specs(paths, p, labels = NULL)` (the `agents` resource handler, installed in Task 8). P19 consumes `agent_file_parse()` and `tool_name_map()`.
 
-Agent files are Claude Code's Markdown format (report 16 section 3.8, report 20 section 4.4, report 15 sections 2.12, 4.3, 4.10 and the verified prototype of section 5.16): frontmatter `name` and `description` (strings) are required; `model` (`inherit` means the caller's model, stored as `NULL`), `tools` (a comma list or a YAML array, mapped by `tool_name_map()`), `skills`, `backend`, `preset`, `max_turns` or Claude's `maxTurns`, `mode` or Claude's `permissionMode` (`default` -> `manual`, `acceptEdits` -> `edits`, `plan`, `dontAsk`/`bypassPermissions` -> `auto`; a child only ever tightens its parent's mode, 04 §6.1), `returns`; the body is the system text. Pi's agent files use `mode: inline|worker|cli` for the execution mode, which is gptr's `backend`. Fields are always read with `m[["field"]]`: `m$mode` would partially match `model` (report 15 section 2.12). Shell tools map to `r` (S-4: there is no shell tool), Claude's `AskUserQuestion` maps to `ask` (report 15 section 4.10), and a permission-pattern suffix such as `Bash(git diff *)` maps by its head; tools gptr does not have (`WebFetch`, `NotebookEdit`) are dropped with a diagnostic, as report 15's verified prototype `p8_agent_files.R` did. YAML 1.1 coercion does not reach `name`, `description`, `model` or `tools` (Task 1, IC-71).
+- Consumes: Task 1 (`frontmatter_read()`, `fm_chr_list()`, `res_spec()`, `res_cached()`); P01 `path_norm()`, `` `%||%` ``; P02 `gptr_spec("agent", ...)` and its validator (04 §10.2 row 21: `description` chr(1), `model`, `tools`, `skills`, `system` chr(1), `backend` chr(1) default `"auto"`, `preset` default `"minimal"`, `max_turns` int(1), `mode` in `plan`, `manual`, `edits`, `auto`, `returns` list, `file` chr(1); names equal to a session accessor are refused, IC-71), `registry_diagnostic()`, `gptr_registry()`.
+- Produces (04 section 7.17): `tool_name_map(names)` -> chr (unknown names dropped and listed in the
+  attribute `unknown`); `agent_file_parse(path)` -> an `agent` spec (the `gptr_agent()` fields plus
+  `source` and `trusted`) or `NULL` (no frontmatter or no `name`: documentation, no diagnostic;
+  invalid: diagnostic); `agent_mode(x)`; `agent_parse_cached(path)`; `agent_untrust(spec)`;
+  `agent_files(dir, recursive = TRUE)`; `agent_dir_specs(paths, p, labels = NULL)` (the `agents`
+  resource handler, installed in Task 8). P19 consumes `agent_file_parse()` and `tool_name_map()`.
+
+Agent files are Claude Code's Markdown format (report 16 section 3.8, report 20 section 4.4, report
+15 sections 2.12, 4.3, 4.10 and the verified prototype of section 5.16): frontmatter `name` and
+`description` (strings) are required; `model` (`inherit` means the caller's model, stored as
+`NULL`), `tools` (a comma list or a YAML array, mapped by `tool_name_map()`), `skills`, `backend`,
+`preset`, `max_turns` or Claude's `maxTurns`, `mode` or Claude's `permissionMode` (`default` ->
+`manual`, `acceptEdits` -> `edits`, `plan`, `dontAsk`/`bypassPermissions` -> `auto`; a child only
+ever tightens its parent's mode, 04 section 6.1), `returns`; the body is the system text. Pi's agent
+files use `mode: inline|worker|cli` for the execution mode, which is gptr's `backend`. Fields are
+always read with `m[["field"]]`: `m$mode` would partially match `model` (report 15 section 2.12).
+Shell tools map to `r` (S-4: there is no shell tool), Claude's `AskUserQuestion` maps to `ask`
+(report 15 section 4.10), and a permission-pattern suffix such as `Bash(git diff *)` maps by its
+head; tools gptr does not have (`WebFetch`, `NotebookEdit`) are dropped with a diagnostic, as report
+15's verified prototype `p8_agent_files.R` did. YAML 1.1 coercion does not reach `name`,
+`description`, `model` or `tools` (Task 1, IC-71).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3008,7 +3300,8 @@ test_that("documentation files are skipped silently; broken agent files are diag
 Rscript --vanilla -e 'devtools::test(filter = "subagent-defs")'
 ```
 
-Expected: the four tests error, the first with `could not find function "tool_name_map"`; the summary is `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`.
+Expected: the four tests error, the first with `could not find function "tool_name_map"`; the
+summary is `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3181,15 +3474,41 @@ git commit -m "feat(agents): parse Claude-compatible agent files and map foreign
 ### Task 8: Agent discovery, `gptr_agents()`, `agent_def.get` and `builtin:agents`
 
 **Files:**
+
 - Modify: `R/subagent-defs.R` (append)
 - Test: `tests/testthat/test-subagent-defs.R` (append)
 - Regenerate: `NAMESPACE`, `man/gptr_skills.Rd`
 
 **Interfaces:**
-- Consumes: Tasks 1 and 7; P01 `gptr_can_prompt()`, `setting_get()`, `gptr_user_dir()`, `user_home()`, `check_choice()`, `check_string()`, `new_listing()`, `gptr_inform()`, `path_key()`, `project_root()`; P02 `registry_names()`, `registry_get()`, `registry_all()`, `gptr_agent()` (loads through `agent_def.get` when given only `name` or `file`, 04 §6.8), `ext_declare_builtin()`, `ext_service_set()`; P06 kernel SDK `session_data(s)` (fields `depth`, `mode`); test helpers `local_project()`, `local_gptr_options(..., .env = parent.frame())`.
-- Produces (04 §6.3, §7.0, §7.17): the export `gptr_agents(scope = c("all", "project", "user", "packages"))` -> `gptr_agents` listing (`name`, `description`, `model`, `backend`, `source`, `path`), documented on the `gptr_skills` page; the service `agent_def.get` = `agent_def_get(name = NULL, file = NULL)` -> `<spec:agent>` (`builtin = "agents"`); `builtin_agents(gptr)` (a `session_start` hook); `agent_roots()`, `agent_collect(mode = NULL)`, `agent_discover(scope = "all")`, `agent_sync(mode = NULL)`, `agent_find(name)`, `agents_on_session_start(event, ctx)`.
 
-Roots (04 §11.13, report 15 section 4.10, IC-63): the project's `.gptr/agents`, `.claude/agents`, `.codex/agents`, `.pi/agents` (nearest directory first, rank 1); the user's `R_user_dir("gptr", "config")/agents`, `~/.claude/agents`, `~/.codex/agents`, `~/.pi/agent/agents` under `user_home()` (rank 3); gptr's `inst/gptr/agents` (rank 6; the files are P19's); attached packages (rank 5); enabled plugins; `resources_discover` paths. Pi's `.pi` agent directories are flat; the others are searched recursively. Trust (04 §6.2, IC-52): the agents of an untrusted project lose `model` and `tools` (`trusted = FALSE`), never shadow an agent of the same name from another origin, and are omitted with a notice when nobody can answer questions (`gptr_can_prompt()` is `FALSE`) and the session's mode is `auto` or `edits`; they stay listed by `gptr_agents()` as `project (untrusted)`. `agent_def.get` resolves names exactly, then after normalisation (IC-42), syncing once if the name is not registered yet; a file inside an untrusted project loses `model` and `tools` the same way. The 04 §6.3 sentence "with a `tokens` column" is read as applying to `gptr_skills()` only: §5.12 fixes the `gptr_agents` columns and agents are not in any prompt catalog.
+- Consumes: Tasks 1 and 7; P01 `gptr_can_prompt()`, `setting_get()`, `gptr_user_dir()`,
+  `user_home()`, `check_choice()`, `check_string()`, `new_listing()`, `gptr_inform()`, `path_key()`,
+  `project_root()`; P02 `registry_names()`, `registry_get()`, `registry_all()`, `gptr_agent()`
+  (loads through `agent_def.get` when given only `name` or `file`, 04 section 6.8),
+  `ext_declare_builtin()`, `ext_service_set()`; P06 kernel SDK `session_data(s)` (fields `depth`,
+  `mode`); test helpers `local_project()`, `local_gptr_options(..., .env = parent.frame())`.
+- Produces (04 sections 6.3, 7.0, 7.17): the export
+  `gptr_agents(scope = c("all", "project", "user", "packages"))` -> `gptr_agents` listing (`name`,
+  `description`, `model`, `backend`, `source`, `path`), documented on the `gptr_skills` page; the
+  service `agent_def.get` = `agent_def_get(name = NULL, file = NULL)` -> `<spec:agent>`
+  (`builtin = "agents"`); `builtin_agents(gptr)` (a `session_start` hook); `agent_roots()`,
+  `agent_collect(mode = NULL)`, `agent_discover(scope = "all")`, `agent_sync(mode = NULL)`,
+  `agent_find(name)`, `agents_on_session_start(event, ctx)`.
+
+Roots (04 section 11.13, report 15 section 4.10, IC-63): the project's `.gptr/agents`,
+`.claude/agents`, `.codex/agents`, `.pi/agents` (nearest directory first, rank 1); the user's
+`R_user_dir("gptr", "config")/agents`, `~/.claude/agents`, `~/.codex/agents`, `~/.pi/agent/agents`
+under `user_home()` (rank 3); gptr's `inst/gptr/agents` (rank 6; the files are P19's); attached
+packages (rank 5); enabled plugins; `resources_discover` paths. Pi's `.pi` agent directories are
+flat; the others are searched recursively. Trust (04 section 6.2, IC-52): the agents of an untrusted
+project lose `model` and `tools` (`trusted = FALSE`), never shadow an agent of the same name from
+another origin, and are omitted with a notice when nobody can answer questions (`gptr_can_prompt()`
+is `FALSE`) and the session's mode is `auto` or `edits`; they stay listed by `gptr_agents()` as
+`project (untrusted)`. `agent_def.get` resolves names exactly, then after normalisation (IC-42),
+syncing once if the name is not registered yet; a file inside an untrusted project loses `model` and
+`tools` the same way. The 04 section 6.3 sentence "with a `tokens` column" is read as applying to
+`gptr_skills()` only: section 5.12 fixes the `gptr_agents` columns and agents are not in any prompt
+catalog.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3303,7 +3622,9 @@ test_that("builtin:agents syncs on session start and registers the service", {
 Rscript --vanilla -e 'devtools::test(filter = "subagent-defs")'
 ```
 
-Expected: the 31 expectations of Task 7 pass; the new tests error, first with `could not find function "gptr_agents"`, and `gptr_agent("stats-rev")` signals `gptr_error_not_available` because `agent_def.get` is not registered yet.
+Expected: the 31 expectations of Task 7 pass; the new tests error, first with
+`could not find function "gptr_agents"`, and `gptr_agent("stats-rev")` signals
+`gptr_error_not_available` because `agent_def.get` is not registered yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3505,7 +3826,8 @@ Regenerate the documentation:
 Rscript --vanilla -e 'devtools::document()'
 ```
 
-Expected: `NAMESPACE` gains `export(gptr_agents)`; `man/gptr_skills.Rd` now documents `gptr_skills()` and `gptr_agents()`.
+Expected: `NAMESPACE` gains `export(gptr_agents)`; `man/gptr_skills.Rd` now documents
+`gptr_skills()` and `gptr_agents()`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -3527,14 +3849,33 @@ git commit -m "feat(agents): discover agent files with trust rules and add gptr_
 ### Task 9: Plugin resolution
 
 **Files:**
+
 - Modify: `R/ext-plugins.R` (append)
 - Test: `tests/testthat/test-ext-plugins.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1 (`res_match()`, `res_norm()`, `registry_diagnostic()` use); P01 `json_decode()`, `json_encode()`, `read_utf8()`, `workspace_dir(path = getwd())`, `user_home()`, `path_norm()`, `check_string()`, `as_utf8()`; base `find.package()`, `read.dcf()` (installed `DESCRIPTION` only; no namespace is loaded).
-- Produces (04 §7.17): `plugin_resolve(name)` -> `list(kind = "package" | "directory" | "claude-plugin", name, path, manifest, version, api)` (packages add `package` and `package_path`) or `gptr_error_invalid_argument`; `plugin_manifest_read(file)`; `plugin_api_req(manifest)`; `plugin_from_dir(path)`; `plugin_from_package(pkg)`; `plugin_claude_installed()`.
 
-Resolution order: a path to a directory (a name containing `/` or `\`, or starting with `.` or `~`, that is not a plugin directory is an error); the project's `.gptr/plugins/<name>/`; an installed package with `inst/gptr/` or `Config/gptr/plugin: true` (04 §11.12; the manifest's `gptr.api` falls back to `Config/gptr/api`); an installed Claude Code plugin from `~/.claude/plugins/installed_plugins.json` (version 2, report 16 section 3.8; the most recently updated existing `installPath` of each plugin; read-only, under `user_home()`). Names match exactly, then after normalisation (IC-42, so `clinical_trials` finds `.gptr/plugins/clinical-trials/`); two normalised matches signal `gptr_error_invalid_identifier`. A directory is a gptr plugin with `plugin.json`, a Claude bundle with `.claude-plugin/plugin.json` (or an empty `.claude-plugin/`), and otherwise a plugin when it holds `skills/`, `prompts/`, `agents/`, `extensions/`, `commands/` or `mcp.json`. An invalid manifest is a registry diagnostic, never an error.
+- Consumes: Task 1 (`res_match()`, `res_norm()`, `registry_diagnostic()` use); P01 `json_decode()`,
+  `json_encode()`, `read_utf8()`, `workspace_dir(path = getwd())`, `user_home()`, `path_norm()`,
+  `check_string()`, `as_utf8()`; base `find.package()`, `read.dcf()` (installed `DESCRIPTION` only;
+  no namespace is loaded).
+- Produces (04 section 7.17): `plugin_resolve(name)` ->
+  `list(kind = "package" | "directory" | "claude-plugin", name, path, manifest, version, api)`
+  (packages add `package` and `package_path`) or `gptr_error_invalid_argument`;
+  `plugin_manifest_read(file)`; `plugin_api_req(manifest)`; `plugin_from_dir(path)`;
+  `plugin_from_package(pkg)`; `plugin_claude_installed()`.
+
+Resolution order: a path to a directory (a name containing `/` or `\`, or starting with `.` or `~`,
+that is not a plugin directory is an error); the project's `.gptr/plugins/<name>/`; an installed
+package with `inst/gptr/` or `Config/gptr/plugin: true` (04 section 11.12; the manifest's `gptr.api`
+falls back to `Config/gptr/api`); an installed Claude Code plugin from
+`~/.claude/plugins/installed_plugins.json` (version 2, report 16 section 3.8; the most recently
+updated existing `installPath` of each plugin; read-only, under `user_home()`). Names match exactly,
+then after normalisation (IC-42, so `clinical_trials` finds `.gptr/plugins/clinical-trials/`); two
+normalised matches signal `gptr_error_invalid_identifier`. A directory is a gptr plugin with
+`plugin.json`, a Claude bundle with `.claude-plugin/plugin.json` (or an empty `.claude-plugin/`),
+and otherwise a plugin when it holds `skills/`, `prompts/`, `agents/`, `extensions/`, `commands/` or
+`mcp.json`. An invalid manifest is a registry diagnostic, never an error.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3598,7 +3939,8 @@ test_that("plugin_from_package reads DESCRIPTION fields without loading the pack
 Rscript --vanilla -e 'devtools::test(filter = "ext-plugins")'
 ```
 
-Expected: the 67 expectations of Task 1 pass; the new tests fail, first with `could not find function "plugin_resolve"`.
+Expected: the 67 expectations of Task 1 pass; the new tests fail, first with
+`could not find function "plugin_resolve"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3792,16 +4134,71 @@ git commit -m "feat(plugins): resolve plugin packages, directories and Claude pl
 ### Task 10: Enabling plugins: declarative resources, code, trust and session scope
 
 **Files:**
+
 - Modify: `R/ext-plugins.R` (append)
 - Test: `tests/testthat/test-ext-plugins.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1 and 9; the resource handlers installed by Tasks 4 (`skills`), 6 (`prompts`, `commands`) and 8 (`agents`); P01 `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`, `gptr_warn(message, class, ..., .data = NULL, .once = NULL)`, `gptr_inform()`, `est_tokens()`, `gptr_user_dir()`, `workspace_dir()`; P02 `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)` (staged, transactional, rolls back and records a diagnostic on failure; `lazy = TRUE` registers the manifest's `provides` placeholders and `declarations`; `session` scopes every staged record, removed at that session's `session_shutdown`, IC-69), `registry_add()`, `registry_remove()`, `registry_get()`, `registry_names()`, `gptr_api()`, the `mcp_server` validator (04 §11.7 fields); P08 `gptr_trust(path = ".", trust = NULL)`, `peter(..., plugins = )` (calls `plugin.enable` with `rank = 0L, session = <session id>`); test helpers `local_project()`, `local_fake_provider()`, `fake_requests()`.
-- Produces (04 §7.0, §7.17): `plugin_enable(name, rank, session = NULL)` -> `invisible(lgl(1))`, registered as the `plugin.enable` service (`provided_by = "P17"`, `builtin = "skills"`); `extension_resolve(name)` -> `list(path, name, scope)` or `NULL`; `extension_enable(ext, rank, session = NULL)`; `plugin_declarative_specs(p)`; `plugin_mcp_specs(p)`; `plugin_expand_root(x, root)`; `plugin_code(p)` -> `list(factory, lazy)` or `NULL`; `plugin_file_factory(path)`, `plugin_dir_factory(files)`, `plugin_entry_factory(pkg, fun)`; `plugin_manifest_provides(manifest)`; `plugin_track_factory(key, factory)`; `plugin_entry_save(entry)`; `plugin_entry_alive(e)` (a package unload removed the entry's records, so enabling runs again); `plugin_forget(path)` (tests); `plugin_tokens(p, specs)`; `plugins_enabled(session = NULL)` -> `data.frame(name, kind, path, rank, session)` (P19's worker spec lists "enabled plugins with ranks", IC-69; a consumer that enables them again elsewhere passes `path`, since a directory plugin outside the project is found by its path, not by its name); `plugins_session_end(session)` (used by the `session_shutdown` hook of Task 12).
 
-What `plugin_enable()` does (04 §7.17, §10.8, §11.12): `gptr` itself is a no-op (its resources are the built-ins'); a name that is an extension file (`<name>.R` in a trusted project's `.gptr/extensions/` or the user's `extensions/`, or a path to an `.R` file) is loaded as one extension (P08 routes `extensions = "name"` here); otherwise `plugin_resolve()`. A plugin inside the project needs a trusted project (packages and directories outside the project are the user's explicit choice); an untrusted one contributes nothing and gives a one-time notice (IC-52, acceptance 4). An unmet `gptr.api` requirement (G1 section 3.5 grammar: `"1.2"` means `>= 1.2, < 2`) or a missing `rDepends` package disables the plugin with a registry diagnostic and a `gptr_warning_plugin` (field `diagnostic`). Declarative resources are registered at once at `rank` with source `plugin:<name>` (scoped to `session` when given): skills, templates (gptr plugins) or commands named `<plugin>:<cmd>` (Claude bundles), agents (tool-name map), and MCP servers from `mcp.json`, a Claude bundle's `.mcp.json` or the manifest's `mcpServers` (`${CLAUDE_PLUGIN_ROOT}` and `${GPTR_PLUGIN_ROOT}` are expanded now; every other placeholder is left for P18 to expand at connect time, 04 §11.7). Claude plugin hooks are not imported in 1.0: a diagnostic says so. Code: a package's `extension.entry` (`pkg::fun`, an exported function reached with `getExportedValue()`, never `:::`) or a directory's `extensions/*.R` (each file's last expression is the `function(gptr)` factory) goes through `ext_load()`, lazily when the manifest lists `provides` and `activation` is not `"eager"`, so the factory runs on first use. The plugin table entry records `lazy`/`active`/`failed`. Enabling is idempotent per plugin, rank and session; after `gptr_reload()` (a new registry generation) the declarative records are rebuilt, old ones removed first, while code is loaded only once (P02 re-declares lazy factories on reload itself and keeps the records of eager ones). Extension files are loaded once per path, rank and session: P02 keeps an eager factory's records across `gptr_reload()` and has no per-extension unload, so re-running an edited file would only add records shadowed by the first run's (ties go to the first registered).
+- Consumes: Tasks 1 and 9; the resource handlers installed by Tasks 4 (`skills`), 6 (`prompts`,
+  `commands`) and 8 (`agents`); P01
+  `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`,
+  `gptr_warn(message, class, ..., .data = NULL, .once = NULL)`, `gptr_inform()`, `est_tokens()`,
+  `gptr_user_dir()`, `workspace_dir()`; P02
+  `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)`
+  (staged, transactional, rolls back and records a diagnostic on failure; `lazy = TRUE` registers
+  the manifest's `provides` placeholders and `declarations`; `session` scopes every staged record,
+  removed at that session's `session_shutdown`, IC-69), `registry_add()`, `registry_remove()`,
+  `registry_get()`, `registry_names()`, `gptr_api()`, the `mcp_server` validator (04 section 11.7
+  fields); P08 `gptr_trust(path = ".", trust = NULL)`, `peter(..., plugins = )` (calls
+  `plugin.enable` with `rank = 0L, session = <session id>`); test helpers `local_project()`,
+  `local_fake_provider()`, `fake_requests()`.
+- Produces (04 sections 7.0, 7.17): `plugin_enable(name, rank, session = NULL)` ->
+  `invisible(lgl(1))`, registered as the `plugin.enable` service (`provided_by = "P17"`,
+  `builtin = "skills"`); `extension_resolve(name)` -> `list(path, name, scope)` or `NULL`;
+  `extension_enable(ext, rank, session = NULL)`; `plugin_declarative_specs(p)`;
+  `plugin_mcp_specs(p)`; `plugin_expand_root(x, root)`; `plugin_code(p)` -> `list(factory, lazy)` or
+  `NULL`; `plugin_file_factory(path)`, `plugin_dir_factory(files)`,
+  `plugin_entry_factory(pkg, fun)`; `plugin_manifest_provides(manifest)`;
+  `plugin_track_factory(key, factory)`; `plugin_entry_save(entry)`; `plugin_entry_alive(e)` (a
+  package unload removed the entry's records, so enabling runs again); `plugin_forget(path)`
+  (tests); `plugin_tokens(p, specs)`; `plugins_enabled(session = NULL)` ->
+  `data.frame(name, kind, path, rank, session)` (P19's worker spec lists "enabled plugins with
+  ranks", IC-69; a consumer that enables them again elsewhere passes `path`, since a directory
+  plugin outside the project is found by its path, not by its name); `plugins_session_end(session)`
+  (used by the `session_shutdown` hook of Task 12).
 
-The last test is NS-10's skills and plugins half (02-north-star-examples.md section 10) on the fake provider: `skills = c(single_cell, plotting)` with bare identifiers preloads both project skills and lists them in `<skills>`, and `plugins = clinical_trials` resolves `.gptr/plugins/clinical-trials/` (a bundle with a skill, a lazily declared tool and an MCP server, disabled so that no process starts) for that session only. It needs P08's capture, P07's freeze and P10's `plugins` section, which exist at this point.
+What `plugin_enable()` does (04 sections 7.17, 10.8, 11.12): `gptr` itself is a no-op (its resources
+are the built-ins'); a name that is an extension file (`<name>.R` in a trusted project's
+`.gptr/extensions/` or the user's `extensions/`, or a path to an `.R` file) is loaded as one
+extension (P08 routes `extensions = "name"` here); otherwise `plugin_resolve()`. A plugin inside the
+project needs a trusted project (packages and directories outside the project are the user's
+explicit choice); an untrusted one contributes nothing and gives a one-time notice (IC-52,
+acceptance 4). An unmet `gptr.api` requirement (G1 section 3.5 grammar: `"1.2"` means `>= 1.2, < 2`)
+or a missing `rDepends` package disables the plugin with a registry diagnostic and a
+`gptr_warning_plugin` (field `diagnostic`). Declarative resources are registered at once at `rank`
+with source `plugin:<name>` (scoped to `session` when given): skills, templates (gptr plugins) or
+commands named `<plugin>:<cmd>` (Claude bundles), agents (tool-name map), and MCP servers from
+`mcp.json`, a Claude bundle's `.mcp.json` or the manifest's `mcpServers` (`${CLAUDE_PLUGIN_ROOT}`
+and `${GPTR_PLUGIN_ROOT}` are expanded now; every other placeholder is left for P18 to expand at
+connect time, 04 section 11.7). Claude plugin hooks are not imported in 1.0: a diagnostic says so.
+Code: a package's `extension.entry` (`pkg::fun`, an exported function reached with
+`getExportedValue()`, never `:::`) or a directory's `extensions/*.R` (each file's last expression is
+the `function(gptr)` factory) goes through `ext_load()`, lazily when the manifest lists `provides`
+and `activation` is not `"eager"`, so the factory runs on first use. The plugin table entry records
+`lazy`/`active`/`failed`. Enabling is idempotent per plugin, rank and session; after `gptr_reload()`
+(a new registry generation) the declarative records are rebuilt, old ones removed first, while code
+is loaded only once (P02 re-declares lazy factories on reload itself and keeps the records of eager
+ones). Extension files are loaded once per path, rank and session: P02 keeps an eager factory's
+records across `gptr_reload()` and has no per-extension unload, so re-running an edited file would
+only add records shadowed by the first run's (ties go to the first registered).
+
+The last test is NS-10's skills and plugins half (02-north-star-examples.md section 10) on the fake
+provider: `skills = c(single_cell, plotting)` with bare identifiers preloads both project skills and
+lists them in `<skills>`, and `plugins = clinical_trials` resolves `.gptr/plugins/clinical-trials/`
+(a bundle with a skill, a lazily declared tool and an MCP server, disabled so that no process
+starts) for that session only. It needs P08's capture, P07's freeze and P10's `plugins` section,
+which exist at this point.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4045,7 +4442,9 @@ test_that("NS-10: skills = c(single_cell, plotting) and plugins = clinical_trial
 Rscript --vanilla -e 'devtools::test(filter = "ext-plugins")'
 ```
 
-Expected: the 82 expectations of Tasks 1 and 9 pass; the new tests error, first with `could not find function "plugin_enable"`, and the two end-to-end tests because `peter(plugins = )` signals `gptr_error_not_available` (no `plugin.enable` service yet).
+Expected: the 82 expectations of Tasks 1 and 9 pass; the new tests error, first with
+`could not find function "plugin_enable"`, and the two end-to-end tests because `peter(plugins = )`
+signals `gptr_error_not_available` (no `plugin.enable` service yet).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4501,15 +4900,42 @@ git commit -m "feat(plugins): enable plugins with declarative resources, lazy co
 ### Task 11: `gptr_plugins()`, rollback, lazy activation and the toy plugin package
 
 **Files:**
+
 - Modify: `R/ext-plugins.R` (append)
 - Test: `tests/testthat/test-ext-plugins.R` (append)
 - Regenerate: `NAMESPACE`, `man/gptr_plugins.Rd`
 
 **Interfaces:**
-- Consumes: Tasks 1, 9 and 10; P01 `check_flag(x, arg, null = FALSE)`, `new_listing()`, `setting_get()`; P02 `gptr_registry(diagnostics = TRUE)` (columns `time`, `source`, `event`, `class`, `message`), `registry_get()` (activates a lazy placeholder's factory first); P10 the `plugins` section (`ns_catalog()`, built from manifest `declarations` before activation) and the `peter$<ns>$<name>()` members (`ns.resolve`); P08 `peter()`; test helpers `local_fake_provider()`, `fake_requests()`, `fake_tool(name, ..., .text = NULL, .id = NULL)`; `utils::install.packages(type = "source")` and `withr::local_libpaths()` in the toy-package helper (under `skip_on_cran()`).
-- Produces (04 §6.3): the export `gptr_plugins(installed = FALSE)` -> `gptr_plugins` listing (`name`, `version`, `api`, `kind`, `enabled`, `state` in `lazy`/`active`/`disabled`/`failed`, `provides`, `tokens`, `path`); `plugins_setting()` (the `plugins` setting without filter entries); `plugin_candidates(installed = FALSE)`; `plugin_state(e)`; `plugin_row(...)`.
 
-`installed = FALSE` lists the plugins known to this R process (04 §6.3): entries of the plugin table (a plugin enabled for the process and for live sessions is listed once, process entries first), plugins named in the `plugins` setting that are not enabled yet (state `lazy`, enabled `TRUE`: they are enabled at the next session start, Task 12), attached packages with `inst/gptr/`, the project's `.gptr/plugins/` and installed Claude Code plugins (state `disabled`). `installed = TRUE` adds every installed package with `inst/gptr/`: one vectorised `dir.exists()` over `list.dirs(.libPaths(), recursive = FALSE)`, reading only `DESCRIPTION` and `plugin.json`, so nothing is loaded. The toy package is G1 section 4.4's `gptrpanel` shape (`Config/gptr/plugin: true`, `Suggests: gptr`, an exported factory named by `inst/gptr/plugin.json`, a lazy `provides` of `tool: trials/search` with a `declarations` signature, and a skill); the helper installs it from source into a temporary library with `R CMD INSTALL` (started by `utils::install.packages()` from `R.home("bin")`, not from `PATH`), so the tests that use it call `skip_on_cran()`. Acceptance 3: the package is discovered without loading it, its signature reaches the frozen prompt through `declarations` before activation, and its factory runs on first use; a failing factory is rolled back by P02 and reported in `gptr_registry(diagnostics = TRUE)`, and `gptr_plugins()` shows `failed`.
+- Consumes: Tasks 1, 9 and 10; P01 `check_flag(x, arg, null = FALSE)`, `new_listing()`,
+  `setting_get()`; P02 `gptr_registry(diagnostics = TRUE)` (columns `time`, `source`, `event`,
+  `class`, `message`), `registry_get()` (activates a lazy placeholder's factory first); P10 the
+  `plugins` section (`ns_catalog()`, built from manifest `declarations` before activation) and the
+  `peter$<ns>$<name>()` members (`ns.resolve`); P08 `peter()`; test helpers `local_fake_provider()`,
+  `fake_requests()`, `fake_tool(name, ..., .text = NULL, .id = NULL)`;
+  `utils::install.packages(type = "source")` and `withr::local_libpaths()` in the toy-package helper
+  (under `skip_on_cran()`).
+- Produces (04 section 6.3): the export `gptr_plugins(installed = FALSE)` -> `gptr_plugins` listing
+  (`name`, `version`, `api`, `kind`, `enabled`, `state` in `lazy`/`active`/`disabled`/`failed`,
+  `provides`, `tokens`, `path`); `plugins_setting()` (the `plugins` setting without filter entries);
+  `plugin_candidates(installed = FALSE)`; `plugin_state(e)`; `plugin_row(...)`.
+
+`installed = FALSE` lists the plugins known to this R process (04 section 6.3): entries of the
+plugin table (a plugin enabled for the process and for live sessions is listed once, process entries
+first), plugins named in the `plugins` setting that are not enabled yet (state `lazy`, enabled
+`TRUE`: they are enabled at the next session start, Task 12), attached packages with `inst/gptr/`,
+the project's `.gptr/plugins/` and installed Claude Code plugins (state `disabled`).
+`installed = TRUE` adds every installed package with `inst/gptr/`: one vectorised `dir.exists()`
+over `list.dirs(.libPaths(), recursive = FALSE)`, reading only `DESCRIPTION` and `plugin.json`, so
+nothing is loaded. The toy package is G1 section 4.4's `gptrpanel` shape
+(`Config/gptr/plugin: true`, `Suggests: gptr`, an exported factory named by `inst/gptr/plugin.json`,
+a lazy `provides` of `tool: trials/search` with a `declarations` signature, and a skill); the helper
+installs it from source into a temporary library with `R CMD INSTALL` (started by
+`utils::install.packages()` from `R.home("bin")`, not from `PATH`), so the tests that use it call
+`skip_on_cran()`. Acceptance 3: the package is discovered without loading it, its signature reaches
+the frozen prompt through `declarations` before activation, and its factory runs on first use; a
+failing factory is rolled back by P02 and reported in `gptr_registry(diagnostics = TRUE)`, and
+`gptr_plugins()` shows `failed`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4678,7 +5104,8 @@ test_that("declarations reach the frozen prompt before activation; first use act
 Rscript --vanilla -e 'devtools::test(filter = "ext-plugins")'
 ```
 
-Expected: the 133 expectations of Tasks 1, 9 and 10 pass and the new expectations that do not need the listing pass too; the new tests then error with `could not find function "gptr_plugins"`.
+Expected: the 133 expectations of Tasks 1, 9 and 10 pass and the new expectations that do not need
+the listing pass too; the new tests then error with `could not find function "gptr_plugins"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4837,6 +5264,7 @@ git commit -m "feat(plugins): list plugins with gptr_plugins() and test rollback
 ### Task 12: Settings plugins, extension directories, `resources_discover` and the session hooks
 
 **Files:**
+
 - Modify: `R/ext-plugins.R` (append)
 - Modify: `R/skill-discover.R` (replace the `session_start` hook and `builtin_skills()`)
 - Modify: `R/skill-templates.R` (replace the `session_start` hook)
@@ -4844,10 +5272,29 @@ git commit -m "feat(plugins): list plugins with gptr_plugins() and test rollback
 - Test: `tests/testthat/test-ext-plugins.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-11; P01 `ev_new(type, ...)`, `setting_get()`, `gptr_user_dir()`, `workspace_dir()`, `project_root()`; P02 `ev_dispatch(event, payload, session = NULL, ctx = NULL)` (collect semantics for `resources_discover`), `gptr_hook(event, handler, matcher = NULL)`, `gptr_register(spec)`, `gptr_reload()`, `registry_generation()`; P08 `peter()`; test helpers `local_gptr_options()`, `local_project()`, `local_fake_provider()`, `fake_requests()`.
-- Produces: `plugins_sync()` (enables the `plugins` setting's plugins at rank 3, a trusted project's `.gptr/extensions/*.R` at rank 1 and the user's `extensions/*.R` at rank 3, and dispatches `resources_discover` with `reason = "startup"` at the first sync and `"reload"` after `gptr_reload()`, keeping the returned `skill_paths`, `prompt_paths` and `agent_paths` for the roots of Tasks 2, 6 and 8); `ext_files(dir)`; the final `session_start` hooks of `builtin:skills`, `builtin:prompts` and `builtin:agents` (each calls `plugins_sync()` before its own sync, for top-level sessions only) and the `session_shutdown` hook of `builtin:skills` (`skills_on_session_shutdown(event, ctx)`, which forgets the plugin table entries of the ended session; P02 already dropped its records).
 
-Settings plugins come from P08's merged `plugins` setting (user file, and the project file only when trusted, 04 §11.2); this L0 file reads settings only through `setting_get()` and cannot tell the layers apart, so all enable at the user rank 3 (04 §10.1 lists rank 1 for plugins named in trusted project settings; recorded under "Contract readings"). Filter entries (`+x`, `-x`) in the `plugins` setting are not plugins and are skipped (filters have their own `filters` key). Every step is idempotent and failures become registry diagnostics, never errors, so a broken plugin never breaks session start-up (04 §10.8).
+- Consumes: Tasks 1-11; P01 `ev_new(type, ...)`, `setting_get()`, `gptr_user_dir()`,
+  `workspace_dir()`, `project_root()`; P02 `ev_dispatch(event, payload, session = NULL, ctx = NULL)`
+  (collect semantics for `resources_discover`), `gptr_hook(event, handler, matcher = NULL)`,
+  `gptr_register(spec)`, `gptr_reload()`, `registry_generation()`; P08 `peter()`; test helpers
+  `local_gptr_options()`, `local_project()`, `local_fake_provider()`, `fake_requests()`.
+- Produces: `plugins_sync()` (enables the `plugins` setting's plugins at rank 3, a trusted project's
+  `.gptr/extensions/*.R` at rank 1 and the user's `extensions/*.R` at rank 3, and dispatches
+  `resources_discover` with `reason = "startup"` at the first sync and `"reload"` after
+  `gptr_reload()`, keeping the returned `skill_paths`, `prompt_paths` and `agent_paths` for the
+  roots of Tasks 2, 6 and 8); `ext_files(dir)`; the final `session_start` hooks of `builtin:skills`,
+  `builtin:prompts` and `builtin:agents` (each calls `plugins_sync()` before its own sync, for
+  top-level sessions only) and the `session_shutdown` hook of `builtin:skills`
+  (`skills_on_session_shutdown(event, ctx)`, which forgets the plugin table entries of the ended
+  session; P02 already dropped its records).
+
+Settings plugins come from P08's merged `plugins` setting (user file, and the project file only when
+trusted, 04 section 11.2); this L0 file reads settings only through `setting_get()` and cannot tell
+the layers apart, so all enable at the user rank 3 (04 section 10.1 lists rank 1 for plugins named
+in trusted project settings; recorded under "Contract readings"). Filter entries (`+x`, `-x`) in the
+`plugins` setting are not plugins and are skipped (filters have their own `filters` key). Every step
+is idempotent and failures become registry diagnostics, never errors, so a broken plugin never
+breaks session start-up (04 section 10.8).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4963,7 +5410,11 @@ test_that("filter entries in the plugins setting are not enabled as plugins", {
 Rscript --vanilla -e 'devtools::test(filter = "ext-plugins")'
 ```
 
-Expected: the 166 expectations of Tasks 1 and 9-11 pass; four new tests error with `could not find function "plugins_sync"`, the shutdown test with `could not find function "skills_on_session_shutdown"`, and the two hook tests fail because the `session_start` hooks do not enable settings plugins yet (`registry_get("command", "hook-tpl")` is `NULL`, and `start-skill` is missing from the end-to-end request's `t1`).
+Expected: the 166 expectations of Tasks 1 and 9-11 pass; four new tests error with
+`could not find function "plugins_sync"`, the shutdown test with
+`could not find function "skills_on_session_shutdown"`, and the two hook tests fail because the
+`session_start` hooks do not enable settings plugins yet (`registry_get("command", "hook-tpl")` is
+`NULL`, and `start-skill` is missing from the end-to-end request's `t1`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5147,7 +5598,9 @@ Rscript --vanilla -e 'devtools::test(filter = "ext-plugins")'
 Rscript --vanilla -e 'devtools::test(filter = "skill|subagent-defs")'
 ```
 
-Expected: the first prints `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 184 ]`; the second `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 260 ]` (skill-discover 99, skill-templates 104, subagent-defs 57: the changed hooks keep the earlier tests green).
+Expected: the first prints `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 184 ]`; the second
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 260 ]` (skill-discover 99, skill-templates 104, subagent-defs 57:
+the changed hooks keep the earlier tests green).
 
 - [ ] **Step 5: Commit**
 
@@ -5160,7 +5613,8 @@ git commit -m "feat(plugins): enable settings plugins and extension files at ses
 
 ## Plan acceptance
 
-Every acceptance check of 05 (P17), including its review amendments, with the task and test that prove it. Run the commands from the repository root after Task 12.
+Every acceptance check of 05 (P17), including its review amendments, with the task and test that
+prove it. Run the commands from the repository root after Task 12.
 
 | # | Acceptance check (05 P17) | Task and test | Command | Expected |
 |---|---|---|---|---|
@@ -5177,21 +5631,46 @@ Every acceptance check of 05 (P17), including its review amendments, with the ta
 | 4f | review addition: an untrusted project's skill is not in the catalog (IC-52) | Task 4, "trusted project skills enter the catalog; untrusted ones never do (IC-52)" and "an untrusted project's skill is not in the catalog of a session (e2e)"; Task 2, "an untrusted project's skills are listed as untrusted and never visible" | as 4c | as 4c |
 | 5 | M3 exit (P17 is the last M3 plan; run after Task 12, once P14-P16 are complete): NS-1 through the scripted console, NS-7 in `.R`, Rmd, qmd and ipynb, `/undo` and rewind, NS-10 skills and plugins and NS-12 pass on the fake provider; `devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")` clean | NS-1 (P14's acceptance 2), NS-7 (P15's acceptance 2), `/undo` and rewind (P16's acceptances 1 and 3), NS-10 (Tasks 10-11: the NS-10 test and the toy-package tests), NS-12 (P11's acceptance 3); steps in "Milestone gate (M3 exit, acceptance 5)" below | `Rscript --vanilla -e 'devtools::test()'`; `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'` | `FAIL 0 \| WARN 0`, skips limited to those P01-P17 name; `0 errors \| 0 warnings \| 1 note` (incoming feasibility) |
 
-The other review amendments of 05 P17 are covered as follows: IC-42 name normalisation for skills, plugins, extensions and agents (Task 1 `res_match()`; Tasks 4, 8, 9, 10 tests with `single_cell`, `stats_rev`, `clinical_trials`, `deploy_tools`, `p17-named`); IC-52 untrusted project skills and agents listed but not catalogued, and omitted non-interactively in `auto`/`edits` (Tasks 2, 4, 8: "non-interactive auto and edits runs omit untrusted project agents (IC-52)"); IC-68 `[skill:<name>/SKILL.md]` pseudo-paths (Tasks 3 and 4, the catalog line tests); IC-63 user and foreign-harness directories through `user_home()` (Tasks 2, 8, 9 build their paths with `user_home()`; their tests plant files under the redirected `HOME` of P01's `setup.R`); IC-69 session-scoped plugins and extensions (Task 10); IC-67 the high-performance-r skill states that `str()` makes the next edit of a large object copy (Task 3, "the shipped skill never recommends str() and states its cost (IC-67)"). The architecture checks that span plans also hold for P17's files: `Rscript --vanilla -e 'devtools::test(filter = "lint-rules|arch-layers")'` stays green (P01's tests: no left-arrow assignment, no `:::`, ASCII-only sources, `ext-plugins.R` calls only L0 functions and services, the L4 files only the extension API, L0, their own area and the kernel SDK).
+The other review amendments of 05 P17 are covered as follows: IC-42 name normalisation for skills,
+plugins, extensions and agents (Task 1 `res_match()`; Tasks 4, 8, 9, 10 tests with `single_cell`,
+`stats_rev`, `clinical_trials`, `deploy_tools`, `p17-named`); IC-52 untrusted project skills and
+agents listed but not catalogued, and omitted non-interactively in `auto`/`edits` (Tasks 2, 4, 8:
+"non-interactive auto and edits runs omit untrusted project agents (IC-52)"); IC-68
+`[skill:<name>/SKILL.md]` pseudo-paths (Tasks 3 and 4, the catalog line tests); IC-63 user and
+foreign-harness directories through `user_home()` (Tasks 2, 8, 9 build their paths with
+`user_home()`; their tests plant files under the redirected `HOME` of P01's `setup.R`); IC-69
+session-scoped plugins and extensions (Task 10); IC-67 the high-performance-r skill states that
+`str()` makes the next edit of a large object copy (Task 3, "the shipped skill never recommends
+str() and states its cost (IC-67)"). The architecture checks that span plans also hold for P17's
+files: `Rscript --vanilla -e 'devtools::test(filter = "lint-rules|arch-layers")'` stays green (P01's
+tests: no left-arrow assignment, no `:::`, ASCII-only sources, `ext-plugins.R` calls only L0
+functions and services, the L4 files only the extension API, L0, their own area and the kernel SDK).
 
 ## Milestone gate (M3 exit, acceptance 5)
 
-P17 is the last plan of M3 (P14-P17, executed in that order), and 05 gives each milestone's exit test to its last plan ("Exit test (last plan of the milestone)"; P13 runs M2's the same way), so this gate is P17's acceptance item 5 and runs after Task 12, once P14, P15 and P16 are complete (05: "M3 exit (once P14-P17 are complete)"). P17 itself depends only on P08 and P10; if it is executed before one of P14-P16, run these two steps when that plan is complete. The gate adds no code and no commit: a failure is fixed in the plan that owns the failing file.
+P17 is the last plan of M3 (P14-P17, executed in that order), and 05 gives each milestone's exit
+test to its last plan ("Exit test (last plan of the milestone)"; P13 runs M2's the same way), so
+this gate is P17's acceptance item 5 and runs after Task 12, once P14, P15 and P16 are complete (05:
+"M3 exit (once P14-P17 are complete)"). P17 itself depends only on P08 and P10; if it is executed
+before one of P14-P16, run these two steps when that plan is complete. The gate adds no code and no
+commit: a failure is fixed in the plan that owns the failing file.
 
 - [ ] **Step 1: Run the whole suite on the fake provider**
 
-NS-1 through the scripted console (P14's acceptance 2), NS-7 in `.R`, Rmd, qmd and ipynb (P15's acceptance 2), `/undo` and rewind (P16's acceptances 1 and 3: Task 8's console commands and Task 7's `gptr_rewind()` tests), NS-10 skills and plugins (this plan's Task 10 NS-10 test and Task 11's toy-package tests) and NS-12 (P11's acceptance 3) all pass on the fake provider:
+NS-1 through the scripted console (P14's acceptance 2), NS-7 in `.R`, Rmd, qmd and ipynb (P15's
+acceptance 2), `/undo` and rewind (P16's acceptances 1 and 3: Task 8's console commands and Task 7's
+`gptr_rewind()` tests), NS-10 skills and plugins (this plan's Task 10 NS-10 test and Task 11's
+toy-package tests) and NS-12 (P11's acceptance 3) all pass on the fake provider:
 
 ```bash
 Rscript --vanilla -e 'devtools::test()'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP n | PASS m ]`, with the `n` skips limited to those the plans P01-P17 name for the machine: the live tests without `GPTR_LIVE_TESTS=true`, P14's INFRA-03 test off CI, P15's Quarto cases without the Quarto CLI, platform skips such as P15's SIGTERM test on Windows, and the copy rows where `capabilities("profmem")` is missing. P17's own files add no skip (acceptance 1).
+Expected: `[ FAIL 0 | WARN 0 | SKIP n | PASS m ]`, with the `n` skips limited to those the plans
+P01-P17 name for the machine: the live tests without `GPTR_LIVE_TESTS=true`, P14's INFRA-03 test off
+CI, P15's Quarto cases without the Quarto CLI, platform skips such as P15's SIGTERM test on Windows,
+and the copy rows where `capabilities("profmem")` is missing. P17's own files add no skip
+(acceptance 1).
 
 - [ ] **Step 2: Run the full check**
 
@@ -5199,7 +5678,11 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP n | PASS m ]`, with the `n` skips limited to
 Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'
 ```
 
-Expected: `0 errors | 0 warnings | 1 note`, the note being the incoming-feasibility NOTE naming the maintainer (conventions §2; gptr 0.7.0 is on CRAN, so 1.0.0 is an update and gets no "New submission" NOTE), on the CI matrix of P01 (macOS, Windows, Linux, oldrel-4, no-suggests, `LC_ALL=C`). Under `--as-cran` the toy-package tests skip (`skip_on_cran()`), and the examples of `gptr_skills()`, `gptr_agents()` and `gptr_plugins()` only read files.
+Expected: `0 errors | 0 warnings | 1 note`, the note being the incoming-feasibility NOTE naming the
+maintainer (conventions section 2; gptr 0.7.0 is on CRAN, so 1.0.0 is an update and gets no "New
+submission" NOTE), on the CI matrix of P01 (macOS, Windows, Linux, oldrel-4, no-suggests,
+`LC_ALL=C`). Under `--as-cran` the toy-package tests skip (`skip_on_cran()`), and the examples of
+`gptr_skills()`, `gptr_agents()` and `gptr_plugins()` only read files.
 
 ## Self-review
 
@@ -5228,56 +5711,164 @@ Expected: `0 errors | 0 warnings | 1 note`, the note being the incoming-feasibil
 
 ### Placeholder scan
 
-The plan was searched for `TBD`, `TODO`, `implement later`, `fill in`, `appropriate error handling`, `handle edge cases`, `similar to Task` and for steps without code: none. Every function the code calls is defined in this plan or is a P01, P02, P06 (`session_data()`), P08 or P10 function or service of 04 (§7.0-§7.2, §7.8, §7.10, §12.2).
+The plan was searched for `TBD`, `TODO`, `implement later`, `fill in`, `appropriate error handling`,
+`handle edge cases`, `similar to Task` and for steps without code: none. Every function the code
+calls is defined in this plan or is a P01, P02, P06 (`session_data()`), P08 or P10 function or
+service of 04 (sections 7.0-7.2, 7.8, 7.10, 12.2).
 
 ### Type and name consistency with 04
 
-- Exports: `gptr_skills(scope = c("all", "project", "user", "packages"))`, `gptr_agents(scope = c("all", "project", "user", "packages"))`, `gptr_plugins(installed = FALSE)` (04 §6.3), with the listing classes and columns of 04 §5.12; `check_choice()`/`check_flag()` give `gptr_error_invalid_argument`.
-- Internal functions of 04 §7.17 with their exact signatures: `builtin_skills(gptr)`, `builtin_prompts(gptr)`, `builtin_agents(gptr)`, `skill_discover(scope = "all")`, `skill_parse(path)`, `template_expand(text, args)` (with the default `args = character()`), `agent_file_parse(path)`, `tool_name_map(names)`, `plugin_resolve(name)`, `plugin_enable(name, rank, session = NULL)`.
-- Services of 04 §7.0: `skill.catalog`, `skill.body`, `agent_def.get`, `plugin.enable`, `provided_by = "P17"`; consumed `trust.get` (fallback `FALSE`). Event `resources_discover` (collect; `cwd`, `reason`). Section `skills` (`T1`, `820L`, `1500L`). Option `gptr.skills_budget`. Conditions `invalid_argument`, `invalid_identifier`, `untrusted`, `invalid_spec`; warning `plugin` (field `diagnostic`); message `notice`.
-- Spec kinds and fields of 04 §10.2: `skill` (`description`, `path`, `dir`, `source`, `disable_model_invocation`, `allowed_tools`, `tokens`), `prompt_template` (`text`, `description`, `argument_hint`, `source`), `command` (`handler(args, ctx)`, `description`), `agent` (the `gptr_agent()` fields), `mcp_server` (04 §11.7 fields plus `transport`, `source`), `prompt_section`, `hook`. Extra fields (`version` of skills, `path`/`model`/`allowed_tools` of templates, `template` of commands, `source`/`trusted` of agents) rely on "validators accept unknown fields".
+- Exports: `gptr_skills(scope = c("all", "project", "user", "packages"))`,
+  `gptr_agents(scope = c("all", "project", "user", "packages"))`, `gptr_plugins(installed = FALSE)`
+  (04 section 6.3), with the listing classes and columns of 04 section 5.12;
+  `check_choice()`/`check_flag()` give `gptr_error_invalid_argument`.
+- Internal functions of 04 section 7.17 with their exact signatures: `builtin_skills(gptr)`,
+  `builtin_prompts(gptr)`, `builtin_agents(gptr)`, `skill_discover(scope = "all")`,
+  `skill_parse(path)`, `template_expand(text, args)` (with the default `args = character()`),
+  `agent_file_parse(path)`, `tool_name_map(names)`, `plugin_resolve(name)`,
+  `plugin_enable(name, rank, session = NULL)`.
+- Services of 04 section 7.0: `skill.catalog`, `skill.body`, `agent_def.get`, `plugin.enable`,
+  `provided_by = "P17"`; consumed `trust.get` (fallback `FALSE`). Event `resources_discover`
+  (collect; `cwd`, `reason`). Section `skills` (`T1`, `820L`, `1500L`). Option `gptr.skills_budget`.
+  Conditions `invalid_argument`, `invalid_identifier`, `untrusted`, `invalid_spec`; warning `plugin`
+  (field `diagnostic`); message `notice`.
+- Spec kinds and fields of 04 section 10.2: `skill` (`description`, `path`, `dir`, `source`,
+  `disable_model_invocation`, `allowed_tools`, `tokens`), `prompt_template` (`text`, `description`,
+  `argument_hint`, `source`), `command` (`handler(args, ctx)`, `description`), `agent` (the
+  `gptr_agent()` fields), `mcp_server` (04 section 11.7 fields plus `transport`, `source`),
+  `prompt_section`, `hook`. Extra fields (`version` of skills, `path`/`model`/`allowed_tools` of
+  templates, `template` of commands, `source`/`trusted` of agents) rely on "validators accept
+  unknown fields".
 
-Contract readings (where 04, 03 or a dependency plan is ambiguous; the reading most consistent with 04 §15 was implemented):
+Contract readings (where 04, 03 or a dependency plan is ambiguous; the reading most consistent with
+04 section 15 was implemented):
 
-1. `plugin.enable` is owned by `builtin:skills`: 04 §7.17 lists it among the services the three built-ins register and IC-34 says every service is owned by a built-in. Consequence: a `-builtin:skills` filter makes `peter(plugins =)` signal `gptr_error_not_available`.
-2. `skill.body` returns `list(text, dir, name)` and accepts an optional `session`: 04 fixes `function(name) list(text, dir)`; `name` (the canonical name after IC-42 normalisation) is additive.
-3. 04 §6.3 says `gptr_skills()`/`gptr_agents()` "with a `tokens` column"; §5.12 fixes the `gptr_agents` columns without it, and agents are in no prompt catalog, so only `gptr_skills()` has `tokens`.
-4. 04 §10.1 gives rank 1 to plugins named in *trusted project* settings; `ext-plugins.R` is L0 and reads settings only through `setting_get()` (merged layers), so settings plugins enable at rank 3.
-5. 04 §10.1 says project extension files are "re-read by `gptr_reload()`". P02's `gptr_reload()` keeps an eager factory's records and P02 has no per-extension unload (its `ext_unload(source)` removes a whole source such as `project`), so a re-run would add records shadowed by the first run's. P17 loads each extension file once per path, rank and session; declarative resources and plugin manifests are re-read after a reload, as 04 §6.7 requires. Recorded for P02/P25 (a per-extension unload in a later API version would close this).
-6. Untrusted projects' prompt templates are not registered: 04 §10.1 lists only *trusted* project resources at rank 1, and IC-54 classes `.gptr/prompts/` with the instruction files.
-7. P17's process state lives in `the$resources`, a field not in 04 §7.0's table, created lazily like P08's `the$gateway`; it holds configuration only (INFRA-15).
-8. Name normalisation uses `res_norm()` (identical to P08's `name_norm()`), because L0 and L4 files may not call the L6 file that defines `name_norm()` (03 §2.2).
-9. 03 §11.1 names `reviewer` and `explorer` as `builtin:agents` built-ins; 03 §3.3 gives `inst/gptr/agents/reviewer.md`, `explorer.md` to P19. `builtin:agents` discovers whatever `inst/gptr/agents/` holds (rank 6), so they appear once P19 ships them.
-10. Report 16 section 4.8 proposes a `skill` tool, an `<available_skills>` format, a `max(8000 characters, 1%)` budget and plugin skills named `plugin:skill`; 04 (IC-68) supersedes them with activation through `read`, the compact catalog and 1,500 tokens, and the `skill` validator forbids `:` in names, so plugin skills keep their own names while Claude plugin commands become `<plugin>:<cmd>` (04 §11.12). `allowed-tools` is stored as written (mapping it would need `tool_name_map()` from the `subagent` area).
-11. `gptr_plugins(installed = FALSE)` also lists installed Claude Code plugins (read-only, from `~/.claude/plugins/installed_plugins.json` under `user_home()`), reading 04 §6.3's ".claude-plugin bundles" as the bundles visible to this R process.
-12. 05's "the 37-skill corpus of report 05" was the researcher's local skill folders, not shipped in `dev/research/assets/`; the test builds 37 skills in the styles the report measured.
-13. Claude's `permissionMode` maps to gptr modes (`bypassPermissions`/`dontAsk` -> `auto`); children only tighten their parent's mode (04 §6.1), so an agent file cannot loosen a run.
-14. P10's plan was still being written; P17 relies only on what 04 fixes for P10: `read` resolves `skill:<name>/<path>` through `skill.body` (P10's header says so), `ns_catalog()` builds the `plugins` section, including manifest `declarations` of lazy plugins.
-15. `tool_name_map()` also maps Claude's `AskUserQuestion` to `ask` (report 15 section 4.10), an addition to the 04 §7.17 table.
-16. No dependency plan deviates from 04 in what P17 consumes. Observations: P08's `gateway_skill_blocks()` labels a preload with the name as requested (`single_cell`), not the canonical name; P02's `gptr_registry()` omits session-scoped records, so session-scoped tests use `registry_get(..., session =)`.
-17. 03 §11.1 lists "skills" among the built-in `search_source` records, while 04 §7.0 names P10's `peter$search()` as a consumer of the `skill.catalog` service and 04 §10.3 lists no search source for `builtin:skills`. P10's `member_search()` combines every `search_source` with the documents it parses from `skill.catalog`, so a P17 `skills` search source would list each skill twice (ids `skill:<name>` and `<name>`), spending two of the eight result slots. 04 wins: `builtin:skills` registers no search source, and skills are searchable through `skill.catalog`.
-18. 04 §11.12 names Claude plugin commands `/<plugin>:<cmd>`; P14's `command_parse()` reads `/<name>:<sub> args` as the command `<name>` with the arguments `<sub> args` (the grammar of `/skill:<name>`). Both readings hold because P17 registers the full-name commands and one dispatcher command `<plugin>` per Claude plugin (skipped with a `collision` diagnostic when that name is already a command).
-19. 04 §6.3 says `gptr_plugins(installed = TRUE)` "scans installed packages for `Config/gptr/plugin` or `inst/gptr/plugin.json` (one vectorised `dir.exists()`; loads nothing)". A `dir.exists()` scan can only see `inst/gptr/`; reading every installed `DESCRIPTION` for the `Config/gptr/plugin` flag would break that cost bound. So the scan lists packages with `inst/gptr/`, and a package that only sets the flag is found by name (`plugin_resolve()` reads its `DESCRIPTION`).
-20. P19's `worker_registry_apply()` re-enables the parent's plugins with `plugins_enabled()$name`. A directory plugin outside the project (`plugins = "/path/to/dir"`) is resolvable by its path, not by its name, so P19 should pass `$path` (recorded for P19; `plugins_enabled()` returns both columns).
+1. `plugin.enable` is owned by `builtin:skills`: 04 section 7.17 lists it among the services the
+   three built-ins register and IC-34 says every service is owned by a built-in. Consequence: a
+   `-builtin:skills` filter makes `peter(plugins =)` signal `gptr_error_not_available`.
+2. `skill.body` returns `list(text, dir, name)` and accepts an optional `session`: 04 fixes
+   `function(name) list(text, dir)`; `name` (the canonical name after IC-42 normalisation) is
+   additive.
+3. 04 section 6.3 says `gptr_skills()`/`gptr_agents()` "with a `tokens` column"; section 5.12 fixes
+   the `gptr_agents` columns without it, and agents are in no prompt catalog, so only
+   `gptr_skills()` has `tokens`.
+4. 04 section 10.1 gives rank 1 to plugins named in *trusted project* settings; `ext-plugins.R` is
+   L0 and reads settings only through `setting_get()` (merged layers), so settings plugins enable at
+   rank 3.
+5. 04 section 10.1 says project extension files are "re-read by `gptr_reload()`". P02's
+   `gptr_reload()` keeps an eager factory's records and P02 has no per-extension unload (its
+   `ext_unload(source)` removes a whole source such as `project`), so a re-run would add records
+   shadowed by the first run's. P17 loads each extension file once per path, rank and session;
+   declarative resources and plugin manifests are re-read after a reload, as 04 section 6.7
+   requires. Recorded for P02/P25 (a per-extension unload in a later API version would close this).
+6. Untrusted projects' prompt templates are not registered: 04 section 10.1 lists only *trusted*
+   project resources at rank 1, and IC-54 classes `.gptr/prompts/` with the instruction files.
+7. P17's process state lives in `the$resources`, a field not in 04 section 7.0's table, created
+   lazily like P08's `the$gateway`; it holds configuration only (INFRA-15).
+8. Name normalisation uses `res_norm()` (identical to P08's `name_norm()`), because L0 and L4 files
+   may not call the L6 file that defines `name_norm()` (03 section 2.2).
+9. 03 section 11.1 names `reviewer` and `explorer` as `builtin:agents` built-ins; 03 section 3.3
+   gives `inst/gptr/agents/reviewer.md`, `explorer.md` to P19. `builtin:agents` discovers whatever
+   `inst/gptr/agents/` holds (rank 6), so they appear once P19 ships them.
+10. Report 16 section 4.8 proposes a `skill` tool, an `<available_skills>` format, a
+    `max(8000 characters, 1%)` budget and plugin skills named `plugin:skill`; 04 (IC-68) supersedes
+    them with activation through `read`, the compact catalog and 1,500 tokens, and the `skill`
+    validator forbids `:` in names, so plugin skills keep their own names while Claude plugin
+    commands become `<plugin>:<cmd>` (04 section 11.12). `allowed-tools` is stored as written
+    (mapping it would need `tool_name_map()` from the `subagent` area).
+11. `gptr_plugins(installed = FALSE)` also lists installed Claude Code plugins (read-only, from
+    `~/.claude/plugins/installed_plugins.json` under `user_home()`), reading 04 section 6.3's
+    ".claude-plugin bundles" as the bundles visible to this R process.
+12. 05's "the 37-skill corpus of report 05" was the researcher's local skill folders, not shipped in
+    `dev/research/assets/`; the test builds 37 skills in the styles the report measured.
+13. Claude's `permissionMode` maps to gptr modes (`bypassPermissions`/`dontAsk` -> `auto`); children
+    only tighten their parent's mode (04 section 6.1), so an agent file cannot loosen a run.
+14. P10's plan was still being written; P17 relies only on what 04 fixes for P10: `read` resolves
+    `skill:<name>/<path>` through `skill.body` (P10's header says so), `ns_catalog()` builds the
+    `plugins` section, including manifest `declarations` of lazy plugins.
+15. `tool_name_map()` also maps Claude's `AskUserQuestion` to `ask` (report 15 section 4.10), an
+    addition to the 04 section 7.17 table.
+16. No dependency plan deviates from 04 in what P17 consumes. Observations: P08's
+    `gateway_skill_blocks()` labels a preload with the name as requested (`single_cell`), not the
+    canonical name; P02's `gptr_registry()` omits session-scoped records, so session-scoped tests
+    use `registry_get(..., session =)`.
+17. 03 section 11.1 lists "skills" among the built-in `search_source` records, while 04 section 7.0
+    names P10's `peter$search()` as a consumer of the `skill.catalog` service and 04 section 10.3
+    lists no search source for `builtin:skills`. P10's `member_search()` combines every
+    `search_source` with the documents it parses from `skill.catalog`, so a P17 `skills` search
+    source would list each skill twice (ids `skill:<name>` and `<name>`), spending two of the eight
+    result slots. 04 wins: `builtin:skills` registers no search source, and skills are searchable
+    through `skill.catalog`.
+18. 04 section 11.12 names Claude plugin commands `/<plugin>:<cmd>`; P14's `command_parse()` reads
+    `/<name>:<sub> args` as the command `<name>` with the arguments `<sub> args` (the grammar of
+    `/skill:<name>`). Both readings hold because P17 registers the full-name commands and one
+    dispatcher command `<plugin>` per Claude plugin (skipped with a `collision` diagnostic when that
+    name is already a command).
+19. 04 section 6.3 says `gptr_plugins(installed = TRUE)` "scans installed packages for
+    `Config/gptr/plugin` or `inst/gptr/plugin.json` (one vectorised `dir.exists()`; loads nothing)".
+    A `dir.exists()` scan can only see `inst/gptr/`; reading every installed `DESCRIPTION` for the
+    `Config/gptr/plugin` flag would break that cost bound. So the scan lists packages with
+    `inst/gptr/`, and a package that only sets the flag is found by name (`plugin_resolve()` reads
+    its `DESCRIPTION`).
+20. P19's `worker_registry_apply()` re-enables the parent's plugins with `plugins_enabled()$name`. A
+    directory plugin outside the project (`plugins = "/path/to/dir"`) is resolvable by its path, not
+    by its name, so P19 should pass `$path` (recorded for P19; `plugins_enabled()` returns both
+    columns).
 
 ### Validation executed
 
-- A scratch namespace was assembled from the R code of P01 and P02 extracted from their plan files (455 top-level definitions, keeping each name's last definition), small stand-ins for the P06/P08 functions P17's tests touch (`session_data()`, `gptr_trust()`/`trust_get()` with the IC-52 fingerprint of the gated files, `resolve_identifier()` with IC-42 matching, P01's `local_project()` and `local_gptr_options()`), then P17's four files (`.onLoad` evaluated their `on_load()` declarations). With testthat 3.3.2, yaml 2.3.12 and `NOT_CRAN=true`: 80 test blocks, 409 expectations passed, 0 failed; the 6 end-to-end tests that need the real `peter()` (P06-P10) were skipped by the stand-in, and the toy-package test installed `gptrpanel` into a temporary library, listed it without loading it, and failed only at activation because gptr itself is not an installed package in the scratch (`there is no package called 'gptr'`; P02's rollback, diagnostic and `plugin` warning were observed). The expectation counts of the end-to-end tests (4, 3 + 8, 1 + 5, 2) were added to give the counts above.
-- Each task's red and green states were run separately (cumulative code and tests per task), which gave the PASS counts of Steps 2 and 4.
-- The template oracle passes 67 of 67 under UTF-8 and `LC_ALL=C`; the fixture was compared case by case with report 05's prototype: 67 of 67 identical.
-- `lintr` 3.3.0.1 with the repository settings (`assignment_linter(operator = c("=", "<<-"))`, `line_length_linter(100)`, snake_case) on the four R files and every test part: 0 lints. All R and test sources and shipped files are ASCII.
-- Every R block of this plan was extracted and parsed with `parse(file = <f>)`: the 29 R code blocks and the 18 R recipes inside the shipped skill files, 47 in all, with no parse error; the plan contains no left-arrow assignment and no magrittr pipe in code.
-- The 125 top-level names P17 defines were compared with every top-level definition in the existing plan files (P01-P11, P14, P21): no collision.
-- Review round (see "Plan review log"): the counts of Steps 2 and 4 and of "Plan acceptance" were updated for the review changes (ext-plugins +9, skill-discover -1, skill-templates +4). The 29 R blocks were extracted again and parsed (0 errors, 0 `LEFT_ASSIGN` tokens, lintr with the repository linters: 0 lints, all ASCII, no line over 100 characters). Against stand-ins for the P01/P02 helpers (the P01 code copied from its plan; a minimal registry with session scoping), these test blocks were run with testthat 3.3.2 and yaml 2.3.12: Task 1 (67 expectations), Task 2 (33), Task 3 with the shipped files extracted from this plan (31), Task 5 under UTF-8 and `LC_ALL=C` (77 each), the Task 6 tests "template_parse reads ..." and "Claude plugin commands are ..." (10), Task 7 (31), Task 9 (15), and the Task 10 tests "a .claude-plugin bundle contributes ..." (11), "plugin_mcp_specs reads ..." (2), "a plugin whose records were removed ..." (4), "missing rDepends ..." (2) and "plugin_enable is idempotent ..." (5): all passed. The catalog trimming of Task 4 was simulated with 31 skills (budget 600: `lru-07` keeps its description, `lru-30` is bare; budget 120: 110 estimated tokens with the `(25 more skills: ...)` line). The toy package of Task 11 was installed from the plan's `toy_package()` into a temporary library (0.6 s; `Config/gptr/plugin: true` and `gptr/plugin.json` present after installation).
+- A scratch namespace was assembled from the R code of P01 and P02 extracted from their plan files
+  (455 top-level definitions, keeping each name's last definition), small stand-ins for the P06/P08
+  functions P17's tests touch (`session_data()`, `gptr_trust()`/`trust_get()` with the IC-52
+  fingerprint of the gated files, `resolve_identifier()` with IC-42 matching, P01's
+  `local_project()` and `local_gptr_options()`), then P17's four files (`.onLoad` evaluated their
+  `on_load()` declarations). With testthat 3.3.2, yaml 2.3.12 and `NOT_CRAN=true`: 80 test blocks,
+  409 expectations passed, 0 failed; the 6 end-to-end tests that need the real `peter()` (P06-P10)
+  were skipped by the stand-in, and the toy-package test installed `gptrpanel` into a temporary
+  library, listed it without loading it, and failed only at activation because gptr itself is not an
+  installed package in the scratch (`there is no package called 'gptr'`; P02's rollback, diagnostic
+  and `plugin` warning were observed). The expectation counts of the end-to-end tests (4, 3 + 8, 1 +
+  5, 2) were added to give the counts above.
+- Each task's red and green states were run separately (cumulative code and tests per task), which
+  gave the PASS counts of Steps 2 and 4.
+- The template oracle passes 67 of 67 under UTF-8 and `LC_ALL=C`; the fixture was compared case by
+  case with report 05's prototype: 67 of 67 identical.
+- `lintr` 3.3.0.1 with the repository settings (`assignment_linter(operator = c("=", "<<-"))`,
+  `line_length_linter(100)`, snake_case) on the four R files and every test part: 0 lints. All R and
+  test sources and shipped files are ASCII.
+- Every R block of this plan was extracted and parsed with `parse(file = <f>)`: the 29 R code blocks
+  and the 18 R recipes inside the shipped skill files, 47 in all, with no parse error; the plan
+  contains no left-arrow assignment and no magrittr pipe in code.
+- The 125 top-level names P17 defines were compared with every top-level definition in the existing
+  plan files (P01-P11, P14, P21): no collision.
+- Review round (see "Plan review log"): the counts of Steps 2 and 4 and of "Plan acceptance" were
+  updated for the review changes (ext-plugins +9, skill-discover -1, skill-templates +4). The 29 R
+  blocks were extracted again and parsed (0 errors, 0 `LEFT_ASSIGN` tokens, lintr with the
+  repository linters: 0 lints, all ASCII, no line over 100 characters). Against stand-ins for the
+  P01/P02 helpers (the P01 code copied from its plan; a minimal registry with session scoping),
+  these test blocks were run with testthat 3.3.2 and yaml 2.3.12: Task 1 (67 expectations), Task 2
+  (33), Task 3 with the shipped files extracted from this plan (31), Task 5 under UTF-8 and
+  `LC_ALL=C` (77 each), the Task 6 tests "template_parse reads ..." and "Claude plugin commands are
+  ..." (10), Task 7 (31), Task 9 (15), and the Task 10 tests "a .claude-plugin bundle contributes
+  ..." (11), "plugin_mcp_specs reads ..." (2), "a plugin whose records were removed ..." (4),
+  "missing rDepends ..." (2) and "plugin_enable is idempotent ..." (5): all passed. The catalog
+  trimming of Task 4 was simulated with 31 skills (budget 600: `lru-07` keeps its description,
+  `lru-30` is bare; budget 120: 110 estimated tokens with the `(25 more skills: ...)` line). The toy
+  package of Task 11 was installed from the plan's `toy_package()` into a temporary library (0.6 s;
+  `Config/gptr/plugin: true` and `gptr/plugin.json` present after installation).
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 00-conventions, 04 (with §15), 05 P17, the dependency plans P01, P02, P07, P08 and P10, and the consumers P09, P14 and P19, plus research reports 05, 15, 16, 19, G1 and G2 (verification logs first). Every R block was extracted again and parsed, and the self-contained code and tests were run against stand-ins (see "Validation executed").
+Adversarial review of 2026-10-01 against 00-conventions, 04 (with section 15), 05 P17, the
+dependency plans P01, P02, P07, P08 and P10, and the consumers P09, P14 and P19, plus research
+reports 05, 15, 16, 19, G1 and G2 (verification logs first). Every R block was extracted again and
+parsed, and the self-contained code and tests were run against stand-ins (see "Validation
+executed").
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| 1 | major | Task 4 `builtin_skills()`, `skills_search_docs()` and their test; Task 12 (both copies of `builtin_skills()`); File Structure; Self-review | `builtin:skills` registered a `skills` `search_source`, while P10's `member_search()` already indexes skills from the `skill.catalog` service (04 §7.0 names P10's `peter$search()` as its consumer). Every skill appeared twice in `peter$search()` results (ids `skill:<name>` and `<name>`), costing result slots and tokens; 04 §10.3 lists no search source for `builtin:skills`. | applied | Removed `skills_search_docs()` and the registration; the Task 4 test now asserts that no `skills` search source exists; interfaces, File Structure, type list and contract reading 17 updated; skill-discover count 100 -> 99. |
-| 2 | major | Task 6 `template_command_specs()` | Claude plugin commands were registered only as `<plugin>:<cmd>`, but P14's `command_parse()` reads `/<plugin>:<cmd> args` as the command `<plugin>` with the arguments `<cmd> args` (its `/skill:<name>` grammar), so no Claude plugin command could be run from the console (04 §11.12, acceptance 4). | applied | New `template_plugin_dispatcher()` and `template_dispatch_handler()`: one extra command named after the plugin runs `<cmd>` with the rest of the arguments (a name that is already a command is skipped with a `collision` diagnostic); the full-name commands stay. New Task 6 test "Claude plugin commands are /<plugin>:<cmd>, also reachable as /<plugin> <cmd>" and a dispatcher assertion in the Task 10 bundle test; prose, interfaces, acceptance 4a and contract reading 18 updated. |
+| 1 | major | Task 4 `builtin_skills()`, `skills_search_docs()` and their test; Task 12 (both copies of `builtin_skills()`); File Structure; Self-review | `builtin:skills` registered a `skills` `search_source`, while P10's `member_search()` already indexes skills from the `skill.catalog` service (04 section 7.0 names P10's `peter$search()` as its consumer). Every skill appeared twice in `peter$search()` results (ids `skill:<name>` and `<name>`), costing result slots and tokens; 04 section 10.3 lists no search source for `builtin:skills`. | applied | Removed `skills_search_docs()` and the registration; the Task 4 test now asserts that no `skills` search source exists; interfaces, File Structure, type list and contract reading 17 updated; skill-discover count 100 -> 99. |
+| 2 | major | Task 6 `template_command_specs()` | Claude plugin commands were registered only as `<plugin>:<cmd>`, but P14's `command_parse()` reads `/<plugin>:<cmd> args` as the command `<plugin>` with the arguments `<cmd> args` (its `/skill:<name>` grammar), so no Claude plugin command could be run from the console (04 section 11.12, acceptance 4). | applied | New `template_plugin_dispatcher()` and `template_dispatch_handler()`: one extra command named after the plugin runs `<cmd>` with the rest of the arguments (a name that is already a command is skipped with a `collision` diagnostic); the full-name commands stay. New Task 6 test "Claude plugin commands are /<plugin>:<cmd>, also reachable as /<plugin> <cmd>" and a dispatcher assertion in the Task 10 bundle test; prose, interfaces, acceptance 4a and contract reading 18 updated. |
 | 3 | minor | Task 6 `template_specs()`, `template_dir_specs()`, `template_command_specs()`, `template_sync()` | Every template carried `source = "user"`, including plugin and built-in templates, unlike skills and agents (`plugin:<name>`). | applied | `template_specs()` gains `source = NULL`; plugin handlers pass `plugin:<name>`, `template_sync()` passes its group (`project`, `user`, `builtin:prompts`, `plugin:<pkg>`); covered by the new Task 6 test. |
 | 4 | minor | Task 10 `plugin_mcp_specs()` | A Claude manifest's `mcpServers` given as a path to a JSON file (a Claude component key) was ignored; only `.mcp.json` and inline objects were read. | applied | A string `mcpServers` adds its files to `.mcp.json` for Claude bundles and replaces `mcp.json` for gptr plugins (as before); new Task 10 test "plugin_mcp_specs reads .mcp.json and a manifest mcpServers path of Claude bundles". |
 | 5 | minor | Task 10 `plugin_enable()` | `plugins = "gptr"` (documented as a no-op) failed under `devtools::test()`/`load_all()`: `plugin_resolve()` runs first and a source tree has no installed `gptr/` directory or plugin flag. | applied | The no-op check runs before resolution (`res_norm(name) == "gptr"`); assertion added to "plugin_enable is idempotent ...". |
@@ -5286,20 +5877,26 @@ Adversarial review of 2026-10-01 against 00-conventions, 04 (with §15), 05 P17,
 | 8 | minor | Task 3 SKILL.md rule 4 | "On R < 4.6.1 ..." stated as fact that R 4.6.1 fixes the `dyn.load()` crash; report 19's verification log (row 12) downgraded that to LIKELY (reproduced only on R 4.4). | applied | Reworded to "In R 4.4 (and, probably, every release before 4.6.1) ..."; Task 3 prose lists the change. |
 | 9 | minor | Task 3 prose | "non-ASCII characters are written as `ï` inside R strings" was garbled (and itself non-ASCII); the recipe uses `ï`. | applied | Prose now says `ï` escapes. |
 | 10 | minor | Task 10 interfaces; Self-review | P19's `worker_registry_apply()` re-enables the parent's plugins by `plugins_enabled()$name`; a directory plugin outside the project resolves only by its path, so a worker could not enable it. | applied | P17 cannot edit P19: documented in Task 10's interfaces (consumers pass `path`) and as contract reading 20 for P19. |
-| 11 | minor | Task 11 `plugin_candidates()`; Self-review | 04 §6.3 says `installed = TRUE` finds packages by `Config/gptr/plugin` or `inst/gptr/plugin.json` with "one vectorised `dir.exists()`"; such a scan cannot see a flag-only package. | applied | Recorded as contract reading 19 (the scan lists packages with `inst/gptr/`; a flag-only package is found by name through `plugin_resolve()`). |
+| 11 | minor | Task 11 `plugin_candidates()`; Self-review | 04 section 6.3 says `installed = TRUE` finds packages by `Config/gptr/plugin` or `inst/gptr/plugin.json` with "one vectorised `dir.exists()`"; such a scan cannot see a flag-only package. | applied | Recorded as contract reading 19 (the scan lists packages with `inst/gptr/`; a flag-only package is found by name through `plugin_resolve()`). |
 | 12 | minor | Steps 2 and 4 of Tasks 1, 4, 6, 9-12; "Plan acceptance"; "Validation executed" | Expectation counts had to follow the changes above. | applied | ext-plugins 175 -> 184, skill-discover 100 -> 99, skill-templates 100 -> 104, subagent-defs 57; acceptance 1: 444; 4c: 283; Task 12's second command: 260. |
-| 13 | minor | Task 10 `plugin_file_factory()` | Extension files are evaluated in `new.env(parent = globalenv())`. | rejected | Nothing is written to the global environment (conventions §4 forbids writes, not lookups); extension files need the search path, and P08's `gateway_extension_file()` evaluates them the same way. |
+| 13 | minor | Task 10 `plugin_file_factory()` | Extension files are evaluated in `new.env(parent = globalenv())`. | rejected | Nothing is written to the global environment (conventions section 4 forbids writes, not lookups); extension files need the search path, and P08's `gateway_extension_file()` evaluates them the same way. |
 | 14 | minor | Task 12 `plugins_sync()` | It runs up to three times per session start (once in each built-in's `session_start` hook). | rejected | Every step is idempotent and cheap (table lookups, two file listings); one shared hook would couple three built-ins that `-builtin:<name>` filters can disable independently. |
 | 15 | minor | Task 4 `skill_body()` | For an untrusted project's skill named in `skills =`, IC-52 says project skills are "omitted with a notice" in non-interactive `auto`/`edits` runs; `skill.body` signals `gptr_error_untrusted` instead. | rejected | IC-52's omission is about discovery and the catalog, which never show untrusted skills; an explicit preload of one gets a classed error naming `gptr_trust()`, and P08, P09 and P10 consume `skill.body` as `function(name) list(text, dir)` with no "omitted" value. |
-| 16 | minor | Tasks 2 and 8 `gptr_skills()`, `gptr_agents()` | 04 §6.3 says "No side effects", but both fill P17's parse cache and may append registry diagnostics. | rejected | In-memory caches and diagnostics only; no file, option, registry record or trust decision changes. |
-| 17 | minor | Task 8 `agent_sync()` | Untrusted project agents are registered at rank 1 with source `project`, although 04 §10.1 lists *trusted* project resources at rank 1. | rejected | 04 §6.2 keeps untrusted agents usable without `model` and `tools`; the plan never lets them shadow an agent of another origin, so the rank cannot override anything. |
+| 16 | minor | Tasks 2 and 8 `gptr_skills()`, `gptr_agents()` | 04 section 6.3 says "No side effects", but both fill P17's parse cache and may append registry diagnostics. | rejected | In-memory caches and diagnostics only; no file, option, registry record or trust decision changes. |
+| 17 | minor | Task 8 `agent_sync()` | Untrusted project agents are registered at rank 1 with source `project`, although 04 section 10.1 lists *trusted* project resources at rank 1. | rejected | 04 section 6.2 keeps untrusted agents usable without `model` and `tools`; the plan never lets them shadow an agent of another origin, so the rank cannot override anything. |
 | 18 | minor | Task 2 `skill_collect()` | The listing's `visible` column follows discovery order on a rank tie, while the registry's tie-break is registration order (groups register alphabetically). | rejected | A cosmetic listing difference in a tie that P02 already reports as a `collision` diagnostic. |
-| 19 | minor | Task 4 `skill_catalog()` | Descriptions enter the T1 prompt unescaped (a description could contain `</skills>`). | rejected | Only user, package and trusted-project skills reach the catalog (IC-52), whitespace is collapsed to one line, and 03 §7.3/IC-68 fix the compact unescaped format byte for byte. |
-| 20 | minor | Task 8 `agent_roots()` | Report 15 reads only the nearest `.pi/agents`, `.claude/agents` and `.gptr/agents`; the plan reads every existing one from the working directory up to the project root. | rejected | A superset in the same precedence (nearest first, lower rank wins), consistent with the skill roots of 04 §7.17 and report 16 section 4.8. |
+| 19 | minor | Task 4 `skill_catalog()` | Descriptions enter the T1 prompt unescaped (a description could contain `</skills>`). | rejected | Only user, package and trusted-project skills reach the catalog (IC-52), whitespace is collapsed to one line, and 03 section 7.3/IC-68 fix the compact unescaped format byte for byte. |
+| 20 | minor | Task 8 `agent_roots()` | Report 15 reads only the nearest `.pi/agents`, `.claude/agents` and `.gptr/agents`; the plan reads every existing one from the working directory up to the project root. | rejected | A superset in the same precedence (nearest first, lower rank wins), consistent with the skill roots of 04 section 7.17 and report 16 section 4.8. |
 
 ## Cross-plan consolidation log
 
-Cross-plan consolidation of 2026-10-01 against 04 (with §15), 05 (milestone table and P17 acceptance 5), 00-conventions §2 and the related plans P01, P11, P13, P14, P15 and P16. Verification after the change: every R code block of this plan was extracted again and parsed with `Rscript --vanilla` (`parse(file = <f>)`): 47 blocks (29 plan blocks and the 18 recipes of the shipped skill files), 0 parse errors, no left-arrow assignment and no magrittr pipe in code. No R code or test changed, so the expectation counts of Tasks 1-12 and of acceptance rows 1-4f are unchanged.
+Cross-plan consolidation of 2026-10-01 against 04 (with section 15), 05 (milestone table and P17
+acceptance 5), 00-conventions section 2 and the related plans P01, P11, P13, P14, P15 and P16.
+Verification after the change: every R code block of this plan was extracted again and parsed with
+`Rscript --vanilla` (`parse(file = <f>)`): 47 blocks (29 plan blocks and the 18 recipes of the
+shipped skill files), 0 parse errors, no left-arrow assignment and no magrittr pipe in code. No R
+code or test changed, so the expectation counts of Tasks 1-12 and of acceptance rows 1-4f are
+unchanged.
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|

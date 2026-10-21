@@ -79,7 +79,8 @@ cledit and a tty gets `" ,;!"` and restores `" ,;"`; the old front-end exclusion
 to model an IDE console as `tty = FALSE`; `front_end()` with `RSTUDIO=1` + tty is `"terminal"`,
 without tty `"rstudio"`; the reader's readline is not `identical()` to `base::readline` but has
 its formals and body. Spec: 03 section 6.17 (REPL completion bullet), 03 section 6.2 (IDE
-terminal tabs have the pause menu). Commit: `fix(console): treat IDE terminal tabs as terminals and complete !code everywhere`.
+terminal tabs have the pause menu).
+Commit: `fix(console): treat IDE terminal tabs as terminals and complete !code everywhere`.
 
 ### Task 2: A pasted block is one message; stale input never answers a question (#11, D-184, IC-75)
 
@@ -92,9 +93,9 @@ Decisions (skeptic-corrected):
   chunk without newline) and splitting on `\r\n|\r|\n`. Waiting lines join the input; a dim
   `(pasted: Enter sends it as one message)` hint and one `... ` read follow, where Enter alone
   sends and typed text is appended. `"""` blocks and fences take their lines from the waiting
-  lines before `... ` (Task 19, D-220). Long prompts (over
-  200 bytes; R keeps 255) are printed whole and read after `> ` (moved here from Task 6). Piped `.stdin = TRUE`
-  stays line-based. Linux and other front ends are documented ("use `\"\"\"`"); no inputrc tip.
+  lines before `... ` (Task 19, D-220). Long prompts (over 200 bytes; R keeps 255) are printed whole
+  and read after `> ` (moved here from Task 6). Piped `.stdin = TRUE` stays line-based. Linux and
+  other front ends are documented ("use `\"\"\"`"); no inputrc tip.
 - Stale answers, every front end: `gptr_readline()` records the duration of its `readline()` in
   `the$readline_secs` (timed with `proc.time()[["elapsed"]]`); `readline_answer(prompt)` re-reads
   while an interactive answer arrived in under 0.1 s, at most 100 reads, then returns the last.
@@ -110,10 +111,11 @@ Tests (`test-console-repl.R`, `test-console-ui.R`, `test-utils-options.R`,
 lines; paste without final newline completed at `... `; `!x = 1` plus waiting `y = 2`; `"""` and
 fences take the waiting lines (Task 19); stdin reader never polls; readline-limit line drops the
 waiting lines; stale `h$config$codex` and `y` skipped then `n` denies; `readline_answer()`
-bounded; acceptance: 3 pasted lines give 1 fake request; a `skip_on_cran()` macOS pty child: paste is one turn, Ctrl-D
-after a partial typed line does not hang. Spec: 03 section 6.17 grammar bullet ("on a macOS
-terminal ..."), 04 section 7.1 wrapper row, IC-75 (paste joining scope, stale-answer rule, the
-fd-0 connection is not an R connection and is never closed; read with `conn_read_chars()` only).
+bounded; acceptance: 3 pasted lines give 1 fake request; a `skip_on_cran()` macOS pty child: paste
+is one turn, Ctrl-D after a partial typed line does not hang. Spec: 03 section 6.17 grammar bullet
+("on a macOS terminal ..."), 04 section 7.1 wrapper row, IC-75 (paste joining scope, stale-answer
+rule, the fd-0 connection is not an R connection and is never closed; read with
+`conn_read_chars()` only).
 Commit: `fix(console): join pasted blocks and never take typed-ahead lines as answers`.
 
 ### Task 3: Typing while the agent runs steers it (#12, D-185, IC-76)
@@ -146,7 +148,8 @@ message; no polling outside a tty REPL (`.stdin`, plain `peter()`, jsonl); an in
 lines; a `skip_on_cran()` pty child proves the reader returns complete lines only, survives
 Ctrl-D and a `/dev/null` stdin. Spec: 04 section 11.2 row, section 10.4 `input` row, IC-49
 producers, IC-76; 03 sections 6.2 and 6.17; report 18 Verification log ("terminal R can read
-complete typed lines during a run"). Commit: `feat(console): typed lines steer the running agent (type_ahead setting)`.
+complete typed lines during a run").
+Commit: `feat(console): typed lines steer the running agent (type_ahead setting)`.
 
 ### Task 4: Console layout: margin, block spacing, waiting row, Markdown, highlighting (#13, D-186)
 
@@ -188,7 +191,7 @@ RED first: margin and width at 40 columns; plain mode unchanged; block spacing i
 `\n\n`; no `\r +\r\n` in a terminal run; a prompt clears the waiting row, keeps the task and a
 later tick redraws; nested lists, tables, italics, links, quotes, rules; R statement and python
 highlighting; chunk invariance over 200 random splits in the four `cli.dynamic` x colour modes;
-launch boundary without LF except rgui. Spec: 03 section 6.17 Rendering, P14 Task 1-2 notes.
+launch boundary without LF except rgui. Spec: 03 section 6.17 Rendering, P14 Tasks 1-2 notes.
 Commit: `feat(console): margin, block spacing and richer Markdown in the console renderer`.
 
 ### Task 5: Code blocks and tool calls as Markdown (#14, D-187)
@@ -213,7 +216,8 @@ UTF-8 output stripped of SGR equals the source Markdown for r, python and no lan
 frame character, and `parse()` succeeds on the body; a fence indented 4 and 8 spaces under a list
 item closes and copies unindented; a long one-line call and a 2-line call render as fences, never
 cut; nested backtick fences get a longer fence; `error: boom`; fence characters appear before the
-line end. Spec: 03 section 6.17 Rendering (fence rule, no box drawing). Commit: `fix(console): render code blocks and tool code as Markdown fences`.
+line end. Spec: 03 section 6.17 Rendering (fence rule, no box drawing).
+Commit: `fix(console): render code blocks and tool code as Markdown fences`.
 
 ### Task 6: Prompts reach the person and say who asks; fan-out status; nested calls in overlays (#15, D-188, IC-77)
 
@@ -248,11 +252,11 @@ Decisions:
 
 Tests (`test-console-message-stream.R`, `test-console-ui.R`, `test-agent-dispatch.R`,
 `test-subagent-team.R`, `test-cli-claude.R` with a fan-out fixture, `test-console-render.R`,
-`test-utils-options.R`, `test-gptr-gateway.R`, `test-copy-gateway.R`, `test-tool-r.R`,
-), RED first, including the end-to-end fan-out whose console shows
-`sub-agent a > r  cm = 1; pp = 2` and the status line while the parent tool result contains none
-of it. Spec: 04 sections 7.9, 7.11, 6.1 `envir` row, IC-77; 03 sections 5.8, 6.8.3, 6.13,
-6.17, 7.3. Commit: `fix(console): sub-agent prompts reach the person and fan-outs show progress`.
+`test-utils-options.R`, `test-gptr-gateway.R`, `test-copy-gateway.R`, `test-tool-r.R`), RED first,
+including the end-to-end fan-out whose console shows `sub-agent a > r  cm = 1; pp = 2` and the
+status line while the parent tool result contains none of it. Spec: 04 sections 7.9, 7.11, 6.1
+`envir` row, IC-77; 03 sections 5.8, 6.8.3, 6.13, 6.17, 7.3.
+Commit: `fix(console): sub-agent prompts reach the person and fan-outs show progress`.
 
 ### Task 7: Object sizes and agent-made object bloat (#16, D-189)
 
@@ -277,7 +281,8 @@ restored for both `keep.parse.data` states; a worker-exported formula serializes
 environment's parent is the base and an exported `f = function() length(d)` still works; a fan-out
 child's export no longer keeps its scratch object; guard: objects made through `peter()` and
 through `mcp_dispatch_local()` capture the session home. Spec: 04 env_snapshot, eval_r and
-worker_main rows; 03 section 6.4 R4. Commit: `fix(env): honest object sizes and console-sized agent exports`.
+worker_main rows; 03 section 6.4 R4.
+Commit: `fix(env): honest object sizes and console-sized agent exports`.
 
 ### Task 8: The `yolo` permission mode (#17, D-190, IC-78)
 
@@ -338,7 +343,8 @@ Tests (`test-cli-codex.R` rewritten argv and relay e2e without httpuv/later/open
 `test-provider-*`, `test-cli-common.R`, `test-http-reactor.R`, `test-live-cli.R` loses its three
 skips; fixture `inst/gptr/fixtures/fake_cli.R` spawns the relay from argv), RED first. Spec: 03
 sections 1.x line 140, 8.3 and the Suggests table; 04 sections 7.0, 8.5, 2888 row, IC-19, IC-58,
-IC-65, IC-79; P19 and P20 plan text. Commit: `feat(cli): codex reaches the session through a stdio relay; CLI routes serve the session's tools`.
+IC-65, IC-79; P19 and P20 plan text.
+Commit: `feat(cli): codex reaches the session through a stdio relay; CLI routes serve the session's tools`.
 
 ### Task 10: Streaming and visibility on the CLI routes (#19, D-192)
 
@@ -356,7 +362,8 @@ Decisions:
 Tests (`test-cli-codex.R`, `test-cli-claude.R`, `test-console-render.R`), RED first: a fake codex
 reasoning and command item render before the final message; a fake claude MCP r call renders a
 tool line and its result; the first CLI turn's waiting row is drawn before the probe returns or
-the probe runs before it. Spec: 03 section 8.3, P20 note. Commit: `fix(cli): show codex progress and claude-cli tool calls while they run`.
+the probe runs before it. Spec: 03 section 8.3, P20 note.
+Commit: `fix(cli): show codex progress and claude-cli tool calls while they run`.
 
 ### Task 11: Amazon Bedrock with access keys (SigV4) and the Converse API (#20, D-193)
 
@@ -390,8 +397,8 @@ Commit: `feat(provider): Amazon Bedrock Converse with SigV4 signing`.
 
 ### Tasks 12-37: live dogfood fixes (2026-10-18)
 
-The live dogfood matrix below found issues #21-#46; each was fixed test first on lane x, y or z (based
-on 3313f1e) and merged here. Deviations D-200..D-226; evidence in `dev/progress/P26.md`.
+The live dogfood matrix below found issues #21-#46; each was fixed test first on lane x, y or z
+(based on 3313f1e) and merged here. Deviations D-200..D-226; evidence in `dev/progress/P26.md`.
 
 | Task | Issue | Title | Lane | Commit |
 |---|---|---|---|---|

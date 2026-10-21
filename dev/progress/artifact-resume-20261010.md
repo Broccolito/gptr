@@ -47,7 +47,7 @@ Its guards remained 4 GiB free disk, 2 GiB owned outputs and a 3,900s outer dead
 The following gates then ran sequentially against the same immutable export:
 
 | Gate | Result | Profiled elapsed / peak family RSS |
-| --- | --- | --- |
+|---|---|---|
 | Documentation | 0 problems | 0.475s; too short for useful RSS sampling |
 | Shipped files (`all`) | 0 problems | 0.312s; too short for useful RSS sampling |
 | Full-package lint | Zero lints | 85.375s / 1,054.5 MiB |
@@ -148,7 +148,7 @@ load/unload, dependency/code/Rd checks, installed guide layout, rebuilt guides, 
 nonstandard files and temporary detritus all passed.
 
 | Check section | CPU / elapsed seconds from checker |
-| --- | --- |
+|---|---|
 | Incoming feasibility | 3 / 36 |
 | Installation | 13 / 13 |
 | R code possible problems | 35 / 35 |
@@ -181,7 +181,7 @@ These commands ran against the same immutable export, with no shipping-input edi
 second overlapping job in this lane:
 
 | Command | Result | Whole profiled elapsed / peak family RSS |
-| --- | --- | --- |
+|---|---|---|
 | `Rscript --vanilla dev/release/check-docs.R` | 0 problems | 0.370s; too short for useful RSS sampling |
 | `Rscript --vanilla dev/release/check-files.R all` | 0 problems | 0.262s; too short for useful RSS sampling |
 | `Rscript --vanilla dev/ci/isolated-check.R lint` | Zero lints | 79.869s / 1,031.8 MiB |

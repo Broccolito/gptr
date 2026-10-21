@@ -1,14 +1,34 @@
 # P11 Permissions, UI and Plan Mode Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the permission model of architecture section 6.8: the static risk classifier (`gptr_risk()`), the rule grammar and rule stores (`gptr_permissions()`), the built-in policies the kernel's `perm_check()` combines, the UI backends with the one-line approval prompt, the `ask` tool, and plan mode with its pending-plan hand-off.
+**Goal:** Build the permission model of architecture section 6.8: the static risk classifier
+(`gptr_risk()`), the rule grammar and rule stores (`gptr_permissions()`), the built-in policies the
+kernel's `perm_check()` combines, the UI backends with the one-line approval prompt, the `ask` tool,
+and plan mode with its pending-plan hand-off.
 
-**Architecture:** Everything here is a built-in plugin (S-11) that the P06 kernel reaches only through the registry and the service table: `builtin:permissions` registers the five policies (`mode`, `rules`, `critical_guard`, `secret_guard`, `protect_size`), `builtin:plan` the `plan` policy and the plan-mode hooks, `builtin:ui` the four `ui` backends, `builtin:ask` the `ask` direct tool; the services `risk.classify`, `ui.get` and `plan.pending` are provided with `ext_service_set()`. The classifier walks parsed code once (never evaluating it) against two data tables shipped in `inst/extdata/`, extendable with `risk_rule` records; policies only return decisions, and `perm_check()` (P06, contract IC-04) combines them, asks hooks and the UI, and stops non-interactive runs.
+**Architecture:** Everything here is a built-in plugin (S-11) that the P06 kernel reaches only
+through the registry and the service table: `builtin:permissions` registers the five policies
+(`mode`, `rules`, `critical_guard`, `secret_guard`, `protect_size`), `builtin:plan` the `plan`
+policy and the plan-mode hooks, `builtin:ui` the four `ui` backends, `builtin:ask` the `ask` direct
+tool; the services `risk.classify`, `ui.get` and `plan.pending` are provided with
+`ext_service_set()`. The classifier walks parsed code once (never evaluating it) against two data
+tables shipped in `inst/extdata/`, extendable with `risk_rule` records; policies only return
+decisions, and `perm_check()` (P06, contract IC-04) combines them, asks hooks and the UI, and stops
+non-interactive runs.
 
-**Tech Stack:** base R (>= 4.2.0); rlang (`obj_address()`, `env_binding_are_lazy()`); jsonlite through P01's `json_encode()`/`json_decode()`; cli through P01's `msg_verbatim()`; rstudioapi (Suggests, behind `requireNamespace()`); testthat 3e and withr in tests; roxygen2 through `devtools::document()`.
+**Tech Stack:** base R (>= 4.2.0); rlang (`obj_address()`, `env_binding_are_lazy()`); jsonlite
+through P01's `json_encode()`/`json_decode()`; cli through P01's `msg_verbatim()`; rstudioapi
+(Suggests, behind `requireNamespace()`); testthat 3e and withr in tests; roxygen2 through
+`devtools::document()`.
 
-**Spec:** dev/spec/03-architecture.md (§2.2, §3.2-3.4, §6.4, §6.8.1-6.8.5, §6.9.1, §7.1-7.4, §10.1, §10.8), dev/spec/04-interface-contract.md (§1.1-1.5, §2.1-2.2, §3.1, §4.1-4.6, §5.11-5.12, §6.2 `gptr_permissions()`, §6.6 `gptr_risk()`, §6.8, §7.0-7.3, §7.6, §7.8, §7.11, §9.1-9.3, §10.1-10.7, §11.1-11.3, §11.15, §12.1-12.3, §15: IC-43, IC-52, IC-53, IC-54, IC-56, IC-68, IC-69), dev/spec/05-plan-decomposition.md (P11).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2-3.4, 6.4, 6.8.1-6.8.5, 6.9.1, 7.1-7.4,
+10.1, 10.8), dev/spec/04-interface-contract.md (sections 1.1-1.5, 2.1-2.2, 3.1, 4.1-4.6, 5.11-5.12,
+6.2 `gptr_permissions()`, 6.6 `gptr_risk()`, 6.8, 7.0-7.3, 7.6, 7.8, 7.11, 9.1-9.3, 10.1-10.7,
+11.1-11.3, 11.15, 12.1-12.3, section 15: IC-43, IC-52, IC-53, IC-54, IC-56, IC-68, IC-69),
+dev/spec/05-plan-decomposition.md (P11).
 
 **Depends on:** P10 (and through it P01-P09). **Milestone:** M2.
 
@@ -16,29 +36,178 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow; `<<-` only for closure state), the native `|>` (never `%>%`), ASCII-only R sources including tests (non-ASCII written as `\u` escapes), lines of at most 100 characters, `pkg::fun()` calls, conditions only through `gptr_abort()`/`gptr_warn()`/`gptr_inform()` with messages built by concatenation (never glue-interpolated, rule C1), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed global state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line your harness specifies (conventions §10). Plan-specific requirements, copied from the specification:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow; `<<-` only
+for closure state), the native `|>` (never `%>%`), ASCII-only R sources including tests (non-ASCII
+written as `\u` escapes), lines of at most 100 characters, `pkg::fun()` calls, conditions only
+through `gptr_abort()`/`gptr_warn()`/`gptr_inform()` with messages built by concatenation (never
+glue-interpolated, rule C1), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed
+global state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network in tests,
+`Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose
+message ends with the attribution line your harness specifies (conventions section 10).
+Plan-specific requirements, copied from the specification:
 
-- Owned files (05 P11): `R/perm-classify.R`, `R/perm-rules.R`, `R/perm-gate.R`, `R/perm-plan.R`, `R/console-ui.R`, `R/tool-ask.R`; `inst/extdata/risk-functions.csv`, `inst/extdata/risk-commands.csv`; `tests/testthat/helper-scripted-ui.R`; the test files `test-perm-classify.R`, `test-perm-rules.R`, `test-perm-gate.R`, `test-perm-plan.R`, `test-console-ui.R`, `test-tool-ask.R`; the snapshot file `tests/testthat/_snaps/perm-classify.md`; plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`.
-- Layers (03 §3.2, §2.2; P01's `arch_layer_table()`): `perm-*.R` are L4 in area `perm`; `tool-ask.R` is L4 in area `tool`; `console-ui.R` is L5 in area `console`. L4 files call only L0 (`utils`, `json`, `ext`, `http`, `proc`, `auth`), their own area, the L4 service files (`eval-*`, `env-*`, `tool-walk.R`), the record constructors (`provider-message.R`, `provider-events.R`), the §7.0 services and the kernel SDK of IC-33 (`session_data()`, `session_live()`, `session_home()`, `session_append()`, `session_set_mode()`, `session_enqueue()`, `run_current()`, `run_eval_env()`, `home_address()`, `setting_get()`, `settings_write()`, `rule_parse()`, ...). L5 (`console-ui.R`) calls L0, L5, the kernel SDK and `gptr-sdk.R`, never a `perm-*.R` function: a remembered answer travels to `perm-rules.R` as the channel event `permissions:remember`, and `console-ui.R` keeps its own display escaper.
-- Exports (04 §6.2, §6.6), exact signatures: `gptr_risk(code, envir = NULL, root = NULL)` and `gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL, scope = c("session", "project", "user"))`; S3 methods `format.gptr_risk()`, `print.gptr_risk()`. Examples run offline and write only inside `tempdir()`-redirected locations.
-- Classes (04 §5.11-5.12): `gptr_risk` = "list(level int(1) 0-4, label chr(1), categories chr, flagged df(call, fn, level, category, path, path_class), paths chr, secret lgl(1), secret_guard lgl(1), assigned chr, dynamic lgl(1)); `print` shows the flagged calls" (this plan adds the fields `sizes`, `secrets`, `kind`, `parse_error`); `gptr_permissions` = `c("gptr_permissions", "gptr_listing", "data.frame")` with columns `rule`, `list` (`allow`, `ask`, `deny`), `scope`, `source`, built by P01's `new_listing()`.
-- Internal functions (04 §7.11): `code_targets(code)` -> `list(assign, modify, byref, remove, super, files, unknown, process, calls = df(fn, package, line))` ("chr each, never evaluating"); `rule_parse(rule)` -> `list(tool, kind = "any" | "glob" | "level" | "fn" | "category" | "sh" | "sql" | "secret", value)` or `gptr_error_invalid_argument`; `rule_match(rules, call)` -> `list(deny = chr, ask = chr, allow = chr)` ("allow `r(fn:..)`/`r(category:..)` match only if **every** flagged call (level >= 1) is covered; deny/ask match if **any** is"); `rule_suggest(call)` -> chr(1) or `NULL` ("never for level 4"); `risk_table(kind)`; `builtin_permissions(gptr)`, `builtin_plan(gptr)`, `builtin_ui(gptr)`, `builtin_ask(gptr)`.
-- Services (04 §7.0): `risk.classify` = `function(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python")) <gptr_risk>` (owned by `builtin:permissions`); `ui.get` = `function(session = NULL) <spec:ui>` (owned by `builtin:ui`); `plan.pending` = `function(envir_address, consume = TRUE) chr(1) or NULL` (owned by `builtin:plan`). Consumed: `trust.get` (`function(path = getwd()) lgl(1)`, fallback `FALSE`), `checkpoint.note` (`function(call, run) chr(1) or NULL`).
-- Built-ins (04 §10.3): `builtin:permissions`, `builtin:plan` (both `replaceable = FALSE`: "no filter from any source disables `builtin:permissions`, `builtin:plan`, the `critical_guard` and `secret_guard` policies"), `builtin:ui`, `builtin:ask` (replaceable), each declared with `on_load(ext_declare_builtin("<name>", builtin_<name>, ...))`.
-- Options (04 §3.1): `gptr.ui` (`NULL`: "console when a human is present, else `none`"), `gptr.protect_size` (`1e8` bytes; "overwriting a larger object is level 3"), `gptr.critical_guard` (`TRUE`; "level 4 asks even in `auto`"), `gptr.secret_guard` (`TRUE`), `gptr.plan_handoff` (`TRUE`); read: `gptr.interactive`, `gptr.noninteractive_ask` (`"stop"` or `"deny"`). The run snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`, `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode`, `gptr.unsafe_no_permissions` (IC-53 item 2); the policies read the snapshot in `run$opts$safety` and fall back to the live option only outside a run.
-- Modes and levels (03 §6.8.1): modes `plan`, `manual` (default), `edits`, `auto`; level 0 "known read-only" allow everywhere; level 1 plan "only allowlisted read-only calls run, in a scratch child env", manual/edits ask, auto allow; level 2 plan deny, manual ask, edits "allow `write`/`edit` inside the project, ask for R", auto allow; level 3 plan deny, manual/edits ask, auto allow ("the secret guard still asks"); level 4 plan deny, manual/edits/auto `ask_human` ("blocked without a UI"). The `control` category and path class are `ask_human` in every mode, plan included (05 P11 acceptance 6; see the self-review). P26 Task 8 (IC-78) adds `yolo` after `auto`: every level allows, except non-control level-4 rows, `options(gptr.*)` and secret-to-network flows, which stay `ask_human`.
-- Risk tables (04 §11.15): `risk-functions.csv` columns `package`, `function`, `level` (0-4), `category` (`read`, `object_write`, `file_write`, `file_delete`, `network`, `process`, `install`, `dynamic`, `session`, `secret`, `interactive`, `critical`, `control`), `path_arg`, `note`; the risky-package list as `function = "*"` rows (targets, usethis, devtools, renv, pak, remotes, fs, gert, git2r, gh, googledrive, pins, `aws.*`, `paws.*`: at least level 2, delete verbs 3); "An unlisted function of a package outside base, stats, utils, methods, graphics, grDevices and tools is level 1". `risk-commands.csv` columns `command`, `subcommand` (or `*`), `level`, `category`, `note`. `risk_rule` records (P02 kind: `rows` df, `target` `"function"`/`"command"`, `lower` lgl): "on a duplicate the highest level wins; user and plugin rows may lower a level only explicitly (`lower = TRUE`)". Rows of the base packages (base, stats, utils, methods, graphics, grDevices, tools) are always exact names: base's `*` row is the multiplication operator and `%*%` the matrix product, never a wildcard; `*` globs apply only to rows of other packages (this plan's reading, recorded in the self-review).
-- Control category (IC-53 item 3): level 4 `control` for `gptr_config`, `gptr_permissions`, `gptr_trust`, `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`, `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune, clear), `gptr_scrub` (`dry_run = FALSE`), `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`, `gptr_rewind`; `options()` with `gptr.*` names; `Sys.setenv()`/`Sys.unsetenv()` of `GPTR_*` or provider key names; `setHook()`, `assignInNamespace()`. `gptr_artifacts()` is level 0 except with `open`, `version` or `stop` set (or computed), which relaunch or stop an app: level 3 `process`, the level of `peter$app()` (04 §9.4). Path classes (P01 `path_class()`): `control` (level 4) and `instructions` (level 3) apply to the `write`/`edit` tools and to static path arguments in R code (IC-54).
-- Plan-mode allowlist (IC-54): "Plan mode evaluates an `r` call only when every call in it resolves to an allowlisted read-only function (level-0 `read` rows, base/stats/utils getters and summaries, describers, gptr read members); otherwise the call is denied with "not known to be read-only in plan mode"".
-- Rules and stores (03 §6.8.2, IC-52): grammar `tool(spec)` (`write(results/**)`, `r(fn:write.csv,saveRDS)`, `r(level<=1)`, `r(sh:git status*)`, `r(sql:select)`, `r(secret:NAME)`, `mcp__github__*`); "Allow rules never loosen plan and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard". `gptr_permissions(scope = "session")` = this R process (`the$rules_session`, 04 §7.0); `"project"` = `R_user_dir("gptr", "config")/projects/<first 16 hex of sha256(path_key(root))>.json`, written with P08's `settings_write("user_project", patch)`; `"user"` = the user `settings.json` (`settings_write("user", patch)`). "An existing `.gptr/settings.local.json` contributes only `permissions.deny`/`ask` additions and only in a trusted project; allow ... keys in it are ignored with a notice"; an untrusted `.gptr/settings.json` contributes only deny/ask rules.
-- Prompt and display (03 §6.8.3, IC-53 item 8): "One line (NS-1): `allow? [y]es / [a]lways / [n]o / [?]`, listing every flagged call and `+N more lines`, with C0/C1 controls, bidi and zero-width characters escaped as `<U+XXXX>`"; `a` adds a session rule covering exactly the flagged calls; `?` opens the detail view (code, flagged calls with levels, paths, "cannot be undone" from the `checkpoint.note` service, and "always in this project"); `n` optionally takes feedback text; Ctrl-C aborts. Never `askYesNo()`, `menu()` or `select.list()`.
-- Permission request record (04 §7.11): `list(tool, input, summary, risk, reason, suggested_rule, undo_note, session, turn, nested, tier = "ask" | "ask_human")`. UI kind (04 §10.2 row 22): `has_ui()`, `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)` -> int (`NA` = cancelled; `attr(, "other")` = free text), `input(prompt, default = "", secret = FALSE)` -> chr(1)|NA, `questions(qs)` -> `list(answers = named list, cancelled = lgl(1))`, `notify(text, level = "info")`, `permission(request)` -> `list(decision = "allow" | "deny" | "abort", remember = NULL | "session" | "project", feedback = chr(1) | NULL)`; "a failing dialog is not an approval". Resolution (IC-43, IC-53): "the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`".
-- The `ask` tool (04 §9.2, IC-68): schema and description byte-identical to §9.2; snippet `Ask the user one to four questions when a decision changes the result`; declared when a human can answer and in non-interactive `manual` runs, where calling it stops the run (the `mode` policy answers `ask_human`, so `perm_check()` stops the run with status `blocked`); result texts of 18 §3.6: `The user answered:` then `- <id>: <answer>` lines (`(typed) <text>` for free text), the cancellation text "The user dismissed the questions without answering. Do not guess silently: either stop and summarise what you need, or proceed with clearly stated assumptions."; `details` = `answers` (named list keyed by `id`), `cancelled`.
-- Plan mode (03 §6.8.5, IC-15, IC-56): the scratch environment is created by the run (P06); P11 captures the last `<proposed_plan>...</proposed_plan>` of a plan-mode answer, saves it to `<workspace root>/plans/<YYYY-MM-DD>-<slug>.md`, sets `.d$plan`, appends the custom entry `gptr.plan` `{path, text_hash, status: "pending" | "used" | "superseded"}`, stores the pending plan in `the$plan_pending` under `home_address(home)` with the time (an address string, never an environment, R2), and offers "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning" interactively from the plan-mode `agent_end` hook (04 §7.11), after the plan run settled: the chosen mode applies to the same session and the go-ahead is queued for its next run (P06 fixes the scratch overlay `run$scratch` when a plan-mode run starts, so the plan cannot execute inside that run). The plan goes "only to the **next** `peter()` call of the same R process and environment within one hour, and only when that call is top-level (not nested, not in a run, not in a loop body); any other `peter()` call in between discards it with a notice" (message class `plan_handoff`); `options(gptr.plan_handoff = FALSE)` disables the hand-off.
-- Conditions (04 §2.2): `gptr_error_invalid_argument` (`arg`, `expected`; never the value), `gptr_error_permission` (`action`, `tool`, `risk`, `how_to_allow`, `session`), `gptr_error_workspace` (`path`), `gptr_error_noninteractive` (`what`, `questions`; see the self-review); messages `gptr_message_plan_handoff`, `gptr_message_notice`.
-- Events (04 §10.4): hooks on `tool_result`, `agent_start`, `agent_end`, `turn_end`, `input` and `decision`, and the channel `permissions:remember` (inter-plugin channels contain `:`, IC-11). Hooks are notify handlers and return `NULL`.
-- One-shot approvals (IC-53 item 3): P06's `perm_check()` grants them, not P11. On a human's approval of an `ask_human` call, P06's `perm_grant_control(run, risk)` appends one token per flagged `control` function to `run$signal$control` (and records it with P02's `ext_control_grant()`), and P06's `tool_execute_frame()` clears the slot when the call ends. P08's `control_check()` and P11's `gptr_permissions()` (through `perm_control_guard()`) each consume one token. P11 only has to flag every control call in `risk$flagged` with category `control`.
-- Tests (conventions §7, 04 §12): P01's `local_project()`, `local_gptr_options()`, `local_fake_provider()`, `fake_tool()`, `fake_requests()`; `setup.R` sets `options(gptr.interactive = FALSE, gptr.quiet = TRUE)` and redirects `R_USER_CONFIG_DIR`; this plan adds `local_scripted_ui(answers = list(), .env = parent.frame())` (04 §12.2) returning an environment with `log` (df `method`, `prompt`, `answer`) and `remaining()`, which "registers a `scripted` UI, sets `options(gptr.ui = "scripted", gptr.interactive = TRUE)`"; queue items for `permission()`: `"y"`, `"a"` (always, session), `"p"` (always, project), `"n"`, `list(decision = "deny", feedback = chr(1))`, `"abort"`; for `select()`: int; for `input()`: chr(1); for `questions()`: a named list. Printed output uses `expect_snapshot()` inside `testthat::local_reproducible_output(width = 80)`. Test commands use anchored filters (`filter = "^perm-classify$"`).
+- Owned files (05 P11): `R/perm-classify.R`, `R/perm-rules.R`, `R/perm-gate.R`, `R/perm-plan.R`,
+  `R/console-ui.R`, `R/tool-ask.R`; `inst/extdata/risk-functions.csv`,
+  `inst/extdata/risk-commands.csv`; `tests/testthat/helper-scripted-ui.R`; the test files
+  `test-perm-classify.R`, `test-perm-rules.R`, `test-perm-gate.R`, `test-perm-plan.R`,
+  `test-console-ui.R`, `test-tool-ask.R`; the snapshot file
+  `tests/testthat/_snaps/perm-classify.md`; plus `NAMESPACE` and `man/` through
+  `Rscript --vanilla -e 'devtools::document()'`.
+- Layers (03 sections 3.2, 2.2; P01's `arch_layer_table()`): `perm-*.R` are L4 in area `perm`;
+  `tool-ask.R` is L4 in area `tool`; `console-ui.R` is L5 in area `console`. L4 files call only L0
+  (`utils`, `json`, `ext`, `http`, `proc`, `auth`), their own area, the L4 service files (`eval-*`,
+  `env-*`, `tool-walk.R`), the record constructors (`provider-message.R`, `provider-events.R`), the
+  section 7.0 services and the kernel SDK of IC-33 (`session_data()`, `session_live()`,
+  `session_home()`, `session_append()`, `session_set_mode()`, `session_enqueue()`, `run_current()`,
+  `run_eval_env()`, `home_address()`, `setting_get()`, `settings_write()`, `rule_parse()`, ...). L5
+  (`console-ui.R`) calls L0, L5, the kernel SDK and `gptr-sdk.R`, never a `perm-*.R` function: a
+  remembered answer travels to `perm-rules.R` as the channel event `permissions:remember`, and
+  `console-ui.R` keeps its own display escaper.
+- Exports (04 sections 6.2, 6.6), exact signatures: `gptr_risk(code, envir = NULL, root = NULL)` and
+  `gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL, scope = c("session", "project", "user"))`;
+  S3 methods `format.gptr_risk()`, `print.gptr_risk()`. Examples run offline and write only inside
+  `tempdir()`-redirected locations.
+- Classes (04 sections 5.11-5.12): `gptr_risk` = "list(level int(1) 0-4, label chr(1), categories
+  chr, flagged df(call, fn, level, category, path, path_class), paths chr, secret lgl(1),
+  secret_guard lgl(1), assigned chr, dynamic lgl(1)); `print` shows the flagged calls" (this plan
+  adds the fields `sizes`, `secrets`, `kind`, `parse_error`); `gptr_permissions` =
+  `c("gptr_permissions", "gptr_listing", "data.frame")` with columns `rule`, `list` (`allow`, `ask`,
+  `deny`), `scope`, `source`, built by P01's `new_listing()`.
+- Internal functions (04 section 7.11): `code_targets(code)` ->
+  `list(assign, modify, byref, remove, super, files, unknown, process, calls = df(fn, package, line))`
+  ("chr each, never evaluating"); `rule_parse(rule)` ->
+  `list(tool, kind = "any" | "glob" | "level" | "fn" | "category" | "sh" | "sql" | "secret", value)`
+  or `gptr_error_invalid_argument`; `rule_match(rules, call)` ->
+  `list(deny = chr, ask = chr, allow = chr)` ("allow `r(fn:..)`/`r(category:..)` match only if
+  **every** flagged call (level >= 1) is covered; deny/ask match if **any** is");
+  `rule_suggest(call)` -> chr(1) or `NULL` ("never for level 4"); `risk_table(kind)`;
+  `builtin_permissions(gptr)`, `builtin_plan(gptr)`, `builtin_ui(gptr)`, `builtin_ask(gptr)`.
+- Services (04 section 7.0): `risk.classify` =
+  `function(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python")) <gptr_risk>`
+  (owned by `builtin:permissions`); `ui.get` = `function(session = NULL) <spec:ui>` (owned by
+  `builtin:ui`); `plan.pending` = `function(envir_address, consume = TRUE) chr(1) or NULL` (owned by
+  `builtin:plan`). Consumed: `trust.get` (`function(path = getwd()) lgl(1)`, fallback `FALSE`),
+  `checkpoint.note` (`function(call, run) chr(1) or NULL`).
+- Built-ins (04 section 10.3): `builtin:permissions`, `builtin:plan` (both `replaceable = FALSE`:
+  "no filter from any source disables `builtin:permissions`, `builtin:plan`, the `critical_guard`
+  and `secret_guard` policies"), `builtin:ui`, `builtin:ask` (replaceable), each declared with
+  `on_load(ext_declare_builtin("<name>", builtin_<name>, ...))`.
+- Options (04 section 3.1): `gptr.ui` (`NULL`: "console when a human is present, else `none`"),
+  `gptr.protect_size` (`1e8` bytes; "overwriting a larger object is level 3"), `gptr.critical_guard`
+  (`TRUE`; "level 4 asks even in `auto`"), `gptr.secret_guard` (`TRUE`), `gptr.plan_handoff`
+  (`TRUE`); read: `gptr.interactive`, `gptr.noninteractive_ask` (`"stop"` or `"deny"`). The run
+  snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`,
+  `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode`, `gptr.unsafe_no_permissions` (IC-53
+  item 2); the policies read the snapshot in `run$opts$safety` and fall back to the live option only
+  outside a run.
+- Modes and levels (03 section 6.8.1): modes `plan`, `manual` (default), `edits`, `auto`; level 0
+  "known read-only" allow everywhere; level 1 plan "only allowlisted read-only calls run, in a
+  scratch child env", manual/edits ask, auto allow; level 2 plan deny, manual ask, edits "allow
+  `write`/`edit` inside the project, ask for R", auto allow; level 3 plan deny, manual/edits ask,
+  auto allow ("the secret guard still asks"); level 4 plan deny, manual/edits/auto `ask_human`
+  ("blocked without a UI"). The `control` category and path class are `ask_human` in every mode,
+  plan included (05 P11 acceptance 6; see the self-review). P26 Task 8 (IC-78) adds `yolo` after
+  `auto`: every level allows, except non-control level-4 rows, `options(gptr.*)` and
+  secret-to-network flows, which stay `ask_human`.
+- Risk tables (04 section 11.15): `risk-functions.csv` columns `package`, `function`, `level` (0-4),
+  `category` (`read`, `object_write`, `file_write`, `file_delete`, `network`, `process`, `install`,
+  `dynamic`, `session`, `secret`, `interactive`, `critical`, `control`), `path_arg`, `note`; the
+  risky-package list as `function = "*"` rows (targets, usethis, devtools, renv, pak, remotes, fs,
+  gert, git2r, gh, googledrive, pins, `aws.*`, `paws.*`: at least level 2, delete verbs 3); "An
+  unlisted function of a package outside base, stats, utils, methods, graphics, grDevices and tools
+  is level 1". `risk-commands.csv` columns `command`, `subcommand` (or `*`), `level`, `category`,
+  `note`. `risk_rule` records (P02 kind: `rows` df, `target` `"function"`/`"command"`, `lower` lgl):
+  "on a duplicate the highest level wins; user and plugin rows may lower a level only explicitly
+  (`lower = TRUE`)". Rows of the base packages (base, stats, utils, methods, graphics, grDevices,
+  tools) are always exact names: base's `*` row is the multiplication operator and `%*%` the matrix
+  product, never a wildcard; `*` globs apply only to rows of other packages (this plan's reading,
+  recorded in the self-review).
+- Control category (IC-53 item 3): level 4 `control` for `gptr_config`, `gptr_permissions`,
+  `gptr_trust`, `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
+  `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune,
+  clear), `gptr_scrub` (`dry_run = FALSE`), `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`,
+  `gptr_rewind`; `options()` with `gptr.*` names; `Sys.setenv()`/`Sys.unsetenv()` of `GPTR_*` or
+  provider key names; `setHook()`, `assignInNamespace()`. `gptr_artifacts()` is level 0 except with
+  `open`, `version` or `stop` set (or computed), which relaunch or stop an app: level 3 `process`,
+  the level of `peter$app()` (04 section 9.4). Path classes (P01 `path_class()`): `control`
+  (level 4) and `instructions` (level 3) apply to the `write`/`edit` tools and to static path
+  arguments in R code (IC-54).
+- Plan-mode allowlist (IC-54): "Plan mode evaluates an `r` call only when every call in it resolves
+  to an allowlisted read-only function (level-0 `read` rows, base/stats/utils getters and summaries,
+  describers, gptr read members); otherwise the call is denied with "not known to be read-only in
+  plan mode"".
+- Rules and stores (03 section 6.8.2, IC-52): grammar `tool(spec)` (`write(results/**)`,
+  `r(fn:write.csv,saveRDS)`, `r(level<=1)`, `r(sh:git status*)`, `r(sql:select)`, `r(secret:NAME)`,
+  `mcp__github__*`); "Allow rules never loosen plan and never pre-approve level 4; only
+  `r(secret:NAME)` rules pre-approve the secret guard". `gptr_permissions(scope = "session")` = this
+  R process (`the$rules_session`, 04 section 7.0); `"project"` =
+  `R_user_dir("gptr", "config")/projects/<first 16 hex of sha256(path_key(root))>.json`, written
+  with P08's `settings_write("user_project", patch)`; `"user"` = the user `settings.json`
+  (`settings_write("user", patch)`). "An existing `.gptr/settings.local.json` contributes only
+  `permissions.deny`/`ask` additions and only in a trusted project; allow ... keys in it are ignored
+  with a notice"; an untrusted `.gptr/settings.json` contributes only deny/ask rules.
+- Prompt and display (03 section 6.8.3, IC-53 item 8): "One line (NS-1):
+  `allow? [y]es / [a]lways / [n]o / [?]`, listing every flagged call and `+N more lines`, with C0/C1
+  controls, bidi and zero-width characters escaped as `<U+XXXX>`"; `a` adds a session rule covering
+  exactly the flagged calls; `?` opens the detail view (code, flagged calls with levels, paths,
+  "cannot be undone" from the `checkpoint.note` service, and "always in this project"); `n`
+  optionally takes feedback text; Ctrl-C aborts. Never `askYesNo()`, `menu()` or `select.list()`.
+- Permission request record (04 section 7.11):
+  `list(tool, input, summary, risk, reason, suggested_rule, undo_note, session, turn, nested, tier = "ask" | "ask_human")`.
+  UI kind (04 section 10.2 row 22): `has_ui()`,
+  `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)` ->
+  int (`NA` = cancelled; `attr(, "other")` = free text),
+  `input(prompt, default = "", secret = FALSE)` -> chr(1)|NA, `questions(qs)` ->
+  `list(answers = named list, cancelled = lgl(1))`, `notify(text, level = "info")`,
+  `permission(request)` ->
+  `list(decision = "allow" | "deny" | "abort", remember = NULL | "session" | "project", feedback = chr(1) | NULL)`;
+  "a failing dialog is not an approval". Resolution (IC-43, IC-53): "the run's snapshot of
+  `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`".
+- The `ask` tool (04 section 9.2, IC-68): schema and description byte-identical to section 9.2;
+  snippet `Ask the user one to four questions when a decision changes the result`; declared when a
+  human can answer and in non-interactive `manual` runs, where calling it stops the run (the `mode`
+  policy answers `ask_human`, so `perm_check()` stops the run with status `blocked`); result texts
+  of 18 section 3.6: `The user answered:` then `- <id>: <answer>` lines (`(typed) <text>` for free
+  text), the cancellation text "The user dismissed the questions without answering. Do not guess
+  silently: either stop and summarise what you need, or proceed with clearly stated assumptions.";
+  `details` = `answers` (named list keyed by `id`), `cancelled`.
+- Plan mode (03 section 6.8.5, IC-15, IC-56): the scratch environment is created by the run (P06);
+  P11 captures the last `<proposed_plan>...</proposed_plan>` of a plan-mode answer, saves it to
+  `<workspace root>/plans/<YYYY-MM-DD>-<slug>.md`, sets `.d$plan`, appends the custom entry
+  `gptr.plan` `{path, text_hash, status: "pending" | "used" | "superseded"}`, stores the pending
+  plan in `the$plan_pending` under `home_address(home)` with the time (an address string, never an
+  environment, R2), and offers "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning"
+  interactively from the plan-mode `agent_end` hook (04 section 7.11), after the plan run settled:
+  the chosen mode applies to the same session and the go-ahead is queued for its next run (P06 fixes
+  the scratch overlay `run$scratch` when a plan-mode run starts, so the plan cannot execute inside
+  that run). The plan goes "only to the **next** `peter()` call of the same R process and
+  environment within one hour, and only when that call is top-level (not nested, not in a run, not
+  in a loop body); any other `peter()` call in between discards it with a notice" (message class
+  `plan_handoff`); `options(gptr.plan_handoff = FALSE)` disables the hand-off.
+- Conditions (04 section 2.2): `gptr_error_invalid_argument` (`arg`, `expected`; never the value),
+  `gptr_error_permission` (`action`, `tool`, `risk`, `how_to_allow`, `session`),
+  `gptr_error_workspace` (`path`), `gptr_error_noninteractive` (`what`, `questions`; see the
+  self-review); messages `gptr_message_plan_handoff`, `gptr_message_notice`.
+- Events (04 section 10.4): hooks on `tool_result`, `agent_start`, `agent_end`, `turn_end`, `input`
+  and `decision`, and the channel `permissions:remember` (inter-plugin channels contain `:`, IC-11).
+  Hooks are notify handlers and return `NULL`.
+- One-shot approvals (IC-53 item 3): P06's `perm_check()` grants them, not P11. On a human's
+  approval of an `ask_human` call, P06's `perm_grant_control(run, risk)` appends one token per
+  flagged `control` function to `run$signal$control` (and records it with P02's
+  `ext_control_grant()`), and P06's `tool_execute_frame()` clears the slot when the call ends. P08's
+  `control_check()` and P11's `gptr_permissions()` (through `perm_control_guard()`) each consume one
+  token. P11 only has to flag every control call in `risk$flagged` with category `control`.
+- Tests (conventions section 7, 04 section 12): P01's `local_project()`, `local_gptr_options()`,
+  `local_fake_provider()`, `fake_tool()`, `fake_requests()`; `setup.R` sets
+  `options(gptr.interactive = FALSE, gptr.quiet = TRUE)` and redirects `R_USER_CONFIG_DIR`; this
+  plan adds `local_scripted_ui(answers = list(), .env = parent.frame())` (04 section 12.2) returning
+  an environment with `log` (df `method`, `prompt`, `answer`) and `remaining()`, which "registers a
+  `scripted` UI, sets `options(gptr.ui = "scripted", gptr.interactive = TRUE)`"; queue items for
+  `permission()`: `"y"`, `"a"` (always, session), `"p"` (always, project), `"n"`,
+  `list(decision = "deny", feedback = chr(1))`, `"abort"`; for `select()`: int; for `input()`:
+  chr(1); for `questions()`: a named list. Printed output uses `expect_snapshot()` inside
+  `testthat::local_reproducible_output(width = 80)`. Test commands use anchored filters
+  (`filter = "^perm-classify$"`).
 
 ## File Structure
 
@@ -81,15 +250,31 @@ Tasks:
 ### Task 1: Risk tables and `risk_rule` merging
 
 **Files:**
-- Create: `inst/extdata/risk-functions.csv`, `inst/extdata/risk-commands.csv` (generated once by the two scripts below, which are not committed)
+- Create: `inst/extdata/risk-functions.csv`, `inst/extdata/risk-commands.csv` (generated once by the
+  two scripts below, which are not committed)
 - Create: `R/perm-classify.R`
 - Test: `tests/testthat/test-perm-classify.R` (create)
 
 **Interfaces:**
-- Consumes (P01, 04 §1.1, §7.1): `check_choice(x, choices, arg)`, `the`; (P02, 04 §7.2): `registry_all(kind, session = NULL)`, `registry_generation()`, `gptr_register(spec)`, `gptr_spec(kind, name, ...)` and the `risk_rule` kind (`rows` df, `target = c("function", "command")`, `lower` lgl(1)); test helpers `local_project()` (P01).
-- Produces (04 §7.11, §11.15): the two risk tables; `risk_table(kind = c("functions", "commands"))` (the merged table; the functions table carries lookup indexes as attributes); `risk_read_csv(path)`; `risk_lookup(fn, pkg = NA_character_, tab = risk_table("functions"))` -> one table row as a list or `NULL` (exact row, then a function glob such as `geom_*`, then a package-wide `*` row such as `targets::*`); `risk_glob_re(glob)`; the package constants `risk_labels`, `risk_base_pkgs` and the file-local cache `risk_state`.
+- Consumes (P01, 04 sections 1.1, 7.1): `check_choice(x, choices, arg)`, `the`; (P02, 04
+  section 7.2): `registry_all(kind, session = NULL)`, `registry_generation()`,
+  `gptr_register(spec)`, `gptr_spec(kind, name, ...)` and the `risk_rule` kind (`rows` df,
+  `target = c("function", "command")`, `lower` lgl(1)); test helpers `local_project()` (P01).
+- Produces (04 sections 7.11, 11.15): the two risk tables;
+  `risk_table(kind = c("functions", "commands"))` (the merged table; the functions table carries
+  lookup indexes as attributes); `risk_read_csv(path)`;
+  `risk_lookup(fn, pkg = NA_character_, tab = risk_table("functions"))` -> one table row as a list
+  or `NULL` (exact row, then a function glob such as `geom_*`, then a package-wide `*` row such as
+  `targets::*`); `risk_glob_re(glob)`; the package constants `risk_labels`, `risk_base_pkgs` and the
+  file-local cache `risk_state`.
 
-The tables are data, not code: they are written once by two generator scripts (report 18 Appendix A.1's `RISK_TABLE`, the `control` rows of IC-53, the risky packages of IC-54 and G5's command levels), committed as CSV and read with `utils::read.csv()`. Unlisted functions of packages outside base R are level 1 (IC-54); that rule lives in the walker (Task 3), not in the table. Rows of the seven base packages are always exact: base's `*` (multiplication) and `%*%` rows would otherwise read as a package-wide wildcard and a `%...%` glob, turning every unlisted base function (`write.dcf()`, `truncate()`, ...) into a "known read-only" call that plan mode would run.
+The tables are data, not code: they are written once by two generator scripts (report 18 Appendix
+A.1's `RISK_TABLE`, the `control` rows of IC-53, the risky packages of IC-54 and G5's command
+levels), committed as CSV and read with `utils::read.csv()`. Unlisted functions of packages outside
+base R are level 1 (IC-54); that rule lives in the walker (Task 3), not in the table. Rows of the
+seven base packages are always exact: base's `*` (multiplication) and `%*%` rows would otherwise
+read as a package-wide wildcard and a `%...%` glob, turning every unlisted base function
+(`write.dcf()`, `truncate()`, ...) into a "known read-only" call that plan mode would run.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -200,11 +385,16 @@ test_that("risk_rule records extend both tables; lowering needs lower = TRUE (10
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-classify$")'`
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; the first error reads `could not find function "risk_read_csv"`.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; the first error reads
+`could not find function "risk_read_csv"`.
 
 - [ ] **Step 3: Write the implementation**
 
-Save the first generator outside the repository (for example as `$TMPDIR/gen-risk-functions.R`; it is not committed) and run it from the repository root with `Rscript --vanilla $TMPDIR/gen-risk-functions.R`. It prints `1492 rows` and writes `inst/extdata/risk-functions.csv` (UTF-8, LF line endings, rows sorted by package and function with `method = "radix"`):
+Save the first generator outside the repository (for example as `$TMPDIR/gen-risk-functions.R`; it
+is not committed) and run it from the repository root with
+`Rscript --vanilla $TMPDIR/gen-risk-functions.R`. It prints `1492 rows` and writes
+`inst/extdata/risk-functions.csv` (UTF-8, LF line endings, rows sorted by package and function with
+`method = "radix"`):
 
 ```r
 # Writes inst/extdata/risk-functions.csv (P11). Run from the repository root:
@@ -598,7 +788,8 @@ local({
 })
 ```
 
-Save the second generator as `$TMPDIR/gen-risk-commands.R` and run it the same way. It prints `434 rows` and writes `inst/extdata/risk-commands.csv`:
+Save the second generator as `$TMPDIR/gen-risk-commands.R` and run it the same way. It prints
+`434 rows` and writes `inst/extdata/risk-commands.csv`:
 
 ```r
 # Writes inst/extdata/risk-commands.csv (P11). Run from the repository root:
@@ -672,7 +863,11 @@ local({
 })
 ```
 
-Check the generated files: `Rscript --vanilla -e 'tools::md5sum(c("inst/extdata/risk-functions.csv", "inst/extdata/risk-commands.csv"))'` prints `370829e6af9e3912b56b5f10a9b5fad9` and `109ecbb40ce1ef11345bded0576dd970` (R 4.4.3; a different R version may quote differently, in which case the row counts and the tests are the check).
+Check the generated files:
+`Rscript --vanilla -e 'tools::md5sum(c("inst/extdata/risk-functions.csv", "inst/extdata/risk-commands.csv"))'`
+prints `370829e6af9e3912b56b5f10a9b5fad9` and `109ecbb40ce1ef11345bded0576dd970` (R 4.4.3; a
+different R version may quote differently, in which case the row counts and the tests are the
+check).
 
 Create `R/perm-classify.R`:
 
@@ -865,10 +1060,25 @@ git commit -m "feat(perm): add the risk tables and risk_rule merging"
 - Test: `tests/testthat/test-perm-classify.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1 `risk_table("commands")`, `risk_glob_re()`; P01 `path_class(path, root = project_root())` (classes `workspace`, `temp`, `outside`, `protected`, `control`, `instructions`, `critical`, `url`, `wildcard`, `unknown`), `project_root()`.
-- Produces: `risk_path_class(path, root = project_root())` (P01's `path_class()` that never fails: a path R cannot translate, such as a non-ASCII path in a C locale, is `"unknown"`); the flag-row helpers `risk_flags_empty()`, `risk_flags_row(call, fn, level, category, path = NA_character_, path_class = NA_character_)`, `risk_flags_bind(...)` (the `flagged` data frame of 04 §5.11: `call`, `fn`, `level`, `category`, `path`, `path_class`); `risk_command(cmd, root = project_root())` (argv when `length(cmd) > 1`, else one command line with shell syntax), `risk_sql(query)`, `risk_python(code)`, each returning flag rows; the constant `risk_cmd_edits_parity` (`mkdir`, `touch`, `mv`, `cp`: the programs edits mode auto-approves inside the project, G5 fact-check 20); `risk_cmd_row(prog, sub)`.
+- Consumes: Task 1 `risk_table("commands")`, `risk_glob_re()`; P01
+  `path_class(path, root = project_root())` (classes `workspace`, `temp`, `outside`, `protected`,
+  `control`, `instructions`, `critical`, `url`, `wildcard`, `unknown`), `project_root()`.
+- Produces: `risk_path_class(path, root = project_root())` (P01's `path_class()` that never fails: a
+  path R cannot translate, such as a non-ASCII path in a C locale, is `"unknown"`); the flag-row
+  helpers `risk_flags_empty()`,
+  `risk_flags_row(call, fn, level, category, path = NA_character_, path_class = NA_character_)`,
+  `risk_flags_bind(...)` (the `flagged` data frame of 04 section 5.11: `call`, `fn`, `level`,
+  `category`, `path`, `path_class`); `risk_command(cmd, root = project_root())` (argv when
+  `length(cmd) > 1`, else one command line with shell syntax), `risk_sql(query)`,
+  `risk_python(code)`, each returning flag rows; the constant `risk_cmd_edits_parity` (`mkdir`,
+  `touch`, `mv`, `cp`: the programs edits mode auto-approves inside the project, G5 fact-check 20);
+  `risk_cmd_row(prog, sub)`.
 
-These are G5's `g5_classify.R` classifiers (46/46 verified cases) with the program lists moved into `risk-commands.csv`: `rm` of a critical, control or protected path is level 4, redirects and `cp`/`mv` targets take the level of their path class, an interpreter with `-c`/`-e` is dynamic, a download piped into a shell is level 3, SQL is read by its leading keywords and Python by a token scan.
+These are G5's `g5_classify.R` classifiers (46/46 verified cases) with the program lists moved into
+`risk-commands.csv`: `rm` of a critical, control or protected path is level 4, redirects and
+`cp`/`mv` targets take the level of their path class, an interpreter with `-c`/`-e` is dynamic, a
+download piped into a shell is level 3, SQL is read by its leading keywords and Python by a token
+scan.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -954,7 +1164,8 @@ test_that("flag rows bind without duplicates", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-classify$")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 96 ]`; the new tests error with `could not find function "risk_command"` (and `risk_sql`, `risk_python`, `risk_flags_row`).
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 96 ]`; the new tests error with
+`could not find function "risk_command"` (and `risk_sql`, `risk_python`, `risk_flags_row`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1402,10 +1613,54 @@ git commit -m "feat(perm): classify shell commands, SQL and Python"
 - Generated: `NAMESPACE`, `man/gptr_risk.Rd`, `man/format.gptr_risk.Rd`
 
 **Interfaces:**
-- Consumes: Tasks 1-2; P01 `check_env()`, `check_string()`, `check_choice()`, `gptr_abort()`, `gptr_opt("protect_size")`, `as_utf8()`, `project_root()`, `path_class()`, `on_load()`, `ext_service_set(name, fun, provided_by, builtin = NULL)`; P02 `registry_get(kind, name, session = NULL)` (namespaced plugin members are `tool` records named `<namespace>/<name>`); P03 `secret_scan(code, tainted = character())` -> `list(findings = df(rule, name, level, guard), level, guard, assigned)` (G6 §3.8: `secret_env_registered` is the guarded read of a registered secret's variable); rlang `obj_address()`, `env_binding_are_lazy()`; the P01 test helper `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`.
-- Produces (04 §6.6, §5.11, §7.0): the export `gptr_risk(code, envir = NULL, root = NULL)` returning a `gptr_risk` (fields of 04 §5.11 plus `sizes` (named num: bytes of existing objects the code overwrites), `secrets` (registered secret names read), `kind`, `parse_error`); `format.gptr_risk()`, `print.gptr_risk()`; `risk_classify(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python"))`, registered as the service `risk.classify` owned by `builtin:permissions` (Task 7 declares that built-in; until then `ext_service_get("risk.classify")` signals `gptr_error_not_available`); `risk_norm(risk, tool = NULL)` (a tool's `risk()` result or `NULL` -> a `gptr_risk`; `NULL` is level 0 for `annotations$read_only`, else 2, 04 §9.1); `risk_escape(x)` (controls except TAB, bidi and zero-width characters as `<U+XXXX>`, IC-53 item 8); `risk_scan(exprs, envir = NULL, root = project_root(), depth = 2L, seen = character())` -> `list(flags, targets, calls, sizes)` (the one parse walk, IC-31); `risk_parse(code)`; the walker's helpers `risk_head()`, `risk_fun_ref()`, `risk_binding_info()` (class, bytes and reference-ness of an existing binding, never forcing promises; the object is measured in the closure-free leaf `risk_binding_leaf()`), `risk_binding_safe()`, `risk_gptr_internal()` (`gptr:::`, `asNamespace("gptr")`); constants `risk_arrow`, `risk_assign_ops`, `risk_plan_syntax`.
+- Consumes: Tasks 1-2; P01 `check_env()`, `check_string()`, `check_choice()`, `gptr_abort()`,
+  `gptr_opt("protect_size")`, `as_utf8()`, `project_root()`, `path_class()`, `on_load()`,
+  `ext_service_set(name, fun, provided_by, builtin = NULL)`; P02
+  `registry_get(kind, name, session = NULL)` (namespaced plugin members are `tool` records named
+  `<namespace>/<name>`); P03 `secret_scan(code, tainted = character())` ->
+  `list(findings = df(rule, name, level, guard), level, guard, assigned)` (G6 section 3.8:
+  `secret_env_registered` is the guarded read of a registered secret's variable); rlang
+  `obj_address()`, `env_binding_are_lazy()`; the P01 test helper
+  `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`.
+- Produces (04 sections 6.6, 5.11, 7.0): the export `gptr_risk(code, envir = NULL, root = NULL)`
+  returning a `gptr_risk` (fields of 04 section 5.11 plus `sizes` (named num: bytes of existing
+  objects the code overwrites), `secrets` (registered secret names read), `kind`, `parse_error`);
+  `format.gptr_risk()`, `print.gptr_risk()`;
+  `risk_classify(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python"))`,
+  registered as the service `risk.classify` owned by `builtin:permissions` (Task 7 declares that
+  built-in; until then `ext_service_get("risk.classify")` signals `gptr_error_not_available`);
+  `risk_norm(risk, tool = NULL)` (a tool's `risk()` result or `NULL` -> a `gptr_risk`; `NULL` is
+  level 0 for `annotations$read_only`, else 2, 04 section 9.1); `risk_escape(x)` (controls except
+  TAB, bidi and zero-width characters as `<U+XXXX>`, IC-53 item 8);
+  `risk_scan(exprs, envir = NULL, root = project_root(), depth = 2L, seen = character())` ->
+  `list(flags, targets, calls, sizes)` (the one parse walk, IC-31); `risk_parse(code)`; the walker's
+  helpers `risk_head()`, `risk_fun_ref()`, `risk_binding_info()` (class, bytes and reference-ness of
+  an existing binding, never forcing promises; the object is measured in the closure-free leaf
+  `risk_binding_leaf()`), `risk_binding_safe()`, `risk_gptr_internal()` (`gptr:::`,
+  `asNamespace("gptr")`); constants `risk_arrow`, `risk_assign_ops`, `risk_plan_syntax`.
 
-The walker is report 18's `classify_r_code()` (Appendix A.1, 101/101 cases) rebuilt on the data tables: call heads are resolved through backticks, strings, `::`/`:::`, `(f)`, `get()`/`match.fun()`/`getFromNamespace()`, aliases (`f = unlink`) and higher-order arguments (`lapply(files, file.remove)`); literal `parse(text =)` and `source()`d files are classified recursively; user functions, S3 methods and environment methods found in `envir` are classified through their bodies (two levels deep); quoted code is capped at level 2; overwrites of existing bindings are reported with their size from `object.size()` inside the closure-free leaf `risk_binding_leaf()` (promises and active bindings are never forced; a frame that held the object and created a `tryCatch()` handler would keep it referenced, and the user's next in-place edit would copy it: the copy-safety test pins this, R4); `peter$<member>(...)` calls are classified through their arguments (G5); P03's secret rules become rows of category `secret`. Two additions close gaps the report's table leaves: `file()`, `gzfile()`, `bzfile()` and `xzfile()` opened with a writing mode (`"w"`, `"a"`, `"r+"` or a computed mode) are `file_write` calls with their path class (otherwise `close(file("data.csv", "w"))`, which truncates the file, would be level 0 and run in plan mode); any `gptr:::<name>`, `asNamespace("gptr")` or `getNamespace("gptr")` is a level-4 `control` call (it reaches `the$rules_session` and the other kernel state; P03's `vault_access` finding already asks while the secret guard is on). A third closes a gap between tables: `gptr_artifacts()` is a level-0 `read` row, but `gptr_artifacts(id, open = TRUE)` and `gptr_artifacts(id, version = k)` relaunch model-written app code, which 04 §9.4 rates level 3 when done through `peter$app()`, and `stop = TRUE` stops its process; such a call (or one whose arguments R cannot match) is level 3 `process`, so plan mode denies it and `manual`/`edits` ask (P23 ambiguity 15). Six of 18's 101 expectations change on purpose (stated in the test).
+The walker is report 18's `classify_r_code()` (Appendix A.1, 101/101 cases) rebuilt on the data
+tables: call heads are resolved through backticks, strings, `::`/`:::`, `(f)`,
+`get()`/`match.fun()`/`getFromNamespace()`, aliases (`f = unlink`) and higher-order arguments
+(`lapply(files, file.remove)`); literal `parse(text =)` and `source()`d files are classified
+recursively; user functions, S3 methods and environment methods found in `envir` are classified
+through their bodies (two levels deep); quoted code is capped at level 2; overwrites of existing
+bindings are reported with their size from `object.size()` inside the closure-free leaf
+`risk_binding_leaf()` (promises and active bindings are never forced; a frame that held the object
+and created a `tryCatch()` handler would keep it referenced, and the user's next in-place edit would
+copy it: the copy-safety test pins this, R4); `peter$<member>(...)` calls are classified through
+their arguments (G5); P03's secret rules become rows of category `secret`. Two additions close gaps
+the report's table leaves: `file()`, `gzfile()`, `bzfile()` and `xzfile()` opened with a writing
+mode (`"w"`, `"a"`, `"r+"` or a computed mode) are `file_write` calls with their path class
+(otherwise `close(file("data.csv", "w"))`, which truncates the file, would be level 0 and run in
+plan mode); any `gptr:::<name>`, `asNamespace("gptr")` or `getNamespace("gptr")` is a level-4
+`control` call (it reaches `the$rules_session` and the other kernel state; P03's `vault_access`
+finding already asks while the secret guard is on). A third closes a gap between tables:
+`gptr_artifacts()` is a level-0 `read` row, but `gptr_artifacts(id, open = TRUE)` and
+`gptr_artifacts(id, version = k)` relaunch model-written app code, which 04 section 9.4 rates
+level 3 when done through `peter$app()`, and `stop = TRUE` stops its process; such a call (or one
+whose arguments R cannot match) is level 3 `process`, so plan mode denies it and `manual`/`edits`
+ask (P23 ambiguity 15). Six of 18's 101 expectations change on purpose (stated in the test).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1716,7 +1971,8 @@ test_that("printing a risk lists the flagged calls; displays escape controls (IC
 })
 ```
 
-Create `tests/testthat/_snaps/perm-classify.md` with exactly this content (it ends with one empty line):
+Create `tests/testthat/_snaps/perm-classify.md` with exactly this content (it ends with one empty
+line):
 
 ```markdown
 # printing a risk lists the flagged calls; displays escape controls (IC-53)
@@ -1733,7 +1989,9 @@ Create `tests/testthat/_snaps/perm-classify.md` with exactly this content (it en
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-classify$")'`
 
-Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 153 ]`; the new tests error with `could not find function "gptr_risk"` (and `risk_classify`, `risk_escape`), and the copy-safety test fails because its child process cannot find `gptr_risk()`.
+Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 153 ]`; the new tests error with
+`could not find function "gptr_risk"` (and `risk_classify`, `risk_escape`), and the copy-safety test
+fails because its child process cannot find `gptr_risk()`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3042,13 +3300,16 @@ on_load(ext_service_set("risk.classify", risk_classify, provided_by = "P11",
                         builtin = "permissions"))
 ```
 
-Regenerate the documentation: `Rscript --vanilla -e 'devtools::document()'` (adds `export(gptr_risk)`, `S3method(format,gptr_risk)` and `S3method(print,gptr_risk)` to `NAMESPACE` and writes `man/gptr_risk.Rd` and `man/format.gptr_risk.Rd`).
+Regenerate the documentation: `Rscript --vanilla -e 'devtools::document()'` (adds
+`export(gptr_risk)`, `S3method(format,gptr_risk)` and `S3method(print,gptr_risk)` to `NAMESPACE` and
+writes `man/gptr_risk.Rd` and `man/format.gptr_risk.Rd`).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-classify$")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 409 ]` (the copy-safety test starts one `Rscript` child through P01's `expect_no_copy()`; it is skipped on CRAN).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 409 ]` (the copy-safety test starts one `Rscript` child
+through P01's `expect_no_copy()`; it is skipped on CRAN).
 
 - [ ] **Step 5: Commit**
 
@@ -3065,7 +3326,13 @@ git commit -m "feat(perm): add gptr_risk() and the risk.classify service"
 
 **Interfaces:**
 - Consumes: Task 3 `risk_parse()`, `risk_scan()`, `risk_lookup()`, `risk_plan_syntax`.
-- Produces (04 §7.11, IC-31, IC-54): `code_targets(code)` -> `list(assign, modify, byref, remove, super, files, unknown, process, calls = df(fn, package, line), parse_error)` (the one parse walk shared with P16's `ckpt_predict()`; `parse_error` is an additive field); `risk_plan_disallowed(code, root = project_root())` -> chr of the calls plan mode does not know to be read-only, including every call the walk flags at level 2 or more (empty = the code may run in the scratch environment); the constant `risk_plan_members` (`peter$` members plan mode accepts when their own classification is level 0).
+- Produces (04 section 7.11, IC-31, IC-54): `code_targets(code)` ->
+  `list(assign, modify, byref, remove, super, files, unknown, process, calls = df(fn, package, line), parse_error)`
+  (the one parse walk shared with P16's `ckpt_predict()`; `parse_error` is an additive field);
+  `risk_plan_disallowed(code, root = project_root())` -> chr of the calls plan mode does not know to
+  be read-only, including every call the walk flags at level 2 or more (empty = the code may run in
+  the scratch environment); the constant `risk_plan_members` (`peter$` members plan mode accepts
+  when their own classification is level 0).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3144,7 +3411,8 @@ test_that("the plan-mode allowlist admits only known read-only calls (IC-54)", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-classify$")'`
 
-Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 409 ]`; the new tests error with `could not find function "code_targets"` and `could not find function "risk_plan_disallowed"`.
+Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 409 ]`; the new tests error with
+`could not find function "code_targets"` and `could not find function "risk_plan_disallowed"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3230,10 +3498,26 @@ git commit -m "feat(perm): add code_targets() and the plan-mode allowlist"
 - Test: `tests/testthat/test-perm-rules.R` (create)
 
 **Interfaces:**
-- Consumes: Task 3 `gptr_risk()`, `risk_norm()`, `risk_glob_re()`; P01 `gptr_abort()`, `path_rel(path, root = project_root())`, `path_norm()`, `user_home()`, `path_class()`, `project_root()`, `` `%||%` ``.
-- Produces (04 §7.11): `rule_parse(rule)` -> `list(tool, kind, value)` (kind in `any`, `glob`, `level`, `fn`, `category`, `sh`, `sql`, `secret`) or `gptr_error_invalid_argument` with `arg = "rule"` (the rule text never appears in the message, 04 §1.1); `rule_match(rules, call)` -> `list(deny, ask, allow)` of matching rule strings; `rule_suggest(call)` -> chr(1) or `NULL`; the helpers `rule_glob_re(glob)` (rule globs anchored at the project root: `**/` any directories, `**` anything, `*` one segment, `?` one character, a glob without `/` matches a file name at any depth inside the project but never a `~/` or `//` path), `rule_call_path(call)`, `rule_hit(p, call, lst)`, `rule_tool_match()`; the constants `perm_lists`, `perm_path_tools`, `perm_shell_fns`, `perm_rule_expected`. `rule_parse()` is on the kernel SDK allowlist (IC-33): P14's `/permissions` command calls it.
+- Consumes: Task 3 `gptr_risk()`, `risk_norm()`, `risk_glob_re()`; P01 `gptr_abort()`,
+  `path_rel(path, root = project_root())`, `path_norm()`, `user_home()`, `path_class()`,
+  `project_root()`, `` `%||%` ``.
+- Produces (04 section 7.11): `rule_parse(rule)` -> `list(tool, kind, value)` (kind in `any`,
+  `glob`, `level`, `fn`, `category`, `sh`, `sql`, `secret`) or `gptr_error_invalid_argument` with
+  `arg = "rule"` (the rule text never appears in the message, 04 section 1.1);
+  `rule_match(rules, call)` -> `list(deny, ask, allow)` of matching rule strings;
+  `rule_suggest(call)` -> chr(1) or `NULL`; the helpers `rule_glob_re(glob)` (rule globs anchored at
+  the project root: `**/` any directories, `**` anything, `*` one segment, `?` one character, a glob
+  without `/` matches a file name at any depth inside the project but never a `~/` or `//` path),
+  `rule_call_path(call)`, `rule_hit(p, call, lst)`, `rule_tool_match()`; the constants `perm_lists`,
+  `perm_path_tools`, `perm_shell_fns`, `perm_rule_expected`. `rule_parse()` is on the kernel SDK
+  allowlist (IC-33): P14's `/permissions` command calls it.
 
-A call record is the dispatcher's (04 §4.4): `list(id, name, input, raw, tool, nested, parent_id, outer_level, risk)`; `risk` is a `gptr_risk` for `r`, else the tool's `risk()` result (`list(level, categories, paths)`) or `NULL`. "Flagged calls" are the `flagged` rows of level >= 1 that name a function; object overwrites (rows without a function) are not calls, and oversized overwrites are asked for by the `protect_size` policy (Task 7) whatever the rules say.
+A call record is the dispatcher's (04 section 4.4):
+`list(id, name, input, raw, tool, nested, parent_id, outer_level, risk)`; `risk` is a `gptr_risk`
+for `r`, else the tool's `risk()` result (`list(level, categories, paths)`) or `NULL`. "Flagged
+calls" are the `flagged` rows of level >= 1 that name a function; object overwrites (rows without a
+function) are not calls, and oversized overwrites are asked for by the `protect_size` policy
+(Task 7) whatever the rules say.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3354,7 +3638,8 @@ test_that("rule_suggest() covers exactly the flagged calls, never level 4 or con
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-rules$")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the first error reads `could not find function "rule_parse"`.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the first error reads
+`could not find function "rule_parse"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3595,8 +3880,27 @@ git commit -m "feat(perm): add the permission rule grammar"
 - Generated: `NAMESPACE`, `man/gptr_permissions.Rd`
 
 **Interfaces:**
-- Consumes: Task 5; P01 `the`, `check_strings()`, `check_choice()`, `gptr_abort()`, `gptr_inform(message, class, ..., .once = NULL)`, `hash_sha256()`, `path_key()`, `gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)`, `workspace_dir()`, `project_root()`, `read_utf8(path)` (-> `list(text, ...)`), `json_decode()`, `new_listing(df, class, footer = NULL)`, `ext_service_has()`, `ext_service_get()`; P06 kernel SDK `run_current()` and the `gptr_run` fields `id`, `session`, `signal`; P08 kernel SDK `settings_write(scope, patch)` with the scopes `"user"` and `"user_project"` (the user-level project file of IC-52; atomic write under the IC-71 lock; unknown keys preserved); the service `trust.get` (`function(path = getwd()) lgl(1)`, fallback untrusted).
-- Produces (04 §6.2, §7.0, §5.12): the export `gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL, scope = c("session", "project", "user"))`; `perm_store()` (the environment `the$rules_session` with `allow`, `ask`, `deny`); `perm_rules_table()` (df `rule`, `list`, `scope`, `source`; sources `process`, `user-level project file`, `.gptr/settings.json`, `.gptr/settings.local.json`, `user settings`); `perm_rules_effective()` -> `list(allow, ask, deny)` (what the policies match against); `perm_rules_update(scope, add = list(), remove = character())`; `perm_project_file(root = project_root())`, `perm_user_file()`; `perm_trusted(root = project_root())`; `perm_control_guard(what)` (the IC-53 check, consuming the one-shot token `what` from `run$signal$control` exactly as P08's `control_check()` does; P06's `perm_check()` grants the token); the test helper `local_permission_rules(.env = parent.frame())` in `helper-scripted-ui.R` (restores `the$rules_session`).
+- Consumes: Task 5; P01 `the`, `check_strings()`, `check_choice()`, `gptr_abort()`,
+  `gptr_inform(message, class, ..., .once = NULL)`, `hash_sha256()`, `path_key()`,
+  `gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)`, `workspace_dir()`,
+  `project_root()`, `read_utf8(path)` (-> `list(text, ...)`), `json_decode()`,
+  `new_listing(df, class, footer = NULL)`, `ext_service_has()`, `ext_service_get()`; P06 kernel SDK
+  `run_current()` and the `gptr_run` fields `id`, `session`, `signal`; P08 kernel SDK
+  `settings_write(scope, patch)` with the scopes `"user"` and `"user_project"` (the user-level
+  project file of IC-52; atomic write under the IC-71 lock; unknown keys preserved); the service
+  `trust.get` (`function(path = getwd()) lgl(1)`, fallback untrusted).
+- Produces (04 sections 6.2, 7.0, 5.12): the export
+  `gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL, scope = c("session", "project", "user"))`;
+  `perm_store()` (the environment `the$rules_session` with `allow`, `ask`, `deny`);
+  `perm_rules_table()` (df `rule`, `list`, `scope`, `source`; sources `process`,
+  `user-level project file`, `.gptr/settings.json`, `.gptr/settings.local.json`, `user settings`);
+  `perm_rules_effective()` -> `list(allow, ask, deny)` (what the policies match against);
+  `perm_rules_update(scope, add = list(), remove = character())`;
+  `perm_project_file(root = project_root())`, `perm_user_file()`;
+  `perm_trusted(root = project_root())`; `perm_control_guard(what)` (the IC-53 check, consuming the
+  one-shot token `what` from `run$signal$control` exactly as P08's `control_check()` does; P06's
+  `perm_check()` grants the token); the test helper `local_permission_rules(.env = parent.frame())`
+  in `helper-scripted-ui.R` (restores `the$rules_session`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3728,7 +4032,8 @@ test_that("a cloned settings.local.json only tightens, and only when trusted (IC
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-rules$")'`
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 68 ]`; the new tests error with `could not find function "perm_store"` and `could not find function "gptr_permissions"`.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 68 ]`; the new tests error with
+`could not find function "perm_store"` and `could not find function "gptr_permissions"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3982,7 +4287,8 @@ perm_listing = function() {
 }
 ```
 
-Regenerate the documentation: `Rscript --vanilla -e 'devtools::document()'` (adds `export(gptr_permissions)` and writes `man/gptr_permissions.Rd`).
+Regenerate the documentation: `Rscript --vanilla -e 'devtools::document()'` (adds
+`export(gptr_permissions)` and writes `man/gptr_permissions.Rd`).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -4004,10 +4310,42 @@ git commit -m "feat(perm): add rule stores and gptr_permissions()"
 - Test: `tests/testthat/test-perm-gate.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 1-6 (`risk_classify()`, `risk_norm()`, `risk_secret_scan()`, `risk_path_class()`, `risk_cmd_edits_parity`, `rule_match()`, `rule_suggest()`, `rule_parse()`, `perm_rules_effective()`, `perm_rules_update()`, `perm_shell_fns`); P01 `gptr_opt()`, `gptr_can_prompt()`, `project_root()`, `on_load()`; P02 `gptr_policy(name, check, description = NULL)`, the factory API (`gptr$register(spec)`, `gptr$on(event, handler, matcher = NULL)`), `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `registry_all()`, `ev_dispatch()` (tests); P06 kernel SDK `session_data()`, `session_live()`, `run_current()` and the `gptr_run` fields `id`, `session`, `opts$safety` (P06's `safety_snapshot()`: `ui`, `interactive`, `critical_guard`, `secret_guard`, `noninteractive_ask`, `protect_size`, `mode`, `unsafe_no_permissions`, `can_prompt`, `has_human`); the `ctx` members of 04 §10.6 used by policies and hooks: `ctx$session`, `ctx$envir`, `ctx$mode()`, `ctx$has_ui()`, `ctx$state()`; P01 test helpers `local_fake_provider()`, `fake_tool()`, `fake_requests()`, `msg_text()`; P08 `peter()` (end-to-end tests).
-- Produces (04 §7.11, §10.3, IC-04, IC-53): `builtin_permissions(gptr)` declared with `on_load(ext_declare_builtin("permissions", builtin_permissions, replaceable = FALSE))`, registering the policies `mode`, `rules`, `critical_guard`, `secret_guard`, `protect_size` (each `check(call, ctx)` returns `NULL` or `list(decision, reason, input, rule, suggested_rule)` with `decision` in `allow`, `deny`, `ask`, `ask_human`; `suggested_rule` is what `perm_check()` puts in the permission request record), the hook `tool_result` (secret taint in `ctx$state()$taint`) and the channel `permissions:remember` (the one-shot control tokens of IC-53 item 3 are P06's: `perm_check()` grants them on a person's approval and `tool_execute_frame()` clears them); the owner of the `risk.classify` service of Task 3; helpers later P11 tasks use: `perm_run(ctx, id = NULL)`, `perm_safety(ctx, name)`, `perm_mode(ctx)`, `perm_can_prompt(ctx)`, `perm_call_risk(call, ctx)`, `perm_is_control(call, risk)`, `perm_policy_names`.
+- Consumes: Tasks 1-6 (`risk_classify()`, `risk_norm()`, `risk_secret_scan()`, `risk_path_class()`,
+  `risk_cmd_edits_parity`, `rule_match()`, `rule_suggest()`, `rule_parse()`,
+  `perm_rules_effective()`, `perm_rules_update()`, `perm_shell_fns`); P01 `gptr_opt()`,
+  `gptr_can_prompt()`, `project_root()`, `on_load()`; P02
+  `gptr_policy(name, check, description = NULL)`, the factory API (`gptr$register(spec)`,
+  `gptr$on(event, handler, matcher = NULL)`),
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `registry_all()`,
+  `ev_dispatch()` (tests); P06 kernel SDK `session_data()`, `session_live()`, `run_current()` and
+  the `gptr_run` fields `id`, `session`, `opts$safety` (P06's `safety_snapshot()`: `ui`,
+  `interactive`, `critical_guard`, `secret_guard`, `noninteractive_ask`, `protect_size`, `mode`,
+  `unsafe_no_permissions`, `can_prompt`, `has_human`); the `ctx` members of 04 section 10.6 used by
+  policies and hooks: `ctx$session`, `ctx$envir`, `ctx$mode()`, `ctx$has_ui()`, `ctx$state()`; P01
+  test helpers `local_fake_provider()`, `fake_tool()`, `fake_requests()`, `msg_text()`; P08
+  `peter()` (end-to-end tests).
+- Produces (04 sections 7.11, 10.3, IC-04, IC-53): `builtin_permissions(gptr)` declared with
+  `on_load(ext_declare_builtin("permissions", builtin_permissions, replaceable = FALSE))`,
+  registering the policies `mode`, `rules`, `critical_guard`, `secret_guard`, `protect_size` (each
+  `check(call, ctx)` returns `NULL` or `list(decision, reason, input, rule, suggested_rule)` with
+  `decision` in `allow`, `deny`, `ask`, `ask_human`; `suggested_rule` is what `perm_check()` puts in
+  the permission request record), the hook `tool_result` (secret taint in `ctx$state()$taint`) and
+  the channel `permissions:remember` (the one-shot control tokens of IC-53 item 3 are P06's:
+  `perm_check()` grants them on a person's approval and `tool_execute_frame()` clears them); the
+  owner of the `risk.classify` service of Task 3; helpers later P11 tasks use:
+  `perm_run(ctx, id = NULL)`, `perm_safety(ctx, name)`, `perm_mode(ctx)`, `perm_can_prompt(ctx)`,
+  `perm_call_risk(call, ctx)`, `perm_is_control(call, risk)`, `perm_policy_names`.
 
-Policies only decide; `perm_check()` (P06) combines them "deny > ask_human > ask > modify > allow", treats a throwing policy as a denial, asks `permission_request` hooks for `ask` only, then the UI, and stops a run nobody can answer. The control category is `ask_human` in every mode, so model code cannot reconfigure gptr without a person (IC-53; 05 P11 acceptance 6); the critical guard asks for level 4 even in `auto` unless `gptr.critical_guard` is off in the run's snapshot; the secret guard asks for guarded secret reads and secret-to-network flows even in `auto`, and only `r(secret:NAME)` rules pre-approve a read of a registered secret by name; the protect-size policy asks for overwrites above `gptr.protect_size` outside `auto`. P11 grants no one-shot token itself: P06's `perm_check()` appends them to `run$signal$control` when a person approves an `ask_human` call and clears the slot when the call ends, so a second grant here would let approved code call a control export twice.
+Policies only decide; `perm_check()` (P06) combines them "deny > ask_human > ask > modify > allow",
+treats a throwing policy as a denial, asks `permission_request` hooks for `ask` only, then the UI,
+and stops a run nobody can answer. The control category is `ask_human` in every mode, so model code
+cannot reconfigure gptr without a person (IC-53; 05 P11 acceptance 6); the critical guard asks for
+level 4 even in `auto` unless `gptr.critical_guard` is off in the run's snapshot; the secret guard
+asks for guarded secret reads and secret-to-network flows even in `auto`, and only `r(secret:NAME)`
+rules pre-approve a read of a registered secret by name; the protect-size policy asks for overwrites
+above `gptr.protect_size` outside `auto`. P11 grants no one-shot token itself: P06's `perm_check()`
+appends them to `run$signal$control` when a person approves an `ask_human` call and clears the slot
+when the call ends, so a second grant here would let approved code call a control export twice.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4284,13 +4622,20 @@ test_that("a modify decision is re-checked once and changes what the tool runs (
 })
 ```
 
-The last four tests are end-to-end: they run `peter()` on the fake provider through P06's `perm_check()`, P08's gateway and P10's `r` tool.
+The last four tests are end-to-end: they run `peter()` on the fake provider through P06's
+`perm_check()`, P08's gateway and P10's `r` tool.
 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-gate$")'`
 
-Expected: the unit tests fail: no policy is registered yet, so `gate_decide()` answers `allow` everywhere, and the hooks and policy functions are missing (`could not find function "perm_policy_mode"`, `"perm_on_tool_result"`, `"perm_policy_protect"`). Measured on the unit tests alone (Step 1 without its last four tests): `[ FAIL 52 | WARN 0 | SKIP 0 | PASS 8 ]`; testthat may stop early with "Maximum number of failures exceeded". The four end-to-end tests at the end of the file depend on P06's fail-closed gate (no `mode` policy means `ask`), so some of them already pass at this point.
+Expected: the unit tests fail: no policy is registered yet, so `gate_decide()` answers `allow`
+everywhere, and the hooks and policy functions are missing
+(`could not find function "perm_policy_mode"`, `"perm_on_tool_result"`, `"perm_policy_protect"`).
+Measured on the unit tests alone (Step 1 without its last four tests):
+`[ FAIL 52 | WARN 0 | SKIP 0 | PASS 8 ]`; testthat may stop early with "Maximum number of failures
+exceeded". The four end-to-end tests at the end of the file depend on P06's fail-closed gate (no
+`mode` policy means `ask`), so some of them already pass at this point.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4622,7 +4967,8 @@ on_load(ext_declare_builtin("permissions", builtin_permissions, replaceable = FA
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-gate$")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 84 ]` (71 unit expectations, 13 in the four end-to-end tests).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 84 ]` (71 unit expectations, 13 in the four end-to-end
+tests).
 
 - [ ] **Step 5: Commit**
 
@@ -4639,10 +4985,30 @@ git commit -m "feat(perm): add the built-in permission policies"
 - Test: `tests/testthat/test-console-ui.R` (create)
 
 **Interfaces:**
-- Consumes: P01 `as_utf8()`, `gptr_readline(prompt = "")`, `gptr_can_prompt()`, `msg_verbatim(x, stream = c("stdout", "stderr"))`, `gptr_inform()`, `json_obj()`, `json_encode()`, `on_load()`, `ext_service_set()`, `ext_service_has()`, `ext_service_get()`; P02 `gptr_spec("ui", ...)` (the `ui` kind validator adds a default `permission` built from `select`), `registry_get()`, `ev_dispatch()`, `ext_declare_builtin()`, `gptr_register()` (helper); P06 kernel SDK `session_data()`, `session_live()`, `run_current()`; the service `checkpoint.note` (P16; absent before M3); Tasks 3-7 in tests only (`gptr_risk()`, `perm_store()`, `perm_rules_effective()`, `local_permission_rules()`); P08 `peter()` (end-to-end test).
-- Produces (04 §7.11, §10.2 row 22, §12.2): `builtin_ui(gptr)` registering the `ui` specs `console`, `none`, `scripted` (an empty queue) and `rstudio`, declared with `on_load(ext_declare_builtin("ui", builtin_ui))`; the service `ui.get` (`ui_get(session = NULL)`, owned by `builtin:ui`): resolution from the run's snapshot of `gptr.ui`, else `console` when someone can be prompted, else `none`, the result wrapped by `ui_wrap()` (answers normalised, a failing dialog a denial, a remembered answer sent on the channel `permissions:remember` with `scope`, `tool`, `input`, `rule`); the display helpers `ui_escape()`, `ui_permission_lines(request)`, `ui_permission_detail(request)`; `ui_scripted_state(answers = list())`, `ui_scripted_spec(st, name = "scripted")`; the test helper `local_scripted_ui(answers = list(), .env = parent.frame())`.
+- Consumes: P01 `as_utf8()`, `gptr_readline(prompt = "")`, `gptr_can_prompt()`,
+  `msg_verbatim(x, stream = c("stdout", "stderr"))`, `gptr_inform()`, `json_obj()`, `json_encode()`,
+  `on_load()`, `ext_service_set()`, `ext_service_has()`, `ext_service_get()`; P02
+  `gptr_spec("ui", ...)` (the `ui` kind validator adds a default `permission` built from `select`),
+  `registry_get()`, `ev_dispatch()`, `ext_declare_builtin()`, `gptr_register()` (helper); P06 kernel
+  SDK `session_data()`, `session_live()`, `run_current()`; the service `checkpoint.note` (P16;
+  absent before M3); Tasks 3-7 in tests only (`gptr_risk()`, `perm_store()`,
+  `perm_rules_effective()`, `local_permission_rules()`); P08 `peter()` (end-to-end test).
+- Produces (04 sections 7.11, 10.2 row 22, 12.2): `builtin_ui(gptr)` registering the `ui` specs
+  `console`, `none`, `scripted` (an empty queue) and `rstudio`, declared with
+  `on_load(ext_declare_builtin("ui", builtin_ui))`; the service `ui.get` (`ui_get(session = NULL)`,
+  owned by `builtin:ui`): resolution from the run's snapshot of `gptr.ui`, else `console` when
+  someone can be prompted, else `none`, the result wrapped by `ui_wrap()` (answers normalised, a
+  failing dialog a denial, a remembered answer sent on the channel `permissions:remember` with
+  `scope`, `tool`, `input`, `rule`); the display helpers `ui_escape()`,
+  `ui_permission_lines(request)`, `ui_permission_detail(request)`;
+  `ui_scripted_state(answers = list())`, `ui_scripted_spec(st, name = "scripted")`; the test helper
+  `local_scripted_ui(answers = list(), .env = parent.frame())`.
 
-The console prompt is NS-1's one line (`allow? [y]es / [a]lways / [n]o / [?]`, without `[a]lways` for level 4, control and `ask`), preceded by the call's first line with `(+N more lines)` and every flagged call; `p` remembers in the user-level project file; `n <text>` sends feedback; `?` prints the detail view; Ctrl-C or EOF aborts. Every displayed string goes through `ui_escape()` and `msg_verbatim()` (rule C1, IC-53 item 8).
+The console prompt is NS-1's one line (`allow? [y]es / [a]lways / [n]o / [?]`, without `[a]lways`
+for level 4, control and `ask`), preceded by the call's first line with `(+N more lines)` and every
+flagged call; `p` remembers in the user-level project file; `n <text>` sends feedback; `?` prints
+the detail view; Ctrl-C or EOF aborts. Every displayed string goes through `ui_escape()` and
+`msg_verbatim()` (rule C1, IC-53 item 8).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4868,7 +5234,9 @@ test_that("[a]lways in a run covers the same calls in the next run (05 P11 accep
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^console-ui$")'`
 
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 0 ]`; the errors read `could not find function "ui_escape"`, `"ui_permission_lines"`, `"ui_console_permission"`, `"ui_scripted_state"` (the helper calls it) and `"ui_none_spec"`.
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 0 ]`; the errors read
+`could not find function "ui_escape"`, `"ui_permission_lines"`, `"ui_console_permission"`,
+`"ui_scripted_state"` (the helper calls it) and `"ui_none_spec"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5417,7 +5785,10 @@ on_load(ext_service_set("ui.get", ui_get, provided_by = "P11", builtin = "ui"))
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^console-ui$")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 61 ]` (56 unit expectations, 5 in the end-to-end test). Run it once more with `LC_ALL=C Rscript --vanilla -e 'devtools::test(filter = "^console-ui$")'`: the same summary (the escape tests avoid string literals R's parser rejects in UTF-8 locales or mis-encodes in a C locale).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 61 ]` (56 unit expectations, 5 in the end-to-end test).
+Run it once more with `LC_ALL=C Rscript --vanilla -e 'devtools::test(filter = "^console-ui$")'`: the
+same summary (the escape tests avoid string literals R's parser rejects in UTF-8 locales or
+mis-encodes in a C locale).
 
 - [ ] **Step 5: Commit**
 
@@ -5433,10 +5804,28 @@ git commit -m "feat(ui): add the UI backends, ui.get and the scripted UI"
 - Test: `tests/testthat/test-tool-ask.R` (create)
 
 **Interfaces:**
-- Consumes: P01 `as_utf8()`, `json_obj()`, `json_encode()` (tests), `on_load()`, `gptr_can_prompt()`, `is_testthat()`, `check_running()`, `is_knitting()`, `gptr_is_interactive()`, `gptr_readline()` (the last five mocked in the IRkernel test); P02 `gptr_tool(...)`, `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`, `ext_declare_builtin()`, `registry_get()`; the `ctx` members `ctx$ui()`, `ctx$has_ui()` (the `ui.get` service of Task 8) and `ctx$mode()`; Task 8 `local_scripted_ui()` (tests).
-- Produces (04 §7.11, §9.1-9.2, IC-68): `builtin_ask(gptr)` declared with `on_load(ext_declare_builtin("ask", builtin_ask, after = "ui"))`, registering the direct tool `ask` (schema and description byte-identical to 04 §9.2; `snippet` for the `<tools>` section; `execution = "sequential"`; `risk` level 0, category `interactive`; `annotations = list(read_only = TRUE, requires_user = TRUE)`; `available = ask_available`, TRUE when a person can answer or the run's mode is `manual`); `ask_execute(input, ctx)` -> a `gptr_tool_result` whose text is 18 §3.6's and whose `details` are `list(answers, cancelled)`; `ask_parameters()`, `ask_validate(input)`, `ask_normalise(qs)`.
+- Consumes: P01 `as_utf8()`, `json_obj()`, `json_encode()` (tests), `on_load()`,
+  `gptr_can_prompt()`, `is_testthat()`, `check_running()`, `is_knitting()`, `gptr_is_interactive()`,
+  `gptr_readline()` (the last five mocked in the IRkernel test); P02 `gptr_tool(...)`,
+  `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`,
+  `ext_declare_builtin()`, `registry_get()`; the `ctx` members `ctx$ui()`, `ctx$has_ui()` (the
+  `ui.get` service of Task 8) and `ctx$mode()`; Task 8 `local_scripted_ui()` (tests).
+- Produces (04 sections 7.11, 9.1-9.2, IC-68): `builtin_ask(gptr)` declared with
+  `on_load(ext_declare_builtin("ask", builtin_ask, after = "ui"))`, registering the direct tool
+  `ask` (schema and description byte-identical to 04 section 9.2; `snippet` for the `<tools>`
+  section; `execution = "sequential"`; `risk` level 0, category `interactive`;
+  `annotations = list(read_only = TRUE, requires_user = TRUE)`; `available = ask_available`, TRUE
+  when a person can answer or the run's mode is `manual`); `ask_execute(input, ctx)` -> a
+  `gptr_tool_result` whose text is 18 section 3.6's and whose `details` are
+  `list(answers, cancelled)`; `ask_parameters()`, `ask_validate(input)`, `ask_normalise(qs)`.
 
-Questions are validated beyond the JSON Schema (unique non-empty ids; `single`/`multi` need 2 to 9 options; at most 4 questions) and passed to `ui$questions()` as `list(id, question, type, options, default)`; typed free text carries `attr(, "other") = TRUE` and is reported as `(typed) <text>`. Without a person the `mode` policy (Task 7) answers `ask_human`, so the run stops `blocked` before `execute` runs; if `execute` is reached anyway (`gptr.unsafe_no_permissions`), it returns an error result with `terminate = TRUE` naming the questions.
+Questions are validated beyond the JSON Schema (unique non-empty ids; `single`/`multi` need 2 to 9
+options; at most 4 questions) and passed to `ui$questions()` as
+`list(id, question, type, options, default)`; typed free text carries `attr(, "other") = TRUE` and
+is reported as `(typed) <text>`. Without a person the `mode` policy (Task 7) answers `ask_human`, so
+the run stops `blocked` before `execute` runs; if `execute` is reached anyway
+(`gptr.unsafe_no_permissions`), it returns an error result with `terminate = TRUE` naming the
+questions.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5557,7 +5946,9 @@ test_that("in IRkernel the console UI answers through readline() (IC-43)", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^tool-ask$")'`
 
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 2 ]`; the errors read `could not find function "ask_parameters"`, `"ask_available"` and `"ask_execute"` (no `ask` tool is registered, so the schema test also fails on `spec$description`).
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 2 ]`; the errors read
+`could not find function "ask_parameters"`, `"ask_available"` and `"ask_execute"` (no `ask` tool is
+registered, so the schema test also fails on `spec$description`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5734,10 +6125,54 @@ git commit -m "feat(tools): add the ask tool"
 - Test: `tests/testthat/test-perm-plan.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 3-8 (`code_targets()`, `risk_plan_disallowed()`, `perm_call_risk()`, `perm_is_control()`, `perm_mode()`, `perm_can_prompt()`, `perm_run()`, `perm_policy_names`, the `ui.get` service, `local_scripted_ui()`); P01 `as_utf8()`, `hash_sha256()`, `ws_path(..., create_parent = TRUE)`, `write_utf8(path, text, ...)`, `read_utf8()` (tests), `path_rel()`, `project_root()`, `check_string()`, `check_flag()`, `gptr_opt("plan_handoff")`, `gptr_inform(message, "plan_handoff")`, `msg_text(msg)`, `setting_get(key, session = NULL, default = NULL)`, `on_load()`, `ext_service_set()`; P02 `gptr_policy()`, `registry_get()` (the `preset` kind, IC-69), `registry_diagnostic()`, `ext_declare_builtin()`, `ev_dispatch(event, payload, session = NULL, ctx = NULL)` and P01 `ev_new()` (tests: P14's slash-command `input` events); P03 `redact(x, profile = "persist")`; P06 kernel SDK `session_data()` (`.d$id`, `$depth`, `$model`, `$preset`, `$frozen$preset`, `$frozen$tool_names`, `$last_text`, and `.d$plan`, which this plan sets per 04 §7.11), `session_home()`, `session_append()` (custom entries in the R shape `list(type = "custom", custom_type, data)`), `session_set_mode(s, mode, source = "user")`, `session_enqueue(s, text, as, source)`, `session_live(s)` (the 04 §5.1 live fields `run` and `background`), `run_current()`, `run_eval_env(run)`; P08 kernel SDK `home_address(envir)`; the `ctx` members `ctx$session`, `ctx$envir`, `ctx$mode()`, `ctx$state()`, `ctx$ui()`, `ctx$add_tools(specs)` (P07's `session.add_tools`); the events `turn_end` (`message`), `agent_end` (`status`), `agent_start`, `input` (`source`), `decision`; P08 `peter()` and P07's `plan` context block (end-to-end test).
-- Produces (04 §7.11, §7.0, IC-15, IC-54, IC-56): `builtin_plan(gptr)` declared with `on_load(ext_declare_builtin("plan", builtin_plan, after = "permissions", replaceable = FALSE))`, registering the policy `plan` and the hooks above; the service `plan.pending` (`plan_pending_get(envir_address, consume = TRUE)` -> the plan text with attributes `from` (session id) and `path`, or `NULL`; owned by `builtin:plan`); the store `the$plan_pending` (address string -> `list(text, session, path, time, seq)`, plus the call counter `.calls`); `plan_extract(text)`, `plan_capture(s, text, ctx)`, `plan_execute(s, mode, ctx)`.
+- Consumes: Tasks 3-8 (`code_targets()`, `risk_plan_disallowed()`, `perm_call_risk()`,
+  `perm_is_control()`, `perm_mode()`, `perm_can_prompt()`, `perm_run()`, `perm_policy_names`, the
+  `ui.get` service, `local_scripted_ui()`); P01 `as_utf8()`, `hash_sha256()`,
+  `ws_path(..., create_parent = TRUE)`, `write_utf8(path, text, ...)`, `read_utf8()` (tests),
+  `path_rel()`, `project_root()`, `check_string()`, `check_flag()`, `gptr_opt("plan_handoff")`,
+  `gptr_inform(message, "plan_handoff")`, `msg_text(msg)`,
+  `setting_get(key, session = NULL, default = NULL)`, `on_load()`, `ext_service_set()`; P02
+  `gptr_policy()`, `registry_get()` (the `preset` kind, IC-69), `registry_diagnostic()`,
+  `ext_declare_builtin()`, `ev_dispatch(event, payload, session = NULL, ctx = NULL)` and P01
+  `ev_new()` (tests: P14's slash-command `input` events); P03 `redact(x, profile = "persist")`; P06
+  kernel SDK `session_data()` (`.d$id`, `$depth`, `$model`, `$preset`, `$frozen$preset`,
+  `$frozen$tool_names`, `$last_text`, and `.d$plan`, which this plan sets per 04 section 7.11),
+  `session_home()`, `session_append()` (custom entries in the R shape
+  `list(type = "custom", custom_type, data)`), `session_set_mode(s, mode, source = "user")`,
+  `session_enqueue(s, text, as, source)`, `session_live(s)` (the 04 section 5.1 live fields `run`
+  and `background`), `run_current()`, `run_eval_env(run)`; P08 kernel SDK `home_address(envir)`; the
+  `ctx` members `ctx$session`, `ctx$envir`, `ctx$mode()`, `ctx$state()`, `ctx$ui()`,
+  `ctx$add_tools(specs)` (P07's `session.add_tools`); the events `turn_end` (`message`), `agent_end`
+  (`status`), `agent_start`, `input` (`source`), `decision`; P08 `peter()` and P07's `plan` context
+  block (end-to-end test).
+- Produces (04 sections 7.11, 7.0, IC-15, IC-54, IC-56): `builtin_plan(gptr)` declared with
+  `on_load(ext_declare_builtin("plan", builtin_plan, after = "permissions", replaceable = FALSE))`,
+  registering the policy `plan` and the hooks above; the service `plan.pending`
+  (`plan_pending_get(envir_address, consume = TRUE)` -> the plan text with attributes `from`
+  (session id) and `path`, or `NULL`; owned by `builtin:plan`); the store `the$plan_pending`
+  (address string -> `list(text, session, path, time, seq)`, plus the call counter `.calls`);
+  `plan_extract(text)`, `plan_capture(s, text, ctx)`, `plan_execute(s, mode, ctx)`.
 
-The plan policy denies `write`/`edit`, and an `r` call unless every call in it is known read-only (Task 4's allowlist), it changes no existing object, and the run evaluates in a scratch overlay (`ctx$envir` is not the session's home; P06 creates it, IC-15); the control calls themselves are left to the guards, which ask a person, but every other call in the same code must still pass the allowlist. A plan-mode answer's last `<proposed_plan>` block is captured at `turn_end` (and at `agent_end` as a fallback), saved under `<workspace root>/plans/`, recorded and stored under the home's address. The hand-off counts peter() calls through the `input` events of source `prompt` and `pipe` (P08; a console prompt is a gateway call too) and the `decision` events (System 1); a slash-command line (P14, source `repl`) is not a peter() call and keeps the plan: a plan recorded at call k goes only to call k + 1, made from the top level (no run on the stack), outside a loop body (detected from srcrefs when R keeps them, as in RStudio, knitr and `source(keep.source = TRUE)`), within one hour; otherwise it is discarded with a `plan_handoff` notice. Interactively the `agent_end` hook shows the menu `Execute: [a]uto / [e]dits / [m]anual / [k]eep planning` once per captured plan, after the plan run settled (04 §7.11): the choice switches the mode of the same session, declares the tools the readonly preset lacked (once, through `ctx$add_tools()`), marks the plan used and queues `Go ahead with the plan above.` as a follow-up that the session's next run takes (P08's `gptr_step()` or the console's next turn), with a `plan_handoff` notice naming `gptr_step(gptr_last())`. It does not run inside the plan run: P06 creates that run's scratch overlay at its start and evaluates every `r` call of the run there, so objects created while executing the plan would be discarded at settlement.
+The plan policy denies `write`/`edit`, and an `r` call unless every call in it is known read-only
+(Task 4's allowlist), it changes no existing object, and the run evaluates in a scratch overlay
+(`ctx$envir` is not the session's home; P06 creates it, IC-15); the control calls themselves are
+left to the guards, which ask a person, but every other call in the same code must still pass the
+allowlist. A plan-mode answer's last `<proposed_plan>` block is captured at `turn_end` (and at
+`agent_end` as a fallback), saved under `<workspace root>/plans/`, recorded and stored under the
+home's address. The hand-off counts peter() calls through the `input` events of source `prompt` and
+`pipe` (P08; a console prompt is a gateway call too) and the `decision` events (System 1); a
+slash-command line (P14, source `repl`) is not a peter() call and keeps the plan: a plan recorded at
+call k goes only to call k + 1, made from the top level (no run on the stack), outside a loop body
+(detected from srcrefs when R keeps them, as in RStudio, knitr and `source(keep.source = TRUE)`),
+within one hour; otherwise it is discarded with a `plan_handoff` notice. Interactively the
+`agent_end` hook shows the menu `Execute: [a]uto / [e]dits / [m]anual / [k]eep planning` once per
+captured plan, after the plan run settled (04 section 7.11): the choice switches the mode of the
+same session, declares the tools the readonly preset lacked (once, through `ctx$add_tools()`), marks
+the plan used and queues `Go ahead with the plan above.` as a follow-up that the session's next run
+takes (P08's `gptr_step()` or the console's next turn), with a `plan_handoff` notice naming
+`gptr_step(gptr_last())`. It does not run inside the plan run: P06 creates that run's scratch
+overlay at its start and evaluates every `r` call of the run there, so objects created while
+executing the plan would be discarded at settlement.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6092,7 +6527,10 @@ test_that("plan mode on the fake provider: denied writes, scratch r, a plan hand
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-plan$")'`
 
-Expected: the tests error with `could not find function "plan_extract"`, `"plan_policy_check"` and `"plan_store"`; measured on the unit tests (Step 1 without its last test): `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 7 ]`; the end-to-end test errors too (`local_plan_store()` calls `plan_store()`).
+Expected: the tests error with `could not find function "plan_extract"`, `"plan_policy_check"` and
+`"plan_store"`; measured on the unit tests (Step 1 without its last test):
+`[ FAIL 12 | WARN 0 | SKIP 0 | PASS 7 ]`; the end-to-end test errors too (`local_plan_store()` calls
+`plan_store()`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6539,7 +6977,8 @@ on_load(ext_service_set("plan.pending", plan_pending_get, provided_by = "P11", b
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^perm-plan$")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 83 ]` (72 unit expectations, 11 in the end-to-end test).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 83 ]` (72 unit expectations, 11 in the end-to-end
+test).
 
 - [ ] **Step 5: Commit**
 
@@ -6551,24 +6990,38 @@ git commit -m "feat(perm): add plan mode and the pending-plan hand-off"
 ### Task 11: Documentation, lint and plan acceptance
 
 **Files:**
-- Generated: `NAMESPACE`, `man/gptr_risk.Rd`, `man/format.gptr_risk.Rd`, `man/gptr_permissions.Rd` (no change expected after Tasks 3 and 6)
-- Test: the cross-cutting suites of P01 that scan every file under `R/` (`tests/testthat/test-lint-rules.R`, `tests/testthat/test-arch-layers.R`) and the six P11 test files
+- Generated: `NAMESPACE`, `man/gptr_risk.Rd`, `man/format.gptr_risk.Rd`, `man/gptr_permissions.Rd`
+  (no change expected after Tasks 3 and 6)
+- Test: the cross-cutting suites of P01 that scan every file under `R/`
+  (`tests/testthat/test-lint-rules.R`, `tests/testthat/test-arch-layers.R`) and the six P11 test
+  files
 
 **Interfaces:**
-- Consumes: Tasks 1-10; P01's `lint_scan()` (in `test-lint-rules.R`) and `arch_edges()`/`arch_check()` (in `helper-arch.R`), which now include P11's six files (`perm-*.R` L4, `tool-ask.R` L4, `console-ui.R` L5).
-- Produces: the M2 contribution of P11: the exports `gptr_risk()` and `gptr_permissions()` documented with examples that run offline; the built-ins `builtin:permissions`, `builtin:plan`, `builtin:ui`, `builtin:ask`; the services `risk.classify`, `ui.get`, `plan.pending`.
+- Consumes: Tasks 1-10; P01's `lint_scan()` (in `test-lint-rules.R`) and
+  `arch_edges()`/`arch_check()` (in `helper-arch.R`), which now include P11's six files (`perm-*.R`
+  L4, `tool-ask.R` L4, `console-ui.R` L5).
+- Produces: the M2 contribution of P11: the exports `gptr_risk()` and `gptr_permissions()`
+  documented with examples that run offline; the built-ins `builtin:permissions`, `builtin:plan`,
+  `builtin:ui`, `builtin:ask`; the services `risk.classify`, `ui.get`, `plan.pending`.
 
-This task adds no code. It proves the cross-cutting rules hold for P11's files and runs the plan acceptance.
+This task adds no code. It proves the cross-cutting rules hold for P11's files and runs the plan
+acceptance.
 
 - [ ] **Step 1: Write the failing test**
 
-No new test: P01's `test-lint-rules.R` (no left arrow, no `:::`, every `readLines()` with `encoding = "UTF-8"`, ASCII-only sources, no `askYesNo()`/`menu()`/`select.list()`, no `withr::` in `R/`, literal first arguments of `cli_*()` calls, ...) and `test-arch-layers.R` (L4 and L5 call only what 03 §2.2 and the kernel SDK of IC-33 allow; every literal `ext_service_get("<name>")` names a declared service) scan P11's files automatically. They are the tests of this task.
+No new test: P01's `test-lint-rules.R` (no left arrow, no `:::`, every `readLines()` with
+`encoding = "UTF-8"`, ASCII-only sources, no `askYesNo()`/`menu()`/`select.list()`, no `withr::` in
+`R/`, literal first arguments of `cli_*()` calls, ...) and `test-arch-layers.R` (L4 and L5 call only
+what 03 section 2.2 and the kernel SDK of IC-33 allow; every literal `ext_service_get("<name>")`
+names a declared service) scan P11's files automatically. They are the tests of this task.
 
 - [ ] **Step 2: Run them to verify the state**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^(lint-rules|arch-layers)$")'`
 
-Expected: `FAIL 0` (the PASS count is P01's; P11 adds no expectation to these files). A violation names the file, line and rule (`left_assign`, `readlines_encoding`, `non_ascii`, ...) or the forbidden call edge; fix the P11 file it names and run again.
+Expected: `FAIL 0` (the PASS count is P01's; P11 adds no expectation to these files). A violation
+names the file, line and rule (`left_assign`, `readlines_encoding`, `non_ascii`, ...) or the
+forbidden call edge; fix the P11 file it names and run again.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6579,7 +7032,9 @@ Rscript --vanilla -e 'devtools::document()'
 git status --short NAMESPACE man/
 ```
 
-Expected: no output from `git status` (Tasks 3 and 6 committed the generated files); `NAMESPACE` contains `S3method(format,gptr_risk)`, `S3method(print,gptr_risk)`, `export(gptr_permissions)` and `export(gptr_risk)`.
+Expected: no output from `git status` (Tasks 3 and 6 committed the generated files); `NAMESPACE`
+contains `S3method(format,gptr_risk)`, `S3method(print,gptr_risk)`, `export(gptr_permissions)` and
+`export(gptr_risk)`.
 
 Run the two exports' examples against the loaded sources:
 
@@ -6601,9 +7056,12 @@ Expected: no lints printed.
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "perm|console-ui|tool-ask")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 819 ]` (perm-classify 446, perm-rules 106, perm-gate 84, console-ui 61, tool-ask 39, perm-plan 83).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 819 ]` (perm-classify 446, perm-rules 106, perm-gate
+84, console-ui 61, tool-ask 39, perm-plan 83).
 
-Run the same command in a C locale: `LC_ALL=C Rscript --vanilla -e 'devtools::test(filter = "perm|console-ui|tool-ask")'`. Expected: the same summary.
+Run the same command in a C locale:
+`LC_ALL=C Rscript --vanilla -e 'devtools::test(filter = "perm|console-ui|tool-ask")'`. Expected: the
+same summary.
 
 - [ ] **Step 5: Commit**
 
@@ -6618,37 +7076,100 @@ git commit -m "docs(perm): regenerate the P11 documentation"
 
 ## Plan acceptance
 
-Every check of 05 P11, including its review amendments, with the task and test that prove it and the command with its expected result. All commands run from the repository root. The per-file commands are:
+Every check of 05 P11, including its review amendments, with the task and test that prove it and the
+command with its expected result. All commands run from the repository root. The per-file commands
+are:
 
-- `Rscript --vanilla -e 'devtools::test(filter = "^perm-classify$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 446 ]`
-- `Rscript --vanilla -e 'devtools::test(filter = "^perm-rules$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 106 ]`
-- `Rscript --vanilla -e 'devtools::test(filter = "^perm-gate$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 84 ]`
-- `Rscript --vanilla -e 'devtools::test(filter = "^console-ui$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 61 ]`
-- `Rscript --vanilla -e 'devtools::test(filter = "^tool-ask$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 39 ]`
-- `Rscript --vanilla -e 'devtools::test(filter = "^perm-plan$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 83 ]`
+- `Rscript --vanilla -e 'devtools::test(filter = "^perm-classify$")'` ->
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 446 ]`
+- `Rscript --vanilla -e 'devtools::test(filter = "^perm-rules$")'` ->
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 106 ]`
+- `Rscript --vanilla -e 'devtools::test(filter = "^perm-gate$")'` ->
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 84 ]`
+- `Rscript --vanilla -e 'devtools::test(filter = "^console-ui$")'` ->
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 61 ]`
+- `Rscript --vanilla -e 'devtools::test(filter = "^tool-ask$")'` ->
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 39 ]`
+- `Rscript --vanilla -e 'devtools::test(filter = "^perm-plan$")'` ->
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 83 ]`
 
-1. **`devtools::test(filter = "perm|console-ui|tool-ask")` is green.** Task 11 Step 4. Command: `Rscript --vanilla -e 'devtools::test(filter = "perm|console-ui|tool-ask")'`. Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 819 ]`; the same with `LC_ALL=C`.
-2. **18's 101 classifier cases and the 11-row mode x risk matrix pass; a throwing policy denies; `modify` changes the arguments and is recorded; allow rules never loosen plan or pre-approve level 4.**
-   - 101 cases: Task 3, `test-perm-classify.R` "report 18's 101 cases get their levels (18 section 2.5.2, amended)"; the six levels that differ from 18's table are listed in the test with their reason (G5 command table, network reads, the control path class, P03's secret levels).
-   - Matrix: Task 7, `test-perm-gate.R` "the 11-row mode x risk matrix holds (03 section 6.8.1; 18 section 4.7)".
-   - Throwing policy and `modify`: Task 7, "a throwing policy denies the call (IC-53 item 1)" and "a modify decision is re-checked once and changes what the tool runs (IC-53)" (the object gets the modified value and the tool result's `details$code` is the modified code).
-   - Allow rules: Task 7, "allow rules never loosen plan or pre-approve level 4; deny rules win (6.8.2)"; Task 5, "rule_suggest() covers exactly the flagged calls, never level 4 or control (7.11)".
+1. **`devtools::test(filter = "perm|console-ui|tool-ask")` is green.** Task 11 Step 4. Command:
+   `Rscript --vanilla -e 'devtools::test(filter = "perm|console-ui|tool-ask")'`. Expected:
+   `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 819 ]`; the same with `LC_ALL=C`.
+2. **18's 101 classifier cases and the 11-row mode x risk matrix pass; a throwing policy denies;
+   `modify` changes the arguments and is recorded; allow rules never loosen plan or pre-approve
+   level 4.**
+   - 101 cases: Task 3, `test-perm-classify.R` "report 18's 101 cases get their levels (18
+     section 2.5.2, amended)"; the six levels that differ from 18's table are listed in the test
+     with their reason (G5 command table, network reads, the control path class, P03's secret
+     levels).
+   - Matrix: Task 7, `test-perm-gate.R` "the 11-row mode x risk matrix holds (03 section 6.8.1; 18
+     section 4.7)".
+   - Throwing policy and `modify`: Task 7, "a throwing policy denies the call (IC-53 item 1)" and "a
+     modify decision is re-checked once and changes what the tool runs (IC-53)" (the object gets the
+     modified value and the tool result's `details$code` is the modified code).
+   - Allow rules: Task 7, "allow rules never loosen plan or pre-approve level 4; deny rules win
+     (6.8.2)"; Task 5, "rule_suggest() covers exactly the flagged calls, never level 4 or control
+     (7.11)".
    - Commands: the `perm-classify`, `perm-gate` and `perm-rules` lines above.
-3. **Non-interactive: an action needing approval stops the run with status `blocked` and `gptr_error_permission` naming the action and how to allow it; with `options(gptr.noninteractive_ask = "deny")` the model receives a denial result instead.** Task 7, "an action needing approval stops a non-interactive run (NS-12, 6.8.5)" and "with gptr.noninteractive_ask = 'deny' the model receives a denial (IC-14)". Command: the `perm-gate` line.
-4. **Plan mode on the fake provider: a write is denied, level-1 R runs in the scratch environment and its assignments do not persist, the `<proposed_plan>` is saved, and the next non-plan call in the same environment receives `<plan>` exactly once; the pending-plan store holds no environment reference (copy row).** Task 10, "plan mode on the fake provider: denied writes, scratch r, a plan handed over once" and "a captured plan is saved, recorded and keyed by an address string (R2)"; both walk `the$plan_pending` and assert that it holds no environment and no function. Plan-mode code that would write through a read row (`close(file("a.csv", "w"))`) is denied: Task 3, "file connections opened for writing are file writes (plan mode stays read-only)" and Task 4's allowlist test. Command: the `perm-plan` and `perm-classify` lines.
-5. **The scripted UI answers `[a]lways`, producing a session rule that covers exactly the flagged calls.** Task 8, "answering [a]lways adds a session rule covering exactly the flagged calls" and "[a]lways in a run covers the same calls in the next run (05 P11 acceptance 5)". Command: the `console-ui` line.
+3. **Non-interactive: an action needing approval stops the run with status `blocked` and
+   `gptr_error_permission` naming the action and how to allow it; with
+   `options(gptr.noninteractive_ask = "deny")` the model receives a denial result instead.** Task 7,
+   "an action needing approval stops a non-interactive run (NS-12, 6.8.5)" and "with
+   gptr.noninteractive_ask = 'deny' the model receives a denial (IC-14)". Command: the `perm-gate`
+   line.
+4. **Plan mode on the fake provider: a write is denied, level-1 R runs in the scratch environment
+   and its assignments do not persist, the `<proposed_plan>` is saved, and the next non-plan call in
+   the same environment receives `<plan>` exactly once; the pending-plan store holds no environment
+   reference (copy row).** Task 10, "plan mode on the fake provider: denied writes, scratch r, a
+   plan handed over once" and "a captured plan is saved, recorded and keyed by an address string
+   (R2)"; both walk `the$plan_pending` and assert that it holds no environment and no function.
+   Plan-mode code that would write through a read row (`close(file("a.csv", "w"))`) is denied:
+   Task 3, "file connections opened for writing are file writes (plan mode stays read-only)" and
+   Task 4's allowlist test. Command: the `perm-plan` and `perm-classify` lines.
+5. **The scripted UI answers `[a]lways`, producing a session rule that covers exactly the flagged
+   calls.** Task 8, "answering [a]lways adds a session rule covering exactly the flagged calls" and
+   "[a]lways in a run covers the same calls in the next run (05 P11 acceptance 5)". Command: the
+   `console-ui` line.
 6. **Review additions.**
-   - Blind spots (`targets::tar_destroy()` >= 2, `usethis::create_package(".")` >= 2), denied in plan mode: Task 3, "18's blind spots and user methods get the amended levels (IC-54)"; Task 4, "the plan-mode allowlist admits only known read-only calls (IC-54)"; Task 10, "in plan mode blind spots are denied and control calls need a person (acc. 6)".
-   - In `manual` and `plan`, model code calling `gptr_permissions(allow =)`, `gptr_trust(".", TRUE)`, `gptr_register(gptr_hook("permission_request", ...))`, `options(gptr.critical_guard = FALSE)` or writing `.gptr/extensions/x.R` needs a human (`blocked` without one): Task 3, "gptr's own configuration is the control category, level 4 (IC-53, IC-54)"; Task 7, "control actions need a person in every mode, plan included (IC-53, IC-54)" (the decision is `ask_human`, which `perm_check()` stops as `blocked` when no UI can answer); Task 10's plan-mode combination test; Task 6, "model code needs a one-shot approval to change rules during a run (IC-53)".
-   - An ESC or bidi payload in code is escaped in the prompt: Task 8, "displays escape C0/C1 controls, bidi and zero-width characters (IC-53 item 8)" and "the one-line prompt shows the first line, +N more lines and every flagged call"; Task 3's escape assertions. Also run `LC_ALL=C Rscript --vanilla -e 'devtools::test(filter = "^console-ui$")'`: the same summary.
-   - A cloned fixture with `settings.local.json` allow rules and an `AGENTS.md` instruction still asks: Task 7, "a cloned project's settings.local.json and AGENTS.md pre-approve nothing (IC-52)"; Task 6, "a cloned settings.local.json only tightens, and only when trusted (IC-52)".
-   - Control calls cannot carry other changes into plan mode: Task 10, "the plan policy denies writes and code not known to be read-only (IC-54)" (`gptr_permissions(...); unlink(...)` is denied, naming `unlink`) and the `gptr_trust(...); unlink(...)` case of "in plan mode blind spots are denied and control calls need a person (acc. 6)".
-   - The pending plan is not handed to a call inside a loop or to a call after an intervening `peter()`: Task 10, "a peter() call inside a loop body does not receive the plan (IC-56)" and "an intervening peter() call, a run, a loop or an hour discard the plan (IC-56)"; a console slash command (P14's `input` of source `repl`) is not a `peter()` call and keeps the plan: Task 10, "a slash command between the plan and the next peter() call keeps the plan (IC-56)".
-   - With `jupyter.in_kernel = TRUE` mocked and a mocked `gptr_readline()`, an ask is answered: Task 9, "in IRkernel the console UI answers through readline() (IC-43)".
+   - Blind spots (`targets::tar_destroy()` >= 2, `usethis::create_package(".")` >= 2), denied in
+     plan mode: Task 3, "18's blind spots and user methods get the amended levels (IC-54)"; Task 4,
+     "the plan-mode allowlist admits only known read-only calls (IC-54)"; Task 10, "in plan mode
+     blind spots are denied and control calls need a person (acc. 6)".
+   - In `manual` and `plan`, model code calling `gptr_permissions(allow =)`,
+     `gptr_trust(".", TRUE)`, `gptr_register(gptr_hook("permission_request", ...))`,
+     `options(gptr.critical_guard = FALSE)` or writing `.gptr/extensions/x.R` needs a human
+     (`blocked` without one): Task 3, "gptr's own configuration is the control category, level 4
+     (IC-53, IC-54)"; Task 7, "control actions need a person in every mode, plan included (IC-53,
+     IC-54)" (the decision is `ask_human`, which `perm_check()` stops as `blocked` when no UI can
+     answer); Task 10's plan-mode combination test; Task 6, "model code needs a one-shot approval to
+     change rules during a run (IC-53)".
+   - An ESC or bidi payload in code is escaped in the prompt: Task 8, "displays escape C0/C1
+     controls, bidi and zero-width characters (IC-53 item 8)" and "the one-line prompt shows the
+     first line, +N more lines and every flagged call"; Task 3's escape assertions. Also run
+     `LC_ALL=C Rscript --vanilla -e 'devtools::test(filter = "^console-ui$")'`: the same summary.
+   - A cloned fixture with `settings.local.json` allow rules and an `AGENTS.md` instruction still
+     asks: Task 7, "a cloned project's settings.local.json and AGENTS.md pre-approve nothing
+     (IC-52)"; Task 6, "a cloned settings.local.json only tightens, and only when trusted (IC-52)".
+   - Control calls cannot carry other changes into plan mode: Task 10, "the plan policy denies
+     writes and code not known to be read-only (IC-54)" (`gptr_permissions(...); unlink(...)` is
+     denied, naming `unlink`) and the `gptr_trust(...); unlink(...)` case of "in plan mode blind
+     spots are denied and control calls need a person (acc. 6)".
+   - The pending plan is not handed to a call inside a loop or to a call after an intervening
+     `peter()`: Task 10, "a peter() call inside a loop body does not receive the plan (IC-56)" and
+     "an intervening peter() call, a run, a loop or an hour discard the plan (IC-56)"; a console
+     slash command (P14's `input` of source `repl`) is not a `peter()` call and keeps the plan:
+     Task 10, "a slash command between the plan and the next peter() call keeps the plan (IC-56)".
+   - With `jupyter.in_kernel = TRUE` mocked and a mocked `gptr_readline()`, an ask is answered:
+     Task 9, "in IRkernel the console UI answers through readline() (IC-43)".
    - Commands: the per-file lines above.
-7. **Cross-cutting rules (lint, layering, declared services) hold for P11's files.** Task 11 Step 2. Command: `Rscript --vanilla -e 'devtools::test(filter = "^(lint-rules|arch-layers)$")'`. Expected: `FAIL 0`.
+7. **Cross-cutting rules (lint, layering, declared services) hold for P11's files.** Task 11 Step 2.
+   Command: `Rscript --vanilla -e 'devtools::test(filter = "^(lint-rules|arch-layers)$")'`.
+   Expected: `FAIL 0`.
 
-The M2 milestone check (`devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")`) runs after P13, the last M2 plan (05 P13 acceptance 5); P11's two examples run offline (Task 11 Step 3).
+The M2 milestone check
+(`devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")`) runs after P13, the
+last M2 plan (05 P13 acceptance 5); P11's two examples run offline (Task 11 Step 3).
 
 ---
 
@@ -6656,86 +7177,266 @@ The M2 milestone check (`devtools::check(args = c("--as-cran", "--no-manual"), e
 
 ### Spec coverage (05 P11 scope and review amendments -> tasks)
 
-- `perm-classify.R`: `gptr_risk()` (R classifier of 18 with path classes and overwrite sizes) -> Task 3; command, SQL and Python classifiers of G5 -> Task 2; secret rules of G6 through P03's `secret_scan()` -> Task 3; the `inst/extdata/risk-*.csv` tables and `risk_table(kind)` -> Task 1; `code_targets()` (IC-31) -> Task 4.
-- `perm-rules.R`: rule grammar -> Task 5; session, project (user-level project file) and user persistence, `gptr_permissions()` -> Task 6.
-- `perm-gate.R`: mode table, rules, critical and secret guards, protect size, `builtin:permissions` -> Task 7; the combination and the non-interactive stop stay in P06's `perm_check()` (IC-04), exercised end to end in Task 7.
-- `perm-plan.R`: `readonly` preset wiring (tools added when leaving plan mode), scratch environment check, `<proposed_plan>` capture, pending plan keyed by address string, execute menu, `builtin:plan` -> Task 10.
-- `console-ui.R`: the four UI backends, the one-line prompt and its detail view, `builtin:ui`, the `ui.get` service -> Task 8; `helper-scripted-ui.R` -> Tasks 6 and 8.
+- `perm-classify.R`: `gptr_risk()` (R classifier of 18 with path classes and overwrite sizes) ->
+  Task 3; command, SQL and Python classifiers of G5 -> Task 2; secret rules of G6 through P03's
+  `secret_scan()` -> Task 3; the `inst/extdata/risk-*.csv` tables and `risk_table(kind)` -> Task 1;
+  `code_targets()` (IC-31) -> Task 4.
+- `perm-rules.R`: rule grammar -> Task 5; session, project (user-level project file) and user
+  persistence, `gptr_permissions()` -> Task 6.
+- `perm-gate.R`: mode table, rules, critical and secret guards, protect size, `builtin:permissions`
+  -> Task 7; the combination and the non-interactive stop stay in P06's `perm_check()` (IC-04),
+  exercised end to end in Task 7.
+- `perm-plan.R`: `readonly` preset wiring (tools added when leaving plan mode), scratch environment
+  check, `<proposed_plan>` capture, pending plan keyed by address string, execute menu,
+  `builtin:plan` -> Task 10.
+- `console-ui.R`: the four UI backends, the one-line prompt and its detail view, `builtin:ui`, the
+  `ui.get` service -> Task 8; `helper-scripted-ui.R` -> Tasks 6 and 8.
 - `tool-ask.R`: trimmed schema, UI mapping, `builtin:ask` -> Task 9.
-- Review amendments: `control` rows (IC-53) -> Tasks 1, 3; risky-package list and level 1 for unlisted non-base functions (IC-54) -> Tasks 1, 3; additive `risk_rule` records (IC-69) -> Task 1; plan-mode allowlist (IC-54) -> Tasks 4, 10; `ask_human` tier and non-removable policies (IC-53) -> Tasks 7, 10; display sanitisation and every flagged call in prompts (IC-53) -> Tasks 3, 8; "always in this project" in the user-level project file and the legacy `settings.local.json` only tightening (IC-52) -> Tasks 6, 7, 8; `gptr_can_prompt()` for UI resolution and the `ask` tool, `ask` declared in non-interactive `manual` runs and stopping the run (IC-43, IC-68) -> Tasks 7, 8, 9; pending-plan hand-off rules (IC-56) -> Task 10.
+- Review amendments: `control` rows (IC-53) -> Tasks 1, 3; risky-package list and level 1 for
+  unlisted non-base functions (IC-54) -> Tasks 1, 3; additive `risk_rule` records (IC-69) -> Task 1;
+  plan-mode allowlist (IC-54) -> Tasks 4, 10; `ask_human` tier and non-removable policies (IC-53) ->
+  Tasks 7, 10; display sanitisation and every flagged call in prompts (IC-53) -> Tasks 3, 8; "always
+  in this project" in the user-level project file and the legacy `settings.local.json` only
+  tightening (IC-52) -> Tasks 6, 7, 8; `gptr_can_prompt()` for UI resolution and the `ask` tool,
+  `ask` declared in non-interactive `manual` runs and stopping the run (IC-43, IC-68) -> Tasks 7, 8,
+  9; pending-plan hand-off rules (IC-56) -> Task 10.
 - Every acceptance check of 05 P11 is mapped in "Plan acceptance" above.
 
 ### Placeholder scan
 
-The plan was searched for "TBD", "TODO", "implement later", "fill in", "similar to Task", "handle edge cases" and "add appropriate": none occurs, apart from the data string `rg -n TODO R/` in two of G5's command cases. Every step that changes code shows the complete code; the two CSV files are produced by the complete generator scripts of Task 1 (with row counts and checksums).
+The plan was searched for "TBD", "TODO", "implement later", "fill in", "similar to Task", "handle
+edge cases" and "add appropriate": none occurs, apart from the data string `rg -n TODO R/` in two of
+G5's command cases. Every step that changes code shows the complete code; the two CSV files are
+produced by the complete generator scripts of Task 1 (with row counts and checksums).
 
 ### Type and name consistency with 04
 
-- Exports match 04 §6.2 and §6.6 exactly: `gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL, scope = c("session", "project", "user"))`, `gptr_risk(code, envir = NULL, root = NULL)`.
-- Internal names match 04 §7.11: `code_targets(code)`, `rule_parse(rule)`, `rule_match(rules, call)`, `rule_suggest(call)`, `builtin_permissions(gptr)`, `builtin_plan(gptr)`, `builtin_ui(gptr)`, `builtin_ask(gptr)`, `risk_table(kind)`; services `risk.classify` (`function(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python"))`), `ui.get` (`function(session = NULL)`), `plan.pending` (`function(envir_address, consume = TRUE)`), each owned by its built-in (IC-34).
-- Classes: `gptr_risk` carries every field of 04 §5.11 (`level`, `label`, `categories`, `flagged` with `call`, `fn`, `level`, `category`, `path`, `path_class`, `paths`, `secret`, `secret_guard`, `assigned`, `dynamic`) plus the additive `sizes`, `secrets`, `kind`, `parse_error`; `gptr_permissions` is a P01 listing with `rule`, `list`, `scope`, `source`.
-- Options, settings keys, file paths, condition classes and event names are those of 04 §3.1, §11.1-11.3, §2.2 and §10.4. P11 defines no function another plan defines; private helpers carry the prefixes `risk_`, `rule_`, `perm_`, `ui_`, `ask_`, `plan_`.
+- Exports match 04 sections 6.2 and 6.6 exactly:
+  `gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL, scope = c("session", "project", "user"))`,
+  `gptr_risk(code, envir = NULL, root = NULL)`.
+- Internal names match 04 section 7.11: `code_targets(code)`, `rule_parse(rule)`,
+  `rule_match(rules, call)`, `rule_suggest(call)`, `builtin_permissions(gptr)`,
+  `builtin_plan(gptr)`, `builtin_ui(gptr)`, `builtin_ask(gptr)`, `risk_table(kind)`; services
+  `risk.classify`
+  (`function(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python"))`), `ui.get`
+  (`function(session = NULL)`), `plan.pending` (`function(envir_address, consume = TRUE)`), each
+  owned by its built-in (IC-34).
+- Classes: `gptr_risk` carries every field of 04 section 5.11 (`level`, `label`, `categories`,
+  `flagged` with `call`, `fn`, `level`, `category`, `path`, `path_class`, `paths`, `secret`,
+  `secret_guard`, `assigned`, `dynamic`) plus the additive `sizes`, `secrets`, `kind`,
+  `parse_error`; `gptr_permissions` is a P01 listing with `rule`, `list`, `scope`, `source`.
+- Options, settings keys, file paths, condition classes and event names are those of 04
+  sections 3.1, 11.1-11.3, 2.2 and 10.4. P11 defines no function another plan defines; private
+  helpers carry the prefixes `risk_`, `rule_`, `perm_`, `ui_`, `ask_`, `plan_`.
 
 ### Contract ambiguities and deviations (recorded, with the reading chosen)
 
-1. **`ask_human` from policies.** 04 §10.2 row 12 lists policy decisions `allow`, `deny`, `ask`, `modify`; 04 §7.6 and IC-53 item 6 (which win) combine `deny > ask_human > ask > modify > allow` and give the guards the `ask_human` tier. P11's policies return `ask_human`. P02's plan validates policy answers with `ext_policy_ok()`, which accepts only the four older decisions, so P02's `ext_policy_decide()` and its `gptr_check()` matrix call an `ask_human` "malformed" (measured: `gptr_check(builtin_permissions)` reports `policy.matrix` failures for `mode` and `critical_guard`). P02 must accept `ask_human`; until it does, a P06 that evaluates policies through `ext_policy_decide()` turns these decisions into denials (fail closed, never an approval).
-2. **Control actions in plan mode.** 03 §6.8.1 lists level 4 (which includes the control category) as `deny` in plan mode; 05 P11 acceptance 6 requires that in `manual` and `plan` such model code "needs a human (`blocked` without one)". P11 answers `ask_human` for the control category in every mode: the plan policy leaves the control calls themselves to the guards but still applies the allowlist to every other call of the same code, so `gptr_permissions(...); unlink(...)` is denied in plan mode instead of asking; other level-4 actions stay `deny` in plan mode.
-3. **`suggested_rule` in the permission request record (04 §7.11).** No plan is named as its source, and P06 cannot call `rule_suggest()` (an L4 function). P11's policies return the suggestion in an additive `suggested_rule` field of their decision; P06's `perm_check()` should copy the winning `ask`/`ask_human` decision's `suggested_rule` into the request. The remember path does not depend on it: the `permissions:remember` handler recomputes the rule from the call.
-4. **Who stores a remembered answer.** The UI returns `remember` (04 §10.2 row 22). `console-ui.R` (L5) may not call `perm-rules.R` (L4), so the UI wrapper of `ui.get` emits the channel event `permissions:remember` and `builtin:permissions` stores the rule in the process store or the user-level project file (never for level 4, control or `ask`). P06's `perm_ask()` also appends `req$suggested_rule` to `session_data(s)$rules$allow`; no policy reads `.d$rules`, so that copy is inert, and P06 should drop it (it does not check level 4 or control).
-5. **The one-shot approval of IC-53 item 3.** 04 says "a one-shot token on the run" without a slot. P06's `perm_check()` grants the tokens: on a person's approval of an `ask_human` call, `perm_grant_control(run, risk)` appends one per flagged `control` function to `run$signal$control` (and calls P02's `ext_control_grant()`), and `tool_execute_frame()` clears the slot when the call ends. P08's `control_check()` and P11's `perm_control_guard()` consume from that slot. P11 registers no token hook (an earlier draft granted tokens at `tool_execution_start` as well, which gave approved code two tokens per control export); P11's part is that every control call is flagged with category `control`.
-6. **The `ask` tool without a person.** IC-68 (04 §15, which wins) and 04 §2.2 require the run to stop `blocked` with `gptr_error_noninteractive` (`what`, `questions`), and P08's `gateway_signal()` re-signals whatever condition P06 stored. P11 makes the run stop `blocked` through the gate: the `mode` policy answers `ask_human` for `ask` without a UI and names the questions in its reason. The stored condition is built by P06's `perm_ask()`, which today always builds `gptr_error_permission`; P11 cannot reach it (a policy returns only a decision, and `gptr_run` fields are read-only for other plans). Resolved in P06's cross-plan consolidation (its log row 10): when the blocked call is the tool `ask`, `perm_ask()` stores `gptr_error_noninteractive` with `what = "ask"` and the questions (`perm_ask_questions()`). No P11 test asserts the class, so P11 stays green either way.
-7. **The `ask` tool's `available`.** 04 §7.11 says `function(ctx) ctx$has_ui()`; IC-68 (wins) keeps `ask` declared in non-interactive `manual` runs. P11: `has_ui()` or mode `manual`.
-8. **The run's safety snapshot.** IC-53 item 2 requires policies to read the run's snapshot, but 04 gives a policy no documented handle on its run. P11 looks up the run through `run_current()`, else `session_live(s)$run` (the live-record field `run` of 04 §5.1), and reads `run$opts$safety` (P06's `safety_snapshot()`) with keys accepted with or without the `gptr.` prefix; whether a person can answer is the snapshot's `can_prompt`, then `interactive` (P06 stores `getOption("gptr.interactive")`, often `NULL`), and only outside a run the live `gptr_can_prompt()`; outside a run the other options are read live.
-9. **Rule globs.** 04 §7.10 lists P11 as a consumer of P10's `glob_to_regex()`, which implements Pi's `**/` prefix rule for `find` (a slash-containing glob matches at any depth). Permission rules are anchored at the project root (18 §3.7), so P11 compiles them with its own `rule_glob_re()`; a glob without `/` matches a file name at any depth inside the project only, never a `~/` or `//` path (otherwise the `write(notes.md)` an `[a]lways` answer suggests would also allow writing `/etc/notes.md`).
-10. **`settings_write()` scopes.** 04 §7.8 does not enumerate them; P11 uses P08's plan's `"user_project"` (the IC-52 file) and `"user"`.
-11. **The risky-package "packages table" of 04 §11.15** is stored as `function = "*"` rows of `risk-functions.csv` (with `aws.*`/`paws.*` package globs); `code_targets()` adds the field `parse_error`. 04 §7.11 says the tables are extendable "through `setting` specs"; §11.15 and IC-69 (which win) say additive `risk_rule` records, which is what `risk_table()` merges.
-12. **Plan hand-off counting.** "Any other `peter()` call in between" is counted from the `input` events of source `prompt` and `pipe` (P08, which emits them for every gateway call, console prompts included) and the `decision` events of System 1 calls (P13). P14 emits source `repl` only for slash-command lines (its ambiguities 3 and 21 leave the choice to P11); a slash command is not a `peter()` call, so `/mode auto` or `/status` between the plan and the next prompt keeps the plan, and a command that sends a prompt (a prompt template, `/skill:<name> request`) sends it through the gateway, whose own `prompt` event is counted. Loop bodies are recognised from srcrefs, which R keeps in RStudio, knitr and `source(keep.source = TRUE)` but not under plain `Rscript`; there the one-call rule still discards the plan at the second iteration. The plan policy verifies the scratch overlay through `ctx$envir` (it must not be the session's home) and fails closed when it cannot.
-13. **R's parser and bidi controls.** In UTF-8 locales R refuses bidi formatting characters inside string literals, even written as `\u` escapes, so such code classifies as invalid (and the evaluator cannot run it either); in a C locale R mis-encodes `\u` literals that mix U+0080-U+00FF with higher code points. The tests keep payloads in comments or single-range literals and pass in both locales.
-14. **Where the execute menu runs.** 04 §7.11 puts the capture and the menu in the plan-mode `agent_end` hook, and P11 follows it: `turn_end` only captures (so a plan is saved even if the run later fails), and `agent_end` captures what `turn_end` did not see and shows the menu once per captured plan for an `idle` run. Showing the menu at `turn_end` and letting the same run take the queued `Go ahead with the plan above.` would execute the plan inside the plan-mode run, whose scratch overlay P06's `run_new()` fixes at the start (`run$scratch`; `session_set_mode()` changes `run$mode` but not the overlay), so every object the execution created would be discarded at settlement. The go-ahead therefore waits in the queue for the session's next run (P08's `gptr_step()`, or the console's next turn; the notice names `gptr_step(gptr_last())`), which "continues the same session" (03 §6.8.5). Background sessions (live field `background`) show no menu.
-15. **Copy safety of `gptr_risk(envir =)` (R4).** The research prototype measured overwritten objects with `tryCatch(object.size(obj), ...)` in the frame that held `obj`; the handler closure kept that frame, and the object, referenced, and a scratch run showed the user's next `big[1] = 0` copying a 40 MB vector. The plan measures inside the closure-free leaf `risk_binding_leaf()` and catches errors one frame up (`risk_binding_safe()`); Task 3's `expect_no_copy()` row fails with the old code and passes with the new. P11 owns no `test-copy-*.R` file (05), so the row lives in `test-perm-classify.R`.
-16. **Base-package rows are exact names.** 04 §11.15 makes `function = "*"` rows package-wide wildcards, and base's operator rows include `*` (multiplication) and `%*%`. P11 treats a `*` as a glob only in rows of packages outside the seven base packages; otherwise base's `*` row matched every unlisted base function as level 0 `read` (so `write.dcf()` or `truncate()` were "known read-only" and ran in plan mode) and `%*%` matched every `%op%` name. The table gains the common read-only base calls that had relied on that accident (`summary()`, `getOption()`, `diff()`, ...) and writers 18's table missed (`write.dcf()`, `truncate()`, `Sys.junction()`, `savehistory()`, `Rprof()`, the `dev.copy2*`/`savePlot()` family), plus ggplot2's theme setters as level 1 `session`.
-17. **Classifier additions.** `file()`, `gzfile()`, `bzfile()` and `xzfile()` with a writing `open` mode (`"w"`, `"a"`, `"r+"`, or computed) are `file_write` calls with their path class, and `risk_plan_disallowed()` rejects any call the walk flags at level 2 or more. `gptr:::<name>`, `asNamespace("gptr")` and `getNamespace("gptr")` are level-4 `control`: P03's `vault_access` finding already makes the secret guard ask, but only while `gptr.secret_guard` is on, and these calls reach `the$rules_session` directly (IC-53). From P23's ambiguity 15: `gptr_artifacts()` with `open`, `version` or `stop` set (or computed, or arguments R cannot match) is level 3 `process`, the level 04 section 9.4 gives `peter$app()`, which relaunches the same model-written code; the table row stays level 0 `read` (the generator and its checksum are unchanged) and `flag_special()` raises such calls.
+1. **`ask_human` from policies.** 04 section 10.2 row 12 lists policy decisions `allow`, `deny`,
+   `ask`, `modify`; 04 section 7.6 and IC-53 item 6 (which win) combine
+   `deny > ask_human > ask > modify > allow` and give the guards the `ask_human` tier. P11's
+   policies return `ask_human`. P02's plan validates policy answers with `ext_policy_ok()`, which
+   accepts only the four older decisions, so P02's `ext_policy_decide()` and its `gptr_check()`
+   matrix call an `ask_human` "malformed" (measured: `gptr_check(builtin_permissions)` reports
+   `policy.matrix` failures for `mode` and `critical_guard`). P02 must accept `ask_human`; until it
+   does, a P06 that evaluates policies through `ext_policy_decide()` turns these decisions into
+   denials (fail closed, never an approval).
+2. **Control actions in plan mode.** 03 section 6.8.1 lists level 4 (which includes the control
+   category) as `deny` in plan mode; 05 P11 acceptance 6 requires that in `manual` and `plan` such
+   model code "needs a human (`blocked` without one)". P11 answers `ask_human` for the control
+   category in every mode: the plan policy leaves the control calls themselves to the guards but
+   still applies the allowlist to every other call of the same code, so
+   `gptr_permissions(...); unlink(...)` is denied in plan mode instead of asking; other level-4
+   actions stay `deny` in plan mode.
+3. **`suggested_rule` in the permission request record (04 section 7.11).** No plan is named as its
+   source, and P06 cannot call `rule_suggest()` (an L4 function). P11's policies return the
+   suggestion in an additive `suggested_rule` field of their decision; P06's `perm_check()` should
+   copy the winning `ask`/`ask_human` decision's `suggested_rule` into the request. The remember
+   path does not depend on it: the `permissions:remember` handler recomputes the rule from the call.
+4. **Who stores a remembered answer.** The UI returns `remember` (04 section 10.2 row 22).
+   `console-ui.R` (L5) may not call `perm-rules.R` (L4), so the UI wrapper of `ui.get` emits the
+   channel event `permissions:remember` and `builtin:permissions` stores the rule in the process
+   store or the user-level project file (never for level 4, control or `ask`). P06's `perm_ask()`
+   also appends `req$suggested_rule` to `session_data(s)$rules$allow`; no policy reads `.d$rules`,
+   so that copy is inert, and P06 should drop it (it does not check level 4 or control).
+5. **The one-shot approval of IC-53 item 3.** 04 says "a one-shot token on the run" without a slot.
+   P06's `perm_check()` grants the tokens: on a person's approval of an `ask_human` call,
+   `perm_grant_control(run, risk)` appends one per flagged `control` function to
+   `run$signal$control` (and calls P02's `ext_control_grant()`), and `tool_execute_frame()` clears
+   the slot when the call ends. P08's `control_check()` and P11's `perm_control_guard()` consume
+   from that slot. P11 registers no token hook (an earlier draft granted tokens at
+   `tool_execution_start` as well, which gave approved code two tokens per control export); P11's
+   part is that every control call is flagged with category `control`.
+6. **The `ask` tool without a person.** IC-68 (04 section 15, which wins) and 04 section 2.2 require
+   the run to stop `blocked` with `gptr_error_noninteractive` (`what`, `questions`), and P08's
+   `gateway_signal()` re-signals whatever condition P06 stored. P11 makes the run stop `blocked`
+   through the gate: the `mode` policy answers `ask_human` for `ask` without a UI and names the
+   questions in its reason. The stored condition is built by P06's `perm_ask()`, which today always
+   builds `gptr_error_permission`; P11 cannot reach it (a policy returns only a decision, and
+   `gptr_run` fields are read-only for other plans). Resolved in P06's cross-plan consolidation (its
+   log row 10): when the blocked call is the tool `ask`, `perm_ask()` stores
+   `gptr_error_noninteractive` with `what = "ask"` and the questions (`perm_ask_questions()`). No
+   P11 test asserts the class, so P11 stays green either way.
+7. **The `ask` tool's `available`.** 04 section 7.11 says `function(ctx) ctx$has_ui()`; IC-68 (wins)
+   keeps `ask` declared in non-interactive `manual` runs. P11: `has_ui()` or mode `manual`.
+8. **The run's safety snapshot.** IC-53 item 2 requires policies to read the run's snapshot, but 04
+   gives a policy no documented handle on its run. P11 looks up the run through `run_current()`,
+   else `session_live(s)$run` (the live-record field `run` of 04 section 5.1), and reads
+   `run$opts$safety` (P06's `safety_snapshot()`) with keys accepted with or without the `gptr.`
+   prefix; whether a person can answer is the snapshot's `can_prompt`, then `interactive` (P06
+   stores `getOption("gptr.interactive")`, often `NULL`), and only outside a run the live
+   `gptr_can_prompt()`; outside a run the other options are read live.
+9. **Rule globs.** 04 section 7.10 lists P11 as a consumer of P10's `glob_to_regex()`, which
+   implements Pi's `**/` prefix rule for `find` (a slash-containing glob matches at any depth).
+   Permission rules are anchored at the project root (18 section 3.7), so P11 compiles them with its
+   own `rule_glob_re()`; a glob without `/` matches a file name at any depth inside the project
+   only, never a `~/` or `//` path (otherwise the `write(notes.md)` an `[a]lways` answer suggests
+   would also allow writing `/etc/notes.md`).
+10. **`settings_write()` scopes.** 04 section 7.8 does not enumerate them; P11 uses P08's plan's
+    `"user_project"` (the IC-52 file) and `"user"`.
+11. **The risky-package "packages table" of 04 section 11.15** is stored as `function = "*"` rows of
+    `risk-functions.csv` (with `aws.*`/`paws.*` package globs); `code_targets()` adds the field
+    `parse_error`. 04 section 7.11 says the tables are extendable "through `setting` specs";
+    section 11.15 and IC-69 (which win) say additive `risk_rule` records, which is what
+    `risk_table()` merges.
+12. **Plan hand-off counting.** "Any other `peter()` call in between" is counted from the `input`
+    events of source `prompt` and `pipe` (P08, which emits them for every gateway call, console
+    prompts included) and the `decision` events of System 1 calls (P13). P14 emits source `repl`
+    only for slash-command lines (its ambiguities 3 and 21 leave the choice to P11); a slash command
+    is not a `peter()` call, so `/mode auto` or `/status` between the plan and the next prompt keeps
+    the plan, and a command that sends a prompt (a prompt template, `/skill:<name> request`) sends
+    it through the gateway, whose own `prompt` event is counted. Loop bodies are recognised from
+    srcrefs, which R keeps in RStudio, knitr and `source(keep.source = TRUE)` but not under plain
+    `Rscript`; there the one-call rule still discards the plan at the second iteration. The plan
+    policy verifies the scratch overlay through `ctx$envir` (it must not be the session's home) and
+    fails closed when it cannot.
+13. **R's parser and bidi controls.** In UTF-8 locales R refuses bidi formatting characters inside
+    string literals, even written as `\u` escapes, so such code classifies as invalid (and the
+    evaluator cannot run it either); in a C locale R mis-encodes `\u` literals that mix
+    U+0080-U+00FF with higher code points. The tests keep payloads in comments or single-range
+    literals and pass in both locales.
+14. **Where the execute menu runs.** 04 section 7.11 puts the capture and the menu in the plan-mode
+    `agent_end` hook, and P11 follows it: `turn_end` only captures (so a plan is saved even if the
+    run later fails), and `agent_end` captures what `turn_end` did not see and shows the menu once
+    per captured plan for an `idle` run. Showing the menu at `turn_end` and letting the same run
+    take the queued `Go ahead with the plan above.` would execute the plan inside the plan-mode run,
+    whose scratch overlay P06's `run_new()` fixes at the start (`run$scratch`; `session_set_mode()`
+    changes `run$mode` but not the overlay), so every object the execution created would be
+    discarded at settlement. The go-ahead therefore waits in the queue for the session's next run
+    (P08's `gptr_step()`, or the console's next turn; the notice names `gptr_step(gptr_last())`),
+    which "continues the same session" (03 section 6.8.5). Background sessions (live field
+    `background`) show no menu.
+15. **Copy safety of `gptr_risk(envir =)` (R4).** The research prototype measured overwritten
+    objects with `tryCatch(object.size(obj), ...)` in the frame that held `obj`; the handler closure
+    kept that frame, and the object, referenced, and a scratch run showed the user's next
+    `big[1] = 0` copying a 40 MB vector. The plan measures inside the closure-free leaf
+    `risk_binding_leaf()` and catches errors one frame up (`risk_binding_safe()`); Task 3's
+    `expect_no_copy()` row fails with the old code and passes with the new. P11 owns no
+    `test-copy-*.R` file (05), so the row lives in `test-perm-classify.R`.
+16. **Base-package rows are exact names.** 04 section 11.15 makes `function = "*"` rows package-wide
+    wildcards, and base's operator rows include `*` (multiplication) and `%*%`. P11 treats a `*` as
+    a glob only in rows of packages outside the seven base packages; otherwise base's `*` row
+    matched every unlisted base function as level 0 `read` (so `write.dcf()` or `truncate()` were
+    "known read-only" and ran in plan mode) and `%*%` matched every `%op%` name. The table gains the
+    common read-only base calls that had relied on that accident (`summary()`, `getOption()`,
+    `diff()`, ...) and writers 18's table missed (`write.dcf()`, `truncate()`, `Sys.junction()`,
+    `savehistory()`, `Rprof()`, the `dev.copy2*`/`savePlot()` family), plus ggplot2's theme setters
+    as level 1 `session`.
+17. **Classifier additions.** `file()`, `gzfile()`, `bzfile()` and `xzfile()` with a writing `open`
+    mode (`"w"`, `"a"`, `"r+"`, or computed) are `file_write` calls with their path class, and
+    `risk_plan_disallowed()` rejects any call the walk flags at level 2 or more. `gptr:::<name>`,
+    `asNamespace("gptr")` and `getNamespace("gptr")` are level-4 `control`: P03's `vault_access`
+    finding already makes the secret guard ask, but only while `gptr.secret_guard` is on, and these
+    calls reach `the$rules_session` directly (IC-53). From P23's ambiguity 15: `gptr_artifacts()`
+    with `open`, `version` or `stop` set (or computed, or arguments R cannot match) is level 3
+    `process`, the level 04 section 9.4 gives `peter$app()`, which relaunches the same model-written
+    code; the table row stays level 0 `read` (the generator and its checksum are unchanged) and
+    `flag_special()` raises such calls.
 
 ### Validation executed while writing this plan
 
-- A scratch package was assembled from the R code of P01, P02 and P03 extracted from their plan files, P11's six files and stand-ins for the P06/P08 kernel SDK functions P11 calls (`session_*`, `run_current()`, `run_eval_env()`, `home_address()`, `settings_write()`, the `trust.get` service) plus a `standard` preset and `edit`/`write` tools for the plan-mode tool test. With `devtools::test()` the six P11 test files, extracted from this plan's text, gave 766 passing expectations in both the C and the `en_US.UTF-8` locales; the only failures were the six end-to-end tests, which stop at `could not find function "gptr"` (their 29 expectations need P06-P10 and were parse-checked, not run).
-- The red phase of every task was measured the same way (the summaries in Step 2): a stage runner rebuilt the package from this plan's blocks for each task (tests of tasks 1..k with the code of tasks 1..k-1, then with the code of task k) and ran the task's filter; every Step 2 and Step 4 line above is the measured one (the end-to-end expectations, 13 in `perm-gate`, 5 in `console-ui` and 11 in `perm-plan`, are added to the measured unit counts).
-- Copy safety: child `Rscript` processes with `tracemem()` showed no copy after `gptr_risk(..., envir =)` for a 40 MB vector (overwrite, `big = big + 0`), a list, a scratch overlay over the global environment, a call to a user function and the `protect_size` policy; a data frame copies on `big$a[1] = 0` with or without gptr (baseline measured), so the test uses a vector.
-- Both generators ran (1492 and 434 rows; checksums in Task 1); every generated row has a valid level and category.
-- `lintr` with the repository's settings (`=` and `<<-` only, 100 characters, snake_case): no lints in the six R files, the tests and the generators; P01's `lint_scan()`: no hits; a layering check with P01's `arch_edge_ok()` over the P11 functions' call edges (stand-ins mapped to their real files): no violation; literal services named: `trust.get`, `checkpoint.note`.
-- `devtools::document()` produced `man/gptr_risk.Rd`, `man/format.gptr_risk.Rd`, `man/gptr_permissions.Rd` and the four `NAMESPACE` lines without warnings; the three examples (`gptr_risk`, `format.gptr_risk`, `gptr_permissions`) ran offline with the output stated in Task 11.
-- Every fenced `r` block of this plan was extracted and parsed with `parse(file =)`; the plan contains no left-arrow assignment and no magrittr pipe in code (the classifier's test cases build both from pieces).
+- A scratch package was assembled from the R code of P01, P02 and P03 extracted from their plan
+  files, P11's six files and stand-ins for the P06/P08 kernel SDK functions P11 calls (`session_*`,
+  `run_current()`, `run_eval_env()`, `home_address()`, `settings_write()`, the `trust.get` service)
+  plus a `standard` preset and `edit`/`write` tools for the plan-mode tool test. With
+  `devtools::test()` the six P11 test files, extracted from this plan's text, gave 766 passing
+  expectations in both the C and the `en_US.UTF-8` locales; the only failures were the six
+  end-to-end tests, which stop at `could not find function "gptr"` (their 29 expectations need
+  P06-P10 and were parse-checked, not run).
+- The red phase of every task was measured the same way (the summaries in Step 2): a stage runner
+  rebuilt the package from this plan's blocks for each task (tests of tasks 1..k with the code of
+  tasks 1..k-1, then with the code of task k) and ran the task's filter; every Step 2 and Step 4
+  line above is the measured one (the end-to-end expectations, 13 in `perm-gate`, 5 in `console-ui`
+  and 11 in `perm-plan`, are added to the measured unit counts).
+- Copy safety: child `Rscript` processes with `tracemem()` showed no copy after
+  `gptr_risk(..., envir =)` for a 40 MB vector (overwrite, `big = big + 0`), a list, a scratch
+  overlay over the global environment, a call to a user function and the `protect_size` policy; a
+  data frame copies on `big$a[1] = 0` with or without gptr (baseline measured), so the test uses a
+  vector.
+- Both generators ran (1492 and 434 rows; checksums in Task 1); every generated row has a valid
+  level and category.
+- `lintr` with the repository's settings (`=` and `<<-` only, 100 characters, snake_case): no lints
+  in the six R files, the tests and the generators; P01's `lint_scan()`: no hits; a layering check
+  with P01's `arch_edge_ok()` over the P11 functions' call edges (stand-ins mapped to their real
+  files): no violation; literal services named: `trust.get`, `checkpoint.note`.
+- `devtools::document()` produced `man/gptr_risk.Rd`, `man/format.gptr_risk.Rd`,
+  `man/gptr_permissions.Rd` and the four `NAMESPACE` lines without warnings; the three examples
+  (`gptr_risk`, `format.gptr_risk`, `gptr_permissions`) ran offline with the output stated in
+  Task 11.
+- Every fenced `r` block of this plan was extracted and parsed with `parse(file =)`; the plan
+  contains no left-arrow assignment and no magrittr pipe in code (the classifier's test cases build
+  both from pieces).
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 05 P11, 04 (§15 first), 03 §6.8, the P01/P02/P03/P06/P08 plans and the research notes. All R blocks were re-extracted and parsed (24 blocks, 0 errors; no left arrow or magrittr pipe in code; ASCII only; no line over 100 characters). The six R files, the tests, the snapshot and the generators were rebuilt from this plan into a scratch package (P01-P03 code from their plans, P06/P08 stand-ins). Results: 766 unit expectations green in the UTF-8 and C locales; only the six end-to-end tests fail, at `could not find function "gptr"`. Every Step 2 and Step 4 line was re-measured task by task. Each new test was run against the pre-review code and failed there (red), then passed on the fixed code. Generator checksums were reproduced, the three examples ran, and lintr, P01's `lint_scan()` and the layering check found nothing.
+Adversarial review of 2026-10-01 against 05 P11, 04 (section 15 first), 03 section 6.8, the
+P01/P02/P03/P06/P08 plans and the research notes. All R blocks were re-extracted and parsed (24
+blocks, 0 errors; no left arrow or magrittr pipe in code; ASCII only; no line over 100 characters).
+The six R files, the tests, the snapshot and the generators were rebuilt from this plan into a
+scratch package (P01-P03 code from their plans, P06/P08 stand-ins). Results: 766 unit expectations
+green in the UTF-8 and C locales; only the six end-to-end tests fail, at
+`could not find function "gptr"`. Every Step 2 and Step 4 line was re-measured task by task. Each
+new test was run against the pre-review code and failed there (red), then passed on the fixed code.
+Generator checksums were reproduced, the three examples ran, and lintr, P01's `lint_scan()` and the
+layering check found nothing.
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
 | 1 | major | Task 1 `risk_index_functions()` / `risk_lookup()`; generator | Base's `*` (multiplication) and `%*%` rows were indexed as globs. The `*` row acted as a `base::*` wildcard, so every unlisted base function was a level-0 `read` row: `write.dcf()` and `truncate()` passed the plan-mode allowlist and ran in plan mode. `%*%` also matched any `%op%` name when the package was unknown. | applied | Rows of the seven base packages are now exact names (Global Constraints, Task 1 prose, code, new test). The generator adds the read-only base calls that had relied on the accident (`summary`, `getOption`, `diff`, ...) and missing writers and session rows (`write.dcf`, `truncate`, `Sys.junction`, `savehistory`, `Rprof`, the `dev.copy2*`/`savePlot`/`bitmap` family, `download.packages`, `closeAllConnections`, time limits, `locator`/`identify`). Now 1492 rows, md5 `024d3fa8...`. |
 | 2 | major | Task 3 walker, Task 4 `risk_plan_disallowed()` | `file("data.csv", "w")` and the compressed variants are level 0 (`file` is a read row), so `close(file("data.csv", "w"))` truncated a file in plan mode. | applied | `flag_special()` flags `file`/`gzfile`/`bzfile`/`xzfile` opened with a writing mode as `file_write` with the path class. `risk_plan_disallowed()` also rejects every call the walk flags at level 2 or more. `write.dcf` takes its path from position 2. New tests in Tasks 3 and 4. |
 | 3 | major | Task 10 `plan_policy_check()` | Any control call made the plan policy return `NULL` for the whole code, so `gptr_permissions(...); unlink("data", recursive = TRUE)` only asked a person, and an approval ran the `unlink()` in plan mode. | applied | Only the control calls themselves are exempt; every other call must still pass the allowlist. Tests cover the mixed `gptr_permissions`/`gptr_trust` + `unlink` cases (now `deny`). |
-| 4 | major | Task 10 execute menu (hooks, prose, self-review 14) | The menu ran at `turn_end`, and the same plan-mode run took the queued go-ahead. P06 fixes `run$scratch` at run start (`session_set_mode()` does not clear it), so the "executed" plan evaluated in the scratch overlay and lost every object it created. This also deviated from 04 §7.11, which puts the menu in `agent_end`. | applied | `turn_end` only captures. `agent_end` captures and shows the menu once per captured plan for an `idle` run. The go-ahead is queued for the next run, with a `plan_handoff` notice naming `gptr_step(gptr_last())`. Background sessions are skipped through the 04 §5.1 live field `background`. The two menu tests were rewritten (they were red on the old code). |
+| 4 | major | Task 10 execute menu (hooks, prose, self-review 14) | The menu ran at `turn_end`, and the same plan-mode run took the queued go-ahead. P06 fixes `run$scratch` at run start (`session_set_mode()` does not clear it), so the "executed" plan evaluated in the scratch overlay and lost every object it created. This also deviated from 04 section 7.11, which puts the menu in `agent_end`. | applied | `turn_end` only captures. `agent_end` captures and shows the menu once per captured plan for an `idle` run. The go-ahead is queued for the next run, with a `plan_handoff` notice naming `gptr_step(gptr_last())`. Background sessions are skipped through the 04 section 5.1 live field `background`. The two menu tests were rewritten (they were red on the old code). |
 | 5 | major | Task 7 `perm_on_tool_start()` / `perm_on_tool_end()`; Global Constraints | P06's `perm_check()` already grants the IC-53 one-shot tokens (`perm_grant_control()`) and `tool_execute_frame()` clears them. P11 granted a second set at `tool_execution_start`, before the gate, so approved code got two tokens per control export. | applied | The two hooks and their test were removed, and the constraint, the Task 7 prose and self-review item 5 were rewritten: P06 grants the tokens, P08 and P11 consume them. |
 | 6 | major | Task 5 `rule_glob_re()` | A glob without `/` matched at any depth, including `//etc/notes.md` and `~/notes.md`. An `[a]lways` answer for a project `notes.md` (suggested rule `write(notes.md)`) therefore also allowed writing `/etc/notes.md` without asking. | applied | Such globs now match inside the project only (`(?![/~])`). Tests and docs updated; self-review item 9 notes it. |
 | 7 | minor | Tasks 7 and 8 `perm_can_prompt()` / `ui_can_prompt()` | When the snapshot's `interactive` was `NULL` (P06 stores `getOption("gptr.interactive")`), both fell back to the live `gptr_can_prompt()` and ignored the snapshot's `can_prompt` (IC-53 item 2). | applied | Snapshot `can_prompt`, then `interactive`, then the live predicate only outside a run. Test added. |
 | 8 | minor | Task 8 test "ui.get resolves the snapshot..." | The spec case was vacuous: a `none` spec in the snapshot resolved to `none` whether or not specs were honoured. | applied | It now uses a `probe` scripted spec, plus `can_prompt` TRUE/FALSE cases against the opposite live option. |
 | 9 | minor | Task 3 walker | `gptr:::the$rules_session$allow = ...` and `asNamespace("gptr")` were held back only by P03's `vault_access` secret finding, which `options(gptr.secret_guard = FALSE)` switches off. | applied | `risk_gptr_internal()` makes such calls level-4 `control`. Cases added to the control test. |
 | 10 | minor | Task 1 generator | The ggplot2 `theme*` glob made `theme_set()`, `theme_update()` and `theme_replace()`, which change global state, level-0 `read` rows that plan mode admitted. | applied | Exact level-1 `session` rows (exact rows win over globs). Test added. |
-| 11 | minor | Task 3 `format.gptr_risk()` | An exported S3 method without `@examples` (conventions §4). | applied | Example added; Task 11 runs it. |
+| 11 | minor | Task 3 `format.gptr_risk()` | An exported S3 method without `@examples` (conventions section 4). | applied | Example added; Task 11 runs it. |
 | 12 | minor | Global Constraints, Task 6 | The name of P08's IC-53 token consumer had to match P08's plan. | applied | P08 names its consumer `control_check()` (P08's name since its review row 5); P06's session-level check is `session_control_check()`. The prose and the roxygen use `control_check()` (corrected again in the cross-plan consolidation, row 1). |
-| 13 | minor | Self-review 6 | IC-68 (04 §15) requires `gptr_error_noninteractive` for the blocked `ask` tool, and P08's `gateway_signal()` re-signals P06's stored condition. The plan presented this as optional. | applied | Recorded as a required P06 change: P11 cannot build that condition (policies return decisions; run fields are read-only). |
-| 14 | minor | Self-review 8 | Said `session_live(s)$run` is not in 04; it is a §5.1 live field. | applied | Corrected; snapshot keys listed. |
+| 13 | minor | Self-review 6 | IC-68 (04 section 15) requires `gptr_error_noninteractive` for the blocked `ask` tool, and P08's `gateway_signal()` re-signals P06's stored condition. The plan presented this as optional. | applied | Recorded as a required P06 change: P11 cannot build that condition (policies return decisions; run fields are read-only). |
+| 14 | minor | Self-review 8 | Said `session_live(s)$run` is not in 04; it is a section 5.1 live field. | applied | Corrected; snapshot keys listed. |
 | 15 | minor | Self-review 4 | Missed that P06's `perm_ask()` also appends `suggested_rule` to `.d$rules$allow`, unchecked for level 4 or control. | applied | Recorded: that copy is inert (no policy reads `.d$rules`) and should be dropped in P06. |
 | 16 | minor | Task 2 test title | Claimed "46/46" for 28 command cases (the 46 G5 cases are the polyglot test of Task 3). | applied | Retitled. |
 | 17 | minor | Steps 2 and 4, Task 11, Plan acceptance | Expected summaries, row count and checksum were stale after the fixes. | applied | All re-measured: perm-classify 424, perm-rules 106, perm-gate 84, console-ui 61, tool-ask 39, perm-plan 81, total 795. |
 | 18 | minor | Task 3 `note_assign()` | Raises large overwrites to level 3 using the live `gptr.protect_size`, not the run's snapshot. | rejected | The level only labels the call; the decision comes from the `protect_size` policy, which reads the snapshot (IC-53 item 2). Changing `gptr.protect_size` from model code is itself a `control` call. |
-| 19 | minor | Task 3 `print.gptr_risk()` | Uses `cat()` rather than `msg_verbatim()`. | rejected | 04 §1.5 allows `print()` methods of a package's own classes. `format()` escapes controls first, `cat()` keeps the snapshot under `Output`, and P01's listing print does the same. |
+| 19 | minor | Task 3 `print.gptr_risk()` | Uses `cat()` rather than `msg_verbatim()`. | rejected | 04 section 1.5 allows `print()` methods of a package's own classes. `format()` escapes controls first, `cat()` keeps the snapshot under `Output`, and P01's listing print does the same. |
 | 20 | minor | Task 8 `none`/`rstudio` `notify()` | Notification text reaches `gptr_inform()` without `ui_escape()`. | rejected | IC-53 item 8 covers approval displays; notifications come from gptr and plugins, not model code. `gptr_inform()` builds its message by concatenation (rule C1). |
 
 ## Cross-plan consolidation log
 
-Consolidation of 2026-10-01 against 04 (§15 first), 03, 05 and the P01, P06, P08, P14, P21 and P23 plans. The eight checker findings reduce to four distinct changes: rows 1, 3 and 6 are one finding, rows 2 and 4 are another, and rows 7 and 8 are a third. Verification: every fenced `r` block was re-extracted and parsed with `Rscript --vanilla` (24 blocks, 0 errors). The code has no `<-` or `%>%` tokens, is ASCII only and has no line over 100 characters. The six R files and the six test files were rebuilt from this plan into the review's scratch package (P01-P03 code from their plans, P06/P08 stand-ins). Unit expectations are now 790 green in both the UTF-8 and the C locale (766 before); the six end-to-end tests still stop at `could not find function "gptr"`. Task by task: Task 3 red `[ FAIL 13 | PASS 153 ]`, green 409; Task 4 red `[ FAIL 3 | PASS 409 ]`, green 446; Task 10 red (unit tests) `[ FAIL 12 | PASS 7 ]`, green 72 unit plus 11 end to end. Totals: perm-classify 446, perm-plan 83, all six files 819. Each new test failed against the pre-consolidation code and passed on the new code. A load_all lint run of the six files reports exactly the same lints before and after these changes.
+Consolidation of 2026-10-01 against 04 (section 15 first), 03, 05 and the P01, P06, P08, P14, P21
+and P23 plans. The eight checker findings reduce to four distinct changes: rows 1, 3 and 6 are one
+finding, rows 2 and 4 are another, and rows 7 and 8 are a third. Verification: every fenced `r`
+block was re-extracted and parsed with `Rscript --vanilla` (24 blocks, 0 errors). The code has no
+`<-` or `%>%` tokens, is ASCII only and has no line over 100 characters. The six R files and the six
+test files were rebuilt from this plan into the review's scratch package (P01-P03 code from their
+plans, P06/P08 stand-ins). Unit expectations are now 790 green in both the UTF-8 and the C locale
+(766 before); the six end-to-end tests still stop at `could not find function "gptr"`. Task by task:
+Task 3 red `[ FAIL 13 | PASS 153 ]`, green 409; Task 4 red `[ FAIL 3 | PASS 409 ]`, green 446;
+Task 10 red (unit tests) `[ FAIL 12 | PASS 7 ]`, green 72 unit plus 11 end to end. Totals:
+perm-classify 446, perm-plan 83, all six files 819. Each new test failed against the
+pre-consolidation code and passed on the new code. A load_all lint run of the six files reports
+exactly the same lints before and after these changes.
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
@@ -6743,9 +7444,13 @@ Consolidation of 2026-10-01 against 04 (§15 first), 03, 05 and the P01, P06, P0
 | 2 | interfaces | minor | Task 10 `plan_on_input()` | applied | 04 IC-56 discards a plan only for another `peter()` call. P14 emits source `repl` only for slash-command lines, and console prompts reach P08's gateway, which emits `prompt` or `pipe`. P14 ambiguity 21 leaves this choice to P11. `plan_on_input()` now counts only `c("prompt", "pipe")`, and `plan_on_decision()` still counts System 1 calls. The roxygen, the Task 10 prose, contract ambiguity 12, the Task 10 Consumes list (`ev_dispatch()`, `ev_new()`) and Plan acceptance 6 are updated. New test "a slash command between the plan and the next peter() call keeps the plan (IC-56)" dispatches `/mode auto` and `/status` with source `repl`, then a `prompt` (the plan is still pending), then a `pipe` (the plan is discarded). It fails on the old code. |
 | 3 | shared-names | minor | as row 1 | applied (duplicate of row 1) | Same change as row 1. |
 | 4 | obligations | minor | Task 10 `plan_on_input()` | applied (duplicate of row 2) | Same change as row 2. The new test drives the events through `ev_dispatch("input", ev_new(...))`, so it also checks that `builtin:plan` registers the hook. |
-| 5 | obligations | minor | Task 3 `flag_special()` (after the `gptr_scrub` branch); Task 1 generator row | applied, adjusted | 04 §6.2: `gptr_artifacts(id, open = TRUE)` and `version = k` relaunch model-written code, which 04 §9.4 rates level 3 for `peter$app()`. P23 ambiguity 15 asks P11 for this change. Two departures from the suggested code. (a) The arguments are matched with `match.call()` against the 04 §6.2 signature `function(id = NULL, open = FALSE, stop = FALSE, version = NULL)`. The suggested `sum(nms == "") >= 2L` missed `gptr_artifacts(id = "a", TRUE)`, where the unnamed argument is `open`. An unmatched call (`...`, unknown argument) also escalates. (b) `stop = TRUE` also escalates, because it stops the app's process; the shell `kill` row is level 3 `process` as well. Computed values escalate, and `version = NULL`/`open = FALSE` stay level 0. The generator row stays level 0 `read`, so the generator and its checksum are unchanged. New test in Task 3, "gptr_artifacts() that relaunches or stops an app is level 3 process (04 9.4)": 8 escalating forms and 4 level-0 forms, 20 expectations. Two more expectations in Task 4's allowlist test: plan mode denies `gptr_artifacts('a', open = TRUE)` and admits `gptr_artifacts()`. The Global Constraints, the Task 3 prose and self-review 17 are updated. |
+| 5 | obligations | minor | Task 3 `flag_special()` (after the `gptr_scrub` branch); Task 1 generator row | applied, adjusted | 04 section 6.2: `gptr_artifacts(id, open = TRUE)` and `version = k` relaunch model-written code, which 04 section 9.4 rates level 3 for `peter$app()`. P23 ambiguity 15 asks P11 for this change. Two departures from the suggested code. (a) The arguments are matched with `match.call()` against the 04 section 6.2 signature `function(id = NULL, open = FALSE, stop = FALSE, version = NULL)`. The suggested `sum(nms == "") >= 2L` missed `gptr_artifacts(id = "a", TRUE)`, where the unnamed argument is `open`. An unmatched call (`...`, unknown argument) also escalates. (b) `stop = TRUE` also escalates, because it stops the app's process; the shell `kill` row is level 3 `process` as well. Computed values escalate, and `version = NULL`/`open = FALSE` stay level 0. The generator row stays level 0 `read`, so the generator and its checksum are unchanged. New test in Task 3, "gptr_artifacts() that relaunches or stops an app is level 3 process (04 9.4)": 8 escalating forms and 4 level-0 forms, 20 expectations. Two more expectations in Task 4's allowlist test: plan mode denies `gptr_artifacts('a', open = TRUE)` and admits `gptr_artifacts()`. The Global Constraints, the Task 3 prose and self-review 17 are updated. |
 | 6 | obligations | minor | as row 1 | applied (duplicate of row 1) | Same change as row 1. |
 | 7 | obligations | minor | Task 11 Step 3 lint command | applied | Without the namespace loaded, `object_usage_linter` (in `linters_with_defaults()`) reports every helper defined in another file (P01 acceptance A3 note, P21 review row 11). The command now starts with `pkgload::load_all(quiet = TRUE);`. |
 | 8 | trace | minor | Task 11 Step 3 lint command | applied (duplicate of row 7) | Same change as row 7. |
 
-Not changed here, for the owning plan: with lintr 3.3, `linters_with_defaults()` includes `indentation_linter`. It reports the hanging indents of this plan's existing code (23 lints in the six R files, the same before and after this consolidation), so Task 11's "no lints printed" holds only with a lintr that lacks that linter or with P01's `.lintr` turning it off. The `.lintr` file is P01's, and the same applies to every plan.
+Not changed here, for the owning plan: with lintr 3.3, `linters_with_defaults()` includes
+`indentation_linter`. It reports the hanging indents of this plan's existing code (23 lints in the
+six R files, the same before and after this consolidation), so Task 11's "no lints printed" holds
+only with a lintr that lacks that linter or with P01's `.lintr` turning it off. The `.lintr` file is
+P01's, and the same applies to every plan.

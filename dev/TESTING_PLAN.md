@@ -5,7 +5,7 @@ Resumed from `dev/PAUSED_HANDOFF_2026-10-15.md`; the coordinator is
 `dev/.validation/readiness-20261011/resume-20261015-claude/` (ignored).
 
 | Status | Result |
-| --- | --- |
+|---|---|
 | Fixed, test only | `ubuntu-latest (release, LC_ALL=C)` failed on 138 because the wrapped-raw export test sourced a UTF-8 file with `encoding = "UTF-8"`, which stops at the first non-ASCII comment in a C locale. The test now sources in the native encoding; RED 3 failures, GREEN 211/0 in C and UTF-8 locales. |
 | Fixed, test only | The bc13 Windows release binary-writer case timed out because a 1.93 s cold start used the 2 s no-progress window that IC-60 starts before lazy startup. The case now admits the production writer under its own 2 s deadline, then runs both timed writes unchanged. No production file changed; cold-start coverage stays in native04/native09. Two hosted Windows optional runs at `35536d4` pass it (22/0); both retain the optional-only absence-probe failure seen in every optional by-file run since 2026-10-12. |
 | PASS, authenticated Jupyter | Fresh K run `k-4`: human local token sign-in, seven cells 1..7 with no errors, Idle, all 13 GUI predicates, widths 1440/320/768/1440, saved MIME/state/cleanup gates and authenticated shutdown; raw log has zero warnings (no heartbeat warning). 166.9 s, 779 MiB peak. `k-2` (DevTools 404) and `k-3` (stale-token 401) remain strict NONPASS. |
@@ -41,7 +41,7 @@ failure receipt remains preserved. The primary dirty checkout, user files,
 shared Ollama models and documentation servers are untouched.
 
 | Status | Evidence and next action |
-| --- | --- |
+|---|---|
 | Complete, fresh dependencies | 139 compatible binary packages cover 40 explicit testing/documentation/frontend roots plus rtiktoken. All selected namespaces verify with zero warnings. Cold magick and IRkernel initialization is isolated in a disposable probe; all eight installer-parent state checks pass. No old package library was restored. |
 | Complete execution; independent review active | Fresh normal build/install: source archive 2,656,120 bytes; installed package 7,007,000 bytes; all 14 guides included. Whole family 41.336 seconds, peak sampled RSS 489.5 MiB; build/install 19.818/14.226 seconds. Original compilation and package contents retained. Installed 5 MB goal remains unmet. |
 | Running, fresh validation | Three lanes bind the verified fresh artifact: Shiny/browser; models/workflows/compaction; frontends/UX. New-R source batches, full as-cran and plan checks remain pending. Prepared routes and old passes are not new-R acceptance. |
@@ -75,59 +75,112 @@ by the original native preflight. Those checks remain queued at this checkpoint.
 
 ## Historical integration checkpoint — `1d0e40f`, 2026-10-15
 
-Coordinator worktree: `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`. The tested RStudio width correction is committed at `1d0e40fdfcef84daac6069b81fdc04b781dc808a`. The preceding normal artifact and comprehensive results certify `1f9c18996bf3ff49f6174a95a7d0869647fe5ca7`; they do not certify the new correction. Primary `/Users/wgu/Desktop/gptr`, working R/Code sessions, shared Ollama models and documentation servers remain protected. PR6 is draft/unmerged; current public publication and CRAN submission remain pending.
+Coordinator worktree: `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
+`codex/skipped-platform-tests`. The tested RStudio width correction is committed at
+`1d0e40fdfcef84daac6069b81fdc04b781dc808a`. The preceding normal artifact and comprehensive results
+certify `1f9c18996bf3ff49f6174a95a7d0869647fe5ca7`; they do not certify the new correction. Primary
+`/Users/wgu/Desktop/gptr`, working R/Code sessions, shared Ollama models and documentation servers
+remain protected. PR6 is draft/unmerged; current public publication and CRAN submission remain
+pending.
 
 | Status | Evidence and next action |
-| --- | --- |
+|---|---|
 | COMPLETE, causal RStudio diagnostic | Actual physical widening changes the host metric to99; eval_open changes width52 to100 and eval_restore resets a paired width99 to52. Fourteen retained trace rows establish the restoration cause. Original numerical/body/selected cleanup gates pass; full-width remains NONPASS. Diagnostic-only functions are restored and owned app/session16611/16625 are absent. |
-| INTEGRATED, focused RStudio correction | Preserve an already-current width only when an interactive RStudio host metric changed during the tool, the metric is a valid integer10–10000, and it exactly matches the current width option. Ordinary, invalid, unmatched, unchanged, noninteractive and other-client widths still restore. Existing35 plus2 new cases pass286 assertions; two lints are zero. Success/error/interrupt, later tools, fixed cli.width, other options and full connections are covered. Baseline has six failures confined to the new genuine-resize case. Fresh normal build, native production resizing and combined checks are QUEUED. |
+| INTEGRATED, focused RStudio correction | Preserve an already-current width only when an interactive RStudio host metric changed during the tool, the metric is a valid integer10-10000, and it exactly matches the current width option. Ordinary, invalid, unmatched, unchanged, noninteractive and other-client widths still restore. Existing35 plus2 new cases pass286 assertions; two lints are zero. Success/error/interrupt, later tools, fixed cli.width, other options and full connections are covered. Baseline has six failures confined to the new genuine-resize case. Fresh normal build, native production resizing and combined checks are QUEUED. |
 | COMPLETE, preceding source and models | The1f9 source scope passes200 files/4208 cases/33358 assertions with44 accounted skips, all-eight/full-connections/cleanup gates. Five live cases/ten phases pass: Claude/Codex exact dat regressions and zero-request replay; Azure steering/history/raw replay; two actual overlapping workers returning3/6; INLINE fanout/compaction/resume/replay. Inline fanout does not imply process parallelism. No paid/GPU/large-memory repeat is needed solely for this RStudio-specific correction. |
-| COMPLETE, preceding native decisions | Current1f9 Jev logical/choice/score LIVE and fresh zero-request replay pass. Jev→Versa→Jev composition passes two native decisions/one chat, preserves session/copy/connection state and cleanup. Timings1.463/1.431/2.542s. No calibration, native wire-POST freshness or continuous memory-peak inference. |
-| NONPASS, current Jupyter client | Human signed in at49582; all seven cells are saved with counts1–7 and zero cell errors, including actual R-tool42. Twelve of13 GUI predicates pass; completion remains Unknown. Full raw retains25 ping warnings plus one login401 warning. Controller589.251s/793.172MiB/519 valid samples; authenticated shutdown200, owned server27866/parent27796 and tab gone, protected7 exact. Installed JupyterServer2.21.1/Tornado6.5.10 use conflicting heartbeat units; the introduced30s flag was not unchanged-effective configuration. A private dependency compatibility correction and actual retry remain ONGOING; no authentication, warning, idle or keepalive waiver. Host notebook clipping is retained as client-specific evidence. |
+| COMPLETE, preceding native decisions | Current1f9 Jev logical/choice/score LIVE and fresh zero-request replay pass. Jev->Versa->Jev composition passes two native decisions/one chat, preserves session/copy/connection state and cleanup. Timings1.463/1.431/2.542s. No calibration, native wire-POST freshness or continuous memory-peak inference. |
+| NONPASS, current Jupyter client | Human signed in at49582; all seven cells are saved with counts1-7 and zero cell errors, including actual R-tool42. Twelve of13 GUI predicates pass; completion remains Unknown. Full raw retains25 ping warnings plus one login401 warning. Controller589.251s/793.172MiB/519 valid samples; authenticated shutdown200, owned server27866/parent27796 and tab gone, protected7 exact. Installed JupyterServer2.21.1/Tornado6.5.10 use conflicting heartbeat units; the introduced30s flag was not unchanged-effective configuration. A private dependency compatibility correction and actual retry remain ONGOING; no authentication, warning, idle or keepalive waiver. Host notebook clipping is retained as client-specific evidence. |
 | SOURCE READY, VS Code | Original Code4 refuses prebody because Foundation maps /private/tmp to /tmp. A private Darwin realpath correction passes positive/negative controls and compile/typecheck, retaining strict PID/cwd/env/AX checks. Runtime terminal and separate R-extension/editor completion are QUEUED against the fresh artifact; no old1f9 launch or admission bypass. |
 | PREPARED, isolated R.app | Human approved private UTM. Official UTM4.7.5 build118, compatible Apple macOS26.6.2 restore image and trusted R4.5.0/GUI1.81 installer are downloaded and verified. VM created/booted FALSE; guest2CPU/4GiB/64GiB sparse disk requires6GiB host budget after healthy admission. Human completes Setup Assistant/password locally. Fresh archive, exact dependency versions and read-only guest transfer are QUEUED; host libraries/keys/preferences are not copied. Native guest UI/completion/scaling/progress remains UNRUN. |
-| COMPLETE, preceding CI; delivery open | All13 required1f9 checks pass with strict main protection. Both Windows hosts have31646 ordinary assertions/107 skips and1906 native assertions/32 original witnesses/one native skip, zero failures/warnings. Oldrel-4 retains9.8Mb size NOTE. Current hosted Mac StatusOK is separate from local clockNOTE. Final correction CI/reviewed merge/main sync/actual Pages publication are QUEUED; final live Windows follows completed Mac work. |
+| COMPLETE, preceding CI; delivery open | All13 required1f9 checks pass with strict main protection. Both Windows hosts have31646 ordinary assertions/107 skips and1906 native assertions/32 original witnesses/one native skip, zero failures/warnings. Oldrel-4 retains9.8Mb size NOTE. Current hosted Mac Status OK is separate from local clock NOTE. Final correction CI/reviewed merge/main sync/actual Pages publication are QUEUED; final live Windows follows completed Mac work. |
 | RETAINED, package size and full check | Accepted preceding normal archive2655073B, installed6990541B/Rdb5039747B, combined docs1726611B/data0; build/install20.786/14.640s. Installed5MB goal remains unmet; source/docs/data goals met. Full archive check30565 passes/zero test failures or warnings/445 accounted skips, sole unable-to-verify-current-time NOTE. Strict controller remains NONPASS; no clock/trust change or suppression. Fresh measurements/check follow the correction. |
 | RETAINED, other Mac scopes | Saved generated Shiny GUI, site preview, terminal completion/formatting, in-memory4GiB, file formats, skills/plugins/MCP/download/search, .gptr, ML/single-cell and history/replay retain their exact preceding-source scopes. Genuine Shiny deadline, scientific model-tool error, Quarto client-closure comparison and allocator-emitter limitations remain visible. Final relevant installed smoke checks and public deployment are pending. |
 
-Three parallel lanes remain active: Shiny/browser; models/workflows/compaction; frontends/UX. Root alone manages shared documents, dependencies, integration, Git and rebuilds; Fast alone controls GUI. Independent agents use separate private sessions/libraries/working directories/output paths and file ownership. At most four private families/12GiB aggregate declared caps, ordinary CPU1, at most two internally parallel heavy jobs/12 workers; one GPU/high-memory family only if separately admitted. Recheck CPU, memory pressure, interval swap, disk and thermal state before overlap. GUI/auth waits leave independent bounded tests available. Preserve working sessions/shared models; signal only verified owned identities. Finish Mac integration, native verification, current CI, reviewed merge and actual publication before final live Windows verification.
+Three parallel lanes remain active: Shiny/browser; models/workflows/compaction; frontends/UX. Root
+alone manages shared documents, dependencies, integration, Git and rebuilds; Fast alone controls
+GUI. Independent agents use separate private sessions/libraries/working directories/output paths and
+file ownership. At most four private families/12GiB aggregate declared caps, ordinary CPU1, at most
+two internally parallel heavy jobs/12 workers; one GPU/high-memory family only if separately
+admitted. Recheck CPU, memory pressure, interval swap, disk and thermal state before overlap.
+GUI/auth waits leave independent bounded tests available. Preserve working sessions/shared models;
+signal only verified owned identities. Finish Mac integration, native verification, current CI,
+reviewed merge and actual publication before final live Windows verification.
 
-Evidence root: `/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011`. RStudio exact fix `eval-host-width-1f9c189-source-only-v2/ACTUAL-ACCEPTANCE.json` (9be1b1ed), integration `root-eval-host-width-INTEGRATED.json`; trace `native-rstudio-width-1f9c189-eval-trace-bound-prepared-v2`; Jupyter `CLIENT-ACTUAL-NONPASS.json` (fed15297) and `GUI-SETTLEMENT-SOURCE-PROOF.json` (39ce876d); Jev/composition `ACTUAL-DECISIONS-ACCEPTANCE.json` (b20aa444); all13 CI `FINAL-1F9C-DELIVERY-ACTUAL-ACCEPTANCE.json` (ec8226db); UTM `GUI-SETUP.md` (9cdf19ab). All earlier prepared, paused and NONPASS evidence below remains historical. Repeat four cross-plan tools after adopting this saved-plan update; prepared packets are not actual passes.
+Evidence root: `/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011`. RStudio exact fix
+`eval-host-width-1f9c189-source-only-v2/ACTUAL-ACCEPTANCE.json` (9be1b1ed), integration
+`root-eval-host-width-INTEGRATED.json`; trace
+`native-rstudio-width-1f9c189-eval-trace-bound-prepared-v2`; Jupyter `CLIENT-ACTUAL-NONPASS.json`
+(fed15297) and `GUI-SETTLEMENT-SOURCE-PROOF.json` (39ce876d); Jev/composition
+`ACTUAL-DECISIONS-ACCEPTANCE.json` (b20aa444); all13 CI `FINAL-1F9C-DELIVERY-ACTUAL-ACCEPTANCE.json`
+(ec8226db); UTM `GUI-SETUP.md` (9cdf19ab). All earlier prepared, paused and NONPASS evidence below
+remains historical. Repeat four cross-plan tools after adopting this saved-plan update; prepared
+packets are not actual passes.
 
 ## Historical validation checkpoint — certified `1f9c189`, 2026-10-15
 
-Worktree `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch `codex/skipped-platform-tests`; accepted artifact source `1f9c18996bf3ff49f6174a95a7d0869647fe5ca7`. The supported zero-duration host-event yield is integrated and pushed. Primary `/Users/wgu/Desktop/gptr`, working sessions and shared models remain protected. PR6 is draft/unmerged; public deployment and CRAN submission are pending.
+Worktree `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
+`codex/skipped-platform-tests`; accepted artifact source `1f9c18996bf3ff49f6174a95a7d0869647fe5ca7`.
+The supported zero-duration host-event yield is integrated and pushed. Primary
+`/Users/wgu/Desktop/gptr`, working sessions and shared models remain protected. PR6 is
+draft/unmerged; public deployment and CRAN submission are pending.
 
 | Status | Settled evidence and next condition |
-| --- | --- |
+|---|---|
 | COMPLETE, normal build/install | Archive 2,655,073 B; installed 6,990,541 B; `R/gptr.rdb` 5,039,747 B; combined doc/help/html 1,726,611 B; extdata 83,185 B/data 0. All 667 inputs/121 R files/14 guide pairs/64 exports/read-only installation match. Whole family 44.598 s/516.234 MiB sampled; inner build/install 20.786/14.640 s. Installed 5 MB goal remains unmet. |
 | COMPLETE tests, check NOTE open | Original archive as-cran: 30,565 passes/zero test failures or warnings/445 accounted skips (418 On CRAN/27 specific). Sole NOTE: unable to verify current time. Child0/controller1 remains strict NONPASS; 573.627 s/1,961.375 MiB/487 samples0errors, all100 traced identities gone. No clock skew or exclusive cause is established. |
 | COMPLETE, source scope | Five independent private sessions cover 200 files/4,208 cases/33,358 assertions/44 exact original skips. Each preserves all eight caller predicates/full connections/source/parent/owned cleanup. 1,030 samples0errors/peak3,256.141 MiB. B4 retains one test-owned direct ps_find_tree warning; captured wrapper and production process warnings are empty. No single-session or universal warning-signal claim. |
 | COMPLETE, affected LIVE controls | Five cases/ten phases: Claude and Codex exact dat regression/raw replay; Azure Peter pipeline/history/raw replay; two genuine overlapping worker PIDs returning3/6; INLINE fanout/compaction plus fresh resume and strict replay. All scoped caller/resource/cleanup gates pass; resume/replay make zero requests. INLINE fanout does not establish process parallelism; unknown costs and unwitnessed CLI argv remain qualified. |
 | COMPLETE, four plan tools | All four original tools pass119.475 s/1,587.188 MiB:25 plans/1,446 blocks/912 findings (822 INFO/90 historical WARN/zero ERROR),770 R blocks parse/style clean, lint0. Repeat after adopting this plan update. |
-| ONGOING, native RStudio width | Supported host yield permits active-output shrink1,200→800 with reported81→52, but widening1,440 remains52. The original full-width gate remains NONPASS. A private eval_open/eval_restore trace is source-clear; its first attempt stops prebody at guarded input. No causal restoration diagnosis, complete width cure or trace acceptance yet. |
+| ONGOING, native RStudio width | Supported host yield permits active-output shrink1,200->800 with reported81->52, but widening1,440 remains52. The original full-width gate remains NONPASS. A private eval_open/eval_restore trace is source-clear; its first attempt stops prebody at guarded input. No causal restoration diagnosis, complete width cure or trace acceptance yet. |
 | NONPASS, native Jupyter authentication | Current V3 standard-auth test58947 closes before deadline without human login; no seven-cell execution/13GUI acceptance. Controller860.977 s/137.172 MiB/757 samples0errors/ownedcleanup; authenticated shutdown200, owned server79191/parent79188 and tab gone, protected sessions intact. Original RuntimeError/review/expired token instructions retained. Older V2 executes seven cells but has two host-warning NONPASS. Fresh lease needs renewed human readiness; no token disclosure or authentication bypass. |
 | SOURCE READY, VS Code | Code4 public LaunchServices exact-PID startup, cleanup mocks and current-artifact binding are independently source-clear; private output root0700. Original180 s/2GiB terminal runtime remains queued after GUI settlement, with strict PID/cwd/env/AX guard before input. R-extension/editor completion remains separately queued. |
 | HUMAN ENVIRONMENT PENDING, R.app | Same-user preference/window isolation is not established. No VM/user was created. Choice of a private UTM VM or separate Mac GUI user session is pending; VM setup requires compatible Apple restore image, local human Setup Assistant and verified guest UI route. Working R.app remains untouched. |
 | RETAINED, previous frontend scopes | Genuine Shiny deadline NONPASS and separate saved-v2 GUI PASS remain distinct. Site render/responsive visual and plain-R terminal completion/formatting/control-C evidence retain their exact713 scopes; public documentation is unchanged by the reactor yield. Strict Quarto client-closure, scientific model-tool-error and narrow allocator limitations stay visible. |
-| RUNNING, final-head CI/delivery | All13 current1f9 required job statuses succeed at18:02:19UTC; the finite final Windows oldrel raw/witness readback is being sealed. Current Windows release has31,646 ordinary assertions/107 original skips and1,906 native assertions/32 complete witnesses/one original skip, zero failures or warnings; cleanup and original guards pass. Hosted Mac StatusOK/33,036 assertions/65 skips/zero failures or warnings is distinct from local clockNOTE. Reviewed PR6/main sync/public Pages remain pending; final live Windows verification follows completed Mac work. |
+| RUNNING, final-head CI/delivery | All13 current1f9 required job statuses succeed at18:02:19UTC; the finite final Windows oldrel raw/witness readback is being sealed. Current Windows release has31,646 ordinary assertions/107 original skips and1,906 native assertions/32 complete witnesses/one original skip, zero failures or warnings; cleanup and original guards pass. Hosted Mac Status OK/33,036 assertions/65 skips/zero failures or warnings is distinct from local clock NOTE. Reviewed PR6/main sync/public Pages remain pending; final live Windows verification follows completed Mac work. |
 
-Evidence root `/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011`: normal `ROOT-ACTUAL-ACCEPTANCE.json` (7bde16c2), normal Consumer (020a7636), source `ALL-FIVE-SOURCE-ACTUAL-ACCEPTANCE.json` (2c0f6ee4), full check `PR5-ACTUAL-NONPASS.json` (15be3612), independent B1/check (33d6462a), live `FIVE-CASE-TEN-PHASE-ACTUAL-ACCEPTANCE.json` (0bfdbb95), plan actual (19552105), Jupyter `CLIENT-AUTH-BLOCKED-ACTUAL-NONPASS.json` (21c33879). Historical source-only, paused, deadline, warning, model-style and resource failures below remain unchanged.
+Evidence root `/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011`: normal
+`ROOT-ACTUAL-ACCEPTANCE.json` (7bde16c2), normal Consumer (020a7636), source
+`ALL-FIVE-SOURCE-ACTUAL-ACCEPTANCE.json` (2c0f6ee4), full check `PR5-ACTUAL-NONPASS.json`
+(15be3612), independent B1/check (33d6462a), live `FIVE-CASE-TEN-PHASE-ACTUAL-ACCEPTANCE.json`
+(0bfdbb95), plan actual (19552105), Jupyter `CLIENT-AUTH-BLOCKED-ACTUAL-NONPASS.json` (21c33879).
+Historical source-only, paused, deadline, warning, model-style and resource failures below remain
+unchanged.
 
-Root coordinates three parallel lanes: Shiny/browser; models/workflows/compaction; frontends/UX. Use separate private sessions/libraries/working directories/output paths and file ownership, with one GUI owner. At most four private families/12GiB combined declared R caps, ordinary CPU1; at most two internally parallel heavy jobs/12 aggregate workers. Check CPU, memory pressure, interval swap, disk and thermal state before heavier overlap. GUI/authentication waiting leaves independent bounded lanes available. Preserve working sessions/shared models; never stop unowned processes. Finish all remaining Mac acceptance, integration/current CI/reviewed merge and actual publication before final live Windows verification. Prepared packets and preceding artifacts are not current completion.
+Root coordinates three parallel lanes: Shiny/browser; models/workflows/compaction; frontends/UX. Use
+separate private sessions/libraries/working directories/output paths and file ownership, with one
+GUI owner. At most four private families/12GiB combined declared R caps, ordinary CPU1; at most two
+internally parallel heavy jobs/12 aggregate workers. Check CPU, memory pressure, interval swap, disk
+and thermal state before heavier overlap. GUI/authentication waiting leaves independent bounded
+lanes available. Preserve working sessions/shared models; never stop unowned processes. Finish all
+remaining Mac acceptance, integration/current CI/reviewed merge and actual publication before final
+live Windows verification. Prepared packets and preceding artifacts are not current completion.
 
-## Historical integration of host-event yield — 2026-10-15
+## Historical checkpoint — host-event yield integration, 2026-10-15
 
-The short-process-poll path now uses a supported zero-duration R yield to service host events and interrupts. Private red/green controls retain all 44 existing reactor cases: the baseline has seven failures only in the three new cases; the fix passes 47 cases/239 assertions with zero errors, warnings or skips. Both configured lints are zero; all eight caller-state checks, full connections and source/parent/owned cleanup pass. Five hundred immediately-ready polls take 0.007 s in this scoped test, with no added scheduling delay.
+The short-process-poll path now uses a supported zero-duration R yield to service host events and
+interrupts. Private red/green controls retain all 44 existing reactor cases: the baseline has seven
+failures only in the three new cases; the fix passes 47 cases/239 assertions with zero errors,
+warnings or skips. Both configured lints are zero; all eight caller-state checks, full connections
+and source/parent/owned cleanup pass. Five hundred immediately-ready polls take 0.007 s in this
+scoped test, with no added scheduling delay.
 
-Fresh combined build/check, native RStudio resizing, affected live CLI/stream/worker/fanout controls and final-head CI are pending. The following certified713 measurements belong to the preceding artifact and do not certify the integrated yield. Root coordinates the same three parallel lanes; Windows live verification remains last. Evidence: `/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011/reactor-host-yield-713ba29-source-only-v2/ACTUAL-ACCEPTANCE.json` (5c8e50b3).
+Fresh combined build/check, native RStudio resizing, affected live CLI/stream/worker/fanout controls
+and final-head CI are pending. The following certified713 measurements belong to the preceding
+artifact and do not certify the integrated yield. Root coordinates the same three parallel lanes;
+Windows live verification remains last. Evidence:
+`/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011/reactor-host-yield-713ba29-source-only-v2/ACTUAL-ACCEPTANCE.json`
+(5c8e50b3).
 
 ## Historical checkpoint — certified `713ba29`, 2026-10-15
 
-Coordinator source and accepted artifact: `713ba29f5e472a9926f7c2d79be7e850e5ecd8ee`, branch `codex/skipped-platform-tests`, in `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`. Calendar-helper preservation, responsive Shiny guidance and socket-first browser cleanup are integrated. Primary `/Users/wgu/Desktop/gptr`, working sessions and shared models remain protected. No merge, submission or release completion is claimed.
+Coordinator source and accepted artifact: `713ba29f5e472a9926f7c2d79be7e850e5ecd8ee`, branch
+`codex/skipped-platform-tests`, in `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`.
+Calendar-helper preservation, responsive Shiny guidance and socket-first browser cleanup are
+integrated. Primary `/Users/wgu/Desktop/gptr`, working sessions and shared models remain protected.
+No merge, submission or release completion is claimed.
 
 | Status | Current evidence and remaining condition |
-| --- | --- |
+|---|---|
 | COMPLETE, normal build/install | Archive 2,654,400 B; installed 6,989,513 B; `R/gptr.rdb` 5,039,714 B; combined documentation 1,725,639 B; extdata 83,185 B/data 0. Exact 667 inputs/121 R files/14 guide pairs/64 exports/read-only installation match. Family 45.252 s/516.516 MiB sampled. Installed 5 MB goal remains unmet. |
 | COMPLETE tests, clock NOTE open | Original archive as-cran: 30,550 passes/zero test failures or warnings/445 accounted skips (418 On CRAN/27 specific). Sole NOTE: unable to verify current time; strict controller remains NONPASS. 554.842 s/1,877.578 MiB. The primary clock probe fails before datetime parsing; no clock skew or exclusive network/certificate cause is established. |
 | COMPLETE, offline source scope | Five independent sessions cover all 200 files/4,205 cases/33,343 assertions/44 exact admitted skips. Each has all eight caller states, full connections, wrapper W0 and source/parent/owned cleanup intact. This is not a single-session suite or whole-warning-signal claim. |
@@ -141,18 +194,36 @@ Coordinator source and accepted artifact: `713ba29f5e472a9926f7c2d79be7e850e5ecd
 | COMPLETE, narrow allocator controls | Three commands preserve four measured environment/options/cwd/RNG predicates after namespace preload. The original MallocStackLogging warning was not reproduced; its emitter remains unproved. Retain the RStudio app Electron ERR_CONNECTION_REFUSED diagnostic; no cold all-eight or whole-native-quiet claim. |
 | COMPLETE CI, delivery open | All 13 required current713 checks succeed. Both Windows hosts run 1,906 native assertions/32 complete witnesses and 31,631 ordinary assertions with zero failures/warnings; ordinary skips 107/native skip 1 remain accounted. Oldrel-4 installed-size NOTE 9.8 Mb stays visible. PR6 is draft/unmerged; focused source review finds no concrete blocker. Remaining native Mac gates, merge/main sync and publication precede final live Windows verification/submission. |
 
-**Coordinator update before adoption/merge:** replace the pending native GUI and event-yield fields only when their final scoped receipts settle; do not infer passes from prepared packets or older artifacts. CRAN submission is being prepared, not submitted. README installation continues to target `main`.
+**Coordinator update before adoption/merge:** replace the pending native GUI and event-yield fields
+only when their final scoped receipts settle; do not infer passes from prepared packets or older
+artifacts. CRAN submission is being prepared, not submitted. README installation continues to target
+`main`.
 
-Evidence root: `/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011`. Key receipts: `normal-final-713ba29-CONSUMER-ACTUAL-ACCEPTANCE.json`, `c713/peer/PR5-ACTUAL-NONPASS.json`, `mac-comprehensive-713ba29-final-five-batches-prepared/ALL-FIVE-SOURCE-ACTUAL-ACCEPTANCE.json`, `plan-crosschecks-713ba29-final-checkpoint-bound-prepared/ACTUAL-ACCEPTANCE.json`, `saved-generated-shiny-713-GUI300-ACTUAL-READBACK.json`, `final-adopted-site-713ba29-bound-prepared/SITE-VISUAL-ACTUAL.json`, and the completion/scientific PTY actuals. Retain all earlier NONPASS, paused, TZDIR, supervisor FIFO, native EOF, timeout and model-style evidence with its original scope.
+Evidence root: `/Users/wgu/Desktop/gptr/dev/.validation/readiness-20261011`. Key receipts:
+`normal-final-713ba29-CONSUMER-ACTUAL-ACCEPTANCE.json`, `c713/peer/PR5-ACTUAL-NONPASS.json`,
+`mac-comprehensive-713ba29-final-five-batches-prepared/ALL-FIVE-SOURCE-ACTUAL-ACCEPTANCE.json`,
+`plan-crosschecks-713ba29-final-checkpoint-bound-prepared/ACTUAL-ACCEPTANCE.json`,
+`saved-generated-shiny-713-GUI300-ACTUAL-READBACK.json`,
+`final-adopted-site-713ba29-bound-prepared/SITE-VISUAL-ACTUAL.json`, and the completion/scientific
+PTY actuals. Retain all earlier NONPASS, paused, TZDIR, supervisor FIFO, native EOF, timeout and
+model-style evidence with its original scope.
 
-Root coordinates three lanes: Shiny/browser; models/workflows/compaction; frontends/UX. Private sessions and separate ownership; one GUI lease. At most four families/12 GiB combined declared R caps, ordinary CPU1; at most two internally parallel heavy jobs/12 aggregate workers. Recheck CPU, memory pressure, interval swap, disk and thermal state before heavy overlap. Preserve working sessions/shared models; signal only verified owned processes. An idle authentication/GUI wait leaves independent bounded lanes available without adding another GUI owner. Finish Mac validation before final live Windows verification.
+Root coordinates three lanes: Shiny/browser; models/workflows/compaction; frontends/UX. Private
+sessions and separate ownership; one GUI lease. At most four families/12 GiB combined declared R
+caps, ordinary CPU1; at most two internally parallel heavy jobs/12 aggregate workers. Recheck CPU,
+memory pressure, interval swap, disk and thermal state before heavy overlap. Preserve working
+sessions/shared models; signal only verified owned processes. An idle authentication/GUI wait leaves
+independent bounded lanes available without adding another GUI owner. Finish Mac validation before
+final live Windows verification.
 
-## Historical validation checkpoint — certified `f48f825`, 2026-10-14
+## Historical checkpoint — certified `f48f825`, 2026-10-14
 
-Clean product source is `2654a21`; these normal/check/source results certify `f48f825`. Tested builtin guidance/Windows fixture changes are integrated; fresh combined validation is pending. Historical failures and release gates remain intact.
+Clean product source is `2654a21`; these normal/check/source results certify `f48f825`. Tested
+builtin guidance/Windows fixture changes are integrated; fresh combined validation is pending.
+Historical failures and release gates remain intact.
 
 | Evidence | Accepted scope / retained boundary |
-| --- | --- |
+|---|---|
 | Normal | 667 inputs/121 R sources/14 guide pairs/64 exports; five quiet logs, read-only tree/five MD5s and owned cleanup exact. Installed 6,989,229 B/Rdb 5,039,928 B; installed 5 MB target unmet. |
 | Archive as-cran | Status OK, zero errors/warnings/notes; 30,538 assertions/445 accounted skips (418 On CRAN/27 specific); 495.431 s/2,025.234375 MiB. No caller all-eight or native Windows body acceptance. |
 | Five source batches | 200 files/4,205 cases/33,331 assertions/44 admitted skips. All eight caller states/full connections/source/parent/cleanup pass in each independent 40-file session. Wrapper warning scope excludes base warn-to-error conversion inside tests; no single-session/whole-signal claim. |
@@ -160,18 +231,30 @@ Clean product source is `2654a21`; these normal/check/source results certify `f4
 | Shiny | Saved manually modified app passes production-default controls. Genuine new generation retains created-v2/returned-v1 NONPASS. Plain-R handle controls pass; integrated guidance awaits fresh generation validation. |
 | Site | Render 14 guides/64 exports/265 files/2,885 links passes, all eight states/no observed warnings. Full connections, visual review and publication remain separate. |
 
-Native history passes 11 restoration checks/default black text/owned cleanup (104.063 s). Width retains 181.208 s deadline NONPASS; 800/1,440 widths unverified. R.app/private VS Code/Jupyter browser, native quietness/allocator and final live Windows remain open. Earlier installed frontend/PTY results retain their artifact scopes; strict Quarto closure serialization stays NONPASS.
+Native history passes 11 restoration checks/default black text/owned cleanup (104.063 s). Width
+retains 181.208 s deadline NONPASS; 800/1,440 widths unverified. R.app/private VS Code/Jupyter
+browser, native quietness/allocator and final live Windows remain open. Earlier installed
+frontend/PTY results retain their artifact scopes; strict Quarto closure serialization stays
+NONPASS.
 
-CI snapshot 03:22 UTC October 15: f48 plans succeed; required run pending/zero jobs, predecessor 6715 eleven successes/two Windows running. PR6 draft/unmerged. Complete fresh artifact checks, scoped native/site reviews, current required CI, merge/publication. Repeat the original four plan tools after adopting this checkpoint; keep state/security/deadline/raw/cleanup gates unchanged.
+CI snapshot 03:22 UTC October 15: f48 plans succeed; required run pending/zero jobs, predecessor
+6715 eleven successes/two Windows running. PR6 draft/unmerged. Complete fresh artifact checks,
+scoped native/site reviews, current required CI, merge/publication. Repeat the original four plan
+tools after adopting this checkpoint; keep state/security/deadline/raw/cleanup gates unchanged.
 
-Bounded parallelism: at most four private families and 12 GiB combined declared R memory caps; ordinary CPU1, one GUI owner. Recheck CPU, memory pressure, interval swap, disk and thermal state before heavier overlaps. Preserve working sessions/shared models and original per-job security, state, deadline and cleanup checks. Finish Mac validation before final live Windows verification.
+Bounded parallelism: at most four private families and 12 GiB combined declared R memory caps;
+ordinary CPU1, one GUI owner. Recheck CPU, memory pressure, interval swap, disk and thermal state
+before heavier overlaps. Preserve working sessions/shared models and original per-job security,
+state, deadline and cleanup checks. Finish Mac validation before final live Windows verification.
 
 ## Historical checkpoint — certified `ef5201e`, updated 2026-10-14 10:15 UTC
 
-Exact artifact source: `ef5201ecc65b109c682a4cf81fd9e84aaed8a5fa`. Earlier `68e3e1f`/`aeb5702` checkpoints below are historical; preserve their failures and receipts. Main is unmerged and publication remains pending.
+Exact artifact source: `ef5201ecc65b109c682a4cf81fd9e84aaed8a5fa`. Earlier `68e3e1f`/`aeb5702`
+checkpoints below are historical; preserve their failures and receipts. Main is unmerged and
+publication remains pending.
 
 | Gate | Current evidence | Next action / scope limit |
-| --- | --- | --- |
+|---|---|---|
 | Normal archive/install | Certificate `94deab2f`, archive `a65ed9ee`, 121 R sources/14 guide pairs/79 read-only files/five exact MD5s. Build 20.620 s/install 14.564 s/family 44.816 s/526.375 MiB sampled | Build/install accepted; other gates remain separate. |
 | Size | Archive 2,627,841 B; logical installation 6,973,927 B; Rdb 5,023,427 B. doc/ 1,224,500 + help/ 486,947 + html/ 15,771 = 1,727,218 B; extdata 83,185 B/data 0 | Installed 5 MB target unmet. Preserve default compilation/debug support and all 14 guides; retain size NOTE history and request CRAN consideration. |
 | Complete as-cran | 29,708P/0F/0W/441S/one clock NOTE; 462.626 s/2,189.125 MiB sampled | Three exact R clock probes all fail; all-eight states preserved. Explain the environment NOTE; no unchanged retry or native Windows claim. |
@@ -180,39 +263,52 @@ Exact artifact source: `ef5201ecc65b109c682a4cf81fd9e84aaed8a5fa`. Earlier `68e3
 | Decision/chat composition | Two native decision calls plus one Azure chat PASS/all-eight/connections/W0 | Keep other model/workflow and compaction gates distinct. |
 | Claude and Qwen | Exact `dat` Claude live 7.727 s/replay 0.221 s/zero requests/all-eight/W0; no connection assertion. Stronger Qwen transformed-data fidelity LIVE passes 19.816 s/replay zero requests | Original Qwen overwrite NONPASS and raw `<-` style gap retained. No whole frontend or continuous external-memory claim. |
 | Clef LIVE/replay | Corrected typed outputs independently accepted (`e9823d9a`): 6.584 s/4 POST/3 native usage/all-eight/connections/W0; replay zero requests | Original `names(d)` NONPASS/one POST/no replay retained. |
-| Automatic compaction | Independent `940c2e36` LIVE/resume: actual summaries 4,210→2,667 and 5,232→2,676; fixed cap 3,634/hysteresis, eight durable rows/24,716 tokens/eight turns/all-eight outer/W0/data addresses preserved/zero resume requests | Retain one standard `predict.lm` tool warning and unknown costs. No byte-prefix claim. |
+| Automatic compaction | Independent `940c2e36` LIVE/resume: actual summaries 4,210->2,667 and 5,232->2,676; fixed cap 3,634/hysteresis, eight durable rows/24,716 tokens/eight turns/all-eight outer/W0/data addresses preserved/zero resume requests | Retain one standard `predict.lm` tool warning and unknown costs. No byte-prefix claim. |
 | Reviewed small corrections | Registry-cycle 81P/lint scope retained; broader 260 actual `test-session-live.R:310` collected-session shutdown hook fails (`log$mine` NULL), weak-registry proposal HOLD. C-locale 8P in C/UTF-8/lint clear remains ready. MCP accepted `1b5f2a4e`: cold/ordinary 11P each, whole 30 cases/172P/0FEW/one original .cmd platform skip/lint 0/all-eight/connections/cleanup | Integrate after review; original MCP init failure retained. No source199/full-RSS/current-CI cure inferred. |
-| Shiny/browser | V2 corrected-context baseline 108P/5 expected F/0EWS/all-eight/connections; amended 11 cases/113P/0FEWS. Offline original app raises error; amended named-sidebar HTML 6,957 B/data preserved/four lint paths 0/all-eight/connections/W0/cleanup | Independent acceptance `dccefa91` complete. No browser/server/live-generated-app proof; retain original supervisor 3→5 connection NONPASS and earlier eight-turn failures. |
+| Shiny/browser | V2 corrected-context baseline 108P/5 expected F/0EWS/all-eight/connections; amended 11 cases/113P/0FEWS. Offline original app raises error; amended named-sidebar HTML 6,957 B/data preserved/four lint paths 0/all-eight/connections/W0/cleanup | Independent acceptance `dccefa91` complete. No browser/server/live-generated-app proof; retain original supervisor 3->5 connection NONPASS and earlier eight-turn failures. |
 | Native RStudio/console | Fresh `/Applications` lease selects Main under computer control; no R input. Guard cleanup/four protected sessions unchanged | Native Mac execution, window scaling/completion/default ANSI and allocator warning remain OPEN. Guard-only result is not native acceptance. |
-| Hosted CI | Completed six SUCCESS/seven FAILURE: six Linux jobs retain observer status1/root (C-locale also Unicode 1F); Windows oldrel4 native08 observer-snapshot-deadline/sampling_errors 1, ordinary MCP initialize −32601/1F. Mac/Windows release PASS; connections all 199/32,233P/0F/0W/52S | Private C/UTF-8 correction 8P/lint clear is ready for integration; required CI failures remain. Diagnose/rerun failures; neither scoped connection completion nor historical success closes other gates. |
+| Hosted CI | Completed six SUCCESS/seven FAILURE: six Linux jobs retain observer status1/root (C-locale also Unicode 1F); Windows oldrel4 native08 observer-snapshot-deadline/sampling_errors 1, ordinary MCP initialize -32601/1F. Mac/Windows release PASS; connections all 199/32,233P/0F/0W/52S | Private C/UTF-8 correction 8P/lint clear is ready for integration; required CI failures remain. Diagnose/rerun failures; neither scoped connection completion nor historical success closes other gates. |
 | Broader 260 | Original preflight NONPASS for two escaped-quote title metadata defects retained; corrected execution now has the actual collected-session shutdown-hook failure above | Weak-registry proposal HOLD pending fix; do not declare integration ready. |
-| Inline fan-out | LIVE completed 6.905 s driver/8.302 s whole/199.5 MiB/four actual requests plus one manual summary/9,072 tokens/five turns. RESUME completed 0.284 s driver/1.477 s whole/33.03125 MiB/zero requests/all-eight/W0/root-journal-only 21 fields | All three phases exit 0, but parent-summary fidelity OPEN/NONPASS: checkpoint 2,478→2,826 incorrectly says no taskwork/computations despite child AIC 156.6523. Narrow overlap/accounting/root-only resume/replay may pass; summarization remains open. |
+| Inline fan-out | LIVE completed 6.905 s driver/8.302 s whole/199.5 MiB/four actual requests plus one manual summary/9,072 tokens/five turns. RESUME completed 0.284 s driver/1.477 s whole/33.03125 MiB/zero requests/all-eight/W0/root-journal-only 21 fields | All three phases exit 0, but parent-summary fidelity OPEN/NONPASS: checkpoint 2,478->2,826 incorrectly says no taskwork/computations despite child AIC 156.6523. Narrow overlap/accounting/root-only resume/replay may pass; summarization remains open. |
 | Final integration | Final installed frontends, Mac gaps, source199/CI, merge and publication remain open | Finish Mac work before final live Windows verification; Windows is the last platform gate. |
 
-Preserve strict resource/all-eight/connection/raw-warning/owned-cleanup gates and protected sessions/shared models. Prepared/source-only changes are not executed passes. Root integrates this private four-document overlay and runs the four required cross-plan checks after adoption.
+Preserve strict resource/all-eight/connection/raw-warning/owned-cleanup gates and protected
+sessions/shared models. Prepared/source-only changes are not executed passes. Root integrates this
+private four-document overlay and runs the four required cross-plan checks after adoption.
 
 ## Historical checkpoint — integrated `68e3e1f`, certified artifact `aeb5702`, 2026-10-14
 
-Fresh normal build/install and complete local original-archive as-cran are accepted for `aeb5702cb3a362cc616ab37a11f0a3e50fb612a5`. Current clean source is `68e3e1f9a58d4dcc3f95926b015bb35c712ebb29`. Root integrated 17 exact tested and peer-reviewed files in six task commits: worker `edf1a61`, parser `e5357bb`, compaction `84fc54e`, observer `abbc2d1`, Linux diagnostics `4c2bb54` and display `68e3e1f` (`root-aeb5702-reviewed-task-INTEGRATED.json`). Fresh combined normal build/install, full check, source199 and CI for this integrated HEAD remain pending; prior certified aeb sizes and results are unchanged. Main remains unmerged; publication is not declared ready.
+Fresh normal build/install and complete local original-archive as-cran are accepted for
+`aeb5702cb3a362cc616ab37a11f0a3e50fb612a5`. Current clean source is
+`68e3e1f9a58d4dcc3f95926b015bb35c712ebb29`. Root integrated 17 exact tested and peer-reviewed files
+in six task commits: worker `edf1a61`, parser `e5357bb`, compaction `84fc54e`, observer `abbc2d1`,
+Linux diagnostics `4c2bb54` and display `68e3e1f` (`root-aeb5702-reviewed-task-INTEGRATED.json`).
+Fresh combined normal build/install, full check, source199 and CI for this integrated HEAD remain
+pending; prior certified aeb sizes and results are unchanged. Main remains unmerged; publication is
+not declared ready.
 
 | Gate | Established result | Remaining condition |
-| --- | --- | --- |
+|---|---|---|
 | Normal artifact | Certificate `65e8dc6a`, archive `f6206703` (2,624,087 B), 121 R files/14 guide pairs/79 read-only files/five MD5s. Measured build 20.491 s; install 14.581 s; family44.768s/548MiB sampled/36 samples, zero sampling errors and five quiet logs (`97dca8a2`) | Build/install only; no R caller all-eight or release claim |
 | Complete as-cran | `cd4aa464`: Status OK/0EWN, 29,618P/0F/0W/441S; 15 complete raw logs quiet. 493.69 s/2,232 MiB/419 samples, zero errors; input/Python-parent/owned cleanup pass. Skips: 414 On CRAN, duckdb 4, keyring 1, locale 1, dev absent 5, live opt-in absent 9, source-tree absent 5, source NAMESPACE absent 2 | Windows-only entry scripts were no-ops here; R caller all-eight/release-ready remain false. Current hosted/native/CI separate; earlier 2 GiB abort and parser-layer failure historical |
 | Source199 | Certified aeb Mac NONPASS (`dacb57dc`; controller `881d5fda`): 117/199 files started, 798.466 s/4,121.25 MiB above unchanged 4,096 MiB; 685 samples/zero sampling errors, input/parent/owned cleanup pass. Three bp-disk-observer reporter glyphs lack condition messages | No canonical completion, whole-warning total or final caller all-eight proof. Earlier timeout/RSS/ENV failures retained; no source199 pass or memory cure |
 | Size | Normal 6,973,605 logical B/Rdb 5,023,081 B; doc/ 1,224,500 B + help/ 486,962 B + html/ 15,771 B = combined docs 1,727,233 B; extdata 83,185 B/data 0 B. Separate keep-source check totals 10,049,777 file B/Rdb 8,105,590 B and displays installed 10.5 Mb/R 8.5 Mb as INFO | User installed 5 MB target unmet. Keep 14 guides/default compilation. Logical bytes/display units distinct; request CRAN consideration. Historical R 4.2 size NOTE 9.7 Mb and later size NOTEs retained |
 | Certified controls/docs | The aeb artifact includes startup 134/655P, composed compaction 15/420P, browser diagnostics 36/1,826P, skill/SDK and README/main-link/hook changes. Retain ordinary eight 133/1,598P and cold real openssl three modes; scoped all-eight/W0/connections/cleanup and owned lints zero. Seven-doc V3 passed two cases/10P/exact eight-expression hook (`a0340749`) | Baselines remain manual/NONQUALIFIED; external SIGINT/native timer cause/directory-cleanup cure unproved. Prior doc V2 whitespace/output and first V3 missing-input/parent attempts historical |
-| Integrated scoped corrections | Worker V2 `7988a092` source/control accepted and integrated; original worker LIVE failed. Parser V2 focused15/90P + two lint0/all-eight/W0/connections/peer (`35a49d6b`), baseline sole failure/V1 lint NONPASS retained. BP focused V4 exact8/145P/0FEWS/all-eight/W0/connections/peer (`c2bf6105`) | Integrated in current source, outside the retained aeb certificate. Cold absent1 Matrix1.7-6→1.7.6 fixture refusal retained, path identity gate not reached; genuine cold absent/custom V2 strict all-eight/connections/W0/version/path accepted (`766a7ca6`), optional-owner scope only. CP V3 full16/452P/0FEWS/lint1zero/all-eight/connections/W0/cleanup accepted (`eec1cb44`); V1 .824/V2 full449P1F and manual overflow NONADMISSION retained. No full199/native/memory cure |
+| Integrated scoped corrections | Worker V2 `7988a092` source/control accepted and integrated; original worker LIVE failed. Parser V2 focused15/90P + two lint0/all-eight/W0/connections/peer (`35a49d6b`), baseline sole failure/V1 lint NONPASS retained. BP focused V4 exact8/145P/0FEWS/all-eight/W0/connections/peer (`c2bf6105`) | Integrated in current source, outside the retained aeb certificate. Cold absent1 Matrix1.7-6->1.7.6 fixture refusal retained, path identity gate not reached; genuine cold absent/custom V2 strict all-eight/connections/W0/version/path accepted (`766a7ca6`), optional-owner scope only. CP V3 full16/452P/0FEWS/lint1zero/all-eight/connections/W0/cleanup accepted (`eec1cb44`); V1 .824/V2 full449P1F and manual overflow NONADMISSION retained. No full199/native/memory cure |
 | Integrated display and local setup | Session-print V3 baseline144/823P/5F/two genuine invalid-UTF8 warnings/0E/S manually qualified, other141 clean; corrected oracle has no class mismatch. Root/peer accepted GREEN144/828P/0FEWS/canonicalempty and five lint paths zero (`4d3d8bdb`, `025d4359`), all-eight/connections/W0/source/parent/owned cleanup; tested shared L0 sanitizer integrated. Root nonoverwriting local Quarto launcher repair gives ordinary shell1.10.18/exit0 | Applicable final-artifact Quarto checks pending. Original allocator warning OPEN/emitter unproven. No native/default ANSI or new LIVE acceptance; capacity errors and source-test failures remain distinct |
 | Private RStudio | V1 pre-GPTR guard/deadline NONPASS retained. V2 two actual guards/seven cases PASS: 1.346 s/49.796875 MiB/all eight states/W0/connections/zero sampling errors | Guard-only proof; fresh owned native GUI/width/completion pending. User approval for unowned duplicate-app cleanup is independent |
-| Final providers/workflows | `a657c204`: Codex/Jev/Azure pairs, integration four cases, history LIVE/replay, two-threshold auto LIVE/resume and inline fanout LIVE/resume/replay scoped PASS; all-eight/W0/input/parent/cleanup, zero new replay/resume calls | Claude controller0/numerics/W0 still SEMANTIC NONPASS: mtcars rather than requested dat; no accepted replay. Genuine worker status1 NONPASS:442→400 proof truncation/two unknown-cost warnings; real PID overlap/death/all-eight do not establish numeric success |
+| Final providers/workflows | `a657c204`: Codex/Jev/Azure pairs, integration four cases, history LIVE/replay, two-threshold auto LIVE/resume and inline fanout LIVE/resume/replay scoped PASS; all-eight/W0/input/parent/cleanup, zero new replay/resume calls | Claude controller0/numerics/W0 still SEMANTIC NONPASS: mtcars rather than requested dat; no accepted replay. Genuine worker status1 NONPASS:442->400 proof truncation/two unknown-cost warnings; real PID overlap/death/all-eight do not establish numeric success |
 | Installed frontends | `1e9e8ad1`: public23/250P/canonical[]/all-eight; Rscript/defaultRmd/Jupyter24 history rows/latest8/all13 cleanup flags/six ENV phases/W0/zero requests. Additive `485b015d`: kable/paged/tibble all13 TRUE/W0/six ENV phases; Quarto origin controls19/84P/all-eight/connections/W0; functional user names/values, source-origin closures and12 other states PASS | Original Quarto serialized objects FALSE/NONPASS (.QuartoInlineRender) remains. No whole-state/GUI/default ANSI acceptance |
-| Site and PTY | Site `adf342f1`/`47ad3055`:14guides/64exports/265files/2,885links,99.675s/916.390625MiB/all-eight/W0. Root Chrome320/768/1440/1920, native200% inner720/DPR2, themes/mobile navigation/code keyboard scroll/table containment. PTY `078cf4be`: two offline width/selected-cleanup cells PASS/NO_COLOR1 | Site restored100%/light/default viewport/owned tab closed; preview-server67555 exit0 verified by Root, no deployment. PTY manual sparse RSS only:80→120 after fixture,120→80 during run approximate13.983s; no exact active-prose/default ANSI/whole all-eight/raw-warning/connection credit |
-| Pending model matrix | `d3cd5281`: current Qwen regression/replay, native Clef typed/cache/replay, isolated system-wide Jev default/precedence/service use, live System1→System2 composition | Historical17 Qwen and inventory/auth are separate. Current bound model inference remains pending; accepted scoped source controls are listed above. |
-| Shiny and historical live | Prior edited model-free Shiny functional/visual PASS `b186c530` remains overall/native NONPASS for known CV; historical17 Qwen/frontend/PTY scopes retained | Final generated Shiny pending, no efficacy/native quietness claim; unknown-close, visual deadlines and cold processx3→5 failures retained |
-| Hosted/native/publication | Certified aeb required38515623544 all13SUCCESS at06:38Z/exact aeb/PR6 unmerged. Both Windows30,861P/0F/0W/103S: release StatusOK/size9.8Mb INFO, oldrel4 sizeNOTE9.7Mb/no directory NOTE (`0f8e4bfe`). Linux source199/all199 exact contexts/32,143P/0F/0W/52S/1,996.9s/explicit unchanged connection tables (`1ae8e21a`). Mac32,033P/65S/Linux C31,994P/73S/no-Suggests32,020P/68S StatusOK; Linux release/devel/oldrel1 directory NOTEs, oldrel4 directory+size NOTEs retained. Historical17 profiles0EWN/945 Windows startup skips and old8e13ordinaryF/native1,824P subPASS remain separate | Two current HTTP-only browser-startup skips persist; success artifacts lack full native Routs/32 witnesses. Linux199 has no final all-eight/RSS credit and does not cure Mac4GiB NONPASS. Root causes unobserved. Final LIVE/native GUI/model matrix, win-builder, main merge/publication remain open |
+| Site and PTY | Site `adf342f1`/`47ad3055`:14guides/64exports/265files/2,885links,99.675s/916.390625MiB/all-eight/W0. Root Chrome320/768/1440/1920, native200% inner720/DPR2, themes/mobile navigation/code keyboard scroll/table containment. PTY `078cf4be`: two offline width/selected-cleanup cells PASS/NO_COLOR1 | Site restored100%/light/default viewport/owned tab closed; preview-server67555 exit0 verified by Root, no deployment. PTY manual sparse RSS only:80->120 after fixture,120->80 during run approximate13.983s; no exact active-prose/default ANSI/whole all-eight/raw-warning/connection credit |
+| Pending model matrix | `d3cd5281`: current Qwen regression/replay, native Clef typed/cache/replay, isolated system-wide Jev default/precedence/service use, live System1->System2 composition | Historical17 Qwen and inventory/auth are separate. Current bound model inference remains pending; accepted scoped source controls are listed above. |
+| Shiny and historical live | Prior edited model-free Shiny functional/visual PASS `b186c530` remains overall/native NONPASS for known CV; historical17 Qwen/frontend/PTY scopes retained | Final generated Shiny pending, no efficacy/native quietness claim; unknown-close, visual deadlines and cold processx3->5 failures retained |
+| Hosted/native/publication | Certified aeb required38515623544 all13SUCCESS at06:38Z/exact aeb/PR6 unmerged. Both Windows30,861P/0F/0W/103S: release Status OK/size9.8Mb INFO, oldrel4 sizeNOTE9.7Mb/no directory NOTE (`0f8e4bfe`). Linux source199/all199 exact contexts/32,143P/0F/0W/52S/1,996.9s/explicit unchanged connection tables (`1ae8e21a`). Mac32,033P/65S/Linux C31,994P/73S/no-Suggests32,020P/68S Status OK; Linux release/devel/oldrel1 directory NOTEs, oldrel4 directory+size NOTEs retained. Historical17 profiles0EWN/945 Windows startup skips and old8e13ordinaryF/native1,824P subPASS remain separate | Two current HTTP-only browser-startup skips persist; success artifacts lack full native Routs/32 witnesses. Linux199 has no final all-eight/RSS credit and does not cure Mac4GiB NONPASS. Root causes unobserved. Final LIVE/native GUI/model matrix, win-builder, main merge/publication remain open |
 
-Preserve admitted limits, protected sessions/shared models and exact owned cleanup; no raw-error waiver. Root owns four shared documents and four required cross-plan tools after adoption. Linux diagnostics are integrated diagnostic-only: 13 pure controls accepted, no cause or cleanup cure. Fresh combined normal/check/source199/CI and final LIVE/native verification remain pending. Existing guide and documentation-example contracts remain unchanged.
+Preserve admitted limits, protected sessions/shared models and exact owned cleanup; no raw-error
+waiver. Root owns four shared documents and four required cross-plan tools after adoption. Linux
+diagnostics are integrated diagnostic-only: 13 pure controls accepted, no cause or cleanup cure.
+Fresh combined normal/check/source199/CI and final LIVE/native verification remain pending. Existing
+guide and documentation-example contracts remain unchanged.
 
 Earlier evidence below remains historical; it does not override these current gates.
 
@@ -250,12 +346,12 @@ Earlier evidence below remains historical; it does not override these current ga
   Connections28,359P/1F/0W/52 guards; C-locale28,198P/8F/0W/74 guards. Other completed
   jobs pass; Windows release/oldrel4 remain running in the retained pre-push snapshot.
   Those outcomes precede the current closure/writer corrections. Canceled jobs are not passes.
-- DONE/current normal build/private install (`c115b7c`): exact643 Git inputs,120 R sources
-  and14 guides; normal vignettes build and same-archive installation.44.798s/532.4375MiB
-  sampled family/46,825,583B witnessed CSV output/0 sampling errors; all three owned cleanups TRUE, five raw
-  logs without warnings/errors. Archive13d187fb, exact guide hashes, five installed file hashes
-  and read-only library identity verified. Streamed preflight rejects normalized tar aliases
-  and oversized entries. Five consumers, dependency profiles and native acceptance stay WAITING.
+- DONE/current normal build/private install (`c115b7c`): exact643 Git inputs,120 R sources and14
+  guides; normal vignettes build and same-archive installation.44.798s/532.4375MiB sampled
+  family/46,825,583B witnessed CSV output/0 sampling errors; all three owned cleanups TRUE, five raw
+  logs without warnings/errors. Archive13d187fb, exact guide hashes, five installed file hashes and
+  read-only library identity verified. Streamed preflight rejects normalized tar aliases and
+  oversized entries. Five consumers, dependency profiles and native acceptance stay WAITING.
 - DONE/current compaction (`756c2b1`): finite public waits yield the same retained checkpoint;
   repeated waits, abort, known/unknown accounting, retry, fallback, overflow, durable rebuild,
   active-session/manual boundaries and all eight caller-state checks pass. Tests-first15/319P/
@@ -280,39 +376,44 @@ Earlier evidence below remains historical; it does not override these current ga
   metadata warnings; current ordinary-cleanup and metadata diagnosis remain OPEN. No historical
   run or local scoped pass overrides these.
 - DONE/private site renderer: Pandoc3.10 path/bytes/SHA admitted in2.339s/91.859375MiB;
-  same-public259-input/all14-guide render74.965s/869.203125MiB/23,263,677B, zero R warnings
-  and zero raw native warning/error lines, zero sampling errors and owned cleanup TRUE.
-  Prior229 deprecations retained. Public build helper/CI compatibility and refreshed changed-source
-  reference render remain WAITING; scoped configuration/index appearance passes below; this is a source preview only.
+  same-public259-input/all14-guide render74.965s/869.203125MiB/23,263,677B, zero R warnings and zero
+  raw native warning/error lines, zero sampling errors and owned cleanup TRUE. Prior229 deprecations
+  retained. Public build helper/CI compatibility and refreshed changed-source reference render
+  remain WAITING; scoped configuration/index appearance passes below; this is a source preview only.
 - DONE/current registry callbacks (`95fcb28`): remove source metadata only from the package-created
   unregister literal; keep the original closure environment, registry identity and user functions.
   Tests-first31/203P/2F becomes31/205P/0F/E/W/S; affected150/1012P/0F/E/W with the named Windows
   parent-death guard only. All eight caller flags TRUE, two lints0; affected35.262s/1063.328125MiB,
-  zero sampling errors and owned cleanup TRUE. Local full retained-source4MB proof now passes; current CI stays OPEN.
+  zero sampling errors and owned cleanup TRUE. Local full retained-source4MB proof now passes;
+  current CI stays OPEN.
 - HISTORICAL/held cleanup reruns: Windows38316032571 at784522f fails six offline empty-directory
   controls before native/security execution. Canonical-path successor v4 reproduces12/199P/7F/1E
   then reaches209P/3F,0E/W/S/all eight TRUE; three failures expose an outdated synthetic path seam.
   Source-reviewed v5 corrects only that seam and checks all thirteen postconditions/nineteen labels;
-  actual v5 and exact75 native reruns remain WAITING. The sandbox-sampling attempt is invalid evidence.
+  actual v5 and exact75 native reruns remain WAITING. The sandbox-sampling attempt is invalid
+  evidence.
 - HISTORICAL/native browser diagnostic: retained Chrome process dies while its socket is still open;
   one public child-loop pump settles the close callback, then unchanged cleanup releases ownership.
   Actual3.363s/1465.46875MiB has abnormal close1006/native EOF and changes seed/objects despite
   zero R warnings. Native Chrome stderr also contains allocator/display diagnostics. Graceful-close
   and scoped RNG preservation are independently source-reviewed; actual quiet/state acceptance OPEN.
-- HISTORICAL/history export: immutable initial draft refuses ambiguous/missing/secret records and keeps
-  raw recorded R versus inert Peter comments distinct. Actual nine-case baseline4P/9E and amended5P/9E
-  expose missing fixture byte helpers and wrong doc_file_arg format arguments; zero W/S and all eight
-  caller flags TRUE do not make those runs passes. Corrected per-operand notes, parse/raw numeric+plot
-  replay, affected checks, lint, roxygen sync and public examples remain under implementation.
+- HISTORICAL/history export: immutable initial draft refuses ambiguous/missing/secret records and
+  keeps raw recorded R versus inert Peter comments distinct. Actual nine-case baseline4P/9E and
+  amended5P/9E expose missing fixture byte helpers and wrong doc_file_arg format arguments; zero W/S
+  and all eight caller flags TRUE do not make those runs passes. Corrected per-operand notes,
+  parse/raw numeric+plot replay, affected checks, lint, roxygen sync and public examples remain
+  under implementation.
 - DONE/scoped documentation appearance: actual Chrome200% zoom and320px effective width stay within
   the page; mobile navigation opens and keyboard-scrollable tables contain their own overflow.
   Light/dark logo switching persists and light restores white. Configuration/index HTML and assets
-  match the warning-free private render; the served Peter reference is older HTML with identical CSS.
-  This does not certify fresh changed-source references or generated Shiny/native-console layout.
-- SOURCE PREPARED/generated Shiny: real Azure create/revise fixture uses locked iris data, independent
-  reactive/plot oracles, revision immutability, authenticated HTTP/browser checks,320/768/1440px
-  screenshots, actual200% zoom, distinct owned processes and exact shutdown. Execution waits for
-  browser acceptance and a fresh current archive/library certificate; no generated app pass is claimed.
+  match the warning-free private render; the served Peter reference is older HTML with identical
+  CSS. This does not certify fresh changed-source references or generated Shiny/native-console
+  layout.
+- SOURCE PREPARED/generated Shiny: real Azure create/revise fixture uses locked iris data,
+  independent reactive/plot oracles, revision immutability, authenticated HTTP/browser
+  checks,320/768/1440px screenshots, actual200% zoom, distinct owned processes and exact shutdown.
+  Execution waits for browser acceptance and a fresh current archive/library certificate; no
+  generated app pass is claimed.
 - DONE/main protection: active ruleset24955100 requires PRs, all13 automatic package checks,
   an up-to-date base and resolved threads. No bypass actors; force pushes/deletion blocked;
   zero required approvals, feature branch and existing merge methods unchanged.
@@ -321,18 +422,18 @@ Earlier evidence below remains historical; it does not override these current ga
   provenance/limitations. Bound scripts preserve user lines; truncated top-level context is
   not a complete executable transcript. Test generated Shiny interactions, revision/reopen,
   responsive aesthetics, dependency/startup/error/cancel/security and exact owned cleanup.
-- DONE/historical evidence only (`02ceac9`): five normal consumers StatusOK/0E/W/N;
- 129,180P/2,308 guards. SuggestsStatusOK; reverse inventory empty/PASS; Depends retains four
+- DONE/historical evidence only (`02ceac9`): five normal consumers Status OK/0E/W/N;
+  129,180P/2,308 guards. Suggests Status OK; reverse inventory empty/PASS; Depends retains four
   failures. Three-OS worker/Shiny assertions9,462P/0F/E/RW still emit30 native websocket close
   lines. Private Azure/files/extensions/MCP/network/storage/history evidence remains retained.
 - DONE/GitHub: legacy issues1/2 closed as completed; fresh inventory has zero open issues.
   PR6 remains the only open draft PR. Current narrow corrections have independent source review.
 - WAITING: current full CI4MB/C/Windows/security acceptance, five archive consumers and
-  Depends/Suggests profiles; oldrel4 size/teardown; quiet native Chrome and fresh references; generated Shiny appearance;
-  native R/RStudio/VS Code/documents and resize/completion;
-  current Claude CLI/Codex CLI/Jev/Azure and exact Ollama workflows; in-memory ML/simulation/
-  synthetic RNA, steering/abort/inline!, real parallel teams, .gptr layout/replay/compaction.
-  Verify the owned fresh RStudio project before any commands; preserve original port27070.
+  Depends/Suggests profiles; oldrel4 size/teardown; quiet native Chrome and fresh references;
+  generated Shiny appearance; native R/RStudio/VS Code/documents and resize/completion; current
+  Claude CLI/Codex CLI/Jev/Azure and exact Ollama workflows; in-memory ML/simulation/ synthetic RNA,
+  steering/abort/inline!, real parallel teams, .gptr layout/replay/compaction. Verify the owned
+  fresh RStudio project before any commands; preserve original port27070.
 
 Evidence is in ignored primary `dev/.validation/readiness-20261011/`. At17:00 PDT: load
 17.29/14.05/15.73, CPU48.6% idle,109G used/18G unused, swap19,316.38MiB with zero
@@ -421,14 +522,14 @@ The following proof applies only to its diagnostic source; final current-source 
   inert text/HTML/Markdown, no LaTeX and holder removal. Retain first private-base `tail()`
   failure and source-cleared isolated `utils::tail` fix `f729`. IRkernel: 2.041677 s /
   173.344 MiB / 3 samples; Quarto: 2.13175 s / 458.281 MiB / 3 samples; 0 sampling errors.
-  Rmd: 0.56–0.80 s / one pre-fork sample each; true memory peak is unproved. GUI stays WAITING.
+  Rmd: 0.56-0.80 s / one pre-fork sample each; true memory peak is unproved. GUI stays WAITING.
 - DI03 ONGOING: closure PASS 2.771 s / 184.734 MiB / 3 samples, 0 warnings/exact restoration;
   storage, HTTP, live extensions/team and compaction WAITING.
-- UX01 DONE/offline: RED 4 cases / 34 passes / 21 failures; GREEN 4 / 55 / 0. Both have
-  0 errors/test warnings/skips/all eight state flags TRUE. Genuine warnings 1 + 1 remain,
-  outside unknown warnings 0; only removal is informational. Filtering intact; affected/lint ONGOING.
+- UX01 DONE/offline: RED 4 cases / 34 passes / 21 failures; GREEN 4 / 55 / 0. Both have 0
+  errors/test warnings/skips/all eight state flags TRUE. Genuine warnings 1 + 1 remain, outside
+  unknown warnings 0; only removal is informational. Filtering intact; affected/lint ONGOING.
 - WS01 FAILED/controller: a4 run38276750681 has four ABBA DONE/status0/stderr0 attempts
-  (0.29–0.33 s), parent five/attempt settlement TRUE. Four unknown observations result from
+  (0.29-0.33 s), parent five/attempt settlement TRUE. Four unknown observations result from
   numeric time passed to POSIXct-only `ps_handle`, not four proven survivors. Identity fix
   adoption/native replay/full ACL rerun WAITING; original 5 s limit remains unchanged.
 - ARCHIVE FAILED: c3 run38269972934 has 126,006 passes / 1 failure / 0 warnings / 2,308 guards,
@@ -448,11 +549,11 @@ Root must run four fresh serial plan checks after this delta; none ran in the au
 | DI01 exact private install | Install the original hosted `c3dad3d` archive into a fresh read-only private library; require real installer status0, loadability, all120 R records,14 guide pairs, five installed hashes and owned-process settlement. Emit a diagnostic installation record with release readiness false and dependency profiles blocked. The production R comparison applies only to nominated `a4c435c`; archive tests/docs retain c3 provenance. | DONE/diagnostic: actual install13.996 s/controller16.216 s; all120 R records/14 guide pairs/five installed hashes verified read-only. release_ready=false, profiles blocked; R comparison is nominated a4 only. Final current-source archive WAITING. |
 | DI02 history frontends | Using DI01's explicitly diagnostic installation record, execute all four R Markdown renderers, Quarto HTML and an actual fresh IRkernel bare-history MIME case serially. Independently verify bounded/inert display, full24-row preservation, counters, hashes and cleanup. Headless results do not establish GUI appearance or release readiness. | DONE/diagnostic: all six cases pass with0 warnings/requests/usage or native growth, all11 restore flags/hashes and full24/latest8/inert3 MIME proofs. First Jupyter tail failure retained; fresh IRkernel passes after isolated fixture qualification. GUI/release acceptance WAITING; Rmd true peak unproved. |
 | DI03 functional discovery | Run the three key-free closure/storage/HTTP cases, then approved live file/network/extensions/worker and compaction cases within existing per-case deadlines and budgets. Bind each result to its diagnostic installation scope; preserve every failure and parent-session witness. | ONGOING: closure PASS2.771 s/184.734 MiB/3 samples,0 warnings and exact restoration. Storage/HTTP also PASS; all three key-free cases complete diagnostically. Live extensions/team/compaction WAITING. |
-| WS01 native startup | Dispatch the default-off Windows devel PowerShell ABBA diagnostic at full `a4c435c`, then audit raw startup timings, script-entry markers and owned cleanup. Retain the original five-second deadline and unchanged ACL security oracles; a startup diagnostic cannot clear the failing whole check. | FAILED/controller: actual four ABBA attempts DONE/status0/stderr0,0.29–0.33 s and parent5/attempt settlement TRUE. Four unknown numeric-time identity observations are not four proven survivors. Reviewed identity correction/native and full ACL replay WAITING;5 s unchanged. |
+| WS01 native startup | Dispatch the default-off Windows devel PowerShell ABBA diagnostic at full `a4c435c`, then audit raw startup timings, script-entry markers and owned cleanup. Retain the original five-second deadline and unchanged ACL security oracles; a startup diagnostic cannot clear the failing whole check. | FAILED/controller: actual four ABBA attempts DONE/status0/stderr0,0.29-0.33 s and parent5/attempt settlement TRUE. Four unknown numeric-time identity observations are not four proven survivors. Reviewed identity correction/native and full ACL replay WAITING;5 s unchanged. |
 | UX01 billing advisory | Test first, then deliberately reclassify only successful CLI billing-key removal as a typed informational notice using the existing regular-output path. Align existing message handlers and the active contract; retain filtering, explicit consent, once/quiet behavior and genuine warnings/errors. | DONE/offline: meaningful RED4/34P21F and GREEN4/55P0F, both0E/testW/S/all8 state TRUE. Genuine warnings1+1 retained/outside unknown0. Runtime classification applied uncommitted; affected suites/lint ONGOING. |
 
 The c3 archive has all five raw checks: four Status OK and one Windows-devel ERROR;
-dependency profiles are skipped/blocked. DI01–03 prove only the stated diagnostic archive,
+dependency profiles are skipped/blocked. DI01-03 prove only the stated diagnostic archive,
 not the later billing production change. All-five acceptance, final current archive, native
 UI, remaining live matrix and merge stay open. Older checkpoints below remain historical.
 The RStudio tool still selects original port27070; no new input was sent. Preserve the
@@ -539,7 +640,7 @@ Only executed evidence below is complete; archive and frontend gates remain open
 - DONE/source-preview: native per-tab Chrome media-query dark/light transitions keep
   Auto selected and apply the appropriate background without reload. Restore no
   emulation and original Light, then close the owned tab. Evidence `ac2d8758`, source
- 1356296; extension-decorated favicon URLs are not exact asset evidence.
+  1356296; extension-decorated favicon URLs are not exact asset evidence.
 - WAIT: corrected certified archive installation, current examples/site/frontends,
   live providers/extensions/team/fan-out/compaction/fresh replay, and native GUI tests.
   RStudio control selects original port27070; alternate application times out, original
@@ -566,7 +667,7 @@ sessions, user objects and shared Ollama.
   Static links/logos, 12 width cells and normal/read-denied/write-denied theme UI pass.
   Separate 12 MiB quota proof has native QuotaExceededError/read OK/absent theme and owned
   cleanup at 10,485,760 bytes/57 attempts/99 ms; retain original 8 MiB unsupported evidence.
-  Native Chrome Peter reference passes 100–200% zoom; home/interactive-console at 200%
+  Native Chrome Peter reference passes 100-200% zoom; home/interactive-console at 200%
   have no overflow and a reachable homepage menu. Actual Size restores 100% before owned
   close. Ineffective IAB shortcut stays NOT PASS; real media-query transition remains WAIT.
 - DONE/O: token `3302607` controller8/164, protocol7/136, old registry65/3,277 and Python13
@@ -731,12 +832,13 @@ See [artifact evidence](progress/artifact-resume-20261010.md),
 | `8d13b58` | Installed CLI MCP recording repair; LR all nine Claude CLI/Codex CLI/exact Qwen direct Rscript/Rmd/Quarto cells | Install 29.51s, 417.1 MiB / 31 samples / zero sampling errors. O 48 focused / 1,601 affected assertions, zero failures/warnings/skips, three-file lint clean. All 18 document phases passed with one nonempty block per cell and zero replay requests/fresh usage/native rows. GUI and other outstanding cells remain P. |
 | `3d92b05` | Verified normal archive installed; local CRAN check/source gates; LR Azure emulated decisions/team-fanout and native Jev typed source; VS Code active width and Azure/Jev live/replay | Exact archive/hash above. Native GUI replay uses a fresh namespace/vault in the same R process, distinct from LR. First post-install verifier incorrectly counted generated index.html; installation DONE and a separate 14-guide/loadability certificate passed without reinstalling. |
 
-The coordinator's earlier verified installation checkpoint is `8952567`: normal archive
-SHA256 `e22172a337fe8efd6383aa570675061aae193fc7b1c7bff5680490e85550c6a8`,
-2,218,170 bytes, 14 built guides, install14.19s/421.5MiB sampled family peak/zero sampling
-errors. The notice fix passed42 focused/184 affected assertions, one CI-only skip and zero
-counted warnings. The normal local R 4.5.0 archive check is DONE: Status OK, 22,645 assertions, zero errors/warnings/notes, 386 skips; all five source/document gates pass. Hosted exact-byte checks remain ONGOING.
-Do not retag older live rows with it: confirm the installed SHA at every new run.
+The coordinator's earlier verified installation checkpoint is `8952567`: normal archive SHA256
+`e22172a337fe8efd6383aa570675061aae193fc7b1c7bff5680490e85550c6a8`, 2,218,170 bytes, 14 built
+guides, install14.19s/421.5MiB sampled family peak/zero sampling errors. The notice fix passed42
+focused/184 affected assertions, one CI-only skip and zero counted warnings. The normal local R
+4.5.0 archive check is DONE: Status OK, 22,645 assertions, zero errors/warnings/notes, 386 skips;
+all five source/document gates pass. Hosted exact-byte checks remain ONGOING. Do not retag older
+live rows with it: confirm the installed SHA at every new run.
 
 A separate normal `03963e0` archive and immutable installation passed:2,243,072bytes,
 SHA256 `b716aa6f090ea6b85ed997952ff2e2ed5de91e51e89767381a7f3a808af0d3e4`,14 built guides,
@@ -746,15 +848,22 @@ after an error followed by a CR redraw. Reviewed6501a64 corrects the boundary; a
 bounded notebook/document history renderers. Their source tests pass; actual installed visual,
 renderer, regenerated-help and current full-check evidence is pending. The895 library is intact.
 
-Resumed completions: native VS Code Codex/Qwen live and same-process fresh-namespace replay
-passed at `3d92b05`; native RStudio active resize passed widths199/122, two tools and all eight
-restoration checks. Native R.app's newer probe passed static layout/computation/restoration,
-but its automation call blocked through execution, so that run does not establish active
-resizing. Direct Jev Rscript passed live and fresh-child replay at `3d92b05`. Corrected Azure
-running-session and pumped-background steering passed at `8952567` (8.693s); protected seeded
-simulation passed (4.720s). The earlier failures remain retained. A canonical offline request
-spy proves the original queued-steer fixture omitted the initial prompt/context; no runtime
-queue-order change or budget increase was needed. Latest headless IRkernel regression/typed/team cells passed 14 live/replay phases at `8952567`, including the corrected exact-Qwen serialized teams within the original budget. Fresh native RStudio and R.app each passed Azure/Jev/Codex live and same-process fresh-namespace replay, six phases per client, with zero counted warnings and unchanged archive/installed database hashes. The older RStudio decompression-warning run is retained; restarting R with the same immutable package resolved the warnings. R.app notice/redraw layout remains ONGOING despite numerical passes. Detailed timings, failed trajectories and evidence limits are in the progress ledgers.
+Resumed completions: native VS Code Codex/Qwen live and same-process fresh-namespace replay passed
+at `3d92b05`; native RStudio active resize passed widths199/122, two tools and all eight restoration
+checks. Native R.app's newer probe passed static layout/computation/restoration, but its automation
+call blocked through execution, so that run does not establish active resizing. Direct Jev Rscript
+passed live and fresh-child replay at `3d92b05`. Corrected Azure running-session and
+pumped-background steering passed at `8952567` (8.693s); protected seeded simulation passed
+(4.720s). The earlier failures remain retained. A canonical offline request spy proves the original
+queued-steer fixture omitted the initial prompt/context; no runtime queue-order change or budget
+increase was needed. Latest headless IRkernel regression/typed/team cells passed 14 live/replay
+phases at `8952567`, including the corrected exact-Qwen serialized teams within the original budget.
+Fresh native RStudio and R.app each passed Azure/Jev/Codex live and same-process fresh-namespace
+replay, six phases per client, with zero counted warnings and unchanged archive/installed database
+hashes. The older RStudio decompression-warning run is retained; restarting R with the same
+immutable package resolved the warnings. R.app notice/redraw layout remains ONGOING despite
+numerical passes. Detailed timings, failed trajectories and evidence limits are in the progress
+ledgers.
 
 The true4GiB fresh-Rscript Azure probe passed at `3d92b05`: three exact read-only R aggregate
 tools on the same ordinary536,870,912-double vector, unchanged identity/input, six bounded
@@ -814,8 +923,8 @@ or universal crash-proof guarantee, and per-upsert validation still has bounded 
 Execute source/offline safety checks first, then serial live capability cases, then their
 fresh-process replay/cleanup checks. Update this table and the detailed progress ledgers after
 reviewing actual evidence. Completion must distinguish unsupported provider/client features
-from tests that remain waiting. All original G01–G14, A01–A08, D01–D07, IM01–IM06, UX01–UX08,
-X01–X14 and Q01–Q05 acceptance clauses remain in scope alongside these added cases.
+from tests that remain waiting. All original G01..G14, A01..A08, D01..D07, IM01..IM06, UX01..UX08,
+X01..X14 and Q01..Q05 acceptance clauses remain in scope alongside these added cases.
 Native Unix prefix completion at `f0f3448` passed O 71 focused / 476 affected assertions,
 one CI-only skip, zero failures/warnings and two-file lint clean. Immutable installation
 passed in 13.89s (15 samples, 386.7 MiB peak, zero sampling errors). Actual native R readline
@@ -1025,7 +1134,7 @@ surfaces. Ordinary R function/script syntax does not gain Peter-chat prefixes.
 |---|---|---|
 | R PTY | L streamed output/controls `fc9f8d4`; earlier F bare-bang completion retained; O/L scoped fix `f0f3448` completed `!mtc`, `!!mtc`, namespace and quoted path, restoring separators on exit | P error/interrupt completion restoration and outside-evaluator width changes. No native window-management claim |
 | Native Terminal app | Actual computer-use control unavailable under access policy | P resize its actual window during output; native readline completion/input, font/scale and spinner behavior |
-| macOS R.app/R Console | LGUI-O actual streamed resize `390485f`, widths 79→383 and exact text/input/restoration; R 4.5.0 / GUI 1.81 | P live inference, completion, multiline input, stop behavior and other wrapping/scale cases. Unix TTY fix does not cover this GUI; no memory peak measured for this streamed probe. |
+| macOS R.app/R Console | LGUI-O actual streamed resize `390485f`, widths 79->383 and exact text/input/restoration; R 4.5.0 / GUI 1.81 | P live inference, completion, multiline input, stop behavior and other wrapping/scale cases. Unix TTY fix does not cover this GUI; no memory peak measured for this streamed probe. |
 | RStudio | L Source/function, Knit, thinking indicator and c722 manual-tool timing/listing. Native R prompt completed `mtc`/`!mtc`; F Peter-prompt completion for bare/`!` input | P client-owned editor/readline completion integration; active resize/scale/wrapping. AX maximize/restore is not resize proof; partial-stream Esc attempts completed too early (not reached) |
 | VS Code R extension / native R / alternative console | Local versions inventoried; visible session unattached and `sess` prerequisite missing in checked libraries; radian availability unproven | P isolated attached-runtime fixture, native completion/prefix handling, active resize, controls and restoration; keep editor/LSP/terminal distinct |
 | Jupyter/IRkernel | LR actual GUI safe Markdown, stdout progress and one pending code display | P cell/editor completion versus input prompts, active browser/window/scale changes during output, tables/fences/tool/status wrapping and kernel interrupt cleanup |
@@ -1084,7 +1193,7 @@ the observed boundary and proposed owner rather than promising gptr can replace 
 | X09 tools/apps | R and bounded shell; optional Python/SQL engines; permission previews/denials; read/write/edit; output/plot truncation; artifact create/version/reopen/stop; Shiny dependency and browser UI; exact owned child cleanup | O installed 8d tiny Python/SQL/bash/files/shell/background and exact owned cleanup. P representative live/UI/apps/permissions; H broader offline suites |
 | X10 security/restoration | No credentials in prompt/events/logs/doc/cache/display; synthetic split-secret/bidi/markup tests; context/egress/local-only/trust restrictions; permission allow/ask/deny and guarded actions; original input invariant; cwd/options/env/libs/seed/listeners/binding restored; no orphaned owned processes | O synthetic guards; L selected cleanup/UI; P new installed/failure-path witnesses. In-process R is not a security sandbox. |
 | X11 usage/budget/cache | Known vs estimated vs unknown tokens/cost; abort once/request; preserve known partial usage; no implied zero charge; pricing tier and lower-bound budget behavior; cache-hit no request; compaction/checkpoint/rewind partial restoration | O abort accounting; H suites/ratchet; P live unknown/limit/cache/compaction cases |
-| X12 performance/resources | Installed SHA, first visible feedback, first normalized text, request/tool/completion intervals; approval dwell excluded from R execution duration; CLI telemetry gaps labeled. Sample owned process-family peak RSS and server/GPU allocation separately; deadline/cancellation cleanup and cold/warm comparisons | L documented install/document profiles and c722 approval-dwell exclusion; O timing. Latest live family RSS 249.4–876.4 MiB excludes the model server and may double-count shared pages/miss children. Qwen Rscript 70.008s versus rendered 20.685/22.963s under rising host load is not a causal model-performance diagnosis. Remaining comparisons P. |
+| X12 performance/resources | Installed SHA, first visible feedback, first normalized text, request/tool/completion intervals; approval dwell excluded from R execution duration; CLI telemetry gaps labeled. Sample owned process-family peak RSS and server/GPU allocation separately; deadline/cancellation cleanup and cold/warm comparisons | L documented install/document profiles and c722 approval-dwell exclusion; O timing. Latest live family RSS 249.4-876.4 MiB excludes the model server and may double-count shared pages/miss children. Qwen Rscript 70.008s versus rendered 20.685/22.963s under rising host load is not a causal model-performance diagnosis. Remaining comparisons P. |
 | X13 transport/auth/availability | API adapter content/usage/error normalization; SSE/JSONL partial streams; connect/first-byte/idle limits; retry/backoff versus definitive quota; CLI model/path/stdin and served token attribution; offline/no-key/absent optional package or executable; login/logout/expiry in isolated fake vaults | H/O provider/auth/HTTP/CLI regressions; L selected routes/quota reproduction. P current installed negative cases; no real shared-account logout or credential changes. |
 | X14 other inputs/UI | Bounded images/plots/attachments and unsupported-modality errors; human question/approval deny/cancel; piped stdin EOF and registered JSONL frontend distinct from native console; summary/print/str/format/rich repr without eager optional loading | H/O input/UI/display suites; L selected terminal/Jupyter. P remaining actual frontend/adapter capabilities. |
 
@@ -1099,7 +1208,7 @@ CLI does not expose every MCP tool event, actual R objects and numeric oracles r
 | ID | Required recurring check | Latest evidence / next action |
 |---|---|---|
 | Q01 documentation | All 14 guide precomputes; README, function/configuration help and asset README in-memory wording; man aliases/examples, every options/command table row, source/output consistency and no live chunks; private-overlay generation preserves the maintainer's DESCRIPTION preference | O `82a7db3` help generation and final README/all14 fresh-process guide refresh, zero documentation/file problems; NAMESPACE unchanged, DESCRIPTION `8.1.0` preserved. H 58 example pages/71 assertions. Static-site refresh did not rerun reference examples or install. P current full artifact checks. |
-| Q02 site/branding | Homepage/quickstart/Why Peter prominent; all guide/reference links; canonical logo files unchanged; light/dark/auto; native menu/theme persistence; code/table overflow keyboard focus; representative 320–1920px layouts and doubled text | O refreshed 90-page site: all14 guides/63 exports, zero broken local links, all8 image assets hash-identical. Browser18 cases: light five pages and dark homepage at320/768/1440, no page overflow, white light background, matching logos; theme/viewport restored. H prior60 cases and doubled-text check. P actual browser zoom and expanded current-site accessibility. |
+| Q02 site/branding | Homepage/quickstart/Why Peter prominent; all guide/reference links; canonical logo files unchanged; light/dark/auto; native menu/theme persistence; code/table overflow keyboard focus; representative 320-1920px layouts and doubled text | O refreshed 90-page site: all14 guides/63 exports, zero broken local links, all8 image assets hash-identical. Browser18 cases: light five pages and dark homepage at320/768/1440, no page overflow, white light background, matching logos; theme/viewport restored. H prior60 cases and doubled-text check. P actual browser zoom and expanded current-site accessibility. |
 | Q03 CRAN periodic | Focused isolated tests/lint then docs/files; examples/precompute when changed; current dependency metadata including optional `Enhances: repr`, absent-optional load/display, pure R/fixed Imports, source/archive exclusions and credential-free offline tests | O normal `3d92b05` archive exclusions/14 guides, local R4.5 `--as-cran` 0 errors/warnings/notes, docs/files/full lint/fresh examples/all-14 precompute. P remaining optional-dependency and final platform clauses. |
 | Q04 resource/size/timing | Record install/example/test/vignette timings, slowest pages, actual tarball bytes/hash, installed `du -k` and largest directories; watch source near 10 MB and docs/data near 5 MB; check at most two cores | O normal `3d92b05`: 2,216,695-byte archive, installed 6,592 KiB, doc content 555,401 bytes; build19.955/install13.430/check437.603s with two workers and BLAS1; checker-family peak2,002.1MiB/472samples/0errors. Installed-size INFO retained. Large-object/live performance remains separate. |
 | Q05 platform/current artifact | Existing hosted matrix with exact SHA; current R-release/R-devel exact-tarball `--as-cran`, Windows and reverse dependencies; force-killed child temp cleanup on Windows; manual/incoming/URL checks | O local `3d92b05` archive/manual/incoming. Hosted `68017d0` Windows release/oldrel completion/temp checks settled, but sole IC-33 failure persisted; corrected `3d92b05` matrix pending. P build-once current-release archive with identical-byte consumers on release/devel Windows/Linux/macOS and local adoption; reverse dependencies pending. Checkout rebuilds do not prove identical bytes. |
@@ -1169,8 +1278,8 @@ replacement actually executed; Linux guards are eight Windows writer cases plus 
 Windows worker case. No dependency/zero-assertion/unknown guard is accepted.
 
 Owned parent AND file ACL restoration is ACTUALLY exact on main and recovery: flags
-37892→37892, XOR zero, ordered DACL byte difference zero and Access SDDL equality one.
-Main reaches restored/stages 15–16, recovery reaches 107–108 and status zero/settled one.
+37892->37892, XOR zero, ordered DACL byte difference zero and Access SDDL equality one.
+Main reaches restored/stages 15-16, recovery reaches 107-108 and status zero/settled one.
 The fresh-owned baseline permits only AI+1024 stabilization before backup and requires a
 second exact Access/owner round-trip; caller paths and all 45 test bytes remain unchanged.
 Native absence still produces PROBE2, proving safe existing-entry refusal without proving
@@ -1196,29 +1305,29 @@ proof is required first, separately followed by an actual reticulate witness per
 Local install/renders, installed frontends/GUI/kernels/models and current full CRAN remain
 WAITING the disk/resource gate. No local inference/import/install/build/test was started.
 
-All four fresh broad-profile Linux plan stages pass on exact 3a27: 25 plans, 1523 blocks,
-770 R blocks, zero parse/style problems/lints and 39 equal before/after source hashes.
-Retain 90 historical index warnings, distinct from test/runtime warnings. Registry remains
-37 files/172 mandatory titles/55 lint paths with no new OS allowances. The first plan-only job4910648/run38148828001 passes exact identity, dependency setup,
-six controller units and39 equal before/after hashes, but fails the strict index gate:
-25plans/1446blocks/4389definitions/28337calls with14135ERROR/878INFO/150WARN.
-Actual installed-profile metadata proves testthat absent. Source review shows bare assertion
-exports disappearing into undefined classifications; the exact per-category error distribution
-was not retained. Extraction/parse/lint were not reached. The actual RED remains recorded;
-it does not invalidate the broad3a plan GREEN or the separately proved runtime/native fixes.
+All four fresh broad-profile Linux plan stages pass on exact 3a27: 25 plans, 1523 blocks, 770 R
+blocks, zero parse/style problems/lints and 39 equal before/after source hashes. Retain 90
+historical index warnings, distinct from test/runtime warnings. Registry remains 37 files/172
+mandatory titles/55 lint paths with no new OS allowances. The first plan-only
+job4910648/run38148828001 passes exact identity, dependency setup, six controller units and39 equal
+before/after hashes, but fails the strict index gate: 25plans/1446blocks/4389definitions/28337calls
+with14135ERROR/878INFO/150WARN. Actual installed-profile metadata proves testthat absent. Source
+review shows bare assertion exports disappearing into undefined classifications; the exact
+per-category error distribution was not retained. Extraction/parse/lint were not reached. The actual
+RED remains recorded; it does not invalidate the broad3a plan GREEN or the separately proved
+runtime/native fixes.
 
-The reviewed plan-only correction uses the exact pinned integration needs:check R dependency
-action and six extra packages, inherits its effective libraries and requires testthat/jsonlite/
-lintr. It records actual package versions and36 availability booleans without requiring every
-optional research package. The same six units/all four bounded stages/zero index errors/
-parse-style/zero lint/source-hash gates remain strict. Numeric fixed-category diagnostics
-improve retained failure evidence without uploading arbitrary source/messages. The dependency action may provision Pandoc/Quarto automatically; no browser, Quarto render,
-Python module, gptr runtime or model is exercised by this status-only job.
-Corrected exact-source all4 outcome is ONGOING until evidence is read; record the latest
-result in companion progress/ignored ledger without another plan edit. This check does not
-replace package/integration, native or CRAN coverage. Current Windows denial/warning/callr
-gates, merge, D-019 and release remain OPEN.
-
+The reviewed plan-only correction uses the exact pinned integration needs:check R dependency action
+and six extra packages, inherits its effective libraries and requires testthat/jsonlite/ lintr. It
+records actual package versions and36 availability booleans without requiring every optional
+research package. The same six units/all four bounded stages/zero index errors/ parse-style/zero
+lint/source-hash gates remain strict. Numeric fixed-category diagnostics improve retained failure
+evidence without uploading arbitrary source/messages. The dependency action may provision
+Pandoc/Quarto automatically; no browser, Quarto render, Python module, gptr runtime or model is
+exercised by this status-only job. Corrected exact-source all4 outcome is ONGOING until evidence is
+read; record the latest result in companion progress/ignored ledger without another plan edit. This
+check does not replace package/integration, native or CRAN coverage. Current Windows
+denial/warning/callr gates, merge, D-019 and release remain OPEN.
 
 Historical a03068e run38127051182 stopped before package installation, preflight or
 any of the12 selected test bodies: both hosts passed12 Python tests and1727 R result-gate
@@ -1229,30 +1338,30 @@ limits; the same12-file Windows/Linux scope must rerun. All4 Linux cross-plan st
 39 equal hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index
 warnings remain. Fresh plan gates are required after this update.
 
-Historical completed exact426423f [run38127752428](https://github.com/Broccolito/gptr/actions/runs/38127752428)
-confirms the formatting correction on both hosts. Verified raw artifacts establish the
-failures in the table; two timed-out files cannot count as passes. All26 cleanup records
-confirm stopped owned roots, settlement and0 marked survivors; controller warnings are0.
-The family-name correction3fd20b1 is committed/pushed but not yet rerun. Preserve all original
-assertions, add exact-family negative controls, and diagnose the Windows-only parent-env
-mismatch before the next run. All local jobs remain held; both hosted leases are now free.
-New plan edits require fresh4 exact-candidate cross-plan gates.
+Historical completed exact426423f
+[run38127752428](https://github.com/Broccolito/gptr/actions/runs/38127752428) confirms the
+formatting correction on both hosts. Verified raw artifacts establish the failures in the table; two
+timed-out files cannot count as passes. All26 cleanup records confirm stopped owned roots,
+settlement and0 marked survivors; controller warnings are0. The family-name correction3fd20b1 is
+committed/pushed but not yet rerun. Preserve all original assertions, add exact-family negative
+controls, and diagnose the Windows-only parent-env mismatch before the next run. All local jobs
+remain held; both hosted leases are now free. New plan edits require fresh4 exact-candidate
+cross-plan gates.
 
 The historical optional dependency helper's11 stdlib tests and plan diagnostic guard's6 stdlib tests
-are GREEN. They launch no R/browser/model process and do not replace actual integration.
-The two-host39f3248 run actually passed the prior9 Python tests and21 R result-gate assertions
-with0 failures/warnings/skips. The new2 launcher regressions use mocks; actual Windows launch
-passed at89f804d, along with11 Python tests,41 R gate assertions and0 runner/gate-file lints.
-The older Linux39f3248 run found2 brace lints in the runner; its pure R gate file had0 lints.
-All four mandatory index/extract/R-parse/lintr plan checks actually passed on Linux at
-exact245de54 in38113192422,39f3248 in38113687980,89f804d in38114220610 and
-b6fff3d in38115064744. All source hashes matched before/after. Verified245de54 artifact:
-25 plans,770 R blocks,0 parse/style problems and0 lints;
-the index retained90 historical warning-level findings and0 error-level findings. Its
-39-file source manifests matched before/after; artifact SHA25675c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466.
-Recheck the updated plan
-on each next candidate. The strict hosted runner counts raw expectation errors,
-failures and warnings; the older file runner's numeric summary omits raw errors.
+are GREEN. They launch no R/browser/model process and do not replace actual integration. The
+two-host39f3248 run actually passed the prior9 Python tests and21 R result-gate assertions with0
+failures/warnings/skips. The new2 launcher regressions use mocks; actual Windows launch passed
+at89f804d, along with11 Python tests,41 R gate assertions and0 runner/gate-file lints. The older
+Linux39f3248 run found2 brace lints in the runner; its pure R gate file had0 lints. All four
+mandatory index/extract/R-parse/lintr plan checks actually passed on Linux at exact245de54
+in38113192422,39f3248 in38113687980,89f804d in38114220610 and b6fff3d in38115064744. All source
+hashes matched before/after. Verified245de54 artifact: 25 plans,770 R blocks,0 parse/style problems
+and0 lints; the index retained90 historical warning-level findings and0 error-level findings. Its
+39-file source manifests matched before/after; artifact
+SHA25675c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466. Recheck the updated plan on
+each next candidate. The strict hosted runner counts raw expectation errors, failures and warnings;
+the older file runner's numeric summary omits raw errors.
 
 Historical resource check at 04:14 PDT: load 138.30/79.23/62.26, CPU 45.82% idle,
 physical RAM 123 GiB used and 4339 MiB unused, swap 17,352.25 MiB used, and 22 GiB free disk.
@@ -1262,15 +1371,15 @@ gate remain unsafe; the disk decline has no established cause. Keep all local R,
 import, build, browser, kernel, model and CRAN jobs held. Preserve shared Ollama and unrelated
 processes/files. Hosted jobs use separate resources, with at most two active jobs.
 
-Historical prepared follow-up at 03:16 PDT: family identity correction and private environment diagnostics,
-exact ACL-restoration diagnostics, fixed Windows control-file discovery, and bounded nested
-ACL phases are committed and pushed. The strict registry in d1fafc8 has 35 full files,
-145 required titles and 51 lint paths. Run 13 complete files: lint-rules, original cold idle,
-separate warm idle-boundary, marker-family, MCP, subagent-worker, CLI common/Claude/Codex,
-checkpoint, writer-runtime, native backpressure and spawn. Run all four plan gates on the same
-exact candidate after this update. No new Windows capability skip or timeout relaxation is
-accepted. The warm diagnostic cannot count as a cold-start pass or authorize retirement by
-itself. Quarto local rendering, private pandas/NumPy wheels and actual imports remain WAITING.
+Historical prepared follow-up at 03:16 PDT: family identity correction and private environment
+diagnostics, exact ACL-restoration diagnostics, fixed Windows control-file discovery, and bounded
+nested ACL phases are committed and pushed. The strict registry in d1fafc8 has 35 full files, 145
+required titles and 51 lint paths. Run 13 complete files: lint-rules, original cold idle, separate
+warm idle-boundary, marker-family, MCP, subagent-worker, CLI common/Claude/Codex, checkpoint,
+writer-runtime, native backpressure and spawn. Run all four plan gates on the same exact candidate
+after this update. No new Windows capability skip or timeout relaxation is accepted. The warm
+diagnostic cannot count as a cold-start pass or authorize retirement by itself. Quarto local
+rendering, private pandas/NumPy wheels and actual imports remain WAITING.
 
 The hold began at19:46 PDT and supersedes the earlier two-lane allowance: load was
 224.51/198.89/166.78, physical RAM127GiB used/94GiB wired/291MiB unused, swap31,460MiB
@@ -1321,7 +1430,7 @@ then fresh exact Linux and Windows consumers. None certifies current display fix
    then representative team documents/GUI controls; keep nonexported replay-value expectations
    honest. Complete system-wide Jev defaults and capability-gated emulation.
 4. Complete every guide/table acceptance checklist, skills/plugins/MCP/tools/artifacts and
-   modest in-memory multi-iteration profiling and UX01–UX03 across native surfaces; record
+   modest in-memory multi-iteration profiling and UX01..UX03 across native surfaces; record
    all omissions as P and identify proposed integration gaps explicitly.
 5. Run the mandatory full cross-plan checks after this update and retain their outcome in
    the documentation ledger. Periodic full CRAN/artifact gates remain resource-deferred; the
@@ -1364,7 +1473,7 @@ Record the evidence path and PASS/FAIL/PENDING/NOT REACHED. A screenshot or answ
 insufficient. Keep private logs/tokens/account inventories out of versioned records.
 
 Run the [cross-plan consistency sequence](research/assets/consolidation-tools/README.md)
-after a plan edit. These scripts index P01–P25, so also review this ledger's links/counts/statuses:
+after a plan edit. These scripts index P01..P25, so also review this ledger's links/counts/statuses:
 
 ```sh
 T="$PWD/dev/research/assets/consolidation-tools"
@@ -1383,10 +1492,9 @@ P17 skill examples produced `LONG` notes, not failures. The 89 warnings were rev
 category: recorded cross-owner edits, call-shaped signatures, prototype/removed names,
 historical contract spellings and later functions already present in current runtime; no
 new runtime blocker or numbered-plan edit was identified. The checker README's historical
-74-warning baseline is stale. The ledger itself is not indexed by those P01–P25 scripts.
+74-warning baseline is stale. The ledger itself is not indexed by those P01..P25 scripts.
 The coordinator records each subsequent full rerun's result in the linked documentation
 progress ledger; do not infer a current gate from the historical counts alone.
-
 
 ## Windows callr parent-environment repair — 2026-10-11
 
@@ -1428,15 +1536,16 @@ in phases: failing tests, the two launch changes, native parity/regression check
 conditional dependency removal. The approved dependency exception permits removing callr;
 it adds no Import or compiled code. Keep callr in DESCRIPTION until RPX07 passes.
 
-The CE01–07 section above records the separate upstream experiment. Its completed native
-callr evidence is historical and remains in [the companion ledger](progress/skipped-platform-tests-20261010.md).
-It does not prove these replacement entrypoints. The first Mac helper packet is expected RED:
-five test errors from missing launcher/library helpers and spawn callback, with 0 passes/test
-warnings/skips. The separate testthat build-version startup advisory is retained. RPX01 records
-this tests-first result. The focused Mac working-tree helper now passes 33 assertions with
-0 failures/test warnings/skips; worker/Shiny native parity remains P. The runtime commit is not
-yet nominated by this helper result. Track subsequent outcomes in [replacement progress](progress/rscript-processx-20261011.md) and HANDOFF without
-rewriting historical results.
+The CE01-07 section above records the separate upstream experiment. Its completed native callr
+evidence is historical and remains in
+[the companion ledger](progress/skipped-platform-tests-20261010.md). It does not prove these
+replacement entrypoints. The first Mac helper packet is expected RED: five test errors from missing
+launcher/library helpers and spawn callback, with 0 passes/test warnings/skips. The separate
+testthat build-version startup advisory is retained. RPX01 records this tests-first result. The
+focused Mac working-tree helper now passes 33 assertions with 0 failures/test warnings/skips;
+worker/Shiny native parity remains P. The runtime commit is not yet nominated by this helper result.
+Track subsequent outcomes in [replacement progress](progress/rscript-processx-20261011.md) and
+HANDOFF without rewriting historical results.
 
 | Case | Independent acceptance evidence | State |
 |---|---|---|
@@ -1446,9 +1555,9 @@ rewriting historical results.
 | RPX04 Shiny protocol | Actual owned loopback HTTP/ready proof, token and atomic port, explicit library/data loading, immutable revision and redacted logs. Startup failure and parent watchdog must preserve existing public handle/status/error behavior and avoid user browser/settings changes. | P |
 | RPX05 lifecycle and ownership | Native cancellation, EOF/EPIPE, unsupervised parent-only death within the existing 10-second oracle, exact PID/creation-time/marker settlement and foreign sentinel preservation. Failed launch or unknown/failed kill retains a recoverable owner/job and private files; watcher cancellation cannot turn uncertainty into deletion permission. Keep existing deadlines/caps. | P |
 | RPX06 native/regression gates | Native macOS and Windows in installed-package AND devtools contexts, plus Linux regression coverage. Strict raw error/warning/skip/unique-positive gates, affected full suites, architecture/lint and all four fresh plan checks. Record exact artifact/library source, elapsed time, memory scope and zero survivors. Local Mac work waits for resource clearance. | P |
-| RPX07 retire dependency | Only after RPX01–06 pass, verify no production callr use, remove its Import and unused adapter, preserve every other dependency and pure-R contract, then rerun metadata/docs, native affected checks and exact-archive CRAN/release gates. No general callr/r_process replacement API is introduced. | ONGOING; DESCRIPTION removal applied after three-OS native acceptance; changed-source gates pending |
+| RPX07 retire dependency | Only after RPX01-06 pass, verify no production callr use, remove its Import and unused adapter, preserve every other dependency and pure-R contract, then rerun metadata/docs, native affected checks and exact-archive CRAN/release gates. No general callr/r_process replacement API is introduced. | ONGOING; DESCRIPTION removal applied after three-OS native acceptance; changed-source gates pending |
 
-The accepted scope amends [architecture §6.7/§9](spec/03-architecture.md) and
+The accepted scope amends [architecture section 6.7/section 9](spec/03-architecture.md) and
 [IC-60](spec/04-interface-contract.md); P19/P23 callr examples remain baseline design history.
 The implementation retains GPTR's public handles and protocols. No fork installation, shared
 namespace hook, caller empty-value normalization, new library bridge or unbounded launcher
@@ -1456,7 +1565,6 @@ is authorized. Parent raw environment equality is checked independently from R C
 startup normalization; an invalid native seed cannot prove either preservation or its failure.
 Use offline fake data/keys only, exact-owned cleanup and bounded fresh child processes.
 Native or cleanup unknowns remain failures, never passes or new capability skips.
-
 
 ## Current verification checkpoint — 2026-10-12 03:45 PDT
 
@@ -1470,12 +1578,13 @@ Valid foreign imports preserve original identity; the old test forged only its h
 Corrected fixtures prove full ledger preservation and reject tampered identities.
 
 Measured no-follow CI gates8754d77 pass64pure cases/3236assertions/0F/E/W/S; three-path lint0.
-Registered workflow portb7f82b0 dispatched run38236352196 with the explicit default-false flag
-set true and the exact8observer/9security/47writer selection. Windows64rows969P/1F/0W/S; Linux553P/0F/W plus17Windows guards. Raw audit verifies
-eight Windows sampler witnesses/peak941MB/owned cleanup; denial fixture did not deny lookup,
-production refused existing input. Effective-denial fixture correction remains ONGOING, with
-no warning waiver or resource-cap increase. The unavailable separate workflow filename created
-no run. Earlier Phase A38231403037 remains GREEN145/144P and four settled cleanup witnesses.
+Registered workflow portb7f82b0 dispatched run38236352196 with the explicit default-false flag set
+true and the exact8observer/9security/47writer selection. Windows64rows969P/1F/0W/S; Linux553P/0F/W
+plus17Windows guards. Raw audit verifies eight Windows sampler witnesses/peak941MB/owned cleanup;
+denial fixture did not deny lookup, production refused existing input. Effective-denial fixture
+correction remains ONGOING, with no warning waiver or resource-cap increase. The unavailable
+separate workflow filename created no run. Earlier Phase A38231403037 remains GREEN145/144P and four
+settled cleanup witnesses.
 
 Callr was retired in ea18992 after three-platform native parity; current DESCRIPTION has
 seven external Imports and six base/recommended imports. The later six Python fixtures/CI
@@ -1501,7 +1610,7 @@ at completion; this is not that completion claim. Four fresh plan checks are req
 ## Current readiness execution queue — 2026-10-11 23:50 PDT
 
 The maintainer requested completing every applicable non-Windows-desktop item. The
-existing frontend/provider, fourteen-guide and X01–14 tables remain the coverage contract;
+existing frontend/provider, fourteen-guide and X01-14 tables remain the coverage contract;
 this queue orders their remaining work. Prepared source, a login/catalog entry and a
 headless render are not substitutes for execution or native visual observation. Only the
 Windows desktop live verification may remain at the final handoff. No CRAN submission,
@@ -1509,7 +1618,7 @@ account logout, user workspace reset or shared-model stop is authorized.
 
 | Gate | Scope and next independent proof | Current state |
 |---|---|---|
-| R01 child execution | RPX01–06: exact seeded parent state, worker protocol, installed/source Shiny HTTP/browser and cancellation; Mac/Windows native plus Linux regression | DONE pre-retirement native acceptance. Run38211164788 at3574: Mac1422P and Windows1439P per source/installed context; run38212625104 at8f03: Linux1425P per context. Each207cases/0F/0W/0outerW/0unexpected skips. Named platform guards retained; earlier failed packets remain. Final changed-source/archive gates remain required. |
+| R01 child execution | RPX01-06: exact seeded parent state, worker protocol, installed/source Shiny HTTP/browser and cancellation; Mac/Windows native plus Linux regression | DONE pre-retirement native acceptance. Run38211164788 at3574: Mac1422P and Windows1439P per source/installed context; run38212625104 at8f03: Linux1425P per context. Each207cases/0F/0W/0outerW/0unexpected skips. Named platform guards retained; earlier failed packets remain. Final changed-source/archive gates remain required. |
 | R02 dependency retirement | RPX07: remove production callr only after R01 acceptance, retain upstream experiment separately; repeat native, metadata and exact-archive gates | ONGOING. R01 three-OS source/installed acceptance passed. Reviewed callr Import/adapter retirement and observer-preserving CI subtraction are applied; focused metadata/environment/worker/artifact gates pass. Repeated current-source native matrix, exact archive and CRAN gates remain pending. |
 | R03 file and persistence safety | FT01/ST01/ST02: private JSONL/checkpoint creation, absence preconditions, sidecar structural/call bounds; installed tree/hash/mode deltas, corruption/rewind/refusal, text/doc reopens | ONGOING. Actual Mac551 storage and665 sidecar assertions pass,0F/0W/0S; scoped lint0. Earlier21/49-failure runs retained. Installed/current Windows and remaining extension packet pending. |
 | R04 Windows security | Native known-junction containment, strict effective-denial controls, exact ACL restoration, child death, writer concurrency and no-follow test supervisor controls | ONGOING. Native run38214805977: Linux observer113P/0F/0W/0S; Windows81P/11F/0W/0S before callback through blanket empty-entry preflight, with0outer warnings/survivors. Six-key first-init correction has actual Mac tests-first2F/96P then144P/0F/0W/0S and two-file lint0. Both hosted native eight-case/ten-control reruns must pass before sampler adoption, then9 security/47 writer cases; denial/resource/cleanup gates unchanged. |
@@ -1517,11 +1626,11 @@ account logout, user workspace reset or shared-model stop is authorized.
 | R06 compact history | UX05: certified actual IRkernel MIME and Rmd default/kable/paged/tibble plus Quarto, full24-row invariance/latest8 display,0requests/usage, exact cleanup | DONE/current02 diagnostic install: six serial Rmd/Quarto/IRkernel cases pass exact MIME/HTML/data/restoration and0request gates. Native GUI/browser appearance and final changed-source artifact remain WAITING. |
 | R07 live providers and decisions | All five requested routes: Claude CLI, Codex CLI, Jev typed decisions, exact Ollama Qwen and Versa Azure; S1 logical/choice/score, emulated/native/local boundaries and configuration | ONGOING historical live/replay cells retained by revision; current remaining cells and capability-specific errors pending. No inference claim from inventory. Preserve shared Ollama. |
 | R08 live workflows | Functional Peter/file/scripts, interactive steering, queued/background work, named subagents and fan-out, bounded simulation/ML/single-cell examples; independent numerical/input and replay oracles | ONGOING historical scoped passes retained. Certified closure/storage/HTTP and five live file/resource/download/agent/web cases prepared; remaining team/cancel/summary-quality cases pending. |
-| R09 compaction | CP01–07: manual/automatic continuity, budget/abort/malformed/timeout, durable per-attempt usage, fresh resume/rewind, teams/shared attribution and strict replay across PTY/GUI/Rscript/Rmd/Quarto/IRkernel | ONGOING source regressions. Four certified manual/auto/budget/abort live cases and fresh resume prepared; real team/frontend cases still required. |
-| R10 extensions and MCP | EX01–03/FT02: trusted skills/local import/template/agents; directory/package plugin lazy load/unload/reload/trust refusal; stdio and HTTP auth/expiry/progress/error/cancel/reconnect/remove; bounded public download failures | ONGOING. Existing actual scoped MCP/web/download passes retained. Source-only remaining installed negative packet being prepared; external skill upload has no named destination/API and is documented as caller-controlled. |
-| R11 native UX and resources | UX04–08/X12–14: ordinary stdout/error stderr, current R.app post-error color, spinner/layout/newlines/tool-text-tool/interrupt, malloc diagnostics and streamed fence boundaries; active width at narrow/wide windows, inline! completion/client limits; RSS/time/first feedback/owned cleanup | WAITING certified native RStudio/R.app/VSCode/terminal/notebook observation. Earlier native passes remain historical. No library claim to reflow emitted scrollback or alter third-party editor completion. |
-| R12 documentation and site | G01–14/Q01–02: README/help/14 guides use accurate in-memory/worker wording and Peter namesakes; all settings/slash/tool/extension/workflow tables; canonical light/dark logos, white background; fresh links/render and320–1920px/zoom checks | ONGOING. README/getting-started and2Rd regenerated,0problems; generated whitespace normalized. Theme storage guard/source asset audit clear. Fresh all-guide/reference/site/browser checks pending. |
-| R13 release helpers and CRAN | Q03–05: readonly doc checks, current normal-release build once, same-byte release/devel OS consumers, CRAN-mode/manual/incoming/deps-only/Suggests-only/revdeps/size/timing checks and all four plan gates | ONGOING. README-check mutation/fabricated notification reproduced6 failures; reviewed fix passes42 assertions and docs/files checks0problems. Plan392c009 local+hosted38211975848 passes25plans/770Rblocks/0parse/style/lints; this updated plan requires fresh checks. Local R4.5.0 is diagnostic, not current-release proof. |
+| R09 compaction | CP01-07: manual/automatic continuity, budget/abort/malformed/timeout, durable per-attempt usage, fresh resume/rewind, teams/shared attribution and strict replay across PTY/GUI/Rscript/Rmd/Quarto/IRkernel | ONGOING source regressions. Four certified manual/auto/budget/abort live cases and fresh resume prepared; real team/frontend cases still required. |
+| R10 extensions and MCP | EX01-03/FT02: trusted skills/local import/template/agents; directory/package plugin lazy load/unload/reload/trust refusal; stdio and HTTP auth/expiry/progress/error/cancel/reconnect/remove; bounded public download failures | ONGOING. Existing actual scoped MCP/web/download passes retained. Source-only remaining installed negative packet being prepared; external skill upload has no named destination/API and is documented as caller-controlled. |
+| R11 native UX and resources | UX04-08/X12-14: ordinary stdout/error stderr, current R.app post-error color, spinner/layout/newlines/tool-text-tool/interrupt, malloc diagnostics and streamed fence boundaries; active width at narrow/wide windows, inline! completion/client limits; RSS/time/first feedback/owned cleanup | WAITING certified native RStudio/R.app/VSCode/terminal/notebook observation. Earlier native passes remain historical. No library claim to reflow emitted scrollback or alter third-party editor completion. |
+| R12 documentation and site | G01-14/Q01-02: README/help/14 guides use accurate in-memory/worker wording and Peter namesakes; all settings/slash/tool/extension/workflow tables; canonical light/dark logos, white background; fresh links/render and320-1920px/zoom checks | ONGOING. README/getting-started and2Rd regenerated,0problems; generated whitespace normalized. Theme storage guard/source asset audit clear. Fresh all-guide/reference/site/browser checks pending. |
+| R13 release helpers and CRAN | Q03-05: readonly doc checks, current normal-release build once, same-byte release/devel OS consumers, CRAN-mode/manual/incoming/deps-only/Suggests-only/revdeps/size/timing checks and all four plan gates | ONGOING. README-check mutation/fabricated notification reproduced6 failures; reviewed fix passes42 assertions and docs/files checks0problems. Plan392c009 local+hosted38211975848 passes25plans/770Rblocks/0parse/style/lints; this updated plan requires fresh checks. Local R4.5.0 is diagnostic, not current-release proof. |
 | R14 review and integration | Review complete candidate against pure-R/fixed-dependency/style/security contract, periodic commits/push, exact CI evidence, concrete PR review then authorized merge and final installed/live verification | ONGOING isolated codex/skipped-platform-tests. Existing PR4/5 already merged; no open PR at discovery. Main718e81e/shared dirty paths preserved. New reviewed integration PR/merge waits acceptance. |
 
 At23:05 CPU49.81%idle, load13.41/16.01/15.30, RAM122GiBused/5695MiBunused,

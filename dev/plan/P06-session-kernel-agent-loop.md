@@ -1,14 +1,38 @@
 # P06 Session Kernel and Agent Loop Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the S-8 session object and the offline agent runtime of gptr: the session shell with its weak live registry, the append-only Pi-v3 JSONL store with fork, resume and replay, budgets and usage, the pure agent-loop state machine, the run lifecycle on P04's reactor, the never-throw tool dispatcher with the fail-closed permission kernel, and the `ctx.kernel` service.
+**Goal:** Build the S-8 session object and the offline agent runtime of gptr: the session shell with
+its weak live registry, the append-only Pi-v3 JSONL store with fork, resume and replay, budgets and
+usage, the pure agent-loop state machine, the run lifecycle on P04's reactor, the never-throw tool
+dispatcher with the fail-closed permission kernel, and the `ctx.kernel` service.
 
-**Architecture:** A session is a classed environment (the shell) whose only binding is `.d`, an unclassed data environment; live resources sit in `the$live[[id]] = rlang::new_weakref(key = shell, value = live)` and `the$last` holds the most recent shell strongly (IC-71). `agent-loop.R` is Pi's two nested loops rewritten as a pure state machine that the run engine (`agent-run.R`) drives from reactor callbacks: requests go out through P05's `provider_stream()`, tool batches through `agent-dispatch.R` (validate -> `tool_call` hooks -> `perm_check()` -> checkpointers -> execute in P04's tool FIFO -> `tool_result` hooks), and every entry is appended open-append-close to `<workspace root>/sessions/<stamp>_<id>.jsonl` inside `suspendInterrupts()`. Later plans reach the kernel through the kernel SDK of IC-33 and the `ctx.kernel` service; P06 reaches later plans only through the P07/P08/P11/P14/P15/P16/P18 services of 04 §7.0, each with its documented fallback.
+**Architecture:** A session is a classed environment (the shell) whose only binding is `.d`, an
+unclassed data environment; live resources sit in
+`the$live[[id]] = rlang::new_weakref(key = shell, value = live)` and `the$last` holds the most
+recent shell strongly (IC-71). `agent-loop.R` is Pi's two nested loops rewritten as a pure state
+machine that the run engine (`agent-run.R`) drives from reactor callbacks: requests go out through
+P05's `provider_stream()`, tool batches through `agent-dispatch.R` (validate -> `tool_call` hooks ->
+`perm_check()` -> checkpointers -> execute in P04's tool FIFO -> `tool_result` hooks), and every
+entry is appended open-append-close to `<workspace root>/sessions/<stamp>_<id>.jsonl` inside
+`suspendInterrupts()`. Later plans reach the kernel through the kernel SDK of IC-33 and the
+`ctx.kernel` service; P06 reaches later plans only through the P07/P08/P11/P14/P15/P16/P18 services
+of 04 section 7.0, each with its documented fallback.
 
-**Tech Stack:** base R (>= 4.2.0); rlang (weak references, `obj_address()`, `duplicate()`); jsonlite (through P01's `json_encode()`/`json_decode()`); ps (lock creation times); cli (colours in the print footer); utils; P04's reactor; testthat 3e, withr and processx in tests (processx and pkgload only in the `skip_on_cran()` crash and lock tests); roxygen2 through `devtools::document()`.
+**Tech Stack:** base R (>= 4.2.0); rlang (weak references, `obj_address()`, `duplicate()`); jsonlite
+(through P01's `json_encode()`/`json_decode()`); ps (lock creation times); cli (colours in the print
+footer); utils; P04's reactor; testthat 3e, withr and processx in tests (processx and pkgload only
+in the `skip_on_cran()` crash and lock tests); roxygen2 through `devtools::document()`.
 
-**Spec:** dev/spec/03-architecture.md (§2.2, §2.3, §3.2, §5.1-5.5, §6.2, §6.4, §6.8.2-6.8.5, §6.9.1-6.9.2, §6.11, §6.18 INFRA-09..15/25/26, §12.5-12.6), dev/spec/04-interface-contract.md (§1.1-1.4, §2.1-2.2, §3.1, §4.1-4.8, §5.1, §5.7, §5.12-5.13, §6.5 `gptr_fork()`/`gptr_sessions()`/`gptr_resume()`/`gptr_last()`/`gptr_usage()`, §7.0-7.6, §7.11 permission request record, §8.1, §8.4, §9.1, §10.2-10.7, §11.4-11.5, §12.1-12.4, §15: IC-33, IC-34, IC-46, IC-52, IC-53, IC-55, IC-57, IC-59, IC-61, IC-66, IC-67, IC-69, IC-71), dev/spec/05-plan-decomposition.md (P06).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 2.3, 3.2, 5.1-5.5, 6.2, 6.4, 6.8.2-6.8.5,
+6.9.1-6.9.2, 6.11, 6.18 INFRA-09..15/25/26, 12.5-12.6), dev/spec/04-interface-contract.md
+(sections 1.1-1.4, 2.1-2.2, 3.1, 4.1-4.8, 5.1, 5.7, 5.12-5.13, 6.5
+`gptr_fork()`/`gptr_sessions()`/`gptr_resume()`/`gptr_last()`/`gptr_usage()`, 7.0-7.6, 7.11
+permission request record, 8.1, 8.4, 9.1, 10.2-10.7, 11.4-11.5, 12.1-12.4, section 15: IC-33, IC-34,
+IC-46, IC-52, IC-53, IC-55, IC-57, IC-59, IC-61, IC-66, IC-67, IC-69, IC-71),
+dev/spec/05-plan-decomposition.md (P06).
 
 **Depends on:** P04, P05 (and through them P01, P02, P03). **Milestone:** M1.
 
@@ -16,32 +40,203 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only for closure state), the native `|>` (never `%>%`), ASCII-only R sources including tests (non-ASCII as `\u` escapes), lines of at most 100 characters, `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions (messages built by concatenation, never glue-interpolated), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed global state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line required by the executing harness (conventions §10). Plan-specific requirements, copied from the specification:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only for closure
+state), the native `|>` (never `%>%`), ASCII-only R sources including tests (non-ASCII as `\u`
+escapes), lines of at most 100 characters, `pkg::fun()` calls,
+`gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions (messages built by concatenation, never
+glue-interpolated), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed global
+state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network in tests,
+`Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose
+message ends with the attribution line required by the executing harness (conventions section 10).
+Plan-specific requirements, copied from the specification:
 
-- Owned files (05 P06): `R/session-object.R`, `R/session-live.R`, `R/session-store.R`, `R/session-budget.R`, `R/agent-loop.R`, `R/agent-run.R`, `R/agent-dispatch.R`, their test files `tests/testthat/test-session-object.R`, `test-session-live.R`, `test-session-store.R`, `test-session-budget.R`, `test-agent-loop.R`, `test-agent-run.R`, `test-agent-dispatch.R`, and `tests/testthat/fixtures/oracles/report02/` ("the 24 loop, 42 store and 26 recovery checks of report 02, converted to R test data"); plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`, and the snapshot file `tests/testthat/_snaps/session-object.md` of P06's own `expect_snapshot()` calls.
-- Layers (03 §2.2, §3.2): `agent-loop.R` and `agent-dispatch.R` are L2; `session-*.R` and `agent-run.R` are L3. L2 "may call L0, L1 types" and, by P01's `arch_edge_ok()`, its own `agent` area, so the L2 files never call a `session-*.R` function: the dispatcher reaches the session through agent-area helpers of `agent-run.R` (`run_data()`, `run_ctx()`, `run_append_message()`, ...), and P01's `test-arch-layers.R` checks every edge. L3 "never call an L4 capability by function name" (registry lookups only); nothing below L5 prints except `print()` methods of P06's own classes.
-- Exports (04 §14.1, §6.5), exact signatures: `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))`, `gptr_sessions(project = TRUE)`, `gptr_resume(x = NULL, envir = parent.frame(), block = NULL, child = NULL)`, `gptr_last()`, `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)`. Their examples run offline: the parts that need `peter()` (P08) are in `@examplesIf exists("peter", mode = "function")` blocks. S3 methods of `gptr_session` (04 §5.1): `$`, `[[`, `$<-`, `[[<-`, `names`, `.DollarNames` (utils), `print`, `format`, `as.character`, `summary`, `str` (utils); `print.gptr_session_summary`.
-- Kernel SDK owned here (IC-33): `session_data()`, `session_live()`, `session_home()`, `session_append()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`, `session_value_set()`, `session_value_get()`, `session_replay_apply()`, `session_replay_new()`, `session_replay_bind()`, `replay_lookup()`, `session_run()`, `run_start()`, `run_wait()`, `run_abort()`, `run_current()`, `run_eval_env()`, `run_emit()`, `dispatch_nested()`, `perm_check()`, `tool_result_message()`, `store_read()`, `store_rebuild()`, `last_set()`.
-- Internal signatures (04 §7.6): `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())`, `session_set_model(s, ref, reason = "user")`, `session_set_mode(s, mode, source = "user")`, `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())`, `session_value_set(s, label, value, name = NULL, forced_home = NULL)`, `session_value_get(s, turn = NULL)`, `live_all()`, `last_set(s)`, `store_open(s)`, `store_append(store, entries)`, `store_read(path)`, `store_close(store)`, `store_fork(s, cut, new)`, `store_rebuild(path, home)`, `store_heartbeat(store)`, `session_replay_apply(s, block, header, text = NULL)`, `session_replay_new(block, header, envir, doc)`, `session_replay_bind(block, s, child = NULL)`, `replay_lookup(block, child = NULL)`, `budget_check(s, estimate = 0)`, `ledger_add(s, request_id, components)`, `session_run(s, input, opts = list())`, `run_start(s, input, opts = list())`, `run_wait(runs, timeout = Inf)`, `run_abort(run, reason = "user")`, `run_current()`, `run_eval_env(run)`, `run_emit(run, type, ...)`, `dispatch_tools(run, calls)`, `dispatch_nested(name, input, ctx)`, `tool_validate(tool, input)`, `perm_check(call, run)`, `tool_result_message(result, call)`.
-- Classes (04 §5.1, §5.12, §5.13): `gptr_session` (shell), `gptr_session_summary`, `gptr_usage`, `gptr_ledger`, `gptr_sessions` (listings through P01's `new_listing()`), `gptr_run`, `gptr_loop`, `gptr_store`.
-- Package state owned (04 §7.0): `the$live` ("weak index of live sessions `id -> weakref(key = shell, value = live)`"), `the$last` ("the last session, held strongly (IC-71)"), `the$replay_blocks` ("block id -> the session replay bound to it (gptr-created sessions only, IC-46)"). No other package-global run state (INFRA-15).
-- Consumed from P05 without redefinition: `usage_empty()` (the zero-row table with the 21 columns of 04 §4.3), `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)`, `usage_new(...)`, `usage_log()`, `model_resolve(ref, strict = TRUE)`, `project_messages(entries, leaf, target)`, `adapter_get(api)`, `model_default(role = c("chat", "small", "system1"))`, `provider_stream(model, context, opts, emit, done, run = NULL)` (with `opts$gate`, `opts$tool_result` and `opts$mcp_dispatch` passed in `opts`, IC-33). P06 defines no function whose name another plan defines: P01's `usage_to_json()`/`usage_from_json()`, P04's `proc_create_time(pid)` and P08's `mode_tighter()`/`control_check()` exist, so P06's helpers are `entry_usage_to_json()`, `entry_usage_from_json()`, `lock_self_created()`, `run_mode_tighter()` and `session_control_check()` (two definitions of one name in `R/` would let the later-collating file silently replace the other; `usage_to_json()` replaced inside `msg_to_json()` would even recurse without end).
-- Cross-plan slots P06 fills (from the P01, P02, P05, P07 and P08 plans): operator entries carry `custom_type = "gptr.operator"` (P05's `project_messages()` projects exactly those); `.d$frozen` is `NULL` until the first freeze (P07's `prompt_freeze()` freezes only a `NULL` value) and the freeze options are the run options plus `start`, `interactive` and `refreeze`; `live$out` starts `NULL` (P01's `out_store()` creates a `gptr_out_store` lazily and rejects a bare environment); the IC-53 one-shot approval tokens are function names in `run$signal$control` (P08's `control_check()`) plus P02's `ext_control_grant(run, what)`; the stored terminal condition is also `run$signal$condition` (P08's `gateway_signal()`).
-- Ids (IC-20): session ids `s` + 10 lower hex (`id_new("s", 10L)`), entry ids 8 lower hex (`id_entry()`), request ids `q` + 12 hex, run ids `u` + 8 hex. `.Random.seed` is never touched (IC-61).
-- Options owned (04 §3.1): `gptr.unsafe_no_permissions` (`FALSE`; "set outside a run only: no permission gate (sandboxed CI); snapshotted at run start (IC-53)"), `gptr.value_copy_max` (`1048576` bytes), `gptr.values_max_bytes` (`67108864` bytes), `gptr.max_turns` (`50L`), `gptr.max_nested_calls` (`20L`), `gptr.noninteractive_ask` (`"stop"` or `"deny"`; default `"stop"`). All read with `gptr_opt()`.
-- Safety snapshot (IC-53 item 2): `run_start()` snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`, `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode` and `gptr.unsafe_no_permissions`; "the run's gate reads only the snapshot".
-- Gate (IC-04, IC-53, 03 §6.8.2): `perm_check(call, run)` returns `list(decision = "allow" | "deny" | "ask" | "ask_human" | "modify", reason, input, risk, rule)`; policies combine "deny > ask_human > ask > modify > allow; a throwing policy denies; no active `mode` policy = ask"; "a `modify` is re-classified and re-checked once (a second modify denies)"; `ask` goes to `permission_request` hooks (first decision; error = deny) then the UI; "an `ask_human` skips the hooks"; without a human `"stop"` stops the run with status `blocked` (stored condition `gptr_error_permission`, or `gptr_error_noninteractive` with `what = "ask"` and the questions when the blocked call is the `ask` tool, IC-68) and `"deny"` returns a denial; a policy answer that is not `NULL`, a list or one known decision denies (fail closed, as a throwing policy).
-- Budgets (IC-66): settings default `budget = {cost: 5, tokens: 2000000, turns: null}` per top-level call; `budget_near` at 80%; reaching it "asks to extend by the same amount (`ask_human`) interactively and stops with status `budget` otherwise"; "`null` set explicitly disables a limit"; every request charges the root (the live runs of a session's ancestors, and the session named by the run option `root`, "the root session id for budgets" of 04 §7.6: its run, or one shared pool when it has no run, as a top-level team or fan-out container); `gptr.max_nested_calls` = 20 `peter()` calls per `r` evaluation.
-- Store (IC-59, 04 §11.4): `<workspace root>/sessions/<YYYYmmddTHHMMSS>_<session id>.jsonl`; header §4.7 (`"type":"session","version":3`); entries §4.6; each append is `file(path, "ab")` opened, written, flushed and closed through `on.exit()` inside `suspendInterrupts()`; a resume on a file whose last byte is not LF first appends `"\n"` and a `gptr.recovered` entry `{from, to}`; readers skip unparsable lines with a diagnostic and re-parent children of missing ids; lock directory `<file>.lock/` with file `pid` holding the pid and the process creation time, touched every 10 minutes, stale when `pid_alive()` is `FALSE` or its heartbeat is older than 24 h.
-- Custom entries written here (04 §4.6): `gptr.mode_change` `{from, to, source}`, `gptr.value` `{turn, mode, name, address, class, bytes}` (never the value), `gptr.recovered` `{from, to}`, `gptr.router` `{router, state, model, reason}`, `gptr.image_elision` `{images: [ids]}`, `gptr.budget` `{kind, budget, used}`, `gptr.replay` `{doc, block, mode, turn, value}`; plus, on behalf of other owners, `gptr.frozen` (only the fallback freeze before P07), `gptr.checkpoint` (the container of checkpointer fragments) and `gptr.ext` (`ctx$state()` persistence).
-- Texts (04 §4.2, IC-55): the steering relay is exactly `The user sent this message while you were working: <text>` (user sources `pipe`, `pause_menu`, `repl`, `api_user` only); extension items are user-role `Extension <name> sent this note (not from the user): <text>`; agent items are user-role `<agent_report from="<name>">` data; the unknown tool text is `Tool <name> not found` (04 §7.6).
-- Recovery (C-33, INFRA-26): at most two agent-level retries of transient errors, 2 s then 4 s; one compact-and-retry per run through the `compact.run` service; a second overflow surfaces as `gptr_error_context_overflow` (parent `gptr_error_provider`, field `tokens`).
-- Conditions (04 §2.2): `gptr_error_readonly` (`object`, `field`), `gptr_error_unknown_member` (`name`, `available`), `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_split_brain` (`id`, `holder_pid`), `gptr_error_busy` (`session`), `gptr_error_replay_unbound` (parent `gptr_error_not_recorded`; `block`, `child`), `gptr_error_permission` (`action`, `tool`, `risk`, `how_to_allow`, `session`), `gptr_error_noninteractive` (`what`, `questions`; the `ask` tool in a run nobody can answer, IC-68), `gptr_error_budget` and `gptr_error_budget_tokens|cost|turns` (`kind`, `budget`, `used`, `session`), `gptr_error_max_turns` (`max_turns`, `session`), `gptr_error_provider` and subclasses (`provider`, `model`, `status`, `request_id`, `error_type`, `session`), `gptr_error_tool` (`tool`, `status`), `gptr_error_internal` (`detail`); messages `gptr_message_value_rebound` and `gptr_message_notice`. Terminal-status conditions are stored unsignalled; the gateway (P08) signals them (04 §6.1.2).
-- Events emitted (04 §10.4): `session_start` (collect; reasons `new`, `fork`, `resume`, `replay`, `child`), `session_before_fork` (first decision), `session_shutdown` (reasons `gc`, `unload`), `agent_start`, `agent_end` (`status`, `reason`, `usage`, `doc`, `turns`), `turn_start`, `turn_end` (`message`, `results`), `before_request` (`provider`, `model`, `request_id`, `view`, `tokens_est`), `request_params` (patch chain), `message_start`, `message_update` (`index`, `kind`, `delta`), `message_end` (`message`), `tool_call` (decision, error = block), `permission_request` (first decision, error = deny), `tool_execution_start`, `tool_execution_update` (`tool_call_id`, `tool_name`, `text`), `tool_execution_end`, `tool_result` (patch chain), `queue_update` (`steer`, `follow_up`), `retry_start`, `retry_end`, `usage` (`row`), `budget_near`, `budget_exceeded`, `model_select` (`from`, `to`, `reason`), `route`. Every event is built with `ev_new()` and dispatched with `ev_dispatch()` (P02), which redacts payloads with the `stream` profile.
-- Services (04 §7.0): provided `ctx.kernel` (`function() named list` of the §10.6 members marked P06: `envir`, `run`, `mode`, `model`, `execute_tool`, `send`, `set_model`, `append_entry`, `abort`, `aborted`, `update`, `usage`, `state`; each implementation takes the `ctx` first, then the member's arguments, positionally, in the convention P02's `ctx_new()` uses: `send(ctx, text, as[, plugin])`, `append_entry(ctx, type, data[, plugin])`, `state(ctx[, plugin])`, where the optional last argument is passed only inside a handler and is the handler's plugin name with its source prefix removed (`"plugin:panel"` -> `"panel"`); P06 names that formal `extension = NULL` and its `ctx_ext_label()` accepts the bare name or a full source). Consumed, with the documented fallbacks of 04 §7.0 ("freeze: empty T0/T1 and the direct tools' JSON; first message: the prompt alone; request: the projected messages; no prefix guard; no compaction"): `prompt.freeze`, `request.build`, `prefix.guard`, `compact.should`, `compact.run`, `console.interrupt_policy` (else abort-only), `ui.get`, `risk.classify`, `router.call`, `checkpoint.note`, `mcp.dispatch_local`, `settings.get` (through `setting_get()`). The built-in `store` record `jsonl` (IC-69) is declared as `builtin:store`.
-- Copy safety (03 §6.4, G3 verification log): "never put a user frame in a list or closure that can become garbage; hold it only in environment bindings that are explicitly reset"; a function-frame home lives only in the run's `home` binding, reset to `NULL` at settlement; the live index is weak and keyed on shells, which hold no frames or user objects (R10); values follow the §5.1 value policy (R1); interruptions of tools are recorded with `on.exit()`, never an exiting `tryCatch(interrupt =)`. Settlement cancels the run's reactor task, timers, transfers and a FIFO tool job that has not started, so that nothing keeps a settled session alive. Tool `value`s never enter events or the loop state: the loop and `turn_end` receive the tool-result messages (rule R1).
-- Tests (conventions §7, 04 §12): the fake provider (`gptr_fake_provider()`, `local_fake_provider()`, `fake_text()`, `fake_tool()`, `fake_tools()`, `fake_error()`, `fake_requests()`), `local_project()`, `local_gptr_options()`; processes only under `skip_on_cran()` and started with `rscript_path()`; `pkgload::load_all()` only inside the text of a generated child script; printed output through `expect_snapshot()` inside `testthat::local_reproducible_output(width = 80)`. The shared P06 test harness lives in P06's own fixture directory (`fixtures/oracles/report02/harness.R`) and is sourced by each P06 test file; closures registered in the registry by tests are defined at the top level of a test file whenever a test later expects the session to be garbage-collected (a closure created inside a helper keeps the helper's frame, and the session in it, alive).
-- Test commands use anchored filters (`devtools::test(filter = "^agent-loop$")`) so that later plans' files with similar names never run. The expected summary lines were measured on macOS (R 4.4.3, testthat 3.3.2, roxygen2 7.3.3) with stand-ins for P01-P05 that follow 04 §7.1-7.5 and §12.1-12.2 (P05's `usage_empty()` copied verbatim from its plan) and with `NOT_CRAN=true` (as `devtools::test()` sets it); FAIL counts are exact, and PASS counts match whenever the earlier plans behave as the contract specifies.
+- Owned files (05 P06): `R/session-object.R`, `R/session-live.R`, `R/session-store.R`,
+  `R/session-budget.R`, `R/agent-loop.R`, `R/agent-run.R`, `R/agent-dispatch.R`, their test files
+  `tests/testthat/test-session-object.R`, `test-session-live.R`, `test-session-store.R`,
+  `test-session-budget.R`, `test-agent-loop.R`, `test-agent-run.R`, `test-agent-dispatch.R`, and
+  `tests/testthat/fixtures/oracles/report02/` ("the 24 loop, 42 store and 26 recovery checks of
+  report 02, converted to R test data"); plus `NAMESPACE` and `man/` through
+  `Rscript --vanilla -e 'devtools::document()'`, and the snapshot file
+  `tests/testthat/_snaps/session-object.md` of P06's own `expect_snapshot()` calls.
+- Layers (03 sections 2.2, 3.2): `agent-loop.R` and `agent-dispatch.R` are L2; `session-*.R` and
+  `agent-run.R` are L3. L2 "may call L0, L1 types" and, by P01's `arch_edge_ok()`, its own `agent`
+  area, so the L2 files never call a `session-*.R` function: the dispatcher reaches the session
+  through agent-area helpers of `agent-run.R` (`run_data()`, `run_ctx()`, `run_append_message()`,
+  ...), and P01's `test-arch-layers.R` checks every edge. L3 "never call an L4 capability by
+  function name" (registry lookups only); nothing below L5 prints except `print()` methods of P06's
+  own classes.
+- Exports (04 sections 14.1, 6.5), exact signatures:
+  `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))`, `gptr_sessions(project = TRUE)`,
+  `gptr_resume(x = NULL, envir = parent.frame(), block = NULL, child = NULL)`, `gptr_last()`,
+  `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)`. Their
+  examples run offline: the parts that need `peter()` (P08) are in
+  `@examplesIf exists("peter", mode = "function")` blocks. S3 methods of `gptr_session` (04
+  section 5.1): `$`, `[[`, `$<-`, `[[<-`, `names`, `.DollarNames` (utils), `print`, `format`,
+  `as.character`, `summary`, `str` (utils); `print.gptr_session_summary`.
+- Kernel SDK owned here (IC-33): `session_data()`, `session_live()`, `session_home()`,
+  `session_append()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`,
+  `session_value_set()`, `session_value_get()`, `session_replay_apply()`, `session_replay_new()`,
+  `session_replay_bind()`, `replay_lookup()`, `session_run()`, `run_start()`, `run_wait()`,
+  `run_abort()`, `run_current()`, `run_eval_env()`, `run_emit()`, `dispatch_nested()`,
+  `perm_check()`, `tool_result_message()`, `store_read()`, `store_rebuild()`, `last_set()`.
+- Internal signatures (04 section 7.6):
+  `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())`,
+  `session_set_model(s, ref, reason = "user")`, `session_set_mode(s, mode, source = "user")`,
+  `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())`,
+  `session_value_set(s, label, value, name = NULL, forced_home = NULL)`,
+  `session_value_get(s, turn = NULL)`, `live_all()`, `last_set(s)`, `store_open(s)`,
+  `store_append(store, entries)`, `store_read(path)`, `store_close(store)`,
+  `store_fork(s, cut, new)`, `store_rebuild(path, home)`, `store_heartbeat(store)`,
+  `session_replay_apply(s, block, header, text = NULL)`,
+  `session_replay_new(block, header, envir, doc)`, `session_replay_bind(block, s, child = NULL)`,
+  `replay_lookup(block, child = NULL)`, `budget_check(s, estimate = 0)`,
+  `ledger_add(s, request_id, components)`, `session_run(s, input, opts = list())`,
+  `run_start(s, input, opts = list())`, `run_wait(runs, timeout = Inf)`,
+  `run_abort(run, reason = "user")`, `run_current()`, `run_eval_env(run)`,
+  `run_emit(run, type, ...)`, `dispatch_tools(run, calls)`, `dispatch_nested(name, input, ctx)`,
+  `tool_validate(tool, input)`, `perm_check(call, run)`, `tool_result_message(result, call)`.
+- Classes (04 sections 5.1, 5.12, 5.13): `gptr_session` (shell), `gptr_session_summary`,
+  `gptr_usage`, `gptr_ledger`, `gptr_sessions` (listings through P01's `new_listing()`), `gptr_run`,
+  `gptr_loop`, `gptr_store`.
+- Package state owned (04 section 7.0): `the$live` ("weak index of live sessions
+  `id -> weakref(key = shell, value = live)`"), `the$last` ("the last session, held strongly
+  (IC-71)"), `the$replay_blocks` ("block id -> the session replay bound to it (gptr-created sessions
+  only, IC-46)"). No other package-global run state (INFRA-15).
+- Consumed from P05 without redefinition: `usage_empty()` (the zero-row table with the 21 columns of
+  04 section 4.3), `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)`,
+  `usage_new(...)`, `usage_log()`, `model_resolve(ref, strict = TRUE)`,
+  `project_messages(entries, leaf, target)`, `adapter_get(api)`,
+  `model_default(role = c("chat", "small", "system1"))`,
+  `provider_stream(model, context, opts, emit, done, run = NULL)` (with `opts$gate`,
+  `opts$tool_result` and `opts$mcp_dispatch` passed in `opts`, IC-33). P06 defines no function whose
+  name another plan defines: P01's `usage_to_json()`/`usage_from_json()`, P04's
+  `proc_create_time(pid)` and P08's `mode_tighter()`/`control_check()` exist, so P06's helpers are
+  `entry_usage_to_json()`, `entry_usage_from_json()`, `lock_self_created()`, `run_mode_tighter()`
+  and `session_control_check()` (two definitions of one name in `R/` would let the later-collating
+  file silently replace the other; `usage_to_json()` replaced inside `msg_to_json()` would even
+  recurse without end).
+- Cross-plan slots P06 fills (from the P01, P02, P05, P07 and P08 plans): operator entries carry
+  `custom_type = "gptr.operator"` (P05's `project_messages()` projects exactly those); `.d$frozen`
+  is `NULL` until the first freeze (P07's `prompt_freeze()` freezes only a `NULL` value) and the
+  freeze options are the run options plus `start`, `interactive` and `refreeze`; `live$out` starts
+  `NULL` (P01's `out_store()` creates a `gptr_out_store` lazily and rejects a bare environment); the
+  IC-53 one-shot approval tokens are function names in `run$signal$control` (P08's
+  `control_check()`) plus P02's `ext_control_grant(run, what)`; the stored terminal condition is
+  also `run$signal$condition` (P08's `gateway_signal()`).
+- Ids (IC-20): session ids `s` + 10 lower hex (`id_new("s", 10L)`), entry ids 8 lower hex
+  (`id_entry()`), request ids `q` + 12 hex, run ids `u` + 8 hex. `.Random.seed` is never touched
+  (IC-61).
+- Options owned (04 section 3.1): `gptr.unsafe_no_permissions` (`FALSE`; "set outside a run only: no
+  permission gate (sandboxed CI); snapshotted at run start (IC-53)"), `gptr.value_copy_max`
+  (`1048576` bytes), `gptr.values_max_bytes` (`67108864` bytes), `gptr.max_turns` (`50L`),
+  `gptr.max_nested_calls` (`20L`), `gptr.noninteractive_ask` (`"stop"` or `"deny"`; default
+  `"stop"`). All read with `gptr_opt()`.
+- Safety snapshot (IC-53 item 2): `run_start()` snapshots `gptr.ui`, `gptr.interactive`,
+  `gptr.critical_guard`, `gptr.secret_guard`, `gptr.noninteractive_ask`, `gptr.protect_size`,
+  `gptr.mode` and `gptr.unsafe_no_permissions`; "the run's gate reads only the snapshot".
+- Gate (IC-04, IC-53, 03 section 6.8.2): `perm_check(call, run)` returns
+  `list(decision = "allow" | "deny" | "ask" | "ask_human" | "modify", reason, input, risk, rule)`;
+  policies combine "deny > ask_human > ask > modify > allow; a throwing policy denies; no active
+  `mode` policy = ask"; "a `modify` is re-classified and re-checked once (a second modify denies)";
+  `ask` goes to `permission_request` hooks (first decision; error = deny) then the UI; "an
+  `ask_human` skips the hooks"; without a human `"stop"` stops the run with status `blocked` (stored
+  condition `gptr_error_permission`, or `gptr_error_noninteractive` with `what = "ask"` and the
+  questions when the blocked call is the `ask` tool, IC-68) and `"deny"` returns a denial; a policy
+  answer that is not `NULL`, a list or one known decision denies (fail closed, as a throwing
+  policy).
+- Budgets (IC-66): settings default `budget = {cost: 5, tokens: 2000000, turns: null}` per top-level
+  call; `budget_near` at 80%; reaching it "asks to extend by the same amount (`ask_human`)
+  interactively and stops with status `budget` otherwise"; "`null` set explicitly disables a limit";
+  every request charges the root (the live runs of a session's ancestors, and the session named by
+  the run option `root`, "the root session id for budgets" of 04 section 7.6: its run, or one shared
+  pool when it has no run, as a top-level team or fan-out container); `gptr.max_nested_calls` = 20
+  `peter()` calls per `r` evaluation.
+- Store (IC-59, 04 section 11.4): `<workspace root>/sessions/<YYYYmmddTHHMMSS>_<session id>.jsonl`;
+  header section 4.7 (`"type":"session","version":3`); entries section 4.6; each append is
+  `file(path, "ab")` opened, written, flushed and closed through `on.exit()` inside
+  `suspendInterrupts()`; a resume on a file whose last byte is not LF first appends `"\n"` and a
+  `gptr.recovered` entry `{from, to}`; readers skip unparsable lines with a diagnostic and re-parent
+  children of missing ids; lock directory `<file>.lock/` with file `pid` holding the pid and the
+  process creation time, touched every 10 minutes, stale when `pid_alive()` is `FALSE` or its
+  heartbeat is older than 24 h.
+- Custom entries written here (04 section 4.6): `gptr.mode_change` `{from, to, source}`,
+  `gptr.value` `{turn, mode, name, address, class, bytes}` (never the value), `gptr.recovered`
+  `{from, to}`, `gptr.router` `{router, state, model, reason}`, `gptr.image_elision`
+  `{images: [ids]}`, `gptr.budget` `{kind, budget, used}`, `gptr.replay`
+  `{doc, block, mode, turn, value}`; plus, on behalf of other owners, `gptr.frozen` (only the
+  fallback freeze before P07), `gptr.checkpoint` (the container of checkpointer fragments) and
+  `gptr.ext` (`ctx$state()` persistence).
+- Texts (04 section 4.2, IC-55): the steering relay is exactly
+  `The user sent this message while you were working: <text>` (user sources `pipe`, `pause_menu`,
+  `repl`, `api_user` only); extension items are user-role
+  `Extension <name> sent this note (not from the user): <text>`; agent items are user-role
+  `<agent_report from="<name>">` data; the unknown tool text is `Tool <name> not found` (04
+  section 7.6).
+- Recovery (C-33, INFRA-26): at most two agent-level retries of transient errors, 2 s then 4 s; one
+  compact-and-retry per run through the `compact.run` service; a second overflow surfaces as
+  `gptr_error_context_overflow` (parent `gptr_error_provider`, field `tokens`).
+- Conditions (04 section 2.2): `gptr_error_readonly` (`object`, `field`),
+  `gptr_error_unknown_member` (`name`, `available`), `gptr_error_invalid_argument` (`arg`,
+  `expected`), `gptr_error_split_brain` (`id`, `holder_pid`), `gptr_error_busy` (`session`),
+  `gptr_error_replay_unbound` (parent `gptr_error_not_recorded`; `block`, `child`),
+  `gptr_error_permission` (`action`, `tool`, `risk`, `how_to_allow`, `session`),
+  `gptr_error_noninteractive` (`what`, `questions`; the `ask` tool in a run nobody can answer,
+  IC-68), `gptr_error_budget` and `gptr_error_budget_tokens|cost|turns` (`kind`, `budget`, `used`,
+  `session`), `gptr_error_max_turns` (`max_turns`, `session`), `gptr_error_provider` and subclasses
+  (`provider`, `model`, `status`, `request_id`, `error_type`, `session`), `gptr_error_tool` (`tool`,
+  `status`), `gptr_error_internal` (`detail`); messages `gptr_message_value_rebound` and
+  `gptr_message_notice`. Terminal-status conditions are stored unsignalled; the gateway (P08)
+  signals them (04 section 6.1.2).
+- Events emitted (04 section 10.4): `session_start` (collect; reasons `new`, `fork`, `resume`,
+  `replay`, `child`), `session_before_fork` (first decision), `session_shutdown` (reasons `gc`,
+  `unload`), `agent_start`, `agent_end` (`status`, `reason`, `usage`, `doc`, `turns`), `turn_start`,
+  `turn_end` (`message`, `results`), `before_request` (`provider`, `model`, `request_id`, `view`,
+  `tokens_est`), `request_params` (patch chain), `message_start`, `message_update` (`index`, `kind`,
+  `delta`), `message_end` (`message`), `tool_call` (decision, error = block), `permission_request`
+  (first decision, error = deny), `tool_execution_start`, `tool_execution_update` (`tool_call_id`,
+  `tool_name`, `text`), `tool_execution_end`, `tool_result` (patch chain), `queue_update` (`steer`,
+  `follow_up`), `retry_start`, `retry_end`, `usage` (`row`), `budget_near`, `budget_exceeded`,
+  `model_select` (`from`, `to`, `reason`), `route`. Every event is built with `ev_new()` and
+  dispatched with `ev_dispatch()` (P02), which redacts payloads with the `stream` profile.
+- Services (04 section 7.0): provided `ctx.kernel` (`function() named list` of the section 10.6
+  members marked P06: `envir`, `run`, `mode`, `model`, `execute_tool`, `send`, `set_model`,
+  `append_entry`, `abort`, `aborted`, `update`, `usage`, `state`; each implementation takes the
+  `ctx` first, then the member's arguments, positionally, in the convention P02's `ctx_new()` uses:
+  `send(ctx, text, as[, plugin])`, `append_entry(ctx, type, data[, plugin])`,
+  `state(ctx[, plugin])`, where the optional last argument is passed only inside a handler and is
+  the handler's plugin name with its source prefix removed (`"plugin:panel"` -> `"panel"`); P06
+  names that formal `extension = NULL` and its `ctx_ext_label()` accepts the bare name or a full
+  source). Consumed, with the documented fallbacks of 04 section 7.0 ("freeze: empty T0/T1 and the
+  direct tools' JSON; first message: the prompt alone; request: the projected messages; no prefix
+  guard; no compaction"): `prompt.freeze`, `request.build`, `prefix.guard`, `compact.should`,
+  `compact.run`, `console.interrupt_policy` (else abort-only), `ui.get`, `risk.classify`,
+  `router.call`, `checkpoint.note`, `mcp.dispatch_local`, `settings.get` (through `setting_get()`).
+  The built-in `store` record `jsonl` (IC-69) is declared as `builtin:store`.
+- Copy safety (03 section 6.4, G3 verification log): "never put a user frame in a list or closure
+  that can become garbage; hold it only in environment bindings that are explicitly reset"; a
+  function-frame home lives only in the run's `home` binding, reset to `NULL` at settlement; the
+  live index is weak and keyed on shells, which hold no frames or user objects (R10); values follow
+  the section 5.1 value policy (R1); interruptions of tools are recorded with `on.exit()`, never an
+  exiting `tryCatch(interrupt =)`. Settlement cancels the run's reactor task, timers, transfers and
+  a FIFO tool job that has not started, so that nothing keeps a settled session alive. Tool `value`s
+  never enter events or the loop state: the loop and `turn_end` receive the tool-result messages
+  (rule R1).
+- Tests (conventions section 7, 04 section 12): the fake provider (`gptr_fake_provider()`,
+  `local_fake_provider()`, `fake_text()`, `fake_tool()`, `fake_tools()`, `fake_error()`,
+  `fake_requests()`), `local_project()`, `local_gptr_options()`; processes only under
+  `skip_on_cran()` and started with `rscript_path()`; `pkgload::load_all()` only inside the text of
+  a generated child script; printed output through `expect_snapshot()` inside
+  `testthat::local_reproducible_output(width = 80)`. The shared P06 test harness lives in P06's own
+  fixture directory (`fixtures/oracles/report02/harness.R`) and is sourced by each P06 test file;
+  closures registered in the registry by tests are defined at the top level of a test file whenever
+  a test later expects the session to be garbage-collected (a closure created inside a helper keeps
+  the helper's frame, and the session in it, alive).
+- Test commands use anchored filters (`devtools::test(filter = "^agent-loop$")`) so that later
+  plans' files with similar names never run. The expected summary lines were measured on macOS (R
+  4.4.3, testthat 3.3.2, roxygen2 7.3.3) with stand-ins for P01-P05 that follow 04 sections 7.1-7.5
+  and 12.1-12.2 (P05's `usage_empty()` copied verbatim from its plan) and with `NOT_CRAN=true` (as
+  `devtools::test()` sets it); FAIL counts are exact, and PASS counts match whenever the earlier
+  plans behave as the contract specifies.
 
 ## File Structure
 
@@ -66,11 +261,12 @@
 | `tests/testthat/_snaps/session-object.md` | create (Task 4) | the expected `expect_snapshot()` output of `print()` and `str()` |
 | `NAMESPACE`, `man/gptr_fork.Rd`, `man/gptr_sessions.Rd`, `man/gptr_resume.Rd`, `man/gptr_last.Rd`, `man/gptr_usage.Rd`, `man/session-accessors.Rd`, `man/print.gptr_session.Rd`, `man/format.gptr_session.Rd`, `man/summary.gptr_session.Rd`, `man/print.gptr_session_summary.Rd`, `man/str.gptr_session.Rd` | generated (Task 16) | by `devtools::document()` |
 
-## Tasks (overview)
+## Tasks
 
 1. Agent-loop state machine and the P06 test harness (`agent-loop.R`)
 2. Usage frames and the ledger frame (`session-budget.R`)
-3. Session shell, transcript, live registry, locks and the store writer (`session-object.R`, `session-live.R`, `session-store.R`)
+3. Session shell, transcript, live registry, locks and the store writer (`session-object.R`,
+   `session-live.R`, `session-store.R`)
 4. Accessors, printing, the value policy and usage roll-up (`session-object.R`, `session-budget.R`)
 5. Run records, events and budget checks (`agent-run.R`, `session-budget.R`)
 6. Session verbs: model, mode and the steering queue (`session-object.R`)
@@ -86,6 +282,7 @@
 16. Documentation, NAMESPACE and plan acceptance
 
 ---
+
 ### Task 1: Agent-loop state machine and the P06 test harness
 
 **Files:**
@@ -98,19 +295,42 @@
 
 Consumes:
 
-- P01 (04 §4.1-4.2): `msg_user(content, source = "prompt", timestamp = NULL)`, `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`, `block_text(text, signature = NULL)`, `block_context(kind, text, attrs = list(), anchor = FALSE)`, `` `%||%` ``.
-- Tests and harness (04 §12.2, §6.7-6.8, §7.2): `json_decode(text)`, `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`, `local_gptr_options(..., .env = parent.frame())` (P01); `gptr_tool()`, `gptr_policy(name, check, description = NULL)`, `gptr_spec(kind, name, ...)`, `gptr_register(spec)`, `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`, `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)`, `hook_remove(id)` (P02). The harness only defines helpers; the helpers that call later P06 functions (`test_session()`, `test_run()`, `run_text()`) are first used in Tasks 3-5.
+- P01 (04 sections 4.1-4.2): `msg_user(content, source = "prompt", timestamp = NULL)`,
+  `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`,
+  `block_text(text, signature = NULL)`, `block_context(kind, text, attrs = list(), anchor = FALSE)`,
+  `` `%||%` ``.
+- Tests and harness (04 sections 12.2, 6.7-6.8, 7.2): `json_decode(text)`,
+  `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`,
+  `local_gptr_options(..., .env = parent.frame())` (P01); `gptr_tool()`,
+  `gptr_policy(name, check, description = NULL)`, `gptr_spec(kind, name, ...)`,
+  `gptr_register(spec)`, `registry_add(spec, source, rank, session = NULL, state = "active")`,
+  `registry_remove(id)`,
+  `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)`,
+  `hook_remove(id)` (P02). The harness only defines helpers; the helpers that call later P06
+  functions (`test_session()`, `test_run()`, `run_text()`) are first used in Tasks 3-5.
 
 Produces:
 
-- `loop_new(max_turns = NULL, steering = function() list(), follow_up = function() list(), finish_turn = function(turn) NULL, emit = function(type, ...) invisible(NULL))` -> an environment of class `gptr_loop`.
-- `loop_next(lp)` -> `list(action = "request", messages)`, `list(action = "tools", calls, message, truncated)`, `list(action = "end", reason)` or `list(action = "wait")`; `loop_response(lp, message)`, `loop_results(lp, results, terminate = FALSE)`, `loop_end(lp, reason)`.
-- `queue_item_message(item, which, relay = FALSE)` (IC-55 texts); `queue_user_sources`, `queue_sources`.
-- Harness helpers used by every later P06 test file: `oracle(group)`, `oracle_title(recs, id)`, `expect_oracles_covered(recs, file)`, `local_store()`, `local_tool()`, `local_policy()`, `local_service()`, `local_without_services()` (hides later plans' bootstrap services so that a fallback test keeps testing the fallback in the full suite), `local_hook()`, `local_events()`, `local_permissive()`, `test_session()`, `test_run()`, `run_text()`, `roles()`, `tool_results()`, `req_roles()`, `num_schema()`.
+- `loop_new(max_turns = NULL, steering = function() list(), follow_up = function() list(), finish_turn = function(turn) NULL, emit = function(type, ...) invisible(NULL))`
+  -> an environment of class `gptr_loop`.
+- `loop_next(lp)` -> `list(action = "request", messages)`,
+  `list(action = "tools", calls, message, truncated)`, `list(action = "end", reason)` or
+  `list(action = "wait")`; `loop_response(lp, message)`,
+  `loop_results(lp, results, terminate = FALSE)`, `loop_end(lp, reason)`.
+- `queue_item_message(item, which, relay = FALSE)` (IC-55 texts); `queue_user_sources`,
+  `queue_sources`.
+- Harness helpers used by every later P06 test file: `oracle(group)`, `oracle_title(recs, id)`,
+  `expect_oracles_covered(recs, file)`, `local_store()`, `local_tool()`, `local_policy()`,
+  `local_service()`, `local_without_services()` (hides later plans' bootstrap services so that a
+  fallback test keeps testing the fallback in the full suite), `local_hook()`, `local_events()`,
+  `local_permissive()`, `test_session()`, `test_run()`, `run_text()`, `roles()`, `tool_results()`,
+  `req_roles()`, `num_schema()`.
 
 - [ ] **Step 1: Write the failing test**
 
-The harness is sourced (not a `helper-*.R` file, which P06 does not own) by the first line of every P06 test file. The state machine is tested in isolation with hand-written assistant messages; the report 02 loop checks L01-L24 that need the engine come in Task 10.
+The harness is sourced (not a `helper-*.R` file, which P06 does not own) by the first line of every
+P06 test file. The state machine is tested in isolation with hand-written assistant messages; the
+report 02 loop checks L01-L24 that need the engine come in Task 10.
 
 Create `tests/testthat/fixtures/oracles/report02/harness.R`:
 
@@ -388,11 +608,18 @@ test_that("queue items become relays, user messages, extension notes and agent r
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^agent-loop$")'`
 
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as ``Error in `loop_new(emit = ev$emit)`: could not find function "loop_new"``.
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as
+``Error in `loop_new(emit = ev$emit)`: could not find function "loop_new"``.
 
 - [ ] **Step 3: Write the implementation**
 
-Pi's `runLoop()` (packages/agent/src/agent-loop.ts:102-321 at 1b347794; report 02 §2.2, prototype `run_agent_loop()` in §5.1) becomes explicit states: `begin` polls steering once, `inner` loops while there is more to do or pending messages, `turn` issues one request (`max_turns` caps requests), `tools` hands the batch to the engine, `after_turn` asks `finish_turn()` whether the run ends (gptr additions: `blocked`, `aborted`, `budget`), `outer` drains follow-ups. `turn_start` is emitted by the loop only for turns after the first (the engine emits the first with `agent_start`).
+Pi's `runLoop()` (packages/agent/src/agent-loop.ts:102-321 at 1b347794; report 02 section 2.2,
+prototype `run_agent_loop()` in section 5.1) becomes explicit states: `begin` polls steering once,
+`inner` loops while there is more to do or pending messages, `turn` issues one request (`max_turns`
+caps requests), `tools` hands the batch to the engine, `after_turn` asks `finish_turn()` whether the
+run ends (gptr additions: `blocked`, `aborted`, `budget`), `outer` drains follow-ups. `turn_start`
+is emitted by the loop only for turns after the first (the engine emits the first with
+`agent_start`).
 
 Create `R/agent-loop.R`:
 
@@ -592,14 +819,16 @@ git commit -m "feat(agent): add the agent-loop state machine and the P06 test ha
 
 Consumes:
 
-- P05: `usage_empty()` (the zero-row usage table with the 21 columns of 04 §4.3, in order).
+- P05: `usage_empty()` (the zero-row usage table with the 21 columns of 04 section 4.3, in order).
 
 Produces:
 
-- `usage_columns` (the 21 column names of 04 §4.3), `usage_token_columns`.
-- `usage_conform(row)` -> the rows with the §4.3 columns, order and types (missing token and cost columns 0, other missing columns `NA`, `started` POSIXct).
+- `usage_columns` (the 21 column names of 04 section 4.3), `usage_token_columns`.
+- `usage_conform(row)` -> the rows with the section 4.3 columns, order and types (missing token and
+  cost columns 0, other missing columns `NA`, `started` POSIXct).
 - `usage_totals(u)` -> named num `requests`, `input`, `output`, `cache_read`, `cache_write`, `cost`.
-- `ledger_empty()` -> the zero-row ledger (`request_id`, `component`, `tokens`, `cached`) of 04 §4.3; `format_count(n)` -> `"950"`, `"1.2k"`, `"3.4M"`.
+- `ledger_empty()` -> the zero-row ledger (`request_id`, `component`, `tokens`, `cached`) of 04
+  section 4.3; `format_count(n)` -> `"950"`, `"1.2k"`, `"3.4M"`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -662,11 +891,13 @@ test_that("ledger_empty() has the ledger columns and format_count() abbreviates"
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-budget$")'`
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as ``Error in `usage_conform(row)`: could not find function "usage_conform"``.
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as
+``Error in `usage_conform(row)`: could not find function "usage_conform"``.
 
 - [ ] **Step 3: Write the implementation**
 
-IC-05 moved `gptr_usage()` to P06; the per-request rows themselves come from P05's `usage_row()` and are never rebuilt here.
+IC-05 moved `gptr_usage()` to P06; the per-request rows themselves come from P05's `usage_row()` and
+are never rebuilt here.
 
 Create `R/session-budget.R`:
 
@@ -762,22 +993,50 @@ git commit -m "feat(session): add usage frames and the token ledger frame"
 
 Consumes:
 
-- P01: `id_new(prefix = "", n = 10L)`, `id_entry(taken = NULL)`, `as_utf8(x)`, `json_encode(x, pretty = FALSE)`, `json_obj()`, `msg_to_json(msg)`, `msg_text(msg)`, `msg_user()`, `msg_assistant()`, `ev_new(type, ...)`, `write_atomic(path, content)`, `ws_path(..., create_parent = TRUE)`, `path_norm(path)`, `setting_get(key, session = NULL, default = NULL)`, `on_load(expr)`, `on_unload(fun)`, `gptr_abort()`, `gptr_inform()`, the checkers of 04 §1.1.
-- P02: `ctx_new(session, run = NULL)`, `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, `registry_get(kind, name, session = NULL)`.
-- P03: `redact_tree(x, profile = "persist", structural = FALSE)`, `secret_discover_env(env = Sys.getenv())`, `secret_live_entries_set(fun)` (P03's callback slot for the IC-70 late-registration scan, its ambiguity A1: a zero-argument function returning session id -> list of entries); in tests `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()`.
+- P01: `id_new(prefix = "", n = 10L)`, `id_entry(taken = NULL)`, `as_utf8(x)`,
+  `json_encode(x, pretty = FALSE)`, `json_obj()`, `msg_to_json(msg)`, `msg_text(msg)`, `msg_user()`,
+  `msg_assistant()`, `ev_new(type, ...)`, `write_atomic(path, content)`,
+  `ws_path(..., create_parent = TRUE)`, `path_norm(path)`,
+  `setting_get(key, session = NULL, default = NULL)`, `on_load(expr)`, `on_unload(fun)`,
+  `gptr_abort()`, `gptr_inform()`, the checkers of 04 section 1.1.
+- P02: `ctx_new(session, run = NULL)`, `ev_dispatch(event, payload, session = NULL, ctx = NULL)`,
+  `registry_get(kind, name, session = NULL)`.
+- P03: `redact_tree(x, profile = "persist", structural = FALSE)`,
+  `secret_discover_env(env = Sys.getenv())`, `secret_live_entries_set(fun)` (P03's callback slot for
+  the IC-70 late-registration scan, its ambiguity A1: a zero-argument function returning session
+  id -> list of entries); in tests
+  `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()`.
 - P04: `pid_alive(pid, create_time = NULL)`.
 - P05: `model_resolve(ref, strict = TRUE)`, `usage_empty()`; Task 2: `ledger_empty()`.
 
 Produces:
 
-- `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())` -> a new idle `gptr_session` (opts: `id`, `name`, `thinking`, `max_turns`); `session_data(s)`, `session_live(s)`, `session_home(s)`, `session_by_id(id)`, `live_all()`, `live_entries_all()` (the in-memory entries of the live sessions, named by id; installed with `on_load(secret_live_entries_set(live_entries_all))` and again by `live_new()`, so that P03's `secret_register()` warns `secret_late`, IC-70), `last_set(s)`, the export `gptr_last()`.
-- `session_append(s, entry)` -> the entry id, invisibly; entry constructors `entry_message(msg)`, `entry_custom(custom_type, data)`, `entry_model_change(ref, thinking = NULL, reason = "user")`; path readers `entries_path(d, leaf = d$leaf)`, `path_messages(path)`, `path_turn(path)`, `final_text(path)`; `iso_time()`, `drop_null(x)`, `model_canonical(model, strict = FALSE)`.
-- Live records (04 §5.1 fields `home`, `run`, `listeners`, `store`, `ctx`, `memo`, `adapter`, `background`, `lock`, `out`, `mcp_token`, plus `ext`), `home_keep(env)`, `home_label(env)`, `live_forget(s)` (undoes the registration of a shell whose resume failed, Task 13), `session_attach(s, home = NULL)` (split-brain rules), locks `lock_path()`, `lock_acquire()`, `lock_holder()`, `lock_release()`, `lock_held_elsewhere()`.
-- The store writer: `store_open(s)` -> `gptr_store`, `store_append(store, entries)`, `store_close(store)`, `store_heartbeat(store)`, `store_impl()` (the selected `store` record, else the built-in functions), `entry_to_json(e)`, `store_header(d)`; package state `the$live`, `the$last`, `the$replay_blocks`.
+- `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())`
+  -> a new idle `gptr_session` (opts: `id`, `name`, `thinking`, `max_turns`); `session_data(s)`,
+  `session_live(s)`, `session_home(s)`, `session_by_id(id)`, `live_all()`, `live_entries_all()` (the
+  in-memory entries of the live sessions, named by id; installed with
+  `on_load(secret_live_entries_set(live_entries_all))` and again by `live_new()`, so that P03's
+  `secret_register()` warns `secret_late`, IC-70), `last_set(s)`, the export `gptr_last()`.
+- `session_append(s, entry)` -> the entry id, invisibly; entry constructors `entry_message(msg)`,
+  `entry_custom(custom_type, data)`, `entry_model_change(ref, thinking = NULL, reason = "user")`;
+  path readers `entries_path(d, leaf = d$leaf)`, `path_messages(path)`, `path_turn(path)`,
+  `final_text(path)`; `iso_time()`, `drop_null(x)`, `model_canonical(model, strict = FALSE)`.
+- Live records (04 section 5.1 fields `home`, `run`, `listeners`, `store`, `ctx`, `memo`, `adapter`,
+  `background`, `lock`, `out`, `mcp_token`, plus `ext`), `home_keep(env)`, `home_label(env)`,
+  `live_forget(s)` (undoes the registration of a shell whose resume failed, Task 13),
+  `session_attach(s, home = NULL)` (split-brain rules), locks `lock_path()`, `lock_acquire()`,
+  `lock_holder()`, `lock_release()`, `lock_held_elsewhere()`.
+- The store writer: `store_open(s)` -> `gptr_store`, `store_append(store, entries)`,
+  `store_close(store)`, `store_heartbeat(store)`, `store_impl()` (the selected `store` record, else
+  the built-in functions), `entry_to_json(e)`, `store_header(d)`; package state `the$live`,
+  `the$last`, `the$replay_blocks`.
 
 - [ ] **Step 1: Write the failing test**
 
-`store.json` holds report 02's 42 store checks (the `session_store.R` prototype of §5.2, verification log applied): `id`, `source`, the original `check`, `status` (`port` or `adapted`) and the gptr assertion in `gptr`. The writer checks S01-S10, S30 and S37 are tested here; the remaining S checks follow in Tasks 7, 9, 10, 12 and 13, and Task 13 adds the test that every id has a test.
+`store.json` holds report 02's 42 store checks (the `session_store.R` prototype of section 5.2,
+verification log applied): `id`, `source`, the original `check`, `status` (`port` or `adapted`) and
+the gptr assertion in `gptr`. The writer checks S01-S10, S30 and S37 are tested here; the remaining
+S checks follow in Tasks 7, 9, 10, 12 and 13, and Task 13 adds the test that every id has a test.
 
 Create `tests/testthat/fixtures/oracles/report02/store.json`:
 
@@ -1264,11 +1523,18 @@ test_that("a detached copy persists nothing until it is attached", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-(object|live|store)$")'`
 
-Expected: `[ FAIL 33 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as ``Error in `session_new(model, mode, home = home, ...)`: could not find function "session_new"``.
+Expected: `[ FAIL 33 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as
+``Error in `session_new(model, mode, home = home, ...)`: could not find function "session_new"``.
 
 - [ ] **Step 3: Write the implementation**
 
-The shell and `.d` follow the verified G3 prototype (`gptr_session.R` in dev/research/G3-session-object-pipe-steering.md) with its verification-log corrections: no user frame in a list or closure, the live index is a weak reference keyed on the shell, and the store is open-append-close (IC-59) instead of a kept connection. `session_append()` does the in-memory update and the file append inside one `suspendInterrupts()`, so an interrupt can never leave the file and `.d$entries` disagreeing. A detached copy (from `serialize()`) has no live record until `session_attach()` gives it one; until then nothing is written.
+The shell and `.d` follow the verified G3 prototype (`gptr_session.R` in
+dev/research/G3-session-object-pipe-steering.md) with its verification-log corrections: no user
+frame in a list or closure, the live index is a weak reference keyed on the shell, and the store is
+open-append-close (IC-59) instead of a kept connection. `session_append()` does the in-memory update
+and the file append inside one `suspendInterrupts()`, so an interrupt can never leave the file and
+`.d$entries` disagreeing. A detached copy (from `serialize()`) has no live record until
+`session_attach()` gives it one; until then nothing is written.
 
 Create `R/session-object.R`:
 
@@ -2136,18 +2402,39 @@ git commit -m "feat(session): add the session shell, live registry, locks and th
 
 Consumes:
 
-- P01: `new_listing(df, class, footer = NULL)`, `msg_verbatim(x, stream = c("stdout", "stderr"))`, `est_tokens(x, class = "prose")`, `gptr_opt(name)`; rlang `obj_address()`, `duplicate()`; cli `col_grey()`, `is_utf8_output()`.
-- Task 2: `usage_conform()`, `usage_totals()`, `format_count()`; Task 3: `session_data()`, `session_home()`, `session_append()`, `entries_path()`, `path_messages()`, `entry_custom()`, `session_by_id()`.
+- P01: `new_listing(df, class, footer = NULL)`, `msg_verbatim(x, stream = c("stdout", "stderr"))`,
+  `est_tokens(x, class = "prose")`, `gptr_opt(name)`; rlang `obj_address()`, `duplicate()`; cli
+  `col_grey()`, `is_utf8_output()`.
+- Task 2: `usage_conform()`, `usage_totals()`, `format_count()`; Task 3: `session_data()`,
+  `session_home()`, `session_append()`, `entries_path()`, `path_messages()`, `entry_custom()`,
+  `session_by_id()`.
 
 Produces:
 
-- S3 methods of 04 §5.1: `$.gptr_session`, `[[.gptr_session` (integer index into `children`), `$<-`/`[[<-` refusing with `gptr_error_readonly` (`object`, `field`), `names.gptr_session`, `.DollarNames.gptr_session`, `print.gptr_session` (answer, then the dim footer `status . model . turns . tokens . cost . id`; `invisible(x)`), `format.gptr_session`, `as.character.gptr_session`, `summary.gptr_session` -> `gptr_session_summary`, `print.gptr_session_summary`, `str.gptr_session`; unknown members signal `gptr_error_unknown_member` (`name`, `available`).
-- The value policy: `session_value_set(s, label, value, name = NULL, forced_home = NULL)` (copy below `gptr.value_copy_max`, name + address above, box otherwise; `gptr.value` entry without the value; held copies trimmed to `gptr.values_max_bytes`), `session_value_get(s, turn = NULL)` (a `value_rebound` message when a name was re-bound), `binding_env(name, env)`.
-- Usage: `usage_add(s, row)` (the session and every live ancestor), `session_usage_rows(s)` -> `gptr_usage` listing of this session and its children, `ledger_add(s, request_id, components)`, `ledger_mark_cached(s, request_id, cache_read)`.
+- S3 methods of 04 section 5.1: `$.gptr_session`, `[[.gptr_session` (integer index into `children`),
+  `$<-`/`[[<-` refusing with `gptr_error_readonly` (`object`, `field`), `names.gptr_session`,
+  `.DollarNames.gptr_session`, `print.gptr_session` (answer, then the dim footer
+  `status . model . turns . tokens . cost . id`; `invisible(x)`), `format.gptr_session`,
+  `as.character.gptr_session`, `summary.gptr_session` -> `gptr_session_summary`,
+  `print.gptr_session_summary`, `str.gptr_session`; unknown members signal
+  `gptr_error_unknown_member` (`name`, `available`).
+- The value policy: `session_value_set(s, label, value, name = NULL, forced_home = NULL)` (copy
+  below `gptr.value_copy_max`, name + address above, box otherwise; `gptr.value` entry without the
+  value; held copies trimmed to `gptr.values_max_bytes`), `session_value_get(s, turn = NULL)` (a
+  `value_rebound` message when a name was re-bound), `binding_env(name, env)`.
+- Usage: `usage_add(s, row)` (the session and every live ancestor), `session_usage_rows(s)` ->
+  `gptr_usage` listing of this session and its children, `ledger_add(s, request_id, components)`,
+  `ledger_mark_cached(s, request_id, cache_read)`.
 
 - [ ] **Step 1: Write the failing test**
 
-The snapshot file is the expected output of the two `expect_snapshot()` calls; create it exactly as shown (testthat compares against it instead of recording a new one). The footer uses `" . "` because `local_reproducible_output()` turns UTF-8 output off. The printed lines are recorded under `Message`, not `Output`: `print()` and `str()` write through P01's `msg_verbatim()`, i.e. `cli::cli_verbatim()`, which emits a cli message condition outside an interactive console (verified with testthat 3.3.2 and cli 3.6.6: a `cli::cli_verbatim()` call inside `expect_snapshot()` is recorded as `Message`, and `utils::capture.output()` captures nothing).
+The snapshot file is the expected output of the two `expect_snapshot()` calls; create it exactly as
+shown (testthat compares against it instead of recording a new one). The footer uses `" . "` because
+`local_reproducible_output()` turns UTF-8 output off. The printed lines are recorded under
+`Message`, not `Output`: `print()` and `str()` write through P01's `msg_verbatim()`, i.e.
+`cli::cli_verbatim()`, which emits a cli message condition outside an interactive console (verified
+with testthat 3.3.2 and cli 3.6.6: a `cli::cli_verbatim()` call inside `expect_snapshot()` is
+recorded as `Message`, and `utils::capture.output()` captures nothing).
 
 Append to `tests/testthat/test-session-object.R`:
 
@@ -2346,11 +2633,13 @@ test_that("ledger_add() records components and ledger_mark_cached() marks the ca
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-(object|budget)$")'`
 
-Expected: `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 54 ]`, with errors such as ``Error in `usage_add(child, usage_fixture(session_data(child)$id, "q000000000001", cost = 0.5))`: could not find function "usage_add"``.
+Expected: `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 54 ]`, with errors such as
+``Error in `usage_add(child, usage_fixture(session_data(child)$id, "q000000000001", cost = 0.5))`: could not find function "usage_add"``.
 
 - [ ] **Step 3: Write the implementation**
 
-`print()`, `format()`, `str()` and `summary()` read only `.d` (copy-safe, rules R1/R4). A name-held value is resolved with `get0()` through the fork overlays down to `globalenv()`, never kept.
+`print()`, `format()`, `str()` and `summary()` read only `.d` (copy-safe, rules R1/R4). A name-held
+value is resolved with `get0()` through the fork overlays down to `globalenv()`, never kept.
 
 Append to `R/session-object.R`:
 
@@ -2790,18 +3079,38 @@ git commit -m "feat(session): add session accessors, printing, the value policy 
 
 Consumes:
 
-- P01: `ev_new(type, ...)`, `gptr_opt(name)`, `gptr_can_prompt()`, `gptr_has_human()`, `setting_get()`, `ext_service_has(name)`, `ext_service_get(name)`, `id_new()`; P02: `ev_dispatch()`.
+- P01: `ev_new(type, ...)`, `gptr_opt(name)`, `gptr_can_prompt()`, `gptr_has_human()`,
+  `setting_get()`, `ext_service_has(name)`, `ext_service_get(name)`, `id_new()`; P02:
+  `ev_dispatch()`.
 - Task 3: `session_data()`, `session_live()`, `session_by_id()`; Task 4: `session_usage_rows()`.
 
 Produces:
 
-- `run_new(s, opts, outer)` -> an environment of class `gptr_run` with the 04 §7.6 fields `id` (`u` + 8 hex), `session`, `status` (`queued`), `turn`, `mode`, `model`, `depth`, `parent_run`, `opts` (with `opts$safety`), `signal` (environment `aborted`, `reason`), `started`, `children`, plus private fields (`shell`, `home`, `scratch`, `budget`, `transfers`, `timers`, ...).
-- `safety_snapshot()` (IC-53 item 2), `run_mode_tighter(a, b)` (not `mode_tighter()`, which is P08's), `run_current()` (walks `sys.frame()` for the `.gptr_tool_run` marker), `run_eval_env(run)` (plan-mode scratch overlay, else the run's home), `run_emit(run, type, ...)`, `session_emit(s, type, ...)`, `run_ui(run)` (the `ui.get` service or `NULL`); the agent-area accessors the L2 dispatcher of Task 7 uses instead of the L3 session files (03 §2.2, P01's `test-arch-layers.R`): `run_data(run)`, `run_live(run)`, `run_ctx(run)`, `run_ctx_sid(ctx)`, `run_append_message(run, msg)`, `run_append_custom(run, type, data)`.
-- Budgets (IC-66): `run_budget_limits(s, opts, outer)`, `run_budget_root(s, opts)` (the live session named by the run option `root`, 04 §7.6), `run_budget_pool(s, opts)` (the shared pool of a root without a run, kept as `budget_root` on the root's live record and in `run$budget_root`), `run_chain(run)`, `run_used(run)`, `budget_check(s, estimate = 0)` -> `NULL` or `list(kind, budget, used)`, `budget_near(run)`. A child whose `root` is another session starts with its own share only and is checked against the root's run or pool as well ("children start with `min(<their share>, <root remaining>)`"), so the children of a top-level team or fan-out share one per-call budget.
+- `run_new(s, opts, outer)` -> an environment of class `gptr_run` with the 04 section 7.6 fields
+  `id` (`u` + 8 hex), `session`, `status` (`queued`), `turn`, `mode`, `model`, `depth`,
+  `parent_run`, `opts` (with `opts$safety`), `signal` (environment `aborted`, `reason`), `started`,
+  `children`, plus private fields (`shell`, `home`, `scratch`, `budget`, `transfers`, `timers`,
+  ...).
+- `safety_snapshot()` (IC-53 item 2), `run_mode_tighter(a, b)` (not `mode_tighter()`, which is
+  P08's), `run_current()` (walks `sys.frame()` for the `.gptr_tool_run` marker), `run_eval_env(run)`
+  (plan-mode scratch overlay, else the run's home), `run_emit(run, type, ...)`,
+  `session_emit(s, type, ...)`, `run_ui(run)` (the `ui.get` service or `NULL`); the agent-area
+  accessors the L2 dispatcher of Task 7 uses instead of the L3 session files (03 section 2.2, P01's
+  `test-arch-layers.R`): `run_data(run)`, `run_live(run)`, `run_ctx(run)`, `run_ctx_sid(ctx)`,
+  `run_append_message(run, msg)`, `run_append_custom(run, type, data)`.
+- Budgets (IC-66): `run_budget_limits(s, opts, outer)`, `run_budget_root(s, opts)` (the live session
+  named by the run option `root`, 04 section 7.6), `run_budget_pool(s, opts)` (the shared pool of a
+  root without a run, kept as `budget_root` on the root's live record and in `run$budget_root`),
+  `run_chain(run)`, `run_used(run)`, `budget_check(s, estimate = 0)` -> `NULL` or
+  `list(kind, budget, used)`, `budget_near(run)`. A child whose `root` is another session starts
+  with its own share only and is checked against the root's run or pool as well ("children start
+  with `min(<their share>, <root remaining>)`"), so the children of a top-level team or fan-out
+  share one per-call budget.
 
 - [ ] **Step 1: Write the failing test**
 
-`test_run()` (harness) attaches an unstarted run to a session so that gates and budgets can be tested without the engine of Task 10.
+`test_run()` (harness) attaches an unstarted run to a session so that gates and budgets can be
+tested without the engine of Task 10.
 
 Create `tests/testthat/test-agent-run.R`:
 
@@ -3017,11 +3326,14 @@ test_that("budget_near is emitted once per kind at 80%", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^(agent-run|session-budget)$")'`
 
-Expected: `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 26 ]`, with errors such as ``Error in `run_new(s, list(agent = "main"), NULL)`: could not find function "run_new"``.
+Expected: `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 26 ]`, with errors such as
+``Error in `run_new(s, list(agent = "main"), NULL)`: could not find function "run_new"``.
 
 - [ ] **Step 3: Write the implementation**
 
-No run state lives in the package namespace (INFRA-15): `run_current()` finds the innermost executing tool by walking `sys.frame(k)` (never `sys.frames()`, rule R3) for the binding `.gptr_tool_run` that the dispatcher's execution frame holds.
+No run state lives in the package namespace (INFRA-15): `run_current()` finds the innermost
+executing tool by walking `sys.frame(k)` (never `sys.frames()`, rule R3) for the binding
+`.gptr_tool_run` that the dispatcher's execution frame holds.
 
 Create `R/agent-run.R`:
 
@@ -3383,17 +3695,25 @@ git commit -m "feat(agent): add run records, agent events and budget checks"
 
 Consumes:
 
-- P01: `block_context()`, `msg_operator()`, `as_utf8()`; P02: `registry_get()`; P03: `redact(x, profile = "persist")`.
-- Tasks 3-5: `model_canonical()`, `entry_model_change()`, `entry_custom()`, `session_append()`, `session_emit()`, `session_live()`, `run_current()`.
+- P01: `block_context()`, `msg_operator()`, `as_utf8()`; P02: `registry_get()`; P03:
+  `redact(x, profile = "persist")`.
+- Tasks 3-5: `model_canonical()`, `entry_model_change()`, `entry_custom()`, `session_append()`,
+  `session_emit()`, `session_live()`, `run_current()`.
 - Initial recording for P19: P01 `check_class()`; P05 `stream_chat_model()`; Task 9
   `run_model_resolve(ref, sid)` (available before P19 uses the completed kernel).
 
 Produces:
 
 - `session_record_initial_model(s)` records one typed initial `model_change` on an empty session,
-  resolves session-only models, refuses decision-only models and leaves routers deferred; no request,
-  prompt freeze or `model_select` event. It leaves a started session unchanged.
-- `session_set_model(s, ref, reason = "user")` (resolves, appends `model_change`, emits `model_select`), `session_set_mode(s, mode, source = "user")` (appends `gptr.mode_change`; a running run gets an operator `mode` message after the current tool results), `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())` (FIFO items `list(text, blocks, source, t)`, `queue_update`; refused with `gptr_error_permission` from model code of the same session tree, IC-55), `session_root_id(s)`, `mode_block_text(s, mode)`.
+  resolves session-only models, refuses decision-only models and leaves routers deferred; no
+  request, prompt freeze or `model_select` event. It leaves a started session unchanged.
+- `session_set_model(s, ref, reason = "user")` (resolves, appends `model_change`, emits
+  `model_select`), `session_set_mode(s, mode, source = "user")` (appends `gptr.mode_change`; a
+  running run gets an operator `mode` message after the current tool results),
+  `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())`
+  (FIFO items `list(text, blocks, source, t)`, `queue_update`; refused with `gptr_error_permission`
+  from model code of the same session tree, IC-55), `session_root_id(s)`,
+  `mode_block_text(s, mode)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3478,11 +3798,13 @@ test_that("session_root_id() follows live parents to the root", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-object$")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 82 ]`, with errors such as ``Error in `session_set_model(s, "other/other-1", reason = "user")`: could not find function "session_set_model"``.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 82 ]`, with errors such as
+``Error in `session_set_model(s, "other/other-1", reason = "user")`: could not find function "session_set_model"``.
 
 - [ ] **Step 3: Write the implementation**
 
-The `<mode>` block comes from a registered `mode` context block (P07) when there is one, else a one-line notice, so the verb works before P07 exists.
+The `<mode>` block comes from a registered `mode` context block (P07) when there is one, else a
+one-line notice, so the verb works before P07 exists.
 
 Append to `R/session-object.R`:
 
@@ -3633,21 +3955,55 @@ git commit -m "feat(session): add the model, mode and steering-queue verbs"
 
 Consumes:
 
-- P01: `schema_validate(schema, input)`, `truncate_output(text, budget_tokens, class = "r_output", head = 0.4, id_prefix = "o")`, `json_decode()`, `json_encode()`, `json_obj()`, `msg_tool_result(tool_call_id, tool_name, content, is_error = FALSE, details = NULL, usage = NULL, timestamp = NULL)`, `block_text()`, `est_tokens()`, `gptr_opt()`, `project_root()`, `ext_service_has()`, `ext_service_get()`.
-- P02: `registry_get()`, `registry_all(kind, session = NULL)`, `as_tool_result(x)`, `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`, `spec_tool_execute(fun, output_tokens)` (`ext-specs.R`, L0: the generated `execute` of 04 §6.8, which `dispatch_nested()` builds for an `r` member that has only `fun`), `ext_control_grant(run, what)` (P02's IC-53 point 3 helper: "P06 or P11 calls `ext_control_grant()` after an `ask_human` approval of a control export"); P03: `redact()`; P04: `reactor_now()`.
-- Services (04 §7.0): `risk.classify`, `ui.get` (through `run_ui()`), `checkpoint.note`.
-- Task 5 (agent area): `run_emit()`, `run_current()`, `run_eval_env()`, `run_ui()`, `run_data()`, `run_live()`, `run_ctx()`, `run_ctx_sid()`, `run_append_message()`, `run_append_custom()`. This file is layer L2 (03 §3.2): it calls L0, the L1 record constructors and its own `agent` area only, never the L3 `session-*.R` files, which P01's `test-arch-layers.R` would flag; the session is reached through the run.
+- P01: `schema_validate(schema, input)`,
+  `truncate_output(text, budget_tokens, class = "r_output", head = 0.4, id_prefix = "o")`,
+  `json_decode()`, `json_encode()`, `json_obj()`,
+  `msg_tool_result(tool_call_id, tool_name, content, is_error = FALSE, details = NULL, usage = NULL, timestamp = NULL)`,
+  `block_text()`, `est_tokens()`, `gptr_opt()`, `project_root()`, `ext_service_has()`,
+  `ext_service_get()`.
+- P02: `registry_get()`, `registry_all(kind, session = NULL)`, `as_tool_result(x)`,
+  `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`,
+  `spec_tool_execute(fun, output_tokens)` (`ext-specs.R`, L0: the generated `execute` of 04
+  section 6.8, which `dispatch_nested()` builds for an `r` member that has only `fun`),
+  `ext_control_grant(run, what)` (P02's IC-53 point 3 helper: "P06 or P11 calls
+  `ext_control_grant()` after an `ask_human` approval of a control export"); P03: `redact()`; P04:
+  `reactor_now()`.
+- Services (04 section 7.0): `risk.classify`, `ui.get` (through `run_ui()`), `checkpoint.note`.
+- Task 5 (agent area): `run_emit()`, `run_current()`, `run_eval_env()`, `run_ui()`, `run_data()`,
+  `run_live()`, `run_ctx()`, `run_ctx_sid()`, `run_append_message()`, `run_append_custom()`. This
+  file is layer L2 (03 section 3.2): it calls L0, the L1 record constructors and its own `agent`
+  area only, never the L3 `session-*.R` files, which P01's `test-arch-layers.R` would flag; the
+  session is reached through the run.
 
 Produces:
 
-- `dispatch_tools(run, calls)` -> `list(results = list(<gptr_tool_result>), terminate = lgl(1), messages = list(<tool_result message>))` (04 §7.6's two fields plus the appended tool-result messages, which the engine of Task 10 passes to the loop and to `turn_end` so that no tool `value` enters an event or the loop state, rule R1; never throws; a `length`/`refusal` stop fails every call unrun); `call_record(run, block)` (04 §4.4 call records); `tool_validate(tool, input)`; `tool_lookup(name, session_id = NULL)`, `tool_schema(tool)`, `tool_error(text)`.
-- `perm_check(call, run)` -> `list(decision, reason, input, risk, rule)` (IC-04, IC-53; a policy answer that is not `NULL`, a list or one known decision denies); `perm_request_record(call, run, out, risk, tier)` (04 §7.11), `risk_level(risk)`; `perm_ask_questions(input)` (the question texts of a blocked `ask` call, stored in `gptr_error_noninteractive`, IC-68; a remembered UI answer is stored by P11 through `permissions:remember`, never by the kernel); `perm_grant_control(run, risk)` (the one-shot tokens of an approved `ask_human`: the flagged control exports appended to `run$signal$control`, the slot P08's `control_check()` reads, plus P02's `ext_control_grant()`; cleared when the call ends).
-- `tool_result_message(result, call)` (redaction with the `context` profile, truncation to `gptr.r_output_tokens`, `details$value_ref`, never the value); `dispatch_nested(name, input, ctx)` (nested `peter$` calls: skips the gate for members listed by the outer analysis at an approved level, records at most 20 `details$nested`, signals `gptr_error_tool` inside model code; an `r` member declared with `fun` only runs through P02's generated `execute`, 04 §6.8).
-- Checkpointer calls `checkpoint_before()`/`checkpoint_after()` gathered into one `gptr.checkpoint` entry.
+- `dispatch_tools(run, calls)` ->
+  `list(results = list(<gptr_tool_result>), terminate = lgl(1), messages = list(<tool_result message>))`
+  (04 section 7.6's two fields plus the appended tool-result messages, which the engine of Task 10
+  passes to the loop and to `turn_end` so that no tool `value` enters an event or the loop state,
+  rule R1; never throws; a `length`/`refusal` stop fails every call unrun);
+  `call_record(run, block)` (04 section 4.4 call records); `tool_validate(tool, input)`;
+  `tool_lookup(name, session_id = NULL)`, `tool_schema(tool)`, `tool_error(text)`.
+- `perm_check(call, run)` -> `list(decision, reason, input, risk, rule)` (IC-04, IC-53; a policy
+  answer that is not `NULL`, a list or one known decision denies);
+  `perm_request_record(call, run, out, risk, tier)` (04 section 7.11), `risk_level(risk)`;
+  `perm_ask_questions(input)` (the question texts of a blocked `ask` call, stored in
+  `gptr_error_noninteractive`, IC-68; a remembered UI answer is stored by P11 through
+  `permissions:remember`, never by the kernel); `perm_grant_control(run, risk)` (the one-shot tokens
+  of an approved `ask_human`: the flagged control exports appended to `run$signal$control`, the slot
+  P08's `control_check()` reads, plus P02's `ext_control_grant()`; cleared when the call ends).
+- `tool_result_message(result, call)` (redaction with the `context` profile, truncation to
+  `gptr.r_output_tokens`, `details$value_ref`, never the value); `dispatch_nested(name, input, ctx)`
+  (nested `peter$` calls: skips the gate for members listed by the outer analysis at an approved
+  level, records at most 20 `details$nested`, signals `gptr_error_tool` inside model code; an `r`
+  member declared with `fun` only runs through P02's generated `execute`, 04 section 6.8).
+- Checkpointer calls `checkpoint_before()`/`checkpoint_after()` gathered into one `gptr.checkpoint`
+  entry.
 
 - [ ] **Step 1: Write the failing test**
 
-S31 (tool-result truncation) lives in the store test file because report 02 lists it with the store checks.
+S31 (tool-result truncation) lives in the store test file because report 02 lists it with the store
+checks.
 
 Create `tests/testthat/test-agent-dispatch.R`:
 
@@ -4153,11 +4509,15 @@ test_that(oracle_title(store_recs, "S31"), {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^(agent-dispatch|session-store)$")'`
 
-Expected: `[ FAIL 29 | WARN 0 | SKIP 0 | PASS 42 ]`, with errors such as ``Error in `call_record(run, b)`: could not find function "call_record"``.
+Expected: `[ FAIL 29 | WARN 0 | SKIP 0 | PASS 42 ]`, with errors such as
+``Error in `call_record(run, b)`: could not find function "call_record"``.
 
 - [ ] **Step 3: Write the implementation**
 
-Adapted from report 02 §5.1 (`run_tool_call()`, `execute_tool_calls()`) with gptr's texts. An interrupted tool is recorded by `on.exit()` in `tool_execute_frame()` ("Interrupted after <s> s; side effects may have occurred.") and the interrupt continues to the run's interrupt policy: never an exiting `tryCatch(interrupt =)` (G3 finding 5).
+Adapted from report 02 section 5.1 (`run_tool_call()`, `execute_tool_calls()`) with gptr's texts. An
+interrupted tool is recorded by `on.exit()` in `tool_execute_frame()` ("Interrupted after <s> s;
+side effects may have occurred.") and the interrupt continues to the run's interrupt policy: never
+an exiting `tryCatch(interrupt =)` (G3 finding 5).
 
 Create `R/agent-dispatch.R`:
 
@@ -4821,15 +5181,22 @@ git commit -m "feat(agent): add the tool dispatcher and the permission kernel"
 
 Consumes:
 
-- None beyond base R: the classifier works on assistant messages (`stop_reason`, `error_message`) and the unsignalled condition carried by an `error` event (04 §4.5).
+- None beyond base R: the classifier works on assistant messages (`stop_reason`, `error_message`)
+  and the unsignalled condition carried by an `error` event (04 section 4.5).
 
 Produces:
 
-- `is_context_overflow(message, context_window = NULL, error = NULL)` (the 21 provider texts of report 02 §5.3, the 413/no-body forms, silent overflow by usage), `run_retryable(msg, err)` (transient vs. non-retryable, never an overflow), `retryable_error_text(text)`, `err_class(err)`, `provider_classes(err)`, `agent_retry_delay(attempt)` (2 then 4 seconds, C-33); pattern constants `overflow_patterns`, `non_overflow_patterns`, `bodyless_overflow_pattern`, `retryable_pattern`, `non_retryable_pattern`.
+- `is_context_overflow(message, context_window = NULL, error = NULL)` (the 21 provider texts of
+  report 02 section 5.3, the 413/no-body forms, silent overflow by usage), `run_retryable(msg, err)`
+  (transient vs. non-retryable, never an overflow), `retryable_error_text(text)`, `err_class(err)`,
+  `provider_classes(err)`, `agent_retry_delay(attempt)` (2 then 4 seconds, C-33); pattern constants
+  `overflow_patterns`, `non_overflow_patterns`, `bodyless_overflow_pattern`, `retryable_pattern`,
+  `non_retryable_pattern`.
 
 - [ ] **Step 1: Write the failing test**
 
-`recovery.json` holds report 02's 26 recovery checks; R01's `data` field holds the 21 overflow texts. R01-R18 (pure classification) are tested here; R19-R26 need the engine and come with Task 10.
+`recovery.json` holds report 02's 26 recovery checks; R01's `data` field holds the 21 overflow
+texts. R01-R18 (pure classification) are tested here; R19-R26 need the engine and come with Task 10.
 
 Create `tests/testthat/fixtures/oracles/report02/recovery.json`:
 
@@ -5025,11 +5392,13 @@ test_that(oracle_title(recovery_recs, "R18"), {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^agent-run$")'`
 
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 66 ]`, with errors such as ``Error in `is_context_overflow(err_msg(e))`: could not find function "is_context_overflow"``.
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 66 ]`, with errors such as
+``Error in `is_context_overflow(err_msg(e))`: could not find function "is_context_overflow"``.
 
 - [ ] **Step 3: Write the implementation**
 
-Ported from report 02 §2.8-2.9 and the §5.3 prototype (`run_with_recovery()`), with the verification-log fixes applied and gptr's constants (C-33).
+Ported from report 02 sections 2.8-2.9 and the section 5.3 prototype (`run_with_recovery()`), with
+the verification-log fixes applied and gptr's constants (C-33).
 
 Append to `R/agent-run.R`:
 
@@ -5196,20 +5565,38 @@ git commit -m "feat(agent): add recovery classification"
 
 Consumes:
 
-- P01: `est_tokens()`, `est_multiplier(state, estimated, reported, prior)`, `hash_sha256()`, `json_verbatim(text)`, `json_decode()`, `json_encode()`, `schema_validate()`, `block_text()`, `msg_text()`; P02: `registry_diagnostic(source, event, class, message)`, `registry_get(kind, name, session = NULL)` (a session's rank-0 `provider` record), in tests `gptr_provider()`, `registry_add()`, `registry_remove()`.
-- P05: `model_resolve()`, `model_default(role = c("chat", "small", "system1"))`, `adapter_get(api)` (`capabilities$request_params`), `project_messages(entries, leaf, target)`.
-- Services: `prompt.freeze`, `request.build`, `router.call` (IC-69), with the 04 §7.0 fallbacks.
-- Tasks 3-7: `session_append()`, `entry_custom()`, `entry_model_change()`, `session_set_model()`, `session_value_set()`, `run_emit()`, `tool_lookup()`, `tool_schema()`.
+- P01: `est_tokens()`, `est_multiplier(state, estimated, reported, prior)`, `hash_sha256()`,
+  `json_verbatim(text)`, `json_decode()`, `json_encode()`, `schema_validate()`, `block_text()`,
+  `msg_text()`; P02: `registry_diagnostic(source, event, class, message)`,
+  `registry_get(kind, name, session = NULL)` (a session's rank-0 `provider` record), in tests
+  `gptr_provider()`, `registry_add()`, `registry_remove()`.
+- P05: `model_resolve()`, `model_default(role = c("chat", "small", "system1"))`, `adapter_get(api)`
+  (`capabilities$request_params`), `project_messages(entries, leaf, target)`.
+- Services: `prompt.freeze`, `request.build`, `router.call` (IC-69), with the 04 section 7.0
+  fallbacks.
+- Tasks 3-7: `session_append()`, `entry_custom()`, `entry_model_change()`, `session_set_model()`,
+  `session_value_set()`, `run_emit()`, `tool_lookup()`, `tool_schema()`.
 
 Produces:
 
-- `run_freeze(run, input)` (the `prompt.freeze` service, else the fallback `freeze_fallback()` appending `gptr.frozen`; `session_start` collect results joined to the first user message), `session_start_reason(d)`.
-- `run_target(run)` (a pending `ctx$set_model()` switch, then `router.call` for `router:` models, IC-69), `run_route(run, reason = "turn")` (`model_change` + `gptr.router` + `route` per switch), `run_model_resolve(ref, sid)` (P05's catalog, else the session's rank-0 provider spec of `model = <spec:provider>` narrowed to the named model and passed to `model_resolve()`, else the strict `gptr_error_unknown_model`).
-- `run_build(run, target)` (`request.build` or `request_fallback()`), `run_request_params(run, target, params)` (patch chain limited to the adapter's declared fields), `images_elide(s, messages, target)` (`gptr.image_elision`, IC-67), `run_returns(run)` (`returns =` schema: designated value or a notice), `plugin_state_persist(s)` (`gptr.ext`), `run_estimator_update(run, msg)`, `context_tokens(s)`, `context_idle(s)`.
+- `run_freeze(run, input)` (the `prompt.freeze` service, else the fallback `freeze_fallback()`
+  appending `gptr.frozen`; `session_start` collect results joined to the first user message),
+  `session_start_reason(d)`.
+- `run_target(run)` (a pending `ctx$set_model()` switch, then `router.call` for `router:` models,
+  IC-69), `run_route(run, reason = "turn")` (`model_change` + `gptr.router` + `route` per switch),
+  `run_model_resolve(ref, sid)` (P05's catalog, else the session's rank-0 provider spec of
+  `model = <spec:provider>` narrowed to the named model and passed to `model_resolve()`, else the
+  strict `gptr_error_unknown_model`).
+- `run_build(run, target)` (`request.build` or `request_fallback()`),
+  `run_request_params(run, target, params)` (patch chain limited to the adapter's declared fields),
+  `images_elide(s, messages, target)` (`gptr.image_elision`, IC-67), `run_returns(run)` (`returns =`
+  schema: designated value or a notice), `plugin_state_persist(s)` (`gptr.ext`),
+  `run_estimator_update(run, msg)`, `context_tokens(s)`, `context_idle(s)`.
 
 - [ ] **Step 1: Write the failing test**
 
-S34 (the compaction entry shrinks the context estimate) is a store check that needs `context_tokens()`.
+S34 (the compaction entry shrinks the context estimate) is a store check that needs
+`context_tokens()`.
 
 Append to `tests/testthat/test-agent-run.R`:
 
@@ -5453,11 +5840,14 @@ test_that(oracle_title(store_recs, "S34"), {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^(agent-run|session-store)$")'`
 
-Expected: `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 130 ]`, with errors such as ``Error in `run_freeze(run, list(msg_user("hi")))`: could not find function "run_freeze"``.
+Expected: `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 130 ]`, with errors such as
+``Error in `run_freeze(run, list(msg_user("hi")))`: could not find function "run_freeze"``.
 
 - [ ] **Step 3: Write the implementation**
 
-The fallbacks make every request possible before P07 exists: an empty T0/T1 and the frozen direct tools' JSON, the prompt alone as the first message, the projected transcript as the request, no prefix guard, no compaction.
+The fallbacks make every request possible before P07 exists: an empty T0/T1 and the frozen direct
+tools' JSON, the prompt alone as the first message, the projected transcript as the request, no
+prefix guard, no compaction.
 
 Append to `R/agent-run.R`:
 
@@ -5889,21 +6279,46 @@ git commit -m "feat(agent): add request shaping (freeze, routers, params, image 
 
 Consumes:
 
-- P01: `acc_new()`, `msg_assistant()`, `msg_text()`, `est_tokens()`, `gptr_opt()`, `id_new()`; P03: `redact_stream(profile = "stream")`.
-- P04 (04 §8.2): `reactor_task(fn, run = NULL)`, `reactor_timer(at, fn, run = NULL)`, `reactor_enqueue_tool(run, fn)`, `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`, `reactor_cancel(ids)`, `reactor_run_add(run)`, `reactor_run_remove(run)`, `reactor_now()`.
-- P05: `provider_stream(model, context, opts, emit, done, run = NULL)`, `usage_new(...)`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)`.
-- Services: `console.interrupt_policy` (else abort-only), `compact.should`, `compact.run`, `prefix.guard`, `mcp.dispatch_local`.
-- Tasks 1-9: the loop, `dispatch_tools()`, `call_record()`, `perm_check()`, `tool_result_message()`, `budget_check()`, `budget_near()`, `usage_add()`, `ledger_add()`, `run_new()`, `run_freeze()`, `run_target()`, `run_build()`, the recovery classifiers, `session_attach()`, `store_heartbeat()`, `last_set()`.
+- P01: `acc_new()`, `msg_assistant()`, `msg_text()`, `est_tokens()`, `gptr_opt()`, `id_new()`; P03:
+  `redact_stream(profile = "stream")`.
+- P04 (04 section 8.2): `reactor_task(fn, run = NULL)`, `reactor_timer(at, fn, run = NULL)`,
+  `reactor_enqueue_tool(run, fn)`,
+  `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`,
+  `reactor_cancel(ids)`, `reactor_run_add(run)`, `reactor_run_remove(run)`, `reactor_now()`.
+- P05: `provider_stream(model, context, opts, emit, done, run = NULL)`, `usage_new(...)`,
+  `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)`.
+- Services: `console.interrupt_policy` (else abort-only), `compact.should`, `compact.run`,
+  `prefix.guard`, `mcp.dispatch_local`.
+- Tasks 1-9: the loop, `dispatch_tools()`, `call_record()`, `perm_check()`, `tool_result_message()`,
+  `budget_check()`, `budget_near()`, `usage_add()`, `ledger_add()`, `run_new()`, `run_freeze()`,
+  `run_target()`, `run_build()`, the recovery classifiers, `session_attach()`, `store_heartbeat()`,
+  `last_set()`.
 
 Produces:
 
-- `session_run(s, input, opts = list())` -> `s` invisibly (settles on the reactor under the interrupt policy; raises nothing itself), `run_start(s, input, opts = list())` -> a registered `gptr_run`, `run_wait(runs, timeout = Inf)` -> `invisible(lgl(1))`, `run_abort(run, reason = "user")`.
-- Settlement `run_settle(run, reason)`: statuses `idle`, `blocked`, `budget`, `max_turns`, `error`, `aborted`; the stored unsignalled condition in `.d$condition` and in `run$signal$condition` (where P08's `gateway_signal()` reads it); the run's `home`, `scratch`, `outer` and `opts$call` bindings reset; its reactor task, timers, transfers and queued FIFO tool job cancelled; `agent_end`. A failure before the run is wired (freeze, first append) settles it with status `error` and re-signals the condition, so the session never stays `running`.
-- Recovery on the reactor: two transient retries (2 s, 4 s) with `retry_start`/`retry_end`, one compact-and-retry via `compact.run`, then `gptr_error_context_overflow`; budgets `gptr.budget` + `budget_exceeded` (interactive extension through `ask_human`); `gptr.max_nested_calls` (`run_count_nested()`); the `prefix.guard` service's `gptr_error_internal` under `gptr.check_prefix = "error"` (04 §3.1) ends the run with status `error`, any other failure of the guard is a diagnostic.
+- `session_run(s, input, opts = list())` -> `s` invisibly (settles on the reactor under the
+  interrupt policy; raises nothing itself), `run_start(s, input, opts = list())` -> a registered
+  `gptr_run`, `run_wait(runs, timeout = Inf)` -> `invisible(lgl(1))`,
+  `run_abort(run, reason = "user")`.
+- Settlement `run_settle(run, reason)`: statuses `idle`, `blocked`, `budget`, `max_turns`, `error`,
+  `aborted`; the stored unsignalled condition in `.d$condition` and in `run$signal$condition` (where
+  P08's `gateway_signal()` reads it); the run's `home`, `scratch`, `outer` and `opts$call` bindings
+  reset; its reactor task, timers, transfers and queued FIFO tool job cancelled; `agent_end`. A
+  failure before the run is wired (freeze, first append) settles it with status `error` and
+  re-signals the condition, so the session never stays `running`.
+- Recovery on the reactor: two transient retries (2 s, 4 s) with `retry_start`/`retry_end`, one
+  compact-and-retry via `compact.run`, then `gptr_error_context_overflow`; budgets `gptr.budget` +
+  `budget_exceeded` (interactive extension through `ask_human`); `gptr.max_nested_calls`
+  (`run_count_nested()`); the `prefix.guard` service's `gptr_error_internal` under
+  `gptr.check_prefix = "error"` (04 section 3.1) ends the run with status `error`, any other failure
+  of the guard is a diagnostic.
 
 - [ ] **Step 1: Write the failing test**
 
-`loop.json` holds report 02's 24 loop checks. This task adds the checks that need the engine: L01-L24 (with the coverage test for the loop group), R19-R26 and the recovery coverage test, the S25-S29, S33, S35, S36 and S38-S42 store checks, the INFRA-09 `length` stop, the NS-12 blocked ask, and the budget stops.
+`loop.json` holds report 02's 24 loop checks. This task adds the checks that need the engine:
+L01-L24 (with the coverage test for the loop group), R19-R26 and the recovery coverage test, the
+S25-S29, S33, S35, S36 and S38-S42 store checks, the INFRA-09 `length` stop, the NS-12 blocked ask,
+and the budget stops.
 
 Create `tests/testthat/fixtures/oracles/report02/loop.json`:
 
@@ -7151,11 +7566,22 @@ test_that("each run touches its session's lock when it starts (heartbeat, IC-59)
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^(agent-loop|agent-run|agent-dispatch|session-budget|session-store)$")'`
 
-Expected: `[ FAIL 78 | WARN 0 | SKIP 0 | PASS 398 ]`, with errors such as ``Error in `session_run(s, msg_user(text), opts)`: could not find function "session_run"``.
+Expected: `[ FAIL 78 | WARN 0 | SKIP 0 | PASS 398 ]`, with errors such as
+``Error in `session_run(s, msg_user(text), opts)`: could not find function "session_run"``.
 
 - [ ] **Step 3: Write the implementation**
 
-One reactor task per run (`run_drive()`) asks the loop for its next action whenever the run is not busy. A request goes out through `provider_stream()` with emit/done closures whose frame holds the run and the request but never a user frame (a function-frame home is reachable only through `run$home`, reset at settlement, rule R2), and with the run's gate, tool-result builder and MCP dispatcher in `opts` (IC-33; P05 reads them from there); deltas become `message_update` events through a stream redactor; `done()` records the assistant message, the usage row (charged to every ancestor, IC-66) and the ledger. Sequential tools go through P04's tool FIFO (`reactor_enqueue_tool()`), so a nested pump never runs another run's tool (IC-57). Steering is taken only at turn boundaries, after complete tool results (INFRA-12). `session_run()` pumps until settlement under the `console.interrupt_policy` service; without it an interrupt aborts the run and is re-signalled.
+One reactor task per run (`run_drive()`) asks the loop for its next action whenever the run is not
+busy. A request goes out through `provider_stream()` with emit/done closures whose frame holds the
+run and the request but never a user frame (a function-frame home is reachable only through
+`run$home`, reset at settlement, rule R2), and with the run's gate, tool-result builder and MCP
+dispatcher in `opts` (IC-33; P05 reads them from there); deltas become `message_update` events
+through a stream redactor; `done()` records the assistant message, the usage row (charged to every
+ancestor, IC-66) and the ledger. Sequential tools go through P04's tool FIFO
+(`reactor_enqueue_tool()`), so a nested pump never runs another run's tool (IC-57). Steering is
+taken only at turn boundaries, after complete tool results (INFRA-12). `session_run()` pumps until
+settlement under the `console.interrupt_policy` service; without it an interrupt aborts the run and
+is re-signalled.
 
 Append to `R/agent-run.R`:
 
@@ -7864,12 +8290,17 @@ git commit -m "feat(agent): add the run engine on the reactor"
 
 Consumes:
 
-- P01: `check_choice()`, `check_flag()`, `new_listing()`; P05: `usage_log()` (the process System 1 log), `usage_empty()`.
-- Tasks 2-4: `usage_conform()`, `usage_totals()`, `format_count()`, `ledger_empty()`; Task 3: `live_all()`, `session_data()`.
+- P01: `check_choice()`, `check_flag()`, `new_listing()`; P05: `usage_log()` (the process System 1
+  log), `usage_empty()`.
+- Tasks 2-4: `usage_conform()`, `usage_totals()`, `format_count()`, `ledger_empty()`; Task 3:
+  `live_all()`, `session_data()`.
 
 Produces:
 
-- The export `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)` -> a `gptr_usage` data frame (`group`, `requests`, `input`, `output`, `cache_read`, `cache_write`, `cost`) with attribute `totals` and a footer, or with `detail = TRUE` the `gptr_ledger` (`request_id`, `component`, `tokens`, `cached`); `usage_sessions(x)`.
+- The export `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)` ->
+  a `gptr_usage` data frame (`group`, `requests`, `input`, `output`, `cache_read`, `cache_write`,
+  `cost`) with attribute `totals` and a footer, or with `detail = TRUE` the `gptr_ledger`
+  (`request_id`, `component`, `tokens`, `cached`); `usage_sessions(x)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -7935,11 +8366,13 @@ test_that("gptr_usage(detail = TRUE) returns the token ledger per request and co
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-budget$")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 68 ]`, with errors such as ``Error in `gptr_usage(list(root, child))`: could not find function "gptr_usage"``.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 68 ]`, with errors such as
+``Error in `gptr_usage(list(root, child))`: could not find function "gptr_usage"``.
 
 - [ ] **Step 3: Write the implementation**
 
-Each request is counted once even though its row sits in the session and in every ancestor (root charging).
+Each request is counted once even though its row sits in the session and in every ancestor (root
+charging).
 
 Append to `R/session-budget.R`:
 
@@ -8046,17 +8479,27 @@ git commit -m "feat(session): add gptr_usage()"
 
 Consumes:
 
-- P01: `check_number()`, `check_choice()`, `check_class()`, `id_new()`, `gptr_inform()`; P02: `registry_add()`, `registry_get()`, `registry_names(kind, session = NULL)`.
-- Tasks 3-5: `session_new()`, `session_data()`, `session_live()`, `session_emit()`, `entries_path()`, `path_turn()`, `final_text()`, `lock_held_elsewhere()`, `run_current()`.
+- P01: `check_number()`, `check_choice()`, `check_class()`, `id_new()`, `gptr_inform()`; P02:
+  `registry_add()`, `registry_get()`, `registry_names(kind, session = NULL)`.
+- Tasks 3-5: `session_new()`, `session_data()`, `session_live()`, `session_emit()`,
+  `entries_path()`, `path_turn()`, `final_text()`, `lock_held_elsewhere()`, `run_current()`.
 
 Produces:
 
-- The export `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))` -> a new idle `gptr_session` (cut at the last closed boundary, turn `k`, `0` or an entry id; entry ids kept and re-chained; overlay `new.env(parent = <source home>)`; rank-0 specs re-registered; `session_before_fork` may cancel; `session_start` with reason `fork`).
-- `store_fork(s, cut, new)` (lazy fork file with `parentSession` and `gptr.forkOf`), `fork_cut(d, at)`, `fork_boundaries(path)`, `overlay_new(home, id)`, `fork_copy_specs(src_id, new_id)`, `session_control_check(what, s = NULL)` (IC-53 item 3: model code may not act on another session without a human approval; it consumes the one-shot token `what` from `run$signal$control`; not `control_check()`, which is P08's).
+- The export `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))` -> a new idle `gptr_session`
+  (cut at the last closed boundary, turn `k`, `0` or an entry id; entry ids kept and re-chained;
+  overlay `new.env(parent = <source home>)`; rank-0 specs re-registered; `session_before_fork` may
+  cancel; `session_start` with reason `fork`).
+- `store_fork(s, cut, new)` (lazy fork file with `parentSession` and `gptr.forkOf`),
+  `fork_cut(d, at)`, `fork_boundaries(path)`, `overlay_new(home, id)`,
+  `fork_copy_specs(src_id, new_id)`, `session_control_check(what, s = NULL)` (IC-53 item 3: model
+  code may not act on another session without a human approval; it consumes the one-shot token
+  `what` from `run$signal$control`; not `control_check()`, which is P08's).
 
 - [ ] **Step 1: Write the failing test**
 
-S21-S23 check the fork files; the object tests cover INFRA-14 (a listener on the fork never fires for the source; overlay writes never reach the source home).
+S21-S23 check the fork files; the object tests cover INFRA-14 (a listener on the fork never fires
+for the source; overlay writes never reach the source home).
 
 Append to `tests/testthat/test-session-object.R`:
 
@@ -8298,11 +8741,13 @@ test_that(oracle_title(store_recs, "S23"), {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-(object|store)$")'`
 
-Expected: `[ FAIL 17 | WARN 0 | SKIP 0 | PASS 181 ]`, with errors such as ``Error in `gptr_fork(x$s)`: could not find function "gptr_fork"``.
+Expected: `[ FAIL 17 | WARN 0 | SKIP 0 | PASS 181 ]`, with errors such as
+``Error in `gptr_fork(x$s)`: could not find function "gptr_fork"``.
 
 - [ ] **Step 3: Write the implementation**
 
-Pi's `createBranchedSession()` (report 02 §2.11; G3 finding 11) copies the path with ids kept and parents re-chained; the file is written at the fork's first own message.
+Pi's `createBranchedSession()` (report 02 section 2.11; G3 finding 11) copies the path with ids kept
+and parents re-chained; the file is written at the fork's first own message.
 
 Append to `R/session-object.R`:
 
@@ -8542,20 +8987,39 @@ git commit -m "feat(session): add gptr_fork() and fork files"
 
 Consumes:
 
-- P01: `json_decode()`, `msg_from_json(x)`, `msg_operator()`, `msg_text()`, `path_key(path)`, `project_root()`, `workspace_root(create = TRUE)`, `new_listing()`, `as_utf8()`; P02: `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `gptr_spec()`, `registry_diagnostic()`; P04: `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` (only `git ls-files`); P05: `usage_row()`.
-- Tests: `rscript_path()` (P01), processx (a child killed with SIGKILL), pkgload inside the generated child script only.
-- Tasks 3-12: `session_new()`, `session_attach()`, `store_open()`, `home_keep()`, `overlay_new()`, `entries_path()`, `path_turn()`, `final_text()`, `usage_conform()`, `session_control_check()`, `live_all()`.
+- P01: `json_decode()`, `msg_from_json(x)`, `msg_operator()`, `msg_text()`, `path_key(path)`,
+  `project_root()`, `workspace_root(create = TRUE)`, `new_listing()`, `as_utf8()`; P02:
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `gptr_spec()`,
+  `registry_diagnostic()`; P04:
+  `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)`
+  (only `git ls-files`); P05: `usage_row()`.
+- Tests: `rscript_path()` (P01), processx (a child killed with SIGKILL), pkgload inside the
+  generated child script only.
+- Tasks 3-12: `session_new()`, `session_attach()`, `store_open()`, `home_keep()`, `overlay_new()`,
+  `entries_path()`, `path_turn()`, `final_text()`, `usage_conform()`, `session_control_check()`,
+  `live_all()`.
 
 Produces:
 
-- `store_read(path)` -> `list(header, entries)` (unparsable lines skipped with one diagnostic, orphans re-parented), `entry_from_json(x)`, `store_rebuild(path, home)` -> `gptr_session` (leaf = last entry; `idle` or `interrupted`; a fork gets a fresh overlay of `home`, IC-46; a foreign or git-tracked file gets a fresh prompt and `imported` user turns, IC-52), `store_find(id)`, `sessions_dir()`.
+- `store_read(path)` -> `list(header, entries)` (unparsable lines skipped with one diagnostic,
+  orphans re-parented), `entry_from_json(x)`, `store_rebuild(path, home)` -> `gptr_session` (leaf =
+  last entry; `idle` or `interrupted`; a fork gets a fresh overlay of `home`, IC-46; a foreign or
+  git-tracked file gets a fresh prompt and `imported` user turns, IC-52), `store_find(id)`,
+  `sessions_dir()`.
 - The built-in `store` record `jsonl` (`builtin_store()`, declared as `builtin:store`, IC-69).
-- The exports `gptr_sessions(project = TRUE)` -> `gptr_sessions` listing (`id`, `file`, `created`, `updated`, `turns`, `model`, `status`, `title`, `live`) and `gptr_resume(x = NULL, envir = parent.frame(), block = NULL, child = NULL)`.
-- The replay table: `session_replay_bind(block, s, child = NULL)`, `replay_lookup(block, child = NULL)`, `replay_key()`.
+- The exports `gptr_sessions(project = TRUE)` -> `gptr_sessions` listing (`id`, `file`, `created`,
+  `updated`, `turns`, `model`, `status`, `title`, `live`) and
+  `gptr_resume(x = NULL, envir = parent.frame(), block = NULL, child = NULL)`.
+- The replay table: `session_replay_bind(block, s, child = NULL)`,
+  `replay_lookup(block, child = NULL)`, `replay_key()`.
 
 - [ ] **Step 1: Write the failing test**
 
-The two crash tests start a child R process with `rscript_path()` that loads the package sources (`pkgload::load_all()` appears only in the generated script text) and SIGKILL it mid-stream and mid-append; they skip on CRAN and on Windows. `package_src` is resolved when testthat sources the file, before `local_store()` changes the working directory. The Pi file of S18-S20 is a real Pi v3 session (a `label` and a `branch_summary` entry) that must be read and written back unchanged.
+The two crash tests start a child R process with `rscript_path()` that loads the package sources
+(`pkgload::load_all()` appears only in the generated script text) and SIGKILL it mid-stream and
+mid-append; they skip on CRAN and on Windows. `package_src` is resolved when testthat sources the
+file, before `local_store()` changes the working directory. The Pi file of S18-S20 is a real Pi v3
+session (a `label` and a `branch_summary` entry) that must be read and written back unchanged.
 
 Append to `tests/testthat/test-session-live.R`:
 
@@ -8997,11 +9461,13 @@ test_that("gptr_resume(block =) returns the session replay bound to the block, n
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-(live|store)$")'`
 
-Expected: `[ FAIL 26 | WARN 0 | SKIP 0 | PASS 116 ]`, with errors such as ``Error in `gptr_resume(copy)`: could not find function "gptr_resume"`` and ``Error in `store_read(s$file)`: could not find function "store_read"``.
+Expected: `[ FAIL 26 | WARN 0 | SKIP 0 | PASS 116 ]`, with errors such as
+``Error in `gptr_resume(copy)`: could not find function "gptr_resume"`` and ``Error in `store_read(s$file)`: could not find function "store_read"``.
 
 - [ ] **Step 3: Write the implementation**
 
-`gptr_resume(block =)` never falls back to `envir`: an unbound block is `gptr_error_replay_unbound` (IC-46).
+`gptr_resume(block =)` never falls back to `envir`: an unbound block is `gptr_error_replay_unbound`
+(IC-46).
 
 Append to `R/session-store.R`:
 
@@ -9588,17 +10054,30 @@ git commit -m "feat(session): add the store reader, gptr_resume(), gptr_sessions
 
 Consumes:
 
-- P01: `msg_user()`, `msg_assistant()`, `msg_tool_result()`, `block_tool_call(id, name, arguments, raw_arguments = NULL, thought_signature = NULL)`, `setting_get()`, `gptr_inform(..., .once =)`, `id_new()`.
-- Tasks 3-13: `session_new()`, `session_append()`, `session_value_set()`, `session_home()`, `session_by_id()`, `entry_custom()`, `entry_message()`, `entries_path()`, `final_text()`, `fork_cut()`, `store_find()`, `store_rebuild()`, `run_start()`.
+- P01: `msg_user()`, `msg_assistant()`, `msg_tool_result()`,
+  `block_tool_call(id, name, arguments, raw_arguments = NULL, thought_signature = NULL)`,
+  `setting_get()`, `gptr_inform(..., .once =)`, `id_new()`.
+- Tasks 3-13: `session_new()`, `session_append()`, `session_value_set()`, `session_home()`,
+  `session_by_id()`, `entry_custom()`, `entry_message()`, `entries_path()`, `final_text()`,
+  `fork_cut()`, `store_find()`, `store_rebuild()`, `run_start()`.
 
 Produces:
 
-- `session_replay_apply(s, block, header, text = NULL)` -> `s` (advanced in place: `gptr.replay`, `seen`, one more turn, the `value=` name, `last_text`), `session_replay_new(block, header, envir, doc)` -> the live session with the header's id (advanced), else a `replayed` session adopting the recorded id, rebuilt from its JSONL cut at the recorded turn or reconstructed from the document (`history_source = "reconstructed"`); private `replay_mark()`, `replay_value()`, `replay_rebuild()`, `replay_reconstruct()`, `replay_notice()` (the one-time notice when a reconstructed session continues live).
-- `header` is the parsed block header of 04 §11.5 as a named list of strings (`model`, `session`, `turn`, `value`, `fork`, ...), plus `doc` and `mode` when P15 knows them; `doc` is `list(path, format, template, code, output, text)`.
+- `session_replay_apply(s, block, header, text = NULL)` -> `s` (advanced in place: `gptr.replay`,
+  `seen`, one more turn, the `value=` name, `last_text`),
+  `session_replay_new(block, header, envir, doc)` -> the live session with the header's id
+  (advanced), else a `replayed` session adopting the recorded id, rebuilt from its JSONL cut at the
+  recorded turn or reconstructed from the document (`history_source = "reconstructed"`); private
+  `replay_mark()`, `replay_value()`, `replay_rebuild()`, `replay_reconstruct()`, `replay_notice()`
+  (the one-time notice when a reconstructed session continues live).
+- `header` is the parsed block header of 04 section 11.5 as a named list of strings (`model`,
+  `session`, `turn`, `value`, `fork`, ...), plus `doc` and `mode` when P15 knows them; `doc` is
+  `list(path, format, template, code, output, text)`.
 
 - [ ] **Step 1: Write the failing test**
 
-The chain test proves the acceptance line "`session_replay_apply()` keeps `identical()` along a replayed pipe chain".
+The chain test proves the acceptance line "`session_replay_apply()` keeps `identical()` along a
+replayed pipe chain".
 
 Append to `tests/testthat/test-session-object.R`:
 
@@ -9735,11 +10214,14 @@ test_that("a later live run of a reconstructed session gives a one-time notice",
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-object$")'`
 
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 144 ]`, with errors such as ``Error in `session_replay_apply(s, "a1b2c3", list(turn = "1"))`: could not find function "session_replay_apply"``.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 144 ]`, with errors such as
+``Error in `session_replay_apply(s, "a1b2c3", list(turn = "1"))`: could not find function "session_replay_apply"``.
 
 - [ ] **Step 3: Write the implementation**
 
-A rebuilt session keeps the turn of its transcript (no extra turn), a piped session gains one. The name-only value record resolves later through the kept home, so a replayed `value=` name bound after the replay is still found.
+A rebuilt session keeps the turn of its transcript (no extra turn), a piped session gains one. The
+name-only value record resolves later through the kept home, so a replayed `value=` name bound after
+the replay is still found.
 
 Append to `R/session-object.R`:
 
@@ -9909,7 +10391,8 @@ replay_notice = function(s) {
 }
 ```
 
-Modify `R/agent-run.R`: in `run_start()`, call `replay_notice(s)` right after the run record is created. Replace
+Modify `R/agent-run.R`: in `run_start()`, call `replay_notice(s)` right after the run record is
+created. Replace
 
 ```r
   run = run_new(s, opts, outer)
@@ -9950,17 +10433,37 @@ git commit -m "feat(session): add the replay functions (IC-46)"
 
 Consumes:
 
-- P01: `on_load()`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has()`, `ext_service_get()`, `check_choice()`, `check_string()`, `setting_get()`; P05: `model_default(role = c("chat", "small", "system1"))` (the `model` member of a session-less, process-level `ctx`).
-- P02 (the caller): `ctx_new()` calls each member as `impl(ctx, ...)` with positional arguments and, only inside a handler, appends the handler's source (`ctx_source(ctx)`, for example `"plugin:panel"`; P06's `ctx_ext_label()` derives `"panel"`) as the last positional argument (`extension`) of `send`, `append_entry` and `state` (P02 plan Task 7, `ctx_call_plugin()`).
-- Tasks 3-14: `session_data()`, `session_live()`, `session_home()`, `session_append()`, `entry_custom()`, `session_enqueue()`, `session_set_model()`, `run_eval_env()`, `run_emit()`, `run_abort()`, `dispatch_nested()`, `gptr_usage()`, `queue_item_message()`.
+- P01: `on_load()`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has()`,
+  `ext_service_get()`, `check_choice()`, `check_string()`, `setting_get()`; P05:
+  `model_default(role = c("chat", "small", "system1"))` (the `model` member of a session-less,
+  process-level `ctx`).
+- P02 (the caller): `ctx_new()` calls each member as `impl(ctx, ...)` with positional arguments and,
+  only inside a handler, appends the handler's source (`ctx_source(ctx)`, for example
+  `"plugin:panel"`; P06's `ctx_ext_label()` derives `"panel"`) as the last positional argument
+  (`extension`) of `send`, `append_entry` and `state` (P02 plan Task 7, `ctx_call_plugin()`).
+- Tasks 3-14: `session_data()`, `session_live()`, `session_home()`, `session_append()`,
+  `entry_custom()`, `session_enqueue()`, `session_set_model()`, `run_eval_env()`, `run_emit()`,
+  `run_abort()`, `dispatch_nested()`, `gptr_usage()`, `queue_item_message()`.
 
 Produces:
 
-- The service `ctx.kernel` (IC-34): `ctx_kernel()` -> a named list of the 04 §10.6 member implementations marked P06, with the calling convention P02's `ctx_new()` uses (`impl(ctx, ...)` with positional arguments; inside a handler P02 adds the handler's plugin name, already stripped of its `plugin:`/`builtin:` prefix, as the last argument of `send`, `append_entry` and `state`; outside handlers it adds nothing, so the default applies): `envir(ctx)`, `run(ctx)`, `mode(ctx)`, `model(ctx)`, `execute_tool(ctx, name, input)`, `send(ctx, text, as = c("steer", "follow_up"), extension = NULL)`, `set_model(ctx, ref, thinking = NULL, reason = "plugin")`, `append_entry(ctx, type, data, extension = NULL)`, `abort(ctx, reason = "plugin")`, `aborted(ctx)`, `update(ctx, text)`, `usage(ctx)`, `state(ctx, extension = NULL)`; private `ctx_run(ctx)` and `ctx_ext_label(extension)` (`"plugin:units"` -> `"units"`, `"plugin"` without a source).
+- The service `ctx.kernel` (IC-34): `ctx_kernel()` -> a named list of the 04 section 10.6 member
+  implementations marked P06, with the calling convention P02's `ctx_new()` uses (`impl(ctx, ...)`
+  with positional arguments; inside a handler P02 adds the handler's plugin name, already stripped
+  of its `plugin:`/`builtin:` prefix, as the last argument of `send`, `append_entry` and `state`;
+  outside handlers it adds nothing, so the default applies): `envir(ctx)`, `run(ctx)`, `mode(ctx)`,
+  `model(ctx)`, `execute_tool(ctx, name, input)`,
+  `send(ctx, text, as = c("steer", "follow_up"), extension = NULL)`,
+  `set_model(ctx, ref, thinking = NULL, reason = "plugin")`,
+  `append_entry(ctx, type, data, extension = NULL)`, `abort(ctx, reason = "plugin")`,
+  `aborted(ctx)`, `update(ctx, text)`, `usage(ctx)`, `state(ctx, extension = NULL)`; private
+  `ctx_run(ctx)` and `ctx_ext_label(extension)` (`"plugin:units"` -> `"units"`, `"plugin"` without a
+  source).
 
 - [ ] **Step 1: Write the failing test**
 
-P02's `ctx_new()` is a thin shell whose members fetch this service at call time (IC-34); the tests call the implementations directly with the session's `ctx`.
+P02's `ctx_new()` is a thin shell whose members fetch this service at call time (IC-34); the tests
+call the implementations directly with the session's `ctx`.
 
 Append to `tests/testthat/test-agent-run.R`:
 
@@ -10111,11 +10614,14 @@ test_that("state() is one environment per session and plugin, persisted when JSO
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^agent-run$")'`
 
-Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 255 ]`, with errors such as ``Error in `ctx_kernel()`: could not find function "ctx_kernel"`` and a failure because `ext_service_has("ctx.kernel")` is `FALSE`.
+Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 255 ]`, with errors such as
+``Error in `ctx_kernel()`: could not find function "ctx_kernel"`` and a failure because `ext_service_has("ctx.kernel")` is `FALSE`.
 
 - [ ] **Step 3: Write the implementation**
 
-`abort()` from inside a tool only raises the run's abort signal, so the dispatcher skips the remaining calls and the next step settles the run with the given reason; outside a tool it aborts at once.
+`abort()` from inside a tool only raises the run's abort signal, so the dispatcher skips the
+remaining calls and the next step settles the run with the given reason; outside a tool it aborts at
+once.
 
 Append to `R/agent-run.R`:
 
@@ -10268,7 +10774,10 @@ git commit -m "feat(agent): add the ctx.kernel service"
 **Files:**
 
 - Modify: `NAMESPACE`
-- Create: `man/gptr_fork.Rd`, `man/gptr_sessions.Rd`, `man/gptr_resume.Rd`, `man/gptr_last.Rd`, `man/gptr_usage.Rd`, `man/session-accessors.Rd`, `man/print.gptr_session.Rd`, `man/format.gptr_session.Rd`, `man/summary.gptr_session.Rd`, `man/print.gptr_session_summary.Rd`, `man/str.gptr_session.Rd` (generated)
+- Create: `man/gptr_fork.Rd`, `man/gptr_sessions.Rd`, `man/gptr_resume.Rd`, `man/gptr_last.Rd`,
+  `man/gptr_usage.Rd`, `man/session-accessors.Rd`, `man/print.gptr_session.Rd`,
+  `man/format.gptr_session.Rd`, `man/summary.gptr_session.Rd`, `man/print.gptr_session_summary.Rd`,
+  `man/str.gptr_session.Rd` (generated)
 - Test: `tests/testthat/test-session-object.R`
 
 **Interfaces:**
@@ -10279,11 +10788,15 @@ Consumes:
 
 Produces:
 
-- `NAMESPACE` entries `export(gptr_fork)`, `export(gptr_last)`, `export(gptr_resume)`, `export(gptr_sessions)`, `export(gptr_usage)` and the twelve `S3method()` registrations of the session methods; the eleven man pages.
+- `NAMESPACE` entries `export(gptr_fork)`, `export(gptr_last)`, `export(gptr_resume)`,
+  `export(gptr_sessions)`, `export(gptr_usage)` and the twelve `S3method()` registrations of the
+  session methods; the eleven man pages.
 
 - [ ] **Step 1: Write the failing test**
 
-Under `devtools::test()` all functions are visible even without `NAMESPACE` entries, so this test reads the `NAMESPACE` file itself (`system.file()` finds it in the source tree under pkgload and in the installed package under R CMD check).
+Under `devtools::test()` all functions are visible even without `NAMESPACE` entries, so this test
+reads the `NAMESPACE` file itself (`system.file()` finds it in the source tree under pkgload and in
+the installed package under R CMD check).
 
 Append to `tests/testthat/test-session-object.R`:
 
@@ -10308,7 +10821,9 @@ test_that("NAMESPACE exports the session API and registers the session methods",
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-object$")'`
 
-Expected: `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 189 ]`, with errors such as ``Failure ('test-session-object.R'): NAMESPACE exports the session API and registers the session methods``: `setdiff(c(exports, methods), ns)` lists the 17 missing lines.
+Expected: `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 189 ]`, with errors such as
+``Failure ('test-session-object.R'): NAMESPACE exports the session API and registers the session methods``: `setdiff(c(exports, methods), ns)`
+lists the 17 missing lines.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -10316,7 +10831,12 @@ Generate `NAMESPACE` and the man pages from the roxygen blocks of Tasks 3, 4, 11
 
 Run: `Rscript --vanilla -e 'devtools::document()'`
 
-Expected: roxygen2 reports `Writing 'NAMESPACE'` and writes `gptr_usage.Rd`, `gptr_last.Rd`, `session-accessors.Rd`, `print.gptr_session.Rd`, `format.gptr_session.Rd`, `summary.gptr_session.Rd`, `print.gptr_session_summary.Rd`, `str.gptr_session.Rd`, `gptr_fork.Rd`, `gptr_sessions.Rd` and `gptr_resume.Rd` without any warning (no unresolved link: roxygen text in P06 writes copy-safety rules as `(rule R2)`, never as `[R2]`, which markdown roxygen would read as a link). The P06 lines of `NAMESPACE` are then exactly:
+Expected: roxygen2 reports `Writing 'NAMESPACE'` and writes `gptr_usage.Rd`, `gptr_last.Rd`,
+`session-accessors.Rd`, `print.gptr_session.Rd`, `format.gptr_session.Rd`,
+`summary.gptr_session.Rd`, `print.gptr_session_summary.Rd`, `str.gptr_session.Rd`, `gptr_fork.Rd`,
+`gptr_sessions.Rd` and `gptr_resume.Rd` without any warning (no unresolved link: roxygen text in P06
+writes copy-safety rules as `(rule R2)`, never as `[R2]`, which markdown roxygen would read as a
+link). The P06 lines of `NAMESPACE` are then exactly:
 
 ```text
 S3method("$",gptr_session)
@@ -10338,7 +10858,10 @@ export(gptr_sessions)
 export(gptr_usage)
 ```
 
-Then run every example offline: `Rscript --vanilla -e 'devtools::run_examples(document = FALSE)'` finishes without error. Before P08 exists the `@examplesIf exists("peter", mode = "function")` sections of the five P06 exports are skipped, `gptr_last()` returns `NULL`, and `gptr_sessions()` and `gptr_usage()` print empty listings.
+Then run every example offline: `Rscript --vanilla -e 'devtools::run_examples(document = FALSE)'`
+finishes without error. Before P08 exists the `@examplesIf exists("peter", mode = "function")`
+sections of the five P06 exports are skipped, `gptr_last()` returns `NULL`, and `gptr_sessions()`
+and `gptr_usage()` print empty listings.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -10350,13 +10873,17 @@ Then run the whole P06 suite (plan acceptance 1):
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "session|agent")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 974 ]` (on CRAN, where `NOT_CRAN` is unset, the two SIGKILL tests, the two foreign-lock tests and the snapshot test skip).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 974 ]` (on CRAN, where `NOT_CRAN` is unset, the two
+SIGKILL tests, the two foreign-lock tests and the snapshot test skip).
 
-Then run P01's layering and lint tests, which now scan the seven P06 files (every call edge against the 03 §2.2 table and the IC-33 kernel SDK; the parse-tree lint rules of 04 §12.3):
+Then run P01's layering and lint tests, which now scan the seven P06 files (every call edge against
+the 03 section 2.2 table and the IC-33 kernel SDK; the parse-tree lint rules of 04 section 12.3):
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^(arch-layers|lint-rules)$")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]` (with P01-P06 in `R/`; a call from `agent-dispatch.R` or `agent-loop.R` into a `session-*.R` function would fail `test-arch-layers.R` with a "layering violations" listing).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]` (with P01-P06 in `R/`; a call from
+`agent-dispatch.R` or `agent-loop.R` into a `session-*.R` function would fail `test-arch-layers.R`
+with a "layering violations" listing).
 
 - [ ] **Step 5: Commit**
 
@@ -10366,9 +10893,13 @@ git commit -m "docs(session): generate NAMESPACE and man pages for the session A
 ```
 
 ---
+
 ## Plan acceptance
 
-Every command runs from `/Users/wanjun/Desktop/gptr` after Task 16. The counts are those of the P06 test files (`test-agent-dispatch.R` 130, `test-agent-loop.R` 86, `test-agent-run.R` 291, `test-session-budget.R` 86, `test-session-live.R` 35, `test-session-object.R` 190, `test-session-store.R` 156 expectations).
+Every command runs from `/Users/wanjun/Desktop/gptr` after Task 16. The counts are those of the P06
+test files (`test-agent-dispatch.R` 130, `test-agent-loop.R` 86, `test-agent-run.R` 291,
+`test-session-budget.R` 86, `test-session-live.R` 35, `test-session-object.R` 190,
+`test-session-store.R` 156 expectations).
 
 | # | Acceptance check (05 P06, with its review amendments) | Proved by | Command and expected result |
 |---|---|---|---|
@@ -10381,7 +10912,17 @@ Every command runs from `/Users/wanjun/Desktop/gptr` after Task 16. The counts a
 | 7 | G3 analogues: `identical(s |> step, s)`; `$<-` refused; an unreferenced settled session is finalised and its lock removed (except the one `gptr_last()` holds); a same-process duplicate continues with `gptr_error_split_brain` | "session_run() returns the identical session; each run is one prompt turn" (Task 10: `expect_identical(s |> session_run(msg_user("b")), s)`; `gptr_step()` is P08's and repeats the check on the gateway); "$<- and [[<- are refused (gptr_error_readonly)" (Task 4); "an unreferenced session is finalised and its lock removed, except gptr_last()'s" (Task 3); "a same-process duplicate cannot attach: gptr_error_split_brain" (Task 3) and "continuing a same-process duplicate with a run is split brain" (Task 13); a settled (aborted) session with nothing left in the reactor is collected: "an abort while a tool waits in the FIFO cancels the job; the session can be collected" (Task 10, `test-agent-run.R`, run by acceptance 1) | `Rscript --vanilla -e 'devtools::test(filter = "^session-(object|live)$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 225 ]` |
 | 8 | Review additions: `nrow(showConnections())` unchanged after a run returns, errors or is interrupted and after 300 sessions kept in a list; SIGKILL mid-append, resume, three appends: all present and the tree connected; `gptr_last()` survives `gc()`; with no policy a mutating tool asks (and is `blocked` without a UI); a hook answering allow to an `ask_human` is ignored; an option changed by model code mid-run does not change the run's gate; a budget of 5 USD on a root stops its children (a top-level container without a run still caps its children, IC-66); `session_replay_apply()` keeps `identical()` along a replayed pipe chain | "no connection is left open after a run returns or errors (IC-59)" and "an interrupt aborts the run and is re-signalled; no connection is left open" (Task 10; `peter()` is P08's and repeats them on the gateway); "300 sessions kept in a list leave no connection open (IC-59)" and "gptr_last() holds the most recent session strongly and survives gc()" (Task 3); "SIGKILL mid-append, resume, three appends: all present and the tree connected (IC-59)" (Task 13); "with no mode policy a mutating tool asks and is blocked without a UI (NS-12)", "a hook answering allow to an ask_human is ignored (IC-53)", "an option changed by model code mid-run does not change the run's gate (IC-53)" (Task 7) and "with no policy a mutating tool asks and the run ends blocked without a human" (Task 10); "a budget of 5 USD on a root stops its children (root charging, IC-66)" (Task 10) and, for a top-level container without a run, "children of a root without a run share one budget through opts$root (IC-66)" (Task 5); "session_replay_apply() advances the piped session in place; identical() holds" (Task 14) | `Rscript --vanilla -e 'devtools::test(filter = "session|agent")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 974 ]` |
 
-Review amendments of 05 P06 and where they are implemented: open-append-close appends, torn-line recovery at resume, unparsable lines skipped, locks with pid, creation time and 10-minute heartbeat (IC-59): Tasks 3, 10 (`run_heartbeat()`), 13; `the$last` strong (IC-71): Task 3; the replay functions and `gptr_resume(block =, child =)` with fresh overlays (IC-46): Tasks 13, 14; `perm_check()` with `ask_human`, one modify re-check, the safety snapshot and mode inheritance for every call made during a run (IC-53): Tasks 5, 7; relays and queue items by source (IC-55): Tasks 1, 6, 15; budgets with the default ceiling, root charging and `gptr.max_nested_calls` (IC-66): Tasks 4, 5, 10; router calls before each request (IC-69): Tasks 9, 10; `ctx.kernel` (IC-34): Task 15; per-session `out` stores (IC-71): Task 3 (`live$out`); image elision entries (IC-67): Task 9; the `store` kind's built-in record (IC-69): Task 13; re-classification of worker-forwarded permission requests (IC-53): Task 7 ("a forwarded request is re-classified from its raw input (IC-53)").
+Review amendments of 05 P06 and where they are implemented: open-append-close appends, torn-line
+recovery at resume, unparsable lines skipped, locks with pid, creation time and 10-minute heartbeat
+(IC-59): Tasks 3, 10 (`run_heartbeat()`), 13; `the$last` strong (IC-71): Task 3; the replay
+functions and `gptr_resume(block =, child =)` with fresh overlays (IC-46): Tasks 13, 14;
+`perm_check()` with `ask_human`, one modify re-check, the safety snapshot and mode inheritance for
+every call made during a run (IC-53): Tasks 5, 7; relays and queue items by source (IC-55): Tasks 1,
+6, 15; budgets with the default ceiling, root charging and `gptr.max_nested_calls` (IC-66): Tasks 4,
+5, 10; router calls before each request (IC-69): Tasks 9, 10; `ctx.kernel` (IC-34): Task 15;
+per-session `out` stores (IC-71): Task 3 (`live$out`); image elision entries (IC-67): Task 9; the
+`store` kind's built-in record (IC-69): Task 13; re-classification of worker-forwarded permission
+requests (IC-53): Task 7 ("a forwarded request is re-classified from its raw input (IC-53)").
 
 ## Self-review
 
@@ -10391,9 +10932,9 @@ Review amendments of 05 P06 and where they are implemented: open-append-close ap
 |---|---|
 | `session-object.R`: shell + `.d` | 3 |
 | accessors, `print`/`format`/`summary`/`str` (no `knit_print`: P15, IC-07), `$<-` refusal | 4 |
-| value policy (03 §5.1) | 4 (replay `value=` in 14) |
+| value policy (03 section 5.1) | 4 (replay `value=` in 14) |
 | `gptr_fork()` with the overlay default | 12 |
-| model, mode and queue verbs (04 §7.6) | 6 |
+| model, mode and queue verbs (04 section 7.6) | 6 |
 | replay functions (IC-46) | 13 (table), 14 |
 | `session-live.R`: weak live registry, home policy with the frame reset at settlement, pid locks, split-brain rules, `gptr_last()` | 3 (registry, homes, locks, attach, `gptr_last()`), 10 (reset at settlement), 13 (split brain on resume) |
 | `session-store.R`: Pi-v3 JSONL tree, appends in `suspendInterrupts()` | 3 |
@@ -10411,92 +10952,228 @@ Every acceptance check maps to a task and a test in "Plan acceptance" above.
 
 ### Placeholder scan
 
-The plan was searched (case-sensitive `grep`) for every placeholder phrase that the plan format forbids (unfinished-work markers, deferred implementation, vague error or edge-case handling, references to another task instead of code, test steps without test code) and for steps that describe code without showing it: there are no hits. Every step that changes a file shows the complete code or the exact replacement; the only generated files (`NAMESPACE`, `man/`) come from `devtools::document()` with their expected `NAMESPACE` lines shown.
+The plan was searched (case-sensitive `grep`) for every placeholder phrase that the plan format
+forbids (unfinished-work markers, deferred implementation, vague error or edge-case handling,
+references to another task instead of code, test steps without test code) and for steps that
+describe code without showing it: there are no hits. Every step that changes a file shows the
+complete code or the exact replacement; the only generated files (`NAMESPACE`, `man/`) come from
+`devtools::document()` with their expected `NAMESPACE` lines shown.
 
 ### Type and name consistency with 04
 
-- Every function of 04 §7.6 exists with the contract's exact signature: `session_new()`, `session_data()`, `session_live()`, `session_home()`, `session_append()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`, `session_value_set()`, `session_value_get()`, `live_all()`, `last_set()`, `store_open()`, `store_append()`, `store_read()`, `store_close()`, `store_fork()`, `store_rebuild()`, `store_heartbeat()`, `session_replay_apply()`, `session_replay_new()`, `session_replay_bind()`, `replay_lookup()`, `budget_check()`, `ledger_add()`, `session_run()`, `run_start()`, `run_wait()`, `run_abort()`, `run_current()`, `run_eval_env()`, `run_emit()`, `dispatch_tools()`, `dispatch_nested()`, `tool_validate()`, `perm_check()`, `tool_result_message()`.
-- The five exports match 04 §6.5 argument for argument; the listings carry the 04 §5.12 classes and columns; `gptr_run` carries the 04 §7.6 fields; `.d` carries every 04 §5.1 field.
-- Condition classes and fields, option names and defaults, entry and event names are those of 04 §2.2, §3.1, §4.6 and §10.4 (Global Constraints).
-- Functions consumed from P01-P05 are called by their 04 names and signatures, and the five dependency plans in `dev/plan/` agree: the review assembled their R code with this plan's and ran the whole P06 suite against it (Executed validation). P05's `usage_empty()` is consumed, not redefined. No function name of this plan is defined by another plan's `R/` code (a parse of every plan's code blocks; the one other `.DollarNames.gptr_session` is P01's lint fixture). P02's `ctx_new()` calls the `ctx.kernel` members positionally (ambiguity 4); P02's checkpointer validator requires `undo` and `redo` (Task 7's test supplies them); P08's `control_check()` and `run_settled()` read `run$signal$control` and the run statuses `queued`, `requesting`, `streaming`, `tools`, `boundary` that this plan writes.
+- Every function of 04 section 7.6 exists with the contract's exact signature: `session_new()`,
+  `session_data()`, `session_live()`, `session_home()`, `session_append()`, `session_set_model()`,
+  `session_set_mode()`, `session_enqueue()`, `session_value_set()`, `session_value_get()`,
+  `live_all()`, `last_set()`, `store_open()`, `store_append()`, `store_read()`, `store_close()`,
+  `store_fork()`, `store_rebuild()`, `store_heartbeat()`, `session_replay_apply()`,
+  `session_replay_new()`, `session_replay_bind()`, `replay_lookup()`, `budget_check()`,
+  `ledger_add()`, `session_run()`, `run_start()`, `run_wait()`, `run_abort()`, `run_current()`,
+  `run_eval_env()`, `run_emit()`, `dispatch_tools()`, `dispatch_nested()`, `tool_validate()`,
+  `perm_check()`, `tool_result_message()`.
+- The five exports match 04 section 6.5 argument for argument; the listings carry the 04
+  section 5.12 classes and columns; `gptr_run` carries the 04 section 7.6 fields; `.d` carries every
+  04 section 5.1 field.
+- Condition classes and fields, option names and defaults, entry and event names are those of 04
+  sections 2.2, 3.1, 4.6 and 10.4 (Global Constraints).
+- Functions consumed from P01-P05 are called by their 04 names and signatures, and the five
+  dependency plans in `dev/plan/` agree: the review assembled their R code with this plan's and ran
+  the whole P06 suite against it (Executed validation). P05's `usage_empty()` is consumed, not
+  redefined. No function name of this plan is defined by another plan's `R/` code (a parse of every
+  plan's code blocks; the one other `.DollarNames.gptr_session` is P01's lint fixture). P02's
+  `ctx_new()` calls the `ctx.kernel` members positionally (ambiguity 4); P02's checkpointer
+  validator requires `undo` and `redo` (Task 7's test supplies them); P08's `control_check()` and
+  `run_settled()` read `run$signal$control` and the run statuses `queued`, `requesting`,
+  `streaming`, `tools`, `boundary` that this plan writes.
 
 ### Ambiguities in 04 and the reading this plan implements
 
-1. `session_replay_new(block, header, envir, doc)`: 04 does not define `header` or `doc`. `header` is the parsed block header of 04 §11.5 as a named list of strings (`model`, `session`, `turn`, `value`, `fork`, ...) plus `doc` (document path) and `mode` (P15's replay mode) when known; `doc` is `list(path, format, template, code, output, text)`. P15 builds both.
-2. `session_replay_new()` when a live session holds the header's id: 04 says it "returns" that session; this plan also records the block on it through `session_replay_apply()` (so `gptr.replay`, `seen` and the turn advance) and returns it.
-3. A session rebuilt from JSONL for a replay emits `session_start` with reason `resume` (inside `store_rebuild(path, home)`, whose fixed signature has no reason); a reconstructed replay session emits `replay` at its first freeze.
-4. `ctx.kernel` calling convention: 04 §10.6 lists the members but not how P02 calls them. Each implementation takes the `ctx` first, then the member's arguments positionally (P02's `ctx_call()`). `ctx` carries no plugin identity, so `send()`, `append_entry()` and `state()` take an optional last formal `extension = NULL`; P02's `ctx_call_plugin()` fills it positionally, only inside a handler, with the plugin name stripped of its `plugin:`/`builtin:` prefix (`"panel"`), and P06's `ctx_ext_label()` maps `NULL` to `"plugin"` and accepts either form. `append_entry()` writes `customType = "<plugin>.<type>"`; `send()` labels the queue item's `name` with it. (P02's own test stub names the formal `name`/`plugin`; positional calls make the names irrelevant.)
-5. `ctx$abort()` from inside a tool raises the run's abort signal (the dispatcher skips the remaining calls and the next step settles the run with the reason); outside a tool it calls `run_abort()` at once.
-6. `ctx$usage()` returns `gptr_usage(ctx$session)` (the aggregated `gptr_usage` view), not the per-request rows of `s$usage`; both have class `gptr_usage`.
-7. Internal `.d` fields beyond 04 §5.1: `condition` (the stored unsignalled condition of the last terminal status, read by P08), `ledger` (the token ledger) and `estimator` (the EWMA state of 03 §12.5). `gptr_run` has private fields beyond 04 §7.6 (`shell`, `home`, `scratch`, `budget`, `budget_root`, `transfers`, `timers`, ...), and the live record one beyond 04 §5.1 (`budget_root`, ambiguity 19); other plans read only the contract fields.
-8. `the$last` is set when a top-level session is created as well as when it runs (IC-71 "the most recently active session ... including one whose call was interrupted before assignment").
-9. `str()` prints `<gptr_session s... | chat | idle | 1 turns | fake/fake-1>`: the 04 §5.1 template with "turns" kept literal for every count.
-10. A replayed `value=` name that is not bound yet is recorded by name only (`gptr.value` with `turn`, `mode = "name"`, `name`; no `address`, `class`, `bytes`); the value resolves when first read.
-11. 05 acceptance 7 and 8 name `s |> step` and `peter()`; both are P08's. This plan proves the kernel form (`session_run()`), and P08's acceptance repeats the checks on the gateway.
-12. P05's plan also defines `usage_rollup(rows)` (roll-up to root sessions for an aggregated view). P06 charges every request to the session and each live ancestor at write time (`usage_add()`, IC-66) and aggregates with request de-duplication in `gptr_usage()`; it does not call `usage_rollup()`. The two agree on totals.
-13. `turn_end`'s `results` (04 §10.4: "tool results") are the tool-result messages of the turn (Pi's `toolResults`), not `gptr_tool_result` objects: a result's `value` may be a user object, which must not sit in the loop state or pass `redact_tree()` in an event payload (rule R1). `dispatch_tools()` therefore returns 04 §7.6's `results` and `terminate` plus `messages`.
-14. `gptr.max_nested_calls` (IC-66: "a team or fan-out counts as one"): 04 names no run option for the grouping, so the children of one team or fan-out pass the same `opts$nested_group` (P19 sets it) and count once; the error is `gptr_error_budget` with `kind = "nested_calls"`, `budget` (the cap) and `used`, the IC-66 budget class with a kind outside the three `budget_<kind>` subclasses.
-15. The run option `interactive` (04 §7.6: "a human can answer") is applied to the run's safety snapshot: `interactive = FALSE` sets `can_prompt = FALSE`, so the gate stops or denies instead of prompting (background runs, children without a human); `TRUE` cannot loosen the snapshot of `gptr_can_prompt()`.
-16. A `session_before_fork` handler answering `list(cancel = TRUE, reason)` makes `gptr_fork()` signal `gptr_error_invalid_argument` carrying the reason (04 names no class for a cancelled fork).
-17. `agent` queue items: `session_enqueue()` has no name argument in 04, so a sub-agent names itself by passing its report as `blocks` (an `agent_report` context block with `attrs = list(from = <name>)`), which `queue_item_message()` delivers as is; `extension` items get their `name` from the `ctx.kernel` `send()` member.
-18. `run_start()` (and so `session_run()`) re-signals a failure that happens before the run is wired (a freeze that refuses the model, a store error) after settling the run with status `error`; 04's "raises nothing itself" is read as "maps no terminal status to a condition".
-19. The run option `root` (04 §7.6, IC-66) when the root has no run (the container of a top-level team or fan-out): 04 does not say where the root's per-call budget lives. P06 keeps one pool per root on its live record (`budget_root`), created at the first child's run with the settings default merged with that child's `opts$budget` (P19 passes the call's budget to every child of one container), charged with the root's rolled-up usage since its creation. P19 creates a container per top-level call and refuses to continue one, so the pool is never reset. A child whose root is another session starts with its own share only (`min(<share>, <root remaining>)` holds because both are checked).
-20. `secret_live_entries_set()` is P03's addition (its ambiguity A1). P06 installs `live_entries_all()` at load and again in every `live_new()`: P03's own test clears the slot with `secret_live_entries_set(NULL)` when it ends, and a scan that stayed inert for the rest of the process would break IC-70 silently.
-21. `model = <spec:provider>` registered at rank 0 for one session (P08, P19): P05's catalog lists only process-level providers and `model_resolve(ref, strict = TRUE)` has no session argument, but it accepts a `gptr_provider` spec. `run_model_resolve(ref, sid)` therefore falls back to the session's `provider` record, narrowed to the declared model the reference names; `provider_stream()` already finds that record through `opts$session`.
+1. `session_replay_new(block, header, envir, doc)`: 04 does not define `header` or `doc`. `header`
+   is the parsed block header of 04 section 11.5 as a named list of strings (`model`, `session`,
+   `turn`, `value`, `fork`, ...) plus `doc` (document path) and `mode` (P15's replay mode) when
+   known; `doc` is `list(path, format, template, code, output, text)`. P15 builds both.
+2. `session_replay_new()` when a live session holds the header's id: 04 says it "returns" that
+   session; this plan also records the block on it through `session_replay_apply()` (so
+   `gptr.replay`, `seen` and the turn advance) and returns it.
+3. A session rebuilt from JSONL for a replay emits `session_start` with reason `resume` (inside
+   `store_rebuild(path, home)`, whose fixed signature has no reason); a reconstructed replay session
+   emits `replay` at its first freeze.
+4. `ctx.kernel` calling convention: 04 section 10.6 lists the members but not how P02 calls them.
+   Each implementation takes the `ctx` first, then the member's arguments positionally (P02's
+   `ctx_call()`). `ctx` carries no plugin identity, so `send()`, `append_entry()` and `state()` take
+   an optional last formal `extension = NULL`; P02's `ctx_call_plugin()` fills it positionally, only
+   inside a handler, with the plugin name stripped of its `plugin:`/`builtin:` prefix (`"panel"`),
+   and P06's `ctx_ext_label()` maps `NULL` to `"plugin"` and accepts either form. `append_entry()`
+   writes `customType = "<plugin>.<type>"`; `send()` labels the queue item's `name` with it. (P02's
+   own test stub names the formal `name`/`plugin`; positional calls make the names irrelevant.)
+5. `ctx$abort()` from inside a tool raises the run's abort signal (the dispatcher skips the
+   remaining calls and the next step settles the run with the reason); outside a tool it calls
+   `run_abort()` at once.
+6. `ctx$usage()` returns `gptr_usage(ctx$session)` (the aggregated `gptr_usage` view), not the
+   per-request rows of `s$usage`; both have class `gptr_usage`.
+7. Internal `.d` fields beyond 04 section 5.1: `condition` (the stored unsignalled condition of the
+   last terminal status, read by P08), `ledger` (the token ledger) and `estimator` (the EWMA state
+   of 03 section 12.5). `gptr_run` has private fields beyond 04 section 7.6 (`shell`, `home`,
+   `scratch`, `budget`, `budget_root`, `transfers`, `timers`, ...), and the live record one beyond
+   04 section 5.1 (`budget_root`, ambiguity 19); other plans read only the contract fields.
+8. `the$last` is set when a top-level session is created as well as when it runs (IC-71 "the most
+   recently active session ... including one whose call was interrupted before assignment").
+9. `str()` prints `<gptr_session s... | chat | idle | 1 turns | fake/fake-1>`: the 04 section 5.1
+   template with "turns" kept literal for every count.
+10. A replayed `value=` name that is not bound yet is recorded by name only (`gptr.value` with
+    `turn`, `mode = "name"`, `name`; no `address`, `class`, `bytes`); the value resolves when first
+    read.
+11. 05 acceptance 7 and 8 name `s |> step` and `peter()`; both are P08's. This plan proves the
+    kernel form (`session_run()`), and P08's acceptance repeats the checks on the gateway.
+12. P05's plan also defines `usage_rollup(rows)` (roll-up to root sessions for an aggregated view).
+    P06 charges every request to the session and each live ancestor at write time (`usage_add()`,
+    IC-66) and aggregates with request de-duplication in `gptr_usage()`; it does not call
+    `usage_rollup()`. The two agree on totals.
+13. `turn_end`'s `results` (04 section 10.4: "tool results") are the tool-result messages of the
+    turn (Pi's `toolResults`), not `gptr_tool_result` objects: a result's `value` may be a user
+    object, which must not sit in the loop state or pass `redact_tree()` in an event payload (rule
+    R1). `dispatch_tools()` therefore returns 04 section 7.6's `results` and `terminate` plus
+    `messages`.
+14. `gptr.max_nested_calls` (IC-66: "a team or fan-out counts as one"): 04 names no run option for
+    the grouping, so the children of one team or fan-out pass the same `opts$nested_group` (P19 sets
+    it) and count once; the error is `gptr_error_budget` with `kind = "nested_calls"`, `budget` (the
+    cap) and `used`, the IC-66 budget class with a kind outside the three `budget_<kind>`
+    subclasses.
+15. The run option `interactive` (04 section 7.6: "a human can answer") is applied to the run's
+    safety snapshot: `interactive = FALSE` sets `can_prompt = FALSE`, so the gate stops or denies
+    instead of prompting (background runs, children without a human); `TRUE` cannot loosen the
+    snapshot of `gptr_can_prompt()`.
+16. A `session_before_fork` handler answering `list(cancel = TRUE, reason)` makes `gptr_fork()`
+    signal `gptr_error_invalid_argument` carrying the reason (04 names no class for a cancelled
+    fork).
+17. `agent` queue items: `session_enqueue()` has no name argument in 04, so a sub-agent names itself
+    by passing its report as `blocks` (an `agent_report` context block with
+    `attrs = list(from = <name>)`), which `queue_item_message()` delivers as is; `extension` items
+    get their `name` from the `ctx.kernel` `send()` member.
+18. `run_start()` (and so `session_run()`) re-signals a failure that happens before the run is wired
+    (a freeze that refuses the model, a store error) after settling the run with status `error`;
+    04's "raises nothing itself" is read as "maps no terminal status to a condition".
+19. The run option `root` (04 section 7.6, IC-66) when the root has no run (the container of a
+    top-level team or fan-out): 04 does not say where the root's per-call budget lives. P06 keeps
+    one pool per root on its live record (`budget_root`), created at the first child's run with the
+    settings default merged with that child's `opts$budget` (P19 passes the call's budget to every
+    child of one container), charged with the root's rolled-up usage since its creation. P19 creates
+    a container per top-level call and refuses to continue one, so the pool is never reset. A child
+    whose root is another session starts with its own share only (`min(<share>, <root remaining>)`
+    holds because both are checked).
+20. `secret_live_entries_set()` is P03's addition (its ambiguity A1). P06 installs
+    `live_entries_all()` at load and again in every `live_new()`: P03's own test clears the slot
+    with `secret_live_entries_set(NULL)` when it ends, and a scan that stayed inert for the rest of
+    the process would break IC-70 silently.
+21. `model = <spec:provider>` registered at rank 0 for one session (P08, P19): P05's catalog lists
+    only process-level providers and `model_resolve(ref, strict = TRUE)` has no session argument,
+    but it accepts a `gptr_provider` spec. `run_model_resolve(ref, sid)` therefore falls back to the
+    session's `provider` record, narrowed to the declared model the reference names;
+    `provider_stream()` already finds that record through `opts$session`.
 
 ### Executed validation
 
-- The seven R files, the seven test files, the harness and the three oracle files of this plan were assembled into a scratch package (`DESCRIPTION`, `R/aaa-stubs.R` with stand-ins for the P01-P05 functions named above that follow 04, P05's `usage_empty()` copied verbatim, and an `.onLoad` running the `on_load()` expressions), and `devtools::test()` was run with `NOT_CRAN=true` after every task, first with the task's tests but without its implementation (red) and then with both (green). Every Step 2 and Step 4 summary line above is the measured one. The two SIGKILL tests ran for real (a child `Rscript` loading the scratch package with `pkgload::load_all()` and killed mid-stream and mid-append) and passed; the foreign-lock test ran against a live `Rscript` child.
-- `devtools::document()` on the scratch package produced exactly the `NAMESPACE` lines of Task 16 and the eleven man pages with no roxygen warning; `devtools::run_examples()` ran every example of the five exports offline.
+- The seven R files, the seven test files, the harness and the three oracle files of this plan were
+  assembled into a scratch package (`DESCRIPTION`, `R/aaa-stubs.R` with stand-ins for the P01-P05
+  functions named above that follow 04, P05's `usage_empty()` copied verbatim, and an `.onLoad`
+  running the `on_load()` expressions), and `devtools::test()` was run with `NOT_CRAN=true` after
+  every task, first with the task's tests but without its implementation (red) and then with both
+  (green). Every Step 2 and Step 4 summary line above is the measured one. The two SIGKILL tests ran
+  for real (a child `Rscript` loading the scratch package with `pkgload::load_all()` and killed
+  mid-stream and mid-append) and passed; the foreign-lock test ran against a live `Rscript` child.
+- `devtools::document()` on the scratch package produced exactly the `NAMESPACE` lines of Task 16
+  and the eleven man pages with no roxygen warning; `devtools::run_examples()` ran every example of
+  the five exports offline.
 - Every ```` ```r ```` block of this plan was extracted to its own file and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. A `getParseData()` scan of every block finds no `<-` assignment and no `%>%`: the only `LEFT_ASSIGN` tokens are the two `<<-` in `run_chain()` (Task 5), which update the closure state of its `add()` helper as conventions §4 allows, and the other `<-` characters in code are inside the S3 method names `` `$<-.gptr_session` `` / `` `[[<-.gptr_session` `` and the strings of the Task 16 test. All R code is ASCII and no line exceeds 100 characters.
-- Two defects of the earlier draft were found and fixed by this validation: settlement did not cancel the run's reactor task, so an aborted run that no pump visited again kept its session alive (the finaliser and split-brain tests failed); and a test helper registered a tool closure created inside the helper, which kept the helper's frame and the session alive in the registry.
-- Review round (2026-10-01). The R code of P01-P05 was assembled from their plans in `dev/plan/` (P04's "replace the definitions" blocks applied) together with this plan's seven files (Task 14's one-line modification applied), P01's `setup.R` and `helper-fake.R`, and this plan's tests, harness, oracles and snapshot, into a scratch package (no stand-ins). Results with `NOT_CRAN=true`, R 4.4.3, testthat 3.3.2: `roxygen2::roxygenise()` wrote exactly the 17 `NAMESPACE` lines of Task 16 and the eleven man pages, with no warning from a P06 file; the examples of the five exports ran offline (before P08 the `@examplesIf` parts skip) and left no connection open; `devtools::test(filter = "session|agent")` gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 938 ]` (dispatch 116, loop 86, run 283, budget 74, live 33, object 190, store 156; both SIGKILL tests and both foreign-lock tests ran against real `Rscript` children); P01's `test-arch-layers.R` and `test-lint-rules.R` gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]`. Before the review fixes the same run gave one error (the checkpointer spec of Task 7 lacked the `undo`/`redo` that P02's validator requires) and `test-arch-layers.R` listed eleven L2 -> L3 layering violations from `agent-dispatch.R`; each test the review added was run once with its fix reverted and failed (2, 3, 1, 4 and 1 failed expectations; the `gptr_usage()` test errored with "row names contain missing values"). P01's and P02's own tests were run with and without the P06 files: the only one whose result changes is P02's "ctx members whose plan is not loaded signal gptr_error_not_available", which assumes that no `ctx.kernel` bootstrap service exists (see the review log).
-- Cross-plan consolidation round (2026-10-01; see the consolidation log at the end). P01-P05 plus this plan were assembled again from `dev/plan/`, and every changed Step 2 and Step 4 line was measured: Task 3 `FAIL 33`/`PASS 106`, Task 5 `FAIL 14 | PASS 26`/`PASS 96`, Task 7 `FAIL 29 | PASS 42`/`PASS 166`, Task 8 unchanged (`FAIL 10 | PASS 66`/`PASS 85`), Task 9 `FAIL 15 | PASS 130`/`PASS 186`, Task 10 `FAIL 78 | PASS 398`/`PASS 613`, Task 11 `FAIL 5 | PASS 68`/`PASS 86`, Task 13 `FAIL 26 | PASS 116`/`PASS 191`, Task 15 `FAIL 12 | PASS 255`/`PASS 291`, and the suite `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 974 ]` (dispatch 130, loop 86, run 291, budget 86, live 35, object 190, store 156). The same suite with P07's R code also loaded gives `PASS 974` (before this round it gave three failures: the fallback freeze, the router test and the overflow test). With P03's test files added, `^(agent-run|auth-.*|session-live)$` stays green, so the installed `secret_late` callback changes no P03 result and survives P03's test clearing it. `test-arch-layers.R` reports no new layering edge.
-- Finalize pass (2026-10-01; rows F1-F7 of the consolidation log, and the "Finalize pass" paragraph after its table). The lints that the consolidation run reported for this plan are fixed. The re-extracted `r` blocks lint clean with P01's linters (`indentation_linter = NULL`) and parse. The P06 suite, assembled with P01-P05, stays at `PASS 974` with unchanged per-file counts.
+- Two defects of the earlier draft were found and fixed by this validation: settlement did not
+  cancel the run's reactor task, so an aborted run that no pump visited again kept its session alive
+  (the finaliser and split-brain tests failed); and a test helper registered a tool closure created
+  inside the helper, which kept the helper's frame and the session alive in the registry.
+- Review round (2026-10-01). The R code of P01-P05 was assembled from their plans in `dev/plan/`
+  (P04's "replace the definitions" blocks applied) together with this plan's seven files (Task 14's
+  one-line modification applied), P01's `setup.R` and `helper-fake.R`, and this plan's tests,
+  harness, oracles and snapshot, into a scratch package (no stand-ins). Results with
+  `NOT_CRAN=true`, R 4.4.3, testthat 3.3.2: `roxygen2::roxygenise()` wrote exactly the 17
+  `NAMESPACE` lines of Task 16 and the eleven man pages, with no warning from a P06 file; the
+  examples of the five exports ran offline (before P08 the `@examplesIf` parts skip) and left no
+  connection open; `devtools::test(filter = "session|agent")` gave
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 938 ]` (dispatch 116, loop 86, run 283, budget 74, live 33,
+  object 190, store 156; both SIGKILL tests and both foreign-lock tests ran against real `Rscript`
+  children); P01's `test-arch-layers.R` and `test-lint-rules.R` gave
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]`. Before the review fixes the same run gave one error (the
+  checkpointer spec of Task 7 lacked the `undo`/`redo` that P02's validator requires) and
+  `test-arch-layers.R` listed eleven L2 -> L3 layering violations from `agent-dispatch.R`; each test
+  the review added was run once with its fix reverted and failed (2, 3, 1, 4 and 1 failed
+  expectations; the `gptr_usage()` test errored with "row names contain missing values"). P01's and
+  P02's own tests were run with and without the P06 files: the only one whose result changes is
+  P02's "ctx members whose plan is not loaded signal gptr_error_not_available", which assumes that
+  no `ctx.kernel` bootstrap service exists (see the review log).
+- Cross-plan consolidation round (2026-10-01; see the consolidation log at the end). P01-P05 plus
+  this plan were assembled again from `dev/plan/`, and every changed Step 2 and Step 4 line was
+  measured: Task 3 `FAIL 33`/`PASS 106`, Task 5 `FAIL 14 | PASS 26`/`PASS 96`, Task 7
+  `FAIL 29 | PASS 42`/`PASS 166`, Task 8 unchanged (`FAIL 10 | PASS 66`/`PASS 85`), Task 9
+  `FAIL 15 | PASS 130`/`PASS 186`, Task 10 `FAIL 78 | PASS 398`/`PASS 613`, Task 11
+  `FAIL 5 | PASS 68`/`PASS 86`, Task 13 `FAIL 26 | PASS 116`/`PASS 191`, Task 15
+  `FAIL 12 | PASS 255`/`PASS 291`, and the suite `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 974 ]` (dispatch
+  130, loop 86, run 291, budget 86, live 35, object 190, store 156). The same suite with P07's R
+  code also loaded gives `PASS 974` (before this round it gave three failures: the fallback freeze,
+  the router test and the overflow test). With P03's test files added,
+  `^(agent-run|auth-.*|session-live)$` stays green, so the installed `secret_late` callback changes
+  no P03 result and survives P03's test clearing it. `test-arch-layers.R` reports no new layering
+  edge.
+- Finalize pass (2026-10-01; rows F1-F7 of the consolidation log, and the "Finalize pass" paragraph
+  after its table). The lints that the consolidation run reported for this plan are fixed. The
+  re-extracted `r` blocks lint clean with P01's linters (`indentation_linter = NULL`) and parse. The
+  P06 suite, assembled with P01-P05, stays at `PASS 974` with unchanged per-file counts.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 04 (with §15), 03, 05 P06, the conventions, reports 02 and G3 and the dependency plans P01-P05 in `dev/plan/`; every finding below was checked by running the assembled P01-P06 code (Self-review, Executed validation, "Review round").
+Adversarial review of 2026-10-01 against 04 (with section 15), 03, 05 P06, the conventions, reports
+02 and G3 and the dependency plans P01-P05 in `dev/plan/`; every finding below was checked by
+running the assembled P01-P06 code (Self-review, Executed validation, "Review round").
 
 | # | Severity | Location | Finding | Verdict | What changed, or why rejected |
 |---|---|---|---|---|---|
 | 1 | blocker | Task 7, `agent-dispatch.R` | The dispatcher (layer L2) called eleven functions of the L3 `session-*.R` files (`session_live()`, `session_data()`, `session_append()`, `entry_message()`, `entry_custom()`); P01's `test-arch-layers.R` reports them as layering violations as soon as P06 is in `R/`, so the M1 test suite and check go red | applied | Task 5 adds agent-area accessors to `agent-run.R` (`run_data()`, `run_live()`, `run_ctx()`, `run_ctx_sid()`, `run_append_message()`, `run_append_custom()`), which the dispatcher uses instead; Global Constraints (Layers) and Task 7 Consumes say so; Task 16 Step 4 and acceptance 1 run `^(arch-layers|lint-rules)$` -> `PASS 16` |
-| 2 | major | Task 7 test "checkpointers wrap sequential mutating calls ..." | The test's `gptr_spec("checkpointer", ...)` had no `undo`/`redo`, which P02's checkpointer validator requires (04 §10.2 row 29), so the test errors and Task 7's Step 4 count is unreachable | applied | The spec now carries `undo` and `redo` functions with the required formals |
+| 2 | major | Task 7 test "checkpointers wrap sequential mutating calls ..." | The test's `gptr_spec("checkpointer", ...)` had no `undo`/`redo`, which P02's checkpointer validator requires (04 section 10.2 row 29), so the test errors and Task 7's Step 4 count is unreachable | applied | The spec now carries `undo` and `redo` functions with the required formals |
 | 3 | major | Tasks 7 and 10, `dispatch_tools()`, `run_tools()` | `turn_end`'s `results` and the loop state (`lp$results`) held the `gptr_tool_result` objects, whose `value` may be a user object: rule R1 broken, and every `turn_end` ran `redact_tree()` over such values | applied | `dispatch_tools()` also returns the tool-result `messages` (04's two fields kept); the engine hands those to `loop_results()`, so `turn_end` carries messages (Pi's `toolResults`); new test "turn_end carries the tool-result messages, never the tools' R values (R1)"; ambiguity 13 |
 | 4 | major | Task 13, `store_rebuild()` | The rebuilt session was registered under the recorded id (and set as `gptr_last()`) before `store_open()` took the lock; when another live process held the lock, the split-brain error left that half-built session live, so the next `gptr_resume()` returned it without a lock and appended to a file another process writes | applied | The foreign lock is checked before anything is registered; a failing `store_open()` is rolled back (a lock this process took is released, the registration undone with the new `live_forget()` of Task 3, the previous `the$last` restored); the finalizer ignores forgotten shells; new test "a file locked by another live process is not resumed and leaves no live session" |
 | 5 | major | Task 10, `run_wire()` | The lock heartbeat was first scheduled 10 minutes after a run started, so a session whose runs are all shorter never refreshed its lock, and after 24 h another process took an actively used session's lock for stale (IC-59) | applied | `run_wire()` calls `run_heartbeat()` at once (touch now, then every 10 minutes); new test "each run touches its session's lock when it starts (heartbeat, IC-59)" |
-| 6 | major | Task 5, `run_new()` | The run option `interactive` (04 §7.6: "a human can answer") was ignored by the gate: a background run or a child started with `interactive = FALSE` could still prompt through the UI | applied | `interactive = FALSE` sets the run snapshot's `can_prompt = FALSE`; new test "interactive = FALSE in the run options means nobody can answer the run's gate"; ambiguity 15 |
+| 6 | major | Task 5, `run_new()` | The run option `interactive` (04 section 7.6: "a human can answer") was ignored by the gate: a background run or a child started with `interactive = FALSE` could still prompt through the UI | applied | `interactive = FALSE` sets the run snapshot's `can_prompt = FALSE`; new test "interactive = FALSE in the run options means nobody can answer the run's gate"; ambiguity 15 |
 | 7 | major | Task 11, `gptr_usage()` | A group that is `NA` (System 1 log rows without a session, rows without an agent) made `data.frame()` fail ("row names contain missing values", from the named `vapply()` results) and `group == k` gave `NA` sums, so `gptr_usage()` errors once P13 logs System 1 calls | applied | `%in%` and `USE.NAMES = FALSE`; new test "gptr_usage() counts rows whose group is NA (process-level System 1 rows)" |
 | 8 | minor | Task 10, `run_tools()`, `run_settle()` | A sequential batch queued in P04's tool FIFO but not yet started was never cancelled at settlement; the job's closure kept the run and the session alive until some later pump | applied | The FIFO item id is kept in `run$fifo` and cancelled with the task, timers and transfers; new test "an abort while a tool waits in the FIFO cancels the job; the session can be collected" (also proves 05 acceptance 7's "settled session is finalised") |
 | 9 | minor | Task 13, `gptr_sessions()` | One unreadable session file (NUL bytes after a power loss, a file removed meanwhile) made the whole listing fail | applied | Each file summary is read inside `tryCatch()`; a damaged file is left out |
 | 10 | minor | Global Constraints (Services), Task 15 Consumes/Produces, `ctx_kernel()` roxygen, ambiguity 4 | The `ctx.kernel` calling convention was described three different ways, none matching P02's `ctx_new()` (positional arguments; inside a handler only, the plugin name already stripped of `plugin:`); the code itself was compatible | applied | All four passages now describe P02's actual call; `ctx_ext_label()` (unchanged) accepts the bare name or a full source |
 | 11 | minor | Self-review (Type and name consistency, Ambiguities) | The self-review said the P01, P02 and P04 plans were not written; several readings of 04 that the code implements were unrecorded (`opts$nested_group` and the `nested_calls` budget class, the class of a cancelled fork, how `agent` queue items name their sender, `run_start()` re-signalling a pre-wiring failure) | applied | The consistency bullet records the cross-plan checks; ambiguities 13-18 added; Executed validation gains the review-round bullet |
 | 12 | minor | Steps 2 and 4 of Tasks 5, 8-13, 15, 16; Plan acceptance | The expected summary lines did not include the review's new tests | applied | Recomputed and confirmed by the run: the P06 suite is `PASS 938` (dispatch 116, loop 86, run 283, budget 74, live 33, object 190, store 156); acceptance rows 2, 5, 6, 7 give 525, 156, 473 and 223 |
-| 13 | major | Task 10, `run_abort_only()`, `run_resignal_interrupt()` | Claim: the abort-only fallback catches the interrupt with an exiting `tryCatch(interrupt =)` and signals a newly built interrupt plus `invokeRestart("abort")` instead of letting R's own condition continue, unlike P08's `on.exit()` form | rejected | This is report 02 §5.8's `resignal_interrupt()`, confirmed in its verification log (item 42: enclosing handlers see it, `Rscript` halts, the console returns to top level); 03 §6.2 says programmatic calls re-signal; the condition has the same class and no fields; G3's "never an exiting `tryCatch(interrupt =)`" concerns tool frames, which still record interruptions with `on.exit()`; L18-L20 and the interrupt tests pass |
+| 13 | major | Task 10, `run_abort_only()`, `run_resignal_interrupt()` | Claim: the abort-only fallback catches the interrupt with an exiting `tryCatch(interrupt =)` and signals a newly built interrupt plus `invokeRestart("abort")` instead of letting R's own condition continue, unlike P08's `on.exit()` form | rejected | This is report 02 section 5.8's `resignal_interrupt()`, confirmed in its verification log (item 42: enclosing handlers see it, `Rscript` halts, the console returns to top level); 03 section 6.2 says programmatic calls re-signal; the condition has the same class and no fields; G3's "never an exiting `tryCatch(interrupt =)`" concerns tool frames, which still record interruptions with `on.exit()`; L18-L20 and the interrupt tests pass |
 | 14 | major | P02's test "ctx members whose plan is not loaded signal gptr_error_not_available" (`test-ext-api.R`) | Once P06 registers the `ctx.kernel` bootstrap service, `ctx$mode()` no longer fails, so that P02 test fails in the full suite (the only P01/P02 test whose result P06 changes) | rejected | Not a P06 defect and not a P06 file: P06 must provide `ctx.kernel` (IC-34), and the test belongs to P02, which must remove `ctx.kernel` from `the$services` for its duration (save and restore, as its `local_bootstrap_service()` does). Flagged for the P02 review |
-| 15 | minor | Task 7, `dispatch_one()` | Claim: input replaced by a `tool_call` hook's `modify` is not validated against the schema again | rejected | 04 §10.7 lets a `modify` replace the input "for later handlers and the tool"; the modified input still goes through `perm_check()`, whose policies classify exactly that input |
-| 16 | minor | Task 5, `run_ui()` | Claim: the UI is resolved from the current options, not the run's `gptr.ui` snapshot (IC-53) | rejected | 04 §7.11 puts that resolution in P11's `ui.get` service ("resolution from the run's snapshot of `gptr.ui`"); P06 passes the session, through which P11 reaches the running run's snapshot |
+| 15 | minor | Task 7, `dispatch_one()` | Claim: input replaced by a `tool_call` hook's `modify` is not validated against the schema again | rejected | 04 section 10.7 lets a `modify` replace the input "for later handlers and the tool"; the modified input still goes through `perm_check()`, whose policies classify exactly that input |
+| 16 | minor | Task 5, `run_ui()` | Claim: the UI is resolved from the current options, not the run's `gptr.ui` snapshot (IC-53) | rejected | 04 section 7.11 puts that resolution in P11's `ui.get` service ("resolution from the run's snapshot of `gptr.ui`"); P06 passes the session, through which P11 reaches the running run's snapshot |
 | 17 | minor | Task 7 INFRA-10 test | Claim: 05 acceptance 3 names a 30 s timeout but the test uses `setTimeLimit(elapsed = 0.3)` | rejected | The code path is the same (an elapsed time limit inside the tool becomes an error result with paired events); a 30 s wait would only slow the suite, and Plan acceptance row 3 states the substitution |
 
 ## Cross-plan consolidation log
 
-Consolidation of 2026-10-01 against 04 (with §15), 03, 05 and the plans P01-P23. Each finding was checked against the contract and the related plans; the changed plan was assembled with P01-P05 (and once more with P07's R code) and run (Self-review, Executed validation, "Cross-plan consolidation round"). Every `r` block parses, contains no `<-` assignment (only the two `<<-` of `run_chain()`'s closure helper) and no `%>%`, is ASCII and has no line over 100 characters.
+Consolidation of 2026-10-01 against 04 (with section 15), 03, 05 and the plans P01-P23. Each finding
+was checked against the contract and the related plans; the changed plan was assembled with P01-P05
+(and once more with P07's R code) and run (Self-review, Executed validation, "Cross-plan
+consolidation round"). Every `r` block parses, contains no `<-` assignment (only the two `<<-` of
+`run_chain()`'s closure helper) and no `%>%`, is ASCII and has no line over 100 characters.
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| 1 | interfaces | major | `test-agent-run.R`: the fallback freeze (Task 9), the fallback request (Task 9), "without a compactor the first overflow is terminal" (Task 10), the `run_ui()` test (Task 5); harness | applied | Valid: 04 §7.0 fallbacks are chosen with `ext_service_has()`, and P07/P11 register `prompt.freeze`, `request.build`, `prefix.guard`, `compact.should`, `compact.run` and `ui.get` in P01's bootstrap table from `on_load()`. Reproduced: with P07's code loaded the suite gave 3 failures. The harness gains `local_without_services(names, .env)` (saves `the$services`, drops the names, restores it on exit; Task 1 Produces lists it). The two fallback tests and "the first run freezes the prompt ... (fallback before P07)" hide `prompt.freeze`, `request.build`, `prefix.guard`, `context.first`, `context.turn`; the overflow test hides `compact.should`, `compact.run`; the `run_ui()` test hides `ui.get` (its second half uses a registry record, which still wins). The same run showed a third P07 interaction the checkers did not list: "a router session calls router.call before each request (IC-69)" saw reasons `compaction`, `turn` because P07's compactor asked the router first; that test now hides `compact.should`, `compact.run` too. With P07 loaded the suite is green (`PASS 974`); no expectation count changes |
-| 2 | interfaces | major | Task 3, `R/session-live.R`, `test-session-live.R` | applied | Valid (IC-70, 04 §7.3; P03 ambiguity A1 and review row 6). New `live_entries_all()` (entries of `live_all()`, named by id), installed with `on_load(secret_live_entries_set(live_entries_all))` and again in `live_new()`, because P03's own test ends with `secret_live_entries_set(NULL)` and test files run alphabetically (`test-auth-*` before `test-session-*`). New test "secret_register() warns secret_late for a value a live session already holds (IC-70)" (2 expectations). Task 3 Consumes adds P03's `secret_live_entries_set(fun)` (and `secret_register()`, `vault_reset()` in tests); Produces adds `live_entries_all()`; ambiguity 20. P03's test files stay green with the callback installed |
-| 3 | interfaces | major | Task 5, `run_budget_limits()`, `run_chain()` | applied | Valid: 04 §7.6 defines the run option `root` ("the root session id for budgets, IC-66") and IC-66 requires children to start with `min(<share>, <root remaining>)`; P19 passes `root = <container id>` for the children of a top-level team or fan-out, whose container has no run. Implemented as described in row 11 (one design for rows 3, 11 and 15) |
+| 1 | interfaces | major | `test-agent-run.R`: the fallback freeze (Task 9), the fallback request (Task 9), "without a compactor the first overflow is terminal" (Task 10), the `run_ui()` test (Task 5); harness | applied | Valid: 04 section 7.0 fallbacks are chosen with `ext_service_has()`, and P07/P11 register `prompt.freeze`, `request.build`, `prefix.guard`, `compact.should`, `compact.run` and `ui.get` in P01's bootstrap table from `on_load()`. Reproduced: with P07's code loaded the suite gave 3 failures. The harness gains `local_without_services(names, .env)` (saves `the$services`, drops the names, restores it on exit; Task 1 Produces lists it). The two fallback tests and "the first run freezes the prompt ... (fallback before P07)" hide `prompt.freeze`, `request.build`, `prefix.guard`, `context.first`, `context.turn`; the overflow test hides `compact.should`, `compact.run`; the `run_ui()` test hides `ui.get` (its second half uses a registry record, which still wins). The same run showed a third P07 interaction the checkers did not list: "a router session calls router.call before each request (IC-69)" saw reasons `compaction`, `turn` because P07's compactor asked the router first; that test now hides `compact.should`, `compact.run` too. With P07 loaded the suite is green (`PASS 974`); no expectation count changes |
+| 2 | interfaces | major | Task 3, `R/session-live.R`, `test-session-live.R` | applied | Valid (IC-70, 04 section 7.3; P03 ambiguity A1 and review row 6). New `live_entries_all()` (entries of `live_all()`, named by id), installed with `on_load(secret_live_entries_set(live_entries_all))` and again in `live_new()`, because P03's own test ends with `secret_live_entries_set(NULL)` and test files run alphabetically (`test-auth-*` before `test-session-*`). New test "secret_register() warns secret_late for a value a live session already holds (IC-70)" (2 expectations). Task 3 Consumes adds P03's `secret_live_entries_set(fun)` (and `secret_register()`, `vault_reset()` in tests); Produces adds `live_entries_all()`; ambiguity 20. P03's test files stay green with the callback installed |
+| 3 | interfaces | major | Task 5, `run_budget_limits()`, `run_chain()` | applied | Valid: 04 section 7.6 defines the run option `root` ("the root session id for budgets, IC-66") and IC-66 requires children to start with `min(<share>, <root remaining>)`; P19 passes `root = <container id>` for the children of a top-level team or fan-out, whose container has no run. Implemented as described in row 11 (one design for rows 3, 11 and 15) |
 | 4 | interfaces | minor | Self-review, "Type and name consistency" | applied | `gateway_control_check()` was a stale name: the bullet now reads P08's `control_check()` (P08's `control_check = function(what)`) |
 | 5 | shared-names | major | the same fallback tests as row 1; harness | applied | Duplicate of row 1. One helper serves both findings: `local_without_services()` takes a vector of names, so the suggested single-name `local_no_service()` was not added as a second helper |
 | 6 | shared-names | minor | Self-review, "Type and name consistency" | applied | Duplicate of row 4; same one-word change |
-| 7 | obligations | major | Task 7, `dispatch_nested()` | applied | Valid (04 §6.8: a `fun`-only `r` member gets no generated `execute`; 04 §7.6 and §7.10 promise the member's value through `dispatch_nested()`; P10 review row 5 reproduced `Tool wdemo/hello not found`). When the record has no `execute` but a `fun`, the dispatcher builds P02's `spec_tool_execute(tool$fun, tool[["output_tokens"]])` (L0, callable from L2); records with neither still give `Tool <name> not found`. New test "an r member declared with fun only runs through the generated execute (04 6.8)" (3 expectations: inside a run, the nested record, and outside a run). Task 7 Consumes adds `spec_tool_execute()` |
-| 8 | obligations | major | Task 7, `perm_policies()` | applied | Valid (04 §10.2 row 12 "a throwing policy denies"; 04 §7.6 fail closed): a non-list answer (`"yes"`, `TRUE`) errored at `res$decision` outside the `tryCatch()`, and a decision of length 2 errored in `if`. A non-list answer now denies with "returned a malformed answer"; a decision that is not one known string denies with "returned an unknown decision"; `NULL` and a list without `decision` stay "no opinion". New test "a malformed policy answer denies instead of throwing (fail closed)" (5 expectations) |
+| 7 | obligations | major | Task 7, `dispatch_nested()` | applied | Valid (04 section 6.8: a `fun`-only `r` member gets no generated `execute`; 04 sections 7.6 and 7.10 promise the member's value through `dispatch_nested()`; P10 review row 5 reproduced `Tool wdemo/hello not found`). When the record has no `execute` but a `fun`, the dispatcher builds P02's `spec_tool_execute(tool$fun, tool[["output_tokens"]])` (L0, callable from L2); records with neither still give `Tool <name> not found`. New test "an r member declared with fun only runs through the generated execute (04 6.8)" (3 expectations: inside a run, the nested record, and outside a run). Task 7 Consumes adds `spec_tool_execute()` |
+| 8 | obligations | major | Task 7, `perm_policies()` | applied | Valid (04 section 10.2 row 12 "a throwing policy denies"; 04 section 7.6 fail closed): a non-list answer (`"yes"`, `TRUE`) errored at `res$decision` outside the `tryCatch()`, and a decision of length 2 errored in `if`. A non-list answer now denies with "returned a malformed answer"; a decision that is not one known string denies with "returned an unknown decision"; `NULL` and a list without `decision` stay "no opinion". New test "a malformed policy answer denies instead of throwing (fail closed)" (5 expectations) |
 | 9 | obligations | major | Task 3, `R/session-live.R` | applied | Duplicate of row 2 |
-| 10 | obligations | major | Task 7, `perm_ask()` non-interactive stop | applied | Valid (IC-68, 04 §2.2 `noninteractive` row: "the `ask` tool in a non-interactive `manual` run (P11; status `blocked`)"; P11 self-review item 6 and review row 13). When the blocked call is the `ask` tool, the stored condition is `gptr_error_noninteractive` with `what = "ask"` and `questions` (the question texts, through the new `perm_ask_questions(input)`); `run$blocked` and the returned denial are unchanged, and every other tool keeps `gptr_error_permission`. New test "a non-interactive ask call stops blocked with gptr_error_noninteractive (IC-68)" (6 expectations); Global Constraints (Gate, Conditions) and Task 7 Produces updated |
+| 10 | obligations | major | Task 7, `perm_ask()` non-interactive stop | applied | Valid (IC-68, 04 section 2.2 `noninteractive` row: "the `ask` tool in a non-interactive `manual` run (P11; status `blocked`)"; P11 self-review item 6 and review row 13). When the blocked call is the `ask` tool, the stored condition is `gptr_error_noninteractive` with `what = "ask"` and `questions` (the question texts, through the new `perm_ask_questions(input)`); `run$blocked` and the returned denial are unchanged, and every other tool keeps `gptr_error_permission`. New test "a non-interactive ask call stops blocked with gptr_error_noninteractive (IC-68)" (6 expectations); Global Constraints (Gate, Conditions) and Task 7 Produces updated |
 | 11 | obligations | major | Task 5, `run_new()`, `run_budget_limits()`, `run_chain()` | applied | Valid (see row 3). `run_budget_root(s, opts)` returns the live session named by `opts$root` when it is another session. `run_budget_limits()` gives such a child only its own share, as a nested run. `run_budget_pool(s, opts)` creates, once per root without a run, an environment `budget_root` on the root's live record (`id = "root:<id>"`, `shell`, `budget` = the settings default merged with the call's budget, `usage_start`, `near`); `run_new()` keeps it in `run$budget_root`; `run_chain()` adds it, and also adds the root's own run when `opts$root` names a running session that the ancestor walk did not reach. `budget_check()`, `budget_near()` and `run_budget_extend()` work on it unchanged, because `usage_add()` already rolls every child's rows up to the root. The pool lives on the live record rather than in `.d` (runtime state that a `saveRDS()` copy must not carry). Not adopted: clearing the pool at the container's `agent_end`; P19 creates a new container for every top-level call and refuses to continue one (piped sessions are refused), so one pool per container is one budget per call (ambiguity 19). New test "children of a root without a run share one budget through opts$root (IC-66)" (12 expectations, two children of a run-less team container plus a running root); Global Constraints (Budgets), Task 5 Produces and Plan acceptance row 8 updated |
-| 12 | obligations | major | Task 9, `run_target()` | applied | Valid (04 §6.1 `model = <spec:provider>`; P08 review row 17, P19 item 23c; P05 documents that `model_resolve()` accepts a `gptr_provider` spec "which is how a session-scoped `model = <spec>` resolves"). New `run_model_resolve(ref, sid)`: P05's catalog (`strict = FALSE`) first; else the session's `provider` record (`registry_get("provider", <id>, session = sid)`), narrowed to the declared model the reference names (by `id`, or the `ref` P08's specs may carry), resolved with `model_resolve(<spec>)`, with a thinking suffix kept when the model supports it; else the strict `model_resolve(ref)` for the classed `gptr_error_unknown_model`. `run_target()` and `run_route()` (router answers) use it. New test "run_target() resolves a provider registered for the session only (model = <spec>)" (3 expectations; api `fake`, models `m0` and `m1`, `offline = TRUE`); Task 9 Consumes and Produces updated; ambiguity 21 |
-| 13 | obligations | minor | Task 10, `run_request()` prefix guard | applied | Valid (04 §3.1 `gptr.check_prefix`: `"event"`, `"warn"`, `"error"`; P07 review row 18 left the rethrow to P06). The handler re-signals a `gptr_error_internal` when `gptr_opt("check_prefix")` is `"error"`, so `run_fail()` settles the run with status `error`; any other failure stays a diagnostic. New test "a prefix break stops the run only under `gptr.check_prefix = "error"`" (5 expectations, with a stub `prefix.guard` registry record); Task 10 Produces updated |
+| 12 | obligations | major | Task 9, `run_target()` | applied | Valid (04 section 6.1 `model = <spec:provider>`; P08 review row 17, P19 item 23c; P05 documents that `model_resolve()` accepts a `gptr_provider` spec "which is how a session-scoped `model = <spec>` resolves"). New `run_model_resolve(ref, sid)`: P05's catalog (`strict = FALSE`) first; else the session's `provider` record (`registry_get("provider", <id>, session = sid)`), narrowed to the declared model the reference names (by `id`, or the `ref` P08's specs may carry), resolved with `model_resolve(<spec>)`, with a thinking suffix kept when the model supports it; else the strict `model_resolve(ref)` for the classed `gptr_error_unknown_model`. `run_target()` and `run_route()` (router answers) use it. New test "run_target() resolves a provider registered for the session only (model = <spec>)" (3 expectations; api `fake`, models `m0` and `m1`, `offline = TRUE`); Task 9 Consumes and Produces updated; ambiguity 21 |
+| 13 | obligations | minor | Task 10, `run_request()` prefix guard | applied | Valid (04 section 3.1 `gptr.check_prefix`: `"event"`, `"warn"`, `"error"`; P07 review row 18 left the rethrow to P06). The handler re-signals a `gptr_error_internal` when `gptr_opt("check_prefix")` is `"error"`, so `run_fail()` settles the run with status `error`; any other failure stays a diagnostic. New test "a prefix break stops the run only under `gptr.check_prefix = "error"`" (5 expectations, with a stub `prefix.guard` registry record); Task 10 Produces updated |
 | 14 | obligations | minor | Task 7, `perm_ask()` remember branch | applied | Valid: no policy reads `.d$rules`, P11's `builtin:permissions` stores remembered answers through the UI wrapper's `permissions:remember` channel (never for level 4, control or `ask_human`), and 04 assigns P06 no remember duty. The block is removed; the test "the UI answers asks when the run's snapshot can prompt" now expects `session_data(s)$rules$allow` to stay `character()` (same expectation count) |
 | 15 | trace | major | Task 5, `run_budget_limits()`, `run_chain()`; Plan acceptance row 8 | applied | Duplicate of rows 3 and 11 (one implementation). Acceptance row 8 now names "a top-level container without a run still caps its children (IC-66)" and the new Task 5 test. The suggested 3 USD-per-request engine test was replaced by the deterministic Task 5 unit test with `usage_add()`, which exercises the same `budget_check()` path the engine calls before each request |
 | F1 | finalize | minor | Task 1, `tests/testthat/fixtures/oracles/report02/harness.R`, header comment | applied | `commented_code_linter` (consolidation lint `P06_L00117.R:2`): the header line that quoted `source(testthat::test_path("fixtures", "oracles", "report02", "harness.R"), local = TRUE)` as a comment is now prose ("The first line of every P06 test file sources this file with local = TRUE, locating it through testthat::test_path()."); the first lines of the test files are unchanged |
@@ -10507,13 +11184,38 @@ Consolidation of 2026-10-01 against 04 (with §15), 03, 05 and the plans P01-P23
 | F6 | finalize | minor | One-line `{ a; b }` blocks in tests: Task 4 and Task 12 `test-session-object.R` (the two read-only `expect_error()` probes, `capture.output()` of `print(s)`, `expect_message()` of `s$value` and of `gptr_fork(s)`); Task 7 and Task 10 `test-agent-dispatch.R` (the counting tools, the interrupt `tryCatch()`, the `seen` echo tool, the UI's `permission` callback, the length-stop tool); Task 10 `test-agent-loop.R` (the two flag tools, the interrupt `tryCatch()`, the nested `run_start()` probe); Task 10 `test-agent-run.R` (the interrupt `tryCatch()`) | applied | `brace_linter`, "opening curly braces ... followed by a new line", and `semicolon_linter` (`P06_L02151.R:38`, `:39`, `:65`, `:99`, `P06_L03626.R:26`, `:45`, `:91`, `:113`, `:409`, `P06_L05889.R:89`, `:177`, `:236`, `:308`, `P06_L06213.R:214`, `P06_L06767.R:8`, `P06_L07990.R:110`): each brace opens a multi-line block with one statement per line; the evaluated code is the same |
 | F7 | finalize | minor | Section-header comments: Task 7 `test-agent-dispatch.R`; Task 11 `test-session-budget.R` and `R/session-budget.R`; Task 12 `test-session-object.R`; Task 13 `R/session-store.R` (two) | applied | `commented_code_linter` (`P06_L03626.R:280`, `P06_L07805.R:2`, `P06_L07873.R:1`, `P06_L07990.R:2`, `P06_L08933.R:313`, `P06_L08933.R:439`): headers such as `# ---- gptr_usage()` parse as R code. They now read `permission checks (IC-04, IC-53)`, `usage (gptr_usage)` (test and source), `forks (gptr_fork, INFRA-14)`, `list (gptr_sessions)` and `resume (gptr_resume)`; every header line stays within 100 characters |
 
-Counts changed by this round (measured): `test-agent-dispatch.R` 116 -> 130, `test-agent-run.R` 283 -> 291, `test-session-budget.R` 74 -> 86, `test-session-live.R` 33 -> 35; the suite 938 -> 974; acceptance rows 2, 3, 6 and 7 give 533, 130, 481 and 225. The red and green lines of Tasks 3, 5, 7, 9, 10, 11, 13 and 15 and Task 16 Step 4 were updated to the measured values.
+Counts changed by this round (measured): `test-agent-dispatch.R` 116 -> 130, `test-agent-run.R`
+283 -> 291, `test-session-budget.R` 74 -> 86, `test-session-live.R` 33 -> 35; the suite 938 -> 974;
+acceptance rows 2, 3, 6 and 7 give 533, 130, 481 and 225. The red and green lines of Tasks 3, 5, 7,
+9, 10, 11, 13 and 15 and Task 16 Step 4 were updated to the measured values.
 
-Finalize pass (2026-10-01, rows F1-F7): every row of `dev/research/assets/consolidation-lint-results.csv` for P06 except `indentation_linter` (now off) was fixed; no lint was silenced with `# nolint`. Verification: the 52 `r` blocks were re-extracted with the consolidation harness and linted with P01's `.lintr` linters (`indentation_linter = NULL`; `object_usage_linter` off for single blocks): no lints. Every block parses with `Rscript --vanilla`, has no `<-` or `%>%`, is ASCII and has no line over 100 characters. P01-P05 plus this plan were assembled again and the P06 suite was run before and after the pass: `PASS 974` both times with the same per-file counts (`test-agent-dispatch.R` 130, `test-agent-loop.R` 86, `test-agent-run.R` 291, `test-session-budget.R` 86, `test-session-live.R` 35, `test-session-object.R` 190, `test-session-store.R` 156), so no Step 2 or Step 4 line and no acceptance count changes. Linting the seven assembled `R/` files after `pkgload::load_all()` with `object_usage_linter` on also gives no lints. In the five test files, `object_usage_linter` reports "no visible global function definition" for the harness helpers (`test_session()`, `run_text()`, `local_store()`, `local_tool()` and others) wherever a top-level test helper function calls them, because the harness is sourced by each file rather than loaded as a `helper-*.R` file. This pass leaves those reports as they are: they come from the harness layout, not from a P06 code defect.
-
+Finalize pass (2026-10-01, rows F1-F7): every row of
+`dev/research/assets/consolidation-lint-results.csv` for P06 except `indentation_linter` (now off)
+was fixed; no lint was silenced with `# nolint`. Verification: the 52 `r` blocks were re-extracted
+with the consolidation harness and linted with P01's `.lintr` linters (`indentation_linter = NULL`;
+`object_usage_linter` off for single blocks): no lints. Every block parses with `Rscript --vanilla`,
+has no `<-` or `%>%`, is ASCII and has no line over 100 characters. P01-P05 plus this plan were
+assembled again and the P06 suite was run before and after the pass: `PASS 974` both times with the
+same per-file counts (`test-agent-dispatch.R` 130, `test-agent-loop.R` 86, `test-agent-run.R` 291,
+`test-session-budget.R` 86, `test-session-live.R` 35, `test-session-object.R` 190,
+`test-session-store.R` 156), so no Step 2 or Step 4 line and no acceptance count changes. Linting
+the seven assembled `R/` files after `pkgload::load_all()` with `object_usage_linter` on also gives
+no lints. In the five test files, `object_usage_linter` reports "no visible global function
+definition" for the harness helpers (`test_session()`, `run_text()`, `local_store()`, `local_tool()`
+and others) wherever a top-level test helper function calls them, because the harness is sourced by
+each file rather than loaded as a `helper-*.R` file. This pass leaves those reports as they are:
+they come from the harness layout, not from a P06 code defect.
 
 ## Live validation amendment, 2026-10-10: concise ordinary display
 
-The public history accessor and summary() retain the complete history as the existing gptr_session_summary data-frame class. Printing defaults to eight recent messages, an omitted count and detached session metadata at current console width. print(x, n = Inf) and as.data.frame(x) expose the complete table. Display sanitization affects only a temporary copy and never retains the session home; unknown assistant accounting stays unknown.
+The public history accessor and summary() retain the complete history as the existing
+gptr_session_summary data-frame class. Printing defaults to eight recent messages, an omitted count
+and detached session metadata at current console width. print(x, n = Inf) and as.data.frame(x)
+expose the complete table. Display sanitization affects only a temporary copy and never retains the
+session home; unknown assistant accounting stays unknown.
 
-The contract also names `as.data.frame.gptr_session_summary(x, ...)` to strip only display metadata while retaining every row. Its implementation is in `R/session-object.R`; the historical literal plan sketch is intentionally not duplicated here. The cross-index warning that this amended S3 method has no plan-body definition is a recorded documentation exception, not a missing runtime function.
+The contract also names `as.data.frame.gptr_session_summary(x, ...)` to strip only display metadata
+while retaining every row. Its implementation is in `R/session-object.R`; the historical literal
+plan sketch is intentionally not duplicated here. The cross-index warning that this amended S3
+method has no plan-body definition is a recorded documentation exception, not a missing runtime
+function.

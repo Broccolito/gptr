@@ -1,39 +1,148 @@
 # P09 Evaluator and Workspace Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Evaluate model-written R code in the live session with everything REQ-23 asks for (output, messages, warnings, errors with a traceback, plots) and describe the workspace compactly, without ever copying a user object.
+**Goal:** Evaluate model-written R code in the live session with everything REQ-23 asks for (output,
+messages, warnings, errors with a traceback, plots) and describe the workspace compactly, without
+ever copying a user object.
 
-**Architecture:** Eight "L4 svc" files (architecture section 3.2). `eval-core.R` is the hand-rolled evaluator `eval_r()` of architecture section 6.12 (report 12's `gptr_eval2.R` with the contract's amendments) plus the RNG swap `rng_swap()`; `eval-guard.R`, `eval-plots.R` and `eval-format.R` hold its static guard and `gptr::` shim, plot capture and replay to PNG, and the model-facing text within the token budget. `env-snapshot.R`, `env-describe.R`, `env-history.R` and `env-probe.R` introspect the workspace through leaf functions that return primitives only (snapshots, diffs, budgeted `gptr_describe()` descriptions, the user's top-level expressions, the installed-package probe) and register `builtin:workspace`: the `workspace`, `workspace_changes`, `attached` and `skill_content` context blocks, the `r_env` prompt section, the `evaluator` record `r` and the `eval.r` and `describe` services.
+**Architecture:** Eight "L4 svc" files (architecture section 3.2). `eval-core.R` is the hand-rolled
+evaluator `eval_r()` of architecture section 6.12 (report 12's `gptr_eval2.R` with the contract's
+amendments) plus the RNG swap `rng_swap()`; `eval-guard.R`, `eval-plots.R` and `eval-format.R` hold
+its static guard and `gptr::` shim, plot capture and replay to PNG, and the model-facing text within
+the token budget. `env-snapshot.R`, `env-describe.R`, `env-history.R` and `env-probe.R` introspect
+the workspace through leaf functions that return primitives only (snapshots, diffs, budgeted
+`gptr_describe()` descriptions, the user's top-level expressions, the installed-package probe) and
+register `builtin:workspace`: the `workspace`, `workspace_changes`, `attached` and `skill_content`
+context blocks, the `r_env` prompt section, the `evaluator` record `r` and the `eval.r` and
+`describe` services.
 
-**Tech Stack:** base R (>= 4.2.0) with grDevices, graphics, methods, stats, utils; rlang (`obj_address()`, `env_binding_are_active()`, `env_binding_are_lazy()`); ps (core count and RAM for `<r_env>`); ragg when installed (Suggests); testthat 3e, withr and processx in tests; P01's `expect_no_copy()` for the fresh-process copy suite.
+**Tech Stack:** base R (>= 4.2.0) with grDevices, graphics, methods, stats, utils; rlang
+(`obj_address()`, `env_binding_are_active()`, `env_binding_are_lazy()`); ps (core count and RAM for
+`<r_env>`); ragg when installed (Suggests); testthat 3e, withr and processx in tests; P01's
+`expect_no_copy()` for the fresh-process copy suite.
 
-**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2, 6.4, 6.12, 7.3 `<r_env>`, 7.4, 7.5, 12.2), dev/spec/04-interface-contract.md (sections 1.1, 1.3, 2.1-2.2, 3.1, 4.1, 4.4, 5.8, 6.6 `gptr_describe()`, 7.0, 7.1, 7.6, 7.8 `call_value()`, 7.9, 10.2 kinds 13, 14, 34, 38, 10.3, 10.6 `ctx$eval()`/`ctx$describe()`, 12.2-12.3; section 15: IC-33, IC-34, IC-38, IC-61, IC-62, IC-67, IC-69, IC-71), dev/spec/05-plan-decomposition.md (P09).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2, 6.4, 6.12, 7.3 `<r_env>`, 7.4, 7.5, 12.2),
+dev/spec/04-interface-contract.md (sections 1.1, 1.3, 2.1-2.2, 3.1, 4.1, 4.4, 5.8, 6.6
+`gptr_describe()`, 7.0, 7.1, 7.6, 7.8 `call_value()`, 7.9, 10.2 kinds 13, 14, 34, 38, 10.3, 10.6
+`ctx$eval()`/`ctx$describe()`, 12.2-12.3; section 15: IC-33, IC-34, IC-38, IC-61, IC-62, IC-67,
+IC-69, IC-71), dev/spec/05-plan-decomposition.md (P09).
 
 **Depends on:** P08 (and through it P01-P07). **Milestone:** M2.
 
 ---
 
-
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow; `<<-` only for closure state), the native `|>` (never `%>%`), ASCII-only R sources, `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions (messages built by plain concatenation), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed global state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line the executing harness specifies, if it specifies one (conventions section 10). Plan-specific requirements, with the exact values of the specification:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow; `<<-` only
+for closure state), the native `|>` (never `%>%`), ASCII-only R sources, `pkg::fun()` calls,
+`gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions (messages built by plain concatenation),
+no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed global state restored with
+`on.exit(..., add = TRUE)`, testthat 3e, no network in tests, `Rscript --vanilla` from the
+repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the
+attribution line the executing harness specifies, if it specifies one (conventions section 10).
+Plan-specific requirements, with the exact values of the specification:
 
-- Owned files (05 P09): `R/eval-core.R`, `R/eval-plots.R`, `R/eval-guard.R`, `R/eval-format.R`, `R/env-snapshot.R`, `R/env-describe.R`, `R/env-history.R`, `R/env-probe.R`; their tests `tests/testthat/test-eval-core.R`, `test-eval-plots.R`, `test-eval-guard.R`, `test-eval-format.R`, `test-env-snapshot.R`, `test-env-describe.R`, `test-env-history.R`, `test-env-probe.R`; the copy suite `tests/testthat/test-copy-eval.R`; plus `NAMESPACE` and `man/gptr_describe.Rd` through `Rscript --vanilla -e 'devtools::document()'`.
-- Layer (03 section 3.2, section 2.2; IC-33): all eight files are "L4 svc". They call L0 helpers, the extension API (`gptr_spec()`, `gptr_context_block()`, `gptr_prompt_section()`, `registry_get()`, `ext_declare_builtin()`), each other, the services of 04 section 7.0 (`skill.body`, `compact.should`) and the kernel SDK only: `session_data()` (read), `session_live()`, `session_home()`, `run_current()`, `call_value()`, `setting_get()`. They never call another L3 function by name (not `gptr_last()`, not `live_all()`).
-- The one export (04 section 6.6): `gptr_describe(x, budget = 150L, ...)`, an S3 generic; `budget` "`int(1)` >= 20, estimated tokens (`est_tokens(, "describe")`)"; "Returns a character vector of lines, the first a header `<class> shape, size`, at most `budget` estimated tokens". Built-in methods: `default`, `data.frame`, `data.table`, `matrix`, `list`, `Date`, `POSIXct`, `factor`, `formula`, `lm`, `glm`, `environment`, `function`, `S4` (through `default` with `isS4()`), `dgCMatrix`, `ArrowTabular`, `Dataset`, `DBIConnection`, `Seurat`, `SingleCellExperiment`, `ggplot`. Methods "MUST follow [R4][leaf]: no promise forcing, no I/O (no `dbListTables()`, no `collect()`), no `str()` on the object"; methods for classes of packages outside Suggests "use only base generics, `methods::slot()`/`slotNames()`, `attr()` and `dim()` guarded by `isNamespaceLoaded()`, never `pkg::fun()`" (IC-71). Level-based: "a method may accept `level = 1:4` in `...`".
-- Internal signatures (04 section 7.9), exactly: `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))`; `rng_swap(state, expr)`; `format_eval_result(res, budget_tokens)` -> `list(text = chr(1), images = list, truncated = lgl(1), out_id, spill)`; `eval_guard(exprs)` -> `list(blocked = chr, reason = chr(1) | NULL)`; `gptr_shim(exprs, envir)`; `plot_png(recorded, width = gptr.plot_width, height = gptr.plot_height, res = gptr.plot_res)`; `env_snapshot(envir, previous = NULL)` -> df `name`, `kind` (`value`, `promise`, `active`), `address`, `class`, `bytes`, `shape`, `fp`; `env_diff(old, new, assigned = character())` -> `list(added, modified, removed)`; `workspace_lines(snapshot, budget = 600L)`; `changes_lines(diff, snapshot, user_ran, budget = 300L)`; `describe_binding(name, envir, budget = 150L)`; `user_expr_log(since = NULL, n = 20L)`; `r_env_probe()` -> `chr(1)`; `builtin_workspace(gptr)`.
-- `gptr_eval_result` (04 section 5.8): `structure(list(status, events, n_done, n_total, changes, elapsed, images, assigned, outputs, spill, out_id, interrupted_after), class = "gptr_eval_result")`; `status` in `ok`, `error`, `timeout`, `interrupt`, `blocked`, `parse_error`; `events` ordered `list(type = "source"|"output"|"message"|"warning"|"error"|"interrupt"|"plot", ...)`, "`plot` events carry the PNG path, never the recorded plot"; `changes` = `list(wd = chr(2)|NULL, options = chr, envvars = chr, attached = chr, loaded = chr, devices = list(from, to))` "names only"; "The value of an evaluation is never kept (R8)".
-- Options owned (04 section 3.1): `gptr.r_timeout` (`3600`, "seconds for `r` when no human is present"), `gptr.r_output_tokens` (`4000L`, "`r` result budget (estimated tokens, images included)"), `gptr.r_max_images` (`3L`, "plot images attached per `r` result (IC-67)"), `gptr.plot_width`, `gptr.plot_height`, `gptr.plot_res` (`768L`, `512L`, `120L`, "PNG sent to the model"). Read through P01's `gptr_opt()`; their defaults live in P01's `gptr_option_defaults`.
-- Evaluator rules (04 section 7.9, IC-67): parse with `srcfilecopy("<gptr>", code)`; "calling handlers created in a frame that does not hold `envir` [R2][R3]"; "per-expression `setTimeLimit(elapsed = timeout, transient = TRUE)` (`timeout = NULL`: none with a human present, else `gptr.r_timeout`)"; "symbols printed with `print(<sym>)` in `envir` and every `withVisible()` result cleared in place (`res[1L] = list(NULL)`)"; plots "on `pdf(NULL)` with the display list enabled when no device is open and no human sees one; the prior device restored" and "replayed to PNG, at most `max_images` attached (the rest kept in the session's out store)"; "stops at the first error"; `q` and `quit` "flagged in any position (a value, a `FUN` argument, `match.fun`, `get`, `do.call`, `base::`)"; "a literal `[secret:` marker is blocked with the `Sys.getenv()` hint".
-- Model text (03 section 6.12, 04 section 7.9): "output, messages, warnings, error + trimmed traceback, `[plot N attached]`, state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status line, head 40% / tail 60% truncation with the `peter$out(<id>)` notice; halves the budget when the session's context exceeds half the compaction threshold"; later plots "listed as `[plots 4-50 not attached: peter$plot(k)]`" (IC-67).
-- RNG (IC-61): `rng_swap()` "saves `get0(".Random.seed", globalenv(), inherits = FALSE)`, assigns the agent's `c(10407L, <6 seeds>)`, evaluates, keeps the advanced vector in the agent's state, then restores the saved value or removes the variable. The six seeds come from 24 bytes of `sha256(<agent id>)` reduced modulo m1 = 4294967087 (three) and m2 = 4294944443 (three), stored as R integers (two's complement), or from an explicit `.opts$seed` hashed with the agent label". gptr never calls `set.seed()`, `RNGkind()`, `sample()` or `runif()`.
-- Workspace texts (03 sections 7.4-7.5, 12.2): `<workspace>` "one line per object from `env_snapshot()` (name, class, shape, size), largest first, at most 12 lines and 600 tokens", then `(+ n smaller objects: use ls())`, never forcing promises or active bindings ("reported as `<promise>`/`<active>`"); `<workspace_changes>` "`+ name class shape size`, `~ name`, `- name`, `user ran: <expr>` from the task-callback log, last 20; only when non-empty; ... budget 300"; `<attached>` "`gptr_describe(x, budget = 150)` per context object (at most 300)"; `<skill_content>` "5,000 per skill, 10,000 re-injected after compaction"; `<r_env>` (T1) "about 399 [G4] | 450".
-- `builtin:workspace` (04 section 7.9, IC-38): "registers context blocks `workspace` (`first`, order 500), `workspace_changes` (`turn`, order 100), `attached` (`both`, order 600), `skill_content` preloads (`both`, order 700) (IC-38), the prompt section `r_env` (T1, order 900), the `evaluator` record `r` and the `describe` and `eval.r` services"; declared with `on_load(ext_declare_builtin("workspace", builtin_workspace))`; services registered with `on_load(ext_service_set(<name>, <fun>, provided_by = "P09", builtin = "workspace"))` (IC-34). Service signatures (04 section 7.0): `eval.r` = "`eval_r()` through the `evaluator` kind (IC-69)", `describe` = `function(x, budget) chr`.
-- Copy safety (03 section 6.4, 04 section 1.3): [R1] no user object held after return; [R2] a caller frame only in an environment binding reset to `NULL`; [R3] no closures, `tryCatch()` or `withCallingHandlers()` in a frame holding the home, never assign to a formal; [R4] introspection through leaf functions returning primitives, never `str()`; [R5] no binding locks; [R6] no `mget()` or list snapshots; [R8] as above. Every row of `test-copy-eval.R` runs in a fresh `Rscript --vanilla` through P01's `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)` (skips on CRAN and without `capabilities("profmem")`).
-- Conditions (04 section 2.2): argument checks signal `gptr_error_invalid_argument` (fields `arg`, `expected`; never the value). Evaluation failures never throw: they become events and a status.
-- Tests use P01's environment (`tests/testthat/setup.R`: `options(gptr.interactive = FALSE, gptr.quiet = TRUE)`, `GPTR_PROJECT_ROOT` a temporary project, redirected user directories) and P01's helpers `expect_no_copy()`, `tracemem_loader()` (the child's load line), `rscript_path()`; processes are started only under `skip_on_cran()`.
-
+- Owned files (05 P09): `R/eval-core.R`, `R/eval-plots.R`, `R/eval-guard.R`, `R/eval-format.R`,
+  `R/env-snapshot.R`, `R/env-describe.R`, `R/env-history.R`, `R/env-probe.R`; their tests
+  `tests/testthat/test-eval-core.R`, `test-eval-plots.R`, `test-eval-guard.R`, `test-eval-format.R`,
+  `test-env-snapshot.R`, `test-env-describe.R`, `test-env-history.R`, `test-env-probe.R`; the copy
+  suite `tests/testthat/test-copy-eval.R`; plus `NAMESPACE` and `man/gptr_describe.Rd` through
+  `Rscript --vanilla -e 'devtools::document()'`.
+- Layer (03 section 3.2, section 2.2; IC-33): all eight files are "L4 svc". They call L0 helpers,
+  the extension API (`gptr_spec()`, `gptr_context_block()`, `gptr_prompt_section()`,
+  `registry_get()`, `ext_declare_builtin()`), each other, the services of 04 section 7.0
+  (`skill.body`, `compact.should`) and the kernel SDK only: `session_data()` (read),
+  `session_live()`, `session_home()`, `run_current()`, `call_value()`, `setting_get()`. They never
+  call another L3 function by name (not `gptr_last()`, not `live_all()`).
+- The one export (04 section 6.6): `gptr_describe(x, budget = 150L, ...)`, an S3 generic; `budget`
+  "`int(1)` >= 20, estimated tokens (`est_tokens(, "describe")`)"; "Returns a character vector of
+  lines, the first a header `<class> shape, size`, at most `budget` estimated tokens". Built-in
+  methods: `default`, `data.frame`, `data.table`, `matrix`, `list`, `Date`, `POSIXct`, `factor`,
+  `formula`, `lm`, `glm`, `environment`, `function`, `S4` (through `default` with `isS4()`),
+  `dgCMatrix`, `ArrowTabular`, `Dataset`, `DBIConnection`, `Seurat`, `SingleCellExperiment`,
+  `ggplot`. Methods "MUST follow [R4][leaf]: no promise forcing, no I/O (no `dbListTables()`, no
+  `collect()`), no `str()` on the object"; methods for classes of packages outside Suggests "use
+  only base generics, `methods::slot()`/`slotNames()`, `attr()` and `dim()` guarded by
+  `isNamespaceLoaded()`, never `pkg::fun()`" (IC-71). Level-based: "a method may accept
+  `level = 1:4` in `...`".
+- Internal signatures (04 section 7.9), exactly:
+  `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))`;
+  `rng_swap(state, expr)`; `format_eval_result(res, budget_tokens)` ->
+  `list(text = chr(1), images = list, truncated = lgl(1), out_id, spill)`; `eval_guard(exprs)` ->
+  `list(blocked = chr, reason = chr(1) | NULL)`; `gptr_shim(exprs, envir)`;
+  `plot_png(recorded, width = gptr.plot_width, height = gptr.plot_height, res = gptr.plot_res)`;
+  `env_snapshot(envir, previous = NULL)` -> df `name`, `kind` (`value`, `promise`, `active`),
+  `address`, `class`, `bytes`, `shape`, `fp`; `env_diff(old, new, assigned = character())` ->
+  `list(added, modified, removed)`; `workspace_lines(snapshot, budget = 600L)`;
+  `changes_lines(diff, snapshot, user_ran, budget = 300L)`;
+  `describe_binding(name, envir, budget = 150L)`; `user_expr_log(since = NULL, n = 20L)`;
+  `r_env_probe()` -> `chr(1)`; `builtin_workspace(gptr)`.
+- `gptr_eval_result` (04 section 5.8):
+  `structure(list(status, events, n_done, n_total, changes, elapsed, images, assigned, outputs, spill, out_id, interrupted_after), class = "gptr_eval_result")`;
+  `status` in `ok`, `error`, `timeout`, `interrupt`, `blocked`, `parse_error`; `events` ordered
+  `list(type = "source"|"output"|"message"|"warning"|"error"|"interrupt"|"plot", ...)`, "`plot`
+  events carry the PNG path, never the recorded plot"; `changes` =
+  `list(wd = chr(2)|NULL, options = chr, envvars = chr, attached = chr, loaded = chr, devices = list(from, to))`
+  "names only"; "The value of an evaluation is never kept (R8)".
+- Options owned (04 section 3.1): `gptr.r_timeout` (`3600`, "seconds for `r` when no human is
+  present"), `gptr.r_output_tokens` (`4000L`, "`r` result budget (estimated tokens, images
+  included)"), `gptr.r_max_images` (`3L`, "plot images attached per `r` result (IC-67)"),
+  `gptr.plot_width`, `gptr.plot_height`, `gptr.plot_res` (`768L`, `512L`, `120L`, "PNG sent to the
+  model"). Read through P01's `gptr_opt()`; their defaults live in P01's `gptr_option_defaults`.
+- Evaluator rules (04 section 7.9, IC-67): parse with `srcfilecopy("<gptr>", code)`; "calling
+  handlers created in a frame that does not hold `envir` [R2][R3]"; "per-expression
+  `setTimeLimit(elapsed = timeout, transient = TRUE)` (`timeout = NULL`: none with a human present,
+  else `gptr.r_timeout`)"; "symbols printed with `print(<sym>)` in `envir` and every `withVisible()`
+  result cleared in place (`res[1L] = list(NULL)`)"; plots "on `pdf(NULL)` with the display list
+  enabled when no device is open and no human sees one; the prior device restored" and "replayed to
+  PNG, at most `max_images` attached (the rest kept in the session's out store)"; "stops at the
+  first error"; `q` and `quit` "flagged in any position (a value, a `FUN` argument, `match.fun`,
+  `get`, `do.call`, `base::`)"; "a literal `[secret:` marker is blocked with the `Sys.getenv()`
+  hint".
+- Model text (03 section 6.12, 04 section 7.9): "output, messages, warnings, error + trimmed
+  traceback, `[plot N attached]`, state-change lines (`~ pbmc <Seurat> modified`,
+  `+ markers <data.frame 4,211 x 7>`), a status line, head 40% / tail 60% truncation with the
+  `peter$out(<id>)` notice; halves the budget when the session's context exceeds half the compaction
+  threshold"; later plots "listed as `[plots 4-50 not attached: peter$plot(k)]`" (IC-67).
+- RNG (IC-61): `rng_swap()` "saves `get0(".Random.seed", globalenv(), inherits = FALSE)`, assigns
+  the agent's `c(10407L, <6 seeds>)`, evaluates, keeps the advanced vector in the agent's state,
+  then restores the saved value or removes the variable. The six seeds come from 24 bytes of
+  `sha256(<agent id>)` reduced modulo m1 = 4294967087 (three) and m2 = 4294944443 (three), stored as
+  R integers (two's complement), or from an explicit `.opts$seed` hashed with the agent label". gptr
+  never calls `set.seed()`, `RNGkind()`, `sample()` or `runif()`.
+- Workspace texts (03 sections 7.4-7.5, 12.2): `<workspace>` "one line per object from
+  `env_snapshot()` (name, class, shape, size), largest first, at most 12 lines and 600 tokens", then
+  `(+ n smaller objects: use ls())`, never forcing promises or active bindings ("reported as
+  `<promise>`/`<active>`"); `<workspace_changes>` "`+ name class shape size`, `~ name`, `- name`,
+  `user ran: <expr>` from the task-callback log, last 20; only when non-empty; ... budget 300";
+  `<attached>` "`gptr_describe(x, budget = 150)` per context object (at most 300)";
+  `<skill_content>` "5,000 per skill, 10,000 re-injected after compaction"; `<r_env>` (T1) "about
+  399 [G4] | 450".
+- `builtin:workspace` (04 section 7.9, IC-38): "registers context blocks `workspace` (`first`, order
+  500), `workspace_changes` (`turn`, order 100), `attached` (`both`, order 600), `skill_content`
+  preloads (`both`, order 700) (IC-38), the prompt section `r_env` (T1, order 900), the `evaluator`
+  record `r` and the `describe` and `eval.r` services"; declared with
+  `on_load(ext_declare_builtin("workspace", builtin_workspace))`; services registered with
+  `on_load(ext_service_set(<name>, <fun>, provided_by = "P09", builtin = "workspace"))` (IC-34).
+  Service signatures (04 section 7.0): `eval.r` = "`eval_r()` through the `evaluator` kind (IC-69)",
+  `describe` = `function(x, budget) chr`.
+- Copy safety (03 section 6.4, 04 section 1.3): [R1] no user object held after return; [R2] a caller
+  frame only in an environment binding reset to `NULL`; [R3] no closures, `tryCatch()` or
+  `withCallingHandlers()` in a frame holding the home, never assign to a formal; [R4] introspection
+  through leaf functions returning primitives, never `str()`; [R5] no binding locks; [R6] no
+  `mget()` or list snapshots; [R8] as above. Every row of `test-copy-eval.R` runs in a fresh
+  `Rscript --vanilla` through P01's
+  `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`
+  (skips on CRAN and without `capabilities("profmem")`).
+- Conditions (04 section 2.2): argument checks signal `gptr_error_invalid_argument` (fields `arg`,
+  `expected`; never the value). Evaluation failures never throw: they become events and a status.
+- Tests use P01's environment (`tests/testthat/setup.R`:
+  `options(gptr.interactive = FALSE, gptr.quiet = TRUE)`, `GPTR_PROJECT_ROOT` a temporary project,
+  redirected user directories) and P01's helpers `expect_no_copy()`, `tracemem_loader()` (the
+  child's load line), `rscript_path()`; processes are started only under `skip_on_cran()`.
 
 ## File Structure
 
@@ -69,21 +178,41 @@ Tasks:
 7. Agent RNG streams: `rng_swap()` (`eval-core.R`)
 8. The evaluator `eval_r()` (`eval-core.R`)
 9. The model-facing text: `format_eval_result()` (`eval-format.R`)
-10. `builtin:workspace`: context blocks, `r_env`, the evaluator record and the services (`env-snapshot.R`)
+10. `builtin:workspace`: context blocks, `r_env`, the evaluator record and the services
+    (`env-snapshot.R`)
 11. Documentation, lint, layering and plan acceptance
 
 ---
-
 
 ### Task 1: The static guard, assignment targets and the `gptr::` shim
 
 **Files:** Create: `R/eval-guard.R`; Test: `tests/testthat/test-eval-guard.R`.
 
-Adapted from report 12 section 5.1 (`.gptr_guard_rules`, `gptr_called_functions()`) with its verification log item 25 (`g = q; g()` was not blocked) and IC-67 (the symbols `q` and `quit` are flagged in any position). The guard walks the parsed code once and never evaluates anything. A local binding never hides a blocked call: R skips non-function bindings when it looks a function up, so `q = 1; q("no")` still calls `base::q()` and ends the user's session. A called name is therefore exempt only when the code defines a function of that name (`menu = function(...) 1`) or an enclosing function binds it (a formal or a local variable); `pkg::name` is always refused; a string passed to `do.call()`, `match.fun()`, `get()` and friends is exempt only for a function the code defines; and `q`/`quit` used as a value are exempt only when the code assigns a variable of that name (`q = quantile(x); q[2]`). `stdin()` calls count as standard-input reads. `eval_assign_targets()` is the static half of the state diff (04 section 5.8 `assigned`: replacement functions, `assign()`, `:=`, `set*()`, `<<-`; architecture section 6.12). `gptr_shim()` rewrites `peter(...)`, `peter$member(...)` and `gptr_return(...)` to `gptr::` when the symbols are not visible from the evaluation environment (for example a `new.env(parent = baseenv())` home), binding nothing there; the caller records the code the model sent, so recorded code keeps `peter$grep("x")` (P10 acceptance 4). The left arrow is spelled `paste0("<", "-")`, as P01's `helper-arch.R` does, so the sources and this plan stay free of the literal.
+Adapted from report 12 section 5.1 (`.gptr_guard_rules`, `gptr_called_functions()`) with its
+verification log item 25 (`g = q; g()` was not blocked) and IC-67 (the symbols `q` and `quit` are
+flagged in any position). The guard walks the parsed code once and never evaluates anything. A local
+binding never hides a blocked call: R skips non-function bindings when it looks a function up, so
+`q = 1; q("no")` still calls `base::q()` and ends the user's session. A called name is therefore
+exempt only when the code defines a function of that name (`menu = function(...) 1`) or an enclosing
+function binds it (a formal or a local variable); `pkg::name` is always refused; a string passed to
+`do.call()`, `match.fun()`, `get()` and friends is exempt only for a function the code defines; and
+`q`/`quit` used as a value are exempt only when the code assigns a variable of that name
+(`q = quantile(x); q[2]`). `stdin()` calls count as standard-input reads. `eval_assign_targets()` is
+the static half of the state diff (04 section 5.8 `assigned`: replacement functions, `assign()`,
+`:=`, `set*()`, `<<-`; architecture section 6.12). `gptr_shim()` rewrites `peter(...)`,
+`peter$member(...)` and `gptr_return(...)` to `gptr::` when the symbols are not visible from the
+evaluation environment (for example a `new.env(parent = baseenv())` home), binding nothing there;
+the caller records the code the model sent, so recorded code keeps `peter$grep("x")` (P10 acceptance
+4). The left arrow is spelled `paste0("<", "-")`, as P01's `helper-arch.R` does, so the sources and
+this plan stay free of the literal.
 
 **Interfaces:**
 - Consumes (P01, 04 section 7.1): `` `%||%` `` (`aaa-state.R`).
-- Produces (04 section 7.9): `eval_guard(exprs)` -> `list(blocked = chr, reason = chr(1) | NULL)` (`blocked`: refused function names, `"stdin"`, `[secret:NAME]` markers; `reason`: the model-facing text starting `Not run: `); `gptr_shim(exprs, envir)` -> the expression vector with its `srcref` attribute kept; `eval_assign_targets(exprs)` -> chr (used by Task 8 for `gptr_eval_result$assigned`).
+- Produces (04 section 7.9): `eval_guard(exprs)` -> `list(blocked = chr, reason = chr(1) | NULL)`
+  (`blocked`: refused function names, `"stdin"`, `[secret:NAME]` markers; `reason`: the model-facing
+  text starting `Not run: `); `gptr_shim(exprs, envir)` -> the expression vector with its `srcref`
+  attribute kept; `eval_assign_targets(exprs)` -> chr (used by Task 8 for
+  `gptr_eval_result$assigned`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -191,7 +320,8 @@ test_that("gptr_shim keeps the source references of the expression vector", {
 Rscript --vanilla -e 'devtools::test(filter = "eval-guard")'
 ```
 
-Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors with `could not find function "eval_guard"` (or `"eval_assign_targets"`, `"gptr_shim"`).
+Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors with
+`could not find function "eval_guard"` (or `"eval_assign_targets"`, `"gptr_shim"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -542,18 +672,42 @@ git add R/eval-guard.R tests/testthat/test-eval-guard.R
 git commit -m "feat(eval): add the static guard, assignment targets and the gptr:: shim"
 ```
 
-
 ### Task 2: Workspace snapshots, diffs and workspace lines
 
-**Files:** Create: `R/env-snapshot.R`, `tests/testthat/test-copy-eval.R`; Test: `tests/testthat/test-env-snapshot.R`.
+**Files:** Create: `R/env-snapshot.R`, `tests/testthat/test-copy-eval.R`; Test:
+`tests/testthat/test-env-snapshot.R`.
 
-Adapted from report 12 section 5.2 (`gptr_introspect.R`: leaves, non-forcing detection with `rlang::env_binding_are_active()`/`env_binding_are_lazy()`, address-keyed sizes) and its verification log items 14-15, 17 and 19 (ALTREP `1:1e9` is 680 bytes, not the 3.7 GB `object.size()` claims), with the G3 fact-check fix: a function-frame home is held only in a box binding that is reset on exit, and the per-binding loop lives in a frame that never binds the home. `fingerprint()` is P01's (report 21 section 2.9). Helpers carry the `env_` prefix so no other plan's names collide (P01's `test-arch-layers.R` requires one home per function). The copy suite starts here with the two snapshot rows of acceptance 5; Tasks 3, 8 and 11 add the rest. A binding whose methods fail (a `length()` method that errors, such as a reticulate Python object without a length) is listed with its class and shape `?` (`env_snap_facts()`), so one odd object cannot make every snapshot, and with it every `r` call and the `<workspace>` block, fail.
+Adapted from report 12 section 5.2 (`gptr_introspect.R`: leaves, non-forcing detection with
+`rlang::env_binding_are_active()`/`env_binding_are_lazy()`, address-keyed sizes) and its
+verification log items 14-15, 17 and 19 (ALTREP `1:1e9` is 680 bytes, not the 3.7 GB `object.size()`
+claims), with the G3 fact-check fix: a function-frame home is held only in a box binding that is
+reset on exit, and the per-binding loop lives in a frame that never binds the home. `fingerprint()`
+is P01's (report 21 section 2.9). Helpers carry the `env_` prefix so no other plan's names collide
+(P01's `test-arch-layers.R` requires one home per function). The copy suite starts here with the two
+snapshot rows of acceptance 5; Tasks 3, 8 and 11 add the rest. A binding whose methods fail (a
+`length()` method that errors, such as a reticulate Python object without a length) is listed with
+its class and shape `?` (`env_snap_facts()`), so one odd object cannot make every snapshot, and with
+it every `r` call and the `<workspace>` block, fail.
 
-The measured scratch runs behind this task (fresh `Rscript --vanilla` per row): snapshot of `globalenv()` and of a function frame holding a 40 MB vector, 0 copies each; the prototype variants with a `for` loop in the frame that binds the home, or a positional `ls(envir)`, copied once.
+The measured scratch runs behind this task (fresh `Rscript --vanilla` per row): snapshot of
+`globalenv()` and of a function frame holding a 40 MB vector, 0 copies each; the prototype variants
+with a `for` loop in the frame that binds the home, or a positional `ls(envir)`, copied once.
 
 **Interfaces:**
-- Consumes (P01, 04 section 7.1): `check_env(x, arg, null = FALSE)`, `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `est_tokens(x, class)`, `fingerprint(x)` [leaf]; test helper `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)` (P01 `helper-tracemem.R`).
-- Produces (04 section 7.9): `env_snapshot(envir, previous = NULL)` [R4] -> df `name`, `kind`, `address`, `class`, `bytes`, `shape`, `fp` (`.Random.seed` and `.Last.value` excluded); `env_diff(old, new, assigned = character())` -> `list(added, modified, removed)`; `workspace_lines(snapshot, budget = 600L)` -> chr; `changes_lines(diff, snapshot, user_ran, budget = 300L)` -> chr. Private helpers used by Tasks 3, 8 and 10: `env_snapshot_rows(envir, previous = NULL, sizes = TRUE)`, `env_tokens(lines, class = "describe")`, `env_fmt_bytes(b)`, `env_fmt_n(n)`, `env_compact_seq(x)`, `env_seurat_facts(x)`, `env_shape(x)`.
+- Consumes (P01, 04 section 7.1): `check_env(x, arg, null = FALSE)`,
+  `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`,
+  `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `est_tokens(x, class)`,
+  `fingerprint(x)` [leaf]; test helper
+  `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`
+  (P01 `helper-tracemem.R`).
+- Produces (04 section 7.9): `env_snapshot(envir, previous = NULL)` [R4] -> df `name`, `kind`,
+  `address`, `class`, `bytes`, `shape`, `fp` (`.Random.seed` and `.Last.value` excluded);
+  `env_diff(old, new, assigned = character())` -> `list(added, modified, removed)`;
+  `workspace_lines(snapshot, budget = 600L)` -> chr;
+  `changes_lines(diff, snapshot, user_ran, budget = 300L)` -> chr. Private helpers used by Tasks 3,
+  8 and 10: `env_snapshot_rows(envir, previous = NULL, sizes = TRUE)`,
+  `env_tokens(lines, class = "describe")`, `env_fmt_bytes(b)`, `env_fmt_n(n)`, `env_compact_seq(x)`,
+  `env_seurat_facts(x)`, `env_shape(x)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -768,7 +922,10 @@ test_that("snapshots of globalenv and of a function frame leave the object in pl
 Rscript --vanilla -e 'devtools::test(filter = "env-snapshot|copy-eval")'
 ```
 
-Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 0 ]`: the ten tests of `test-env-snapshot.R` error with `could not find function` (`env_fmt_bytes`, `env_snapshot`, `workspace_lines`, `changes_lines`, `env_shape`), and both copy rows fail with `the script did not finish` (the child cannot find `env_snapshot`).
+Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 0 ]`: the ten tests of `test-env-snapshot.R` error
+with `could not find function` (`env_fmt_bytes`, `env_snapshot`, `workspace_lines`, `changes_lines`,
+`env_shape`), and both copy rows fail with `the script did not finish` (the child cannot find
+`env_snapshot`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1096,7 +1253,8 @@ changes_lines = function(diff, snapshot, user_ran, budget = 300L) {
 Rscript --vanilla -e 'devtools::test(filter = "env-snapshot|copy-eval")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 47 ]` (45 in `test-env-snapshot.R`, 2 copy rows; the copy rows skip only without `capabilities("profmem")`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 47 ]` (45 in `test-env-snapshot.R`, 2 copy rows; the
+copy rows skip only without `capabilities("profmem")`).
 
 - [ ] **Step 5: Commit**
 
@@ -1105,16 +1263,35 @@ git add R/env-snapshot.R tests/testthat/test-env-snapshot.R tests/testthat/test-
 git commit -m "feat(env): add copy-safe workspace snapshots, diffs and workspace lines"
 ```
 
-
 ### Task 3: `gptr_describe()` and the level-based describers
 
-**Files:** Create: `R/env-describe.R`; Modify: `tests/testthat/test-copy-eval.R` (append); Test: `tests/testthat/test-env-describe.R`. (`NAMESPACE` and `man/gptr_describe.Rd` are generated in Task 11: until then the methods are found by lexical lookup from inside the namespace and its tests, which is all Tasks 3-10 need.)
+**Files:** Create: `R/env-describe.R`; Modify: `tests/testthat/test-copy-eval.R` (append); Test:
+`tests/testthat/test-env-describe.R`. (`NAMESPACE` and `man/gptr_describe.Rd` are generated in Task
+11: until then the methods are found by lexical lookup from inside the namespace and its tests,
+which is all Tasks 3-10 need.)
 
-Ported from report 12 section 5.2 (leaves and formatters) and G2 section 5.4 `describe2()` (levels chosen with the calibrated estimator, content class `describe` = 2.39 characters per token), with the gaps G2's fact-check 18 names closed: Dates keep their class, dgCMatrix dims and nnz, formula text, nested names, and the Seurat `meta.data` dimensions and columns in the first lines at 150 tokens ("a design requirement"). Leaves (`dsc_leaf_*()`) bind the object and return fresh facts; formatters (`dsc_fmt_*()`) never see it; methods for classes of packages outside Suggests read slots with `attr()`, `.subset2()` and `methods::slotNames()` only (IC-71), and the Arrow methods call `dim()`/`names()` only when `isNamespaceLoaded("arrow")`. The test rebuilds all 20 of G2's fixture objects (Matrix, SeuratObject, R6, tibble and data.table classes) from base R, so it needs no package outside Suggests. Measured in scratch: 92 of G2's 98 facts (93.9%; G2's own describe2 kept 90.8%) at 150 tokens, the largest description 130 tokens.
+Ported from report 12 section 5.2 (leaves and formatters) and G2 section 5.4 `describe2()` (levels
+chosen with the calibrated estimator, content class `describe` = 2.39 characters per token), with
+the gaps G2's fact-check 18 names closed: Dates keep their class, dgCMatrix dims and nnz, formula
+text, nested names, and the Seurat `meta.data` dimensions and columns in the first lines at 150
+tokens ("a design requirement"). Leaves (`dsc_leaf_*()`) bind the object and return fresh facts;
+formatters (`dsc_fmt_*()`) never see it; methods for classes of packages outside Suggests read slots
+with `attr()`, `.subset2()` and `methods::slotNames()` only (IC-71), and the Arrow methods call
+`dim()`/`names()` only when `isNamespaceLoaded("arrow")`. The test rebuilds all 20 of G2's fixture
+objects (Matrix, SeuratObject, R6, tibble and data.table classes) from base R, so it needs no
+package outside Suggests. Measured in scratch: 92 of G2's 98 facts (93.9%; G2's own describe2 kept
+90.8%) at 150 tokens, the largest description 130 tokens.
 
 **Interfaces:**
-- Consumes: Task 2's `env_tokens()`, `env_fmt_n()`, `env_fmt_bytes()`, `env_compact_seq()`, `env_seurat_facts()`; P01's `check_number()`, `check_string()`, `check_env()`.
-- Produces: the export `gptr_describe(x, budget = 150L, ...)` (04 section 6.6) and its 20 S3 methods, each `function(x, budget = 150L, ..., level = NULL)`; `describe_binding(name, envir, budget = 150L)` [R4] (04 section 7.9: `<promise>`/`<active>`/`<not found>`, errors caught: a failing method falls back to the default method, and a one-line note only when that fails too); the private budget harness `describe_value(x, budget = 150L)` and `dsc_fit(lines, budget)` (Task 10's `describe` service and the `attached` block use them).
+- Consumes: Task 2's `env_tokens()`, `env_fmt_n()`, `env_fmt_bytes()`, `env_compact_seq()`,
+  `env_seurat_facts()`; P01's `check_number()`, `check_string()`, `check_env()`.
+- Produces: the export `gptr_describe(x, budget = 150L, ...)` (04 section 6.6) and its 20 S3
+  methods, each `function(x, budget = 150L, ..., level = NULL)`;
+  `describe_binding(name, envir, budget = 150L)` [R4] (04 section 7.9:
+  `<promise>`/`<active>`/`<not found>`, errors caught: a failing method falls back to the default
+  method, and a one-line note only when that fails too); the private budget harness
+  `describe_value(x, budget = 150L)` and `dsc_fit(lines, budget)` (Task 10's `describe` service and
+  the `attached` block use them).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1410,7 +1587,9 @@ test_that("describe_binding() leaves the object in place (R4)", {
 Rscript --vanilla -e 'devtools::test(filter = "env-describe|copy-eval")'
 ```
 
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 2 ]`: the eight tests of `test-env-describe.R` error (`could not find function "describe_binding"`, `object 'gptr_describe' not found`), the two new copy rows fail with `the script did not finish`; the two snapshot rows of Task 2 pass.
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 2 ]`: the eight tests of `test-env-describe.R` error
+(`could not find function "describe_binding"`, `object 'gptr_describe' not found`), the two new copy
+rows fail with `the script did not finish`; the two snapshot rows of Task 2 pass.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2128,7 +2307,8 @@ gptr_describe.ggplot = function(x, budget = 150L, ..., level = NULL) {
 Rscript --vanilla -e 'devtools::test(filter = "env-describe|copy-eval")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 98 ]` (94 in `test-env-describe.R`, 4 copy rows). Without RSQLite the DBI expectation skips (`SKIP 1`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 98 ]` (94 in `test-env-describe.R`, 4 copy rows).
+Without RSQLite the DBI expectation skips (`SKIP 1`).
 
 - [ ] **Step 5: Commit**
 
@@ -2137,16 +2317,23 @@ git add R/env-describe.R tests/testthat/test-env-describe.R tests/testthat/test-
 git commit -m "feat(env): add gptr_describe() and the level-based describers"
 ```
 
-
 ### Task 4: The user-expression log
 
 **Files:** Create: `R/env-history.R`; Test: `tests/testthat/test-env-history.R`.
 
-The `user ran: <expr>` lines of `<workspace_changes>` (architecture section 7.4) come from a task callback (report 12 section 2.C5, `exp_c19_taskcb.R`: the callback sees each successful top-level expression and does not copy the value it is handed; verification log item 18: the registering `peter()` call is logged first, so `peter()` calls are filtered). The callback is added while a session with a kept home is live (Task 10 starts it from the `workspace` block) and removed with the last such session or at unload. The log is process-level (the user's own typing, not run state) and keeps the last 20 entries of at most 120 characters.
+The `user ran: <expr>` lines of `<workspace_changes>` (architecture section 7.4) come from a task
+callback (report 12 section 2.C5, `exp_c19_taskcb.R`: the callback sees each successful top-level
+expression and does not copy the value it is handed; verification log item 18: the registering
+`peter()` call is logged first, so `peter()` calls are filtered). The callback is added while a
+session with a kept home is live (Task 10 starts it from the `workspace` block) and removed with the
+last such session or at unload. The log is process-level (the user's own typing, not run state) and
+keeps the last 20 entries of at most 120 characters.
 
 **Interfaces:**
 - Consumes (P01): `check_number()`, `on_load(expr)`, `on_unload(fun)`.
-- Produces: `user_expr_log(since = NULL, n = 20L)` (04 section 7.9) -> chr, oldest first; private `user_log_start(session_id)`, `user_log_release(session_id)`, `user_log_stop()`, `user_log_push(expr)` (Task 10 and its tests use them).
+- Produces: `user_expr_log(since = NULL, n = 20L)` (04 section 7.9) -> chr, oldest first; private
+  `user_log_start(session_id)`, `user_log_release(session_id)`, `user_log_stop()`,
+  `user_log_push(expr)` (Task 10 and its tests use them).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2210,7 +2397,8 @@ test_that("the task callback is registered per session and removed with the last
 Rscript --vanilla -e 'devtools::test(filter = "env-history")'
 ```
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors with `could not find function "user_log_stop"`.
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors with
+`could not find function "user_log_stop"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2333,11 +2521,22 @@ git commit -m "feat(env): add the task-callback log of user expressions"
 
 **Files:** Create: `R/env-probe.R`; Test: `tests/testthat/test-env-probe.R`.
 
-Adapted from report 19 section 5.12 (`proto_caps.R`) and its format (section 3.2; the `<r_env>` text of architecture section 7.3): `find.package()` plus `Meta/package.rds`, never `loadNamespace()`/`requireNamespace()` (report 19 section 2.5: `rlang::is_installed()` loads namespaces). "Installed but NOT loadable" is decided without loading: a hard dependency (Depends, Imports, LinkingTo) that is not installed; the prototype's out-of-process load probe (29 s) is not run. Cores and RAM come from ps (Imports, IC-59), never from the parallel package; under R CMD check (P01's `check_running()`, or `_R_CHECK_LIMIT_CORES_` set to anything but `false`, as the parallel package reads it) the advertised workers are 2 (IC-60). The body is cached per process because the section is frozen into the cached prompt. Measured on the development machine: 173 estimated tokens, 0.06 s.
+Adapted from report 19 section 5.12 (`proto_caps.R`) and its format (section 3.2; the `<r_env>` text
+of architecture section 7.3): `find.package()` plus `Meta/package.rds`, never
+`loadNamespace()`/`requireNamespace()` (report 19 section 2.5: `rlang::is_installed()` loads
+namespaces). "Installed but NOT loadable" is decided without loading: a hard dependency (Depends,
+Imports, LinkingTo) that is not installed; the prototype's out-of-process load probe (29 s) is not
+run. Cores and RAM come from ps (Imports, IC-59), never from the parallel package; under R CMD check
+(P01's `check_running()`, or `_R_CHECK_LIMIT_CORES_` set to anything but `false`, as the parallel
+package reads it) the advertised workers are 2 (IC-60). The body is cached per process because the
+section is frozen into the cached prompt. Measured on the development machine: 173 estimated tokens,
+0.06 s.
 
 **Interfaces:**
 - Consumes (P01): `check_running()`; `est_tokens()` (tests only).
-- Produces: `r_env_probe()` (04 section 7.9) -> chr(1), the body of `<r_env>` (Task 10 registers it as the T1 section `r_env`); private `env_probe_registry()`, `env_probe_packages(reg, lib = NULL)`, `env_probe_session()`, `env_probe_render(caps, sess)`, `env_probe_deps(field)`, `env_probe_cache`.
+- Produces: `r_env_probe()` (04 section 7.9) -> chr(1), the body of `<r_env>` (Task 10 registers it
+  as the T1 section `r_env`); private `env_probe_registry()`, `env_probe_packages(reg, lib = NULL)`,
+  `env_probe_session()`, `env_probe_render(caps, sess)`, `env_probe_deps(field)`, `env_probe_cache`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2417,7 +2616,9 @@ test_that("_R_CHECK_LIMIT_CORES_=false outside R CMD check does not limit the wo
 Rscript --vanilla -e 'devtools::test(filter = "env-probe")'
 ```
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the tests error with `object 'env_probe_cache' not found` and `could not find function "env_probe_registry"` (`"env_probe_packages"`, `"env_probe_session"`).
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the tests error with
+`object 'env_probe_cache' not found` and `could not find function "env_probe_registry"`
+(`"env_probe_packages"`, `"env_probe_session"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2581,11 +2782,29 @@ git commit -m "feat(env): add the r_env capability probe"
 
 **Files:** Create: `R/eval-plots.R`; Test: `tests/testthat/test-eval-plots.R`.
 
-Adapted from report 12 section 5.1 (device-following capture; evaluate 1.0.5's `non_visual_calls` and display-list prefix heuristics, verification log item 6) with IC-67: when no device is open and no human can see one, plots go to `grDevices::pdf(NULL)` with `dev.control(displaylist = "enable")`, so no `Rplots.pdf` appears in `getwd()` and no screen device opens under `_R_CHECK_SCREEN_DEVICE_=stop`; the prior device is restored. Recorded plots are replayed to 768x512 PNGs at res 120 (532 Anthropic tokens, G2 (g)) through ragg when installed, else `grDevices::png()` (cairo on Linux), and dropped once rendered. Low-level additions in later top-level expressions (`plot(x)`, then `abline(...)`, then `lines(...)`) replace the recording of the page this evaluation already captured, as knitr's default `fig.keep = "high"` does with evaluate's per-expression snapshots: the model sees the finished page as one image instead of every intermediate state, each costing 532 tokens, with the finished page past the `max_images` cut. Task 8 wires the capture into `eval_r()`; `plot_png()` is also used by `peter$plot()` (P10).
+Adapted from report 12 section 5.1 (device-following capture; evaluate 1.0.5's `non_visual_calls`
+and display-list prefix heuristics, verification log item 6) with IC-67: when no device is open and
+no human can see one, plots go to `grDevices::pdf(NULL)` with `dev.control(displaylist = "enable")`,
+so no `Rplots.pdf` appears in `getwd()` and no screen device opens under
+`_R_CHECK_SCREEN_DEVICE_=stop`; the prior device is restored. Recorded plots are replayed to 768x512
+PNGs at res 120 (532 Anthropic tokens, G2 (g)) through ragg when installed, else `grDevices::png()`
+(cairo on Linux), and dropped once rendered. Low-level additions in later top-level expressions
+(`plot(x)`, then `abline(...)`, then `lines(...)`) replace the recording of the page this evaluation
+already captured, as knitr's default `fig.keep = "high"` does with evaluate's per-expression
+snapshots: the model sees the finished page as one image instead of every intermediate state, each
+costing 532 tokens, with the finished page past the `max_images` cut. Task 8 wires the capture into
+`eval_r()`; `plot_png()` is also used by `peter$plot()` (P10).
 
 **Interfaces:**
-- Consumes (P01): `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)` (raw data is base64-encoded without newlines), `ws_path(..., create_parent = TRUE)`, `id_new(prefix, n)`, `gptr_opt()`, `check_class()`, `check_number()`.
-- Produces: `plot_png(recorded, width = gptr_opt("plot_width"), height = gptr_opt("plot_height"), res = gptr_opt("plot_res"))` (04 section 7.9) -> an image block or `NULL`; private `plot_begin(mode, human, ...)`, `plot_enable_new(ps)`, `plot_capture(ps, incomplete = FALSE)`, `plot_close(ps)`, `plot_render_all(ps, max_render = 50L, ...)`, `plot_block(file, width, height)`.
+- Consumes (P01):
+  `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)` (raw data is
+  base64-encoded without newlines), `ws_path(..., create_parent = TRUE)`, `id_new(prefix, n)`,
+  `gptr_opt()`, `check_class()`, `check_number()`.
+- Produces:
+  `plot_png(recorded, width = gptr_opt("plot_width"), height = gptr_opt("plot_height"), res = gptr_opt("plot_res"))`
+  (04 section 7.9) -> an image block or `NULL`; private `plot_begin(mode, human, ...)`,
+  `plot_enable_new(ps)`, `plot_capture(ps, incomplete = FALSE)`, `plot_close(ps)`,
+  `plot_render_all(ps, max_render = 50L, ...)`, `plot_block(file, width, height)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2691,7 +2910,8 @@ test_that("low-level additions update the captured page instead of adding a plot
 Rscript --vanilla -e 'devtools::test(filter = "eval-plots")'
 ```
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; the tests error with `could not find function "plot_png"` (`"plot_begin"`, `"plot_visual_change"`).
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; the tests error with
+`could not find function "plot_png"` (`"plot_begin"`, `"plot_visual_change"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2907,7 +3127,8 @@ plot_render_all = function(ps, max_render = 50L, width = gptr_opt("plot_width"),
 Rscript --vanilla -e 'devtools::test(filter = "eval-plots")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 32 ]` (without ragg and without `capabilities("png")` the first test skips).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 32 ]` (without ragg and without `capabilities("png")`
+the first test skips).
 
 - [ ] **Step 5: Commit**
 
@@ -2916,16 +3137,29 @@ git add R/eval-plots.R tests/testthat/test-eval-plots.R
 git commit -m "feat(eval): add plot capture on pdf(NULL) and replay to 768x512 PNG"
 ```
 
-
 ### Task 7: Agent RNG streams: `rng_swap()`
 
 **Files:** Create: `R/eval-core.R`; Test: `tests/testthat/test-eval-core.R`.
 
-IC-61: each inline agent draws from its own L'Ecuyer-CMRG stream, swapped in around its evaluations, so the user's `.Random.seed` is identical before and after. The seeds are derived from `hash_sha256()` bits, never from R's generator, and the swap assigns `.Random.seed` with `env[[".Random.seed"]] =` and removes it with `rm(list = ...)`, the forms P01's lint rule allows inside `rng_swap()` and `with_seed_preserved()` only. The state environment holds `seed` (the advanced vector, `NULL` before the first swap) and `id` (the agent id, or `"<.opts$seed>:<agent label>"` when a reproducible stream is requested; P19 builds it as `run$opts$rng_state`). R keeps its generator kind internally and `set.seed()` keeps the kind in force, so removing `.Random.seed` after the swap (the user had none) would leave L'Ecuyer-CMRG in force: the user's next `set.seed(42); runif(1)` gives 0.1738 instead of 0.9148 (measured in scratch, R 4.4.3). Without `RNGkind()` (IC-61 forbids it), `rng_swap()` reads the kind code before the swap and puts it back afterwards through `stats::rbinom(1L, 0L, 0.5)`, which makes R load and store its state without drawing a number, then removes the stored variable again. This task creates `eval-core.R` with the file header and the two RNG functions; Task 8 appends the evaluator.
+IC-61: each inline agent draws from its own L'Ecuyer-CMRG stream, swapped in around its evaluations,
+so the user's `.Random.seed` is identical before and after. The seeds are derived from
+`hash_sha256()` bits, never from R's generator, and the swap assigns `.Random.seed` with
+`env[[".Random.seed"]] =` and removes it with `rm(list = ...)`, the forms P01's lint rule allows
+inside `rng_swap()` and `with_seed_preserved()` only. The state environment holds `seed` (the
+advanced vector, `NULL` before the first swap) and `id` (the agent id, or
+`"<.opts$seed>:<agent label>"` when a reproducible stream is requested; P19 builds it as
+`run$opts$rng_state`). R keeps its generator kind internally and `set.seed()` keeps the kind in
+force, so removing `.Random.seed` after the swap (the user had none) would leave L'Ecuyer-CMRG in
+force: the user's next `set.seed(42); runif(1)` gives 0.1738 instead of 0.9148 (measured in scratch,
+R 4.4.3). Without `RNGkind()` (IC-61 forbids it), `rng_swap()` reads the kind code before the swap
+and puts it back afterwards through `stats::rbinom(1L, 0L, 0.5)`, which makes R load and store its
+state without drawing a number, then removes the stored variable again. This task creates
+`eval-core.R` with the file header and the two RNG functions; Task 8 appends the evaluator.
 
 **Interfaces:**
 - Consumes (P01): `hash_sha256(x)`, `check_env()`, `` `%||%` ``.
-- Produces (04 section 7.9): `rng_swap(state, expr)` [leaf] -> the value of `expr`; private `rng_seeds(key)` -> `c(10407L, <6 seeds>)`. Consumers: `eval_r(rng =)` (Task 8), P19.
+- Produces (04 section 7.9): `rng_swap(state, expr)` [leaf] -> the value of `expr`; private
+  `rng_seeds(key)` -> `c(10407L, <6 seeds>)`. Consumers: `eval_r(rng =)` (Task 8), P19.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2997,7 +3231,8 @@ test_that("rng_swap leaves R's generator kind as it found it when the user had n
 Rscript --vanilla -e 'devtools::test(filter = "eval-core")'
 ```
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`; the tests error with `could not find function "rng_seeds"` (`"rng_swap"`).
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`; the tests error with
+`could not find function "rng_seeds"` (`"rng_swap"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3103,21 +3338,75 @@ git commit -m "feat(eval): add hash-derived L'Ecuyer agent streams with rng_swap
 
 ### Task 8: The evaluator `eval_r()`
 
-**Files:** Modify: `R/eval-core.R` (append), `tests/testthat/test-eval-core.R` (append), `tests/testthat/test-copy-eval.R` (append).
+**Files:** Modify: `R/eval-core.R` (append), `tests/testthat/test-eval-core.R` (append),
+`tests/testthat/test-copy-eval.R` (append).
 
-The hand-rolled evaluator of architecture section 6.12, adapted from report 12 section 5.1 (`gptr_eval2.R`) with the fixes of its verification log (item 3: a sink the model leaves open is recovered; item 4: rlang errors keep their class; item 10: `setTimeLimit()` is best effort and reset to `Inf` after every expression; item 25: the guard) and of the review round (IC-67, IC-61, G3 fact-check):
+The hand-rolled evaluator of architecture section 6.12, adapted from report 12 section 5.1
+(`gptr_eval2.R`) with the fixes of its verification log (item 3: a sink the model leaves open is
+recovered; item 4: rlang errors keep their class; item 10: `setTimeLimit()` is best effort and reset
+to `Inf` after every expression; item 25: the guard) and of the review round (IC-67, IC-61, G3
+fact-check):
 
-- Frame layout for copy safety. `eval_r()` binds `envir` but creates no closure, no `tryCatch()` and no loop; it stores `envir` in the state environment `st` and resets `st$envir` to `NULL` on exit inside `suspendInterrupts()` [R2]. `eval_run()`, `eval_loop()` and `eval_one()` hold only `st` and force their arguments on entry; `eval_one()` creates the calling handlers and the `gptr_stop` restart [R3]. `eval_top()` and `eval_frame()` reach `envir` through `st$envir`; a symbol is printed as `print(<sym>)` in `envir`, assignments and other invisible heads never pass through `withVisible()`, and every `withVisible()` result is cleared in place with `res[1L] = list(NULL)` before the frame returns [R8, IC-67]. The object snapshots use Task 2's box pattern.
-- Capture. Output goes to an anonymous-file sink (`file("", "w+b")`, split to the console when `tee`), messages and warnings are recorded by the calling handlers in order and muffled unless teed (under `options(warn = 2)` R turns the warning into an error), errors stop at the first failing expression with a traceback of the user frames between `eval_frame()` and the handler, cut to 20 frames of 120 characters with `at <gptr>#<line>` locations. The traceback is computed as text (`eval_traceback()`), so no call object that `do.call()` may have filled with values stays in the frame the restart unwinds. An infinite recursion leaves a calling handler almost no stack (measured: a `tryCatch()` inside the handler fails again with "evaluation nested too deeply", and the error escaped `eval_r()`), so a condition of class `stackOverflowError` (R >= 4.2.0) unwinds through the restart first and is recorded afterwards by `eval_overflow()`, without a traceback. CR LF and CR line ends are normalised before parsing (the parser rejects a bare CR).
-- Session hygiene. Harness options (`max.print`, `width`, `rlang_interactive`, `cli.dynamic`, `cli.num_colors`, and an `askYesNo` trap for package code) are set and restored; hooks, sinks, the time limit and the plot device are restored on every path; outside a run an interrupt is caught and gives status `interrupt` (inside a run it propagates to the run's interrupt policy). Changes of the working directory, options, environment variables (names only), attached and loaded packages and devices are reported by name; a newly set `TZDIR` is not, because R sets it itself the first time a time is formatted on macOS (gptr's own ids do that while rendering plots). Only calls that are always invisible skip `withVisible()`: `options("digits")`, `library()` and `suppressPackageStartupMessages(x)` print their visible values as at the console.
-- Plots. Task 6's capture; at most `max_images` plots are attached, fewer when their image tokens would take more than 60% of the budget; the paths of the others go into one entry of the running session's out store (the process store outside a run) for `peter$plot(k)` (P10). The session is found through the run: 04 section 7.6 types `gptr_run$session` as an id and the kernel SDK has no id-to-session accessor, so `eval_session()` reads the run's `shell` binding defensively and falls back to the process store (see the self-review).
-- Known limit (R itself): an error unwinds the frames between the failing call and the restart without releasing what they reference, so an object that failing code passed through a function (or a function-frame home it forced) copies once on its next in-place edit, exactly as after `try()` in user code. An error at top level after reading an object leaves it in place (copy row below).
+- Frame layout for copy safety. `eval_r()` binds `envir` but creates no closure, no `tryCatch()` and
+  no loop; it stores `envir` in the state environment `st` and resets `st$envir` to `NULL` on exit
+  inside `suspendInterrupts()` [R2]. `eval_run()`, `eval_loop()` and `eval_one()` hold only `st` and
+  force their arguments on entry; `eval_one()` creates the calling handlers and the `gptr_stop`
+  restart [R3]. `eval_top()` and `eval_frame()` reach `envir` through `st$envir`; a symbol is
+  printed as `print(<sym>)` in `envir`, assignments and other invisible heads never pass through
+  `withVisible()`, and every `withVisible()` result is cleared in place with `res[1L] = list(NULL)`
+  before the frame returns [R8, IC-67]. The object snapshots use Task 2's box pattern.
+- Capture. Output goes to an anonymous-file sink (`file("", "w+b")`, split to the console when
+  `tee`), messages and warnings are recorded by the calling handlers in order and muffled unless
+  teed (under `options(warn = 2)` R turns the warning into an error), errors stop at the first
+  failing expression with a traceback of the user frames between `eval_frame()` and the handler, cut
+  to 20 frames of 120 characters with `at <gptr>#<line>` locations. The traceback is computed as
+  text (`eval_traceback()`), so no call object that `do.call()` may have filled with values stays in
+  the frame the restart unwinds. An infinite recursion leaves a calling handler almost no stack
+  (measured: a `tryCatch()` inside the handler fails again with "evaluation nested too deeply", and
+  the error escaped `eval_r()`), so a condition of class `stackOverflowError` (R >= 4.2.0) unwinds
+  through the restart first and is recorded afterwards by `eval_overflow()`, without a traceback. CR
+  LF and CR line ends are normalised before parsing (the parser rejects a bare CR).
+- Session hygiene. Harness options (`max.print`, `width`, `rlang_interactive`, `cli.dynamic`,
+  `cli.num_colors`, and an `askYesNo` trap for package code) are set and restored; hooks, sinks, the
+  time limit and the plot device are restored on every path; outside a run an interrupt is caught
+  and gives status `interrupt` (inside a run it propagates to the run's interrupt policy). Changes
+  of the working directory, options, environment variables (names only), attached and loaded
+  packages and devices are reported by name; a newly set `TZDIR` is not, because R sets it itself
+  the first time a time is formatted on macOS (gptr's own ids do that while rendering plots). Only
+  calls that are always invisible skip `withVisible()`: `options("digits")`, `library()` and
+  `suppressPackageStartupMessages(x)` print their visible values as at the console.
+- Plots. Task 6's capture; at most `max_images` plots are attached, fewer when their image tokens
+  would take more than 60% of the budget; the paths of the others go into one entry of the running
+  session's out store (the process store outside a run) for `peter$plot(k)` (P10). The session is
+  found through the run: 04 section 7.6 types `gptr_run$session` as an id and the kernel SDK has no
+  id-to-session accessor, so `eval_session()` reads the run's `shell` binding defensively and falls
+  back to the process store (see the self-review).
+- Known limit (R itself): an error unwinds the frames between the failing call and the restart
+  without releasing what they reference, so an object that failing code passed through a function
+  (or a function-frame home it forced) copies once on its next in-place edit, exactly as after
+  `try()` in user code. An error at top level after reading an object leaves it in place (copy row
+  below).
 
-Measured in scratch (fresh `Rscript --vanilla` per row, 40 MB vector): all 13 copy rows of this task report 0 copies (the S4 row 1 copy, the same as R's own `x@v[1] = 0` without gptr); removing `res[1L] = list(NULL)` makes the `(x)` row copy once (negative control).
+Measured in scratch (fresh `Rscript --vanilla` per row, 40 MB vector): all 13 copy rows of this task
+report 0 copies (the S4 row 1 copy, the same as R's own `x@v[1] = 0` without gptr); removing
+`res[1L] = list(NULL)` makes the `(x)` row copy once (negative control).
 
 **Interfaces:**
-- Consumes: Tasks 1, 2, 6 and 7 (`eval_guard()`, `eval_assign_targets()`, `gptr_shim()`, `env_snapshot_rows()`, `env_diff()`, `plot_begin()`, `plot_enable_new()`, `plot_capture()`, `plot_close()`, `plot_render_all()`, `plot_block()`, `rng_swap()`); P01 (04 section 7.1): `check_string()`, `check_env()`, `check_choice()`, `check_number()`, `check_flag()`, `as_utf8()`, `gptr_has_human()`, `gptr_opt()`, `raw_to_utf8(x, fallback = "CP1252")`, `clean_terminal(x)` (returns lines), `est_image_tokens(width, height, api = "anthropic")`, `out_put(text, stream = "stdout", meta = list(), session = NULL)` (`session`: `NULL` or a session's live record); P06 kernel SDK (IC-33): `run_current()`, `session_live(s)`; test helpers `expect_no_copy()`, `tracemem_loader()`, `rscript_path()` (P01) and `out_get(id, stream, lines, session)` (P01).
-- Produces (04 section 7.9, section 5.8): `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))` -> `gptr_eval_result` with `changes$objects = list(added, modified, removed, lines)` (the object diff and its `+`/`~`/`-` lines, read by Task 9 and P10) and `plot` events `list(type = "plot", index, path, attached, out_id)`; private `eval_session()` (Task 9).
+- Consumes: Tasks 1, 2, 6 and 7 (`eval_guard()`, `eval_assign_targets()`, `gptr_shim()`,
+  `env_snapshot_rows()`, `env_diff()`, `plot_begin()`, `plot_enable_new()`, `plot_capture()`,
+  `plot_close()`, `plot_render_all()`, `plot_block()`, `rng_swap()`); P01 (04 section 7.1):
+  `check_string()`, `check_env()`, `check_choice()`, `check_number()`, `check_flag()`, `as_utf8()`,
+  `gptr_has_human()`, `gptr_opt()`, `raw_to_utf8(x, fallback = "CP1252")`, `clean_terminal(x)`
+  (returns lines), `est_image_tokens(width, height, api = "anthropic")`,
+  `out_put(text, stream = "stdout", meta = list(), session = NULL)` (`session`: `NULL` or a
+  session's live record); P06 kernel SDK (IC-33): `run_current()`, `session_live(s)`; test helpers
+  `expect_no_copy()`, `tracemem_loader()`, `rscript_path()` (P01) and
+  `out_get(id, stream, lines, session)` (P01).
+- Produces (04 section 7.9, section 5.8):
+  `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))`
+  -> `gptr_eval_result` with `changes$objects = list(added, modified, removed, lines)` (the object
+  diff and its `+`/`~`/`-` lines, read by Task 9 and P10) and `plot` events
+  `list(type = "plot", index, path, attached, out_id)`; private `eval_session()` (Task 9).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3437,7 +3726,11 @@ test_that("an error at top level after reading the object leaves it in place", {
 Rscript --vanilla -e 'devtools::test(filter = "eval-core|copy-eval")'
 ```
 
-Expected: `[ FAIL 35 | WARN 0 | SKIP 0 | PASS 23 ]`: in `test-eval-core.R` the 19 new tests fail (17 error with `could not find function "eval_r"` or `"eval_state_diff"`, the argument test records 4 failures, the Rscript test 2 failures) while the 17 RNG expectations and the Rplots check pass; in `test-copy-eval.R` 12 new rows fail with `the script did not finish` while the 4 earlier rows and the S4 baseline pass.
+Expected: `[ FAIL 35 | WARN 0 | SKIP 0 | PASS 23 ]`: in `test-eval-core.R` the 19 new tests fail (17
+error with `could not find function "eval_r"` or `"eval_state_diff"`, the argument test records 4
+failures, the Rscript test 2 failures) while the 17 RNG expectations and the Rplots check pass; in
+`test-copy-eval.R` 12 new rows fail with `the script did not finish` while the 4 earlier rows and
+the S4 baseline pass.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4130,7 +4423,9 @@ eval_result = function(st, state0) {
 Rscript --vanilla -e 'devtools::test(filter = "eval-core|copy-eval")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 133 ]` (116 in `test-eval-core.R`, 17 copy rows). The plot tests skip without ragg and `capabilities("png")`; the copy rows skip without `capabilities("profmem")`.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 133 ]` (116 in `test-eval-core.R`, 17 copy rows). The
+plot tests skip without ragg and `capabilities("png")`; the copy rows skip without
+`capabilities("profmem")`.
 
 - [ ] **Step 5: Commit**
 
@@ -4139,16 +4434,33 @@ git add R/eval-core.R tests/testthat/test-eval-core.R tests/testthat/test-copy-e
 git commit -m "feat(eval): add the hand-rolled evaluator eval_r()"
 ```
 
-
 ### Task 9: The model-facing text: `format_eval_result()`
 
 **Files:** Create: `R/eval-format.R`; Test: `tests/testthat/test-eval-format.R`.
 
-The layout of report 12 section 3.4 with the contract's notices (04 section 7.9, IC-67): the events in order (output and messages cleaned by P01's `clean_terminal()`, `Warning in <call>: ...`, `Error in <call>: ...  [expression at line n]` with `Traceback (outermost first):`, `[interrupted by the user after s s; side effects may have occurred]` (the wording of architecture section 6.12), `[plot N attached]`), then `[plots 4-50 not attached: peter$plot(k)]`, at most 12 object-change lines (`+ markers <data.frame 4,211 x 7>`, `~ pbmc <Seurat> modified`, `- x removed`), the session changes by name and, unless the status is `ok`, a status line. The text is cut by P01's `truncate_output()` (head 40% / tail 60% by lines, the full text in the out store and a spill file, the notice `[... n lines omitted; all: peter$out("<id>")]`) to the budget minus the image tokens; the budget is halved (at least 200) when the running session's last request is above half the compaction threshold, asked through P07's `compact.should` service (G4 section 4.4.5).
+The layout of report 12 section 3.4 with the contract's notices (04 section 7.9, IC-67): the events
+in order (output and messages cleaned by P01's `clean_terminal()`, `Warning in <call>: ...`,
+`Error in <call>: ...  [expression at line n]` with `Traceback (outermost first):`,
+`[interrupted by the user after s s; side effects may have occurred]` (the wording of architecture
+section 6.12), `[plot N attached]`), then `[plots 4-50 not attached: peter$plot(k)]`, at most 12
+object-change lines (`+ markers <data.frame 4,211 x 7>`, `~ pbmc <Seurat> modified`, `- x removed`),
+the session changes by name and, unless the status is `ok`, a status line. The text is cut by P01's
+`truncate_output()` (head 40% / tail 60% by lines, the full text in the out store and a spill file,
+the notice `[... n lines omitted; all: peter$out("<id>")]`) to the budget minus the image tokens;
+the budget is halved (at least 200) when the running session's last request is above half the
+compaction threshold, asked through P07's `compact.should` service (G4 section 4.4.5).
 
 **Interfaces:**
-- Consumes: Task 8's `eval_session()` and `eval_r()` (tests); P01: `check_class()`, `check_number()`, `clean_terminal()`, `est_image_tokens()`, `truncate_output(text, budget_tokens, class = "r_output", head = 0.4, id_prefix = "o")`, `ext_service_has()`, `ext_service_get()`, `out_get()` (tests); P06 kernel SDK: `session_data(s)` (`$usage`, the 04 section 4.3 rows); P07 service `compact.should` = `function(s, tokens, idle_s) lgl(1)` (absent: no halving).
-- Produces (04 section 7.9): `format_eval_result(res, budget_tokens)` -> `list(text = chr(1), images = list, truncated = lgl(1), out_id = chr(1) | NULL, spill = chr(1) | NULL)` (P10's `r` tool); private `eval_budget(budget_tokens, pressure = eval_pressure())`, `eval_pressure(s = eval_session())`.
+- Consumes: Task 8's `eval_session()` and `eval_r()` (tests); P01: `check_class()`,
+  `check_number()`, `clean_terminal()`, `est_image_tokens()`,
+  `truncate_output(text, budget_tokens, class = "r_output", head = 0.4, id_prefix = "o")`,
+  `ext_service_has()`, `ext_service_get()`, `out_get()` (tests); P06 kernel SDK: `session_data(s)`
+  (`$usage`, the 04 section 4.3 rows); P07 service `compact.should` =
+  `function(s, tokens, idle_s) lgl(1)` (absent: no halving).
+- Produces (04 section 7.9): `format_eval_result(res, budget_tokens)` ->
+  `list(text = chr(1), images = list, truncated = lgl(1), out_id = chr(1) | NULL, spill = chr(1) | NULL)`
+  (P10's `r` tool); private `eval_budget(budget_tokens, pressure = eval_pressure())`,
+  `eval_pressure(s = eval_session())`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4288,7 +4600,9 @@ test_that("blank lines of printed output are kept", {
 Rscript --vanilla -e 'devtools::test(filter = "eval-format")'
 ```
 
-Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 0 ]`; the tests error with `could not find function "format_eval_result"` (`"eval_budget"`), and the validation test records its two failed `expect_error()` calls.
+Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 0 ]`; the tests error with
+`could not find function "format_eval_result"` (`"eval_budget"`), and the validation test records
+its two failed `expect_error()` calls.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4462,11 +4776,46 @@ git commit -m "feat(eval): add the budgeted model text of an evaluation"
 
 **Files:** Modify: `R/env-snapshot.R` (append), `tests/testthat/test-env-snapshot.R` (append).
 
-The built-in of 04 section 7.9 and section 10.3 as amended by IC-38 (`attached` and `skill_content` have `placement = "both"`, so `peter("x", mtcars)` sends `<attached name="mtcars">` after `<workspace>` in its first request) and IC-69/IC-34 (the `evaluator` record `r`; the `eval.r` and `describe` services owned by `builtin:workspace`, so filtering the built-in removes them). Block providers follow the `context_block` contract (04 section 10.2 kind 13): `provide(ctx, budget)` returns `NULL`, a string or `list(text, attrs)`; `ctx$input` is `list(call, turn, prompt, placement, last_hash, opts)`; `.opts$context` `"names"` lists names only and `"none"` omits the blocks. The workspace snapshot of the last block is kept in an environment inside `ctx$state()` (an environment is never JSON-able, so it is not persisted: snapshot addresses mean nothing in another process); an `agent_end` hook refreshes it (only once the workspace block has run, so a `.opts$context = "none"` session pays for no snapshot) so the next `<workspace_changes>` shows only what the user changed between requests; without a session label the `env` attribute is `globalenv` for the global environment and `<environment>` otherwise (04 section 5.1 `home_label`); `session_shutdown` releases the session's history log. Context items are read with P08's `call_value()` [leaf]; a failing describer becomes a one-line note.
+The built-in of 04 section 7.9 and section 10.3 as amended by IC-38 (`attached` and `skill_content`
+have `placement = "both"`, so `peter("x", mtcars)` sends `<attached name="mtcars">` after
+`<workspace>` in its first request) and IC-69/IC-34 (the `evaluator` record `r`; the `eval.r` and
+`describe` services owned by `builtin:workspace`, so filtering the built-in removes them). Block
+providers follow the `context_block` contract (04 section 10.2 kind 13): `provide(ctx, budget)`
+returns `NULL`, a string or `list(text, attrs)`; `ctx$input` is
+`list(call, turn, prompt, placement, last_hash, opts)`; `.opts$context` `"names"` lists names only
+and `"none"` omits the blocks. The workspace snapshot of the last block is kept in an environment
+inside `ctx$state()` (an environment is never JSON-able, so it is not persisted: snapshot addresses
+mean nothing in another process); an `agent_end` hook refreshes it (only once the workspace block
+has run, so a `.opts$context = "none"` session pays for no snapshot) so the next
+`<workspace_changes>` shows only what the user changed between requests; without a session label the
+`env` attribute is `globalenv` for the global environment and `<environment>` otherwise (04 section
+5.1 `home_label`); `session_shutdown` releases the session's history log. Context items are read
+with P08's `call_value()` [leaf]; a failing describer becomes a one-line note.
 
 **Interfaces:**
-- Consumes: Tasks 2-5 and 8 (`env_snapshot()`, `env_diff()`, `workspace_lines()`, `changes_lines()`, `env_tokens()`, `gptr_describe()`, `describe_value()`, `dsc_fit()`, `user_expr_log()`, `user_log_start()`, `user_log_release()`, `r_env_probe()`, `eval_r()`); P01: `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has(name)`, `ext_service_get(name)`, `setting_get(key, session = NULL, default = NULL)`; P02 (04 sections 6.8, 7.2, 10.5): `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`, `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, `gptr_spec(kind, name, ...)`, `registry_get(kind, name, session = NULL)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API object's `gptr$register(spec)` and `gptr$on(event, handler, matcher = NULL)`, `gptr_registry(kind = NULL, diagnostics = FALSE)` (tests); P06 kernel SDK: `session_home(s)`, `session_data(s)` (`$id`, `$home_label`); P08 kernel SDK: `call_value(call, i)` on the `gptr_call` bindings `context` (items `list(label, kind, name, slot, facts)`), `envir`, `values`, `ids$skills`; P17 service `skill.body` = `function(name) list(text, dir)` (absent before P17: no block).
-- Produces: `builtin_workspace(gptr)` (04 section 7.9); context blocks `workspace` (`first`, order 500, budget 600), `workspace_changes` (`turn`, order 100, budget 300), `attached` (`both`, order 600, budget 1200: 150 per object, at least 60), `skill_content` (`both`, order 700, budget 10000: 5,000 per skill); prompt section `r_env` (T1, order 900, budget 450); `evaluator` record `r` with `eval = eval_r`; services `eval.r` = `function(code, envir, ...)` (the evaluator named by setting `evaluator`, default `"r"`) and `describe` = `function(x, budget = 150L)`; hooks on `agent_end` and `session_shutdown`.
+- Consumes: Tasks 2-5 and 8 (`env_snapshot()`, `env_diff()`, `workspace_lines()`, `changes_lines()`,
+  `env_tokens()`, `gptr_describe()`, `describe_value()`, `dsc_fit()`, `user_expr_log()`,
+  `user_log_start()`, `user_log_release()`, `r_env_probe()`, `eval_r()`); P01: `on_load(expr)`,
+  `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has(name)`,
+  `ext_service_get(name)`, `setting_get(key, session = NULL, default = NULL)`; P02 (04 sections 6.8,
+  7.2, 10.5):
+  `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`,
+  `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`,
+  `gptr_spec(kind, name, ...)`, `registry_get(kind, name, session = NULL)`,
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API object's
+  `gptr$register(spec)` and `gptr$on(event, handler, matcher = NULL)`,
+  `gptr_registry(kind = NULL, diagnostics = FALSE)` (tests); P06 kernel SDK: `session_home(s)`,
+  `session_data(s)` (`$id`, `$home_label`); P08 kernel SDK: `call_value(call, i)` on the `gptr_call`
+  bindings `context` (items `list(label, kind, name, slot, facts)`), `envir`, `values`,
+  `ids$skills`; P17 service `skill.body` = `function(name) list(text, dir)` (absent before P17: no
+  block).
+- Produces: `builtin_workspace(gptr)` (04 section 7.9); context blocks `workspace` (`first`, order
+  500, budget 600), `workspace_changes` (`turn`, order 100, budget 300), `attached` (`both`, order
+  600, budget 1200: 150 per object, at least 60), `skill_content` (`both`, order 700, budget 10000:
+  5,000 per skill); prompt section `r_env` (T1, order 900, budget 450); `evaluator` record `r` with
+  `eval = eval_r`; services `eval.r` = `function(code, envir, ...)` (the evaluator named by setting
+  `evaluator`, default `"r"`) and `describe` = `function(x, budget = 150L)`; hooks on `agent_end`
+  and `session_shutdown`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4634,7 +4983,11 @@ test_that("the loaded registry holds the workspace records (P02)", {
 Rscript --vanilla -e 'devtools::test(filter = "env-snapshot")'
 ```
 
-Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 45 ]`: six new tests error with `could not find function` (`env_block_workspace`, `env_block_attached`, `env_block_skills`, `builtin_workspace`), the service test records two failures and then errors with `gptr_error_not_available` ("The gptr service 'eval.r' is not available"), and the registry test records four failures; the 45 earlier expectations pass.
+Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 45 ]`: six new tests error with
+`could not find function` (`env_block_workspace`, `env_block_attached`, `env_block_skills`,
+`builtin_workspace`), the service test records two failures and then errors with
+`gptr_error_not_available` ("The gptr service 'eval.r' is not available"), and the registry test
+records four failures; the 45 earlier expectations pass.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4879,16 +5232,28 @@ git add R/env-snapshot.R tests/testthat/test-env-snapshot.R
 git commit -m "feat(env): register builtin:workspace with its blocks, r_env and services"
 ```
 
-
 ### Task 11: Documentation, lint, layering and plan acceptance
 
-**Files:** Modify: `tests/testthat/test-env-describe.R` (append), `tests/testthat/test-copy-eval.R` (append); Generated: `NAMESPACE`, `man/gptr_describe.Rd`.
+**Files:** Modify: `tests/testthat/test-env-describe.R` (append), `tests/testthat/test-copy-eval.R`
+(append); Generated: `NAMESPACE`, `man/gptr_describe.Rd`.
 
-`gptr_describe()` is the plan's one export (04 section 14.1). roxygen2 turns `@export` on the generic into `export(gptr_describe)` and `@export` on each method into an `S3method()` line; the `function` method is written `S3method(gptr_describe,"function")` (checked with roxygen2 on a scratch copy of the package: 20 `S3method` lines, no roxygen warning, `tools::checkRd()` clean). Until the methods are registered, `gptr_describe()` called from outside the namespace (the copy rows' child scripts, other packages, the console) finds no method (`no applicable method for 'gptr_describe'`, reproduced with a toy package loaded by `pkgload::load_all(export_all = FALSE)`), so the rows that call the export directly are added here. Both roxygen examples run offline and print `<data.frame> 32 x 11, 7 KB` plus the column types, and `<Date> length 10, 400 B` / `2026-01-01 to 2026-01-10; no NA`.
+`gptr_describe()` is the plan's one export (04 section 14.1). roxygen2 turns `@export` on the
+generic into `export(gptr_describe)` and `@export` on each method into an `S3method()` line; the
+`function` method is written `S3method(gptr_describe,"function")` (checked with roxygen2 on a
+scratch copy of the package: 20 `S3method` lines, no roxygen warning, `tools::checkRd()` clean).
+Until the methods are registered, `gptr_describe()` called from outside the namespace (the copy
+rows' child scripts, other packages, the console) finds no method
+(`no applicable method for 'gptr_describe'`, reproduced with a toy package loaded by
+`pkgload::load_all(export_all = FALSE)`), so the rows that call the export directly are added here.
+Both roxygen examples run offline and print `<data.frame> 32 x 11, 7 KB` plus the column types, and
+`<Date> length 10, 400 B` / `2026-01-01 to 2026-01-10; no NA`.
 
 **Interfaces:**
-- Consumes: the roxygen block of `gptr_describe()` and its methods (Task 3); P01's `expect_no_copy()`; P01's layering and lint tests (`test-arch-layers.R`, `test-lint-rules.R`) and `.lintr`.
-- Produces: `export(gptr_describe)` and `S3method(gptr_describe, <class>)` for the 20 classes of 04 section 6.6 in `NAMESPACE`; `man/gptr_describe.Rd`; the evidence of 05 P09 acceptance 1-6.
+- Consumes: the roxygen block of `gptr_describe()` and its methods (Task 3); P01's
+  `expect_no_copy()`; P01's layering and lint tests (`test-arch-layers.R`, `test-lint-rules.R`) and
+  `.lintr`.
+- Produces: `export(gptr_describe)` and `S3method(gptr_describe, <class>)` for the 20 classes of 04
+  section 6.6 in `NAMESPACE`; `man/gptr_describe.Rd`; the evidence of 05 P09 acceptance 1-6.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4934,7 +5299,11 @@ test_that("a data frame description adds no copy to R's own column-edit copy", {
 Rscript --vanilla -e 'devtools::test(filter = "env-describe|copy-eval")'
 ```
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 112 ]`: the NAMESPACE test records two failures (`"export(gptr_describe)" %in% ns is not TRUE` and the `expect_setequal()` of the registered classes), the three copy rows that call `gptr_describe()` in the child fail with `the script did not finish` (`could not find function "gptr_describe"`), and the data-frame baseline passes.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 112 ]`: the NAMESPACE test records two failures
+(`"export(gptr_describe)" %in% ns is not TRUE` and the `expect_setequal()` of the registered
+classes), the three copy rows that call `gptr_describe()` in the child fail with
+`the script did not finish` (`could not find function "gptr_describe"`), and the data-frame baseline
+passes.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4980,7 +5349,17 @@ Rscript --vanilla -e 'devtools::test(filter = "arch|lint")'
 Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'
 ```
 
-Expected: the first command prints `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 117 ]` (96 + 21); the second `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 457 ]` (guard 52, snapshot 85, describe 96, history 12, probe 16, plots 32, core 116, format 27, copy 21; skips appear only without ragg and `capabilities("png")`, RSQLite or `capabilities("profmem")`); the third shows `FAIL 0 | WARN 0` (P01's layering test finds no P09 call outside the layer table and the kernel SDK, every function has one home, and the literal service names `eval.r`, `describe`, `skill.body`, `compact.should` are declared; P01's lint rules find no hit in the eight files); the fourth prints no lints and exits 0. The namespace is loaded first, as in P01's acceptance A3: for an uninstalled development tree lintr's `object_usage_linter` cannot resolve internal functions through `getNamespace("gptr")` and would report every call to a P01, P02, P06, P08 or P09 internal helper as "no visible global function definition". This is a shell command, not package or test code, so IC-71's rule on `pkgload::load_all()` is not touched.
+Expected: the first command prints `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 117 ]` (96 + 21); the second
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 457 ]` (guard 52, snapshot 85, describe 96, history 12, probe 16,
+plots 32, core 116, format 27, copy 21; skips appear only without ragg and `capabilities("png")`,
+RSQLite or `capabilities("profmem")`); the third shows `FAIL 0 | WARN 0` (P01's layering test finds
+no P09 call outside the layer table and the kernel SDK, every function has one home, and the literal
+service names `eval.r`, `describe`, `skill.body`, `compact.should` are declared; P01's lint rules
+find no hit in the eight files); the fourth prints no lints and exits 0. The namespace is loaded
+first, as in P01's acceptance A3: for an uninstalled development tree lintr's `object_usage_linter`
+cannot resolve internal functions through `getNamespace("gptr")` and would report every call to a
+P01, P02, P06, P08 or P09 internal helper as "no visible global function definition". This is a
+shell command, not package or test code, so IC-71's rule on `pkgload::load_all()` is not touched.
 
 - [ ] **Step 5: Commit**
 
@@ -4989,10 +5368,10 @@ git add NAMESPACE man/gptr_describe.Rd tests/testthat/test-env-describe.R tests/
 git commit -m "docs(env): export gptr_describe() and register its methods"
 ```
 
-
 ## Plan acceptance
 
-Run from the repository root after Task 11. Each check of 05 P09 (including its review amendments) and the test that proves it:
+Run from the repository root after Task 11. Each check of 05 P09 (including its review amendments)
+and the test that proves it:
 
 | # | Acceptance check (05 P09) | Proved by |
 |---|---|---|
@@ -5025,8 +5404,15 @@ Rscript --vanilla -e 'devtools::test(filter = "arch|lint")'
 Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'
 ```
 
-Expected, in order: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 457 ]`; `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]`; `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 21 ]`; `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 197 ]` (96 + 16 + 85); the layering and lint tests with `FAIL 0 | WARN 0`; no lints and exit status 0 (the namespace is loaded first, as in P01's acceptance A3; after `R CMD INSTALL .` the bare `lintr::lint_package()` gives the same empty result). Skips appear only on machines without ragg and `capabilities("png")` (plot tests), RSQLite (one DBI expectation) or `capabilities("profmem")` (the copy rows). The image elision above provider limits (IC-67) is P06's projection (it appends `gptr.image_elision`, 04 section 4.6); P09 supplies the stored plots it points to.
-
+Expected, in order: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 457 ]`;
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]`; `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 21 ]`;
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 197 ]` (96 + 16 + 85); the layering and lint tests with
+`FAIL 0 | WARN 0`; no lints and exit status 0 (the namespace is loaded first, as in P01's acceptance
+A3; after `R CMD INSTALL .` the bare `lintr::lint_package()` gives the same empty result). Skips
+appear only on machines without ragg and `capabilities("png")` (plot tests), RSQLite (one DBI
+expectation) or `capabilities("profmem")` (the copy rows). The image elision above provider limits
+(IC-67) is P06's projection (it appends `gptr.image_elision`, 04 section 4.6); P09 supplies the
+stored plots it points to.
 
 ## Self-review
 
@@ -5047,43 +5433,152 @@ Expected, in order: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 457 ]`; `[ FAIL 0 | WARN 
 | `test-copy-eval.R` (acceptance 3) | 2, 3, 8, 11 |
 | Acceptance 1-6 and the review amendments | the "Plan acceptance" table |
 
-**Placeholder scan.** The plan was searched for the placeholder phrases of the writing-plans standard (to-be-decided markers, deferred implementation, unspecified error handling, references to another task's code instead of the code): none occurs. Every step shows the complete file or appended block, the command and the expected summary line, and every function a step calls is defined in this plan or in 04 for an earlier plan.
+**Placeholder scan.** The plan was searched for the placeholder phrases of the writing-plans
+standard (to-be-decided markers, deferred implementation, unspecified error handling, references to
+another task's code instead of the code): none occurs. Every step shows the complete file or
+appended block, the command and the expected summary line, and every function a step calls is
+defined in this plan or in 04 for an earlier plan.
 
-**Type and name consistency with 04.** Signatures copied from 04 section 7.9 and section 6.6 and checked against the code: `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))`, `rng_swap(state, expr)`, `format_eval_result(res, budget_tokens)`, `eval_guard(exprs)`, `gptr_shim(exprs, envir)`, `plot_png(recorded, width = gptr_opt("plot_width"), height = gptr_opt("plot_height"), res = gptr_opt("plot_res"))`, `env_snapshot(envir, previous = NULL)`, `env_diff(old, new, assigned = character())`, `workspace_lines(snapshot, budget = 600L)`, `changes_lines(diff, snapshot, user_ran, budget = 300L)`, `describe_binding(name, envir, budget = 150L)`, `user_expr_log(since = NULL, n = 20L)`, `r_env_probe()`, `builtin_workspace(gptr)`, `gptr_describe(x, budget = 150L, ...)`. The `gptr_eval_result` has the twelve fields of 04 section 5.8 in that order (a test asserts `names()`); statuses, event types, option names (`gptr.r_timeout`, `gptr.r_output_tokens`, `gptr.r_max_images`, `gptr.plot_width`, `gptr.plot_height`, `gptr.plot_res`), block names, placements and orders, the section name, tier and order, the kind names `context_block`, `prompt_section`, `evaluator`, the event names `agent_end` and `session_shutdown`, the service names and the condition class `gptr_error_invalid_argument` match 04. Consumed functions use their 04 signatures (P01 section 7.1, P02 sections 6.8/7.2, P06 section 7.6, P08 section 7.8); P01's code was read from `dev/plan/P01-foundation.md` (its `clean_terminal()` returns lines and `out_put()` takes a session's live record, and the code here follows that).
+**Type and name consistency with 04.** Signatures copied from 04 section 7.9 and section 6.6 and
+checked against the code:
+`eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))`,
+`rng_swap(state, expr)`, `format_eval_result(res, budget_tokens)`, `eval_guard(exprs)`,
+`gptr_shim(exprs, envir)`,
+`plot_png(recorded, width = gptr_opt("plot_width"), height = gptr_opt("plot_height"), res = gptr_opt("plot_res"))`,
+`env_snapshot(envir, previous = NULL)`, `env_diff(old, new, assigned = character())`,
+`workspace_lines(snapshot, budget = 600L)`,
+`changes_lines(diff, snapshot, user_ran, budget = 300L)`,
+`describe_binding(name, envir, budget = 150L)`, `user_expr_log(since = NULL, n = 20L)`,
+`r_env_probe()`, `builtin_workspace(gptr)`, `gptr_describe(x, budget = 150L, ...)`. The
+`gptr_eval_result` has the twelve fields of 04 section 5.8 in that order (a test asserts `names()`);
+statuses, event types, option names (`gptr.r_timeout`, `gptr.r_output_tokens`, `gptr.r_max_images`,
+`gptr.plot_width`, `gptr.plot_height`, `gptr.plot_res`), block names, placements and orders, the
+section name, tier and order, the kind names `context_block`, `prompt_section`, `evaluator`, the
+event names `agent_end` and `session_shutdown`, the service names and the condition class
+`gptr_error_invalid_argument` match 04. Consumed functions use their 04 signatures (P01 section 7.1,
+P02 sections 6.8/7.2, P06 section 7.6, P08 section 7.8); P01's code was read from
+`dev/plan/P01-foundation.md` (its `clean_terminal()` returns lines and `out_put()` takes a session's
+live record, and the code here follows that).
 
 **Contract ambiguities and the reading chosen.**
 
-1. 04 section 7.6 types `gptr_run$session` as an id and the kernel SDK (IC-33) has no id-to-session accessor, while 04 section 7.9 asks `eval_r()` to keep extra plots "in the session's out store" and `format_eval_result()` to halve the budget by "the session's context". `eval_session()` reads the run's `shell` binding when it holds a `gptr_session` (the name P06's draft uses) and otherwise falls back to the process out store, which `out_get()` searches as well (IC-71), with no halving. P06 should expose the shell as a documented run field or add an SDK accessor.
-2. 04 section 5.8 lists `changes` without the object diff, while architecture section 6.12 puts "added, modified, removed" in `changes` and `format_eval_result(res, budget_tokens)` must print the state-change lines from `res` alone. `eval_r()` adds `changes$objects = list(added, modified, removed, lines)`; the listed fields are unchanged.
-3. 04 section 10.3's built-in table gives `attached (600, turn)` and omits `skill_content`; section 7.9 and IC-38 give `attached` and `skill_content` `placement = "both"` (orders 600 and 700). IC-38 (section 15) wins.
-4. The block budgets of `attached` and `skill_content` are not fixed in 04; architecture section 12.2 gives 150 per object (300 maximum) and 5,000 per skill (10,000 after compaction): the blocks use 1,200 (150 per object, at least 60 when many objects share it) and 10,000 (5,000 per skill).
-5. "`plot` events carry the PNG path": the field is named `path` (with `index`, `attached`, `out_id`); P10's draft reads `e$path`.
-6. The `rng` state environment's fields are not named in 04 (section 7.6: "environment holding the child's `c(10407L, <6 seeds>)`"): `state$seed` holds the vector (advanced in place) and `state$id` the hash key (agent id, or `"<.opts$seed>:<agent label>"`). P19 must build `run$opts$rng_state` with these names.
-7. `.d$snapshot` (04 section 5.1) has no writer among the kernel SDK verbs; the workspace snapshot lives in an environment inside `ctx$state()` (never JSON-able, so never persisted).
-8. 04 section 7.0 lists no `the` field for P09, but the task-callback log and the probe cache are process-level by nature (neither is run state, INFRA-15): they are the package-level environments `user_log_state` and `env_probe_cache`.
-9. Acceptance 5 ("`loadedNamespaces()` unchanged"): the probe reads cores and RAM through ps, an Import (IC-59) that R loads on first use; the test loads ps first, and the probe never loads a probed package.
-10. The `eval.r` service signature is "`eval_r()` through the `evaluator` kind"; P02's draft `ctx$eval()` calls `f(code, envir = where)`, so the service is `function(code, envir, ...)`.
-11. `changes_lines()` keeps 04's signature without a default for `user_ran`; callers pass `character()`.
-12. IC-44 says `.opts$images` plots are rendered with `plot_png()` (P09, L4) while P08 (L6) may not call an L4 function by name; P08's plan renders them itself. Not P09's file; noted for the reviewers of P08.
-13. R semantics, not a contract point: an error unwinds frames without releasing their references, so an object passed through a failing function (or a function-frame home the failing code forced) copies once on its next edit, as with `try()` in user code. 05's copy rows cover only non-failing code; the error row at top level after reading the object is in place and tested.
-14. 04 section 7.9 says "per-expression `setTimeLimit(elapsed = timeout, transient = TRUE)`"; the `r` tool's `timeout` is "Seconds; best effort" for the call (P10). `eval_r()` keeps one deadline for the whole call and gives each top-level expression the remaining time as its per-expression `setTimeLimit()`, so a 10-expression call cannot run 10 times the limit; an expression that starts after the deadline is not run (status `timeout`).
-15. 04 section 7.9 says `describe_binding()` has "errors caught (default method)": a failing class method falls back to `gptr_describe.default()`, and only when that fails too does the line become `<?> (describe failed: <the method's message>)`. The `attached` block keeps its one-line note (04 asks nothing more of blocks; P02 omits a block whose provider fails).
-16. IC-61 forbids `RNGkind()`, yet R keeps the generator kind internally and `set.seed()` keeps it in force, so a swap for a user without `.Random.seed` must restore the kind some other way: `rng_swap()` reads and restores the kind code through `stats::rbinom(1L, 0L, 0.5)`, which loads and stores R's state without drawing (size 0). `rbinom()` is not on the lint list of 04 section 12.3 (`set.seed(`, `sample(`, `runif(`, `RNGkind(`) and draws nothing from any stream.
+1. 04 section 7.6 types `gptr_run$session` as an id and the kernel SDK (IC-33) has no id-to-session
+   accessor, while 04 section 7.9 asks `eval_r()` to keep extra plots "in the session's out store"
+   and `format_eval_result()` to halve the budget by "the session's context". `eval_session()` reads
+   the run's `shell` binding when it holds a `gptr_session` (the name P06's draft uses) and
+   otherwise falls back to the process out store, which `out_get()` searches as well (IC-71), with
+   no halving. P06 should expose the shell as a documented run field or add an SDK accessor.
+2. 04 section 5.8 lists `changes` without the object diff, while architecture section 6.12 puts
+   "added, modified, removed" in `changes` and `format_eval_result(res, budget_tokens)` must print
+   the state-change lines from `res` alone. `eval_r()` adds
+   `changes$objects = list(added, modified, removed, lines)`; the listed fields are unchanged.
+3. 04 section 10.3's built-in table gives `attached (600, turn)` and omits `skill_content`; section
+   7.9 and IC-38 give `attached` and `skill_content` `placement = "both"` (orders 600 and 700).
+   IC-38 (section 15) wins.
+4. The block budgets of `attached` and `skill_content` are not fixed in 04; architecture section
+   12.2 gives 150 per object (300 maximum) and 5,000 per skill (10,000 after compaction): the blocks
+   use 1,200 (150 per object, at least 60 when many objects share it) and 10,000 (5,000 per skill).
+5. "`plot` events carry the PNG path": the field is named `path` (with `index`, `attached`,
+   `out_id`); P10's draft reads `e$path`.
+6. The `rng` state environment's fields are not named in 04 (section 7.6: "environment holding the
+   child's `c(10407L, <6 seeds>)`"): `state$seed` holds the vector (advanced in place) and
+   `state$id` the hash key (agent id, or `"<.opts$seed>:<agent label>"`). P19 must build
+   `run$opts$rng_state` with these names.
+7. `.d$snapshot` (04 section 5.1) has no writer among the kernel SDK verbs; the workspace snapshot
+   lives in an environment inside `ctx$state()` (never JSON-able, so never persisted).
+8. 04 section 7.0 lists no `the` field for P09, but the task-callback log and the probe cache are
+   process-level by nature (neither is run state, INFRA-15): they are the package-level environments
+   `user_log_state` and `env_probe_cache`.
+9. Acceptance 5 ("`loadedNamespaces()` unchanged"): the probe reads cores and RAM through ps, an
+   Import (IC-59) that R loads on first use; the test loads ps first, and the probe never loads a
+   probed package.
+10. The `eval.r` service signature is "`eval_r()` through the `evaluator` kind"; P02's draft
+    `ctx$eval()` calls `f(code, envir = where)`, so the service is `function(code, envir, ...)`.
+11. `changes_lines()` keeps 04's signature without a default for `user_ran`; callers pass
+    `character()`.
+12. IC-44 says `.opts$images` plots are rendered with `plot_png()` (P09, L4) while P08 (L6) may not
+    call an L4 function by name; P08's plan renders them itself. Not P09's file; noted for the
+    reviewers of P08.
+13. R semantics, not a contract point: an error unwinds frames without releasing their references,
+    so an object passed through a failing function (or a function-frame home the failing code
+    forced) copies once on its next edit, as with `try()` in user code. 05's copy rows cover only
+    non-failing code; the error row at top level after reading the object is in place and tested.
+14. 04 section 7.9 says "per-expression `setTimeLimit(elapsed = timeout, transient = TRUE)`"; the
+    `r` tool's `timeout` is "Seconds; best effort" for the call (P10). `eval_r()` keeps one deadline
+    for the whole call and gives each top-level expression the remaining time as its per-expression
+    `setTimeLimit()`, so a 10-expression call cannot run 10 times the limit; an expression that
+    starts after the deadline is not run (status `timeout`).
+15. 04 section 7.9 says `describe_binding()` has "errors caught (default method)": a failing class
+    method falls back to `gptr_describe.default()`, and only when that fails too does the line
+    become `<?> (describe failed: <the method's message>)`. The `attached` block keeps its one-line
+    note (04 asks nothing more of blocks; P02 omits a block whose provider fails).
+16. IC-61 forbids `RNGkind()`, yet R keeps the generator kind internally and `set.seed()` keeps it
+    in force, so a swap for a user without `.Random.seed` must restore the kind some other way:
+    `rng_swap()` reads and restores the kind code through `stats::rbinom(1L, 0L, 0.5)`, which loads
+    and stores R's state without drawing (size 0). `rbinom()` is not on the lint list of 04 section
+    12.3 (`set.seed(`, `sample(`, `runif(`, `RNGkind(`) and draws nothing from any stream.
 
-**Executed validation** (scratch directory `work/plans/P09/v2`, R 4.4.3, testthat 3.3.2, lintr 3.3.0.1, roxygen2 installed):
+**Executed validation** (scratch directory `work/plans/P09/v2`, R 4.4.3, testthat 3.3.2, lintr
+3.3.0.1, roxygen2 installed):
 
-- Every `r` code block of this plan (25 blocks) was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. The plan contains no left-arrow assignment and no `%>%` in code (grep).
-- P01's 15 R files were extracted from `dev/plan/P01-foundation.md` and loaded with scratch stand-ins for `gptr_spec()`, `gptr_context_block()`, `gptr_prompt_section()`, `registry_get()`, `ext_declare_builtin()` (P02), `run_current()`, `session_data()`, `session_home()`, `session_live()` (P06) and P08's `call_value()` (copied from the P08 plan); P09's eight files were then loaded and every test file run with `testthat::test_file()`: guard 39, snapshot 76 (+ the P02 registry test, which needs `gptr_registry()`), describe 92, history 12, probe 15, plots 26, core 97 (+ the shim test, which needs P08's `gptr_return()` in a loaded `gptr` namespace, and the Rscript test, run as an equivalent script: no `Rplots.pdf`, 2 images), format 26, all passing. The red phase of Tasks 1-10 was simulated by leaving the task's code out; the failure counts above are the measured ones, adjusted for the tests that cannot run in scratch.
-- The 21 rows of `test-copy-eval.R` ran in fresh `Rscript --vanilla` processes through a scratch `expect_no_copy()` with P01's counting rule: 0 copies, except the S4 and data-frame rows, which equal their R baselines (1 copy each without gptr). Negative control: without `res[1L] = list(NULL)` the `(x)` row copies once. Prototype variants were checked the same way: a `for` loop in the frame that binds a function-frame home copies once, a positional `ls(envir)` copies once, the box pattern does not.
-- `lintr::lint_package()` with the repository `.lintr` on a scratch package: no lints in the P09 files and tests other than `object_usage_linter` "no visible global function" notes for functions that the scratch stand-ins define outside lintr's view (every name listed exists in P01, P02, P06, P08 or P09). These notes are the uninstalled-namespace lookup failure of P01's A3 note, which is why Task 11 Step 4 and the Plan acceptance run `pkgload::load_all(quiet = TRUE)` before `lintr::lint_package()` and stop on any lint. P01's `lint_scan()` rules over the eight files: 0 hits. P01's layering check (`arch_fun_map()`, `arch_edges()`, `arch_check()`, the factory rule, `arch_service_calls()`) over P01's files, the stand-ins placed in their owners' files and P09's files: 0 violations, no duplicated function names, all service names declared.
-- `roxygen2::roxygenise()` on the scratch package: `export(gptr_describe)` and the 20 `S3method` lines listed in Task 11, no warnings; `tools::checkRd()` clean; the two examples print the outputs quoted in Task 11.
-- Describer facts: 92 of G2's 98 at 150 tokens (93.9%), the longest description 130 tokens. `r_env_probe()` on the development machine: 173 estimated tokens, 0.06 s.
-- Review re-run after the fixes of the review log below (scratch `work/plans/review-P09/v3`): the 25 `r` blocks re-extracted from this file and parsed; the eight R files and nine test files assembled from the blocks, built into a scratch package with P01's 15 extracted R files and stand-ins for P02, P06 and P08, `roxygen2::roxygenise()` and `devtools::test()`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 457 ]` (guard 52, snapshot 85, describe 96, history 12, probe 16, plots 32, core 116, format 27, copy 21, including every fresh-process copy row at 0 copies or its R baseline); P01's `lint_scan()` rules: 0 hits; `lintr::lint()` with the repository `.lintr` over the 17 files: no lints apart from `object_usage_linter` notes for stand-in functions; no left-arrow `LEFT_ASSIGN` token (`getParseData()`) and no `%>%` in any block. Probes run before the fixes: `q = 1; q('no')`, `q = 1; base::q('no')`, `quit = base::quit; quit()`, `f = function(q) 1; q('no')` and `q = 1; do.call('q', list('no'))` passed the guard; `set.seed(42); runif(1)` after a swap without a user seed gave 0.1738 instead of 0.9148; `options('digits')`, `library()` and `suppressPackageStartupMessages(1 + 1)` printed nothing; `f = function(n) f(n + 1); f(1)` made `eval_r()` itself throw "evaluation nested too deeply"; `plot(1:10)`, `abline()`, `lines()`, `points()` in four expressions gave four images with the finished page not attached; CR LF code was a parse error; the first plot of a session reported `[environment variables changed: TZDIR]`.
-
+- Every `r` code block of this plan (25 blocks) was extracted and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. The plan contains no
+  left-arrow assignment and no `%>%` in code (grep).
+- P01's 15 R files were extracted from `dev/plan/P01-foundation.md` and loaded with scratch
+  stand-ins for `gptr_spec()`, `gptr_context_block()`, `gptr_prompt_section()`, `registry_get()`,
+  `ext_declare_builtin()` (P02), `run_current()`, `session_data()`, `session_home()`,
+  `session_live()` (P06) and P08's `call_value()` (copied from the P08 plan); P09's eight files were
+  then loaded and every test file run with `testthat::test_file()`: guard 39, snapshot 76 (+ the P02
+  registry test, which needs `gptr_registry()`), describe 92, history 12, probe 15, plots 26, core
+  97 (+ the shim test, which needs P08's `gptr_return()` in a loaded `gptr` namespace, and the
+  Rscript test, run as an equivalent script: no `Rplots.pdf`, 2 images), format 26, all passing. The
+  red phase of Tasks 1-10 was simulated by leaving the task's code out; the failure counts above are
+  the measured ones, adjusted for the tests that cannot run in scratch.
+- The 21 rows of `test-copy-eval.R` ran in fresh `Rscript --vanilla` processes through a scratch
+  `expect_no_copy()` with P01's counting rule: 0 copies, except the S4 and data-frame rows, which
+  equal their R baselines (1 copy each without gptr). Negative control: without
+  `res[1L] = list(NULL)` the `(x)` row copies once. Prototype variants were checked the same way: a
+  `for` loop in the frame that binds a function-frame home copies once, a positional `ls(envir)`
+  copies once, the box pattern does not.
+- `lintr::lint_package()` with the repository `.lintr` on a scratch package: no lints in the P09
+  files and tests other than `object_usage_linter` "no visible global function" notes for functions
+  that the scratch stand-ins define outside lintr's view (every name listed exists in P01, P02, P06,
+  P08 or P09). These notes are the uninstalled-namespace lookup failure of P01's A3 note, which is
+  why Task 11 Step 4 and the Plan acceptance run `pkgload::load_all(quiet = TRUE)` before
+  `lintr::lint_package()` and stop on any lint. P01's `lint_scan()` rules over the eight files: 0
+  hits. P01's layering check (`arch_fun_map()`, `arch_edges()`, `arch_check()`, the factory rule,
+  `arch_service_calls()`) over P01's files, the stand-ins placed in their owners' files and P09's
+  files: 0 violations, no duplicated function names, all service names declared.
+- `roxygen2::roxygenise()` on the scratch package: `export(gptr_describe)` and the 20 `S3method`
+  lines listed in Task 11, no warnings; `tools::checkRd()` clean; the two examples print the outputs
+  quoted in Task 11.
+- Describer facts: 92 of G2's 98 at 150 tokens (93.9%), the longest description 130 tokens.
+  `r_env_probe()` on the development machine: 173 estimated tokens, 0.06 s.
+- Review re-run after the fixes of the review log below (scratch `work/plans/review-P09/v3`): the 25
+  `r` blocks re-extracted from this file and parsed; the eight R files and nine test files assembled
+  from the blocks, built into a scratch package with P01's 15 extracted R files and stand-ins for
+  P02, P06 and P08, `roxygen2::roxygenise()` and `devtools::test()`:
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 457 ]` (guard 52, snapshot 85, describe 96, history 12, probe
+  16, plots 32, core 116, format 27, copy 21, including every fresh-process copy row at 0 copies or
+  its R baseline); P01's `lint_scan()` rules: 0 hits; `lintr::lint()` with the repository `.lintr`
+  over the 17 files: no lints apart from `object_usage_linter` notes for stand-in functions; no
+  left-arrow `LEFT_ASSIGN` token (`getParseData()`) and no `%>%` in any block. Probes run before the
+  fixes: `q = 1; q('no')`, `q = 1; base::q('no')`, `quit = base::quit; quit()`,
+  `f = function(q) 1; q('no')` and `q = 1; do.call('q', list('no'))` passed the guard;
+  `set.seed(42); runif(1)` after a swap without a user seed gave 0.1738 instead of 0.9148;
+  `options('digits')`, `library()` and `suppressPackageStartupMessages(1 + 1)` printed nothing;
+  `f = function(n) f(n + 1); f(1)` made `eval_r()` itself throw "evaluation nested too deeply";
+  `plot(1:10)`, `abline()`, `lines()`, `points()` in four expressions gave four images with the
+  finished page not attached; CR LF code was a parse error; the first plot of a session reported
+  `[environment variables changed: TZDIR]`.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 05 P09, 04 (sections 5.8, 6.6, 7.0, 7.1, 7.6, 7.9, 10.2-10.6, 12.3; IC-33, IC-34, IC-38, IC-60, IC-61, IC-67, IC-69, IC-71), 03 sections 6.4, 6.12, 7.3-7.5, 12.2, the P01, P02, P06, P08 and P10 plans and report 12 (verification log). Every finding was reproduced in scratch before it was fixed; the fixed code is the code above, re-extracted, built and run (Self-review, "Review re-run").
+Adversarial review of 2026-10-01 against 05 P09, 04 (sections 5.8, 6.6, 7.0, 7.1, 7.6, 7.9,
+10.2-10.6, 12.3; IC-33, IC-34, IC-38, IC-60, IC-61, IC-67, IC-69, IC-71), 03 sections 6.4, 6.12,
+7.3-7.5, 12.2, the P01, P02, P06, P08 and P10 plans and report 12 (verification log). Every finding
+was reproduced in scratch before it was fixed; the fixed code is the code above, re-extracted, built
+and run (Self-review, "Review re-run").
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
@@ -5108,17 +5603,22 @@ Adversarial review of 2026-10-01 against 05 P09, 04 (sections 5.8, 6.6, 7.0, 7.1
 | 19 | minor | `test-env-snapshot.R`, `test-env-describe.R` | `s4_where()` is defined in both files | rejected | P09 owns no `helper-*.R` file (P01 does); each test file stays self-contained |
 | 20 | minor | Task 10, `env_attached_one()` | In `"names"` mode a third-party describer that ignores `budget = 20L` is not cut | rejected | P02 truncates every block to its `budget` (04 section 10.2 kind 13), and cutting the header line at 20 tokens would also cut the longer built-in headers (Seurat) |
 
-
 ## Cross-plan consolidation log
 
-Cross-plan check of 2026-10-01 against 04 (IC-71), 05 P01 acceptance 3 and P09 acceptance, 00-conventions (lint section) and P01 (acceptance A3 and its note, contract-ambiguity 5). The two findings below describe the same defect from two lenses and share one change.
+Cross-plan check of 2026-10-01 against 04 (IC-71), 05 P01 acceptance 3 and P09 acceptance,
+00-conventions (lint section) and P01 (acceptance A3 and its note, contract-ambiguity 5). The two
+findings below describe the same defect from two lenses and share one change.
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
 | 1 | obligations | minor | Task 11 Step 4 command block and Plan acceptance commands | applied | A bare `Rscript --vanilla -e 'lintr::lint_package()'` on the uninstalled development tree reports `object_usage_linter` "no visible global function definition" for every internal helper (P09's own executed validation saw these notes; P01's A3 note explains the `getNamespace("gptr")` lookup failure). Both blocks now run `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`, P01's A3 command, so the check fails with a non-zero exit on any lint. The expected-output text of both places says "no lints and exit 0"; the Self-review's executed-validation bullet links the notes to the change. 05's bare `lintr::lint_package()` is satisfied (same empty result after `R CMD INSTALL .`); a shell command is neither package nor test code, so IC-71's `pkgload::load_all()` rule is respected. No R code or test count changes (457 green, 117 in Task 11). Checked in scratch (`work/consolidate/P09`): a two-file package whose `helper_b()` calls `helper_a()` gave one `object_usage_linter` lint with the bare command and "No lints found", exit 0, with the new one; the 25 `r` blocks re-extracted and parsed, no left-arrow or `%>%` token |
 | 2 | trace | minor | Task 11 Step 4 and Plan acceptance commands | applied | Same defect and same change as row 1 |
 
-
 ## Live validation amendment, 2026-10-10: concise ordinary display
 
-The built-in evaluator provides a private frame-scoped informational/control writer. Calling handlers finish before normal display; a teed condition is recorded once as a message event, with only its synchronous display bytes drained from the stdout sink. Pause/steer controls are excluded from model tool output; ordinary cat()/printed values remain captured. No sink is popped or global option/binding changed. Actual warnings/errors retain their evaluator events and base warning semantics.
+The built-in evaluator provides a private frame-scoped informational/control writer. Calling
+handlers finish before normal display; a teed condition is recorded once as a message event, with
+only its synchronous display bytes drained from the stdout sink. Pause/steer controls are excluded
+from model tool output; ordinary cat()/printed values remain captured. No sink is popped or global
+option/binding changed. Actual warnings/errors retain their evaluator events and base warning
+semantics.

@@ -6,15 +6,37 @@
 > and adapter validation must match the amended contract. Older literal code
 > and PASS counts require reconciliation before implementation.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the one public, versioned extension API (S-11, REQ-41) on which every gptr capability and every built-in registers: the registry keyed by `(kind, name)` with ranks, filters, diagnostics and a generation counter, the 37 kinds of `ext-specs.R` with their validators and the 11 exported constructors, the event catalogue and its dispatch semantics, the factory API object and `ctx`, transactional and lazy loading, the built-in declaration table, and the `gptr_check()` conformance suites.
+**Goal:** Build the one public, versioned extension API (S-11, REQ-41) on which every gptr
+capability and every built-in registers: the registry keyed by `(kind, name)` with ranks, filters,
+diagnostics and a generation counter, the 37 kinds of `ext-specs.R` with their validators and the 11
+exported constructors, the event catalogue and its dispatch semantics, the factory API object and
+`ctx`, transactional and lazy loading, the built-in declaration table, and the `gptr_check()`
+conformance suites.
 
-**Architecture:** Everything lives in L0 files `R/ext-*.R`: a registry environment (`gptr_registry_env`) holds classed spec records indexed by kind, by `(kind, key)` and by event, and resolves them at call time by rank, session scope and filters, so later plans find capabilities only through `registry_get()`/`registry_all()`/`ev_dispatch()` and never by function name. Factories `function(gptr)` receive a read-only API object whose registrations are staged and committed only when the factory returns; handlers receive a per-session `ctx` whose members fetch their implementations at call time through registry `service` records and P01's bootstrap service table, so members whose plan is not loaded signal `gptr_error_not_available`. The prototype is report G1's verified host package (G1 §5.1-5.5), converted to `=`/`|>`, without binding locks, and with the review amendments of contract §15.
+**Architecture:** Everything lives in L0 files `R/ext-*.R`: a registry environment
+(`gptr_registry_env`) holds classed spec records indexed by kind, by `(kind, key)` and by event, and
+resolves them at call time by rank, session scope and filters, so later plans find capabilities only
+through `registry_get()`/`registry_all()`/`ev_dispatch()` and never by function name. Factories
+`function(gptr)` receive a read-only API object whose registrations are staged and committed only
+when the factory returns; handlers receive a per-session `ctx` whose members fetch their
+implementations at call time through registry `service` records and P01's bootstrap service table,
+so members whose plan is not loaded signal `gptr_error_not_available`. The prototype is report G1's
+verified host package (G1 sections 5.1-5.5), converted to `=`/`|>`, without binding locks, and with
+the review amendments of contract section 15.
 
-**Tech Stack:** base R (>= 4.2.0); `jsonlite` through P01's `json_encode()`/`json_decode()`; `ps` (child processes in `gptr_check()`); `utils`, `stats`, `tools`; testthat 3e, withr and processx in tests only.
+**Tech Stack:** base R (>= 4.2.0); `jsonlite` through P01's `json_encode()`/`json_decode()`; `ps`
+(child processes in `gptr_check()`); `utils`, `stats`, `tools`; testthat 3e, withr and processx in
+tests only.
 
-**Spec:** dev/spec/03-architecture.md (§2.1-2.2, §3.2 `ext-*` rows, §5.4, §5.10, §6.3, §6.4 R3/R4/R5, §11.1-11.4, §12.3), dev/spec/04-interface-contract.md (§1.1, §1.4, §2.1-2.2, §3.1 `gptr.deprecations`, §4.4-4.5, §5.4-5.7, §5.11, §5.13, §6.7, §6.8, §7.0, §7.2, §8.1, §9.1, §9.4, §10.1-10.9, §11.7, §11.12, §12.2; §15: IC-26, IC-32, IC-34, IC-35, IC-37, IC-42, IC-52, IC-53, IC-55, IC-69, IC-71), dev/spec/05-plan-decomposition.md (P02).
+**Spec:** dev/spec/03-architecture.md (sections 2.1-2.2, 3.2 `ext-*` rows, 5.4, 5.10, 6.3, 6.4
+R3/R4/R5, 11.1-11.4, 12.3), dev/spec/04-interface-contract.md (sections 1.1, 1.4, 2.1-2.2, 3.1
+`gptr.deprecations`, 4.4-4.5, 5.4-5.7, 5.11, 5.13, 6.7, 6.8, 7.0, 7.2, 8.1, 9.1, 9.4, 10.1-10.9,
+11.7, 11.12, 12.2; section 15: IC-26, IC-32, IC-34, IC-35, IC-37, IC-42, IC-52, IC-53, IC-55, IC-69,
+IC-71), dev/spec/05-plan-decomposition.md (P02).
 
 **Depends on:** P01 (Foundation). **Milestone:** M0.
 
@@ -22,38 +44,154 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only to update state of an enclosing function), the native `|>` (never `%>%`), ASCII-only R sources, `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions with messages built by concatenation (never glue-interpolated), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed global state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, lines of at most 100 characters, one commit per task whose message ends with the attribution line required by the executing harness (conventions §10). Plan-specific requirements, copied from the specification:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only to update
+state of an enclosing function), the native `|>` (never `%>%`), ASCII-only R sources, `pkg::fun()`
+calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions with messages built by
+concatenation (never glue-interpolated), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`,
+every changed global state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network in
+tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, lines of at most
+100 characters, one commit per task whose message ends with the attribution line required by the
+executing harness (conventions section 10). Plan-specific requirements, copied from the
+specification:
 
-- Owned files (05 P02): `R/ext-registry.R`, `R/ext-specs.R`, `R/ext-api.R`, `R/ext-events.R`, `R/ext-load.R`, `R/ext-check.R`, `R/ext-builtins.R` and their tests `tests/testthat/test-ext-registry.R`, `test-ext-specs.R`, `test-ext-api.R`, `test-ext-events.R`, `test-ext-load.R`, `test-ext-check.R`, `test-ext-builtins.R`; plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`. No `DESCRIPTION` change (conventions §8: "A plan may not add an Import or a Suggests entry").
-- Layer (03 §2.2, §3.2): every `ext-*.R` file is **L0**: it "may call base R, Imports, L0" and talks upward "only through return values; callbacks registered by upper layers". Later plans are reached only through the service table (IC-09, IC-34) and registry records. "Nothing below L5 prints" except `print()` methods of P02's own classes.
-- Exports (04 §14.1, 18 names): `gptr_api`, `gptr_register`, `gptr_registry`, `gptr_reload`, `gptr_check`, `gptr_tool_result`, `gptr_spec`, `gptr_tool`, `gptr_provider`, `gptr_adapter`, `gptr_router`, `gptr_hook`, `gptr_policy`, `gptr_agent`, `gptr_command`, `gptr_prompt_section`, `gptr_context_block`, `gptr_backend`. Exact signatures (04 §6.7, §6.8, IC-35):
-  - `gptr_api()`; `gptr_register(spec)`; `gptr_registry(kind = NULL, diagnostics = FALSE)`; `gptr_reload()`; `gptr_check(x, error = FALSE, tokens = FALSE)`; `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`; `gptr_spec(kind, name, ...)`.
+- Owned files (05 P02): `R/ext-registry.R`, `R/ext-specs.R`, `R/ext-api.R`, `R/ext-events.R`,
+  `R/ext-load.R`, `R/ext-check.R`, `R/ext-builtins.R` and their tests
+  `tests/testthat/test-ext-registry.R`, `test-ext-specs.R`, `test-ext-api.R`, `test-ext-events.R`,
+  `test-ext-load.R`, `test-ext-check.R`, `test-ext-builtins.R`; plus `NAMESPACE` and `man/` through
+  `Rscript --vanilla -e 'devtools::document()'`. No `DESCRIPTION` change (conventions section 8: "A
+  plan may not add an Import or a Suggests entry").
+- Layer (03 sections 2.2, 3.2): every `ext-*.R` file is **L0**: it "may call base R, Imports, L0"
+  and talks upward "only through return values; callbacks registered by upper layers". Later plans
+  are reached only through the service table (IC-09, IC-34) and registry records. "Nothing below L5
+  prints" except `print()` methods of P02's own classes.
+- Exports (04 section 14.1, 18 names): `gptr_api`, `gptr_register`, `gptr_registry`, `gptr_reload`,
+  `gptr_check`, `gptr_tool_result`, `gptr_spec`, `gptr_tool`, `gptr_provider`, `gptr_adapter`,
+  `gptr_router`, `gptr_hook`, `gptr_policy`, `gptr_agent`, `gptr_command`, `gptr_prompt_section`,
+  `gptr_context_block`, `gptr_backend`. Exact signatures (04 sections 6.7, 6.8, IC-35):
+  - `gptr_api()`; `gptr_register(spec)`; `gptr_registry(kind = NULL, diagnostics = FALSE)`;
+    `gptr_reload()`; `gptr_check(x, error = FALSE, tokens = FALSE)`;
+    `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`;
+    `gptr_spec(kind, name, ...)`.
   - `gptr_tool(name, description, parameters = NULL, execute = NULL, fun = NULL, exposure = c("direct", "r", "deferred", "hidden"), namespace = NULL, execution = c("sequential", "concurrent"), risk = NULL, snippet = NULL, guidelines = NULL, signature = NULL, output_tokens = NULL, record = TRUE, available = NULL, annotations = list())`
   - `gptr_provider(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(), type = c("chat", "classifier", "cli"), headers = list(), discover = NULL, status = NULL, aliases = character(), local = FALSE, offline = FALSE, rate = NULL)`
   - `gptr_adapter(api, transport = c("http_sse", "http_ndjson", "http_json", "process_jsonl", "inprocess"), build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())`
-  - `gptr_router(name, route, description = NULL, timeout = 2)`; `gptr_hook(event, handler, matcher = NULL)`; `gptr_policy(name, check, description = NULL)`
+  - `gptr_router(name, route, description = NULL, timeout = 2)`;
+    `gptr_hook(event, handler, matcher = NULL)`; `gptr_policy(name, check, description = NULL)`
   - `gptr_agent(name = NULL, description = NULL, model = NULL, tools = NULL, skills = NULL, system = NULL, backend = c("auto", "inline", "worker", "cli"), preset = "minimal", max_turns = NULL, mode = NULL, objects = NULL, export = NULL, returns = NULL, file = NULL)`
-  - `gptr_command(name, handler, description = NULL, complete = NULL)`; `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`; `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`; `gptr_backend(name, start, poll = NULL, cancel, capabilities = list())`
-- Internal signatures (04 §7.2): `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`, `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)`, `registry_names(kind, session = NULL)`, `registry_generation()`, `registry_filters_set(filters, scope = c("session", "user", "project"))`, `registry_diagnostic(source, event, class, message)`; `kind_define(name, validate, resolve = c("first", "all"), fields = chr, order_field = NULL, experimental = FALSE, source = "builtin")`, `kind_get(name)`, `kind_names()`, `spec_new(kind, name, ...)`, `as_tool_result(x)`; `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, `ev_catalogue()`, `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)`, `hook_remove(id)`; `ext_api_new(source, dir = NULL, manifest = NULL)`, `ctx_new(session, run = NULL)`; `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)`, `ext_activate(source)`; `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `ext_load_builtins()`; `check_spec(spec)`, `check_factory(factory)`, `check_package(pkg)` (each returns the rows of a `gptr_check`; optional trailing arguments `tokens`, `adapter_check` and, for factories, `manifest`).
-- Ranks and sources (04 §10.1): "call arguments ... | 0 | `session`"; "trusted project ... | 1 | `project`"; "user: `gptr_register()` ... | 3 | `user`"; "plugins ... | 5 | `plugin:<name>`"; "built-ins ... | 6 | `builtin:<name>`". "Same `(kind, name)`: the lowest rank wins; ties: the first registered, with a `collision` diagnostic." "A lower-rank record shadows **only** the record with the same `(kind, name)`; a whole built-in is disabled only by an explicit `-builtin:<name>` filter" (IC-69).
-- Record shape (04 §5.5): `list(id = chr(1), kind, name, spec, rank = int(1), source = chr(1), state = chr(1) ("lazy", "active", "overridden", "disabled"), generation = int(1), tokens = num(1), session = chr(1) | NULL, order = int(1))`. `gptr_registry()` returns `c("gptr_registry", "data.frame")` with columns `kind`, `name`, `source`, `rank`, `state`, `tokens`, `experimental`; with `diagnostics = TRUE` `c("gptr_diagnostics", "data.frame")` with `time`, `source`, `event`, `class`, `message` (redacted).
-- Filters (04 §10.1, IC-53): `-builtin:<name>`, `-plugin:<name>`, `-<kind>:<name>`, and `+...` to undo. "filters from a *project* settings file never disable `policy` or `hook` records of the user or of built-ins; filters from **no** source (project, user, call, `gptr_config()`) disable `builtin:permissions`, `builtin:plan`, the `critical_guard` and `secret_guard` policies or `builtin:secrets`, and inside a run filters that would remove `policy` or `hook` records are refused". The settings key is `filters` (04 §11.2, owner P02): P02 owns its meaning and `registry_filters_set(filters, scope)`; the settings layer (P08, the only code that knows which layer a value came from) passes the user file's `filters` with `scope = "user"`, the project file's with `scope = "project"`, and `gptr_config()`/call filters with `scope = "session"` (the `settings.get` service returns merged values only, so P02 cannot split layers itself).
-- Kinds (04 §10.2): 38 in all, "P02 defines 37, P22 adds `interpreter`". Resolve `all`: `hook`, `policy` (order field `order`, default `500`), `context_block` (`order`, default `650`), `prompt_section` (`order`), `secret_source`, `redaction_rule`, `env_alias`, `checkpointer`, `route` (`order`, num), `risk_rule`, `search_source`; every other kind resolves `first`. Experimental kinds: `artifact_type`, `frontend`, `checkpointer`, `route`, `service`, `renderer`, `search_source`, `store`, `evaluator` (and plugin-defined kinds). "Validators accept unknown fields (forward compatibility) and reject wrong types of known fields with `gptr_error_invalid_spec`." Every spec has `kind`, `name` and `api_version` (IC-23) and class `c("gptr_<kind>", "gptr_spec")`.
-- Tool rules (04 §9.1, IC-37): name `^[a-zA-Z0-9_-]{1,64}$`; "direct tools at most 400 estimated tokens (`gptr_check()`)"; "`parameters` ... `NULL` = derived from `fun`'s formals (all `string`, required when no default)"; "a plugin spec with `exposure = "r"` MUST set `namespace`; a namespace equal to a reserved or existing member name is `gptr_error_invalid_spec` at registration"; reserved member names (04 §9.4): `read`, `write`, `edit`, `grep`, `find`, `ls`, `help`, `search`, `describe`, `plot`, `out`, `sh`, `script`, `bg`, `jobs`, `py`, `sql`, `knit`, `app`, `mcp`.
-- Other kind rules: provider id `^[a-z0-9][a-z0-9-]*$`; skill description "<= 1,024 chars"; adapters "`http_*` and `process_jsonl` need `build` and `parse`, `inprocess` needs `stream`, classifier adapters need `classify`" (IC-35); "A `gptr_context_block()` with `authority = "operator"` is accepted only from records of rank >= 3" (IC-52); `gptr_agent()` "stores the raw captured expressions (symbol names or literals)" (IC-34); agent names equal to a session accessor are rejected (IC-71); a redaction rule "must not match its own marker"; a policy "must return within 10 ms".
-- Events (04 §10.4, D-25, IC-03): 46 catalogued events plus `<plugin>:<topic>` channels; semantics notify, collect, transform chain, decision (`tool_call`, **error = block**), first decision (`permission_request`: **error = deny**), patch chain (`tool_result`, `request_params`), block + patch (`document_write`, **error = block**). "Hook-injected context (returned `blocks`, `text` of transforms) is capped at 10,000 characters per dispatch." "Every event payload passes `redact_tree(profile = "stream")` before dispatch" (through P01's `redact_hook()`). Claude/Codex names are refused with a hint.
-- API object and `ctx` (04 §5.6, §10.5, §10.6, IC-26): environments of class `gptr_extension_api` and `gptr_ctx`; "No binding is locked ... `$<-` and `[[<-` methods refuse assignment (`gptr_error_readonly`) except re-assigning `state` to the identical environment". "After `gptr_reload()` or the plugin's unload, every method signals `gptr_error_stale_api`." `ctx` "is created once per session (`ctx_new()`), never per dispatch; members are closures that fetch their service at call time".
-- API version (04 §6.7, §10.9): `gptr_api()$version` is `package_version("1.0")`; features `kind.<name>`, `event.<name>`, `lazy_activation`, `declarations`, `ctx.decide`, `ctx.secret`, `route`, `services`. Requirements: `"1.2"` is caret (`>= 1.2, < 2`), otherwise comma-separated `op version` with `op` in `>=, >, <=, <, ==`; one-component versions become `"x.0"` (G1 §3.5, verification row 25).
-- Option (04 §3.1): `gptr.deprecations` (`chr(1)`, default `"warn"`, owner P02): `"warn"` or `"error"`; "a deprecated member warns once per session (`gptr_warning_deprecated`; `options(gptr.deprecations = "error")` for plugin CI)".
-- Conditions (04 §2.2): `gptr_error_invalid_spec` (`kind`, `name`, `field`, `problem`), `gptr_error_unknown_kind` (parent `invalid_spec`; `kind`), `gptr_error_api_version` (`plugin`, `required`, `available`), `gptr_error_stale_api` (`plugin`, `generation`), `gptr_error_conformance` (`results`), `gptr_error_not_available` (`member`, `provided_by`), `gptr_error_readonly` (`object`, `field`), `gptr_error_unknown_member` (`name`, `available`), `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_permission` (`action`, `tool`, `risk`, `how_to_allow`, `session`), `gptr_error_tool` (`tool`, `status`); warnings `gptr_warning_deprecated` and `gptr_warning_plugin` (field `diagnostic`).
-- Package state (04 §7.0): P02 owns `the$registry`, `the$kinds`, `the$hooks`, `the$builtins`, `the$diagnostics` ("registry env; kind table; event index; built-in declarations; diagnostics log"). No run state (INFRA-15).
-- Control exports (IC-53 point 3): `gptr_register` and `gptr_reload` "called from model code during a run ... signal `gptr_error_permission` unless the dispatcher approved exactly that call through an `ask_human` (a one-shot token on the run)".
-- Copy safety (03 §6.4): no `lockBinding()`/`unlockBinding()` (R5); `gptr_agent()` is a capture site obeying R3 (never forces or assigns its identifier formals); `ctx` holds the session shell only, never frames or user objects (R1, R2, R10).
-- Tests (conventions §7, 04 §12.2): test helpers local to each P02 test file (`local_registry()`, `local_builtins()`, `local_service()`), P01's `gptr_fake_provider()` and `rscript_path()`; processes only under `skip_on_cran()`; no wall-clock assertion tighter than 5 seconds.
+  - `gptr_command(name, handler, description = NULL, complete = NULL)`;
+    `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`;
+    `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`;
+    `gptr_backend(name, start, poll = NULL, cancel, capabilities = list())`
+- Internal signatures (04 section 7.2):
+  `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`,
+  `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)`,
+  `registry_names(kind, session = NULL)`, `registry_generation()`,
+  `registry_filters_set(filters, scope = c("session", "user", "project"))`,
+  `registry_diagnostic(source, event, class, message)`;
+  `kind_define(name, validate, resolve = c("first", "all"), fields = chr, order_field = NULL, experimental = FALSE, source = "builtin")`,
+  `kind_get(name)`, `kind_names()`, `spec_new(kind, name, ...)`, `as_tool_result(x)`;
+  `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, `ev_catalogue()`,
+  `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)`,
+  `hook_remove(id)`; `ext_api_new(source, dir = NULL, manifest = NULL)`,
+  `ctx_new(session, run = NULL)`;
+  `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)`,
+  `ext_activate(source)`;
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`,
+  `ext_load_builtins()`; `check_spec(spec)`, `check_factory(factory)`, `check_package(pkg)` (each
+  returns the rows of a `gptr_check`; optional trailing arguments `tokens`, `adapter_check` and, for
+  factories, `manifest`).
+- Ranks and sources (04 section 10.1): "call arguments ... | 0 | `session`"; "trusted project ... |
+  1 | `project`"; "user: `gptr_register()` ... | 3 | `user`"; "plugins ... | 5 | `plugin:<name>`";
+  "built-ins ... | 6 | `builtin:<name>`". "Same `(kind, name)`: the lowest rank wins; ties: the
+  first registered, with a `collision` diagnostic." "A lower-rank record shadows **only** the record
+  with the same `(kind, name)`; a whole built-in is disabled only by an explicit `-builtin:<name>`
+  filter" (IC-69).
+- Record shape (04 section 5.5):
+  `list(id = chr(1), kind, name, spec, rank = int(1), source = chr(1), state = chr(1) ("lazy", "active", "overridden", "disabled"), generation = int(1), tokens = num(1), session = chr(1) | NULL, order = int(1))`.
+  `gptr_registry()` returns `c("gptr_registry", "data.frame")` with columns `kind`, `name`,
+  `source`, `rank`, `state`, `tokens`, `experimental`; with `diagnostics = TRUE`,
+  `c("gptr_diagnostics", "data.frame")` with `time`, `source`, `event`, `class`, `message`
+  (redacted).
+- Filters (04 section 10.1, IC-53): `-builtin:<name>`, `-plugin:<name>`, `-<kind>:<name>`, and
+  `+...` to undo. "filters from a *project* settings file never disable `policy` or `hook` records
+  of the user or of built-ins; filters from **no** source (project, user, call, `gptr_config()`)
+  disable `builtin:permissions`, `builtin:plan`, the `critical_guard` and `secret_guard` policies or
+  `builtin:secrets`, and inside a run filters that would remove `policy` or `hook` records are
+  refused". The settings key is `filters` (04 section 11.2, owner P02): P02 owns its meaning and
+  `registry_filters_set(filters, scope)`; the settings layer (P08, the only code that knows which
+  layer a value came from) passes the user file's `filters` with `scope = "user"`, the project
+  file's with `scope = "project"`, and `gptr_config()`/call filters with `scope = "session"` (the
+  `settings.get` service returns merged values only, so P02 cannot split layers itself).
+- Kinds (04 section 10.2): 38 in all, "P02 defines 37, P22 adds `interpreter`". Resolve `all`:
+  `hook`, `policy` (order field `order`, default `500`), `context_block` (`order`, default `650`),
+  `prompt_section` (`order`), `secret_source`, `redaction_rule`, `env_alias`, `checkpointer`,
+  `route` (`order`, num), `risk_rule`, `search_source`; every other kind resolves `first`.
+  Experimental kinds: `artifact_type`, `frontend`, `checkpointer`, `route`, `service`, `renderer`,
+  `search_source`, `store`, `evaluator` (and plugin-defined kinds). "Validators accept unknown
+  fields (forward compatibility) and reject wrong types of known fields with
+  `gptr_error_invalid_spec`." Every spec has `kind`, `name` and `api_version` (IC-23) and class
+  `c("gptr_<kind>", "gptr_spec")`.
+- Tool rules (04 section 9.1, IC-37): name `^[a-zA-Z0-9_-]{1,64}$`; "direct tools at most 400
+  estimated tokens (`gptr_check()`)"; "`parameters` ... `NULL` = derived from `fun`'s formals (all
+  `string`, required when no default)"; "a plugin spec with `exposure = "r"` MUST set `namespace`; a
+  namespace equal to a reserved or existing member name is `gptr_error_invalid_spec` at
+  registration"; reserved member names (04 section 9.4): `read`, `write`, `edit`, `grep`, `find`,
+  `ls`, `help`, `search`, `describe`, `plot`, `out`, `sh`, `script`, `bg`, `jobs`, `py`, `sql`,
+  `knit`, `app`, `mcp`.
+- Other kind rules: provider id `^[a-z0-9][a-z0-9-]*$`; skill description "<= 1,024 chars"; adapters
+  "`http_*` and `process_jsonl` need `build` and `parse`, `inprocess` needs `stream`, classifier
+  adapters need `classify`" (IC-35); "A `gptr_context_block()` with `authority = "operator"` is
+  accepted only from records of rank >= 3" (IC-52); `gptr_agent()` "stores the raw captured
+  expressions (symbol names or literals)" (IC-34); agent names equal to a session accessor are
+  rejected (IC-71); a redaction rule "must not match its own marker"; a policy "must return within
+  10 ms".
+- Events (04 section 10.4, D-25, IC-03): 46 catalogued events plus `<plugin>:<topic>` channels;
+  semantics notify, collect, transform chain, decision (`tool_call`, **error = block**), first
+  decision (`permission_request`: **error = deny**), patch chain (`tool_result`, `request_params`),
+  block + patch (`document_write`, **error = block**). "Hook-injected context (returned `blocks`,
+  `text` of transforms) is capped at 10,000 characters per dispatch." "Every event payload passes
+  `redact_tree(profile = "stream")` before dispatch" (through P01's `redact_hook()`). Claude/Codex
+  names are refused with a hint.
+- API object and `ctx` (04 sections 5.6, 10.5, 10.6, IC-26): environments of class
+  `gptr_extension_api` and `gptr_ctx`; "No binding is locked ... `$<-` and `[[<-` methods refuse
+  assignment (`gptr_error_readonly`) except re-assigning `state` to the identical environment".
+  "After `gptr_reload()` or the plugin's unload, every method signals `gptr_error_stale_api`." `ctx`
+  "is created once per session (`ctx_new()`), never per dispatch; members are closures that fetch
+  their service at call time".
+- API version (04 sections 6.7, 10.9): `gptr_api()$version` is `package_version("1.0")`; features
+  `kind.<name>`, `event.<name>`, `lazy_activation`, `declarations`, `ctx.decide`, `ctx.secret`,
+  `route`, `services`. Requirements: `"1.2"` is caret (`>= 1.2, < 2`), otherwise comma-separated
+  `op version` with `op` in `>=, >, <=, <, ==`; one-component versions become `"x.0"` (G1
+  section 3.5, verification row 25).
+- Option (04 section 3.1): `gptr.deprecations` (`chr(1)`, default `"warn"`, owner P02): `"warn"` or
+  `"error"`; "a deprecated member warns once per session (`gptr_warning_deprecated`;
+  `options(gptr.deprecations = "error")` for plugin CI)".
+- Conditions (04 section 2.2): `gptr_error_invalid_spec` (`kind`, `name`, `field`, `problem`),
+  `gptr_error_unknown_kind` (parent `invalid_spec`; `kind`), `gptr_error_api_version` (`plugin`,
+  `required`, `available`), `gptr_error_stale_api` (`plugin`, `generation`),
+  `gptr_error_conformance` (`results`), `gptr_error_not_available` (`member`, `provided_by`),
+  `gptr_error_readonly` (`object`, `field`), `gptr_error_unknown_member` (`name`, `available`),
+  `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_permission` (`action`, `tool`,
+  `risk`, `how_to_allow`, `session`), `gptr_error_tool` (`tool`, `status`); warnings
+  `gptr_warning_deprecated` and `gptr_warning_plugin` (field `diagnostic`).
+- Package state (04 section 7.0): P02 owns `the$registry`, `the$kinds`, `the$hooks`, `the$builtins`,
+  `the$diagnostics` ("registry env; kind table; event index; built-in declarations; diagnostics
+  log"). No run state (INFRA-15).
+- Control exports (IC-53 point 3): `gptr_register` and `gptr_reload` "called from model code during
+  a run ... signal `gptr_error_permission` unless the dispatcher approved exactly that call through
+  an `ask_human` (a one-shot token on the run)".
+- Copy safety (03 section 6.4): no `lockBinding()`/`unlockBinding()` (R5); `gptr_agent()` is a
+  capture site obeying R3 (never forces or assigns its identifier formals); `ctx` holds the session
+  shell only, never frames or user objects (R1, R2, R10).
+- Tests (conventions section 7, 04 section 12.2): test helpers local to each P02 test file
+  (`local_registry()`, `local_builtins()`, `local_service()`), P01's `gptr_fake_provider()` and
+  `rscript_path()`; processes only under `skip_on_cran()`; no wall-clock assertion tighter than 5
+  seconds.
 
 ### Interfaces used from P01
 
-These are the 04 §2.1, §7.0 and §7.1 signatures as `dev/plan/P01-foundation.md` defines them (the review assembled P01's plan code with this plan's code and ran every P02 test against it):
+These are the 04 sections 2.1, 7.0 and 7.1 signatures as `dev/plan/P01-foundation.md` defines them
+(the review assembled P01's plan code with this plan's code and ran every P02 test against it):
 
 | From | Signature | Used for |
 |---|---|---|
@@ -72,7 +210,7 @@ These are the 04 §2.1, §7.0 and §7.1 signatures as `dev/plan/P01-foundation.m
 
 | Path | Action | Responsibility |
 |---|---|---|
-| `R/ext-events.R` | create (Task 1), extend (Task 8) | the event catalogue of 04 §10.4 with semantics and hints; `ev_dispatch()` with the §10.7 algorithms, fail-closed events, stream redaction, the 10,000-character cap, run/tool tracking for IC-53; `hook_add()`, `hook_remove()`; the fail-closed policy evaluator `ext_policy_decide()` |
+| `R/ext-events.R` | create (Task 1), extend (Task 8) | the event catalogue of 04 section 10.4 with semantics and hints; `ev_dispatch()` with the section 10.7 algorithms, fail-closed events, stream redaction, the 10,000-character cap, run/tool tracking for IC-53; `hook_add()`, `hook_remove()`; the fail-closed policy evaluator `ext_policy_decide()` |
 | `R/ext-registry.R` | create (Task 2), extend (Tasks 4, 5) | the registry environment and its binding to `the`; records, indexes, resolution by rank, session and filters; diagnostics; the IC-53 control guard; `gptr_register()`, `gptr_registry()`; filters |
 | `R/ext-specs.R` | create (Task 2), extend (Tasks 3, 4) | the kind table (37 kinds) and validators, `kind_define()`/`kind_get()`/`kind_names()`, the spec engine `spec_new()`, `gptr_spec()`, spec printing; the 11 constructors, `gptr_tool_result()`, `as_tool_result()`; kinds defined by `kind` records |
 | `R/ext-api.R` | create (Task 6), extend (Task 7) | the factory API object (`register`, `register_<kind>`, `on`, `require`, `has`, `state`, staging) and `ctx` (service-bound members, the `none` UI, read-only methods) |
@@ -80,7 +218,7 @@ These are the 04 §2.1, §7.0 and §7.1 signatures as `dev/plan/P01-foundation.m
 | `R/ext-load.R` | create (Task 9) | `ext_load()` (stage, commit, rollback, requirements), lazy placeholders and declarations, activation, session scope, `ext_unload()`, unload watching, `gptr_reload()` |
 | `R/ext-builtins.R` | create (Task 10) | `the$builtins`, `ext_declare_builtin()`, dependency order, `ext_load_builtins()` |
 | `tests/testthat/test-ext-events.R` | create (Task 1), extend (Task 8) | catalogue, names, every dispatch semantics, fail-closed events, redaction, tracking, policies |
-| `tests/testthat/test-ext-specs.R` | create (Task 2), extend (Task 3) | kind table, validators, every 04 §6.8 example, constructors, tool results |
+| `tests/testthat/test-ext-specs.R` | create (Task 2), extend (Task 3) | kind table, validators, every 04 section 6.8 example, constructors, tool results |
 | `tests/testthat/test-ext-registry.R` | create (Task 4), extend (Task 5) | precedence, per-record overrides, admission rules, listings, diagnostics, filters and the IC-53 rules |
 | `tests/testthat/test-ext-api.R` | create (Task 6), extend (Task 7) | API object, requirement grammar, stale objects, `ctx` members and services |
 | `tests/testthat/test-ext-check.R` | create (Task 6), extend (Task 11) | `gptr_api()`, deprecations, every `gptr_check()` suite |
@@ -112,9 +250,18 @@ Tasks:
 
 **Interfaces:**
 - Consumes: P01 `gptr_abort(message, class, ..., .data = NULL, call = NULL)`.
-- Produces: `ev_catalogue()` -> `data.frame(event, semantics, fail_closed, payload, returns, origin)` (04 §7.2), one row per event of 04 §10.4 (46 events); internal `ev_table` (the same data frame), `ev_semantics(event)` -> `"notify"`, `"collect"`, `"transform"`, `"decision"`, `"first_decision"`, `"patch"`, `"block_patch"` or `NULL` (channels `"<plugin>:<topic>"` are `"notify"`), `ev_is_channel(event)` -> `lgl(1)`, `ev_hint(event)` -> `chr(1) | NULL`, `ev_check_name(event, arg = "event")` (signals `gptr_error_invalid_argument` with a hint for Claude/Codex, pre-IC-03 and unported Pi names).
+- Produces: `ev_catalogue()` ->
+  `data.frame(event, semantics, fail_closed, payload, returns, origin)` (04 section 7.2), one row
+  per event of 04 section 10.4 (46 events); internal `ev_table` (the same data frame),
+  `ev_semantics(event)` -> `"notify"`, `"collect"`, `"transform"`, `"decision"`, `"first_decision"`,
+  `"patch"`, `"block_patch"` or `NULL` (channels `"<plugin>:<topic>"` are `"notify"`),
+  `ev_is_channel(event)` -> `lgl(1)`, `ev_hint(event)` -> `chr(1) | NULL`,
+  `ev_check_name(event, arg = "event")` (signals `gptr_error_invalid_argument` with a hint for
+  Claude/Codex, pre-IC-03 and unported Pi names).
 
-The catalogue is the D-25 table of 04 §10.4 (Pi names where the semantics match, IC-03); report G1's verification log (row 16) notes that the prototype's uncatalogued `compaction` event must not exist, so the hint table sends it to `session_compact`.
+The catalogue is the D-25 table of 04 section 10.4 (Pi names where the semantics match, IC-03);
+report G1's verification log (row 16) notes that the prototype's uncatalogued `compaction` event
+must not exist, so the hint table sends it to `session_compact`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -170,7 +317,8 @@ test_that("Claude, Codex, pre-IC-03 and unported names are refused with a hint",
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-events")'`
-Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 0 ]`, from errors such as `could not find function "ev_catalogue"` and `could not find function "ev_check_name"`.
+Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 0 ]`, from errors such as
+`could not find function "ev_catalogue"` and `could not find function "ev_check_name"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -356,9 +504,25 @@ git commit -m "feat(ext): add the event catalogue"
 
 **Interfaces:**
 - Consumes: P01 `the`, `` `%||%` ``, `gptr_abort()`, `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_strings()`, `check_function(x, arg, null = FALSE, args = NULL)`, `check_flag()`, `check_choice(x, choices, arg)`, `json_obj()`, `truncate_output(text, budget_tokens, ...)`, `gptr_opt(name)`; Task 1 `ev_table`, `ev_is_channel()`, `ev_hint()`; `gptr_fake_provider()` in the test.
-- Produces (04 §5.4, §5.13, §7.2, §6.7): the registry environment of class `gptr_registry_env` (`registry_new()`, `registry_env()`, `registry_scratch()`, `registry_swap(reg)` -> the previous registry invisibly, `registry_bind(reg)`, which points `the$registry`, `the$kinds`, `the$hooks` and `the$diagnostics` at it; `registry_touch(reg)`, called by every change of records, filters or kinds so that Task 4's cached `gptr_registry()` listing is rebuilt); `ext_session_id(session)` -> `chr(1) | NULL` (a session id string or anything with an `id`); `ext_api_version` (`"1.0"`); `kind_define(name, validate, resolve = c("first", "all"), fields = character(), order_field = NULL, experimental = FALSE, source = "builtin")`; `kind_get(name)` -> the kind record `list(name, validate, resolve, fields, order_field, experimental, source, record, staged)` or `gptr_error_unknown_kind` (a `gptr_error_invalid_spec`); `kind_names()` -> sorted chr; `kind_user_validate(validate)`; `spec_new(kind, name, ...)`; `spec_finish(spec, k)`; `spec_abort(spec, field, problem)`; the exported `gptr_spec(kind, name, ...)`; `format.gptr_spec()` and `print.gptr_spec()` (functions shown as `<fn>`).
+- Produces (04 sections 5.4, 5.13, 7.2, 6.7): the registry environment of class `gptr_registry_env`
+  (`registry_new()`, `registry_env()`, `registry_scratch()`, `registry_swap(reg)` -> the previous
+  registry invisibly, `registry_bind(reg)`, which points `the$registry`, `the$kinds`, `the$hooks`
+  and `the$diagnostics` at it; `registry_touch(reg)`, called by every change of records, filters or
+  kinds so that Task 4's cached `gptr_registry()` listing is rebuilt); `ext_session_id(session)` ->
+  `chr(1) | NULL` (a session id string or anything with an `id`); `ext_api_version` (`"1.0"`);
+  `kind_define(name, validate, resolve = c("first", "all"), fields = character(), order_field = NULL, experimental = FALSE, source = "builtin")`;
+  `kind_get(name)` -> the kind record
+  `list(name, validate, resolve, fields, order_field, experimental, source, record, staged)` or
+  `gptr_error_unknown_kind` (a `gptr_error_invalid_spec`); `kind_names()` -> sorted chr;
+  `kind_user_validate(validate)`; `spec_new(kind, name, ...)`; `spec_finish(spec, k)`;
+  `spec_abort(spec, field, problem)`; the exported `gptr_spec(kind, name, ...)`;
+  `format.gptr_spec()` and `print.gptr_spec()` (functions shown as `<fn>`).
 
-`ext-specs.R` defines the 37 kinds of 04 §10.2 (all but `interpreter`, which P22 adds through the `kind` kind). Two helpers are defined here for later tasks: `spec_tool_execute()` (the generated `execute()` of a direct tool that has only `fun`) and `spec_tool_fun()` (the generated `fun()` of an `r` member that has only `execute`), whose body calls `ctx_default()` from Task 7 when it runs; nothing in Tasks 2 to 6 calls it.
+`ext-specs.R` defines the 37 kinds of 04 section 10.2 (all but `interpreter`, which P22 adds through
+the `kind` kind). Two helpers are defined here for later tasks: `spec_tool_execute()` (the generated
+`execute()` of a direct tool that has only `fun`) and `spec_tool_fun()` (the generated `fun()` of an
+`r` member that has only `execute`), whose body calls `ctx_default()` from Task 7 when it runs;
+nothing in Tasks 2-6 calls it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -634,7 +798,9 @@ test_that("format() shows fields and never function bodies", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-specs")'`
-Expected: errors such as `could not find function "registry_env"`, `could not find function "ext_session_id"` and `could not find function "registry_swap"`, until testthat stops with `Maximum number of failures exceeded; quitting.`
+Expected: errors such as `could not find function "registry_env"`,
+`could not find function "ext_session_id"` and `could not find function "registry_swap"`, until
+testthat stops with `Maximum number of failures exceeded; quitting.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1593,7 +1759,9 @@ print.gptr_spec = function(x, ...) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'` (writes `export(gptr_spec)`, `S3method(format,gptr_spec)`, `S3method(print,gptr_spec)` and `man/gptr_spec.Rd`), then `Rscript --vanilla -e 'devtools::test(filter = "ext-specs")'`
+Run: `Rscript --vanilla -e 'devtools::document()'` (writes `export(gptr_spec)`,
+`S3method(format,gptr_spec)`, `S3method(print,gptr_spec)` and `man/gptr_spec.Rd`), then
+`Rscript --vanilla -e 'devtools::test(filter = "ext-specs")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 123 ]`
 
 - [ ] **Step 5: Commit**
@@ -1608,14 +1776,32 @@ git commit -m "feat(ext): add the registry state, kind table and spec engine"
 ### Task 3: Spec constructors and tool results
 
 **Files:**
-- Modify: `R/ext-specs.R` (append), `NAMESPACE`, `man/` (generated: `gptr_tool.Rd`, `gptr_provider.Rd`, `gptr_adapter.Rd`, `gptr_router.Rd`, `gptr_hook.Rd`, `gptr_policy.Rd`, `gptr_agent.Rd`, `gptr_command.Rd`, `gptr_prompt_section.Rd`, `gptr_context_block.Rd`, `gptr_backend.Rd`, `gptr_tool_result.Rd`)
+- Modify: `R/ext-specs.R` (append), `NAMESPACE`, `man/` (generated: `gptr_tool.Rd`,
+  `gptr_provider.Rd`, `gptr_adapter.Rd`, `gptr_router.Rd`, `gptr_hook.Rd`, `gptr_policy.Rd`,
+  `gptr_agent.Rd`, `gptr_command.Rd`, `gptr_prompt_section.Rd`, `gptr_context_block.Rd`,
+  `gptr_backend.Rd`, `gptr_tool_result.Rd`)
 - Test: `tests/testthat/test-ext-specs.R` (append)
 
 **Interfaces:**
-- Consumes: Task 2 `spec_new()`, `spec_abort()`, `kind_get()`; P01 `block_text(text, signature = NULL)`, `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)`, `check_strings()`, `check_list()`, `check_flag()`, `msg_verbatim()`.
-- Produces: the 11 exported constructors with the exact 04 §6.8 / IC-35 signatures (Global Constraints); `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)` -> `structure(list(content, details, is_error, value, spill = NULL, out_id = NULL, truncated = FALSE, terminate = FALSE), class = "gptr_tool_result")` (04 §5.7); `as_tool_result(x)` (a `gptr_tool_result`, a character vector, `list(text, images, value, is_error, details)` or `NULL` -> `"(no output)"`); `format.gptr_tool_result()` (text blocks and `[image]`), `print.gptr_tool_result()` (through `msg_verbatim()`).
+- Consumes: Task 2 `spec_new()`, `spec_abort()`, `kind_get()`; P01
+  `block_text(text, signature = NULL)`,
+  `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)`,
+  `check_strings()`, `check_list()`, `check_flag()`, `msg_verbatim()`.
+- Produces: the 11 exported constructors with the exact 04 section 6.8 / IC-35 signatures (Global
+  Constraints);
+  `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)` ->
+  `structure(list(content, details, is_error, value, spill = NULL, out_id = NULL, truncated = FALSE, terminate = FALSE), class = "gptr_tool_result")`
+  (04 section 5.7); `as_tool_result(x)` (a `gptr_tool_result`, a character vector,
+  `list(text, images, value, is_error, details)` or `NULL` -> `"(no output)"`);
+  `format.gptr_tool_result()` (text blocks and `[image]`), `print.gptr_tool_result()` (through
+  `msg_verbatim()`).
 
-Constructors use the first element of a choice vector when the argument is left at its default and hand any other value to the kind validator, so a wrong `exposure` or `placement` is `gptr_error_invalid_spec` naming the field (04 §6.8). `gptr_agent()` keeps `model` and `skills` as the raw expressions `substitute()` returns (IC-34), never forcing them (rule R3); with only a name or a file it loads a definition through the `agent_def.get` service (P17) and otherwise signals `gptr_error_not_available`; that branch calls `ext_service_try()` from Task 7.
+Constructors use the first element of a choice vector when the argument is left at its default and
+hand any other value to the kind validator, so a wrong `exposure` or `placement` is
+`gptr_error_invalid_spec` naming the field (04 section 6.8). `gptr_agent()` keeps `model` and
+`skills` as the raw expressions `substitute()` returns (IC-34), never forcing them (rule R3); with
+only a name or a file it loads a definition through the `agent_def.get` service (P17) and otherwise
+signals `gptr_error_not_available`; that branch calls `ext_service_try()` from Task 7.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1783,7 +1969,9 @@ test_that("a direct tool with only fun gets an execute() printing the value in b
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-specs")'`
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 123 ]`, from errors such as `could not find function "gptr_tool"`, `could not find function "gptr_agent"` and `could not find function "gptr_tool_result"`.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 123 ]`, from errors such as
+`could not find function "gptr_tool"`, `could not find function "gptr_agent"` and
+`could not find function "gptr_tool_result"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2247,7 +2435,8 @@ print.gptr_tool_result = function(x, ...) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'`, then `Rscript --vanilla -e 'devtools::test(filter = "ext-specs")'`
+Run: `Rscript --vanilla -e 'devtools::document()'`, then
+`Rscript --vanilla -e 'devtools::test(filter = "ext-specs")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 207 ]`
 
 - [ ] **Step 5: Commit**
@@ -2265,14 +2454,44 @@ git commit -m "feat(ext): add the spec constructors and gptr_tool_result()"
 ### Task 4: Records, resolution, `gptr_register()` and `gptr_registry()`
 
 **Files:**
-- Modify: `R/ext-registry.R` (append), `R/ext-specs.R` (append), `NAMESPACE`, `man/gptr_register.Rd`, `man/gptr_registry.Rd` (generated)
+- Modify: `R/ext-registry.R` (append), `R/ext-specs.R` (append), `NAMESPACE`,
+  `man/gptr_register.Rd`, `man/gptr_registry.Rd` (generated)
 - Test: `tests/testthat/test-ext-registry.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 2-3 (`spec_finish()`, `kind_get()`, `kind_record()`, `kind_user_validate()`, the constructors); P01 `redact_hook(x, profile)`, `est_tokens(x, class)`, `schema_signature(name, schema, description = NULL, prefix = "")`, `json_encode()`, `check_class()`, `check_number()`.
-- Produces (04 §7.2): `registry_add(spec, source, rank, session = NULL, state = "active")` -> record id (`"r<n>"`); `registry_remove(id)` -> `invisible(lgl(1))`; `registry_get(kind, name, session = NULL)` -> the winning spec or `NULL`; `registry_all(kind, session = NULL)` -> named list of specs (all-kinds: every enabled record ordered by the kind's order field, else rank then registration; first-kinds: the winner per name, sorted by name; lazy records are activated first, except `tool` placeholders, which are returned unactivated because their manifest declarations feed the frozen prompt's catalogs, 04 §10.8); `registry_names(kind, session = NULL)`; `registry_generation()`; `registry_diagnostic(source, event, class, message)` (redacted with `redact_hook(x, "persist")`, last 1,000 rows); `registry_session_drop(sid)` (removes a session's records, makes its extensions stale and forgets them); `ext_forget(info, reg)` (an extension record leaves `reg$exts`, releases its factory and its per-load state, so no factory closure, and no frame it captured, outlives the session or the failed, unloaded or reloaded load: rule R10); `registry_check_source(source)`; `registry_member_names(reg)`; `spec_key(spec)` (`"<namespace>/<name>"` for namespaced tools); `spec_tokens(spec)`; `ext_reserved_members`; `ext_control_guard(what)` and `ext_control_grant(run, what)` (IC-53 point 3: P06 or P11 calls `ext_control_grant()` after an `ask_human` approval of a control export); the exports `gptr_register(spec)` -> unregister function invisibly (the function passes the same `ext_control_guard("gptr_register")`, so model code cannot remove a user's policy through an `off()` closure kept in its evaluation environment) and `gptr_registry(kind = NULL, diagnostics = FALSE)` (the full listing, `kind = NULL`, is cached in `reg$listing` until `registry_touch()` or a change of the protected built-ins; P01's `service_builtin_active()` lists the registry on every service lookup, and without the cache every `ctx` member call cost two full listings, about 14 ms with 320 records, above the 10 ms policy budget); `kind_from_spec()`, `kind_undefine()` (a `kind` record defines its kind; removing it undefines it).
+- Consumes: Tasks 2-3 (`spec_finish()`, `kind_get()`, `kind_record()`, `kind_user_validate()`, the
+  constructors); P01 `redact_hook(x, profile)`, `est_tokens(x, class)`,
+  `schema_signature(name, schema, description = NULL, prefix = "")`, `json_encode()`,
+  `check_class()`, `check_number()`.
+- Produces (04 section 7.2): `registry_add(spec, source, rank, session = NULL, state = "active")` ->
+  record id (`"r<n>"`); `registry_remove(id)` -> `invisible(lgl(1))`;
+  `registry_get(kind, name, session = NULL)` -> the winning spec or `NULL`;
+  `registry_all(kind, session = NULL)` -> named list of specs (all-kinds: every enabled record
+  ordered by the kind's order field, else rank then registration; first-kinds: the winner per name,
+  sorted by name; lazy records are activated first, except `tool` placeholders, which are returned
+  unactivated because their manifest declarations feed the frozen prompt's catalogs,
+  04 section 10.8); `registry_names(kind, session = NULL)`; `registry_generation()`;
+  `registry_diagnostic(source, event, class, message)` (redacted with `redact_hook(x, "persist")`,
+  last 1,000 rows); `registry_session_drop(sid)` (removes a session's records, makes its extensions
+  stale and forgets them); `ext_forget(info, reg)` (an extension record leaves `reg$exts`, releases
+  its factory and its per-load state, so no factory closure, and no frame it captured, outlives the
+  session or the failed, unloaded or reloaded load: rule R10); `registry_check_source(source)`;
+  `registry_member_names(reg)`; `spec_key(spec)` (`"<namespace>/<name>"` for namespaced tools);
+  `spec_tokens(spec)`; `ext_reserved_members`; `ext_control_guard(what)` and
+  `ext_control_grant(run, what)` (IC-53 point 3: P06 or P11 calls `ext_control_grant()` after an
+  `ask_human` approval of a control export); the exports `gptr_register(spec)` -> unregister
+  function invisibly (the function passes the same `ext_control_guard("gptr_register")`, so model
+  code cannot remove a user's policy through an `off()` closure kept in its evaluation environment)
+  and `gptr_registry(kind = NULL, diagnostics = FALSE)` (the full listing, `kind = NULL`, is cached
+  in `reg$listing` until `registry_touch()` or a change of the protected built-ins; P01's
+  `service_builtin_active()` lists the registry on every service lookup, and without the cache every
+  `ctx` member call cost two full listings, about 14 ms with 320 records, above the 10 ms policy
+  budget); `kind_from_spec()`, `kind_undefine()` (a `kind` record defines its kind; removing it
+  undefines it).
 
-`registry_rec_filtered()` is defined here and reads the effective filters (`reg$eff`) that Task 5 sets; until Task 5 there are none. `registry_get()` and `registry_all()` call `ext_activate_record()` (Task 9) for lazy placeholders, which exist only once Task 9 registers them.
+`registry_rec_filtered()` is defined here and reads the effective filters (`reg$eff`) that Task 5
+sets; until Task 5 there are none. `registry_get()` and `registry_all()` call
+`ext_activate_record()` (Task 9) for lazy placeholders, which exist only once Task 9 registers them.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2496,7 +2715,9 @@ test_that("registry_session_drop() removes only that session's records", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-registry")'`
-Expected: errors such as `could not find function "registry_add"`, `could not find function "gptr_register"` and `could not find function "registry_diagnostic"`, until testthat stops with `Maximum number of failures exceeded; quitting.`
+Expected: errors such as `could not find function "registry_add"`,
+`could not find function "gptr_register"` and `could not find function "registry_diagnostic"`, until
+testthat stops with `Maximum number of failures exceeded; quitting.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3083,7 +3304,8 @@ kind_undefine = function(name, id) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'`, then `Rscript --vanilla -e 'devtools::test(filter = "ext-registry")'`
+Run: `Rscript --vanilla -e 'devtools::document()'`, then
+`Rscript --vanilla -e 'devtools::test(filter = "ext-registry")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 80 ]`
 
 - [ ] **Step 5: Commit**
@@ -3103,10 +3325,25 @@ git commit -m "feat(ext): add registry records, resolution, gptr_register() and 
 - Test: `tests/testthat/test-ext-registry.R` (append)
 
 **Interfaces:**
-- Consumes: Task 4 (`registry_rec_filtered()`, `registry_protected_builtins()`, `registry_source_protected()`, `registry_recs()`, `registry_diagnostic()`), `kind_names()`; `the$builtins` (Task 10 fills it).
-- Produces: `registry_filters_set(filters, scope = c("session", "user", "project"))` -> the effective filter keys invisibly with attribute `refused` (04 §7.2, IC-53); `registry_filters_effective(filters)`; `registry_drops_guard(reg, eff)` -> `lgl(1)` (would `eff` disable a `policy` or `hook` record that is enabled now?); `registry_source_filtered(source)` -> `lgl(1)` (a whole `builtin:`/`plugin:` source disabled; used by `ext_load()` and `ext_load_builtins()`).
+- Consumes: Task 4 (`registry_rec_filtered()`, `registry_protected_builtins()`,
+  `registry_source_protected()`, `registry_recs()`, `registry_diagnostic()`), `kind_names()`;
+  `the$builtins` (Task 10 fills it).
+- Produces: `registry_filters_set(filters, scope = c("session", "user", "project"))` -> the
+  effective filter keys invisibly with attribute `refused` (04 section 7.2, IC-53);
+  `registry_filters_effective(filters)`; `registry_drops_guard(reg, eff)` -> `lgl(1)` (would `eff`
+  disable a `policy` or `hook` record that is enabled now?); `registry_source_filtered(source)` ->
+  `lgl(1)` (a whole `builtin:`/`plugin:` source disabled; used by `ext_load()` and
+  `ext_load_builtins()`).
 
-Scopes apply in the order user, project, session; `+<key>` in a later scope removes a key an earlier scope set. A `+builtin:<name>` filter calls `ext_load_builtins()` (Task 10) when built-ins are declared, so a built-in skipped at load comes back. Setting a scope replaces its filters, so inside a run two paths could remove a policy or hook: a new `-` filter (refused per filter) and dropping a `+` filter that undid an earlier scope's `-` (the dropped `+` is kept and reported in `refused`; IC-53). A malformed filter is `gptr_error_invalid_argument`; a well-formed filter whose prefix is neither `builtin`, `plugin` nor a registered kind is kept with a `filter_unknown_kind` diagnostic, because a kind that a lazy plugin defines on activation does not exist yet when the settings layer applies the user's filters (an error there would break every `peter()` call of that user).
+Scopes apply in the order user, project, session; `+<key>` in a later scope removes a key an earlier
+scope set. A `+builtin:<name>` filter calls `ext_load_builtins()` (Task 10) when built-ins are
+declared, so a built-in skipped at load comes back. Setting a scope replaces its filters, so inside
+a run two paths could remove a policy or hook: a new `-` filter (refused per filter) and dropping a
+`+` filter that undid an earlier scope's `-` (the dropped `+` is kept and reported in `refused`;
+IC-53). A malformed filter is `gptr_error_invalid_argument`; a well-formed filter whose prefix is
+neither `builtin`, `plugin` nor a registered kind is kept with a `filter_unknown_kind` diagnostic,
+because a kind that a lazy plugin defines on activation does not exist yet when the settings layer
+applies the user's filters (an error there would break every `peter()` call of that user).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3254,7 +3491,9 @@ test_that("a filter on a kind not defined yet is kept with a diagnostic (plugin 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-registry")'`
-Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 81 ]`, from errors such as `could not find function "registry_filters_set"` (the first new test's opening `gptr_registry()` expectation passes before its `registry_filters_set()` call fails).
+Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 81 ]`, from errors such as
+`could not find function "registry_filters_set"` (the first new test's opening `gptr_registry()`
+expectation passes before its `registry_filters_set()` call fails).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3425,10 +3664,26 @@ git commit -m "feat(ext): add registry filters"
 - Test: `tests/testthat/test-ext-api.R` (create), `tests/testthat/test-ext-check.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 1-5 (`registry_add()`, `registry_remove()`, `kind_names()`, `gptr_spec()`, `gptr_hook()`, `ev_table`, `ext_api_version`); P01 `gptr_deprecated(what, since, instead = NULL)`, `check_list()`.
-- Produces: `ext_api_new(source, dir = NULL, manifest = NULL)` -> a `gptr_extension_api` (04 §5.6, §10.5): members `name`, `dir`, `state`, `register(spec)` (staged while `info$status == "loading"`, else committed; returns an unregister function invisibly), `register_<kind>(...)` for every registered kind, `on(event, handler, matcher = NULL)`, `require(requires)`, `has(feature)`; `$<-`/`[[<-` refuse with `gptr_error_readonly`; `ext_info_new(source, dir = NULL, manifest = NULL)` (the extension record: `id`, `source`, `dir`, `manifest`, `rank`, `session`, `status`, `stage`, `ids`, `placeholders`, `factory`, `lazy`, `lazy_origin`, `api`, `unloaded`); `api_build(info, reg)`; `ext_commit_one(info, spec)`; `ext_register(info, spec)`; `api_satisfies(requires, provided = package_version(ext_api_version), plugin = "?")`, `api_require(requires, plugin)`, `api_parse_requires(requires, plugin = "?")` (an unparsable requirement is `gptr_error_api_version` naming the requiring plugin); `ext_state(info)`; the export `gptr_api()` -> `gptr_api` list (`version`, `features`); `ext_deprecations()` (empty in API 1.0) and `ext_warn_deprecated(object, name)`.
+- Consumes: Tasks 1-5 (`registry_add()`, `registry_remove()`, `kind_names()`, `gptr_spec()`,
+  `gptr_hook()`, `ev_table`, `ext_api_version`); P01 `gptr_deprecated(what, since, instead = NULL)`,
+  `check_list()`.
+- Produces: `ext_api_new(source, dir = NULL, manifest = NULL)` -> a `gptr_extension_api`
+  (04 sections 5.6, 10.5): members `name`, `dir`, `state`, `register(spec)` (staged while
+  `info$status == "loading"`, else committed; returns an unregister function invisibly),
+  `register_<kind>(...)` for every registered kind, `on(event, handler, matcher = NULL)`,
+  `require(requires)`, `has(feature)`; `$<-`/`[[<-` refuse with `gptr_error_readonly`;
+  `ext_info_new(source, dir = NULL, manifest = NULL)` (the extension record: `id`, `source`, `dir`,
+  `manifest`, `rank`, `session`, `status`, `stage`, `ids`, `placeholders`, `factory`, `lazy`,
+  `lazy_origin`, `api`, `unloaded`); `api_build(info, reg)`; `ext_commit_one(info, spec)`;
+  `ext_register(info, spec)`;
+  `api_satisfies(requires, provided = package_version(ext_api_version), plugin = "?")`,
+  `api_require(requires, plugin)`, `api_parse_requires(requires, plugin = "?")` (an unparsable
+  requirement is `gptr_error_api_version` naming the requiring plugin); `ext_state(info)`; the
+  export `gptr_api()` -> `gptr_api` list (`version`, `features`); `ext_deprecations()` (empty in
+  API 1.0) and `ext_warn_deprecated(object, name)`.
 
-`ext_register()` calls `kind_stage()` from Task 9 only while a factory is loading; before Task 9 API objects only exist outside factories.
+`ext_register()` calls `kind_stage()` from Task 9 only while a factory is loading; before Task 9 API
+objects only exist outside factories.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3590,7 +3845,9 @@ test_that("a deprecated API member warns once, or errors for plugin CI (contract
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-api|ext-check")'`
-Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`, from errors such as `could not find function "ext_api_new"`, `could not find function "api_satisfies"` and `could not find function "gptr_api"`.
+Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`, from errors such as
+`could not find function "ext_api_new"`, `could not find function "api_satisfies"` and
+`could not find function "gptr_api"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3910,7 +4167,8 @@ ext_warn_deprecated = function(object, name) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'`, then `Rscript --vanilla -e 'devtools::test(filter = "ext-api|ext-check")'`
+Run: `Rscript --vanilla -e 'devtools::document()'`, then
+`Rscript --vanilla -e 'devtools::test(filter = "ext-api|ext-check")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 98 ]`
 
 - [ ] **Step 5: Commit**
@@ -3930,13 +4188,45 @@ git commit -m "feat(ext): add the extension API object and gptr_api()"
 - Test: `tests/testthat/test-ext-api.R` (append)
 
 **Interfaces:**
-- Consumes: P01 `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`, `ext_service_has(name)`, `redact_hook(x, profile)`, `est_tokens()`; Task 4 `registry_get()`; Task 6 `ext_warn_deprecated()`; the services of 04 §7.0 `ctx.kernel` (P06), `ctx.input`, `session.add_tools` (P07), `ui.get`, `risk.classify` (P11), `secret.lookup` (P03), `eval.r`, `describe` (P09), `s1.decide` (P13), `agent_def.get` (P17).
-- Produces (04 §5.6, §10.6): `ctx_new(session, run = NULL)` -> `gptr_ctx` with every member of 04 §10.6 and IC-11/IC-69 (`session`, active bindings `envir`, `run`, `input`; `mode()`, `model()`, `has_ui()`, `ui()`, `risk(code, kind = "r")`, `redact(x, profile = "persist")`, `secret(name)`, `execute_tool(name, input)`, `send(text, as = c("steer", "follow_up"))`, `set_model(ref, thinking = NULL, reason = "plugin")`, `add_tools(specs)`, `tokens(x, class = "prose")`, `eval(code, envir = NULL)`, `describe(x, budget = 150L)`, `append_entry(type, data)`, `abort(reason)`, `aborted()`, `update(text)`, `decide(question, x, ...)`, `usage()`, `state()`, `emit(channel, data)`, `get(kind, name)`); `ext_service_try(name, session = NULL)` -> the function of a `service` record (session-scoped first) or of P01's table (one `ext_service_get()` lookup), or `NULL`; `ctx_default(session)`; `ctx_source(ctx)`, `ctx_with_source(ctx, source, fun)` (the source a handler runs for, or `NULL`); `ctx_ui_none()` (the `none` UI: `has_ui()` is `FALSE`, `select()` answers `NA`, `permission()` denies).
-- The `ctx.kernel` contract P06 implements (`ctx_kernel()` in P06's `agent-run.R`): `function() named list` whose functions are called as `impl(ctx, ...)` with positional arguments: `envir(ctx)`, `run(ctx)`, `mode(ctx)`, `model(ctx)`, `execute_tool(ctx, name, input)`, `send(ctx, text, as[, extension])`, `set_model(ctx, ref, thinking, reason)`, `append_entry(ctx, type, data[, extension])`, `abort(ctx, reason)`, `aborted(ctx)`, `update(ctx, text)`, `usage(ctx)`, `state(ctx[, extension])`. The optional last argument of the three plugin-scoped members is the source of the handler that called the member (`ctx_source(ctx)`, for example `"plugin:panel"`); it is passed positionally and only inside a handler, so P06's default (`extension = NULL`, labelled `"plugin"`) applies otherwise. This is exactly what `dev/plan/P06-session-kernel-agent-loop.md` implements: its `ctx_kernel()` names the argument `extension`, derives the label with `ctx_ext_label()` (`"plugin:panel"` -> `"panel"`), labels `extension` queue items with it (IC-55) and keys `gptr.ext` state and `customType` `"<label>.<type>"` by it.
+- Consumes: P01 `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`,
+  `ext_service_has(name)`, `redact_hook(x, profile)`, `est_tokens()`; Task 4 `registry_get()`;
+  Task 6 `ext_warn_deprecated()`; the services of 04 section 7.0 `ctx.kernel` (P06), `ctx.input`,
+  `session.add_tools` (P07), `ui.get`, `risk.classify` (P11), `secret.lookup` (P03), `eval.r`,
+  `describe` (P09), `s1.decide` (P13), `agent_def.get` (P17).
+- Produces (04 sections 5.6, 10.6): `ctx_new(session, run = NULL)` -> `gptr_ctx` with every member
+  of 04 section 10.6 and IC-11/IC-69 (`session`, active bindings `envir`, `run`, `input`; `mode()`,
+  `model()`, `has_ui()`, `ui()`, `risk(code, kind = "r")`, `redact(x, profile = "persist")`,
+  `secret(name)`, `execute_tool(name, input)`, `send(text, as = c("steer", "follow_up"))`,
+  `set_model(ref, thinking = NULL, reason = "plugin")`, `add_tools(specs)`,
+  `tokens(x, class = "prose")`, `eval(code, envir = NULL)`, `describe(x, budget = 150L)`,
+  `append_entry(type, data)`, `abort(reason)`, `aborted()`, `update(text)`,
+  `decide(question, x, ...)`, `usage()`, `state()`, `emit(channel, data)`, `get(kind, name)`);
+  `ext_service_try(name, session = NULL)` -> the function of a `service` record (session-scoped
+  first) or of P01's table (one `ext_service_get()` lookup), or `NULL`; `ctx_default(session)`;
+  `ctx_source(ctx)`, `ctx_with_source(ctx, source, fun)` (the source a handler runs for, or `NULL`);
+  `ctx_ui_none()` (the `none` UI: `has_ui()` is `FALSE`, `select()` answers `NA`, `permission()`
+  denies).
+- The `ctx.kernel` contract P06 implements (`ctx_kernel()` in P06's `agent-run.R`):
+  `function() named list` whose functions are called as `impl(ctx, ...)` with positional arguments:
+  `envir(ctx)`, `run(ctx)`, `mode(ctx)`, `model(ctx)`, `execute_tool(ctx, name, input)`,
+  `send(ctx, text, as[, extension])`, `set_model(ctx, ref, thinking, reason)`,
+  `append_entry(ctx, type, data[, extension])`, `abort(ctx, reason)`, `aborted(ctx)`,
+  `update(ctx, text)`, `usage(ctx)`, `state(ctx[, extension])`. The optional last argument of the
+  three plugin-scoped members is the source of the handler that called the member
+  (`ctx_source(ctx)`, for example `"plugin:panel"`); it is passed positionally and only inside a
+  handler, so P06's default (`extension = NULL`, labelled `"plugin"`) applies otherwise. This is
+  exactly what `dev/plan/P06-session-kernel-agent-loop.md` implements: its `ctx_kernel()` names the
+  argument `extension`, derives the label with `ctx_ext_label()` (`"plugin:panel"` -> `"panel"`),
+  labels `extension` queue items with it (IC-55) and keys `gptr.ext` state and `customType`
+  `"<label>.<type>"` by it.
 
 `ctx$emit()` calls `ev_dispatch()` from Task 8.
 
-Tests that assert a "not available" fallback or a member's behaviour without a kernel call `local_no_bootstrap_services()` after `local_registry()`: later plans register their services in P01's bootstrap table from `on_load()`, and an empty scratch registry makes P01's `service_builtin_active()` count every built-in as active, so these tests would otherwise fail in the full suite once P06 (`ctx.kernel`), P07, P09, P11, P13 or P17 is loaded (self-review item 28).
+Tests that assert a "not available" fallback or a member's behaviour without a kernel call
+`local_no_bootstrap_services()` after `local_registry()`: later plans register their services in
+P01's bootstrap table from `on_load()`, and an empty scratch registry makes P01's
+`service_builtin_active()` count every built-in as active, so these tests would otherwise fail in
+the full suite once P06 (`ctx.kernel`), P07, P09, P11, P13 or P17 is loaded (self-review item 28).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4176,7 +4466,8 @@ test_that("a deprecated ctx member warns through the same helper (contract 10.9)
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-api")'`
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 91 ]`, from errors such as `could not find function "ctx_new"` and `could not find function "ext_service_try"`.
+Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 91 ]`, from errors such as
+`could not find function "ctx_new"` and `could not find function "ext_service_try"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4429,7 +4720,8 @@ print.gptr_ctx = function(x, ...) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'` (adds the `$`, `[[`, `$<-`, `[[<-` and `print` methods of `gptr_ctx`), then `Rscript --vanilla -e 'devtools::test(filter = "ext-api")'`
+Run: `Rscript --vanilla -e 'devtools::document()'` (adds the `$`, `[[`, `$<-`, `[[<-` and `print`
+methods of `gptr_ctx`), then `Rscript --vanilla -e 'devtools::test(filter = "ext-api")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 172 ]`
 
 - [ ] **Step 5: Commit**
@@ -4448,10 +4740,42 @@ git commit -m "feat(ext): add ctx and service binding"
 - Test: `tests/testthat/test-ext-events.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1 (`ev_table`, `ev_semantics()`, `ev_check_name()`, `ev_is_channel()`), Task 4 (`registry_add()`, `registry_remove()`, `registry_recs()`, `registry_visible()`, `registry_sort()`, `registry_rec_filtered()`, `registry_diagnostic()`, `registry_session_drop()`, `ext_session_id()`), Task 7 (`ctx_default()`, `ctx_with_source()`, `ctx_new()` in tests); P01 `redact_hook()`.
-- Produces (04 §7.2, §10.7): `ev_dispatch(event, payload, session = NULL, ctx = NULL)` returning `NULL` (notify), the merged list (collect), `list(action, text)` (transform), `list(decision = "allow" | "block" | "modify", reason, input)` (`tool_call`; a handler error or an answer with an unknown `decision`, such as `"deny"`, blocks with a `malformed_decision` diagnostic for the latter), the first non-empty list answer or `NULL` (first decision; non-list returns such as the value of a logging assignment have no opinion; a failing `permission_request` handler answers `list(decision = "deny", reason)`), the patched payload (patch chain; `tool_result` patches only `content`, `details`, `is_error`; `request_params` only `params`, whose keys are merged so that a handler can add a declared key that is unset, while P06's `run_request_params()` drops keys the adapter does not declare), `list(block, reason, lines)` (`document_write`); handlers see `type`, `session`, `ts` and a copy redacted with the `stream` profile (opaque replay fields untouched); `session_shutdown` drops the session's records after its handlers ran (IC-69); `agent_start`/`agent_end` and `tool_execution_start`/`tool_execution_end` update the run and executing-tool mirrors that Tasks 4-5 read (IC-53); the `tool_execution_end` of a top-level call (a `tool_call_id` without `/`; nested calls are `<outer>/<k>`) also drops the run's unused `ext_control_grant()` grants, so the one-shot approval covers exactly the approved call, as P06's `tool_execute_frame()` clears `run$signal$control` when the call ends. `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)` -> id; `hook_remove(id)`; `ext_policy_decide(spec, call, ctx = NULL)` -> `NULL` or `list(decision, reason, input)` (the single-policy fail-closed evaluator of 04 §10.2 row 12, the G1 check "a throwing policy denies": an error or a malformed answer denies; P06's `perm_policies()` evaluates and combines policies itself, IC-04, so no later plan depends on this helper); `ext_policy_ok(r)` (the well-formedness test that `gptr_check()`'s policy matrix uses: decision `allow`, `deny`, `ask`, `ask_human` (IC-53 item 6; 04 §7.6 combines deny > ask_human > ask > modify > allow, and P11's built-in policies answer it) or `modify` with an input list; `ext_policy_decide()` returns an `ask_human` unchanged).
+- Consumes: Task 1 (`ev_table`, `ev_semantics()`, `ev_check_name()`, `ev_is_channel()`), Task 4
+  (`registry_add()`, `registry_remove()`, `registry_recs()`, `registry_visible()`,
+  `registry_sort()`, `registry_rec_filtered()`, `registry_diagnostic()`, `registry_session_drop()`,
+  `ext_session_id()`), Task 7 (`ctx_default()`, `ctx_with_source()`, `ctx_new()` in tests); P01
+  `redact_hook()`.
+- Produces (04 sections 7.2, 10.7): `ev_dispatch(event, payload, session = NULL, ctx = NULL)`
+  returning `NULL` (notify), the merged list (collect), `list(action, text)` (transform),
+  `list(decision = "allow" | "block" | "modify", reason, input)` (`tool_call`; a handler error or an
+  answer with an unknown `decision`, such as `"deny"`, blocks with a `malformed_decision` diagnostic
+  for the latter), the first non-empty list answer or `NULL` (first decision; non-list returns such
+  as the value of a logging assignment have no opinion; a failing `permission_request` handler
+  answers `list(decision = "deny", reason)`), the patched payload (patch chain; `tool_result`
+  patches only `content`, `details`, `is_error`; `request_params` only `params`, whose keys are
+  merged so that a handler can add a declared key that is unset, while P06's `run_request_params()`
+  drops keys the adapter does not declare), `list(block, reason, lines)` (`document_write`);
+  handlers see `type`, `session`, `ts` and a copy redacted with the `stream` profile (opaque replay
+  fields untouched); `session_shutdown` drops the session's records after its handlers ran (IC-69);
+  `agent_start`/`agent_end` and `tool_execution_start`/`tool_execution_end` update the run and
+  executing-tool mirrors that Tasks 4-5 read (IC-53); the `tool_execution_end` of a top-level call
+  (a `tool_call_id` without `/`; nested calls are `<outer>/<k>`) also drops the run's unused
+  `ext_control_grant()` grants, so the one-shot approval covers exactly the approved call, as P06's
+  `tool_execute_frame()` clears `run$signal$control` when the call ends.
+  `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)` -> id;
+  `hook_remove(id)`; `ext_policy_decide(spec, call, ctx = NULL)` -> `NULL` or
+  `list(decision, reason, input)` (the single-policy fail-closed evaluator of 04 section 10.2
+  row 12, the G1 check "a throwing policy denies": an error or a malformed answer denies; P06's
+  `perm_policies()` evaluates and combines policies itself, IC-04, so no later plan depends on this
+  helper); `ext_policy_ok(r)` (the well-formedness test that `gptr_check()`'s policy matrix uses:
+  decision `allow`, `deny`, `ask`, `ask_human` (IC-53 item 6; 04 section 7.6 combines deny >
+  ask_human > ask > modify > allow, and P11's built-in policies answer it) or `modify` with an input
+  list; `ext_policy_decide()` returns an `ask_human` unchanged).
 
-Handlers run in order: session listeners (rank 0), then hooks by rank and registration (04 §10.7); a matcher is `NULL`, a tool-name glob (converted with `utils::glob2rx()` and matched with `perl = TRUE`, G1 verification row 9) or a predicate. `ev_hooks()` activates lazy hook placeholders through `ext_activate_record()` (Task 9).
+Handlers run in order: session listeners (rank 0), then hooks by rank and registration
+(04 section 10.7); a matcher is `NULL`, a tool-name glob (converted with `utils::glob2rx()` and
+matched with `perl = TRUE`, G1 verification row 9) or a predicate. `ev_hooks()` activates lazy hook
+placeholders through `ext_activate_record()` (Task 9).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4790,7 +5114,9 @@ test_that("a throwing policy denies; malformed answers deny; NULL has no opinion
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-events")'`
-Expected: errors such as `could not find function "hook_add"` and `could not find function "ev_dispatch"`, until testthat stops with `Maximum number of failures exceeded; quitting.`
+Expected: errors such as `could not find function "hook_add"` and
+`could not find function "ev_dispatch"`, until testthat stops with
+`Maximum number of failures exceeded; quitting.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5250,12 +5576,40 @@ git commit -m "feat(ext): add event dispatch, hooks and policies"
 - Test: `tests/testthat/test-ext-load.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 2-8 (`ext_info_new()`, `api_build()`, `ext_commit_one()`, `api_require()`, `kind_record_from_spec()`, `kinds_env()`, `registry_add(..., state = "lazy")`, `registry_remove()`, `registry_check_source()`, `registry_source_filtered()`, `registry_recs()`, `registry_diagnostic()`, `registry_touch()`, `ext_forget()`, `ext_control_guard()`, `ev_dispatch()` in tests); P01 `gptr_warn(..., .once = )`, `on_unload(fun)`, `check_function()`, `check_list()`, `ext_service_set()`/`ext_service_get()` in tests.
-- Produces (04 §7.2, §10.8): `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)` -> `lgl(1)`; `ext_activate(source)` -> `lgl(1)`; `ext_activate_record(rec)`; `ext_unload(source)` -> number of records removed (the package-unload path); `ext_watch_unload(pkg, source = paste0("plugin:", pkg))` (`setHook(packageEvent(pkg, "onUnload"), ...)`, once per package and registry, removed again by an `on_unload()` cleanup when gptr unloads) and `ext_unhook(hook, fun)`; failed, unloaded, reloaded and session-scoped extensions are forgotten with `ext_forget()` (Task 4); `kind_stage(spec, ext_id, source)`, `kinds_unstage(ext_id)`; `ext_provides(manifest)`; `ext_placeholder(kind, name, source, declaration = NULL)`; the export `gptr_reload()` -> the new generation invisibly.
-- Manifests are the parsed `plugin.json` of 04 §11.12 (`json_decode()` shape: `extension$provides` is kind -> list of names, hooks by event name; `extension$declarations` is name -> `list(signature, description)`; `extension$activation` `"lazy"` or `"eager"`; `gptr$api` the requirement). Lazy placeholders are specs of class `c("gptr_<kind>", "gptr_spec")` with `lazy = TRUE`, `source` and `declaration`, stored with state `"lazy"`: `registry_all("tool")` returns tool placeholders unactivated so P07/P10 can put declarations into the frozen prompt before activation, while `registry_get()` and `registry_all()` of any other kind activate them.
-- Declarative-resource owners (P17 skills, prompts, agents; P18 MCP configurations) key their discovery caches on `registry_generation()`, which `gptr_reload()` increments; that is how `gptr_reload()` makes them re-discover (04 §6.7) without a P02 -> P17 call.
+- Consumes: Tasks 2-8 (`ext_info_new()`, `api_build()`, `ext_commit_one()`, `api_require()`,
+  `kind_record_from_spec()`, `kinds_env()`, `registry_add(..., state = "lazy")`,
+  `registry_remove()`, `registry_check_source()`, `registry_source_filtered()`, `registry_recs()`,
+  `registry_diagnostic()`, `registry_touch()`, `ext_forget()`, `ext_control_guard()`,
+  `ev_dispatch()` in tests); P01 `gptr_warn(..., .once = )`, `on_unload(fun)`, `check_function()`,
+  `check_list()`, `ext_service_set()`/`ext_service_get()` in tests.
+- Produces (04 sections 7.2, 10.8):
+  `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)` ->
+  `lgl(1)`; `ext_activate(source)` -> `lgl(1)`; `ext_activate_record(rec)`; `ext_unload(source)` ->
+  number of records removed (the package-unload path);
+  `ext_watch_unload(pkg, source = paste0("plugin:", pkg))`
+  (`setHook(packageEvent(pkg, "onUnload"), ...)`, once per package and registry, removed again by an
+  `on_unload()` cleanup when gptr unloads) and `ext_unhook(hook, fun)`; failed, unloaded, reloaded
+  and session-scoped extensions are forgotten with `ext_forget()` (Task 4);
+  `kind_stage(spec, ext_id, source)`, `kinds_unstage(ext_id)`; `ext_provides(manifest)`;
+  `ext_placeholder(kind, name, source, declaration = NULL)`; the export `gptr_reload()` -> the new
+  generation invisibly.
+- Manifests are the parsed `plugin.json` of 04 section 11.12 (`json_decode()` shape:
+  `extension$provides` is kind -> list of names, hooks by event name; `extension$declarations` is
+  name -> `list(signature, description)`; `extension$activation` `"lazy"` or `"eager"`; `gptr$api`
+  the requirement). Lazy placeholders are specs of class `c("gptr_<kind>", "gptr_spec")` with
+  `lazy = TRUE`, `source` and `declaration`, stored with state `"lazy"`: `registry_all("tool")`
+  returns tool placeholders unactivated so P07/P10 can put declarations into the frozen prompt
+  before activation, while `registry_get()` and `registry_all()` of any other kind activate them.
+- Declarative-resource owners (P17 skills, prompts, agents; P18 MCP configurations) key their
+  discovery caches on `registry_generation()`, which `gptr_reload()` increments; that is how
+  `gptr_reload()` makes them re-discover (04 section 6.7) without a P02 -> P17 call.
 
-The factory's registrations are staged (Task 6's `ext_register()`) and committed only when it returns, `kind` specs first so later specs of the factory validate; an error, an unmet requirement (manifest `gptr.api`, the factory attribute `gptr_api`, or `gptr$require()`), a missing API member or an invalid spec at commit rolls every staged and committed record back, removes staged kinds, records a diagnostic and warns once per source with class `gptr_warning_plugin` (report G1 5.1 `ext_load()`/`commit()`; §4.4 rule 4 for provided names a factory forgot).
+The factory's registrations are staged (Task 6's `ext_register()`) and committed only when it
+returns, `kind` specs first so later specs of the factory validate; an error, an unmet requirement
+(manifest `gptr.api`, the factory attribute `gptr_api`, or `gptr$require()`), a missing API member
+or an invalid spec at commit rolls every staged and committed record back, removes staged kinds,
+records a diagnostic and warns once per source with class `gptr_warning_plugin` (report G1 5.1
+`ext_load()`/`commit()`; section 4.4 rule 4 for provided names a factory forgot).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5617,7 +5971,8 @@ test_that("ext_activate(source) runs a lazy extension's factory on request", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-load")'`
-Expected: errors such as `could not find function "ext_load"`, until testthat stops with `Maximum number of failures exceeded; quitting.`
+Expected: errors such as `could not find function "ext_load"`, until testthat stops with
+`Maximum number of failures exceeded; quitting.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5978,7 +6333,8 @@ gptr_reload = function() {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'`, then `Rscript --vanilla -e 'devtools::test(filter = "ext-load")'`
+Run: `Rscript --vanilla -e 'devtools::document()'`, then
+`Rscript --vanilla -e 'devtools::test(filter = "ext-load")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 103 ]`
 
 - [ ] **Step 5: Commit**
@@ -5997,10 +6353,20 @@ git commit -m "feat(ext): add transactional and lazy extension loading"
 - Test: `tests/testthat/test-ext-builtins.R` (create)
 
 **Interfaces:**
-- Consumes: Task 9 `ext_load()`; Task 5 `registry_source_filtered()`, `registry_filters_set()` (tests); Task 4 `registry_diagnostic()`; P01 `the`, `check_*()`; P01's `.onLoad`, which calls `ext_load_builtins()` after evaluating every `on_load()` expression (IC-32).
-- Produces (04 §7.2, §10.3): `the$builtins` (name -> `list(name, factory, after, replaceable)`); `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` -> name invisibly; `ext_builtin_order(builtins = the$builtins %||% list())` -> names in dependency order; `ext_load_builtins()` -> names loaded now, invisibly. Every later plan declares its built-in with `on_load(ext_declare_builtin("<name>", builtin_<name>))` in its own file (P03 `secrets` with `replaceable = FALSE`, P05 `fake` and `providers`, P08 `gateway` with `replaceable = FALSE`, ...).
+- Consumes: Task 9 `ext_load()`; Task 5 `registry_source_filtered()`, `registry_filters_set()`
+  (tests); Task 4 `registry_diagnostic()`; P01 `the`, `check_*()`; P01's `.onLoad`, which calls
+  `ext_load_builtins()` after evaluating every `on_load()` expression (IC-32).
+- Produces (04 sections 7.2, 10.3): `the$builtins` (name ->
+  `list(name, factory, after, replaceable)`);
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` -> name invisibly;
+  `ext_builtin_order(builtins = the$builtins %||% list())` -> names in dependency order;
+  `ext_load_builtins()` -> names loaded now, invisibly. Every later plan declares its built-in with
+  `on_load(ext_declare_builtin("<name>", builtin_<name>))` in its own file (P03 `secrets` with
+  `replaceable = FALSE`, P05 `fake` and `providers`, P08 `gateway` with `replaceable = FALSE`, ...).
 
-`replaceable = FALSE` feeds `registry_protected_builtins()` (Task 4), so `-builtin:<name>` is refused for that built-in; `builtin:permissions`, `builtin:plan` and `builtin:secrets` are protected whatever their declaration says (IC-53).
+`replaceable = FALSE` feeds `registry_protected_builtins()` (Task 4), so `-builtin:<name>` is
+refused for that built-in; `builtin:permissions`, `builtin:plan` and `builtin:secrets` are protected
+whatever their declaration says (IC-53).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6133,7 +6499,8 @@ test_that("a user record overrides one record of a built-in, not the whole built
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-builtins")'`
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`, from errors such as `could not find function "ext_declare_builtin"`.
+Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`, from errors such as
+`could not find function "ext_declare_builtin"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6233,10 +6600,41 @@ git commit -m "feat(ext): add built-in declarations and load order"
 - Test: `tests/testthat/test-ext-check.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 2-10 (`spec_finish()`, `kind_get()`, `registry_scratch()`, `registry_swap()`, `registry_add()`, `registry_remove()`, `registry_recs()`, `registry_index_push()`, `registry_rec_filtered()`, `spec_tokens()`, `ctx_new()`, `ext_policy_ok()`, `ext_load()`, `ext_provides()`, `api_satisfies()`, `as_tool_result()`); P01 `schema_problems()`, `schema_validate()`, `est_tokens()`, `json_decode()`, `ext_service_has()`/`ext_service_get()`; `ps::ps_children()`, `ps::ps_handle()`, `ps::ps_pid()`; the service `check.adapter` (P12): `function(adapter, fixtures = NULL) <gptr_check>`.
-- Produces (04 §6.7, §5.11, §7.2): the export `gptr_check(x, error = FALSE, tokens = FALSE)` -> `c("gptr_check", "data.frame")` with columns `target`, `check`, `ok`, `message`, or `gptr_error_conformance` (field `results`) with `error = TRUE`; the row builders `check_spec(spec, tokens = FALSE, adapter_check = NULL)`, `check_factory(factory, manifest = NULL, tokens = FALSE, adapter_check = NULL)`, `check_package(pkg, tokens = FALSE, adapter_check = NULL)` (the names and leading arguments of 04 §7.2; each returns the rows of a `gptr_check` as a list of one-row data frames that `gptr_check()` binds), `check_row()`, `check_rows()`; `print.gptr_check()`; `ext_bare_identifiers(objects)` (IC-42).
+- Consumes: Tasks 2-10 (`spec_finish()`, `kind_get()`, `registry_scratch()`, `registry_swap()`,
+  `registry_add()`, `registry_remove()`, `registry_recs()`, `registry_index_push()`,
+  `registry_rec_filtered()`, `spec_tokens()`, `ctx_new()`, `ext_policy_ok()`, `ext_load()`,
+  `ext_provides()`, `api_satisfies()`, `as_tool_result()`); P01 `schema_problems()`,
+  `schema_validate()`, `est_tokens()`, `json_decode()`, `ext_service_has()`/`ext_service_get()`;
+  `ps::ps_children()`, `ps::ps_handle()`, `ps::ps_pid()`; the service `check.adapter` (P12):
+  `function(adapter, fixtures = NULL) <gptr_check>`.
+- Produces (04 sections 6.7, 5.11, 7.2): the export `gptr_check(x, error = FALSE, tokens = FALSE)`
+  -> `c("gptr_check", "data.frame")` with columns `target`, `check`, `ok`, `message`, or
+  `gptr_error_conformance` (field `results`) with `error = TRUE`; the row builders
+  `check_spec(spec, tokens = FALSE, adapter_check = NULL)`,
+  `check_factory(factory, manifest = NULL, tokens = FALSE, adapter_check = NULL)`,
+  `check_package(pkg, tokens = FALSE, adapter_check = NULL)` (the names and leading arguments of
+  04 section 7.2; each returns the rows of a `gptr_check` as a list of one-row data frames that
+  `gptr_check()` binds), `check_row()`, `check_rows()`; `print.gptr_check()`;
+  `ext_bare_identifiers(objects)` (IC-42).
 
-Check names: `spec.class`, `spec.fields` (the failing field in the message: `field '<name>' <problem>`), `tool.schema`, `tool.description_tokens` (direct tools, at most 400), `tool.empty_input`, `section.budget`, `policy.matrix`, `policy.speed` (median at most 10 ms), `backend.start`, `backend.cancel`, `backend.processes`, the rows of the `check.adapter` service (when P12 is loaded), `tokens.declaration`, `tokens.example.<i>`, `factory.load`, `factory.registers`, `factory.no_action`, `provides.<kind>:<name>`, `package.installed`, `manifest.present`, `manifest.valid`, `api.declared`, `api.satisfied`, `factory.exported`, `tokens.declarations`, `code.identifiers`. Checks run in a scratch registry that copies the current registry's non-P02 kinds and its enabled, active process-level records (G1 5.1 `with_scratch_registry()`, extended): plugin kinds validate, bootstrap services owned by loaded built-ins stay available (P01's `ext_service_get()` treats a built-in without records in a non-empty registry as filtered out, so an empty-but-for-the-check scratch made `ctx$risk()` "not available" inside the policy matrix), a plugin namespace that clashes with a live member fails as it would live, and nothing leaks into the live registry. `check_policy()` registers its scripted `ctx.kernel` at rank 0 so it wins over a mirrored one. The package helpers `ext_pkg_path()`, `ext_pkg_factory()`, `ext_pkg_description()` and `ext_pkg_objects()` wrap `system.file()`, `getExportedValue()`, `utils::packageDescription()` and the namespace, so tests replace them with `testthat::local_mocked_bindings()` instead of installing a package.
+Check names: `spec.class`, `spec.fields` (the failing field in the message:
+`field '<name>' <problem>`), `tool.schema`, `tool.description_tokens` (direct tools, at most 400),
+`tool.empty_input`, `section.budget`, `policy.matrix`, `policy.speed` (median at most 10 ms),
+`backend.start`, `backend.cancel`, `backend.processes`, the rows of the `check.adapter` service
+(when P12 is loaded), `tokens.declaration`, `tokens.example.<i>`, `factory.load`,
+`factory.registers`, `factory.no_action`, `provides.<kind>:<name>`, `package.installed`,
+`manifest.present`, `manifest.valid`, `api.declared`, `api.satisfied`, `factory.exported`,
+`tokens.declarations`, `code.identifiers`. Checks run in a scratch registry that copies the current
+registry's non-P02 kinds and its enabled, active process-level records (G1 5.1
+`with_scratch_registry()`, extended): plugin kinds validate, bootstrap services owned by loaded
+built-ins stay available (P01's `ext_service_get()` treats a built-in without records in a non-empty
+registry as filtered out, so an empty-but-for-the-check scratch made `ctx$risk()` "not available"
+inside the policy matrix), a plugin namespace that clashes with a live member fails as it would
+live, and nothing leaks into the live registry. `check_policy()` registers its scripted `ctx.kernel`
+at rank 0 so it wins over a mirrored one. The package helpers `ext_pkg_path()`, `ext_pkg_factory()`,
+`ext_pkg_description()` and `ext_pkg_objects()` wrap `system.file()`, `getExportedValue()`,
+`utils::packageDescription()` and the namespace, so tests replace them with
+`testthat::local_mocked_bindings()` instead of installing a package.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6595,7 +6993,8 @@ test_that("the identifier scan knows arrow assignments and for-loop variables (I
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ext-check")'`
-Expected: errors such as `could not find function "gptr_check"`, until testthat stops with `Maximum number of failures exceeded; quitting.`
+Expected: errors such as `could not find function "gptr_check"`, until testthat stops with
+`Maximum number of failures exceeded; quitting.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -7168,7 +7567,8 @@ print.gptr_check = function(x, ...) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'`, then `Rscript --vanilla -e 'devtools::test(filter = "ext-check")'`
+Run: `Rscript --vanilla -e 'devtools::document()'`, then
+`Rscript --vanilla -e 'devtools::test(filter = "ext-check")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 224 ]`
 
 - [ ] **Step 5: Commit**
@@ -7182,9 +7582,10 @@ git commit -m "feat(ext): add gptr_check() conformance suites"
 
 ## Plan acceptance
 
-Every acceptance check of 05 P02, including its review amendments, with the task and test that prove it. Run from the repository root after Task 11.
+Every acceptance check of 05 P02, including its review amendments, with the task and test that prove
+it. Run from the repository root after Task 11.
 
-| # | Check (05 P02) | Proven by | Command and expected result |
+| # | Check (05 P02) | Proved by | Command and expected result |
 |---|---|---|---|
 | 1 | `devtools::test(filter = "ext")` is green | all tasks | `Rscript --vanilla -e 'devtools::test(filter = "ext")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS n ]`, where n is the 982 expectations of the seven `test-ext-*.R` files plus those of P01's `test-utils-text.R`, which the pattern `"ext"` also selects; P02's files alone: `Rscript --vanilla -e 'devtools::test(filter = "^ext-")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 982 ]`. Under R CMD check on CRAN (`NOT_CRAN` unset) the backend-process test skips: `SKIP 1`. |
 | 2a | ported G1 check: precedence by rank | Task 4, `test-ext-registry.R` "the lowest rank wins per (kind, name): session < project < user < plugin < builtin", "ties go to the first registration with a collision diagnostic" | as row 1 |
@@ -7198,21 +7599,49 @@ Every acceptance check of 05 P02, including its review amendments, with the task
 | 2i | a notify hook error becomes a diagnostic | Task 8 "notify runs listeners then hooks by rank; a handler error is a diagnostic" | as row 1 |
 | 2j | a plugin-defined kind is registered and resolved | Task 4 "registry_remove() drops a record; a kind record defines and undefines its kind"; Task 6 "register_<kind>() is gptr_spec() sugar for every kind, including plugin kinds"; Task 9 "a factory can define a kind and use it; a rollback removes the kind" | as row 1 |
 | 3 | `gptr_check()` passes a valid spec of every kind, names the failing field of an invalid one, and fails a direct tool description over 400 tokens | Task 11, `test-ext-check.R` "gptr_check() passes a valid spec of every kind (acceptance 3)", "an invalid spec fails and names the failing field; error = TRUE signals", "a direct tool description over 400 tokens fails (acceptance 3)" | as row 1 |
-| 4 | registering 100 lazy manifests takes under 50 ms (G1 measured 8-16 ms) | Task 9 "100 lazy manifests register quickly" (the test bound is 5 s, conventions §7) and this benchmark (a warm-up pass, then a fresh registry): `Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); m = function(i) list(name = paste0("p", i), extension = list(activation = "lazy", provides = list(tool = list(paste0("t", i))), declarations = stats::setNames(list(list(signature = paste0("t", i, "(x)"), description = "A tool.")), paste0("t", i)))); run = function() { old = registry_swap(registry_scratch()); on.exit(registry_swap(old)); system.time(for (i in 1:100) ext_load(function(gptr) NULL, paste0("plugin:p", i), 5L, manifest = m(i), lazy = TRUE))[["elapsed"]] }; invisible(run()); cat(sprintf("100 lazy manifests: %.0f ms\n", 1000 * run()))'` | prints `100 lazy manifests: <t> ms` with t below 50 (measured 13-14 ms; 11-12 ms with the installed, byte-compiled package; the first, cold pass under `load_all()` also compiles the functions and took 48-51 ms, which is why the benchmark warms up) |
-| 5a | every §6.8 example of the contract runs (IC-35) | Task 3 "every example of contract 6.8 runs and returns its class (IC-35)"; the roxygen examples | as row 1; `Rscript --vanilla -e 'devtools::run_examples(document = FALSE)'` finishes without an error |
+| 4 | registering 100 lazy manifests takes under 50 ms (G1 measured 8-16 ms) | Task 9 "100 lazy manifests register quickly" (the test bound is 5 s, conventions section 7) and this benchmark (a warm-up pass, then a fresh registry): `Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); m = function(i) list(name = paste0("p", i), extension = list(activation = "lazy", provides = list(tool = list(paste0("t", i))), declarations = stats::setNames(list(list(signature = paste0("t", i, "(x)"), description = "A tool.")), paste0("t", i)))); run = function() { old = registry_swap(registry_scratch()); on.exit(registry_swap(old)); system.time(for (i in 1:100) ext_load(function(gptr) NULL, paste0("plugin:p", i), 5L, manifest = m(i), lazy = TRUE))[["elapsed"]] }; invisible(run()); cat(sprintf("100 lazy manifests: %.0f ms\n", 1000 * run()))'` | prints `100 lazy manifests: <t> ms` with t below 50 (measured 13-14 ms; 11-12 ms with the installed, byte-compiled package; the first, cold pass under `load_all()` also compiles the functions and took 48-51 ms, which is why the benchmark warms up) |
+| 5a | every section 6.8 example of the contract runs (IC-35) | Task 3 "every example of contract 6.8 runs and returns its class (IC-35)"; the roxygen examples | as row 1; `Rscript --vanilla -e 'devtools::run_examples(document = FALSE)'` finishes without an error |
 | 5b | a user `read` override leaves `edit` and the `peter$grep` member working | Task 4 and Task 10 (rows 2c) | as row 1 |
 | 5c | a factory loaded with `session = <id>` is invisible to another session and removed at its shutdown | Task 9 "a factory loaded with session = <id> is invisible to other sessions (IC-69)"; Task 8 "session_shutdown drops the session's records after its handlers ran (IC-69)" | as row 1 |
 | 5d | a `-builtin:permissions` filter from user settings, a call and `gptr_config()` is refused | Task 5 "no filter from user settings, a call or gptr_config() disables the kernel (IC-53)" (scopes `user`, `session` and `project`; P08's `gptr_config(filters =)` and call arguments reach the registry only through `registry_filters_set()`); Task 10 "non-replaceable built-ins cannot be filtered out (IC-53)" | as row 1 |
 | 5e | a plugin `service` record replaces a built-in service and disappears with its plugin | Task 9 "a plugin service record replaces a built-in service and leaves with its plugin"; Task 7 "a service record replaces the bootstrap service of the same name (IC-34)" | as row 1 |
 | 5f | an `operator` context block registered at rank 1 is refused | Task 4 "registration rules that depend on the source: operator blocks and namespaces" | as row 1 |
 
-Further review amendments in scope (05 P02 "Review amendments"), each covered: IC-69 overrides per record (rows 2c, 5b); IC-53 filters inside a run (Task 5 "inside a run, filters that remove policies or hooks are refused (IC-53)", "inside a run, dropping a + that keeps a policy enabled is refused (IC-53)") and control exports (Task 4 "gptr_register() is refused from model code during a run unless granted (IC-53)", Task 9 "gptr_reload() is refused from model code during a run (IC-53)", Task 8 "runs and executing tools are tracked from agent and tool events (IC-53)", "an unused control grant ends with the top-level call it was granted in (IC-53)"); `ext_load(..., session =)` (row 5c; Task 9 "a session's extension releases its factory and captured frames (R10)"); IC-35 signatures (Task 3 "constructors pick the first choice and report missing or wrong arguments", `test-ext-specs.R` "adapter specs are validated per transport (IC-35)"); IC-34 `gptr_agent()` raw expressions (Task 3 "gptr_agent() stores the raw captured expressions (IC-34)"); the IC-69 `ctx` members and IC-55 `ctx$send()` source (Task 7 "ctx members call the P06 kernel with the ctx first, lazily at call time", "ctx services: ui, risk, secret, tokens, eval, describe, decide, add_tools, input"); the `request_params` event (Task 8 "request_params patches only `params`; unset declared keys can be added (IC-69)"); `gptr_check(tokens =)` (Task 11 "tokens = TRUE reports declaration costs and the printed cost of examples", and the package test's `tokens.declarations` row); IC-52 (row 5f).
+Further review amendments in scope (05 P02 "Review amendments"), each covered: IC-69 overrides per
+record (rows 2c, 5b); IC-53 filters inside a run (Task 5 "inside a run, filters that remove policies
+or hooks are refused (IC-53)", "inside a run, dropping a + that keeps a policy enabled is refused
+(IC-53)") and control exports (Task 4 "gptr_register() is refused from model code during a run
+unless granted (IC-53)", Task 9 "gptr_reload() is refused from model code during a run (IC-53)",
+Task 8 "runs and executing tools are tracked from agent and tool events (IC-53)", "an unused control
+grant ends with the top-level call it was granted in (IC-53)"); `ext_load(..., session =)` (row 5c;
+Task 9 "a session's extension releases its factory and captured frames (R10)"); IC-35 signatures
+(Task 3 "constructors pick the first choice and report missing or wrong arguments",
+`test-ext-specs.R` "adapter specs are validated per transport (IC-35)"); IC-34 `gptr_agent()` raw
+expressions (Task 3 "gptr_agent() stores the raw captured expressions (IC-34)"); the IC-69 `ctx`
+members and IC-55 `ctx$send()` source (Task 7 "ctx members call the P06 kernel with the ctx first,
+lazily at call time", "ctx services: ui, risk, secret, tokens, eval, describe, decide, add_tools,
+input"); the `request_params` event (Task 8 "request_params patches only `params`; unset declared
+keys can be added (IC-69)"); `gptr_check(tokens =)` (Task 11 "tokens = TRUE reports declaration
+costs and the printed cost of examples", and the package test's `tokens.declarations` row); IC-52
+(row 5f).
 
 Also run:
 
-- `Rscript --vanilla -e 'devtools::test(filter = "lint|arch")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS n ]`: P01's `test-lint-rules.R` and `test-arch-layers.R` pass with the seven `ext-*.R` files in `R/` (no `:::`, no `<-`, ASCII only, no `lockBinding`, no `withr::`, no literal-free `cli_*()` calls; every `ext-*.R` callee is L0).
-- `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'` -> no lint; exit 0 (P01 acceptance A3's command: loading the namespace first lets `object_usage_linter` see the package's internal functions on the uninstalled development tree). Test lines that call the API member `require()` with a string carry `# nolint: object_usage_linter.`, because lintr reads any `require("x")` call as loading package `x`.
-- `Rscript --vanilla -e 'devtools::document()'` -> `NAMESPACE` exports the 18 P02 names of 04 §14.1 (plus P01's `gptr_fake_provider`) and registers the S3 methods `$`, `[[`, `$<-`, `[[<-` and `print` for `gptr_ctx` and `gptr_extension_api`, `format` and `print` for `gptr_spec` and `gptr_tool_result`, and `print` for `gptr_registry`, `gptr_diagnostics`, `gptr_api` and `gptr_check`.
+- `Rscript --vanilla -e 'devtools::test(filter = "lint|arch")'` ->
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS n ]`: P01's `test-lint-rules.R` and `test-arch-layers.R` pass
+  with the seven `ext-*.R` files in `R/` (no `:::`, no `<-`, ASCII only, no `lockBinding`, no
+  `withr::`, no literal-free `cli_*()` calls; every `ext-*.R` callee is L0).
+- `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`
+  -> no lint; exit 0 (P01 acceptance A3's command: loading the namespace first lets
+  `object_usage_linter` see the package's internal functions on the uninstalled development tree).
+  Test lines that call the API member `require()` with a string carry
+  `# nolint: object_usage_linter.`, because lintr reads any `require("x")` call as loading package
+  `x`.
+- `Rscript --vanilla -e 'devtools::document()'` -> `NAMESPACE` exports the 18 P02 names of
+  04 section 14.1 (plus P01's `gptr_fake_provider`) and registers the S3 methods `$`, `[[`, `$<-`,
+  `[[<-` and `print` for `gptr_ctx` and `gptr_extension_api`, `format` and `print` for `gptr_spec`
+  and `gptr_tool_result`, and `print` for `gptr_registry`, `gptr_diagnostics`, `gptr_api` and
+  `gptr_check`.
 
 ## Self-review
 
@@ -7223,8 +7652,8 @@ Also run:
 | registry keyed by (kind, name) with ranks 0/1/3/5/6, diagnostics, generation counter | 2 (state), 4 (records, resolution, diagnostics), 9 (generation bump) |
 | filters `-builtin:`, `-<kind>:`, `+...`; project filters cannot disable user or built-in policies and hooks | 5 |
 | `gptr_register()`, `gptr_registry()` with the `tokens` column | 4 |
-| the 37 kinds and their validators (IC-02, IC-34, IC-69, §10.2) | 2 (table), 4 (`kind` records), 3 (constructors) |
-| `ctx` members bound lazily through P01's service table (IC-09, IC-34, §7.0) | 7 |
+| the 37 kinds and their validators (IC-02, IC-34, IC-69, section 10.2) | 2 (table), 4 (`kind` records), 3 (constructors) |
+| `ctx` members bound lazily through P01's service table (IC-09, IC-34, section 7.0) | 7 |
 | `gptr_spec()` and the 11 exported constructors; `gptr_tool_result()` | 2, 3 |
 | the factory API object: `register()`, `register_<kind>()` for every kind, `on()`, `require()`, `has()`, `state` | 6 |
 | the `ctx` object and its members; "not available" before their plan | 7 |
@@ -7233,68 +7662,232 @@ Also run:
 | `gptr_check()` conformance for specs and factories (and packages); `gptr_api()` | 11, 6 |
 | the built-in declaration table filled by `on_load(ext_declare_builtin(...))`, loaded in dependency order | 10 |
 | review amendments: IC-69 overrides, IC-53 filters and control exports, `ext_load(session =)`, IC-35 signatures, IC-34 agents, IC-69/IC-55 `ctx` members, `request_params`, `gptr_check(tokens =)`, IC-52 operator blocks | 3, 4, 5, 7, 8, 9, 11 (Plan acceptance lists the tests) |
-| option `gptr.deprecations`, warning class `deprecated` (04 §3.1, §2.2 owner P02) | 6 (API members), 7 (`ctx` members) |
-| copy safety (03 §6.4 R1, R2, R5, R10): no binding locks; `ctx` holds the session shell only; failed, unloaded, reloaded and session-scoped extensions release their factories and per-load state (`ext_forget()`) | 4, 6, 7, 9 |
+| option `gptr.deprecations`, warning class `deprecated` (04 sections 3.1, 2.2 owner P02) | 6 (API members), 7 (`ctx` members) |
+| copy safety (03 section 6.4 R1, R2, R5, R10): no binding locks; `ctx` holds the session shell only; failed, unloaded, reloaded and session-scoped extensions release their factories and per-load state (`ext_forget()`) | 4, 6, 7, 9 |
 | the 10 ms policy budget and cheap `ctx` members: the cached `gptr_registry()` listing behind P01's service lookups | 4, 7 |
 
 Every acceptance check of 05 P02 maps to a named test in "Plan acceptance".
 
-**Placeholder scan.** The plan was searched for "TBD", "TODO", "implement later", "fill in", "appropriate error handling", "handle edge cases", "similar to Task" and "write tests for the above": none occur. Every step that changes code shows the complete code. Functions called before the task that defines them (`ext_activate_record()` in Tasks 4 and 8, `kind_stage()` in Task 6, `ctx_default()` and `ext_service_try()` in Tasks 2-3, `ev_dispatch()` in Task 7, `ext_load_builtins()` in Task 5) are named in each task's notes and are reached only by code paths that the earlier tasks' tests do not exercise.
+**Placeholder scan.** The plan was searched for "TBD", "TODO", "implement later", "fill in",
+"appropriate error handling", "handle edge cases", "similar to Task" and "write tests for the
+above": none occur. Every step that changes code shows the complete code. Functions called before
+the task that defines them (`ext_activate_record()` in Tasks 4 and 8, `kind_stage()` in Task 6,
+`ctx_default()` and `ext_service_try()` in Tasks 2-3, `ev_dispatch()` in Task 7,
+`ext_load_builtins()` in Task 5) are named in each task's notes and are reached only by code paths
+that the earlier tasks' tests do not exercise.
 
-**Type and name consistency with 04.** Signatures of the 18 exports match 04 §6.7, §6.8 and IC-35 exactly (Global Constraints); internal signatures match 04 §7.2 (`registry_add`, `registry_remove`, `registry_get`, `registry_all`, `registry_names`, `registry_generation`, `registry_filters_set`, `registry_diagnostic`, `kind_define`, `kind_get`, `kind_names`, `spec_new`, `as_tool_result`, `ev_dispatch`, `ev_catalogue`, `hook_add`, `hook_remove`, `ext_api_new`, `ctx_new`, `ext_load`, `ext_activate`, `ext_declare_builtin`, `ext_load_builtins`), including `check_spec(spec)`, `check_factory(factory)` and `check_package(pkg)` (optional trailing arguments `tokens`, `adapter_check` and, for factories, `manifest`; each returns the rows of a `gptr_check` as a list that `gptr_check()` binds; no other plan calls them). The adapter rows come from the private `check_adapter_rows(spec, target, adapter_check)`: the name `check_adapter()` belongs to P12 (04 §7.12, `check_adapter(adapter, fixtures = NULL)` in `R/provider-anthropic.R`, the `check.adapter` service), so no P02 file defines a function of that name (a second top-level definition would be replaced silently by the later-collating file and fail P01's "every function one home" test). Classes: `gptr_<kind>`/`gptr_spec`, `gptr_tool_result`, `gptr_registry`, `gptr_diagnostics`, `gptr_extension_api`, `gptr_ctx`, `gptr_check`, `gptr_api`, `gptr_registry_env` (04 §5.4-5.7, §5.11, §5.13). Condition classes and fields are those of 04 §2.2 listed in Global Constraints. Event names, semantics and handler returns are 04 §10.4 and §10.7; kind names, resolve modes and order fields are 04 §10.2; the service names used (`ctx.kernel`, `ctx.input`, `ui.get`, `risk.classify`, `secret.lookup`, `eval.r`, `describe`, `s1.decide`, `session.add_tools`, `agent_def.get`, `check.adapter`) are all in 04 §7.0, so P01's architecture test maps them.
+**Type and name consistency with 04.** Signatures of the 18 exports match 04 sections 6.7, 6.8 and
+IC-35 exactly (Global Constraints); internal signatures match 04 section 7.2 (`registry_add`,
+`registry_remove`, `registry_get`, `registry_all`, `registry_names`, `registry_generation`,
+`registry_filters_set`, `registry_diagnostic`, `kind_define`, `kind_get`, `kind_names`, `spec_new`,
+`as_tool_result`, `ev_dispatch`, `ev_catalogue`, `hook_add`, `hook_remove`, `ext_api_new`,
+`ctx_new`, `ext_load`, `ext_activate`, `ext_declare_builtin`, `ext_load_builtins`), including
+`check_spec(spec)`, `check_factory(factory)` and `check_package(pkg)` (optional trailing arguments
+`tokens`, `adapter_check` and, for factories, `manifest`; each returns the rows of a `gptr_check` as
+a list that `gptr_check()` binds; no other plan calls them). The adapter rows come from the private
+`check_adapter_rows(spec, target, adapter_check)`: the name `check_adapter()` belongs to P12
+(04 section 7.12, `check_adapter(adapter, fixtures = NULL)` in `R/provider-anthropic.R`, the
+`check.adapter` service), so no P02 file defines a function of that name (a second top-level
+definition would be replaced silently by the later-collating file and fail P01's "every function one
+home" test). Classes: `gptr_<kind>`/`gptr_spec`, `gptr_tool_result`, `gptr_registry`,
+`gptr_diagnostics`, `gptr_extension_api`, `gptr_ctx`, `gptr_check`, `gptr_api`, `gptr_registry_env`
+(04 sections 5.4-5.7, 5.11, 5.13). Condition classes and fields are those of 04 section 2.2 listed
+in Global Constraints. Event names, semantics and handler returns are 04 sections 10.4 and 10.7;
+kind names, resolve modes and order fields are 04 section 10.2; the service names used
+(`ctx.kernel`, `ctx.input`, `ui.get`, `risk.classify`, `secret.lookup`, `eval.r`, `describe`,
+`s1.decide`, `session.add_tools`, `agent_def.get`, `check.adapter`) are all in 04 section 7.0, so
+P01's architecture test maps them.
 
 **Contract ambiguities (resolved as stated, implemented, and tested).**
 
-1. 04 §6.8 says "Arguments not listed in §10.2 for the kind signal `gptr_error_invalid_spec`", but the §6.8 signatures have no `...`, so an unknown constructor argument is R's "unused argument" error; fields that a constructor does not take (`render` of a tool, `examples`) are set with `gptr_spec()`, whose validators keep unknown fields (§10.2 forward compatibility). Wrong values of known fields are `gptr_error_invalid_spec` naming the field.
-2. The `model` kind: §4.9's display `name` collides with the spec name, which §10.2 fixes as `provider/id`; the display name is the field `label`.
-3. IC-53 point 3 asks `gptr_register()` and `gptr_reload()` to check `run_current()` (P06), which an L0 file cannot call. P02 mirrors active runs and executing tools from the `agent_start`/`agent_end` and `tool_execution_start`/`tool_execution_end` events that P06 dispatches through `ev_dispatch()`; the one-shot approval is recorded by P06/P11 with `ext_control_grant(run, what)` after the `ask_human` approval. "Exactly that call": a grant is consumed by its first use, and an unused one is dropped at the `tool_execution_end` of the top-level call it was granted in (a `tool_call_id` without `/`; P06's nested calls are `<outer>/<k>` and end inside it), the same lifetime P06's `tool_execute_frame()` gives `run$signal$control`; `agent_end` drops whatever remains.
-4. 04 §7.0 gives `ctx.kernel` as "`function() named list` of the §10.6 member implementations" without a calling convention. Task 7 calls `impl(ctx, ...)` with positional arguments and, for `send`, `append_entry` and `state`, adds the handler's source (`ctx_source(ctx)`, e.g. `"plugin:panel"`) as an optional last positional argument only inside a handler. This is the convention `dev/plan/P06-session-kernel-agent-loop.md` implements (`send(ctx, text, as, extension = NULL)`, `append_entry(ctx, type, data, extension = NULL)`, `state(ctx, extension = NULL)`, the label `"panel"` derived by P06's `ctx_ext_label()`); passing it positionally keeps P02 independent of the argument's name.
-5. `registry_all("tool")` returns lazy placeholders (`lazy = TRUE`, `declaration`, `source`) without activating them, so catalogs can use declarations before activation (§10.8 declarations are signature lines of `r` members and direct tools); `registry_get()` and `registry_all()` of every other kind activate first, so consumers such as P05's `catalog_model_specs()` (`registry_all("model")`) never see a placeholder without the kind's fields.
-6. `gptr_reload()` "re-discovers declarative resources", which P17 and P18 own and 04 §7.0 gives no service for; P02 increments `registry_generation()`, which those owners use as their cache key.
-7. `gptr_check(tokens = TRUE)` reports "the printed-result cost of each member on its examples"; §9.1 has no examples field. Reading: an optional tool field `examples` (a list of argument lists), kept by the validator as an unknown field.
-8. "a backend (cancel leaves no process)": `gptr_check()` starts the backend with a probe spec (`name`, `prompt`, `model = NULL`, `tools`), cancels it, and compares the R process's children (`ps`) for up to 2 s.
-9. 05 acceptance 4 (100 lazy manifests under 50 ms) against conventions §7 ("No wall-clock assertions tighter than 5 seconds"): the test asserts 5 s and the 50 ms target is the separate benchmark of Plan acceptance row 4.
-10. IC-69 validates `backend` against `registry_names("backend")` plus `"auto"`; agents can be defined before the built-in that registers their backend is loaded, so `gptr_agent()` accepts any string and the check belongs where the agent runs (P19).
-11. §7.2 "payload redacted with `stream` first": handlers see the redacted copy; the patched payload `ev_dispatch()` returns is built from the unredacted payload, so the kernel never receives stream-redacted data back from a dispatch.
-12. `gptr$state` is "an environment private to the extension, process lifetime": one per `plugin:`/`builtin:` source; for the shared source strings `session`, `user` and `project` one per load.
-13. `ev_dispatch()` called with a session but without a ctx builds one for that call; sessions (P06) pass their own ctx, which 04 §10.6 creates once per session. Caching a ctx per session inside the registry would keep sessions alive (R10).
-14. `-builtin:<name>` for a built-in declared with `replaceable = FALSE` is refused like the permission kernel's (04 §7.2 "`replaceable` now only decides whether a `-builtin:<name>` filter may disable it"); its individual records can still be filtered with `-<kind>:<name>`, except records of `builtin:permissions`, `builtin:plan` and `builtin:secrets`.
-15. A `context_block` with `authority = "operator"` is refused by `registry_add()` for ranks below 3 (the constructor cannot know the rank).
-16. `gptr_hook()` names its spec after its event (hooks resolve `all`, so several hooks of one event coexist).
-17. P02 uses the 04 names of P01 exactly as `dev/plan/P01-foundation.md` defines them, and was validated against code assembled from that plan (see below). P01's `service_builtin_active()` decides built-in ownership of bootstrap services by listing `gptr_registry()` on every `ext_service_get()`/`ext_service_has()`; P02 therefore caches the full listing (`reg$listing`, keyed on `registry_touch()`'s counter and the protected built-ins), which took a `ctx` member call from about 14 ms to 0.1 ms with 320 records.
-18. The settings key `filters` (04 §11.2) is P02's, but only the settings layer knows which layer a value came from (`settings.get` returns merged values): P08 passes each layer's `filters` to `registry_filters_set()` with `scope = "user"`, `"project"` or `"session"`, and P02 enforces the IC-53 and project rules per scope.
-19. "decision (`tool_call`) ... error = block" (04 §10.7) says nothing about answers that are not `NULL`, `block` or `modify`. A list whose `decision` is anything else (for example `"deny"`, the policy word) blocks with a `malformed_decision` diagnostic, as a malformed policy answer denies (§10.2 row 12); non-list returns (the value of a logging assignment) have no opinion.
-20. Setting a filter scope replaces its filters. Inside a run, dropping a `+key` that undid an earlier scope's `-key` would remove a policy or hook without any `-` filter; such a `+key` is kept and reported in `refused` (IC-53 "filters that would remove `policy` or `hook` records are refused").
-21. "first decision: the first non-`NULL` return wins" (04 §10.7) is read together with the "Handler may return" column of §10.4, which lists only lists: a non-list return (the value of `log$n = log$n + 1`) and an empty list have no opinion. Otherwise a logging hook would hide every later handler and hand emitters a number where they read `res$cancel` (P07's `isTRUE(dec$cancel)` fails with "$ operator is invalid for atomic vectors").
-22. `request_params` (IC-69): only the emitter knows the adapter's declared `capabilities$request_params`, and P06's `run_request_params()` sends only the declared keys that are set. P02 therefore lets handlers patch `params` only (other top-level fields are ignored with a `patch_ignored` diagnostic) and merges its keys, so a handler can add a declared key that is unset (`metadata`, `user`); P06 drops undeclared keys with its own `ignored_patch` diagnostic. Dropping keys absent from the payload in P02 made those params impossible to set.
-23. Filters naming a kind that is not registered yet are kept with a `filter_unknown_kind` diagnostic: a kind defined by a lazy plugin's factory does not exist when the settings layer applies user filters at session start.
-24. `gptr_check()`'s scratch registry mirrors the live registry's enabled, active process-level records as well as its plugin kinds: with an otherwise empty scratch, P01's `service_builtin_active()` reports every built-in-owned bootstrap service as filtered out.
-25. IC-42's bare-identifier scan treats `gptr_agent()`'s `model` and `skills` differently from `peter()`'s identifier arguments: `gptr_agent()` stores them unevaluated (IC-34) for a later `peter()` call to resolve in its own frame, so even a local symbol there is reported (use a string or `I(x)`).
-26. IC-53 point 3 names `gptr_register()`; the unregister function it returns is guarded the same way, because users keep it in the environment model code evaluates in and removing a policy reconfigures gptr as much as adding one. The unregister functions of `gptr$register()` (plugin code) are not guarded.
-27. Policy decisions: 04 §10.2 row 12 lists `allow`, `deny`, `ask`, `modify`; 04 §7.6 (`perm_check()` combines every policy's answer as deny > ask_human > ask > modify > allow) and §15 IC-53 item 6 (the `ask_human` tier of the guards), which win, add `ask_human`, and P11's built-in policies (`mode`, `critical_guard`, `secret_guard`, `plan`) answer it. `ext_policy_ok()` therefore accepts the five decisions, `ext_policy_decide()` returns an `ask_human` unchanged, and `gptr_check()`'s `policy.matrix` passes a policy that answers it.
-28. Tests of a "not available" fallback (the `ctx` members, `gptr_agent(name)`, `gptr_check()` without `check.adapter`) hide P01's bootstrap service table for their duration (`local_no_bootstrap_services()`, or the same three lines inline in `test-ext-check.R`), as P01's `local_services()` does: later plans register `ctx.kernel`, `session.add_tools`, `describe`, `eval.r`, `risk.classify`, `s1.decide`, `agent_def.get` and `check.adapter` there from `on_load()`, and with the empty scratch registry of `local_registry()` P01's `service_builtin_active()` counts every built-in as active, so without the isolation these tests fail in the full suite from P06 on (P06 review row 14).
+1. 04 section 6.8 says "Arguments not listed in §10.2 for the kind signal
+   `gptr_error_invalid_spec`", but the section 6.8 signatures have no `...`, so an unknown
+   constructor argument is R's "unused argument" error; fields that a constructor does not take
+   (`render` of a tool, `examples`) are set with `gptr_spec()`, whose validators keep unknown fields
+   (section 10.2 forward compatibility). Wrong values of known fields are `gptr_error_invalid_spec`
+   naming the field.
+2. The `model` kind: section 4.9's display `name` collides with the spec name, which section 10.2
+   fixes as `provider/id`; the display name is the field `label`.
+3. IC-53 point 3 asks `gptr_register()` and `gptr_reload()` to check `run_current()` (P06), which an
+   L0 file cannot call. P02 mirrors active runs and executing tools from the
+   `agent_start`/`agent_end` and `tool_execution_start`/`tool_execution_end` events that P06
+   dispatches through `ev_dispatch()`; the one-shot approval is recorded by P06/P11 with
+   `ext_control_grant(run, what)` after the `ask_human` approval. "Exactly that call": a grant is
+   consumed by its first use, and an unused one is dropped at the `tool_execution_end` of the
+   top-level call it was granted in (a `tool_call_id` without `/`; P06's nested calls are
+   `<outer>/<k>` and end inside it), the same lifetime P06's `tool_execute_frame()` gives
+   `run$signal$control`; `agent_end` drops whatever remains.
+4. 04 section 7.0 gives `ctx.kernel` as "`function() named list` of the §10.6 member
+   implementations" without a calling convention. Task 7 calls `impl(ctx, ...)` with positional
+   arguments and, for `send`, `append_entry` and `state`, adds the handler's source
+   (`ctx_source(ctx)`, for example `"plugin:panel"`) as an optional last positional argument only
+   inside a handler. This is the convention `dev/plan/P06-session-kernel-agent-loop.md` implements
+   (`send(ctx, text, as, extension = NULL)`, `append_entry(ctx, type, data, extension = NULL)`,
+   `state(ctx, extension = NULL)`, the label `"panel"` derived by P06's `ctx_ext_label()`); passing
+   it positionally keeps P02 independent of the argument's name.
+5. `registry_all("tool")` returns lazy placeholders (`lazy = TRUE`, `declaration`, `source`) without
+   activating them, so catalogs can use declarations before activation (section 10.8 declarations
+   are signature lines of `r` members and direct tools); `registry_get()` and `registry_all()` of
+   every other kind activate first, so consumers such as P05's `catalog_model_specs()`
+   (`registry_all("model")`) never see a placeholder without the kind's fields.
+6. `gptr_reload()` "re-discovers declarative resources", which P17 and P18 own and 04 section 7.0
+   gives no service for; P02 increments `registry_generation()`, which those owners use as their
+   cache key.
+7. `gptr_check(tokens = TRUE)` reports "the printed-result cost of each member on its examples";
+   section 9.1 has no examples field. Reading: an optional tool field `examples` (a list of argument
+   lists), kept by the validator as an unknown field.
+8. "a backend (cancel leaves no process)": `gptr_check()` starts the backend with a probe spec
+   (`name`, `prompt`, `model = NULL`, `tools`), cancels it, and compares the R process's children
+   (`ps`) for up to 2 s.
+9. 05 acceptance 4 (100 lazy manifests under 50 ms) against conventions section 7 ("No wall-clock
+   assertions tighter than 5 seconds"): the test asserts 5 s and the 50 ms target is the separate
+   benchmark of Plan acceptance row 4.
+10. IC-69 validates `backend` against `registry_names("backend")` plus `"auto"`; agents can be
+    defined before the built-in that registers their backend is loaded, so `gptr_agent()` accepts
+    any string and the check belongs where the agent runs (P19).
+11. Section 7.2 "payload redacted with `stream` first": handlers see the redacted copy; the patched
+    payload `ev_dispatch()` returns is built from the unredacted payload, so the kernel never
+    receives stream-redacted data back from a dispatch.
+12. `gptr$state` is "an environment private to the extension, process lifetime": one per
+    `plugin:`/`builtin:` source; for the shared source strings `session`, `user` and `project` one
+    per load.
+13. `ev_dispatch()` called with a session but without a ctx builds one for that call; sessions (P06)
+    pass their own ctx, which 04 section 10.6 creates once per session. Caching a ctx per session
+    inside the registry would keep sessions alive (R10).
+14. `-builtin:<name>` for a built-in declared with `replaceable = FALSE` is refused like the
+    permission kernel's (04 section 7.2 "`replaceable` now only decides whether a `-builtin:<name>`
+    filter may disable it"); its individual records can still be filtered with `-<kind>:<name>`,
+    except records of `builtin:permissions`, `builtin:plan` and `builtin:secrets`.
+15. A `context_block` with `authority = "operator"` is refused by `registry_add()` for ranks below 3
+    (the constructor cannot know the rank).
+16. `gptr_hook()` names its spec after its event (hooks resolve `all`, so several hooks of one event
+    coexist).
+17. P02 uses the 04 names of P01 exactly as `dev/plan/P01-foundation.md` defines them, and was
+    validated against code assembled from that plan (see below). P01's `service_builtin_active()`
+    decides built-in ownership of bootstrap services by listing `gptr_registry()` on every
+    `ext_service_get()`/`ext_service_has()`; P02 therefore caches the full listing (`reg$listing`,
+    keyed on `registry_touch()`'s counter and the protected built-ins), which took a `ctx` member
+    call from about 14 ms to 0.1 ms with 320 records.
+18. The settings key `filters` (04 section 11.2) is P02's, but only the settings layer knows which
+    layer a value came from (`settings.get` returns merged values): P08 passes each layer's
+    `filters` to `registry_filters_set()` with `scope = "user"`, `"project"` or `"session"`, and P02
+    enforces the IC-53 and project rules per scope.
+19. "decision (`tool_call`) ... error = block" (04 section 10.7) says nothing about answers that are
+    not `NULL`, `block` or `modify`. A list whose `decision` is anything else (for example `"deny"`,
+    the policy word) blocks with a `malformed_decision` diagnostic, as a malformed policy answer
+    denies (section 10.2 row 12); non-list returns (the value of a logging assignment) have no
+    opinion.
+20. Setting a filter scope replaces its filters. Inside a run, dropping a `+key` that undid an
+    earlier scope's `-key` would remove a policy or hook without any `-` filter; such a `+key` is
+    kept and reported in `refused` (IC-53 "filters that would remove `policy` or `hook` records are
+    refused").
+21. "first decision: the first non-`NULL` return wins" (04 section 10.7) is read together with the
+    "Handler may return" column of section 10.4, which lists only lists: a non-list return (the
+    value of `log$n = log$n + 1`) and an empty list have no opinion. Otherwise a logging hook would
+    hide every later handler and hand emitters a number where they read `res$cancel` (P07's
+    `isTRUE(dec$cancel)` fails with "$ operator is invalid for atomic vectors").
+22. `request_params` (IC-69): only the emitter knows the adapter's declared
+    `capabilities$request_params`, and P06's `run_request_params()` sends only the declared keys
+    that are set. P02 therefore lets handlers patch `params` only (other top-level fields are
+    ignored with a `patch_ignored` diagnostic) and merges its keys, so a handler can add a declared
+    key that is unset (`metadata`, `user`); P06 drops undeclared keys with its own `ignored_patch`
+    diagnostic. Dropping keys absent from the payload in P02 made those params impossible to set.
+23. Filters naming a kind that is not registered yet are kept with a `filter_unknown_kind`
+    diagnostic: a kind defined by a lazy plugin's factory does not exist when the settings layer
+    applies user filters at session start.
+24. `gptr_check()`'s scratch registry mirrors the live registry's enabled, active process-level
+    records as well as its plugin kinds: with an otherwise empty scratch, P01's
+    `service_builtin_active()` reports every built-in-owned bootstrap service as filtered out.
+25. IC-42's bare-identifier scan treats `gptr_agent()`'s `model` and `skills` differently from
+    `peter()`'s identifier arguments: `gptr_agent()` stores them unevaluated (IC-34) for a later
+    `peter()` call to resolve in its own frame, so even a local symbol there is reported (use a
+    string or `I(x)`).
+26. IC-53 point 3 names `gptr_register()`; the unregister function it returns is guarded the same
+    way, because users keep it in the environment model code evaluates in and removing a policy
+    reconfigures gptr as much as adding one. The unregister functions of `gptr$register()` (plugin
+    code) are not guarded.
+27. Policy decisions: 04 section 10.2 row 12 lists `allow`, `deny`, `ask`, `modify`; 04 section 7.6
+    (`perm_check()` combines every policy's answer as deny > ask_human > ask > modify > allow) and
+    section 15 IC-53 item 6 (the `ask_human` tier of the guards), which win, add `ask_human`, and
+    P11's built-in policies (`mode`, `critical_guard`, `secret_guard`, `plan`) answer it.
+    `ext_policy_ok()` therefore accepts the five decisions, `ext_policy_decide()` returns an
+    `ask_human` unchanged, and `gptr_check()`'s `policy.matrix` passes a policy that answers it.
+28. Tests of a "not available" fallback (the `ctx` members, `gptr_agent(name)`, `gptr_check()`
+    without `check.adapter`) hide P01's bootstrap service table for their duration
+    (`local_no_bootstrap_services()`, or the same three lines inline in `test-ext-check.R`), as
+    P01's `local_services()` does: later plans register `ctx.kernel`, `session.add_tools`,
+    `describe`, `eval.r`, `risk.classify`, `s1.decide`, `agent_def.get` and `check.adapter` there
+    from `on_load()`, and with the empty scratch registry of `local_registry()` P01's
+    `service_builtin_active()` counts every built-in as active, so without the isolation these tests
+    fail in the full suite from P06 on (P06 review row 14).
 
-**Executed validation (author 2026-09-30; re-run by the review 2026-10-01; R 4.4.3, macOS, testthat 3.3.2, lintr 3.3.0.1).**
+**Executed validation (author 2026-09-30; re-run by the review 2026-10-01; R 4.4.3, macOS, testthat
+3.3.2, lintr 3.3.0.1).**
 
 - Every `r` block of this plan was extracted (26 blocks) and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse, all ASCII, no line over 100 characters. `getParseData()` finds no `LEFT_ASSIGN` token (no `<-` and no `<<-`) and no `%>%` in any block; the only arrow character sequences in code are the names of the replacement methods `` `$<-.gptr_ctx` ``, `` `[[<-.gptr_ctx` ``, `` `$<-.gptr_extension_api` `` and `` `[[<-.gptr_extension_api` `` that 04 §5.6 requires (IC-72 notes that a text regex flags such names, which is why P01's lint test reads tokens); the assignment operators that `gptr_check()` looks for in package code are written as `\u` escapes.
-- The review assembled a scratch package from the code blocks of `dev/plan/P01-foundation.md` (its `R/` files, `setup.R`, `helper-fake.R`, `helper-tracemem.R`, `helper-mock-server.R`) and this plan's blocks in task order. Each task was run red (its implementation blocks left out) and green with the exact commands of Steps 2 and 4; every summary line quoted in the tasks is the observed one.
-- `devtools::test(filter = "^ext-")`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 975 ]` (events 117, specs 207, registry 124, api 172, load 103, builtins 29, check 223; after the fixes of the Plan review log, re-run 2026-10-01 against code assembled from the current `dev/plan/P01-foundation.md`). With P01's `test-lint-rules.R` (its scanner inserted as P01 Task 20 says), `helper-arch.R`, `test-arch-layers.R` and the lint fixture: `devtools::test(filter = "lint|arch")` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]`.
+- The review assembled a scratch package from the code blocks of `dev/plan/P01-foundation.md` (its
+  `R/` files, `setup.R`, `helper-fake.R`, `helper-tracemem.R`, `helper-mock-server.R`) and this
+  plan's blocks in task order. Each task was run red (its implementation blocks left out) and green
+  with the exact commands of Steps 2 and 4; every summary line quoted in the tasks is the observed
+  one.
+- `devtools::test(filter = "^ext-")`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 975 ]` (events 117, specs
+  207, registry 124, api 172, load 103, builtins 29, check 223; after the fixes of the Plan review
+  log, re-run 2026-10-01 against code assembled from the current `dev/plan/P01-foundation.md`). With
+  P01's `test-lint-rules.R` (its scanner inserted as P01 Task 20 says), `helper-arch.R`,
+  `test-arch-layers.R` and the lint fixture: `devtools::test(filter = "lint|arch")` ->
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]`.
 - `devtools::run_examples(document = FALSE)`: every example runs offline.
-- `lintr::lint()` of the seven `R/ext-*.R` and seven `test-ext-*.R` files with P01's `.lintr` linters and `object_usage_linter = NULL` (it needs an installed gptr): 0 lints.
-- Probes in the scratch package, before and after the review fixes (320 records from 8 built-ins): `ctx$mode()` through a built-in-owned bootstrap `ctx.kernel` 14.4 ms -> 0.1 ms, `ext_service_get()` 7.3 ms -> 0.2 ms; a session-scoped factory closing over a 40 MB frame stayed in `reg$exts` after `session_shutdown` -> released; a `tool_call` hook answering `list(decision = "deny")` allowed the call -> blocks; inside a run, `registry_filters_set(character(), "session")` dropped a `+policy:audit` and disabled the policy -> refused.
-- Second review pass, probes before and after its fixes: a `session_before_compact` hook returning the value of `log$n = log$n + 1` won the first decision (`ev_dispatch()` returned the number 1, hiding a later `list(cancel = TRUE)`) -> the later list wins; a policy calling `ctx$risk()` failed `gptr_check()`'s `policy.matrix` with a `risk.classify` service owned by a loaded `builtin:permissions` ("ctx$risk() is not available") -> passes; `builtin_fake()` of P01 loads through `ext_load()` and its two adapters validate. After the fixes, Steps 2 and 4 of Tasks 4, 5, 7, 8, 9 and 11 were re-run red and green (every quoted summary line is the observed one), `devtools::test(filter = "lint|arch")` gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]`, `lintr` 0 lints, `devtools::run_examples(document = FALSE)` exit 0, and `codetools::checkUsage()` over every `ext-*.R` function reported nothing.
-- Tests never assert the `policy.speed` row (median at most 10 ms), so no test depends on a wall-clock bound tighter than 5 s (conventions §7); the 100-manifest test uses 5 s.
-- The lazy-manifest benchmark of Plan acceptance row 4: 13-14 ms (author), 20 ms (review, loaded machine), 25 ms (second review pass, loaded machine), warm under `load_all()`.
-- Cross-plan consolidation (2026-10-01): every `r` block re-extracted and parsed; a scratch package assembled from the current `dev/plan/P01-foundation.md` and this plan gave `devtools::test(filter = "^ext-")` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 982 ]` (api 172, builtins 29, check 224, events 123, load 103, registry 124, specs 207), and P01 A3's `pkgload::load_all(quiet = TRUE); lints = lintr::lint_package()` with P01's `.lintr` gave 0 lints. The same package plus a file simulating later plans (bootstrap services `ctx.kernel`, `session.add_tools`, `ctx.input`, `describe`, `eval.r`, `risk.classify`, `ui.get`, `secret.lookup`, `s1.decide`, `agent_def.get` signalling `invalid_argument` as P17's does, and `check.adapter`, all registered from `on_load()`, plus P12's top-level `check_adapter(adapter, fixtures = NULL)` in `R/provider-anthropic.R`) also gave `PASS 982`, FAIL 0; with the consolidation fixes reverted it gave FAIL 30 and 3 errors in 9 tests (the four `ctx`/`gptr_agent` tests, "gptr_check() passes a valid spec of every kind" with `unused argument (adapter_check)`, the policy matrix, the adapter replay test, the grant-lifetime test and the policy evaluator test).
+- `lintr::lint()` of the seven `R/ext-*.R` and seven `test-ext-*.R` files with P01's `.lintr`
+  linters and `object_usage_linter = NULL` (it needs an installed gptr): 0 lints.
+- Probes in the scratch package, before and after the review fixes (320 records from 8 built-ins):
+  `ctx$mode()` through a built-in-owned bootstrap `ctx.kernel` 14.4 ms -> 0.1 ms,
+  `ext_service_get()` 7.3 ms -> 0.2 ms; a session-scoped factory closing over a 40 MB frame stayed
+  in `reg$exts` after `session_shutdown` -> released; a `tool_call` hook answering
+  `list(decision = "deny")` allowed the call -> blocks; inside a run,
+  `registry_filters_set(character(), "session")` dropped a `+policy:audit` and disabled the policy
+  -> refused.
+- Second review pass, probes before and after its fixes: a `session_before_compact` hook returning
+  the value of `log$n = log$n + 1` won the first decision (`ev_dispatch()` returned the number 1,
+  hiding a later `list(cancel = TRUE)`) -> the later list wins; a policy calling `ctx$risk()` failed
+  `gptr_check()`'s `policy.matrix` with a `risk.classify` service owned by a loaded
+  `builtin:permissions` ("ctx$risk() is not available") -> passes; `builtin_fake()` of P01 loads
+  through `ext_load()` and its two adapters validate. After the fixes, Steps 2 and 4 of Tasks 4, 5,
+  7, 8, 9 and 11 were re-run red and green (every quoted summary line is the observed one),
+  `devtools::test(filter = "lint|arch")` gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]`, `lintr` 0
+  lints, `devtools::run_examples(document = FALSE)` exit 0, and `codetools::checkUsage()` over every
+  `ext-*.R` function reported nothing.
+- Tests never assert the `policy.speed` row (median at most 10 ms), so no test depends on a
+  wall-clock bound tighter than 5 s (conventions section 7); the 100-manifest test uses 5 s.
+- The lazy-manifest benchmark of Plan acceptance row 4: 13-14 ms (author), 20 ms (review, loaded
+  machine), 25 ms (second review pass, loaded machine), warm under `load_all()`.
+- Cross-plan consolidation (2026-10-01): every `r` block re-extracted and parsed; a scratch package
+  assembled from the current `dev/plan/P01-foundation.md` and this plan gave
+  `devtools::test(filter = "^ext-")` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 982 ]` (api 172, builtins
+  29, check 224, events 123, load 103, registry 124, specs 207), and P01 A3's
+  `pkgload::load_all(quiet = TRUE); lints = lintr::lint_package()` with P01's `.lintr` gave 0 lints.
+  The same package plus a file simulating later plans (bootstrap services `ctx.kernel`,
+  `session.add_tools`, `ctx.input`, `describe`, `eval.r`, `risk.classify`, `ui.get`,
+  `secret.lookup`, `s1.decide`, `agent_def.get` signalling `invalid_argument` as P17's does, and
+  `check.adapter`, all registered from `on_load()`, plus P12's top-level
+  `check_adapter(adapter, fixtures = NULL)` in `R/provider-anthropic.R`) also gave `PASS 982`,
+  FAIL 0; with the consolidation fixes reverted it gave FAIL 30 and 3 errors in 9 tests (the four
+  `ctx`/`gptr_agent` tests, "gptr_check() passes a valid spec of every kind" with
+  `unused argument (adapter_check)`, the policy matrix, the adapter replay test, the grant-lifetime
+  test and the policy evaluator test).
 
 ## Plan review log
 
-Adversarial review against `dev/plan/00-conventions.md`, 04 (with §15), 05 P02, 03 §11, report G1 and its verification log, and the dependent plans already written (P01, P03, P05, P06, P07, P08, P11). Rows E1-E8 were applied by the first pass of this review (2026-10-01, before its validation summary above); rows F1-F10 and R1-R6 by the second pass, which re-extracted every block, assembled it with the current `dev/plan/P01-foundation.md` and confirmed each defect with a probe before fixing it.
+Adversarial review against `dev/plan/00-conventions.md`, 04 (with section 15), 05 P02,
+03 section 11, report G1 and its verification log, and the dependent plans already written (P01,
+P03, P05, P06, P07, P08, P11). Rows E1-E8 were applied by the first pass of this review (2026-10-01,
+before its validation summary above); rows F1-F10 and R1-R6 by the second pass, which re-extracted
+every block, assembled it with the current `dev/plan/P01-foundation.md` and confirmed each defect
+with a probe before fixing it.
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
 | E1 | blocker | Task 8 `ev_run_decision()` | A `tool_call` hook answering `list(decision = "deny")` (the policy word) was treated as no opinion, so the call ran: fail-open on a fail-closed event | applied | Any decision other than `NULL`, `allow`, `block` or `modify` with an input list blocks with a `malformed_decision` diagnostic; test "an unknown decision blocks" |
-| E2 | major | Task 11 row builders | 04 §7.2 names `check_spec()`, `check_factory()`, `check_package()`; the plan defined `check_*_rows()` | applied | Renamed; self-review consistency paragraph updated |
+| E2 | major | Task 11 row builders | 04 section 7.2 names `check_spec()`, `check_factory()`, `check_package()`; the plan defined `check_*_rows()` | applied | Renamed; self-review consistency paragraph updated |
 | E3 | major | Task 4 `gptr_registry()` | P01's `service_builtin_active()` lists `gptr_registry()` on every `ext_service_get()`, so each `ctx` member call cost two full listings (14 ms with 320 records, above the 10 ms policy budget) | applied | Full listing cached in `reg$listing`, keyed on `registry_touch()`'s counter and the protected built-ins (0.1 ms) |
 | E4 | major | Tasks 4, 9 (R10) | A session-scoped factory and the frames it closed over stayed in `reg$exts` after `session_shutdown`, as did failed, unloaded and reloaded loads | applied | `ext_forget()` releases the factory, staged items and per-load state; test "a session's extension releases its factory and captured frames (R10)" |
 | E5 | major | Task 5 `registry_filters_set()` | Inside a run, replacing a scope's filters could drop a `+policy:x` that undid an earlier `-policy:x`, disabling a policy without any `-` filter (IC-53) | applied | Such a `+` is kept and reported in `refused`; test "inside a run, dropping a + that keeps a policy enabled is refused" |
@@ -7307,30 +7900,34 @@ Adversarial review against `dev/plan/00-conventions.md`, 04 (with §15), 05 P02,
 | F4 | major | Task 4 `registry_unregister_fn()` | The `off()` closure returned by `gptr_register()` removed records without the IC-53 guard; users keep it in the environment model code evaluates in (`off = gptr_register(gptr_policy(...))`), so model code could remove a user policy mid-run | applied | The closure calls `ext_control_guard("gptr_register")`; roxygen and Interfaces updated; test expectations added; item 26 |
 | F5 | minor | Task 7 `ctx_call_plugin()`, Interfaces, item 4 | The plan passed the stripped plugin name and described P06's argument as `name`/`plugin`; the current P06 plan names it `extension`, documents "P02 passes `extension = ctx_source(ctx)`" and strips the prefix itself (`ctx_ext_label()`) | applied | The handler's source is passed positionally; `ctx_plugin()` removed; the test's mock kernel now mirrors P06's signatures; texts updated |
 | F6 | minor | Task 5 `registry_filters_set()` | A filter on a kind not registered yet was `gptr_error_invalid_argument`; kinds defined by lazy plugins do not exist when the settings layer applies user filters, so every `peter()` call would fail | applied | Kept with a `filter_unknown_kind` diagnostic; malformed filters still error; new test; item 23 |
-| F7 | minor | Task 4 `registry_all()` | First-resolving kinds returned lazy placeholders without the kind's fields for every kind; P05's `catalog_model_specs()` (`registry_all("model")`) would read placeholders as models | applied | Only `tool` placeholders (whose declarations feed catalogs, 04 §10.8) stay unactivated; every other kind activates first; Task 9 test "registry_all() activates lazy records of every kind but tool"; item 5 |
+| F7 | minor | Task 4 `registry_all()` | First-resolving kinds returned lazy placeholders without the kind's fields for every kind; P05's `catalog_model_specs()` (`registry_all("model")`) would read placeholders as models | applied | Only `tool` placeholders (whose declarations feed catalogs, 04 section 10.8) stay unactivated; every other kind activates first; Task 9 test "registry_all() activates lazy records of every kind but tool"; item 5 |
 | F8 | minor | Task 11 `ext_bare_identifiers()` | IC-42's scan exempted local symbols passed to `gptr_agent(model =, skills =)`, which `gptr_agent()` stores unevaluated (IC-34) for a later `peter()` frame where the local does not exist | applied | Every bare symbol in those two arguments of `gptr_agent()` is reported (strings or `I(x)` pass); tests extended; item 25 |
-| F9 | minor | Task 8 `ext_policy_decide()` docs | Described as "the evaluation step of P06's `perm_check()`", but P06's `perm_policies()` evaluates policies itself | applied | Docs say what it is (the 04 §10.2 row 12 single-policy evaluator behind the G1 check) and that no later plan depends on it |
+| F9 | minor | Task 8 `ext_policy_decide()` docs | Described as "the evaluation step of P06's `perm_check()`", but P06's `perm_policies()` evaluates policies itself | applied | Docs say what it is (the 04 section 10.2 row 12 single-policy evaluator behind the G1 check) and that no later plan depends on it |
 | F10 | minor | Step 2/4 counts, Plan acceptance, Executed validation | Counts changed with the fixes | applied | Re-run red and green: Task 4 80, Task 5 red `FAIL 9 PASS 81` / green 124, Task 8 117, Task 9 103, Task 11 223, total 975 |
-| R1 | minor | Tests of `print()` methods | Conventions §7 say printed output is tested with `expect_snapshot()` | rejected | Snapshot files under `tests/testthat/_snaps/` are not among P02's owned files (05), a first run records "Adding new snapshot" warnings that contradict the `WARN 0` lines, and fixed-substring `expect_output()` checks of these short headers are deterministic |
-| R2 | minor | Task 5 scopes | Call-level filters (`plugins = "-builtin:x"`) reach the process-wide `session` scope | rejected | 04 §7.2 defines `registry_filters_set(filters, scope)` without a session; P08 records the same reading (its ambiguity 9); per-session filters would be a contract change |
+| R1 | minor | Tests of `print()` methods | Conventions section 7 say printed output is tested with `expect_snapshot()` | rejected | Snapshot files under `tests/testthat/_snaps/` are not among P02's owned files (05), a first run records "Adding new snapshot" warnings that contradict the `WARN 0` lines, and fixed-substring `expect_output()` checks of these short headers are deterministic |
+| R2 | minor | Task 5 scopes | Call-level filters (`plugins = "-builtin:x"`) reach the process-wide `session` scope | rejected | 04 section 7.2 defines `registry_filters_set(filters, scope)` without a session; P08 records the same reading (its ambiguity 9); per-session filters would be a contract change |
 | R3 | minor | Test files | `local_registry()` is repeated in each test file | rejected | P02 owns no `helper-*.R` file (05 "Owns"), and testthat evaluates each test file in its own environment |
-| R4 | minor | Task 4 `registry_admit()` | Reserved-namespace check also applies to built-in sources and might block P18 | rejected | `peter$mcp$<server>$<tool>` is the `mcp` member resolved by P18 (04 §9.4), not tool records with `namespace = "mcp"`; built-ins register un-namespaced members |
-| R5 | minor | Task 11 `tool.empty_input` | The check calls a tool's `execute()` with empty input, which may have side effects | rejected | 04 §6.7 requires "empty-input handling for tools"; tools with required properties are checked through schema validation only, never executed |
+| R4 | minor | Task 4 `registry_admit()` | Reserved-namespace check also applies to built-in sources and might block P18 | rejected | `peter$mcp$<server>$<tool>` is the `mcp` member resolved by P18 (04 section 9.4), not tool records with `namespace = "mcp"`; built-ins register un-namespaced members |
+| R5 | minor | Task 11 `tool.empty_input` | The check calls a tool's `execute()` with empty input, which may have side effects | rejected | 04 section 6.7 requires "empty-input handling for tools"; tools with required properties are checked through schema validation only, never executed |
 | R6 | major | P06 `perm_policies()` (not a P02 file) | A policy returning a non-list (for example `"yes"`) makes `res$decision` error outside P06's `tryCatch()`, so `perm_check()` throws instead of denying | rejected (out of scope) | P02 may edit only its own plan; P02's own evaluator `ext_policy_decide()` already denies malformed answers; reported for P06's review |
 
 ## Cross-plan consolidation log
 
-Issues raised by the cross-plan checkers (lenses ownership, interfaces, shared-names, obligations, trace) on 2026-10-01, verified against 04 (with §15), 05 P02 and the related plans (P01, P06, P07, P09, P11, P12, P13, P17). Each fix was confirmed on a scratch package assembled from the current P01 plan and this plan, alone and with a file that simulates the later plans' bootstrap services and P12's `check_adapter()` (Executed validation, last bullet).
+Issues raised by the cross-plan checkers (lenses ownership, interfaces, shared-names, obligations,
+trace) on 2026-10-01, verified against 04 (with section 15), 05 P02 and the related plans (P01, P06,
+P07, P09, P11, P12, P13, P17). Each fix was confirmed on a scratch package assembled from the
+current P01 plan and this plan, alone and with a file that simulates the later plans' bootstrap
+services and P12's `check_adapter()` (Executed validation, last bullet).
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| C1 | ownership | blocker | Task 11 `R/ext-check.R`: private `check_adapter(spec, target, adapter_check)` and its call in `check_spec()` | applied | 04 §7.12 gives `check_adapter(adapter, fixtures = NULL)` to P12 (`R/provider-anthropic.R`, service `check.adapter`), which collates later and replaced P02's helper (probe: `gptr_check()` on the `wire` adapter failed with `unused argument (adapter_check)`). Renamed to `check_adapter_rows()` (definition and its one call in `check_spec()`); its roxygen line names the 04 owner; `kind_check_adapter()` unchanged; no count changes |
-| C2 | interfaces | blocker | same as C1 | applied | Same change as C1; the self-review's "Type and name consistency" paragraph now says the adapter rows come from the private `check_adapter_rows()` and that `check_adapter()` belongs to P12 (04 §7.12) |
+| C1 | ownership | blocker | Task 11 `R/ext-check.R`: private `check_adapter(spec, target, adapter_check)` and its call in `check_spec()` | applied | 04 section 7.12 gives `check_adapter(adapter, fixtures = NULL)` to P12 (`R/provider-anthropic.R`, service `check.adapter`), which collates later and replaced P02's helper (probe: `gptr_check()` on the `wire` adapter failed with `unused argument (adapter_check)`). Renamed to `check_adapter_rows()` (definition and its one call in `check_spec()`); its roxygen line names the 04 owner; `kind_check_adapter()` unchanged; no count changes |
+| C2 | interfaces | blocker | same as C1 | applied | Same change as C1; the self-review's "Type and name consistency" paragraph now says the adapter rows come from the private `check_adapter_rows()` and that `check_adapter()` belongs to P12 (04 section 7.12) |
 | C3 | interfaces | major | Task 7 `test-ext-api.R`: "ctx members whose plan is not loaded signal gptr_error_not_available", "gptr_agent(name) loads a definition through agent_def.get, else not available" | applied | New test helper `local_no_bootstrap_services()` (P01's `local_services()` pattern: save `the$services`, defer the restore, empty it) called right after `local_registry()` in both tests; `local_service("agent_def.get", ...)` still works because it registers a registry `service` record. The simulation showed two more Task 7 tests that rely on the absence of `ctx.kernel` ("ctx members call the P06 kernel with the ctx first, lazily at call time" reads the stored run `"u7"` before its mock kernel is registered; "ctx services: ..." expects `ctx$eval("1")` to fail for want of an `envir`); both call the helper too. Task 7 note and self-review item 28 added; no expectations added, so the Task 7 counts are unchanged |
 | C4 | shared-names | blocker | same as C1 | applied | Same change as C1 |
 | C5 | shared-names | major | Task 7 tests as in C3; Task 11 `test-ext-check.R` "adapters are replayed through the check.adapter service when it exists" | applied | Task 7: as C3. Task 11: the save and deferred restore of `the$services` moved above the first `gptr_check(wire)` and followed by `assign("services", list(), envir = the)`, so the "no service" rows (`spec.class`, `spec.fields`) hold once P12 registers `check.adapter` (P12 adds `adapter.replay` for an inprocess adapter). The other `test-ext-*.R` tests either register their own registry `service` records, which win, or passed with the simulated services |
 | C6 | obligations | blocker | same as C1, plus the self-review consistency paragraph | applied | Same change as C1 and C2 |
-| C7 | obligations | major | Task 8 `ext_policy_ok()` (decision set) and its roxygen | applied | 04 §7.6 (`perm_check()`: deny > ask_human > ask > modify > allow over every policy's answer) and §15 IC-53 item 6 win over §10.2 row 12, and P11's built-in policies answer `ask_human`. `ext_policy_ok()` accepts `ask_human`; roxygen of `ext_policy_ok()` and of the exported `gptr_policy()` and Task 8 Produces updated; Task 8 test "a throwing policy denies; ..." asserts that `ext_policy_decide()` returns `ask_human` unchanged (+1); Task 11 test "policies are run over the modes x report 18 matrix" asserts that a policy answering `ask_human` passes `policy.matrix` (+1); self-review item 27 |
+| C7 | obligations | major | Task 8 `ext_policy_ok()` (decision set) and its roxygen | applied | 04 section 7.6 (`perm_check()`: deny > ask_human > ask > modify > allow over every policy's answer) and section 15 IC-53 item 6 win over section 10.2 row 12, and P11's built-in policies answer `ask_human`. `ext_policy_ok()` accepts `ask_human`; roxygen of `ext_policy_ok()` and of the exported `gptr_policy()` and Task 8 Produces updated; Task 8 test "a throwing policy denies; ..." asserts that `ext_policy_decide()` returns `ask_human` unchanged (+1); Task 11 test "policies are run over the modes x report 18 matrix" asserts that a policy answering `ask_human` passes `policy.matrix` (+1); self-review item 27 |
 | C8 | obligations | major | Task 7 test "ctx members whose plan is not loaded signal gptr_error_not_available" | applied (other form) | The proposed fix removes a fixed list of service names from `the$services`; the plan empties the table for the test instead (C3), as P01's `local_services()` does, so a service a later plan adds cannot leak into the fallback assertions; the expectations are the same |
 | C9 | obligations | minor | Task 8 `ev_track()` (one-shot control grants) | applied | IC-53 item 3 approves "exactly that call"; an unused grant lived until `agent_end`, so a later unapproved `r` call of the same run could use it. `ev_track()` now drops the run's grants at the `tool_execution_end` of a top-level call (a `tool_call_id` without `/`; P06's nested ids are `<outer>/<k>`), the lifetime P06's `tool_execute_frame()` gives `run$signal$control`; P06 grants inside `dispatch_one()`, between that call's `tool_execution_start` and `tool_execution_end`. New Task 8 test "an unused control grant ends with the top-level call it was granted in (IC-53)" (+5); `ext_control_guard()` roxygen, Task 8 Produces, Plan acceptance amendments paragraph and self-review item 3 updated |
 | C10 | obligations | minor | Plan acceptance "Also run", lint bullet | applied | Replaced `lintr::lint_package()` (which reports every internal call on an uninstalled tree) with P01 A3's `pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)` -> no lint, exit 0 (measured: 0 lints on the assembled P01 + P02 package with P01's `.lintr`); the installed-gptr caveat is gone |

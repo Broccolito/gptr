@@ -1,10 +1,10 @@
 # gptr implementation conventions
 
-Every implementation plan in `dev/plan/` inherits this file as its **Global
-Constraints**. The review round of 2026-09-30 (`dev/spec/06-review-resolution.md`;
-contract section 15, IC-32..IC-73) amended sections 2-8 below. An implementer reads this file, then `dev/spec/03-architecture.md`
-and `dev/spec/04-interface-contract.md`, then their plan. Where a plan and this
-file disagree, this file wins unless the plan names the exception explicitly.
+Every implementation plan in `dev/plan/` inherits this file as its **Global Constraints**. The
+review round of 2026-09-30 (`dev/spec/06-review-resolution.md`; contract section 15, IC-32..IC-73)
+amended sections 2-8 below. An implementer reads this file, then `dev/spec/03-architecture.md` and
+`dev/spec/04-interface-contract.md`, then their plan. Where a plan and this file disagree, this file
+wins unless the plan names the exception explicitly.
 
 The design phase (2026-09-29) resolved every section it was asked to confirm
 (area prefixes, R version, error helpers, dependency list, compiled code) to the
@@ -314,4 +314,3 @@ review round):
 Plan acceptance stays one table (row, command, actual, status). No "Built", "Precheck" or
 "Adaptations" narratives, no per-round counts, no `dev/.validation/` paths, no copies of
 deviation text.
-

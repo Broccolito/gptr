@@ -9,40 +9,130 @@
 > reconcile the affected steps before implementation. No implementation has
 > been performed as part of this design update.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make gptr's token efficiency and its cross-cutting guarantees (secrets, rule C1, the permission kernel, the north-star examples, "everything a plugin") measurable and regression-proof, with the benchmark suites of architecture 12.7 under `dev/bench/` and four end-to-end test files.
+**Goal:** Make gptr's token efficiency and its cross-cutting guarantees (secrets, rule C1, the
+permission kernel, the north-star examples, "everything a plugin") measurable and regression-proof,
+with the benchmark suites of architecture 12.7 under `dev/bench/` and four end-to-end test files.
 
-**Architecture:** P24 owns no R file. It adds development-only code under `dev/bench/` (shared helpers; tests proving every 12.7 gate of P07's golden-transcript runner; the golden transcripts not added by earlier plans; the live calibration mode; the polyglot, Shiny-vs-HTML, cache-economics and performance suites; the INFRA-24 timing gate), each with development tests under `dev/bench/tests/`, plus four package tests (`test-secrets-e2e.R`, `test-injection-e2e.R`, `test-northstar.R`, `test-s11-conformance.R`) that drive the finished package through the fake provider, the scripted UI and the shared test helpers of P01, P11 and P18. Every P24 ratchet raises `gptr_error_token_regression`; every P24 runner exits 0 (pass), 1 (regression or error) or 2 (a development tool is missing, so the step stops for the maintainer).
+**Architecture:** P24 owns no R file. It adds development-only code under `dev/bench/` (shared
+helpers; tests proving every 12.7 gate of P07's golden-transcript runner; the golden transcripts not
+added by earlier plans; the live calibration mode; the polyglot, Shiny-vs-HTML, cache-economics and
+performance suites; the INFRA-24 timing gate), each with development tests under `dev/bench/tests/`,
+plus four package tests (`test-secrets-e2e.R`, `test-injection-e2e.R`, `test-northstar.R`,
+`test-s11-conformance.R`) that drive the finished package through the fake provider, the scripted UI
+and the shared test helpers of P01, P11 and P18. Every P24 ratchet raises
+`gptr_error_token_regression`; every P24 runner exits 0 (pass), 1 (regression or error) or 2 (a
+development tool is missing, so the step stops for the maintainer).
 
-**Tech Stack:** R (>= 4.2.0), testthat 3e, withr, processx, callr, jsonlite, curl, rlang, pkgload (development), rtiktoken `o200k_base` (development tool, never in DESCRIPTION), chromote, shiny, bslib, plotly, DT, httpuv (ladder only), DBI/RSQLite and reticulate (polyglot tasks, when present).
+**Tech Stack:** R (>= 4.2.0), testthat 3e, withr, processx, callr, jsonlite, curl, rlang, pkgload
+(development), rtiktoken `o200k_base` (development tool, never in DESCRIPTION), chromote, shiny,
+bslib, plotly, DT, httpuv (ladder only), DBI/RSQLite and reticulate (polyglot tasks, when present).
 
-**Spec:** dev/spec/03-architecture.md (3.4, 3.5, 6.3, 6.5, 6.11, 6.18, 7.3, 10, 12), dev/spec/04-interface-contract.md (2.1-2.2, 3.1-3.2, 4.2-4.3, 5.1-5.2, 5.11-5.12, 6.1-6.8, 7.1-7.3, 7.9-7.10, 7.22-7.23, 8.3, 9.3-9.4, 10.2-10.6, 11.12, 12, 15: IC-45, IC-52 to IC-56, IC-60, IC-64, IC-68 to IC-71, IC-73), dev/spec/05-plan-decomposition.md (P24).
+**Spec:** dev/spec/03-architecture.md (sections 3.4, 3.5, 6.3, 6.5, 6.11, 6.18, 7.3, 10, 12),
+dev/spec/04-interface-contract.md (sections 2.1-2.2, 3.1-3.2, 4.2-4.3, 5.1-5.2, 5.11-5.12, 6.1-6.8,
+7.1-7.3, 7.9-7.10, 7.22-7.23, 8.3, 9.3-9.4, 10.2-10.6, 11.12, 12, 15: IC-45, IC-52 to IC-56, IC-60,
+IC-64, IC-68 to IC-71, IC-73), dev/spec/05-plan-decomposition.md (P24).
 
 **Depends on:** P01-P23 (every plan). **Milestone:** M5.
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full (`=` for assignment, `|>` for pipes, `<<-` only for closure state, ASCII-only sources with `\u` escapes, testthat 3e, no network in tests, `Rscript --vanilla`, no new Import or Suggests, one commit per task). Plan-specific requirements, copied from the spec:
+`dev/plan/00-conventions.md` applies in full (`=` for assignment, `|>` for pipes, `<<-` only for
+closure state, ASCII-only sources with `\u` escapes, testthat 3e, no network in tests,
+`Rscript --vanilla`, no new Import or Suggests, one commit per task). Plan-specific requirements,
+copied from the spec:
 
-- Ratchet gates of the golden transcripts (03 §12.7, IC-73): "prefix +2%, input and output totals +5%, request count and image tokens +0, describer facts no loss, catalogs +5%"; "failure raises `gptr_error_token_regression`". P07's `dev/bench/tokens/run.R` implements them (`bench_tolerance = c(prefix = 0.02, input_total = 0.05, output_total = 0.05, requests = 0, image_tokens = 0, catalog = 0.05)`, `facts` no loss); P24 proves each one (05 P24 acceptance 1 and 4) and never edits P07's runner.
-- Condition class (04 §2.2): `gptr_error_token_regression`, fields `fixture`, `metric`, `baseline`, `value`, class vector `c("gptr_error_token_regression", "gptr_error", "error", "condition")`.
-- Acceptance 1 (05 P24): "`Rscript --vanilla dev/bench/tokens/run.R` replays all golden transcripts offline in under 5 s and writes `dev/bench/tokens/results.csv`; `Rscript --vanilla dev/bench/tokens/run.R --check` exits 0 against the committed baseline and exits non-zero (raising `gptr_error_token_regression`) when a fixture's prefix grows by more than 2%".
-- Golden-transcript format (P07 Task 16, used by P10, P13, P15, P18, P19, P22, P23): `id`, `north_star`, `description`, `mode`, `human`, `preset`, `models`, `standins`, `environment`, `files`, `objects`, `facts`, `turns` (each `prompt`, `source`, optional `model`, `context` of `{label, class}`, `steps` of `{text, calls}`; a call is `{id, name, input, result, details}` plus optional `images` of `[width, height]`); baseline and results columns `case`, `requests`, `prefix`, `input_total`, `output_total`, `image_tokens`, `catalog`, `facts`, `est_prefix`, `est_input_total`; rows are added with `Rscript --vanilla dev/bench/tokens/run.R --update <ids>`.
-- Polyglot (05 P24 acceptance 2): "`Rscript --vanilla dev/bench/polyglot/run.R --check` exits 0 (B and C totals within 10% of baseline)".
-- Cache economics (03 §12.7): "a change may not raise simulated session cost by more than 2%"; Opus 5.5 prices input 4, 5-minute write 5, 1-hour write 8, read 0.20 USD per million tokens (G4 §5.8, input tokens only per its fact-check); minimum cacheable prefix 512 (5.x models) and 4,096 (Haiku 4.5); `gptr.cache_gap` = 240 s (04 §3.1); breakpoints BP1 end of T0 (1 h), BP2 on the project block (1 h), the tail 5 min switching to 1 h after a gap over 240 s (03 §6.11).
-- Live calibration (IC-73, 03 §12.7): only with `GPTR_LIVE_TESTS=true`; "NS-1..NS-11 against one Anthropic and one OpenAI model ... request counts (within +2 of the golden transcript) and input tokens (within 20%) in `dev/bench/tokens/live-<date>.csv`"; provider priors (03 §12.5) "OpenAI 1.00, Claude 4.7+ 1.35, Gemini 1.10".
-- INFRA-24 (03 §6.18): "the INFRA suite runs offline under `--as-cran` in < 60 s (CI timing assertion outside CRAN; P24)"; the INFRA test files are the acceptance files named in 03 §6.18.
-- Performance (03 §12.7 row "Performance"; report 21): pure R is enough while a typical operation stays under 200 ms and a large workload under 1 s; INFRA-23 "20,000 deltas consumed in < 1 s CPU".
-- Development tools (05 P24 "Depends on"; conventions §1): "`rtiktoken` is a development tool used only under `dev/bench`; if it is not installed, the step stops for the maintainer"; the same holds for pkgload and chromote.
-- Test environment (04 §3.2, §12.2): `setup.R` sets `GPTR_REPLAY=replay`, blanks every provider key unless `GPTR_LIVE_TESTS=true`, and sets `options(gptr.interactive = FALSE, gptr.quiet = TRUE)`; the helpers are used with their exact names: `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`, `fake_text(text, ...)`, `fake_tool(name, ..., .text = NULL, .id = NULL)`, `fake_error(message = "overloaded", status = 529L, after = 0L)`, `fake_requests(spec)`, `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`, `local_gptr_options(..., .env = parent.frame())`, `local_mock_server(scenario, ..., .env = parent.frame())` (scenario `"redirect"`), `local_scripted_ui(answers = list(), .env = parent.frame())` (P11), `local_mcp_fixture(era, transport, tools, n_extra, .env)` (P18; its `spec` is a plain list in the `mcp_server` shape, not a spec) and `local_mcp_server(fx, name = "fixture", .env = parent.frame())` (P18's `helper-mcp-server.R`: adds that list as gptr's user server with `gptr_mcp_add()` and removes it on exit). P19's `local_worker_lib(.env = parent.frame())` (it installs the source tree once per R session into `tempdir()/gptr-worker-lib` for callr worker children) lives in P19's test files, so `test-secrets-e2e.R` and `test-injection-e2e.R` carry a copy.
-- Options used (04 §3.1): `gptr.quiet` (`FALSE`), `gptr.interactive` (`NULL`), `gptr.verbose` (`NULL`; 2 = streamed console), `gptr.ui` (`NULL`), `gptr.wire_log` (`FALSE`), `gptr.unsafe_no_permissions` (`FALSE`), `gptr.noninteractive_ask` (`"stop"`), `gptr.r_output_tokens` (`4000L`).
-- Rule C1 (03 §6.3; report 13 C-36): untrusted text is never a cli or glue format string; `test-injection-e2e.R` enforces it end to end.
-- IC-53 control category (level 4, `ask_human`): `gptr_config`, `gptr_permissions`, `gptr_trust`, `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`, `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune, clear), `gptr_scrub` (`dry_run = FALSE`), `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` of `GPTR_*` or provider key names, `setHook()`, `assignInNamespace()`; control paths (IC-54) `.gptr/settings*.json`, `.gptr/mcp.json`, `.gptr/extensions/`, `.gptr/plugins/`, `.gptr/SYSTEM.md`, `.gptr/APPEND_SYSTEM.md`, `.gptr/agents/`, `.Rprofile`.
-- Secrets sinks (IC-70, IC-64, 03 §6.5, §6.18 INFRA-22): JSONL, wire logs, documents, caches, spill files, deferred-write sidecars, MCP logs (`tempdir()/gptr/mcp-logs/`), artifact logs (`run/app-vNNN.log`), worker spec and result files, the console, condition messages, provider egress; a redirect is never followed (`gptr_error_redirect`, parent `gptr_error_provider`). Value redaction cannot be disabled (03 §6.5), so the negative control pushes a non-secret canary through the same paths.
-- The composed standard prompt with every built-in loaded equals 03 §7.3 byte for byte, `{s1}` = `jev` (IC-68).
-- 38 registry kinds (04 §10.2, IC-69); `test-s11-conformance.R` uses one record of each at run time (IC-73).
-- Files P24 writes: the `dev/bench/` tree except P07's runner and fixtures (05 P24 "Owns"), rows appended to `dev/bench/tokens/baseline.csv` by P07's runner (IC-73: each plan adds "their NS fixture and baseline rows"), the four test files, and three steps appended to the `bench` job of P01's `.github/workflows/R-CMD-check.yaml` (05 P24 scope: "a CI step asserting the offline INFRA suite finishes in under 60 s"). No `R/` file, no `NAMESPACE` or `man/` change, no DESCRIPTION change.
+- Ratchet gates of the golden transcripts (03 section 12.7, IC-73): "prefix +2%, input and output
+  totals +5%, request count and image tokens +0, describer facts no loss, catalogs +5%"; "failure
+  raises `gptr_error_token_regression`". P07's `dev/bench/tokens/run.R` implements them
+  (`bench_tolerance = c(prefix = 0.02, input_total = 0.05, output_total = 0.05, requests = 0, image_tokens = 0, catalog = 0.05)`,
+  `facts` no loss); P24 proves each one (05 P24 acceptance 1 and 4) and never edits P07's runner.
+- Condition class (04 section 2.2): `gptr_error_token_regression`, fields `fixture`, `metric`,
+  `baseline`, `value`, class vector
+  `c("gptr_error_token_regression", "gptr_error", "error", "condition")`.
+- Acceptance 1 (05 P24): "`Rscript --vanilla dev/bench/tokens/run.R` replays all golden transcripts
+  offline in under 5 s and writes `dev/bench/tokens/results.csv`;
+  `Rscript --vanilla dev/bench/tokens/run.R --check` exits 0 against the committed baseline and
+  exits non-zero (raising `gptr_error_token_regression`) when a fixture's prefix grows by more than
+  2%".
+- Golden-transcript format (P07 Task 16, used by P10, P13, P15, P18, P19, P22, P23): `id`,
+  `north_star`, `description`, `mode`, `human`, `preset`, `models`, `standins`, `environment`,
+  `files`, `objects`, `facts`, `turns` (each `prompt`, `source`, optional `model`, `context` of
+  `{label, class}`, `steps` of `{text, calls}`; a call is `{id, name, input, result, details}` plus
+  optional `images` of `[width, height]`); baseline and results columns `case`, `requests`,
+  `prefix`, `input_total`, `output_total`, `image_tokens`, `catalog`, `facts`, `est_prefix`,
+  `est_input_total`; rows are added with `Rscript --vanilla dev/bench/tokens/run.R --update <ids>`.
+- Polyglot (05 P24 acceptance 2): "`Rscript --vanilla dev/bench/polyglot/run.R --check` exits 0 (B
+  and C totals within 10% of baseline)".
+- Cache economics (03 section 12.7): "a change may not raise simulated session cost by more than
+  2%"; Opus 5.5 prices input 4, 5-minute write 5, 1-hour write 8, read 0.20 USD per million tokens
+  (G4 section 5.8, input tokens only per its fact-check); minimum cacheable prefix 512 (5.x models)
+  and 4,096 (Haiku 4.5); `gptr.cache_gap` = 240 s (04 section 3.1); breakpoints BP1 end of T0 (1 h),
+  BP2 on the project block (1 h), the tail 5 min switching to 1 h after a gap over 240 s (03
+  section 6.11).
+- Live calibration (IC-73, 03 section 12.7): only with `GPTR_LIVE_TESTS=true`; "NS-1..NS-11 against
+  one Anthropic and one OpenAI model ... request counts (within +2 of the golden transcript) and
+  input tokens (within 20%) in `dev/bench/tokens/live-<date>.csv`"; provider priors (03
+  section 12.5) "OpenAI 1.00, Claude 4.7+ 1.35, Gemini 1.10".
+- INFRA-24 (03 section 6.18): "the INFRA suite runs offline under `--as-cran` in < 60 s (CI timing
+  assertion outside CRAN; P24)"; the INFRA test files are the acceptance files named in 03
+  section 6.18.
+- Performance (03 section 12.7 row "Performance"; report 21): pure R is enough while a typical
+  operation stays under 200 ms and a large workload under 1 s; INFRA-23 "20,000 deltas consumed in <
+  1 s CPU".
+- Development tools (05 P24 "Depends on"; conventions section 1): "`rtiktoken` is a development tool
+  used only under `dev/bench`; if it is not installed, the step stops for the maintainer"; the same
+  holds for pkgload and chromote.
+- Test environment (04 sections 3.2 and 12.2): `setup.R` sets `GPTR_REPLAY=replay`, blanks every
+  provider key unless `GPTR_LIVE_TESTS=true`, and sets
+  `options(gptr.interactive = FALSE, gptr.quiet = TRUE)`; the helpers are used with their exact
+  names: `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`,
+  `fake_text(text, ...)`, `fake_tool(name, ..., .text = NULL, .id = NULL)`,
+  `fake_error(message = "overloaded", status = 529L, after = 0L)`, `fake_requests(spec)`,
+  `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`,
+  `local_gptr_options(..., .env = parent.frame())`,
+  `local_mock_server(scenario, ..., .env = parent.frame())` (scenario `"redirect"`),
+  `local_scripted_ui(answers = list(), .env = parent.frame())` (P11),
+  `local_mcp_fixture(era, transport, tools, n_extra, .env)` (P18; its `spec` is a plain list in the
+  `mcp_server` shape, not a spec) and
+  `local_mcp_server(fx, name = "fixture", .env = parent.frame())` (P18's `helper-mcp-server.R`: adds
+  that list as gptr's user server with `gptr_mcp_add()` and removes it on exit). P19's
+  `local_worker_lib(.env = parent.frame())` (it installs the source tree once per R session into
+  `tempdir()/gptr-worker-lib` for callr worker children) lives in P19's test files, so
+  `test-secrets-e2e.R` and `test-injection-e2e.R` carry a copy.
+- Options used (04 section 3.1): `gptr.quiet` (`FALSE`), `gptr.interactive` (`NULL`), `gptr.verbose`
+  (`NULL`; 2 = streamed console), `gptr.ui` (`NULL`), `gptr.wire_log` (`FALSE`),
+  `gptr.unsafe_no_permissions` (`FALSE`), `gptr.noninteractive_ask` (`"stop"`),
+  `gptr.r_output_tokens` (`4000L`).
+- Rule C1 (03 section 6.3; report 13 C-36): untrusted text is never a cli or glue format string;
+  `test-injection-e2e.R` enforces it end to end.
+- IC-53 control category (level 4, `ask_human`): `gptr_config`, `gptr_permissions`, `gptr_trust`,
+  `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
+  `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune,
+  clear), `gptr_scrub` (`dry_run = FALSE`), `options()` with `gptr.*` names,
+  `Sys.setenv()`/`Sys.unsetenv()` of `GPTR_*` or provider key names, `setHook()`,
+  `assignInNamespace()`; control paths (IC-54) `.gptr/settings*.json`, `.gptr/mcp.json`,
+  `.gptr/extensions/`, `.gptr/plugins/`, `.gptr/SYSTEM.md`, `.gptr/APPEND_SYSTEM.md`,
+  `.gptr/agents/`, `.Rprofile`.
+- Secrets sinks (IC-70, IC-64, 03 sections 6.5 and 6.18 INFRA-22): JSONL, wire logs, documents,
+  caches, spill files, deferred-write sidecars, MCP logs (`tempdir()/gptr/mcp-logs/`), artifact logs
+  (`run/app-vNNN.log`), worker spec and result files, the console, condition messages, provider
+  egress; a redirect is never followed (`gptr_error_redirect`, parent `gptr_error_provider`). Value
+  redaction cannot be disabled (03 section 6.5), so the negative control pushes a non-secret canary
+  through the same paths.
+- The composed standard prompt with every built-in loaded equals 03 section 7.3 byte for byte,
+  `{s1}` = `jev` (IC-68).
+- 38 registry kinds (04 section 10.2, IC-69); `test-s11-conformance.R` uses one record of each at
+  run time (IC-73).
+- Files P24 writes: the `dev/bench/` tree except P07's runner and fixtures (05 P24 "Owns"), rows
+  appended to `dev/bench/tokens/baseline.csv` by P07's runner (IC-73: each plan adds "their NS
+  fixture and baseline rows"), the four test files, and three steps appended to the `bench` job of
+  P01's `.github/workflows/R-CMD-check.yaml` (05 P24 scope: "a CI step asserting the offline INFRA
+  suite finishes in under 60 s"). No `R/` file, no `NAMESPACE` or `man/` change, no DESCRIPTION
+  change.
 
 ## File Structure
 
@@ -68,12 +158,13 @@
 | `dev/bench/perf/run.R`, `infra-time.R` | grep/read/SSE/diff timings against report 21's bar; the INFRA-24 60 s gate |
 | `dev/bench/tests/test-perf.R` | tests of the workloads, the INFRA file list and the CI steps |
 | `.github/workflows/R-CMD-check.yaml` (P01's file) | three steps appended to the `bench` job |
-| `tests/testthat/test-secrets-e2e.R` | G6 §5.8 end to end on the real package: zero key bytes in every sink; the canary control |
+| `tests/testthat/test-secrets-e2e.R` | G6 section 5.8 end to end on the real package: zero key bytes in every sink; the canary control |
 | `tests/testthat/test-injection-e2e.R` | rule C1 through every printer and condition constructor; the IC-53 and IC-55 adversarial paths |
-| `tests/testthat/test-northstar.R` | NS-1..NS-12 on the fake provider and the scripted UI; the composed prompt against 03 §7.3 |
+| `tests/testthat/test-northstar.R` | NS-1..NS-12 on the fake provider and the scripted UI; the composed prompt against 03 section 7.3 |
 | `tests/testthat/test-s11-conformance.R` | a fixture plugin with one record of every kind, each used at run time |
 
-`dev/bench/tokens/run.R` and the fixtures of P07, P10, P13, P15, P18, P19, P22 and P23 are read, never edited.
+`dev/bench/tokens/run.R` and the fixtures of P07, P10, P13, P15, P18, P19, P22 and P23 are read,
+never edited.
 
 ## Tasks
 
@@ -83,19 +174,38 @@ tests (`dev/` is excluded from the build); they run with
 sources `dev/bench/tests/helper-bench.R` before them. Before Task 2, check the development tools
 once: `Rscript --vanilla -e 'cat(vapply(c("rtiktoken", "pkgload"), requireNamespace, NA, quietly = TRUE), "\n")'`
 must print `TRUE TRUE`. If it prints a `FALSE`, stop and ask the maintainer to install the
-missing package (CRAN) into their library; a plan step never installs anything (conventions §1).
+missing package (CRAN) into their library; a plan step never installs anything (conventions
+section 1).
 A P24 runner that finds a development tool missing exits with status 2 and the message "This step
 stops for the maintainer".
 
 ### Task 1: Shared benchmark helpers
 
 **Files:**
+
 - Create: `dev/bench/common.R`, `dev/bench/README.md`, `dev/bench/tests/helper-bench.R`
 - Test: `dev/bench/tests/test-common.R`
 
 **Interfaces:**
-- Consumes: `pkgload::load_all(path, export_all = TRUE, helpers = FALSE, attach_testthat = FALSE, quiet = TRUE)`; `rtiktoken::get_token_count(text, model)` (development tool; the encoder is rebuilt for every element, about 0.1 s each with rtiktoken 0.0.7, hence the disk memo); `rlang::hash()`; the class layout of `gptr_abort()` (04 §2.1).
-- Produces (development only; used by Tasks 2-8): `bench_root(start)`, `bench_args(args)` -> `list(check, update, only)`, `bench_require(pkg, why)` (condition class `bench_missing_tool`, field `package`), `bench_utf8(x)`, `bench_regression(message, fixture, metric, baseline, value, details)` (class `c("gptr_error_token_regression", "gptr_error", "error", "condition")`), `tok_count(x, encoding = "o200k_base")`, `bench_tok_save()`, `bench_isolate(keys = FALSE, replay = "replay")`, `bench_load_gptr(root, isolate = TRUE, keys = FALSE)`, `gptr_internal(name)`, `bench_read_csv(path)`, `bench_write_csv(df, path)`, `bench_run(fun)` -> exit status 0/1/2; `%||%` when base R lacks it (R < 4.4). Test helpers: `bench_repo_root()`, `bench_source_only(...)`, `skip_without_gptr_source()`, `bench_test_load_gptr()`. None of these names is one that P07's `run.R` defines (`bench_main`, `bench_case`, `bench_compare`, `bench_static`, `bench_in_project`, `bench_counter`, `bench_providers`, `bench_message_payload`, `bench_tolerance`, `bench_columns`).
+
+- Consumes:
+  `pkgload::load_all(path, export_all = TRUE, helpers = FALSE, attach_testthat = FALSE, quiet = TRUE)`;
+  `rtiktoken::get_token_count(text, model)` (development tool; the encoder is rebuilt for every
+  element, about 0.1 s each with rtiktoken 0.0.7, hence the disk memo); `rlang::hash()`; the class
+  layout of `gptr_abort()` (04 section 2.1).
+- Produces (development only; used by Tasks 2-8): `bench_root(start)`, `bench_args(args)` ->
+  `list(check, update, only)`, `bench_require(pkg, why)` (condition class `bench_missing_tool`,
+  field `package`), `bench_utf8(x)`,
+  `bench_regression(message, fixture, metric, baseline, value, details)` (class
+  `c("gptr_error_token_regression", "gptr_error", "error", "condition")`),
+  `tok_count(x, encoding = "o200k_base")`, `bench_tok_save()`,
+  `bench_isolate(keys = FALSE, replay = "replay")`,
+  `bench_load_gptr(root, isolate = TRUE, keys = FALSE)`, `gptr_internal(name)`,
+  `bench_read_csv(path)`, `bench_write_csv(df, path)`, `bench_run(fun)` -> exit status 0/1/2; `%||%`
+  when base R lacks it (R < 4.4). Test helpers: `bench_repo_root()`, `bench_source_only(...)`,
+  `skip_without_gptr_source()`, `bench_test_load_gptr()`. None of these names is one that P07's
+  `run.R` defines (`bench_main`, `bench_case`, `bench_compare`, `bench_static`, `bench_in_project`,
+  `bench_counter`, `bench_providers`, `bench_message_payload`, `bench_tolerance`, `bench_columns`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -216,7 +326,8 @@ test_that("tok_count() counts o200k tokens and memoises them on disk", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "common")'`
-Expected: an error while testthat sources the helper: `dev/bench/common.R not found above .../dev/bench/tests`.
+Expected: an error while testthat sources the helper:
+`dev/bench/common.R not found above .../dev/bench/tests`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -451,7 +562,8 @@ plan that owns its fixture, never to make a regression pass.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "common")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 26 ]` (without rtiktoken the last test skips: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 21 ]`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 26 ]` (without rtiktoken the last test skips:
+`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 21 ]`).
 
 - [ ] **Step 5: Commit**
 
@@ -463,14 +575,38 @@ git commit -m "chore(bench): add shared benchmark helpers and the dev test harne
 ### Task 2: Every architecture 12.7 gate on P07's runner
 
 **Files:**
+
 - Test: `dev/bench/tests/test-token-gates.R`
-- Read, never modified: `dev/bench/tokens/run.R`, `dev/bench/tokens/baseline.csv`, `tests/testthat/fixtures/bench/standins.R`, `tests/testthat/fixtures/bench/prefix-baseline.json` (P07)
+- Read, never modified: `dev/bench/tokens/run.R`, `dev/bench/tokens/baseline.csv`,
+  `tests/testthat/fixtures/bench/standins.R`, `tests/testthat/fixtures/bench/prefix-baseline.json`
+  (P07)
 
 **Interfaces:**
-- Consumes (P07 Task 16, IC-73): sourcing `dev/bench/tokens/run.R` defines `bench_tolerance` (named num), `bench_columns` (chr), `bench_case(fx, standins, tok)` -> one-row data frame with `bench_columns`, `bench_compare(res, base)` (signals `gptr_error_token_regression` with `fixture`, `metric`, `baseline`, `value` of the first failure, the message `Token-efficiency regression:` followed by one line per failure such as `  <case>: <metric> <baseline> -> <value> (tolerance +N%)` or `  <case>: no baseline row (run with --update <case>)`; returns `invisible(TRUE)`), and `bench_main()` runs only when the file is the Rscript entry point (`sys.nframe() == 0L`); `bench_main()` prints `OK: <n> static prefixes and <m> golden transcripts within the baseline tolerances` (a message) when `--check` passes; `prompt_standins_register()` from P07's `standins.R`; `gptr_abort()` (P01) through the loaded source tree; Task 1's `bench_test_load_gptr()`, `skip_without_gptr_source()`, `bench_repo_root()`.
-- Produces: the proof of 05 P24 acceptance 1 and 4 and of the review amendment "every §12.7 gate in `run.R --check`"; the environment variable `GPTR_BENCH_RUNNER` (a path) points the tests at another copy of the runner.
 
-P07's runner already compares every metric with its 12.7 tolerance; P24 must not edit it (05 P24 "Owns": "the `dev/bench/` tree except P07's runner and fixtures"). These tests pin the tolerances to the architecture, trip each gate one token above its tolerance, check that a lost describer fact and a fixture without a baseline row fail, keep `baseline.csv` in step with the fixtures (one row per fixture, no stale rows), measure the replay of every golden transcript, and run `run.R --check` end to end in a shadow copy of the repository whose baseline prefix was lowered by 3% (the repository's own `baseline.csv` is never touched).
+- Consumes (P07 Task 16, IC-73): sourcing `dev/bench/tokens/run.R` defines `bench_tolerance` (named
+  num), `bench_columns` (chr), `bench_case(fx, standins, tok)` -> one-row data frame with
+  `bench_columns`, `bench_compare(res, base)` (signals `gptr_error_token_regression` with `fixture`,
+  `metric`, `baseline`, `value` of the first failure, the message `Token-efficiency regression:`
+  followed by one line per failure such as
+  `  <case>: <metric> <baseline> -> <value> (tolerance +N%)` or
+  `  <case>: no baseline row (run with --update <case>)`; returns `invisible(TRUE)`), and
+  `bench_main()` runs only when the file is the Rscript entry point (`sys.nframe() == 0L`);
+  `bench_main()` prints
+  `OK: <n> static prefixes and <m> golden transcripts within the baseline tolerances` (a message)
+  when `--check` passes; `prompt_standins_register()` from P07's `standins.R`; `gptr_abort()` (P01)
+  through the loaded source tree; Task 1's `bench_test_load_gptr()`, `skip_without_gptr_source()`,
+  `bench_repo_root()`.
+- Produces: the proof of 05 P24 acceptance 1 and 4 and of the review amendment "every §12.7 gate in
+  `run.R --check`"; the environment variable `GPTR_BENCH_RUNNER` (a path) points the tests at
+  another copy of the runner.
+
+P07's runner already compares every metric with its 12.7 tolerance; P24 must not edit it (05 P24
+"Owns": "the `dev/bench/` tree except P07's runner and fixtures"). These tests pin the tolerances to
+the architecture, trip each gate one token above its tolerance, check that a lost describer fact and
+a fixture without a baseline row fail, keep `baseline.csv` in step with the fixtures (one row per
+fixture, no stale rows), measure the replay of every golden transcript, and run `run.R --check` end
+to end in a shadow copy of the repository whose baseline prefix was lowered by 3% (the repository's
+own `baseline.csv` is never touched).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -635,19 +771,26 @@ test_that("run.R --check exits 0 on the baseline and non-zero when a prefix grow
 
 - [ ] **Step 2: Run it to verify it fails**
 
-The gates already exist in P07's runner, so the red run uses a copy whose prefix tolerance was loosened to 3% (written to the session's temporary directory, never into the repository):
+The gates already exist in P07's runner, so the red run uses a copy whose prefix tolerance was
+loosened to 3% (written to the session's temporary directory, never into the repository):
 
 Run: `Rscript --vanilla -e 'f = file.path(tempdir(), "run-loose.R"); writeLines(sub("prefix = 0.02,", "prefix = 0.03,", readLines("dev/bench/tokens/run.R"), fixed = TRUE), f); Sys.setenv(GPTR_BENCH_RUNNER = f); testthat::test_dir("dev/bench/tests", filter = "token-gates")'`
-Expected: `FAILURE` in "P07's runner carries exactly the tolerances of architecture 12.7" (`r$bench_tolerance` not identical to `gate_tolerance`) and in "each gate passes at its tolerance and raises gptr_error_token_regression above it" (`cnd` is `TRUE`, not a `gptr_error_token_regression`, for `prefix`); the summary line starts `[ FAIL 3 |`.
+Expected: `FAILURE` in "P07's runner carries exactly the tolerances of architecture 12.7"
+(`r$bench_tolerance` not identical to `gate_tolerance`) and in "each gate passes at its tolerance
+and raises gptr_error_token_regression above it" (`cnd` is `TRUE`, not a
+`gptr_error_token_regression`, for `prefix`); the summary line starts `[ FAIL 3 |`.
 
 - [ ] **Step 3: Write the implementation**
 
-No new code: the gates are P07's (`dev/bench/tokens/run.R`). If a test fails against the real runner, the defect is in P07's file and is fixed there, never by loosening this test.
+No new code: the gates are P07's (`dev/bench/tokens/run.R`). If a test fails against the real
+runner, the defect is in P07's file and is fixed there, never by loosening this test.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "token-gates")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 62 ]` with the source tree, P07's stand-ins and rtiktoken (the end-to-end test takes about 30 s: two `load_all()` runs in child processes). Without the source tree only the two source-free tests run: `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 6 ]`.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 62 ]` with the source tree, P07's stand-ins and
+rtiktoken (the end-to-end test takes about 30 s: two `load_all()` runs in child processes). Without
+the source tree only the two source-free tests run: `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 6 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -659,15 +802,37 @@ git commit -m "test(bench): prove every architecture 12.7 gate of the token runn
 ### Task 3: Golden transcripts NS-1, NS-5, NS-9, NS-11 and the describer fixture
 
 **Files:**
-- Create: `dev/bench/tokens/fixtures/ns01-console.json`, `dev/bench/tokens/fixtures/ns02c-describers.json`, `dev/bench/tokens/fixtures/ns05-routing.json`, `dev/bench/tokens/fixtures/ns09-setup.json`, `dev/bench/tokens/fixtures/ns11-workflow.json`
+
+- Create: `dev/bench/tokens/fixtures/ns01-console.json`,
+  `dev/bench/tokens/fixtures/ns02c-describers.json`, `dev/bench/tokens/fixtures/ns05-routing.json`,
+  `dev/bench/tokens/fixtures/ns09-setup.json`, `dev/bench/tokens/fixtures/ns11-workflow.json`
 - Modify: `dev/bench/tokens/baseline.csv` (five rows written by P07's runner with `--update`; IC-73)
 - Test: `dev/bench/tests/test-golden-fixtures.R`
 
 **Interfaces:**
-- Consumes: P07's runner `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` and its fixture format (Global Constraints); the fixtures of the earlier plans: `ns02-mixed-model`, `ns03-pipe-steering` (P07), `ns02b-data-first-pipe` (P10), `ns04-system-one` (P13), `ns07-script-history` (P15), `ns10-mcp-catalog` (P18), `ns06-team-member` (P19), `ns01b-polyglot-build` (P22), `ns08-marker-explorer` (P23); P09's `attached` context block (one block for all attached objects, `min(150, max(60, 1200 %/% n))` tokens per object, each object prefixed with its label when several are attached); the message sources of 04 §4.2.
-- Produces: the fixtures `ns01-console` (NS-1 at the console), `ns05-routing` (the System 2 leg of NS-5, non-interactive `auto`), `ns09-setup` (NS-9's "Refactor utils.R": `read`, one `edit` with three disjoint edits), `ns11-workflow` (the System 2 pipe chain of NS-11, non-interactive `auto`), `ns02c-describers` (seven attached objects of different classes with 24 facts, so the "describer facts no loss" gate guards real describer output); their baseline rows; `test-golden-fixtures.R`, which keeps NS-1..NS-11 covered.
 
-The earlier plans' fixtures cover NS-1 (P22's polyglot variant), NS-2, NS-3, NS-4, NS-6, NS-7, NS-8 and NS-10. 05 P24 asks for "the NS-1 and remaining fixtures not added by earlier plans": the console NS-1 of 02-north-star-examples.md §1 and 03 §12.8, NS-5, NS-9 and NS-11. The runner never runs the scripted code; it measures what gptr would send. Results are recorded text (NS-1's and NS-11's are the real Seurat 5.4.0 outputs of G2 `out/d_tasks.txt` on `pbmc_small`, the composed style of G2 tasks 1 and 6); the objects are base-R stand-ins built without RNG. Like P13's fixture, the rows are recorded with `TYPESAFE_API_KEY` unset, so the baseline does not depend on the maintainer's shell.
+- Consumes: P07's runner `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` and
+  its fixture format (Global Constraints); the fixtures of the earlier plans: `ns02-mixed-model`,
+  `ns03-pipe-steering` (P07), `ns02b-data-first-pipe` (P10), `ns04-system-one` (P13),
+  `ns07-script-history` (P15), `ns10-mcp-catalog` (P18), `ns06-team-member` (P19),
+  `ns01b-polyglot-build` (P22), `ns08-marker-explorer` (P23); P09's `attached` context block (one
+  block for all attached objects, `min(150, max(60, 1200 %/% n))` tokens per object, each object
+  prefixed with its label when several are attached); the message sources of 04 section 4.2.
+- Produces: the fixtures `ns01-console` (NS-1 at the console), `ns05-routing` (the System 2 leg of
+  NS-5, non-interactive `auto`), `ns09-setup` (NS-9's "Refactor utils.R": `read`, one `edit` with
+  three disjoint edits), `ns11-workflow` (the System 2 pipe chain of NS-11, non-interactive `auto`),
+  `ns02c-describers` (seven attached objects of different classes with 24 facts, so the "describer
+  facts no loss" gate guards real describer output); their baseline rows; `test-golden-fixtures.R`,
+  which keeps NS-1..NS-11 covered.
+
+The earlier plans' fixtures cover NS-1 (P22's polyglot variant), NS-2, NS-3, NS-4, NS-6, NS-7, NS-8
+and NS-10. 05 P24 asks for "the NS-1 and remaining fixtures not added by earlier plans": the console
+NS-1 of 02-north-star-examples.md section 1 and 03 section 12.8, NS-5, NS-9 and NS-11. The runner
+never runs the scripted code; it measures what gptr would send. Results are recorded text (NS-1's
+and NS-11's are the real Seurat 5.4.0 outputs of G2 `out/d_tasks.txt` on `pbmc_small`, the composed
+style of G2 tasks 1 and 6); the objects are base-R stand-ins built without RNG. Like P13's fixture,
+the rows are recorded with `TYPESAFE_API_KEY` unset, so the baseline does not depend on the
+maintainer's shell.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -761,7 +926,10 @@ test_that("the describer fixture attaches every object it lists facts for", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "golden-fixtures")'`
-Expected: `FAILURE` "the golden transcripts cover every north-star example NS-1..NS-11" with `missing: 5, 9, 11`; `FAILURE` `file.exists(f)` for each of the five P24 ids; an error reading `ns02c-describers.json`; `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 143 ]` with the nine fixtures of the earlier plans.
+Expected: `FAILURE` "the golden transcripts cover every north-star example NS-1..NS-11" with
+`missing: 5, 9, 11`; `FAILURE` `file.exists(f)` for each of the five P24 ids; an error reading
+`ns02c-describers.json`; `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 143 ]` with the nine fixtures of the
+earlier plans.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1219,19 +1387,34 @@ Create `dev/bench/tokens/fixtures/ns11-workflow.json`:
 Check that the runner sees the new fixtures without baseline rows:
 
 Run: `env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R --check`
-Expected: the table lists the five new cases, then `Error: Token-efficiency regression:` with the five lines `  ns01-console: no baseline row (run with --update ns01-console)` (and the same for `ns02c-describers`, `ns05-routing`, `ns09-setup`, `ns11-workflow`); exit status non-zero.
+Expected: the table lists the five new cases, then `Error: Token-efficiency regression:` with the
+five lines `  ns01-console: no baseline row (run with --update ns01-console)` (and the same for
+`ns02c-describers`, `ns05-routing`, `ns09-setup`, `ns11-workflow`); exit status non-zero.
 
-Record the rows (the runner writes them; nothing is edited by hand), after reading the printed table:
+Record the rows (the runner writes them; nothing is edited by hand), after reading the printed
+table:
 
 Run: `env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R --update ns01-console ns02c-describers ns05-routing ns09-setup ns11-workflow`
-Expected: the table shows `requests` 2 (`ns01-console`), 1 (`ns02c-describers`), 2 (`ns05-routing`), 3 (`ns09-setup`) and 6 (`ns11-workflow`); `image_tokens` 0 for all five; `prefix` and `catalog` of `ns01-console`, `ns02c-describers` and `ns09-setup` equal to those of `ns02-mixed-model` (same preset, mode, human flag and stand-ins), and those of `ns05-routing` and `ns11-workflow` equal to each other (the standard preset, non-interactive `auto`); `facts` of `ns02c-describers` at least 20 of its 24 (P09's level-based describers kept 90.8% of G2's facts at 150 tokens; a fact the describers miss is reported to P09, never removed from the fixture) and `facts` of `ns11-workflow` 2. The run ends with `baseline written: ns01-console, ns02c-describers, ns05-routing, ns09-setup, ns11-workflow`; `git diff --stat dev/bench/tokens/baseline.csv` shows 5 insertions.
+Expected: the table shows `requests` 2 (`ns01-console`), 1 (`ns02c-describers`), 2 (`ns05-routing`),
+3 (`ns09-setup`) and 6 (`ns11-workflow`); `image_tokens` 0 for all five; `prefix` and `catalog` of
+`ns01-console`, `ns02c-describers` and `ns09-setup` equal to those of `ns02-mixed-model` (same
+preset, mode, human flag and stand-ins), and those of `ns05-routing` and `ns11-workflow` equal to
+each other (the standard preset, non-interactive `auto`); `facts` of `ns02c-describers` at least 20
+of its 24 (P09's level-based describers kept 90.8% of G2's facts at 150 tokens; a fact the
+describers miss is reported to P09, never removed from the fixture) and `facts` of
+`ns11-workflow` 2. The run ends with
+`baseline written: ns01-console, ns02c-describers, ns05-routing, ns09-setup, ns11-workflow`;
+`git diff --stat dev/bench/tokens/baseline.csv` shows 5 insertions.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "golden-fixtures|token-gates")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 335 ]` with the fourteen fixtures of P07, P10, P13, P15, P18, P19, P22, P23 and P24 (273 in `test-golden-fixtures.R`, 62 in `test-token-gates.R`; the first count grows with every further fixture).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 335 ]` with the fourteen fixtures of P07, P10, P13,
+P15, P18, P19, P22, P23 and P24 (273 in `test-golden-fixtures.R`, 62 in `test-token-gates.R`; the
+first count grows with every further fixture).
 Run: `env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R --check`
-Expected: the last line is `OK: 4 static prefixes and 14 golden transcripts within the baseline tolerances`; exit status 0.
+Expected: the last line is
+`OK: 4 static prefixes and 14 golden transcripts within the baseline tolerances`; exit status 0.
 
 - [ ] **Step 5: Commit**
 
@@ -1243,14 +1426,41 @@ git commit -m "chore(bench): add the NS-1, NS-5, NS-9, NS-11 and describer golde
 ### Task 4: Live calibration mode
 
 **Files:**
+
 - Create: `dev/bench/tokens/live.R`
 - Test: `dev/bench/tests/test-live.R`
 
 **Interfaces:**
-- Consumes: `peter(..., model, mode, envir, budget, prompt)` (04 §6.1; `budget = list(tokens =, cost =)`) and a continuation `peter(s, prompt = p)`; `s$usage` (04 §5.1: a `gptr_usage` df of the §4.3 per-request columns `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h`, `cost`, or rows aggregated with `requests` and `cache_write`, §5.12); `gptr_env(path, quiet = TRUE)` (04 §6.2); `gptr_config(egress = list(<provider> = "ack"), .scope = "user")` (04 §6.2: egress is accepted only at user scope); `gptr_prompt(preset = "standard")` (`system$t0`, `system$t1`, `tools_json`, 04 §5.11); `model_resolve(ref)` (P05, 04 §4.9: `$ref`, `$id`); `json_encode(x)` (P01, through `gptr_internal()`); the golden fixtures (Task 3) and the offline `dev/bench/tokens/results.csv` (columns `case`, `requests`, `input_total`); Anthropic's free `POST /v1/messages/count_tokens` (G2 §4.10); Task 1's helpers.
-- Produces: `live_priors`, `live_tolerance`, `live_fixtures(root, only = NULL)`, `live_prompts(fx)`, `live_usage(u)`, `live_run_fixture(fx, model, budget_usd)`, `live_count_prefix(model_id)`, `live_cache_check(model)`, `live_row(fam, ref, fx, r, prefix, cache_ok)`, `live_main()`; the CSV `dev/bench/tokens/live-<date>.csv` with the columns `date`, `provider`, `model`, `fixture`, `status`, `requests_golden`, `requests_live`, `input_golden_o200k`, `prior`, `input_live`, `cache_read_live`, `cost_live`, `ratio`, `prefix_claude`, `prefix_o200k`, `cache_read_seen`, `ok` (P25's release checklist reads it).
 
-The golden transcripts script the agent, so they measure what the harness sends; the live run measures behaviour (IC-73). Each fixture runs in a temporary project with its files, its objects in a fresh environment and its attached objects passed by name; every live run uses mode `auto` (nobody answers approvals). The golden o200k input is scaled by the provider prior of 03 §12.5 before the 20% comparison; input counts uncached, cache-read and cache-write tokens. For the Anthropic model the free count-tokens request on the frozen standard prefix gives the measured projected/o200k ratio, which `live_main()` prints next to the prior it refits (03 §12.7: "refit estimator priors"); the CSV keeps both counts (`prefix_claude`, `prefix_o200k`), so its columns stay those P25 reads. Nothing is sent unless `GPTR_LIVE_TESTS=true`; keys come from the environment or `gptr_env(GPTR_BENCH_ENV)` and are never printed.
+- Consumes: `peter(..., model, mode, envir, budget, prompt)` (04 section 6.1;
+  `budget = list(tokens =, cost =)`) and a continuation `peter(s, prompt = p)`; `s$usage` (04
+  section 5.1: a `gptr_usage` df of the section 4.3 per-request columns `input`, `output`,
+  `cache_read`, `cache_write_5m`, `cache_write_1h`, `cost`, or rows aggregated with `requests` and
+  `cache_write`, section 5.12); `gptr_env(path, quiet = TRUE)` (04 section 6.2);
+  `gptr_config(egress = list(<provider> = "ack"), .scope = "user")` (04 section 6.2: egress is
+  accepted only at user scope); `gptr_prompt(preset = "standard")` (`system$t0`, `system$t1`,
+  `tools_json`, 04 section 5.11); `model_resolve(ref)` (P05, 04 section 4.9: `$ref`, `$id`);
+  `json_encode(x)` (P01, through `gptr_internal()`); the golden fixtures (Task 3) and the offline
+  `dev/bench/tokens/results.csv` (columns `case`, `requests`, `input_total`); Anthropic's free
+  `POST /v1/messages/count_tokens` (G2 section 4.10); Task 1's helpers.
+- Produces: `live_priors`, `live_tolerance`, `live_fixtures(root, only = NULL)`, `live_prompts(fx)`,
+  `live_usage(u)`, `live_run_fixture(fx, model, budget_usd)`, `live_count_prefix(model_id)`,
+  `live_cache_check(model)`, `live_row(fam, ref, fx, r, prefix, cache_ok)`, `live_main()`; the CSV
+  `dev/bench/tokens/live-<date>.csv` with the columns `date`, `provider`, `model`, `fixture`,
+  `status`, `requests_golden`, `requests_live`, `input_golden_o200k`, `prior`, `input_live`,
+  `cache_read_live`, `cost_live`, `ratio`, `prefix_claude`, `prefix_o200k`, `cache_read_seen`, `ok`
+  (P25's release checklist reads it).
+
+The golden transcripts script the agent, so they measure what the harness sends; the live run
+measures behaviour (IC-73). Each fixture runs in a temporary project with its files, its objects in
+a fresh environment and its attached objects passed by name; every live run uses mode `auto` (nobody
+answers approvals). The golden o200k input is scaled by the provider prior of 03 section 12.5 before
+the 20% comparison; input counts uncached, cache-read and cache-write tokens. For the Anthropic
+model the free count-tokens request on the frozen standard prefix gives the measured projected/o200k
+ratio, which `live_main()` prints next to the prior it refits (03 section 12.7: "refit estimator
+priors"); the CSV keeps both counts (`prefix_claude`, `prefix_o200k`), so its columns stay those P25
+reads. Nothing is sent unless `GPTR_LIVE_TESTS=true`; keys come from the environment or
+`gptr_env(GPTR_BENCH_ENV)` and are never printed.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1331,7 +1541,9 @@ test_that("the provider priors are those of architecture 12.5", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "live")'`
-Expected: an error while the test file is sourced: `'.../dev/bench/tokens/live.R' is not an existing file` (from `sys.source()` in `bench_source_only()`).
+Expected: an error while the test file is sourced:
+`'.../dev/bench/tokens/live.R' is not an existing file` (from `sys.source()` in
+`bench_source_only()`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1564,14 +1776,39 @@ git commit -m "feat(bench): add the live calibration mode behind GPTR_LIVE_TESTS
 ### Task 5: Polyglot benchmark (G5's eight tasks)
 
 **Files:**
-- Create: `dev/bench/polyglot/tasks.R`, `dev/bench/polyglot/run.R`, `dev/bench/polyglot/baseline.csv` (written by `--update`)
+
+- Create: `dev/bench/polyglot/tasks.R`, `dev/bench/polyglot/run.R`,
+  `dev/bench/polyglot/baseline.csv` (written by `--update`)
 - Test: `dev/bench/tests/test-polyglot.R`
 
 **Interfaces:**
-- Consumes: `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), ...)` and `format_eval_result(res, budget_tokens)` -> `list(text, images, truncated, out_id, spill)` (P09, 04 §7.9); `gptr_opt(name)` and `json_encode(x)` (P01); the members of 04 §9.4: `peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` (`gptr_cmd`: `stdout` chr(1), `stderr`, `status`), `peter$script(path, args = character(), interpreter = NULL, ...)`, `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` (`gptr_job` with `wait(timeout = Inf, until = NULL)` and `read(stream = "stdout", n = NULL)`), `peter$py(code, name = NULL, max_rows = 10L)` (`$value`), `peter$sql(query, name = NULL, con = NULL, n = 10L)` (P22); called outside a run the members run directly (04 §9.4); Task 1's helpers.
-- Produces: `polyglot_programs()`, `polyglot_git(repo, ...)`, `polyglot_fixture(dir)`, `polyglot_tasks(fx)`, `polyglot_pi_bash(command, wd)`, `polyglot_r_tool(code, wd, envir)`, `polyglot_run(root)` (columns `task`, `variant`, `calls`, `call_tok`, `result_tok`, `total`, `available`), `polyglot_check(res, base, tol = 0.10)`; `dev/bench/polyglot/results.csv` (regenerated, not committed) and `baseline.csv`.
 
-G5's `p10_tokens.R` measured variant A (a bash tool with Pi semantics), B (the same commands through the `peter$` helpers in `r`) and C (R composing the helpers and printing only what is needed): 45,140, 7,592 and 1,967 o200k tokens over eight tasks (03 §12.3). The rebuilt suite needs no network and no RNG: the download reads a local `file://` URL, the data are arithmetic sequences, `rg` became `grep` over a generated tree, and git runs with a fixed identity and fixed dates, so two builds are byte-identical. A task whose program or R package is missing is marked `available = FALSE`; `--check` compares the B and C totals over the tasks available in both the run and the baseline (at least six).
+- Consumes:
+  `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), ...)`
+  and `format_eval_result(res, budget_tokens)` -> `list(text, images, truncated, out_id, spill)`
+  (P09, 04 section 7.9); `gptr_opt(name)` and `json_encode(x)` (P01); the members of 04 section 9.4:
+  `peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)`
+  (`gptr_cmd`: `stdout` chr(1), `stderr`, `status`),
+  `peter$script(path, args = character(), interpreter = NULL, ...)`,
+  `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` (`gptr_job` with
+  `wait(timeout = Inf, until = NULL)` and `read(stream = "stdout", n = NULL)`),
+  `peter$py(code, name = NULL, max_rows = 10L)` (`$value`),
+  `peter$sql(query, name = NULL, con = NULL, n = 10L)` (P22); called outside a run the members run
+  directly (04 section 9.4); Task 1's helpers.
+- Produces: `polyglot_programs()`, `polyglot_git(repo, ...)`, `polyglot_fixture(dir)`,
+  `polyglot_tasks(fx)`, `polyglot_pi_bash(command, wd)`, `polyglot_r_tool(code, wd, envir)`,
+  `polyglot_run(root)` (columns `task`, `variant`, `calls`, `call_tok`, `result_tok`, `total`,
+  `available`), `polyglot_check(res, base, tol = 0.10)`; `dev/bench/polyglot/results.csv`
+  (regenerated, not committed) and `baseline.csv`.
+
+G5's `p10_tokens.R` measured variant A (a bash tool with Pi semantics), B (the same commands through
+the `peter$` helpers in `r`) and C (R composing the helpers and printing only what is needed):
+45,140, 7,592 and 1,967 o200k tokens over eight tasks (03 section 12.3). The rebuilt suite needs no
+network and no RNG: the download reads a local `file://` URL, the data are arithmetic sequences,
+`rg` became `grep` over a generated tree, and git runs with a fixed identity and fixed dates, so two
+builds are byte-identical. A task whose program or R package is missing is marked
+`available = FALSE`; `--check` compares the B and C totals over the tasks available in both the run
+and the baseline (at least six).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1639,11 +1876,13 @@ test_that("the Pi bash reference keeps the last 2,000 lines with Pi's notice", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "polyglot")'`
-Expected: an error while the test file is sourced: `'.../dev/bench/polyglot/run.R' is not an existing file` (from `sys.source()` in `bench_source_only()`).
+Expected: an error while the test file is sourced:
+`'.../dev/bench/polyglot/run.R' is not an existing file` (from `sys.source()` in
+`bench_source_only()`).
 
 - [ ] **Step 3: Write the implementation**
 
-Create `dev/bench/polyglot/tasks.R` (G5 `p10_tokens.R` adapted to the 04 §9.4 signatures):
+Create `dev/bench/polyglot/tasks.R` (G5 `p10_tokens.R` adapted to the 04 section 9.4 signatures):
 
 ```r
 # The eight polyglot tasks of G5 p10_tokens.R (plan P24; architecture 12.3 and 12.7), rebuilt
@@ -1965,17 +2204,22 @@ if (!identical(Sys.getenv("GPTR_BENCH_SOURCE_ONLY"), "true")) {
 }
 ```
 
-Record the baseline after reading the printed table (on the maintainer's machine with git, sh, grep, python3 with pandas and a configured `RETICULATE_PYTHON`, sqlite3, curl, make and bash; the CI `bench` job compares the tasks it can run):
+Record the baseline after reading the printed table (on the maintainer's machine with git, sh, grep,
+python3 with pandas and a configured `RETICULATE_PYTHON`, sqlite3, curl, make and bash; the CI
+`bench` job compares the tasks it can run):
 
 Run: `Rscript --vanilla dev/bench/polyglot/run.R --update`
-Expected: 24 rows (8 tasks x A, B, C), every row `available` TRUE, the B total several times smaller than A and the C total smaller than B (G5's own fixtures gave 45,140 / 7,592 / 1,967); exit status 0.
+Expected: 24 rows (8 tasks x A, B, C), every row `available` TRUE, the B total several times smaller
+than A and the C total smaller than B (G5's own fixtures gave 45,140 / 7,592 / 1,967); exit
+status 0.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "polyglot")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 45 ]` (with git and bash on PATH)
 Run: `Rscript --vanilla dev/bench/polyglot/run.R --check; echo "exit $?"`
-Expected: two lines `[bench] variant B: ...` and `[bench] variant C: ...`, then `[bench] polyglot: B and C totals within 10% of the baseline` and `exit 0`.
+Expected: two lines `[bench] variant B: ...` and `[bench] variant C: ...`, then
+`[bench] polyglot: B and C totals within 10% of the baseline` and `exit 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1987,14 +2231,35 @@ git commit -m "feat(bench): add the polyglot token benchmark with a 10% ratchet"
 ### Task 6: Cache-economics simulator
 
 **Files:**
-- Create: `dev/bench/cache-sim/sim.R`, `dev/bench/cache-sim/scenario.R`, `dev/bench/cache-sim/run.R`, `dev/bench/cache-sim/baseline.csv` (written by `--update`)
+
+- Create: `dev/bench/cache-sim/sim.R`, `dev/bench/cache-sim/scenario.R`,
+  `dev/bench/cache-sim/run.R`, `dev/bench/cache-sim/baseline.csv` (written by `--update`)
 - Test: `dev/bench/tests/test-cache-sim.R`
 
 **Interfaces:**
-- Consumes: `gptr_fake_provider(script, name)` with a function script receiving `request = list(n, model, system = list(t0, t1), tools, messages, last_user, last_results, params)` (04 §12.1); `peter()` and continuations with a model switch (04 §6.1); `session_data(s)$frozen$tools_json` (P06/P07, as P07's runner reads it); `msg_to_json(msg)` and `json_encode(x)` (P01, 04 §4.2); Task 1's helpers.
-- Produces: `sim_prices`, `sim_new_cache()`, `sim_blocks(tools_json, t0, t1, messages, ttl_anchor = 3600, tail_ttl = 300)`, `sim_request(cache, sb, tok, model, time, min_tokens = 512L, price = sim_prices)` -> `c(total, read, write5m, write1h, uncached, cost)`, `sim_tail_ttl(gap, cache_gap = 240)`, `sim_session(requests, tok, label)`, `cache_sim_codes`, `cache_sim_prompts`, `cache_sim_scenario()`, `cache_sim_requests(sc, ttl_anchor = 3600, tail = "gap")`, `cache_sim_summary(d)`; `results.csv` (regenerated) and `baseline.csv` with the columns `strategy`, `total`, `read`, `write5m`, `write1h`, `uncached`, `cost`, `hit_rate` for the strategies `gptr` (the gap rule of 03 §6.11), `all_5m` and `all_1h`.
 
-G4 §5.8's simulator applies Anthropic's documented rules to gptr's own requests: a prefix hash over tools, system and messages at block granularity; writes only at breakpoints (BP1 at the end of T0, BP2 on the first user message, the tail); reads look back at most 20 blocks from each breakpoint; entries are model-scoped, readable until their TTL expires and refreshed by each read; minimum cacheable prefix 512 tokens (4,096 on the Haiku-like model). The scenario runs eight turns through the real request path with a switch to a second model and back and a 12-minute idle pause before turn 6. Input tokens only, every request at Opus 5.5 prices (G4 fact-check).
+- Consumes: `gptr_fake_provider(script, name)` with a function script receiving
+  `request = list(n, model, system = list(t0, t1), tools, messages, last_user, last_results, params)`
+  (04 section 12.1); `peter()` and continuations with a model switch (04 section 6.1);
+  `session_data(s)$frozen$tools_json` (P06/P07, as P07's runner reads it); `msg_to_json(msg)` and
+  `json_encode(x)` (P01, 04 section 4.2); Task 1's helpers.
+- Produces: `sim_prices`, `sim_new_cache()`,
+  `sim_blocks(tools_json, t0, t1, messages, ttl_anchor = 3600, tail_ttl = 300)`,
+  `sim_request(cache, sb, tok, model, time, min_tokens = 512L, price = sim_prices)` ->
+  `c(total, read, write5m, write1h, uncached, cost)`, `sim_tail_ttl(gap, cache_gap = 240)`,
+  `sim_session(requests, tok, label)`, `cache_sim_codes`, `cache_sim_prompts`,
+  `cache_sim_scenario()`, `cache_sim_requests(sc, ttl_anchor = 3600, tail = "gap")`,
+  `cache_sim_summary(d)`; `results.csv` (regenerated) and `baseline.csv` with the columns
+  `strategy`, `total`, `read`, `write5m`, `write1h`, `uncached`, `cost`, `hit_rate` for the
+  strategies `gptr` (the gap rule of 03 section 6.11), `all_5m` and `all_1h`.
+
+G4 section 5.8's simulator applies Anthropic's documented rules to gptr's own requests: a prefix
+hash over tools, system and messages at block granularity; writes only at breakpoints (BP1 at the
+end of T0, BP2 on the first user message, the tail); reads look back at most 20 blocks from each
+breakpoint; entries are model-scoped, readable until their TTL expires and refreshed by each read;
+minimum cacheable prefix 512 tokens (4,096 on the Haiku-like model). The scenario runs eight turns
+through the real request path with a switch to a second model and back and a 12-minute idle pause
+before turn 6. Input tokens only, every request at Opus 5.5 prices (G4 fact-check).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2048,7 +2313,9 @@ test_that("costs follow the Opus 5.5 prices", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "cache-sim")'`
-Expected: an error while the test file is sourced: `'.../dev/bench/cache-sim/run.R' is not an existing file` (from `sys.source()` in `bench_source_only()`).
+Expected: an error while the test file is sourced:
+`'.../dev/bench/cache-sim/run.R' is not an existing file` (from `sys.source()` in
+`bench_source_only()`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2298,10 +2565,18 @@ if (!identical(Sys.getenv("GPTR_BENCH_SOURCE_ONLY"), "true")) {
 }
 ```
 
-Record the baseline after reading the table. The two fixed strategies are reference points, not targets: which of the three is cheapest depends on the session's shape (with one 12-minute pause and a second model, the 1-hour premium on every anchor write can outweigh the one re-read it saves; on a synthetic replica of this scenario, built with the token sizes below, `all_5m` came out cheapest at 0.0938 USD against 0.1008 for `all_1h` and 0.1026 for `gptr`). The gate compares only the `gptr` row with its own baseline.
+Record the baseline after reading the table. The two fixed strategies are reference points, not
+targets: which of the three is cheapest depends on the session's shape (with one 12-minute pause and
+a second model, the 1-hour premium on every anchor write can outweigh the one re-read it saves; on a
+synthetic replica of this scenario, built with the token sizes below, `all_5m` came out cheapest at
+0.0938 USD against 0.1008 for `all_1h` and 0.1026 for `gptr`). The gate compares only the `gptr` row
+with its own baseline.
 
 Run: `Rscript --vanilla dev/bench/cache-sim/run.R --update`
-Expected: three rows (`all_1h`, `all_5m`, `gptr`) with positive `cost`; the `gptr` row reads most of its input from the cache (`hit_rate` above 0.7; 0.82 on the synthetic replica: tools 1,400, T0 1,650, T1 900 and a 450-token first message); exit status 0. A `gptr` cost far above both references is worth reporting to P07 (layout or TTL policy), but it is recorded as measured.
+Expected: three rows (`all_1h`, `all_5m`, `gptr`) with positive `cost`; the `gptr` row reads most of
+its input from the cache (`hit_rate` above 0.7; 0.82 on the synthetic replica: tools 1,400, T0
+1,650, T1 900 and a 450-token first message); exit status 0. A `gptr` cost far above both references
+is worth reporting to P07 (layout or TTL policy), but it is recorded as measured.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -2320,14 +2595,34 @@ git commit -m "feat(bench): add the cache-economics simulator with a 2% ratchet"
 ### Task 7: Shiny vs HTML/JS ladder (G2's 20 apps)
 
 **Files:**
-- Create: `dev/bench/shiny-html/apps/` (copy of `dev/research/assets/G2/a_apps/`: `SPEC.md`, `data.R`, `L1`-`L5` x `shiny_a.R`, `shiny_b.R`, `html_a.html`, `html_b.html`), `dev/bench/shiny-html/revised/` (copy of `a_revised/`), `dev/bench/shiny-html/mutants/` (copy of `a_mutants/`), `dev/bench/shiny-html/check.R`, `dev/bench/shiny-html/tokens.R`, `dev/bench/shiny-html/results.csv` (written by `tokens.R`)
+
+- Create: `dev/bench/shiny-html/apps/` (copy of `dev/research/assets/G2/a_apps/`: `SPEC.md`,
+  `data.R`, `L1`-`L5` x `shiny_a.R`, `shiny_b.R`, `html_a.html`, `html_b.html`),
+  `dev/bench/shiny-html/revised/` (copy of `a_revised/`), `dev/bench/shiny-html/mutants/` (copy of
+  `a_mutants/`), `dev/bench/shiny-html/check.R`, `dev/bench/shiny-html/tokens.R`,
+  `dev/bench/shiny-html/results.csv` (written by `tokens.R`)
 - Test: `dev/bench/tests/test-shiny-html.R`
 
 **Interfaces:**
-- Consumes: nothing from gptr (the ladder measures the design choice of S-5); shiny, bslib, plotly, DT, httpuv, chromote (Chrome or Edge), callr, curl and withr (`with_preserve_seed()` around the Chrome start) as development tools; Task 1's helpers.
-- Produces: `ladder_main()` (exit 0 when every app of `apps` or `revised` passes and every app of `mutants` fails), `lcs_hunks(a, b)`, `count_fixed(x, pat)`, `derive_edits(a, b)`, `ladder_tokens_main()`; `results.csv` with the columns `level`, `impl`, `side`, `lines`, `o200k`, `write_arg`, `n_edits`, `edit_tok`, `rewrite_tok` (tracked, not gated: 03 §12.7 "ratio and edit-vs-rewrite tracked").
 
-G2 part (a) and its fact-check: 20 of 20 apps pass the ladder (parse, launch, HTTP 200, chromote interactions), 10 of 10 mutants fail, 20 of 20 revisions pass, and the HTML/JS apps cost 2.35x the o200k tokens of the Shiny apps. The apps are G2's verified files, copied unchanged (some lines exceed 100 characters: they are benchmark data written as a model wrote them, not package code). `check.R` is G2's `a_check.R` with paths from the repository, the set chosen with `--set=` and the exit status from the ladder result. `tokens.R` derives the edits from a line diff of `apps/` against `revised/` (one exact-match edit per changed hunk, widened by context lines until its `oldText` is unique, Pi's edit semantics); the derived edits carry whole lines of context, so the rewrite/edit ratio (3.0x Shiny, 4.2x HTML) is lower than for G2's hand-made edits (3.9x, 6.1x).
+- Consumes: nothing from gptr (the ladder measures the design choice of S-5); shiny, bslib, plotly,
+  DT, httpuv, chromote (Chrome or Edge), callr, curl and withr (`with_preserve_seed()` around the
+  Chrome start) as development tools; Task 1's helpers.
+- Produces: `ladder_main()` (exit 0 when every app of `apps` or `revised` passes and every app of
+  `mutants` fails), `lcs_hunks(a, b)`, `count_fixed(x, pat)`, `derive_edits(a, b)`,
+  `ladder_tokens_main()`; `results.csv` with the columns `level`, `impl`, `side`, `lines`, `o200k`,
+  `write_arg`, `n_edits`, `edit_tok`, `rewrite_tok` (tracked, not gated: 03 section 12.7 "ratio and
+  edit-vs-rewrite tracked").
+
+G2 part (a) and its fact-check: 20 of 20 apps pass the ladder (parse, launch, HTTP 200, chromote
+interactions), 10 of 10 mutants fail, 20 of 20 revisions pass, and the HTML/JS apps cost 2.35x the
+o200k tokens of the Shiny apps. The apps are G2's verified files, copied unchanged (some lines
+exceed 100 characters: they are benchmark data written as a model wrote them, not package code).
+`check.R` is G2's `a_check.R` with paths from the repository, the set chosen with `--set=` and the
+exit status from the ladder result. `tokens.R` derives the edits from a line diff of `apps/` against
+`revised/` (one exact-match edit per changed hunk, widened by context lines until its `oldText` is
+unique, Pi's edit semantics); the derived edits carry whole lines of context, so the rewrite/edit
+ratio (3.0x Shiny, 4.2x HTML) is lower than for G2's hand-made edits (3.9x, 6.1x).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2373,7 +2668,9 @@ test_that("derived edits are unique in the original and reproduce all 20 revisio
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "shiny-html")'`
-Expected: an error while the test file is sourced: `'.../dev/bench/shiny-html/tokens.R' is not an existing file` (from `sys.source()` in `bench_source_only()`).
+Expected: an error while the test file is sourced:
+`'.../dev/bench/shiny-html/tokens.R' is not an existing file` (from `sys.source()` in
+`bench_source_only()`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2929,9 +3226,15 @@ if (!identical(Sys.getenv("GPTR_BENCH_SOURCE_ONLY"), "true")) {
 Record the tracked numbers and run the ladder once (on demand; needs Chrome or Edge):
 
 Run: `Rscript --vanilla dev/bench/shiny-html/tokens.R`
-Expected: `html/shiny o200k ratio: 2.35 (G2: 2.35)`, the per-level ratios 2.26, 2.47, 2.86, 2.64 and 1.62, and `rewrite/edit: shiny 3.0x, html 4.2x (G2: 3.9x, 6.1x)`; `dev/bench/shiny-html/results.csv` has 20 rows.
+Expected: `html/shiny o200k ratio: 2.35 (G2: 2.35)`, the per-level ratios 2.26, 2.47, 2.86, 2.64 and
+1.62, and `rewrite/edit: shiny 3.0x, html 4.2x (G2: 3.9x, 6.1x)`; `dev/bench/shiny-html/results.csv`
+has 20 rows.
 Run: `Rscript --vanilla dev/bench/shiny-html/check.R --set=apps; Rscript --vanilla dev/bench/shiny-html/check.R --set=revised; Rscript --vanilla dev/bench/shiny-html/check.R --set=mutants`
-Expected: one line per app (for example `L1 shiny_a  parse=ok http200=TRUE steps=1/1 js_err=0 out_err=0 log_err=0 => PASS (2.0s)`), ending with `PASS 20 of 20 apps (apps)`, `PASS 20 of 20 apps (revised)` and `PASS 0 of 10 apps (mutants)`; each run exits 0 (the mutant run takes about 4 minutes: every failing interaction waits for its 15 s timeout).
+Expected: one line per app (for example
+`L1 shiny_a  parse=ok http200=TRUE steps=1/1 js_err=0 out_err=0 log_err=0 => PASS (2.0s)`), ending
+with `PASS 20 of 20 apps (apps)`, `PASS 20 of 20 apps (revised)` and `PASS 0 of 10 apps (mutants)`;
+each run exits 0 (the mutant run takes about 4 minutes: every failing interaction waits for its 15 s
+timeout).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -2948,15 +3251,35 @@ git commit -m "feat(bench): add the Shiny vs HTML/JS ladder and its token tracki
 ### Task 8: Performance benchmarks, the INFRA-24 gate and the CI steps
 
 **Files:**
+
 - Create: `dev/bench/perf/run.R`, `dev/bench/perf/infra-time.R`
-- Modify: `.github/workflows/R-CMD-check.yaml` (P01's file; three steps appended to the `bench` job, 05 P24 scope "a CI step asserting the offline INFRA suite finishes in under 60 s")
+- Modify: `.github/workflows/R-CMD-check.yaml` (P01's file; three steps appended to the `bench` job,
+  05 P24 scope "a CI step asserting the offline INFRA suite finishes in under 60 s")
 - Test: `dev/bench/tests/test-perf.R`
 
 **Interfaces:**
-- Consumes: `search_grep(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE, context = 0L, limit = 100L, output = c("content", "files", "count"), sort = ...)`, `read_file(path, offset = NULL, limit = NULL, budget_tokens = gptr_opt("read_max_tokens"))`, `diff_lines(old, new, context = 3L, max_tokens = 400L)` (`max_tokens = Inf` disables the cut) (P10, 04 §7.10); `sse_splitter()` -> environment with `push(raw)` -> list of events and `flush()` (P04, 04 §8.3); `testthat::test_local(path, reporter, ...)` with `filter` and `stop_on_failure` passed to `test_dir()`; the acceptance test files of 03 §6.18 (owned by P01, P04, P05, P06, P07, P11, P12, P13, P14, P19, P20, P21 and this plan); P01's `bench` job (it installs `rtiktoken` and `pkgload` and runs `dev/bench/tokens/run.R --check`); Task 1's helpers.
-- Produces: `perf_median(fun, times = 5L)`, `perf_repo(dir)`, `perf_big_file(path)`, `perf_sse_bytes(n = 20000L)`, `perf_run(root)` (columns `path`, `workload`, `seconds`, `bar`, `verdict`, `measure`), `perf_main()`; `infra_files`, `infra_limit`, `infra_main()`; the CI steps running the polyglot ratchet, the INFRA-24 gate and the development tests.
 
-Report 21's verdicts are the reference (grep 40-211 ms over 2,100 files, a cached slice read 5-17 ms, SSE 23-58 us per event, a 20,000-line diff 56-73 ms): every hot path is expected to print `PURE R IS ENOUGH`. A path over its bar prints `INVESTIGATE`; `--check` then exits 1 and the maintainer runs report 21's procedure (an Rcpp routine needs that procedure's `RCPP JUSTIFIED` verdict and a pure-R reference, conventions §9). INFRA-24 runs the 29 acceptance files of 03 §6.18 (INFRA-02's `test-provider-*.R` of P01 and P12 included) with `NOT_CRAN=false` (every `skip_on_cran()` test skips, as on CRAN) and fails when a test fails or the run takes 60 s or more.
+- Consumes:
+  `search_grep(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE, context = 0L, limit = 100L, output = c("content", "files", "count"), sort = ...)`,
+  `read_file(path, offset = NULL, limit = NULL, budget_tokens = gptr_opt("read_max_tokens"))`,
+  `diff_lines(old, new, context = 3L, max_tokens = 400L)` (`max_tokens = Inf` disables the cut)
+  (P10, 04 section 7.10); `sse_splitter()` -> environment with `push(raw)` -> list of events and
+  `flush()` (P04, 04 section 8.3); `testthat::test_local(path, reporter, ...)` with `filter` and
+  `stop_on_failure` passed to `test_dir()`; the acceptance test files of 03 section 6.18 (owned by
+  P01, P04, P05, P06, P07, P11, P12, P13, P14, P19, P20, P21 and this plan); P01's `bench` job (it
+  installs `rtiktoken` and `pkgload` and runs `dev/bench/tokens/run.R --check`); Task 1's helpers.
+- Produces: `perf_median(fun, times = 5L)`, `perf_repo(dir)`, `perf_big_file(path)`,
+  `perf_sse_bytes(n = 20000L)`, `perf_run(root)` (columns `path`, `workload`, `seconds`, `bar`,
+  `verdict`, `measure`), `perf_main()`; `infra_files`, `infra_limit`, `infra_main()`; the CI steps
+  running the polyglot ratchet, the INFRA-24 gate and the development tests.
+
+Report 21's verdicts are the reference (grep 40-211 ms over 2,100 files, a cached slice read 5-17
+ms, SSE 23-58 us per event, a 20,000-line diff 56-73 ms): every hot path is expected to print
+`PURE R IS ENOUGH`. A path over its bar prints `INVESTIGATE`; `--check` then exits 1 and the
+maintainer runs report 21's procedure (an Rcpp routine needs that procedure's `RCPP JUSTIFIED`
+verdict and a pure-R reference, conventions section 9). INFRA-24 runs the 29 acceptance files of 03
+section 6.18 (INFRA-02's `test-provider-*.R` of P01 and P12 included) with `NOT_CRAN=false` (every
+`skip_on_cran()` test skips, as on CRAN) and fails when a test fails or the run takes 60 s or more.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3004,7 +3327,8 @@ test_that("the CI bench job runs both ratchets, the dev tests and the INFRA timi
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "perf")'`
-Expected: an error while the test file is sourced: `'.../dev/bench/perf/run.R' is not an existing file` (from `sys.source()` in `bench_source_only()`).
+Expected: an error while the test file is sourced:
+`'.../dev/bench/perf/run.R' is not an existing file` (from `sys.source()` in `bench_source_only()`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3188,7 +3512,9 @@ infra_main = function() {
 quit(save = "no", status = bench_run(infra_main))
 ```
 
-Append these steps at the end of the `steps:` list of the `bench` job in `.github/workflows/R-CMD-check.yaml`, after P01's "Token ratchet" step (same indentation as that step; the job names and P01's `test-zzz.R` check stay valid):
+Append these steps at the end of the `steps:` list of the `bench` job in
+`.github/workflows/R-CMD-check.yaml`, after P01's "Token ratchet" step (same indentation as that
+step; the job names and P01's `test-zzz.R` check stay valid):
 
 ```yaml
       - name: Polyglot token ratchet (B and C within 10%, P24)
@@ -3206,7 +3532,8 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 11 ]`
 Run: `Rscript --vanilla -e 'devtools::test(filter = "zzz")'`
 Expected: `FAIL 0` (P01's workflow test still finds its six jobs and the token ratchet step).
 Run: `Rscript --vanilla dev/bench/perf/infra-time.R; echo "exit $?"`
-Expected: `[bench] INFRA suite: 29 files, <n> tests, 0 failed, <s> s (limit 60 s)` with `<s>` below 60, and `exit 0`.
+Expected: `[bench] INFRA suite: 29 files, <n> tests, 0 failed, <s> s (limit 60 s)` with `<s>` below
+60, and `exit 0`.
 Run: `Rscript --vanilla dev/bench/perf/run.R --check; echo "exit $?"`
 Expected: six rows whose `verdict` is `PURE R IS ENOUGH`, and `exit 0`.
 
@@ -3219,7 +3546,8 @@ git commit -m "feat(bench): add performance benchmarks and the INFRA-24 60 s gat
 
 The four package tests below exercise code that P01-P23 implemented, so their red step is a
 mutation run: the test file runs once against a deliberately broken internal function, mocked for
-that R process only with `testthat::local_mocked_bindings(..., .package = "gptr", .env = globalenv())`
+that R process only with
+`testthat::local_mocked_bindings(..., .package = "gptr", .env = globalenv())`
 (no file is edited), and must fail; the green step runs it against the real package. A failure in
 the green step names the sink, printer, gate path or example to fix in its owning plan's file
 (the `info` of each expectation names it); it is never fixed by weakening these tests.
@@ -3227,13 +3555,39 @@ the green step names the sink, printer, gate path or example to fix in its ownin
 ### Task 9: Secrets end to end (`test-secrets-e2e.R`)
 
 **Files:**
+
 - Test: `tests/testthat/test-secrets-e2e.R`
 
 **Interfaces:**
-- Consumes: `gptr_env(path, aliases = NULL, set_env = getOption("gptr.env_export", TRUE), override = FALSE, quiet = FALSE)` (P03, 04 §6.2); `gptr_permissions(allow =, remove =)` (P11; `r(secret:NAME)` is the only pre-approval of the secret guard, IC-53 item 7); `gptr_doc(path)`, `gptr_doc(FALSE)` (P15); `peter()` (P08); `print`, `summary`, `str`, `$history`, `$usage` of a `gptr_session` (P06, 04 §5.1); `gptr_prompt(x)` (P07); `gptr_providers()` (P05); `secret_lookup(name)` (P03, 04 §7.3); `gptr_scrub(paths = NULL, dry_run = TRUE, error = FALSE)` (P03, IC-70; directories in `paths` are scanned recursively); `child_env(profile, ...)` (P03); `rscript_path()` (P01); `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())` and `gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)` (P23; the log is `.gptr/artifacts/<id>/run/app-vNNN.log`, synced by the listing and flushed at stop); `gptr_register(spec)` (P02); `agent(model =, backend = "worker")` inside `agents =` (P19); helpers `local_project()`, `local_gptr_options()`, `local_fake_provider()`, `fake_tool()`, `fake_text()`, `fake_error()`, `fake_requests()`, `local_mock_server("redirect")` (P01: `provider` is the `mock` record with `local = TRUE`, `offline = TRUE`; `log()` holds both origins' requests), `local_mcp_fixture(tools = "echo")` and `local_mcp_server(fx)` (P18); P19's `local_worker_lib()` (copied into the file); `testthat::evaluate_promise()` (stdout in `$output`; messages, including cli output under testthat, in `$messages`; warnings in `$warnings`); condition classes `gptr_error_provider`, `gptr_error_redirect` (IC-64).
-- Produces: the INFRA-22 acceptance test of 03 §6.18 and the IC-70/IC-64 sinks of 05 P24 acceptance 3.
 
-G6 §5.8's `test_e2e.R` used the same fake keys and code paths with redaction switched off as its negative control; value redaction cannot be disabled in gptr (03 §6.5), so the control pushes a non-secret canary through the same code and requires it in the session JSONL, the spill file, the document, the console and the provider egress. `NEW_SERVICE_TOKEN` is assembled at run time inside the model's code (G6's late-secret case) so that the literal never appears in the tool-call arguments.
+- Consumes:
+  `gptr_env(path, aliases = NULL, set_env = getOption("gptr.env_export", TRUE), override = FALSE, quiet = FALSE)`
+  (P03, 04 section 6.2); `gptr_permissions(allow =, remove =)` (P11; `r(secret:NAME)` is the only
+  pre-approval of the secret guard, IC-53 item 7); `gptr_doc(path)`, `gptr_doc(FALSE)` (P15);
+  `peter()` (P08); `print`, `summary`, `str`, `$history`, `$usage` of a `gptr_session` (P06, 04
+  section 5.1); `gptr_prompt(x)` (P07); `gptr_providers()` (P05); `secret_lookup(name)` (P03, 04
+  section 7.3); `gptr_scrub(paths = NULL, dry_run = TRUE, error = FALSE)` (P03, IC-70; directories
+  in `paths` are scanned recursively); `child_env(profile, ...)` (P03); `rscript_path()` (P01);
+  `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())`
+  and `gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)` (P23; the log is
+  `.gptr/artifacts/<id>/run/app-vNNN.log`, synced by the listing and flushed at stop);
+  `gptr_register(spec)` (P02); `agent(model =, backend = "worker")` inside `agents =` (P19); helpers
+  `local_project()`, `local_gptr_options()`, `local_fake_provider()`, `fake_tool()`, `fake_text()`,
+  `fake_error()`, `fake_requests()`, `local_mock_server("redirect")` (P01: `provider` is the `mock`
+  record with `local = TRUE`, `offline = TRUE`; `log()` holds both origins' requests),
+  `local_mcp_fixture(tools = "echo")` and `local_mcp_server(fx)` (P18); P19's `local_worker_lib()`
+  (copied into the file); `testthat::evaluate_promise()` (stdout in `$output`; messages, including
+  cli output under testthat, in `$messages`; warnings in `$warnings`); condition classes
+  `gptr_error_provider`, `gptr_error_redirect` (IC-64).
+- Produces: the INFRA-22 acceptance test of 03 section 6.18 and the IC-70/IC-64 sinks of 05 P24
+  acceptance 3.
+
+G6 section 5.8's `test_e2e.R` used the same fake keys and code paths with redaction switched off as
+its negative control; value redaction cannot be disabled in gptr (03 section 6.5), so the control
+pushes a non-secret canary through the same code and requires it in the session JSONL, the spill
+file, the document, the console and the provider egress. `NEW_SERVICE_TOKEN` is assembled at run
+time inside the model's code (G6's late-secret case) so that the literal never appears in the
+tool-call arguments.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3542,18 +3896,22 @@ test_that("an Rscript run with a bound document leaves no key in documents or si
 Mutation: redaction replaced by the identity for this process.
 
 Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); testthat::local_mocked_bindings(redact = function(x, profile = "persist") x, redact_tree = function(x, profile = "persist", structural = FALSE) x, .package = "gptr", .env = globalenv()); redactor_set(function(x, profile = "persist") x); testthat::test_file("tests/testthat/test-secrets-e2e.R")'`
-Expected: `FAILURE` in "fake keys reach no in-process sink, and the canary reaches them (control)": `sum(sinks)` is not identical to `0L`, with an `info` naming the leaking sinks (for example `.../.gptr/sessions/<file>.jsonl, console`); the summary line shows `FAIL` of at least 1.
+Expected: `FAILURE` in "fake keys reach no in-process sink, and the canary reaches them (control)":
+`sum(sinks)` is not identical to `0L`, with an `info` naming the leaking sinks (for example
+`.../.gptr/sessions/<file>.jsonl, console`); the summary line shows `FAIL` of at least 1.
 
 - [ ] **Step 3: Write the implementation**
 
-No package code: the test exercises P03's redactor at every sink built by P04-P23. When a sink leaks, fix it in its owning plan's file (the `info` names the file).
+No package code: the test exercises P03's redactor at every sink built by P04-P23. When a sink
+leaks, fix it in its owning plan's file (the `info` names the file).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::test(filter = "secrets-e2e")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 30 ]`
 Run: `NOT_CRAN=false Rscript --vanilla -e 'devtools::test(filter = "secrets-e2e")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 10 ]` (the in-process test runs on CRAN; the six process tests skip).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 10 ]` (the in-process test runs on CRAN; the six
+process tests skip).
 
 - [ ] **Step 5: Commit**
 
@@ -3565,13 +3923,50 @@ git commit -m "test(secrets): add the end-to-end secrets test over every sink"
 ### Task 10: Injection end to end (`test-injection-e2e.R`)
 
 **Files:**
+
 - Test: `tests/testthat/test-injection-e2e.R`
 
 **Interfaces:**
-- Consumes: `gptr_abort()`, `gptr_warn()`, `gptr_inform()` (04 §2.1); `msg_verbatim(x, stream = c("stdout", "stderr"))` and `new_listing(df, class, footer = NULL)` (P01); `msg_text(msg)` (P01, 04 §4.2); `gptr_redact()`, `gptr_tool_result()`, `gptr_tool()`, `gptr_command()`, `gptr_policy()`, `gptr_hook()`, `gptr_registry(kind)` (columns `kind`, `name`, `source`, ...), `gptr_check(x)` (P02); `gptr_skills()` (P17); `gptr_describe(x, budget)` (P09); `gptr_prompt(preset =)` (P07); `gptr_permissions()` (column `rule`), `gptr_trust(path, trust)` (P11, P08); `gptr_mcp()` (P18); `gptr_fake_provider(script, name)` (P01); `gptr_last()`, `gptr_steer()`, `gptr_on()`, `gptr_config()` (P08, P06) and the continuation `s |> peter(prompt)`; P06's refusal of a steer from model code of the same session tree (`session_enqueue()`: `gptr_error_permission` with the message `model code cannot send steering messages to its own session tree (session <id>)`, IC-55); the session fields `$status`, `$text`, `$messages`, `$children`, `cnd$session` (04 §5.1, §6.1.2); `local_scripted_ui(answers = list())` (P11: `log` df `method`, `prompt`, `answer`, where a permission's `prompt` is the escaped first line of `ui_permission_lines()`; `remaining()`); `gptr_readline()` (P01, mocked for console input); `user_home()` (P01) and `tools::R_user_dir("gptr", "config")` (both redirected by `setup.R`) for the out-of-project control paths; the control exports named only inside attack code, which the gate stops before it runs (`gptr_init(path)`, `gptr_env(path, override)`, `gptr_mcp_remove(name, scope)`, `gptr_mcp_serve()`, `gptr_login(provider)`, `gptr_logout(provider)`, `gptr_doc(path)`, `gptr_cache(action)`, `gptr_fork(s)`, `gptr_cancel(x)`, `gptr_resume(x)`, `gptr_rewind(s, turn)`; 04 §6.2-§6.5); condition classes `gptr_error_permission`, `gptr_error_provider`; tests: `local_mcp_fixture(tools = "echo")` and `local_mcp_server(fx)` (P18), P19's `local_worker_lib()` (copied into the file), `agent(model =, backend = "worker")` inside `agents =` (P19).
-- Produces: the rule C1 acceptance test (03 §6.3) and the IC-53/IC-55 adversarial test of 05 P24 acceptance 3 and the review amendment "the adversarial gate paths of IC-53".
 
-The payload is report 13's injection that printed "EVALUATED" through `cli::cli_text()` (C-36), extended with glue and cli inline markup; each `{...}` either sets an environment variable or stops, so any evaluation is visible. Part 2 has one attacker per IC-53 path: each control function of IC-53 item 3 (P11 classifies all of them, including the session verbs `gptr_fork`/`gptr_cancel`/`gptr_resume`/`gptr_rewind`, statically as level 4 `control`), `options(gptr.*)`, `Sys.setenv()`/`Sys.unsetenv()` of `GPTR_*` and key names, `setHook()`, `assignInNamespace()`, a filter removing `builtin:permissions`, and a `write` to each IC-54 control path (`.gptr/settings*.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `agents/`, `.Rprofile`, `.git/hooks/`, `.git/config`, the user config directory and `~/.R/Makevars`): 38 attacks. `gptr_steer()` from model code is the IC-55 test; items 5-8 of IC-53 have their own tests. Without a human every attempt ends with status `blocked` even in `auto` mode, and with the scripted UI answering "n" every attempt is asked exactly once; afterwards no attack path holds the marker `P24_ATTACK`.
+- Consumes: `gptr_abort()`, `gptr_warn()`, `gptr_inform()` (04 section 2.1);
+  `msg_verbatim(x, stream = c("stdout", "stderr"))` and `new_listing(df, class, footer = NULL)`
+  (P01); `msg_text(msg)` (P01, 04 section 4.2); `gptr_redact()`, `gptr_tool_result()`,
+  `gptr_tool()`, `gptr_command()`, `gptr_policy()`, `gptr_hook()`, `gptr_registry(kind)` (columns
+  `kind`, `name`, `source`, ...), `gptr_check(x)` (P02); `gptr_skills()` (P17);
+  `gptr_describe(x, budget)` (P09); `gptr_prompt(preset =)` (P07); `gptr_permissions()` (column
+  `rule`), `gptr_trust(path, trust)` (P11, P08); `gptr_mcp()` (P18);
+  `gptr_fake_provider(script, name)` (P01); `gptr_last()`, `gptr_steer()`, `gptr_on()`,
+  `gptr_config()` (P08, P06) and the continuation `s |> peter(prompt)`; P06's refusal of a steer
+  from model code of the same session tree (`session_enqueue()`: `gptr_error_permission` with the
+  message `model code cannot send steering messages to its own session tree (session <id>)`, IC-55);
+  the session fields `$status`, `$text`, `$messages`, `$children`, `cnd$session` (04 sections 5.1
+  and 6.1.2); `local_scripted_ui(answers = list())` (P11: `log` df `method`, `prompt`, `answer`,
+  where a permission's `prompt` is the escaped first line of `ui_permission_lines()`;
+  `remaining()`); `gptr_readline()` (P01, mocked for console input); `user_home()` (P01) and
+  `tools::R_user_dir("gptr", "config")` (both redirected by `setup.R`) for the out-of-project
+  control paths; the control exports named only inside attack code, which the gate stops before it
+  runs (`gptr_init(path)`, `gptr_env(path, override)`, `gptr_mcp_remove(name, scope)`,
+  `gptr_mcp_serve()`, `gptr_login(provider)`, `gptr_logout(provider)`, `gptr_doc(path)`,
+  `gptr_cache(action)`, `gptr_fork(s)`, `gptr_cancel(x)`, `gptr_resume(x)`, `gptr_rewind(s, turn)`;
+  04 sections 6.2-6.5); condition classes `gptr_error_permission`, `gptr_error_provider`; tests:
+  `local_mcp_fixture(tools = "echo")` and `local_mcp_server(fx)` (P18), P19's `local_worker_lib()`
+  (copied into the file), `agent(model =, backend = "worker")` inside `agents =` (P19).
+- Produces: the rule C1 acceptance test (03 section 6.3) and the IC-53/IC-55 adversarial test of 05
+  P24 acceptance 3 and the review amendment "the adversarial gate paths of IC-53".
+
+The payload is report 13's injection that printed "EVALUATED" through `cli::cli_text()` (C-36),
+extended with glue and cli inline markup; each `{...}` either sets an environment variable or stops,
+so any evaluation is visible. Part 2 has one attacker per IC-53 path: each control function of IC-53
+item 3 (P11 classifies all of them, including the session verbs
+`gptr_fork`/`gptr_cancel`/`gptr_resume`/`gptr_rewind`, statically as level 4 `control`),
+`options(gptr.*)`, `Sys.setenv()`/`Sys.unsetenv()` of `GPTR_*` and key names, `setHook()`,
+`assignInNamespace()`, a filter removing `builtin:permissions`, and a `write` to each IC-54 control
+path (`.gptr/settings*.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`,
+`APPEND_SYSTEM.md`, `agents/`, `.Rprofile`, `.git/hooks/`, `.git/config`, the user config directory
+and `~/.R/Makevars`): 38 attacks. `gptr_steer()` from model code is the IC-55 test; items 5-8 of
+IC-53 have their own tests. Without a human every attempt ends with status `blocked` even in `auto`
+mode, and with the scripted UI answering "n" every attempt is asked exactly once; afterwards no
+attack path holds the marker `P24_ATTACK`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3946,7 +4341,8 @@ test_that("a worker's forwarded permission request is re-classified by the paren
 Mutation: untrusted text printed through a cli format string (the C-36 bug).
 
 Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); testthat::local_mocked_bindings(msg_verbatim = function(x, stream = "stdout") cli::cli_text(x), .package = "gptr", .env = globalenv()); testthat::test_file("tests/testthat/test-injection-e2e.R")'`
-Expected: failures in part 1 (`Sys.getenv(inj_flag)` is `"glue"` or `"cli"` instead of `""`, or an error `INJECTED`); the summary line shows `FAIL` of at least 1.
+Expected: failures in part 1 (`Sys.getenv(inj_flag)` is `"glue"` or `"cli"` instead of `""`, or an
+error `INJECTED`); the summary line shows `FAIL` of at least 1.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3955,7 +4351,9 @@ No package code: a failure names the printer, constructor or gate path to fix in
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::test(filter = "injection-e2e")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 193 ]` (part 1: 27; part 2: 86 without a human (38 attacks x 2, 9 gate checks, the settings file), 49 with one (38 + 2 + 9), 10 hook, 2 modify, 4 display, 5 IC-55, 10 worker)
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 193 ]` (part 1: 27; part 2: 86 without a human (38
+attacks x 2, 9 gate checks, the settings file), 49 with one (38 + 2 + 9), 10 hook, 2 modify, 4
+display, 5 IC-55, 10 worker)
 Run: `NOT_CRAN=false Rscript --vanilla -e 'devtools::test(filter = "injection-e2e")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 179 ]` (the MCP and worker tests skip on CRAN).
 
@@ -3969,13 +4367,31 @@ git commit -m "test(safety): add the rule C1 and IC-53 adversarial end-to-end te
 ### Task 11: North-star examples and the composed prompt (`test-northstar.R`)
 
 **Files:**
+
 - Test: `tests/testthat/test-northstar.R`
 
 **Interfaces:**
-- Consumes: every call shape of 04 §6.1 (`peter()` with context objects, the data-first pipe, continuations with `model =`, `agents = list(<name> = agent(...))`, `parallel =`, `choices =`, `mode =` as a bare identifier, the console route with no prompt), `gptr_fork(s)` (P06), `gptr_prob(x)` (P13), `gptr_doc()`, `gptr_source(file, replay, envir)`, `gptr_blocks(file)` (P15), `peter$app()`, `gptr_artifacts()` (P23), `gptr_init(path)`, `gptr_config(..., .scope = NULL)` (P08), `gptr_env()` (P03), `gptr_providers()`, `gptr_models(query)` (P05), `gptr_mcp()` (P18), `user_home()` (P01), `gptr_prompt(preset = "standard")` (`system$t0`, `system$t1`, `sections` df with `name`; P07); the session fields `$text`, `$value`, `$usage`, `$turns`, `$model`, `$mode`, `$status`, `$kind`, `$children`, `$id` (04 §5.1); classes `gptr_session`, `gptr_usage`, `gptr_decision`, `gptr_choice` (04 §5.2), `gptr_error_noninteractive`, `gptr_error_permission`; the request fields `messages`, `system$t1`, `last_user` of `fake_requests()` (04 §12.1); `local_scripted_ui()` (P11); `gptr_readline()` (P01, mocked).
-- Produces: the NS-1..NS-12 end-to-end acceptance (05 P24 acceptance 3) and the IC-68 byte-for-byte prompt check (review amendment).
 
-Seurat, the 5 GB object and real models are replaced by small base-R objects and fakes; the call shapes, returned classes and side effects are the north-star ones. `ns_expected_t0()` and `ns_expected_skills()` are 03 §7.3's text with `{s1}` = `jev`, split into source lines of at most 100 ASCII characters; the scratch run of this plan regenerated them from the architecture file and compared them with `identical()` (both `TRUE`).
+- Consumes: every call shape of 04 section 6.1 (`peter()` with context objects, the data-first pipe,
+  continuations with `model =`, `agents = list(<name> = agent(...))`, `parallel =`, `choices =`,
+  `mode =` as a bare identifier, the console route with no prompt), `gptr_fork(s)` (P06),
+  `gptr_prob(x)` (P13), `gptr_doc()`, `gptr_source(file, replay, envir)`, `gptr_blocks(file)` (P15),
+  `peter$app()`, `gptr_artifacts()` (P23), `gptr_init(path)`, `gptr_config(..., .scope = NULL)`
+  (P08), `gptr_env()` (P03), `gptr_providers()`, `gptr_models(query)` (P05), `gptr_mcp()` (P18),
+  `user_home()` (P01), `gptr_prompt(preset = "standard")` (`system$t0`, `system$t1`, `sections` df
+  with `name`; P07); the session fields `$text`, `$value`, `$usage`, `$turns`, `$model`, `$mode`,
+  `$status`, `$kind`, `$children`, `$id` (04 section 5.1); classes `gptr_session`, `gptr_usage`,
+  `gptr_decision`, `gptr_choice` (04 section 5.2), `gptr_error_noninteractive`,
+  `gptr_error_permission`; the request fields `messages`, `system$t1`, `last_user` of
+  `fake_requests()` (04 section 12.1); `local_scripted_ui()` (P11); `gptr_readline()` (P01, mocked).
+- Produces: the NS-1..NS-12 end-to-end acceptance (05 P24 acceptance 3) and the IC-68 byte-for-byte
+  prompt check (review amendment).
+
+Seurat, the 5 GB object and real models are replaced by small base-R objects and fakes; the call
+shapes, returned classes and side effects are the north-star ones. `ns_expected_t0()` and
+`ns_expected_skills()` are 03 section 7.3's text with `{s1}` = `jev`, split into source lines of at
+most 100 ASCII characters; the scratch run of this plan regenerated them from the architecture file
+and compared them with `identical()` (both `TRUE`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4526,11 +4942,14 @@ test_that("the composed standard prompt equals architecture 7.3 byte for byte (I
 Mutation: a permission kernel that denies every tool call.
 
 Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); testthat::local_mocked_bindings(perm_check = function(call, run) list(decision = "deny", reason = "mutated", input = call$input, risk = NULL, rule = NULL, how = NULL), .package = "gptr", .env = globalenv()); testthat::test_file("tests/testthat/test-northstar.R")'`
-Expected: failures in NS-1 (`exists("markers", envir = e, inherits = FALSE)` is `FALSE`) and NS-2 (`res$value` is `NULL`, not an `lm`), among others; the summary line shows `FAIL` of at least 2.
+Expected: failures in NS-1 (`exists("markers", envir = e, inherits = FALSE)` is `FALSE`) and NS-2
+(`res$value` is `NULL`, not an `lm`), among others; the summary line shows `FAIL` of at least 2.
 
 - [ ] **Step 3: Write the implementation**
 
-No package code. A failing NS test names the example; fix the owning plan's code. A mismatch in the prompt test shows the first differing line of T0: the owning plan of that section (04 §9.3 "Registered by") restores its text.
+No package code. A failing NS test names the example; fix the owning plan's code. A mismatch in the
+prompt test shows the first differing line of T0: the owning plan of that section (04 section 9.3
+"Registered by") restores its text.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -4549,13 +4968,44 @@ git commit -m "test(northstar): add NS-1 to NS-12 and the composed prompt check"
 ### Task 12: S-11 conformance (`test-s11-conformance.R`)
 
 **Files:**
+
 - Test: `tests/testthat/test-s11-conformance.R`
 
 **Interfaces:**
-- Consumes: `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)` -> lgl(1), `registry_get(kind, name, session = NULL)`, `registry_filters_set(filters, scope = c("session", "user", "project"))`, `kind_names()` (P02, 04 §7.2); `ext_service_get(name)` (P01; consults `service` registry records first); `ev_new()`, `block_text()`, `block_tool_call()`, `msg_assistant()`, `msg_text()`, `json_obj()` (P01, 04 §4); `usage_new()` (P05); `eval_r()` (P09); `rscript_path()` (P01); the constructors of 04 §6.8 (`gptr_provider()`, `gptr_adapter()`, `gptr_router()`, `gptr_tool()`, `gptr_command()`, `gptr_hook()`, `gptr_policy()`, `gptr_context_block()`, `gptr_prompt_section()`, `gptr_backend()`, `gptr_agent()`) and `gptr_spec(kind, name, ...)` with the fields of 04 §10.2 rows 1-38; the `inprocess` adapter contract (04 §8.1: `stream(model, context, opts)` returns a generator `function()` -> `NULL` when done or `list(events, wait)`); `ctx$tokens()`, `ctx$secret()`, `ctx$append_entry()` (04 §10.6); `gptr_risk()` (P11), `child_env()`, `gptr_redact()`, `gptr_env()` (P03), `peter$search()`, `peter$script()` (P10, P22), `peter$app(kind =)` (P23), `gptr_doc()` (P15), `gptr_config(store =, evaluator =, compactor =, <plugin setting> =, .scope = "session")` (P08), `gptr_registry()` (P02); `local_project()`, `local_gptr_options()`, `local_scripted_ui()`, `local_mcp_fixture()` (P18; its `spec` is a plain list, registered here as a `mcp_server` record built with `gptr_spec("mcp_server", name, ...)` from that list, as P18's `mcp_sync()` builds its records; 04 §10.2 row 7).
-- Produces: the IC-73 conformance test: a fixture plugin (`plugin:s11fixture`, rank 5) with one record of each of the 38 kinds, each used at run time.
 
-Every function-valued field of the fixture records marks its kind in `s11$used` when gptr calls it; data kinds are marked when their effect is observed (a redaction marker, an alias mapped by `gptr_env()`, a child environment, a risk level, a routed result). The MCP server record needs a process and is registered in the one test that skips on CRAN. Records that a setting selects are selected for the test that uses them (`compactor`, `store`, `evaluator`, `ui`); the `risk_rule` record carries its rows as a data frame (P02's validator); the `doc_format` record shadows the built-in `qmd` format, because P15's `gptr_doc()` binds only `.R`, `.Rmd`, `.qmd` and `.ipynb` documents. The plugin is filtered out and the session settings are reset when the file ends: a top-level `withr::defer()` of a testthat 3e file runs at the end of that file, whereas `testthat::teardown_env()` would defer it past every later test file.
+- Consumes:
+  `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)` ->
+  lgl(1), `registry_get(kind, name, session = NULL)`,
+  `registry_filters_set(filters, scope = c("session", "user", "project"))`, `kind_names()` (P02, 04
+  section 7.2); `ext_service_get(name)` (P01; consults `service` registry records first);
+  `ev_new()`, `block_text()`, `block_tool_call()`, `msg_assistant()`, `msg_text()`, `json_obj()`
+  (P01, 04 section 4); `usage_new()` (P05); `eval_r()` (P09); `rscript_path()` (P01); the
+  constructors of 04 section 6.8 (`gptr_provider()`, `gptr_adapter()`, `gptr_router()`,
+  `gptr_tool()`, `gptr_command()`, `gptr_hook()`, `gptr_policy()`, `gptr_context_block()`,
+  `gptr_prompt_section()`, `gptr_backend()`, `gptr_agent()`) and `gptr_spec(kind, name, ...)` with
+  the fields of 04 section 10.2 rows 1-38; the `inprocess` adapter contract (04 section 8.1:
+  `stream(model, context, opts)` returns a generator `function()` -> `NULL` when done or
+  `list(events, wait)`); `ctx$tokens()`, `ctx$secret()`, `ctx$append_entry()` (04 section 10.6);
+  `gptr_risk()` (P11), `child_env()`, `gptr_redact()`, `gptr_env()` (P03), `peter$search()`,
+  `peter$script()` (P10, P22), `peter$app(kind =)` (P23), `gptr_doc()` (P15),
+  `gptr_config(store =, evaluator =, compactor =, <plugin setting> =, .scope = "session")` (P08),
+  `gptr_registry()` (P02); `local_project()`, `local_gptr_options()`, `local_scripted_ui()`,
+  `local_mcp_fixture()` (P18; its `spec` is a plain list, registered here as a `mcp_server` record
+  built with `gptr_spec("mcp_server", name, ...)` from that list, as P18's `mcp_sync()` builds its
+  records; 04 section 10.2 row 7).
+- Produces: the IC-73 conformance test: a fixture plugin (`plugin:s11fixture`, rank 5) with one
+  record of each of the 38 kinds, each used at run time.
+
+Every function-valued field of the fixture records marks its kind in `s11$used` when gptr calls it;
+data kinds are marked when their effect is observed (a redaction marker, an alias mapped by
+`gptr_env()`, a child environment, a risk level, a routed result). The MCP server record needs a
+process and is registered in the one test that skips on CRAN. Records that a setting selects are
+selected for the test that uses them (`compactor`, `store`, `evaluator`, `ui`); the `risk_rule`
+record carries its rows as a data frame (P02's validator); the `doc_format` record shadows the
+built-in `qmd` format, because P15's `gptr_doc()` binds only `.R`, `.Rmd`, `.qmd` and `.ipynb`
+documents. The plugin is filtered out and the session settings are reset when the file ends: a
+top-level `withr::defer()` of a testthat 3e file runs at the end of that file, whereas
+`testthat::teardown_env()` would defer it past every later test file.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5058,7 +5508,9 @@ test_that("every registry kind was used at run time (IC-73)", {
 Mutation: a 39th kind that no record uses.
 
 Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); k = get("kind_names", envir = asNamespace("gptr")); testthat::local_mocked_bindings(kind_names = function() c(k(), "p24_unused_kind"), .package = "gptr", .env = globalenv()); testthat::test_file("tests/testthat/test-s11-conformance.R")'`
-Expected: `FAILURE` in the first test (`mine` lacks `p24_unused_kind`) and in the last (`kinds` has length 39, not 38; `ls(s11$used)` lacks `p24_unused_kind`); the summary line shows `FAIL` of at least 2.
+Expected: `FAILURE` in the first test (`mine` lacks `p24_unused_kind`) and in the last (`kinds` has
+length 39, not 38; `ls(s11$used)` lacks `p24_unused_kind`); the summary line shows `FAIL` of at
+least 2.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5069,9 +5521,11 @@ No package code. A kind that stays unused names the plan whose dispatcher ignore
 Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::test(filter = "s11-conformance")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 63 ]`
 Run: `NOT_CRAN=false Rscript --vanilla -e 'devtools::test(filter = "s11-conformance")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 58 ]` (the process test and the final every-kind test skip on CRAN).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 58 ]` (the process test and the final every-kind test
+skip on CRAN).
 Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::test(filter = "s11-conformance|secrets-e2e")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 93 ]` (63 + 30; both files in one process, this one first, so the next file starts after this file's cleanup has run).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 93 ]` (63 + 30; both files in one process, this one
+first, so the next file starts after this file's cleanup has run).
 
 - [ ] **Step 5: Commit**
 
@@ -5083,11 +5537,14 @@ git commit -m "test(ext): add the S-11 conformance test over all 38 kinds"
 ### Task 13: M5 exit check
 
 **Files:**
+
 - No file is created; the task runs the plan acceptance and the milestone check.
 
 **Interfaces:**
+
 - Consumes: Tasks 1-12; P01's CI matrix.
-- Produces: the M5 evidence P25 starts from (P25's release checklist runs `dev/bench/tokens/live.R`).
+- Produces: the M5 evidence P25 starts from (P25's release checklist runs
+  `dev/bench/tokens/live.R`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5095,25 +5552,35 @@ No new test: the commands of "Plan acceptance" below are the test.
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", stop_on_failure = TRUE)'` with `dev/bench/common.R` moved aside (`mv dev/bench/common.R /tmp/p24-common.R` first, `mv /tmp/p24-common.R dev/bench/common.R` after).
-Expected: an error while sourcing `helper-bench.R`: `dev/bench/common.R not found above ...`; after the file is restored the same command is green (Step 4).
+Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", stop_on_failure = TRUE)'` with
+`dev/bench/common.R` moved aside (`mv dev/bench/common.R /tmp/p24-common.R` first,
+`mv /tmp/p24-common.R dev/bench/common.R` after).
+Expected: an error while sourcing `helper-bench.R`: `dev/bench/common.R not found above ...`; after
+the file is restored the same command is green (Step 4).
 
 - [ ] **Step 3: Write the implementation**
 
 Refresh the tracked outputs after the last change of this plan:
 
 Run: `env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R; Rscript --vanilla dev/bench/shiny-html/tokens.R`
-Expected: `14 golden transcripts in <s> s; wrote dev/bench/tokens/results.csv` and the ratio line `html/shiny o200k ratio: 2.35 (G2: 2.35)`. `git status --short dev/bench` shows no change to a committed file (`results.csv` of the tokens, polyglot and cache-sim suites is regenerated and not committed; `shiny-html/results.csv` is unchanged).
+Expected: `14 golden transcripts in <s> s; wrote dev/bench/tokens/results.csv` and the ratio line
+`html/shiny o200k ratio: 2.35 (G2: 2.35)`. `git status --short dev/bench` shows no change to a
+committed file (`results.csv` of the tokens, polyglot and cache-sim suites is regenerated and not
+committed; `shiny-html/results.csv` is unchanged).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run every command of "Plan acceptance" (A1-A18) with the results stated there, then:
-Run: `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'`
-Expected: `0 errors | 0 warnings | 1 note`, the note being the incoming-feasibility NOTE naming the maintainer (gptr 1.0.0 is an update of 0.7.0; IC-72), on the CI matrix of P01.
+Run:
+`Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'`
+Expected: `0 errors | 0 warnings | 1 note`, the note being the incoming-feasibility NOTE naming the
+maintainer (gptr 1.0.0 is an update of 0.7.0; IC-72), on the CI matrix of P01.
 
 - [ ] **Step 5: Commit**
 
-Nothing new is committed when Step 3 changed no committed file. If `dev/bench/shiny-html/results.csv` changed because an app file changed, review the numbers and commit it:
+Nothing new is committed when Step 3 changed no committed file. If
+`dev/bench/shiny-html/results.csv` changed because an app file changed, review the numbers and
+commit it:
 
 ```bash
 git add dev/bench/shiny-html/results.csv
@@ -5122,9 +5589,10 @@ git commit -m "chore(bench): refresh the Shiny vs HTML/JS token numbers for the 
 
 ## Plan acceptance
 
-Every acceptance check of 05 P24, its review amendments and its scope items, the task and test
-that prove it, and the command (A1-A18 below) with its expected result. Commands run from the
-repository root after Task 12, with rtiktoken and pkgload installed (development tools).
+The table maps every acceptance check of 05 P24, its review amendments and its scope items to the
+task and test that prove it and to the command (A1-A18 below) with its expected result. Commands
+run from the repository root after Task 12, with rtiktoken and pkgload installed (development
+tools).
 
 | # | Acceptance check (05 P24) | Proved by | Command |
 |---|---|---|---|
@@ -5207,7 +5675,7 @@ Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", stop_on_failure = TR
 | Goal: token efficiency and the cross-cutting guarantees measurable and regression-proof (S-12, INFRA-22/24, rule C1) | 1-13 |
 | Scope: `dev/bench/tokens/` golden transcripts for NS-1..NS-11 as JSON, replayed through the fake provider | 3 (NS-1, NS-5, NS-9, NS-11, describers; NS-1..NS-11 coverage test); the replay is P07's runner (2) |
 | Scope: rtiktoken counts; committed baseline | 2 (end-to-end `--check`), 3 (`--update` rows), 1 (`tok_count()` for P24's suites) |
-| Scope: ratchet gates of 03 §12.7 | 2 |
+| Scope: ratchet gates of 03 section 12.7 | 2 |
 | Scope: `live.R` calibration mode behind `GPTR_LIVE_TESTS` | 4 |
 | Scope: `dev/bench/polyglot/` (G5's 8 tasks) | 5 |
 | Scope: `dev/bench/shiny-html/` (G2's 20-app ladder) | 7 |
@@ -5215,69 +5683,221 @@ Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", stop_on_failure = TR
 | Scope: `dev/bench/perf/` (grep, read, SSE and diff benchmarks) | 8 |
 | Scope: `test-secrets-e2e.R`, `test-injection-e2e.R`, `test-northstar.R` | 9, 10, 11 |
 | Scope: a CI step asserting the offline INFRA suite finishes in under 60 s | 8 |
-| Review amendments: `test-s11-conformance.R`; every §12.7 gate in `run.R --check`; the composed prompt vs 03 §7.3; the IC-70 sinks and the IC-64 redirect mock; the IC-53 paths; the NS-1 and remaining fixtures | 12; 2; 11; 9; 10; 3 |
+| Review amendments: `test-s11-conformance.R`; every section 12.7 gate in `run.R --check`; the composed prompt vs 03 section 7.3; the IC-70 sinks and the IC-64 redirect mock; the IC-53 paths; the NS-1 and remaining fixtures | 12; 2; 11; 9; 10; 3 |
 | Acceptance 1-4 | see "Plan acceptance" |
-| Research: G2 (apps and ladder, tokens, catalogs, describers, bench design, priors) and fact-check; G4 §4.9, §5.10 and fact-check (simulator, input-only pricing, Opus prices); G5 p10 and fact-check (8 tasks, totals, 10% rule); G6 `test_e2e` (sinks, late secret, control); 13 C-36 (payload); 02 north-star examples; 03 §6.3, §6.5, §12 | 3, 7; 6; 5; 9; 10; 3, 11; all |
+| Research: G2 (apps and ladder, tokens, catalogs, describers, bench design, priors) and fact-check; G4 sections 4.9, 5.10 and fact-check (simulator, input-only pricing, Opus prices); G5 p10 and fact-check (8 tasks, totals, 10% rule); G6 `test_e2e` (sinks, late secret, control); 13 C-36 (payload); 02 north-star examples; 03 sections 6.3, 6.5, 12 | 3, 7; 6; 5; 9; 10; 3, 11; all |
 
 ### Placeholder scan
 
-The plan was searched for "TBD", "TODO", "implement later", "fill in", "similar to Task", "appropriate error handling" and "handle edge cases": the only hits are the `# TODO: vectorise` lines that the grep benchmark writes into its generated workload files (Task 8), which are data the benchmark searches for. Every step shows its code or its exact command; Steps 3 of Tasks 2 and 9-12 state that no package code is written, because those tasks test code owned by earlier plans.
+The plan was searched for "TBD", "TODO", "implement later", "fill in", "similar to Task",
+"appropriate error handling" and "handle edge cases": the only hits are the `# TODO: vectorise`
+lines that the grep benchmark writes into its generated workload files (Task 8), which are data the
+benchmark searches for. Every step shows its code or its exact command; Steps 3 of Tasks 2 and 9-12
+state that no package code is written, because those tasks test code owned by earlier plans.
 
 ### Type and name consistency with 04
 
-- Condition classes: `gptr_error_token_regression` (fields `fixture`, `metric`, `baseline`, `value`; 04 §2.2), `gptr_error_permission` (`session`, `how_to_allow`), `gptr_error_noninteractive`, `gptr_error_provider` and its child `gptr_error_redirect` (IC-64); the development-only `bench_missing_tool`.
-- Exports used with their 04 signatures: `peter()`, `gptr_fork()`, `gptr_prob()`, `gptr_doc()`, `gptr_source()`, `gptr_blocks()`, `gptr_init()`, `gptr_config(..., .scope)`, `gptr_env()`, `gptr_trust()`, `gptr_providers()`, `gptr_models()`, `gptr_permissions()`, `gptr_skills()`, `gptr_mcp()`, `gptr_mcp_add()`, `gptr_prompt(x, preset, tokens)`, `gptr_describe(x, budget)`, `gptr_redact()`, `gptr_scrub(paths, dry_run, error)`, `gptr_risk()`, `gptr_register()`, `gptr_registry(kind)`, `gptr_reload()`, `gptr_check()`, `gptr_fake_provider(script, name, type)`, `gptr_tool_result()`, `gptr_spec()` and the 04 §6.8 constructors, `gptr_artifacts(id, open, stop, version)`, `gptr_on()`, `gptr_steer()`, `gptr_last()`.
-- Internals used from tests (they run with the package loaded) or from development code through `gptr_internal()`: `secret_lookup`, `child_env`, `rscript_path`, `user_home`, `msg_verbatim`, `msg_text`, `msg_to_json`, `msg_assistant`, `new_listing`, `ev_new`, `block_text`, `block_tool_call`, `json_obj`, `json_encode`, `usage_new`, `gptr_opt`, `eval_r`, `format_eval_result`, `session_data`, `model_resolve`, `ext_load`, `registry_get`, `registry_filters_set`, `kind_names`, `ext_service_get`, `redactor_set`, `perm_check`, `redact`, `redact_tree`, `search_grep`, `read_file`, `diff_lines`, `sse_splitter`, `gptr_readline` (each listed in 04 §2.1, §4, §7 or §8 and defined in its owning plan; the definitions of `search_grep`, `read_file`, `diff_lines`, `sse_splitter`, `eval_r`, `format_eval_result`, `perm_check`, `ext_service_get`, `gptr_scrub`, `local_scripted_ui`, `local_project` and the fake helpers were read in P01, P03, P04, P06, P09, P10 and P11 on 2026-10-01).
-- Test helpers with their 04 §12.2 names and arguments (Global Constraints).
-- The 38 kinds of 04 §10.2 with their field names; the s11 adapter follows the `inprocess` generator contract of 04 §8.1.
-- P07's runner names (`bench_tolerance`, `bench_columns`, `bench_case`, `bench_compare`, `bench_main`) are used as P07 defines them; P24's helpers avoid every one of them.
+- Condition classes: `gptr_error_token_regression` (fields `fixture`, `metric`, `baseline`, `value`;
+  04 section 2.2), `gptr_error_permission` (`session`, `how_to_allow`), `gptr_error_noninteractive`,
+  `gptr_error_provider` and its child `gptr_error_redirect` (IC-64); the development-only
+  `bench_missing_tool`.
+- Exports used with their 04 signatures: `peter()`, `gptr_fork()`, `gptr_prob()`, `gptr_doc()`,
+  `gptr_source()`, `gptr_blocks()`, `gptr_init()`, `gptr_config(..., .scope)`, `gptr_env()`,
+  `gptr_trust()`, `gptr_providers()`, `gptr_models()`, `gptr_permissions()`, `gptr_skills()`,
+  `gptr_mcp()`, `gptr_mcp_add()`, `gptr_prompt(x, preset, tokens)`, `gptr_describe(x, budget)`,
+  `gptr_redact()`, `gptr_scrub(paths, dry_run, error)`, `gptr_risk()`, `gptr_register()`,
+  `gptr_registry(kind)`, `gptr_reload()`, `gptr_check()`, `gptr_fake_provider(script, name, type)`,
+  `gptr_tool_result()`, `gptr_spec()` and the 04 section 6.8 constructors,
+  `gptr_artifacts(id, open, stop, version)`, `gptr_on()`, `gptr_steer()`, `gptr_last()`.
+- Internals used from tests (they run with the package loaded) or from development code through
+  `gptr_internal()`: `secret_lookup`, `child_env`, `rscript_path`, `user_home`, `msg_verbatim`,
+  `msg_text`, `msg_to_json`, `msg_assistant`, `new_listing`, `ev_new`, `block_text`,
+  `block_tool_call`, `json_obj`, `json_encode`, `usage_new`, `gptr_opt`, `eval_r`,
+  `format_eval_result`, `session_data`, `model_resolve`, `ext_load`, `registry_get`,
+  `registry_filters_set`, `kind_names`, `ext_service_get`, `redactor_set`, `perm_check`, `redact`,
+  `redact_tree`, `search_grep`, `read_file`, `diff_lines`, `sse_splitter`, `gptr_readline` (each
+  listed in 04 sections 2.1, 4, 7 or 8 and defined in its owning plan; the definitions of
+  `search_grep`, `read_file`, `diff_lines`, `sse_splitter`, `eval_r`, `format_eval_result`,
+  `perm_check`, `ext_service_get`, `gptr_scrub`, `local_scripted_ui`, `local_project` and the fake
+  helpers were read in P01, P03, P04, P06, P09, P10 and P11 on 2026-10-01).
+- Test helpers with their 04 section 12.2 names and arguments (Global Constraints).
+- The 38 kinds of 04 section 10.2 with their field names; the s11 adapter follows the `inprocess`
+  generator contract of 04 section 8.1.
+- P07's runner names (`bench_tolerance`, `bench_columns`, `bench_case`, `bench_compare`,
+  `bench_main`) are used as P07 defines them; P24's helpers avoid every one of them.
 
 ### Contract ambiguities and the reading chosen
 
-1. **The 5 s bound of acceptance 1 and P07's runner.** P07's `dev/bench/tokens/run.R` (owned by P07, not editable here) counts tokens with rtiktoken in memory only; rtiktoken 0.0.7 rebuilds its o200k encoder for every element (20 calls took 2.3 s in this plan's scratch run), and P07's own expected output reports 5.4 s for its two fixtures. With 14 fixtures the whole script cannot finish in 5 s. P24 reads the bound as the replay itself (fake provider, context assembly, request building): `test-token-gates.R` replays every fixture through P07's `bench_case()` with a character-count tokenizer and requires under 5 s; A1 reports the full wall time. Meeting the bound for the whole script needs a persistent token memo in P07's `bench_counter()` (recorded under unresolved).
-2. **P07's runner is not edited.** 05 gives P24 "the `dev/bench/` tree except P07's runner and fixtures"; P07's `bench_compare()` already applies every 12.7 tolerance (prefix, input and output totals, requests, image tokens, catalog, facts), so the review amendment "every §12.7 gate in `run.R --check`" is satisfied by P07's code and proven by P24's tests, which pin the tolerances and trip each gate.
-3. **"Describer facts no loss"** is P07's per-fixture `facts` metric (fixture facts found in the first message's `<attached>` block). P07's NS-2 row was recorded with the one-line stand-in (facts 1); P24 adds `ns02c-describers` with seven attached objects and 24 facts, so the gate guards real describer output once P09 is loaded.
-4. **Which NS fixtures are P24's.** The earlier plans cover NS-1 (P22's polyglot variant), NS-2 (P07, P10), NS-3, NS-4, NS-6, NS-7, NS-8 and NS-10. 05 names NS-1 for P24; P24 adds the console NS-1 (02 §1, 03 §12.8), NS-5 (the System 2 leg, non-interactive `auto`), NS-9 (the "Refactor utils.R" session; the CLI's own framing is measured only live, 03 §12.4) and NS-11 (the System 2 pipe chain; its System 1 calls are NS-4's fixture).
-5. **Baseline rows in P07's file.** IC-73 has each plan "add their NS fixture and baseline rows"; P24 appends its five rows with `run.R --update <ids>`, recorded with `TYPESAFE_API_KEY` unset as P13 did.
-6. **The CI step** named in P24's scope lives in P01's workflow; P24 appends three steps to the `bench` job and adds no job, so P01's workflow test keeps passing.
-7. **INFRA-22's "`format(request)`"** has no `format()` method for requests in 04; the printed request views (`print(gptr_prompt(s))`, `print(s$usage)`) and the fake provider's request log stand for it.
-8. **The secrets negative control.** G6 switched redaction off; 03 §6.5 says value redaction cannot be disabled, so the control pushes a non-secret canary through the same paths and requires it in the JSONL, spill file, document, console and egress.
-9. **`fake_requests()` of a classifier fake** (04 §12.1 documents the log for chat scripts) is read as the log of its classify requests; when a classifier fake logs nothing, that sink count is trivially 0.
-10. **`local_mock_server("redirect")`** logs the requests of both origins (P01); with `followlocation = 0L` the log has exactly one row and no row for the second origin.
-11. **Console capture.** cli output reaches the R console on stderr and, under testthat, as message conditions; the tests capture stdout, messages and warnings with `testthat::evaluate_promise()` instead of `capture.output()`.
-12. **Bidi characters.** R's parser refuses bidi controls inside string literals (P11's console test notes it), so the approval-display test puts them in a comment on the first line of the model's code, which the one-line prompt shows.
-13. **Trust in the human IC-53 test.** The project is trusted so that the one-time trust question of IC-52 does not consume a scripted answer; the gate-intact check then expects the recorded trust to be unchanged (`TRUE`).
-14. **`risk_rule` spec fields** (04 §10.2 row 33: "the columns of `risk-functions.csv` ... as a data frame"): P02's kind validator (`rows` = a data frame, required; `target`; `lower`) and P11's merging read the columns from `rows`, so the fixture passes `rows = data.frame(package, function, level, category, path_arg, note)`. Top-level column fields would make `gptr_spec()` signal `gptr_error_invalid_spec` inside the factory and `ext_load()` would roll back every fixture record.
-15. **Renderer entry type.** `ctx$append_entry(type, data)` makes `customType` `"<plugin>.<type>"`; the fixture's renderer is named `s11fixture.note` (the plugin name without the `plugin:` prefix).
-16. **Plugin prompt templates at the console.** IC-31 turns templates into commands (P17); the test expects `/s11tmpl hello` to send "Say hello politely" for a `prompt_template` record registered by a plugin.
-17. **Plan hand-off under testthat.** IC-56's "top-level" is read as "not inside a run, not nested, not in a loop body", which a `test_that()` block satisfies.
-18. **Polyglot fixtures** differ from G5's (generated tree, `grep` for `rg`, a `file://` download, fixed git identity and dates, 5 ms sleeps), so the baseline is gptr's own; G5's totals are the reference.
-19. **Edit-vs-rewrite** uses edits derived from the line diff (verified to reproduce all 20 revisions); the derived edits carry whole context lines, so the ratio (3.0x, 4.2x) is lower than G2's hand-made edits (3.9x, 6.1x); tracked, not gated.
-20. **A steer of the running session from model code.** IC-53 item 3 classifies `gptr_steer()` on *another* session as a control action, while IC-55 has the session kernel refuse a steer of the same session tree; a static classifier cannot tell which session `gptr_last()` names, so the IC-55 test accepts either outcome (the call blocked by the gate, or the r call's error result carrying P06's refusal message) and asserts the guarantee itself: the text never reaches an operator or user message.
-21. **Live runs** use mode `auto` for every fixture (nobody answers approvals) and pass the attached objects by name; the golden request count and input total come from the offline `results.csv`.
-22. **Plugin document formats.** 04 §10.2 row 18 makes `doc_format` a registry kind, but P15's `gptr_doc()` binds only `.R`, `.Rmd`, `.qmd` and `.ipynb` and fetches the format record by those names (`doc_format_get()`). A plugin therefore uses the kind by shadowing a built-in format name at a lower rank (IC-69 per-record override); the S-11 fixture shadows `qmd` for the duration of its file and binds `notes.qmd`.
-23. **Routers and `$model`.** P06 keeps `router:<name>` as the session model and resolves the router before every request (its own test asserts `s$model == "router:cheapest"` after a routed run), so the S-11 router test checks `s$model == "router:s11router"` and the model id the adapter received (`s11-extra`).
-24. **Records chosen by settings.** `compactor`, `store`, `evaluator` and `ui` records are used only when the matching setting or option selects them (P07 `compact_compactor()`, 04 §10.2 rows 15, 22, 37, 38); each S-11 test selects the record it exercises and resets the setting.
-25. **File-level cleanup.** testthat 3e runs a top-level `withr::defer()` of a test file when that file ends; `testthat::teardown_env()` runs after all files (checked with testthat 3.3.2). The S-11 fixture is filtered out with the former, so no later test file sees its records.
-26. **IC-53 coverage.** Every function of IC-53 item 3 is attacked once (the session verbs through `gptr_fork`/`gptr_cancel` and `gptr_resume`/`gptr_rewind`; `gptr_steer` in the IC-55 test), and every IC-54 control path once with the `write` tool (paths outside the project are absolute: the redirected user config directory and `~/.R/Makevars` under the redirected home). `Rprofile.site`, `Renviron.site` and the `R_PROFILE_USER`/`R_ENVIRON_USER` targets are left out: writing them would need paths of the R installation or of the test process's own start-up files.
+1. **The 5 s bound of acceptance 1 and P07's runner.** P07's `dev/bench/tokens/run.R` (owned by P07,
+   not editable here) counts tokens with rtiktoken in memory only; rtiktoken 0.0.7 rebuilds its
+   o200k encoder for every element (20 calls took 2.3 s in this plan's scratch run), and P07's own
+   expected output reports 5.4 s for its two fixtures. With 14 fixtures the whole script cannot
+   finish in 5 s. P24 reads the bound as the replay itself (fake provider, context assembly, request
+   building): `test-token-gates.R` replays every fixture through P07's `bench_case()` with a
+   character-count tokenizer and requires under 5 s; A1 reports the full wall time. Meeting the
+   bound for the whole script needs a persistent token memo in P07's `bench_counter()` (recorded
+   under unresolved).
+2. **P07's runner is not edited.** 05 gives P24 "the `dev/bench/` tree except P07's runner and
+   fixtures"; P07's `bench_compare()` already applies every 12.7 tolerance (prefix, input and output
+   totals, requests, image tokens, catalog, facts), so the review amendment "every §12.7 gate in
+   `run.R --check`" is satisfied by P07's code and proven by P24's tests, which pin the tolerances
+   and trip each gate.
+3. **"Describer facts no loss"** is P07's per-fixture `facts` metric (fixture facts found in the
+   first message's `<attached>` block). P07's NS-2 row was recorded with the one-line stand-in
+   (facts 1); P24 adds `ns02c-describers` with seven attached objects and 24 facts, so the gate
+   guards real describer output once P09 is loaded.
+4. **Which NS fixtures are P24's.** The earlier plans cover NS-1 (P22's polyglot variant), NS-2
+   (P07, P10), NS-3, NS-4, NS-6, NS-7, NS-8 and NS-10. 05 names NS-1 for P24; P24 adds the console
+   NS-1 (02 section 1, 03 section 12.8), NS-5 (the System 2 leg, non-interactive `auto`), NS-9 (the
+   "Refactor utils.R" session; the CLI's own framing is measured only live, 03 section 12.4) and
+   NS-11 (the System 2 pipe chain; its System 1 calls are NS-4's fixture).
+5. **Baseline rows in P07's file.** IC-73 has each plan "add their NS fixture and baseline rows";
+   P24 appends its five rows with `run.R --update <ids>`, recorded with `TYPESAFE_API_KEY` unset as
+   P13 did.
+6. **The CI step** named in P24's scope lives in P01's workflow; P24 appends three steps to the
+   `bench` job and adds no job, so P01's workflow test keeps passing.
+7. **INFRA-22's "`format(request)`"** has no `format()` method for requests in 04; the printed
+   request views (`print(gptr_prompt(s))`, `print(s$usage)`) and the fake provider's request log
+   stand for it.
+8. **The secrets negative control.** G6 switched redaction off; 03 section 6.5 says value redaction
+   cannot be disabled, so the control pushes a non-secret canary through the same paths and requires
+   it in the JSONL, spill file, document, console and egress.
+9. **`fake_requests()` of a classifier fake** (04 section 12.1 documents the log for chat scripts)
+   is read as the log of its classify requests; when a classifier fake logs nothing, that sink count
+   is trivially 0.
+10. **`local_mock_server("redirect")`** logs the requests of both origins (P01); with
+    `followlocation = 0L` the log has exactly one row and no row for the second origin.
+11. **Console capture.** cli output reaches the R console on stderr and, under testthat, as message
+    conditions; the tests capture stdout, messages and warnings with `testthat::evaluate_promise()`
+    instead of `capture.output()`.
+12. **Bidi characters.** R's parser refuses bidi controls inside string literals (P11's console test
+    notes it), so the approval-display test puts them in a comment on the first line of the model's
+    code, which the one-line prompt shows.
+13. **Trust in the human IC-53 test.** The project is trusted so that the one-time trust question of
+    IC-52 does not consume a scripted answer; the gate-intact check then expects the recorded trust
+    to be unchanged (`TRUE`).
+14. **`risk_rule` spec fields** (04 section 10.2 row 33: "the columns of `risk-functions.csv` ... as
+    a data frame"): P02's kind validator (`rows` = a data frame, required; `target`; `lower`) and
+    P11's merging read the columns from `rows`, so the fixture passes
+    `rows = data.frame(package, function, level, category, path_arg, note)`. Top-level column fields
+    would make `gptr_spec()` signal `gptr_error_invalid_spec` inside the factory and `ext_load()`
+    would roll back every fixture record.
+15. **Renderer entry type.** `ctx$append_entry(type, data)` makes `customType` `"<plugin>.<type>"`;
+    the fixture's renderer is named `s11fixture.note` (the plugin name without the `plugin:`
+    prefix).
+16. **Plugin prompt templates at the console.** IC-31 turns templates into commands (P17); the test
+    expects `/s11tmpl hello` to send "Say hello politely" for a `prompt_template` record registered
+    by a plugin.
+17. **Plan hand-off under testthat.** IC-56's "top-level" is read as "not inside a run, not nested,
+    not in a loop body", which a `test_that()` block satisfies.
+18. **Polyglot fixtures** differ from G5's (generated tree, `grep` for `rg`, a `file://` download,
+    fixed git identity and dates, 5 ms sleeps), so the baseline is gptr's own; G5's totals are the
+    reference.
+19. **Edit-vs-rewrite** uses edits derived from the line diff (verified to reproduce all 20
+    revisions); the derived edits carry whole context lines, so the ratio (3.0x, 4.2x) is lower than
+    G2's hand-made edits (3.9x, 6.1x); tracked, not gated.
+20. **A steer of the running session from model code.** IC-53 item 3 classifies `gptr_steer()` on
+    *another* session as a control action, while IC-55 has the session kernel refuse a steer of the
+    same session tree; a static classifier cannot tell which session `gptr_last()` names, so the
+    IC-55 test accepts either outcome (the call blocked by the gate, or the r call's error result
+    carrying P06's refusal message) and asserts the guarantee itself: the text never reaches an
+    operator or user message.
+21. **Live runs** use mode `auto` for every fixture (nobody answers approvals) and pass the attached
+    objects by name; the golden request count and input total come from the offline `results.csv`.
+22. **Plugin document formats.** 04 section 10.2 row 18 makes `doc_format` a registry kind, but
+    P15's `gptr_doc()` binds only `.R`, `.Rmd`, `.qmd` and `.ipynb` and fetches the format record by
+    those names (`doc_format_get()`). A plugin therefore uses the kind by shadowing a built-in
+    format name at a lower rank (IC-69 per-record override); the S-11 fixture shadows `qmd` for the
+    duration of its file and binds `notes.qmd`.
+23. **Routers and `$model`.** P06 keeps `router:<name>` as the session model and resolves the router
+    before every request (its own test asserts `s$model == "router:cheapest"` after a routed run),
+    so the S-11 router test checks `s$model == "router:s11router"` and the model id the adapter
+    received (`s11-extra`).
+24. **Records chosen by settings.** `compactor`, `store`, `evaluator` and `ui` records are used only
+    when the matching setting or option selects them (P07 `compact_compactor()`, 04 section 10.2
+    rows 15, 22, 37, 38); each S-11 test selects the record it exercises and resets the setting.
+25. **File-level cleanup.** testthat 3e runs a top-level `withr::defer()` of a test file when that
+    file ends; `testthat::teardown_env()` runs after all files (checked with testthat 3.3.2). The
+    S-11 fixture is filtered out with the former, so no later test file sees its records.
+26. **IC-53 coverage.** Every function of IC-53 item 3 is attacked once (the session verbs through
+    `gptr_fork`/`gptr_cancel` and `gptr_resume`/`gptr_rewind`; `gptr_steer` in the IC-55 test), and
+    every IC-54 control path once with the `write` tool (paths outside the project are absolute: the
+    redirected user config directory and `~/.R/Makevars` under the redirected home).
+    `Rprofile.site`, `Renviron.site` and the `R_PROFILE_USER`/`R_ENVIRON_USER` targets are left out:
+    writing them would need paths of the R installation or of the test process's own start-up files.
 
 ### Executed validation
 
-Run in the scratch directory `.../scratchpad/work/plans/P24/v2/repo/` (a copy of every file of this plan, P07's `run.R` extracted verbatim from P07's plan, the nine golden fixtures of P07, P10, P13, P15, P18, P19, P22 and P23 extracted from their plans, and a stub `R/aaa-state.R` holding P01's `gptr_condition()`/`gptr_abort()` without redaction; the gptr package itself does not exist yet, so the package tests and the gptr-dependent runners were parsed and checked against the dependency plans but not run):
+Run in the scratch directory `.../scratchpad/work/plans/P24/v2/repo/` (a copy of every file of this
+plan, P07's `run.R` extracted verbatim from P07's plan, the nine golden fixtures of P07, P10, P13,
+P15, P18, P19, P22 and P23 extracted from their plans, and a stub `R/aaa-state.R` holding P01's
+`gptr_condition()`/`gptr_abort()` without redaction; the gptr package itself does not exist yet, so
+the package tests and the gptr-dependent runners were parsed and checked against the dependency
+plans but not run):
 
 - Every ```r block of this plan was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. `getParseData()` finds no `<-` (`LEFT_ASSIGN` tokens are only `<<-` updating closure state), no file has `%>%`, every R source is ASCII and at most 100 characters per line (G2's copied app files are copied by command, not embedded).
-- Development tests (rtiktoken 0.0.7 from a private library): `common` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 26 ]`; `golden-fixtures` `[ ... PASS 273 ]` with the 14 fixtures, and `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 143 ]` with P24's five removed (the red step); `token-gates` `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 53 ]` against P07's real `bench_compare()` (the replay and end-to-end tests skip without P07's stand-ins and the package), `[ FAIL 3 | ... ]` with the loosened runner, and `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 6 ]` without a source tree; `live` `[ ... PASS 20 ]` (`live.R` exits 0 and sends nothing with `GPTR_LIVE_TESTS=false`); `polyglot` `[ ... PASS 45 ]` (two fixture builds byte-identical, same git commit hash); `cache-sim` `[ ... PASS 10 ]`; `shiny-html` `[ ... PASS 65 ]` (derived edits reproduce 20 of 20 revisions); `perf` `[ ... SKIP 1 | PASS 7 ]` (no workflow file in scratch).
-- The ladder with chromote and Chrome: `PASS 20 of 20 apps (apps)`, `PASS 20 of 20 apps (revised)`, `PASS 0 of 10 apps (mutants)`, each exit 0; `tokens.R`: `html/shiny o200k ratio: 2.35 (G2: 2.35)`, per-level 2.26, 2.47, 2.86, 2.64, 1.62, `rewrite/edit: shiny 3.0x, html 4.2x`; the copy command of Task 7 produced 52 files identical to G2's assets.
-- P24's fixtures are valid JSON in P07's format; their objects evaluate in an environment whose parent is `baseenv()` (data frames, numeric, Date, matrix, `lm`, list, function).
-- `ns_expected_t0()` and `ns_expected_skills()` were compared with the text of 03 §7.3 regenerated from the architecture file (`{s1}` = `jev`): both `identical()`.
-- The expectation counts of the four package tests (30, 193, 81, 63) were counted from the parsed test files with the loop multiplicities (38 IC-53 attacks, 9 gate checks, 12 kinds in the run test; the IC-55 test has two expectations in either branch).
-- Review pass (2026-10-01): every code block was re-extracted from this file into `.../scratchpad/work/plans/review-P24/blocks/` and parsed (45 blocks, 24 R files: all parse, no `LEFT_ASSIGN` token `<-`, no `%>%`, ASCII only, at most 100 characters per line; the five JSON fixtures are valid). The dev tests were re-run in a copy of the scratch repository rebuilt from these blocks (rtiktoken 0.0.7 from the private library): `common` 26, `token-gates` 55 (2 skipped without P07's stand-ins and the package), `golden-fixtures` 273, `live` 21, `polyglot` 45, `cache-sim` 10, `shiny-html` 65, `perf` 11, all with 0 failures. The IC-68 texts `ns_expected_t0()`/`ns_expected_skills()` were compared again with 03 §7.3 (`identical()` TRUE for both). `inj_attacks` evaluates to 38 attacks (25 `r`, 13 `write`), every `r` attack parses, and `inj_planted()` returns `character()` for a clean project and the planted paths otherwise. The cache-sim expectation was checked on a synthetic replica of the scenario with this plan's `sim.R` (`gptr` 0.1026, `all_5m` 0.0938, `all_1h` 0.1008 USD; `gptr` hit rate 0.82). rtiktoken 0.0.7's cost was re-measured: 20 strings take 2.4 s whether passed one by one or as one vector (ambiguity 1).
-- Unresolved for P07/P09 (not P24 code): the 5 s bound of the whole script (ambiguity 1) and the machine-dependent `<r_env>` section that the fixtures render once P09 registers it (P07 uses stand-ins only for unregistered sections), which can make a baseline recorded on one machine fail on another; the baselines of this plan are recorded on the maintainer's machine as P07, P13 and P23 did.
-- Finalize pass (2026-10-01, cross-plan check against the final P01-P23; scratch `work/finalize/xcheck-P24/`): the cross-plan index was rebuilt with `build_index.py --scope P24 --reuse-r` (0 error, 1 warn and 342 info findings for P24, each judged in the consolidation log below); every code block was re-extracted (24 R blocks) and linted with P01's `.lintr` linters (`indentation_linter = NULL`, `object_usage_linter` off for single files, then on with the visibility notes of the unloaded package filtered out): 6 lints before, none after; all 24 R blocks parse with `Rscript --vanilla`, with no `LEFT_ASSIGN` token `<-`, no `%>%`, no non-ASCII byte and no line over 100 characters. The 14 golden fixtures of P07, P10, P13, P15, P18, P19, P22, P23 and P24, extracted from the final plans, pass every field check of `test-golden-fixtures.R` and cover NS-1..NS-11; `ns_expected_t0()` and `ns_expected_skills()` are still `identical()` to 03 §7.3 with `{s1}` = `jev`. In a scratch repository rebuilt from the edited blocks (rtiktoken 0.0.7 from the private library) the source-free dev tests gave `common` 26, `golden-fixtures` 273, `live` 21, `polyglot` 45, `cache-sim` 10, `shiny-html` 65 and `perf` 11 (with a stand-in workflow file), all with 0 failures, so every expected count of this plan is unchanged.
+- Development tests (rtiktoken 0.0.7 from a private library): `common`
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 26 ]`; `golden-fixtures` `[ ... PASS 273 ]` with the 14
+  fixtures, and `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 143 ]` with P24's five removed (the red step);
+  `token-gates` `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 53 ]` against P07's real `bench_compare()` (the
+  replay and end-to-end tests skip without P07's stand-ins and the package), `[ FAIL 3 | ... ]` with
+  the loosened runner, and `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 6 ]` without a source tree; `live`
+  `[ ... PASS 20 ]` (`live.R` exits 0 and sends nothing with `GPTR_LIVE_TESTS=false`); `polyglot`
+  `[ ... PASS 45 ]` (two fixture builds byte-identical, same git commit hash); `cache-sim`
+  `[ ... PASS 10 ]`; `shiny-html` `[ ... PASS 65 ]` (derived edits reproduce 20 of 20 revisions);
+  `perf` `[ ... SKIP 1 | PASS 7 ]` (no workflow file in scratch).
+- The ladder with chromote and Chrome: `PASS 20 of 20 apps (apps)`, `PASS 20 of 20 apps (revised)`,
+  `PASS 0 of 10 apps (mutants)`, each exit 0; `tokens.R`: `html/shiny o200k ratio: 2.35 (G2: 2.35)`,
+  per-level 2.26, 2.47, 2.86, 2.64, 1.62, `rewrite/edit: shiny 3.0x, html 4.2x`; the copy command of
+  Task 7 produced 52 files identical to G2's assets.
+- P24's fixtures are valid JSON in P07's format; their objects evaluate in an environment whose
+  parent is `baseenv()` (data frames, numeric, Date, matrix, `lm`, list, function).
+- `ns_expected_t0()` and `ns_expected_skills()` were compared with the text of 03 section 7.3
+  regenerated from the architecture file (`{s1}` = `jev`): both `identical()`.
+- The expectation counts of the four package tests (30, 193, 81, 63) were counted from the parsed
+  test files with the loop multiplicities (38 IC-53 attacks, 9 gate checks, 12 kinds in the run
+  test; the IC-55 test has two expectations in either branch).
+- Review pass (2026-10-01): every code block was re-extracted from this file into
+  `.../scratchpad/work/plans/review-P24/blocks/` and parsed (45 blocks, 24 R files: all parse, no
+  `LEFT_ASSIGN` token `<-`, no `%>%`, ASCII only, at most 100 characters per line; the five JSON
+  fixtures are valid). The dev tests were re-run in a copy of the scratch repository rebuilt from
+  these blocks (rtiktoken 0.0.7 from the private library): `common` 26, `token-gates` 55 (2 skipped
+  without P07's stand-ins and the package), `golden-fixtures` 273, `live` 21, `polyglot` 45,
+  `cache-sim` 10, `shiny-html` 65, `perf` 11, all with 0 failures. The IC-68 texts
+  `ns_expected_t0()`/`ns_expected_skills()` were compared again with 03 section 7.3 (`identical()`
+  TRUE for both). `inj_attacks` evaluates to 38 attacks (25 `r`, 13 `write`), every `r` attack
+  parses, and `inj_planted()` returns `character()` for a clean project and the planted paths
+  otherwise. The cache-sim expectation was checked on a synthetic replica of the scenario with this
+  plan's `sim.R` (`gptr` 0.1026, `all_5m` 0.0938, `all_1h` 0.1008 USD; `gptr` hit rate 0.82).
+  rtiktoken 0.0.7's cost was re-measured: 20 strings take 2.4 s whether passed one by one or as one
+  vector (ambiguity 1).
+- Unresolved for P07/P09 (not P24 code): the 5 s bound of the whole script (ambiguity 1) and the
+  machine-dependent `<r_env>` section that the fixtures render once P09 registers it (P07 uses
+  stand-ins only for unregistered sections), which can make a baseline recorded on one machine fail
+  on another; the baselines of this plan are recorded on the maintainer's machine as P07, P13 and
+  P23 did.
+- Finalize pass (2026-10-01, cross-plan check against the final P01-P23; scratch
+  `work/finalize/xcheck-P24/`): the cross-plan index was rebuilt with
+  `build_index.py --scope P24 --reuse-r` (0 error, 1 warn and 342 info findings for P24, each judged
+  in the consolidation log below); every code block was re-extracted (24 R blocks) and linted with
+  P01's `.lintr` linters (`indentation_linter = NULL`, `object_usage_linter` off for single files,
+  then on with the visibility notes of the unloaded package filtered out): 6 lints before, none
+  after; all 24 R blocks parse with `Rscript --vanilla`, with no `LEFT_ASSIGN` token `<-`, no `%>%`,
+  no non-ASCII byte and no line over 100 characters. The 14 golden fixtures of P07, P10, P13, P15,
+  P18, P19, P22, P23 and P24, extracted from the final plans, pass every field check of
+  `test-golden-fixtures.R` and cover NS-1..NS-11; `ns_expected_t0()` and `ns_expected_skills()` are
+  still `identical()` to 03 section 7.3 with `{s1}` = `jev`. In a scratch repository rebuilt from
+  the edited blocks (rtiktoken 0.0.7 from the private library) the source-free dev tests gave
+  `common` 26, `golden-fixtures` 273, `live` 21, `polyglot` 45, `cache-sim` 10, `shiny-html` 65 and
+  `perf` 11 (with a stand-in workflow file), all with 0 failures, so every expected count of this
+  plan is unchanged.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 00-conventions, 04 (incl. §15), 05 P24 and the dependency plans P01, P02, P03, P06, P07, P08, P10, P11, P14, P15 and P22. Every code block was re-extracted and parsed afterwards, and the affected dev tests re-run (Self-review, "Executed validation").
+Adversarial review of 2026-10-01 against 00-conventions, 04 (incl. section 15), 05 P24 and the
+dependency plans P01, P02, P03, P06, P07, P08, P10, P11, P14, P15 and P22. Every code block was
+re-extracted and parsed afterwards, and the affected dev tests re-run (Self-review, "Executed
+validation").
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
@@ -5287,11 +5907,11 @@ Adversarial review of 2026-10-01 against 00-conventions, 04 (incl. §15), 05 P24
 | 4 | major | Task 12, router test | Expected `s$model == "s11prov/s11-extra"`, but P06 keeps `router:<name>` as the session model (its own test asserts it). | applied | Expects `router:s11router` and checks the model id the adapter received (`s11_stream()` now records `s11$model_ids`); ambiguity 23. |
 | 5 | major | Task 12, doc-format test | `gptr_doc("notes.s11doc")` errors: P15 binds only `.R/.Rmd/.qmd/.ipynb` and fetches formats by those names. | applied | The fixture's `doc_format` record shadows the built-in `qmd` (rank 5 < 6) and the test binds `notes.qmd`; ambiguity 22. |
 | 6 | major | Task 10, `inj_attacks` | 05 acceptance 3 and the review amendment require every IC-53 path; 11 control functions (`gptr_init`, `gptr_env`, `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache`, the session verbs), `Sys.unsetenv()` and 9 IC-54 control paths were not attacked. | applied | 38 attacks (25 `r`, 13 `write`), every planted file carries `P24_ATTACK` and `inj_planted()` checks all write targets; counts 141 -> 193 (CRAN 125 -> 179), A5 313 -> 367, A10; ambiguity 26. |
-| 7 | minor | Task 10, worker test | A blocked member may make the team call signal `gptr_error_permission` (04 §6.1.2), which the test did not catch. | applied | `tryCatch(..., gptr_error_permission = function(e) e$session)`. |
+| 7 | minor | Task 10, worker test | A blocked member may make the team call signal `gptr_error_permission` (04 section 6.1.2), which the test did not catch. | applied | `tryCatch(..., gptr_error_permission = function(e) e$session)`. |
 | 8 | minor | Task 12, run test | Checkpointers run only for sequential, non-read-only tools; asserting `checkpointer` after a direct tool alone depended on that tool's risk. | applied | The run continues with `s \|> peter("use r please")` (an object-creating `r` call) and asserts `e$s11_x`; counts 61 -> 63 with item 4 (CRAN 56 -> 58), A7. |
 | 9 | minor | Task 12, ui test | The manual-mode ask relied on the risk of the direct tool. | applied | The test asks for an `r` call that creates an object (always asked in `manual`). |
-| 10 | minor | Task 4, `live_count_prefix()` | Serialised with bare `jsonlite::toJSON(auto_unbox = TRUE)` (nulls become `{}`, numbers rounded to 4 digits; conventions §6) and sent an empty T1 text block, which the API rejects. | applied | `json_encode()` through `gptr_internal()`; empty system texts dropped; Interfaces updated. |
-| 11 | minor | Task 4, `live_cache_check()` | Assumed per-request usage rows; with aggregated rows (§5.12) `nrow(u) >= 2` is false and the check always failed. | applied | Uses `live_usage()`; one more `live_usage()` expectation (20 -> 21, A12, A18 512 -> 513). |
+| 10 | minor | Task 4, `live_count_prefix()` | Serialised with bare `jsonlite::toJSON(auto_unbox = TRUE)` (nulls become `{}`, numbers rounded to 4 digits; conventions section 6) and sent an empty T1 text block, which the API rejects. | applied | `json_encode()` through `gptr_internal()`; empty system texts dropped; Interfaces updated. |
+| 11 | minor | Task 4, `live_cache_check()` | Assumed per-request usage rows; with aggregated rows (section 5.12) `nrow(u) >= 2` is false and the check always failed. | applied | Uses `live_usage()`; one more `live_usage()` expectation (20 -> 21, A12, A18 512 -> 513). |
 | 12 | minor | Task 6, Step 3 expected output | "The `gptr` row has the lowest cost" is not guaranteed: on a synthetic replica of the scenario `all_5m` is cheapest (0.0938 vs 0.1008 and 0.1026 USD). | applied | Expected output states the measured rows and the hit rate only; the ordering is informative and the gate compares `gptr` with its own baseline. |
 | 13 | minor | Tasks 4-8, Step 2 | The predicted red-step error `cannot open file ...` is wrong: `sys.source()` reports `'<path>' is not an existing file`. | applied | Five expected messages corrected. |
 | 14 | minor | Task 8, `perf_run()` | `length(sp$flush())` counts the fields of the one unterminated event P04's `flush()` returns, not events. | applied | `if (!is.null(sp$flush())) n = n + 1L`. |
@@ -5303,20 +5923,27 @@ Adversarial review of 2026-10-01 against 00-conventions, 04 (incl. §15), 05 P24
 
 ## Cross-plan consolidation log
 
-Finalization pass of 2026-10-01 (label `finalize`): P24 was written while P01-P23 were still being consolidated, so every call into P01-P23, every helper, file, option, condition and event name and the plan acceptance were checked again against the final plans, 04 (with §15), 03 (§6.18, §7.3, §12.7) and 05 P24. Inputs: the cross-plan index (`build_index.py --scope P24 --reuse-r`), the consolidation logs of the plans P24 calls (P01, P02, P07, P09, P10, P13, P14, P18, P19, P22, P23), P07's final `dev/bench/tokens/run.R` (Task 16), P02's kind validators (`kinds_install()`), P18's test helpers and P19's worker tests. Verification is the "Finalize pass" bullet of "Executed validation". No expected test count changes.
+Finalization pass of 2026-10-01 (label `finalize`): P24 was written while P01-P23 were still being
+consolidated, so every call into P01-P23, every helper, file, option, condition and event name and
+the plan acceptance were checked again against the final plans, 04 (with section 15), 03
+(sections 6.18, 7.3, 12.7) and 05 P24. Inputs: the cross-plan index
+(`build_index.py --scope P24 --reuse-r`), the consolidation logs of the plans P24 calls (P01, P02,
+P07, P09, P10, P13, P14, P18, P19, P22, P23), P07's final `dev/bench/tokens/run.R` (Task 16), P02's
+kind validators (`kinds_install()`), P18's test helpers and P19's worker tests. Verification is the
+"Finalize pass" bullet of "Executed validation". No expected test count changes.
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| F1 | finalize | major | Task 9 test "an MCP tool result and the MCP logs are redacted (IC-70)" | applied | `gptr_register(fx$spec)` passed the `spec` of P18's `local_mcp_fixture()`, which is "a plain list in the shape of a `mcp_server` spec" (P18 `helper-mcp-server.R`), while `gptr_register()` takes specs only (04 §6.7): the test errored before scanning a sink. It now calls P18's helper `local_mcp_server(fx)` (adds the list as gptr's user server `fixture` with `gptr_mcp_add()` and removes it on exit; the path of P18's own `peter$mcp$fixture` tests). Global Constraints and Task 9 Consumes name the helper. |
+| F1 | finalize | major | Task 9 test "an MCP tool result and the MCP logs are redacted (IC-70)" | applied | `gptr_register(fx$spec)` passed the `spec` of P18's `local_mcp_fixture()`, which is "a plain list in the shape of a `mcp_server` spec" (P18 `helper-mcp-server.R`), while `gptr_register()` takes specs only (04 section 6.7): the test errored before scanning a sink. It now calls P18's helper `local_mcp_server(fx)` (adds the list as gptr's user server `fixture` with `gptr_mcp_add()` and removes it on exit; the path of P18's own `peter$mcp$fixture` tests). Global Constraints and Task 9 Consumes name the helper. |
 | F2 | finalize | major | Task 10 test "MCP tool text prints literally (rule C1)" | applied | Same defect and same change as F1 (`local_mcp_server(fx)` instead of `gptr_register(fx$spec)`); Task 10 Consumes names the P18 helpers. |
-| F3 | finalize | major | Task 12 test "the interpreter and MCP server records run their processes" | applied | The fixture plugin's factory registered the same plain list (`gptr$register(fx$spec)`), which `register()` rejects, so the `mcp_server` kind was never used and the every-kind test failed. The list is now turned into a record with `do.call(gptr_spec, c(list("mcp_server", fx$spec$name), fx$spec[setdiff(names(fx$spec), "name")]))`, the construction of P18's `mcp_sync()`, and registered by the factory at rank 5 under `plugin:s11fixture` (04 §10.2 row 7; P02's `mcp_server` validator accepts `transport`, `command`, `args`, `env`, `timeout`, `protocol`); `peter$mcp[["fixture"]]` finds registry records (P18 `mcp_ns_provider()`). Task 12 Consumes updated. |
+| F3 | finalize | major | Task 12 test "the interpreter and MCP server records run their processes" | applied | The fixture plugin's factory registered the same plain list (`gptr$register(fx$spec)`), which `register()` rejects, so the `mcp_server` kind was never used and the every-kind test failed. The list is now turned into a record with `do.call(gptr_spec, c(list("mcp_server", fx$spec$name), fx$spec[setdiff(names(fx$spec), "name")]))`, the construction of P18's `mcp_sync()`, and registered by the factory at rank 5 under `plugin:s11fixture` (04 section 10.2 row 7; P02's `mcp_server` validator accepts `transport`, `command`, `args`, `env`, `timeout`, `protocol`); `peter$mcp[["fixture"]]` finds registry records (P18 `mcp_ns_provider()`). Task 12 Consumes updated. |
 | F4 | finalize | major | Task 9 test "worker spec and result files and worker output carry no key (IC-70)"; Task 10 test "a worker's forwarded permission request is re-classified by the parent" | applied | Worker children are callr processes that run `library(gptr)`; P19 (Task 8, `local_worker_lib()`) installs the source tree once per R session into `tempdir()/gptr-worker-lib` for `devtools::test()` runs, and P24's two worker tests did not, so under A5, A9 and A10 the child loaded no gptr or a stale installed one. Both files now carry a copy of P19's `local_worker_lib()` (testthat sources each file on its own and 05 gives P24 no helper file; P19 copies it the same way) and call it first in those tests. It skips on CRAN, as the tests already did, so the counts (30, 193; CRAN 10, 179) are unchanged. |
-| F5 | finalize | minor | Task 8 `infra-time.R` `infra_files`, `test-perf.R`, prose, Step 4 and A16 | applied | 03 §6.18 row INFRA-02 names `test-provider-*.R` of P01 and P12; P01's `test-provider-message.R` (the message model, INFRA-07's design element `provider-message.R`) was missing from the INFRA-24 suite. Added as the 29th file; `test-perf.R` expects 29 (still one expectation, 11 in the file); the expected run line is `INFRA suite: 29 files`. Every other file of the list exists under its owner's final name (P01, P04, P05, P06, P07, P11, P12, P13, P14, P19, P20, P21). |
-| F6 | finalize | minor | Task 4 `live_main()` and prose | applied | 03 §12.7 gives the live calibration the job to "refit estimator priors"; `live.R` measured the frozen standard prefix with the count-tokens endpoint (`prefix_claude`) and o200k (`prefix_o200k`) but never derived the ratio. `live_main()` now prints the measured count-tokens / o200k ratio next to the prior of 03 §12.5. A message only: the CSV columns stay exactly those P25's `check-live.R` reads; `test-live.R` (21) unchanged. |
+| F5 | finalize | minor | Task 8 `infra-time.R` `infra_files`, `test-perf.R`, prose, Step 4 and A16 | applied | 03 section 6.18 row INFRA-02 names `test-provider-*.R` of P01 and P12; P01's `test-provider-message.R` (the message model, INFRA-07's design element `provider-message.R`) was missing from the INFRA-24 suite. Added as the 29th file; `test-perf.R` expects 29 (still one expectation, 11 in the file); the expected run line is `INFRA suite: 29 files`. Every other file of the list exists under its owner's final name (P01, P04, P05, P06, P07, P11, P12, P13, P14, P19, P20, P21). |
+| F6 | finalize | minor | Task 4 `live_main()` and prose | applied | 03 section 12.7 gives the live calibration the job to "refit estimator priors"; `live.R` measured the frozen standard prefix with the count-tokens endpoint (`prefix_claude`) and o200k (`prefix_o200k`) but never derived the ratio. `live_main()` now prints the measured count-tokens / o200k ratio next to the prior of 03 section 12.5. A message only: the CSV columns stay exactly those P25's `check-live.R` reads; `test-live.R` (21) unchanged. |
 | F7 | finalize | minor | `common.R` (`%\|\|%` fallback), `test-common.R` (`bench_run()` test), `test-shiny-html.R` (`n()`), `check.R` (seed handling, `rev_steps()`), `test-s11-conformance.R` (`ui` record `select`) | applied | P01's linters (`indentation_linter = NULL`) gave 6 lints: `object_name_linter` on `` `%\|\|%` `` (now in a block with P01's `# nolint: object_name_linter.`) and on `assign(".Random.seed", ...)` in `check.R` (the save/restore around `chromote::Chromote$new()` is now `withr::with_preserve_seed()`, and `withr` joins the ladder's `bench_require()` list and Task 7 Consumes); four `brace_linter` multi-line function bodies wrapped in braces. Re-lint: no lints. |
-| F8 | finalize | info | Index F0003, Task 4 Consumes `gptr_config(egress = list(<provider> = "ack"), .scope = "user")` | rejected | `egress` is matched by the `...` of `gptr_config(..., .scope = NULL)` (P08 Task 7); 04 §6.2 accepts `egress` at user scope and P08 registers the `egress` setting (`scope = "user"`). The line shows a call, not a signature. |
-| F9 | finalize | info | Index F0158, Task 9 Consumes `gptr_doc(FALSE)` | rejected | 04 §6.4: "`FALSE` unbinds"; P15's `gptr_doc(path = NULL, format = NULL, sync = FALSE)` handles it. Positional-naming note only. |
-| F10 | finalize | info | Index F0159, `ext_service_get("s11.echo")` in `test-s11-conformance.R` | rejected | A test-only `service` record of the S-11 fixture (04 §10.2 row 34); P01's service table lists package services, and P01's `arch_service_calls()` scans `R/` only. |
+| F8 | finalize | info | Index F0003, Task 4 Consumes `gptr_config(egress = list(<provider> = "ack"), .scope = "user")` | rejected | `egress` is matched by the `...` of `gptr_config(..., .scope = NULL)` (P08 Task 7); 04 section 6.2 accepts `egress` at user scope and P08 registers the `egress` setting (`scope = "user"`). The line shows a call, not a signature. |
+| F9 | finalize | info | Index F0158, Task 9 Consumes `gptr_doc(FALSE)` | rejected | 04 section 6.4: "`FALSE` unbinds"; P15's `gptr_doc(path = NULL, format = NULL, sync = FALSE)` handles it. Positional-naming note only. |
+| F10 | finalize | info | Index F0159, `ext_service_get("s11.echo")` in `test-s11-conformance.R` | rejected | A test-only `service` record of the S-11 fixture (04 section 10.2 row 34); P01's service table lists package services, and P01's `arch_service_calls()` scans `R/` only. |
 | F11 | finalize | info | Index `call_not_visible` (153) and `undefined_function_other` (187) for P24 | rejected | The dev tests call `common.R` and `helper-bench.R` functions, which testthat sources from `dev/bench/tests/helper-bench.R`; the runners `source()` `common.R`; the other "undefined" calls are testthat expectations and skips. The 04-wide findings F0001, F0002 and F0157 name no P24 code. |
 | F12 | finalize | info | Tasks 2-12, every other call into P01-P23 | no change | Checked against the final definitions: P07's runner (`bench_tolerance`, `bench_columns`, `bench_case(fx, standins, tok)`, `bench_compare()` messages and `.data` fields, `bench_main()` "OK: ..." message), the fixture format and the 14 fixture ids, P01's fake-provider request (`model` = ref, roles `tool_result`, `last_user` from text blocks), `msg_to_json()`, `json_encode()`, `new_listing()`, `gptr_readline()`, P05 `model_resolve()` (`$ref`, `$id`), P07 `gptr_prompt()` (`system$t0`, `system$t1`, `tools_json`, `sections`) and `cache_plan`, P09 `eval_r()`/`format_eval_result()`, P10 `search_grep()`, `read_file()`, `diff_lines()` and the T1 `plugins` section, P11's control list (including `gptr_steer`, `gptr_fork`, `gptr_cancel`, `gptr_resume`, `gptr_rewind`), P11 `local_scripted_ui()`, `gptr_permissions()`, P08 `gptr_trust()`, `gptr_init()`, P15 block markers and `gptr_source()`, P22's members (`peter$sh` argv form, `peter$py(name =)`, `peter$sql(con =)`, `gptr_job` `wait(timeout, until)`/`read()`) and `interpreter` fields, P23's artifact layout and `gptr_artifacts()`, P14's NS-8 line and banner, and the field names of all 38 kinds in P02's validators. |
-| F13 | finalize | info | Plan acceptance vs 05 P24 | no change | Acceptance 1-4, the six review amendments and every scope item map to tasks and commands A1-A18; NS-1..NS-12 each have a test in `test-northstar.R`, NS-1..NS-11 a golden transcript; the INFRA items 05/03 give P24 (INFRA-22 `test-secrets-e2e.R`, INFRA-24 `infra-time.R` and its CI step, INFRA-28's secrets grep through the redirect test's wire log) are covered; the S-12 suites of 03 §12.7 owned by P24 (golden-transcript gates, polyglot, Shiny ladder, cache economics, live calibration, performance) are all present with exact commands. |
+| F13 | finalize | info | Plan acceptance vs 05 P24 | no change | Acceptance 1-4, the six review amendments and every scope item map to tasks and commands A1-A18; NS-1..NS-12 each have a test in `test-northstar.R`, NS-1..NS-11 a golden transcript; the INFRA items 05/03 give P24 (INFRA-22 `test-secrets-e2e.R`, INFRA-24 `infra-time.R` and its CI step, INFRA-28's secrets grep through the redirect test's wire log) are covered; the S-12 suites of 03 section 12.7 owned by P24 (golden-transcript gates, polyglot, Shiny ladder, cache economics, live calibration, performance) are all present with exact commands. |

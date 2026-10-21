@@ -1,4 +1,4 @@
-# Console display checkpoint — 2026-10-10
+# Console display checkpoint, 2026-10-10
 
 Source review and offline test evidence for the coordinator's current ordinary-output
 changes. This checkpoint does not establish installation, native GUI behavior or a new
@@ -93,7 +93,7 @@ tar choice, `COPYFILE_DISABLE=1`, and refuses xattr/AppleDouble archive records 
 install. Neither failed attempt produced an approved installation certificate.
 
 Actual R.app PID77953 completed the combined native fixture: one delayed fake request,
-zero external requests,24 retained messages, bounded latest8/default/show previews,
+zero external requests, 24 retained messages, bounded latest8/default/show previews,
 unknown unreported assistant totals, full-table escape hatches and unchanged installed
 hashes. All three computational/after-return restoration proofs pass with zero warnings.
 **Visual ordinary-output color still failed:** the first ordinary marker is black and the
@@ -109,7 +109,7 @@ test-first implementation. Source analysis of the Mac-GUI color cache supports t
 the live control is the direct evidence. Native window size was550x539, reported width79.
 
 The actual finite-stdin JSONL probe against the certified039 library passed: four fake/
-zero external requests,55 parseable JSON stdout lines, one provider error then recovery,
+zero external requests, 55 parseable JSON stdout lines, one provider error then recovery,
 notice only on stderr, no local slash/inline R execution, sum7/mean3.5 and unchanged input
 identity. All11 restoration flags passed; zero warnings. Controller wall1.336s, sampled
 154.4MiB family peak/two samples/zero sampling errors. Raw evidence is in ignored

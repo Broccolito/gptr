@@ -1,14 +1,31 @@
 # P21 Background sessions (experimental) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let `peter(..., background = TRUE)` return a running session at once and keep it progressing at the idle R console, so that `s |> peter("...")` steers a running session (S-8, REQ-18, REQ-38).
+**Goal:** Let `peter(..., background = TRUE)` return a running session at once and keep it
+progressing at the idle R console, so that `s |> peter("...")` steers a running session (S-8,
+REQ-18, REQ-38).
 
-**Architecture:** One new L3 file, `R/agent-background.R`, provides `bg_register()` (the `bg.register` service that P08's gateway and P14's pause menu call), a `later` timer that runs one non-blocking iteration of P04's process reactor every 50 ms while no reactor pump is on the call stack, and bookkeeping that adds `session` rows to P04's job table. Asks never prompt from a `later` callback: during an idle tick, session-scoped wrappers of every `ui` record (and a `tool_call` hook for the `ask` tool) answer that approval is pending, the sweep after the tick stops the run and parks the session with status `waiting`, and the next blocking gptr call continues it from the denied call, so the model repeats the call and the normal gate asks the user. A `tool_result` hook of the new `builtin:background` prints one notice when an idle-tick `r` call changed workspace bindings.
+**Architecture:** One new L3 file, `R/agent-background.R`, provides `bg_register()` (the
+`bg.register` service that P08's gateway and P14's pause menu call), a `later` timer that runs one
+non-blocking iteration of P04's process reactor every 50 ms while no reactor pump is on the call
+stack, and bookkeeping that adds `session` rows to P04's job table. Asks never prompt from a `later`
+callback: during an idle tick, session-scoped wrappers of every `ui` record (and a `tool_call` hook
+for the `ask` tool) answer that approval is pending, the sweep after the tick stops the run and
+parks the session with status `waiting`, and the next blocking gptr call continues it from the
+denied call, so the model repeats the call and the normal gate asks the user. A `tool_result` hook
+of the new `builtin:background` prints one notice when an idle-tick `r` call changed workspace
+bindings.
 
-**Tech Stack:** R (>= 4.2.0); later (Suggests, guarded with `requireNamespace()`); rlang (weak references in one test); testthat 3e and withr (tests only); P01's fake provider and test helpers.
+**Tech Stack:** R (>= 4.2.0); later (Suggests, guarded with `requireNamespace()`); rlang (weak
+references in one test); testthat 3e and withr (tests only); P01's fake provider and test helpers.
 
-**Spec:** dev/spec/03-architecture.md (§1.3, §2.2, §2.3, §3.2, §5.1, §6.1, §6.2, §6.4, §6.8.2, §9.2), dev/spec/04-interface-contract.md (§1.3, §2.1-2.2, §3.1, §4.2, §5.1, §5.12-5.13, §6.1, §6.5, §7.0, §7.1, §7.2, §7.4, §7.6, §7.11, §7.14, §7.21, §8.2, §10.2 kind 22 `ui`, §10.4, §10.5, §12.1-12.3, §15 IC-33, IC-34, IC-36, IC-53, IC-55, IC-57, IC-71), dev/spec/05-plan-decomposition.md (P21).
+**Spec:** dev/spec/03-architecture.md (sections 1.3, 2.2, 2.3, 3.2, 5.1, 6.1, 6.2, 6.4, 6.8.2, 9.2),
+dev/spec/04-interface-contract.md (sections 1.3, 2.1-2.2, 3.1, 4.2, 5.1, 5.12-5.13, 6.1, 6.5, 7.0,
+7.1, 7.2, 7.4, 7.6, 7.11, 7.14, 7.21, 8.2, 10.2 kind 22 `ui`, 10.4, 10.5, 12.1-12.3; section 15:
+IC-33, IC-34, IC-36, IC-53, IC-55, IC-57, IC-71), dev/spec/05-plan-decomposition.md (P21).
 
 **Depends on:** P06, P14 (and through them P01-P05, P07, P08, P11). **Milestone:** M4.
 
@@ -16,29 +33,78 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only for closure state), native `|>` (never `%>%`), ASCII-only R sources, `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line required by the executing harness (conventions §10).
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only for closure
+state), native `|>` (never `%>%`), ASCII-only R sources, `pkg::fun()` calls,
+`gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions, testthat 3e, no network in tests,
+`Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose
+message ends with the attribution line required by the executing harness (conventions section 10).
 
 Plan-specific requirements (values copied from the spec):
 
-- File and layer: `agent-background.R` | L3 | "experimental background runs serviced by `later`; session rows of the job table" | P21 (03 §3.2). Test file: `tests/testthat/test-agent-background.R` (05 P21).
-- Contract row (04 §7.21): `bg_register(s)` (service `bg.register`) | `agent-background.R` | "requires later (`gptr_error_missing_package`); marks the run background, adds a `session` job, ensures the `later` pump (50 ms timer calling `reactor_pump(slice_ms = 0)`, a no-op while the reactor is on the stack, IC-57); R tools of background runs run at idle ticks (`gptr.background_tools = "idle"`) or wait for `gptr_wait()`; an ask moves the run to `waiting` and is shown at the next blocking gptr call; a tool that changed bindings at an idle tick prints one notice" | consumers P08, P14 (`[b]ackground`).
-- Service table (04 §7.0): `bg.register` | P21 | `peter(background = TRUE)` (P08), the pause menu (P14) | `function(session) invisible(session)`. Every service is owned by a built-in (IC-34): this plan declares `builtin:background`.
-- Package state (04 §7.0): `the$bg` | P21 | background pump state.
-- Option (04 §3.1): `gptr.background_tools` | `chr(1)` | `"idle"` | P21 | `"idle"` or `"wait"`; read with `gptr_opt("background_tools")`.
-- Session status (04 §5.1): `waiting` = "a background or served run with an ask pending, IC-57". Live record field (04 §5.1): `background` (list or `NULL`); this plan stores `list(id, run, since, ui, dropped_n, ask, waiting, opts)` there (ids, numbers, flags and a whitelisted copy of the run options; never a session, run, frame or user object).
-- Permission answers (04 §10.2 kind 22; P06 `perm_ask()`): an ask raised during an idle tick is answered `list(decision = "deny", remember = NULL, feedback = <pending text>)`, never `"abort"`: P06 turns `"abort"` into the tool result "Permission denied: the user aborted the run. The run stops here.", which the resumed run would show the model. The pending text is `bg_pending_text()`.
-- Hooks (04 §10.4): `tool_call` ("decision, error = block"; a handler returns `NULL` or `list(decision = "block", reason)`; payload `tool_name`, `tool_call_id`, `input`, `nested`, `parent_tool_call_id`, `risk` plus `session`) and `tool_result` ("patch chain"; `NULL` = no patch; payload `tool_name`, `tool_call_id`, `input`, `content`, `details`, `is_error`). The `r` tool's `details$objects` is `list(added, modified, removed)` of chr (04 §4.4).
-- IC-57: "The background pump is a no-op while the reactor is on the stack (depth > 0)."; "Asks raised outside a blocking gptr call (background runs, ...) never prompt from a `later` callback: a background run moves to status `waiting` (a notice; `gptr_jobs()` shows it) and the ask is shown at the next `gptr_wait()`, `peter()` or console turn"; "A background R tool that changed bindings in the user's environment at an idle tick prints one notice."
-- 03 §6.2: "timer polling every 50 ms; ... no `later_fd`, which LIKELY cannot watch processx pipes on Windows"; "A SIGINT inside a later callback reaches the same calling handler, so the pause menu works"; "Under Rscript there is no idle console: background runs progress only inside blocking gptr calls"; "Support matrix documented: terminal R verified [G3 t9]; RStudio, Positron, Jupyter and Windows consoles unverified. Requires `later`; never used in examples or CRAN tests."
-- Job table (04 §7.4, §5.12, IC-36): `job_add(kind, id, name, pid = NA, stop, status = function() "running")`; `gptr_jobs()` (P04) lists columns `id`, `kind` (`session`, `bg`, `artifact`, `mcp_serve`, `worker`, `cli`), `name`, `pid`, `status`, `started`; P21 adds `kind = "session"` rows with `status` `running` or `waiting`.
-- Condition (04 §2.2, §6.1.5): `gptr_error_missing_package` with fields `package`, `feature` ("background without later").
-- Notices (04 §2.2): message class `gptr_message_notice` through `gptr_inform(message, "notice", .once = NULL)`; silenced by `options(gptr.quiet = TRUE)`; built by concatenation (rule C1).
-- Steering relay text (04 §4.2, IC-55): `The user sent this message while you were working: <text>` for the user sources `pipe`, `pause_menu`, `repl`, `api_user`.
-- Interrupt policy service (04 §7.0, §7.14): `console.interrupt_policy` = `function(expr_fun, runs, mode = c("call", "repl")) value`; "`mode = "call"` re-signals the interrupt after an abort". Idle ticks use `mode = "repl"`.
-- Experimental status (03 §1.3): "`background = TRUE` ... opt-in, documented, excluded from examples and CRAN tests". Every test in the file calls `skip_on_cran()`; tests that need later also call `skip_if_not_installed("later")`. No example anywhere uses `background = TRUE`.
-- Dependencies (conventions §8, 03 §9.2): later is a Suggests package ("experimental background sessions (later)"); P21 adds no Import or Suggests.
-- Cleanup (04 §7.1): `on_unload(fun)` "registers a zero-argument cleanup run by `.onUnload` (reverse order, each in `try()`)".
-- Copy safety (03 §6.4 R1, R2): P21 never holds a user object or a user frame; the job-table and UI closures hold the session id only, never the session.
+- File and layer: `agent-background.R` | L3 | "experimental background runs serviced by `later`;
+  session rows of the job table" | P21 (03 section 3.2). Test file:
+  `tests/testthat/test-agent-background.R` (05 P21).
+- Contract row (04 section 7.21): `bg_register(s)` (service `bg.register`) | `agent-background.R` |
+  "requires later (`gptr_error_missing_package`); marks the run background, adds a `session` job,
+  ensures the `later` pump (50 ms timer calling `reactor_pump(slice_ms = 0)`, a no-op while the
+  reactor is on the stack, IC-57); R tools of background runs run at idle ticks
+  (`gptr.background_tools = "idle"`) or wait for `gptr_wait()`; an ask moves the run to `waiting`
+  and is shown at the next blocking gptr call; a tool that changed bindings at an idle tick prints
+  one notice" | consumers P08, P14 (`[b]ackground`).
+- Service table (04 section 7.0): `bg.register` | P21 | `peter(background = TRUE)` (P08), the pause
+  menu (P14) | `function(session) invisible(session)`. Every service is owned by a built-in (IC-34):
+  this plan declares `builtin:background`.
+- Package state (04 section 7.0): `the$bg` | P21 | background pump state.
+- Option (04 section 3.1): `gptr.background_tools` | `chr(1)` | `"idle"` | P21 | `"idle"` or
+  `"wait"`; read with `gptr_opt("background_tools")`.
+- Session status (04 section 5.1): `waiting` = "a background or served run with an ask pending,
+  IC-57". Live record field (04 section 5.1): `background` (list or `NULL`); this plan stores
+  `list(id, run, since, ui, dropped_n, ask, waiting, opts)` there (ids, numbers, flags and a
+  whitelisted copy of the run options; never a session, run, frame or user object).
+- Permission answers (04 section 10.2 kind 22; P06 `perm_ask()`): an ask raised during an idle tick
+  is answered `list(decision = "deny", remember = NULL, feedback = <pending text>)`, never
+  `"abort"`: P06 turns `"abort"` into the tool result "Permission denied: the user aborted the run.
+  The run stops here.", which the resumed run would show the model. The pending text is
+  `bg_pending_text()`.
+- Hooks (04 section 10.4): `tool_call` ("decision, error = block"; a handler returns `NULL` or
+  `list(decision = "block", reason)`; payload `tool_name`, `tool_call_id`, `input`, `nested`,
+  `parent_tool_call_id`, `risk` plus `session`) and `tool_result` ("patch chain"; `NULL` = no patch;
+  payload `tool_name`, `tool_call_id`, `input`, `content`, `details`, `is_error`). The `r` tool's
+  `details$objects` is `list(added, modified, removed)` of chr (04 section 4.4).
+- IC-57: "The background pump is a no-op while the reactor is on the stack (depth > 0)."; "Asks
+  raised outside a blocking gptr call (background runs, ...) never prompt from a `later` callback: a
+  background run moves to status `waiting` (a notice; `gptr_jobs()` shows it) and the ask is shown
+  at the next `gptr_wait()`, `peter()` or console turn"; "A background R tool that changed bindings
+  in the user's environment at an idle tick prints one notice."
+- 03 section 6.2: "timer polling every 50 ms; ... no `later_fd`, which LIKELY cannot watch processx
+  pipes on Windows"; "A SIGINT inside a later callback reaches the same calling handler, so the
+  pause menu works"; "Under Rscript there is no idle console: background runs progress only inside
+  blocking gptr calls"; "Support matrix documented: terminal R verified [G3 t9]; RStudio, Positron,
+  Jupyter and Windows consoles unverified. Requires `later`; never used in examples or CRAN tests."
+- Job table (04 sections 7.4, 5.12, IC-36):
+  `job_add(kind, id, name, pid = NA, stop, status = function() "running")`; `gptr_jobs()` (P04)
+  lists columns `id`, `kind` (`session`, `bg`, `artifact`, `mcp_serve`, `worker`, `cli`), `name`,
+  `pid`, `status`, `started`; P21 adds `kind = "session"` rows with `status` `running` or `waiting`.
+- Condition (04 sections 2.2, 6.1.5): `gptr_error_missing_package` with fields `package`, `feature`
+  ("background without later").
+- Notices (04 section 2.2): message class `gptr_message_notice` through
+  `gptr_inform(message, "notice", .once = NULL)`; silenced by `options(gptr.quiet = TRUE)`; built by
+  concatenation (rule C1).
+- Steering relay text (04 section 4.2, IC-55):
+  `The user sent this message while you were working: <text>` for the user sources `pipe`,
+  `pause_menu`, `repl`, `api_user`.
+- Interrupt policy service (04 sections 7.0, 7.14): `console.interrupt_policy` =
+  `function(expr_fun, runs, mode = c("call", "repl")) value`; "`mode = "call"` re-signals the
+  interrupt after an abort". Idle ticks use `mode = "repl"`.
+- Experimental status (03 section 1.3): "`background = TRUE` ... opt-in, documented, excluded from
+  examples and CRAN tests". Every test in the file calls `skip_on_cran()`; tests that need later
+  also call `skip_if_not_installed("later")`. No example anywhere uses `background = TRUE`.
+- Dependencies (conventions section 8, 03 section 9.2): later is a Suggests package ("experimental
+  background sessions (later)"); P21 adds no Import or Suggests.
+- Cleanup (04 section 7.1): `on_unload(fun)` "registers a zero-argument cleanup run by `.onUnload`
+  (reverse order, each in `try()`)".
+- Copy safety (03 section 6.4 R1, R2): P21 never holds a user object or a user frame; the job-table
+  and UI closures hold the session id only, never the session.
 
 ## File Structure
 
@@ -55,19 +121,23 @@ Exact signatures from `04`; the tasks call nothing else.
 
 | Owner | Function or record | Used for |
 |---|---|---|
-| P01 `aaa-state.R` | `the`; `on_load(expr)`; `on_unload(fun)`; `ext_service_set(name, fun, provided_by, builtin = NULL)`; `ext_service_get(name)`; `ext_service_has(name)`; `` `%||%` `` | state, declarations, services |
+| P01 `aaa-state.R` | `the`; `on_load(expr)`; `on_unload(fun)`; `ext_service_set(name, fun, provided_by, builtin = NULL)`; `ext_service_get(name)`; `ext_service_has(name)`; `` `%\|\|%` `` | state, declarations, services |
 | P01 `utils-options.R` | `gptr_opt(name)` | `gptr.background_tools` |
 | P01 `utils-conditions.R` | `gptr_abort(message, class, ..., .data = NULL, call = NULL)`; `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`; `check_class(x, class, arg, null = FALSE)` | conditions, notices, validation |
 | P01 `utils-encoding.R`, `provider-message.R` | `as_utf8(x)`; `msg_text(msg)` | notice text, job names |
 | P01 tests | `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))`; `local_gptr_options(..., .env = parent.frame())`; `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)` | tests |
 | P02 | `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`; `registry_add(spec, source, rank, session = NULL, state = "active")`; `registry_remove(id)`; `registry_get(kind, name, session = NULL)`; `registry_names(kind, session = NULL)`; `registry_diagnostic(source, event, class, message)`; `gptr_spec(kind, name, ...)`; `gptr_register(spec)`; `gptr_registry(kind = NULL, diagnostics = FALSE)`; API object `gptr$on(event, handler, matcher = NULL)` | built-in, UI wrappers, hook, diagnostics |
 | P04 | `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`; `job_add(kind, id, name, pid = NA, stop, status = function() "running")`; `job_remove(id)`; `job_list(kind = NULL)`; `gptr_jobs(kill = FALSE)` | the tick, job rows |
-| P06 | `session_data(s)` (`.d`: `id`, `status`, `reason`, `mode`, `turns`, `entries`, `queue`, `dropped`); `session_live(s)` (live: `run`, `background`); `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())`; `run_start(s, input, opts = list())` (run options of 04 §7.6: `max_turns`, `budget`, `returns`, `context`, `timeout`, `interactive`, `depth`, `parent_run`, `agent`, `background`, `rng_state`, `preset`, `tools`, `call`, `safety`, `root`); `run_abort(run, reason = "user")`; `run_current()`; `gptr_run` fields `id`, `opts` | kernel SDK (IC-33) |
+| P06 | `session_data(s)` (`.d`: `id`, `status`, `reason`, `mode`, `turns`, `entries`, `queue`, `dropped`); `session_live(s)` (live: `run`, `background`); `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())`; `run_start(s, input, opts = list())` (run options of 04 section 7.6: `max_turns`, `budget`, `returns`, `context`, `timeout`, `interactive`, `depth`, `parent_run`, `agent`, `background`, `rng_state`, `preset`, `tools`, `call`, `safety`, `root`); `run_abort(run, reason = "user")`; `run_current()`; `gptr_run` fields `id`, `opts` | kernel SDK (IC-33) |
 | P08 | `peter(..., background = FALSE, ...)` (calls `ext_service_get("bg.register")(s)`); `gptr_wait(x, timeout = Inf)`; `gptr_cancel(x)`; `gptr_steer(s, text, as = c("steer", "follow_up"))` | entry points, tests |
 | P11 | kind `ui` fields `has_ui`, `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)`, `input(prompt, default = "", secret = FALSE)`, `questions(qs)`, `notify(text, level = "info")`, `permission(request)` -> `list(decision = "allow" \| "deny" \| "abort", remember, feedback)`; the `ui.get` service; test helper `local_scripted_ui(answers = list(), .env = parent.frame())` | UI wrappers, waiting tests |
 | P14 | service `console.interrupt_policy` `function(expr_fun, runs, mode = c("call", "repl"))`; the pause menu's `[b]ackground` calls `bg.register` | idle ticks under the pause menu |
 
-What this plan produces for later plans: the `bg.register` service (`function(session) invisible(session)`), `builtin:background` (a `tool_call` hook with matcher `ask` and a `tool_result` hook with matcher `r`), `session` rows in the job table (status `running` or `waiting`), the `waiting` session status, the help topic `gptr-background`, and the live-record field `background`.
+What this plan produces for later plans: the `bg.register` service
+(`function(session) invisible(session)`), `builtin:background` (a `tool_call` hook with matcher
+`ask` and a `tool_result` hook with matcher `r`), `session` rows in the job table (status `running`
+or `waiting`), the `waiting` session status, the help topic `gptr-background`, and the live-record
+field `background`.
 
 ## How the pieces fit
 
@@ -103,9 +173,19 @@ next blocking gptr call pumps the reactor -> later::run_now(0) at depth 1 -> bg_
 
 **Interfaces:**
 - Consumes: `the`, `` `%||%` `` (P01 `aaa-state.R`); `gptr_opt(name)` (P01); `as_utf8(x)` (P01); `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)` (P04, only compared by identity); test helper `local_gptr_options(..., .env = parent.frame())` (P01).
-- Produces (internal, `@noRd`): `bg_state()` (creates `the$bg`: `sessions` env, `cancel`, `ticking`, `ticks`, `changed`), `bg_has_later()`, `bg_get(id)`, `bg_has(id)`, `bg_is_id(id)`, `bg_ids()`, `bg_count()`, `bg_ticking()`, `bg_once()`, `bg_tools_mode()`, `bg_reactor_busy()`, `bg_clean(x)`, `bg_cut(x, n)`, `bg_names_text(nm, max = 6L)`, `bg_request_summary(request)`, the constant `bg_interval = 0.05`.
+- Produces (internal, `@noRd`): `bg_state()` (creates `the$bg`: `sessions` env, `cancel`, `ticking`,
+  `ticks`, `changed`), `bg_has_later()`, `bg_get(id)`, `bg_has(id)`, `bg_is_id(id)`, `bg_ids()`,
+  `bg_count()`, `bg_ticking()`, `bg_once()`, `bg_tools_mode()`, `bg_reactor_busy()`, `bg_clean(x)`,
+  `bg_cut(x, n)`, `bg_names_text(nm, max = 6L)`, `bg_request_summary(request)`, the constant
+  `bg_interval = 0.05`.
 
-Why these helpers: IC-57 makes the background pump a no-op while any reactor pump is on the stack; 04 names no accessor for P04's pump depth, so `bg_reactor_busy()` looks for `reactor_pump` itself among the functions of the call stack (frame identity, no frame is kept). `reactor_pump(slice_ms = 0)` with the default `until` would never return, so `bg_once()` stops it after exactly one non-blocking iteration (P04's loop checks `until()` before each iteration: FALSE, one iteration, TRUE). `bg_clean()` blanks C0/C1 controls, bidi and zero-width characters (the IC-53 display rule) through code points, so it gives the same result in a C locale and in UTF-8 locales.
+Why these helpers: IC-57 makes the background pump a no-op while any reactor pump is on the stack;
+04 names no accessor for P04's pump depth, so `bg_reactor_busy()` looks for `reactor_pump` itself
+among the functions of the call stack (frame identity, no frame is kept).
+`reactor_pump(slice_ms = 0)` with the default `until` would never return, so `bg_once()` stops it
+after exactly one non-blocking iteration (P04's loop checks `until()` before each iteration: FALSE,
+one iteration, TRUE). `bg_clean()` blanks C0/C1 controls, bidi and zero-width characters (the IC-53
+display rule) through code points, so it gives the same result in a C locale and in UTF-8 locales.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -185,13 +265,18 @@ test_that("bg_reactor_busy() is TRUE only inside a reactor pump", {
 })
 ```
 
-Note for the test writer: the bidi and zero-width characters are built with `intToUtf8()` so that the test source shows their code points (U+202E, U+200B) and stays ASCII; a `\u202e` escape in a string literal would also parse (checked with R 4.4.3), but never paste the raw characters into a source or plan file.
+Note for the test writer: the bidi and zero-width characters are built with `intToUtf8()` so that
+the test source shows their code points (U+202E, U+200B) and stays ASCII; a `\u202e` escape in a
+string literal would also parse (checked with R 4.4.3), but never paste the raw characters into a
+source or plan file.
 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`, each test erroring with `could not find function "bg_state"` (and `"bg_once"`, `"bg_clean"`, `"bg_names_text"`, `"bg_tools_mode"`, `"bg_reactor_busy"`).
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`, each test erroring with
+`could not find function "bg_state"` (and `"bg_once"`, `"bg_clean"`, `"bg_names_text"`,
+`"bg_tools_mode"`, `"bg_reactor_busy"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -369,10 +454,32 @@ git commit -m "feat(agent): add background-session state and helpers"
 - Test: `tests/testthat/test-agent-background.R` (append)
 
 **Interfaces:**
-- Consumes: `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`, `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`, `gptr_spec(kind, name, ...)`, `gptr_register(spec)` (P02); `session_live(s)` (P06); `gptr_abort()` (P01); in tests `run_start(s, input, opts = list())`, `run_abort(run, reason = "user")` (P06), `peter()` with `.run = FALSE` (P08) and `gptr_fake_provider()` (P01).
-- Produces (internal): `bg_pending_text(what = "approval")` (the text the model reads when an ask could not be shown), `bg_park(id, what, summary)` (records `live$background$ask = list(what, summary, t)`; the first ask wins; it never stops the run), `bg_ui_target(name)`, `bg_ui_spec(name, id)` (a `gptr_ui` spec with the six `ui` methods of 04 §10.2 kind 22), `bg_install_ui(id)` (-> chr of registry record ids).
+- Consumes: `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`,
+  `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`,
+  `gptr_spec(kind, name, ...)`, `gptr_register(spec)` (P02); `session_live(s)` (P06); `gptr_abort()`
+  (P01); in tests `run_start(s, input, opts = list())`, `run_abort(run, reason = "user")` (P06),
+  `peter()` with `.run = FALSE` (P08) and `gptr_fake_provider()` (P01).
+- Produces (internal): `bg_pending_text(what = "approval")` (the text the model reads when an ask
+  could not be shown), `bg_park(id, what, summary)` (records
+  `live$background$ask = list(what, summary, t)`; the first ask wins; it never stops the run),
+  `bg_ui_target(name)`, `bg_ui_spec(name, id)` (a `gptr_ui` spec with the six `ui` methods of 04
+  section 10.2 kind 22), `bg_install_ui(id)` (-> chr of registry record ids).
 
-How it works: `ui.get` (P11) resolves the run's UI by name through the registry, and `registry_get(kind, name, session)` lets a rank-0 record scoped to one session shadow the global record of the same name for that session only (04 §7.2, §10.1). `bg_install_ui()` registers such a wrapper for every registered `ui` name. Outside an idle tick every method delegates to the global record, so a background session asks exactly like a foreground one inside blocking calls. During an idle tick (`the$bg$ticking`) no method prompts: `permission()` records the ask and answers `list(decision = "deny", remember = NULL, feedback = bg_pending_text("approval"))`; `questions()`, `select()` and `input()` record the ask and return a cancelled answer. The answer is a denial, never `"abort"`: P06's `perm_ask()` turns `"abort"` into the tool result "Permission denied: the user aborted the run. The run stops here." and the tool-call message stays complete (only a streaming partial is marked aborted), so a resumed run would tell the model that the user aborted, the model would not repeat the call, and the user would never be asked. The pending text tells the model that nothing ran, that nobody declined, and to call the tool again when the session continues. The wrappers never stop the run themselves (they run inside P06's dispatcher, in the middle of a call); the sweep after the tick does (Task 4), and Task 5 turns the stopped run into a `waiting` session.
+How it works: `ui.get` (P11) resolves the run's UI by name through the registry, and
+`registry_get(kind, name, session)` lets a rank-0 record scoped to one session shadow the global
+record of the same name for that session only (04 sections 7.2, 10.1). `bg_install_ui()` registers
+such a wrapper for every registered `ui` name. Outside an idle tick every method delegates to the
+global record, so a background session asks exactly like a foreground one inside blocking calls.
+During an idle tick (`the$bg$ticking`) no method prompts: `permission()` records the ask and answers
+`list(decision = "deny", remember = NULL, feedback = bg_pending_text("approval"))`; `questions()`,
+`select()` and `input()` record the ask and return a cancelled answer. The answer is a denial, never
+`"abort"`: P06's `perm_ask()` turns `"abort"` into the tool result "Permission denied: the user
+aborted the run. The run stops here." and the tool-call message stays complete (only a streaming
+partial is marked aborted), so a resumed run would tell the model that the user aborted, the model
+would not repeat the call, and the user would never be asked. The pending text tells the model that
+nothing ran, that nobody declined, and to call the tool again when the session continues. The
+wrappers never stop the run themselves (they run inside P06's dispatcher, in the middle of a call);
+the sweep after the tick does (Task 4), and Task 5 turns the stopped run into a `waiting` session.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -478,7 +585,9 @@ test_that("bg_park() records the first ask only and never stops the run itself",
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
 
-Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 28 ]`; the three new tests error with `could not find function "bg_ui_spec"`, `could not find function "bg_install_ui"` and `could not find function "bg_park"`.
+Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 28 ]`; the three new tests error with
+`could not find function "bg_ui_spec"`, `could not find function "bg_install_ui"` and
+`could not find function "bg_park"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -606,12 +715,61 @@ git commit -m "feat(agent): add session-scoped UI wrappers that never prompt at 
 - Test: `tests/testthat/test-agent-background.R` (append)
 
 **Interfaces:**
-- Consumes: `on_load(expr)`, `on_unload(fun)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has(name)`, `ext_service_get(name)` and the rule of P01's `service_builtin_active()` (a built-in that has no record in a non-empty registry counts as filtered out, so its bootstrap services are hidden), `check_class(x, class, arg, null = FALSE)`, `gptr_inform()`, `msg_text(msg)` (P01); `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API object's `gptr$on(event, handler, matcher = NULL)` with the `tool_call` event (04 §10.4: "decision, error = block"; a handler returns `NULL` or `list(decision = "block", reason)`), and in tests `gptr_registry()`, `registry_get(kind, name, session = NULL)` (P02); `job_add(kind, id, name, pid = NA, stop, status = function() "running")`, `job_remove(id)`, `job_list(kind = NULL)`, `gptr_jobs(kill = FALSE)` (P04); `session_data(s)`, `session_live(s)`, `run_start(s, input, opts = list())`, `run_abort(run, reason = "user")` (P06); `peter(..., background = TRUE)` (P08, which calls the service).
-- Produces: service `bg.register` = `bg_register(s)` -> `invisible(s)` (04 §7.0, §7.21); `builtin:background` (declared with `ext_declare_builtin("background", builtin_background)`; it owns the service, IC-34, and from this task on its factory registers the `tool_call` hook `gptr$on("tool_call", bg_on_tool_call, matcher = "ask")`, so a record of source `builtin:background` exists whenever the built-in is loaded and P01's `service_builtin_active()` keeps `bg.register` visible; the service itself stays a bootstrap entry, never a `service` record, so a test stub set with `ext_service_set()`, as P14's pause-menu test does, still replaces it); `bg_on_tool_call(event, ctx)` (during an idle tick a background session's `ask` call is blocked with `bg_pending_text("answers")` and the ask is recorded; Task 5 parks the session); internal `bg_has_queued(d)`, `bg_keep_opts` (chr), `bg_run_opts(run)` (the whitelisted run options plus `background = TRUE`), `bg_mark(run)` (sets `run$opts$background = TRUE`), `bg_track(s, run, title)`, `bg_job_fns(id)`, `bg_job_status(id)`, `bg_title(s)`, `bg_stop(id)`, `bg_release(id, notice)`, `bg_notice_done(s)`, `bg_shutdown()` (registered with `on_unload()`); job rows `kind = "session"`, `id` = the session id, `name` = the first prompt (40 characters), `status` = the session status.
+- Consumes: `on_load(expr)`, `on_unload(fun)`,
+  `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has(name)`,
+  `ext_service_get(name)` and the rule of P01's `service_builtin_active()` (a built-in that has no
+  record in a non-empty registry counts as filtered out, so its bootstrap services are hidden),
+  `check_class(x, class, arg, null = FALSE)`, `gptr_inform()`, `msg_text(msg)` (P01);
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API object's
+  `gptr$on(event, handler, matcher = NULL)` with the `tool_call` event (04 section 10.4: "decision,
+  error = block"; a handler returns `NULL` or `list(decision = "block", reason)`), and in tests
+  `gptr_registry()`, `registry_get(kind, name, session = NULL)` (P02);
+  `job_add(kind, id, name, pid = NA, stop, status = function() "running")`, `job_remove(id)`,
+  `job_list(kind = NULL)`, `gptr_jobs(kill = FALSE)` (P04); `session_data(s)`, `session_live(s)`,
+  `run_start(s, input, opts = list())`, `run_abort(run, reason = "user")` (P06);
+  `peter(..., background = TRUE)` (P08, which calls the service).
+- Produces: service `bg.register` = `bg_register(s)` -> `invisible(s)` (04 sections 7.0, 7.21);
+  `builtin:background` (declared with `ext_declare_builtin("background", builtin_background)`; it
+  owns the service, IC-34, and from this task on its factory registers the `tool_call` hook
+  `gptr$on("tool_call", bg_on_tool_call, matcher = "ask")`, so a record of source
+  `builtin:background` exists whenever the built-in is loaded and P01's `service_builtin_active()`
+  keeps `bg.register` visible; the service itself stays a bootstrap entry, never a `service` record,
+  so a test stub set with `ext_service_set()`, as P14's pause-menu test does, still replaces it);
+  `bg_on_tool_call(event, ctx)` (during an idle tick a background session's `ask` call is blocked
+  with `bg_pending_text("answers")` and the ask is recorded; Task 5 parks the session); internal
+  `bg_has_queued(d)`, `bg_keep_opts` (chr), `bg_run_opts(run)` (the whitelisted run options plus
+  `background = TRUE`), `bg_mark(run)` (sets `run$opts$background = TRUE`),
+  `bg_track(s, run, title)`, `bg_job_fns(id)`, `bg_job_status(id)`, `bg_title(s)`, `bg_stop(id)`,
+  `bg_release(id, notice)`, `bg_notice_done(s)`, `bg_shutdown()` (registered with `on_unload()`);
+  job rows `kind = "session"`, `id` = the session id, `name` = the first prompt (40 characters),
+  `status` = the session status.
 
-Behaviour of `bg_register(s)`, in order: a non-session or a detached copy is `gptr_error_invalid_argument`; without later it signals `gptr_error_missing_package` (`package = "later"`, `feature = "background sessions"`) and first aborts a run that P08 started for the background (`run$opts$background` already `TRUE`), so nothing is left unpumped; a live run (P08's background start, or a foreground run sent to the background from the pause menu) is marked with `run$opts$background = TRUE`, which is what lets P06's foreground wait return for `[b]ackground`; an idle session with queued input (the `.run = FALSE` example of 04 §7.21) is started with `run_start(s, NULL, opts = list(background = TRUE))`; an idle session with nothing queued is `gptr_error_invalid_argument`. It then holds the session in `the$bg$sessions` (a running session is held by the reactor anyway; P21 releases it at settlement), records `live$background` (including `opts = bg_run_opts(run)`: `max_turns`, `budget`, `returns`, `context`, `timeout`, `preset`, `tools`, `root`, `agent` and `depth` of the background run, so a run resumed after waiting keeps the call's limits; never `call`, which holds the caller's frame [R2], nor `safety`, which is snapshotted again at resume, IC-53), adds the job row, installs the UI wrappers and prints the one-time experimental notice. Task 4 adds the timer.
+Behaviour of `bg_register(s)`, in order: a non-session or a detached copy is
+`gptr_error_invalid_argument`; without later it signals `gptr_error_missing_package`
+(`package = "later"`, `feature = "background sessions"`) and first aborts a run that P08 started for
+the background (`run$opts$background` already `TRUE`), so nothing is left unpumped; a live run
+(P08's background start, or a foreground run sent to the background from the pause menu) is marked
+with `run$opts$background = TRUE`, which is what lets P06's foreground wait return for
+`[b]ackground`; an idle session with queued input (the `.run = FALSE` example of 04 section 7.21) is
+started with `run_start(s, NULL, opts = list(background = TRUE))`; an idle session with nothing
+queued is `gptr_error_invalid_argument`. It then holds the session in `the$bg$sessions` (a running
+session is held by the reactor anyway; P21 releases it at settlement), records `live$background`
+(including `opts = bg_run_opts(run)`: `max_turns`, `budget`, `returns`, `context`, `timeout`,
+`preset`, `tools`, `root`, `agent` and `depth` of the background run, so a run resumed after waiting
+keeps the call's limits; never `call`, which holds the caller's frame [R2], nor `safety`, which is
+snapshotted again at resume, IC-53), adds the job row, installs the UI wrappers and prints the
+one-time experimental notice. Task 4 adds the timer.
 
-Why the factory registers a record already in this task: P01's `service_builtin_active()` treats a built-in without any record in a non-empty registry as filtered out (every built-in of 04 §10.3 registers at least one record), so a factory that registered nothing would hide `bg.register` (`ext_service_has()` FALSE, `ext_service_get()` signalling `gptr_error_not_available`, and `peter(background = TRUE)` failing with that class instead of `gptr_error_missing_package`). The record is the `ask` hook that the final built-in has anyway (04 §10.3 reading A6), not a `service` record: built-ins own their services through the bootstrap table (IC-34), and a built-in `service` record would shadow the stub that P14's test "[b]ackground hands a foreground run to bg.register (P21) and resumes" sets with `ext_service_set()`. Until Task 5 parks sessions, the Task 4 sweep stops a run whose `ask` call was blocked, as it stops any run with a recorded ask.
+Why the factory registers a record already in this task: P01's `service_builtin_active()` treats a
+built-in without any record in a non-empty registry as filtered out (every built-in of 04
+section 10.3 registers at least one record), so a factory that registered nothing would hide
+`bg.register` (`ext_service_has()` FALSE, `ext_service_get()` signalling `gptr_error_not_available`,
+and `peter(background = TRUE)` failing with that class instead of `gptr_error_missing_package`). The
+record is the `ask` hook that the final built-in has anyway (04 section 10.3 reading A6), not a
+`service` record: built-ins own their services through the bootstrap table (IC-34), and a built-in
+`service` record would shadow the stub that P14's test "[b]ackground hands a foreground run to
+bg.register (P21) and resumes" sets with `ext_service_set()`. Until Task 5 parks sessions, the
+Task 4 sweep stops a run whose `ask` call was blocked, as it stops any run with a recorded ask.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -737,7 +895,13 @@ test_that("gptr_jobs(kill = TRUE) and bg_shutdown() stop background sessions", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
 
-Expected: the 54 expectations of Tasks 1-2 pass and the eight new tests fail: `"builtin:background" %in% gptr_registry()$source is not TRUE`, `ext_service_has("bg.register") is not TRUE`, `gptr_error_not_available` from `ext_service_get("bg.register")`, `could not find function "bg_on_tool_call"`, `could not find function "bg_run_opts"`, and `could not find function "bg_register"` / `could not find function "bg_shutdown"` in the others (the summary line shows `FAIL` greater than 0).
+Expected: the 54 expectations of Tasks 1-2 pass and the eight new tests fail:
+`"builtin:background" %in% gptr_registry()$source is not TRUE`,
+`ext_service_has("bg.register") is not TRUE`, `gptr_error_not_available` from
+`ext_service_get("bg.register")`, `could not find function "bg_on_tool_call"`,
+`could not find function "bg_run_opts"`, and `could not find function "bg_register"` /
+`could not find function "bg_shutdown"` in the others (the summary line shows `FAIL` greater than
+0).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -988,10 +1152,33 @@ git commit -m "feat(agent): register background sessions through the bg.register
 - Test: `tests/testthat/test-agent-background.R` (append)
 
 **Interfaces:**
-- Consumes: `later::later(func, delay = 0)` (returns a cancel function), `later::run_now(timeoutSecs = 0L, all = TRUE)` (tests); `reactor_pump()` (P04); `registry_diagnostic(source, event, class, message)`, `ext_service_has()`, `ext_service_get("console.interrupt_policy")` (P01/P02, service of P14); `run_abort()` (P06); `gptr_wait()`, `gptr_cancel()`, `gptr_steer()` through the pipe (P08); `gptr_jobs()` (P04).
-- Produces (internal): `bg_ensure_pump()`, `bg_guard(event, expr)`, `bg_callback()`, `bg_runs()`, `bg_tick()`, `bg_with_policy(fun, runs)`, `bg_sweep(idle)` (Task 5 replaces it with `bg_sweep(idle, resume)`).
+- Consumes: `later::later(func, delay = 0)` (returns a cancel function),
+  `later::run_now(timeoutSecs = 0L, all = TRUE)` (tests); `reactor_pump()` (P04);
+  `registry_diagnostic(source, event, class, message)`, `ext_service_has()`,
+  `ext_service_get("console.interrupt_policy")` (P01/P02, service of P14); `run_abort()` (P06);
+  `gptr_wait()`, `gptr_cancel()`, `gptr_steer()` through the pipe (P08); `gptr_jobs()` (P04).
+- Produces (internal): `bg_ensure_pump()`, `bg_guard(event, expr)`, `bg_callback()`, `bg_runs()`,
+  `bg_tick()`, `bg_with_policy(fun, runs)`, `bg_sweep(idle)` (Task 5 replaces it with
+  `bg_sweep(idle, resume)`).
 
-How it works: `bg_ensure_pump()` arms one `later::later(bg_callback, 0.05)` while background sessions exist; it never creates `the$bg`, so a callback that fires after `bg_shutdown()` cannot revive the state. `bg_callback()` first cancels any other armed handle (so a manual call never leaves two timer chains) and re-arms through `on.exit()`, so neither an error nor an interrupt can stop the chain while sessions exist; then it either runs an idle tick (no reactor pump on the stack) or does bookkeeping only (a blocking gptr call is pumping; IC-57). The idle tick sets `the$bg$ticking`, runs `reactor_pump(until = bg_once(), slice_ms = 0L, allow_runs = <ids>)` under P14's interrupt policy in `"repl"` mode (abort-only when P14 is absent), where `<ids>` are the background runs with `gptr.background_tools = "idle"` and `character()` with `"wait"` (explicit ids also keep a suspended foreground run's queued tools waiting); a session with a recorded ask is not ticked again. The tick and the sweep are guarded separately by `bg_guard()`: an error never escapes the callback (`later::run_now()` would re-raise it at the console) and becomes a `builtin:background` diagnostic, and a failing tick never skips the sweep. The sweep first aborts (reason `"waiting"`) any run of a session with a recorded ask, so a denied call is never retried at the next tick (Task 5 then parks such a session instead of releasing it), and releases sessions whose run settled: job row removed, UI wrappers removed, `live$background` cleared, the strong reference dropped (so an unreferenced settled session can be collected), and a notice when the settlement was seen at the idle console.
+How it works: `bg_ensure_pump()` arms one `later::later(bg_callback, 0.05)` while background
+sessions exist; it never creates `the$bg`, so a callback that fires after `bg_shutdown()` cannot
+revive the state. `bg_callback()` first cancels any other armed handle (so a manual call never
+leaves two timer chains) and re-arms through `on.exit()`, so neither an error nor an interrupt can
+stop the chain while sessions exist; then it either runs an idle tick (no reactor pump on the stack)
+or does bookkeeping only (a blocking gptr call is pumping; IC-57). The idle tick sets
+`the$bg$ticking`, runs `reactor_pump(until = bg_once(), slice_ms = 0L, allow_runs = <ids>)` under
+P14's interrupt policy in `"repl"` mode (abort-only when P14 is absent), where `<ids>` are the
+background runs with `gptr.background_tools = "idle"` and `character()` with `"wait"` (explicit ids
+also keep a suspended foreground run's queued tools waiting); a session with a recorded ask is not
+ticked again. The tick and the sweep are guarded separately by `bg_guard()`: an error never escapes
+the callback (`later::run_now()` would re-raise it at the console) and becomes a
+`builtin:background` diagnostic, and a failing tick never skips the sweep. The sweep first aborts
+(reason `"waiting"`) any run of a session with a recorded ask, so a denied call is never retried at
+the next tick (Task 5 then parks such a session instead of releasing it), and releases sessions
+whose run settled: job row removed, UI wrappers removed, `live$background` cleared, the strong
+reference dropped (so an unreferenced settled session can be collected), and a notice when the
+settlement was seen at the idle console.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1116,11 +1303,15 @@ test_that("an unreferenced settled background session is collected", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
 
-Expected: the 94 earlier expectations pass; the new tests fail: `could not find function "bg_callback"`, and `bg_pump_until(...) is not TRUE` after the 20 s timeouts because nothing pumps the background runs yet (the red run takes about 80 s).
+Expected: the 94 earlier expectations pass; the new tests fail:
+`could not find function "bg_callback"`, and `bg_pump_until(...) is not TRUE` after the 20 s
+timeouts because nothing pumps the background runs yet (the red run takes about 80 s).
 
 - [ ] **Step 3: Write the implementation**
 
-Replace the whole definition of `bg_register()` (from its roxygen title `#' Run a session in the background ...` to its closing brace) with this version, which arms the timer before returning (the only change is the `bg_ensure_pump()` line):
+Replace the whole definition of `bg_register()` (from its roxygen title
+`#' Run a session in the background ...` to its closing brace) with this version, which arms the
+timer before returning (the only change is the `bg_ensure_pump()` line):
 
 ```r
 #' Run a session in the background (service `bg.register`, 04 section 7.21) [experimental]
@@ -1282,10 +1473,41 @@ git commit -m "feat(agent): pump background sessions from a later timer at the i
 - Test: `tests/testthat/test-agent-background.R` (append)
 
 **Interfaces:**
-- Consumes: `session_data(s)` (writes `status` and `reason` for the `waiting` transition that 04 §7.21 and IC-57 assign to P21), `session_live(s)`, `session_enqueue(s, text, as = "follow_up", source, blocks)`, `run_start(s, input, opts = list())`, `run_abort()`, `run_current()` (P06); `gptr_inform()` (P01); `registry_diagnostic()` (P02); Task 3's `bg_on_tool_call()` (the `tool_call` hook that `builtin:background` registers with matcher `ask`); test helpers `local_scripted_ui(answers = list(), .env = parent.frame())` (P11) and `bg_fixture()` (Task 2).
-- Produces (internal): `bg_sweep(idle, resume)`, `bg_wait_label(ask)`, `bg_park_session(s)`, `bg_resume(s)` (`builtin:background` keeps Task 3's factory, whose `tool_call` hook records an idle-tick `ask` call that this task now parks); the session status `waiting` with `reason = "waiting for approval: <tool>: <first line>"` (or `"waiting for an answer: ..."` for `ask`, `select`, `input` and `questions`); job status `waiting`.
+- Consumes: `session_data(s)` (writes `status` and `reason` for the `waiting` transition that 04
+  section 7.21 and IC-57 assign to P21), `session_live(s)`,
+  `session_enqueue(s, text, as = "follow_up", source, blocks)`,
+  `run_start(s, input, opts = list())`, `run_abort()`, `run_current()` (P06); `gptr_inform()` (P01);
+  `registry_diagnostic()` (P02); Task 3's `bg_on_tool_call()` (the `tool_call` hook that
+  `builtin:background` registers with matcher `ask`); test helpers
+  `local_scripted_ui(answers = list(), .env = parent.frame())` (P11) and `bg_fixture()` (Task 2).
+- Produces (internal): `bg_sweep(idle, resume)`, `bg_wait_label(ask)`, `bg_park_session(s)`,
+  `bg_resume(s)` (`builtin:background` keeps Task 3's factory, whose `tool_call` hook records an
+  idle-tick `ask` call that this task now parks); the session status `waiting` with
+  `reason = "waiting for approval: <tool>: <first line>"` (or `"waiting for an answer: ..."` for
+  `ask`, `select`, `input` and `questions`); job status `waiting`.
 
-How it works: during an idle tick a UI wrapper (Task 2) answered a denial with the pending text and recorded the ask; an `ask` tool call is blocked earlier, by Task 3's `tool_call` hook, with the same text (P06 shows it as "Tool execution was blocked: ..."), because a cancelled `questions()` answer would only tell the model that the user dismissed the questions. Right after the tick, `bg_sweep()` aborts the run with reason `"waiting"` (whichever run of the session asked: the background run, or a run that `gptr_wait()` or `gptr_step()` started on it), so the model never sees the denial at an idle tick and makes no further request. `bg_park_session()` then re-queues as follow-ups the queue items that this abort moved to `.d$dropped` (so a steer piped in meanwhile is not lost; items without text are skipped), sets `.d$status = "waiting"` and `.d$reason`, and prints one notice. Idle ticks never resume a waiting session. When a blocking gptr call pumps the reactor (`peter()`, `gptr_wait()`, `gptr_step()`, a console turn), P04's outermost pump calls `later::run_now(0)`, `bg_callback()` sees the pump on the stack and, when no run is executing a tool (`run_current()` is `NULL`), `bg_resume()` starts a run with `run_start(s, NULL, opts = <kept options>)`. P06 continues from the leaf: the transcript ends with the denied (or blocked) call and its result, so the model reads the pending text and repeats the call, and the gate now asks through the real UI inside the blocking call (one more model request). A run that `gptr_wait()` or `gptr_step()` starts on a waiting session with queued input supersedes the ask; a pipe into a waiting session queues a steer (P08 treats `waiting` like `running`), which that run or the resumed run receives; a session whose status someone else changed is released; `gptr_jobs(kill = TRUE)` sets a waiting session to `aborted`. A waiting session that cannot continue (for example a transcript that ends with a final answer, so `run_start()` has nothing to run) is set to `aborted` with one diagnostic and released, never left waiting.
+How it works: during an idle tick a UI wrapper (Task 2) answered a denial with the pending text and
+recorded the ask; an `ask` tool call is blocked earlier, by Task 3's `tool_call` hook, with the same
+text (P06 shows it as "Tool execution was blocked: ..."), because a cancelled `questions()` answer
+would only tell the model that the user dismissed the questions. Right after the tick, `bg_sweep()`
+aborts the run with reason `"waiting"` (whichever run of the session asked: the background run, or a
+run that `gptr_wait()` or `gptr_step()` started on it), so the model never sees the denial at an
+idle tick and makes no further request. `bg_park_session()` then re-queues as follow-ups the queue
+items that this abort moved to `.d$dropped` (so a steer piped in meanwhile is not lost; items
+without text are skipped), sets `.d$status = "waiting"` and `.d$reason`, and prints one notice. Idle
+ticks never resume a waiting session. When a blocking gptr call pumps the reactor (`peter()`,
+`gptr_wait()`, `gptr_step()`, a console turn), P04's outermost pump calls `later::run_now(0)`,
+`bg_callback()` sees the pump on the stack and, when no run is executing a tool (`run_current()` is
+`NULL`), `bg_resume()` starts a run with `run_start(s, NULL, opts = <kept options>)`. P06 continues
+from the leaf: the transcript ends with the denied (or blocked) call and its result, so the model
+reads the pending text and repeats the call, and the gate now asks through the real UI inside the
+blocking call (one more model request). A run that `gptr_wait()` or `gptr_step()` starts on a
+waiting session with queued input supersedes the ask; a pipe into a waiting session queues a steer
+(P08 treats `waiting` like `running`), which that run or the resumed run receives; a session whose
+status someone else changed is released; `gptr_jobs(kill = TRUE)` sets a waiting session to
+`aborted`. A waiting session that cannot continue (for example a transcript that ends with a final
+answer, so `run_start()` has nothing to run) is set to `aborted` with one diagnostic and released,
+never left waiting.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1383,11 +1605,16 @@ test_that("a waiting session that cannot continue is aborted and released", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
 
-Expected: the 127 earlier expectations pass; the three integration tests fail with `bg_pump_until(function() identical(s$status, "waiting")) is not TRUE` (the Task 4 sweep aborts the asked run and releases the session with status `aborted` instead of parking it) and `grep("is waiting for approval: r", notes, fixed = TRUE)` of length 0 instead of 1; the unit test errors with `could not find function "bg_resume"`.
+Expected: the 127 earlier expectations pass; the three integration tests fail with
+`bg_pump_until(function() identical(s$status, "waiting")) is not TRUE` (the Task 4 sweep aborts the
+asked run and releases the session with status `aborted` instead of parking it) and
+`grep("is waiting for approval: r", notes, fixed = TRUE)` of length 0 instead of 1; the unit test
+errors with `could not find function "bg_resume"`.
 
 - [ ] **Step 3: Write the implementation**
 
-Replace the whole definition of `bg_callback()` (from its roxygen title `#' The later callback: ...` to its closing brace) with:
+Replace the whole definition of `bg_callback()` (from its roxygen title `#' The later callback: ...`
+to its closing brace) with:
 
 ```r
 #' The later callback: an idle tick, or bookkeeping only while a reactor pump is on the stack
@@ -1411,7 +1638,8 @@ bg_callback = function() {
 }
 ```
 
-Replace the whole definition of `bg_sweep()` (from its roxygen title `#' Bookkeeping after a tick ...` to its closing brace) with:
+Replace the whole definition of `bg_sweep()` (from its roxygen title
+`#' Bookkeeping after a tick ...` to its closing brace) with:
 
 ```r
 #' Bookkeeping after a tick or inside a blocking pump: stop, park, resume, release
@@ -1460,7 +1688,8 @@ bg_sweep = function(idle, resume) {
 }
 ```
 
-Append to `R/agent-background.R` (`builtin_background()` and `bg_on_tool_call()` stay as written in Task 3):
+Append to `R/agent-background.R` (`builtin_background()` and `bg_on_tool_call()` stay as written in
+Task 3):
 
 ```r
 #' "approval" for a permission ask, "an answer" for the other asks
@@ -1555,10 +1784,20 @@ git commit -m "feat(agent): park idle-tick asks as waiting and resume at the nex
 - Test: `tests/testthat/test-agent-background.R` (append)
 
 **Interfaces:**
-- Consumes: the API object's `gptr$on(event, handler, matcher = NULL)` (P02); the `tool_result` event (04 §10.4: patch chain, payload `tool_name`, `tool_call_id`, `input`, `content`, `details`, `is_error`; handlers return `NULL` for no patch) and the `r` tool's `details$objects = list(added, modified, removed)` (04 §4.4, P10); `gptr_registry()` (P02).
-- Produces (internal): `builtin:background` now registers two hooks, `gptr$on("tool_call", bg_on_tool_call, matcher = "ask")` (Task 3) and `gptr$on("tool_result", bg_on_tool_result, matcher = "r")`; `bg_on_tool_result(event, ctx)`; `bg_flush_changes()`; the notice `Background session <id> changed <names> in your workspace.`
+- Consumes: the API object's `gptr$on(event, handler, matcher = NULL)` (P02); the `tool_result`
+  event (04 section 10.4: patch chain, payload `tool_name`, `tool_call_id`, `input`, `content`,
+  `details`, `is_error`; handlers return `NULL` for no patch) and the `r` tool's
+  `details$objects = list(added, modified, removed)` (04 section 4.4, P10); `gptr_registry()` (P02).
+- Produces (internal): `builtin:background` now registers two hooks,
+  `gptr$on("tool_call", bg_on_tool_call, matcher = "ask")` (Task 3) and
+  `gptr$on("tool_result", bg_on_tool_result, matcher = "r")`; `bg_on_tool_result(event, ctx)`;
+  `bg_flush_changes()`; the notice `Background session <id> changed <names> in your workspace.`
 
-How it works: the hook only records (never prints: it runs inside the dispatcher, where output could land in a tool's capture), and only during an idle tick, only for a background session, and never for plan mode (plan mode evaluates in a scratch overlay, not the user's workspace). After the tick's pump returns, `bg_flush_changes()` prints one notice per recorded `r` result. Foreground calls never produce the notice.
+How it works: the hook only records (never prints: it runs inside the dispatcher, where output could
+land in a tool's capture), and only during an idle tick, only for a background session, and never
+for plan mode (plan mode evaluates in a scratch overlay, not the user's workspace). After the tick's
+pump returns, `bg_flush_changes()` prints one notice per recorded `r` result. Foreground calls never
+produce the notice.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1592,11 +1831,15 @@ test_that("an r tool that changed bindings at an idle tick prints one notice", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
 
-Expected: the 147 earlier expectations pass; the new test fails with `grep("changed made_in_bg in your workspace", notes, fixed = TRUE)` of length 0 instead of 1 (nothing records `r` results yet; its last expectation already passes, because Task 3's factory registers the `tool_call` hook under the source `builtin:background`).
+Expected: the 147 earlier expectations pass; the new test fails with
+`grep("changed made_in_bg in your workspace", notes, fixed = TRUE)` of length 0 instead of 1
+(nothing records `r` results yet; its last expectation already passes, because Task 3's factory
+registers the `tool_call` hook under the source `builtin:background`).
 
 - [ ] **Step 3: Write the implementation**
 
-Replace the whole definition of `builtin_background()` (its roxygen block and the function, as written in Task 3) with:
+Replace the whole definition of `builtin_background()` (its roxygen block and the function, as
+written in Task 3) with:
 
 ```r
 #' The `builtin:background` factory: owns the bg.register service, blocks idle-tick `ask` calls,
@@ -1612,7 +1855,8 @@ builtin_background = function(gptr) {
 }
 ```
 
-Replace the whole definition of `bg_tick()` (from its roxygen title `#' One idle tick: ...` to its closing brace) with:
+Replace the whole definition of `bg_tick()` (from its roxygen title `#' One idle tick: ...` to its
+closing brace) with:
 
 ```r
 #' One idle tick: one non-blocking reactor iteration under the interrupt policy
@@ -1691,8 +1935,11 @@ git commit -m "feat(agent): notify when an idle-tick r call changes workspace bi
 - Test: `tests/testthat/test-agent-background.R` (append)
 
 **Interfaces:**
-- Consumes: `devtools::document()`; `tools::parse_Rd()`; `expect_no_copy()` (P01 `helper-tracemem.R`).
-- Produces: the help topic `gptr-background` (alias `background-sessions`) documenting the experimental status, the behaviour, the support matrix and the option `gptr.background_tools` (P25 copies the option text into `?gptr_options`, 04 §3.1).
+- Consumes: `devtools::document()`; `tools::parse_Rd()`; `expect_no_copy()` (P01
+  `helper-tracemem.R`).
+- Produces: the help topic `gptr-background` (alias `background-sessions`) documenting the
+  experimental status, the behaviour, the support matrix and the option `gptr.background_tools` (P25
+  copies the option text into `?gptr_options`, 04 section 3.1).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1743,7 +1990,9 @@ test_that("a settled background run leaves the caller's object editable in place
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
 
-Expected: the 152 earlier expectations, the examples guard and the copy-safety row pass; the topic test fails with `file.exists(rd) is not TRUE` and a `cannot open file '.../man/gptr-background.Rd'` error.
+Expected: the 152 earlier expectations, the examples guard and the copy-safety row pass; the topic
+test fails with `file.exists(rd) is not TRUE` and a `cannot open file '.../man/gptr-background.Rd'`
+error.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1815,21 +2064,26 @@ Then regenerate the documentation:
 
 Run: `Rscript --vanilla -e 'devtools::document()'`
 
-Expected: the output includes `Writing 'gptr-background.Rd'`; `git diff --exit-code NAMESPACE` exits with status 0 (NAMESPACE unchanged).
+Expected: the output includes `Writing 'gptr-background.Rd'`; `git diff --exit-code NAMESPACE` exits
+with status 0 (NAMESPACE unchanged).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 158 ]` (with later installed and `capabilities("profmem")` TRUE; otherwise the copy row reports one SKIP).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 158 ]` (with later installed and
+`capabilities("profmem")` TRUE; otherwise the copy row reports one SKIP).
 
 Run: `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); print(lintr::lint("R/agent-background.R")); print(lintr::lint("tests/testthat/test-agent-background.R"))'`
 
-Expected: `No lints found.` twice (the repository `.lintr` of conventions §4; the namespace is loaded first because the `object_usage_linter` of `linters_with_defaults()` otherwise reports every internal helper as "no visible global function definition", P01 acceptance A3).
+Expected: `No lints found.` twice (the repository `.lintr` of conventions section 4; the namespace
+is loaded first because the `object_usage_linter` of `linters_with_defaults()` otherwise reports
+every internal helper as "no visible global function definition", P01 acceptance A3).
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "arch-layers|lint-rules")'`
 
-Expected: a summary line with `FAIL 0 | WARN 0` (P01's architecture and lint tests; this file calls only L0-L2 functions, the kernel SDK and the declared service `console.interrupt_policy`).
+Expected: a summary line with `FAIL 0 | WARN 0` (P01's architecture and lint tests; this file calls
+only L0-L2 functions, the kernel SDK and the declared service `console.interrupt_policy`).
 
 - [ ] **Step 5: Commit**
 
@@ -1842,7 +2096,8 @@ git commit -m "docs(agent): document background sessions and their support matri
 
 ## Plan acceptance
 
-Every acceptance check of P21 in `05-plan-decomposition.md` (P21 has no separate "Review amendments" bullet; its IC-57 and IC-36 amendments are part of its scope and are listed after the three checks).
+Every acceptance check of P21 in `05-plan-decomposition.md` (P21 has no separate "Review amendments"
+bullet; its IC-57 and IC-36 amendments are part of its scope and are listed after the three checks).
 
 | # | Acceptance check (05, P21) | Proved by |
 |---|---|---|
@@ -1868,19 +2123,24 @@ Commands and expected results, run from `/Users/wanjun/Desktop/gptr` after Task 
 
 1. `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
    Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 158 ]`.
-2. `NOT_CRAN=false Rscript --vanilla -e 'devtools::test(filter = "agent-background")'` (devtools and testthat keep an explicitly set `NOT_CRAN`)
+2. `NOT_CRAN=false Rscript --vanilla -e 'devtools::test(filter = "agent-background")'` (devtools and
+   testthat keep an explicitly set `NOT_CRAN`)
    Expected: `[ FAIL 0 | WARN 0 | SKIP 30 | PASS 0 ]` (every test reports `On CRAN`).
 3. `grep -c 'skip_if_not_installed("later")' tests/testthat/test-agent-background.R`
-   Expected: `14` (every test that creates a background run or pumps `later`; the other 16 tests need no later).
+   Expected: `14` (every test that creates a background run or pumps `later`; the other 16 tests
+   need no later).
 4. `Rscript --vanilla -e 'devtools::test()'`
-   Expected: a summary line with `FAIL 0 | WARN 0` (the whole suite, including P01's `test-lint-rules.R` and `test-arch-layers.R`).
+   Expected: a summary line with `FAIL 0 | WARN 0` (the whole suite, including P01's
+   `test-lint-rules.R` and `test-arch-layers.R`).
 5. M4 exit, run once P18-P21 are complete (05 P20 acceptance 4):
    `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'`
-   Expected: 0 errors, 0 warnings, and no NOTE apart from the incoming-feasibility NOTE naming the maintainer.
+   Expected: 0 errors, 0 warnings, and no NOTE apart from the incoming-feasibility NOTE naming the
+   maintainer.
 
 ## Manual check (interactive terminal R; not automated)
 
-03 §13 asks for a manual checklist for the pause menu and background pumping. In a terminal `R` session started in the repository (`R --vanilla`, then `devtools::load_all()`):
+03 section 13 asks for a manual checklist for the pause menu and background pumping. In a terminal
+`R` session started in the repository (`R --vanilla`, then `devtools::load_all()`):
 
 ```r
 fake = gptr_fake_provider(list(
@@ -1901,16 +2161,16 @@ gptr_wait(w)                      # the approval prompt appears inside the block
 c(w$status, z)                    # "idle" and 3
 ```
 
-Record the result per front end in the support matrix of Task 7 when a front end moves from "unverified" to "verified".
+Record the result per front end in the support matrix of Task 7 when a front end moves from
+"unverified" to "verified".
 
 ---
 
 ## Self-review
 
-
 ### Spec coverage
 
-| Requirement (05 P21 scope, 04 §7.21, IC-57, IC-36) | Task |
+| Requirement (05 P21 scope, 04 section 7.21, IC-57, IC-36) | Task |
 |---|---|
 | Registration of a running session with a `later`-driven pump, 50 ms timer, no `later_fd` | Task 3 (`bg_register()`), Task 4 (`bg_ensure_pump()`, `bg_callback()`) |
 | Pump calls `reactor_pump(slice_ms = 0)`; no-op while the reactor is on the stack (IC-57) | Task 1 (`bg_once()`, `bg_reactor_busy()`), Task 4 (`bg_tick()`) |
@@ -1927,59 +2187,193 @@ Record the result per front end in the support matrix of Task 7 when a front end
 
 ### Placeholder scan
 
-Searched the plan for the placeholder phrases of the writing-plans standard (to-be-determined markers, deferred-implementation notes, "fill in" instructions, references to another task's code instead of the code itself, generic error-handling or edge-case instructions): none. Every step that changes code shows the complete code; every modification replaces a whole named function (its roxygen block and definition) or inserts a complete block at a named line. The red-phase expectations of Tasks 3-7 name the failing assertions and messages rather than exact pass counts, because tests that error mid-way make those counts depend on where the error happens.
+Searched the plan for the placeholder phrases of the writing-plans standard (to-be-determined
+markers, deferred-implementation notes, "fill in" instructions, references to another task's code
+instead of the code itself, generic error-handling or edge-case instructions): none. Every step that
+changes code shows the complete code; every modification replaces a whole named function (its
+roxygen block and definition) or inserts a complete block at a named line. The red-phase
+expectations of Tasks 3-7 name the failing assertions and messages rather than exact pass counts,
+because tests that error mid-way make those counts depend on where the error happens.
 
 ### Type and name consistency with 04
 
-- `bg_register(s)` returns `invisible(s)` (§7.0 shape `function(session) invisible(session)`; §7.21 name `bg_register(s)`); service name `bg.register`; `provided_by = "P21"`; owner `builtin:background`.
-- Option `gptr.background_tools`, default `"idle"`, values `"idle"`/`"wait"` (§3.1). State `the$bg` (§7.0).
-- Status `waiting` (§5.1); job kind `session` and columns of `gptr_jobs` (§5.12).
-- `gptr_error_missing_package` fields `package`, `feature` (§2.2); notices are `gptr_message_notice` (§2.2); errors never escape the callback and become `registry_diagnostic("builtin:background", <"tick" | "sweep" | "resume">, <class>, <message>)` (§7.2).
-- `ui` methods and arguments exactly as §10.2 kind 22; at an idle tick `permission()` answers `list(decision = "deny", remember = NULL, feedback = chr(1))` (a listed decision with feedback), `select()` `NA_integer_`, `input()` `NA_character_`, `questions()` `list(answers = <named list>, cancelled = TRUE)`.
-- Hooks: `tool_call` handler returns `NULL` or `list(decision = "block", reason)`; `tool_result` handler returns `NULL` (§10.4).
-- `reactor_pump(until, slice_ms, allow_runs, timeout)`, `job_add(kind, id, name, pid, stop, status)`, `run_start(s, input, opts)`, `run_abort(run, reason)`, `session_enqueue(s, text, as, source, blocks)`, `registry_add(spec, source, rank, session)`, `ext_service_set(name, fun, provided_by, builtin)`, `console.interrupt_policy(expr_fun, runs, mode)` are called with the argument names of §7-§8. The kept run options are §7.6 names.
-- Queue sources re-used unchanged when dropped items are re-queued (§5.1 `queue`, IC-55); the relay text asserted in Task 4 is the §4.2 text.
-- Dependency plans agree: P08's `route_continue()` steers a `running` or `waiting` session with the pipe and its `gptr_wait()` pumps until no session is `running` or `waiting` (its ambiguity 16 follows this plan's A10); P06's `run_start()` refuses only a live run or status `running`, continues from the leaf with `input = NULL`, and records `"abort"` answers as described in A11; P11's `ui_get()` resolves `registry_get("ui", <name>, session = <id>)`; P04's `job_add()` replaces a row with the same id and `gptr_jobs(kill = TRUE)` tolerates stop functions that remove their own rows.
+- `bg_register(s)` returns `invisible(s)` (section 7.0 shape `function(session) invisible(session)`;
+  section 7.21 name `bg_register(s)`); service name `bg.register`; `provided_by = "P21"`; owner
+  `builtin:background`.
+- Option `gptr.background_tools`, default `"idle"`, values `"idle"`/`"wait"` (section 3.1). State
+  `the$bg` (section 7.0).
+- Status `waiting` (section 5.1); job kind `session` and columns of `gptr_jobs` (section 5.12).
+- `gptr_error_missing_package` fields `package`, `feature` (section 2.2); notices are
+  `gptr_message_notice` (section 2.2); errors never escape the callback and become
+  `registry_diagnostic("builtin:background", <"tick" | "sweep" | "resume">, <class>, <message>)`
+  (section 7.2).
+- `ui` methods and arguments exactly as section 10.2 kind 22; at an idle tick `permission()` answers
+  `list(decision = "deny", remember = NULL, feedback = chr(1))` (a listed decision with feedback),
+  `select()` `NA_integer_`, `input()` `NA_character_`, `questions()`
+  `list(answers = <named list>, cancelled = TRUE)`.
+- Hooks: `tool_call` handler returns `NULL` or `list(decision = "block", reason)`; `tool_result`
+  handler returns `NULL` (section 10.4).
+- `reactor_pump(until, slice_ms, allow_runs, timeout)`,
+  `job_add(kind, id, name, pid, stop, status)`, `run_start(s, input, opts)`,
+  `run_abort(run, reason)`, `session_enqueue(s, text, as, source, blocks)`,
+  `registry_add(spec, source, rank, session)`, `ext_service_set(name, fun, provided_by, builtin)`,
+  `console.interrupt_policy(expr_fun, runs, mode)` are called with the argument names of
+  sections 7-8. The kept run options are section 7.6 names.
+- Queue sources re-used unchanged when dropped items are re-queued (section 5.1 `queue`, IC-55); the
+  relay text asserted in Task 4 is the section 4.2 text.
+- Dependency plans agree: P08's `route_continue()` steers a `running` or `waiting` session with the
+  pipe and its `gptr_wait()` pumps until no session is `running` or `waiting` (its ambiguity 16
+  follows this plan's A10); P06's `run_start()` refuses only a live run or status `running`,
+  continues from the leaf with `input = NULL`, and records `"abort"` answers as described in A11;
+  P11's `ui_get()` resolves `registry_get("ui", <name>, session = <id>)`; P04's `job_add()` replaces
+  a row with the same id and `gptr_jobs(kill = TRUE)` tolerates stop functions that remove their own
+  rows.
 
 ### Contract ambiguities and the reading chosen
 
-- A1. **Parking an ask.** 04 gives P21 the behaviour "an ask moves the run to `waiting`" but no kernel hook, and P06 runs the gate inside the FIFO job of sequential tools, so an idle tick that runs a background tool also runs its gate. Reading: session-scoped rank-0 `ui` records (P02 registry scoping, §7.2, §10.1) wrap every UI and, during an idle tick only, answer a denial whose feedback says that approval is pending (cancelled answers for `select`/`input`/`questions`), a `tool_call` hook blocks the `ask` tool with the same text, and the sweep after the tick aborts the run (reason `"waiting"`) and writes `.d$status = "waiting"` and `.d$reason`. §7.6 and IC-33 ("`session_data()` (read)") say other plans read `.d` only; §7.21, IC-57 and 05 assign exactly this transition to P21 and P06 offers no setter, so P21 writes these two fields (and `aborted` when a waiting session is stopped or cannot continue). It relies on P11's `ui.get` resolving with `registry_get("ui", <name>, session = <session id>)`; Task 5's test fails loudly (a `permission` row in the scripted UI log during idle ticks) if it does not.
-- A2. **`run_start(s, NULL, ...)`.** 04 does not say what `input = NULL` means. Reading (P06 implements it): "take the first queued item; with none, continue from the leaf when the path awaits a response, else `gptr_error_invalid_argument`" (the same call starts a `.run = FALSE` session in the §7.21 example and resumes a waiting session; the error case is handled by `bg_resume()`).
-- A3. **Marking the run.** §7.6 lists `gptr_run` fields as read-only for other plans, while §7.21 says `bg_register()` "marks the run background". Reading: P21 sets `run$opts$background = TRUE` (the documented run option), which P06's `session_run()` foreground wait honours.
-- A4. **Reactor depth.** IC-57 says P04 tracks the pump depth but 04 names no accessor (P04's plan has an internal `reactor_depth()`). Reading: `bg_reactor_busy()` finds `reactor_pump` among `sys.function()` of the call stack (equivalent to depth > 0, no frame is kept, no helper outside 04 is needed).
-- A5. **`reactor_pump(slice_ms = 0)`.** With the default `until` and `timeout = Inf` it never returns. Reading: `until = bg_once()` (exactly one non-blocking iteration per tick).
-- A6. **Built-in owner.** IC-34 says every service is owned by a built-in, §10.3 lists none for P21. Reading: `builtin:background` (a `tool_call` and a `tool_result` hook), which also makes `-builtin:background` remove the service. The factory registers its `tool_call` hook from Task 3 on, because P01's `service_builtin_active()` hides the bootstrap services of a built-in with no record in a non-empty registry; it registers no `service` record (built-ins own services through the bootstrap table, and a built-in `service` record would shadow test stubs set with `ext_service_set()`, such as P14's pause-menu test).
-- A7. **Argument name.** §7.0 shows `function(session)`, §7.21 `bg_register(s)`; both consumers call it positionally. Reading: `s`.
-- A8. **`gptr_jobs` owner.** §5.12 lists the class with owner P21, IC-36 moves `gptr_jobs()` to P04. Reading: P04 owns the function and class; P21 adds rows with `job_add()` only.
-- A9. **Option documentation.** §3.1 says the owner documents the option in its roxygen `?gptr_options` section (assembled by P25). Reading: the option is documented in the `gptr-background` topic (section "Options"), as P04 does on `?gptr_jobs`, for P25 to collect.
-- A10. **`gptr_wait()` on a waiting session.** 04 does not say whether `waiting` counts as settled. Reading: P21 resumes waiting sessions from any blocking reactor pump; P08 treats `waiting` as not settled, so `gptr_wait(s)` pumps (P08 ambiguity 16 agrees). P08's `gptr_step()` starts only queued input and returns at once for a waiting session with an empty queue; `gptr_wait()` or any other blocking call continues it.
-- A11. **The `"abort"` permission answer.** 04 lists it but not its kernel effect. P06's `perm_ask()` records it as the tool result "Permission denied: the user aborted the run. The run stops here." and aborts after the call; the assistant tool-call message stays complete (only a streaming partial gets `stop_reason = "aborted"` and leaves the projection). Reading: background asks never answer `"abort"`; they answer a denial with the pending text, and the sweep stops the run itself.
-- A12. **Live record and run shapes.** Reading: the live record of `session_live()` and `gptr_run` are environments (§5.1 "environment binding", §5.13; P06's `live_new()`), so P21 assigns `live$background` and `run$opts` in place.
-- A13. **Queued input of `.run = FALSE`.** Reading: it lives in `.d$queue` as items `list(text, blocks, source, t)` (§5.1), which is what `bg_has_queued()` and `bg_title()` read.
-- A14. **Gateway order.** Reading (P08 implements it): P08 starts the run with its own run options plus `background = TRUE`, then calls `bg.register` (so budgets and `max_turns` of the call are kept, and copied into the live handle for a resume); `bg_register()` also accepts an unstarted session and starts it with `background = TRUE` only (a `.run = FALSE` call's pending options live inside P08's gateway, which P21 must not call).
-- A15. **Interrupt mode of idle ticks.** 04 does not say which mode of `console.interrupt_policy` background ticks use. Reading: `"repl"` (an abort does not re-signal the interrupt inside a `later` callback).
-- A16. **`gptr_cancel()` on a waiting session.** P08's `gptr_cancel()` aborts only a session's run, and a waiting session has none. Reading: documented in the topic (`gptr_jobs(kill = TRUE)` stops it); P21's sweep releases any waiting session whose status another plan changes, so a later P08 change that sets `aborted` for waiting sessions needs nothing from P21.
-- A17. **Returning from `[b]ackground`.** P06's `session_run()` stops its foreground wait when `run$opts$background` is `TRUE`, but P08's `run_foreground()` pumps through `run_wait()`, which waits for settlement only. Reading: P21 marks the run (its contract); whether the interrupted foreground `peter()` call returns at once is P08/P14 behaviour (P14 is not yet written in full), and the manual check of Task 7 covers it.
-- A18. **A `gptr.ui` spec object.** P11's `ui_get()` uses a `gptr_ui` spec given as the `gptr.ui` option directly, without a registry lookup, so session wrappers cannot shadow it. Reading: documented limitation; with such an option a background ask at an idle tick reaches that UI.
-- A19. **Asks of sub-agents.** A child session started by a background run's R tool at an idle tick resolves its own UI (its id has no wrappers). Reading: documented limitation; such children run inside the tool's evaluation, while the console is busy, as for any background tool.
-- A20. **`"wait"` mode inside unrelated blocking calls.** P04/P06/P08 pumps at depth 1 default `allow_runs` to `NULL`, so a background run's queued R tool also runs inside a blocking call on another session, not only inside `gptr_wait()`. Reading: accepted; 03 §6.2 says such tools are deferred to a blocking call, and the help text says "a blocking gptr call such as `gptr_wait()`".
-- A21. **Questions from extensions.** `select()`, `input()` and `questions()` called by an extension at an idle tick receive cancelled answers (the session is parked after the tick); only the `ask` tool is blocked with the pending text, because P21 can name it in a `tool_call` matcher.
+- A1. **Parking an ask.** 04 gives P21 the behaviour "an ask moves the run to `waiting`" but no
+  kernel hook, and P06 runs the gate inside the FIFO job of sequential tools, so an idle tick that
+  runs a background tool also runs its gate. Reading: session-scoped rank-0 `ui` records (P02
+  registry scoping, sections 7.2, 10.1) wrap every UI and, during an idle tick only, answer a denial
+  whose feedback says that approval is pending (cancelled answers for `select`/`input`/`questions`),
+  a `tool_call` hook blocks the `ask` tool with the same text, and the sweep after the tick aborts
+  the run (reason `"waiting"`) and writes `.d$status = "waiting"` and `.d$reason`. Section 7.6 and
+  IC-33 ("`session_data()` (read)") say other plans read `.d` only; section 7.21, IC-57 and 05
+  assign exactly this transition to P21 and P06 offers no setter, so P21 writes these two fields
+  (and `aborted` when a waiting session is stopped or cannot continue). It relies on P11's `ui.get`
+  resolving with `registry_get("ui", <name>, session = <session id>)`; Task 5's test fails loudly (a
+  `permission` row in the scripted UI log during idle ticks) if it does not.
+- A2. **`run_start(s, NULL, ...)`.** 04 does not say what `input = NULL` means. Reading (P06
+  implements it): "take the first queued item; with none, continue from the leaf when the path
+  awaits a response, else `gptr_error_invalid_argument`" (the same call starts a `.run = FALSE`
+  session in the section 7.21 example and resumes a waiting session; the error case is handled by
+  `bg_resume()`).
+- A3. **Marking the run.** Section 7.6 lists `gptr_run` fields as read-only for other plans, while
+  section 7.21 says `bg_register()` "marks the run background". Reading: P21 sets
+  `run$opts$background = TRUE` (the documented run option), which P06's `session_run()` foreground
+  wait honours.
+- A4. **Reactor depth.** IC-57 says P04 tracks the pump depth but 04 names no accessor (P04's plan
+  has an internal `reactor_depth()`). Reading: `bg_reactor_busy()` finds `reactor_pump` among
+  `sys.function()` of the call stack (equivalent to depth > 0, no frame is kept, no helper outside
+  04 is needed).
+- A5. **`reactor_pump(slice_ms = 0)`.** With the default `until` and `timeout = Inf` it never
+  returns. Reading: `until = bg_once()` (exactly one non-blocking iteration per tick).
+- A6. **Built-in owner.** IC-34 says every service is owned by a built-in, section 10.3 lists none
+  for P21. Reading: `builtin:background` (a `tool_call` and a `tool_result` hook), which also makes
+  `-builtin:background` remove the service. The factory registers its `tool_call` hook from Task 3
+  on, because P01's `service_builtin_active()` hides the bootstrap services of a built-in with no
+  record in a non-empty registry; it registers no `service` record (built-ins own services through
+  the bootstrap table, and a built-in `service` record would shadow test stubs set with
+  `ext_service_set()`, such as P14's pause-menu test).
+- A7. **Argument name.** Section 7.0 shows `function(session)`, section 7.21 `bg_register(s)`; both
+  consumers call it positionally. Reading: `s`.
+- A8. **`gptr_jobs` owner.** Section 5.12 lists the class with owner P21, IC-36 moves `gptr_jobs()`
+  to P04. Reading: P04 owns the function and class; P21 adds rows with `job_add()` only.
+- A9. **Option documentation.** Section 3.1 says the owner documents the option in its roxygen
+  `?gptr_options` section (assembled by P25). Reading: the option is documented in the
+  `gptr-background` topic (section "Options"), as P04 does on `?gptr_jobs`, for P25 to collect.
+- A10. **`gptr_wait()` on a waiting session.** 04 does not say whether `waiting` counts as settled.
+  Reading: P21 resumes waiting sessions from any blocking reactor pump; P08 treats `waiting` as not
+  settled, so `gptr_wait(s)` pumps (P08 ambiguity 16 agrees). P08's `gptr_step()` starts only queued
+  input and returns at once for a waiting session with an empty queue; `gptr_wait()` or any other
+  blocking call continues it.
+- A11. **The `"abort"` permission answer.** 04 lists it but not its kernel effect. P06's
+  `perm_ask()` records it as the tool result "Permission denied: the user aborted the run. The run
+  stops here." and aborts after the call; the assistant tool-call message stays complete (only a
+  streaming partial gets `stop_reason = "aborted"` and leaves the projection). Reading: background
+  asks never answer `"abort"`; they answer a denial with the pending text, and the sweep stops the
+  run itself.
+- A12. **Live record and run shapes.** Reading: the live record of `session_live()` and `gptr_run`
+  are environments (section 5.1 "environment binding", section 5.13; P06's `live_new()`), so P21
+  assigns `live$background` and `run$opts` in place.
+- A13. **Queued input of `.run = FALSE`.** Reading: it lives in `.d$queue` as items
+  `list(text, blocks, source, t)` (section 5.1), which is what `bg_has_queued()` and `bg_title()`
+  read.
+- A14. **Gateway order.** Reading (P08 implements it): P08 starts the run with its own run options
+  plus `background = TRUE`, then calls `bg.register` (so budgets and `max_turns` of the call are
+  kept, and copied into the live handle for a resume); `bg_register()` also accepts an unstarted
+  session and starts it with `background = TRUE` only (a `.run = FALSE` call's pending options live
+  inside P08's gateway, which P21 must not call).
+- A15. **Interrupt mode of idle ticks.** 04 does not say which mode of `console.interrupt_policy`
+  background ticks use. Reading: `"repl"` (an abort does not re-signal the interrupt inside a
+  `later` callback).
+- A16. **`gptr_cancel()` on a waiting session.** P08's `gptr_cancel()` aborts only a session's run,
+  and a waiting session has none. Reading: documented in the topic (`gptr_jobs(kill = TRUE)` stops
+  it); P21's sweep releases any waiting session whose status another plan changes, so a later P08
+  change that sets `aborted` for waiting sessions needs nothing from P21.
+- A17. **Returning from `[b]ackground`.** P06's `session_run()` stops its foreground wait when
+  `run$opts$background` is `TRUE`, but P08's `run_foreground()` pumps through `run_wait()`, which
+  waits for settlement only. Reading: P21 marks the run (its contract); whether the interrupted
+  foreground `peter()` call returns at once is P08/P14 behaviour (P14 is not yet written in full),
+  and the manual check of Task 7 covers it.
+- A18. **A `gptr.ui` spec object.** P11's `ui_get()` uses a `gptr_ui` spec given as the `gptr.ui`
+  option directly, without a registry lookup, so session wrappers cannot shadow it. Reading:
+  documented limitation; with such an option a background ask at an idle tick reaches that UI.
+- A19. **Asks of sub-agents.** A child session started by a background run's R tool at an idle tick
+  resolves its own UI (its id has no wrappers). Reading: documented limitation; such children run
+  inside the tool's evaluation, while the console is busy, as for any background tool.
+- A20. **`"wait"` mode inside unrelated blocking calls.** P04/P06/P08 pumps at depth 1 default
+  `allow_runs` to `NULL`, so a background run's queued R tool also runs inside a blocking call on
+  another session, not only inside `gptr_wait()`. Reading: accepted; 03 section 6.2 says such tools
+  are deferred to a blocking call, and the help text says "a blocking gptr call such as
+  `gptr_wait()`".
+- A21. **Questions from extensions.** `select()`, `input()` and `questions()` called by an extension
+  at an idle tick receive cancelled answers (the session is parked after the tick); only the `ask`
+  tool is blocked with the pending text, because P21 can name it in a `tool_call` matcher.
 
 ### Validation executed while writing and reviewing this plan
 
-- Every `r` code block of the plan was extracted to the scratch directory and parsed with `Rscript --vanilla` (R 4.4.3): all parse. The blocks were applied in task order with a scratch assembler (append, or replace a named definition with its roxygen block, or insert the topic after the header): the assembled stages after Tasks 4, 5 and 6 and the final file parse, and `codetools::findGlobals()` finds no undefined `bg_*` or `builtin_*` function at any stage; the remaining globals are the functions of P01, P02, P04 and P06 listed under "Interfaces used from earlier plans".
-- `lintr::lint()` (lintr 3.3.0.1) with the repository `.lintr` linters (`linters_with_defaults()` with `assignment_linter(operator = c("=", "<<-"))`, `line_length_linter(100)`, the snake_case `object_name_linter` with the S3 regex; `object_usage_linter` off because the other plans' functions are not in the scratch directory): no lints in the final R file, the test file and the intermediate stages. No `<-` or `%>%` in any code block; both R files are ASCII.
-- A stub kernel modelled on P04 (pump depth, the step order tasks, then `later::run_now(0)` at depth 1, then one FIFO tool) and P06 (the gate inside the FIFO job; `"allow"`, `"deny"` with feedback and `"abort"` answers recorded as P06 records them; `run_abort()` at a boundary; `run_start(s, NULL)` taking a queued item or continuing from the leaf, or failing when the transcript ends with a final answer) exercised the final file under `Rscript --vanilla`: 46 of 46 checks passed (registration, job row and name, marking, kept options, timer, progress at idle ticks, release and notices, timer chain stopping, no-op while a pump is on the stack, `"wait"` mode, an idle-tick ask stopped right after the denied call with no further request, the pending text reaching the model and no "aborted" text, the waiting notice and job status, the re-queued steer, no resume at idle ticks, resume inside a blocking pump with exactly one ask, stopping a waiting job, a superseding run's ask parked again without a request loop, the `ask` tool blocked with the pending text, failed resume aborted and released, a failing tick still swept and the timer re-armed after an error and after an interrupt, missing later, shutdown with no revival by a late callback, helpers). The same harness run against the plan's previous version failed 5 checks: the model was told "the user aborted the run", the pending text never reached it, and a superseding run's denied call was retried at every tick.
-- The 6 Task 1 tests and the Task 3 `bg_run_opts()` test (30 expectations) passed with testthat 3.3.2 against the stub environment, in `en_US.UTF-8` and in the C locale.
-- R 4.4.3 parses a `\u202e` escape inside a string literal (checked); the tests still build bidi and zero-width characters with `intToUtf8()`, and the plan contains no raw bidi or zero-width character.
-- later 1.4.8: a cancel function returns `TRUE` for a pending callback and `FALSE` afterwards; an error in a callback propagates out of `later::run_now()` (hence `bg_guard()`); `later::run_now()` called inside a later callback runs the other due callbacks (so the tick's own pump at depth 1 may service other later users, and `bg_callback()` cancels its own handle before ticking).
-- The Task 7 topic was generated with roxygen2 in a scratch package: `tools::checkRd()` reports nothing, `tools::Rd2txt()` renders the support matrix, and the Task 7 examples guard finds no `background = TRUE` in any `\examples` section.
-- `devtools::test()` keeps an explicitly set `NOT_CRAN=false` (testthat's `local_assume_not_on_cran()` returns early when `NOT_CRAN` is set), so acceptance command 2 skips every test.
-- Not executable here (earlier plans' code does not exist yet): the integration tests of Tasks 2-7 against the real P02/P04/P06/P08/P11/P14 code.
+- Every `r` code block of the plan was extracted to the scratch directory and parsed with
+  `Rscript --vanilla` (R 4.4.3): all parse. The blocks were applied in task order with a scratch
+  assembler (append, or replace a named definition with its roxygen block, or insert the topic after
+  the header): the assembled stages after Tasks 4, 5 and 6 and the final file parse, and
+  `codetools::findGlobals()` finds no undefined `bg_*` or `builtin_*` function at any stage; the
+  remaining globals are the functions of P01, P02, P04 and P06 listed under "Interfaces used from
+  earlier plans".
+- `lintr::lint()` (lintr 3.3.0.1) with the repository `.lintr` linters (`linters_with_defaults()`
+  with `assignment_linter(operator = c("=", "<<-"))`, `line_length_linter(100)`, the snake_case
+  `object_name_linter` with the S3 regex; `object_usage_linter` off because the other plans'
+  functions are not in the scratch directory): no lints in the final R file, the test file and the
+  intermediate stages. No `<-` or `%>%` in any code block; both R files are ASCII.
+- A stub kernel modelled on P04 (pump depth, the step order tasks, then `later::run_now(0)` at depth
+  1, then one FIFO tool) and P06 (the gate inside the FIFO job; `"allow"`, `"deny"` with feedback
+  and `"abort"` answers recorded as P06 records them; `run_abort()` at a boundary;
+  `run_start(s, NULL)` taking a queued item or continuing from the leaf, or failing when the
+  transcript ends with a final answer) exercised the final file under `Rscript --vanilla`: 46 of 46
+  checks passed (registration, job row and name, marking, kept options, timer, progress at idle
+  ticks, release and notices, timer chain stopping, no-op while a pump is on the stack, `"wait"`
+  mode, an idle-tick ask stopped right after the denied call with no further request, the pending
+  text reaching the model and no "aborted" text, the waiting notice and job status, the re-queued
+  steer, no resume at idle ticks, resume inside a blocking pump with exactly one ask, stopping a
+  waiting job, a superseding run's ask parked again without a request loop, the `ask` tool blocked
+  with the pending text, failed resume aborted and released, a failing tick still swept and the
+  timer re-armed after an error and after an interrupt, missing later, shutdown with no revival by a
+  late callback, helpers). The same harness run against the plan's previous version failed 5 checks:
+  the model was told "the user aborted the run", the pending text never reached it, and a
+  superseding run's denied call was retried at every tick.
+- The 6 Task 1 tests and the Task 3 `bg_run_opts()` test (30 expectations) passed with testthat
+  3.3.2 against the stub environment, in `en_US.UTF-8` and in the C locale.
+- R 4.4.3 parses a `\u202e` escape inside a string literal (checked); the tests still build bidi and
+  zero-width characters with `intToUtf8()`, and the plan contains no raw bidi or zero-width
+  character.
+- later 1.4.8: a cancel function returns `TRUE` for a pending callback and `FALSE` afterwards; an
+  error in a callback propagates out of `later::run_now()` (hence `bg_guard()`); `later::run_now()`
+  called inside a later callback runs the other due callbacks (so the tick's own pump at depth 1 may
+  service other later users, and `bg_callback()` cancels its own handle before ticking).
+- The Task 7 topic was generated with roxygen2 in a scratch package: `tools::checkRd()` reports
+  nothing, `tools::Rd2txt()` renders the support matrix, and the Task 7 examples guard finds no
+  `background = TRUE` in any `\examples` section.
+- `devtools::test()` keeps an explicitly set `NOT_CRAN=false` (testthat's
+  `local_assume_not_on_cran()` returns early when `NOT_CRAN` is set), so acceptance command 2 skips
+  every test.
+- Not executable here (earlier plans' code does not exist yet): the integration tests of Tasks 2-7
+  against the real P02/P04/P06/P08/P11/P14 code.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (§15 included), 05 P21, the dependency plans P01, P02, P04, P06, P08, P11 and P14, and research reports G3 and 15 with their verification logs.
+Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (section 15 included), 05 P21, the
+dependency plans P01, P02, P04, P06, P08, P11 and P14, and research reports G3 and 15 with their
+verification logs.
 
 | # | Severity (claimed, for rejected rows) | Location | Verdict | What changed, or why rejected |
 |---|---|---|---|---|
@@ -1989,7 +2383,7 @@ Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (§15 included),
 | 4 | major | Task 5 `bg_sweep()` | applied | A run with a recorded ask was aborted only when its id equalled `bg$run`; an ask raised at an idle tick by a run that `gptr_wait()`/`gptr_step()` started on the session was never stopped, so the denied call was retried at every tick (a loop of model requests; reproduced with the stub kernel). The sweep now aborts any live run of a session with a recorded ask, and supersession is keyed on the `waiting` flag. |
 | 5 | major | Task 4 `bg_callback()`, `bg_ensure_pump()` | applied | One `tryCatch()` wrapped tick and sweep, so a failing tick skipped the sweep that must stop an asked run before its next request, and an interrupt escaping the callback skipped the re-arm, stopping the timer chain for good. The callback now re-arms through `on.exit()`, guards tick and sweep separately (`bg_guard()`), and `bg_ensure_pump()` no longer recreates `the$bg` after `bg_shutdown()`; `bg_runs()` skips a session with a recorded ask. |
 | 6 | minor | Task 4 `bg_sweep(idle)` | applied | Between Tasks 4 and 5 a denied ask at an idle tick would have been retried at every tick. The Task 4 sweep already aborts a run with a recorded ask (released as `aborted`); Task 5 parks it instead. |
-| 7 | minor | Task 3 `bg_track()`; Task 5 `bg_resume()` | applied | A resumed run lost the call's run options (`max_turns`, `budget`, `returns`, `timeout`, ...). `bg_run_opts()` keeps a whitelist of §7.6 options in `live$background$opts` (never `call` [R2], `safety`, `doc`, `parent_run`, `interactive` or `rng_state`); new unit test. |
+| 7 | minor | Task 3 `bg_track()`; Task 5 `bg_resume()` | applied | A resumed run lost the call's run options (`max_turns`, `budget`, `returns`, `timeout`, ...). `bg_run_opts()` keeps a whitelist of section 7.6 options in `live$background$opts` (never `call` [R2], `safety`, `doc`, `parent_run`, `interactive` or `rng_state`); new unit test. |
 | 8 | minor | Task 5 `bg_resume()` | applied | A `run_start()` error inside the callback (for example nothing to run) left the session `waiting` forever and logged a diagnostic every 50 ms inside every blocking call. It is now set to `aborted` with one diagnostic and released; new test. |
 | 9 | minor | Task 5 `bg_park_session()` | applied | A dropped item without text would make `session_enqueue()` (which requires a non-empty string) fail inside the sweep and leave the session half parked; such items are skipped. The notice and reason now say "waiting for an answer" for non-permission asks instead of "waiting for approval: a question from the agent". |
 | 10 | minor | Task 7 support matrix | applied | "Terminal R on macOS and Linux: verified" overclaimed: G3 and its verification log exercised only macOS `R --interactive`, and report 15 rates RStudio "LIKELY". Linux and RStudio are now "unverified". |
@@ -1999,14 +2393,18 @@ Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (§15 included),
 | 14 | minor | Self-review ambiguities | applied | Recorded the cross-plan limits found in review (A16 `gptr_cancel()` of a waiting session, A17 the `[b]ackground` return path in P08, A18 a `gptr.ui` spec object, A19 sub-agent asks, A20 `"wait"` mode inside unrelated blocking calls, A21 extension questions) and updated A1, A2, A10, A11 to the code of P06, P08 and P11. |
 | 15 | minor | Plan acceptance, Tasks 2-7 Step 4 | applied | Counts updated to the revised tests: 30 tests, 156 expectations, `SKIP 30` on CRAN, 14 tests need later and 16 do not. |
 | 16 | minor | Task 1 `bg_reactor_busy()` | rejected | Claim: it should call P04's `reactor_depth()`. 04 names no depth accessor (P04's helper exists only in its plan); the stack test is exactly "depth > 0", keeps no frame and costs one short stack walk per 50 ms. Recorded as A4. |
-| 17 | major | Task 5 writes `.d$status` and `.d$reason` | rejected | Claim: IC-33 lists `session_data()` as read-only. §7.21 and IC-57 assign the `waiting` transition to P21 and P06 provides no setter; the writes are confined to `status`/`reason` and recorded as A1. |
-| 18 | minor | Task 7 copy-safety row in `test-agent-background.R` | rejected | Claim: copy rows belong in `test-copy-<area>.R`. 05 gives P21 exactly one test file; the row uses P01's `expect_no_copy()` in a fresh process as conventions §7 requires. |
+| 17 | major | Task 5 writes `.d$status` and `.d$reason` | rejected | Claim: IC-33 lists `session_data()` as read-only. Section 7.21 and IC-57 assign the `waiting` transition to P21 and P06 provides no setter; the writes are confined to `status`/`reason` and recorded as A1. |
+| 18 | minor | Task 7 copy-safety row in `test-agent-background.R` | rejected | Claim: copy rows belong in `test-copy-<area>.R`. 05 gives P21 exactly one test file; the row uses P01's `expect_no_copy()` in a fresh process as conventions section 7 requires. |
 | 19 | minor | Tests that do not need later | rejected | Claim: acceptance 1 ("tests skip without later") requires every test to skip without later. The acceptance means the file is green without later; the 16 tests that do not start a background run need no later and run. |
 | 20 | minor | Task 3 "without later" test | rejected | Claim: mocking `bg_has_later()` cannot reach P08, which checks `requireNamespace("later")` itself. With later installed P08 passes its check and calls the service, so the mocked check in `bg_register()` raises the same class; without later P08 raises it; both paths are covered. |
 
 ## Cross-plan consolidation log
 
-Consolidation of 2026-10-01 against 04 (IC-34; §10.3; §10.4 `tool_call`), 03 and 05 (P21), and the related plans P01 (`service_lookup()`, `service_builtin_active()`), P02 (`ext_load_builtins()` at rank 6, the factory API's `gptr$on()`, `registry_get()`), P08 (`peter(background = TRUE)` calls `ext_service_get("bg.register")`) and P14 (the pause menu's `[b]ackground`, and its test that stubs the service with `ext_service_set()`).
+Consolidation of 2026-10-01 against 04 (IC-34; section 10.3; section 10.4 `tool_call`), 03 and 05
+(P21), and the related plans P01 (`service_lookup()`, `service_builtin_active()`), P02
+(`ext_load_builtins()` at rank 6, the factory API's `gptr$on()`, `registry_get()`), P08
+(`peter(background = TRUE)` calls `ext_service_get("bg.register")`) and P14 (the pause menu's
+`[b]ackground`, and its test that stubs the service with `ext_service_set()`).
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|

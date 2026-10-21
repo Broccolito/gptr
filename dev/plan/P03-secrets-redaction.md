@@ -1,14 +1,36 @@
 # P03 Secrets and Redaction Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Keys never reach a transcript, log, document, cache, spill file, console or child process that does not need them: one vault with origin-bound handles, one redactor with sink profiles for every sink, gptr's own `.env` loader, a 0600 credential store and scrubbed child environments (REQ-13, INFRA-22, D-22).
+**Goal:** Keys never reach a transcript, log, document, cache, spill file, console or child process
+that does not need them: one vault with origin-bound handles, one redactor with sink profiles for
+every sink, gptr's own `.env` loader, a 0600 credential store and scrubbed child environments
+(REQ-13, INFRA-22, D-22).
 
-**Architecture:** Five layer-L0 files `R/auth-*.R`. `auth-secrets.R` holds the vault (`the$vault`, the only place values live), the registry and compiled literal table (`the$secrets`), the `gptr_secret` handle, ambient discovery, the late-registration check, the secret-access classifier and the `builtin:secrets` factory; `auth-redact.R` holds the redactor (registered values and their derived forms through PCRE alternations of at most 200 literals and 16,000 characters, longer literals as fixed strings, then 12 rule specs behind one anchor pre-filter), its tree and streaming forms, `code_for_history()`, `gptr_redact()` and `gptr_scrub()`, and installs itself as P01's redaction hook. `auth-dotenv.R`, `auth-store.R` and `auth-childenv.R` hold the `.env` parser with `gptr_env()` and the vault-only discovery of a trusted project's `.env` files, the `auth.json` credential store and the child-environment profiles; the built-in rules, aliases, sources and profiles are registered as specs through P02's extension API and read back from the registry (the built-in tables are the fallback before the registry is loaded).
+**Architecture:** Five layer-L0 files `R/auth-*.R`. `auth-secrets.R` holds the vault (`the$vault`,
+the only place values live), the registry and compiled literal table (`the$secrets`), the
+`gptr_secret` handle, ambient discovery, the late-registration check, the secret-access classifier
+and the `builtin:secrets` factory; `auth-redact.R` holds the redactor (registered values and their
+derived forms through PCRE alternations of at most 200 literals and 16,000 characters, longer
+literals as fixed strings, then 12 rule specs behind one anchor pre-filter), its tree and streaming
+forms, `code_for_history()`, `gptr_redact()` and `gptr_scrub()`, and installs itself as P01's
+redaction hook. `auth-dotenv.R`, `auth-store.R` and `auth-childenv.R` hold the `.env` parser with
+`gptr_env()` and the vault-only discovery of a trusted project's `.env` files, the `auth.json`
+credential store and the child-environment profiles; the built-in rules, aliases, sources and
+profiles are registered as specs through P02's extension API and read back from the registry (the
+built-in tables are the fallback before the registry is loaded).
 
-**Tech Stack:** base R (PCRE through `perl = TRUE`, `utils::getParseData()`), jsonlite (base64 and JSON escapes), cli (through P01's `hash_sha256()`), ps (lock holders); keyring (Suggests) only behind `requireNamespace()`; tests use testthat 3e, withr, processx and callr.
+**Tech Stack:** base R (PCRE through `perl = TRUE`, `utils::getParseData()`), jsonlite (base64 and
+JSON escapes), cli (through P01's `hash_sha256()`), ps (lock holders); keyring (Suggests) only
+behind `requireNamespace()`; tests use testthat 3e, withr, processx and callr.
 
-**Spec:** dev/spec/03-architecture.md (§2.2, §3.2, §6.5, §6.6, §6.7), dev/spec/04-interface-contract.md (§1.1, §2.1-§2.2, §3.1-§3.2, §4.6, §5.9, §6.2 `gptr_env()`, §6.6 `gptr_redact()` and `gptr_scrub()`, §7.0-§7.4, §10.1-§10.7, §11.1, §11.8, §12.2-§12.3, §14.1, §15 IC-32, IC-33, IC-34, IC-53, IC-60, IC-62, IC-65, IC-70, IC-71, IC-72), dev/spec/05-plan-decomposition.md (P03).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2, 6.5, 6.6, 6.7),
+dev/spec/04-interface-contract.md (sections 1.1, 2.1-2.2, 3.1-3.2, 4.6, 5.9, 6.2 `gptr_env()`, 6.6
+`gptr_redact()` and `gptr_scrub()`, 7.0-7.4, 10.1-10.7, 11.1, 11.8, 12.2-12.3, 14.1, 15 IC-32,
+IC-33, IC-34, IC-53, IC-60, IC-62, IC-65, IC-70, IC-71, IC-72), dev/spec/05-plan-decomposition.md
+(P03).
 
 **Depends on:** P01 Foundation, P02 Extension API and registry. **Milestone:** M0.
 
@@ -16,31 +38,149 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow; `<<-` only to update state of an enclosing function), the native `|>` (never `%>%`), ASCII-only R sources (`\u` escapes), `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions built by concatenation (rule C1), testthat 3e, no network, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line required by the executing harness (conventions §10). Plan-specific requirements, copied from the spec:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow; `<<-` only
+to update state of an enclosing function), the native `|>` (never `%>%`), ASCII-only R sources (`\u`
+escapes), `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions built by
+concatenation (rule C1), testthat 3e, no network, `Rscript --vanilla` from the repository root
+`/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line
+required by the executing harness (conventions section 10). Plan-specific requirements, copied from
+the spec:
 
-- Files and layer (03 §3.2): `auth-secrets.R` | L0 | "vault, `gptr_secret` handles, ambient discovery, origin-bound materialisation" | built-in `secrets`; `auth-redact.R` | L0 | "one redactor with sink profiles; streaming hold-back; `gptr_redact()`; `gptr_scrub()` [IC-70]"; `auth-dotenv.R` | L0 | "own `.env` parser, alias table (`jev-key` -> `TYPESAFE_API_KEY`), `gptr_env()`"; `auth-store.R` | L0 | "`auth.json` credential store (0600, lock, keyring references)"; `auth-childenv.R` | L0 | "child-environment profiles (mcp, worker, cli-claude, cli-codex, helper, artifact) as complete vectors, `child_env_callr()`; empty `R_ENVIRON_USER`/`R_PROFILE_USER` files for every profile [IC-60]". L0 may call base R, Imports and L0 only; it "talks upward only through return values; callbacks registered by upper layers" (03 §2.2).
-- Exports (04 §14.1, §6.2, §6.6), exactly these three signatures:
+- Files and layer (03 section 3.2): `auth-secrets.R` | L0 | "vault, `gptr_secret` handles, ambient
+  discovery, origin-bound materialisation" | built-in `secrets`; `auth-redact.R` | L0 | "one
+  redactor with sink profiles; streaming hold-back; `gptr_redact()`; `gptr_scrub()` [IC-70]";
+  `auth-dotenv.R` | L0 | "own `.env` parser, alias table (`jev-key` -> `TYPESAFE_API_KEY`),
+  `gptr_env()`"; `auth-store.R` | L0 | "`auth.json` credential store (0600, lock, keyring
+  references)"; `auth-childenv.R` | L0 | "child-environment profiles (mcp, worker, cli-claude,
+  cli-codex, helper, artifact) as complete vectors, `child_env_callr()`; empty
+  `R_ENVIRON_USER`/`R_PROFILE_USER` files for every profile [IC-60]". L0 may call base R, Imports
+  and L0 only; it "talks upward only through return values; callbacks registered by upper layers"
+  (03 section 2.2).
+- Exports (04 sections 14.1, 6.2, 6.6), exactly these three signatures:
   - `gptr_env(path = ".env", aliases = NULL, set_env = getOption("gptr.env_export", TRUE), override = FALSE, quiet = FALSE)`
   - `gptr_redact(x, profile = c("persist", "stream", "context", "code", "user_data"))`
   - `gptr_scrub(paths = NULL, dry_run = TRUE, error = FALSE)`
-- Internal cross-plan functions (04 §7.3), exactly: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)`, `secret_value(handle, origin)`, `secret_lookup(name)`, `secret_discover_env(env = Sys.getenv())`, `secret_registered_names()`, `redact(x, profile = "persist")`, `redact_tree(x, profile = "persist", structural = FALSE)`, `redact_stream(profile = "stream")`, `code_for_history(code)`, `dotenv_parse(path)`, `alias_resolve(names, aliases = NULL)`, `auth_store_get(key)`, `auth_store_set(key, record)`, `auth_store_remove(key)`, `child_env(profile, pass = character(), set = character(), provider = NULL)`, `child_env_callr(env)`, `secret_scan(code, tainted = character())`, `builtin_secrets(gptr)`. One addition this plan makes (recorded under Self-review, ambiguity A1): `secret_live_entries_set(fun)`, the callback slot through which the session layer (P06) exposes live sessions' in-memory entries to the IC-70 late-registration check.
-- Options (04 §3.1), read through `gptr_opt()`: `gptr.redact_min_chars` | `int(1)` | `8L` | "shortest value-redacted secret"; `gptr.redact_patterns` | `lgl(1)` | `TRUE` | "pattern layer (values are always redacted)"; `gptr.stream_hold_max` | `int(1)` | `4096L` | "streaming hold-back cap (characters)"; `gptr.env_export` | `lgl(1)` | `TRUE` | "default of `gptr_env(set_env =)`"; `gptr.prompt_secrets` | `chr(1)` | `"redact"` | "secret-looking text in prompts: `"redact"` or `"ask"`"; `gptr.secret_guard` | `lgl(1)` | `TRUE` | P03/P11 | "guarded secret reads ask even in `auto`". Value redaction cannot be switched off.
-- Handle (04 §5.9): `structure(list(id = "TYPESAFE_API_KEY#851d37", name = "TYPESAFE_API_KEY", fp = "851d37", origin = chr(1) | NULL), class = "gptr_secret")`; "`print`/`format` give `<secret TYPESAFE_API_KEY #851d37>`; `as.character` gives the marker `[secret:TYPESAFE_API_KEY]`; `str`, `serialize()` and `saveRDS()` contain no value." `fp` is the first 6 hex of `hash_sha256(value)` (G6 §3.4).
-- Report (04 §5.9): "`gptr_env_report`: `c("gptr_env_report", "data.frame")` with `name` (as spelled in the file), `variable` (canonical), `secret` (lgl), `fingerprint`, `action` (`"set"`, `"registered"`, `"skipped"`, `"duplicate"`); `print` never shows values; attribute `bad_lines` (int)."
-- Automatic `.env` discovery (03 §6.5 "automatic `.env` discovery is vault-only and only in trusted projects"; 04 §7.0, where P03 is the `trust.get` consumer for "`.env` discovery"; G6 §4.5 step 5): `.gptr/.env`, then `.env` of the project root, parsed with `set_env = FALSE`, only when the service `trust.get` (`function(path = getwd()) lgl(1)`, provided by P08, fallback `FALSE`) answers `TRUE`; L0 reaches trust only through that service (IC-33). Runs inside `secret_discover_env()`, which P06 calls at session start. `builtin:secrets` registers it as the `dotenv` secret source next to `environment`, `auth` and `keyring` (03 §11 extensibility table, G6 §4.8).
-- Aliases (REQ-13, 04 §6.2): built-in table `TYPESAFE_API_KEY = c("jev-key", "JEV_KEY", "JEV_API_KEY", "TYPESAFE_KEY")`, extended by `env_alias` specs and the `aliases` argument; "a canonical spelling wins over an alias", "registers **every** value in the vault (including losing duplicates), exports canonical names only"; malformed lines "are reported by line number in the report, not errors".
-- Redactor (03 §6.5, 04 §6.6, G6 §3.4-§3.6, §3.9): markers `[secret:<NAME>]`; profiles `persist`, `stream`, `context`, `code`, `user_data`; registered values plus their derived forms (URL-encoded, JSON-escaped, base64 and base64url cores) through one PCRE alternation per group of at most 200 literals, longest first (a group also holds at most 16,000 pattern characters and a longer literal is matched as a fixed string, because PCRE2 refuses a pattern near 32,000 characters with "regular expression is too large": two or three registered private keys reach that, reproduced with R 4.4.3 / PCRE2 10.44); the 12 rules `private-key` (`PRIVATE KEY(?: BLOCK)?`, G6 verification log), `anthropic-key`, `openai-key`, `google-api-key`, `github-token`, `slack-token`, `huggingface-token`, `aws-access-key`, `jwt`, `auth-header`, `url-password`, `named-secret` (the `NAME=value` rule, `context` and `persist` only) behind one anchor pre-filter; `user_data` redacts values only; the `code` profile rewrites a string literal whose value is a registered secret to `Sys.getenv("NAME")`; opaque replay fields (`signature`, `thinking_signature`, `thought_signature`, `thoughtSignature`, `text_signature`, `encrypted_content`, `data` of `redacted_thinking` blocks, `json` of `opaque` blocks) are never modified; "Idempotent. Never errors on invalid UTF-8 (bytewise fallback)."; streaming equals whole-text redaction with a hold-back capped at `gptr.stream_hold_max`.
-- Conditions (04 §2.2): errors `gptr_error_invalid_argument` (`arg`, `expected`; never the value), `gptr_error_untrusted` (`what`, `path`, `origin`), `gptr_error_secret_found` (`findings`, a data frame without values), `gptr_error_missing_package` (`package`, `feature`), `gptr_error_no_key` (`provider`, `variables`), `gptr_error_timeout` (`seconds`, `what`); warnings `gptr_warning_secret_late` (field `counts`) and `gptr_warning_billing_env` (field `variables`); message `gptr_message_notice`.
-- Event (04 §10.4): `secret_registered` | gptr | notify | payload `name`, `source`, `count` ("never values") | emitted by P03.
-- Session entry (04 §4.6): `custom` entry `customType = "gptr.scrub"`, `data = {date, secrets, count}`, "`gptr_scrub()` rewrote this file (IC-70)".
-- Workspace (04 §11.1): `gptr_scrub(paths = NULL)` scans `.gptr/sessions/`, `.gptr/cache/` (S1/S2 caches, `cache/tmp/` spill files), `.gptr/plans/`, `.gptr/transcripts/` and the documents named by `gptr.doc_block` entries; without a workspace `file.path(tempdir(), "gptr")`; session files are locked by `<file>.lock/`.
-- Credential store (04 §11.8, IC-71, G6 §3.10): `R_user_dir("gptr", "config")/auth.json`, "file 0600, directory 0700 on Unix; the Windows ACL caveat is documented", "written under a lock with umask 077"; the lock is `auth.json.lock/` holding pid and creation time, "50 x 100 ms retries", stale after 30 s or when its holder is gone; "Every value read is registered in the vault at once; access tokens stay in memory"; keyring references `{"service": "gptr", "username": "..."}`. Other harnesses' credential files (`~/.claude`, `~/.codex/auth.json`) are never read.
-- Child environments (04 §3.2, §7.3, IC-60, IC-65, G6 §3.7): profiles `mcp`, `worker`, `cli-claude`, `cli-codex`, `helper`, `artifact` or a registered `child_env` spec; `child_env()` returns "the **complete** named chr for processx `env` (removed names absent; processx rejects `NA`)"; `child_env_callr()` gives "every variable of `Sys.getenv()` absent from `env` added as `NA`"; **every** profile sets `R_ENVIRON_USER`/`R_PROFILE_USER` to empty files and drops `R_ENVIRON` unless passed. "for claude, secret-like names, registered values, `^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDE_PID$)` except the kept `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, and with a `billing_env` warning `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`; for codex, secret-like names, registered values, `^(CODEX_MANAGED_|CODEX_SANDBOX)`, and with the warning `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN`, `OPENAI_BASE_URL` (`CODEX_HOME` kept)"; `helper` sets "`NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`, `PYTHONIOENCODING=utf-8`, `PYTHONUNBUFFERED=1`". The empty files live in `file.path(tempdir(), "gptr", "childenv")`.
-- Kind fields (04 §10.2): `secret_source` (all) `resolve` `function(name, ctx)` -> chr(1)|NULL, `list` `function(ctx)` -> chr, optional `store`, `forget`; `redaction_rule` (all) `pattern` chr(1) PCRE, `anchor` chr, `marker` chr(1), `profiles` chr, "must not match its own marker"; `env_alias` (all, name = canonical) `aliases` chr; `child_env` (first, name = profile) `base` (`inherit`, `allowlist`), `keep` chr, `drop` chr (regex), `set` named chr (values may be handles), `billing` named list.
-- Registration (IC-32, IC-34, 04 §10.3): `on_load(redactor_set(redact))`, `on_load(ext_declare_builtin("secrets", builtin_secrets, replaceable = FALSE))` and `on_load(ext_service_set("secret.lookup", secret_lookup, provided_by = "P03", builtin = "secrets"))`; service `secret.lookup` = `function(name) <handle> or NULL`, fallback `NULL` (consumer `ctx$secret()`); `builtin:secrets` is not replaceable and "filters from **no** source ... disable ... `builtin:secrets`" (P02 enforces it).
-- Package state (04 §7.0): P03 owns `the$vault` (values) and `the$secrets` (metadata, compiled literals and rules, the live-entries callback). It never writes `the$redactor`, which holds P01's installed hook (ambiguity A2).
-- `secret_value()` is called in `R/` only from `R/http-request.R` (P04) and `R/auth-childenv.R` (04 §7.3). `Sys.setenv()` appears only in `R/auth-dotenv.R`; `R/` never contains the text `:::`, `runif(`, `sample(`, `set.seed(`, `enc2utf8(`, `withr::`, `.GlobalEnv`, `processx::run(` or a left-arrow token (`test-lint-rules.R`, 04 §12.3).
-- Tests: every fake key is assembled at run time with `paste0()`, so no key-shaped literal sits in a source file (secret scanners and push protection stay quiet); every test that registers secrets starts with `vault_reset()` and `withr::defer(vault_reset())`; tests that start processes and the 1,400-chunking property tests call `skip_on_cran()` (a 10-chunking version runs everywhere). `devtools::test()` sets `NOT_CRAN=true`, so the counts below include them. Tests use P01's `local_project()` and `local_gptr_options()` (04 §12.2) and rely on P01's `setup.R` (redirected `R_USER_*_DIR`, `HOME`, `GPTR_PROJECT_ROOT`, blank provider keys, `options(gptr.interactive = FALSE, gptr.quiet = TRUE)`).
+- Internal cross-plan functions (04 section 7.3), exactly:
+  `secret_register(value, name, source = "user", active = TRUE, origin = NULL)`,
+  `secret_value(handle, origin)`, `secret_lookup(name)`, `secret_discover_env(env = Sys.getenv())`,
+  `secret_registered_names()`, `redact(x, profile = "persist")`,
+  `redact_tree(x, profile = "persist", structural = FALSE)`, `redact_stream(profile = "stream")`,
+  `code_for_history(code)`, `dotenv_parse(path)`, `alias_resolve(names, aliases = NULL)`,
+  `auth_store_get(key)`, `auth_store_set(key, record)`, `auth_store_remove(key)`,
+  `child_env(profile, pass = character(), set = character(), provider = NULL)`,
+  `child_env_callr(env)`, `secret_scan(code, tainted = character())`, `builtin_secrets(gptr)`. One
+  addition this plan makes (recorded under Self-review, ambiguity A1):
+  `secret_live_entries_set(fun)`, the callback slot through which the session layer (P06) exposes
+  live sessions' in-memory entries to the IC-70 late-registration check.
+- Options (04 section 3.1), read through `gptr_opt()`: `gptr.redact_min_chars` | `int(1)` | `8L` |
+  "shortest value-redacted secret"; `gptr.redact_patterns` | `lgl(1)` | `TRUE` | "pattern layer
+  (values are always redacted)"; `gptr.stream_hold_max` | `int(1)` | `4096L` | "streaming hold-back
+  cap (characters)"; `gptr.env_export` | `lgl(1)` | `TRUE` | "default of `gptr_env(set_env =)`";
+  `gptr.prompt_secrets` | `chr(1)` | `"redact"` | "secret-looking text in prompts: `"redact"` or
+  `"ask"`"; `gptr.secret_guard` | `lgl(1)` | `TRUE` | P03/P11 | "guarded secret reads ask even in
+  `auto`". Value redaction cannot be switched off.
+- Handle (04 section 5.9):
+  `structure(list(id = "TYPESAFE_API_KEY#851d37", name = "TYPESAFE_API_KEY", fp = "851d37", origin = chr(1) | NULL), class = "gptr_secret")`;
+  "`print`/`format` give `<secret TYPESAFE_API_KEY #851d37>`; `as.character` gives the marker
+  `[secret:TYPESAFE_API_KEY]`; `str`, `serialize()` and `saveRDS()` contain no value." `fp` is the
+  first 6 hex of `hash_sha256(value)` (G6 section 3.4).
+- Report (04 section 5.9): "`gptr_env_report`: `c("gptr_env_report", "data.frame")` with `name` (as
+  spelled in the file), `variable` (canonical), `secret` (lgl), `fingerprint`, `action` (`"set"`,
+  `"registered"`, `"skipped"`, `"duplicate"`); `print` never shows values; attribute `bad_lines`
+  (int)."
+- Automatic `.env` discovery (03 section 6.5 "automatic `.env` discovery is vault-only and only in
+  trusted projects"; 04 section 7.0, where P03 is the `trust.get` consumer for "`.env` discovery";
+  G6 section 4.5 step 5): `.gptr/.env`, then `.env` of the project root, parsed with
+  `set_env = FALSE`, only when the service `trust.get` (`function(path = getwd()) lgl(1)`, provided
+  by P08, fallback `FALSE`) answers `TRUE`; L0 reaches trust only through that service (IC-33). Runs
+  inside `secret_discover_env()`, which P06 calls at session start. `builtin:secrets` registers it
+  as the `dotenv` secret source next to `environment`, `auth` and `keyring` (03 section 11
+  extensibility table, G6 section 4.8).
+- Aliases (REQ-13, 04 section 6.2): built-in table
+  `TYPESAFE_API_KEY = c("jev-key", "JEV_KEY", "JEV_API_KEY", "TYPESAFE_KEY")`, extended by
+  `env_alias` specs and the `aliases` argument; "a canonical spelling wins over an alias",
+  "registers **every** value in the vault (including losing duplicates), exports canonical names
+  only"; malformed lines "are reported by line number in the report, not errors".
+- Redactor (03 section 6.5, 04 section 6.6, G6 sections 3.4-3.6, 3.9): markers `[secret:<NAME>]`;
+  profiles `persist`, `stream`, `context`, `code`, `user_data`; registered values plus their derived
+  forms (URL-encoded, JSON-escaped, base64 and base64url cores) through one PCRE alternation per
+  group of at most 200 literals, longest first (a group also holds at most 16,000 pattern characters
+  and a longer literal is matched as a fixed string, because PCRE2 refuses a pattern near 32,000
+  characters with "regular expression is too large": two or three registered private keys reach
+  that, reproduced with R 4.4.3 / PCRE2 10.44); the 12 rules `private-key`
+  (`PRIVATE KEY(?: BLOCK)?`, G6 verification log), `anthropic-key`, `openai-key`, `google-api-key`,
+  `github-token`, `slack-token`, `huggingface-token`, `aws-access-key`, `jwt`, `auth-header`,
+  `url-password`, `named-secret` (the `NAME=value` rule, `context` and `persist` only) behind one
+  anchor pre-filter; `user_data` redacts values only; the `code` profile rewrites a string literal
+  whose value is a registered secret to `Sys.getenv("NAME")`; opaque replay fields (`signature`,
+  `thinking_signature`, `thought_signature`, `thoughtSignature`, `text_signature`,
+  `encrypted_content`, `data` of `redacted_thinking` blocks, `json` of `opaque` blocks) are never
+  modified; "Idempotent. Never errors on invalid UTF-8 (bytewise fallback)."; streaming equals
+  whole-text redaction with a hold-back capped at `gptr.stream_hold_max`.
+- Conditions (04 section 2.2): errors `gptr_error_invalid_argument` (`arg`, `expected`; never the
+  value), `gptr_error_untrusted` (`what`, `path`, `origin`), `gptr_error_secret_found` (`findings`,
+  a data frame without values), `gptr_error_missing_package` (`package`, `feature`),
+  `gptr_error_no_key` (`provider`, `variables`), `gptr_error_timeout` (`seconds`, `what`); warnings
+  `gptr_warning_secret_late` (field `counts`) and `gptr_warning_billing_env` (field `variables`);
+  message `gptr_message_notice`.
+- Event (04 section 10.4): `secret_registered` | gptr | notify | payload `name`, `source`, `count`
+  ("never values") | emitted by P03.
+- Session entry (04 section 4.6): `custom` entry `customType = "gptr.scrub"`,
+  `data = {date, secrets, count}`, "`gptr_scrub()` rewrote this file (IC-70)".
+- Workspace (04 section 11.1): `gptr_scrub(paths = NULL)` scans `.gptr/sessions/`, `.gptr/cache/`
+  (S1/S2 caches, `cache/tmp/` spill files), `.gptr/plans/`, `.gptr/transcripts/` and the documents
+  named by `gptr.doc_block` entries; without a workspace `file.path(tempdir(), "gptr")`; session
+  files are locked by `<file>.lock/`.
+- Credential store (04 section 11.8, IC-71, G6 section 3.10):
+  `R_user_dir("gptr", "config")/auth.json`, "file 0600, directory 0700 on Unix; the Windows ACL
+  caveat is documented", "written under a lock with umask 077"; the lock is `auth.json.lock/`
+  holding pid and creation time, "50 x 100 ms retries", stale after 30 s or when its holder is gone;
+  "Every value read is registered in the vault at once; access tokens stay in memory"; keyring
+  references `{"service": "gptr", "username": "..."}`. Other harnesses' credential files
+  (`~/.claude`, `~/.codex/auth.json`) are never read.
+- Child environments (04 sections 3.2, 7.3, IC-60, IC-65, G6 section 3.7): profiles `mcp`, `worker`,
+  `cli-claude`, `cli-codex`, `helper`, `artifact` or a registered `child_env` spec; `child_env()`
+  returns "the **complete** named chr for processx `env` (removed names absent; processx rejects
+  `NA`)"; `child_env_callr()` gives "every variable of `Sys.getenv()` absent from `env` added as
+  `NA`"; **every** profile sets `R_ENVIRON_USER`/`R_PROFILE_USER` to empty files and drops
+  `R_ENVIRON` unless passed. "for claude, secret-like names, registered values,
+  `^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDE_PID$)` except the kept
+  `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, and with a
+  `billing_env` warning `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`,
+  `ANTHROPIC_BASE_URL`, `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`,
+  `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`; for codex,
+  secret-like names, registered values, `^(CODEX_MANAGED_|CODEX_SANDBOX)`, and with the warning
+  `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN`, `OPENAI_BASE_URL` (`CODEX_HOME` kept)";
+  `helper` sets "`NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`,
+  `PYTHONIOENCODING=utf-8`, `PYTHONUNBUFFERED=1`". The empty files live in
+  `file.path(tempdir(), "gptr", "childenv")`.
+- Kind fields (04 section 10.2): `secret_source` (all) `resolve` `function(name, ctx)` ->
+  chr(1)|NULL, `list` `function(ctx)` -> chr, optional `store`, `forget`; `redaction_rule` (all)
+  `pattern` chr(1) PCRE, `anchor` chr, `marker` chr(1), `profiles` chr, "must not match its own
+  marker"; `env_alias` (all, name = canonical) `aliases` chr; `child_env` (first, name = profile)
+  `base` (`inherit`, `allowlist`), `keep` chr, `drop` chr (regex), `set` named chr (values may be
+  handles), `billing` named list.
+- Registration (IC-32, IC-34, 04 section 10.3): `on_load(redactor_set(redact))`,
+  `on_load(ext_declare_builtin("secrets", builtin_secrets, replaceable = FALSE))` and
+  `on_load(ext_service_set("secret.lookup", secret_lookup, provided_by = "P03", builtin = "secrets"))`;
+  service `secret.lookup` = `function(name) <handle> or NULL`, fallback `NULL` (consumer
+  `ctx$secret()`); `builtin:secrets` is not replaceable and "filters from **no** source ... disable
+  ... `builtin:secrets`" (P02 enforces it).
+- Package state (04 section 7.0): P03 owns `the$vault` (values) and `the$secrets` (metadata,
+  compiled literals and rules, the live-entries callback). It never writes `the$redactor`, which
+  holds P01's installed hook (ambiguity A2).
+- `secret_value()` is called in `R/` only from `R/http-request.R` (P04) and `R/auth-childenv.R` (04
+  section 7.3). `Sys.setenv()` appears only in `R/auth-dotenv.R`; `R/` never contains the text
+  `:::`, `runif(`, `sample(`, `set.seed(`, `enc2utf8(`, `withr::`, `.GlobalEnv`, `processx::run(` or
+  a left-arrow token (`test-lint-rules.R`, 04 section 12.3).
+- Tests: every fake key is assembled at run time with `paste0()`, so no key-shaped literal sits in a
+  source file (secret scanners and push protection stay quiet); every test that registers secrets
+  starts with `vault_reset()` and `withr::defer(vault_reset())`; tests that start processes and the
+  1,400-chunking property tests call `skip_on_cran()` (a 10-chunking version runs everywhere).
+  `devtools::test()` sets `NOT_CRAN=true`, so the counts below include them. Tests use P01's
+  `local_project()` and `local_gptr_options()` (04 section 12.2) and rely on P01's `setup.R`
+  (redirected `R_USER_*_DIR`, `HOME`, `GPTR_PROJECT_ROOT`, blank provider keys,
+  `options(gptr.interactive = FALSE, gptr.quiet = TRUE)`).
 
 ## File Structure
 
@@ -58,7 +198,9 @@
 | `tests/testthat/test-auth-childenv.R` | create (Task 9) | profiles, callr form, Rscript and callr children with a planted `.Renviron` |
 | `NAMESPACE`, `man/gptr_redact.Rd`, `man/gptr_scrub.Rd`, `man/gptr_env.Rd` | generated | by `devtools::document()` (Tasks 1, 2, 5, 7, 11) |
 
-No other file changes: `DESCRIPTION` already lists every package used here (P01: jsonlite, cli, ps, processx, callr in Imports; testthat, withr and keyring in Suggests), and `inst/COPYRIGHTS` (P01) already credits the gitleaks-derived patterns (IC-72). After Task 11 `NAMESPACE` gains exactly:
+No other file changes: `DESCRIPTION` already lists every package used here (P01: jsonlite, cli, ps,
+processx, callr in Imports; testthat, withr and keyring in Suggests), and `inst/COPYRIGHTS` (P01)
+already credits the gitleaks-derived patterns (IC-72). After Task 11 `NAMESPACE` gains exactly:
 
 ```text
 S3method(as.character,gptr_secret)
@@ -79,7 +221,8 @@ P01 and P02 are complete. This command checks that every function this plan cons
 Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); ns = asNamespace("gptr"); need = c("gptr_abort", "gptr_warn", "gptr_inform", "check_string", "check_strings", "check_flag", "check_choice", "check_list", "check_class", "gptr_opt", "on_load", "redactor_set", "redact_hook", "ext_service_set", "ext_service_get", "ext_service_has", "hash_sha256", "id_entry", "as_utf8", "raw_to_utf8", "read_utf8", "json_encode", "json_decode", "json_obj", "project_root", "gptr_user_dir", "workspace_dir", "workspace_root", "write_atomic", "rscript_path", "registry_all", "registry_get", "registry_diagnostic", "ev_dispatch", "ext_declare_builtin", "gptr_spec", "gptr_register", "gptr_hook", "gptr_provider", "gptr_check"); miss = need[!vapply(need, exists, NA, envir = ns)]; if (length(miss)) stop("missing: ", paste(miss, collapse = ", ")); cat("P01/P02 interfaces present\n")'
 ```
 
-Expected output: `P01/P02 interfaces present`. The test helpers `local_project()` and `local_gptr_options()` come from P01's `tests/testthat/helper-fake.R` (04 §12.2).
+Expected output: `P01/P02 interfaces present`. The test helpers `local_project()` and
+`local_gptr_options()` come from P01's `tests/testthat/helper-fake.R` (04 section 12.2).
 
 ## Interfaces used from earlier plans
 
@@ -96,7 +239,11 @@ Exact signatures from 04; the tasks call nothing else from other plans.
 | P01 tests | `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`; `local_gptr_options(..., .env = parent.frame())` | scrub default paths, notices |
 | P02 | `registry_all(kind, session = NULL)`; `registry_get(kind, name, session = NULL)`; `registry_diagnostic(source, event, class, message)`; `ev_dispatch(event, payload, session = NULL, ctx = NULL)`; `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`; `gptr_spec(kind, name, ...)`; `gptr_register(spec)`; `gptr_hook(event, handler, matcher = NULL)`; `gptr_provider(id, api, base_url = NULL, auth = NULL, ...)`; `gptr_check(x, error = FALSE, tokens = FALSE)`; the factory API member `gptr$register(spec)` | specs, events, the built-in, tests |
 
-What this plan produces for later plans: the 18 internal functions of 04 §7.3 listed above, `secret_live_entries_set(fun)` (for P06), the `gptr_secret` class, the `gptr_env_report` class, the `secret.lookup` service, `builtin:secrets` with its 4 `secret_source`, 12 `redaction_rule`, 1 `env_alias` and 6 `child_env` specs, the redaction hook behind `redact_hook()`, the `secret_registered` event and the three exports.
+What this plan produces for later plans: the 18 internal functions of 04 section 7.3 listed above,
+`secret_live_entries_set(fun)` (for P06), the `gptr_secret` class, the `gptr_env_report` class, the
+`secret.lookup` service, `builtin:secrets` with its 4 `secret_source`, 12 `redaction_rule`, 1
+`env_alias` and 6 `child_env` specs, the redaction hook behind `redact_hook()`, the
+`secret_registered` event and the three exports.
 
 ## How the pieces fit
 
@@ -123,15 +270,44 @@ audit: gptr_scrub() scans persisted files with the current literal table; rewrit
 ### Task 1: Vault, handles, origin binding and ambient discovery
 
 **Files:**
+
 - Create: `R/auth-secrets.R`
 - Create: `tests/testthat/test-auth-secrets.R`
 - Generated: `NAMESPACE` (the three `gptr_secret` S3 methods)
 
 **Interfaces:**
-- Consumes (04 §2.1, §7.1, §7.2): `gptr_abort()`, `gptr_warn()`, `check_string()`, `check_flag()`, `check_class()`, `gptr_opt(name)`, `hash_sha256(x)`, `as_utf8(x)`, `json_encode(x)`, `the`, `%||%`; `ev_dispatch(event, payload, session = NULL, ctx = NULL)` (P02); tests: `gptr_register(spec)`, `gptr_hook(event, handler, matcher = NULL)`.
-- Produces (04 §5.9, §7.3): `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` -> `gptr_secret`; `secret_value(handle, origin)` -> chr(1) or `gptr_error_untrusted`; `secret_lookup(name)` -> handle or `NULL`; `secret_registered_names()` -> chr; `secret_discover_env(env = Sys.getenv())` -> `invisible(int(1))`; class `gptr_secret` with `format`, `print`, `as.character` methods; event `secret_registered` (`name`, `source`, `count`); warning `gptr_warning_secret_late` (`counts`); `secret_live_entries_set(fun)` (ambiguity A1). Internal helpers later tasks use: `secrets_state()`, `vault_env()`, `vault_reset()`, `vault_values()`, `secret_bound_origin(handle)`, `origin_of(url)`, `secret_variants(v, min_len)`, `re_escape(x)`, `secrets_opt(name)`, `canon_name(x)`, `is_secret_name(x)`, `nonsecret_suffix_re`, `token_class`, `secret_register_batch(source, fun)`, `lit_groups(esc)`, `lit_group_chars`; the state fields `lits`, `marks`, `lit_re`, `lits_long`, `lits_odd`.
 
-The vault follows G6 §3.4 and §5.0: the value goes into `the$vault` under the id `NAME#fp6`, the metadata entry into `the$secrets$reg`, and every new value recompiles the literal table (values plus URL-encoded, JSON-escaped and base64/base64url cores, longest first, escaped PCRE alternations of at most 200 literals and 16,000 characters; a literal longer than 16,000 escaped characters goes to `lits_long` and is matched as a fixed string, because PCRE2 cannot compile a pattern near 32,000 characters and a few private keys reach that). Values shorter than `gptr.redact_min_chars` are recorded but not value-redacted. A handle may carry an origin; `secret_value()` normalises both sides to `scheme://host:port` (default ports filled in) and refuses any mismatch with `gptr_error_untrusted`, whose message never contains the value. Discovery registers secret-looking environment variables (G6 §3.3 regexes) and proxy passwords, and emits one aggregated `secret_registered` event. The late-registration check (IC-70, G6 §4.7) counts occurrences of a new value in live sessions' in-memory entries, which the session layer supplies through `secret_live_entries_set()` (03 §2.2: L0 talks upward only through callbacks registered by upper layers).
+- Consumes (04 sections 2.1, 7.1, 7.2): `gptr_abort()`, `gptr_warn()`, `check_string()`,
+  `check_flag()`, `check_class()`, `gptr_opt(name)`, `hash_sha256(x)`, `as_utf8(x)`,
+  `json_encode(x)`, `the`, `%||%`; `ev_dispatch(event, payload, session = NULL, ctx = NULL)` (P02);
+  tests: `gptr_register(spec)`, `gptr_hook(event, handler, matcher = NULL)`.
+- Produces (04 sections 5.9, 7.3):
+  `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` -> `gptr_secret`;
+  `secret_value(handle, origin)` -> chr(1) or `gptr_error_untrusted`; `secret_lookup(name)` ->
+  handle or `NULL`; `secret_registered_names()` -> chr; `secret_discover_env(env = Sys.getenv())` ->
+  `invisible(int(1))`; class `gptr_secret` with `format`, `print`, `as.character` methods; event
+  `secret_registered` (`name`, `source`, `count`); warning `gptr_warning_secret_late` (`counts`);
+  `secret_live_entries_set(fun)` (ambiguity A1). Internal helpers later tasks use:
+  `secrets_state()`, `vault_env()`, `vault_reset()`, `vault_values()`,
+  `secret_bound_origin(handle)`, `origin_of(url)`, `secret_variants(v, min_len)`, `re_escape(x)`,
+  `secrets_opt(name)`, `canon_name(x)`, `is_secret_name(x)`, `nonsecret_suffix_re`, `token_class`,
+  `secret_register_batch(source, fun)`, `lit_groups(esc)`, `lit_group_chars`; the state fields
+  `lits`, `marks`, `lit_re`, `lits_long`, `lits_odd`.
+
+The vault follows G6 sections 3.4 and 5.0: the value goes into `the$vault` under the id `NAME#fp6`,
+the metadata entry into `the$secrets$reg`, and every new value recompiles the literal table (values
+plus URL-encoded, JSON-escaped and base64/base64url cores, longest first, escaped PCRE alternations
+of at most 200 literals and 16,000 characters; a literal longer than 16,000 escaped characters goes
+to `lits_long` and is matched as a fixed string, because PCRE2 cannot compile a pattern near 32,000
+characters and a few private keys reach that). Values shorter than `gptr.redact_min_chars` are
+recorded but not value-redacted. A handle may carry an origin; `secret_value()` normalises both
+sides to `scheme://host:port` (default ports filled in) and refuses any mismatch with
+`gptr_error_untrusted`, whose message never contains the value. Discovery registers secret-looking
+environment variables (G6 section 3.3 regexes) and proxy passwords, and emits one aggregated
+`secret_registered` event. The late-registration check (IC-70, G6 section 4.7) counts occurrences of
+a new value in live sessions' in-memory entries, which the session layer supplies through
+`secret_live_entries_set()` (03 section 2.2: L0 talks upward only through callbacks registered by
+upper layers).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -297,7 +473,9 @@ test_that("a value that live sessions already hold warns secret_late with counts
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-secrets")'`
 
-Expected: every test errors with `could not find function "vault_reset"` (the names test with `could not find function "is_secret_name"`, the alternation test with `could not find function "lit_groups"`); summary `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`.
+Expected: every test errors with `could not find function "vault_reset"` (the names test with
+`could not find function "is_secret_name"`, the alternation test with
+`could not find function "lit_groups"`); summary `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -695,7 +873,8 @@ as.character.gptr_secret = function(x, ...) paste0("[secret:", x$name, "]")
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'` (adds the three `S3method(..., gptr_secret)` lines to `NAMESPACE`), then `Rscript --vanilla -e 'devtools::test(filter = "auth-secrets")'`
+Run: `Rscript --vanilla -e 'devtools::document()'` (adds the three `S3method(..., gptr_secret)`
+lines to `NAMESPACE`), then `Rscript --vanilla -e 'devtools::test(filter = "auth-secrets")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 57 ]`.
 
@@ -709,15 +888,39 @@ git commit -m "feat(auth): add the secret vault, handles and origin binding"
 ### Task 2: The redactor: values, 12 rules, trees and `gptr_redact()`
 
 **Files:**
+
 - Create: `R/auth-redact.R`
 - Create: `tests/testthat/test-auth-redact.R`
 - Generated: `NAMESPACE` (`export(gptr_redact)`), `man/gptr_redact.Rd`
 
 **Interfaces:**
-- Consumes: from Task 1 `secrets_state()`, `vault_env()`, `secrets_opt()`, `re_escape()`, `secret_register()`, `vault_reset()`; P01 `gptr_abort()`, `check_choice(x, choices, arg)`, `on_load(expr)`, `redactor_set(fun)`, `redact_hook(x, profile = "persist")` (test); P02 `registry_all(kind, session = NULL)` (the `redaction_rule` records; the built-in table below is the fallback until Task 11 registers them), `registry_diagnostic(source, event, class, message)`.
-- Produces (04 §6.6, §7.3): `redact(x, profile = "persist")` (chr -> chr with attributes kept; a list is passed to `redact_tree()`), `redact_tree(x, profile = "persist", structural = FALSE)`, `gptr_redact(x, profile = c("persist", "stream", "context", "code", "user_data"))` (exported), and the installed hook `on_load(redactor_set(redact))`. Helpers later tasks use: `redact_rules_builtin()`, `rules_current()`, `redact_literals(y, st)`, `code_rewrite_literals(code)`, `redact_profiles`, `pem_begin_re`, `pem_end_re`.
 
-The rule table is G6 §3.5 and §5.0 `redact_patterns()` with the verification-log fix `PRIVATE KEY(?: BLOCK)?` on both PEM delimiters (a PGP private key block was not redacted before). Each rule carries the `redaction_rule` fields of 04 §10.2 (`pattern`, `anchor`, `marker`, `profiles`) plus an optional `replace` for the three rules that keep context (`auth-header` keeps the keyword, `url-password` keeps user and host, `named-secret` keeps the name). One anchor alternation decides which strings any rule can touch; a rule with no anchors makes every string a candidate. Invalid rules and rules that match their own marker are skipped with a registry diagnostic (04 §10.2 "must not match its own marker"). Registered values are replaced first, so a rule never sees a value; markers never re-match, so redaction is idempotent. Invalid UTF-8 falls back to bytewise literal replacement (G6 §3.4). `redact_tree()` collects every string leaf into one vector, redacts it in one call and writes back only changed leaves, skipping the opaque replay fields of G6 §3.9 (also `data` of redacted thinking and `json` of `opaque` blocks); `structural = TRUE` blanks values under sensitive keys (Pi `bug-report.ts`, MIT).
+- Consumes: from Task 1 `secrets_state()`, `vault_env()`, `secrets_opt()`, `re_escape()`,
+  `secret_register()`, `vault_reset()`; P01 `gptr_abort()`, `check_choice(x, choices, arg)`,
+  `on_load(expr)`, `redactor_set(fun)`, `redact_hook(x, profile = "persist")` (test); P02
+  `registry_all(kind, session = NULL)` (the `redaction_rule` records; the built-in table below is
+  the fallback until Task 11 registers them), `registry_diagnostic(source, event, class, message)`.
+- Produces (04 sections 6.6, 7.3): `redact(x, profile = "persist")` (chr -> chr with attributes
+  kept; a list is passed to `redact_tree()`),
+  `redact_tree(x, profile = "persist", structural = FALSE)`,
+  `gptr_redact(x, profile = c("persist", "stream", "context", "code", "user_data"))` (exported), and
+  the installed hook `on_load(redactor_set(redact))`. Helpers later tasks use:
+  `redact_rules_builtin()`, `rules_current()`, `redact_literals(y, st)`,
+  `code_rewrite_literals(code)`, `redact_profiles`, `pem_begin_re`, `pem_end_re`.
+
+The rule table is G6 sections 3.5 and 5.0 `redact_patterns()` with the verification-log fix
+`PRIVATE KEY(?: BLOCK)?` on both PEM delimiters (a PGP private key block was not redacted before).
+Each rule carries the `redaction_rule` fields of 04 section 10.2 (`pattern`, `anchor`, `marker`,
+`profiles`) plus an optional `replace` for the three rules that keep context (`auth-header` keeps
+the keyword, `url-password` keeps user and host, `named-secret` keeps the name). One anchor
+alternation decides which strings any rule can touch; a rule with no anchors makes every string a
+candidate. Invalid rules and rules that match their own marker are skipped with a registry
+diagnostic (04 section 10.2 "must not match its own marker"). Registered values are replaced first,
+so a rule never sees a value; markers never re-match, so redaction is idempotent. Invalid UTF-8
+falls back to bytewise literal replacement (G6 section 3.4). `redact_tree()` collects every string
+leaf into one vector, redacts it in one call and writes back only changed leaves, skipping the
+opaque replay fields of G6 section 3.9 (also `data` of redacted thinking and `json` of `opaque`
+blocks); `structural = TRUE` blanks values under sensitive keys (Pi `bug-report.ts`, MIT).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -972,7 +1175,9 @@ test_that("the redaction hook is installed: conditions never carry a registered 
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-redact")'`
 
-Expected: the tests error with `could not find function "redact"` (and `"redact_tree"`, `"gptr_redact"`); testthat stops after ten failures with `Maximum number of failures exceeded; quitting.`
+Expected: the tests error with `could not find function "redact"` (and `"redact_tree"`,
+`"gptr_redact"`); testthat stops after ten failures with
+`Maximum number of failures exceeded; quitting.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1344,7 +1549,8 @@ on_load(redactor_set(redact))
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'`, then `Rscript --vanilla -e 'devtools::test(filter = "auth-redact")'`
+Run: `Rscript --vanilla -e 'devtools::document()'`, then
+`Rscript --vanilla -e 'devtools::test(filter = "auth-redact")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 78 ]`.
 
@@ -1358,14 +1564,29 @@ git commit -m "feat(auth): add the redactor with sink profiles and gptr_redact()
 ### Task 3: Streaming redaction with a bounded hold-back
 
 **Files:**
+
 - Modify: `R/auth-redact.R` (append)
 - Modify: `tests/testthat/test-auth-redact.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1 `secrets_state()`, `secrets_opt()`, `token_class`; Task 2 `redact()`, `rules_current()`, `pem_begin_re`, `pem_end_re`, `redact_profiles`.
-- Produces (04 §7.3): `redact_stream(profile = "stream")` -> an environment with `push(chunk)` -> chr(1) (redacted text safe to emit now), `flush()` -> chr(1) and `held()` -> int(1) (bytes held back). Consumers: P04 (child pipes), P06 (event text), P14.
 
-`stream_cut()` is G6 §3.6 rules (a)-(g) verbatim, with the verification-log PEM fix: the emit point never falls inside a trailing token run, a keyword that may precede a secret (`Bearer`, `Basic`, an upper-case `NAME` with `=`/`:`), an unfinished `scheme://user:pa`, a partial or unterminated PEM header, a proper prefix of a registered literal that contains non-token characters, or a complete rule match. The hold is capped at `gptr.stream_hold_max` characters (G6's documented residual). Emitted text is redacted with one character of left context so look-behinds behave as on the whole text. A multi-byte UTF-8 character split across chunks is held until it is complete. The CRAN-sized test streams 10 chunkings; the property tests (skipped on CRAN) stream 400 chunkings of the G6 document plus 1,000 shuffled documents of 24 fragments, which is the 1,400 of acceptance 2, and a 200-chunking `persist` run with the `NAME=value` rule. Chunk sizes come from a fixed linear congruential generator, never R's RNG, so `.Random.seed` is untouched.
+- Consumes: Task 1 `secrets_state()`, `secrets_opt()`, `token_class`; Task 2 `redact()`,
+  `rules_current()`, `pem_begin_re`, `pem_end_re`, `redact_profiles`.
+- Produces (04 section 7.3): `redact_stream(profile = "stream")` -> an environment with
+  `push(chunk)` -> chr(1) (redacted text safe to emit now), `flush()` -> chr(1) and `held()` ->
+  int(1) (bytes held back). Consumers: P04 (child pipes), P06 (event text), P14.
+
+`stream_cut()` is G6 section 3.6 rules (a)-(g) verbatim, with the verification-log PEM fix: the emit
+point never falls inside a trailing token run, a keyword that may precede a secret (`Bearer`,
+`Basic`, an upper-case `NAME` with `=`/`:`), an unfinished `scheme://user:pa`, a partial or
+unterminated PEM header, a proper prefix of a registered literal that contains non-token characters,
+or a complete rule match. The hold is capped at `gptr.stream_hold_max` characters (G6's documented
+residual). Emitted text is redacted with one character of left context so look-behinds behave as on
+the whole text. A multi-byte UTF-8 character split across chunks is held until it is complete. The
+CRAN-sized test streams 10 chunkings; the property tests (skipped on CRAN) stream 400 chunkings of
+the G6 document plus 1,000 shuffled documents of 24 fragments, which is the 1,400 of acceptance 2,
+and a 200-chunking `persist` run with the `NAME=value` rule. Chunk sizes come from a fixed linear
+congruential generator, never R's RNG, so `.Random.seed` is untouched.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1510,7 +1731,8 @@ test_that("a multi-byte character split across chunks is held, not mangled", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-redact")'`
 
-Expected: five tests error with `could not find function "redact_stream"`; summary `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 78 ]`.
+Expected: five tests error with `could not find function "redact_stream"`; summary
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 78 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1624,7 +1846,8 @@ redact_stream = function(profile = "stream") {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-redact")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 98 ]` (about 15 s: the property tests stream 1,600 documents).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 98 ]` (about 15 s: the property tests stream 1,600
+documents).
 
 - [ ] **Step 5: Commit**
 
@@ -1636,14 +1859,26 @@ git commit -m "feat(auth): add streaming redaction with bounded hold-back"
 ### Task 4: History code: `code_for_history()`
 
 **Files:**
+
 - Modify: `R/auth-redact.R` (append)
 - Modify: `tests/testthat/test-auth-redact.R` (append)
 
 **Interfaces:**
-- Consumes: Task 2 `code_rewrite_literals(code)` and `redact(x, "code")`; P01 `gptr_abort()`.
-- Produces (04 §7.3): `code_for_history(code)` -> chr(1) with attribute `needs` (chr: the variable names whose literals became `Sys.getenv()` calls). Consumer: P15 (history documents, the deferred writer and its sidecar).
 
-G6 §5.6: a string literal whose value is exactly a registered secret becomes `Sys.getenv("NAME")`, so the recorded line replays wherever the variable is set; any other occurrence (a secret embedded in a longer string) becomes its marker, and the block is prefixed with the comment `# gptr: block needs secrets that are not recorded`. Only a secret registered under an environment-variable name can be replayed through `Sys.getenv()`; a stored credential such as `auth:openrouter` stays a marker and flags the block. Literals longer than 1,000 characters (OAuth access tokens, JWTs) are read back with `utils::getParseText()`, because `getParseData()` abbreviates them (Task 2's long-secrets test covers this through the `code` profile). The result parses, and applying the function twice changes nothing.
+- Consumes: Task 2 `code_rewrite_literals(code)` and `redact(x, "code")`; P01 `gptr_abort()`.
+- Produces (04 section 7.3): `code_for_history(code)` -> chr(1) with attribute `needs` (chr: the
+  variable names whose literals became `Sys.getenv()` calls). Consumer: P15 (history documents, the
+  deferred writer and its sidecar).
+
+G6 section 5.6: a string literal whose value is exactly a registered secret becomes
+`Sys.getenv("NAME")`, so the recorded line replays wherever the variable is set; any other
+occurrence (a secret embedded in a longer string) becomes its marker, and the block is prefixed with
+the comment `# gptr: block needs secrets that are not recorded`. Only a secret registered under an
+environment-variable name can be replayed through `Sys.getenv()`; a stored credential such as
+`auth:openrouter` stays a marker and flags the block. Literals longer than 1,000 characters (OAuth
+access tokens, JWTs) are read back with `utils::getParseText()`, because `getParseData()`
+abbreviates them (Task 2's long-secrets test covers this through the `code` profile). The result
+parses, and applying the function twice changes nothing.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1696,7 +1931,8 @@ test_that("a secret whose name is not a variable name becomes a flagged marker",
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-redact")'`
 
-Expected: three tests error with `could not find function "code_for_history"`; summary `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 98 ]`.
+Expected: three tests error with `could not find function "code_for_history"`; summary
+`[ FAIL 3 | WARN 0 | SKIP 0 | PASS 98 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1737,15 +1973,35 @@ git commit -m "feat(auth): rewrite literal secrets in recorded code"
 ### Task 5: `gptr_scrub()`: audit and clean persisted files
 
 **Files:**
+
 - Modify: `R/auth-redact.R` (append)
 - Modify: `tests/testthat/test-auth-redact.R` (append)
 - Generated: `NAMESPACE` (`export(gptr_scrub)`), `man/gptr_scrub.Rd`
 
 **Interfaces:**
-- Consumes: Task 1 `secrets_state()`, `secret_register()`; Task 2 `redact_literals(y, st)`; P01 `workspace_dir()`, `workspace_root(create = TRUE)`, `project_root()`, `json_decode()`, `json_encode()`, `id_entry(taken = NULL)`, `write_atomic(path, content)`, `gptr_inform()`, `check_strings()`, `check_flag()`, `gptr_abort()`; tests: `local_project()`, `local_gptr_options()`.
-- Produces (04 §6.6, IC-70): `gptr_scrub(paths = NULL, dry_run = TRUE, error = FALSE)` -> data frame `file`, `secret`, `count` (visible for a dry run, invisible after a rewrite); error `gptr_error_secret_found` with field `findings`; the `gptr.scrub` custom entry (04 §4.6) appended to each rewritten session file.
 
-The scan uses the current literal table (values and derived forms; literals in `lits_long` are counted and replaced as fixed strings first, exactly as `redact_literals()` does), so a value registered after it was written is found (G6 §5.7). With `paths = NULL` it covers the workspace's `sessions/`, `cache/` (S1 and S2 caches, `cache/tmp/` spill files and wire logs), `plans/` and `transcripts/` (04 §11.1; `file.path(tempdir(), "gptr")` without a workspace) plus the documents named by `gptr.doc_block` entries of the session files. Text files are scanned with the PCRE alternations; binary files (NUL bytes or invalid UTF-8) bytewise with `grepRaw()` and are reported but never rewritten; a session file whose `<file>.lock/` directory exists (P06's live lock) is skipped with a notice. Rewrites go through `write_atomic()`. A session file gets a `custom` entry `{"customType":"gptr.scrub","data":{"date","secrets","count"}}` parented at its last entry, with an entry id from `id_entry()` that avoids the file's ids. Messages and the condition list files, names and counts, never values.
+- Consumes: Task 1 `secrets_state()`, `secret_register()`; Task 2 `redact_literals(y, st)`; P01
+  `workspace_dir()`, `workspace_root(create = TRUE)`, `project_root()`, `json_decode()`,
+  `json_encode()`, `id_entry(taken = NULL)`, `write_atomic(path, content)`, `gptr_inform()`,
+  `check_strings()`, `check_flag()`, `gptr_abort()`; tests: `local_project()`,
+  `local_gptr_options()`.
+- Produces (04 section 6.6, IC-70): `gptr_scrub(paths = NULL, dry_run = TRUE, error = FALSE)` ->
+  data frame `file`, `secret`, `count` (visible for a dry run, invisible after a rewrite); error
+  `gptr_error_secret_found` with field `findings`; the `gptr.scrub` custom entry (04 section 4.6)
+  appended to each rewritten session file.
+
+The scan uses the current literal table (values and derived forms; literals in `lits_long` are
+counted and replaced as fixed strings first, exactly as `redact_literals()` does), so a value
+registered after it was written is found (G6 section 5.7). With `paths = NULL` it covers the
+workspace's `sessions/`, `cache/` (S1 and S2 caches, `cache/tmp/` spill files and wire logs),
+`plans/` and `transcripts/` (04 section 11.1; `file.path(tempdir(), "gptr")` without a workspace)
+plus the documents named by `gptr.doc_block` entries of the session files. Text files are scanned
+with the PCRE alternations; binary files (NUL bytes or invalid UTF-8) bytewise with `grepRaw()` and
+are reported but never rewritten; a session file whose `<file>.lock/` directory exists (P06's live
+lock) is skipped with a notice. Rewrites go through `write_atomic()`. A session file gets a `custom`
+entry `{"customType":"gptr.scrub","data":{"date","secrets","count"}}` parented at its last entry,
+with an entry id from `id_entry()` that avoids the file's ids. Its messages and its condition list
+files, names and counts, never values.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1874,7 +2130,8 @@ test_that("the documented example runs on a clean directory", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-redact")'`
 
-Expected: six tests error with `could not find function "gptr_scrub"`; summary `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 111 ]`.
+Expected: six tests error with `could not find function "gptr_scrub"`; summary
+`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 111 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2079,7 +2336,8 @@ gptr_scrub = function(paths = NULL, dry_run = TRUE, error = FALSE) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'`, then `Rscript --vanilla -e 'devtools::test(filter = "auth-redact")'`
+Run: `Rscript --vanilla -e 'devtools::document()'`, then
+`Rscript --vanilla -e 'devtools::test(filter = "auth-redact")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 141 ]`.
 
@@ -2093,14 +2351,34 @@ git commit -m "feat(auth): add gptr_scrub() for persisted files"
 ### Task 6: The `.env` parser and the alias table
 
 **Files:**
+
 - Create: `R/auth-dotenv.R`
 - Create: `tests/testthat/test-auth-dotenv.R`
 
 **Interfaces:**
-- Consumes: Task 1 `canon_name(x)`; P01 `as_utf8(x)`, `raw_to_utf8(x, fallback = "CP1252")`, `check_string()`, `gptr_abort()`; P02 `registry_all("env_alias")` (fallback: the built-in table until Task 11 registers it).
-- Produces (04 §7.3): `dotenv_parse(path)` -> `data.frame(name, value, line)` with attribute `bad_lines` (int) (consumers: P03, P08 for a trusted project `.env`); `alias_resolve(names, aliases = NULL)` -> chr of canonical names; helpers `alias_builtin()` (the REQ-13 table, used by Task 11) and `alias_table(aliases = NULL)`.
 
-The grammar is G6 §3.1: the file is read as bytes; a UTF-8 BOM is dropped bytewise; CRLF and lone CR become LF; blank lines and `#` lines are skipped; a leading `export` is dropped; names match `^[A-Za-z_][A-Za-z0-9_.-]*` (so `jev-key` and `my.name` are legal); a double-quoted value may span lines and decodes `\n \r \t \" \\ \$` in one pass (the prototype's sequential `gsub()` calls turned `\\n` into a newline); a single-quoted value is literal and may span lines; an unquoted value loses a ` #` comment and trailing blanks, so `abc#def` stays data; a malformed line is reported by number only; there is no `${VAR}` interpolation. The bytes go through P01's `raw_to_utf8()` (IC-62: a BOM is dropped and a file that is not UTF-8, such as a CP1252 file written by an old Windows editor, is decoded as CP1252 instead of turning `\xfc` into the text `<fc>`). A missing path or a file with NUL bytes is refused with `gptr_error_invalid_argument` (P08 calls `dotenv_parse()` directly). Aliases follow G6 §3.2: `canon_name()` upper-cases and turns every non-alphanumeric character into `_`; an entry maps to canonical `C` when its canonical form equals that of `C` or one of `C`'s aliases; names without an alias are exported as their canonical form (`my.dotted-name` -> `MY_DOTTED_NAME`).
+- Consumes: Task 1 `canon_name(x)`; P01 `as_utf8(x)`, `raw_to_utf8(x, fallback = "CP1252")`,
+  `check_string()`, `gptr_abort()`; P02 `registry_all("env_alias")` (fallback: the built-in table
+  until Task 11 registers it).
+- Produces (04 section 7.3): `dotenv_parse(path)` -> `data.frame(name, value, line)` with attribute
+  `bad_lines` (int) (consumers: P03, P08 for a trusted project `.env`);
+  `alias_resolve(names, aliases = NULL)` -> chr of canonical names; helpers `alias_builtin()` (the
+  REQ-13 table, used by Task 11) and `alias_table(aliases = NULL)`.
+
+The grammar is G6 section 3.1: the file is read as bytes; a UTF-8 BOM is dropped bytewise; CRLF and
+lone CR become LF; blank lines and `#` lines are skipped; a leading `export` is dropped; names match
+`^[A-Za-z_][A-Za-z0-9_.-]*` (so `jev-key` and `my.name` are legal); a double-quoted value may span
+lines and decodes `\n \r \t \" \\ \$` in one pass (the prototype's sequential `gsub()` calls turned
+`\\n` into a newline); a single-quoted value is literal and may span lines; an unquoted value loses
+a ` #` comment and trailing blanks, so `abc#def` stays data; a malformed line is reported by number
+only; there is no `${VAR}` interpolation. The bytes go through P01's `raw_to_utf8()` (IC-62: a BOM
+is dropped and a file that is not UTF-8, such as a CP1252 file written by an old Windows editor, is
+decoded as CP1252 instead of turning `\xfc` into the text `<fc>`). A missing path or a file with NUL
+bytes is refused with `gptr_error_invalid_argument` (P08 calls `dotenv_parse()` directly). Aliases
+follow G6 section 3.2: `canon_name()` upper-cases and turns every non-alphanumeric character into
+`_`; an entry maps to canonical `C` when its canonical form equals that of `C` or one of `C`'s
+aliases; names without an alias are exported as their canonical form (`my.dotted-name` ->
+`MY_DOTTED_NAME`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2191,7 +2469,8 @@ test_that("aliases map onto canonical names through the table and extra entries"
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-dotenv")'`
 
-Expected: the tests error with `could not find function "dotenv_parse"` and `could not find function "alias_resolve"`; summary `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 0 ]`.
+Expected: the tests error with `could not find function "dotenv_parse"` and
+`could not find function "alias_resolve"`; summary `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 0 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2321,18 +2600,54 @@ git commit -m "feat(auth): add the .env parser and alias table"
 ### Task 7: `gptr_env()`: load, register, export; trusted `.env` discovery
 
 **Files:**
+
 - Modify: `R/auth-dotenv.R` (append)
 - Modify: `R/auth-secrets.R` (replace `secret_discover_env()` of Task 1)
 - Modify: `tests/testthat/test-auth-dotenv.R` (append)
-- Generated: `NAMESPACE` (`export(gptr_env)` and the two `gptr_env_report` methods), `man/gptr_env.Rd`
+- Generated: `NAMESPACE` (`export(gptr_env)` and the two `gptr_env_report` methods),
+  `man/gptr_env.Rd`
 
 **Interfaces:**
-- Consumes: Task 1 `secret_register()`, `secret_register_batch(source, fun)`, `secret_lookup()`, `canon_name()`, `nonsecret_suffix_re`, `is_secret_name()`, `secret_name_ok()`, `secrets_opt()`; Task 2 `redact()` (tests); Task 6 `dotenv_parse()`, `alias_resolve()`; P01 `check_string()`, `check_list()`, `check_flag()`, `gptr_abort()`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `as_utf8()`, `project_root()`, `ext_service_has(name)`, `ext_service_get(name)`; the service `trust.get` (P08, fallback `FALSE`, IC-33); tests: `local_project()`, `local_gptr_options()`, `gptr_register()`, `gptr_hook()`.
-- Produces (04 §6.2, §5.9): `gptr_env(path = ".env", aliases = NULL, set_env = getOption("gptr.env_export", TRUE), override = FALSE, quiet = FALSE)` -> `invisible(<gptr_env_report>)`; class `gptr_env_report` with `format` and `print` methods; one `secret_registered` event per call (`source = "dotenv:<file>"`, `count` = new values). The final `secret_discover_env(env = Sys.getenv())` (04 §7.3, same signature and return as Task 1, now also running the trusted-project `.env` discovery); helpers used by Task 11: `dotenv_trusted(root = project_root())`, `dotenv_project_files(root = project_root())`, `dotenv_discover(root = project_root(), trusted = dotenv_trusted(root))` -> int(1), `dotenv_source_resolve(name, root = project_root(), trusted = dotenv_trusted(root))` -> chr(1) or `NULL`, `dotenv_source_list(root = project_root(), trusted = dotenv_trusted(root))` -> chr.
 
-Per variable (after alias resolution) the line spelled exactly as the canonical name wins, otherwise the last line; every secret value is registered, losing duplicates too (`active = FALSE`, source `dotenv:<file>:shadowed`), and losers are registered before winners so that a winner with the same value stays active. A name ending in one of G6's non-secret suffixes (`_URL`, `_PATH`, `_DIR`, ...) is exported but not registered (ambiguity A4). An API key or token (`API_KEY`, `APIKEY`, `TOKEN` suffix) whose value holds whitespace, control or non-ASCII characters is registered, never exported, marked `skipped` and its line added to `bad_lines` (ambiguity A5). Only canonical names are exported, with `Sys.setenv()` (the one call site in `R/`); `override = FALSE` keeps a variable that is already set (`skipped`). The notice lists `NAME #fp (from alias) [action]` per entry and never a value; `quiet = TRUE` or `options(gptr.quiet = TRUE)` silence it.
+- Consumes: Task 1 `secret_register()`, `secret_register_batch(source, fun)`, `secret_lookup()`,
+  `canon_name()`, `nonsecret_suffix_re`, `is_secret_name()`, `secret_name_ok()`, `secrets_opt()`;
+  Task 2 `redact()` (tests); Task 6 `dotenv_parse()`, `alias_resolve()`; P01 `check_string()`,
+  `check_list()`, `check_flag()`, `gptr_abort()`,
+  `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `as_utf8()`, `project_root()`,
+  `ext_service_has(name)`, `ext_service_get(name)`; the service `trust.get` (P08, fallback `FALSE`,
+  IC-33); tests: `local_project()`, `local_gptr_options()`, `gptr_register()`, `gptr_hook()`.
+- Produces (04 sections 6.2, 5.9):
+  `gptr_env(path = ".env", aliases = NULL, set_env = getOption("gptr.env_export", TRUE), override = FALSE, quiet = FALSE)`
+  -> `invisible(<gptr_env_report>)`; class `gptr_env_report` with `format` and `print` methods; one
+  `secret_registered` event per call (`source = "dotenv:<file>"`, `count` = new values). The final
+  `secret_discover_env(env = Sys.getenv())` (04 section 7.3, same signature and return as Task 1,
+  now also running the trusted-project `.env` discovery); helpers used by Task 11:
+  `dotenv_trusted(root = project_root())`, `dotenv_project_files(root = project_root())`,
+  `dotenv_discover(root = project_root(), trusted = dotenv_trusted(root))` -> int(1),
+  `dotenv_source_resolve(name, root = project_root(), trusted = dotenv_trusted(root))` -> chr(1) or
+  `NULL`, `dotenv_source_list(root = project_root(), trusted = dotenv_trusted(root))` -> chr.
 
-Automatic discovery (03 §6.5, 04 §7.0, G6 §4.5 step 5) reuses `gptr_env(set_env = FALSE, quiet = TRUE)` on `.gptr/.env` and then `.env` of the project root, but only when the `trust.get` service says the project is trusted (an L0 file reaches trust only through that service, IC-33; without P08 the fallback is "untrusted"). Nothing is exported; one notice per file version names the variables and fingerprints (`gptr_inform(.once =)` keyed by path, modification time and size, so a session started every turn does not repeat it). `secret_discover_env()`, which P06 already calls at session start, runs it after the environment scan; a failure of the discovery never blocks a session (it counts as 0). The `dotenv` secret source of Task 11 resolves and lists the same files. This task replaces Task 1's `secret_discover_env()` because `dotenv_discover()` only exists from here on.
+Per variable (after alias resolution) the line spelled exactly as the canonical name wins, otherwise
+the last line; every secret value is registered, losing duplicates too (`active = FALSE`, source
+`dotenv:<file>:shadowed`), and losers are registered before winners so that a winner with the same
+value stays active. A name ending in one of G6's non-secret suffixes (`_URL`, `_PATH`, `_DIR`, ...)
+is exported but not registered (ambiguity A4). An API key or token (`API_KEY`, `APIKEY`, `TOKEN`
+suffix) whose value holds whitespace, control or non-ASCII characters is registered, never exported,
+marked `skipped` and its line added to `bad_lines` (ambiguity A5). Only canonical names are
+exported, with `Sys.setenv()` (the one call site in `R/`); `override = FALSE` keeps a variable that
+is already set (`skipped`). The notice lists `NAME #fp (from alias) [action]` per entry and never a
+value; `quiet = TRUE` or `options(gptr.quiet = TRUE)` silence it.
+
+Automatic discovery (03 section 6.5, 04 section 7.0, G6 section 4.5 step 5) reuses
+`gptr_env(set_env = FALSE, quiet = TRUE)` on `.gptr/.env` and then `.env` of the project root, but
+only when the `trust.get` service says the project is trusted (an L0 file reaches trust only through
+that service, IC-33; without P08 the fallback is "untrusted"). Nothing is exported; one notice per
+file version names the variables and fingerprints (`gptr_inform(.once =)` keyed by path,
+modification time and size, so a session started every turn does not repeat it).
+`secret_discover_env()`, which P06 already calls at session start, runs it after the environment
+scan; a failure of the discovery never blocks a session (it counts as 0). The `dotenv` secret source
+of Task 11 resolves and lists the same files. This task replaces Task 1's `secret_discover_env()`
+because `dotenv_discover()` only exists from here on.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2509,7 +2824,8 @@ test_that("a trusted project's .env is discovered vault-only; an untrusted one i
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-dotenv")'`
 
-Expected: six tests error with `could not find function "gptr_env"` and the discovery test with `could not find function "dotenv_project_files"`; summary `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 20 ]`.
+Expected: six tests error with `could not find function "gptr_env"` and the discovery test with
+`could not find function "dotenv_project_files"`; summary `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 20 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2716,7 +3032,8 @@ dotenv_source_list = function(root = project_root(), trusted = dotenv_trusted(ro
 }
 ```
 
-In `R/auth-secrets.R`, replace the definition of `secret_discover_env()` (its two roxygen lines and the function written in Task 1) with:
+In `R/auth-secrets.R`, replace the definition of `secret_discover_env()` (its two roxygen lines and
+the function written in Task 1) with:
 
 ```r
 #' Register secret-looking environment variables and a trusted project's .env files (ambient
@@ -2751,7 +3068,10 @@ secret_discover_env = function(env = Sys.getenv()) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::document()'`, then `Rscript --vanilla -e 'devtools::test(filter = "auth-dotenv")'`, then `Rscript --vanilla -e 'devtools::test(filter = "auth-secrets")'` (Task 1's tests against the replaced `secret_discover_env()`)
+Run: `Rscript --vanilla -e 'devtools::document()'`, then
+`Rscript --vanilla -e 'devtools::test(filter = "auth-dotenv")'`, then
+`Rscript --vanilla -e 'devtools::test(filter = "auth-secrets")'` (Task 1's tests against the
+replaced `secret_discover_env()`)
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 79 ]`, then `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 57 ]`.
 
@@ -2765,14 +3085,38 @@ git commit -m "feat(auth): add gptr_env() and trusted-project .env discovery"
 ### Task 8: The `auth.json` credential store
 
 **Files:**
+
 - Create: `R/auth-store.R`
 - Create: `tests/testthat/test-auth-store.R`
 
 **Interfaces:**
-- Consumes: Task 1 `secret_register()`, `secret_value()` and `secret_lookup()` (tests), `vault_reset()`; Task 2 `redact()` (tests); P01 `gptr_user_dir(which, create = FALSE)`, `read_utf8(path)`, `json_decode()`, `json_encode(x, pretty = FALSE)`, `json_obj()`, `write_atomic()`, `as_utf8()`, `check_string()`, `check_list()`, `gptr_abort()`; `ps::ps_handle()`, `ps::ps_is_running()`, `ps::ps_create_time()`; keyring (Suggests) behind `requireNamespace()`.
-- Produces (04 §7.3, §11.8): `auth_store_get(key)` -> the stored record (a named list) with every secret field (`key`, `refresh`, `token`, `client_secret`, ...) registered and replaced by its `gptr_secret` handle, a keyring reference resolved first, or `NULL`; `auth_store_set(key, record)` -> `invisible(TRUE)`; `auth_store_remove(key)` -> `invisible(lgl(1))`. Helpers used by Task 11: `auth_store_read()`, `auth_record_values(rec)`, `auth_secret_name(key, field)`. Consumers: P05 (stored API keys), P18 (OAuth records).
 
-The file shapes are G6 §3.10 and 04 §11.8, keyed by provider id or `mcp:<server>`. The store is adapted from report 03 §2.11 (Pi's `auth.json`: pretty-printed object, BOM tolerated, 0600 file in a 0700 directory, stale lock after 30 s) with the IC-71 lock policy: a `auth.json.lock/` directory holding `pid` and creation time, 50 attempts 100 ms apart, broken when older than 30 s, when its holder is not running or when the recorded creation time shows that the pid was reused (a lock whose pid file is not written yet counts as held), and no random jitter (IC-61). The directory, the lock and the file are created under `Sys.umask("077")` (set first, restored on exit), written through `write_atomic()`, then `Sys.chmod(0600)`; the directory gets `0700`; Windows relies on the profile ACL (documented caveat). Values are registered under `auth:<key>` (`key` field) or `auth:<key>:<field>`; access tokens (`access`, `access_token`, `id_token`) are registered and never written; the field a keyring reference names (`keyring$field`, else `refresh` for OAuth records and `key` otherwise) goes to the keyring, not the file. A handle in a record is refused, because the file must hold values or references, never handles.
+- Consumes: Task 1 `secret_register()`, `secret_value()` and `secret_lookup()` (tests),
+  `vault_reset()`; Task 2 `redact()` (tests); P01 `gptr_user_dir(which, create = FALSE)`,
+  `read_utf8(path)`, `json_decode()`, `json_encode(x, pretty = FALSE)`, `json_obj()`,
+  `write_atomic()`, `as_utf8()`, `check_string()`, `check_list()`, `gptr_abort()`;
+  `ps::ps_handle()`, `ps::ps_is_running()`, `ps::ps_create_time()`; keyring (Suggests) behind
+  `requireNamespace()`.
+- Produces (04 sections 7.3, 11.8): `auth_store_get(key)` -> the stored record (a named list) with
+  every secret field (`key`, `refresh`, `token`, `client_secret`, ...) registered and replaced by
+  its `gptr_secret` handle, a keyring reference resolved first, or `NULL`;
+  `auth_store_set(key, record)` -> `invisible(TRUE)`; `auth_store_remove(key)` ->
+  `invisible(lgl(1))`. Helpers used by Task 11: `auth_store_read()`, `auth_record_values(rec)`,
+  `auth_secret_name(key, field)`. Consumers: P05 (stored API keys), P18 (OAuth records).
+
+The file shapes are G6 section 3.10 and 04 section 11.8, keyed by provider id or `mcp:<server>`. The
+store is adapted from report 03 section 2.11 (Pi's `auth.json`: pretty-printed object, BOM
+tolerated, 0600 file in a 0700 directory, stale lock after 30 s) with the IC-71 lock policy: an
+`auth.json.lock/` directory holding `pid` and creation time, 50 attempts 100 ms apart, broken when
+older than 30 s, when its holder is not running or when the recorded creation time shows that the
+pid was reused (a lock whose pid file is not written yet counts as held), and no random jitter
+(IC-61). The directory, the lock and the file are created under `Sys.umask("077")` (set first,
+restored on exit), written through `write_atomic()`, then `Sys.chmod(0600)`; the directory gets
+`0700`; Windows relies on the profile ACL (documented caveat). Values are registered under
+`auth:<key>` (`key` field) or `auth:<key>:<field>`; access tokens (`access`, `access_token`,
+`id_token`) are registered and never written; the field a keyring reference names (`keyring$field`,
+else `refresh` for OAuth records and `key` otherwise) goes to the keyring, not the file. A handle in
+a record is refused, because the file must hold values or references, never handles.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2903,7 +3247,9 @@ test_that("a lock is stale only when its holder is gone, its pid was reused, or 
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-store")'`
 
-Expected: six tests error with `could not find function "auth_store_set"` (or `"auth_store_remove"`, `"auth_lock_stale"`); one test skips (reason `{keyring} is not installed`, or `keyring is installed` on a machine with keyring); summary `[ FAIL 6 | WARN 0 | SKIP 1 | PASS 0 ]`.
+Expected: six tests error with `could not find function "auth_store_set"` (or `"auth_store_remove"`,
+`"auth_lock_stale"`); one test skips (reason `{keyring} is not installed`, or `keyring is installed`
+on a machine with keyring); summary `[ FAIL 6 | WARN 0 | SKIP 1 | PASS 0 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3120,7 +3466,11 @@ auth_store_remove = function(key) {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-store")'`
 
-Expected without keyring installed (the conventions' default machine): `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 30 ]`, the skip reason being `{keyring} is not installed` (testthat 3.3.2's wording). With keyring installed: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 33 ]`, the skip reason being `keyring is installed` (the keyring test uses the `env` backend, so no system keyring is touched).
+Expected without keyring installed (the conventions' default machine):
+`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 30 ]`, the skip reason being `{keyring} is not installed`
+(testthat 3.3.2's wording). With keyring installed: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 33 ]`, the
+skip reason being `keyring is installed` (the keyring test uses the `env` backend, so no system
+keyring is touched).
 
 - [ ] **Step 5: Commit**
 
@@ -3132,14 +3482,45 @@ git commit -m "feat(auth): add the auth.json credential store"
 ### Task 9: Child-process environments
 
 **Files:**
+
 - Create: `R/auth-childenv.R`
 - Create: `tests/testthat/test-auth-childenv.R`
 
 **Interfaces:**
-- Consumes: Task 1 `is_secret_name()`, `vault_values()`, `secret_value(handle, origin)`, `secret_bound_origin()`, `secret_lookup()`, `secret_register()`, `secret_registered_names()` and `secret_discover_env()` (tests); P01 `check_string()`, `check_strings()`, `as_utf8()`, `gptr_abort()`, `gptr_warn(..., .once =)`, `rscript_path()` (tests); P02 `registry_get("child_env", profile)`, `registry_get("provider", id)`, `gptr_register()` and `gptr_provider()` (tests); P04 `proc_spawn()` in one test only when it exists (ambiguity A7).
-- Produces (04 §7.3, IC-60, IC-65): `child_env(profile, pass = character(), set = character(), provider = NULL)` -> complete named chr without `NA` (processx `env`); `child_env_callr(env)` -> the same plus every other inherited name as `NA` (callr `env`); warning `gptr_warning_billing_env` (`variables`); helper `child_env_profiles_builtin()` (used by Task 11). Consumers: P04, P18, P19, P20, P22, P23.
 
-Profiles follow G6 §3.7 with the review amendments. `mcp` and `worker` are allowlists (the MCP TypeScript SDK's default inherited variables per platform plus mcptools' locale, proxy, certificate and XDG additions; `worker` adds the R library and `R_USER_*_DIR` variables and `GPTR_SUBAGENT_DEPTH`, the only gptr variable of 04 §3.2 it inherits (P19 passes `GPTR_WORKER` and `GPTR_PROJECT_ROOT` through `set =`), and receives only its provider's key through `provider =`); `cli-claude`, `cli-codex`, `helper` and `artifact` inherit minus secret-looking names and every registered value; the two CLI profiles also drop the enclosing-agent variables and, with one `billing_env` warning per profile and variable set (ambiguity A8), the billing switches listed under Global Constraints, keeping `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH` or `CODEX_HOME`. `pass =` keeps named variables (for example `GITHUB_PAT` for a `gh` call, or `ANTHROPIC_API_KEY` for explicit API billing); `set =` adds strings or handles, which are materialised here, one of the two sanctioned `secret_value()` call sites. A billing variable named in `pass =` or `set =` is not reported as removed. A worker's provider key that is found only in the environment (not yet in the vault) is registered before it is handed over, so the worker's output is redacted too (G6 §4.11: every value from every source is registered). Every profile points `R_ENVIRON_USER` and `R_PROFILE_USER` at empty files in `file.path(tempdir(), "gptr", "childenv")` (truncated if anything wrote to them) and drops `R_ENVIRON` unless it is passed: an Rscript child re-reads `~/.Renviron` otherwise, and callr copies that file into `tempdir()` and the child re-reads it (G6 verification log, item 7). Variables whose values start with `()` (exported shell functions) are dropped; names compare case-insensitively (Windows).
+- Consumes: Task 1 `is_secret_name()`, `vault_values()`, `secret_value(handle, origin)`,
+  `secret_bound_origin()`, `secret_lookup()`, `secret_register()`, `secret_registered_names()` and
+  `secret_discover_env()` (tests); P01 `check_string()`, `check_strings()`, `as_utf8()`,
+  `gptr_abort()`, `gptr_warn(..., .once =)`, `rscript_path()` (tests); P02
+  `registry_get("child_env", profile)`, `registry_get("provider", id)`, `gptr_register()` and
+  `gptr_provider()` (tests); P04 `proc_spawn()` in one test only when it exists (ambiguity A7).
+- Produces (04 section 7.3, IC-60, IC-65):
+  `child_env(profile, pass = character(), set = character(), provider = NULL)` -> complete named chr
+  without `NA` (processx `env`); `child_env_callr(env)` -> the same plus every other inherited name
+  as `NA` (callr `env`); warning `gptr_warning_billing_env` (`variables`); helper
+  `child_env_profiles_builtin()` (used by Task 11). Consumers: P04, P18, P19, P20, P22, P23.
+
+Profiles follow G6 section 3.7 with the review amendments. `mcp` and `worker` are allowlists (the
+MCP TypeScript SDK's default inherited variables per platform plus mcptools' locale, proxy,
+certificate and XDG additions; `worker` adds the R library and `R_USER_*_DIR` variables and
+`GPTR_SUBAGENT_DEPTH`, the only gptr variable of 04 section 3.2 it inherits (P19 passes
+`GPTR_WORKER` and `GPTR_PROJECT_ROOT` through `set =`), and receives only its provider's key through
+`provider =`); `cli-claude`, `cli-codex`, `helper` and `artifact` inherit minus secret-looking names
+and every registered value; the two CLI profiles also drop the enclosing-agent variables and, with
+one `billing_env` warning per profile and variable set (ambiguity A8), the billing switches listed
+under Global Constraints, keeping `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`,
+`CLAUDE_CODE_GIT_BASH_PATH` or `CODEX_HOME`. `pass =` keeps named variables (for example
+`GITHUB_PAT` for a `gh` call, or `ANTHROPIC_API_KEY` for explicit API billing); `set =` adds strings
+or handles, which are materialised here, one of the two sanctioned `secret_value()` call sites. A
+billing variable named in `pass =` or `set =` is not reported as removed. A worker's provider key
+that is found only in the environment (not yet in the vault) is registered before it is handed over,
+so the worker's output is redacted too (G6 section 4.11: every value from every source is
+registered). Every profile points `R_ENVIRON_USER` and `R_PROFILE_USER` at empty files in
+`file.path(tempdir(), "gptr", "childenv")` (truncated if anything wrote to them) and drops
+`R_ENVIRON` unless it is passed: an Rscript child re-reads `~/.Renviron` otherwise, and callr copies
+that file into `tempdir()` and the child re-reads it (G6 verification log, item 7). Variables whose
+values start with `()` (exported shell functions) are dropped; names compare case-insensitively
+(Windows).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3375,7 +3756,9 @@ test_that("a callr worker sees neither the .Renviron key nor the file", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-childenv")'`
 
-Expected: nine tests error with `could not find function "child_env"` (one with `"child_env_callr"`); summary `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 1 ]` (the passing expectation is the negative control: an Rscript child without a profile does read the planted `.Renviron`).
+Expected: nine tests error with `could not find function "child_env"` (one with
+`"child_env_callr"`); summary `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 1 ]` (the passing expectation is
+the negative control: an Rscript child without a profile does read the planted `.Renviron`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3600,14 +3983,33 @@ git commit -m "feat(auth): add child-process environment profiles"
 ### Task 10: The secret-access classifier `secret_scan()`
 
 **Files:**
+
 - Modify: `R/auth-secrets.R` (append)
 - Modify: `tests/testthat/test-auth-secrets.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1 `secret_registered_names()`, `is_secret_name()`, `secret_register()`, `vault_reset()`; P01 `check_strings()`.
-- Produces (04 §7.3): `secret_scan(code, tainted = character())` -> `list(findings = df(rule, name, level, guard), level = int(1), guard = lgl(1), assigned = chr)`. Consumer: P11 (the classifier's secret guard, `gptr_risk()` fields `secret` and `secret_guard`, the taint of later evaluations).
 
-The rules and levels are G6 §3.8 and the walk is G6 §5.0 `secret_scan()` (tested by §5.4's 40 cases): reading a registered key, dumping the environment (`Sys.getenv()` with no names, `system("env")`, `printenv`, `set`) or touching gptr's internals is level 3 with the secret guard; a secret-looking but unregistered name, a dynamic `Sys.getenv()`, a secret file read (`.env`, `.Renviron`, `~/.ssh`, `~/.codex`, `~/.claude`, `/proc/*/environ`, ...) and keyring calls are level 3 without it; `Sys.setenv()` is level 2; a literal `[secret:` marker is level 3 (P11 rejects it before evaluation with a `Sys.getenv()` hint); any secret source together with a network sink in one evaluation, or a later evaluation sending a variable that a secret-reading evaluation assigned (`tainted`), is level 4. The code is parsed, never evaluated; a parse error yields only the marker finding. Two changes from the prototype: the registered names come from the vault instead of an argument (04's signature has no `registered`), and `findings` is a data frame with one row per rule and name, so P11 can list the flagged calls. The internal namespace operator and the assignment arrows are assembled with `paste0()`, so neither the lint rule for `:::` nor a text scan for the arrow matches the file.
+- Consumes: Task 1 `secret_registered_names()`, `is_secret_name()`, `secret_register()`,
+  `vault_reset()`; P01 `check_strings()`.
+- Produces (04 section 7.3): `secret_scan(code, tainted = character())` ->
+  `list(findings = df(rule, name, level, guard), level = int(1), guard = lgl(1), assigned = chr)`.
+  Consumer: P11 (the classifier's secret guard, `gptr_risk()` fields `secret` and `secret_guard`,
+  the taint of later evaluations).
+
+The rules and levels are G6 section 3.8 and the walk is G6 section 5.0 `secret_scan()` (tested by
+section 5.4's 40 cases): reading a registered key, dumping the environment (`Sys.getenv()` with no
+names, `system("env")`, `printenv`, `set`) or touching gptr's internals is level 3 with the secret
+guard; a secret-looking but unregistered name, a dynamic `Sys.getenv()`, a secret file read (`.env`,
+`.Renviron`, `~/.ssh`, `~/.codex`, `~/.claude`, `/proc/*/environ`, ...) and keyring calls are level
+3 without it; `Sys.setenv()` is level 2; a literal `[secret:` marker is level 3 (P11 rejects it
+before evaluation with a `Sys.getenv()` hint); any secret source together with a network sink in one
+evaluation, or a later evaluation sending a variable that a secret-reading evaluation assigned
+(`tainted`), is level 4. The code is parsed, never evaluated; a parse error yields only the marker
+finding. Two changes from the prototype: the registered names come from the vault instead of an
+argument (04's signature has no `registered`), and `findings` is a data frame with one row per rule
+and name, so P11 can list the flagged calls. The internal namespace operator and the assignment
+arrows are assembled with `paste0()`, so neither the lint rule for `:::` nor a text scan for the
+arrow matches the file.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3709,7 +4111,8 @@ test_that("empty arguments, parse errors and a thousand statements are handled",
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-secrets")'`
 
-Expected: three tests error with `could not find function "secret_scan"`; summary `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 57 ]`.
+Expected: three tests error with `could not find function "secret_scan"`; summary
+`[ FAIL 3 | WARN 0 | SKIP 0 | PASS 57 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3902,15 +4305,37 @@ git commit -m "feat(auth): add the secret-access classifier"
 ### Task 11: `builtin:secrets`, the `secret.lookup` service and the acceptance run
 
 **Files:**
+
 - Modify: `R/auth-secrets.R` (append)
 - Modify: `tests/testthat/test-auth-secrets.R` (append)
 - Generated: `NAMESPACE`, `man/` (regenerated; no change expected after Tasks 1, 2, 5 and 7)
 
 **Interfaces:**
-- Consumes: Task 1 `secret_register()`, `secret_lookup()`, `is_secret_name()`; Task 2 `redact_rules_builtin()`, `redact()` (tests); Task 6 `alias_builtin()`, `alias_resolve()` (tests); Task 7 `dotenv_source_resolve()`, `dotenv_source_list()`; Task 8 `auth_store_read()`, `auth_record_values()`, `auth_secret_name()`, `auth_store_set()`, `auth_store_remove()`; Task 9 `child_env_profiles_builtin()`, `child_env()` (tests); P01 `on_load()`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)` (tests), `as_utf8()`; P02 `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the factory API member `gptr$register(spec)`, `gptr_spec(kind, name, ...)`, `registry_all()`, `registry_get()`, `gptr_register()`, `gptr_check(x, error = FALSE, tokens = FALSE)` (tests).
-- Produces (04 §7.3, §10.3, §7.0): `builtin_secrets(gptr)` registering 4 `secret_source` specs (`environment`, `dotenv`, `auth`, `keyring`; 03 §11 and G6 §4.8 name these four), the 12 `redaction_rule` specs, the `env_alias` spec `TYPESAFE_API_KEY` and the 6 `child_env` specs; its declaration `on_load(ext_declare_builtin("secrets", builtin_secrets, replaceable = FALSE))`; the service `secret.lookup` (`function(name) <handle> or NULL`) owned by `builtin:secrets`.
 
-The built-ins register through the same API as plugins (S-11, 04 §10.3, G6 §4.8): a plugin adds a `secret_source` (for example a password-manager CLI), a `redaction_rule`, an `env_alias` (`gptr_spec("env_alias", "SLACK_BOT_TOKEN", aliases = "slack-token")`, the 04 §6.7 example) or a `child_env` profile, and the redactor, `gptr_env()` and `child_env()` pick them up on their next call because they read the registry (Tasks 2, 6 and 9). `rules_current()` recompiles when the set of rule specs changes. Every source registers a value the moment it resolves one. The `dotenv` source reads only a trusted project's `.gptr/.env` and `.env` (Task 7 helpers). The keyring source reads the `gptr` service only behind `requireNamespace("keyring")`.
+- Consumes: Task 1 `secret_register()`, `secret_lookup()`, `is_secret_name()`; Task 2
+  `redact_rules_builtin()`, `redact()` (tests); Task 6 `alias_builtin()`, `alias_resolve()` (tests);
+  Task 7 `dotenv_source_resolve()`, `dotenv_source_list()`; Task 8 `auth_store_read()`,
+  `auth_record_values()`, `auth_secret_name()`, `auth_store_set()`, `auth_store_remove()`; Task 9
+  `child_env_profiles_builtin()`, `child_env()` (tests); P01 `on_load()`,
+  `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)` (tests),
+  `as_utf8()`; P02 `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`,
+  the factory API member `gptr$register(spec)`, `gptr_spec(kind, name, ...)`, `registry_all()`,
+  `registry_get()`, `gptr_register()`, `gptr_check(x, error = FALSE, tokens = FALSE)` (tests).
+- Produces (04 sections 7.3, 10.3, 7.0): `builtin_secrets(gptr)` registering 4 `secret_source` specs
+  (`environment`, `dotenv`, `auth`, `keyring`; 03 section 11 and G6 section 4.8 name these four),
+  the 12 `redaction_rule` specs, the `env_alias` spec `TYPESAFE_API_KEY` and the 6 `child_env`
+  specs; its declaration
+  `on_load(ext_declare_builtin("secrets", builtin_secrets, replaceable = FALSE))`; the service
+  `secret.lookup` (`function(name) <handle> or NULL`) owned by `builtin:secrets`.
+
+The built-ins register through the same API as plugins (S-11, 04 section 10.3, G6 section 4.8): a
+plugin adds a `secret_source` (for example a password-manager CLI), a `redaction_rule`, an
+`env_alias` (`gptr_spec("env_alias", "SLACK_BOT_TOKEN", aliases = "slack-token")`, the 04 section
+6.7 example) or a `child_env` profile, and the redactor, `gptr_env()` and `child_env()` pick them up
+on their next call because they read the registry (Tasks 2, 6 and 9). `rules_current()` recompiles
+when the set of rule specs changes. Every source registers a value the moment it resolves one. The
+`dotenv` source reads only a trusted project's `.gptr/.env` and `.env` (Task 7 helpers). The keyring
+source reads the `gptr` service only behind `requireNamespace("keyring")`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4011,7 +4436,11 @@ test_that("a rule that matches its own marker never applies", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-secrets")'`
 
-Expected: failures such as `Expected spec_names(registry_all("secret_source")) to have the same values as c("environment", "dotenv", "auth", "keyring")` and `Expected mcp to be FALSE` (no `builtin:secrets` records), and `ext_service_get("secret.lookup")` signalling `gptr_error_not_available`; testthat stops after ten failures with `Maximum number of failures exceeded; quitting.`
+Expected: failures such as
+`Expected spec_names(registry_all("secret_source")) to have the same values as c("environment", "dotenv", "auth", "keyring")`
+and `Expected mcp to be FALSE` (no `builtin:secrets` records), and
+`ext_service_get("secret.lookup")` signalling `gptr_error_not_available`; testthat stops after ten
+failures with `Maximum number of failures exceeded; quitting.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4102,11 +4531,20 @@ Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_packa
 ```
 
 Expected:
-- `devtools::document()` reports no new files and leaves `NAMESPACE` with the eight lines listed under File Structure.
+
+- `devtools::document()` reports no new files and leaves `NAMESPACE` with the eight lines listed
+  under File Structure.
 - `auth-secrets`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 199 ]`.
-- `auth` (all five files): `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 534 ]` without keyring installed (skip reason: `{keyring} is not installed`), `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 537 ]` with keyring (skip reason: `keyring is installed`).
-- `lint|arch` (P01's `test-lint-rules.R` and `test-arch-layers.R`): green, with P01's documented skip when codetools is missing. The new files contain no left arrow, `:::`, `withr::`, `enc2utf8(`, non-ASCII byte or non-literal `cli_*()` call; `Sys.setenv()` occurs only in `R/auth-dotenv.R`; no `auth-*.R` function calls a function of a higher layer.
-- `lintr::lint_package()` after `pkgload::load_all()`: prints `No lints found.` and exits with status 0 (P01 acceptance A3: without the loaded namespace lintr's `object_usage_linter` cannot see internal functions and reports every call to one).
+- `auth` (all five files): `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 534 ]` without keyring installed (skip
+  reason: `{keyring} is not installed`), `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 537 ]` with keyring
+  (skip reason: `keyring is installed`).
+- `lint|arch` (P01's `test-lint-rules.R` and `test-arch-layers.R`): green, with P01's documented
+  skip when codetools is missing. The new files contain no left arrow, `:::`, `withr::`,
+  `enc2utf8(`, non-ASCII byte or non-literal `cli_*()` call; `Sys.setenv()` occurs only in
+  `R/auth-dotenv.R`; no `auth-*.R` function calls a function of a higher layer.
+- `lintr::lint_package()` after `pkgload::load_all()`: prints `No lints found.` and exits with
+  status 0 (P01 acceptance A3: without the loaded namespace lintr's `object_usage_linter` cannot see
+  internal functions and reports every call to one).
 
 - [ ] **Step 5: Commit**
 
@@ -4117,7 +4555,9 @@ git commit -m "feat(auth): register builtin:secrets and the secret.lookup servic
 
 ## Plan acceptance
 
-Every acceptance check of 05 P03 (items 1-5 and the review additions, item 6), the task and test that prove it, and the command with its expected result. All commands run from `/Users/wanjun/Desktop/gptr`.
+Every acceptance check of 05 P03 (items 1-5 and the review additions, item 6), the task and test
+that prove it, and the command with its expected result. All commands run from
+`/Users/wanjun/Desktop/gptr`.
 
 | # | Acceptance check (05 P03) | Proved by | Command | Expected |
 |---|---|---|---|---|
@@ -4134,11 +4574,24 @@ Every acceptance check of 05 P03 (items 1-5 and the review additions, item 6), t
 | 6c | "the claude profile removes `CLAUDECODE` and `ANTHROPIC_PROFILE` and keeps `CLAUDE_CONFIG_DIR`" | Task 9: `cli-claude follows G6 3.7: enclosing-agent and billing variables go, with a warning` | as 3 | passes; the warning is `gptr_warning_billing_env` with `variables = c("ANTHROPIC_API_KEY", "ANTHROPIC_PROFILE")` |
 | 6d | "`gptr_scrub()` finds a value registered after it was written, rewrites it with `dry_run = FALSE` and `error = TRUE` signals `gptr_error_secret_found`" | Task 5: `gptr_scrub() finds a value registered after it was written and rewrites it`; `a rewritten session file stays valid JSONL and gets a gptr.scrub entry`; `a long secret is counted and removed through the fixed-string path` | as 2b | passes |
 
-Review additions (2026-10-01), proved by the same commands: long secrets never break a sink (Task 1 `literal alternations stay small enough for PCRE to compile`, Task 2 `long secrets (private keys, long tokens) never overflow the PCRE pattern size`, Task 5 `a long secret is counted and removed through the fixed-string path`); a trusted project's `.env` is discovered vault-only and an untrusted one is never read (Task 7 `a trusted project's .env is discovered vault-only; an untrusted one is not read`; Task 11 `dotenv` source); a half-created store lock is waited for and a reused pid is recognised (Task 8 `a lock is stale only when its holder is gone, its pid was reused, or after 30 s`).
+Review additions (2026-10-01), proved by the same commands: long secrets never break a sink (Task 1
+`literal alternations stay small enough for PCRE to compile`, Task 2
+`long secrets (private keys, long tokens) never overflow the PCRE pattern size`, Task 5
+`a long secret is counted and removed through the fixed-string path`); a trusted project's `.env` is
+discovered vault-only and an untrusted one is never read (Task 7
+`a trusted project's .env is discovered vault-only; an untrusted one is not read`; Task 11 `dotenv`
+source); a half-created store lock is waited for and a reused pid is recognised (Task 8
+`a lock is stale only when its holder is gone, its pid was reused, or after 30 s`).
 
-Additional checks this plan runs (Task 11, Step 4): `Rscript --vanilla -e 'devtools::document()'` leaves the eight `NAMESPACE` lines of File Structure; `Rscript --vanilla -e 'devtools::test(filter = "lint|arch")'` is green (P01's lint and layer tests over the new files); `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'` prints `No lints found.` and exits 0 (the namespace is loaded first, as in P01's A3). The M0 `R CMD check` is P04's exit check (05 Milestones), not this plan's.
+Additional checks this plan runs (Task 11, Step 4): `Rscript --vanilla -e 'devtools::document()'`
+leaves the eight `NAMESPACE` lines of File Structure;
+`Rscript --vanilla -e 'devtools::test(filter = "lint|arch")'` is green (P01's lint and layer tests
+over the new files);
+`Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`
+prints `No lints found.` and exits 0 (the namespace is loaded first, as in P01's A3). The M0
+`R CMD check` is P04's exit check (05 Milestones), not this plan's.
 
-G6 §5.1's 17 parser and loader checks, by test (`test-auth-dotenv.R`):
+G6 section 5.1's 17 parser and loader checks, by test (`test-auth-dotenv.R`):
 
 | G6 check | Test |
 |---|---|
@@ -4148,7 +4601,7 @@ G6 §5.1's 17 parser and loader checks, by test (`test-auth-dotenv.R`):
 | a value with an embedded blank is refused without echoing it | `an API key with blanks is registered, not exported, and reported by line only` |
 | `serialize(handle)` contains no key bytes | `gptr_env() validates arguments and serialised handles carry no key bytes` |
 
-G6 §5.2's 40 redactor checks, by test (`test-auth-redact.R`):
+G6 section 5.2's 40 redactor checks, by test (`test-auth-redact.R`):
 
 | G6 checks | Test |
 |---|---|
@@ -4182,81 +4635,227 @@ G6 §5.2's 40 redactor checks, by test (`test-auth-redact.R`):
 | credential store `auth.json` (0600, lock, keyring references) | 8 |
 | child-environment profiles `mcp`, `worker`, `cli-claude`, `cli-codex`, `helper`, `artifact`, empty `R_ENVIRON_USER`/`R_PROFILE_USER`, billing-switch removal | 9 |
 | `builtin:secrets` registering secret sources (`environment`, `dotenv`, `auth`, `keyring`), redaction rules, env aliases and child-env profiles as specs | 11 |
-| 03 §6.5 "automatic `.env` discovery is vault-only and only in trusted projects"; 04 §7.0 `trust.get` consumer "P03 (`.env` discovery)" | 7 (`dotenv_discover()` inside `secret_discover_env()`; `dotenv_source_resolve()`/`dotenv_source_list()`), 11 (the `dotenv` source) |
+| 03 section 6.5 "automatic `.env` discovery is vault-only and only in trusted projects"; 04 section 7.0 `trust.get` consumer "P03 (`.env` discovery)" | 7 (`dotenv_discover()` inside `secret_discover_env()`; `dotenv_source_resolve()`/`dotenv_source_list()`), 11 (the `dotenv` source) |
 | long secrets (private keys, OAuth tokens) never break a sink | 1 (`lit_groups()`, `lits_long`), 2 (`redact_literals()`, `lits_present()`, `getParseText()`), 5 (`scrub_scan()`) |
 | review: complete vectors without `NA`, `child_env_callr()`, empty files in every profile, `R_ENVIRON` dropped (IC-60) | 9 |
-| review: CLI profiles per G6 §3.7 with `ANTHROPIC_PROFILE`, `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `CODEX_MANAGED_*`, `CODEX_SANDBOX*` (IC-65) | 9 |
+| review: CLI profiles per G6 section 3.7 with `ANTHROPIC_PROFILE`, `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `CODEX_MANAGED_*`, `CODEX_SANDBOX*` (IC-65) | 9 |
 | review: `redact()` installed with `redactor_set()` (IC-34) | 2 |
 | review: `gptr_scrub()` (exported) and the `secret_late` warning of `secret_register()` (IC-70) | 5, 1 |
 | review: the `secret.lookup` service | 11 |
-| 04 §7.3 `secret_scan()` | 10 |
-| 04 §10.4 `secret_registered` event | 1 (single and batch), 7 (one event per `gptr_env()` call) |
-| 04 §4.6 `gptr.scrub` entry | 5 |
-| 03 §6.4 copy safety | P03 owns no `test-copy-*.R` (03 §3.4 lists none for `auth`); `gptr_redact()`/`redact_tree()` edit only their own copy of the argument, and handles hold no user objects |
-| 04 §3.1 options `gptr.redact_min_chars`, `gptr.redact_patterns`, `gptr.stream_hold_max`, `gptr.env_export`, `gptr.prompt_secrets`, `gptr.secret_guard` | read in 1-3 and 7; all six documented in the `Options` section of `?gptr_redact` (P25 assembles `?gptr_options`); `gptr.prompt_secrets` is applied by the gateway (P08) and `gptr.secret_guard` by P11's policy |
+| 04 section 7.3 `secret_scan()` | 10 |
+| 04 section 10.4 `secret_registered` event | 1 (single and batch), 7 (one event per `gptr_env()` call) |
+| 04 section 4.6 `gptr.scrub` entry | 5 |
+| 03 section 6.4 copy safety | P03 owns no `test-copy-*.R` (03 section 3.4 lists none for `auth`); `gptr_redact()`/`redact_tree()` edit only their own copy of the argument, and handles hold no user objects |
+| 04 section 3.1 options `gptr.redact_min_chars`, `gptr.redact_patterns`, `gptr.stream_hold_max`, `gptr.env_export`, `gptr.prompt_secrets`, `gptr.secret_guard` | read in 1-3 and 7; all six documented in the `Options` section of `?gptr_redact` (P25 assembles `?gptr_options`); `gptr.prompt_secrets` is applied by the gateway (P08) and `gptr.secret_guard` by P11's policy |
 
 Every acceptance check of 05 P03 maps to a task and a test in the table above.
 
 ### Placeholder scan
 
-The plan was searched for `TBD`, `TODO`, `implement later`, `fill in`, `appropriate error handling`, `handle edge cases`, `similar to Task` and for steps without code: none. Every code step shows the complete file content or the complete appended block; every function called in the code is defined in this plan, in 04 for P01/P02, or in base R and the Imports.
+The plan was searched for `TBD`, `TODO`, `implement later`, `fill in`, `appropriate error handling`,
+`handle edge cases`, `similar to Task` and for steps without code: none. Every code step shows the
+complete file content or the complete appended block; every function called in the code is defined
+in this plan, in 04 for P01/P02, or in base R and the Imports.
 
 ### Type and name consistency with 04
 
-- Exported signatures are character-for-character those of 04 §6.2 and §6.6 (`gptr_env(path = ".env", aliases = NULL, set_env = getOption("gptr.env_export", TRUE), override = FALSE, quiet = FALSE)`, `gptr_redact(x, profile = c("persist", "stream", "context", "code", "user_data"))`, `gptr_scrub(paths = NULL, dry_run = TRUE, error = FALSE)`), and their examples are 04's (plus one list example for `gptr_redact()`); all run offline.
-- The 18 internal functions of 04 §7.3 have 04's names, argument names and defaults. `redact_stream()` returns an environment with `push()` and `flush()` (plus `held()`), `child_env()` a complete named character vector, `child_env_callr()` the `NA` form, `secret_scan()` the list `findings`/`level`/`guard`/`assigned` with `findings` columns `rule`, `name`, `level`, `guard`.
-- Classes and fields: `gptr_secret` with `id`, `name`, `fp`, `origin`; `gptr_env_report` with `name`, `variable`, `secret`, `fingerprint`, `action` and attribute `bad_lines`; condition classes and fields as in Global Constraints; event `secret_registered` with `name`, `source`, `count`; entry `customType = "gptr.scrub"` with `data` `date`, `secrets`, `count`.
-- Registration: `ext_declare_builtin("secrets", builtin_secrets, replaceable = FALSE)`; `ext_service_set("secret.lookup", secret_lookup, provided_by = "P03", builtin = "secrets")`; spec kinds `secret_source`, `redaction_rule`, `env_alias`, `child_env` with the 04 §10.2 fields.
-- Names agree with the dependency plans `dev/plan/P01-foundation.md` and `dev/plan/P02-extension-api-registry.md` (as of 2026-10-01): every function under "Interfaces used from earlier plans" exists there with 04's signature (checked by the Prerequisites command against a package assembled from those plans' code). Behaviours of those plans this plan relies on: `registry_all()` returns a list **named** by record name (hence `unname()` in Task 11's `spec_names()`); `redact_hook()` turns a failing redactor into `"[redaction failed]"` for text and re-raises for lists, so a redactor error would blank every condition message and break every event payload (why long secrets must never overflow PCRE, Tasks 1-2); `gptr_warn(.once =)` keeps its keys in `the$once` for the process; P02's `redaction_rule` validator already refuses a pattern that matches its own marker and fills `profiles` with all five profiles; P02 accepts unknown spec fields (the `replace` field, A14).
-- Consumers in later plans agree: P04 (`secret_value(handle, origin)` with `url_origin()`, `redact(x, "persist")`), P05 (re-registration with `origin` binds a vault entry; origins compared in `scheme://host:port` form; `auth_store_get()` records hold handles), P06 (`secret_discover_env()` at session start, `redact_tree(entry, profile = "persist")`, `redact_stream("stream")$push()`), P11 (`secret_scan(code, tainted = character())` with `findings` columns `rule`, `name`, `level`, `guard`).
+- Exported signatures are character-for-character those of 04 sections 6.2 and 6.6
+  (`gptr_env(path = ".env", aliases = NULL, set_env = getOption("gptr.env_export", TRUE), override = FALSE, quiet = FALSE)`,
+  `gptr_redact(x, profile = c("persist", "stream", "context", "code", "user_data"))`,
+  `gptr_scrub(paths = NULL, dry_run = TRUE, error = FALSE)`), and their examples are 04's (plus one
+  list example for `gptr_redact()`); all run offline.
+- The 18 internal functions of 04 section 7.3 have 04's names, argument names and defaults.
+  `redact_stream()` returns an environment with `push()` and `flush()` (plus `held()`),
+  `child_env()` a complete named character vector, `child_env_callr()` the `NA` form,
+  `secret_scan()` the list `findings`/`level`/`guard`/`assigned` with `findings` columns `rule`,
+  `name`, `level`, `guard`.
+- Classes and fields: `gptr_secret` with `id`, `name`, `fp`, `origin`; `gptr_env_report` with
+  `name`, `variable`, `secret`, `fingerprint`, `action` and attribute `bad_lines`; condition classes
+  and fields as in Global Constraints; event `secret_registered` with `name`, `source`, `count`;
+  entry `customType = "gptr.scrub"` with `data` `date`, `secrets`, `count`.
+- Registration: `ext_declare_builtin("secrets", builtin_secrets, replaceable = FALSE)`;
+  `ext_service_set("secret.lookup", secret_lookup, provided_by = "P03", builtin = "secrets")`; spec
+  kinds `secret_source`, `redaction_rule`, `env_alias`, `child_env` with the 04 section 10.2 fields.
+- Names agree with the dependency plans `dev/plan/P01-foundation.md` and
+  `dev/plan/P02-extension-api-registry.md` (as of 2026-10-01): every function under "Interfaces used
+  from earlier plans" exists there with 04's signature (checked by the Prerequisites command against
+  a package assembled from those plans' code). Behaviours of those plans this plan relies on:
+  `registry_all()` returns a list **named** by record name (hence `unname()` in Task 11's
+  `spec_names()`); `redact_hook()` turns a failing redactor into `"[redaction failed]"` for text and
+  re-raises for lists, so a redactor error would blank every condition message and break every event
+  payload (why long secrets must never overflow PCRE, Tasks 1-2); `gptr_warn(.once =)` keeps its
+  keys in `the$once` for the process; P02's `redaction_rule` validator already refuses a pattern
+  that matches its own marker and fills `profiles` with all five profiles; P02 accepts unknown spec
+  fields (the `replace` field, A14).
+- Consumers in later plans agree: P04 (`secret_value(handle, origin)` with `url_origin()`,
+  `redact(x, "persist")`), P05 (re-registration with `origin` binds a vault entry; origins compared
+  in `scheme://host:port` form; `auth_store_get()` records hold handles), P06
+  (`secret_discover_env()` at session start, `redact_tree(entry, profile = "persist")`,
+  `redact_stream("stream")$push()`), P11 (`secret_scan(code, tainted = character())` with `findings`
+  columns `rule`, `name`, `level`, `guard`).
 
 ### Contract ambiguities and the reading chosen
 
-- **A1 Late-registration scan.** 04 §7.3/IC-70 say `secret_register()` "scans live sessions' in-memory entries", but the live index `the$live` belongs to P06 (§7.0: other plans read a field "only through the owner's functions") and `auth-secrets.R` is L0, which may not call P06's `live_all()`/`session_data()` (03 §2.2; the kernel SDK of IC-33 is for L3-L6 and L4). Reading: 03 §2.2's "callbacks registered by upper layers". P03 adds `secret_live_entries_set(fun)`; P06 is expected to register `on_load(secret_live_entries_set(function() <named list: session id -> list of entries>))`. Until then (M0) no session exists and nothing is scanned. Contract edit suggested: list `secret_live_entries_set(fun)` in 04 §7.3 with consumer P06, and the registration in P06's §7.6 row for `session-live.R`. **Open follow-up (review, 2026-10-01):** P06's plan calls `secret_discover_env()` at session start but does not install this callback, so after M1 the IC-70 in-memory scan stays inert until P06 adds `on_load(secret_live_entries_set(<live entries>))`; P03 cannot edit P06's files, so the gap is recorded here and in the review log for the contract editor.
-- **A2 `the$redactor`.** 04 §7.0 lists `redactor` under both P01 ("the installed redaction hook") and P03 ("compiled redaction patterns"). Reading: P01 owns `the$redactor` (IC-34's `redactor_set()` writes it); P03 keeps its compiled literals and rules in `the$secrets` and never touches `the$redactor`.
-- **A3 Run check in `gptr_env()` and `gptr_scrub(dry_run = FALSE)`.** IC-53 item 3 says the control-category exports "also check `run_current()`". `run_current()` is P06's and not callable from L0, and P03 precedes P06. Reading: P03 adds no in-function run check; enforcement is P11's `control` category (level 4, `ask_human`) in `risk-functions.csv`, which lists both calls. If an in-function check is wanted, a service (for example a P06-registered callback like A1) needs a contract edit.
-- **A4 "registers every value".** 04 §6.2 says `gptr_env()` registers every value; G6 §3.1 and §5.0 register every *secret* value (a name not ending in `_FILE`, `_PATH`, `_DIR`, `_HOME`, `_URL`, `_URI`, `_HOST`, `_PORT`, `_ID`, `_USER`, `_USERNAME`, `_MODEL`, `_REGION`, `_LEVEL`, `_SOCK`) including losing duplicates. Registering `TYPESAFE_BASE_URL` would redact the provider URL from every transcript, so G6's reading is kept; the report's `secret` column shows the classification.
-- **A5 Invalid API-key values.** G6's prototype stopped with an error for an `*API_KEY`/`*TOKEN` value containing blanks, controls or non-ASCII; 04 §6.2 lists only `invalid_argument` for a missing file and says malformed lines are reported by line number, not errors. Reading: the value is registered (inactive, so it is still redacted), never exported, its action is `skipped` and its line joins `bad_lines`.
-- **A6 Report actions.** 04 names the four actions but not when each applies. Reading: `set` (exported), `registered` (kept in the vault only, `set_env = FALSE`), `skipped` (already set without `override`, refused value, or nothing to register or export), `duplicate` (a losing duplicate).
-- **A7 `proc_spawn()` in acceptance 6.** P04 (which owns `proc_spawn()`) depends on P03, so P03's test cannot require it. The test calls `proc_spawn(rscript_path(), args, env = env, stdout = out, stderr = err)` with 04 §7.4's signature when it exists (looked up with `get0("proc_spawn", mode = "function")`, so `lintr`'s `object_usage_linter` has no unknown function to report before P04 lands), else `processx::process$new()` with the same arguments and `encoding = "UTF-8"`; after P04 lands the same test runs through `proc_spawn()` unchanged.
-- **A8 Billing warning frequency.** 04 requires a `billing_env` warning naming the removed variables but not how often. Reading: once per R process for each profile and set of removed variables (`gptr_warn(.once =)`), so a CLI provider that starts a child per turn warns once.
-- **A9 Names of stored secrets.** 04 §11.8 fixes the file shape, not the vault names of its values. Reading: `auth:<key>` for the `key` field and `auth:<key>:<field>` otherwise (for example `auth:openrouter`, `auth:mcp:github:refresh`); `code_for_history()` rewrites to `Sys.getenv()` only for environment-variable names, so such a value becomes a marker in a flagged block.
-- **A10 `auth_store_get()` return value.** 04 §7.3 says "credential store" without the record shape returned. Reading: the stored record with every secret field registered and replaced by its handle (03 §6.5: "No function takes a secret value as an argument"); callers materialise through `secret_value()` in `http-request.R`.
-- **A11 `redact()` on lists.** 04 §7.3 types `redact()` as chr -> chr, but P01's `redact_hook(x, profile)` hands it event payloads (lists) from `ev_dispatch()` (04 §1.4, §7.2). Reading: `redact()` passes a list to `redact_tree()` and returns any other non-character value unchanged.
-- **A12 Batch events and the origin field.** A batch (`gptr_env()`, `secret_discover_env()`) emits one `secret_registered` event with `name = NA` and `count` = the number of new values (04: "count only"); `origin` in handles is normalised to `scheme://host:port` (default ports added), which is what `secret_value()` compares.
-- **A13 `code_for_history(code)` on a vector.** Lines are joined with `"\n"` and the result is one string with attribute `needs` (G6 §5.6's shape).
-- **A14 `replace` on redaction rules.** 04 §10.2 gives `redaction_rule` the fields `pattern`, `anchor`, `marker`, `profiles`; three built-in rules must keep context (`auth-header` keeps the keyword, `url-password` user and host, `named-secret` the variable name inside its marker), which a fixed marker cannot express. Reading: an optional extra field `replace` (a `gsub()` replacement); validators accept unknown fields (04 §10.2), and a plugin rule without it is replaced by `[secret:<marker>]`. Contract edit suggested: document `replace` as optional.
-- **A15 `billing` of `child_env` specs.** 04 §10.2 types `billing` as a named list without naming its members. Reading: `billing = list(vars = <chr>)`, the variables removed with a `billing_env` warning unless passed or set.
-- **A16 "combined into one alternation".** 04 §10.2 says rules are "combined into one alternation". Reading: the rules' anchors form one alternation that pre-filters every string (G6 §3.5, `the$anchor_re`), and each candidate rule then runs on its own, as in the verified G6 prototype; one alternation of all 12 patterns would lose the per-rule replacements and profiles.
-- **A17 Where automatic `.env` discovery runs.** 03 §6.5 and 04 §7.0 assign trusted-project `.env` discovery to P03 but name no function for it. Reading: `secret_discover_env()`, which P06 already calls at session start, runs `dotenv_discover()` after the environment scan (vault-only, `trust.get` service, fallback untrusted), and `builtin:secrets` also exposes the files as the `dotenv` secret source (03 §11, G6 §4.8). Contract edit suggested: mention the `.env` step in 04 §7.3's `secret_discover_env()` row.
+- **A1 Late-registration scan.** 04 section 7.3/IC-70 say `secret_register()` "scans live sessions'
+  in-memory entries", but the live index `the$live` belongs to P06 (section 7.0: other plans read a
+  field "only through the owner's functions") and `auth-secrets.R` is L0, which may not call P06's
+  `live_all()`/`session_data()` (03 section 2.2; the kernel SDK of IC-33 is for L3-L6 and L4).
+  Reading: 03 section 2.2's "callbacks registered by upper layers". P03 adds
+  `secret_live_entries_set(fun)`; P06 is expected to register
+  `on_load(secret_live_entries_set(function() <named list: session id -> list of entries>))`. Until
+  then (M0) no session exists and nothing is scanned. Contract edit suggested: list
+  `secret_live_entries_set(fun)` in 04 section 7.3 with consumer P06, and the registration in P06's
+  section 7.6 row for `session-live.R`. **Open follow-up (review, 2026-10-01):** P06's plan calls
+  `secret_discover_env()` at session start but does not install this callback, so after M1 the IC-70
+  in-memory scan stays inert until P06 adds `on_load(secret_live_entries_set(<live entries>))`; P03
+  cannot edit P06's files, so the gap is recorded here and in the review log for the contract
+  editor.
+- **A2 `the$redactor`.** 04 section 7.0 lists `redactor` under both P01 ("the installed redaction
+  hook") and P03 ("compiled redaction patterns"). Reading: P01 owns `the$redactor` (IC-34's
+  `redactor_set()` writes it); P03 keeps its compiled literals and rules in `the$secrets` and never
+  touches `the$redactor`.
+- **A3 Run check in `gptr_env()` and `gptr_scrub(dry_run = FALSE)`.** IC-53 item 3 says the
+  control-category exports "also check `run_current()`". `run_current()` is P06's and not callable
+  from L0, and P03 precedes P06. Reading: P03 adds no in-function run check; enforcement is P11's
+  `control` category (level 4, `ask_human`) in `risk-functions.csv`, which lists both calls. If an
+  in-function check is wanted, a service (for example a P06-registered callback like A1) needs a
+  contract edit.
+- **A4 "registers every value".** 04 section 6.2 says `gptr_env()` registers every value; G6
+  sections 3.1 and 5.0 register every *secret* value (a name not ending in `_FILE`, `_PATH`, `_DIR`,
+  `_HOME`, `_URL`, `_URI`, `_HOST`, `_PORT`, `_ID`, `_USER`, `_USERNAME`, `_MODEL`, `_REGION`,
+  `_LEVEL`, `_SOCK`) including losing duplicates. Registering `TYPESAFE_BASE_URL` would redact the
+  provider URL from every transcript, so G6's reading is kept; the report's `secret` column shows
+  the classification.
+- **A5 Invalid API-key values.** G6's prototype stopped with an error for an `*API_KEY`/`*TOKEN`
+  value containing blanks, controls or non-ASCII; 04 section 6.2 lists only `invalid_argument` for a
+  missing file and says malformed lines are reported by line number, not errors. Reading: the value
+  is registered (inactive, so it is still redacted), never exported, its action is `skipped` and its
+  line joins `bad_lines`.
+- **A6 Report actions.** 04 names the four actions but not when each applies. Reading: `set`
+  (exported), `registered` (kept in the vault only, `set_env = FALSE`), `skipped` (already set
+  without `override`, refused value, or nothing to register or export), `duplicate` (a losing
+  duplicate).
+- **A7 `proc_spawn()` in acceptance 6.** P04 (which owns `proc_spawn()`) depends on P03, so P03's
+  test cannot require it. The test calls
+  `proc_spawn(rscript_path(), args, env = env, stdout = out, stderr = err)` with 04 section 7.4's
+  signature when it exists (looked up with `get0("proc_spawn", mode = "function")`, so `lintr`'s
+  `object_usage_linter` has no unknown function to report before P04 lands), else
+  `processx::process$new()` with the same arguments and `encoding = "UTF-8"`; after P04 lands the
+  same test runs through `proc_spawn()` unchanged.
+- **A8 Billing warning frequency.** 04 requires a `billing_env` warning naming the removed variables
+  but not how often. Reading: once per R process for each profile and set of removed variables
+  (`gptr_warn(.once =)`), so a CLI provider that starts a child per turn warns once.
+- **A9 Names of stored secrets.** 04 section 11.8 fixes the file shape, not the vault names of its
+  values. Reading: `auth:<key>` for the `key` field and `auth:<key>:<field>` otherwise (for example
+  `auth:openrouter`, `auth:mcp:github:refresh`); `code_for_history()` rewrites to `Sys.getenv()`
+  only for environment-variable names, so such a value becomes a marker in a flagged block.
+- **A10 `auth_store_get()` return value.** 04 section 7.3 says "credential store" without the record
+  shape returned. Reading: the stored record with every secret field registered and replaced by its
+  handle (03 section 6.5: "No function takes a secret value as an argument"); callers materialise
+  through `secret_value()` in `http-request.R`.
+- **A11 `redact()` on lists.** 04 section 7.3 types `redact()` as chr -> chr, but P01's
+  `redact_hook(x, profile)` hands it event payloads (lists) from `ev_dispatch()` (04 sections 1.4,
+  7.2). Reading: `redact()` passes a list to `redact_tree()` and returns any other non-character
+  value unchanged.
+- **A12 Batch events and the origin field.** A batch (`gptr_env()`, `secret_discover_env()`) emits
+  one `secret_registered` event with `name = NA` and `count` = the number of new values (04: "count
+  only"); `origin` in handles is normalised to `scheme://host:port` (default ports added), which is
+  what `secret_value()` compares.
+- **A13 `code_for_history(code)` on a vector.** Lines are joined with `"\n"` and the result is one
+  string with attribute `needs` (G6 section 5.6's shape).
+- **A14 `replace` on redaction rules.** 04 section 10.2 gives `redaction_rule` the fields `pattern`,
+  `anchor`, `marker`, `profiles`; three built-in rules must keep context (`auth-header` keeps the
+  keyword, `url-password` user and host, `named-secret` the variable name inside its marker), which
+  a fixed marker cannot express. Reading: an optional extra field `replace` (a `gsub()`
+  replacement); validators accept unknown fields (04 section 10.2), and a plugin rule without it is
+  replaced by `[secret:<marker>]`. Contract edit suggested: document `replace` as optional.
+- **A15 `billing` of `child_env` specs.** 04 section 10.2 types `billing` as a named list without
+  naming its members. Reading: `billing = list(vars = <chr>)`, the variables removed with a
+  `billing_env` warning unless passed or set.
+- **A16 "combined into one alternation".** 04 section 10.2 says rules are "combined into one
+  alternation". Reading: the rules' anchors form one alternation that pre-filters every string (G6
+  section 3.5, `the$anchor_re`), and each candidate rule then runs on its own, as in the verified G6
+  prototype; one alternation of all 12 patterns would lose the per-rule replacements and profiles.
+- **A17 Where automatic `.env` discovery runs.** 03 section 6.5 and 04 section 7.0 assign
+  trusted-project `.env` discovery to P03 but name no function for it. Reading:
+  `secret_discover_env()`, which P06 already calls at session start, runs `dotenv_discover()` after
+  the environment scan (vault-only, `trust.get` service, fallback untrusted), and `builtin:secrets`
+  also exposes the files as the `dotenv` secret source (03 section 11, G6 section 4.8). Contract
+  edit suggested: mention the `.env` step in 04 section 7.3's `secret_discover_env()` row.
 
 ### Validation executed while writing this plan
 
-- Every `r` block was extracted from this file and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. A token scan (`getParseData()`) found no left-arrow assignment; the text contains no `%>%`; the only arrow-like text in code is the `<<-` closure updates allowed by conventions §4 and `paste0()`-assembled strings in `secret_scan()`.
-- Review run (2026-10-01): the five R files and five test files were assembled from this plan's task blocks in task order (Task 7's replacement of `secret_discover_env()` applied in place) on top of the **real** P01 and P02 code, extracted from `dev/plan/P01-foundation.md` and `dev/plan/P02-extension-api-registry.md` (all their `R/` files, P01's `setup.R`, `helper-fake.R`, `helper-mock-server.R`, `helper-tracemem.R`, `test-lint-rules.R`, `helper-arch.R`, `test-arch-layers.R` and `.lintr`), not on stubs; the final run used the P01 and P02 revisions saved at 11:27 and 11:19 on 2026-10-01 and gave the same results as the earlier revisions. Each task was run red (its `R/` blocks left out) and green with the task's `devtools::test(filter = ...)` on R 4.4.3 (macOS, testthat 3.3.2, processx 3.8.6, callr 3.7.6): every red and green summary quoted in the tasks is the observed one. The full `filter = "auth"` run gave `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 532 ]` without keyring and `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 535 ]` with keyring 1.4.1 from a private library; `filter = "lint|arch"` (P01's own lint-rule and layer tests over these files) was green (16 expectations). Cross-plan consolidation re-run (2026-10-01, current P01/P02 plan code, same harness): Task 9 red `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 1 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 85 ]` (two new worker-allowlist expectations; with the old `GPTR_HOME` entry the new `expect_false()` fails); `filter = "auth"` `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 534 ]` without keyring and `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 537 ]` with keyring 1.4.1; `filter = "lint|arch"` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]`.
-- The earlier stub-based run had hidden one failure (`registry_all()` of the real P02 returns a named list) and could not show the PCRE size limit: with three fake 1,500-character private keys registered, the original one-alternation-per-200-literals compiler made `redact()` fail with "regular expression is too large" (36,386 pattern characters), reproduced before the fix and covered by Task 2's long-secrets test after it.
-- `devtools::document()` on the assembled package produced the eight `NAMESPACE` lines listed under File Structure and `man/gptr_env.Rd`, `man/gptr_redact.Rd`, `man/gptr_scrub.Rd`; the three exports' examples ran offline without error (`tools::Rd2ex()` + `source()`).
-- `lintr::lint_package()` with P01's `.lintr` reported no style lints in the ten `auth` files (its `object_usage_linter` notes about package functions not being found come from linting an uninstalled scratch package and appear for P01/P02 files alike: 669 of them in the consolidation re-run). With the namespace loaded first, as Task 11 Step 4 now runs it (`pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); ...; stopifnot(length(lints) == 0L)`, P01's A3), the whole assembled package (P01, P02 and P03 files, `R/` and `tests/`) gave "No lints found" and exit status 0, after `run_rscript()` switched from a direct `proc_spawn()` call to `get0("proc_spawn", mode = "function")` (the direct call was the one remaining lint: P04's function does not exist yet); a scan found no non-ASCII byte, `:::`, `enc2utf8(`, `withr::`, `.GlobalEnv`, `runif(`, `sample(`, `set.seed(`, `processx::run(` or `%>%` in the R files, `Sys.setenv(` only in `auth-dotenv.R`, and `secret_value(` called only in `auth-childenv.R`.
-- A probe of the shipped callr (3.7.6) confirmed that a callr child given `child_env_callr(child_env("worker"))` sees neither a key defined only in the parent's `R_ENVIRON_USER` file nor that file, while the same child without the profile sees the key (G6 verification log item 7).
-- Not executed here: a Windows run and `R CMD check`; P04-P23 consumers are checked by name against their plans only.
+- Every `r` block was extracted from this file and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. A token scan
+  (`getParseData()`) found no left-arrow assignment; the text contains no `%>%`; the only arrow-like
+  text in code is the `<<-` closure updates allowed by conventions section 4 and
+  `paste0()`-assembled strings in `secret_scan()`.
+- Review run (2026-10-01): the five R files and five test files were assembled from this plan's task
+  blocks in task order (Task 7's replacement of `secret_discover_env()` applied in place) on top of
+  the **real** P01 and P02 code, extracted from `dev/plan/P01-foundation.md` and
+  `dev/plan/P02-extension-api-registry.md` (all their `R/` files, P01's `setup.R`, `helper-fake.R`,
+  `helper-mock-server.R`, `helper-tracemem.R`, `test-lint-rules.R`, `helper-arch.R`,
+  `test-arch-layers.R` and `.lintr`), not on stubs; the final run used the P01 and P02 revisions
+  saved at 11:27 and 11:19 on 2026-10-01 and gave the same results as the earlier revisions. Each
+  task was run red (its `R/` blocks left out) and green with the task's
+  `devtools::test(filter = ...)` on R 4.4.3 (macOS, testthat 3.3.2, processx 3.8.6, callr 3.7.6):
+  every red and green summary quoted in the tasks is the observed one. The full `filter = "auth"`
+  run gave `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 532 ]` without keyring and
+  `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 535 ]` with keyring 1.4.1 from a private library;
+  `filter = "lint|arch"` (P01's own lint-rule and layer tests over these files) was green (16
+  expectations). Cross-plan consolidation re-run (2026-10-01, current P01/P02 plan code, same
+  harness): Task 9 red `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 1 ]`, green
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 85 ]` (two new worker-allowlist expectations; with the old
+  `GPTR_HOME` entry the new `expect_false()` fails); `filter = "auth"`
+  `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 534 ]` without keyring and
+  `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 537 ]` with keyring 1.4.1; `filter = "lint|arch"`
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]`.
+- The earlier stub-based run had hidden one failure (`registry_all()` of the real P02 returns a
+  named list) and could not show the PCRE size limit: with three fake 1,500-character private keys
+  registered, the original one-alternation-per-200-literals compiler made `redact()` fail with
+  "regular expression is too large" (36,386 pattern characters), reproduced before the fix and
+  covered by Task 2's long-secrets test after it.
+- `devtools::document()` on the assembled package produced the eight `NAMESPACE` lines listed under
+  File Structure and `man/gptr_env.Rd`, `man/gptr_redact.Rd`, `man/gptr_scrub.Rd`; the three
+  exports' examples ran offline without error (`tools::Rd2ex()` + `source()`).
+- `lintr::lint_package()` with P01's `.lintr` reported no style lints in the ten `auth` files (its
+  `object_usage_linter` notes about package functions not being found come from linting an
+  uninstalled scratch package and appear for P01/P02 files alike: 669 of them in the consolidation
+  re-run). With the namespace loaded first, as Task 11 Step 4 now runs it
+  (`pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); ...; stopifnot(length(lints) == 0L)`,
+  P01's A3), the whole assembled package (P01, P02 and P03 files, `R/` and `tests/`) gave "No lints
+  found" and exit status 0, after `run_rscript()` switched from a direct `proc_spawn()` call to
+  `get0("proc_spawn", mode = "function")` (the direct call was the one remaining lint: P04's
+  function does not exist yet); a scan found no non-ASCII byte, `:::`, `enc2utf8(`, `withr::`,
+  `.GlobalEnv`, `runif(`, `sample(`, `set.seed(`, `processx::run(` or `%>%` in the R files,
+  `Sys.setenv(` only in `auth-dotenv.R`, and `secret_value(` called only in `auth-childenv.R`.
+- A probe of the shipped callr (3.7.6) confirmed that a callr child given
+  `child_env_callr(child_env("worker"))` sees neither a key defined only in the parent's
+  `R_ENVIRON_USER` file nor that file, while the same child without the profile sees the key (G6
+  verification log item 7).
+- Not executed here: a Windows run and `R CMD check`; P04-P23 consumers are checked by name against
+  their plans only.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (incl. §15), 05 (P03), G6 and its verification log, and the dependency plans P01/P02 now present in `dev/plan/`. Every task was re-run red and green on the real P01 and P02 code (see "Validation executed"); the counts quoted in the tasks are from that run.
+Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (incl. section 15), 05 (P03), G6 and
+its verification log, and the dependency plans P01/P02 now present in `dev/plan/`. Every task was
+re-run red and green on the real P01 and P02 code (see "Validation executed"); the counts quoted in
+the tasks are from that run.
 
 | # | Severity | Location | Finding | Verdict | What changed, or why rejected |
 |---|---|---|---|---|---|
 | 1 | blocker | Tasks 1, 2, 5: `secret_compile()`, `redact_literals()`, `code_rewrite_literals()`, `scrub_scan()` | One PCRE alternation per 200 literals regardless of their length. PCRE2 refuses a pattern near 32,000 characters, and three registered 1,500-character private keys (with their base64 forms) already make 36,386: `redact()` then fails with "regular expression is too large" (reproduced), so every sink breaks and P01's `redact_hook()` turns every condition message into "[redaction failed]" | applied | `lit_groups()` caps a group at 200 literals and 16,000 characters; literals above 16,000 escaped characters go to `lits_long` and are replaced, detected (`lits_present()`) and counted as fixed strings; tests in Tasks 1, 2 and 5 |
 | 2 | major | Task 11 test helper `spec_names()` | P02's `registry_all()` returns a list named by record name; `vapply()` keeps the names, so `expect_identical()` on the 12 rule names fails on the real P02 code (it passed only against the plan author's stub) | applied | `unname()` in `spec_names()` |
-| 3 | major | scope; Tasks 7 and 11 | 03 §6.5 ("automatic `.env` discovery is vault-only and only in trusted projects"), 04 §7.0 (P03 is the `trust.get` consumer for "`.env` discovery") and 03 §11 / G6 §4.8 (a `.env` secret source in `builtin:secrets`) were not implemented, and no other plan implements them | applied | Task 7 adds `dotenv_trusted()`, `dotenv_project_files()`, `dotenv_discover()`, `dotenv_source_resolve()`, `dotenv_source_list()` and replaces `secret_discover_env()` (called by P06 at session start) to run the discovery; Task 11 registers the `dotenv` source (4 sources); tests; ambiguity A17 |
+| 3 | major | scope; Tasks 7 and 11 | 03 section 6.5 ("automatic `.env` discovery is vault-only and only in trusted projects"), 04 section 7.0 (P03 is the `trust.get` consumer for "`.env` discovery") and 03 section 11 / G6 section 4.8 (a `.env` secret source in `builtin:secrets`) were not implemented, and no other plan implements them | applied | Task 7 adds `dotenv_trusted()`, `dotenv_project_files()`, `dotenv_discover()`, `dotenv_source_resolve()`, `dotenv_source_list()` and replaces `secret_discover_env()` (called by P06 at session start) to run the discovery; Task 11 registers the `dotenv` source (4 sources); tests; ambiguity A17 |
 | 4 | major | Task 2 `code_rewrite_literals()` | `getParseData()` abbreviates a string constant over 1,000 characters to "[N chars quoted with ...]", so a literal OAuth token or JWT in recorded code never became `Sys.getenv("NAME")` | applied | the literal text is read with `utils::getParseText()`; covered by the long-secrets test (`code` profile) |
 | 5 | major | Task 8 `auth_lock_stale()` | A lock directory younger than 30 s without its pid file (creator between `dir.create()` and `writeLines()`, or crashed there) made `strsplit(character())[[1]]` fail with "subscript out of bounds", an unclassed error from `auth_store_set()`; the recorded creation time was never compared, so a reused pid kept a dead lock (IC-71) | applied | no pid file = still held (waited for, stale after 30 s); creation times compared; `file.exists()` guard so no connection warning; new unit test |
 | 6 | major | ambiguity A1 / IC-70 (cross-plan) | P06's plan calls `secret_discover_env()` but never installs `secret_live_entries_set()`, so the late-registration scan of live sessions stays inert after M1 | applied (recorded) | A1 now states the open follow-up for P06 and the contract editor; P03 may not edit P06's files |
 | 7 | minor | Task 6 `dotenv_parse()` | `as_utf8(rawToChar())` followed by `iconv(sub = "byte")` turned a CP1252 value such as `Z\xfcrich` into the text `Z<fc>rich`; a missing path gave an unclassed `readBin()` error although P08 calls `dotenv_parse()` directly | applied | P01's `raw_to_utf8()` (IC-62, BOM and CP1252 fallback) and a classed path check; two expectations added |
-| 8 | minor | Task 2 `redact_tree()` | the base64 `data` of image blocks was scanned and could be rewritten; G6 §4.6 leaves images unscanned (residual) | applied | image `data` skipped; tree test extended |
-| 9 | minor | Task 9 `child_env_provider_key()` | a worker's provider key found only in the environment was handed over unregistered, so the worker's output was not redacted (G6 §4.11: every value from every source is registered) | applied | registered before it is returned; test |
+| 8 | minor | Task 2 `redact_tree()` | the base64 `data` of image blocks was scanned and could be rewritten; G6 section 4.6 leaves images unscanned (residual) | applied | image `data` skipped; tree test extended |
+| 9 | minor | Task 9 `child_env_provider_key()` | a worker's provider key found only in the environment was handed over unregistered, so the worker's output was not redacted (G6 section 4.11: every value from every source is registered) | applied | registered before it is returned; test |
 | 10 | minor | Task 9 `child_env()` | the `billing_env` warning named a billing variable the caller re-adds explicitly with `set =` | applied | names in `set =` are excluded like `pass =`; test |
-| 11 | minor | Task 9 tests | child processes started by tests had no `withr::defer()` cleanup (conventions §7) | applied | `withr::defer(if (p$is_alive()) p$kill())` in `run_rscript()` and the processx test |
+| 11 | minor | Task 9 tests | child processes started by tests had no `withr::defer()` cleanup (conventions section 7) | applied | `withr::defer(if (p$is_alive()) p$kill())` in `run_rscript()` and the processx test |
 | 12 | minor | Task 8 `auth_store_update()` | `umask 077` was set only after the config directory and the lock were created | applied | the umask is set first and restored on exit |
 | 13 | minor | Self-review "Type and name consistency"; validation | claimed that P01/P02 plans did not exist; validation used stubs, which hid finding 2 | applied | names checked against both plans; validation re-run on their real code; section rewritten |
 | 14 | minor | Tasks 8, 11; Plan acceptance row 1 | the skip reason was quoted as `keyring is not installed`; testthat 3.3.2 prints `{keyring} is not installed` | applied | wording corrected |
@@ -4268,10 +4867,14 @@ Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (incl. §15), 05
 
 ## Cross-plan consolidation log
 
-Issues raised by the cross-plan checkers (2026-10-01), verified against 04 (§3.2, §7.3 `child_env()`, IC-60), 03 §6.5 (child environments), 05 (P03), P19 (`worker_spawn()`, which passes `GPTR_WORKER`, `GPTR_SUBAGENT_DEPTH` and `GPTR_PROJECT_ROOT` through `set =`) and P01 (acceptance A3 and its note, decision 5). Every change was re-run on the assembled package (current P01 and P02 plan code plus this plan); results under "Validation executed while writing this plan".
+Issues raised by the cross-plan checkers (2026-10-01), verified against 04 (sections 3.2, 7.3
+`child_env()`, IC-60), 03 section 6.5 (child environments), 05 (P03), P19 (`worker_spawn()`, which
+passes `GPTR_WORKER`, `GPTR_SUBAGENT_DEPTH` and `GPTR_PROJECT_ROOT` through `set =`) and P01
+(acceptance A3 and its note, decision 5). Every change was re-run on the assembled package (current
+P01 and P02 plan code plus this plan); results under "Validation executed while writing this plan".
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| C1 | shared-names | minor | Task 9 `R/auth-childenv.R` `env_allow_r` | applied | Valid: `GPTR_HOME` comes from G6's prototype (D-10's user-directory override). 04 §3.2 does not define it, no plan sets or reads it, and P01's `gptr_user_dir()` is `tools::R_user_dir()`, whose `R_USER_*_DIR` overrides the allowlist already carries. Removed it, so the only gptr variable the worker inherits is `GPTR_SUBAGENT_DEPTH` (04 §3.2). `GPTR_PROJECT_ROOT` was not added: P19's `worker_spawn()` always sets it (and `GPTR_WORKER`) through `set =`, and 04 §3.2 lists gptr's worker variables as set by gptr, so inheriting it would only duplicate that. The Task 9 prose and the source comment say so. Test `mcp and worker are allowlists; ...` gains two expectations (`GPTR_SUBAGENT_DEPTH` kept, `GPTR_HOME` absent; the second fails against the old allowlist). Counts: `auth-childenv` 83 -> 85; `auth` 532 -> 534 (537 with keyring); Task 9 red unchanged |
+| C1 | shared-names | minor | Task 9 `R/auth-childenv.R` `env_allow_r` | applied | Valid: `GPTR_HOME` comes from G6's prototype (D-10's user-directory override). 04 section 3.2 does not define it, no plan sets or reads it, and P01's `gptr_user_dir()` is `tools::R_user_dir()`, whose `R_USER_*_DIR` overrides the allowlist already carries. Removed it, so the only gptr variable the worker inherits is `GPTR_SUBAGENT_DEPTH` (04 section 3.2). `GPTR_PROJECT_ROOT` was not added: P19's `worker_spawn()` always sets it (and `GPTR_WORKER`) through `set =`, and 04 section 3.2 lists gptr's worker variables as set by gptr, so inheriting it would only duplicate that. The Task 9 prose and the source comment say so. Test `mcp and worker are allowlists; ...` gains two expectations (`GPTR_SUBAGENT_DEPTH` kept, `GPTR_HOME` absent; the second fails against the old allowlist). Counts: `auth-childenv` 83 -> 85; `auth` 532 -> 534 (537 with keyring); Task 9 red unchanged |
 | C2 | obligations | minor | Task 11 Step 4 command and expected output | applied | Valid: a bare `lintr::lint_package()` on the uninstalled tree gave 669 `object_usage_linter` lints (every internal call), so "no lints" could not hold. Changed to `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'` (P01 A3), expected `No lints found.` and exit 0. With the namespace loaded, one real lint was left: the direct `proc_spawn()` call in Task 9's `run_rscript()` (P04's function does not exist when P03 lands). The helper now looks it up with `get0("proc_spawn", mode = "function")`, which keeps ambiguity A7's behaviour (through `proc_spawn()` once P04 is loaded); A7 updated. The whole assembled package then gave `No lints found.` |
 | C3 | trace | minor | Task 11 Step 4 and Plan acceptance "Additional checks" | applied (same change as C2) | Duplicate of C2 that also names the "Additional checks" paragraph, which now carries the same command and expected output |
