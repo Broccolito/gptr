@@ -485,70 +485,36 @@ test_that("the fd-0 reader returns complete lines, survives Ctrl-D and a /dev/nu
 test_that("a terminal: typed text shows once, in its notice; questions and the next prompt echo", {
   skip_on_cran()
   skip_on_os("windows")
-  dir = withr::local_tempdir("gptr-echo-")
-  child = file.path(dir, "child.R")
-  writeLines(c(
-    tracemem_loader(),
+  pty = local_pty_r(c(
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
     "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
     "long = paste(c('BEGIN', sprintf('w%02dabc', 1:60), 'END'), collapse = ' ')",
     "fake = gptr_fake_provider(function(req) switch(as.character(req$n),",
     "  '2' = list(tool = 'r', input = list(code = 'zz = 1')), '3' = 'STEERED',",
     "  list(text = long, chunk = 8L, gap = 0.04)))",
-    "invisible(peter(model = fake, envir = new.env()))",
-    "cat('CHILD DONE\\n')"
-  ), child)
-  # the terminal echoes, as a terminal does (a processx pty does not by default)
-  p = processx::process$new(
-    file.path(R.home("bin"), "R"), c("--vanilla", "--quiet"), pty = TRUE,
-    pty_options = list(echo = TRUE), wd = dir,
-    env = c("current", R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
-            TERM = "xterm"),
-    cleanup = TRUE
-  )
-  st = new.env(parent = emptyenv())
-  st$out = ""
-  # a pty child exits only once its output is read: p$kill() would wait for it forever
-  withr::defer({
-    if (p$is_alive()) p$signal(tools::SIGKILL)
-    deadline = Sys.time() + 10
-    while (p$is_alive() && Sys.time() < deadline) {
-      p$poll_io(100L)
-      p$read_output()
-    }
-  })
-  seen = function(x) sum(gregexpr(x, st$out, fixed = TRUE, useBytes = TRUE)[[1L]] > 0L)
-  wait_for = function(x, n = 1L, timeout = 30) {
-    deadline = Sys.time() + timeout
-    while (seen(x) < n && p$is_alive() && Sys.time() < deadline) {
-      p$poll_io(100L)
-      st$out = paste0(st$out, p$read_output())
-    }
-    seen(x) >= n
-  }
-  expect_true(wait_for("> "))
-  p$write_input(sprintf("source(%s)\r", deparse(child)))
-  expect_true(wait_for("peter> ", timeout = 120))
-  p$write_input("ONE\r")
-  expect_true(wait_for("BEGIN"))
-  p$write_input("steer me\r")
-  expect_true(wait_for("allow?"))
-  Sys.sleep(0.5)
-  p$write_input("y\r")
-  expect_true(wait_for("STEERED"))
-  expect_true(wait_for("peter> ", n = 2L))
-  p$write_input("TWO\r")
-  expect_true(wait_for("END", n = 2L))
-  expect_true(wait_for("peter> ", n = 3L))
-  p$write_input("/exit\r")
-  expect_true(wait_for("CHILD DONE"))
-  expect_identical(seen("steer me"), 1L)
-  expect_identical(seen("[gptr] steering: 'steer me'"), 1L)
+    "invisible(peter(model = fake, envir = new.env()))"
+  ), term = "xterm")
+  expect_true(pty$wait("peter> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("steer me\r")
+  expect_true(pty$wait("allow?"))
+  pty$pending()
+  pty$send("y\r")
+  expect_true(pty$wait("STEERED"))
+  expect_true(pty$wait("peter> "))
+  pty$send("TWO\r")
+  expect_true(pty$wait("END"))
+  expect_true(pty$wait("peter> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(pty$seen("steer me"), 1L)
+  expect_identical(pty$seen("[gptr] steering: 'steer me'"), 1L)
   # the answer to approve and the next prompt are shown: readline echoes with the modes restored
-  expect_identical(c(seen("[?]: y"), seen("peter> TWO")), c(1L, 1L))
+  expect_identical(c(pty$seen("[?]: y"), pty$seen("peter> TWO")), c(1L, 1L))
   # the screen's rows (escapes dropped, a row redrawn after "\r" kept as redrawn) without the
   # notice: the streamed answer reads as the undisturbed one of the second prompt
-  rows = strsplit(gsub("\033\\[[0-9;?]*[A-Za-z]", "", st$out), "\n", fixed = TRUE)[[1L]]
+  rows = strsplit(gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$all), "\n", fixed = TRUE)[[1L]]
   text = paste(sub("^.*\r", "", sub("\r$", "", rows)), collapse = " ")
   text = gsub("\\[gptr\\] steering:.*?next step", "", gsub("\\s+", " ", text), perl = TRUE)
   answers = gsub(" ", "", regmatches(text, gregexpr("BEGIN.*?END", text, perl = TRUE))[[1L]])
@@ -599,63 +565,6 @@ test_that("a question drains fd 0 first: lines steer, a partial line is kept in 
     expect_identical(tty$log, c("-g", "-echo", "-g", drain, "SAVED", "SAVED"))
   }
 })
-
-# Terminal R in a pty (80x24, TERM=xterm-256color, echo on as in a terminal) that loads gptr and
-# sources `child`. `send(x)` types; `wait(x)` reads until `x` is shown and consumes the output
-# through it, so the next wait() looks after it; `pending()` reads for 0.5 s and returns what
-# followed, its escapes dropped; `all` keeps everything shown. The child dies with the test.
-local_pty_r = function(child, .env = parent.frame()) {
-  dir = withr::local_tempdir("gptr-pty-", .local_envir = .env)
-  script = file.path(dir, "child.R")
-  writeLines(c(tracemem_loader(), child, "cat('CHILD DONE\\n')"), script)
-  p = processx::process$new(
-    file.path(R.home("bin"), "R"), c("--vanilla", "--quiet"), pty = TRUE,
-    pty_options = list(echo = TRUE, rows = 24L, cols = 80L), wd = dir,
-    env = c("current", R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
-            TERM = "xterm-256color"),
-    cleanup = TRUE
-  )
-  # a pty child exits only once its output is read: p$kill() would wait for it forever
-  withr::defer({
-    if (p$is_alive()) p$signal(tools::SIGKILL)
-    deadline = Sys.time() + 10
-    while (p$is_alive() && Sys.time() < deadline) {
-      p$poll_io(100L)
-      p$read_output()
-    }
-  }, envir = .env)
-  pty = new.env(parent = emptyenv())
-  pty$all = ""
-  pty$out = ""
-  read = function(ms) {
-    p$poll_io(ms)
-    x = p$read_output()
-    pty$all = paste0(pty$all, x)
-    pty$out = paste0(pty$out, x)
-  }
-  pty$send = function(x) p$write_input(x)
-  pty$wait = function(x, timeout = 30) {
-    deadline = Sys.time() + timeout
-    repeat {
-      i = regexpr(x, pty$out, fixed = TRUE)
-      if (i > 0L) {
-        pty$out = substring(pty$out, i + attr(i, "match.length"))
-        return(TRUE)
-      }
-      if (!p$is_alive() || Sys.time() > deadline) return(FALSE)
-      read(100L)
-    }
-  }
-  pty$pending = function() {
-    deadline = Sys.time() + 0.5
-    while (Sys.time() < deadline) read(50L)
-    gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$out)
-  }
-  pty$seen = function(x) sum(gregexpr(x, pty$all, fixed = TRUE)[[1L]] > 0L)
-  pty$wait("> ")
-  pty$send(sprintf("source(%s)\r", deparse(script)))
-  pty
-}
 
 test_that("a terminal: a question never takes the line typed ahead of it (P28 B, C, H)", {
   skip_on_cran()

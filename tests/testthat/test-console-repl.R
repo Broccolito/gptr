@@ -776,78 +776,45 @@ test_that("the lines pasted after a fence are one console turn after the code (a
 test_that("a macOS terminal: a paste is one turn, a fence echoes once, Ctrl-D never hangs", {
   skip_on_cran()
   skip_if_not(is_macos(), "paste joining reads a macOS terminal")
-  dir = withr::local_tempdir("gptr-paste-")
-  child = file.path(dir, "child.R")
-  writeLines(c(
-    tracemem_loader(),
+  pty = local_pty_r(c(
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
     "        gptr.history = FALSE, cli.num_colors = 1L, cli.unicode = FALSE)",
     "fake = gptr_fake_provider(function(req) list(",
     "  text = paste0('GOT ', gsub('\\n', '/', req$last_user), ' END'),",
     "  delay = if (identical(req$last_user, 'SLOW')) 2 else 0))",
-    "invisible(peter(model = fake, envir = new.env()))",
-    "cat('CHILD DONE\\n')"
-  ), child)
-  # an absolute path, so R CMD check's dummy `R` on PATH is never used (IC-60)
-  p = processx::process$new(
-    file.path(R.home("bin"), "R"), c("--vanilla", "--quiet"), pty = TRUE, wd = dir,
-    env = c("current", R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
-            TERM = "xterm"),
-    cleanup = TRUE
-  )
-  st = new.env(parent = emptyenv())
-  st$out = ""
-  # a pty child exits only once its output is read: p$kill() would wait for it forever
-  withr::defer({
-    if (p$is_alive()) p$signal(tools::SIGKILL)
-    deadline = Sys.time() + 10
-    while (p$is_alive() && Sys.time() < deadline) {
-      p$poll_io(100L)
-      p$read_output()
-    }
-  })
-  seen = function(x) sum(gregexpr(x, st$out, fixed = TRUE, useBytes = TRUE)[[1L]] > 0L)
-  wait_for = function(x, n = 1L, timeout = 30) {
-    deadline = Sys.time() + timeout
-    while (seen(x) < n && p$is_alive() && Sys.time() < deadline) {
-      p$poll_io(200L)
-      st$out = paste0(st$out, p$read_output())
-    }
-    seen(x) >= n
-  }
-  expect_true(wait_for("> "))
-  p$write_input(sprintf("source(%s)\r", deparse(child)))
-  expect_true(wait_for("peter> ", timeout = 120))
-  p$write_input("a\rb\rc\r")
-  expect_true(wait_for("Enter sends it as one message"))
-  p$write_input("\r")
-  expect_true(wait_for("GOT a/b/c END"))
-  expect_identical(seen("GOT "), 1L)
+    "invisible(peter(model = fake, envir = new.env()))"
+  ), term = "xterm", echo = FALSE)
+  expect_true(pty$wait("peter> ", timeout = 120))
+  pty$send("a\rb\rc\r")
+  expect_true(pty$wait("Enter sends it as one message"))
+  pty$send("\r")
+  expect_true(pty$wait("GOT a/b/c END"))
+  expect_identical(pty$seen("GOT "), 1L)
   # typed while the agent works, the last line ended by Ctrl-D instead of Enter: it steers the
   # same run (IC-76), whose second answer follows the relay
-  expect_true(wait_for("peter> ", n = 2L))
-  p$write_input("SLOW\r")
+  expect_true(pty$wait("peter> "))
+  pty$send("SLOW\r")
   Sys.sleep(1)
-  p$write_input("x\rhalf\004")
-  expect_true(wait_for("[gptr] steering: 'x"))
-  expect_true(wait_for("GOT SLOW END", n = 2L))
-  expect_true(wait_for("peter> ", n = 3L))
+  pty$send("x\rhalf\004")
+  expect_true(pty$wait("[gptr] steering: 'x"))
+  expect_true(pty$wait("peter> "))
+  expect_identical(pty$seen("GOT SLOW END"), 2L)
   # with echo on, as in a terminal, the tty echoes the rest of a paste once, when it is read; a
   # '... ' read would echo it again. The lines after the closer are one message.
-  p$write_input("!invisible(system('stty echo'))\r")
-  expect_true(wait_for("peter> ", n = 4L))
-  st$out = ""
+  pty$send("!invisible(system('stty echo'))\r")
+  expect_true(pty$wait("peter> "))
+  pty$all = ""
   code = c(sprintf("fz%02d = %d", 1:13, 1:13), "fz01 + fz13 + 1000")
-  p$write_input(paste0(paste(c("```r", code, "```", "line aa", "line bb"), collapse = "\r"), "\r"))
-  expect_true(wait_for("Enter sends it as one message"))
-  p$write_input("\r")
-  expect_true(wait_for("GOT line aa/line bb END"))
-  expect_true(wait_for("peter> "))
-  expect_identical(seen("[1] 1014"), 1L)
-  expect_identical(vapply(code, seen, 1L, USE.NAMES = FALSE), rep(1L, 14L))
-  expect_identical(c(seen("line aa"), seen("GOT "), seen("... ")), c(2L, 1L, 1L))
-  p$write_input("/exit\r")
-  expect_true(wait_for("CHILD DONE"))
+  pty$send(paste0(paste(c("```r", code, "```", "line aa", "line bb"), collapse = "\r"), "\r"))
+  expect_true(pty$wait("Enter sends it as one message"))
+  pty$send("\r")
+  expect_true(pty$wait("GOT line aa/line bb END"))
+  expect_true(pty$wait("peter> "))
+  expect_identical(pty$seen("[1] 1014"), 1L)
+  expect_identical(vapply(code, pty$seen, 1L, USE.NAMES = FALSE), rep(1L, 14L))
+  expect_identical(c(pty$seen("line aa"), pty$seen("GOT "), pty$seen("... ")), c(2L, 1L, 1L))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
 })
 
 test_that("background sessions that wait for approval are announced once (IC-57)", {
