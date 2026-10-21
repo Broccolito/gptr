@@ -13,8 +13,11 @@ test_that("pkgdown_yaml() lists every page once, secondary group members never",
   expect_identical(parsed$navbar$components$cheatsheet,
                    list(text = "Cheatsheet", href = "cheatsheet.html"))
   expect_match(parsed$authors$after, "Mario Zechner's [pi]", fixed = TRUE)
-  assets = c("cheatsheet.html", "gptr-cheatsheet.pdf")
-  expect_true(all(file.exists(file.path(gptr_root(), "pkgdown", "assets", assets))))
+  # the PDF is reached through the HTML sheet's Download PDF link
+  assets = file.path(gptr_root(), "pkgdown", "assets")
+  sheet = readLines(file.path(assets, "cheatsheet.html"), warn = FALSE)
+  expect_true(any(grepl('href="gptr-cheatsheet.pdf"', sheet, fixed = TRUE)))
+  expect_true(file.exists(file.path(assets, "gptr-cheatsheet.pdf")))
 })
 
 test_that("pkgdown_extra() and pkgdown_problems() keep the index complete", {
