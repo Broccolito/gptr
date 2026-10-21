@@ -2945,3 +2945,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the project 0 -> 1; `Rd2txt("x.Rd", "keep.txt")` and `aggregate(len ~ supp, data = d, file.create)` 0 -> 2.
   Reported to the maintainer 2026-10-20.
 - Tests: test-perm-classify.R (new blocks; three D-061 cases move from 0 to 1), test-auth-secrets.R.
+
+## D-240 - Tests: CRAN runs the fast blocks (2026-10-20)
+- Rule: with `NOT_CRAN` unset, a `test_that()` block that took 25 ms or more in a local CRAN-mode run starts with
+  `skip_on_cran()`, except each file's fastest block and the `perm-*`, `auth-redact` and `auth-secrets` files, which
+  run in full; GitHub Actions runs the whole suite. win-builder needed 13 to 29 minutes for the earlier CRAN-mode
+  suite, against CRAN's 10-minute check budget.
+- Tests: tests/testthat (1,193 blocks in 133 files).
