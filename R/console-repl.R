@@ -297,14 +297,6 @@ repl_read_logical = function(rd, prompt) {
   if (rd$flag) "" else out
 }
 
-#' Add a REPL input to the console history (report 18: utils::timestamp(); never fails)
-#' @noRd
-console_history_add = function(x) {
-  tryCatch(utils::timestamp(stamp = x, prefix = "", suffix = "", quiet = TRUE),
-           error = function(e) NULL)
-  invisible(NULL)
-}
-
 # ---------------------------------------------------------------------------------------------
 # `!expr`, notes, @mentions and the prompt call (Task 5). `!code` and `!!code` are the user's own
 # R: evaluated through the `eval.r` service in the REPL's environment (no permission gate, no
@@ -998,13 +990,14 @@ on_load(ext_declare_builtin("console", builtin_console))
 #'
 #' In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 #' and `... ` waits for Enter (text typed there is added); a pasted fence or `"""` block is read
-#' up to its closer at once, and a block pasted at an approval or a choice is dropped and the
-#' question asked again. A last pasted line without a newline waits for Enter at the next prompt,
-#' so a two-line paste without a final newline answers with its first line. Elsewhere (Homebrew
-#' or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted lines arrive one at a
-#' time; wrap a multi-line paste in `"""`. Lines typed, pasted or run from a script before a
-#' question (an approval, a choice, the pause menu) appeared are discarded and never answer it:
-#' answer after the prompt.
+#' up to its closer at once, and a block pasted at an approval or a choice is kept in the console
+#' history and the question asked again. A last pasted line without a newline waits for Enter at
+#' the next prompt, so a two-line paste without a final newline answers with its first line.
+#' Elsewhere (Homebrew or conda R, Linux terminals, RStudio, R.app, Positron, Windows) pasted
+#' lines arrive one at a time; wrap a multi-line paste in `"""`. Lines typed, pasted or run from a
+#' script before a question (an approval, a choice, the pause menu) appeared never answer it:
+#' while an answer runs they are queued for the agent as `type_ahead` says (below), otherwise
+#' they go to the console history. Answer after the prompt.
 #'
 #' In a terminal (terminal R or an IDE's Terminal tab; not Windows) a line typed while an answer
 #' runs steers it: the agent reads it at its next step, after the current tool results, and

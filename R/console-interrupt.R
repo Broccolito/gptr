@@ -107,7 +107,7 @@ console_ask = function(prompt) {
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
     } else {
-      readline_answer(prompt)
+      readline_answer(prompt, console_typed_ahead)
     }
     if (length(x) != 1L || is.na(x)) NA_character_ else as_utf8(x)
   }, interrupt = function(e) NA_character_)
@@ -194,6 +194,17 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
   policy_flush()
   if (length(st$pending)) reactor_timer(at = reactor_now(), fn = policy_flush)
   invisible(TRUE)
+}
+
+#' A line typed before a console question (readline_answer()): queued on the session a run of
+#' this call has, as the `type_ahead` setting says (source "repl"), else added to the console
+#' history; never an answer (IC-75, D-243)
+#' @noRd
+console_typed_ahead = function(text) {
+  target = Find(function(t) !is.null(t$session), policy_targets(policy_find()$runs))
+  if (is.null(target)) return(console_history_add(text))
+  policy_enqueue(target$session, text, setting_get("type_ahead", target$session),
+                 source = "repl")
 }
 
 #' Queue the pending console items once no tool executes on the stack: at the next reactor

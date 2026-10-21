@@ -7,19 +7,20 @@ ui_request = function(code, tier = "ask", rule = NULL) {
        undo_note = NULL, session = "s0000000001", turn = 1L, nested = FALSE, tier = tier)
 }
 
-# Run `fun()` with gptr_readline() answering from `answers`; returns the result and the
-# printed lines
+# Run `fun()` with gptr_readline() answering from `answers`; returns the result, the printed
+# lines and what went to the console history
 console_try = function(fun, answers) {
   i = 0L
+  kept = character()
   testthat::local_mocked_bindings(gptr_readline = function(prompt = "") {
     i <<- i + 1L
     if (i > length(answers)) NA_character_ else answers[[i]]
-  })
+  }, console_history_add = function(x) kept <<- c(kept, x))
   res = NULL
   shown = utils::capture.output({
     res = fun()
   })
-  list(result = res, shown = shown, asked = i)
+  list(result = res, shown = shown, asked = i, kept = kept)
 }
 
 test_that("displays escape C0/C1 controls, bidi and zero-width characters (IC-53 item 8)", {
@@ -164,13 +165,51 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
 test_that("lines typed or pasted before the approval prompt never answer it (IC-75)", {
   root = local_project()
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
-  rl = local_readline(c("h$config$codex", "y", "n"), secs = c(0.001, 0.001, 1.5))
+  expect_identical(vapply(list(0.099, 0.1, NULL), answer_stale, NA), c(TRUE, FALSE, FALSE))
+  rl = local_readline(c("h$config$codex", "", "y", "n"), secs = c(0.001, 0.001, 0.001, 1.5))
   res = NULL
   utils::capture.output({
     res = ui_console_permission(ui_request("zz = 1"))
   })
   expect_identical(res$decision, "deny")
-  expect_identical(rl$i, 3L)
+  expect_identical(rl$i, 4L)
+  # outside a run they go to the console history
+  expect_identical(rl$kept, c("h$config$codex", "y"))
+  # a secret is never kept
+  rl = local_readline(c("sk-typed-ahead", "sk-answer"), secs = c(0.001, 1.5))
+  expect_identical(ui_console_read("Key: ", secret = TRUE), "sk-answer")
+  expect_identical(rl$kept, character())
+})
+
+test_that("during a run a line typed before the approval prompt is queued, then it asks again", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(interactive = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  enqueue = session_enqueue
+  queued = list()
+  local_mocked_bindings(session_enqueue = function(s, text, as = "steer", source = "api_user",
+                                                   ...) {
+    queued[[length(queued) + 1L]] <<- list(text = text, as = as, source = source)
+    enqueue(s, text, as = as, source = source, ...)
+  })
+  rl = local_readline(c("go", "use base R", "y", "/exit"), secs = c(1, 0.01, 1, 1))
+  e = new.env()
+  fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  rs$mode = "manual"
+  out = utils::capture.output(repl_main(rs))
+  expect_identical(e$zz, 2)
+  expect_identical(queued, list(list(text = "use base R", as = "steer", source = "repl")))
+  expect_identical(sum(startsWith(rl$prompts, "  allow?")), 2L)
+  expect_identical(rl$kept, character())
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  last = reqs[[2L]]$messages[[length(reqs[[2L]]$messages)]]
+  expect_identical(msg_text(last),
+                   "The user sent this message while you were working: use base R")
+  expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
 })
 
 test_that("a block pasted at the approval prompt never answers it nor steers (IC-75)", {
@@ -183,8 +222,9 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   fd0$answers = c("go", "y", "n", "/exit")
   fd0$prompts = character()
   reader = console_reader
+  kept = character()
   local_mocked_bindings(
-    repl_terminal = function(rs) TRUE,
+    repl_terminal = function(rs) TRUE, console_history_add = function(x) kept <<- c(kept, x),
     console_typed_lines = function(rd, ...) {
       x = fd0$lines
       fd0$lines = character()
@@ -212,7 +252,8 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   out = utils::capture.output(repl_main(rs))
   expect_null(e$zz)
   expect_identical(sum(startsWith(fd0$prompts, "  allow?")), 2L)
-  expect_identical(sum(out == "  A pasted block is not an answer (3 lines dropped)."), 1L)
+  expect_identical(sum(out == "  A pasted block is not an answer (kept in history)."), 1L)
+  expect_identical(kept, "y\npasted line two\npasted line three")
   expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
@@ -267,27 +308,51 @@ test_that("nested calls with the same prompt are told apart by their number (#36
   }
 })
 
-test_that("invalid answers are explained; five end in a refusal the model is told (D-188)", {
+test_that("invalid answers are explained and kept; five end in a refusal the model is told", {
   skip_on_cran()
   root = local_project()
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
   crit = ui_request("q('no')", tier = "ask_human")
   out = console_try(function() ui_console_permission(crit), c("a", "p", "y"))
   expect_identical(out$result$decision, "allow")
   expect_identical(sum(grepl("[a]lways is not offered: level-4 and control actions",
                              out$shown, fixed = TRUE)), 2L)
+  expect_identical(out$kept, character())
   req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
   out = console_try(function() ui_console_permission(req), rep("zz", 5L))
   expect_identical(out$result, list(decision = "deny", remember = NULL,
                                     feedback = "no valid answer was given at the approval prompt"))
-  expect_identical(sum(out$shown == paste0("  Not an answer: 'zz'. Type y, a, n (n <text> says ",
-                                           "what to do instead) or ? for details.")), 5L)
+  expect_identical(sum(out$shown == paste0("  Not an answer: 'zz' (kept in history). Type y, a, ",
+                                           "p, n or ?.")), 5L)
+  expect_identical(out$kept, rep("zz", 5L))
   expect_identical(utils::tail(out$shown, 1L), "  No valid answer after 5 tries; refused.")
   # asking for details is not an invalid answer
   out = console_try(function() ui_console_permission(req), c("?", "?", "zz", "?", "zz", "?", "y"))
   expect_identical(out$result$decision, "allow")
-  out = console_try(function() ui_console_permission(crit), c("maybe \033", "n"))
-  expect_true(any(grepl("Not an answer: 'maybe <U+001B>'. Type y, n (n <text>", out$shown,
-                        fixed = TRUE)))
+  out = console_try(function() ui_console_permission(crit), c("maybe \033", "", "n"))
+  expect_true("  Not an answer: 'maybe <U+001B>' (kept in history). Type y, n or ?." %in%
+                out$shown)
+  # an empty answer is not kept
+  expect_true("  Not an answer: ''. Type y, n or ?." %in% out$shown)
+  expect_identical(out$kept, "maybe \033")
+  # nothing is kept where there is no console history (a piped .stdin session)
+  local_mocked_bindings(gptr_is_interactive = function() FALSE)
+  out = console_try(function() ui_console_permission(req), c("zz", "y"))
+  expect_true("  Not an answer: 'zz'. Type y, a, p, n or ?." %in% out$shown)
+  expect_identical(out$kept, character())
+})
+
+test_that("a long invalid answer's notice wraps inside the width (P28 B, E, F)", {
+  testthat::local_reproducible_output(width = 60)
+  root = local_project()
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  a = "please use base R graphics for this plot"
+  req = ui_request("zz = 1", rule = "r(level<=1)")
+  out = console_try(function() ui_console_permission(req), c(a, "y"))
+  rows = out$shown[seq(grep("Not an answer", out$shown, fixed = TRUE), length.out = 2L)]
+  expect_identical(rows, c(paste0("  Not an answer: '", a, "'"),
+                           "  (kept in history). Type y, a, p, n or ?."))
+  expect_identical(out$kept, a)
 })
 
 test_that("the detail view shows the checkpoint.note service's undo note", {

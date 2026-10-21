@@ -136,7 +136,7 @@ working directory restored. Plan-specific rules:
 | `R/console-render.R` | 7, 8, 9, 10, 11, 13, 17, 26 |
 | `R/console-ui.R` | 2, 3, 12, 19 |
 | `R/console-repl.R` | 2, 3, 14, 15, 18, 21, 22, 24, 25, 26 |
-| `R/console-interrupt.R` | 13, 14, 15, 20 |
+| `R/console-interrupt.R` | 3, 13, 14, 15, 20 |
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 8, 18, 25 |
@@ -227,6 +227,11 @@ Decisions:
     source = "repl")` and the question is read again (still at most 100 reads).
   - Outside a run, the line goes to the history.
 - This is the only lever in L consoles: RStudio and Windows hold typed lines until R reads.
+- Layering (amended in Task 3): `readline_answer()` is in L0, which may not call the console (03 §2.2).
+  It hands each line it reads past to a `keep` callback instead: the console questions pass
+  `console_typed_ahead()` (`R/console-interrupt.R`, the routing above); the default is
+  `console_history_add()` (moved to `R/utils-options.R`), so `gptr_confirm()` keeps it in the
+  history; a secret input keeps nothing.
 - An invalid answer and a pasted block are added to the history:
   - `Not an answer: '<text>' (kept in history). Type y, a, p, n or ?.`, wrapped through
     `console_wrap()`. This fixes the mid-word hard wraps in pty runs B, E and F.
@@ -242,8 +247,9 @@ Tests (`test-console-ui.R`, `test-console-typing.R`), RED first:
 
 Spec: IC-75 (stale rule, paste rule), 04 §7.1.
 
-Files: `R/utils-options.R` (`readline_answer()`, `answer_stale()`), `R/console-ui.R`,
-`R/console-repl.R`, `tests/testthat/test-console-ui.R`, `tests/testthat/test-console-typing.R`.
+Files: `R/utils-options.R` (`readline_answer()`, `answer_stale()`, `console_history_add()`),
+`R/console-interrupt.R` (`console_typed_ahead()`), `R/console-ui.R`, `R/console-repl.R`,
+`tests/testthat/test-console-ui.R`, `tests/testthat/test-console-typing.R`.
 
 Commit: `fix(console): a line typed before a question is queued, never dropped`.
 

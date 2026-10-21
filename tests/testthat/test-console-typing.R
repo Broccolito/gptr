@@ -267,7 +267,7 @@ test_that("Ctrl-C at an approval prompt aborts the run and drops the held lines"
   fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2", .text = "hmm")))
   local_typed(typed_once("!x = 1", function() length(fake_requests(fake)) == 1L))
   asks = 0L
-  local_mocked_bindings(readline_answer = function(prompt) {
+  local_mocked_bindings(readline_answer = function(prompt, ...) {
     asks <<- asks + 1L
     if (startsWith(prompt, "  allow?")) {
       signalCondition(structure(class = c("interrupt", "condition"),
@@ -563,16 +563,14 @@ test_that("a question drains fd 0 first: lines steer, a partial line is kept in 
   local_gptr_options(interactive = TRUE)
   tty = local_stty()
   drain = c("-icanon", "min", "0", "time", "0")
-  kept = character()
   local_mocked_bindings(
     repl_terminal = function(rs) TRUE, console_readline_tty = function() FALSE,
-    console_history_add = function(x) kept <<- c(kept, x),
     # the partial line is read only in the drain's mode
     console_typed_lines = function(rd, ...) {
       if (!identical(utils::tail(tty$log, 5L), drain)) return(character())
       structure(c("steer me", "use base R"), partial = TRUE)
     })
-  local_readline(c("go", "y", "/exit"))
+  rl = local_readline(c("go", "y", "/exit"))
   e = new.env()
   fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
   rs = repl_state(NULL, e)
@@ -580,7 +578,7 @@ test_that("a question drains fd 0 first: lines steer, a partial line is kept in 
   rs$mode = "manual"
   out = utils::capture.output(repl_main(rs))
   expect_identical(e$zz, 2)
-  expect_identical(kept, "use base R")
+  expect_identical(rl$kept, "use base R")
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("steer me"))
@@ -703,4 +701,36 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(c(pty$seen("kept your unfinished line"), pty$seen("Not an answer"),
                      pty$seen("Permission denied"), pty$seen("(typed)")), c(3L, 0L, 0L, 0L))
+})
+
+test_that("a terminal: a line arriving just as a question is drawn steers the run (P28 D)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE)",
+    # the line arrives after the question drained fd 0, before its readline() starts
+    "trace('ui_permission_lines', exit = quote({cat('DRAWN\\n'); Sys.sleep(1)}), print = FALSE,",
+    "      where = asNamespace('gptr'))",
+    "fake = gptr_fake_provider(function(req) {",
+    "  m = req$messages[[length(req$messages)]]",
+    "  if (identical(m$role, 'user')) return(list(tool = 'r', input = list(code = 'zz = 1')))",
+    "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
+  ))
+  expect_true(pty$wait("peter> ", timeout = 120))
+  pty$send("D\r")
+  expect_true(pty$wait("DRAWN"))
+  pty$send("steer me\r")
+  expect_true(pty$wait("[gptr] steering: 'steer me'"))
+  # the question is asked again, empty; a person answers it later than 0.1 s
+  expect_true(pty$wait("allow? "))
+  expect_true(endsWith(pty$pending(), "[?]: "))
+  pty$send("y\r")
+  expect_true(pty$wait(paste0("REQ operator: ", relay("steer me"))))
+  expect_true(pty$wait("peter> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(pty$seen("Not an answer"), 0L)
 })

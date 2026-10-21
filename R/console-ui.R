@@ -188,20 +188,23 @@ ui_undo_note = function(request) {
   tryCatch(ext_service_get("checkpoint.note")(call, NULL), error = function(e) NULL)
 }
 
-#' Read one console answer, never a line typed before the question; when the REPL's reader finds
-#' lines waiting after the answer (a paste; a last line without a newline is not waiting), the
-#' answer and the lines are dropped and the question is asked again (IC-75); Ctrl-C or EOF gives
-#' NA (a terminal echoes even a `secret` itself)
+#' Read one console answer, never a line typed before the question (readline_answer()); when the
+#' REPL's reader finds lines waiting after the answer (a paste; a last line without a newline is
+#' not waiting), the answer and the lines go to the console history as one entry (a `secret` is
+#' dropped) and the question is asked again (IC-75); Ctrl-C or EOF gives NA (a terminal echoes
+#' even a `secret` itself)
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
   rd = console_repl_find()$reader
   repeat {
-    ans = tryCatch(readline_answer(prompt), interrupt = function(e) NA_character_)
+    ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead),
+                   interrupt = function(e) NA_character_)
     if (!rlang::is_string(ans)) return(NA_character_)
     more = if (!is.null(rd)) rd$waiting()
     if (!length(more)) return(ans)
-    console_write(paste0("  A pasted block is not an answer (", length(more) + 1L,
-                         " lines dropped)."))
+    if (!secret) console_history_add(paste(c(ans, more), collapse = "\n"))
+    console_write(paste0("  A pasted block is not an answer", if (!secret) " (kept in history)",
+                         "."))
   }
 }
 
@@ -261,7 +264,8 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 
 #' Console permission(): the one-line prompt of NS-1, `?` for the detail view; every console
 #' prompt first ends partial answer lines and clears waiting rows (D-186); an invalid answer is
-#' explained, five (`?` is none) end in a refusal whose feedback says so (D-188)
+#' explained (wrapped at the console width) and, in an interactive session, kept in the console
+#' history; five (`?` is none) end in a refusal whose feedback says so (D-188, D-243)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
   console_before_message(kind = "prompt", tools = TRUE)
@@ -286,13 +290,16 @@ ui_console_permission = function(request, read = ui_console_read) {
       next
     }
     bad = bad + 1L
-    console_write(if (low %in% c("a", "always", "p", "project")) {
-      paste0("  [a]lways is not offered: ", why, "; answer y, n or ?.")
+    if (low %in% c("a", "always", "p", "project")) {
+      msg = paste0("  [a]lways is not offered: ", why, "; answer y, n or ?.")
     } else {
-      paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'. Type ",
-             if (can) "y, a, n" else "y, n", " (n <text> says what to do instead) or ? ",
-             "for details.")
-    })
+      kept = nzchar(a) && gptr_is_interactive()
+      if (kept) console_history_add(a)
+      msg = paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
+                   if (kept) " (kept in history)", ". Type ", if (can) "y, a, p, n" else "y, n",
+                   " or ?.")
+    }
+    console_write(console_wrap(msg, cli::console_width()))
   }
   console_write("  No valid answer after 5 tries; refused.")
   ui_answer("deny", feedback = "no valid answer was given at the approval prompt")

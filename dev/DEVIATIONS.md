@@ -3022,6 +3022,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests so far (Task 2): test-console-typing.R "console_typed_split() marks a last line without a line end
   as partial", "a question drains fd 0 first: lines steer, a partial line is kept in the history", "a
   terminal: a question never takes the line typed ahead of it (P28 B, C, H)".
+- Task 3: a stale line is queued during a run, else kept in the history; a paste and an invalid approval answer
+  are kept in the history. `readline_answer()` is in L0, so the console passes the routing as a `keep` callback
+  (`console_typed_ahead()`, 03 §2.2); `console_history_add()` moved to `utils-options.R`; a secret keeps nothing.
+  Tests: test-console-ui.R "lines typed or pasted before the approval prompt never answer it (IC-75)", "during a
+  run a line typed before the approval prompt is queued, then it asks again", "a block pasted at the approval
+  prompt never answers it nor steers (IC-75)", "invalid answers are explained and kept; five end in a refusal
+  the model is told", "a long invalid answer's notice wraps inside the width (P28 B, E, F)"; test-console-typing.R
+  "a terminal: a line arriving just as a question is drawn steers the run (P28 D)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

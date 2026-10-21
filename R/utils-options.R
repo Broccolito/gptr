@@ -124,18 +124,33 @@ gptr_readline = function(prompt = "", read = readline) {
   x
 }
 
-#' The answer to a question: in an interactive session a line readline() returns within 0.1 s
-#' was typed or pasted before the question was shown, so it is asked again; at most 100 times,
-#' as readline() returns at once at the end of a pipe (IC-75)
+#' The answer to a question: in an interactive session a line readline() returns too soon
+#' (answer_stale()) was typed or pasted before the question was shown, so it is asked again; at
+#' most 100 reads, as readline() returns at once at the end of a pipe. Each line read past that is
+#' not blank goes to `keep(line)`: the console history, a console question's
+#' console_typed_ahead(), or nowhere for NULL (a secret) (IC-75, D-243)
 #' @noRd
-readline_answer = function(prompt) {
+readline_answer = function(prompt, keep = console_history_add) {
   for (i in seq_len(100L)) {
     the$readline_secs = NULL
     x = gptr_readline(prompt)
-    if (!gptr_is_interactive() || !isTRUE(the$readline_secs < 0.1)) break
+    if (i == 100L || !gptr_is_interactive() || !answer_stale(the$readline_secs)) break
+    if (is.function(keep) && rlang::is_string(x) && nzchar(trimws(x))) keep(x)
   }
   x
 }
+
+#' Add a line to the console history (report 18: utils::timestamp(); never fails)
+#' @noRd
+console_history_add = function(x) {
+  tryCatch(utils::timestamp(stamp = x, prefix = "", suffix = "", quiet = TRUE),
+           error = function(e) NULL)
+  invisible(NULL)
+}
+
+#' Did readline() return a line too soon (under 0.1 s) for it to answer the question shown? (IC-75)
+#' @noRd
+answer_stale = function(secs) isTRUE(secs < 0.1)
 
 #' @noRd
 is_knitting = function() {

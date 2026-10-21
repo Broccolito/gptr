@@ -1907,8 +1907,10 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   rather than on fd 0) pasted lines arrive one per read: use `"""`. Every console question (approvals, choices,
   input, the pause menu, `gptr_confirm()`) reads again while an interactive answer arrived within 0.1 s of its
   prompt (at most 100 reads): a line typed, pasted or queued from a script (an IDE's run selection) before the
-  question is discarded and never answers it. On a macOS terminal an approval, choice or input answer with lines
-  waiting after it (a paste) is dropped with them and the question asked again (D-220). A fence runs as R only
+  question never answers it. During a run it is queued as typed lines are (`type_ahead`), otherwise it goes to the
+  console history [D-243]. On a macOS terminal an approval, choice or input answer with lines waiting after it (a
+  paste) goes to the history with them and the question is asked again (D-220); so does an invalid approval
+  answer [D-243]. A fence runs as R only
   for an `r`, `R`, `{r...}` or empty info string; other fences are prompt text; the body loses the opener's
   indentation and closes on a fence at least as long (CommonMark).
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
