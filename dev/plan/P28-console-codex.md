@@ -337,9 +337,11 @@ Commit: `feat(perm): permission requests carry the tool call id`.
 ### Task 7: The step boundary reads typed input first (D-242)
 
 Decisions:
-- `builtin_console` subscribes `turn_end`. Its hook runs `console_typed()` once and
-  `policy_flush()`. `turn_end` is emitted in after_turn just before the loop polls steers, so a
-  message sent before a boundary is in the FIFO when the loop looks.
+- `builtin_console` subscribes `turn_end`. Its hook runs `console_typed()` once. `turn_end` is
+  emitted in after_turn just before the loop polls steers, so a message sent before a boundary is
+  in the FIFO when the loop looks. (Amended in review: no `policy_flush()`; `console_typed()`
+  queues through `policy_enqueue()`, which flushes, and items held while a tool ran are flushed at
+  its `tool_execution_end`.)
 - This covers keys typed during an in-process `r` tool, which today reach the next boundary only
   if the 0.1 s task happens to tick in between.
 - Front end only. D class benefits now; T class from Task 18.

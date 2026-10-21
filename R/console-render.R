@@ -1221,12 +1221,10 @@ console_on_shutdown = function(event, ctx) {
 }
 
 #' turn_end, emitted just before the loop polls steers: a terminal REPL reads what was typed (also
-#' during an in-process tool) and the pending items are queued, so a line sent before this step
-#' boundary reaches it (D-242)
+#' during an in-process tool), so a line sent before this step boundary reaches it (D-242)
 #' @noRd
 console_on_turn_end = function(event, ctx) {
   console_typed()
-  policy_flush()
   NULL
 }
 
