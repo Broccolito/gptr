@@ -25,7 +25,8 @@ test_that("pkgdown_extra() and pkgdown_problems() keep the index complete", {
                                 print.gptr_session = rd_page("print.gptr_session"),
                                 hidden = rd_page("hidden", keywords = "internal"))))
   expect_identical(pkgdown_extra(db), "print.gptr_session")
-  expect_identical(pkgdown_problems(pkgdown_yaml("print.gptr_session", gptr_root()), db, gptr_root()),
+  root = gptr_root()
+  expect_identical(pkgdown_problems(pkgdown_yaml("print.gptr_session", root), db, root),
                    character())
-  expect_match(pkgdown_problems(pkgdown_yaml(root = gptr_root()), db, gptr_root()), "out of date")
+  expect_match(pkgdown_problems(pkgdown_yaml(root = root), db, root), "out of date")
 })
