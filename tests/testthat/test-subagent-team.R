@@ -65,7 +65,6 @@ test_that("pools keep their own limits: workers 2 under R CMD check, inline unaf
 })
 
 test_that("a failing start cancels the children already running", {
-  skip_on_cran()
   log = stub_log()
   items = stub_items(3L, after = 30, log = log)
   items[[3L]]$start = function() stop("start failed")
@@ -74,7 +73,6 @@ test_that("a failing start cancels the children already running", {
 })
 
 test_that("at top level the pause menu has no child run to steer or background", {
-  skip_on_cran()
   seen = integer()
   local_bootstrap_service("console.interrupt_policy", function(expr_fun, runs, mode = "call") {
     seen <<- c(seen, length(runs))
@@ -132,7 +130,6 @@ test_that("gptr_parallel() keeps failed members, or signals the first with on_er
 })
 
 test_that("gptr_parallel() refuses unnamed members, non-sessions and accessor names", {
-  skip_on_cran()
   local_team_fake()
   expect_error(gptr_parallel(peter("x", envir = new.env())), class = "gptr_error_invalid_argument")
   expect_error(gptr_parallel(a = 1), class = "gptr_error_invalid_argument")
@@ -165,7 +162,6 @@ test_that("model-issued teams are limited to gptr.subagents.max_tasks (IC-39)", 
 })
 
 test_that("replayed children bound to a block are attached to the replayed team (IC-46)", {
-  skip_on_cran()
   old = the$replay_blocks
   the$replay_blocks = new.env(parent = emptyenv())
   withr::defer(assign("replay_blocks", old, envir = the))
@@ -213,7 +209,6 @@ test_that("the team route matches calls with agents only", {
 })
 
 test_that("a team session holds one child per agent and joins their reports", {
-  skip_on_cran()
   local_team_fake(function(request) paste("report for", request$last_user))
   team = route_team_run(team_call("Review it", agents = team_agents("stats", "code")))
   expect_s3_class(team, "gptr_session")
@@ -228,7 +223,6 @@ test_that("a team session holds one child per agent and joins their reports", {
 })
 
 test_that("the reports reach a continuation as user-role data (IC-55)", {
-  skip_on_cran()
   local_team_fake(function(request) "report text that is long")
   team = route_team_run(team_call("Review it", agents = team_agents("stats", "code")))
   txt = subagent_reports_block(list(session = team), 20000L)
@@ -258,7 +252,6 @@ test_that("exports return to the caller in task order; a second exporter keeps t
 })
 
 test_that("team calls run in the foreground and start new agents", {
-  skip_on_cran()
   local_team_fake()
   a = team_agents("a")
   cnd = expect_error(route_team_run(team_call("x", agents = a, background = TRUE)),
@@ -274,7 +267,6 @@ test_that("team calls run in the foreground and start new agents", {
 
 
 test_that("a settled team dispatches agent_end with its document site (IC-47)", {
-  skip_on_cran()
   local_team_fake()
   seen = new.env()
   id = hook_add("agent_end", function(event, ctx) {
@@ -316,7 +308,6 @@ attached_names = function(s) {
 }
 
 test_that("shapes: lists, data-frame rows and vectors fan out; other objects do not", {
-  skip_on_cran()
   expect_identical(subagent_shape(list(a = 1, b = 2))[c("kind", "n")], list(kind = "list", n = 2L))
   expect_identical(subagent_shape(mtcars[1:3, ])$kind, "rows")
   expect_identical(subagent_shape(mtcars[1:3, ])$n, 3L)
@@ -335,7 +326,6 @@ test_that("children are named by element names, else by position", {
 })
 
 test_that("a fan-out needs exactly one list-like context object", {
-  skip_on_cran()
   local_team_fake()
   e = new.env()
   e$a = list(1, 2)
@@ -518,7 +508,6 @@ test_that("each fan-out child gets its own element alone, as .x, for a symbol or
 })
 
 test_that("a fan-out with context = \"none\" is refused before any child starts", {
-  skip_on_cran()
   fake = local_team_fake()
   b = list(A = 1:3, B = letters)
   expect_error(peter("p", b, parallel = 2, .opts = list(context = "none")),
@@ -681,7 +670,6 @@ test_that("a foreground fan-out, team or gptr_parallel shows a line per sub-agen
 })
 
 test_that("model-issued teams above gptr.subagents.max_tasks fail in the tool result", {
-  skip_on_cran()
   local_team_fake(function(request) {
     if (length(request$last_results)) return("done")
     fake_tool("r", code = paste0("rev = peter(\"check\", agents = list(",
@@ -895,7 +883,6 @@ test_that("a rebuilt parent retains task and reports without reading child journ
 })
 
 test_that("stored child reports deduplicate unchanged turns and allow updated reports", {
-  skip_on_cran()
   local_team_fake(list("Original report."))
   session = peter("Review it", agents = list(stats = agent(model = "fake/fake-1")))
   reports = function() {
@@ -1227,7 +1214,6 @@ test_that("public containers resume their selected model before a parent request
 })
 
 test_that("container model selection stores only its existing typed identity", {
-  skip_on_cran()
   local_team_fake()
   fake = local_fake_provider(list("Child done."), name = "persist-identity")
   selected = "persist-identity/persist-identity-1"
@@ -1252,7 +1238,6 @@ test_that("container model selection stores only its existing typed identity", {
 })
 
 test_that("legacy containers without a model entry keep the existing resume fallback", {
-  skip_on_cran()
   fake = local_team_fake(list("Child done."))
   session = peter("Review it", list(first = 1), parallel = 1, envir = new.env())
   file = session$file

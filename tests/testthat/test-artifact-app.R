@@ -18,7 +18,6 @@ ok_app = c(
 )
 
 test_that("artifact ids follow contract 11.6 and refuse Windows reserved names", {
-  skip_on_cran()
   expect_identical(artifact_id_check("marker-explorer"), "marker-explorer")
   expect_identical(artifact_id_check(strrep("a", 63)), strrep("a", 63))
   bad = c("con", "aux", "nul", "prn", "com1", "lpt9", "Marker", "-x", "a b", "a/b", "a.b",
@@ -30,7 +29,6 @@ test_that("artifact ids follow contract 11.6 and refuse Windows reserved names",
 })
 
 test_that("artifacts live under the workspace root", {
-  skip_on_cran()
   root = local_project()
   expect_identical(artifact_dir("demo"), file.path(root, ".gptr", "artifacts", "demo"))
   expect_identical(basename(artifact_version_dir("demo", 2L)), "v002")
@@ -40,7 +38,6 @@ test_that("artifacts live under the workspace root", {
 })
 
 test_that("artifact.json round-trips versions, checks and a null port", {
-  skip_on_cran()
   local_project()
   meta = artifact_meta_new("demo", "Demo")
   rec = list(name = "d", file = "data/001.rds", class = "data.frame", dim = I(c(3L, 2L)),
@@ -72,7 +69,6 @@ test_that("artifact.json round-trips versions, checks and a null port", {
 })
 
 test_that("the handle formats as the NS-8 line with its checks, and prints it", {
-  skip_on_cran()
   root = local_project()
   h = new_gptr_artifact("marker-explorer", "Marker explorer", "shiny", 1L,
                         url = "http://127.0.0.1:4827/?gptr_token=00ff",
@@ -95,7 +91,6 @@ test_that("the handle formats as the NS-8 line with its checks, and prints it", 
 })
 
 test_that("static checks accept a well-formed app, also ending in shiny::shinyApp()", {
-  skip_on_cran()
   skip_if_not_installed("shiny")
   res = artifact_static_check(ok_app)
   expect_true(res$ok)
@@ -114,7 +109,6 @@ test_that("static checks accept a well-formed app, also ending in shiny::shinyAp
 })
 
 test_that("static checks reject empty code and parse errors at the parse stage", {
-  skip_on_cran()
   for (code in list("", character(), "   \n  ")) {
     res = artifact_static_check(code)
     expect_false(res$ok)
@@ -127,7 +121,6 @@ test_that("static checks reject empty code and parse errors at the parse stage",
 })
 
 test_that("static checks name each forbidden pattern", {
-  skip_on_cran()
   skip_if_not_installed("shiny")
   with_line = function(line) c(ok_app[1:5], line, ok_app[6])
   msg = function(code) {
@@ -155,7 +148,6 @@ test_that("static checks name each forbidden pattern", {
 })
 
 test_that("the shiny and html type checks look at the working copy", {
-  skip_on_cran()
   skip_if_not_installed("shiny")
   local_project()
   dir = artifact_dir("nothing")
@@ -172,7 +164,6 @@ test_that("the shiny and html type checks look at the working copy", {
 })
 
 test_that("objects are snapshotted as numbered files with a loader that binds their names", {
-  skip_on_cran()
   local_project()
   e = new.env()
   e[["a/b"]] = 1:3
@@ -199,7 +190,6 @@ test_that("objects are snapshotted as numbered files with a loader that binds th
 })
 
 test_that("missing objects and oversized snapshots are refused before anything is written", {
-  skip_on_cran()
   local_project()
   local_gptr_options(artifact_max_bytes = 1000)
   e = new.env()
@@ -220,7 +210,6 @@ test_that("missing objects and oversized snapshots are refused before anything i
 })
 
 test_that("builds copy app.R, and the html build wraps page.html and names the data", {
-  skip_on_cran()
   local_project()
   write_working("plain", ok_app)
   vdir = artifact_version_dir("plain", 1L)
@@ -243,7 +232,6 @@ test_that("builds copy app.R, and the html build wraps page.html and names the d
 })
 
 test_that("version directories are claimed in order and never reused", {
-  skip_on_cran()
   local_project()
   dir.create(artifact_dir("vers"), recursive = TRUE)
   expect_identical(artifact_version_claim("vers"), 1L)
@@ -330,7 +318,6 @@ http_status = function(url, wait = 15) {
 }
 
 test_that("the access token is 128 random bits from openssl, else /dev/urandom or none (Windows)", {
-  skip_on_cran()
   tok = artifact_token()
   expect_match(tok, "^[0-9a-f]{32}$")
   expect_false(identical(tok, artifact_token()))
@@ -347,7 +334,6 @@ test_that("the access token is 128 random bits from openssl, else /dev/urandom o
 })
 
 test_that("ports come from port_candidates() after the artifact's previous port", {
-  skip_on_cran()
   local_project()
   ports = artifact_ports("fresh")
   expect_length(ports, 20L)
@@ -359,7 +345,6 @@ test_that("ports come from port_candidates() after the artifact's previous port"
 })
 
 test_that("the child env is the artifact profile with ports, library paths and safe R vars", {
-  skip_on_cran()
   withr::local_envvar(R_TESTS = "startup.Rs")
   env = artifact_child_env(c(50001L, 50002L))
   expect_identical(env[["GPTR_ARTIFACT_PORTS"]], "50001,50002")
@@ -480,7 +465,6 @@ served_record = function(id, lines, data = character(), envir = new.env(),
 }
 
 test_that("server-log errors and warnings are read with the warning's text", {
-  skip_on_cran()
   local_project()
   log = file.path(artifact_dir("log"), "app.log")
   dir.create(dirname(log), recursive = TRUE)
@@ -777,7 +761,6 @@ test_that("an app whose page fails stops at the http stage with status failed", 
 })
 
 test_that("a launch that cannot start reads failed and keeps its checks", {
-  skip_on_cran()
   local_project()
   version_one("nolaunch", tiny_app)
   broken_type = list(launch = function(version_dir, ctx) stop("no runtime"),
@@ -792,7 +775,6 @@ test_that("a launch that cannot start reads failed and keeps its checks", {
 })
 
 test_that("relaunch refuses a version that was never stored and a kind without a type", {
-  skip_on_cran()
   local_project()
   version_one("rel", tiny_app)
   cnd = expect_error(artifact_relaunch("rel", 2L), class = "gptr_error_invalid_argument")
@@ -811,7 +793,6 @@ test_that("missing shiny is a missing_package error naming the feature", {
 })
 
 test_that("the artifact launcher selects its standalone Rscript entry (IC-70)", {
-  skip_on_cran()
   local_project()
   seen = new.env(parent = emptyenv())
   local_mocked_bindings(artifact_shiny_available = function() TRUE,
@@ -855,7 +836,6 @@ test_that("the ladder with the session check leaves .Random.seed unchanged (IC-6
 })
 
 test_that("the checkpointer records current before and after an r call (G7 3.1)", {
-  skip_on_cran()
   local_project()
   seed_artifact("ck", n = 1L)
   r_call = list(id = "c1", name = "r", input = list(code = "peter$app('ck')"))
@@ -879,7 +859,6 @@ test_that("the checkpointer records current before and after an r call (G7 3.1)"
 })
 
 test_that("undo and redo move current and report each artifact", {
-  skip_on_cran()
   local_project()
   seed_artifact("ck", n = 2L)
   frag = list(list(id = "ck", current_before = 1L, current_after = 2L, running_before = FALSE,
@@ -899,7 +878,6 @@ test_that("undo and redo move current and report each artifact", {
 })
 
 test_that("the shiny-bslib skill has its catalog line, house style and a valid example app", {
-  skip_on_cran()
   f = system.file("gptr", "skills", "shiny-bslib", "SKILL.md", package = "gptr", mustWork = TRUE)
   # The frontmatter is read with yaml (an Import, 03 section 9), not P17's skill_parse(): P17 is
   # outside P23's dependency closure (05: P10, P11, P14, P16)
@@ -934,7 +912,6 @@ test_that("the shiny-bslib skill has its catalog line, house style and a valid e
 })
 
 test_that("builtin:artifacts registers the types, the member, the section and the checkpointer", {
-  skip_on_cran()
   expect_true(is.function(builtin_artifacts))
   for (kind in c("shiny", "html")) {
     spec = registry_get("artifact_type", kind)
@@ -975,7 +952,6 @@ test_that("the artifacts section is architecture 7.3 verbatim and needs shiny", 
 })
 
 test_that("peter$app() refuses reserved ids, unknown kinds and a missing working copy", {
-  skip_on_cran()
   local_project()
   expect_error(peter$app("con"), class = "gptr_error_invalid_argument")
   cnd = expect_error(peter$app("x", kind = "nope", launch = FALSE),
@@ -992,7 +968,6 @@ test_that("peter$app() refuses reserved ids, unknown kinds and a missing working
 })
 
 test_that("a second peter$app() after an edit creates v002 without touching v001", {
-  skip_on_cran()
   skip_if_not_installed("shiny")
   local_project()
   markers = data.frame(gene = c("CD14", "LYZ"), p = c(0.01, 0.2))
@@ -1029,7 +1004,6 @@ test_that("a second peter$app() after an edit creates v002 without touching v001
 })
 
 test_that("failed static checks raise gptr_error_artifact and leave no version", {
-  skip_on_cran()
   skip_if_not_installed("shiny")
   local_project()
   write_working("bad", c(ok_app[1:5], "setwd('/')", ok_app[6]))
@@ -1044,7 +1018,6 @@ test_that("failed static checks raise gptr_error_artifact and leave no version",
 })
 
 test_that("a failed snapshot removes the version it claimed", {
-  skip_on_cran()
   local_project()
   write_working("snapfail", ok_app)
   expect_error(peter$app("snapfail", data = "no_such_object", check = FALSE, launch = FALSE),
@@ -1053,7 +1026,6 @@ test_that("a failed snapshot removes the version it claimed", {
 })
 
 test_that("kind = \"html\" wraps page.html in a Shiny app version", {
-  skip_on_cran()
   local_project()
   markers = data.frame(gene = "CD14")
   write_working("page", "<html><head></head><body><div id='x'></div></body></html>", "page.html")
@@ -1067,7 +1039,6 @@ test_that("kind = \"html\" wraps page.html in a Shiny app version", {
 })
 
 test_that("the tool form returns the handle's lines and attaches the screenshot to the r call", {
-  skip_on_cran()
   local_project()
   e = new.env()
   e$markers = data.frame(gene = "CD14")
@@ -1142,7 +1113,6 @@ test_that("undo relaunches the version that was running, on the same port", {
 
 
 test_that("artifact bootstrap files survive unsettled cleanup and disappear after retry", {
-  skip_on_cran()
   dir = withr::local_tempdir()
   writeLines("owned bootstrap", file.path(dir, "bootstrap.R"))
   state = new.env(parent = emptyenv())
@@ -1167,7 +1137,6 @@ test_that("artifact bootstrap files survive unsettled cleanup and disappear afte
 })
 
 test_that("an artifact constructor failure retains its captured child for cleanup retry", {
-  skip_on_cran()
   local_project()
   seed_artifact("recover")
   state = new.env(parent = emptyenv())
@@ -1210,7 +1179,6 @@ test_that("an artifact constructor failure retains its captured child for cleanu
 
 
 test_that("artifact constructor cleanup cannot replace its original error or interrupt", {
-  skip_on_cran()
   local_project()
   seed_artifact("original")
   original_error = structure(list(message = "controlled constructor failure", call = NULL),
@@ -1262,7 +1230,6 @@ test_that("artifact constructor cleanup cannot replace its original error or int
 })
 
 test_that("post-launch artifact cleanup cannot replace a registration condition", {
-  skip_on_cran()
   local_project()
   seed_artifact("register")
   original = structure(list(message = "controlled job registration failure", call = NULL),
@@ -1290,7 +1257,6 @@ test_that("post-launch artifact cleanup cannot replace a registration condition"
 
 
 test_that("a private artifact stop request exits before forced cleanup", {
-  skip_on_cran()
   dir = withr::local_tempdir()
   request = file.path(path_norm(dir), "stop")
   state = new.env(parent = emptyenv())
@@ -1325,7 +1291,6 @@ test_that("a private artifact stop request exits before forced cleanup", {
 })
 
 test_that("artifact cooperative wait and kill share one grace deadline", {
-  skip_on_cran()
   dir = withr::local_tempdir()
   request = file.path(path_norm(dir), "stop")
   state = new.env(parent = emptyenv())
@@ -1350,7 +1315,6 @@ test_that("artifact cooperative wait and kill share one grace deadline", {
 })
 
 test_that("artifact stop keeps the request condition before fallback cleanup conditions", {
-  skip_on_cran()
   original = list(
     structure(list(message = "fixed stop wait error", call = NULL),
       class = c("artifact_stop_wait_test", "error", "condition")),
@@ -1413,7 +1377,6 @@ test_that("artifact stop keeps the request condition before fallback cleanup con
 })
 
 test_that("an artifact stop request cannot write outside its private bootstrap", {
-  skip_on_cran()
   dir = withr::local_tempdir()
   foreign = withr::local_tempdir()
   request = file.path(path_norm(foreign), "stop")

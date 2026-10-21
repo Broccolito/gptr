@@ -201,7 +201,6 @@ test_that("the optional observer refuses a root replaced by a foreign directory 
 })
 
 test_that("the optional observer preserves unchanged empty environment entries and rejects loss", {
-  skip_on_cran()
   state = new.env(parent = emptyenv())
   original = c(EMPTY = "", VALUE = "original")
   expect_silent(bp_disk_env_preflight(original, windows = TRUE))
@@ -273,7 +272,6 @@ test_that("the optional observer restores changed and missing POSIX empty enviro
 
 
 test_that("the optional observer restores library paths after success and failure", {
-  skip_on_cran()
   bp_disk_test_state()
   prior = .libPaths()
   owned = withr::local_tempdir(tmpdir = normalizePath(tempdir(), mustWork = TRUE))

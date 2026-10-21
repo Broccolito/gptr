@@ -45,7 +45,6 @@ with_billing_warning = function(expr) {
 }
 
 test_that("every profile is a complete vector without NA and with empty R startup files", {
-  skip_on_cran()
   local_vault()
   withr::local_envvar(stats::setNames(rep(NA_character_, length(billing_vars)), billing_vars))
   withr::local_envvar(fake_env()[setdiff(names(fake_env()), billing_vars)])
@@ -65,7 +64,6 @@ test_that("every profile is a complete vector without NA and with empty R startu
 })
 
 test_that("mcp and worker are allowlists; the worker gets only its provider's key", {
-  skip_on_cran()
   local_vault()
   local_fake_env()
   withr::local_envvar(GPTR_HOME = "/tmp/gptr-home", GPTR_SUBAGENT_DEPTH = "2")
@@ -98,7 +96,6 @@ test_that("the worker keeps R_ARCH for architecture-specific executable lookup (
 })
 
 test_that("cli-claude follows G6 3.7: enclosing-agent and billing variables go, with a warning", {
-  skip_on_cran()
   local_vault()
   local_fake_env()
   res = with_billing_warning(child_env("cli-claude"))
@@ -130,7 +127,6 @@ test_that("cli-codex drops CODEX_MANAGED_*, CODEX_SANDBOX* and billing variables
 })
 
 test_that("helper and artifact inherit minus secrets and registered values", {
-  skip_on_cran()
   local_vault()
   local_fake_env()
   withr::local_envvar(PLAIN_BUT_REGISTERED = "FAKEregisteredvalue42")
@@ -227,7 +223,6 @@ test_that("an Rscript worker sees neither the .Renviron key nor the source file"
   expect_identical(file.size(res[2]), 0)
 })
 test_that("environment inputs reject malformed names and values without exposing secrets", {
-  skip_on_cran()
   for (nm in c(NA_character_, "", "A=B", "A\nB")) {
     bad = stats::setNames("FAKEinvalidSecretValue123", nm)
     expect_error(child_env("helper", set = bad), class = "gptr_error_invalid_argument")
@@ -255,7 +250,6 @@ test_that("case variants and exported functions do not defeat environment filter
 })
 
 test_that("registered profiles and explicit startup settings still use empty files", {
-  skip_on_cran()
   local_vault()
   file = withr::local_tempfile()
   writeLines("stop('FAKE startup file')", file)
@@ -276,7 +270,6 @@ test_that("registered profiles and explicit startup settings still use empty fil
 })
 
 test_that("provider credentials preserve vault origin restrictions and register environment keys", {
-  skip_on_cran()
   local_vault()
   handle = secret_register("FAKEproviderValue123456", "TEST_PROVIDER_KEY",
                            origin = "https://allowed.test")
@@ -307,7 +300,6 @@ test_that("provider credentials preserve vault origin restrictions and register 
 })
 
 test_that("CLI billing switches warn once per removed set and respect explicit consent", {
-  skip_on_cran()
   old_once = the$once
   withr::defer({
     the$once = old_once
@@ -329,7 +321,6 @@ test_that("CLI billing switches warn once per removed set and respect explicit c
 })
 
 test_that("inherited settings containing registered values or derived forms are omitted", {
-  skip_on_cran()
   local_vault()
   value = "FAKE/key?with=reserved&characters123456"
   secret_register(value, "TEST_EMBEDDED_TOKEN")
@@ -362,7 +353,6 @@ test_that("worker environments forward explicit check and thread policy", {
 })
 
 test_that("worker policy keeps absent blank arbitrary and explicitly overridden values", {
-  skip_on_cran()
   keys = c("_R_CHECK_PACKAGE_NAME_", "_R_CHECK_LIMIT_CORES_", "OMP_THREAD_LIMIT",
     "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
   withr::with_envvar(stats::setNames(rep(NA_character_, length(keys)), keys), {
@@ -392,7 +382,6 @@ test_that("worker policy keeps absent blank arbitrary and explicitly overridden 
 })
 
 test_that("worker policy construction preserves caller state and explicit overrides", {
-  skip_on_cran()
   local_vault()
   withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr", OMP_THREAD_LIMIT = "2")
   capture = function() {

@@ -32,7 +32,6 @@ compaction_events = function(types, .env = parent.frame()) {
 }
 
 test_that("each checkpoint attempt is charged once and survives stored reconstruction", {
-  skip_on_cran()
   x = compaction_fixture(list(fake_text("", usage = usage_new(input = 100, output = 5)),
                               fake_text("A useful summary.",
                                         usage = usage_new(input = 120, output = 7))))
@@ -61,7 +60,6 @@ test_that("each checkpoint attempt is charged once and survives stored reconstru
 })
 
 test_that("unknown CLI-style checkpoint usage is durable and never changed into zero", {
-  skip_on_cran()
   x = compaction_fixture(list("A summary without metering."))
   original = provider_stream
   local_mocked_bindings(provider_stream = function(model, context, opts, emit, done,
@@ -83,7 +81,6 @@ test_that("unknown CLI-style checkpoint usage is durable and never changed into 
 })
 
 test_that("a checkpoint attempt consumes the active request budget before retrying", {
-  skip_on_cran()
   x = compaction_fixture(list(fake_text("", usage = usage_new(input = 100, output = 5)),
                               "This second request must not start."))
   seen = compaction_events(c("before_request", "usage", "session_compact", "agent_end"))
@@ -108,7 +105,6 @@ test_that("a checkpoint attempt consumes the active request budget before retryi
 })
 
 test_that("an exhausted token budget prevents the checkpoint request itself", {
-  skip_on_cran()
   x = compaction_fixture(list("This request must not start."))
   local_service("compact.should", function(s, tokens, idle) TRUE)
   run = run_start(x$s, msg_user("Continue."), list(budget = list(tokens = 1L)))
@@ -121,7 +117,6 @@ test_that("an exhausted token budget prevents the checkpoint request itself", {
 })
 
 test_that("a delayed aborted checkpoint is charged without a late reply or history rewrite", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -180,7 +175,6 @@ test_that("a delayed aborted checkpoint is charged without a late reply or histo
 })
 
 test_that("a checkpoint settlement failure is diagnosed without replacing the run condition", {
-  skip_on_cran()
   x = compaction_fixture(list("No request must start."))
   seen = new.env(parent = emptyenv())
   seen$calls = 0L
@@ -211,7 +205,6 @@ test_that("a checkpoint settlement failure is diagnosed without replacing the ru
 })
 
 test_that("synchronous checkpoint cancellation still cancels its returned task exactly once", {
-  skip_on_cran()
   x = compaction_fixture(list("A response that must not be pumped."))
   seen = new.env(parent = emptyenv())
   seen$id = NULL
@@ -240,7 +233,6 @@ test_that("synchronous checkpoint cancellation still cancels its returned task e
 })
 
 test_that("manual compaction announces waiting before inference and respects quiet output", {
-  skip_on_cran()
   local_gptr_options(verbose = 1L, quiet = FALSE)
   seen = new.env(parent = emptyenv())
   seen$notices = character()
@@ -273,7 +265,6 @@ test_that("manual compaction announces waiting before inference and respects qui
 })
 
 test_that("a failed manual checkpoint preserves its exception and reports unfinished progress", {
-  skip_on_cran()
   local_gptr_options(verbose = 1L, quiet = FALSE)
   x = compaction_fixture(list("A summary."))
   seen = new.env(parent = emptyenv())
@@ -297,7 +288,6 @@ test_that("a failed manual checkpoint preserves its exception and reports unfini
 })
 
 test_that("a cancelled compact command never claims that the conversation was compacted", {
-  skip_on_cran()
   x = compaction_fixture(list("No request expected."))
   off = gptr_register(gptr_hook("session_before_compact", function(event, ctx) {
     list(cancel = TRUE)
@@ -311,7 +301,6 @@ test_that("a cancelled compact command never claims that the conversation was co
 })
 
 test_that("the checkpoint cannot execute served R and the ordinary tool scope is restored", {
-  skip_on_cran()
   x = compaction_fixture(list("A tool-free summary."))
   other_home = new.env()
   other = session_new("fake/fake-1", "auto", home = other_home)
@@ -342,7 +331,6 @@ test_that("the checkpoint cannot execute served R and the ordinary tool scope is
 })
 
 test_that("estimated checkpoint observations retain their provenance", {
-  skip_on_cran()
   x = compaction_fixture(list(fake_text("An estimated summary.",
     usage = usage_new(input = 80, output = 4, estimated = TRUE))))
   compact_run(x$s, "manual")
@@ -355,7 +343,6 @@ test_that("estimated checkpoint observations retain their provenance", {
 })
 
 test_that("stored checkpoint charges validate counts and bind to their owning session", {
-  skip_on_cran()
   x = compaction_fixture(list(fake_text("A summary.", usage = usage_new(input = 80, output = 4))))
   compact_run(x$s, "manual")
   entries = store_read(x$s$file)$entries
@@ -374,7 +361,6 @@ test_that("stored checkpoint charges validate counts and bind to their owning se
 })
 
 test_that("malformed checkpoint charges fail closed and unrelated custom entries survive", {
-  skip_on_cran()
   x = compaction_fixture(list("A summary."))
   compact_run(x$s, "manual")
   entries = store_read(x$s$file)$entries
@@ -399,7 +385,6 @@ test_that("malformed checkpoint charges fail closed and unrelated custom entries
 })
 
 test_that("compaction preserves loaded R objects and continuation uses them directly", {
-  skip_on_cran()
   x = compaction_fixture(list("Remember the fitted public-data coefficients.",
                               fake_tool("r", code = "gptr_return(beta)"), "done"))
   x$home$beta = unname(stats::coef(stats::lm(mpg ~ wt, data = x$home$d)))
@@ -424,7 +409,6 @@ test_that("compaction preserves loaded R objects and continuation uses them dire
 })
 
 test_that("a child's checkpoint attempt consumes its root's shared budget", {
-  skip_on_cran()
   x = compaction_fixture(list(fake_text("A child summary.",
                                         usage = usage_new(input = 100, output = 5))))
   child = session_new("fake/fake-1", "auto", home = x$home, kind = "child", parent = x$s)
@@ -442,7 +426,6 @@ test_that("a child's checkpoint attempt consumes its root's shared budget", {
 })
 
 test_that("a refused checkpoint restores its tool scope without inventing a request charge", {
-  skip_on_cran()
   x = compaction_fixture(list("unused"))
   local_gptr_options(verbose = 1L, quiet = FALSE)
   local_mocked_bindings(provider_stream = function(...) stop("synthetic provider unavailable"))
@@ -461,7 +444,6 @@ test_that("a refused checkpoint restores its tool scope without inventing a requ
 })
 
 test_that("the JSONL sink records checkpoint request and usage without exposing its summary", {
-  skip_on_cran()
   x = compaction_fixture(list(fake_text("INTERNAL_SYNTHETIC_SUMMARY",
                                         usage = usage_new(input = 50, output = 3))))
   local_service("compact.should", function(s, tokens, idle) TRUE)

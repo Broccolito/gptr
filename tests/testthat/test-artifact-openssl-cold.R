@@ -27,7 +27,6 @@ artifact_openssl_env = function(value, .env = parent.frame()) {
 }
 
 test_that("artifact dependency startup preserves known keys and existing or absent RNG", {
-  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     for (value in c(NA_character_, "synthetic-custom")) {
       local({

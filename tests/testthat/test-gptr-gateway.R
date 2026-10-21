@@ -26,7 +26,6 @@ local_probe = function(.env = parent.frame()) {
 }
 
 test_that("peter('a', mice) and mice |> peter('a') capture mice by name", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   mice = data.frame(weight = c(20, 22, 25))
@@ -40,7 +39,6 @@ test_that("peter('a', mice) and mice |> peter('a') capture mice by name", {
 })
 
 test_that("named context, call values and do.call() values", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   mice = data.frame(weight = 1:3)
@@ -53,7 +51,6 @@ test_that("named context, call values and do.call() values", {
 })
 
 test_that("forwarded dots are forced once and keep their label", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   w = function(...) peter(...)
@@ -65,7 +62,6 @@ test_that("forwarded dots are forced once and keep their label", {
 })
 
 test_that("prompt selection: literal first, then a character value; two literals warn", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   expect_warning(peter("first", "second"), class = "gptr_warning_two_prompts")
@@ -80,7 +76,6 @@ test_that("prompt selection: literal first, then a character value; two literals
 })
 
 test_that("literal prompts are interpolated from envir unless switched off (contract 6.1.4)", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   cl = 4L
@@ -94,7 +89,6 @@ test_that("literal prompts are interpolated from envir unless switched off (cont
 })
 
 test_that("an interpolated prompt is echoed at verbosity 2 (gptr_message_interpolated, 04 2.2)", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   local_gptr_options(verbose = 2L, quiet = FALSE)
@@ -108,7 +102,6 @@ test_that("an interpolated prompt is echoed at verbosity 2 (gptr_message_interpo
 })
 
 test_that("identifiers through the gateway, including a wrapper with a local m (G3 t2b)", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   m = "haiku"
@@ -136,7 +129,6 @@ test_that("identifiers through the gateway, including a wrapper with a local m (
 })
 
 test_that("a leading session is the continuation target; a named session is context", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   s0 = session_new("fake/fake-1", "manual", home = new.env())
@@ -150,7 +142,6 @@ test_that("a leading session is the continuation target; a named session is cont
 })
 
 test_that("calls made during a run inherit the running mode, only tightened (IC-53)", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   run = fake_run(mode = "plan")
@@ -191,7 +182,6 @@ test_that("unknown .opts names and a non-environment envir are refused", {
 })
 
 test_that("peter is a classed closure whose members come from the ns services (IC-36)", {
-  skip_on_cran()
   expect_identical(class(peter), c("gptr_gateway", "function"))
   expect_error({
     peter$x = 1
@@ -211,7 +201,6 @@ test_that("peter is a classed closure whose members come from the ns services (I
 })
 
 test_that("without the namespace services, $ is not_available and completion is empty", {
-  skip_on_cran()
   local_without_builtin("tools")
   expect_error(peter$read, class = "gptr_error_not_available")
   expect_identical(utils::.DollarNames(peter, ""), character(0))
@@ -223,7 +212,6 @@ test_that("print(peter) shows the usage and the members hint", {
 })
 
 test_that("routes run in order; route_pass() hands on; a failing match() is skipped", {
-  skip_on_cran()
   local_gw()
   seen = new.env()
   seen$order = character()
@@ -252,7 +240,6 @@ test_that("route_pass(), gateway_defer() and home_address()", {
 
 
 test_that("a shadowed alias wins with a notice; skill names normalise (IC-42)", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   # `gemini`, not `sonnet`: the notice is once per process and key, and test-gptr-capture.R
@@ -278,7 +265,6 @@ test_that("a shadowed alias wins with a notice; skill names normalise (IC-42)", 
 # ---- adaptations (see dev/progress/P08.md, Task 8) ------------------------------------------
 
 test_that("an empty argument is refused before any dot is read (Task 5 obligation, D-102)", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   big = data.frame(a = 1:3)
@@ -293,7 +279,6 @@ test_that("an empty argument is refused before any dot is read (Task 5 obligatio
 })
 
 test_that("the call record is released when peter() returns and when a route fails [R2]", {
-  skip_on_cran()
   local_gw()
   box = new.env()
   off = gptr_register(gptr_spec("route", "test_keep", order = 1,
@@ -320,7 +305,6 @@ test_that("the call record is released when peter() returns and when a route fai
 })
 
 test_that("each route that runs is announced by a route event (contract 6.1.5)", {
-  skip_on_cran()
   local_gw()
   box = local_probe()
   seen = new.env()
@@ -340,7 +324,6 @@ test_that("each route that runs is announced by a route event (contract 6.1.5)",
 })
 
 test_that("routes select by the model-level type, without discovery (IC-74, 07 section 2)", {
-  skip_on_cran()
   local_gw()
   local_mocked_bindings(
     catalog_ollama_discover = function(...) stop("routing must not discover"),
@@ -403,7 +386,6 @@ test_that("routes select by the model-level type, without discovery (IC-74, 07 s
 })
 
 test_that("without the classifier route a decision-only model is not_available (IC-74)", {
-  skip_on_cran()
   local_without_builtin("system1")
   local_gw()
   seen = new.env()
@@ -449,7 +431,6 @@ local_labels_block = function(.env = parent.frame()) {
 }
 
 test_that("builtin:gateway registers its routes, core settings and four services (IC-24, IC-33)", {
-  skip_on_cran()
   routes = registry_all("route")
   ord = stats::setNames(vapply(routes, function(r) as.numeric(r$order), 0),
                         vapply(routes, function(r) r$name, ""))
@@ -470,7 +451,6 @@ test_that("builtin:gateway registers its routes, core settings and four services
 })
 
 test_that("call-level filters join the session filter layer instead of replacing it", {
-  skip_on_cran()
   local_gw()
   box = new.env()
   local_mocked_bindings(
@@ -490,7 +470,6 @@ test_that("call-level filters join the session filter layer instead of replacing
 })
 
 test_that("a top-level peter() applies the filters of the user settings file (04 10.1)", {
-  skip_on_cran()
   local_gw(workspace = FALSE)
   st = gateway_state()
   old = st$filters_applied
@@ -515,7 +494,6 @@ test_that("a top-level peter() applies the filters of the user settings file (04
 })
 
 test_that("a continuation's newer spec replaces the session's older spec of the same name", {
-  skip_on_cran()
   local_gw()
   old = gptr_fake_provider(list("old answer"))
   new = gptr_fake_provider(list("new answer"))
@@ -525,7 +503,6 @@ test_that("a continuation's newer spec replaces the session's older spec of the 
 })
 
 test_that("peter('a', mice) and mice |> peter('a') create sessions labelled mice", {
-  skip_on_cran()
   local_gw()
   local_labels_block()
   fake = local_fake_provider(list("ok"))
@@ -543,7 +520,6 @@ test_that("peter('a', mice) and mice |> peter('a') create sessions labelled mice
 })
 
 test_that("a pipe chain returns the same session and a model switch appends model_change", {
-  skip_on_cran()
   local_gw()
   f1 = local_fake_provider(list("one", "two"), name = "fake1")
   f2 = local_fake_provider(list("three"), name = "fake2")
@@ -560,7 +536,6 @@ test_that("a pipe chain returns the same session and a model switch appends mode
 })
 
 test_that("a tool that pipes into its own running session enqueues a steer after the result", {
-  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   pipe_self = test_tool("pipe_self", function(ctx) {
@@ -583,7 +558,6 @@ test_that("a tool that pipes into its own running session enqueues a steer after
 })
 
 test_that("a continuation evaluates in the kept home and fails fast on a hidden symbol (IC-40)", {
-  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   s = peter("start", model = fake, envir = globalenv())
@@ -596,7 +570,6 @@ test_that("a continuation evaluates in the kept home and fails fast on a hidden 
 })
 
 test_that("a first remote use without an acknowledgement is refused, then replay guards", {
-  skip_on_cran()
   local_gw()
   withr::local_envvar(GPTR_REPLAY = "replay")
   corp = gptr_provider("corp", api = "fake",
@@ -607,7 +580,6 @@ test_that("a first remote use without an acknowledgement is refused, then replay
 })
 
 test_that(".opts entries named by a plugin namespace reach ctx$input$opts (IC-44)", {
-  skip_on_cran()
   local_gw()
   box = new.env()
   offs = list(
@@ -627,7 +599,6 @@ test_that(".opts entries named by a plugin namespace reach ctx$input$opts (IC-44
 })
 
 test_that("a secret-looking prompt is sent redacted, with a notice (gptr.prompt_secrets)", {
-  skip_on_cran()
   local_gw(workspace = FALSE)
   local_gptr_options(quiet = FALSE)
   key = paste0("sk-", "ant-api03-", strrep("FAKEant0", 11), "xxxxxAA")
@@ -677,7 +648,6 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
 })
 
 test_that("a provider failure signals gptr_error_provider carrying the session", {
-  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list(fake_error("bad request", status = 400L)))
   cnd = expect_error(peter("x", model = fake, envir = new.env()), class = "gptr_error_provider")
@@ -687,7 +657,6 @@ test_that("a provider failure signals gptr_error_provider carrying the session",
 })
 
 test_that("the condition P06 stored is the one signalled, with the session attached", {
-  skip_on_cran()
   local_gw()
   s = session_new("fake/fake-1", "manual", home = new.env())
   d = session_data(s)
@@ -725,7 +694,6 @@ test_that("peter() leaves no connection open when it returns, errors or is inter
 })
 
 test_that("model code may not pipe into another running session without approval (IC-53)", {
-  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   other = peter("x", model = fake, .run = FALSE, envir = new.env())
@@ -761,7 +729,6 @@ test_that("a pending session collected without running releases its call record 
 })
 
 test_that("a run that reaches max_turns signals gptr_error_max_turns", {
-  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   again = test_tool("again", function(ctx) "again")
@@ -772,7 +739,6 @@ test_that("a run that reaches max_turns signals gptr_error_max_turns", {
 })
 
 test_that("blocked and budget statuses map to their conditions (contract 6.1.2)", {
-  skip_on_cran()
   local_gw()
   s = session_new("fake/fake-1", "manual", home = new.env())
   d = session_data(s)
@@ -808,7 +774,6 @@ test_that("the session is visible, invisible when streamed; .run = FALSE keeps t
 })
 
 test_that("a peter() call made during a run becomes a child session (route nested)", {
-  skip_on_cran()
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   sub = local_fake_provider(list("child answer"), name = "sub")
@@ -900,7 +865,6 @@ test_that("peter() from model code writes to an overlay and shows its prompt as 
 })
 
 test_that("a router model is stored as router:<name> and picks each request's model (IC-69)", {
-  skip_on_cran()
   local_gw()
   local_fake_provider(list("routed"), name = "fake2")
   off = gptr_register(gptr_router("pick", route = function(request, ctx) "fake2/fake2-1"))
@@ -918,7 +882,6 @@ test_that("a router model is stored as router:<name> and picks each request's mo
 })
 
 test_that("router.call returns the router's choice and appends nothing itself (IC-69)", {
-  skip_on_cran()
   local_gw()
   local_fake_provider(list("x"), name = "fake2")
   off = gptr_register(gptr_router("keep", route = function(request, ctx) {
@@ -934,7 +897,6 @@ test_that("router.call returns the router's choice and appends nothing itself (I
 })
 
 test_that("a failing router falls back to the default model", {
-  skip_on_cran()
   local_gw()
   local_fake_provider(list("fallback"), name = "fake2")
   local_gptr_options(model = "fake2/fake2-1")
@@ -945,7 +907,6 @@ test_that("a failing router falls back to the default model", {
 })
 
 test_that("background = TRUE needs the bg.register service (P21)", {
-  skip_on_cran()
   skip_if_not_installed("later")
   local_without_builtin("background")
   local_gw()
@@ -978,7 +939,6 @@ test_that("a run sent to the background returns the session at once (pause menu 
 })
 
 test_that(".opts$images sends image blocks with the first message (IC-44)", {
-  skip_on_cran()
   local_gw()
   png = withr::local_tempfile(fileext = ".png")
   grDevices::png(png, width = 200, height = 200)
@@ -995,7 +955,6 @@ test_that(".opts$images sends image blocks with the first message (IC-44)", {
 })
 
 test_that("the gateway emits route, model_select and input (contract 6.1.5)", {
-  skip_on_cran()
   local_gw()
   seen = new.env()
   seen$events = character()
@@ -1013,7 +972,6 @@ test_that("the gateway emits route, model_select and input (contract 6.1.5)", {
 })
 
 test_that("parallel = and agents = need the sub-agent routes (P19)", {
-  skip_on_cran()
   local_without_builtin("subagents")
   local_gw()
   fake = local_fake_provider(list("ok"))
@@ -1071,7 +1029,6 @@ test_that("a root run freezes ollama_local_only from human settings only; childr
 })
 
 test_that("the guards follow the effective endpoint, never the local hint (Task 4, IC-74)", {
-  skip_on_cran()
   local_gw()
   lan = gptr_provider("lan", api = "fake", local = TRUE, base_url = "http://192.168.1.20:8080/v1",
                       models = list(list(id = "lan-1", ref = "lan/lan-1")))
@@ -1086,7 +1043,6 @@ test_that("the guards follow the effective endpoint, never the local hint (Task 
 })
 
 test_that("the call's replay = overrides the process replay mode (contract 3.1, IC-45)", {
-  skip_on_cran()
   local_gw()
   live = gptr_fake_provider(list("live answer"), name = "livefake")
   live$offline = FALSE
@@ -1104,7 +1060,6 @@ test_that("the call's replay = overrides the process replay mode (contract 3.1, 
 })
 
 test_that(".opts$system1_images is refused on a conversational route (IC-74 section 4)", {
-  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("ok"))
   img = list(list(data = as.raw(c(0x89, 0x50, 0x4e, 0x47)), mime = "image/png"))
@@ -1116,7 +1071,6 @@ test_that(".opts$system1_images is refused on a conversational route (IC-74 sect
 })
 
 test_that("gateway_model_ref() and router_model() keep colon ids and thinking levels (IC-74)", {
-  skip_on_cran()
   local_gw()
   local_fake_provider(list("x"), name = "fake2")
   loc = gptr_provider("loc", api = "fake", local = TRUE,
@@ -1151,7 +1105,6 @@ test_that("gateway_model_ref() and router_model() keep colon ids and thinking le
 })
 
 test_that("egress reads the session's own provider record, never the global one of its id", {
-  skip_on_cran()
   local_gw()
   local_gptr_options(replay = "auto")
   box = new.env(parent = emptyenv())
@@ -1188,7 +1141,6 @@ test_that("egress reads the session's own provider record, never the global one 
 })
 
 test_that("a routed session's guards honour the call's replay = (contract 3.1, IC-45)", {
-  skip_on_cran()
   local_gw()
   local_fake_provider(list("fallback"), name = "fake2")
   local_gptr_options(model = "fake2/fake2-1")
@@ -1219,7 +1171,6 @@ test_that("a routed session's guards honour the call's replay = (contract 3.1, I
 })
 
 test_that("a routed session's egress check honours .opts$context = \"none\" (IC-29, 7.8)", {
-  skip_on_cran()
   local_gw()
   local_gptr_options(replay = "auto")
   withr::local_envvar(GPTR_REPLAY = "auto")
@@ -1244,7 +1195,6 @@ test_that("a routed session's egress check honours .opts$context = \"none\" (IC-
 })
 
 test_that("router.call judges egress under the frozen record of the run it serves (07 sec. 5)", {
-  skip_on_cran()
   local_gw()
   local_gptr_options(replay = "auto", interactive = FALSE)
   withr::local_envvar(GPTR_REPLAY = "auto")
@@ -1297,7 +1247,6 @@ test_that("router.call judges egress under the frozen record of the run it serve
 })
 
 test_that("a continuation names a provider registered for the session by its bare id", {
-  skip_on_cran()
   local_gw()
   corpx = gptr_fake_provider(list("one", "two", "three"), name = "corpx")
   s = peter("a", model = corpx, envir = new.env())
@@ -1310,7 +1259,6 @@ test_that("a continuation names a provider registered for the session by its bar
 })
 
 test_that("router:<name> names a registered router; an unknown one is refused", {
-  skip_on_cran()
   local_gw()
   fake = local_fake_provider(list("first", "second"), name = "fake2")
   # a default model the router fallback could reach: an unknown router must not get that far
@@ -1336,7 +1284,6 @@ test_that("router:<name> names a registered router; an unknown one is refused", 
 # Task 12: append
 
 test_that("NAMESPACE exports P08's ten names and registers its S3 methods", {
-  skip_on_cran()
   nsfile = testthat::test_path("..", "..", "NAMESPACE")
   skip_if_not(file.exists(nsfile), "the source NAMESPACE is not reachable from here")
   ns = readLines(nsfile, encoding = "UTF-8")

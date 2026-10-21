@@ -49,7 +49,6 @@ test_that("verbosity 1 announces inference on stderr without animation", {
 })
 
 test_that("a non-dynamic streamed console receives a concise waiting message", {
-  skip_on_cran()
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = FALSE)
   w = wait_record()
@@ -59,7 +58,6 @@ test_that("a non-dynamic streamed console receives a concise waiting message", {
 })
 
 test_that("verbosity zero and background requests produce no waiting feedback", {
-  skip_on_cran()
   local_gptr_options(verbose = 0L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
   w = wait_record()
@@ -72,7 +70,6 @@ test_that("verbosity zero and background requests produce no waiting feedback", 
 })
 
 test_that("a dynamic spinner starts immediately and survives buffered text", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -91,7 +88,6 @@ test_that("a dynamic spinner starts immediately and survives buffered text", {
 })
 
 test_that("the first rendered output ends the waiting row, even a style alone (D-186)", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = TRUE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -103,7 +99,6 @@ test_that("the first rendered output ends the waiting row, even a style alone (D
 })
 
 test_that("spinner redraws cannot enter a nested R tool's captured output", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -124,7 +119,6 @@ test_that("spinner redraws cannot enter a nested R tool's captured output", {
 })
 
 test_that("an abort-only IDE console advertises its stop key without promising steering", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, interactive = TRUE)
   withr::local_options(cli.dynamic = TRUE)
@@ -136,7 +130,6 @@ test_that("an abort-only IDE console advertises its stop key without promising s
 })
 
 test_that("continue and queued pause messages restore a pending request's spinner", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, interactive = TRUE, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -164,7 +157,6 @@ test_that("continue and queued pause messages restore a pending request's spinne
 })
 
 test_that("a prompt clears the waiting row, keeps its task and a later tick redraws (D-186)", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -198,7 +190,6 @@ test_that("a prompt clears the waiting row, keeps its task and a later tick redr
 })
 
 test_that("consecutive prompts in a run stay separated by a blank line (D-186)", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -221,7 +212,6 @@ test_that("consecutive prompts in a run stay separated by a blank line (D-186)",
 })
 
 test_that("a CLI tool line keeps the waiting row while its request is pending (D-186)", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -242,7 +232,6 @@ test_that("a CLI tool line keeps the waiting row while its request is pending (D
 })
 
 test_that("CLI tool items add no progress lines on a non-dynamic console (D-186)", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = FALSE)
@@ -262,7 +251,6 @@ test_that("CLI tool items add no progress lines on a non-dynamic console (D-186)
 })
 
 test_that("message completion and agent errors cancel waiting tasks", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -284,7 +272,6 @@ test_that("message completion and agent errors cancel waiting tasks", {
 })
 
 test_that("background notices remove all synthetic bidi and invisible controls", {
-  skip_on_cran()
   controls = c(0x061CL, 0x2060L:0x2065L, 0x2066L:0x2069L, 0xFEFFL)
   for (cp in controls) {
     expect_identical(bg_clean(paste0("left", intToUtf8(cp), "right")), "left right")

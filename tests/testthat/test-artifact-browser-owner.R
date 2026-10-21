@@ -1,5 +1,4 @@
 test_that("a cold artifact browser separately owns Chrome and reuses its remote connection", {
-  skip_on_cran()
   x = artifact_owner_fixture()
   x$scope$artifact_state$browser = x$scope$artifact_state$browser_owner = NULL
   b = x$open()
@@ -16,7 +15,6 @@ test_that("a cold artifact browser separately owns Chrome and reuses its remote 
 })
 
 test_that("owned artifact disconnect settles its loop before signalling and waiting once", {
-  skip_on_cran()
   x = artifact_owner_fixture()
   expect_invisible(x$close())
   expect_identical(x$state$events[[1L]], "websocket")
@@ -35,7 +33,6 @@ test_that("owned artifact disconnect settles its loop before signalling and wait
 })
 
 test_that("artifact owner uncertainty and endpoint changes cannot signal a process", {
-  skip_on_cran()
   for (which in c("local", "alive", "endpoint")) {
     x = artifact_owner_fixture()
     if (which == "local") x$state$local = NA
@@ -207,7 +204,6 @@ test_that(
 })
 
 test_that("foreign remote artifacts and already dead local owners receive no process signal", {
-  skip_on_cran()
   x = artifact_owner_fixture(remote = TRUE)
   expect_invisible(x$close())
   expect_identical(x$state$events, "websocket")
@@ -225,7 +221,6 @@ test_that("foreign remote artifacts and already dead local owners receive no pro
 })
 
 test_that("artifact replacement caches cannot be discarded or used for a local signal", {
-  skip_on_cran()
   for (which in c("browser", "owner")) {
     x = artifact_owner_fixture()
     x$state[[paste0("replace_", which)]] = TRUE
@@ -250,7 +245,6 @@ test_that(
 })
 
 test_that("artifact close errors and interrupts preserve exact conditions and retry ownership", {
-  skip_on_cran()
   for (which in c("query_error", "socket_error", "loop_error", "pump_error",
                  "process_error", "wait_error")) {
     for (kind in c("error", "interrupt")) {
@@ -280,7 +274,6 @@ test_that("artifact close errors and interrupts preserve exact conditions and re
 })
 
 test_that("artifact owner construction and loop callbacks preserve seeded and absent caller RNG", {
-  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     for (which in c("open", "close", "replaced", "launch")) {
       for (failed in c(FALSE, TRUE)) {
@@ -340,7 +333,6 @@ test_that("artifact owner construction and loop callbacks preserve seeded and ab
 })
 
 test_that("Mac artifact browsers merge display timing without replacing user features", {
-  skip_on_cran()
   cases = list(
     list(args = character(), expected = c("--use-mock-keychain",
       "--enable-features=CADisplayLinkInGpu")),
@@ -387,7 +379,6 @@ test_that("Mac artifact browsers merge display timing without replacing user fea
 })
 
 test_that("artifact display timing is Mac only and preserves the caller RNG", {
-  skip_on_cran()
   for (platform in c("Linux", "Windows", "Darwin")) {
     local({
       withr::local_preserve_seed()

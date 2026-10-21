@@ -19,7 +19,6 @@ jsonl_run = function(verbose, script = NULL) {
 }
 
 test_that("jsonl_event() gives the contract 4.5 JSON form", {
-  skip_on_cran()
   msg = msg_assistant("hi", api = "fake", provider = "fake", model = "fake-1",
                       stop_reason = "tool_use")
   ev = ev_new("message_end", session = "s0123456789", run = "u01234567", role = "assistant",
@@ -49,7 +48,6 @@ test_that("jsonl_value() keeps data and drops live objects", {
 })
 
 test_that("jsonl_sink() needs an open connection and subscribes to every catalogued event", {
-  skip_on_cran()
   local_project()
   s = peter("hi", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
   expect_error(jsonl_sink(s, "stdout"), class = "gptr_error_invalid_argument")
@@ -63,7 +61,6 @@ test_that("jsonl_sink() needs an open connection and subscribes to every catalog
 })
 
 test_that("a run gives a JSON line per event, in order (contract 4.5)", {
-  skip_on_cran()
   local_project()
   lines = jsonl_run(0L)
   types = vapply(lines, function(l) json_decode(l)$type, "", USE.NAMES = FALSE)
@@ -81,7 +78,6 @@ test_that("a run gives a JSON line per event, in order (contract 4.5)", {
 })
 
 test_that("no registered secret reaches the sink (acceptance 6)", {
-  skip_on_cran()
   local_project()
   vault_reset()
   withr::defer(vault_reset())
@@ -94,7 +90,6 @@ test_that("no registered secret reaches the sink (acceptance 6)", {
 })
 
 test_that("the jsonl frontend streams a piped session until it settles", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "off")
   s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
@@ -111,7 +106,6 @@ test_that("the jsonl frontend streams a piped session until it settles", {
 })
 
 test_that("peter(.stdin = TRUE, .opts = list(frontend = 'jsonl')) reads prompts, writes events", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "off")
   lines = c("hello", " {\"type\":\"prompt\",\"text\":\"again\"}", "/exit")
@@ -131,7 +125,6 @@ test_that("peter(.stdin = TRUE, .opts = list(frontend = 'jsonl')) reads prompts,
 })
 
 test_that("a failed prompt of the jsonl frontend gives an error line and the loop goes on", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "off")
   lines = c("fail", "next")

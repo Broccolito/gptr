@@ -29,7 +29,6 @@ fence_event = function(type, s, ...) {
 }
 
 test_that("indented closing fences release subsequent headings and lists from the fence", {
-  skip_on_cran()
   for (language in c("r", "R", "{r}", "python", "bash", "json", "")) {
     for (indent in 0:3) {
       close = paste0(strrep(" ", indent), "``` \t")
@@ -41,7 +40,6 @@ test_that("indented closing fences release subsequent headings and lists from th
 })
 
 test_that("opening and indented closing fences survive every single stream split", {
-  skip_on_cran()
   text = "lead\n```r\nx = 1\n  ```\n## done\n- item\n"
   plain = c("lead", "```r", "x = 1", "  ```", "## done", "- item")
   styled = c("lead", "```r", "x = 1", "  ```", "done", "- item")
@@ -56,7 +54,6 @@ test_that("opening and indented closing fences survive every single stream split
 })
 
 test_that("fence closing handles split CRLF lone CR blank lines and final EOF", {
-  skip_on_cran()
   expected = c("```python", "value", "", " ```\t", "", "after")
   for (ending in c("\n", "\r\n", "\r")) {
     text = paste(c("```python", "value", "", " ```\t", "", "after"), collapse = ending)
@@ -68,7 +65,6 @@ test_that("fence closing handles split CRLF lone CR blank lines and final EOF", 
 })
 
 test_that("a close marker must match the opening length and contain no nonblank suffix", {
-  skip_on_cran()
   literal = c("```", "```suffix", "``` suffix", "    ````", "~~~", "x = '```'", "")
   text = paste(c("````r", literal, "   ````` \t", "## outside"), collapse = "\n")
   expected = c("````r", literal, "   ````` \t", "outside")
@@ -80,7 +76,6 @@ test_that("a close marker must match the opening length and contain no nonblank 
 })
 
 test_that("fenced code remains literal and unwrapped while following prose respects width", {
-  skip_on_cran()
   code = c("  if (TRUE) { value = 7 }", strrep("x", 95L), "\tvalue", "", "- code bullet")
   prose = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
   text = paste(c("```r", code, "  ```", prose), collapse = "\n")
@@ -105,7 +100,6 @@ test_that("several fenced language blocks reset their closing and language state
 })
 
 test_that("ordinary inline backticks do not open a fence", {
-  skip_on_cran()
   text = "Use `value` or ``literal`` in prose.\nThe marker ``` occurs mid-line.\n## Heading"
   for (colours in c(1L, 256L)) {
     out = fence_capture(strsplit(text, "", fixed = TRUE)[[1L]], colours)
@@ -116,7 +110,6 @@ test_that("ordinary inline backticks do not open a fence", {
 })
 
 test_that("spinner clearing does not consume closing fences or tool transitions", {
-  skip_on_cran()
   fence_test_format()
   fixture = fence_test_session()
   s = fixture$session
@@ -158,7 +151,6 @@ test_that("spinner clearing does not consume closing fences or tool transitions"
 })
 
 test_that("a new text block does not inherit an earlier unfinished code fence", {
-  skip_on_cran()
   fence_test_format()
   fixture = fence_test_session()
   s = fixture$session
@@ -188,7 +180,6 @@ test_that("an indented closing fence never evaluates literal code or control tex
 
 
 test_that("indented opening fences and labels survive streamed boundaries", {
-  skip_on_cran()
   for (indent in 0:3) {
     text = paste0(strrep(" ", indent), "```r\nvalue\n  ```\n## outside")
     expect_identical(fence_capture(strsplit(text, "", fixed = TRUE)[[1L]]),
@@ -197,7 +188,6 @@ test_that("indented opening fences and labels survive streamed boundaries", {
 })
 
 test_that("a real fake-provider text stream closes its fence before later prose", {
-  skip_on_cran()
   fence_test_format()
   local_project()
   local_gptr_options(verbose = 2L, record = "off", quiet = TRUE)
@@ -220,7 +210,6 @@ test_that("a real fake-provider text stream closes its fence before later prose"
 })
 
 test_that("a styled block copies as Markdown whose body runs: no frame characters (UTF-8)", {
-  skip_on_cran()
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "symbols need a UTF-8 locale")
   withr::local_options(cli.num_colors = 256L, cli.dynamic = FALSE)
   local_mocked_bindings(is_utf8_output = function() TRUE, .package = "cli")
@@ -258,7 +247,6 @@ test_that("a fence indented under a list item closes and shows its body unindent
 })
 
 test_that("tool code shows on the tool line when it fits, else as a fence never cut", {
-  skip_on_cran()
   fence_test_format(width = 40L)
   line = function(x) cli::ansi_strip(console_tool_line(x, width = 40L))
   call = function(code) list(id = "c1", name = "r", input = list(code = code))

@@ -41,7 +41,6 @@ test_that("block_context() renders tags with escaped attributes in the given ord
 })
 
 test_that("message constructors fill defaults and wrap text content", {
-  skip_on_cran()
   u = msg_user("hello", source = "pipe", timestamp = 1)
   expect_identical(
     u, list(role = "user", content = list(block_text("hello")), source = "pipe", timestamp = 1)
@@ -67,7 +66,6 @@ test_that("msg_text() joins text blocks and skips context and other blocks", {
 })
 
 test_that("JSON shapes use Pi names, gptr objects and omit NULL fields (section 4.8)", {
-  skip_on_cran()
   a = msg_assistant(list(block_tool_call("c1", "r", list(code = "x"))), "anthropic-messages",
                     "anthropic", "claude-x", usage = usage_record(), stop_reason = "tool_use",
                     request_id = "q123", timestamp = 5)
@@ -126,7 +124,6 @@ test_that("unknown JSON fields are kept under `extra` and written back", {
 })
 
 test_that("unknown usage survives JSON round trips rather than becoming zero (IC-74)", {
-  skip_on_cran()
   usage = usage_record()
   usage$input = NA_real_
   usage$output = NA_real_

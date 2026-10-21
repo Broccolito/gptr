@@ -20,7 +20,6 @@ user_agents = function(text, .env = parent.frame()) {
 }
 
 test_that("instruction files load user-level first, root to cwd, vignette.Rmd last", {
-  skip_on_cran()
   user_agents("# user rules")
   root = p07_project(list("AGENTS.md" = "# root", "CLAUDE.md" = "# not read (AGENTS.md first)",
                           "sub/CLAUDE.md" = "# sub", "sub/CLAUDE.local.md" = "# local",
@@ -35,7 +34,6 @@ test_that("instruction files load user-level first, root to cwd, vignette.Rmd la
 })
 
 test_that("the directory walk runs from the root to cwd and never leaves the root", {
-  skip_on_cran()
   root = p07_project(list("..cache/sub/AGENTS.md" = "# dotted"))
   sub = file.path(root, "..cache", "sub")
   expect_identical(context_dirs(root, sub),
@@ -54,7 +52,6 @@ test_that("vignette.Rmd loses its YAML header and HTML comments but keeps chunks
 })
 
 test_that("@file lines of vignette.Rmd include project files once, inside the project only", {
-  skip_on_cran()
   p07_project(list("AGENTS.md" = "- root rule", "docs/style.md" = "- style rule",
                    ".gptr/vignette.Rmd" = c("# Project", "@AGENTS.md", "@docs/style.md",
                                             "@docs/style.md", "@../outside.md", "@missing.md")))
@@ -67,7 +64,6 @@ test_that("@file lines of vignette.Rmd include project files once, inside the pr
 })
 
 test_that("an @file line naming an existing file outside the project is dropped", {
-  skip_on_cran()
   # P01's path_rel() gives an absolute path (never "..") for a path outside the root
   outside = withr::local_tempdir("gptr-outside-")
   writeLines("- outside rule", file.path(outside, "rules.md"))
@@ -84,7 +80,6 @@ test_that("an @file line naming an existing file outside the project is dropped"
 })
 
 test_that("@file lines never include control, protected or secret-shaped project files", {
-  skip_on_cran()
   inc = c("@.env", "@.secrets/x.env", "@.gptr/settings.json", "@.git/config", "@.Renviron",
           "@keys/id_rsa", "@credentials.json", "@docs/style.md")
   root = p07_project(list("docs/style.md" = "- style rule", ".env" = "DB_PASSWORD=fixture-a",
@@ -113,7 +108,6 @@ test_that("a file above 64 KiB is cut at a line boundary", {
 })
 
 test_that("the first message follows architecture 7.4 with the anchor on the project block", {
-  skip_on_cran()
   p07_project(list("AGENTS.md" = "- Use = for assignment.",
                    ".gptr/vignette.Rmd" = "# Project\n- data in data/"))
   s = p07_session("manual")
@@ -130,7 +124,6 @@ test_that("the first message follows architecture 7.4 with the anchor on the pro
 })
 
 test_that("session_start blocks follow the registered blocks of the first message", {
-  skip_on_cran()
   p07_project(list())
   s = p07_session()
   start = list(blocks = list(block_context("lab", "cohort B"), "plain note"))
@@ -140,7 +133,6 @@ test_that("session_start blocks follow the registered blocks of the first messag
 })
 
 test_that("an untrusted project renders trusted=\"false\"; a trusted one does not (IC-52)", {
-  skip_on_cran()
   p07_project(list("AGENTS.md" = "- rule"))
   s = p07_session("manual")
   b = context_first_message(s, list(turn = 1L))
@@ -152,7 +144,6 @@ test_that("an untrusted project renders trusted=\"false\"; a trusted one does no
 })
 
 test_that("untrusted project files are withheld non-interactively in auto; the user's stay", {
-  skip_on_cran()
   user_agents("- my own rule")
   p07_project(list("AGENTS.md" = "- project rule"))
   local_gptr_options(quiet = FALSE)
@@ -169,7 +160,6 @@ test_that("untrusted project files are withheld non-interactively in auto; the u
 })
 
 test_that("yolo withholds untrusted project files non-interactively, as auto does", {
-  skip_on_cran()
   user_agents("- my own rule")
   p07_project(list("AGENTS.md" = "- project rule"))
   b = context_first_message(p07_session("yolo"), list(turn = 1L))
@@ -178,7 +168,6 @@ test_that("yolo withholds untrusted project files non-interactively, as auto doe
 })
 
 test_that("the environment block states date, directory, front end and R", {
-  skip_on_cran()
   p07_project(list())
   local_mocked_bindings(front_end = function() "rstudio")
   s = p07_session()
@@ -195,7 +184,6 @@ test_that("the environment block states date, directory, front end and R", {
 })
 
 test_that("mode blocks carry the non-interactive suffixes of contract 9.3", {
-  skip_on_cran()
   tx = prompt_texts()
   expect_identical(context_mode_body("manual", TRUE), tx$mode_manual)
   expect_identical(context_mode_body("manual", FALSE),
@@ -238,7 +226,6 @@ test_that("the plan block hands over a pending plan once, never in plan mode", {
 })
 
 test_that("an unchanged turn block is sent once; a changed one again (IC-38)", {
-  skip_on_cran()
   p07_project(list())
   box = new.env()
   box$text = "cohort B only"
@@ -261,7 +248,6 @@ test_that("an unchanged turn block is sent once; a changed one again (IC-38)", {
 })
 
 test_that("the mode provider reads the session when the kernel calls it without an input", {
-  skip_on_cran()
   p07_project(list())
   s = p07_session("manual")
   session_set_mode(s, "auto")
@@ -271,7 +257,6 @@ test_that("the mode provider reads the session when the kernel calls it without 
 })
 
 test_that("a mode the kernel announced mid-run is not sent again as a turn block", {
-  skip_on_cran()
   p07_project(list())
   s = p07_session("manual")
   append_user(s, context_first_message(s, list(turn = 1L, prompt = "one")), "one")
@@ -285,7 +270,6 @@ test_that("a mode the kernel announced mid-run is not sent again as a turn block
 })
 
 test_that("a changed instruction file is announced once as project_instructions_update", {
-  skip_on_cran()
   root = p07_project(list("AGENTS.md" = "- rule one"))
   s = p07_session("manual")
   first = context_first_message(s, list(turn = 1L, prompt = "one"))
@@ -305,7 +289,6 @@ test_that("a changed instruction file is announced once as project_instructions_
 })
 
 test_that("a project file dropped at compaction is announced again only when it changes", {
-  skip_on_cran()
   root = p07_project(list("AGENTS.md" = "- rule one"))
   s = p07_session("manual")
   first = context_first_message(s, list(turn = 1L, prompt = "one"))
@@ -326,7 +309,6 @@ test_that("a project file dropped at compaction is announced again only when it 
 })
 
 test_that("blocks the transcript stores redacted are deduplicated all the same (IC-38)", {
-  skip_on_cran()
   key = "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz0123"
   root = p07_project(list("AGENTS.md" = paste("- set", key, "in .Renviron")))
   off = gptr_register(gptr_context_block("lab", function(ctx, budget) {
@@ -363,7 +345,6 @@ test_that("blocks the transcript stores redacted are deduplicated all the same (
 })
 
 test_that("operator-authority blocks are queued as operator messages, not user blocks", {
-  skip_on_cran()
   p07_project(list())
   off = gptr_register(gptr_context_block("budget_note", function(ctx, budget) "80% used",
                                          placement = "turn", authority = "operator"))
@@ -380,7 +361,6 @@ test_that("operator-authority blocks are queued as operator messages, not user b
 })
 
 test_that("a failing provide() omits its block and records a diagnostic", {
-  skip_on_cran()
   p07_project(list())
   off = gptr_register(gptr_context_block("broken", function(ctx, budget) stop("no data"),
                                          placement = "first"))

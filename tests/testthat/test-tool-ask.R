@@ -9,7 +9,6 @@ ask_ctx = function(mode = "manual") {
 ask_input = function(...) list(questions = list(...))
 
 test_that("the ask schema and description are byte-identical to contract 9.2", {
-  skip_on_cran()
   spec = registry_get("tool", "ask")
   expect_identical(spec$description, paste0(
     "Ask the user one to four questions and wait for the answers, when a decision changes the ",
@@ -38,7 +37,6 @@ test_that("ask is declared with a person, and in non-interactive manual runs (IC
 })
 
 test_that("invalid questions are refused without asking (18 section 3.6)", {
-  skip_on_cran()
   st = local_scripted_ui(list())
   bad = list(
     list(),
@@ -57,7 +55,6 @@ test_that("invalid questions are refused without asking (18 section 3.6)", {
 })
 
 test_that("answers come back as 18's result text and in details (18 section 3.6)", {
-  skip_on_cran()
   st = local_scripted_ui(list(list(fmt = "Table", obj = structure("use a forest plot",
                                                                     other = TRUE),
                                    cols = c("a", "b"))))
@@ -76,7 +73,6 @@ test_that("answers come back as 18's result text and in details (18 section 3.6)
 })
 
 test_that("a sub-agent's questions say who asks; the answers keep their ids (D-188)", {
-  skip_on_cran()
   st = local_scripted_ui(list(list(fmt = "Table"), list(fmt = "Plot")))
   run = structure(new.env(), class = "gptr_run")
   local_mocked_bindings(run_current = function() run)
@@ -92,7 +88,6 @@ test_that("a sub-agent's questions say who asks; the answers keep their ids (D-1
 })
 
 test_that("a cancelled or failing dialog returns the cancellation text", {
-  skip_on_cran()
   st = local_scripted_ui(list())
   res = ask_execute(ask_input(list(id = "a", question = "Go?")), ask_ctx())
   expect_identical(res$content[[1]]$text, paste(
@@ -103,7 +98,6 @@ test_that("a cancelled or failing dialog returns the cancellation text", {
 })
 
 test_that("without a person the call ends the batch with an error result (NS-12)", {
-  skip_on_cran()
   res = ask_execute(ask_input(list(id = "a", question = "Which file?")), ask_ctx("manual"))
   expect_true(res$is_error)
   expect_true(isTRUE(res$terminate))

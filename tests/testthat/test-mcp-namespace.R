@@ -164,7 +164,6 @@ test_that("tool arguments named like the member closure's own variables reach th
 })
 
 test_that("signatures name the closure's formals when property names are not syntactic", {
-  skip_on_cran()
   schema = list(type = "object", properties = list(`file-path` = list(type = "string")),
                 required = list("file-path"))
   tool = list(name = "read-file", description = "Read a file.", input_schema = schema)
@@ -219,7 +218,6 @@ test_that("setting mcp.exposure = \"direct\" declares the tools of a server with
 })
 
 test_that("the login target of an MCP server is its expanded URL; a stdio server has none", {
-  skip_on_cran()
   local_mcp_home()
   local_project()
   withr::local_envvar(MCP_TEST_HOST = "mcp.example.org")

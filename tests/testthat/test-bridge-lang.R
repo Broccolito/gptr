@@ -2,7 +2,6 @@
 # builtin:lang.
 
 test_that("objects passed by name take the label of their expression", {
-  skip_on_cran()
   f = function(query, name = NULL) bridge_object_names(name, "name", f)
   mt = mtcars
   expect_identical(f("q", name = mt), "mt")
@@ -17,7 +16,6 @@ test_that("objects passed by name take the label of their expression", {
 })
 
 test_that("peter$sql() uses the one DBI connection in the calling frame", {
-  skip_on_cran()
   skip_if_not_installed("DBI")
   skip_if_not_installed("RSQLite")
   f = function(missing_arg) {
@@ -51,7 +49,6 @@ test_that("peter$sql() uses the one DBI connection in the calling frame", {
 })
 
 test_that("name = registers data frames in an in-memory duckdb under their labels", {
-  skip_on_cran()
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
   log = local_bridge_events()
@@ -74,7 +71,6 @@ test_that("name = registers data frames in an in-memory duckdb under their label
 })
 
 test_that("a SQL result prints within the helper budget and keeps every row", {
-  skip_on_cran()
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
   wide = as.data.frame(matrix(seq_len(200 * 40), nrow = 200))
@@ -231,7 +227,6 @@ test_that("interpreter engines run as scripts without registered keys and with a
 })
 
 test_that("other engines run through knitr", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   knitr::knit_engines$set(gptrp22test = function(options) {
     paste0("engine gptrp22test got: ", paste(options$code, collapse = " | "))
@@ -284,7 +279,6 @@ lang_line = paste("- Other languages: peter$py(code); peter$sql(query, name = df
                   "peter$knit(engine, code).")
 
 test_that("builtin:lang registers py, sql and knit as peter$ members only", {
-  skip_on_cran()
   for (nm in c("py", "sql", "knit")) {
     spec = registry_get("tool", nm)
     expect_s3_class(spec, "gptr_tool")
@@ -325,7 +319,6 @@ test_that("tool calls named py, sql or knit are refused before the permission ch
 })
 
 test_that("SQL, Python and knit risks follow 04 (acceptance 3)", {
-  skip_on_cran()
   sql = registry_get("tool", "sql")
   expect_identical(as.integer(sql$risk(list(query = "select * from t"), NULL)$level), 0L)
   expect_identical(as.integer(sql$risk(list(query = "drop table t"), NULL)$level), 3L)
@@ -356,7 +349,6 @@ test_that("peter$sql(name = df) labels the table by the expression, at the conso
 })
 
 test_that("<r_session> carries the shell and languages lines in order", {
-  skip_on_cran()
   t0 = gptr_prompt(preset = "standard")$system$t0
   at_shell = regexpr("- There is no shell tool.", t0, fixed = TRUE)
   at_lang = regexpr(lang_line, t0, fixed = TRUE)

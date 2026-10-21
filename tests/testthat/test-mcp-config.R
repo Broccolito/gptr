@@ -36,7 +36,6 @@ local_foreign_configs = function(trust = FALSE, files = list(), .env = parent.fr
 }
 
 test_that("the TOML subset reads a Codex config", {
-  skip_on_cran()
   x = mcp_toml_read(text = c(
     "# comment", "model = \"gpt-5.5\"", "[mcp_servers.context7]", "command = \"npx\"",
     "args = [\"-y\", \"pkg\"]   # trailing", "tool_timeout_sec = 60.5",
@@ -63,7 +62,6 @@ test_that("the TOML subset reads a Codex config", {
 })
 
 test_that("foreign configs are found under user_home() and app_config_dir() and merged (IC-63)", {
-  skip_on_cran()
   fx = local_foreign_configs()
   specs = mcp_config_all(fx$project)
   expect_setequal(names(specs), c("local-db", "filesystem", "sentry", "github", "context7",
@@ -97,7 +95,6 @@ test_that("timeouts: seconds in gptr's and Codex's files, milliseconds in Claude
 })
 
 test_that("gptr's own files win, defaults apply, and the import setting limits the harnesses", {
-  skip_on_cran()
   project_mcp = json_encode(list(mcpServers = list(
     sentry = list(url = "https://sentry.example/mcp"))))
   fx = local_foreign_configs(trust = TRUE, files = list(".gptr/mcp.json" = project_mcp))
@@ -119,7 +116,6 @@ test_that("gptr's own files win, defaults apply, and the import setting limits t
 })
 
 test_that("gptr_mcp() lists servers without connecting; untrusted project servers never start", {
-  skip_on_cran()
   fx = local_foreign_configs(files = list(".gptr/mcp.json" = json_encode(list(
     mcpServers = list(old = list(command = "evil"))))))
   write_json_file(file.path(gptr_user_dir("config", create = TRUE), "mcp.json"), list(
@@ -147,7 +143,6 @@ test_that("gptr_mcp() lists servers without connecting; untrusted project server
 })
 
 test_that("a .claude.json under the user's profile is listed (Windows home, IC-63)", {
-  skip_on_cran()
   home = local_mcp_home()
   other = withr::local_tempdir("not-home-")
   if (.Platform$OS.type == "windows") withr::local_envvar(HOME = other)
@@ -159,7 +154,6 @@ test_that("a .claude.json under the user's profile is listed (Windows home, IC-6
 })
 
 test_that("gptr_mcp_add() and gptr_mcp_remove() write gptr's own mcp.json only", {
-  skip_on_cran()
   fx = local_foreign_configs()
   seen = new.env()
   seen$events = list()
@@ -197,7 +191,6 @@ test_that("gptr_mcp_add() and gptr_mcp_remove() write gptr's own mcp.json only",
 })
 
 test_that("gptr_mcp_add() validates its arguments and refuses literal secrets", {
-  skip_on_cran()
   local_mcp_home()
   local_project(gptr = FALSE)
   expect_error(gptr_mcp_add("bad name", command = "x"), class = "gptr_error_invalid_argument")

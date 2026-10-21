@@ -6,7 +6,6 @@ builtin_ids = c("anthropic", "openai", "google", "openrouter", "groq", "deepseek
                 "vllm", "azure", "bedrock")
 
 test_that("builtin:providers registers the architecture section 8.1 providers as data", {
-  skip_on_cran()
   a = provider_get("anthropic")
   expect_true(all(builtin_ids %in% registry_names("provider")))
   expect_s3_class(a, "gptr_provider")
@@ -25,7 +24,6 @@ test_that("builtin:providers registers the architecture section 8.1 providers as
 })
 
 test_that("builtin:fake is declared here, and the fake provider passes gptr_check() (INFRA-17)", {
-  skip_on_cran()
   expect_equal(adapter_get("fake")$transport, "inprocess")
   expect_false(is.null(registry_get("adapter", "fake-classifier")))
   res = gptr_check(gptr_fake_provider(list("hi")))
@@ -36,7 +34,6 @@ test_that("builtin:fake is declared here, and the fake provider passes gptr_chec
 })
 
 test_that("a plugin adapter passes gptr_check() (INFRA-17)", {
-  skip_on_cran()
   # an inprocess adapter whose generator plays a one-line fake reply (P01's fake_stream())
   reply = gptr_fake_provider(list("plugin reply"), name = "p05-plugin-fake")
   one_line = function(model, context, opts) {
@@ -59,7 +56,6 @@ test_that("a plugin adapter passes gptr_check() (INFRA-17)", {
 })
 
 test_that("base URLs come from settings, the record or an environment template", {
-  skip_on_cran()
   local_settings(providers = list(openai = list(base_url = "https://proxy.example/v1/"),
                                   openrouter = list(headers = list(`X-Title` = "lab", bad = 1)),
                                   groq = list(enabled = FALSE)))
@@ -87,7 +83,6 @@ test_that("base URLs come from settings, the record or an environment template",
 })
 
 test_that("provider origins match transport normalization and reject malformed URLs", {
-  skip_on_cran()
   expect_identical(provider_origin("http://127.1:80/v1"), "http://127.0.0.1")
   expect_identical(provider_origin("http://[0:0:0:0:0:0:0:1]:80/v1"), "http://[::1]")
   for (url in list(NA_character_, 42, "https://", "not-a-url", "https://a.example/\r\nx")) {
@@ -96,7 +91,6 @@ test_that("provider origins match transport normalization and reject malformed U
 })
 
 test_that("provider records preserve mixed model metadata without granting capabilities", {
-  skip_on_cran()
   decision = list(types = c("noul", "choice", "score"), images = TRUE,
                    server_min = "0.35.1", max_questions = 64L, max_options = 26L,
                    max_request_bytes_text = 65536L, max_request_bytes_images = 33554432L,
@@ -118,7 +112,6 @@ test_that("provider records preserve mixed model metadata without granting capab
 })
 
 test_that("settings header overrides use HTTP name identity and reject ambiguous names", {
-  skip_on_cran()
   local_settings(providers = list(openrouter = list(
     headers = list(`http-referer` = "https://lab.example"))))
   headers = provider_get("openrouter")$headers
@@ -157,7 +150,6 @@ local_test_vault = function(.env = parent.frame()) {
 }
 
 test_that("credentials: vault, then the environment, bound to the provider origin", {
-  skip_on_cran()
   vault = local_test_vault()
   withr::local_envvar(ANTHROPIC_API_KEY = "sk-ant-api03-p05test-000000000000000000")
   h = provider_credential(provider_get("anthropic"))
@@ -175,7 +167,6 @@ test_that("credentials: vault, then the environment, bound to the provider origi
 })
 
 test_that("a keyed provider without any credential signals gptr_error_no_key", {
-  skip_on_cran()
   local_mocked_bindings(secret_lookup = function(name) NULL, auth_store_get = function(key) NULL)
   withr::local_envvar(GROQ_API_KEY = "")
   err = expect_error(provider_credential(provider_get("groq")), class = "gptr_error_no_key")
@@ -185,7 +176,6 @@ test_that("a keyed provider without any credential signals gptr_error_no_key", {
 })
 
 test_that("credential-store and auth-function handles are bound to the provider origin", {
-  skip_on_cran()
   local_test_vault()
   stored = secret_register("synthetic-stored-key-123456", "auth:openrouter")
   local_mocked_bindings(secret_lookup = function(name) NULL,
@@ -210,7 +200,6 @@ test_that("a vault handle bound to another origin is never used for this provide
 })
 
 test_that("vault handles: canonical origins match, unbound ones are bound to the provider", {
-  skip_on_cran()
   vault = local_test_vault()
   key = "sk-proj-p05bind-00000000000000000000000000"
   withr::local_envvar(OPENAI_API_KEY = key)
@@ -227,7 +216,6 @@ test_that("vault handles: canonical origins match, unbound ones are bound to the
 })
 
 test_that("the anthropic provider refuses a Claude subscription OAuth token (sk-ant-oat)", {
-  skip_on_cran()
   vault = local_test_vault()
   local_mocked_bindings(auth_store_get = function(key) NULL)
   oat = "sk-ant-oat01-p05test-0000000000000000000000"
@@ -287,7 +275,6 @@ test_that("provider credentials honor both the actual vault and handle origin re
 })
 
 test_that("real stored handles bind without exposing values and default Ollama avoids cloud auth", {
-  skip_on_cran()
   local_vault()
   root = withr::local_tempdir()
   local_mocked_bindings(auth_store_path = function(create = FALSE) file.path(root, "auth.json"))
@@ -308,7 +295,6 @@ test_that("real stored handles bind without exposing values and default Ollama a
 })
 
 test_that("environment fallback preserves old origin restrictions and distinguishes new keys", {
-  skip_on_cran()
   local_vault()
   local_mocked_bindings(auth_store_get = function(key) NULL)
   old_value = "synthetic-existing-bound-env-key-123456"
@@ -484,7 +470,6 @@ local_run = function(status = "requesting") {
 }
 
 test_that("an SSE stream yields one start, the deltas in order and one done", {
-  skip_on_cran()
   r = local_mock_reactor()
   model = local_stream_adapter()
   log = local_stream_log()
@@ -517,7 +502,6 @@ test_that("an SSE stream yields one start, the deltas in order and one done", {
 })
 
 test_that("an in-stream retryable error before any delta is re-sent by the reactor", {
-  skip_on_cran()
   r = local_mock_reactor()
   model = local_stream_adapter()
   log = local_stream_log()
@@ -543,7 +527,6 @@ test_that("an in-stream retryable error before any delta is re-sent by the react
 })
 
 test_that("a retryable error after a delta ends the stream with the partial message", {
-  skip_on_cran()
   r = local_mock_reactor()
   model = local_stream_adapter()
   log = local_stream_log()
@@ -559,7 +542,6 @@ test_that("a retryable error after a delta ends the stream with the partial mess
 })
 
 test_that("setting the abort flag cancels the transfer and ends with an aborted message", {
-  skip_on_cran()
   r = local_mock_reactor()
   model = local_stream_adapter()
   log = local_stream_log()
@@ -581,7 +563,6 @@ test_that("setting the abort flag cancels the transfer and ends with an aborted 
 })
 
 test_that("a run that settles while its stream is open lets go of the stream", {
-  skip_on_cran()
   r = local_mock_reactor()
   model = local_stream_adapter()
   log = local_stream_log()
@@ -597,7 +578,6 @@ test_that("a run that settles while its stream is open lets go of the stream", {
 })
 
 test_that("an adapter that fails to build ends the stream with one error event", {
-  skip_on_cran()
   r = local_mock_reactor()
   model = local_stream_adapter(api = "test-broken",
                                build = function(model, context, opts) stop("bad request body"))
@@ -613,7 +593,6 @@ test_that("an adapter that fails to build ends the stream with one error event",
 })
 
 test_that("a keyed provider without a credential is refused before anything starts", {
-  skip_on_cran()
   r = local_mock_reactor()
   local_mocked_bindings(secret_lookup = function(name) NULL, auth_store_get = function(key) NULL)
   withr::local_envvar(GPTR_P05_TEST_KEY = "")
@@ -627,7 +606,6 @@ test_that("a keyed provider without a credential is refused before anything star
 })
 
 test_that("a provider disabled in the settings is refused before anything starts", {
-  skip_on_cran()
   r = local_mock_reactor()
   model = local_stream_adapter()
   local_settings(providers = list(streamtest = list(enabled = FALSE)))
@@ -640,7 +618,6 @@ test_that("a provider disabled in the settings is refused before anything starts
 })
 
 test_that("a static-rate override from the settings reaches the limiter once (IC-64)", {
-  skip_on_cran()
   local_mock_reactor()
   model = local_stream_adapter()
   local_settings(providers = list(streamtest = list(rate = list(requests_per_s = 2))))
@@ -663,7 +640,6 @@ test_that("a static-rate override from the settings reaches the limiter once (IC
 })
 
 test_that("adapters receive the injected gate, MCP dispatcher and tool-result builder (IC-33)", {
-  skip_on_cran()
   local_mock_reactor()
   seen = new.env()
   model = local_stream_adapter(build = function(model, context, opts) {
@@ -698,7 +674,6 @@ test_that("adapters receive the injected gate, MCP dispatcher and tool-result bu
 # ---- provider_stream(): beyond the plan's literal tests (IC-74, http_ndjson/http_json) ------
 
 test_that("NDJSON lines and a whole JSON body reach the normaliser", {
-  skip_on_cran()
   r = local_mock_reactor()
   kind = new.env()
   kind$stream = "ndjson"
@@ -736,7 +711,6 @@ test_that("NDJSON lines and a whole JSON body reach the normaliser", {
 })
 
 test_that("transport failures and normaliser errors end the stream exactly once", {
-  skip_on_cran()
   r = local_mock_reactor()
   model = local_stream_adapter()
   log = local_stream_log()
@@ -763,7 +737,6 @@ test_that("transport failures and normaliser errors end the stream exactly once"
 })
 
 test_that("a retry hint the reactor neither re-sends nor fails keeps its parent class", {
-  skip_on_cran()
   r = local_mock_reactor()
   # P04 already forgot the transfer (a hint flushed at on_done, or any http_json body)
   local_mocked_bindings(reactor_retry = function(id, info) invisible(FALSE))
@@ -790,7 +763,6 @@ test_that("a retry hint the reactor neither re-sends nor fails keeps its parent 
 })
 
 test_that("a decision-only model never streams as a conversation (IC-74)", {
-  skip_on_cran()
   r = local_mock_reactor()
   local_mocked_bindings(provider_credential = function(provider) stop("credential looked up"),
                         provider_preflight = function(...) stop("preflight reached"))
@@ -818,7 +790,6 @@ test_that("a decision-only model never streams as a conversation (IC-74)", {
 })
 
 test_that("the checked model of the request preflight reaches the adapter (IC-74)", {
-  skip_on_cran()
   local_mock_reactor()
   seen = new.env()
   model = local_stream_adapter(build = function(model, context, opts) {
@@ -857,7 +828,6 @@ test_that("the checked model of the request preflight reaches the adapter (IC-74
 })
 
 test_that("an Ollama chat model fails before egress unless locality is established (IC-74)", {
-  skip_on_cran()
   r = local_mock_reactor()
   seen = new.env()
   seen$built = 0L
@@ -1025,7 +995,6 @@ test_that("an overload after a committed delta fails at once with the partial me
 # ---- provider_stream(): inprocess (the fake provider on the real reactor) -------------------
 
 test_that("the fake provider streams through the inprocess transport", {
-  skip_on_cran()
   local_fake_provider(list("hello there"))
   log = local_stream_log()
   provider_stream(model_resolve("fake/fake-1"), stream_context(), list(), emit = log$emit,
@@ -1039,7 +1008,6 @@ test_that("the fake provider streams through the inprocess transport", {
 })
 
 test_that("an aborted inprocess stream ends with stop_reason aborted", {
-  skip_on_cran()
   local_fake_provider(list(list(hang = TRUE)))
   log = local_stream_log()
   signal = new.env()
@@ -1189,7 +1157,6 @@ local_process_adapter = function(close_stdin = FALSE, start_with = NULL, seen = 
 }
 
 test_that("process_jsonl: one supervised child, JSON lines both ways, one done per turn", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   model = local_process_adapter()
@@ -1223,7 +1190,6 @@ test_that("process_jsonl: one supervised child, JSON lines both ways, one done p
 })
 
 test_that("process_jsonl with close_stdin writes the turn, then closes stdin", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   model = local_process_adapter(close_stdin = TRUE)
@@ -1241,7 +1207,6 @@ test_that("process_jsonl with close_stdin writes the turn, then closes stdin", {
 })
 
 test_that("a replaced child's late output and exit never reach the next turn", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   model = local_process_adapter(close_stdin = TRUE)
@@ -1304,7 +1269,6 @@ gen_delta = function(v) ev_new("text_delta", index = 1L, delta = v)
 gen_step = function(..., wait = 0) list(events = list(...), wait = wait)
 
 test_that("an inprocess generator that throws, misbehaves or stops early ends the stream once", {
-  skip_on_cran()
   r = local_mock_reactor()
   seen = local_gen_adapter()
   first = gen_step(gen_start(), gen_delta("a"))
@@ -1339,7 +1303,6 @@ test_that("an inprocess generator that throws, misbehaves or stops early ends th
 })
 
 test_that("the inprocess transport calls the generator again after `wait` seconds", {
-  skip_on_cran()
   r = local_mock_reactor()
   clock = new.env()
   clock$t = 10
@@ -1368,7 +1331,6 @@ test_that("the inprocess transport calls the generator again after `wait` second
 })
 
 test_that("an abort gives the inprocess generator two calls before the glue ends the stream", {
-  skip_on_cran()
   r = local_mock_reactor()
   seen = local_gen_adapter(list(gen_step(gen_start(), gen_delta("p"), wait = 60), gen_step()))
   signal = new.env()
@@ -1397,7 +1359,6 @@ test_that("an abort gives the inprocess generator two calls before the glue ends
 })
 
 test_that("an inprocess stream whose run settles is let go without a done", {
-  skip_on_cran()
   r = local_mock_reactor()
   seen = local_gen_adapter(list(gen_step(gen_start()), gen_step(gen_delta("late"))))
   run = local_run("streaming")
@@ -1416,7 +1377,6 @@ test_that("an inprocess stream whose run settles is let go without a done", {
 # ---- provider_stream(): process_jsonl failures and abort ------------------------------------
 
 test_that("an aborted process_jsonl turn forgets and kills its child", {
-  skip_on_cran()
   r = local_mock_reactor()
   pr = local_mock_process()
   seen = new.env()
@@ -1481,7 +1441,6 @@ test_that("an aborted process_jsonl turn forgets and kills its child", {
 })
 
 test_that("a process_jsonl turn that fails locally forgets and kills its child", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   model = local_process_adapter()
@@ -1535,7 +1494,6 @@ test_that("a process_jsonl turn that fails locally forgets and kills its child",
 # P06's run_abort() and run_settle() cancel the id provider_stream() returned, which for
 # process_jsonl is the abort watch: the turn must still end and drop its child.
 test_that("a process_jsonl turn whose watch was cancelled ends at its child's next line or exit", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   model = local_process_adapter()
@@ -1592,7 +1550,6 @@ test_that("a process_jsonl turn whose watch was cancelled ends at its child's ne
 })
 
 test_that("a new turn closes the session's earlier turn whose watch was cancelled", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   model = local_process_adapter()
@@ -1630,7 +1587,6 @@ test_that("a new turn closes the session's earlier turn whose watch was cancelle
 })
 
 test_that("process_jsonl pushes each JSON line as list(data, obj) and ignores other lines", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   seen = new.env()
@@ -1649,7 +1605,6 @@ test_that("process_jsonl pushes each JSON line as list(data, obj) and ignores ot
 })
 
 test_that("stopping a child's job row cancels its watcher; the open turn hears the exit later", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   timers = new.env()
@@ -1696,7 +1651,6 @@ test_that("stopping a child's job row cancels its watcher; the open turn hears t
 })
 
 test_that("process_jsonl passes start's args to proc_spawn() and its env to child_env()", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   model = local_process_adapter()
@@ -1709,7 +1663,6 @@ test_that("process_jsonl passes start's args to proc_spawn() and its env to chil
 })
 
 test_that("a list env reaches child_env() as given; list args are flattened", {
-  skip_on_cran()
   local_mock_reactor()
   pr = local_mock_process()
   got = new.env()
@@ -1742,7 +1695,6 @@ test_that("a list env reaches child_env() as given; list args are flattened", {
 })
 
 test_that("malformed process specs end the stream before any child starts", {
-  skip_on_cran()
   r = local_mock_reactor()
   pr = local_mock_process()
   seen = new.env()
@@ -1931,7 +1883,6 @@ test_that("a real child replaced by the next turn or stopped by its job row leav
 # ---- gptr_providers() ------------------------------------------------------------------------
 
 test_that("gptr_providers() lists providers with fingerprints and no I/O", {
-  skip_on_cran()
   count = new.env()
   count$transfers = 0L
   local_mocked_bindings(
@@ -1967,7 +1918,6 @@ test_that("gptr_providers() lists providers with fingerprints and no I/O", {
 })
 
 test_that("gptr_providers(check = TRUE) probes models endpoints without credentials", {
-  skip_on_cran()
   urls = new.env()
   urls$seen = character()
   local_test_vault()
@@ -1995,7 +1945,6 @@ test_that("gptr_providers(check = TRUE) probes models endpoints without credenti
 })
 
 test_that("the probe skips R CMD check and disabled providers; a failed answer is unreachable", {
-  skip_on_cran()
   local_test_vault()
   seen = new.env()
   seen$urls = character()
@@ -2044,7 +1993,6 @@ test_that("the probe skips R CMD check and disabled providers; a failed answer i
 })
 
 test_that("gptr_providers() reads a provider's status(), registry source and offline flag", {
-  skip_on_cran()
   local_test_vault()
   local_mocked_bindings(auth_store_get = function(key) NULL)
   calls = new.env()
@@ -2127,7 +2075,6 @@ test_that("gptr_providers() reads a provider's status(), registry source and off
 })
 
 test_that("a local provider needs no egress acknowledgement only at a loopback endpoint (IC-74)", {
-  skip_on_cran()
   local_test_vault()
   local_mocked_bindings(auth_store_get = function(key) NULL)
   local_settings(providers = list(ollama = list(base_url = "https://ollama.example/v1"),
@@ -2145,7 +2092,6 @@ test_that("a local provider needs no egress acknowledgement only at a loopback e
 })
 
 test_that("base URL statuses and the probe follow the provider's transport (contract 6.2)", {
-  skip_on_cran()
   local_test_vault()
   local_mocked_bindings(auth_store_get = function(key) NULL)
   withr::local_envvar(VLLM_API_KEY = "")
@@ -2194,7 +2140,6 @@ test_that("base URL statuses and the probe follow the provider's transport (cont
 })
 
 test_that("gptr_providers() neither registers nor binds an environment credential", {
-  skip_on_cran()
   vault = local_test_vault()
   local_mocked_bindings(auth_store_get = function(key) NULL)
   key = "sk-proj-p05peek-00000000000000000000000000"
@@ -2227,7 +2172,6 @@ test_that("gptr_providers() neither registers nor binds an environment credentia
 })
 
 test_that("invalid settings for one provider mark its row, never the listing", {
-  skip_on_cran()
   local_test_vault()
   local_mocked_bindings(auth_store_get = function(key) NULL)
   local_settings(providers = list(groq = list(headers = list(1, 2))))

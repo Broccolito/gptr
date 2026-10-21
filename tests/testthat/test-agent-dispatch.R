@@ -12,7 +12,6 @@ code_schema = list(type = "object", required = I("code"),
 # ---------------------------------------------------------------- the pipeline (INFRA-09, INFRA-10)
 
 test_that("`{\"n\":3}` without the required `code` is an error result; nothing runs (INFRA-09)", {
-  skip_on_cran()
   local_permissive()
   ran = new.env()
   ran$yes = FALSE
@@ -28,7 +27,6 @@ test_that("`{\"n\":3}` without the required `code` is an error result; nothing r
 })
 
 test_that("arguments that failed the final JSON parse are an error result", {
-  skip_on_cran()
   local_permissive()
   local_tool("r", function(input, ctx) "x", parameters = code_schema)
   x = dispatch(test_session(), list(tc("r", list(INVALID_JSON = "{\"code\": \"1 +"))))
@@ -36,7 +34,6 @@ test_that("arguments that failed the final JSON parse are an error result", {
 })
 
 test_that("a length or refusal stop fails every call unrun (INFRA-09)", {
-  skip_on_cran()
   local_permissive()
   ran = new.env()
   ran$n = 0L
@@ -55,7 +52,6 @@ test_that("a length or refusal stop fails every call unrun (INFRA-09)", {
 })
 
 test_that("an unknown tool is an error result", {
-  skip_on_cran()
   local_permissive()
   x = dispatch(test_session(), list(tc("nope")))
   expect_identical(msg_text(x$msgs[[1L]]), "Tool nope not found")
@@ -95,7 +91,6 @@ test_that("throw, warn-as-error, time limit and interrupt give paired events (IN
 })
 
 test_that("tool_call hooks block, modify, and fail closed", {
-  skip_on_cran()
   local_permissive()
   seen = new.env()
   local_tool("echo", function(input, ctx) {
@@ -115,7 +110,6 @@ test_that("tool_call hooks block, modify, and fail closed", {
 })
 
 test_that("a throwing tool_call hook blocks the call (fail closed)", {
-  skip_on_cran()
   local_permissive()
   local_tool("echo", function(input, ctx) "ran")
   local_hook("tool_call", function(event, ctx) stop("hook bug"))
@@ -124,7 +118,6 @@ test_that("a throwing tool_call hook blocks the call (fail closed)", {
 })
 
 test_that("tool_result hooks patch the content; terminate is reported when every result sets it", {
-  skip_on_cran()
   local_permissive()
   local_tool("add", function(input, ctx) "2")
   local_tool("stopper", function(input, ctx) {
@@ -143,7 +136,6 @@ test_that("tool_result hooks patch the content; terminate is reported when every
 })
 
 test_that("tool_result_message() redacts, truncates, keeps value_ref and never the value", {
-  skip_on_cran()
   local_gptr_options(r_output_tokens = 20L)
   spec = gptr_tool("t", "t", execute = function(input, ctx) NULL)
   res = gptr_tool_result(paste(rep("line of output", 200), collapse = "\n"), value = mtcars)
@@ -155,7 +147,6 @@ test_that("tool_result_message() redacts, truncates, keeps value_ref and never t
 })
 
 test_that("checkpointers wrap sequential mutating calls into one gptr.checkpoint entry", {
-  skip_on_cran()
   local_permissive()
   local_tool("mut", function(input, ctx) "changed")
   local_tool("ro", function(input, ctx) "read", annotations = list(read_only = TRUE))
@@ -176,7 +167,6 @@ test_that("checkpointers wrap sequential mutating calls into one gptr.checkpoint
 })
 
 test_that("session_enqueue() from model code of the same session tree is refused (IC-55)", {
-  skip_on_cran()
   local_permissive()
   local_tool("r", function(input, ctx) {
     session_enqueue(ctx$session, "sneaky", as = "steer", source = "pipe")
@@ -197,7 +187,6 @@ test_that("session_enqueue() from model code of the same session tree is refused
 # ---------------------------------------------------------------- nested calls (03 section 6.8.4)
 
 test_that("dispatch_nested() gates, records and returns the member's value", {
-  skip_on_cran()
   local_permissive()
   local_tool("inner", function(input, ctx) gptr_tool_result("inner ran", value = 42L))
   box = new.env()
@@ -213,7 +202,6 @@ test_that("dispatch_nested() gates, records and returns the member's value", {
 })
 
 test_that("a failing nested member signals gptr_error_tool inside the model's code", {
-  skip_on_cran()
   local_permissive()
   local_tool("inner", function(input, ctx) stop("inner failed"))
   box = new.env()
@@ -229,7 +217,6 @@ test_that("a failing nested member signals gptr_error_tool inside the model's co
 })
 
 test_that("a member listed by the outer call's analysis at an approved level skips the gate", {
-  skip_on_cran()
   checked = new.env()
   checked$names = character()
   local_policy("mode", function(call, ctx) {
@@ -253,7 +240,6 @@ test_that("a member listed by the outer call's analysis at an approved level ski
 })
 
 test_that("a member listed without a numeric level passes the gate", {
-  skip_on_cran()
   checked = new.env()
   checked$names = character()
   local_policy("mode", function(call, ctx) {
@@ -278,13 +264,11 @@ test_that("a member listed without a numeric level passes the gate", {
 })
 
 test_that("outside a run a member simply runs and returns its value", {
-  skip_on_cran()
   local_tool("inner", function(input, ctx) gptr_tool_result("x", value = "direct"))
   expect_identical(dispatch_nested("inner", json_obj(), session_live(test_session())$ctx), "direct")
 })
 
 test_that("an r member declared with fun only runs through the generated execute (04 6.8)", {
-  skip_on_cran()
   local_permissive()
   off = gptr_register(gptr_tool("hello", "Say hi",
                                 parameters = list(type = "object", required = I("name"),
@@ -307,7 +291,6 @@ test_that("an r member declared with fun only runs through the generated execute
 # ---------------------------------------------------------------- permission checks (IC-04, IC-53)
 
 test_that("with no mode policy a mutating tool asks and is blocked without a UI (NS-12)", {
-  skip_on_cran()
   recs = registry_all_recs
   local_mocked_bindings(registry_all_recs = function(kind, session = NULL) {
     Filter(function(r) !identical(r$name, "mode"), recs(kind, session))
@@ -326,7 +309,6 @@ test_that("with no mode policy a mutating tool asks and is blocked without a UI 
 })
 
 test_that("a non-interactive ask call stops blocked with gptr_error_noninteractive (IC-68)", {
-  skip_on_cran()
   local_tool("ask", function(input, ctx) "answered",
              parameters = list(type = "object",
                                properties = list(questions = list(type = "array"))))
@@ -350,7 +332,6 @@ test_that("a non-interactive ask call stops blocked with gptr_error_noninteracti
 })
 
 test_that("policies combine deny > ask_human > ask > modify > allow", {
-  skip_on_cran()
   run = test_run(test_session())
   local_policy("mode", function(call, ctx) list(decision = "allow", reason = "mode"))
   expect_identical(perm_check(a_call(), run)$decision, "allow")
@@ -361,7 +342,6 @@ test_that("policies combine deny > ask_human > ask > modify > allow", {
 })
 
 test_that("a policy reads the state its own extension's hooks wrote (FIX-9)", {
-  skip_on_cran()
   local_tool("echo", function(input, ctx) "ok")
   seen = new.env()
   ext_load(function(gptr) {
@@ -381,7 +361,6 @@ test_that("a policy reads the state its own extension's hooks wrote (FIX-9)", {
 })
 
 test_that("a throwing policy denies", {
-  skip_on_cran()
   run = test_run(test_session())
   local_policy("mode", function(call, ctx) stop("broken policy"))
   dec = perm_check(a_call(), run)
@@ -390,7 +369,6 @@ test_that("a throwing policy denies", {
 })
 
 test_that("a malformed policy answer denies instead of throwing (fail closed)", {
-  skip_on_cran()
   run = test_run(test_session())
   box = new.env()
   box$answer = "yes"
@@ -407,7 +385,6 @@ test_that("a malformed policy answer denies instead of throwing (fail closed)", 
 })
 
 test_that("a modify is re-checked once; a second modify denies", {
-  skip_on_cran()
   run = test_run(test_session())
   local_policy("mode", function(call, ctx) {
     if (identical(call$input$x, 1)) {
@@ -426,7 +403,6 @@ test_that("a modify is re-checked once; a second modify denies", {
 })
 
 test_that("permission_request hooks answer an ask; a hook error denies", {
-  skip_on_cran()
   run = test_run(test_session())
   local_policy("mode", function(call, ctx) list(decision = "ask", reason = "level 2"))
   id = local_hook("permission_request", function(event, ctx) {
@@ -441,7 +417,6 @@ test_that("permission_request hooks answer an ask; a hook error denies", {
 })
 
 test_that("a hook answering allow to an ask_human is ignored (IC-53)", {
-  skip_on_cran()
   run = test_run(test_session())
   local_policy("mode", function(call, ctx) list(decision = "ask_human", reason = "level 4"))
   local_hook("permission_request", function(event, ctx) {
@@ -454,7 +429,6 @@ test_that("a hook answering allow to an ask_human is ignored (IC-53)", {
 })
 
 test_that("gptr.noninteractive_ask = \"deny\" returns a denial the model sees", {
-  skip_on_cran()
   local_gptr_options(noninteractive_ask = "deny")
   local_policy("mode", function(call, ctx) list(decision = "ask", reason = "level 2"))
   run = test_run(test_session())
@@ -465,7 +439,6 @@ test_that("gptr.noninteractive_ask = \"deny\" returns a denial the model sees", 
 })
 
 test_that("the UI answers asks when the run's snapshot can prompt", {
-  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   ui = new.env()
   ui$answer = list(decision = "allow", remember = "session", feedback = NULL)
@@ -496,7 +469,6 @@ test_that("the UI answers asks when the run's snapshot can prompt", {
 })
 
 test_that("an option changed by model code mid-run does not change the run's gate (IC-53)", {
-  skip_on_cran()
   withr::defer(options(gptr.unsafe_no_permissions = NULL))
   local_tool("loosen", function(input, ctx) {
     options(gptr.unsafe_no_permissions = TRUE)
@@ -514,7 +486,6 @@ test_that("an option changed by model code mid-run does not change the run's gat
 })
 
 test_that("a forwarded request is re-classified from its raw input (IC-53)", {
-  skip_on_cran()
   run = test_run(test_session())
   spec = gptr_tool("rm_all", "Delete", execute = function(input, ctx) "x",
                    risk = function(input, ctx) {
@@ -534,7 +505,6 @@ test_that("a forwarded request is re-classified from its raw input (IC-53)", {
 # ---------------------------------------------------------------- never throws, fail closed
 
 test_that("a risk record without a level from 0 to 4 counts as level 3 and never breaks dispatch", {
-  skip_on_cran()
   local_permissive()
   for (bad in list("not a record", list(level = 7L), list(level = NA), list(categories = "x"))) {
     box = new.env()
@@ -551,7 +521,6 @@ test_that("a risk record without a level from 0 to 4 counts as level 3 and never
 })
 
 test_that("an internal failure of the pipeline becomes an error result with paired events", {
-  skip_on_cran()
   local_permissive()
   local_tool("w", function(input, ctx) "written")
   local_mocked_bindings(perm_check = function(call, run) stop("kernel bug"))
@@ -566,7 +535,6 @@ test_that("an internal failure of the pipeline becomes an error result with pair
 })
 
 test_that("a malformed tool result is an error result, directly and nested", {
-  skip_on_cran()
   local_permissive()
   broken = function(input, ctx) {
     structure(list(content = list(block_text("x")), details = "not a list", is_error = FALSE),
@@ -587,7 +555,6 @@ test_that("a malformed tool result is an error result, directly and nested", {
 })
 
 test_that("an interrupted nested call ends its own execution events before the outer call's", {
-  skip_on_cran()
   local_permissive()
   local_tool("spin_inner", function(input, ctx) {
     signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
@@ -611,7 +578,6 @@ test_that("an interrupted nested call ends its own execution events before the o
 })
 
 test_that("a modify answer without a named-list input denies (fail closed)", {
-  skip_on_cran()
   ran = new.env()
   ran$yes = FALSE
   local_tool("w", function(input, ctx) {
@@ -631,7 +597,6 @@ test_that("a modify answer without a named-list input denies (fail closed)", {
 })
 
 test_that("a policy reason that is not one string denies; the request record carries text", {
-  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   ui = new.env()
   local_service("ui.get", function(session = NULL) {
@@ -655,7 +620,6 @@ test_that("a policy reason that is not one string denies; the request record car
 })
 
 test_that("the request record names the asking agent; a nested call by its prompt (D-188)", {
-  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   ui = new.env()
   local_service("ui.get", function(session = NULL) {
@@ -681,7 +645,6 @@ test_that("the request record names the asking agent; a nested call by its promp
 })
 
 test_that("a UI answer that is not a list is not an approval", {
-  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   ui = new.env()
   local_service("ui.get", function(session = NULL) {
@@ -700,7 +663,6 @@ test_that("a UI answer that is not a list is not an approval", {
 })
 
 test_that("a frozen schema of a tool whose parameters are a function follows the frozen array", {
-  skip_on_cran()
   local_permissive()
   local_tool("dyn", function(input, ctx) "ran", parameters = function(ctx) num_schema(a = "number"))
   s = test_session()
@@ -722,7 +684,6 @@ test_that("a frozen schema of a tool whose parameters are a function follows the
 })
 
 test_that("every nested call has its own id; details$nested keeps the first 20", {
-  skip_on_cran()
   local_permissive()
   local_tool("inner", function(input, ctx) gptr_tool_result("x", value = 1L))
   local_tool("outer", function(input, ctx) {
@@ -756,7 +717,6 @@ interrupt_now = function() {
 }
 
 test_that("an interrupt at the permission prompt or in a permission_request hook is recorded", {
-  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   ran = new.env()
   ran$n = 0L
@@ -798,7 +758,6 @@ test_that("an interrupt at the permission prompt or in a permission_request hook
 })
 
 test_that("an interrupt in a tool_result hook says that side effects may have occurred", {
-  skip_on_cran()
   local_permissive()
   local_tool("w", function(input, ctx) "written")
   local_hook("tool_result", function(event, ctx) interrupt_now())
@@ -819,7 +778,6 @@ test_that("an interrupt in a tool_result hook says that side effects may have oc
 })
 
 test_that("a named images list gives an unnamed content list, not a malformed result", {
-  skip_on_cran()
   local_permissive()
   png = as.raw(c(0x89, 0x50, 0x4e, 0x47))
   local_tool("plot", function(input, ctx) gptr_tool_result("a plot", images = list(p1 = png)))
@@ -832,7 +790,6 @@ test_that("a named images list gives an unnamed content list, not a malformed re
 })
 
 test_that("a result the transcript cannot record is an error result with paired events", {
-  skip_on_cran()
   local_permissive()
   local_tool("env", function(input, ctx) {
     gptr_tool_result("ok", details = list(e = new.env(), f = function(x) x))
@@ -869,7 +826,6 @@ test_that("a result the transcript cannot record is an error result with paired 
 # ---------------------------------------------------------------- through runs
 
 test_that("a length stop mid-call gives an error result and done(length) (INFRA-09)", {
-  skip_on_cran()
   local_permissive()
   ran = new.env()
   ran$yes = FALSE
@@ -887,7 +843,6 @@ test_that("a length stop mid-call gives an error result and done(length) (INFRA-
 })
 
 test_that("with no policy a mutating tool asks and the run ends blocked without a human", {
-  skip_on_cran()
   local_tool("w", function(input, ctx) "written")
   fake = local_fake_provider(list(fake_tool("w"), "never"))
   s = test_session(mode = "manual")

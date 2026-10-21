@@ -111,7 +111,6 @@ cp_wait_finished = function(x) {
 }
 
 test_that("a finite public wait yields a deferred checkpoint and a second wait completes it", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Remember the fit.", delay = 0.3,
                                     usage = usage_new(input = 100, output = 5)), "Done."))
@@ -179,7 +178,6 @@ test_that("a finite public wait yields a deferred checkpoint and a second wait c
 })
 
 test_that("cancelling a yielded checkpoint charges unknown once and never appends a summary", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(list(hang = TRUE)))
   short = cp_wait_short(x)
@@ -208,7 +206,6 @@ test_that("cancelling a yielded checkpoint charges unknown once and never append
 })
 
 test_that("a delayed checkpoint error falls back once without retrying the request", {
-  skip_on_cran()
   clock = cp_wait_clock()
   injected = new.env(parent = emptyenv())
   injected$n = 0L
@@ -280,7 +277,6 @@ test_that("a delayed checkpoint error falls back once without retrying the reque
 })
 
 test_that("a yielded empty checkpoint retries once and preserves both known charges", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("", delay = 0.3,
                                     usage = usage_new(input = 100, output = 5)),
@@ -367,7 +363,6 @@ test_that("a yielded empty checkpoint retries once and preserves both known char
 })
 
 test_that("a yielded checkpoint consumes its request budget before a retry can start", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("", delay = 0.3,
                                     usage = usage_new(input = 100, output = 5)),
@@ -389,7 +384,6 @@ test_that("a yielded checkpoint consumes its request budget before a retry can s
 })
 
 test_that("an overflow checkpoint yields and resumes the same ordinary request once", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(list(overflow = TRUE),
                           fake_text("Useful summary.", delay = 0.3), "Done."), should = FALSE)
@@ -468,7 +462,6 @@ test_that("an overflow checkpoint yields and resumes the same ordinary request o
 })
 
 test_that("a yielded checkpoint without metering stays unknown after durable reconstruction", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Done."))
   original = provider_stream
@@ -522,7 +515,6 @@ test_that("a yielded checkpoint without metering stays unknown after durable rec
 })
 
 test_that("a yielded checkpoint leaves all caller state intact across both waits", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Done."))
   snapshot = function() {
@@ -575,7 +567,6 @@ test_that("a yielded checkpoint leaves all caller state intact across both waits
 })
 
 test_that("a pending checkpoint keeps served R disabled until its owning run completes", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Done."))
   short = cp_wait_short(x)
@@ -602,7 +593,6 @@ test_that("a pending checkpoint keeps served R disabled until its owning run com
 })
 
 test_that("malformed hook and custom results fall back once across deferred waits", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Done."))
   seen = new.env(parent = emptyenv())
@@ -696,7 +686,6 @@ test_that("malformed hook and custom results fall back once across deferred wait
 })
 
 test_that("a compaction hook cancellation remains a completed no-op at the boundary", {
-  skip_on_cran()
   x = cp_wait_fixture(list("Done."))
   off = gptr_register(gptr_hook("session_before_compact", function(event, ctx) {
     list(cancel = TRUE)
@@ -732,7 +721,6 @@ test_that("aborting before a checkpoint starts preserves the zero-charge boundar
 })
 
 test_that("a deferred checkpoint accounting failure cannot start an ordinary request", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3), "Must not start."))
   short = cp_wait_short(x)
@@ -763,7 +751,6 @@ test_that("a deferred checkpoint accounting failure cannot start an ordinary req
 })
 
 test_that("manual compaction on an active session completes without an orphan continuation", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Ordinary answer.", delay = 0.5,
                                     usage = usage_new(input = 30, output = 3)),
@@ -871,7 +858,6 @@ test_that("manual compaction on an active session completes without an orphan co
 })
 
 test_that("a manual command cannot replace a yielded automatic checkpoint", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Useful summary.", delay = 0.3,
                                     usage = usage_new(input = 100, output = 5)), "Done."))
@@ -953,7 +939,6 @@ test_that("a manual command cannot replace a yielded automatic checkpoint", {
 })
 
 test_that("an admitted stuck checkpoint still aborts under its independent completion guard", {
-  skip_on_cran()
   cp_wait_clock()
   x = cp_wait_fixture(list(fake_text("Must not finish.", hang = TRUE)))
   startup_started = reactor_now()
@@ -1008,7 +993,6 @@ test_that("an admitted stuck checkpoint still aborts under its independent compl
 })
 
 test_that("the offline overflow completion guard aborts at its unchanged deadline", {
-  skip_on_cran()
   clock = cp_wait_clock()
   x = cp_wait_fixture(list(list(overflow = TRUE), list(hang = TRUE)), should = FALSE)
   reactor_pump(until = function() length(fake_requests(x$fake)) >= 2L || x$run$settled,
@@ -1050,7 +1034,6 @@ test_that("the offline overflow completion guard aborts at its unchanged deadlin
 })
 
 test_that("the offline empty checkpoint completion guard aborts at its unchanged deadline", {
-  skip_on_cran()
   clock = cp_wait_clock()
   x = cp_wait_fixture(list(list(hang = TRUE)))
   reactor_pump(until = function() length(fake_requests(x$fake)) >= 1L || x$run$settled,

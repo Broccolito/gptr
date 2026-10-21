@@ -79,7 +79,6 @@ artifact_capture_run = function(probe, server_error = character()) {
 }
 
 test_that("screenshot errors retain collected page state and close the exact session", {
-  skip_on_cran()
   original = simpleError("synthetic screenshot timeout")
   probe = artifact_capture_probe(function() stop(original),
     errors = list(list(id = "plot", message = "synthetic output failure")),
@@ -113,7 +112,6 @@ test_that("clean page validation reports a missing screenshot without claiming H
 })
 
 test_that("screenshot failures retain output JavaScript server and disconnect errors", {
-  skip_on_cran()
   probe = artifact_capture_probe(function() stop("synthetic screenshot timeout"),
     errors = list(list(id = "plot", message = "synthetic output failure")),
     js = "synthetic JavaScript failure", disconnected = TRUE)
@@ -131,7 +129,6 @@ test_that("screenshot failures retain output JavaScript server and disconnect er
 })
 
 test_that("screenshot interrupts and navigation errors preserve their original boundary", {
-  skip_on_cran()
   original = structure(list(message = "synthetic screenshot interrupt", call = NULL),
     class = c("synthetic_interrupt", "interrupt", "condition"))
   probe = artifact_capture_probe(function() stop(original))

@@ -2968,10 +2968,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   each ordinary test file once ...", "each required Windows context gates ...", "the hosted jobs have time for
   the whole suite (CI-19)".
 
-## D-240 - Tests: CRAN runs the fast blocks (2026-10-20)
-- Rule: with `NOT_CRAN` unset, a `test_that()` block starts with `skip_on_cran()` when it took 25 ms or more in a
-  local CRAN-mode run or 50 ms or more on GitHub's windows-latest (R-devel or R-release), except each file's fastest
-  block; in the `perm-*`, `auth-redact` and `auth-secrets` files only blocks of 500 ms or more on Windows skip.
-  GitHub Actions runs the whole suite. win-builder needed 13 to 29 minutes for the CRAN-mode tests before this rule
-  and 6 with the local cut alone, against CRAN's 10-minute check budget.
-- Tests: tests/testthat (2,589 blocks in 170 files; a loop's blocks skip together).
+## D-240 - Tests: CRAN runs a fixed list of fast tests (2026-10-20)
+- Rule: with `NOT_CRAN` not `"true"`, `tests/testthat.R` runs only a fixed list of 65 test files: the `perm-*`,
+  `auth-redact` and `auth-secrets` files and those keeping more than five running blocks under the block rule. In
+  those files a `test_that()` block starts with `skip_on_cran()` when it took 25 ms or more in a local CRAN-mode run
+  or 50 ms or more on GitHub's windows-latest (R-devel or R-release), except the file's fastest block; in the
+  security files only blocks of 500 ms or more on Windows skip. GitHub Actions runs the whole suite. win-builder
+  needed 13 to 29 minutes for the CRAN-mode tests before this rule and 3.3 with the block rule alone, which left the
+  whole check at CRAN's 10-minute budget, because skipped blocks and sourced files still cost time.
+- Tests: tests/testthat.R (the list); 1,183 block skips in the listed files.

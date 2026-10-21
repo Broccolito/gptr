@@ -1,5 +1,4 @@
 test_that("url helpers split URLs; hdr_value reads headers case-insensitively", {
-  skip_on_cran()
   u = url_parse("https://Example.org:8443/a/b?x=1&y=2")
   expect_identical(u$scheme, "https")
   expect_identical(u$host, "example.org")
@@ -16,7 +15,6 @@ test_that("url helpers split URLs; hdr_value reads headers case-insensitively", 
 })
 
 test_that("form and query encoding round-trip", {
-  skip_on_cran()
   expect_identical(form_encode(list(a = "x y", b = NULL, c = "p&q=r")), "a=x%20y&c=p%26q%3Dr")
   q = query_parse("?code=abc&state=s%201&iss=https%3A%2F%2Fas.example&empty")
   expect_identical(q$code, "abc")
@@ -80,7 +78,6 @@ test_that("the authorization URL carries PKCE, state and the resource", {
 })
 
 test_that("redirects are checked for target, state and iss before the code is used", {
-  skip_on_cran()
   redirect = "http://127.0.0.1:50000/callback"
   iss = "https://as.example"
   ok = paste0(redirect, "?code=abc&state=st&iss=https%3A%2F%2Fas.example")
@@ -127,7 +124,6 @@ test_that("lock_with() serialises, waits for a live holder and breaks stale lock
 })
 
 test_that("encoding keeps percent signs, padding and malformed escapes; fields match exactly", {
-  skip_on_cran()
   expect_identical(form_encode(list(v = "50%25")), "v=50%2525")
   expect_identical(form_encode(list(a = NULL)), "")
   q = query_parse("x=abc==&&y=a%")
@@ -260,7 +256,6 @@ test_that("protected-resource metadata naming another resource is refused (RFC 9
 })
 
 test_that("key entry stores an API key; gptr_logout() removes it; no person means no login", {
-  skip_on_cran()
   local_user_dirs()
   key = paste0("sk-or-v1-", "testkeyabcdefghijklmnopqrstuv")
   local_scripted_ui(list(key))
@@ -297,7 +292,6 @@ test_that("the OpenRouter-style PKCE key exchange stores the returned key", {
 })
 
 test_that("without httpuv and later the redirect is pasted, iss included", {
-  skip_on_cran()
   skip_if(!length(find.package("openssl", quiet = TRUE, verbose = FALSE)),
     "openssl is not installed")
   local_mocked_bindings(oauth_loopback_ok = function() FALSE)

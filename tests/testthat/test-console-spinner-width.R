@@ -5,7 +5,6 @@ spinner_tick_output = function(sp) {
 }
 
 test_that("dynamic spinner frames fit and erase the current row at narrow widths", {
-  skip_on_cran()
   withr::local_options(cli.dynamic = TRUE, cli.unicode = FALSE, cli.num_colors = 1L)
   local_mocked_bindings(front_end = function() "terminal")
   sp = console_spinner()

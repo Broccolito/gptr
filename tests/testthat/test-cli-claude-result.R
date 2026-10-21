@@ -2,7 +2,6 @@
 source(testthat::test_path("fixtures", "cli", "local-fake-cli.R"), local = TRUE)
 
 test_that("a success subtype with an API error reports the failure and its result detail", {
-  skip_on_cran()
   cases = list(
     list(status = 429L, class = "rate_limit", label = "rate limit"),
     list(status = 401L, class = "auth", label = "authentication"),
@@ -61,7 +60,6 @@ test_that("a successful result remains a successful turn", {
 })
 
 test_that("a resumed CLI session's total_cost_usd costs its increase; a fresh one counts whole", {
-  skip_on_cran()
   local_fake_cli_path("claude", "text")
   local_mocked_bindings(pcli_probe = function(path) list(bare_optout = NULL),
                         pcli_notice = function(cli) invisible(NULL),

@@ -2,7 +2,6 @@
 # layers, the resolver, defaults, explicit refresh and gptr_models().
 
 test_that("the shipped snapshot has the documented structure (04 section 11.10)", {
-  skip_on_cran()
   path = system.file("extdata", "models.json.gz", package = "gptr")
   expect_true(nzchar(path))
   expect_lt(file.size(path), 1e6)
@@ -26,7 +25,6 @@ test_that("the shipped snapshot has the documented structure (04 section 11.10)"
 })
 
 test_that("models.dev entries are pruned and converted; overrides only patch", {
-  skip_on_cran()
   api = list(
     anthropic = list(id = "anthropic", env = list("ANTHROPIC_API_KEY"), models = list(
       `claude-sonnet-5-5` = list(
@@ -74,7 +72,6 @@ test_that("models.dev entries are pruned and converted; overrides only patch", {
 })
 
 test_that("native decisions bypass chat pruning and retain typed IC-74 metadata", {
-  skip_on_cran()
   decision = list(
     id = "ollama/clef-flash", name = "Clef Flash", type = "decision", tool_call = FALSE,
     capabilities = list(decision = TRUE, tools = FALSE, vision = TRUE),
@@ -115,7 +112,6 @@ test_that("native decisions bypass chat pruning and retain typed IC-74 metadata"
 })
 
 test_that("decision-only snapshots and offline Clef seeds do not claim availability", {
-  skip_on_cran()
   decision = list(id = "ollama/fixture", type = "decision",
                    modalities = list(input = list("text", "image")))
   snap = catalog_snapshot(decision = list(decision), generated = "2026-10-03")
@@ -134,7 +130,6 @@ test_that("decision-only snapshots and offline Clef seeds do not claim availabil
 })
 
 test_that("chat catalog conversion retains locality markers and configured context", {
-  skip_on_cran()
   chat = list(id = "qwen3:1.7b", tool_call = TRUE,
                modalities = list(input = list("text"), output = list("text")),
                capabilities = list(tools = TRUE), digest = "sha256:chat-fixture",
@@ -215,7 +210,6 @@ local_catalog = function(models = fx_models(), .env = parent.frame()) {
 }
 
 test_that("references resolve: exact, alias, family, normalised, owner, thinking", {
-  skip_on_cran()
   local_catalog()
   expect_equal(model_resolve("anthropic/claude-sonnet-5-5")$ref, "anthropic/claude-sonnet-5-5")
   expect_equal(model_resolve("sonnet")$ref, "anthropic/claude-sonnet-5-5")
@@ -238,7 +232,6 @@ test_that("references resolve: exact, alias, family, normalised, owner, thinking
 })
 
 test_that("a model record has every contract field (04 section 4.9)", {
-  skip_on_cran()
   local_catalog()
   r = model_resolve("sonnet")
   expect_named(r, c("ref", "provider", "id", "name", "family", "api", "type", "release_date",
@@ -263,7 +256,6 @@ test_that("a model record has every contract field (04 section 4.9)", {
 })
 
 test_that("unknown references fail with suggestions, or NULL when not strict", {
-  skip_on_cran()
   local_catalog()
   err = expect_error(model_resolve("claude-sonet-5-5"), class = "gptr_error_unknown_model")
   expect_true("claude-sonnet-5-5" %in% err$suggestions)
@@ -276,7 +268,6 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
 })
 
 test_that("a reference that names a provider gets suggestions from that provider only (#44)", {
-  skip_on_cran()
   local_catalog()
   ids = paste0("gpt-5.6-", c("sol", "luna", "terra"), "-2026-07-09")
   off = gptr_register(gptr_provider("versa", api = "openai-responses",
@@ -290,7 +281,6 @@ test_that("a reference that names a provider gets suggestions from that provider
 })
 
 test_that("a provider named alone means its first model; alias separators match (IC-19)", {
-  skip_on_cran()
   for (ref in c("claude-cli", "claude_code", "claude-code", "Claude-Code")) {
     expect_identical(model_resolve(ref)$ref, "claude-cli/default", label = ref)
   }
@@ -306,7 +296,6 @@ test_that("a provider named alone means its first model; alias separators match 
 })
 
 test_that("local providers accept unknown ids; a provider added by data resolves (INFRA-17)", {
-  skip_on_cran()
   local_catalog()
   qwen = model_resolve("ollama/qwen3.5:9b:high")
   expect_equal(qwen$id, "qwen3.5:9b")
@@ -333,7 +322,6 @@ test_that("local providers accept unknown ids; a provider added by data resolves
 })
 
 test_that("user configuration is a merge layer above the snapshot", {
-  skip_on_cran()
   local_catalog()
   local_settings(providers = list(anthropic = list(models = list(
     list(id = "claude-sonnet-5-5", context = 2e6)
@@ -343,7 +331,6 @@ test_that("user configuration is a merge layer above the snapshot", {
 })
 
 test_that("a bare id of several providers goes to the one with a credential, then the owner", {
-  skip_on_cran()
   local_catalog()
   local_mocked_bindings(model_key_present = function(id, vars) FALSE)
   expect_equal(model_resolve("claude-opus-5-5")$ref, "anthropic/claude-opus-5-5")
@@ -359,7 +346,6 @@ test_that("a bare id of several providers goes to the one with a credential, the
 })
 
 test_that("a model registered as a `model` spec joins the catalog (04 section 10.2 row 3)", {
-  skip_on_cran()
   local_catalog()
   off = gptr_register(gptr_spec("model", "anthropic/claude-lab-1", label = "Claude Lab 1",
                                 family = "claude-lab", context = 4096, status = "preview"))
@@ -372,7 +358,6 @@ test_that("a model registered as a `model` spec joins the catalog (04 section 10
 })
 
 test_that("a fake provider used only as a session's spec still resolves by reference", {
-  skip_on_cran()
   local_catalog()
   fake = gptr_fake_provider(list("hi"), name = "p05fake")
   m = model_resolve("p05fake/p05fake-1")
@@ -386,7 +371,6 @@ test_that("a fake provider used only as a session's spec still resolves by refer
 
 
 test_that("mixed provider models resolve their own native route and typed metadata", {
-  skip_on_cran()
   local_catalog()
   entry = list(id = "clef-test", type = "classifier", api = "ollama-system-one",
                  tool_call = FALSE, decision = list(types = c("noul", "choice", "score"),
@@ -412,7 +396,6 @@ test_that("mixed provider models resolve their own native route and typed metada
 })
 
 test_that("unknown Ollama model names never grant tools vision or configured capacity", {
-  skip_on_cran()
   local_catalog()
   model = model_resolve("ollama/unknown-model:7b")
   expect_false(model$tool_call)
@@ -441,7 +424,6 @@ test_that("credential presence checks do not register store values or query keyr
 })
 
 test_that("pure resolution does not invoke provider discovery and rejects malformed capabilities", {
-  skip_on_cran()
   local_catalog()
   off = gptr_register(gptr_provider("pure-local", api = "openai-completions", local = TRUE,
     base_url = "http://127.0.0.1:1234/v1", discover = function() stop("unexpected discovery"),
@@ -460,7 +442,6 @@ test_that("pure resolution does not invoke provider discovery and rejects malfor
 # discovery and request preflight (IC-74, 07-local-ollama.md sections 2 and 2.1) -----------------
 
 test_that("catalog HTTP GET uses the reactor and preserves status headers and bytes", {
-  skip_on_cran()
   local_mocked_bindings(
     reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL,
                             run = NULL, provider = NULL, retry = NULL) {
@@ -507,7 +488,6 @@ test_that("catalog HTTP supports metadata POST and HTTP error status", {
 })
 
 test_that("catalog HTTP cancels only its own transfer on timeout, interrupt or oversize", {
-  skip_on_cran()
   cancelled = character()
   local_mocked_bindings(
     reactor_http = function(...) "catalog-owned",
@@ -586,7 +566,6 @@ test_that("catalog_http_request() runs on the real reactor against loopback fixt
 })
 
 test_that("a loopback server's listed models join the catalog only on request", {
-  skip_on_cran()
   local_catalog()
   local_mocked_bindings(
     check_running = function() FALSE,
@@ -608,7 +587,6 @@ test_that("a loopback server's listed models join the catalog only on request", 
 })
 
 test_that("gptr_models() searches the catalog and lists prices in force", {
-  skip_on_cran()
   local_catalog()
   df = gptr_models("sonnet")
   expect_s3_class(df, "gptr_models")
@@ -626,7 +604,6 @@ test_that("gptr_models() searches the catalog and lists prices in force", {
 })
 
 test_that("model_default() follows the settings, then the first available key", {
-  skip_on_cran()
   local_catalog()
   local_mocked_bindings(secret_lookup = function(name) NULL, auth_store_get = function(key) NULL,
                         auth_store_read = function() list(),
@@ -657,7 +634,6 @@ test_that("model_default() skips providers disabled in the settings", {
 })
 
 test_that("a detected subscription CLI is the last default route", {
-  skip_on_cran()
   local_catalog()
   local_mocked_bindings(model_key_present = function(id, vars) FALSE)
   off = gptr_register(gptr_provider("claude-cli", api = "cli-claude", type = "cli",
@@ -671,7 +647,6 @@ test_that("a detected subscription CLI is the last default route", {
 })
 
 test_that("an explicit refresh revalidates with the ETag and caches in R_user_dir", {
-  skip_on_cran()
   dir = local_catalog()
   api = list(anthropic = list(id = "anthropic", models = list(`claude-sonnet-6` = list(
     id = "claude-sonnet-6", name = "Claude Sonnet 6", family = "claude-sonnet", reasoning = TRUE,
@@ -704,7 +679,6 @@ test_that("an explicit refresh revalidates with the ETag and caches in R_user_di
 })
 
 test_that("resolution is offline: builtins and gptr_models('sonnet') start no transfer", {
-  skip_on_cran()
   count = new.env()
   count$transfers = 0L
   local_mocked_bindings(reactor_http = function(...) {
@@ -806,7 +780,6 @@ local_ollama_server = function(models = ollama_fixture(), version = "0.35.1",
 }
 
 test_that("native Ollama discovery reads version, tags and show only on explicit request", {
-  skip_on_cran()
   local_catalog()
   srv = local_ollama_server()
   expect_equal(nrow(gptr_models(provider = "ollama")), 0L)
@@ -863,7 +836,6 @@ test_that("native Ollama discovery reads version, tags and show only on explicit
 })
 
 test_that("provider_preflight() is pure and passes other providers' models through", {
-  skip_on_cran()
   local_catalog()
   local_mocked_bindings(catalog_http_request = function(...) stop("preflight did I/O"),
                         reactor_http = function(...) stop("preflight started a transfer"))
@@ -882,7 +854,6 @@ test_that("provider_preflight() is pure and passes other providers' models throu
 })
 
 test_that("catalog fields, model specs and settings cannot self-attest local execution", {
-  skip_on_cran()
   local_catalog()
   local_mocked_bindings(catalog_http_request = function(...) stop("no request expected"))
   claimed = list(id = "qwen3:1.7b", type = "chat", tool_call = TRUE, locality = "local",
@@ -910,7 +881,6 @@ test_that("catalog fields, model specs and settings cannot self-attest local exe
 })
 
 test_that("preflight checks evidence: locality, decision capability and server version", {
-  skip_on_cran()
   local_catalog()
   srv = local_ollama_server()
   gptr_models(provider = "ollama", refresh = TRUE)
@@ -954,7 +924,6 @@ test_that("preflight checks evidence: locality, decision capability and server v
 })
 
 test_that("discovery evidence is bound to endpoint, path, registry lifecycle and identity", {
-  skip_on_cran()
   local_catalog()
   srv = local_ollama_server()
   gptr_models(provider = "ollama", refresh = TRUE)
@@ -999,7 +968,6 @@ test_that("discovery evidence is bound to endpoint, path, registry lifecycle and
 })
 
 test_that("only the protected safety record relaxes local-only; settings and models cannot", {
-  skip_on_cran()
   local_catalog()
   srv = local_ollama_server()
   gptr_models(provider = "ollama", refresh = TRUE)
@@ -1029,7 +997,6 @@ test_that("only the protected safety record relaxes local-only; settings and mod
 })
 
 test_that("model_prepare() discovers only missing or stale evidence and fails before egress", {
-  skip_on_cran()
   local_catalog()
   srv = local_ollama_server()
   root = "http://127.0.0.1:11434"
@@ -1071,7 +1038,6 @@ test_that("model_prepare() discovers only missing or stale evidence and fails be
 })
 
 test_that("model_default('system1') uses a verified local classifier without discovering", {
-  skip_on_cran()
   local_catalog()
   srv = local_ollama_server()
   local_mocked_bindings(model_key_present = function(id, vars) FALSE)
@@ -1096,7 +1062,6 @@ test_that("model_default('system1') uses a verified local classifier without dis
 })
 
 test_that("a bare catalog name prepared through its :latest evidence costs nothing locally", {
-  skip_on_cran()
   # the shipped snapshot describes ollama/clef-flash by its bare name (no price, no locality)
   bare = list(provider = "ollama", id = "clef-flash", name = "Clef Flash", family = "clef",
               type = "classifier", api = "ollama-system-one", locality = "unknown",
@@ -1126,7 +1091,6 @@ test_that("a bare catalog name prepared through its :latest evidence costs nothi
 })
 
 test_that("usage rows price a bare local model through the same evidence (P05 Task 9)", {
-  skip_on_cran()
   # IC-74 (07 section 5): local usage records a zero metered API charge. The row applies the
   # request's pure preflight to the resolved record; without current evidence it stays unknown.
   bare = list(provider = "ollama", id = "clef-flash", name = "Clef Flash", family = "clef",
@@ -1167,7 +1131,6 @@ test_that("usage rows price a bare local model through the same evidence (P05 Ta
 })
 
 test_that("a model /api/show cannot describe does not hide the others or blame the server", {
-  skip_on_cran()
   local_catalog()
   srv = local_ollama_server()
   srv$slow = "clef-flash:latest"

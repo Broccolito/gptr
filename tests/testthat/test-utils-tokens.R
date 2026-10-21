@@ -15,7 +15,6 @@ test_that("est_tokens() is within 15% median absolute error on the fixture (05 P
 })
 
 test_that("est_tokens() uses the class constants and the non-ASCII weights", {
-  skip_on_cran()
   expect_identical(est_tokens(strrep("a", 436), "prose"), 100)
   expect_identical(est_tokens(strrep("a", 213), "r_output"), 100)
   expect_identical(est_tokens(strrep("\u4e2d", 100), "prose"), ceiling(84.8))
@@ -68,7 +67,6 @@ test_that("est_multiplier() updates by EWMA only for large enough estimates", {
 })
 
 test_that("image dimensions reject non-finite and complex values with typed errors", {
-  skip_on_cran()
   for (value in list(Inf, -Inf, NaN, NA_real_, 1 + 1i)) {
     for (api in c("anthropic", "openai-responses", "google-generative-ai")) {
       expect_error(est_image_tokens(value, 512, api), class = "gptr_error_invalid_argument")
@@ -78,7 +76,6 @@ test_that("image dimensions reject non-finite and complex values with typed erro
 })
 
 test_that("non-finite or complex usage cannot corrupt estimator calibration", {
-  skip_on_cran()
   state = list(m = 1.35, n = 2L)
   for (value in list(Inf, -Inf, NaN, NA_real_, 1 + 1i)) {
     expect_identical(est_multiplier(state, value, 1000), state)
@@ -88,7 +85,6 @@ test_that("non-finite or complex usage cannot corrupt estimator calibration", {
 })
 
 test_that("new estimator calibration requires a positive finite real prior", {
-  skip_on_cran()
   for (prior in list(Inf, -Inf, NaN, NA_real_, 1 + 1i, 0, -1, c(1, 2))) {
     expect_error(est_multiplier(NULL, 1000, 1000, prior),
                  class = "gptr_error_invalid_argument")

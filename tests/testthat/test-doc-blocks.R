@@ -10,7 +10,6 @@ text_loc = function(lines, k, ph) {
 }
 
 test_that("header key=value pairs round-trip in contract order with quoting", {
-  skip_on_cran()
   x = list(turn = 2L, model = "fake/fake-1", prompt = "3b1c9a0e77d2", value = "a b",
            children = "stats:s1,code:s2", date = "2026-09-29", extra = "z")
   s = doc_format_kv(x)
@@ -31,7 +30,6 @@ test_that("header key=value pairs round-trip in contract order with quoting", {
 })
 
 test_that("quoted header values are decoded on their bytes, also in a C locale", {
-  skip_on_cran()
   withr::local_locale(c(LC_CTYPE = "C"))
   x = list(value = "r\u00e9sum\u00e9 x", children = "an\u00e1lisis:s1")
   expect_identical(doc_parse_kv(doc_format_kv(x)), x)
@@ -47,7 +45,6 @@ test_that("quoted header values are decoded on their bytes, also in a C locale",
 })
 
 test_that("blocks are found with ids, ranges, indentation and headers; bad markers flagged", {
-  skip_on_cran()
   lines = c("x = 1", "peter(\"a\")", "# >>> gptr:7f3a21 model=m date=d prompt=p", "y = 2",
             "# <<< gptr:7f3a21", "  # >>> gptr:0b1c2d model=m", "  z = 3", "  # <<< gptr:0b1c2d")
   b = doc_find_blocks(lines)
@@ -66,7 +63,6 @@ test_that("blocks are found with ids, ranges, indentation and headers; bad marke
 })
 
 test_that("prompt_hash() reproduces report 14's values and args_hash() is order-free", {
-  skip_on_cran()
   expect_identical(prompt_hash("step one"), "52831d1d544e")
   expect_identical(prompt_hash("step two"), "078c44630410")
   expect_identical(prompt_hash("count letters in this prompt"), "3848b6ef5cca")
@@ -81,7 +77,6 @@ test_that("prompt_hash() reproduces report 14's values and args_hash() is order-
 })
 
 test_that("the body sha ignores steering lines and drives user-edited detection", {
-  skip_on_cran()
   body = c("n = 1", "## Steer: use TPM", "#> [1] 1")
   expect_identical(doc_body_sha(body), doc_body_sha(c("n = 1", "#> [1] 1")))
   h = list(prompt = "p", sha = doc_body_sha(body))
@@ -111,7 +106,6 @@ test_that("rendering indents body lines, keeps empty lines and splices in place"
 })
 
 test_that("the scanner finds top-level and nested calls, prompts and pipeline ordinals", {
-  skip_on_cran()
   lines = c("x = 1:3", "peter(\"count the letters\")", "res = peter(", "  \"a multi-line",
             "   prompt\"", ")", "x |> peter(\"piped prompt\")",
             "peter(\"step one\") |> peter(\"step two\")",
@@ -138,7 +132,6 @@ test_that("the scanner finds top-level and nested calls, prompts and pipeline or
 })
 
 test_that("calls know their block, block-nested ordinal, prompt hash and identity", {
-  skip_on_cran()
   lines = c("peter(\"outer\")", "# >>> gptr:7f3a21 model=m prompt=p", "sub = peter(\"inner\")",
             "for (i in 1) peter(\"deep\")", "sub2 = peter(\"inner two\")", "# <<< gptr:7f3a21",
             "peter(paste(\"dyn\", x))")
@@ -153,7 +146,6 @@ test_that("calls know their block, block-nested ordinal, prompt hash and identit
 })
 
 test_that("ownership picks the block by prompt, else by call ordinal (stale), else inserts", {
-  skip_on_cran()
   lines = c("peter(\"step one\") |> peter(\"step two\")",
             "# >>> gptr:aaaaaa model=m prompt=52831d1d544e", "a = 1", "# <<< gptr:aaaaaa", "",
             "# >>> gptr:bbbbbb model=m prompt=0000000000ff call=2", "b = 2", "# <<< gptr:bbbbbb",
@@ -171,7 +163,6 @@ test_that("ownership picks the block by prompt, else by call ordinal (stale), el
 })
 
 test_that("a prompt repeated in one pipeline never takes another call's block", {
-  skip_on_cran()
   ph = prompt_hash("improve it")
   lines = c("peter(\"draft\") |> peter(\"improve it\") |> peter(\"improve it\")",
             paste0("# >>> gptr:aaaaaa model=m prompt=", prompt_hash("draft")), "a = 1",
@@ -192,7 +183,6 @@ test_that("a prompt repeated in one pipeline never takes another call's block", 
 })
 
 test_that("anchors re-locate a call by content after lines move", {
-  skip_on_cran()
   lines = c("x = 1", "peter(\"same\")", "peter(\"same\")", "peter(\"other\")")
   calls = doc_calls(lines)
   a = doc_anchor_of(calls, calls[2, ])
@@ -211,7 +201,6 @@ test_that("anchors re-locate a call by content after lines move", {
 })
 
 test_that("doc_text_locate() reports the owned block's status and block-nested calls", {
-  skip_on_cran()
   ph = prompt_hash("count rows")
   body = "n = nrow(mtcars)"
   lines = c("  peter(\"count rows\")",
@@ -244,7 +233,6 @@ test_that("doc_stmt_by_expr() finds the k-th identical top-level expression", {
 })
 
 test_that("non-ASCII prompts and call texts keep their bytes in a C locale (IC-62)", {
-  skip_on_cran()
   withr::local_locale(c(LC_CTYPE = "C"))
   p = "caf\u00e9 \u00e1"
   call_text = paste0("peter(", doc_str_literal(p), ")")
@@ -263,7 +251,6 @@ test_that("non-ASCII prompts and call texts keep their bytes in a C locale (IC-6
 })
 
 test_that("the scanner remembers the 16 most recently used long texts and shifts lines", {
-  skip_on_cran()
   old = the$doc_pending
   withr::defer(assign("doc_pending", old, envir = the))
   the$doc_pending = NULL
@@ -281,7 +268,6 @@ test_that("the scanner remembers the 16 most recently used long texts and shifts
 })
 
 test_that("ownership matches header keys exactly and never a missing prompt hash", {
-  skip_on_cran()
   bare = c("peter(q)", "# >>> gptr:aaaaaa model=m", "a = 1", "# <<< gptr:aaaaaa")
   expect_identical(text_loc(bare, 1L, NA_character_)$owned$status, "stale")
   lines = c("peter(\"a\") |> peter(\"b\")",
@@ -293,7 +279,6 @@ test_that("ownership matches header keys exactly and never a missing prompt hash
 })
 
 test_that("the scanner keeps parse data where the caller turned it off (sys.source())", {
-  skip_on_cran()
   withr::local_options(keep.parse.data = FALSE)
   expect_identical(doc_scan_calls(c("x = 1", "peter(\"kept\")"))$prompt, "kept")
   expect_false(getOption("keep.parse.data"))
@@ -307,7 +292,6 @@ test_that("the scanner keeps parse data where the caller turned it off (sys.sour
 })
 
 test_that("a computed prompt = is the prompt, never a later unnamed literal (contract 6.1.1)", {
-  skip_on_cran()
   lines = c("peter(prompt = p, \"context text\")", "peter(\"x\", prompt = NULL)",
             "peter(prompt = , q, \"y\")", "peter(`prompt` = p, \"z\")",
             "peter(\"v\", \"prompt\" = \"w\")", "peter(\"u\", prompt = \"t\")")
@@ -320,7 +304,6 @@ test_that("a computed prompt = is the prompt, never a later unnamed literal (con
 })
 
 test_that("call texts and long prompt literals are cut right in UTF-8 and C locales (IC-62)", {
-  skip_on_cran()
   e = "\u00e9"
   long = strrep(paste0("d", e, "j\u00e0 vu "), 150L)
   lines = c(paste0("peter(\"r", e, "sum", e, "\") |> peter(paste(\"next\", x))"),
@@ -356,7 +339,6 @@ test_that("call texts and long prompt literals are cut right in UTF-8 and C loca
 })
 
 test_that("a piped call is found as R calls it; a literal left side is the prompt (6.1.1)", {
-  skip_on_cran()
   lines = c("x = 1; y = \"a\"; q = \"count rows\"; d = data.frame(a = 1)",
             "x |> peter(paste(\"dyn\", y))", "d |> peter(q)", "\"Summarise mtcars\" |> peter()",
             "x |> peter(q) |> peter(paste(\"next\", y))", "\"ctx\" |> peter(\"p\", ctx = _)",
@@ -426,7 +408,6 @@ test_that("calls holding function literals or braces are found under keep.source
 })
 
 test_that("a magrittr-piped call is found as magrittr calls it (6.1.1, research 12 D3)", {
-  skip_on_cran()
   lines = c("x %>% peter(q1)", "\"S1\" %>% peter()", "\"S2\" %>% peter(\"more\")",
             "x %>% peter(paste(\"a\", q2)) %>% peter(q3, .)", "\"S3\" %T>% peter(ctx = .)",
             "\"S4\" %>% peter(prompt = .)", "\"S5\" %!>% peter(q4)", "x %$% peter(q5)",
@@ -461,7 +442,6 @@ test_that("a magrittr-piped call is found as magrittr calls it (6.1.1, research 
 })
 
 test_that("recorded code drops gptr_return() and record = FALSE members and rewrites arrows", {
-  skip_on_cran()
   arrow = paste0("<", "-")
   code = c(paste("fit", arrow, "lm(mpg ~ wt, data = mtcars)"), "gptr_return(fit)",
            "peter$out(\"o1a2b3\")", "hits = peter$grep(\"mtcars\")",
@@ -484,7 +464,6 @@ test_that("recorded code drops gptr_return() and record = FALSE members and rewr
 })
 
 test_that("doc_drop_expr() drops the gptr::-qualified forms like the bare ones (FIX-2)", {
-  skip_on_cran()
   expect_true(doc_drop_expr(quote(gptr::gptr_return(x))))
   expect_true(doc_drop_expr(quote(gptr_return(x))))
   expect_true(doc_drop_expr(quote(gptr::peter$out("o1a2b3"))))
@@ -498,7 +477,6 @@ test_that("doc_drop_expr() drops the gptr::-qualified forms like the bare ones (
 })
 
 test_that("printed output becomes at most gptr.doc_output_lines #> lines of 76 characters", {
-  skip_on_cran()
   out = doc_output_lines(as.character(1:20), max_lines = 12L)
   expect_length(out, 13L)
   expect_identical(out[13], "#> ... (8 more lines)")
@@ -513,7 +491,6 @@ test_that("printed output becomes at most gptr.doc_output_lines #> lines of 76 c
 })
 
 test_that("turn entries follow P06's turn stamps", {
-  skip_on_cran()
   s = doc_test_session(list(doc_test_turn("a = 1", prompt = "one"),
                             doc_test_turn("b = 2", prompt = "two")))
   expect_length(doc_path_entries(s), 8L)
@@ -524,7 +501,6 @@ test_that("turn entries follow P06's turn stamps", {
 })
 
 test_that("a turn's block holds recorded code, outputs, decision, value and header facts", {
-  skip_on_cran()
   arrow = paste0("<", "-")
   s = doc_test_session(list(doc_test_turn(paste("n_rows", arrow, "nrow(mtcars)\nn_rows"),
                                           note = "count rows", outputs = "[1] 32",
@@ -549,7 +525,6 @@ test_that("a turn's block holds recorded code, outputs, decision, value and head
 })
 
 test_that("the output of a dropped expression is dropped with it when outputs are per expression", {
-  skip_on_cran()
   code = "fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(fit)\npeter$out(\"o1a2b3c\", lines = 1)"
   s = doc_test_session(list(doc_test_turn(code, outputs = list(character(), character(),
                                                                 "[1] \"line\""))))
@@ -564,7 +539,6 @@ test_that("the output of a dropped expression is dropped with it when outputs ar
 })
 
 test_that("child answers map to the block's direct peter() calls by prompt, not creation order", {
-  skip_on_cran()
   code = paste0("subs = lapply(1:2, function(i) peter(paste(\"part\", i)))\n",
                 "total = peter(\"Summarise the parts\")")
   s = doc_test_session(list(doc_test_turn(code)))
@@ -586,7 +560,6 @@ test_that("child answers map to the block's direct peter() calls by prompt, not 
 })
 
 test_that("failed and unrecorded calls are left out and plan-mode turns give one Plan line", {
-  skip_on_cran()
   s = doc_test_session(list(doc_test_turn("stop('x')", status = "error", id = "c1"),
                             doc_test_turn("head(mtcars)", record = FALSE, id = "c2",
                                           prompt = "b")))
@@ -602,7 +575,6 @@ test_that("failed and unrecorded calls are left out and plan-mode turns give one
 })
 
 test_that("steers and follow-ups delivered during the turn are recorded as comment lines", {
-  skip_on_cran()
   turn = doc_test_turn("x = 1")
   relay = list(type = "custom_message", message = msg_operator(
     "steer_relay", "The user sent this message while you were working: use TPM",
@@ -618,7 +590,6 @@ test_that("steers and follow-ups delivered during the turn are recorded as comme
 })
 
 test_that("secret markers become Sys.getenv() and an unreplayable one flags the block", {
-  skip_on_cran()
   # entries are redacted at ingress (P06), so recorded code holds markers, never values
   s = doc_test_session(list(doc_test_turn("k = \"[secret:DOC_TEST_KEY]\"\nn = nchar(k)")))
   lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
@@ -631,7 +602,6 @@ test_that("secret markers become Sys.getenv() and an unreplayable one flags the 
 })
 
 test_that("an overlay fork's block is wrapped in local() on its gptr_resume(block =) home", {
-  skip_on_cran()
   home = new.env()
   overlay = new.env(parent = home)
   attr(overlay, "gptr_overlay") = "overlay of s0123456789"
@@ -650,7 +620,6 @@ test_that("an overlay fork's block is wrapped in local() on its gptr_resume(bloc
 })
 
 test_that("a team block has one line per child, child overlays and export assignments", {
-  skip_on_cran()
   team = doc_test_session(list(), kind = "team")
   td = session_data(team)
   kid = function(name, model, text, exports = character(), code = NULL) {
@@ -681,7 +650,6 @@ test_that("a team block has one line per child, child overlays and export assign
 # ---- Task 3 adaptations (IC-48, IC-62, IC-74, G6 5.6; dev/DEVIATIONS.md D-068) ----------------
 
 test_that("dropped code is cut by characters in UTF-8 and C locales, never by srcref bytes", {
-  skip_on_cran()
   arrow = paste0("<", "-")
   e = "\u00e9"
   emoji = "\U0001F600"
@@ -711,7 +679,6 @@ test_that("dropped code is cut by characters in UTF-8 and C locales, never by sr
 })
 
 test_that("a cut takes its own separator, keeps literals and runs without parse data", {
-  skip_on_cran()
   arrow = paste0("<", "-")
   expect_identical(as.character(doc_code_clean("x = \"a;;b\"; gptr_return(x)")), "x = \"a;;b\"")
   expect_identical(as.character(doc_code_clean("gptr_return(x); y = \"p; ;q\"")), "y = \"p; ;q\"")
@@ -735,7 +702,6 @@ test_that("only a literal that is exactly a secret marker becomes Sys.getenv() (
 })
 
 test_that("an emptied chunk drops all its output, even flat; digests and paths stay", {
-  skip_on_cran()
   s = doc_test_session(list(doc_test_turn("peter$out(\"o1a2b3c\", lines = 1)", note = "show it",
                                           outputs = "[1] \"line\"")))
   site = list(format = "r", template = "count rows")
@@ -753,7 +719,6 @@ test_that("an emptied chunk drops all its output, even flat; digests and paths s
 })
 
 test_that("a local model keeps its tag and unknown usage is never summed (IC-74)", {
-  skip_on_cran()
   site = list(format = "r", template = "count rows")
   turn = doc_test_turn("x = 1")
   turn[[4L]]$message$provider = "ollama"
@@ -775,7 +740,6 @@ test_that("a local model keeps its tag and unknown usage is never summed (IC-74)
 })
 
 test_that("wrapped code keeps multi-line strings; team children without text or with secrets", {
-  skip_on_cran()
   expect_identical(doc_wrap_local(c("x = \"a", "b\"", "y = 1")),
                    c("local({", "  x = \"a", "b\"", "  y = 1",
                      paste0("}, envir = gptr_resume(block = \"", doc_block_token, "\")$envir)")))
@@ -801,7 +765,6 @@ test_that("wrapped code keeps multi-line strings; team children without text or 
 # ---- Task 3 review round 1 (IC-48, contract 11.5, G6 5.6; dev/DEVIATIONS.md D-068) -------------
 
 test_that("dropped expressions that share a line with each other are cut, not kept", {
-  skip_on_cran()
   e = "\u00e9"
   check = function(loc) {
     withr::local_locale(c(LC_CTYPE = loc))
@@ -823,7 +786,6 @@ test_that("dropped expressions that share a line with each other are cut, not ke
 })
 
 test_that("a marker that a redaction rule writes stays a marker and flags the block", {
-  skip_on_cran()
   out = doc_history_code(c("tok = \"[secret:jwt]\"", "k = \"[secret:K_ONE]\""))
   expect_identical(out$lines, c("tok = \"[secret:jwt]\"", "k = Sys.getenv(\"K_ONE\")"))
   expect_true(out$secrets)
@@ -840,7 +802,6 @@ test_that("a marker that a redaction rule writes stays a marker and flags the bl
 })
 
 test_that("token counts in the header are never written in scientific notation", {
-  skip_on_cran()
   turn = doc_test_turn("x = 1")
   turn[[2L]]$message$usage$input = 99850
   h = attr(doc_block_lines(doc_test_session(list(turn)), 1L,
@@ -860,7 +821,6 @@ doc_file_site = function(path, prompt = "count rows") {
 }
 
 test_that("doc_upsert() writes nothing without consent and inserts, replaces and is idempotent", {
-  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   writeLines(c("library(gptr)", "peter(\"count rows\")", "z = 1"), f)
@@ -895,7 +855,6 @@ test_that("doc_upsert() writes nothing without consent and inserts, replaces and
 })
 
 test_that("a hand-edited block is kept unless regenerating, and hooks can block or patch", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -924,7 +883,6 @@ test_that("a hand-edited block is kept unless regenerating, and hooks can block 
 })
 
 test_that("a successful write appends gptr.doc_block and caches the answers in S2", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -950,7 +908,6 @@ test_that("a successful write appends gptr.doc_block and caches the answers in S
 })
 
 test_that("a document that keeps changing gives up after three attempts with a warning", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -984,7 +941,6 @@ test_that("a lock held by another live process records nothing", {
 })
 
 test_that("a format error writes nothing and falls back to the console transcript", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1002,7 +958,6 @@ test_that("a format error writes nothing and falls back to the console transcrip
 # ---- Task 9 adaptations (contract 4.6, 11.5, 10.2 row 18; IC-47, IC-74; dev/DEVIATIONS.md D-107)
 
 test_that("a block a document_write hook patched carries the sha of its body as written", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1037,7 +992,6 @@ test_that("a block a document_write hook patched carries the sha of its body as 
 })
 
 test_that("a patched header keeps the hook's text and only its sha changes (11.5, 10.4)", {
-  skip_on_cran()
   body = c("# reviewed", "n = 2")
   sha = doc_body_sha(body)
   patch = function(head, indent = "") {
@@ -1071,7 +1025,6 @@ test_that("a patched header keeps the hook's text and only its sha changes (11.5
 })
 
 test_that("a block written to the console transcript instead is recorded under the transcript", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1097,7 +1050,6 @@ test_that("a block written to the console transcript instead is recorded under t
 })
 
 test_that("a child without an answer is not cached in S2", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1118,7 +1070,6 @@ test_that("a child without an answer is not cached in S2", {
 })
 
 test_that("a local model keeps its tag in the block and S2, and answers are redacted (IC-74)", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")

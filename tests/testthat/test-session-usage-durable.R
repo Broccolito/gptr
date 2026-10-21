@@ -39,7 +39,6 @@ du_entry = function(s, row) {
 }
 
 test_that("ordinary child charges recover their exact row and originating agent", {
-  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list(fake_text("answer", usage = usage_new(input = 0, output = 7))))
@@ -105,7 +104,6 @@ test_that("a fresh root retains nested team and fanout charges without child fil
 })
 
 test_that("canonical charge recovery preserves historical prices and unknown observations", {
-  skip_on_cran()
   local_store()
   s = test_session()
   row = du_row(s)
@@ -157,7 +155,6 @@ test_that("checkpoint and aborted child charges survive fresh ancestor recovery"
 })
 
 test_that("failed ordinary replies retain one exact canonical charge after resume", {
-  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list(fake_error("invalid request", status = 400L)))
@@ -172,7 +169,6 @@ test_that("failed ordinary replies retain one exact canonical charge after resum
 })
 
 test_that("exact canonical duplicates count once and conflicting duplicates fail", {
-  skip_on_cran()
   local_store()
   s = test_session()
   row = du_row(s)
@@ -186,7 +182,6 @@ test_that("exact canonical duplicates count once and conflicting duplicates fail
 })
 
 test_that("mixed legacy messages use fallback only when the private row is absent", {
-  skip_on_cran()
   local_store()
   local_fake_provider(list("unused"))
   s = test_session()
@@ -209,7 +204,6 @@ test_that("mixed legacy messages use fallback only when the private row is absen
 })
 
 test_that("durable rows reject malformed scalars foreign identities and excessive bytes", {
-  skip_on_cran()
   local_store()
   s = test_session()
   row = du_row(s)
@@ -241,7 +235,6 @@ test_that("durable rows reject malformed scalars foreign identities and excessiv
 })
 
 test_that("ancestor accounting validates complete bounded receiver lineage", {
-  skip_on_cran()
   local_store()
   root = test_session()
   middle = test_session(kind = "team", parent = root)
@@ -337,7 +330,6 @@ test_that("aborted accounting failure is retained after complete abort settlemen
 })
 
 test_that("checkpoint accounting failure preserves an earlier condition and completes settlement", {
-  skip_on_cran()
   local_store()
   local_fake_provider(list("unused"))
   s = test_session()
@@ -408,7 +400,6 @@ test_that("durable charging refuses live ancestry cycles and excessive depth bef
 
 
 test_that("durable fractional charges preserve exact numeric bits after a fresh disk resume", {
-  skip_on_cran()
   local_store()
   s = test_session()
   row = du_row(s)
@@ -427,7 +418,6 @@ test_that("durable fractional charges preserve exact numeric bits after a fresh 
 })
 
 test_that("durable numeric recovery preserves finite boundaries and legacy numeric records", {
-  skip_on_cran()
   local_store()
   s = test_session()
   values = c(0, -0.0, .Machine$double.xmin * .Machine$double.eps,
@@ -456,7 +446,6 @@ test_that("durable numeric recovery preserves finite boundaries and legacy numer
 })
 
 test_that("durable numeric tags reject nonfinite malformed and wrong-field values", {
-  skip_on_cran()
   local_store()
   s = test_session()
   row = du_row(s)

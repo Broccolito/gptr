@@ -34,7 +34,6 @@ jupyter_progress_normal = function(rec) {
 }
 
 test_that("IRkernel waiting feedback is stdout at verbosity 1 and 2", {
-  skip_on_cran()
   rec = jupyter_progress_session()
   for (level in c(1L, 2L)) {
     local_gptr_options(verbose = level)
@@ -54,7 +53,6 @@ test_that("IRkernel normal tool and successful completion progress is stdout", {
 })
 
 test_that("quiet and verbosity zero suppress normal notebook progress", {
-  skip_on_cran()
   for (quiet in c(TRUE, FALSE)) {
     rec = jupyter_progress_session()
     local_gptr_options(quiet = quiet, verbose = if (quiet) 1L else 0L)
@@ -71,7 +69,6 @@ test_that("quiet and verbosity zero suppress normal notebook progress", {
 })
 
 test_that("IRkernel tool failure and abnormal completion remain stderr messages", {
-  skip_on_cran()
   rec = jupyter_progress_session()
   captured = jupyter_progress_capture({
     console_on_tool_end(jupyter_progress_event("tool_execution_end", rec,
@@ -86,7 +83,6 @@ test_that("IRkernel tool failure and abnormal completion remain stderr messages"
 })
 
 test_that("nonkernel and knitr progress keeps its existing stderr route", {
-  skip_on_cran()
   for (knitting in c(FALSE, TRUE)) {
     rec = jupyter_progress_session()
     withr::local_options(jupyter.in_kernel = knitting, knitr.in.progress = knitting)
@@ -99,7 +95,6 @@ test_that("nonkernel and knitr progress keeps its existing stderr route", {
 })
 
 test_that("background sessions and nested tools stay silent in IRkernel", {
-  skip_on_cran()
   rec = jupyter_progress_session()
   live = session_live(rec$session)
   live$background = list(id = "offline-background")
@@ -118,7 +113,6 @@ test_that("background sessions and nested tools stay silent in IRkernel", {
 })
 
 test_that("notebook tool progress prints escaped input without interpreting braces", {
-  skip_on_cran()
   rec = jupyter_progress_session()
   captured = jupyter_progress_capture(console_on_tool_start(
     jupyter_progress_event("tool_execution_start", rec, tool_call_id = "c1", tool_name = "r",

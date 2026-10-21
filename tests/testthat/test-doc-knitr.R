@@ -2,7 +2,6 @@
 # Quarto record/replay through the document route with a stand-in peter().
 
 test_that("sessions knit as their answer, plus the code of a live turn", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   s = doc_test_session(list(doc_test_turn("n = nrow(mtcars)")))
   d = session_data(s)
@@ -22,7 +21,6 @@ test_that("sessions knit as their answer, plus the code of a live turn", {
 })
 
 test_that("the label hook skips a chunk for one knit and is removed afterwards", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   local_project()
   rmd = file.path(getwd(), "skip.Rmd")
@@ -38,7 +36,6 @@ test_that("the label hook skips a chunk for one knit and is removed afterwards",
 })
 
 test_that("knitr records an agent chunk on the first knit and replays it on the second", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   fixture = normalizePath(testthat::test_path("fixtures", "docs", "report.Rmd"))
   local_project()
@@ -62,7 +59,6 @@ test_that("knitr records an agent chunk on the first knit and replays it on the 
 })
 
 test_that("a stale agent chunk is regenerated during the knit without running the old code", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   local_project()
   local_gptr_options(record = "auto", replay = "auto")
@@ -99,7 +95,6 @@ local_knitr_hooks = function(.env = parent.frame()) {
 }
 
 test_that("knit_print output is redacted like the recorded blocks (IC-74)", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   local_vault()
   key = "kn1t-s3cr3t-0123456789abcdef"
@@ -119,7 +114,6 @@ test_that("knit_print output is redacted like the recorded blocks (IC-74)", {
 })
 
 test_that("a knit that fails still removes the label hook, so the next knit runs the chunk", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   local_project()
   local_knitr_hooks()
@@ -152,7 +146,6 @@ test_that("a knit that fails still removes the label hook, so the next knit runs
 })
 
 test_that("a child knit inside the document keeps the skip until the document ends", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   local_project()
   local_knitr_hooks()
@@ -173,7 +166,6 @@ test_that("a child knit inside the document keeps the skip until the document en
 })
 
 test_that("a skip set inside a child knit ends with the child", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   local_project()
   local_knitr_hooks()
@@ -193,7 +185,6 @@ test_that("a skip set inside a child knit ends with the child", {
 })
 
 test_that("a knit run from a chunk neither ends the skip nor leaves the hooks behind", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   local_project()
   local_knitr_hooks()
@@ -224,7 +215,6 @@ test_that("a knit run from a chunk neither ends the skip nor leaves the hooks be
 })
 
 test_that("the code of a live turn gets a fence longer than any backtick line it holds", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   code = "md = \"\n```\nnot code\n\"\nn = 1"
   s = doc_test_session(list(doc_test_turn(code)))
@@ -248,7 +238,6 @@ test_that("knitr's generic dispatches to the lazily registered methods", {
 # ---- knitr and Quarto through peter() and the fake provider (05 P15 acceptance 2) ---------------
 
 test_that("knitr records an agent chunk through peter() and replays it on the next knit", {
-  skip_on_cran()
   skip_if_not_installed("knitr")
   # test_path() is relative to tests/testthat, which local_project() leaves: resolve it first
   fixture = normalizePath(testthat::test_path("fixtures", "docs", "report.Rmd"))

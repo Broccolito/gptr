@@ -28,7 +28,6 @@ ripgrep_pairs = function(out, windows = .Platform$OS.type == "windows") {
 }
 
 test_that("grep sorts by path and skips binary and .gitignore'd files", {
-  skip_on_cran()
   td = grep_fixture()
   m = search_grep("alpha", td)
   expect_s3_class(m, "gptr_matches")
@@ -38,7 +37,6 @@ test_that("grep sorts by path and skips binary and .gitignore'd files", {
 })
 
 test_that("grep options: ignore case, literal, CRLF anchors, UTF-8 and PCRE classes", {
-  skip_on_cran()
   td = grep_fixture()
   txt = function(...) grep_tool_text(search_grep(...))
   expect_identical(txt("alpha", td, ignore_case = TRUE),
@@ -55,7 +53,6 @@ test_that("grep options: ignore case, literal, CRLF anchors, UTF-8 and PCRE clas
 })
 
 test_that("grep decodes UTF-8 BOM, UTF-16 and CP1252 files before matching", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "bom.R", c(as.raw(c(0xEF, 0xBB, 0xBF)), charToRaw("x\u00e9yz = 1\n")))
   put_file(td, "u16.txt", c(as.raw(c(0xFF, 0xFE)), iconv("u16 needle\r\n", "UTF-8", "UTF-16LE",
@@ -68,7 +65,6 @@ test_that("grep decodes UTF-8 BOM, UTF-16 and CP1252 files before matching", {
 })
 
 test_that("grep context merges overlapping windows and separates blocks with --", {
-  skip_on_cran()
   td = grep_fixture()
   expect_identical(grep_tool_text(search_grep("line (3|5|12)$", td, context = 1L)),
                    paste(c("sub/c.R-2- line 2", "sub/c.R:3: line 3", "sub/c.R-4- line 4",
@@ -90,7 +86,6 @@ test_that("grep reproduces Pi's limit and context texts (tools.test.ts)", {
 })
 
 test_that("grep notices: limit, long lines centred on the match, regex errors, missing paths", {
-  skip_on_cran()
   td = grep_fixture()
   expect_match(grep_tool_text(search_grep("line", td, limit = 3L)),
                "[3 matches limit reached. Use limit=6 for more, or refine pattern]", fixed = TRUE)
@@ -104,7 +99,6 @@ test_that("grep notices: limit, long lines centred on the match, regex errors, m
 })
 
 test_that("grep output files and count, sorted by path or by match count", {
-  skip_on_cran()
   td = grep_fixture()
   f = search_grep("alpha|line", td, output = "files")
   expect_s3_class(f, "gptr_files")
@@ -156,7 +150,6 @@ find_fixture = function() {
 }
 
 test_that("find matches basenames at any depth, sorts by path and marks directories", {
-  skip_on_cran()
   td = find_fixture()
   expect_identical(search_find("*.R", td)$path,
                    c(".hid.R", "a.R", "B.R", "big.R", "f1.R", "f10.R", "f2.R", "sub/x.R", "test.R",
@@ -169,7 +162,6 @@ test_that("find matches basenames at any depth, sorts by path and marks director
 })
 
 test_that("find sorts by mtime (newest first), size (largest first) and relevance (IC-71)", {
-  skip_on_cran()
   td = find_fixture()
   expect_identical(search_find("*.R", td, sort = "mtime")$path[1L], "f2.R")
   expect_identical(search_find("*", td, sort = "size")$path[1L], "big.R")
@@ -179,7 +171,6 @@ test_that("find sorts by mtime (newest first), size (largest first) and relevanc
 })
 
 test_that("find applies Pi's limit notice", {
-  skip_on_cran()
   td = find_fixture()
   f = search_find("*.R", td, limit = 3L)
   expect_true(attr(f, "truncated"))
@@ -189,7 +180,6 @@ test_that("find applies Pi's limit notice", {
 })
 
 test_that("ls lists entries case-insensitively with dotfiles and '/' after directories (Pi)", {
-  skip_on_cran()
   td = withr::local_tempdir()
   for (f in c(".hidden-file", "Zeta.txt", "alpha.txt", "_under.R", "beta.R")) put_file(td, f, "")
   dir.create(file.path(td, ".hidden-dir"))
@@ -209,7 +199,6 @@ test_that("ls lists entries case-insensitively with dotfiles and '/' after direc
 })
 
 test_that("prints of matches and files stay within the member budget with a notice", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "many.txt", paste0("hit ", strrep("w", 80), " ", 1:2000, "\n", collapse = ""))
   m = search_grep("hit", td, limit = 2000L)
@@ -230,7 +219,6 @@ test_that("prints of matches and files stay within the member budget with a noti
 # CI-5 (D-111): on Windows R cannot name these files in a C locale at all, so the test keeps R's
 # own UTF-8 locale there (local_name_locale(), helper-locale.R).
 test_that("non-ASCII file and directory names are searched, found and listed in any locale", {
-  skip_on_cran()
   local_name_locale()
   td = withr::local_tempdir()
   put_bytes = function(rel, text) {
@@ -260,7 +248,6 @@ test_that("non-ASCII file and directory names are searched, found and listed in 
 # positive lookaround (atomic: `(?=(\s*))\1`) dropped a matching file before the per-line matcher
 # ran (ripgrep -P reports every row below).
 test_that("the whole-file prefilter never drops a file the per-line matcher matches", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "eol.R", "x = c(1,\n  2)\n")
   put_file(td, "hash.R", "y = 1\n#comment\n")
@@ -290,7 +277,6 @@ test_that("the whole-file prefilter never drops a file the per-line matcher matc
 # in a UTF-8 locale stopped the whole listing in tolower()). APFS cannot create such a name, so
 # it is injected.
 test_that("ls skips and counts an entry whose name is not valid UTF-8, as the walker does", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "good.txt", "x\n")
   dir.create(file.path(td, "sub"))
@@ -358,7 +344,6 @@ test_that("a match-limit failure is reported without rows and loses only the lin
 # notice must also reach a search with no rows and both prints, through which model code in `r`
 # sees peter$grep(). The fixture is sparse: only its last byte is written.
 test_that("a skipped file over 20 MB is reported with or without rows, in the text and prints", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "small.txt", "needle one\n")
   con = file(file.path(td, "big.log"), "wb")
@@ -394,7 +379,6 @@ test_that("a skipped file over 20 MB is reported with or without rows, in the te
 # reports ws.R:1 for the first seven). A fixed pattern is literal, so it keeps the prefilter, also
 # with ignore_case.
 test_that("the prefilter is off when ignorable pattern text precedes a possessive +", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "ws.R", "a  \nb\n")
   for (p in c("a\\s*\\E+$", "a\\s*\\Q\\E+$", "a\\s*\\Q\\E\\Q\\E+$", "a\\s*(?#c)+$",

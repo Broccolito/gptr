@@ -1,7 +1,6 @@
 # Listings are compact display copies; the returned data and discovery provenance stay intact.
 
 test_that("long skill listings fit the console and retain rows, visibility and provenance", {
-  skip_on_cran()
   local_reproducible_output(width = 80L)
   df = data.frame(name = sprintf("skill-%02d", rep(seq_len(13L), each = 2L)),
                   description = rep(paste(rep("Detailed skill description", 40L), collapse = " "),
@@ -30,7 +29,6 @@ test_that("long skill listings fit the console and retain rows, visibility and p
 })
 
 test_that("narrow MCP listings show trust and provenance with bounded column groups", {
-  skip_on_cran()
   local_reproducible_output(width = 32L)
   df = data.frame(name = c("server-a", "server-b"), source = c("gptr:user", "gptr:project"),
                   transport = c("stdio", "http"), era = "modern", status = "cached",
@@ -66,7 +64,6 @@ test_that("listing previews retain usable session identifiers before shortening 
 })
 
 test_that("checkpoint listings keep active and abandoned branches visible at narrow widths", {
-  skip_on_cran()
   local_reproducible_output()
   df = data.frame(turn = 1:2, id = paste0("e", c(strrep("a", 20L), strrep("b", 20L))),
                   time = as.POSIXct(c("2026-10-10 12:00:00", "2026-10-10 12:01:00"),
@@ -87,7 +84,6 @@ test_that("checkpoint listings keep active and abandoned branches visible at nar
 })
 
 test_that("listing truncation uses display widths and keeps wide and combining Unicode valid", {
-  skip_on_cran()
   local_reproducible_output(width = 40L)
   df = data.frame(name = c(strrep("\u4e2d", 20L), strrep("e\u0301", 30L)),
                   description = c("line one\nline two\tend", strrep("\u4e2d", 30L)),

@@ -2,7 +2,6 @@
 # exports, and the end-to-end record/replay acceptance of 05 P15.
 
 test_that("write consent comes from the binding, record = auto, a remembered answer or a yes", {
-  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "a.R")
   writeLines("x = 1", f)
@@ -33,7 +32,6 @@ test_that("write consent comes from the binding, record = auto, a remembered ans
 })
 
 test_that("an interactive yes is asked once and remembered per document", {
-  skip_on_cran()
   proj = local_project()
   g = file.path(proj, "b.R")
   writeLines("y = 1", g)
@@ -65,7 +63,6 @@ test_that("model code cannot call a control export during a run unless approved 
 })
 
 test_that("S2 answers round-trip under keys that include the args hash and part", {
-  skip_on_cran()
   local_project()
   k1 = s2_key("a.R", "abc123", "", "p", "")
   k2 = s2_key("a.R", "abc123", "", "p", "aaaa1111")
@@ -84,7 +81,6 @@ test_that("S2 answers round-trip under keys that include the args hash and part"
 # ---- Task 7 additions (contract 2.2, 11.9; IC-53, IC-74; dev/DEVIATIONS.md D-100) ------------
 
 test_that("a control refusal names the running tool, risk 4 and the session (IC-53)", {
-  skip_on_cran()
   run = new.env()
   run$session = "s0123456789"
   run$signal = new.env()
@@ -103,7 +99,6 @@ test_that("a control refusal names the running tool, risk 4 and the session (IC-
 })
 
 test_that("an S2 answer is redacted at ingress and its provenance fields are kept (IC-74)", {
-  skip_on_cran()
   local_project()
   k = s2_key("a.R", "abc123", "", "p", "")
   rec = list(block = "abc123", doc = "a.R", part = "", prompt = "p", model = "ollama/qwen3:8b",
@@ -133,7 +128,6 @@ test_that("an unreadable or non-object S2 file is a miss", {
 })
 
 test_that("a project file whose record or transcript entry is not an object is ignored", {
-  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "a.R")
   writeLines("x = 1", f)
@@ -151,7 +145,6 @@ test_that("a project file whose record or transcript entry is not an object is i
 })
 
 test_that("a remembered transcript target is consent only where IC-52 allows a target", {
-  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = NULL, interactive = FALSE)
   out = file.path(dirname(proj), "outside.R")
@@ -210,7 +203,6 @@ local_replay_table = function(.env = parent.frame()) {
 }
 
 test_that("doc_decide() follows the replay table, the args hash and the undone row", {
-  skip_on_cran()
   local_project()
   expect_identical(doc_decide(doc_decide_site(), prompt_hash("p"), NULL, "auto"), "replay")
   expect_identical(doc_decide(doc_decide_site(), prompt_hash("p"), NULL, "replay"), "replay")
@@ -252,7 +244,6 @@ test_that("doc_decide() follows the replay table, the args hash and the undone r
 })
 
 test_that("a piped session is advanced in place; identical() holds along a replayed chain", {
-  skip_on_cran()
   local_project()
   site = doc_replay_fixture()
   s = session_new("fake/fake-1", "auto", home = new.env())
@@ -268,7 +259,6 @@ test_that("a piped session is advanced in place; identical() holds along a repla
 })
 
 test_that("without a piped session the replayed session is reconstructed from the document", {
-  skip_on_cran()
   local_project()
   site = doc_replay_fixture(header = list(value = "n"),
                             body = c("n = nrow(mtcars)", "#> [1] 32", "## Decision: count"))
@@ -291,7 +281,6 @@ test_that("without a piped session the replayed session is reconstructed from th
 })
 
 test_that("a fork block is bound to its id for gptr_resume(block =)", {
-  skip_on_cran()
   local_project()
   local_replay_table()
   site = doc_replay_fixture(header = list(fork = "s0a1b2c3d4e:1", session = "s9f8e7d6c5b"))
@@ -303,7 +292,6 @@ test_that("a fork block is bound to its id for gptr_resume(block =)", {
 })
 
 test_that("block-nested calls replay from S2 and miss with not_recorded only under replay", {
-  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   ph = prompt_hash("outer")
@@ -332,7 +320,6 @@ test_that("block-nested calls replay from S2 and miss with not_recorded only und
 })
 
 test_that("a team block replays its children from S2 into overlays, with zero requests", {
-  skip_on_cran()
   local_project()
   local_replay_table()
   site = doc_replay_fixture(prompt = "Review", header = list(
@@ -355,7 +342,6 @@ test_that("a team block replays its children from S2 into overlays, with zero re
 })
 
 test_that("replay calls no provider, runs no discovery and keeps local provenance (IC-74)", {
-  skip_on_cran()
   local_project()
   local_replay_table()
   # Counted as well as refused: P06's model_canonical() and the HTTP reactor catch errors, so a
@@ -395,7 +381,6 @@ test_that("replay calls no provider, runs no discovery and keeps local provenanc
 })
 
 test_that("an S2 record whose answer is empty or not text replays without an answer", {
-  skip_on_cran()
   local_project()
   site = doc_replay_fixture()
   s2_put(s2_key("a.R", "abc123", "", prompt_hash("count rows"), ""),
@@ -426,7 +411,6 @@ test_that("a stale block under replay is a not_recorded error naming its documen
 })
 
 test_that("doc_skip_old() marks the old block in the gptr_source() frame of its document only", {
-  skip_on_cran()
   local_project()
   site = doc_decide_site(driver = "gptr_source")
   outer = doc_source_push(file.path(getwd(), "b.R"))
@@ -444,7 +428,6 @@ test_that("doc_skip_old() marks the old block in the gptr_source() frame of its 
 })
 
 test_that("a notebook agent cell gives the code and outputs a replay reconstructs", {
-  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.ipynb")
   writeLines(c("{", " \"cells\": [", "  {", "   \"cell_type\": \"code\",",
@@ -464,7 +447,6 @@ test_that("a notebook agent cell gives the code and outputs a replay reconstruct
 })
 
 test_that("a hand-edited block is overwritten in live or record only after a yes", {
-  skip_on_cran()
   local_project()
   local_gptr_options(interactive = TRUE)
   asked = new.env()
@@ -495,7 +477,6 @@ test_that("a hand-edited block is overwritten in live or record only after a yes
 })
 
 test_that("a hand-edited block whose prompt or args changed is stale, never replayed silently", {
-  skip_on_cran()
   local_project()
   local_gptr_options(interactive = TRUE)
   asked = new.env()
@@ -553,7 +534,6 @@ test_that("a hand-edited block whose prompt or args changed is stale, never repl
 })
 
 test_that("an undone block is regenerated under record by any driver, without a downgrade", {
-  skip_on_cran()
   local_project()
   for (driver in c("base", "gptr_source", "knitr")) {
     u = doc_decide_site("undone", driver = driver)
@@ -568,7 +548,6 @@ test_that("an undone block is regenerated under record by any driver, without a 
 })
 
 test_that("children entries without a name or a session id are skipped", {
-  skip_on_cran()
   local_project()
   local_replay_table()
   site = doc_replay_fixture(prompt = "Review", header = list(
@@ -598,7 +577,6 @@ doc_route_env = function(session = NULL) {
 }
 
 test_that("the route replays a fresh block, passes a new call with its site, skips nested ones", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", replay = "auto")
   f = file.path(getwd(), "analysis.R")
@@ -620,7 +598,6 @@ test_that("the route replays a fresh block, passes a new call with its site, ski
 })
 
 test_that("without consent or under replay the route keeps no site; replay needs no consent", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "off", interactive = FALSE, replay = "auto")
   f = file.path(getwd(), "analysis.R")
@@ -640,7 +617,6 @@ test_that("without consent or under replay the route keeps no site; replay needs
 })
 
 test_that("a stale block regenerates under gptr_source() and errors under replay", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "analysis.R")
@@ -672,7 +648,6 @@ test_that("calls made from model code never match the route", {
 })
 
 test_that("agent_end writes the block of an idle run with a document site", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -693,7 +668,6 @@ test_that("agent_end writes the block of an idle run with a document site", {
 })
 
 test_that("console turns become one steered session in the transcript (IC-49)", {
-  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   doc_project_transcript(".gptr/transcripts/t.R")
@@ -712,7 +686,6 @@ test_that("console turns become one steered session in the transcript (IC-49)", 
 })
 
 test_that("doc.site answers the session's run site, else the gptr_doc() binding", {
-  skip_on_cran()
   local_project()
   expect_null(doc_site_service(NULL))
   old = the$doc_binding
@@ -735,7 +708,6 @@ test_that("doc.site answers the session's run site, else the gptr_doc() binding"
 })
 
 test_that("doc.edit goes through the edit tool, refreshes headers and protects hand edits", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -775,7 +747,6 @@ test_that("doc.edit goes through the edit tool, refreshes headers and protects h
 })
 
 test_that("doc.s1_block writes one #> line below a top-level System 1 call, idempotently", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", replay = "auto")
   f = file.path(getwd(), "a.R")
@@ -801,7 +772,6 @@ test_that("doc.s1_block writes one #> line below a top-level System 1 call, idem
 })
 
 test_that("doc.replay returns the replayed team of a fresh block and NULL otherwise (IC-47)", {
-  skip_on_cran()
   local_project()
   local_replay_table()
   local_gptr_options(record = "auto", replay = "auto")
@@ -829,7 +799,6 @@ test_that("doc.replay returns the replayed team of a fresh block and NULL otherw
 })
 
 test_that("a rewind makes abandoned blocks inert and notes it in the console transcript", {
-  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   f = file.path(proj, "a.R")
@@ -861,7 +830,6 @@ test_that("a rewind makes abandoned blocks inert and notes it in the console tra
 })
 
 test_that("direct R lines and slash commands of the console enter the transcript", {
-  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   doc_project_transcript(".gptr/transcripts/t.R")
@@ -887,7 +855,6 @@ doc_console_call = function(prompt = "fit a model") {
 }
 
 test_that("a console call asks once where to record and keeps the transcript site", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", replay = "auto", interactive = TRUE)
   testthat::local_mocked_bindings(doc_command_args = function() "R")
@@ -917,7 +884,6 @@ test_that("a console call asks once where to record and keeps the transcript sit
 })
 
 test_that("a failing sidecar recovery never turns a replay into a live call", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", replay = "auto")
   f = file.path(getwd(), "analysis.R")
@@ -935,7 +901,6 @@ test_that("a failing sidecar recovery never turns a replay into a live call", {
 })
 
 test_that("doc.edit never changes a hand-edited block, also through a loose match or old_text", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -972,7 +937,6 @@ test_that("doc.edit never changes a hand-edited block, also through a loose matc
 })
 
 test_that("a rewind and a redo of a console turn keep the transcript format of its block", {
-  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   doc_project_transcript(".gptr/transcripts/t.R")
@@ -1023,7 +987,6 @@ test_that("a score summary gives its mean, or NA when every element is NA", {
 # ---- Task 13 review round 1 (dev/DEVIATIONS.md D-122 items 8-10) -------------------------------
 
 test_that("a direct R line that failed or was interrupted is inert, so the transcript re-sources", {
-  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   doc_project_transcript(".gptr/transcripts/t.R")
@@ -1051,7 +1014,6 @@ test_that("a direct R line that failed or was interrupted is inert, so the trans
 })
 
 test_that("a console call asks nothing when it cannot be recorded (record off, replay mode)", {
-  skip_on_cran()
   local_project()
   testthat::local_mocked_bindings(doc_command_args = function() "R")
   asked = new.env()
@@ -1085,7 +1047,6 @@ test_that("a console call asks nothing when it cannot be recorded (record off, r
 })
 
 test_that("an undone team block gives the undone notice and is logged as skipped (G7 3.8)", {
-  skip_on_cran()
   local_project()
   local_replay_table()
   local_gptr_options(record = "auto", replay = "auto", quiet = FALSE)
@@ -1116,7 +1077,6 @@ test_that("an undone team block gives the undone notice and is logged as skipped
 # ---- Task 13 review round 2 (dev/DEVIATIONS.md D-122 items 11-12) -------------------------------
 
 test_that("a dead sidecar's block for the calling statement is replayed, not run again (IC-51)", {
-  skip_on_cran()
   local_project()
   local_replay_table()
   local_gptr_options(record = "auto", replay = "auto")
@@ -1154,7 +1114,6 @@ test_that("a dead sidecar's block for the calling statement is replayed, not run
 })
 
 test_that("a System 1 one-line block is redacted before it is written (IC-74)", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto", replay = "auto")
   f = file.path(getwd(), "a.R")
@@ -1180,7 +1139,6 @@ test_that("a System 1 one-line block is redacted before it is written (IC-74)", 
 # ---- Task 13 review round 3 (dev/DEVIATIONS.md D-122 items 13-14) -------------------------------
 
 test_that("a rewound turn's block stays inert after a new turn on the rewound branch (G7 3.8)", {
-  skip_on_cran()
   proj = local_project()
   local_gptr_options(record = "auto")
   f = file.path(proj, "a.R")
@@ -1225,7 +1183,6 @@ test_that("a rewound turn's block stays inert after a new turn on the rewound br
 })
 
 test_that("doc.replay recovers a dead sidecar's team block for its statement first (IC-51)", {
-  skip_on_cran()
   local_project()
   local_replay_table()
   local_gptr_options(record = "auto", replay = "auto")
@@ -1310,7 +1267,6 @@ doc_queue_turn = function(site, code, prompt) {
 }
 
 test_that("a rewind under Rscript makes the queued block undone and the exit writes it (G7 4.4)", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   st = doc_state()
@@ -1356,7 +1312,6 @@ test_that("a rewind under Rscript makes the queued block undone and the exit wri
 })
 
 test_that("a rewind in a Jupyter kernel makes the pending block undone; sync writes it (IC-50)", {
-  skip_on_cran()
   src = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
   local_project()
   local_gptr_options(record = "auto")
@@ -1388,7 +1343,6 @@ test_that("a rewind in a Jupyter kernel makes the pending block undone; sync wri
 })
 
 test_that("doc.edit never edits the running script or the open notebook it is bound to", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1442,7 +1396,6 @@ test_that("doc.edit never edits the running script or the open notebook it is bo
 })
 
 test_that("gptr_doc() binds, shows and unbinds the document of this process", {
-  skip_on_cran()
   local_project()
   old = the$doc_binding
   withr::defer(assign("doc_binding", old, envir = the))
@@ -1473,7 +1426,6 @@ test_that("gptr_doc() binds, shows and unbinds the document of this process", {
 })
 
 test_that("gptr_blocks() lists fresh, stale, user-edited and undone blocks", {
-  skip_on_cran()
   local_project()
   f = file.path(getwd(), "a.R")
   ok = "x = 1"
@@ -1506,7 +1458,6 @@ test_that("gptr_blocks() lists fresh, stale, user-edited and undone blocks", {
 })
 
 test_that("gptr_blocks() reads Rmd chunks and notebook cells", {
-  skip_on_cran()
   # test_path() is relative to tests/testthat, which local_project() leaves: resolve it first
   rmd = normalizePath(testthat::test_path("fixtures", "docs", "report.expected.Rmd"))
   floats = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
@@ -1529,7 +1480,6 @@ test_that("gptr_blocks() reads Rmd chunks and notebook cells", {
 })
 
 test_that("gptr_cache() lists, prunes and clears, and never removes sidecars", {
-  skip_on_cran()
   proj = local_project()
   f = file.path(proj, "a.R")
   writeLines(c("peter(\"one\")", doc_render_block("aaaaaa", list(model = "m"), "x = 1")), f)
@@ -1568,7 +1518,6 @@ test_that("gptr_cache() lists, prunes and clears, and never removes sidecars", {
 # check ------------------------------------------------------------------------------------------
 
 test_that("gptr_blocks() gives each call of a pipeline its own block (contract 11.5)", {
-  skip_on_cran()
   local_project()
   f = file.path(getwd(), "p.R")
   writeLines(c(
@@ -1588,7 +1537,6 @@ test_that("gptr_blocks() gives each call of a pipeline its own block (contract 1
 })
 
 test_that("gptr_blocks() gives the calls of one notebook cell their own agent cells", {
-  skip_on_cran()
   local_project()
   code = function(id, src, meta = json_obj()) {
     list(cell_type = "code", execution_count = NULL, id = id, metadata = meta,
@@ -1614,7 +1562,6 @@ test_that("gptr_blocks() gives the calls of one notebook cell their own agent ce
 })
 
 test_that("gptr_doc() binds documents only in their own format; gptr_blocks() needs the file", {
-  skip_on_cran()
   local_project()
   old = the$doc_binding
   withr::defer(assign("doc_binding", old, envir = the))
@@ -1638,7 +1585,6 @@ test_that("gptr_doc() binds documents only in their own format; gptr_blocks() ne
 })
 
 test_that("gptr_cache(\"prune\") keeps answers it cannot check and reads spill_days safely", {
-  skip_on_cran()
   proj = local_project()
   writeBin(as.raw(c(0x78, 0xff, 0x0a)), file.path(proj, "bad.R"))
   s2_put(s2_key("bad.R", "aaaaaa", "", "p", ""), list(block = "aaaaaa", doc = "bad.R",
@@ -1684,7 +1630,6 @@ test_that("gptr_cache(\"prune\") keeps answers it cannot check and reads spill_d
 })
 
 test_that("gptr_cache(\"prune\") keeps the answers of queued blocks (IC-50, IC-51)", {
-  skip_on_cran()
   proj = local_project()
   st = doc_state()
   old = st$docs
@@ -1727,7 +1672,6 @@ test_that("gptr_cache(\"prune\") keeps the answers of queued blocks (IC-50, IC-5
 # ---- Task 15: gptr_source() (contract 6.4; report 14 section 4.4.2) -----------------------------
 
 test_that("gptr_source() replays fresh blocks, regenerates stale ones and skips their old code", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   withr::local_options(gptr.replay = NULL)
@@ -1760,7 +1704,6 @@ test_that("gptr_source() replays fresh blocks, regenerates stale ones and skips 
 })
 
 test_that("a call without a block runs and is recorded; replay mode refuses a stale block", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   withr::local_options(gptr.replay = NULL)
@@ -1782,7 +1725,6 @@ test_that("a call without a block runs and is recorded; replay mode refuses a st
 })
 
 test_that("gptr_source() validates its arguments and runs plain scripts", {
-  skip_on_cran()
   local_project()
   f = file.path(getwd(), "plain.R")
   writeLines(c("x = 1", "y = x + 1"), f)
@@ -1803,7 +1745,6 @@ test_that("gptr_source() validates its arguments and runs plain scripts", {
 # ---- Task 15 additions (dev/DEVIATIONS.md D-128) ------------------------------------------------
 
 test_that("gptr_source() keeps UTF-8 literals exact in a non-UTF-8 locale (IC-62)", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   word = "caf\u00e9"
@@ -1827,7 +1768,6 @@ test_that("gptr_source() keeps UTF-8 literals exact in a non-UTF-8 locale (IC-62
 })
 
 test_that("gptr_source() of a missing, directory, non-UTF-8 or unreadable file is invalid", {
-  skip_on_cran()
   local_project()
   dir.create(file.path(getwd(), "d.R"))
   f = file.path(getwd(), "latin1.R")
@@ -1849,7 +1789,6 @@ test_that("gptr_source() of a missing, directory, non-UTF-8 or unreadable file i
 })
 
 test_that("gptr_source() without `replay` keeps GPTR_REPLAY and the replay setting (7.8)", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   withr::local_options(gptr.replay = NULL)
@@ -1879,7 +1818,6 @@ test_that("gptr_source() without `replay` keeps GPTR_REPLAY and the replay setti
 })
 
 test_that("gptr_source() reports a stale call it ran without write consent as `ran`", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "off")
   f = file.path(getwd(), "analysis.R")
@@ -1899,7 +1837,6 @@ test_that("gptr_source() reports a stale call it ran without write consent as `r
 })
 
 test_that("gptr_source() skips a regenerated block's old code below a #line comment", {
-  skip_on_cran()
   local_project()
   local_gptr_options(record = "auto")
   withr::local_options(gptr.replay = NULL)
@@ -1956,7 +1893,6 @@ doc_e2e_source = function(path, envir = new.env(parent = globalenv()), keep_sour
 }
 
 test_that("per-call record FALSE does not ask for or remember a console transcript", {
-  skip_on_cran()
   x = local_doc_e2e(list(fake_text("Done.")))
   local_gptr_options(interactive = TRUE)
   asked = new.env(parent = emptyenv())
@@ -2001,7 +1937,6 @@ test_that("per-call record FALSE prevents writes to an explicitly bound document
 })
 
 test_that("per-call record TRUE does not grant recording consent under persistent off", {
-  skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "answer = 42"), fake_text("Done.")),
                      record = "off")
   f = file.path(x$root, "analysis.R")
@@ -2015,7 +1950,6 @@ test_that("per-call record TRUE does not grant recording consent under persisten
 })
 
 test_that("per-call record FALSE suppresses a System 1 document summary", {
-  skip_on_cran()
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", interactive = FALSE)
   judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
@@ -2036,7 +1970,6 @@ test_that("per-call record FALSE suppresses a System 1 document summary", {
 })
 
 test_that("a recorded block replays under source() with zero model calls (acceptance 2)", {
-  skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "n_rows = nrow(d)\nn_rows", note = "count"),
                          fake_text("There are 4 rows.")))
   f = file.path(x$root, "analysis.R")
@@ -2089,7 +2022,6 @@ test_that("a stale prompt regenerates through gptr_source(replay = \"record\") (
 })
 
 test_that("GPTR_REPLAY=replay blocks a real model called in a loop (acceptance 3)", {
-  skip_on_cran()
   local_project()
   withr::local_options(gptr.replay = NULL)
   withr::local_envvar(GPTR_REPLAY = "replay")
@@ -2107,7 +2039,6 @@ test_that("GPTR_REPLAY=replay blocks a real model called in a loop (acceptance 3
 })
 
 test_that("value= replays by name and no document gets a $value line (acceptance 4)", {
-  skip_on_cran()
   x = local_doc_e2e(list(
     fake_tool("r", code = "markers = c(\"CD3E\", \"MS4A1\")\ngptr_return(markers)"),
     fake_text("Two markers.")))
@@ -2145,7 +2076,6 @@ test_that("documents are written only with consent; a project cannot grant it (a
 })
 
 test_that("a fresh clone without consent replays with zero calls and runs each block once (5)", {
-  skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "hits = hits + 1"), fake_text("Counted.")))
   f = file.path(x$root, "analysis.R")
   writeLines(c("hits = 0", "res = peter(\"Count once\")"), f)
@@ -2317,7 +2247,6 @@ test_that("a two-turn console session with a menu steer re-sources as one sessio
 })
 
 test_that("a plan-mode run records only its plan line (IC-48)", {
-  skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "x = 1"),
                          fake_text("Plan:\n1. Load the data\n2. Fit the model")))
   f = file.path(x$root, "plan.R")
@@ -2350,7 +2279,6 @@ test_that("a block with a nested sub-agent call replays with zero requests (IC-4
 })
 
 test_that("an open notebook is never written; gptr_doc(sync = TRUE) applies it (IC-50)", {
-  skip_on_cran()
   fixture = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
   x = local_doc_e2e(list(fake_tool("r", code = "m = mean(mtcars$mpg)"), fake_text("20.09.")))
   nb = file.path(x$root, "analysis.ipynb")

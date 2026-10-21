@@ -42,7 +42,6 @@ mcp_stop_pure = function(stopper) {
 }
 
 test_that("owned MCP stop preserves seeded and absent RNG while revoking its tokens", {
-  skip_on_cran()
   for (seeded in c(FALSE, TRUE)) {
     local({
       withr::local_preserve_seed()
@@ -73,7 +72,6 @@ test_that("owned MCP stop preserves seeded and absent RNG while revoking its tok
 })
 
 test_that("owned MCP stop retains the original error or interrupt and caller RNG", {
-  skip_on_cran()
   for (outcome in c("error", "interrupt")) {
     for (seeded in c(FALSE, TRUE)) {
       local({
@@ -111,7 +109,6 @@ test_that("an inactive MCP stop is invisible and performs no native or cleanup c
 })
 
 test_that("failed MCP stop revokes access and keeps the owned server available for retry", {
-  skip_on_cran()
   for (outcome in c("error", "interrupt")) {
     for (running in list(TRUE, NA)) {
       local({
@@ -152,7 +149,6 @@ test_that("failed MCP stop revokes access and keeps the owned server available f
 })
 
 test_that("unknown MCP stop confirmation never reports success or drops recovery ownership", {
-  skip_on_cran()
   for (outcome in c("running", "unknown", "string", "vector", "error", "interrupt")) {
     local({
       withr::local_seed(73L)
@@ -212,7 +208,6 @@ test_that("unknown MCP stop confirmation never reports success or drops recovery
 })
 
 test_that("a stopping MCP listener refuses new serving tokens and HTTP dispatch", {
-  skip_on_cran()
   x = mcp_stop_pure(function() NULL)
   x$state$server$stopping = TRUE
   calls = new.env(parent = emptyenv())
@@ -256,7 +251,6 @@ test_that("a stopping MCP listener refuses new serving tokens and HTTP dispatch"
 })
 
 test_that("confirmed MCP stop still cleans ownership before rethrowing its original condition", {
-  skip_on_cran()
   for (outcome in c("error", "interrupt")) {
     local({
       withr::local_seed(73L)

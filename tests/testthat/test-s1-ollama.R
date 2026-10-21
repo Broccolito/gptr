@@ -150,7 +150,6 @@ local_ollama_transfers = function(respond = ollama_reply, delay = 0.01, .env = p
 # ---- the request --------------------------------------------------------------------------------
 
 test_that("the endpoint is /v1/systemone on the configured origin, never a doubled /v1", {
-  skip_on_cran()
   ep = "http://127.0.0.1:11434/v1/systemone"
   for (base in c("http://127.0.0.1:11434/v1", "http://127.0.0.1:11434/v1/",
                  "http://127.0.0.1:11434", "http://127.0.0.1:11434/",
@@ -172,7 +171,6 @@ test_that("the endpoint is /v1/systemone on the configured origin, never a doubl
 })
 
 test_that("a request sends the state, the questions and raw base64 images, never a key", {
-  skip_on_cran()
   q = list(seen = list(type = "noul", instructions = "Is it a dog?"),
            kind = list(type = "choice", instructions = "Which?",
                        criteria = list(dog = NULL, cat = "A cat")),
@@ -216,7 +214,6 @@ test_that("a request sends the state, the questions and raw base64 images, never
 })
 
 test_that("requests outside the adapter's limits fail explicitly before anything is sent", {
-  skip_on_cran()
   base = list(base_url = "http://127.0.0.1:11434/v1")
   noul = function(k) {
     stats::setNames(rep(list(list(type = "noul", instructions = "Q?")), k), paste0("q", seq_len(k)))
@@ -267,7 +264,6 @@ test_that("requests outside the adapter's limits fail explicitly before anything
 })
 
 test_that("images must be PNG, JPEG or WebP bytes that the model accepts", {
-  skip_on_cran()
   base = list(base_url = "http://127.0.0.1:11434/v1")
   build = function(images, model = clef_record()) {
     s1_ollama_build(model, list(text = "a"), noul_q(), c(base, list(images = images)))
@@ -296,7 +292,6 @@ test_that("images must be PNG, JPEG or WebP bytes that the model accepts", {
 # ---- the answers --------------------------------------------------------------------------------
 
 test_that("answers of all three types become canonical records once, in request order", {
-  skip_on_cran()
   for (nm in c("noul", "choice", "score", "image")) {
     fx = wire_fixture(nm, "ollama")
     res = s1_ollama_parse(clef_record(), 200L, list(), json_encode(fx$response),
@@ -342,7 +337,6 @@ test_that("answers of all three types become canonical records once, in request 
 })
 
 test_that("malformed or inconsistent answers are refused, never repaired", {
-  skip_on_cran()
   qs = list(pick = list(type = "choice", instructions = "Which?",
                         criteria = list(dog = NULL, cat = NULL)),
             rate = list(type = "score", instructions = "How?",
@@ -487,7 +481,6 @@ test_that("sums, choices and scores are checked at Ollama's four-decimal roundin
 # ---- requests on the reactor --------------------------------------------------------------------
 
 test_that("a prepared Clef answers on the reactor without a key, one request at a time", {
-  skip_on_cran()
   local_ollama_discovery()
   model = s1_prepare("ollama/clef-flash")
   expect_identical(model$digest, strrep("2", 64))
@@ -625,7 +618,6 @@ test_that("an Ollama error body on the reactor fails its element, not retried (e
 # ---- the classifier route -----------------------------------------------------------------------
 
 test_that("the route prepares Clef once and answers with provenance and unknown calibration", {
-  skip_on_cran()
   s1_fresh()
   srv = local_ollama_discovery()
   log = local_ollama_transfers()
@@ -663,7 +655,6 @@ test_that("the route prepares Clef once and answers with provenance and unknown 
 })
 
 test_that("images join the cache key: other images, another order or none are asked again", {
-  skip_on_cran()
   s1_fresh()
   local_ollama_discovery()
   log = local_ollama_transfers()
@@ -695,7 +686,6 @@ test_that("images join the cache key: other images, another order or none are as
 })
 
 test_that("replay uses the identity frozen with the answers and never discovers (IC-74)", {
-  skip_on_cran()
   s1_fresh(gptr = TRUE)
   srv = local_ollama_discovery()
   log = local_ollama_transfers()
@@ -759,7 +749,6 @@ test_that("replay uses the identity frozen with the answers and never discovers 
 })
 
 test_that("an Ollama model without a digest is asked every time and never pinned", {
-  skip_on_cran()
   s1_fresh()
   models = ollama_models()
   models[["clef-flash:latest"]]$tag$digest = NULL
@@ -776,7 +765,6 @@ test_that("an Ollama model without a digest is asked every time and never pinned
 # ---- failures before egress ---------------------------------------------------------------------
 
 test_that("missing or old servers and unsupported models or inputs fail before anything is sent", {
-  skip_on_cran()
   s1_fresh()
   srv = local_ollama_discovery()
   log = local_ollama_transfers()
@@ -831,7 +819,6 @@ test_that("missing or old servers and unsupported models or inputs fail before a
 })
 
 test_that("local-only refuses cloud markers and remote endpoints; only a run record relaxes it", {
-  skip_on_cran()
   s1_fresh()
   models = ollama_models()
   models[["clef-flash:cloud"]] = list(
@@ -884,7 +871,6 @@ test_that("local-only refuses cloud markers and remote endpoints; only a run rec
 })
 
 test_that("no hidden fallback: a failing Ollama System 1 never asks another model", {
-  skip_on_cran()
   s1_fresh()
   judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
   chat = local_fake_provider(list(list(json = list(answers = list(answer = 0.8)))),

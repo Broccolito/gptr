@@ -20,7 +20,6 @@ s1_sco = function() {
 }
 
 test_that("the three classes carry the contract's class vectors and base types", {
-  skip_on_cran()
   expect_identical(class(s1_dec()), c("gptr_decision", "gptr_s1", "logical"))
   expect_identical(class(s1_cho()), c("gptr_choice", "gptr_s1", "character"))
   expect_identical(class(s1_sco()), c("gptr_score", "gptr_s1", "numeric"))
@@ -34,7 +33,6 @@ test_that("the three classes carry the contract's class vectors and base types",
 })
 
 test_that("decisions work in if, while, isTRUE, ifelse, table, sum and mean like bare vectors", {
-  skip_on_cran()
   d = s1_dec()
   expect_identical(if (d[[1]]) "yes" else "no", "yes")
   expect_identical(if (d[["b"]]) "yes" else "no", "no")
@@ -55,7 +53,6 @@ test_that("decisions work in if, while, isTRUE, ifelse, table, sum and mean like
 })
 
 test_that("[ and [[ subset the values and every per-element attribute", {
-  skip_on_cran()
   d = s1_dec()
   s = d[c("c", "a")]
   expect_s3_class(s, "gptr_decision")
@@ -73,7 +70,6 @@ test_that("[ and [[ subset the values and every per-element attribute", {
 })
 
 test_that("[<- keeps the class for same-kind or bare base values and degrades otherwise", {
-  skip_on_cran()
   d = s1_dec()
   d2 = d
   d2[2] = d[1]
@@ -95,7 +91,6 @@ test_that("[<- keeps the class for same-kind or bare base values and degrades ot
 })
 
 test_that("c, rep, rev, unique and sort follow the contract", {
-  skip_on_cran()
   d = s1_dec()
   both = c(d, d)
   expect_s3_class(both, "gptr_decision")
@@ -113,7 +108,6 @@ test_that("c, rep, rev, unique and sort follow the contract", {
 })
 
 test_that("Ops, Math and Summary return bare vectors", {
-  skip_on_cran()
   ch = s1_cho()
   eq = ch == "liver"
   expect_identical(eq, c(x = TRUE, y = FALSE))
@@ -153,7 +147,6 @@ test_that("as.data.frame gives one row per element with probability columns", {
 })
 
 test_that("as.data.frame and Summary take the generics' row.names and na.rm through ...", {
-  skip_on_cran()
   d = s1_dec()
   expect_identical(row.names(as.data.frame(d, row.names = c("r1", "r2", "r3"))),
                    c("r1", "r2", "r3"))
@@ -168,7 +161,6 @@ test_that("as.data.frame and Summary take the generics' row.names and na.rm thro
 })
 
 test_that("gptr_prob() reads prob, confidence and probabilities", {
-  skip_on_cran()
   d = s1_dec()
   expect_identical(gptr_prob(d), c(a = 0.9, b = 0.2, c = 0.7))
   expect_equal(gptr_prob(d, "confidence"), c(a = 0.8, b = 0.6, c = 0.4))
@@ -183,7 +175,6 @@ test_that("gptr_prob() reads prob, confidence and probabilities", {
 })
 
 test_that("vctrs methods keep the probabilities through slicing and combining", {
-  skip_on_cran()
   skip_if_not_installed("vctrs")
   d = s1_dec()
   s = vctrs::vec_slice(d, 3:2)
@@ -199,7 +190,6 @@ test_that("vctrs methods keep the probabilities through slicing and combining", 
 })
 
 test_that("unknown calibration prints as unknown and native metadata travels (IC-74)", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80)
   meta = list(model = "clef-flash", engine = "ollama", api = "ollama-system-one",
               execution = "native", locality = "local", model_digest = "sha256:0a1b",
@@ -238,7 +228,6 @@ s1_emu = function() {
 }
 
 test_that("c() and [<- never claim calibration that a combined part lacks (IC-74)", {
-  skip_on_cran()
   testthat::local_reproducible_output(width = 80)
   jev = s1_jev()
   clef = s1_clef()
@@ -271,7 +260,6 @@ test_that("c() and [<- never claim calibration that a combined part lacks (IC-74
 })
 
 test_that("[<- with NA subscripts assigns like base R and keeps the attributes aligned", {
-  skip_on_cran()
   d = s1_dec()
   mask = new_gptr_decision(c(NA, TRUE, FALSE), c(NA, 0.8, 0.1))
   r = replace(d, mask, d[3])
@@ -315,7 +303,6 @@ test_that("[<- with NA subscripts assigns like base R and keeps the attributes a
 })
 
 test_that("cached stays per element through zero-length extension and mixed combining", {
-  skip_on_cran()
   e = s1_dec()[0]
   e[2] = TRUE
   expect_identical(attr(e, "meta")$cached, c(NA, NA))
@@ -345,7 +332,6 @@ test_that("cached stays per element through zero-length extension and mixed comb
 })
 
 test_that("vctrs combining never claims calibration that a combined part lacks (IC-74)", {
-  skip_on_cran()
   skip_if_not_installed("vctrs")
   testthat::local_reproducible_output(width = 80)
   calib = function(x) attr(x, "meta", exact = TRUE)$calibrated
@@ -378,7 +364,6 @@ priced_provider = function() {
 }
 
 test_that("s1_provider() passes specs through and looks ids up", {
-  skip_on_cran()
   spec = priced_provider()
   expect_identical(s1_provider(spec), spec)
   off = gptr_register(spec)
@@ -390,7 +375,6 @@ test_that("s1_provider() passes specs through and looks ids up", {
 })
 
 test_that("s1_model() resolves a provider spec to its first model record", {
-  skip_on_cran()
   rec = s1_model(priced_provider())
   expect_identical(rec$provider, "pricey")
   expect_identical(rec$id, "pricey-s1")
@@ -407,7 +391,6 @@ test_that("s1_cost() prices input tokens at the model's dated rate", {
 })
 
 test_that("s1_usage_log() appends one System 1 row to the process log", {
-  skip_on_cran()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
   off = gptr_register(priced_provider())
@@ -442,7 +425,6 @@ clef_provider = function(id, base_url) {
 }
 
 test_that("s1_model() keeps a model's own type and api on a mixed provider (IC-74)", {
-  skip_on_cran()
   mixed = gptr_provider("mixedlocal", api = "openai-completions",
                         base_url = "http://127.0.0.1:11434/v1", local = TRUE,
                         models = list(list(id = "chatty"),
@@ -459,7 +441,6 @@ test_that("s1_model() keeps a model's own type and api on a mixed provider (IC-7
 })
 
 test_that("s1_cost() keeps unknown tokens and prices unknown and a zero rate known (IC-74)", {
-  skip_on_cran()
   rec = s1_model(priced_provider())
   expect_identical(s1_cost(list(input = NA, output = 2), rec), NA_real_)
   expect_identical(s1_cost(NULL, rec), NA_real_)
@@ -478,7 +459,6 @@ test_that("s1_cost() keeps unknown tokens and prices unknown and a zero rate kno
 })
 
 test_that("s1_usage_log() keeps unknown tokens unknown and fills a missing request id (IC-74)", {
-  skip_on_cran()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
   off = gptr_register(priced_provider())
@@ -502,7 +482,6 @@ test_that("s1_usage_log() keeps unknown tokens unknown and fills a missing reque
 })
 
 test_that("s1_usage_log() refuses a malformed request id rather than replacing it (D-015)", {
-  skip_on_cran()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
   off = gptr_register(priced_provider())
@@ -531,7 +510,6 @@ test_that("s1_default_ref() offers a verified local classifier without a TypeSaf
 })
 
 test_that("a keyless loopback classifier gets no credential, even beside a TypeSafe key (IC-74)", {
-  skip_on_cran()
   withr::local_envvar(TYPESAFE_API_KEY = "test-placeholder-not-a-key")
   lp = clef_provider("lollama", "http://127.0.0.1:11434/")
   expect_null(s1_credential(lp))
@@ -543,7 +521,6 @@ test_that("a keyless loopback classifier gets no credential, even beside a TypeS
 })
 
 test_that("s1_preflight() and s1_prepare() check a model before any request (IC-74)", {
-  skip_on_cran()
   local_mocked_bindings(catalog_ollama_discover = function(...) {
     stop("discovery must not run in this test")
   })

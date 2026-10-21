@@ -5,7 +5,6 @@
 # --exclude-standard`.
 
 test_that("resolve_tool_path() follows Pi's resolveToCwd rules", {
-  skip_on_cran()
   expect_identical(resolve_tool_path("sub/../f.R", "/w"), "/w/f.R")
   expect_identical(resolve_tool_path("@src/x.R", "/w"), "/w/src/x.R")
   expect_identical(resolve_tool_path("a\u00a0b.txt", "/w"), "/w/a b.txt")
@@ -15,7 +14,6 @@ test_that("resolve_tool_path() follows Pi's resolveToCwd rules", {
 })
 
 test_that("Git-Bash, WSL, Cygwin, file:// and drive-relative paths name a drive only on Windows", {
-  skip_on_cran()
   win = is_windows()
   posix = c("/c/w/x.R", "/mnt/c/w/x.R", "/cygdrive/c/w/x.R", "/c")
   expect_identical(vapply(posix, resolve_tool_path, "", cwd = "/w", USE.NAMES = FALSE),
@@ -37,7 +35,6 @@ test_that("Git-Bash, WSL, Cygwin, file:// and drive-relative paths name a drive 
 })
 
 test_that("glob_to_regex() implements fd/Pi semantics including the `**/` prefix rule", {
-  skip_on_cran()
   g = function(glob, x) grepl(glob_to_regex(glob), x, perl = TRUE)
   expect_identical(g("*.R", c("a.R", "d/a.R", "a.r", "a.Rmd")), c(TRUE, TRUE, FALSE, FALSE))
   expect_identical(g("src/*.R", c("src/a.R", "src/x/a.R", "a/src/a.R")), c(TRUE, FALSE, TRUE))
@@ -66,7 +63,6 @@ test_that("bracket classes keep POSIX classes and a literal `]` after the negati
 })
 
 test_that("bracket expressions follow git's wildmatch and always compile", {
-  skip_on_cran()
   td = withr::local_tempdir()
   rules = c("[:digit:]", "[z-a].txt", "[z-ab].md", "[[:digit:]-z].x", "[!-a].y", "[[:word:]].a",
             "foo[bar", "[\\]]q", "[a-[:digit:]].w", "a[/]b")
@@ -89,7 +85,6 @@ test_that("bracket expressions follow git's wildmatch and always compile", {
 })
 
 test_that("ignore rules match case-insensitively on a case-insensitive file system", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, ".gitignore", "[B-C].r\n[[:upper:]]x\n[A]y\n")
   for (p in c("b.r", "c.r", "d.r", "ax", "ay")) put_file(td, p)
@@ -100,7 +95,6 @@ test_that("ignore rules match case-insensitively on a case-insensitive file syst
 })
 
 test_that("the .gitignore engine: negation, anchoring, dir-only rules, `**`, escapes, blanks", {
-  skip_on_cran()
   td = withr::local_tempdir()
   rules = c("# comment", "", "*.log", "!keep.log", "/rootonly.txt", "build/", "docs/**/*.tmp",
             "sub/inner.txt", "trail.txt   ", "\\#hash.txt", "data/*", "!data/keep/")
@@ -130,7 +124,6 @@ test_that("nested .gitignore files apply to their own subtree only", {
 })
 
 test_that(".gptrignore wins over .ignore, which wins over .gitignore, at every level", {
-  skip_on_cran()
   td = withr::local_tempdir()
   dir.create(file.path(td, ".git"))
   put_file(td, ".gitignore", "a.txt\nb.txt\n")
@@ -146,7 +139,6 @@ test_that(".gptrignore wins over .ignore, which wins over .gitignore, at every l
 })
 
 test_that("the walker prunes .git, node_modules, renv/library; dotfiles only with hidden = TRUE", {
-  skip_on_cran()
   td = withr::local_tempdir()
   for (p in c(".git/config", "node_modules/p/i.js", "renv/library/x/DESCRIPTION", "renv/activate.R",
               ".hid/h.txt", "R/a.R")) put_file(td, p)
@@ -157,7 +149,6 @@ test_that("the walker prunes .git, node_modules, renv/library; dotfiles only wit
 })
 
 test_that("a negation in an ignore file never re-includes a pruned directory", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, ".gitignore", "*\n!*/\n!*.R\n")
   for (p in c(".git/HEAD", ".git/hooks/h.R", "node_modules/m/x.R", "a.R", "b.txt", "sub/c.R",
@@ -170,7 +161,6 @@ test_that("a negation in an ignore file never re-includes a pruned directory", {
 })
 
 test_that("walk_files() returns path, size, mtime, type and honours max", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, "a.txt", "12345")
   put_file(td, "d/b.txt", "1")
@@ -185,7 +175,6 @@ test_that("walk_files() returns path, size, mtime, type and honours max", {
 })
 
 test_that("max counts only rows of the requested type (directories do not use it up)", {
-  skip_on_cran()
   td = withr::local_tempdir()
   for (i in 1:12) put_file(td, sprintf("d%02d/f.txt", i))
   w = walk_files(td, type = "file", max = 5)
@@ -228,7 +217,6 @@ test_that("the file set equals git ls-files on a repository with tricky rules", 
 })
 
 test_that("non-ASCII directory and file names are walked and matched in any locale", {
-  skip_on_cran()
   td = withr::local_tempdir()
   root = file.path(td, "r\u00e9po")
   put_bytes = function(rel, text = "x\n") {
@@ -277,7 +265,6 @@ test_that("a directory link back to the root (a Windows junction) is listed but 
 })
 
 test_that("the prune list is anchored at the walk root, also below a git root", {
-  skip_on_cran()
   td = withr::local_tempdir()
   dir.create(file.path(td, ".git"))
   for (p in c("proj/R/a.R", "proj/renv/library/pkg/DESCRIPTION", "proj/renv/activate.R")) {
@@ -289,7 +276,6 @@ test_that("the prune list is anchored at the walk root, also below a git root", 
 })
 
 test_that("a git root at the file-system root keeps the ancestor rules", {
-  skip_on_cran()
   td = withr::local_tempdir()
   put_file(td, ".gitignore", "*.tmp\n/proj/drop.txt\n")
   for (p in c("proj/keep.R", "proj/drop.txt", "proj/x.tmp")) put_file(td, p)

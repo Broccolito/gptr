@@ -18,7 +18,6 @@ test_that("short output is returned unchanged", {
 })
 
 test_that("truncation keeps 40% head and 60% tail by lines and returns an out id (acceptance 4)", {
-  skip_on_cran()
   local_out_store()
   lines = sprintf("line %04d xxxxxxxxxxxx", 1:1000)
   res = truncate_output(lines, budget_tokens = 1000)
@@ -56,7 +55,6 @@ test_that("out_get() falls back to the spill file when the store has forgotten t
 })
 
 test_that("the out store keeps the last gptr.out_keep entries and a stderr stream (IC-71)", {
-  skip_on_cran()
   local_out_store()
   withr::local_options(gptr.out_keep = 3L)
   ids = vapply(1:5, function(i) out_put(paste("result", i)), "")
@@ -68,7 +66,6 @@ test_that("the out store keeps the last gptr.out_keep entries and a stderr strea
 })
 
 test_that("a session's live record holds its own out store (IC-71)", {
-  skip_on_cran()
   local_out_store()
   live = new.env()
   live$out = NULL
@@ -103,7 +100,6 @@ test_that("clean_terminal() drops ANSI and OSC sequences, collapses progress and
 })
 
 test_that("listings print at most 20 rows, a count line and the footer", {
-  skip_on_cran()
   local_reproducible_output(width = 80)
   df = data.frame(id = 1:25, name = paste0("item", 1:25))
   listing = new_listing(df, "demo", footer = "Use demo(id) to open one.")

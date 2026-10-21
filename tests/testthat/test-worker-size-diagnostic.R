@@ -29,7 +29,6 @@ test_that("worker size diagnostics retain only fixed numeric structure and uncha
 })
 
 test_that("worker size diagnostics reject oversized and unknown-shape inputs", {
-  skip_on_cran()
   dir = withr::local_tempdir()
   file = file.path(dir, "spec.rds")
   writeBin(raw(81L), file)
@@ -44,7 +43,6 @@ test_that("worker size diagnostics reject oversized and unknown-shape inputs", {
 })
 
 test_that("worker size publication failures retain diagnostic failure and permit cleanup", {
-  skip_on_cran()
   failures = list(simpleError("PUBLIC-DIAGNOSTIC"),
     structure(list(message = "PUBLIC-INTERRUPT", call = NULL),
       class = c("interrupt", "condition")))

@@ -12,7 +12,6 @@ local_setup_providers = function(status = c("found", "found"),
 
 for (choice in 1:2) {
   test_that(paste("first use saves CLI choice", choice, "and preserves acknowledgements"), {
-    skip_on_cran()
     local_gw(workspace = FALSE)
     local_setup_providers()
     ui = local_scripted_ui(list(choice))
@@ -32,7 +31,6 @@ for (choice in 1:2) {
 }
 
 test_that("API setup gives commands and returns to R without choosing a model", {
-  skip_on_cran()
   local_gw(workspace = FALSE)
   local_setup_providers()
   local_scripted_ui(list(3L))
@@ -70,7 +68,6 @@ test_that("manual setup shows API and local Ollama paths without discovering or 
 
 for (choice in list(NA_integer_, 1L)) {
   test_that(paste("cancelled or unavailable CLI choice", choice, "saves no fallback"), {
-    skip_on_cran()
     local_gw(workspace = FALSE)
     local_setup_providers(c("not found", "found"))
     local_scripted_ui(list(choice))
@@ -82,7 +79,6 @@ for (choice in list(NA_integer_, 1L)) {
 }
 
 test_that("setup respects explicit models, existing sessions and configured defaults", {
-  skip_on_cran()
   local_gw(workspace = FALSE)
   ui = local_scripted_ui()
   local_setup_providers()
@@ -100,7 +96,6 @@ test_that("setup respects explicit models, existing sessions and configured defa
 })
 
 test_that("setup does not consume piped input or configure noninteractive calls", {
-  skip_on_cran()
   local_gw(workspace = FALSE)
   ui = local_scripted_ui(list(1L))
   rs = repl_state(NULL, new.env(), stdin = TRUE)
@@ -113,7 +108,6 @@ test_that("setup does not consume piped input or configure noninteractive calls"
 })
 
 test_that("peter opens with the chosen default and skips setup on its next opening", {
-  skip_on_cran()
   local_gw(workspace = FALSE)
   local_setup_providers()
   ui = local_scripted_ui(list(1L))
@@ -127,7 +121,6 @@ test_that("peter opens with the chosen default and skips setup on its next openi
 })
 
 test_that("cancelling first-use setup leaves Peter before reading any chat input", {
-  skip_on_cran()
   local_gw(workspace = FALSE)
   local_setup_providers()
   local_scripted_ui()
@@ -137,7 +130,6 @@ test_that("cancelling first-use setup leaves Peter before reading any chat input
 })
 
 test_that("the console menu consumes a CLI choice before normal chat input", {
-  skip_on_cran()
   local_gw(workspace = FALSE)
   local_setup_providers()
   local_gptr_options(interactive = TRUE, ui = "console")
@@ -178,7 +170,6 @@ test_that("the console menu consumes a CLI choice before normal chat input", {
 
 for (choice in 1:2) {
   test_that(paste("unsigned CLI choice", choice, "gives login instructions without saving"), {
-    skip_on_cran()
     local_gw(workspace = FALSE)
     local_setup_providers(login = c("not signed in", "not signed in"))
     local_scripted_ui(list(choice))
@@ -196,7 +187,6 @@ for (choice in 1:2) {
 }
 
 test_that("unknown CLI login warns but allows the user to choose it", {
-  skip_on_cran()
   local_gw(workspace = FALSE)
   local_setup_providers(login = c("unknown", "unknown"))
   local_scripted_ui(list(2L))
@@ -212,7 +202,6 @@ test_that("unknown CLI login warns but allows the user to choose it", {
 
 for (choice in 1:2) {
   test_that(paste("first use refuses non-CLI overrides of shortcut", choice), {
-    skip_on_cran()
     local_gw(workspace = FALSE)
     local_gptr_options(interactive = TRUE, ui = "console")
     off_codex = gptr_register(gptr_provider("codex", api = "openai-responses",

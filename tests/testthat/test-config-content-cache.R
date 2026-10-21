@@ -25,7 +25,6 @@ test_that("file SHA256 preserves byte identity for binary and empty inputs", {
 })
 
 test_that("content-sensitive settings reuse a parsed value and invalidate unchanged metadata", {
-  skip_on_cran()
   local_gw()
   path = settings_path("user", create = TRUE)
   writeLines('{"mode":"plan"}', path)
@@ -49,7 +48,6 @@ test_that("content-sensitive settings reuse a parsed value and invalidate unchan
 })
 
 test_that("a settings rewrite during decoding cannot publish a mismatched cache entry", {
-  skip_on_cran()
   local_gw()
   path = settings_path("user", create = TRUE)
   writeLines('{"mode":"plan"}', path)
@@ -72,7 +70,6 @@ test_that("a settings rewrite during decoding cannot publish a mismatched cache 
 })
 
 test_that("an unavailable content digest never serves or retains stale settings", {
-  skip_on_cran()
   local_gw()
   path = settings_path("user", create = TRUE)
   writeLines('{"mode":"plan"}', path)
@@ -86,7 +83,6 @@ test_that("an unavailable content digest never serves or retains stale settings"
 })
 
 test_that("content-sensitive trust verifies each hit and reuses its current file hashes", {
-  skip_on_cran()
   project = local_gw()
   path = file.path(project, ".gptr", "settings.json")
   writeLines('{"mode":"plan"}', path)

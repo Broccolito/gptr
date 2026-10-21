@@ -12,7 +12,6 @@ write_skill = function(root, dir, lines) {
 }
 
 test_that("skill_parse builds a skill spec from SKILL.md", {
-  skip_on_cran()
   root = withr::local_tempdir()
   md = skill_md("pdf-tools", "Extract text from PDF files.",
                 c("allowed-tools: read r", "version: 1.0"))
@@ -30,7 +29,6 @@ test_that("skill_parse builds a skill spec from SKILL.md", {
 })
 
 test_that("skills without a description or with an invalid name are skipped and diagnosed", {
-  skip_on_cran()
   root = withr::local_tempdir()
   expect_null(skill_parse(write_skill(root, "nodesc", c("---", "name: nodesc", "---", "x"))))
   bad = c("---", "description: Named after its folder.", "---", "x")
@@ -52,7 +50,6 @@ test_that("a SKILL.md with name: on and version: 1.0 keeps both as strings (IC-7
 })
 
 test_that("a 37-skill corpus in the styles of report 05 parses completely", {
-  skip_on_cran()
   root = withr::local_tempdir()
   for (i in 1:21) {
     md = c("---", sprintf("name: folded-%02d", i), "description: >",
@@ -104,7 +101,6 @@ test_that("skill_walk skips dot-directories, node_modules and files inside a ski
 })
 
 test_that("gptr_skills lists project and user skills; the project wins a name", {
-  skip_on_cran()
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "shared", skill_md("shared", "Project version."))
   write_skill(file.path(p, ".claude", "skills"), "proj-only", skill_md("proj-only", "Project."))
@@ -122,7 +118,6 @@ test_that("gptr_skills lists project and user skills; the project wins a name", 
 })
 
 test_that("an untrusted project's skills are listed as untrusted and never visible", {
-  skip_on_cran()
   p = local_project(trust = FALSE)
   write_skill(file.path(p, ".gptr", "skills"), "proj-skill", skill_md("proj-skill", "Project."))
   sk = gptr_skills("project")
@@ -137,7 +132,6 @@ test_that("gptr_skills validates its scope", {
 # Task 2 review round 1 (D-074): untrusted SKILL.md text never stops discovery.
 
 test_that("NA spellings in SKILL.md frontmatter never stop gptr_skills() (IC-71)", {
-  skip_on_cran()
   p = local_project(trust = FALSE)
   root = file.path(p, ".gptr", "skills")
   write_skill(root, "good", skill_md("good", "A valid skill."))
@@ -156,7 +150,6 @@ test_that("NA spellings in SKILL.md frontmatter never stop gptr_skills() (IC-71)
 })
 
 test_that("skill_parse treats NA fields as missing and turns a failure into a diagnostic", {
-  skip_on_cran()
   root = withr::local_tempdir()
   f = write_skill(root, "fallback", skill_md("fallback", "On disk."))
   meta = list(name = NA_character_, description = "From the parser.")
@@ -178,7 +171,6 @@ test_that("skill_parse treats NA fields as missing and turns a failure into a di
 # Task 2 review round 2 (D-074 item 4): a relative skills.paths entry is project content.
 
 test_that("a relative skills.paths entry is a project root and follows project trust (IC-52)", {
-  skip_on_cran()
   p = local_project(trust = FALSE)
   write_skill(file.path(p, "tools", "skills"), "rel-skill", skill_md("rel-skill", "Relative."))
   abs_root = withr::local_tempdir()
@@ -202,7 +194,6 @@ test_that("a relative skills.paths entry is a project root and follows project t
 # Task 2 review round 3 (D-074 items 5-7): bounded parsing, no warnings, `~name` entries.
 
 test_that("a SKILL.md whose YAML aliases expand too far is skipped with a diagnostic", {
-  skip_on_cran()
   p = local_project(trust = FALSE)
   root = file.path(p, ".gptr", "skills")
   write_skill(root, "good", skill_md("good", "A valid skill."))
@@ -216,7 +207,6 @@ test_that("a SKILL.md whose YAML aliases expand too far is skipped with a diagno
 })
 
 test_that("skill_parse reads a scalar disable-model-invocation and flat allowed-tools only", {
-  skip_on_cran()
   root = withr::local_tempdir()
   f = write_skill(root, "shape", skill_md("shape", "On disk."))
   nested = letters[1:9]
@@ -258,7 +248,6 @@ test_that("an unreadable SKILL.md is a diagnostic and never a warning (contract 
 })
 
 test_that("only ~ and ~/ skills.paths entries are home directories; ~name is project content", {
-  skip_on_cran()
   p = local_project(trust = FALSE)
   home = withr::local_tempdir()
   local_mocked_bindings(user_home = function() home)
@@ -280,7 +269,6 @@ test_that("only ~ and ~/ skills.paths entries are home directories; ~name is pro
 # Task 2 review round 4 (D-074 item 8): a name ends at the end of the string.
 
 test_that("a skill name ending in a newline is refused with a diagnostic (contract 11.13)", {
-  skip_on_cran()
   p = local_project(trust = FALSE)
   root = file.path(p, ".gptr", "skills")
   write_skill(root, "good", skill_md("good", "A valid skill."))
@@ -324,7 +312,6 @@ hpr_files = function() {
 }
 
 test_that("the built-in high-performance-r skill parses with its catalog line", {
-  skip_on_cran()
   f = system.file("gptr", "skills", "high-performance-r", "SKILL.md", package = "gptr")
   expect_true(nzchar(f))
   s = skill_parse(f)
@@ -345,7 +332,6 @@ test_that("the shipped skill never recommends str() and states its cost (IC-67)"
 })
 
 test_that("every R recipe in the skill parses", {
-  skip_on_cran()
   n = 0L
   for (f in hpr_files()) {
     lines = readLines(f, encoding = "UTF-8")
@@ -374,7 +360,6 @@ skills_header = paste0("Skills hold specialized instructions. When a task matche
                        "paths inside it are relative to the skill (read skill:<name>/<path>).")
 
 test_that("the catalog starts with the verbatim header and lists the built-in skill", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   skill_sync()
   lines = strsplit(skill_catalog(NULL, 1500L), "\n", fixed = TRUE)[[1L]]
@@ -384,7 +369,6 @@ test_that("the catalog starts with the verbatim header and lists the built-in sk
 })
 
 test_that("trusted project skills enter the catalog; untrusted ones never do (IC-52)", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = FALSE)
   write_skill(file.path(p, ".gptr", "skills"), "proj-skill",
@@ -404,7 +388,6 @@ test_that("trusted project skills enter the catalog; untrusted ones never do (IC
 })
 
 test_that("over budget, least recently used descriptions go first, then entries", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   root = file.path(p, ".gptr", "skills")
@@ -426,7 +409,6 @@ test_that("over budget, least recently used descriptions go first, then entries"
 })
 
 test_that("skill.body resolves normalised names and returns the body and directory", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   f = write_skill(file.path(p, ".gptr", "skills"), "single-cell",
@@ -442,7 +424,6 @@ test_that("skill.body resolves normalised names and returns the body and directo
 })
 
 test_that("skills = single_cell and high_performance_r resolve after normalisation (IC-42)", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "single-cell",
@@ -455,7 +436,6 @@ test_that("skills = single_cell and high_performance_r resolve after normalisati
 })
 
 test_that("the skills section appears only when read is active", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   skill_sync()
   ctx = function(tools) list(input = list(tool_names = tools), session = NULL)
@@ -464,7 +444,6 @@ test_that("the skills section appears only when read is active", {
 })
 
 test_that("a preview of a new session lists the skills a session start would sync", {
-  skip_on_cran()
   local_project()
   res_prune("skills:", character())
   withr::defer(res_prune("skills:", character()))
@@ -474,7 +453,6 @@ test_that("a preview of a new session lists the skills a session start would syn
 })
 
 test_that("builtin:skills registers the section and the services, and no search source", {
-  skip_on_cran()
   sec = Filter(function(s) identical(s[["name"]], "skills"), registry_all("prompt_section"))
   expect_length(sec, 1L)
   expect_identical(sec[[1L]][["tier"]], "T1")
@@ -488,7 +466,6 @@ test_that("builtin:skills registers the section and the services, and no search 
 })
 
 test_that("a new session carries the catalog in T1 and preloads skills = (e2e)", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "single-cell",
@@ -505,7 +482,6 @@ test_that("a new session carries the catalog in T1 and preloads skills = (e2e)",
 })
 
 test_that("an untrusted project's skill is not in the catalog of a session (e2e)", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = FALSE)
   write_skill(file.path(p, ".gptr", "skills"), "sneaky-skill",
@@ -521,7 +497,6 @@ test_that("an untrusted project's skill is not in the catalog of a session (e2e)
 # the catalog budget follows its documented order.
 
 test_that("skill.body re-checks a synced project skill after its trust is removed (IC-52)", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "proj-skill",
@@ -534,7 +509,6 @@ test_that("skill.body re-checks a synced project skill after its trust is remove
 })
 
 test_that("skill.body never serves the skill of a project the working directory left", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   a = local_project(trust = TRUE)
   write_skill(file.path(a, ".gptr", "skills"), "dup-skill",
@@ -554,7 +528,6 @@ test_that("skill.body never serves the skill of a project the working directory 
 })
 
 test_that("skill.body of a skill whose SKILL.md was removed after the sync is unknown", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   f = write_skill(file.path(p, ".gptr", "skills"), "gone-skill",
@@ -566,7 +539,6 @@ test_that("skill.body of a skill whose SKILL.md was removed after the sync is un
 })
 
 test_that("a skills = preload re-checks trust before the session syncs (e2e, IC-52)", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   write_skill(file.path(p, ".gptr", "skills"), "proj-skill",
@@ -580,7 +552,6 @@ test_that("a skills = preload re-checks trust before the session syncs (e2e, IC-
 })
 
 test_that("the catalog budget is gptr.skills_budget, else skills.budget, else 1500", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   withr::local_options(gptr.skills_budget = NULL)
   expect_identical(skills_budget(), 1500L)
@@ -600,7 +571,6 @@ test_that("the catalog budget is gptr.skills_budget, else skills.budget, else 15
 # would write now, for nested projects and for skills a project shadows (IC-52; 04 section 10.1).
 
 test_that("skill.body never serves a nested project's skill from the outer project (IC-52)", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   a = local_project(trust = TRUE)
   b = file.path(a, "pkg")
@@ -626,7 +596,6 @@ test_that("skill.body never serves a nested project's skill from the outer proje
 })
 
 test_that("skill.body serves the current project's skill over a registered user skill", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   user_root = file.path(gptr_user_dir("config"), "skills")
   write_skill(user_root, "dup-skill", skill_md("dup-skill", "User copy.", body = "USER BODY"))
@@ -643,7 +612,6 @@ test_that("skill.body serves the current project's skill over a registered user 
 })
 
 test_that("a skills = preload and the T1 catalog agree on a skill the project shadows (e2e)", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   user_root = file.path(gptr_user_dir("config"), "skills")
   write_skill(user_root, "dup-skill", skill_md("dup-skill", "User copy.", body = "USER BODY"))
@@ -664,7 +632,6 @@ test_that("a skills = preload and the T1 catalog agree on a skill the project sh
 })
 
 test_that("skill.body does not sync again while the registry holds the current skills", {
-  skip_on_cran()
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)
   shared = withr::local_tempdir("gptr-shared-")

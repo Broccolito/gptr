@@ -39,7 +39,6 @@ local_billing_notice_once = function(.env = parent.frame()) {
 }
 
 test_that("billing removal is a typed neutral notice with unchanged filtering and parent", {
-  skip_on_cran()
   local_gptr_options(quiet = FALSE)
   local_billing_notice_once()
   before = Sys.getenv()
@@ -66,7 +65,6 @@ test_that("billing removal is a typed neutral notice with unchanged filtering an
 })
 
 test_that("billing notice remains once per removed set and respects explicit consent", {
-  skip_on_cran()
   local_gptr_options(quiet = FALSE)
   local_billing_notice_once()
   parent = c(PATH = "/owned-test/bin", ANTHROPIC_API_KEY = "FAKE-API",
@@ -92,7 +90,6 @@ test_that("billing notice remains once per removed set and respects explicit con
 })
 
 test_that("billing notice preserves caller muffling and the explicit quiet-message policy", {
-  skip_on_cran()
   local_gptr_options(quiet = FALSE)
   local_billing_notice_once()
   child = billing_notice_child(c(PATH = "/owned-test/bin", ANTHROPIC_API_KEY = "FAKE-CLAUDE",

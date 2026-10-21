@@ -103,7 +103,6 @@ test_that("Windows writer startup progress cannot extend the stdin deadline", {
 })
 
 test_that("Windows writer delivery deadline advances only on acknowledged bytes", {
-  skip_on_cran()
   x = rw_local_state()
   x$st$startup_t0 = 0
   x$st$startup_elapsed = 0.6

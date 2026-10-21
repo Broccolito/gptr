@@ -16,7 +16,6 @@ worker_launch_state = function() {
 }
 
 test_that("worker launch passes a complete child environment and keeps one owned handle", {
-  skip_on_cran()
   st = worker_launch_state()
   seen = new.env(parent = emptyenv())
   p = list(get_pid = function() 123L)
@@ -66,7 +65,6 @@ test_that("worker launch passes a complete child environment and keeps one owned
 })
 
 test_that("worker launch failure retains the native handle and its original condition", {
-  skip_on_cran()
   st = worker_launch_state()
   seen = new.env(parent = emptyenv())
   p = list(get_pid = function() 124L)
@@ -94,7 +92,6 @@ test_that("worker launch failure retains the native handle and its original cond
 })
 
 test_that("watcher or job registration failure settles before deleting the worker payload", {
-  skip_on_cran()
   for (stage in c("watch", "job")) {
     st = worker_launch_state()
     seen = new.env(parent = emptyenv())
@@ -131,7 +128,6 @@ test_that("watcher or job registration failure settles before deleting the worke
 })
 
 test_that("unsettled worker cleanup retains ownership and permits a confirmed retry", {
-  skip_on_cran()
   values = list(FALSE, NA, structure(list(message = "kill failed", call = NULL),
                                      class = c("error", "condition")),
                  structure(list(message = "kill interrupted", call = NULL),
@@ -198,7 +194,6 @@ test_that("cancelled workers ignore late result, permission and exit callbacks",
 })
 
 test_that("natural worker exit keeps recovery files until the process tree settles", {
-  skip_on_cran()
   st = worker_launch_state()
   st$p = list(get_pid = function() 128L)
   st$dir = withr::local_tempdir()
@@ -225,7 +220,6 @@ test_that("natural worker exit keeps recovery files until the process tree settl
 })
 
 test_that("failed watcher cancellation cannot complete worker cleanup before a retry", {
-  skip_on_cran()
   values = list(structure(list(message = "cancel failed", call = NULL),
                            class = c("error", "condition")),
                  structure(list(message = "cancel interrupted", call = NULL),

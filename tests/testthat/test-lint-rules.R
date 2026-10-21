@@ -170,7 +170,6 @@ test_that("R/ follows the package lint rules (contract section 12.3, IC-72)", {
 })
 
 test_that("each lint rule catches its violation (negative controls)", {
-  skip_on_cran()
   dir = withr::local_tempdir()
   bad = c(
     "f01 = function() gptr:::the",
@@ -210,7 +209,6 @@ test_that("each lint rule catches its violation (negative controls)", {
 })
 
 test_that("the file and function exemptions of the rules hold", {
-  skip_on_cran()
   dir = withr::local_tempdir()
   writeLines(c(
     "save_rds = function(object, file) saveRDS(object, file, ascii = FALSE, compress = FALSE)",
@@ -240,14 +238,12 @@ test_that("the file and function exemptions of the rules hold", {
 })
 
 test_that("S3 methods of Suggests generics and closure state pass (IC-72, acceptance 7)", {
-  skip_on_cran()
   fixture = testthat::test_path("fixtures", "lint", "s3-methods.R")
   expect_identical(nrow(lint_scan(fixture)), 0L)
 })
 
 
 test_that("lint token and call rules preserve caller-disabled parse data", {
-  skip_on_cran()
   path = withr::local_tempfile(pattern = "parse-disabled-", fileext = ".R")
   writeLines(c(paste0("x <", "- 1"), "Sys.setenv(A = '1')", "readLines('x')",
                "f = function() { env[['.Random.seed']] = 1L }"), path)
@@ -299,7 +295,6 @@ test_that("lint parsers restore disabled parse data on errors and interrupts", {
 })
 
 test_that("call scanning keeps compound text lazy without changing security or debug source", {
-  skip_on_cran()
   path = withr::local_tempfile(fileext = ".R")
   lines = c(
     "f = function(x) {",

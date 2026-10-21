@@ -1,7 +1,6 @@
 # Disposable storage ownership regressions; no real project or credential content.
 
 test_that("cache info and cleanup stay inside owned cache directories", {
-  skip_on_cran()
   for (kind in c("s1", "s2", "tmp")) for (action in c("clear", "prune")) {
     for (placement in c("nested", "root")) local({
       project = local_project()
@@ -51,7 +50,6 @@ test_that("a cache-kind link to owned workspace storage still works", {
 })
 
 test_that("checkpoint GC never removes foreign content through storage links", {
-  skip_on_cran()
   for (placement in c("nested", "store", "blobs", "objects")) local({
     project = local_project()
     root = file.path(project, ".gptr")
@@ -134,7 +132,6 @@ test_that("discovered project instructions cannot read escaped or guarded link t
 })
 
 test_that("safe project instruction links and user-level instructions are retained", {
-  skip_on_cran()
   project = p07_project(list("rules.md" = "safe linked project instruction"))
   user = file.path(gptr_user_dir("config", create = TRUE), "AGENTS.md")
   writeLines("user-level instruction", user)

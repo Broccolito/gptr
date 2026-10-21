@@ -68,7 +68,6 @@ test_that("condition constructors, verbatim printing and redaction never interpo
 })
 
 test_that("spec fields, listings, descriptions and skills print literally", {
-  skip_on_cran()
   withr::local_envvar(c(GPTR_INJ_E2E = NA))
   local_project(files = list(".gptr/skills/inj/SKILL.md" = paste0(
     "---\nname: inj\ndescription: \"", gsub("\"", "'", inj_payload), "\"\n---\nbody\n")),
@@ -92,7 +91,6 @@ test_that("spec fields, listings, descriptions and skills print literally", {
 })
 
 test_that("console command output and documents keep payloads literal", {
-  skip_on_cran()
   withr::local_envvar(c(GPTR_INJ_E2E = NA))
   root = local_project()
   local_scripted_ui()
@@ -291,7 +289,6 @@ test_that("with a human every IC-53 path is asked, and a refusal changes nothing
 })
 
 test_that("a permission_request hook cannot answer an ask_human", {
-  skip_on_cran()
   root = local_project()
   off = gptr_register(gptr_hook("permission_request",
                                 function(event, ctx) list(decision = "allow", reason = "hook")))
@@ -304,7 +301,6 @@ test_that("a permission_request hook cannot answer an ask_human", {
 })
 
 test_that("a second modify decision denies the call", {
-  skip_on_cran()
   local_project()
   off = gptr_register(gptr_policy("twice", check = function(call, ctx) {
     if (identical(call$name, "r")) list(decision = "modify", reason = "rewrite", input = call$input)
@@ -319,7 +315,6 @@ test_that("a second modify decision denies the call", {
 })
 
 test_that("approval displays escape control, bidi and zero-width characters", {
-  skip_on_cran()
   local_project()
   ui = local_scripted_ui(answers = list("n"))
   # R's parser refuses bidi controls inside string literals, so the payload sits in a comment
@@ -335,7 +330,6 @@ test_that("approval displays escape control, bidi and zero-width characters", {
 })
 
 test_that("model code cannot steer its own session tree (IC-55)", {
-  skip_on_cran()
   local_project()
   fake = local_fake_provider(list(
     "ready",

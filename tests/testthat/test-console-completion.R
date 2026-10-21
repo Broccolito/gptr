@@ -181,7 +181,6 @@ test_that("native prefix integration preserves argument and quote completers", {
 })
 
 test_that("unsupported input modes and IDE consoles keep completion options unchanged", {
-  skip_on_cran()
   # an IDE console (RStudio, Positron, R.app, Jupyter) reads no tty
   cases = list(list(human = FALSE), list(cledit = FALSE), list(tty = FALSE),
                list(unix = FALSE), list(stdin = TRUE), list(disabled = TRUE))
