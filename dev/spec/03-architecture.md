@@ -492,7 +492,8 @@ redacted, encrypted reasoning, parallel tools, overload, truncation), `fixtures/
 | Path | Content | Plan |
 |---|---|---|
 | `DESCRIPTION`, `NAMESPACE` (roxygen), `.lintr`, `.Rbuildignore`, `.gitignore`, `LICENSE.md` (Apache License 2.0 text) | package skeleton; `.Rprofile` and `LICENSE` deleted | P01 |
-| `.github/workflows/R-CMD-check.yaml` | r-lib check-standard (macOS, Windows, Ubuntu release/devel/oldrel-1) + oldrel-4 + no-suggests + `LC_ALL=C` job + copy-safety job on R-release and R-devel + a job with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true` [IC-59] + a `bench` job running the token ratchet with rtiktoken [IC-73] | P01 |
+| `.github/workflows/R-CMD-check.yaml` | r-lib check-standard (macOS, Ubuntu release/devel/oldrel-1) + oldrel-4 + no-suggests + `LC_ALL=C` job + copy-safety job on R-release and R-devel + a job with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true` [IC-59] + a `bench` job running the token ratchet with rtiktoken [IC-73] | P01 |
+| `.github/workflows/Windows-check.yaml` | check-standard's Windows release and oldrel-4 rows, four serial shards each, behind the required gates `windows-latest (release)` and `windows-latest (oldrel-4)` (D-239) | P01 |
 | `dev/style.R` | `gptr_style()` styler helper (conventions §4) | P01 |
 | `dev/catalog/build_models.R` | builds `inst/extdata/models.json.gz` from models.dev | P05 |
 | `dev/bench/tokens/run.R` and the NS-2/NS-3 golden transcripts | the token ratchet runner, from M1 [IC-73] | P07 (fixtures added by P10, P13, P15, P18, P19, P22, P23) |
