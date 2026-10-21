@@ -19,15 +19,14 @@ Description: Runs large language model agents inside the running 'R'
     interfaces, 'OpenAI'-compatible endpoints, the 'Claude Code' and 'Codex'
     command line tools, local 'Ollama' <https://ollama.com> conversational
     models, and 'System One' typed-decision models such as 'Jev', 'Clef' and
-    'Clef Flash' <https://typesafe.ai/blog/introducing-system-one-models-and-jev>, whose
-    typed yes/no, choice and score answers can be used directly in if()
-    and for() statements. Tools for reading, writing, editing and searching
-    files and for evaluating 'R' code are implemented in 'R'; skills,
-    extensions, Model Context Protocol ('MCP') servers, sub-agents and
-    'shiny' apps are supported. Sessions are recorded as 'R' scripts,
-    'R Markdown', 'Quarto' or 'Jupyter' documents that can be re-run.
-    Writing files and evaluating model-generated code require the user's
-    permission by default.
+    'Clef Flash', whose typed yes/no, choice and score answers can be used
+    directly in if() and for() statements. Tools for reading, writing,
+    editing and searching files and for evaluating 'R' code are implemented
+    in 'R'; skills, extensions, Model Context Protocol ('MCP') servers,
+    sub-agents and 'shiny' apps are supported. Sessions are recorded as 'R'
+    scripts, 'R Markdown', 'Quarto' or 'Jupyter' documents that can be
+    re-run. Writing files and evaluating model-generated code require the
+    user's permission by default.
 License: Apache License (== 2.0)
 URL: https://broccolito.github.io/gptr/,
     https://github.com/Broccolito/gptr
