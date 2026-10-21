@@ -383,7 +383,7 @@ test_that("a lone CR is kept byte for byte and the diff shows only the edited li
 test_that("a NUL byte past the first 8000 makes a file binary, with or without a UTF-8 BOM", {
   td = withr::local_tempdir()
   body = c(charToRaw(strrep("a", 9000)), as.raw(0), charToRaw("\nx\n"))
-  f = put_file(td, "nul.txt", body)
+  f = put_file(td, "nulbyte.txt", body)
   expect_identical(err(edit_file(f, e1("x", "y"))),
                    sprintf("Could not edit file: %s. It is a binary file.", f))
   g = put_file(td, "bomnul.txt", c(as.raw(c(0xEF, 0xBB, 0xBF)), body))
