@@ -1110,3 +1110,37 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Baseline (`run.R --update`): the 12 standard cases' prefix and catalog +143 (catalog 399 -> 542, the value
   recorded before the drift noted in D-135 item 6), input totals +143 per request; the two minimal cases unchanged.
   `run.R --check` OK; polyglot within 10%; `dev/bench/tests` PASS.
+
+## Task CI-79 - The Windows writer-runtime cases give a lazy writer cold start the duplex budget (2026-10-21, #63)
+- Windows-check `windows-latest (release, shard 1/4)` on 176a3a2 (PR #61, run 39580403671, job
+  119156456410) failed native-09 "Windows reactor shutdown settles an idle production writer": a
+  `gptr_error_timeout` at stage delivery with accepted_bytes 0. The lazily started writer was alive
+  and ready 1.93 s after the write was queued (PowerShell's protected CreateDirectory took 0.64 to
+  1.81 s), leaving under 0.07 s of the 2 s window for the first ACK; the file's other cases started
+  in 0.62 to 0.81 s. Same class: bc13aba binary (job 116726253175, 1.93 s, which led to 35536d4),
+  fa64ef2 shutdown (windows-by-file job 118304278433, 1.41 s), c5a2b8e shutdown and orphan (job
+  116082432978, 2.09 and 1.97 s, at stage startup). In R CMD check, this class is 3 of 202 native-09
+  runs since 2026-10-14 (c5a2b8e, bc13aba and 176a3a2); fa64ef2 was a windows-by-file run outside
+  that count.
+- Cause (the limit, not the code): IC-60's no-progress window opens when the write is queued, before
+  the lazy `proc_writer_start()`, and only an ACK moves it ("Windows writer startup progress cannot
+  extend the stdin deadline" pins this), so each case's 2 s covered writer cold start (Rscript actor
+  and PowerShell ACL verifier) plus the first ACK. Hosted cold starts: 437 witnesses, p50 0.65 s,
+  p99 1.97 s, max 5.24 s; readiness to first ACK: 166 base-only controls, p50 0.05 s, max 0.57 s.
+- Fix (tests only, D-246): `rw_child_case()` sets `gptr.stdin_timeout = 20`, the duplex budget
+  (2654a21), and the binary-only 2 s writer admission (35536d4) goes. Product code, IC-60 and the
+  60 s default are unchanged; the no-reader timeout cases and the base-only controls keep 2 s.
+- Red: a scratch replay of the largest cold start plus the largest readiness-to-ACK (write queued at
+  0, ready at 5.24 s, ACK drained at 5.81 s) through the real `reactor_drain_child()`, with each
+  case's budget read from `rw_child_case()`: FAIL 6 (`gptr_error_timeout`) on the old helper. Green:
+  the replay PASS 12; `^(proc-writer-runtime|proc-windows-backpressure|proc-backpressure.*)$` PASS
+  1357 SKIP 8 (the real cases skip off Windows). Lint clean. The replay is not committed: it only
+  restates the budget.
+- Deviations: D-246. Open: not yet run on hosted Windows. PR #61's writer adds a silent read retry,
+  so a retrying writer would leave the same witness; the 0.07 s margin explains 176a3a2, and bc13aba
+  and fa64ef2 failed without the retry. fa64ef2 had no ACK 0.59 s after readiness, past the
+  controls' 0.57 s, so a host stall also occurs and 5.81 s (two maxima from different samples) is
+  not a bound. Still at risk: the no-reader timeout cases (native-04, native-09) need readiness
+  within 2 s (none failed at stage startup since 2654a21, in about 300 runs), and the acl case's
+  PowerShell readback has 5 s (a 3.20 s PowerShell start and a 5.00 s ACL step were witnessed in a
+  duplex case at 3a8315f).
