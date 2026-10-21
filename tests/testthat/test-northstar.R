@@ -25,6 +25,7 @@ ns_first_text = function(request) {
 }
 
 test_that("NS-1: the console clusters, runs !expr and switches mode without reloading", {
+  skip_on_cran()
   local_project()
   ui = local_scripted_ui(answers = list("y"))
   local_gptr_options(quiet = FALSE)
@@ -108,6 +109,7 @@ test_that("NS-3: the pipe steers one session object; switching model hands the h
 })
 
 test_that("NS-4: System 1 decisions drop into if, vectors, choices and while", {
+  skip_on_cran()
   local_project()
   judge = local_fake_provider(function(state, question) {
     if (identical(question$type, "choice")) {
@@ -146,6 +148,7 @@ test_that("NS-4: System 1 decisions drop into if, vectors, choices and while", {
 })
 
 test_that("NS-5: System 1 routes each task to a strong or a cheap System 2 model", {
+  skip_on_cran()
   local_project()
   hardness = local_fake_provider(function(state, question) {
     if (grepl("subtle", state)) 0.9 else 0.1
@@ -184,6 +187,7 @@ test_that("NS-6: sub-agents run as a team and fan out four at a time", {
 })
 
 test_that("NS-7: the script is the history; re-sourcing replays without a model", {
+  skip_on_cran()
   root = local_project()
   fake = local_fake_provider(list(fake_tool("r", code = "m = nrow(d)", note = "count rows"),
                                   "There are 32 rows."))
@@ -238,6 +242,7 @@ test_that("NS-8: an artifact is a Shiny app written under .gptr/artifacts and st
 })
 
 test_that("NS-9: setup from R needs no keys and makes no requests", {
+  skip_on_cran()
   root = local_project(gptr = FALSE, trust = TRUE)
   gptr_init(root)
   expect_true(file.exists(file.path(root, ".gptr", "vignette.Rmd")))
@@ -541,6 +546,7 @@ test_that("the composed standard prompt equals architecture 7.3 byte for byte (I
   writeLines("library(gptr)", doc)
   gptr_doc(doc)
   withr::defer(gptr_doc(FALSE))
+  skill_sync() # what a session start does before the prompt freezes
   view = gptr_prompt(preset = "standard")
   expect_identical(view$system$t0, ns_expected_t0())
   skills = regmatches(view$system$t1, regexpr("(?s)<skills>\n.*?\n</skills>", view$system$t1,
