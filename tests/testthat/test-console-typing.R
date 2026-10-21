@@ -575,23 +575,29 @@ test_that("a question drains fd 0 first: lines steer, a partial line is kept in 
       if (!identical(utils::tail(tty$log, 5L), drain)) return(character())
       structure(c("steer me", "use base R"), partial = TRUE)
     })
-  rl = local_readline(c("go", "y", "/exit"))
-  e = new.env()
-  fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
-  rs = repl_state(NULL, e)
-  rs$model = fake
-  rs$mode = "manual"
-  out = utils::capture.output(repl_main(rs))
-  expect_identical(e$zz, 2)
-  expect_identical(rl$kept, "use base R")
-  reqs = fake_requests(fake)
-  expect_length(reqs, 2L)
-  expect_identical(msg_text(last_message(reqs[[2L]])), relay("steer me"))
-  # the notice quotes the kept line (typed with the echo off) and names the key (D-245 glyphs)
-  expect_lt(grep("[gptr] kept in history (Up): 'use base R'", out, fixed = TRUE),
-            match("  r  zz = 2", out))
-  # the drain's modes are restored before the question reads
-  expect_identical(tty$log, c("-g", "-echo", "-g", drain, "SAVED", "SAVED"))
+  # the notice quotes the line (typed with the echo off) and names the key (D-245 glyphs); with
+  # gptr.history off it says the line was not kept
+  notice = c("[gptr] kept in history (Up): 'use base R'",
+             "[gptr] not kept (gptr.history is off): 'use base R'")
+  for (k in 1:2) {
+    local_gptr_options(history = k == 1L)
+    tty$log = character()
+    rl = local_readline(c("go", "y", "/exit"))
+    e = new.env()
+    fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
+    rs = repl_state(NULL, e)
+    rs$model = fake
+    rs$mode = "manual"
+    out = utils::capture.output(repl_main(rs))
+    expect_identical(e$zz, 2)
+    expect_identical(rl$kept, if (k == 1L) "use base R" else character())
+    reqs = fake_requests(fake)
+    expect_length(reqs, 2L)
+    expect_identical(msg_text(last_message(reqs[[2L]])), relay("steer me"))
+    expect_lt(grep(notice[[k]], out, fixed = TRUE), match("  r  zz = 2", out))
+    # the drain's modes are restored before the question reads
+    expect_identical(tty$log, c("-g", "-echo", "-g", drain, "SAVED", "SAVED"))
+  }
 })
 
 # Terminal R in a pty (80x24, TERM=xterm-256color, echo on as in a terminal) that loads gptr and
@@ -656,7 +662,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   skip_on_os("windows")
   pty = local_pty_r(c(
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
-    "        gptr.history = FALSE)",
+    "        gptr.history = TRUE)",
     "long = paste(c('BEGIN', sprintf('w%02d', 1:30), 'END'), collapse = ' ')",
     "q = list(list(id = 'q1', question = 'Which package?', options = list('ggplot2', 'base')))",
     "calls = list(B = list(tool = 'r', input = list(code = 'zz = 1')),",

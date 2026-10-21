@@ -8,14 +8,16 @@ ui_request = function(code, tier = "ask", rule = NULL) {
 }
 
 # Run `fun()` with gptr_readline() answering from `answers`; returns the result, the printed
-# lines and what went to the console history
+# lines and what went to the console history (gptr.history decides; never the developer's)
 console_try = function(fun, answers) {
   i = 0L
   kept = character()
   testthat::local_mocked_bindings(gptr_readline = function(prompt = "") {
     i <<- i + 1L
     if (i > length(answers)) NA_character_ else answers[[i]]
-  }, console_history_add = function(x) kept <<- c(kept, x))
+  })
+  testthat::local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                                  .package = "utils")
   res = NULL
   shown = utils::capture.output({
     res = fun()
@@ -215,7 +217,7 @@ test_that("during a run a line typed before the approval prompt is queued, then 
 test_that("a block pasted at the approval prompt never answers it nor steers (IC-75)", {
   skip_on_cran()
   local_console_test()
-  local_gptr_options(interactive = TRUE)
+  local_gptr_options(interactive = TRUE, history = TRUE)
   # fd 0 as one buffer: the rest of a paste whose first line answers the question waits there
   fd0 = new.env(parent = emptyenv())
   fd0$lines = character()
@@ -223,8 +225,10 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   fd0$prompts = character()
   reader = console_reader
   kept = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
   local_mocked_bindings(
-    repl_terminal = function(rs) TRUE, console_history_add = function(x) kept <<- c(kept, x),
+    repl_terminal = function(rs) TRUE,
     console_typed_lines = function(rd, ...) {
       x = fd0$lines
       fd0$lines = character()
@@ -253,7 +257,7 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   expect_null(e$zz)
   expect_identical(sum(startsWith(fd0$prompts, "  allow?")), 2L)
   expect_identical(sum(out == "  A pasted block is not an answer (kept in history)."), 1L)
-  expect_identical(kept, "y\npasted line two\npasted line three")
+  expect_identical(kept, '"""\ny\npasted line two\npasted line three\n"""')
   expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
@@ -340,6 +344,19 @@ test_that("invalid answers are explained and kept; five end in a refusal the mod
   out = console_try(function() ui_console_permission(req), c("zz", "y"))
   expect_true("  Not an answer: 'zz'. Type y, a, p, n or ?." %in% out$shown)
   expect_identical(out$kept, character())
+})
+
+test_that("with gptr.history off nothing is kept and no notice says it was (D-243)", {
+  root = local_project()
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  local_gptr_options(history = FALSE)
+  out = console_try(function() ui_console_permission(ui_request("zz = 1")), c("zz", "y"))
+  expect_true("  Not an answer: 'zz'. Type y, n or ?." %in% out$shown)
+  rd = list(waiting = function() "b")
+  local_mocked_bindings(console_repl_find = function() list(reader = rd))
+  out2 = console_try(function() ui_console_read("Q: "), "a")
+  expect_identical(out2$shown, "  A pasted block is not an answer.")
+  expect_identical(c(out$kept, out2$kept), character())
 })
 
 test_that("a long invalid answer's notice wraps inside the width (P28 B, E, F)", {

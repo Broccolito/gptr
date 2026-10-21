@@ -370,7 +370,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `gptr.env_export` | `lgl(1)` | `TRUE` | P03 | default of `gptr_env(set_env =)` |
 | `gptr.prompt_secrets` | `chr(1)` | `"redact"` | P03 | secret-looking text in prompts: `"redact"` or `"ask"` |
 | `gptr.deprecations` | `chr(1)` | `"warn"` | P02 | `"warn"` or `"error"` |
-| `gptr.history` | `lgl(1)` | `TRUE` | P14 | REPL inputs to the console history via `utils::timestamp()` |
+| `gptr.history` | `lgl(1)` | `TRUE` | P14 | console inputs to the console history via `utils::timestamp()`: REPL inputs and every line a console question keeps (`console_history_add()`, D-243) |
 | `gptr.s1_max_active` | `int(1)` | `8L` | P13 | concurrent System 1 requests |
 | `gptr.s1_rounds` | `int(1)` | `3L` | P13 | bounded retry rounds |
 | `gptr.s1_state_max` | `int(1)` | `2000L` | P13 | characters of `as_state(<session>)` |
@@ -2226,7 +2226,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
 | `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with `the$tty_modes` while a console call holds the echo off (IC-76) | P11, P14, P26 |
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
-| `readline_answer(prompt, keep = console_history_add)`, `answer_stale(secs)`, `console_history_add(x)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer is stale (`answer_stale(the$readline_secs)`: under 0.1 s, so typed or pasted before the question), at most 100 reads, then the last answer; each line read past that is not blank goes to the upper layer's callback `keep(line)` (03 §2.2; NULL keeps nothing): `console_history_add()` (`utils::timestamp()`, never fails; text of several lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it back as one input, D-243) by default, `console_typed_ahead()` for the console questions (IC-75 in §15.10); used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26, P28 |
+| `readline_answer(prompt, keep = console_history_add)`, `answer_stale(secs)`, `console_history_add(x)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer is stale (`answer_stale(the$readline_secs)`: under 0.1 s, so typed or pasted before the question), at most 100 reads, then the last answer; each line read past that is not blank goes to the upper layer's callback `keep(line)` (03 §2.2; NULL keeps nothing): `console_history_add()` (`utils::timestamp()` when `gptr.history` is on, TRUE when added; never fails; text of several lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it back as one input, D-243) by default, `console_typed_ahead()` for the console questions (IC-75 in §15.10); used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26, P28 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
 | `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183) | P07, P14, P15 |
 | `verbosity()` | `int(1)` 0-3 (§3.1 `gptr.verbose`) | P14, P06 |
@@ -5311,7 +5311,8 @@ its part in its own commit, and Task 27 finalises them.
     (`ui_console_read()`, the terminal branch of `console_ask()`) pass `console_typed_ahead()`: while a run of the
     call has a session (`policy_targets()`), `policy_enqueue(session, text, <type_ahead>, source = "repl")`, else
     `console_history_add()`. The question is then read again. `gptr_confirm()` keeps the line in the history and a
-    secret input keeps nothing. In IDE consoles, which hold lines typed during a run until R reads, this is the
+    secret input keeps nothing. Every add here obeys `gptr.history` (`console_history_add()` returns FALSE when it
+    is off), and a notice says `(kept in history)` only for a line that was added. In IDE consoles, which hold lines typed during a run until R reads, this is the
     only route by which such a line steers.
   - A paste after an answer goes to the history as one entry (not for a secret) with
     `  A pasted block is not an answer (kept in history).`, and the question is asked again. Every history entry
@@ -5326,9 +5327,10 @@ its part in its own commit, and Task 27 finalises them.
     `console_before_message(kind = "prompt")` reads fd 0 with `console_typed(drain = TRUE)`:
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
     the saved modes (on exit). Complete lines are routed as before. A trailing partial line (attr
-    `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()`,
-    whatever `gptr.history` says, with `[gptr] kept in history (↑): '<line>'` (`Up` where the output
-    is not UTF-8): the echo is off while a run streams, so the notice quotes it. The question's
+    `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()` with
+    `[gptr] kept in history (↑): '<line>'` (`Up` where the output is not UTF-8), or, with `gptr.history`
+    off, `[gptr] not kept (gptr.history is off): '<line>'`: the echo is off while a run streams, so the
+    notice quotes it. The question's
     `readline()` therefore starts empty: typed-ahead text is never an invalid answer, a denial
     (`no ...`) or an ask-tool answer.
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26): pending.

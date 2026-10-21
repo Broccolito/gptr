@@ -783,9 +783,7 @@ ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all") {
   # unchanged: a session_before_tree handler cancelled the rewind, and gptr_rewind() said so
   if (!is.null(err) || identical(lr$id, last)) return(err)
   text = d$editor_text
-  if (length(text) && isTRUE(gptr_opt("history")) && gptr_is_interactive()) {
-    try(utils::timestamp(stamp = text, prefix = "", suffix = "", quiet = TRUE), silent = TRUE)
-  }
+  if (length(text) && gptr_is_interactive()) console_history_add(text)
   c(paste0("Rewound (", lr$restore, if (lr$partial) "); some items were not restored:" else ")."),
     lr$report, if (length(text)) c("Undone prompt:", text))
 }

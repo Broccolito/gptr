@@ -140,15 +140,17 @@ readline_answer = function(prompt, keep = console_history_add) {
   x
 }
 
-#' Add a line to the console history (report 18: utils::timestamp(); never fails); text of several
-#' lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it
-#' back as the one input it was (D-243)
+#' Add a line to the console history when `gptr.history` is on (report 18: utils::timestamp();
+#' never fails); TRUE when it was added. Text of several lines that is not a `"""` block or a fence
+#' is added as a `"""` block, so Up then Enter sends it back as the one input it was (D-243)
 #' @noRd
 console_history_add = function(x) {
+  if (!isTRUE(gptr_opt("history"))) return(FALSE)
   if (grepl("\n", x, fixed = TRUE) && !grepl('^\\s*("""|```)', x)) x = paste0('"""\n', x, '\n"""')
-  tryCatch(utils::timestamp(stamp = x, prefix = "", suffix = "", quiet = TRUE),
-           error = function(e) NULL)
-  invisible(NULL)
+  tryCatch({
+    utils::timestamp(stamp = x, prefix = "", suffix = "", quiet = TRUE)
+    TRUE
+  }, error = function(e) FALSE)
 }
 
 #' Did readline() return a line too soon (under 0.1 s) for it to answer the question shown? (IC-75)

@@ -608,9 +608,11 @@ console_typed = function(drain = FALSE) {
                    source = "repl")
   }
   if (nzchar(trimws(part))) {
-    console_history_add(part)
-    console_notice("[gptr] kept in history (", console_symbols()$up, "): ",
-                   console_escape(paste0("'", part, "'"), FALSE))
+    console_notice(if (console_history_add(part)) {
+      paste0("[gptr] kept in history (", console_symbols()$up, "): ")
+    } else {
+      "[gptr] not kept (gptr.history is off): "
+    }, console_escape(paste0("'", part, "'"), FALSE))
   }
   console_render_resume(pol$runs)
   0.1
@@ -743,14 +745,12 @@ repl_turn = function(rs, text) {
 }
 
 #' Dispatch one logical input: /command, !code or a prompt; inputs of an interactive console go
-#' to R's history (gptr.history)
+#' to R's history (gptr.history, console_history_add())
 #' @noRd
 repl_dispatch = function(rs, line) {
   text = trimws(line)
   if (!nzchar(text)) return(invisible(NULL))
-  if (isTRUE(gptr_opt("history")) && !rs$stdin && gptr_is_interactive()) {
-    console_history_add(line)
-  }
+  if (!rs$stdin && gptr_is_interactive()) console_history_add(line)
   tryCatch({
     if (startsWith(text, "/")) {
       console_command(text, rs$session, send = function(prompt) repl_turn(rs, prompt))

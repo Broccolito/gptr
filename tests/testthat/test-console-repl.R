@@ -294,11 +294,22 @@ test_that("a console opened in yolo shows the yolo notice with its banner (IC-78
   expect_length(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 2L)
 })
 
-test_that("console_history_add() never fails", {
-  expect_null(console_history_add("a prompt"))
+test_that("gptr.history decides whether console_history_add() adds; it never fails (D-243)", {
+  added = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) added <<- c(added, stamp),
+                        .package = "utils")
+  local_gptr_options(history = FALSE)
+  expect_false(console_history_add("a prompt"))
+  expect_identical(added, character())
+  local_gptr_options(history = TRUE)
+  expect_true(console_history_add("a prompt"))
+  expect_identical(added, "a prompt")
+  local_mocked_bindings(timestamp = function(...) stop("no history"), .package = "utils")
+  expect_false(console_history_add("a prompt"))
 })
 
 test_that("a history entry of several lines is a \"\"\" block, so Up then Enter sends one prompt", {
+  local_gptr_options(history = TRUE)
   added = character()
   local_mocked_bindings(timestamp = function(stamp, ...) added <<- c(added, stamp),
                         .package = "utils")

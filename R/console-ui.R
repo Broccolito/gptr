@@ -202,9 +202,8 @@ ui_console_read = function(prompt, secret = FALSE) {
     if (!rlang::is_string(ans)) return(NA_character_)
     more = if (!is.null(rd)) rd$waiting()
     if (!length(more)) return(ans)
-    if (!secret) console_history_add(paste(c(ans, more), collapse = "\n"))
-    console_write(paste0("  A pasted block is not an answer", if (!secret) " (kept in history)",
-                         "."))
+    kept = !secret && console_history_add(paste(c(ans, more), collapse = "\n"))
+    console_write(paste0("  A pasted block is not an answer", if (kept) " (kept in history)", "."))
   }
 }
 
@@ -293,8 +292,7 @@ ui_console_permission = function(request, read = ui_console_read) {
     if (low %in% c("a", "always", "p", "project")) {
       msg = paste0("  [a]lways is not offered: ", why, "; answer y, n or ?.")
     } else {
-      kept = nzchar(a) && gptr_is_interactive()
-      if (kept) console_history_add(a)
+      kept = nzchar(a) && gptr_is_interactive() && console_history_add(a)
       msg = paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
                    if (kept) " (kept in history)", ". Type ", if (can) "y, a, p, n" else "y, n",
                    " or ?.")

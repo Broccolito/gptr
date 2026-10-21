@@ -3063,6 +3063,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     UTF-8, never cli's `^`, which reads as Ctrl (`console_symbols()$up`, Task 8's table). Tests: test-console-typing.R
     "a question drains fd 0 first: lines steer, a partial line is kept in the history", "a terminal: a question
     never takes the line typed ahead of it (P28 B, C, H)".
+  - `gptr.history` decides every console history add, as it does for the REPL's own inputs: `console_history_add()`
+    returns TRUE only when it added (the drained partial line, a line a question reads past, a pasted block, an
+    invalid approval answer, the prompt `/undo` takes back). A notice says `(kept in history)` only then; the
+    drained line is otherwise quoted as `[gptr] not kept (gptr.history is off): '<line>'`, so the person can retype
+    it. Tasks 2 and 3 had added these lines whatever the option said. Tests: test-console-repl.R "gptr.history
+    decides whether console_history_add() adds; it never fails (D-243)"; test-console-ui.R "with gptr.history off
+    nothing is kept and no notice says it was (D-243)"; test-console-typing.R "a question drains fd 0 first: lines
+    steer, a partial line is kept in the history".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

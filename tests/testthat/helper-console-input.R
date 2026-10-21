@@ -1,6 +1,7 @@
 # gptr_readline() answering `answers` in order (NA after the last), each as if readline() had
 # waited `secs` seconds (the real wrapper records them in the$readline_secs, IC-75); `prompts`
-# collects the prompts shown and `kept` what went to the console history, never the developer's
+# collects the prompts shown and `kept` what console_history_add() added (gptr.history decides),
+# never to the developer's history
 local_readline = function(answers, secs = 1, .env = parent.frame()) {
   box = new.env(parent = emptyenv())
   box$i = 0L
@@ -13,7 +14,9 @@ local_readline = function(answers, secs = 1, .env = parent.frame()) {
     if (box$i > length(answers)) return(NA_character_)
     the$readline_secs = secs[[box$i]]
     answers[[box$i]]
-  }, console_history_add = function(x) box$kept = c(box$kept, x), .env = .env)
+  }, .env = .env)
+  testthat::local_mocked_bindings(timestamp = function(stamp, ...) box$kept = c(box$kept, stamp),
+                                  .package = "utils", .env = .env)
   withr::defer(assign("readline_secs", NULL, envir = the), envir = .env)
   box
 }
