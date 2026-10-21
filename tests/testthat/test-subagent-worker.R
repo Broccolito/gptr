@@ -392,6 +392,30 @@ test_that("a stopped worker ends its open request as aborted, never error (IC-60
   expect_identical(c(ev$reason, ev$message$stop_reason, ev$error$class), rep("aborted", 3L))
 })
 
+test_that("a worker's exit ends its abort guard before the guard polls again", {
+  skip_on_cran()
+  st = stub_worker_state()
+  st$home = new.env()
+  st$spec = list(name = "w", depth = 1L, settings = list(project_root = getwd()))
+  local_mocked_bindings(proc_rscript = function(...) {
+    processx::process$new(rscript_path(), c("--vanilla", "-e", "0"), stdout = "|",
+                          stderr = "|")
+  })
+  r = reactor_get()
+  before = ls(r$tasks)
+  worker_spawn(st)
+  guard = setdiff(ls(r$tasks), before)
+  expect_length(guard, 1L)
+  # a peter() call can return right after the exit, before the 0.1 s guard polls again
+  on_exit = worker_on_exit
+  local_mocked_bindings(worker_on_exit = function(st, status) {
+    on_exit(st, status)
+    st$guarded = exists(guard, envir = r$tasks, inherits = FALSE)
+  })
+  expect_true(reactor_pump(until = function() isTRUE(st$exited), timeout = 30))
+  expect_false(st$guarded)
+})
+
 test_that("the user's abort of a forwarded request aborts the proxy run", {
   skip_on_cran()
   local_team_fake(list("never"))

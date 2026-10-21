@@ -1480,6 +1480,46 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   exactly as on macOS, the new one none. Green: `^proc-backpressure-sampling$` PASS 569. Lint clean.
 - Deviations: none.
 
+## Task CI-84 - Reactor tasks end with their worker or codex exec, not at their next poll (2026-10-21, #67)
+- PR #64 run 39617443293 (attempt 1, job 119282269044, oldrel-4, R 4.2.3, two parallel test
+  processes) failed 10 of 18 blocks of `test-compaction-wait.R` with `cp_wait_clock()`:
+  `!length(ls(r$tasks)) is not TRUE` (`:42`, every block starts on an idle reactor). Main 7cfd543
+  passed oldrel-4 (run 39617294607); no other of the 33 failed R-CMD-check jobs since 2026-10-19 has
+  it.
+- Leaker: `test-cli-codex.R` "a fake CLI joins two inline agents and two workers on one reactor
+  (INFRA-16)", the file's last test that pumps the reactor (the log's last lines before the failures
+  are from cli-codex and cli-claude). It left one worker's abort guard (`worker_spawn()`) and
+  nothing else: no transfer, watcher, run or timer. Nothing in compaction-wait pumps before that
+  check, so every block failed. The guard polled every 0.1 s and ended only at its first poll after
+  the exit; the proxy request's generator polls every 0.05 s, so the run settles and the team's pump
+  returns a few ms after the exit is handled. Whether the guard polled in between depends on how
+  long that handling takes: here `kill_all()` of an exited child walks 1259 processes in 33 to 63 ms
+  per child.
+- Evidence: per-test snapshots of the 38 earlier files in one session, and three concurrent copies
+  of the cli and compaction files under 20 busy loops, ended every file idle. INFRA-16 alone left a
+  task in 0 of 6 runs; with an exited child's `kill_all()` returning at once, as on a small runner,
+  and the task calls traced, 2 of 6 left the second worker's guard (`t22`, `t86`); fixed, 0 of 5.
+- The codex relay task (`pcli_codex_relay()`) ended the same way, at its first 0.02 s poll after the
+  turn; INFRA-16 leaves it, one task and nothing else, if its codex agent settles last. The log
+  cannot tell the two apart.
+- Fix: `worker_cleanup()`, which both ends (`worker_on_exit()`, `worker_kill()`) call, cancels the
+  guard first; the guard no longer checks `st$exited`. `pcli_codex_end()`, every end of a codex
+  exec, cancels the relay and removes its mailbox before the terminal event; the relay no longer
+  checks `s$done` (a finished turn is never current). `cp_wait_clock()` names each task an earlier
+  test left by the start of its body instead of the bare `stopifnot()`.
+- Red: the new "a worker's exit ends its abort guard before the guard polls again" (a mocked
+  `proc_rscript()` starts a 0 s Rscript; the guard's registration is read as the exit is handled)
+  failed 3 of 3 and left `t2`; "the relay mailbox is answered in order" now checks the mailbox and
+  task are gone as `turn.completed` returns, and failed both and left `t2`. Each run before
+  `test-compaction-wait.R` in one process failed 10 of 18 blocks, now naming the task: "an earlier
+  test left reactor tasks:" `{ if (isTRUE(st$exited)) return(FALSE) ...` and
+  `{ if (s$done || !pcli_turn_current(s)) ...`. Green: both pass, and 0 of 18.
+  `^(cli-|subagent-|compaction-|auth-|console-setup$|provider-registry$|arch)` PASS 5094 SKIP 4;
+  `^(agent-|reactor|http-|proc-|team|tool-)` PASS 6158 SKIP 13; the whole suite with two parallel
+  workers (`TESTTHAT_PARALLEL=true`) PASS 35153 SKIP 64. Lint clean.
+- Deviations: none (no contract or user-visible change). Open: a codex exec P05 lets go of without
+  its normaliser (`stream_abort()`, `stream_detach()`) still ends its relay at the next poll.
+
 ## Task CI-86 - Linux CI installs its system libraries without pak's Chromium PPA (2026-10-21, #69)
 - Since about 14:30Z on 2026-10-21 Ubuntu jobs failed in `setup-r-dependencies`: pak maps chromote's
   and gptr's own SystemRequirements (a Chrome-family browser) to `chromium`, so it runs
