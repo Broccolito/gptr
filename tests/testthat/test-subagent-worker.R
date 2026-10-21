@@ -754,6 +754,32 @@ test_that(
   expect_true(x$result$seed_unchanged)
 })
 
+# The worker can go before ps stops listing its killed parent: each reads as running once, then
+# as gone, on a virtual clock
+test_that("the Windows witness reads its killed parent once ps no longer lists it (IC-60)", {
+  skip_on_cran()
+  steps = as.list(body(wpd_child_case))
+  text = vapply(steps, function(e) paste(deparse(e), collapse = " "), "")
+  at = seq(which(startsWith(text, "killed_at = ")), which(startsWith(text, "parent_dead = ")))
+  reads = c(worker = 0L, parent = 0L)
+  local_mocked_bindings(proc_handle_alive = function(handle) {
+    reads[[handle]] <<- reads[[handle]] + 1L
+    reads[[handle]] == 1L
+  })
+  local_mocked_bindings(ps_kill = function(p) invisible(NULL), .package = "ps")
+  clock = 0
+  e = new.env()
+  e$fun = function(name) {
+    if (name == "reactor_now") function() clock else get(name, asNamespace("gptr"))
+  }
+  e$Sys.sleep = function(s) clock <<- clock + s
+  e$worker_handle = "worker"
+  e$parent_handle = "parent"
+  for (step in steps[at]) eval(step, e)
+  expect_true(e$before_cleanup)
+  expect_true(e$parent_dead)
+})
+
 
 test_that("unknown worker cost stays unknown through the result wire without warnings", {
   skip_on_cran()
