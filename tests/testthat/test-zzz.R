@@ -52,8 +52,11 @@ test_that("Authors@R credits the maintainer and contributors; COPYRIGHTS credits
   authors = eval(parse(text = desc_fields()[["Authors@R"]]))
   families = unlist(authors$family)
   roles = authors$role
-  expect_setequal(families, c("Gu", "Zhu", "Bellucci"))
+  expect_identical(families, c("Gu", "Zhu", "Bellucci"))
   expect_setequal(roles[[which(families == "Gu")]], c("aut", "cre", "cph"))
+  expect_identical(authors[[3L]]$comment[["ORCID"]], "0000-0002-2635-1699")
+  expect_identical(unlist(authors$email),
+                   c("wanjun.gu@ucsf.edu", "tianluz2013@gmail.com", "Gianmarco.Bellucci@ucsf.edu"))
   expect_identical(unname(desc_fields()[["Copyright"]]), "file inst/COPYRIGHTS")
   path = source_file(file.path("inst", "COPYRIGHTS"))
   if (is.null(path)) path = system.file("COPYRIGHTS", package = "gptr")
@@ -190,12 +193,14 @@ test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-
     names(jobs),
     c("R-CMD-check", "no-suggests", "c-locale", "cran-mode", "copy-safety", "connections", "bench")
   )
-  combos = vapply(jobs[["R-CMD-check"]]$strategy$matrix$config, function(x) {
+  shards = yaml::read_yaml(file.path(dirname(path), "Windows-check.yaml"))$jobs$shards
+  combos = c(vapply(jobs[["R-CMD-check"]]$strategy$matrix$config, function(x) {
     paste(x$os, x$r)
-  }, "")
+  }, ""), paste(shards[["runs-on"]], unlist(shards$strategy$matrix$r)))
   expect_true(all(c(
-    "macos-latest release", "windows-latest release", "ubuntu-latest devel",
-    "ubuntu-latest release", "ubuntu-latest oldrel-1", "ubuntu-latest oldrel-4"
+    "macos-latest release", "windows-latest release", "windows-latest oldrel-4",
+    "ubuntu-latest devel", "ubuntu-latest release", "ubuntu-latest oldrel-1",
+    "ubuntu-latest oldrel-4"
   ) %in% combos))
   expect_false(jobs[["no-suggests"]]$env[["_R_CHECK_FORCE_SUGGESTS_"]])
   expect_identical(jobs[["c-locale"]]$env[["LC_ALL"]], "C")
@@ -213,13 +218,14 @@ test_that("hosted CI jobs are bounded and a crashed R CMD check cannot pass", {
   description = source_file("DESCRIPTION")
   skip_if(is.null(description), "not running from the source tree")
   path = file.path(dirname(description), ".github", "workflows", "R-CMD-check.yaml")
-  jobs = yaml::read_yaml(path)$jobs
+  jobs = c(yaml::read_yaml(path)$jobs,
+           yaml::read_yaml(file.path(dirname(path), "Windows-check.yaml"))$jobs)
   # A hung run fails at its job's limit instead of holding the runner until it is cancelled
   for (name in names(jobs)) {
     expect_false(is.null(jobs[[name]][["timeout-minutes"]]), label = name)
   }
   # rcmdcheck reported success when R CMD check aborted before writing a status line
-  for (name in c("R-CMD-check", "no-suggests", "c-locale", "cran-mode")) {
+  for (name in c("R-CMD-check", "no-suggests", "c-locale", "cran-mode", "shards")) {
     steps = jobs[[name]]$steps
     uses = vapply(steps, function(s) s$uses %||% "", "")
     runs = vapply(steps, function(s) s$run %||% "", "")
@@ -230,27 +236,78 @@ test_that("hosted CI jobs are bounded and a crashed R CMD check cannot pass", {
     expect_true(length(guard) == 1L && all(guard > check), label = name)
   }
   # Windows R before 4.5.0 has no file.info() owner columns, which this check variable needs
-  config = jobs[["R-CMD-check"]]$strategy$matrix$config
-  expect_identical(jobs[["R-CMD-check"]]$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]],
-                   "${{ matrix.config.things-in-other-dirs || 'true' }}")
-  combos = vapply(config, function(x) paste(x$os, x$r), "")
-  other = vapply(config, function(x) x[["things-in-other-dirs"]] %||% "true", "")
-  expect_identical(unname(other[combos == "windows-latest oldrel-4"]), "false")
-  expect_true(all(other[combos != "windows-latest oldrel-4"] == "true"))
+  expect_true(jobs[["R-CMD-check"]]$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]])
+  expect_identical(jobs$shards$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]],
+                   "${{ matrix.things-in-other-dirs || 'true' }}")
+  expect_identical(jobs$shards$strategy$matrix$include,
+                   list(list(r = "oldrel-4", `things-in-other-dirs` = "false")))
+})
+
+test_that("Windows CI shards run each ordinary test file once, native ones in shard 1 (D-239)", {
+  shard = new.env(parent = baseenv())
+  sys.source(test_path("ci-shard.R"), envir = shard)
+  files = paste0("test-", letters[1:9], ".R")
+  groups = lapply(1:4, function(i) shard$ci_shard_files(rev(files), c(i, 4L)))
+  expect_identical(groups[[1L]], files[c(1L, 5L, 9L)])
+  expect_identical(sort(unlist(groups)), files)
+  expect_identical(shard$ci_shard("3/4"), c(3L, 4L))
+  for (selector in c("0/4", "5/4", "1/0", "a", "1/4x")) {
+    expect_error(shard$ci_shard(selector), label = selector)
+  }
+  expect_error(shard$ci_shard_files(files[1:3], c(1L, 4L)))
+  # Unset, a check runs the whole suite
+  withr::local_envvar(GPTR_CI_TEST_SHARD = NA)
+  expect_identical(shard$ci_shard(), c(1L, 1L))
+  expect_identical(shard$ci_shard_files(rev(files)), files)
+  entries = list.files(test_path(".."), pattern = "^native-.*[.]R$", full.names = TRUE)
+  expect_length(entries, 10L)
+  for (entry in entries) {
+    guard = "  if (ci_shard()[[1L]] == 1L) withCallingHandlers({"
+    expect_true(guard %in% readLines(entry), label = entry)
+  }
+})
+
+test_that("each required Windows context gates the four shards of its own R version (D-239)", {
+  description = source_file("DESCRIPTION")
+  skip_if(is.null(description), "not running from the source tree")
+  path = file.path(dirname(description), ".github", "workflows", "Windows-check.yaml")
+  jobs = yaml::read_yaml(path)$jobs
+  shards = jobs$shards
+  gate = jobs$gates
+  expect_identical(gate$name, "windows-latest (${{ matrix.r }})")
+  expect_identical(gate$strategy$matrix$r, shards$strategy$matrix$r)
+  expect_identical(unlist(shards$strategy$matrix$shard), 1:4)
+  expect_identical(shards$env$GPTR_CI_TEST_SHARD, "${{ matrix.shard }}/4")
+  # A skipped required check counts as passing, so the gate always runs and fails closed
+  expect_identical(gate[c("needs", "if")], list(needs = "shards", `if` = "always()"))
+  # Each attempt of a shard records its status, so a failed re-run replaces an earlier pass
+  record = rev(shards$steps)[1:2]
+  expect_identical(vapply(record, function(s) s[["if"]] %||% "", ""), c("always()", "always()"))
+  expect_identical(record[[2L]]$run,
+                   "echo '${{ job.status }}' > windows-status-${{ matrix.r }}-${{ matrix.shard }}")
+  expect_identical(record[[1L]]$with$name, "windows-status-${{ matrix.r }}-${{ matrix.shard }}")
+  expect_identical(gate$steps[[1L]]$with$pattern, "windows-status-${{ matrix.r }}-*")
+  expect_match(gate$steps[[2L]]$run, "for n in 1 2 3 4;", fixed = TRUE)
+  expect_match(gate$steps[[2L]]$run, 'grep -qsx success "windows-status-${{ matrix.r }}-$n"',
+               fixed = TRUE)
+  # read_yaml reads yes as TRUE, but R keeps package sources only for the string "yes"
+  expect_true("      R_KEEP_PKG_SOURCE: yes" %in% readLines(path))
 })
 
 test_that("the hosted jobs have time for the whole suite (CI-19)", {
   description = source_file("DESCRIPTION")
   skip_if(is.null(description), "not running from the source tree")
   root = dirname(description)
-  jobs = yaml::read_yaml(file.path(root, ".github", "workflows", "R-CMD-check.yaml"))$jobs
+  path = file.path(root, ".github", "workflows", "R-CMD-check.yaml")
+  jobs = yaml::read_yaml(path)$jobs
+  shards = yaml::read_yaml(file.path(dirname(path), "Windows-check.yaml"))$jobs$shards
   config = jobs[["R-CMD-check"]]$strategy$matrix$config
   combos = vapply(config, function(x) paste(x$os, x$r), "")
   minutes = vapply(config, function(x) as.numeric(x$minutes %||% 45), 0)
   expect_identical(jobs[["R-CMD-check"]][["timeout-minutes"]],
                    "${{ matrix.config.minutes || 45 }}")
-  # October 2026: about 80 minutes on Windows, about twice Linux; 26-31 on Ubuntu and macOS
-  expect_true(all(minutes[startsWith(combos, "windows-latest")] >= 120))
+  # October 2026: 26-31 minutes on Ubuntu and macOS, about 23 for the slowest Windows shard
+  expect_gte(shards[["timeout-minutes"]], 45)
   expect_identical(unname(minutes[combos == "ubuntu-latest devel"]), 120)
   expect_gte(jobs$connections[["timeout-minutes"]], 60)
 })

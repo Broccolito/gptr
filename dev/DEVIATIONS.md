@@ -2912,8 +2912,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: `Authors@R` lists the maintainer and the contributors Tianlu Zhu (UI/UX polishing and CI/CD) and
   Gianmarco Bellucci (testing). Mario Zechner, whose pi agent inspired gptr and whose MIT-licensed text
   gptr's tool descriptions and templates derive from, is credited in `inst/COPYRIGHTS` (through
-  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are), in the README acknowledgements
-  and on the site's Authors page, instead of as `ctb, cph` (amends cran-4 in spec 06).
+  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are) and in the README
+  acknowledgements on the site's home page, instead of as `ctb, cph` (amends cran-4 in spec 06). The site's
+  Authors page lists only these three people, each linked to the email in `Authors@R`; Gianmarco Bellucci's
+  entry carries his ORCID (2026-10-20).
 - Tests: test-zzz.R (IC-72), dev/release/tests/test-pkgdown.R.
 
 ## D-237 - License: the Apache License 2.0 replaces MIT (2026-10-20)
@@ -2926,3 +2928,23 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (2026-10-20). inst/COPYRIGHTS also gains the MIT notice of typesafe-ai/system-one-adapter-python, whose
   prompt and schema `R/s1-emulate.R` follows.
 - Tests: test-zzz.R (IC-72), dev/release/tests (site-stage, examples, precompute), dev/ci/test-exact-source.py.
+
+## D-239 - CI: Windows R CMD check runs as four shards per R version behind per-version gates (2026-10-20)
+- Rule: the Windows rows of `R-CMD-check.yaml` (release, oldrel-4) move to `.github/workflows/Windows-check.yaml`,
+  where each runs as four serial `R CMD check --as-cran` shards `windows-latest (<r>, shard <n>/4)` with the
+  rows' environment, Python provisioning and Status-line guard (one job per version took 36 to 56 minutes in
+  October 2026; the slowest shard takes about 23). `GPTR_CI_TEST_SHARD=<n>/4`
+  (`tests/testthat/ci-shard.R`) makes `tests/testthat.R` run every fourth ordinary test file, sorted, from the
+  n-th, and fail unless each of those files recorded a test result (so a test file skips inside `test_that()`,
+  not at file level); the native entries `tests/native-*.R` run in shard 1 only. Unset, a check is shard 1/1, the
+  whole suite, as before.
+- Rule: the required contexts `windows-latest (release)` and `windows-latest (oldrel-4)` are Ubuntu gate jobs
+  that always run after the shards (a skipped required check would count as passing) and pass only when the
+  latest attempt of each of their version's four shards recorded `success` in its `windows-status-<r>-<n>`
+  artifact. Every attempt records its job status, so a failed re-run replaces an earlier pass, and "Re-run failed
+  jobs" keeps the passed shards' records.
+- Contract-visible: none. Amends architecture section 3.5, spec 05 P01, 00-index section 5.1, P25 Task 15 and
+  P27 A1-A2: both workflows must pass.
+- Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "Windows CI shards run
+  each ordinary test file once ...", "each required Windows context gates ...", "the hosted jobs have time for
+  the whole suite (CI-19)".
