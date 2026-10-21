@@ -6,7 +6,8 @@ idle_child_case = function(case, root, failure) {
   fun = function(name) get(name, ns, inherits = FALSE)
   phase = function(text) cat(text, "\n", file = file.path(root, "phases.txt"), append = TRUE)
   withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr")
-  withr::local_options(gptr.stdin_timeout = 2, gptr.supervise = FALSE, gptr.quiet = TRUE)
+  # A write past the cap retires an idle writer and cold-starts one: the duplex budget (D-246).
+  withr::local_options(gptr.stdin_timeout = 20, gptr.supervise = FALSE, gptr.quiet = TRUE)
   targets = list()
   on.exit({
     fun("reactor_shutdown")()

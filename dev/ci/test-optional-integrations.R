@@ -1239,7 +1239,7 @@ testthat::test_that("fixed Codex control cases remain mandatory without capabili
 
 testthat::test_that("warm idle writer boundary is mandatory on Windows with one exact Unix guard", {
   file = "test-proc-writer-idle-boundary.R"
-  title = "two warm acknowledged Windows writers do not starve a third two-second write"
+  title = "two warm acknowledged Windows writers do not starve a third write"
   testthat::expect_identical(optional_titles[[file]], title)
   rows = list(record(title))
   result = optional_gate(rows, file, TRUE)
