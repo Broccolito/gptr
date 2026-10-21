@@ -1110,3 +1110,35 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Baseline (`run.R --update`): the 12 standard cases' prefix and catalog +143 (catalog 399 -> 542, the value
   recorded before the drift noted in D-135 item 6), input totals +143 per request; the two minimal cases unchanged.
   `run.R --check` OK; polyglot within 10%; `dev/bench/tests` PASS.
+
+## Task CI-76 - The parent-death witness waits until ps stops listing the killed parent (2026-10-21, #62)
+- Windows-check.yaml `windows-latest (release, shard 1/4)` on c80b703 (PR #56; run 39552770163,
+  attempt 1, job 119065497023, R 4.6.1) failed native-10 "a Windows worker exits within 10 s after
+  its acknowledged parent dies (IC-60)" at `test-subagent-worker.R:715`:
+  `parent_dead_before_cleanup` FALSE. Everything else in the witness passed: it completed in
+  5.96 s, all 20 pre-kill checks held, the worker was gone 0.10 s after the kill and cleanup
+  settled. It is 1 of 247 executions that reached that check since 2026-10-12 (release 1/145,
+  oldrel-4 0/102), and attempt 2 on the same sha passed.
+- Cause (inferred, not observed): `wpd_child_case()` kills the parent with `ps::ps_kill()`
+  (`TerminateProcess()`, which returns before the process has exited), polls until the worker reads
+  as gone, then reads the parent once. The worker's exit starts inside the parent's own exit: either
+  the processx job object closes with the parent's handles or the worker reads EPIPE while they are
+  torn down. So the worker can be gone while ps still lists the parent for a moment (as for CI-45),
+  and that single read then gives alive.
+- Fix (tests only): just before that read the helper calls `proc_wait_exit(list(parent_handle))`
+  with its default bound and poll (2 s, 20 ms), the wait `kill_all()` makes after its signals
+  (D-180 item 1, unchanged). `worker_exit_elapsed` is still measured before the wait, so the 10 s
+  bound and every expectation stay as they were; a parent still listed after 2 s fails as before.
+  No product code changed.
+- Red: the new test "the Windows witness reads its killed parent once ps no longer lists it (IC-60)"
+  runs on any OS. It evaluates the helper's own statements from `killed_at` through `parent_dead`
+  with `proc_handle_alive()` mocked (each process reads as running once, then gone), `ps_kill()`
+  stubbed and a virtual clock. On 221f4a8 it gives FAIL 1 (`parent_dead` FALSE). Green: it passes,
+  and `^subagent-worker$` gives FAIL 0 SKIP 1 PASS 161 (the Windows witness skips on macOS). The
+  block takes 42 ms in CRAN mode, so it starts with `skip_on_cran()` (D-240). Lint clean.
+- Reviews: skeptic: the worker's death may also come from EPIPE as the parent's handles are torn
+  down, so the cause is said to start inside the parent's exit rather than to be the job's kill.
+- Deviations: none. Open: hosted Windows has not run the fix yet, and at about 0.4% per execution
+  one green run proves nothing. The new test pins the order of the reads, not Windows' timing. A
+  parent that ps lists for more than 2 s, or a `proc_handle_alive()` NA (an unrecognised ps error),
+  still fails the check.
