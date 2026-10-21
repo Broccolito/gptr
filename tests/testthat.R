@@ -21,20 +21,15 @@ if (.Platform$OS.type == "windows" && identical(Sys.getenv("NOT_CRAN"), "true"))
     stopifnot(all(grepl("^test-[A-Za-z0-9_-]+[.][rR]$", files)))
     ordinary = setdiff(files, native)
     source("testthat/ci-shard.R", local = TRUE)
-    selector = Sys.getenv("GPTR_CI_TEST_SHARD")
-    selected = ci_test_shard(ordinary, selector)
+    selected = ci_shard_files(ordinary)
     names = sub("[.][rR]$", "", sub("^test[-_]", "", selected))
     stopifnot(all(grepl("^[A-Za-z0-9_-]+$", names)), !anyDuplicated(names))
     result = test_check("gptr", filter = paste0("^(", paste(names, collapse = "|"), ")$"))
-    if (nzchar(selector)) {
-      table = as.data.frame(result)
-      stopifnot(setequal(unique(table$file), selected))
-      table = table[, !vapply(table, is.list, logical(1)), drop = FALSE]
-      native_selected = if (ci_native_shard(selector)) native else character()
-      out = Sys.getenv("GPTR_CI_TEST_RESULTS")
-      if (nzchar(out)) saveRDS(list(selector = selector, files = files, native = native,
-        native_selected = native_selected, selected = selected, results = table,
-        sha = Sys.getenv("GITHUB_SHA")), out)
+    # A CI shard fails unless each of its files, and no other, recorded a test result
+    if (nzchar(Sys.getenv("GPTR_CI_TEST_SHARD"))) {
+      ran = unique(as.data.frame(result)$file)
+      wrong = union(setdiff(selected, ran), setdiff(ran, selected))
+      if (length(wrong)) stop("CI shard files that did not run as selected: ", toString(wrong))
     }
   })
 } else {

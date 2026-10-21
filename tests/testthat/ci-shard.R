@@ -1,19 +1,14 @@
-# Only the Windows non-CRAN entry opts in; default and CRAN checks keep the whole suite.
-ci_shard_parts = function(selector) {
+# Windows CI sets GPTR_CI_TEST_SHARD to "i/n": shard i runs every n-th ordinary test file from the
+# i-th, and only shard 1 runs the native fixtures. Unset, every check is shard 1/1: the whole suite.
+ci_shard = function(selector = Sys.getenv("GPTR_CI_TEST_SHARD", "1/1")) {
   stopifnot(grepl("^[1-9][0-9]*/[1-9][0-9]*$", selector))
-  parts = as.integer(strsplit(selector, "/", fixed = TRUE)[[1L]])
-  stopifnot(!anyNA(parts), parts[[1L]] <= parts[[2L]])
-  parts
+  shard = as.integer(strsplit(selector, "/", fixed = TRUE)[[1L]])
+  stopifnot(shard[[1L]] <= shard[[2L]])
+  shard
 }
 
-ci_native_shard = function(selector = "") {
-  !nzchar(selector) || ci_shard_parts(selector)[[1L]] == 1L
-}
-
-ci_test_shard = function(files, selector = "") {
+ci_shard_files = function(files, shard = ci_shard()) {
+  stopifnot(shard[[2L]] <= length(files))
   files = sort(files)
-  if (!nzchar(selector)) return(files)
-  parts = ci_shard_parts(selector)
-  stopifnot(parts[[2L]] <= length(files))
-  files[(seq_along(files) - 1L) %% parts[[2L]] == parts[[1L]] - 1L]
+  files[(seq_along(files) - 1L) %% shard[[2L]] == shard[[1L]] - 1L]
 }

@@ -1,5 +1,6 @@
-# CRAN's check matrix plus the contract's jobs (IC-59, IC-72, IC-73). rcmdcheck reports success
-# when R CMD check aborts early, so every check job also requires the log's Status line.
+# CRAN's check matrix plus the contract's jobs (IC-59, IC-72, IC-73); the Windows rows run in
+# Windows-check.yaml. rcmdcheck reports success when R CMD check aborts early, so every check job
+# also requires the log's Status line.
 on:
   push:
     branches: [main]
@@ -24,7 +25,6 @@ jobs:
       matrix:
         config:
           - {os: macos-latest, r: 'release'}
-          # Windows checks run in Windows-check.yaml; required check names are preserved.
           # R-devel installs every dependency from source (about 65 minutes on a cold cache)
           - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release', minutes: 120}
           - {os: ubuntu-latest, r: 'release'}
@@ -33,9 +33,9 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
-      _R_CHECK_THINGS_IN_OTHER_DIRS_: ${{ matrix.config.things-in-other-dirs || 'true' }}
+      _R_CHECK_THINGS_IN_OTHER_DIRS_: true
       _R_CHECK_CRAN_INCOMING_: false
-      # Linux rows use two testthat workers; macOS and the separate Windows shards stay serial.
+      # Linux rows run test files in two testthat workers; every other check stays serial
       TESTTHAT_PARALLEL: ${{ startsWith(matrix.config.os, 'ubuntu') }}
     steps:
       - uses: actions/checkout@v6
