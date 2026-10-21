@@ -5335,9 +5335,10 @@ its part in its own commit, and Task 27 finalises them.
     `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()` with
     `[gptr] kept in history (↑): '<line>'` (`Up` where the output is not UTF-8), or, with `gptr.history`
     off, `[gptr] not kept (gptr.history is off): '<line>'`: the echo is off while a run streams, so the
-    notice quotes it. The question's
-    `readline()` therefore starts empty: typed-ahead text is never an invalid answer, a denial
-    (`no ...`) or an ask-tool answer.
+    notice quotes it. The question's `readline()` therefore starts empty: typed-ahead text is never an
+    invalid answer, a denial (`no ...`) or an ask-tool answer. `gptr_confirm()` (L0, also asked during a
+    run, e.g. by `egress_check()` for a nested call's provider) is not drained, so this holds for the
+    console questions only; its stale lines go to the history (IC-75).
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26): pending.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
 - **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25): pending.
