@@ -247,7 +247,7 @@ test_that("console_typed_lines() reads what fd 0 holds without blocking and neve
   # after the end of input (Ctrl-D on an empty line) fd 0 is opened afresh, never closed
   box$eof = TRUE
   box$chunks = "half typed"
-  expect_identical(console_typed_lines(rd), "half typed")
+  expect_identical(console_typed_lines(rd), structure("half typed", partial = TRUE))
   expect_identical(box$created, 2L)
   local_mocked_bindings(poll = function(processes, ms) stop("bad fd"), .package = "processx")
   expect_identical(console_typed_lines(rd), character())

@@ -663,12 +663,13 @@ console_spinner_stop = function(rec) {
 #' boundary (`kind = NULL`), and with `tools` by the console UI before it prompts and by the
 #' sub-agent lines, which also end the lines of a run whose tool executes (a sub-agent asking
 #' during the parent's `r` code; its writes never enter captured output, D-188). Before a prompt
-#' a terminal REPL first routes the lines typed for the run (console_typed()), which IC-75's stale
-#' guard would discard (IC-76).
+#' a terminal REPL first drains what was typed for the run (console_typed(drain = TRUE)): the
+#' lines IC-75's stale guard would discard and the partial line the question would take as its
+#' answer (IC-76).
 #' @noRd
 console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
   rs = if (identical(kind, "prompt")) console_repl_find()
-  if (!is.null(rs) && repl_terminal(rs)) console_typed()
+  if (!is.null(rs) && repl_terminal(rs)) console_typed(drain = TRUE)
   recs = if (is.null(runs)) {
     as.list(console_state()$active)
   } else {

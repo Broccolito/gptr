@@ -3019,6 +3019,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   and the draft; a question drains typed-ahead input, waits for typing to pause and keeps the draft; stale lines
   are queued and invalid answers kept; approvals ask under the call they gate. Amends D-184, D-188 and D-222's
   layout; D-221 stays for terminals without ANSI.
+- Tests so far (Task 2): test-console-typing.R "console_typed_split() marks a last line without a line end
+  as partial", "a question drains fd 0 first: lines steer, a partial line is kept in the history", "a
+  terminal: a question never takes the line typed ahead of it (P28 B, C, H)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

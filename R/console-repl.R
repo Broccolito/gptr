@@ -197,7 +197,17 @@ console_typed_lines = function(rd, wait = 50L) {
     }
     txt
   }, error = function(e) "")
-  if (nzchar(txt)) as_utf8(strsplit(txt, "\r\n|\r|\n")[[1L]]) else character()
+  console_typed_split(txt)
+}
+
+#' The lines of text read from fd 0 (`\r\n`, `\r` or `\n` ends one); attr "partial" (TRUE) marks
+#' a last line without a line end: a partial line in the drain's mode (tty_drain_mode()), else a
+#' line Ctrl-D ended
+#' @noRd
+console_typed_split = function(txt) {
+  lines = if (nzchar(txt)) as_utf8(strsplit(txt, "\r\n|\r|\n")[[1L]]) else character()
+  if (grepl("[^\r\n]$", txt)) attr(lines, "partial") = TRUE
+  lines
 }
 
 #' Lines held or waiting after an input line (a paste) join it, then one more line is read at
@@ -570,21 +580,30 @@ console_call_release = function(rs) {
 #' of this call runs. /command and !code lines, and the lines that continue a held !code line
 #' still incomplete (typed_code_open()), wait in the reader for the next prompt; the others become
 #' one message queued on the session as the `type_ahead` setting says. Nothing is read while no
-#' session runs (the next prompt reads it).
+#' session runs (the next prompt reads it). With `drain` (before a question) fd 0 is read in
+#' tty_drain_mode(), so the partial line the question would take as its answer is read too; it
+#' goes to the console history.
 #' @noRd
-console_typed = function() {
+console_typed = function(drain = FALSE) {
   rd = console_repl_find()$reader
   if (is.null(rd)) return(FALSE)
   pol = policy_find()
   target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
   if (is.null(target)) return(0.1)
+  modes = if (drain) tty_drain_mode()
+  if (length(modes) == 1L) on.exit(tty_modes(modes), add = TRUE)
   lines = console_typed_lines(rd, 0L)
+  part = ""
+  if (length(modes) == 1L && isTRUE(attr(lines, "partial"))) {
+    part = lines[[length(lines)]]
+    lines = lines[-length(lines)]
+  }
   later = logical(length(lines))
   for (i in seq_along(lines)) {
     later[[i]] = grepl("^\\s*[/!]", lines[[i]]) || typed_code_open(c(rd$typed, lines[later]))
   }
   text = paste(lines[!later], collapse = "\n")
-  if (!any(later) && !nzchar(trimws(text))) return(0.1)
+  if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(0.1)
   console_render_pause()
   if (any(later)) {
     rd$typed = c(rd$typed, lines[later])
@@ -594,6 +613,11 @@ console_typed = function() {
   if (nzchar(trimws(text))) {
     policy_enqueue(target$session, text, setting_get("type_ahead", target$session),
                    source = "repl")
+  }
+  if (nzchar(trimws(part))) {
+    console_history_add(part)
+    console_notice("[gptr] kept your unfinished line; ", cli::symbol$arrow_up,
+                   " recalls it at the next prompt")
   }
   console_render_resume(pol$runs)
   0.1

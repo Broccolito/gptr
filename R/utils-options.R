@@ -89,6 +89,16 @@ tty_modes = function(modes = "-g") {
   if (is.null(attr(out, "status"))) out
 }
 
+#' Mockable: let fd 0 be read as typed (`stty -icanon min 0 time 0`, the echo unchanged), so the
+#' partial line the terminal holds can be read; returns the modes to restore (`tty_modes()`), NULL
+#' when stty fails (IC-76)
+#' @noRd
+tty_drain_mode = function() {
+  modes = tty_modes()
+  if (length(modes) == 1L) tty_modes(c("-icanon", "min", "0", "time", "0"))
+  modes
+}
+
 #' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its
 #' own copy of readline() as `read` (console_reader()). The seconds it waited go to
 #' `the$readline_secs` (readline_answer()); readline() keeps only 255 bytes of a prompt, so one

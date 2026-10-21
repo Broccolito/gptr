@@ -412,6 +412,7 @@ test_that("the fd-0 reader returns complete lines, survives Ctrl-D and a /dev/nu
   writeLines(c(
     "as_utf8 = enc2utf8",
     paste("console_typed_lines =", paste(deparse(console_typed_lines), collapse = "\n")),
+    paste("console_typed_split =", paste(deparse(console_typed_split), collapse = "\n")),
     "rd = new.env()",
     "if (!isatty(stdin())) {",
     "  for (k in 1:2) {",
@@ -548,4 +549,158 @@ test_that("a terminal: typed text shows once, in its notice; questions and the n
   answers = gsub(" ", "", regmatches(text, gregexpr("BEGIN.*?END", text, perl = TRUE))[[1L]])
   expect_length(answers, 2L)
   expect_identical(answers[[1L]], answers[[2L]])
+})
+
+test_that("console_typed_split() marks a last line without a line end as partial", {
+  expect_identical(console_typed_split(""), character())
+  expect_identical(console_typed_split("a\r\n\nb\r"), c("a", "", "b"))
+  expect_identical(console_typed_split("steer me\nuse base R"),
+                   structure(c("steer me", "use base R"), partial = TRUE))
+})
+
+test_that("a question drains fd 0 first: lines steer, a partial line is kept in the history", {
+  local_console_test()
+  local_gptr_options(interactive = TRUE)
+  tty = local_stty()
+  drain = c("-icanon", "min", "0", "time", "0")
+  kept = character()
+  local_mocked_bindings(
+    repl_terminal = function(rs) TRUE, console_readline_tty = function() FALSE,
+    console_history_add = function(x) kept <<- c(kept, x),
+    # the partial line is read only in the drain's mode
+    console_typed_lines = function(rd, ...) {
+      if (!identical(utils::tail(tty$log, 5L), drain)) return(character())
+      structure(c("steer me", "use base R"), partial = TRUE)
+    })
+  local_readline(c("go", "y", "/exit"))
+  e = new.env()
+  fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  rs$mode = "manual"
+  out = utils::capture.output(repl_main(rs))
+  expect_identical(e$zz, 2)
+  expect_identical(kept, "use base R")
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(msg_text(last_message(reqs[[2L]])), relay("steer me"))
+  expect_lt(grep("[gptr] kept your unfinished line; ", out, fixed = TRUE),
+            match("  r  zz = 2", out))
+  # the drain's modes are restored before the question reads
+  expect_identical(tty$log, c("-g", "-echo", "-g", drain, "SAVED", "SAVED"))
+})
+
+# Terminal R in a pty (80x24, TERM=xterm-256color, echo on as in a terminal) that loads gptr and
+# sources `child`. `send(x)` types; `wait(x)` reads until `x` is shown and consumes the output
+# through it, so the next wait() looks after it; `pending()` reads for 0.5 s and returns what
+# followed, its escapes dropped; `all` keeps everything shown. The child dies with the test.
+local_pty_r = function(child, .env = parent.frame()) {
+  dir = withr::local_tempdir("gptr-pty-", .local_envir = .env)
+  script = file.path(dir, "child.R")
+  writeLines(c(tracemem_loader(), child, "cat('CHILD DONE\\n')"), script)
+  p = processx::process$new(
+    file.path(R.home("bin"), "R"), c("--vanilla", "--quiet"), pty = TRUE,
+    pty_options = list(echo = TRUE, rows = 24L, cols = 80L), wd = dir,
+    env = c("current", R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
+            TERM = "xterm-256color"),
+    cleanup = TRUE
+  )
+  # a pty child exits only once its output is read: p$kill() would wait for it forever
+  withr::defer({
+    if (p$is_alive()) p$signal(tools::SIGKILL)
+    deadline = Sys.time() + 10
+    while (p$is_alive() && Sys.time() < deadline) {
+      p$poll_io(100L)
+      p$read_output()
+    }
+  }, envir = .env)
+  pty = new.env(parent = emptyenv())
+  pty$all = ""
+  pty$out = ""
+  read = function(ms) {
+    p$poll_io(ms)
+    x = p$read_output()
+    pty$all = paste0(pty$all, x)
+    pty$out = paste0(pty$out, x)
+  }
+  pty$send = function(x) p$write_input(x)
+  pty$wait = function(x, timeout = 30) {
+    deadline = Sys.time() + timeout
+    repeat {
+      i = regexpr(x, pty$out, fixed = TRUE)
+      if (i > 0L) {
+        pty$out = substring(pty$out, i + attr(i, "match.length"))
+        return(TRUE)
+      }
+      if (!p$is_alive() || Sys.time() > deadline) return(FALSE)
+      read(100L)
+    }
+  }
+  pty$pending = function() {
+    deadline = Sys.time() + 0.5
+    while (Sys.time() < deadline) read(50L)
+    gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$out)
+  }
+  pty$seen = function(x) sum(gregexpr(x, pty$all, fixed = TRUE)[[1L]] > 0L)
+  pty$wait("> ")
+  pty$send(sprintf("source(%s)\r", deparse(script)))
+  pty
+}
+
+test_that("a terminal: a question never takes the line typed ahead of it (P28 B, C, H)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE)",
+    "long = paste(c('BEGIN', sprintf('w%02d', 1:30), 'END'), collapse = ' ')",
+    "q = list(list(id = 'q1', question = 'Which package?', options = list('ggplot2', 'base')))",
+    "calls = list(B = list(tool = 'r', input = list(code = 'zz = 1')),",
+    "             C = list(tool = 'r', input = list(code = 'zz = 2')),",
+    "             H = list(tool = 'ask', input = list(questions = q)))",
+    "fake = gptr_fake_provider(function(req) {",
+    "  m = req$messages[[length(req$messages)]]",
+    "  call = if (identical(m$role, 'user')) calls[[req$last_user]]",
+    "  if (!is.null(call)) return(c(list(text = long, chunk = 8L, gap = 0.05), call))",
+    "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
+  ))
+  expect_true(pty$wait("peter> ", timeout = 120))
+  # B: typed without Enter while the answer streams; the approval row ends with its prompt
+  pty$send("B\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("use base R")
+  expect_true(pty$wait("[gptr] kept your unfinished line; "))
+  expect_true(pty$wait("allow? "))
+  expect_true(endsWith(pty$pending(), "[?]: "))
+  pty$send("y\r")
+  expect_true(pty$wait("REQ tool_result: "))
+  expect_true(pty$wait("peter> "))
+  # the kept line is the newest history entry at the next prompt
+  pty$send("\033[A\r")
+  expect_true(pty$wait("REQ user: use base R END"))
+  expect_true(pty$wait("peter> "))
+  # C: a partial line starting with "no" denies nothing
+  pty$send("C\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("no wait, plot it first")
+  expect_true(pty$wait("allow? "))
+  expect_true(endsWith(pty$pending(), "[?]: "))
+  pty$send("y\r")
+  expect_true(pty$wait("REQ tool_result: "))
+  expect_true(pty$wait("peter> "))
+  # H: a partial line at the agent's question is not its answer
+  pty$send("H\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("use base R")
+  expect_true(pty$wait("Choose ("))
+  expect_true(endsWith(pty$pending(), "your own answer): "))
+  pty$send("1\r")
+  expect_true(pty$wait("REQ tool_result: The user answered: - q1: ggplot2 END"))
+  expect_true(pty$wait("peter> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(c(pty$seen("kept your unfinished line"), pty$seen("Not an answer"),
+                     pty$seen("Permission denied"), pty$seen("(typed)")), c(3L, 0L, 0L, 0L))
 })

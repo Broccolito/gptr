@@ -1916,8 +1916,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`, or `"follow_up"`); one batch (a
   paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. The
   terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only in its
-  notice; console questions read with the echo restored (D-221). IDE consoles, R.app and `peter("...")` at R's
-  prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current response.
+  notice; console questions read with the echo restored (D-221). A console question first drains fd 0
+  (`stty -icanon min 0 time 0`, the modes restored after): typed lines are routed as above and a partial line
+  goes to the console history with a notice, so the question starts empty [D-243]. IDE consoles, R.app and
+  `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current
+  response.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
   `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.

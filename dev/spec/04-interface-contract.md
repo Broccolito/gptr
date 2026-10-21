@@ -2225,6 +2225,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
 | `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with `the$tty_modes` while a console call holds the echo off (IC-76) | P11, P14, P26 |
+| `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
 | `readline_answer(prompt)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer arrived within 0.1 s (typed or pasted before the question), at most 100 reads, then the last answer; used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
 | `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183) | P07, P14, P15 |
@@ -5298,7 +5299,15 @@ Written by `dev/plan/P28-console-codex.md`; these items win over earlier section
 its part in its own commit, and Task 27 finalises them.
 
 - IC-75 amended (D-243; P28 Task 3): pending.
-- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21): pending.
+- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 13-16 and 18-21 pending.
+  - A question drains first (Task 2). On a terminal REPL, while a run of the call has a session,
+    `console_before_message(kind = "prompt")` reads fd 0 with `console_typed(drain = TRUE)`:
+    `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
+    the saved modes (on exit). Complete lines are routed as before. A trailing partial line (attr
+    `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()`,
+    whatever `gptr.history` says, with `[gptr] kept your unfinished line; ↑ recalls it at the next
+    prompt`. The question's `readline()` therefore starts empty: typed-ahead text is never an
+    invalid answer, a denial (`no ...`) or an ask-tool answer.
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26): pending.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
 - **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25): pending.
