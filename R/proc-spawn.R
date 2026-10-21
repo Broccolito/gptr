@@ -759,7 +759,9 @@ proc_writer_steps = c("startup", "validate_startup", "validate_create", "create"
 
 #' Standalone writer body: only this child can block in the native Windows WriteFile
 #'
-#' A warning fails its step, so no free text reaches stderr at exit.
+#' A warning fails its step, so no free text reaches stderr at exit. Only the published chunk's
+#' read muffles its warning; a failed read polls that chunk again (alive, mailbox, size), bounded by
+#' the parent's delivery deadline.
 #' @noRd
 proc_writer_main = function(meta) {
   options(warn = 2L)
@@ -840,7 +842,11 @@ proc_writer_main = function(meta) {
     size = file.size(path)
     stopifnot(is.finite(size), size > 0, size <= 65536)
     step = "read"
-    bytes = readBin(path, "raw", n = 65537L)
+    bytes = tryCatch(suppressWarnings(readBin(path, "raw", n = 65537L)), error = function(e) NULL)
+    if (is.null(bytes)) {
+      Sys.sleep(0.05)
+      next
+    }
     step = "length"
     stopifnot(length(bytes) == size)
     pos = 0L
@@ -1056,8 +1062,8 @@ proc_writer_start = function(p, limit) {
 #' Bounded construction/startup evidence, never native stderr or arbitrary condition messages
 #'
 #' The cause keeps only a fixed gptr message (letters, spaces and apostrophes); the writer's exit
-#' status names its failed step and is NULL while it still runs. A size, read or length failure
-#' also records that chunk file's byte size (NA when absent).
+#' status names its failed step and is NULL while it still runs. A size or length failure also
+#' records that chunk file's byte size (NA when absent).
 #' @noRd
 proc_writer_failure = function(p, error = NULL) {
   st = proc_writer_get(p)
@@ -1074,7 +1080,7 @@ proc_writer_failure = function(p, error = NULL) {
   status = tryCatch(st$p$get_exit_status(), error = function(error) NULL)
   step = match(status, 10L + seq_along(proc_writer_steps))
   step = if (isTRUE(step > 0L)) proc_writer_steps[[step]]
-  chunk = if (isTRUE(step %in% c("size", "read", "length")))
+  chunk = if (isTRUE(step %in% c("size", "length")))
     file.size(file.path(st$dir, sprintf("in-%012.0f", st$index)))
   cause = if (inherits(error, "gptr_error")) conditionMessage(error)
   if (!isTRUE(grepl("^[A-Z][A-Za-z' ]{0,118}[.]$", cause))) cause = NULL

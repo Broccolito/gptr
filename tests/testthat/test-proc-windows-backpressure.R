@@ -161,8 +161,10 @@ test_that("Windows writer delivery deadline advances only on acknowledged bytes"
 # Cold standalone actor controls: only the platform-specific ACL creator is a fixed fixture.
 # The original actor body, ownership validator, parser, drain and byte acknowledgements run.
 # `inject` runs first in the actor body and `parent` binds into the drain's scope, so a test can
-# fail one real step; the control then returns the stdin failure.
-writer_cold_control = function(case, inject = NULL, parent = list()) {
+# fail one real step; the control returns the stdin failure of the expected `outcome`.
+writer_cold_control = function(case, inject = NULL, parent = list(), outcome =
+  if (case == "blocked") "timeout" else if (is.null(inject) && !length(parent)) "complete" else
+    "io") {
   root = withr::local_tempdir()
   old = options(gptr.stdin_timeout = 2, gptr.supervise = FALSE)
   on.exit(options(old), add = TRUE)
@@ -283,21 +285,23 @@ writer_cold_control = function(case, inject = NULL, parent = list()) {
   expect_identical(seen$args[[2L]], "--default-packages=NULL")
   expect_identical(search, c(".GlobalEnv", "Autoloads", "package:base"))
   expect_identical(b$limit, 2)
-  if (case == "blocked") {
+  if (outcome == "timeout") {
     expect_s3_class(b$error, "gptr_error_timeout")
     expect_identical(b$error$seconds, 2)
     expect_identical(b$error$writer_stage, "delivery")
     expect_gt(b$error$accepted_bytes, 0)
     expect_gte(b$error$accepted_bytes, 65536)
-    expect_identical(seen$out, c("READY", "PREFIX 65536"))
+    if (case == "blocked") {
+      expect_identical(seen$out, c("READY", "PREFIX 65536"))
+      expect_identical(seen$exits, 0L)
+    }
     expect_identical(names(b$error$writer_phases),
       c("decode", "identity", "acl_start", "acl_wait", "acl_done", "validated", "ready"))
     expect_identical(names(b$error$writer_acl_phases),
       c("enter", "absent", "created", "readback", "verified", "owner", "exit_ok"))
-    expect_identical(seen$exits, 0L)
     expect_null(b$error$writer_step)
     expect_null(b$error$writer_status)
-  } else if (!is.null(inject) || length(parent)) {
+  } else if (outcome == "io") {
     expect_s3_class(b$error, "gptr_error_io")
     expect_identical(conditionMessage(b$error),
       "Could not deliver queued bytes through the stdin writer.")
@@ -345,10 +349,10 @@ test_that("a cold base-only writer times out only after real pipe acceptance", {
 
 # Each injected step fails once, on the second 64 KB mailbox chunk, as a real failure would:
 # the standalone actor's exit status names the step in the stdin failure condition. A failed
-# size, read or length step also reports that chunk's size, which these injections leave intact.
+# size or length step also reports that chunk's size, which these injections leave intact.
 writer_step_failure = function(inject, step) {
   error = writer_cold_control("echo", inject = inject)
-  chunk = step %in% c("size", "read", "length")
+  chunk = step %in% c("size", "length")
   expect_identical(
     bp_case_failure(error)[c("step", "status", "cause", "chunk_bytes")],
     list(step = step, status = 10L + match(step, proc_writer_steps),
@@ -388,17 +392,54 @@ test_that("a cold writer names a failed chunk size", {
   }), "size"), 65536)
 })
 
-test_that("a cold writer names a failed chunk read", {
-  skip_on_cran()
-  expect_identical(writer_step_failure(quote({
+# A readBin() of a full-size chunk occasionally failed on hosted Windows: the writer polls that
+# chunk again (alive, mailbox, size) until the parent's delivery deadline. The actor's `refused`
+# counts the failed reads of the second chunk, so another injection can see a retry.
+refused_chunk_read = function(times) {
+  bquote({
+    refused = 0
     readBin = function(con, ...) { # nolint: object_name_linter.
-      if (is.character(con) && basename(con) == "in-000000000002") {
+      if (is.character(con) && basename(con) == "in-000000000002" && refused < .(times)) {
+        refused <<- refused + 1
         warning("FAKE-actor-warning-canary")
         stop("FAKE-actor-error-canary")
       }
       base::readBin(con, ...)
     }
-  }), "read"), 65536)
+  })
+}
+
+test_that("a cold writer reads a refused chunk again and delivers every byte", {
+  skip_on_cran()
+  writer_cold_control("echo", refused_chunk_read(1), outcome = "complete")
+})
+
+test_that("a chunk read that keeps failing ends at the delivery deadline", {
+  skip_on_cran()
+  error = writer_cold_control("echo", refused_chunk_read(Inf), outcome = "timeout")
+  expect_identical(error$accepted_bytes, 65536)
+})
+
+test_that("a refused chunk is not read again once the mailbox fails validation", {
+  skip_on_cran()
+  expect_identical(writer_step_failure(bquote({
+    .(refused_chunk_read(Inf))
+    meta$valid = local({
+      valid = meta$valid
+      function(dir, canonical, marker, paths = character()) {
+        !(refused > 0 && "in-000000000002" %in% basename(paths)) &&
+          valid(dir, canonical, marker, paths)
+      }
+    })
+  }), "validate_read"), 65536)
+})
+
+test_that("a refused chunk is not read again once the parent or target is gone", {
+  skip_on_cran()
+  expect_identical(writer_step_failure(bquote({
+    .(refused_chunk_read(Inf))
+    isTRUE = function(x) base::isTRUE(x) && refused == 0 # nolint: object_name_linter.
+  }), "alive"), 65536)
 })
 
 test_that("a cold writer names a short chunk read", {

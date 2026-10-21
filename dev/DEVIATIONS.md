@@ -2977,3 +2977,28 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   needed 13 to 29 minutes for the CRAN-mode tests before this rule and 3.3 with the block rule alone, which left the
   whole check at CRAN's 10-minute budget, because skipped blocks and sourced files still cost time.
 - Tests: tests/testthat.R (the list); 1,183 block skips in the listed files.
+
+## D-241 - P04 the Windows stdin writer retries a refused chunk read until the delivery deadline (2026-10-21)
+- Rule (IC-60, D-019 item 5; P04 `R/proc-spawn.R`, `R/http-reactor.R`):
+  1. When the owned Windows stdin writer's `readBin()` of a published chunk fails (on hosted Windows it failed for
+     full-size, 65536-byte chunks; a transient open refusal is inferred, not observed), the writer returns to its
+     poll for that chunk after 0.05 s: it checks that the parent and target still run, validates the mailbox for
+     that chunk, takes the size again and reads. The read's warning is muffled and its error caught, because under
+     `warn = 2` R 4.2's `file()` leaks the connection of a refused open whose warning became an error (R 4.3
+     cleans it up, PR#18491). There is no new bound: the parent's no-progress deadline (`gptr.stdin_timeout`)
+     still ends a read that never succeeds as the typed `gptr_error_timeout` (`what = "stdin"`) and stops the
+     writer. Every other writer step fails at once.
+  2. Diagnostics (`3a05693`): a failed writer step exits with status 10 plus its index in `proc_writer_steps`
+     (startup, validate_startup, validate_create, create, validate_rename, rename, alive, validate_read, read,
+     validate_write, write, unlink, size, length), clear of R's statuses 1 and 2 and Windows' abort status 3, and
+     the writer turns warnings into errors. A Windows stdin failure carries `writer_status` (NULL while the writer
+     runs), `writer_step` decoded from it, `writer_cause` (the inner gptr message, kept only as fixed text) and,
+     for a size or length step, `writer_chunk_bytes` (the published chunk's size, NA when absent). Each
+     parent-side publish and acknowledgement check has its own fixed message; the backpressure witness records
+     step, status, cause and chunk_bytes.
+- Contract-visible: a Windows stdin failure condition gains the writer fields; no section amended.
+- Tests: test-proc-windows-backpressure.R ("a cold writer reads a refused chunk again and delivers every byte", "a
+  chunk read that keeps failing ends at the delivery deadline", "a refused chunk is not read again once the mailbox
+  fails validation", "... once the parent or target is gone", the cold writer step controls);
+  test-proc-writer-runtime.R (the decoded step and chunk size, the fixed causes, the bootstrap size). Evidence:
+  progress/fixes.md Task CI-75.

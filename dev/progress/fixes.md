@@ -1110,3 +1110,82 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Baseline (`run.R --update`): the 12 standard cases' prefix and catalog +143 (catalog 399 -> 542, the value
   recorded before the drift noted in D-135 item 6), input totals +143 per request; the two minimal cases unchanged.
   `run.R --check` OK; polyglot within 10%; `dev/bench/tests` PASS.
+
+## Task CI-75 - The Windows stdin writer reads a refused chunk again (2026-10-21, #61)
+- In the 123 hosted Windows jobs since `2654a21` that ran native-04 (R-CMD-check and Windows-check
+  shard 1), its first case, duplex (`test-proc-windows-backpressure.R:3`), failed twice with the
+  same witness (run 38874952436, job 116887641964, release, `3a8315f`; run 39532643181, job
+  119001917749, oldrel-4, `1b0d3bd`): an io error at stage `delivery`, "Could not deliver queued
+  bytes through the stdin writer.", with `accepted_bytes` 3604480 and 3080192, exact multiples of
+  64 KB. Every failing writer step quit with status 1 and the drain replaced the inner cause, so the
+  witness could not name the check. `3a05693` names it: each writer step exits with status 10 plus
+  its index in `proc_writer_steps`, the writer turns warnings into errors, each parent-side publish
+  and acknowledgement check has its own fixed message, and the stdin failure condition and the
+  backpressure witness gain the writer's step, status, cause and, for the steps that take the
+  chunk, the published chunk's size (D-241 item 2).
+- `claude/native04-loop` (never merged) repeated the duplex case on hosted Windows, R 4.6.1 and
+  R 4.2.3, in runs 39560105451 (300 iterations, before taking a chunk was split into size, read and
+  length) and 39565526323 (600): 896 complete, 4 failed, 2 per R version. Every failure is stage
+  `delivery`, step `read` (status 19), after 42, 30, 58 and 43 full chunks (`accepted_bytes`
+  2752512, 1966080, 3801088 and 2818048). In the second run that step is
+  `readBin(path, "raw", n = 65537L)` alone, after `file.size()` had admitted the chunk, and
+  `writer_chunk_bytes` is 65536: the parent measured the chunk file `in-<index>` at its full size
+  after the writer exited (only the writer deletes it). `observer_retries` and `sampling_errors`
+  were 0 and no deadline fired; the unlink, create, rename, validation and alive steps never failed.
+- Cause (inferred, not observed): `readBin()` of a chunk that the size step had admitted, and that
+  the parent measured at 65536 bytes after the writer exited, failed. The witness keeps no OS reason
+  (`cause` is the parent's "The owned stdin writer exited before delivery settled."). A transient
+  open refusal fits this, but whether a re-read succeeds is untested until `claude/native04-loop`
+  runs on the fix. The writer treated the failure as fatal.
+- Fix: `proc_writer_main()`'s read step muffles the `readBin()` warning and catches its error. A
+  failed read sleeps 0.05 s and returns to the writer's poll for the same chunk, which checks that
+  the parent and target still run (step `alive`, status 17), validates the mailbox for that chunk
+  (`safe("read", ...)`, fail-closed, status 18) and takes the size again, so `length` compares the
+  bytes with the size taken right before that read. No new bound: the parent's no-progress deadline
+  (`gptr.stdin_timeout`) still ends a read that never succeeds as the typed `gptr_error_timeout`
+  and stops the writer. Nothing else retries. `read` keeps its index, so every status is unchanged;
+  it can no longer exit, so the parent records `writer_chunk_bytes` for a size or length step only.
+  The warning is muffled, not turned into an error: under `warn = 2`, R 4.2's `file()` leaks the
+  connection of a refused open whose warning became an error (R 4.3's connections.c cleans it up,
+  PR#18491), so about 125 refusals would fill R's 128 connections and fail the next validation
+  (status 18) before the deadline. Muffled, the open fails and `file()` destroys the connection
+  before it raises "cannot open the connection". On R 4.6.1 (macOS) 1,500 refused opens through
+  the muffled read leave the connection table unchanged; the R 4.2 leak is read from the 4.2 and
+  4.3 branch sources, not run. The trusted bootstrap grows by 52 to 56 bytes at a fixed mailbox
+  path (long path 9,429 to 9,485). The production witness, whose size follows the session tempdir
+  and `.libPaths()`, measured 9,513 in four runs after the fix, 485 bytes under the 9,998-byte
+  Rscript limit.
+- Tests: the cold control in `test-proc-windows-backpressure.R` takes the expected `outcome`
+  (complete, io or timeout). "a cold writer names a failed chunk read" becomes "a cold writer reads
+  a refused chunk again and delivers every byte" (the second chunk's `readBin()` warns, then errors,
+  once: the echoed lines are identical, the target exits 0 and stdin has no error) and "a chunk read
+  that keeps failing ends at the delivery deadline" (`gptr_error_timeout` after 2 s while the writer
+  runs, `writer_step` and `writer_status` NULL, `accepted_bytes` 65536). While the read keeps
+  failing, "a refused chunk is not read again once the mailbox fails validation" (step
+  validate_read, status 18) and "... once the parent or target is gone" (step alive, status 17)
+  each fail one retry check, with `accepted_bytes` 65536; the injection's `refused` counter lives in
+  the actor body, so the other injection sees it. The step tests for alive, validate_read, size,
+  length, unlink, create and rename are unchanged. In `test-proc-writer-runtime.R` the chunk-size
+  test takes size in place of read ("a writer failed in its size or length step reports that
+  chunk's size").
+- Red: on `3a05693` merged with main (`7e0238b`), `^proc-windows-backpressure$` FAIL 9 PASS 225:
+  the refused-once test ends in the io failure with the transfer short, the other three as step
+  read, status 19. A mutant that reads again without the poll's checks (an inner `repeat`) fails
+  the two retry-check tests with the stdin timeout (FAIL 6 PASS 228). Green:
+  `^proc-windows-backpressure$` PASS 234;
+  `^(proc-windows-backpressure|proc-writer-runtime)$` PASS 934 SKIP 8;
+  `^(proc-writer|proc-windows-backpressure|proc-spawn|http-reactor|proc-)` PASS 2653 SKIP 13
+  (PASS 2622 SKIP 13 after the merge, before the fix); `^zzz$` PASS 145. Lint clean.
+- Reviews: R1 and R2, applied here: the read's warning muffled, so a refused open leaks no
+  connection on R 4.2 (R1-1, R2-1); a failed read returns to the writer's poll, so the liveness and
+  mailbox checks run right before the next read (R1-3, R2-3); tests for those two checks after a
+  refused read (R1-2); `read` dropped from the chunk-size steps (R1-4, R2-7); the cause marked
+  inferred and "intact" replaced by the measured size (R2-2); the bootstrap growth measured at
+  fixed paths (R2-4); the census cited by job (R2-5); the loop's header and body corrected and its
+  summary given a class column (R2-6).
+- Deviations: D-241. Open: hosted Windows has not run the fix; `claude/native04-loop`, rebased onto
+  it, repeats the duplex case in 16 jobs (1,200 iterations). A refusal that outlasts the stdin
+  deadline, or a chunk that vanishes after a failed read, now ends as the delivery
+  `gptr_error_timeout` with no writer step; the loop summary's class column shows it. The follow-up
+  card "stdin-writer delivery timeout" (a startup-time `gptr_error_timeout` with `accepted_bytes` 0
+  under the 2 s budget) is a different class and stays open; INFRA-01 is unrelated.

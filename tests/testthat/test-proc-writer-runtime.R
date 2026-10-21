@@ -733,14 +733,15 @@ test_that("writer early-case diagnostics retain only bounded structural evidence
   expect_null(x$chunk_bytes)
 })
 
-test_that("a writer failed in its size, read or length step reports that chunk's size", {
+test_that("a writer failed in its size or length step reports that chunk's size", {
   x = rw_local_state()
   testthat::local_mocked_bindings(proc_writer_get = function(p) x$st)
   chunk = function(status) {
     x$st$p$get_exit_status = function() status
     proc_writer_failure(NULL)[c("writer_step", "writer_chunk_bytes")]
   }
-  expect_identical(chunk(19L), list(writer_step = "read", writer_chunk_bytes = NA_real_))
+  expect_identical(chunk(10L + match("size", proc_writer_steps)),
+    list(writer_step = "size", writer_chunk_bytes = NA_real_))
   writeBin(as.raw(1:3), file.path(x$st$dir, "in-000000000001"))
   expect_identical(chunk(10L + match("length", proc_writer_steps)),
     list(writer_step = "length", writer_chunk_bytes = 3))
