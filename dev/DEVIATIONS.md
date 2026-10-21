@@ -2977,3 +2977,24 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   needed 13 to 29 minutes for the CRAN-mode tests before this rule and 3.3 with the block rule alone, which left the
   whole check at CRAN's 10-minute budget, because skipped blocks and sourced files still cost time.
 - Tests: tests/testthat.R (the list); 1,183 block skips in the listed files.
+
+## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
+- Rule: `rw_child_case()` (helper-proc-writer-runtime.R; native-09 cases ordered, failed, shutdown, orphan,
+  binary, acl) sets `gptr.stdin_timeout = 20`, the budget of the Windows duplex and cancellation cases
+  (helper-proc-backpressure.R, 2654a21), instead of 2; the binary case no longer admits the writer first under its
+  own 2 s (35536d4). IC-60's window opens when the write is queued, before the lazy writer starts, so each case
+  needed writer cold start (Rscript actor and PowerShell ACL verifier) plus the first ACK within 2 s. On hosted
+  windows-latest (2026-10-12 to 2026-10-21) a production writer cold start took p50 0.65 s, p99 1.97 s and at most
+  5.24 s (437 witnesses, 7 of them cut off before readiness by a 2 s window), and readiness to the first ACK p50
+  0.05 s, at most 0.57 s (166 base-only controls). Five cases in four jobs timed out with accepted_bytes 0 after
+  startups of 1.41 to 2.09 s with the writer alive (c5a2b8e, bc13aba, fa64ef2, 176a3a2 in PR #61 run 39580403671).
+  20 s is about 3.4 times 5.81 s, the largest cold start (5.24 s) plus the largest readiness-to-ACK (0.57 s), and
+  leaves a stall inside the 30 s case deadline; the writer's own ACL wait follows the same limit. The no-reader
+  timeout cases (native-04, native-09), the base-only cold controls and the deterministic IC-60 tests keep 2 s.
+- Rule: "many hunks render in linear time" (test-tool-diff.R, P10 Task 3) bounds the diff's CPU time
+  (`user.self + sys.self`) at 5 s instead of its wall time: a stalled hosted runner took 11.4 s once in 205
+  Windows runs while the code needs 1.3 to 1.9 s there and is linear (2.0 times per doubling); CPU time still
+  fails superlinear work.
+- Contract-visible: none (IC-60 and the 60 s `gptr.stdin_timeout` default unchanged).
+- Tests: helper-proc-writer-runtime.R `rw_child_case()`; test-tool-diff.R "many hunks render in linear time".
+  Evidence: progress/fixes.md Tasks CI-79 and CI-80.
