@@ -3081,8 +3081,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     told", "a long invalid answer's notice wraps inside the approval's width (P28 B, E, F)".
   - A line a question reads past during a run is routed as `console_typed()` routes typed lines, through the one
     function both now call (`console_typed_route()`): a `/command` or `!code` line, or one continuing held code,
-    waits in the reader for the next prompt (`[gptr] after this answer: '<line>'`) and is never a steer, as this
-    decision says of a draft starting with `/` or `!`. Task 3 queued it as a steer, so in IDE consoles, and in a
+    waits in the reader for the next prompt (`[gptr] after this answer: '<line>'`) and is never a steer, as D-242
+    says of a draft starting with `/` or `!`. Task 3 queued it as a steer, so in IDE consoles, and in a
     terminal between the drain and the question's `readline()`, `/exit` or `!rm(x)` went to the agent as an
     instruction. Tests: test-console-ui.R "during a run a !code or /command line typed before a question waits for
     the prompt".
