@@ -235,7 +235,8 @@ console_newest = function(s, rd, take = FALSE) {
 #' shown in place of the status words), `draft` (the composer's text; NULL where no composer reads
 #' keys), `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt
 #' key), `pause` (TRUE where the key pauses, else it stops) and `steer` (TRUE where only the pause
-#' menu steers: Positron's console holds what is typed). In the style table's glyphs:
+#' menu steers: Positron's console holds what is typed) and `band` (TRUE on the input band, its
+#' words in the band's grey). In the style table's glyphs:
 #' without a composer the status ends with the key and its verb, as the composer's keys read,
 #' `<sep>esc stop`; with an empty draft the newest message follows, `<queued> steer<sep><text><sep>
 #' <up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person>
@@ -304,7 +305,8 @@ console_live_row = function(state, width) {
       }
     }
   }
-  row = paste0(sym$blue(sym$agent), " ", sym$dim(status))
+  grey = if (isTRUE(state$band)) sym$band_dim else sym$dim
+  row = paste0(sym$blue(sym$agent), " ", grey(status))
   if (is.null(input)) return(row)
   left = room - live_fit(status) - live_fit(gap)
   if (left > live_fit(sym$ellipsis)) {
@@ -367,6 +369,7 @@ console_live = function(cls) {
     # in the console's colours, also when drawn inside an evaluation, whose options say 1 colour
     rlang::local_options(cli.num_colors = console_colors())
     width = cli::console_width()
+    state$band = nzchar(row$band)
     text = console_live_row(state, width)
     row$shown = FALSE
     write(if (row$erase) {

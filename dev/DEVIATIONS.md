@@ -3636,3 +3636,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     promising a pause, and in R.app the `c` meant for the promised menu became a prompt. Task 26 rewrites the
     banner. Tests: test-console-repl.R "the banner names the console's key; no pause is promised where none is
     (review)".
+  - On the input band the live row's words take a band grey (`console_style()$band_dim`): `#6c6c6c` (256 colours
+    `38;5;242`) on the light band and `#a8a8a8` (`38;5;247`) on the dark one, about 4:1, where the one grey
+    `#878787` was about 2.8:1 and 3.2:1. The transcript keeps its grey. Contract-visible: 04 §15.10 IC-82. Tests:
+    test-console-input.R "on the input band the live row's words take the band's grey (review)".

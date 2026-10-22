@@ -284,7 +284,8 @@ test_that("the live row is drawn with \\r and erased to the line end, or padded 
   withr::local_options(cli.num_colors = 256L)
   local_mocked_bindings(console_background = function() "dark")
   expect_identical(draws("T")[[1L]], paste0("\r\033[48;5;237m",
-                                           console_live_row(state, 40L), "\033[K\033[0m"))
+                                           console_live_row(c(state, band = TRUE), 40L),
+                                           "\033[K\033[0m"))
   withr::local_options(cli.num_colors = 1L, cli.ansi = FALSE)
   # RStudio honours \033[K: no padding stays in its transcript (visual review)
   local_mocked_bindings(front_end = function() "rstudio")
@@ -296,6 +297,24 @@ test_that("the live row is drawn with \\r and erased to the line end, or padded 
     expect_identical(draws("L"), c(paste0("\r", row, strrep(" ", 39L - nchar(row))),
                                    paste0("\r", blank, "\r"), ""), info = fe)
   }
+})
+
+test_that("on the input band the live row's words take the band's grey (review)", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 256L, cli.width = 40L, cli.ansi = TRUE)
+  local_mocked_bindings(front_end = function() "terminal")
+  state = live_states$menu
+  # #878787 on the band was about 2.8:1 (light) and 3.2:1 (dark)
+  local_mocked_bindings(console_background = function() "light")
+  expect_match(written(function() console_live("T")$draw(state)),
+               "\033[38;5;242mr 1m 05s", fixed = TRUE)
+  local_mocked_bindings(console_background = function() "dark")
+  expect_match(written(function() console_live("T")$draw(state)),
+               "\033[38;5;247mr 1m 05s", fixed = TRUE)
+  # off the band, and in the transcript, the one grey stays
+  local_mocked_bindings(console_background = function() NA)
+  expect_match(written(function() console_live("T")$draw(state)),
+               "\033[38;5;244mr 1m 05s", fixed = TRUE)
 })
 
 test_that("the live row keeps the console's colours when drawn inside an evaluation (review)", {

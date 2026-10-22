@@ -848,7 +848,9 @@ Decisions:
     elsewhere they are one column, and counting the style table's glyphs two cut rows that fitted).
   - Redrawn on every key and once a second. The block is static (no blink, no spinner).
   - The block is the agent's blue, the status words and hints dim; only the draft is ink (amended in the
-    visual review: the waiting row's ink block and ink sentence were the loudest row on screen).
+    visual review: the waiting row's ink block and ink sentence were the loudest row on screen). On the
+    input band the words take the band's grey, `#6c6c6c` on the light band and `#a8a8a8` on the dark one
+    (amended in the review of Tasks 16-21: the one grey was about 2.8:1 and 3.2:1 on the bands).
   - At column 0, under the transcript's last row, from a run's first request to its end; no block, so
     `console_gap()` loses its waiting kind and the next block writes its blank on the cleared row (amended in
     Task 17).

@@ -5647,7 +5647,9 @@ its part in its own commit, and Task 27 finalises them.
       person's messages waiting for the session (its user-source queue items, those the console holds, the
       REPL's held lines); `question waiting` while a question waits for typing to pause (IC-76, Task 19).
       Completion candidates (Task 22) replace the status words. The block is the blue accent, the words and
-      hints dim, only the draft ink. ASCII: `# thinking 6s - ctrl-c pause`.
+      hints dim, only the draft ink; on the input band the words take the band's grey (`console_style()$band_dim`:
+      `#6c6c6c`, 256 colours `38;5;242`, on the light band; `#a8a8a8`, `38;5;247`, on the dark one), as the one
+      grey was about 2.8:1 and 3.2:1 there (review of Tasks 16-21). ASCII: `# thinking 6s - ctrl-c pause`.
     - One collapse rule: whole terms go from the right, the hint's (`ctrl-c pause`, `tab follow-up`, `enter
       steer`; the queue view's `↑ edit`), then `question waiting`, then `<n> queued`; then the queued message
       is cut with `…`, keeping its head; at least `▌ <elapsed>`; the draft keeps its tail (review of Tasks 16-21:

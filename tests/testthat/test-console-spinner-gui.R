@@ -26,7 +26,8 @@ test_that("a terminal's live row is on the input band where the background is kn
   state = list(what = "r", secs = 1, key = "Ctrl-C", pause = TRUE)
   local_mocked_bindings(console_background = function() "light")
   expect_identical(written(function() console_live("T")$draw(state)),
-                   paste0("\r\033[48;5;254m", console_live_row(state, 40L), "\033[K\033[0m"))
+                   paste0("\r\033[48;5;254m", console_live_row(c(state, band = TRUE), 40L),
+                          "\033[K\033[0m"))
   # an IDE console has no band; nor has a terminal whose background is unknown
   expect_identical(written(function() console_live("L")$draw(state)),
                    paste0("\r", console_live_row(state, 40L), "\033[K"))

@@ -141,7 +141,8 @@ console_colors = function() console_eval_value(".gptr_console_colors") %||% cli:
 #' logo blue (basic red and blue below 256 colours; cli drops them at 1 colour, `NO_COLOR`), the
 #' one grey `dim` (halfway between the logo's ink and cream where 256 colours show, as consoles
 #' that ignore SGR 2 show it too; else SGR 2), the input band where the background is known and
-#' 256 colours show it, and the R code theme in those colours. ASCII where the output is not
+#' 256 colours show it, with `band_dim` the grey of words on it, and the R code theme in those
+#' colours. ASCII where the output is not
 #' UTF-8 and in Windows consoles outside Windows Terminal and RStudio (Rgui among them), whose
 #' fonts lack U+258E and U+21B3 (WGL4); there the person's chevron is doubled, `>>`, so an answer
 #' never reads as R's own prompt. Here in L0, so an evaluation's display of its output can use it
@@ -163,11 +164,15 @@ console_style = function() {
   grey = if (deep) "#878787" else "dim"
   bands = c(dark = "\033[48;5;237m", light = "\033[48;5;254m")
   bg = console_background()
+  band = deep && !is.na(bg)
+  # the grey of words on the band, a step darker (light) or lighter (dark), so they keep contrast
+  on_band = if (band) c(dark = "#a8a8a8", light = "#6c6c6c")[[bg]] else grey
   c(glyphs, list(
     red = cli::make_ansi_style(red),
     blue = cli::make_ansi_style(blue),
     dim = cli::make_ansi_style(grey),
-    band = if (deep && !is.na(bg)) bands[[bg]] else "",
+    band = if (band) bands[[bg]] else "",
+    band_dim = cli::make_ansi_style(on_band),
     code = list(reserved = red, string = blue, number = blue, null = blue, call = "bold",
                 comment = grey)
   ))
