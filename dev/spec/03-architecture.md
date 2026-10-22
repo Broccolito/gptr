@@ -2002,7 +2002,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   act (every other tool) has a red strip and its name bold, an MCP call named `server/tool` with its
   arguments dim; a sub-agent call (Codex's collab call) has the agent's blue block. It shows its
   code on its line when it fits, else under its name: at most 20 rows at column 4, with the results, and
-  no fence lines (R highlighted in both forms; visual review); result lines are indented four spaces, dim, and wrap
+  no fence lines, a row wider than the console cut with `…` (R highlighted in both forms; visual review); result lines are indented four spaces, dim, and wrap
   at the width, also indented (a word wider than it is cut); an error shows its message in red in at most
   6 rows, then an ellipsis, an `r` error then its object changes; an edit's diff has `+` lines blue
   and `-` lines red (its file headers left out, as the call line names the file; hunk headers dim; a row

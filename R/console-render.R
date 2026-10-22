@@ -852,21 +852,24 @@ console_tool_kind = function(name, spec) {
 console_lang = function(name) if (grepl("(^|__)r$", name %||% "")) "r" else ""
 
 #' Code rows under a tool call's name, at column 4 with its results (D-245): at most `n` lines,
-#' R highlighted (console_code()), a cut block ending in a `# ... +N more lines` row (D-207)
+#' R highlighted (console_code()), a cut block ending in a `# ... +N more lines` row (D-207); with
+#' a `width`, a row wider than it is cut with an ellipsis, as a diff row is
 #' @noRd
-console_code_rows = function(lines, lang, n) {
+console_code_rows = function(lines, lang, n, width = NULL) {
   sym = console_style()
   shown = utils::head(lines, n)
   more = length(lines) - length(shown)
-  paste0("    ", c(console_code(shown, lang),
-                   if (more > 0L) sym$dim(paste0("# ", sym$ellipsis, " +", more, " more lines"))))
+  cut = if (more > 0L) sym$dim(paste0("# ", sym$ellipsis, " +", more, " more lines"))
+  rows = paste0("    ", c(console_code(shown, lang), cut))
+  if (is.null(width)) return(rows)
+  as.character(cli::ansi_strtrim(rows, width, ellipsis = sym$ellipsis))
 }
 
 #' The default start of a tool call, a cursor strip by its kind (D-245): `  | r  x = 1` with the
 #' strip (`console_style()$tool`) red, the name bold and R code highlighted, an MCP call as
 #' `server/tool` with its arguments dim; the whole line dim for a read; the agent's blue block for
-#' a sub-agent call. Code that does not fit `width` follows under the name, at most 20 rows that
-#' are never cut (console_code_rows())
+#' a sub-agent call. Code that does not fit `width` follows under the name, at most 20 rows, each
+#' cut to `width` (console_code_rows())
 #' @noRd
 console_call_line = function(call, width, kind = "act") {
   lines = console_escape(console_preview(call$input), FALSE)
@@ -888,7 +891,7 @@ console_call_line = function(call, width, kind = "act") {
   if (!code || (length(lines) < 2L && cli::ansi_nchar(one, type = "width") <= width)) {
     return(as.character(cli::ansi_strtrim(one, width)))
   }
-  c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L))
+  c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L, width))
 }
 
 #' The default result lines of a tool call, indented 4 and dim (D-245): an error's message in red,

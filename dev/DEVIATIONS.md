@@ -3421,3 +3421,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     all of it. Without the margin (Rscript, knitr) the split sink stays. Contract-visible: 04 §15.10 IC-82, 03
     §6.17. Tests: test-console-message-stream.R "in the console margin what R code prints is dim rows at column
     4, cut (visual review)"; test-console-notice.R and test-console-process-launch.R (the r tool's output row).
+  - A call's code row wider than the console is cut with `…`, as a diff row is, and `?` then shows the code whole:
+    at column 4 a 57-character row overflowed a 60-column console and the terminal wrapped its end to column 0
+    (found re-capturing the fixes above). Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests:
+    test-console-fences.R "tool code shows on the tool line when it fits, else under its name, cut to the width";
+    test-console-ui.R "the detail view's keys read as the question's; it skips a fence shown above (D-243)".

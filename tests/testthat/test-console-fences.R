@@ -246,15 +246,17 @@ test_that("a fence indented under a list item closes and shows its body unindent
   }
 })
 
-test_that("tool code shows on the tool line when it fits, else under its name, never cut", {
+test_that("tool code shows on the tool line when it fits, else under its name, cut to the width", {
   fence_test_format(width = 40L)
   line = function(x) cli::ansi_strip(console_tool_line(x, width = 40L))
   call = function(code) list(id = "c1", name = "r", input = list(code = code))
   long = paste0("x = c(", paste(seq_len(40L), collapse = ", "), ")")
   expect_identical(line(call("nrow(df)")), "  | r  nrow(df)")
-  # the code rows at column 4, under the tool's name, with its results and keys: no fence lines
-  expect_identical(line(call(long)), c("  | r", paste0("    ", long)))
-  expect_identical(line(call(c(long, "y = x"))), c("  | r", paste0("    ", c(long, "y = x"))))
+  # the code rows at column 4, under the tool's name, with its results and keys: no fence lines;
+  # a row wider than the console is cut, as a diff row is, never wrapped to column 0 (? shows it)
+  cut_long = paste0(substr(paste0("    ", long), 1L, 37L), "...")
+  expect_identical(line(call(long)), c("  | r", cut_long))
+  expect_identical(line(call(c(long, "y = x"))), c("  | r", cut_long, "    y = x"))
   expect_identical(line(call("x = 1\n```{r}\ny")), c("  | r", "    x = 1", "    ```{r}", "    y"))
   # a cut block says so in a last row that a copied block keeps as an R comment
   many = sprintf("x%d = %d", 1:25, 1:25)

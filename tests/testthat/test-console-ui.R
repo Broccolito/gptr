@@ -221,6 +221,11 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   out = console_try(function() ui_console_permission(req), c("?", "y"))
   expect_false("    write.csv(df, 'out.csv')" %in% out$shown)
   expect_true(all(keys %in% out$shown))
+  # a code row the call block cut at the console's width is shown whole by ? (visual review)
+  long = paste0("write.csv(df, '", strrep("d", 90L), ".csv')")
+  wide = modifyList(req, list(input = list(code = long), summary = long))
+  out = console_try(function() ui_console_permission(wide), c("?", "y"))
+  expect_true(paste0("    ", long) %in% out$shown)
   # the key bold and its words dim; the RStudio dialog gets the code and no SGR
   withr::local_options(cli.num_colors = 256L)
   expect_identical(utils::tail(ui_permission_detail(req), 1L),

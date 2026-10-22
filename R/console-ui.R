@@ -362,8 +362,9 @@ ui_console_permission = function(request, read = ui_console_read) {
     }
     if (low == "?") {
       # the call line above showed the code whole (D-243)
+      lines = ui_request_lines(request)
       whole = ui_call_shown(request) && is.character(request$input$code) &&
-        length(ui_request_lines(request)) <= 20L
+        length(lines) <= 20L && all(nchar(lines, type = "width") + 4L <= ui_width())
       console_write(ui_permission_detail(request, code = !whole))
       next
     }

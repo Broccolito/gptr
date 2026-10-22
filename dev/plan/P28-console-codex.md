@@ -522,7 +522,7 @@ Decisions:
 | kind | line | style |
 |---|---|---|
 | read | `▎ read  R/plot.R` | whole line dim; no result line unless it fails |
-| act | `▎ <name>  <first line>`, or the name over at most 20 code rows at column 4 (amended in the visual review: no fence lines, R highlighted on the one line too) | red strip, name bold |
+| act | `▎ <name>  <first line>`, or the name over at most 20 code rows at column 4, each cut to the width (amended in the visual review: no fence lines, R highlighted on the one line too) | red strip, name bold |
 | agent | `▌ sub-agent a (haiku) started`, `▌ sub-agent a done (1/3) · 4 turns · 12 s` | blue block |
 
 - The tool name is always printed, so a kind never relies on colour alone.

@@ -5522,7 +5522,7 @@ its part in its own commit, and Task 27 finalises them.
     | kind | line | style |
     |---|---|---|
     | read | `▎ read  R/plot.R` | the whole line dim; no result line unless it fails |
-    | act | `▎ r  zz = 1`, or the name over at most 20 code rows at column 4, under the name with the results (no fence lines; a cut block ends with `# … +N more lines`); an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold, R code highlighted (also on the one line); an MCP call's arguments dim |
+    | act | `▎ r  zz = 1`, or the name over at most 20 code rows at column 4, under the name with the results (no fence lines; a cut block ends with `# … +N more lines`; a row wider than the console is cut with `…`, and `?` then shows the code whole); an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold, R code highlighted (also on the one line); an MCP call's arguments dim |
     | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started`, `▌ sub-agent a done (1/3) · 4 turns · 12 s` | block blue |
 
     Tool blocks of consecutive requests group as those of one response: the waiting row between them takes no
