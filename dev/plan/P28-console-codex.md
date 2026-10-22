@@ -511,7 +511,7 @@ Decisions:
 | kind | line | style |
 |---|---|---|
 | read | `▎ read  R/plot.R` | whole line dim; no result line unless it fails |
-| act | `▎ <name>  <first line>`, or the name over a fence of at most 20 lines | red strip, name bold |
+| act | `▎ <name>  <first line>`, or the name over at most 20 code rows at column 4 (amended in the visual review: no fence lines, R highlighted on the one line too) | red strip, name bold |
 | agent | `▌ sub-agent a (haiku) started`, `▌ sub-agent a done (1/3) · 4 turns · 12 s` | blue block |
 
 - The tool name is always printed, so a kind never relies on colour alone.
@@ -563,8 +563,8 @@ Decisions:
 - Flagged rows (at most 5, then `(+N more; ? shows all)`) and the `asks in every mode:` reason
   stay, dim at column 4 like the result rows, later flagged rows under the first's text. The `?`
   detail view lists the keys as the question does (`    y  yes`, the key bold, its words dim) and
-  leaves out its fence when the call line just above showed the code whole (amended in the review of
-  Tasks 8-15; the RStudio dialog keeps it, without SGR).
+  leaves out its code rows when the call line just above showed the code whole (amended in the review of
+  Tasks 8-15; the RStudio dialog keeps them, without SGR).
 - The question is at column 2, `? Allow <tool>?`, and the keys are a row of their own under its text, at
   column 4: `y yes · a always (session) · p always (project) · n no · ? more` (amended in the review of
   Tasks 8-15: on the question's row they wrapped at 80 columns for any tool name of 4 characters or more,

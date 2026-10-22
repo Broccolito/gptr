@@ -270,8 +270,8 @@ test_that("R code is highlighted in the logo palette and other code is plain (D-
       out = render_chunks(paste0("```", lang, "\n", paste(code, collapse = "\n"), "\n```"), 80L)
       expect_identical(out[2:3], want[[n]], info = paste(n, lang))
     }
-    expect_identical(console_call_line(list(name = "r", input = list(code = code)), 80L)[3:4],
-                     want[[n]], info = n)
+    expect_identical(console_call_line(list(name = "r", input = list(code = code)), 80L)[2:3],
+                     paste0("    ", want[[n]]), info = n)
   }
   withr::local_options(cli.num_colors = 256L)
   # R that does not parse and other languages: ink between dim fences
@@ -564,7 +564,7 @@ test_that("tool calls are cursor strips tinted by kind (D-245)", {
   want = function(tool, agent, sep, red = identity, blue = identity, dim = identity,
                   bold = identity) {
     list(calls = c(paste0("  ", dim(paste0(tool, " read  R/plot.R"))),
-                   paste0("  ", red(tool), " ", bold("r"), "  zz = 1"),
+                   paste0("  ", red(tool), " ", bold("r"), "  zz = ", blue("1")),
                    paste0("  ", red(tool), " ", bold("github/search_issues"), "  ",
                           dim("{\"q\":\"bug\"}")),
                    paste0("  ", blue(agent), " codex_agent")),
@@ -768,7 +768,7 @@ test_that("tool lines escape the preview and summarise the result (acceptance 7)
     hook_event("tool_execution_end", s, tool_call_id = "c1", tool_name = "r", is_error = FALSE,
                elapsed = 2.5, details = list()),
     hook_event("message_end", s, role = "tool_result", message = result)))
-  expect_identical(out, c("  | r", "```r", "x = 1 # <U+001B>[31mred", "y = 2", "```",
+  expect_identical(out, c("  | r", "    x = 1 # <U+001B>[31mred", "    y = 2",
                           "    + x, y - 2.5 s"))
   expect_false(any(grepl("\033", out, fixed = TRUE)))
 })

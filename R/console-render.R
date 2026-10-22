@@ -830,37 +830,48 @@ console_tool_kind = function(name, spec) {
   if (identical(name, "codex_agent")) "agent" else "act"
 }
 
+#' The language of a tool's code: "r" for the r tool and its MCP form, else "" (plain)
+#' @noRd
+console_lang = function(name) if (grepl("(^|__)r$", name %||% "")) "r" else ""
+
+#' Code rows under a tool call's name, at column 4 with its results (D-245): at most `n` lines,
+#' R highlighted (console_code()), a cut block ending in a `# ... +N more lines` row (D-207)
+#' @noRd
+console_code_rows = function(lines, lang, n) {
+  sym = console_style()
+  shown = utils::head(lines, n)
+  more = length(lines) - length(shown)
+  paste0("    ", c(console_code(shown, lang),
+                   if (more > 0L) sym$dim(paste0("# ", sym$ellipsis, " +", more, " more lines"))))
+}
+
 #' The default start of a tool call, a cursor strip by its kind (D-245): `  | r  x = 1` with the
-#' strip (`console_style()$tool`) red and the name bold, an MCP call as `server/tool` with its
-#' arguments dim; the whole line dim for a read; the agent's blue block for a sub-agent call. Code
-#' that does not fit `width` follows as a Markdown fence of at most 20 lines that are never cut,
-#' `r` for the r tool (D-187), a cut one ending in a `# ... +N more lines` line inside the fence
-#' (D-207)
+#' strip (`console_style()$tool`) red, the name bold and R code highlighted, an MCP call as
+#' `server/tool` with its arguments dim; the whole line dim for a read; the agent's blue block for
+#' a sub-agent call. Code that does not fit `width` follows under the name, at most 20 rows that
+#' are never cut (console_code_rows())
 #' @noRd
 console_call_line = function(call, width, kind = "act") {
   lines = console_escape(console_preview(call$input), FALSE)
   sym = console_style()
   mcp = startsWith(call$name %||% "", "mcp__")
+  code = is.character(call$input$code)
+  lang = console_lang(call$name)
   name = console_tool_name(call$name)
   head = switch(kind, read = paste0(sym$tool, " ", name),
                 agent = paste0(sym$blue(sym$agent), " ", name),
                 paste0(sym$red(sym$tool), " ", cli::style_bold(name)))
   arg = c(lines, "")[[1L]]
-  if (nzchar(arg)) arg = paste0("  ", if (mcp && kind == "act") sym$dim(arg) else arg)
+  if (nzchar(arg) && kind == "act") {
+    arg = if (mcp && !code) sym$dim(arg) else console_code(arg, lang)
+  }
+  if (nzchar(arg)) arg = paste0("  ", arg)
   tone = if (identical(kind, "read")) sym$dim else identity
   one = paste0("  ", tone(paste0(head, arg)))
-  if (!is.character(call$input$code) ||
-      (length(lines) < 2L && cli::ansi_nchar(one, type = "width") <= width)) {
+  if (!code || (length(lines) < 2L && cli::ansi_nchar(one, type = "width") <= width)) {
     return(as.character(cli::ansi_strtrim(one, width)))
   }
-  code = utils::head(lines, 20L)
-  fence = doc_rmd_fence("```", code)
-  more = length(lines) - length(code)
-  lang = if (grepl("(^|__)r$", call$name %||% "")) "r" else ""
-  body = c(sym$dim(paste0(fence, lang)), console_code(code, lang),
-           if (more > 0L) sym$dim(paste0("# ", sym$ellipsis, " +", more, " more lines")),
-           sym$dim(fence))
-  c(paste0("  ", tone(head)), paste0(console_pad(), body))
+  c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L))
 }
 
 #' The default result lines of a tool call, indented 4 and dim (D-245): an error's message in red,

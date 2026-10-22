@@ -5431,8 +5431,10 @@ its part in its own commit, and Task 27 finalises them.
     line, its ask and its result lines.
   - The `?` detail view (`ui_permission_detail()`) lists the keys as the question shows them,
     `    y  yes`, `    a  always in this session: <rule>`, ..., `    Ctrl-C  abort the run` (the key bold, its words
-    dim). The console leaves out its code fence (`code = FALSE`) when the call line just above is this request's
-    and showed its code whole (at most 20 lines); the RStudio dialog keeps the fence and gets the text without SGR.
+    dim). Its code is at most 40 rows at column 4, as the call block shows them (`console_code_rows()`, no fence
+    lines; visual review). The console leaves them out (`code = FALSE`) when the call line just above is this
+    request's and showed its code whole (at most 20 lines); the RStudio dialog keeps them and gets the text without
+    SGR.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
 - **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Tasks 17 and 25 pending.
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
@@ -5499,7 +5501,7 @@ its part in its own commit, and Task 27 finalises them.
     | kind | line | style |
     |---|---|---|
     | read | `▎ read  R/plot.R` | the whole line dim; no result line unless it fails |
-    | act | `▎ r  zz = 1`, or the name over a fence of at most 20 lines; an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold; an MCP call's arguments dim |
+    | act | `▎ r  zz = 1`, or the name over at most 20 code rows at column 4, under the name with the results (no fence lines; a cut block ends with `# … +N more lines`); an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold, R code highlighted (also on the one line); an MCP call's arguments dim |
     | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started`, `▌ sub-agent a done (1/3) · 4 turns · 12 s` | block blue |
 
     Tool blocks of consecutive requests group as those of one response: the waiting row between them takes no

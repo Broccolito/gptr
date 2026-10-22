@@ -127,9 +127,10 @@ ui_call_shown = function(request) {
     identical(console_state()$last_call, c(request$session, request$tool_call_id))
 }
 
-#' The lines of an approval (D-243): the call line (`  | r  x = 1`, the tool named and an MCP call's
-#' arguments dim as the console's call line has them, fitted to the console before (+N more
-#' lines), D-187) unless the console printed it (ui_call_shown()), then dim at column 4
+#' The lines of an approval (D-243): the call line (`  | r  x = 1`, the tool named, R code
+#' highlighted and an MCP call's arguments dim as the console's call line has them, fitted to the
+#' console before (+N more lines), D-187) unless the console printed it (ui_call_shown()), then dim
+#' at column 4
 #' the flagged calls one per line, fitted, at most 5 (D-222), and why an `ask_human` request asks
 #' in every mode, then the question, and under its text the keys (a and p only with a rule), a row
 #' that wraps between them
@@ -142,8 +143,10 @@ ui_permission_lines = function(request) {
   tool = console_tool_name(request$tool %||% "tool")
   arg = c(lines, "")[1L]
   width = ui_width()
+  code = is.character(request$input[["code"]])
   first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ",
-                 if (startsWith(request$tool %||% "", "mcp__")) sym$dim(arg) else arg)
+                 if (startsWith(request$tool %||% "", "mcp__") && !code) sym$dim(arg) else
+                   console_code(arg, console_lang(request$tool)))
   call = if (!ui_call_shown(request)) {
     paste0(cli::ansi_strtrim(first, max(20L, width - nchar(more))), more)
   }
@@ -175,16 +178,14 @@ ui_permission_lines = function(request) {
     gsub("\u00a0", " ", console_wrap(paste0("    ", opts), width), fixed = TRUE))
 }
 
-#' The detail view shown for `?`: the code as a plain fence unless `code` is FALSE (it also feeds
-#' the RStudio dialog), a cut one ending in a `# ... +N more lines` line inside the fence (D-207);
-#' the keys as the question shows them, bold, and what they do, dim (D-243)
+#' The detail view shown for `?`: unless `code` is FALSE (it also feeds the RStudio dialog), at
+#' most 40 code rows at column 4 as the call block shows them (console_code_rows(), D-207); the
+#' keys as the question shows them, bold, and what they do, dim (D-243)
 #' @noRd
 ui_permission_detail = function(request, code = TRUE) {
   risk = request$risk
   sym = console_style()
   lines = ui_request_lines(request)
-  shown = utils::head(lines, 40L)
-  fence = doc_rmd_fence("```", shown)
   who = ui_who(request)
   out = c(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
                  console_tool_name(request$tool %||% "a tool"),
@@ -197,13 +198,7 @@ ui_permission_detail = function(request, code = TRUE) {
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
             paste0("  reason: ", ui_escape(request$reason))
           },
-          if (code) {
-            paste0("  ", c(paste0(fence, if (grepl("(^|__)r$", request$tool %||% "")) "r"), shown,
-                           if (length(lines) > 40L) {
-                             paste0("# ", sym$ellipsis, " +", length(lines) - 40L, " more lines")
-                           },
-                           fence))
-          })
+          if (code) console_code_rows(lines, console_lang(request$tool), 40L))
   fl = ui_flagged(risk)
   if (NROW(fl)) {
     where = ifelse(is.na(fl$path), "",

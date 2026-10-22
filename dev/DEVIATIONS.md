@@ -3311,3 +3311,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Contract-visible: 04 §15.10 IC-82. Tests: test-console-render.R "console_style() gives the logo accents by depth
     and the band by background (D-245)" and the renderer's styling cases; the 256-colour cases of
     test-console-ui.R and test-console-typing.R.
+  - A call's code sits under its name at column 4, with its result rows and the approval's keys, and its fence
+    lines are gone: the strip at column 2, the name at 4, the fence and code at 2 and the results at 4 gave one
+    block several left edges, the fence repeated the tool name (`▎ r` over ```` ```r ````), and the dim backticks
+    read as stray marks. A one-line r call is highlighted as the same code in a block is. The `?` detail view and
+    the approval's own call line follow (`console_code_rows()`, `console_lang()`). Answer fences stay Markdown
+    (D-187). Contract-visible: 04 §15.10 IC-77 and IC-82, 03 §6.17. Tests: test-console-fences.R "tool code shows
+    on the tool line when it fits, else under its name, never cut", "R code in a call block is highlighted at any
+    length; other code is plain (D-245)"; test-console-ui.R "the detail view shows at most 40 code rows at column 4,
+    as the call block (D-187)".

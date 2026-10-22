@@ -172,8 +172,7 @@ test_that("a path tool's prompt shows the path relative to the project; no empty
            risk = list(level = 2L, categories = "write", paths = "R/io.R"))
   expect_identical(ui_permission_lines(w)[1L], "  | write  R/io.R")
   detail = ui_permission_detail(w)
-  expect_identical(detail[1:4], c("  gptr wants to use write (level 2)", "  ```", "  R/io.R",
-                                  "  ```"))
+  expect_identical(detail[1:2], c("  gptr wants to use write (level 2)", "    R/io.R"))
   expect_match(ui_permission_detail(ui_request("x = 1"))[1L], "(level 1: local)", fixed = TRUE)
 })
 
@@ -193,18 +192,16 @@ test_that("a and p are offered only with a suggested rule; a and p say why not (
   expect_null(ui_answer_norm(list(decision = "allow", remember = "session"), req)$remember)
 })
 
-test_that("the detail view shows the code as a plain fence of at most 40 lines (D-187)", {
+test_that("the detail view shows at most 40 code rows at column 4, as the call block (D-187)", {
   skip_on_cran()
   root = local_project()
   code = sprintf("x%d = %d", 1:45, 1:45)
   detail = ui_permission_detail(ui_request(paste(code, collapse = "\n")))
-  at = match("  ```r", detail)
-  expect_identical(detail[at + 1:42],
-                   c(paste0("  ", code[1:40]), "  # ... +5 more lines", "  ```"))
-  expect_false(any(grepl("\033", detail, fixed = TRUE)))
-  expect_true("  ````r" %in% ui_permission_detail(ui_request("x = '\n```\n'")))
+  at = match("    x1 = 1", detail)
+  expect_identical(detail[at + 0:40], paste0("    ", c(code[1:40], "# ... +5 more lines")))
+  expect_false(any(grepl("\033|```", detail)))
   py = list(tool = "py", input = list(code = "a = 1"), risk = list(level = 2L))
-  expect_identical(ui_permission_detail(py)[2:4], c("  ```", "  a = 1", "  ```"))
+  expect_identical(ui_permission_detail(py)[2L], "    a = 1")
 })
 
 test_that("the detail view's keys read as the question's; it skips a fence shown above (D-243)", {
@@ -221,9 +218,9 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   withr::defer(assign("last_call", old, envir = console_state()))
   assign("last_call", c(req$session, "t1"), envir = console_state())
   out = console_try(function() ui_console_permission(req), c("?", "y"))
-  expect_false(any(grepl("^  `{3,}", out$shown)))
+  expect_false("    write.csv(df, 'out.csv')" %in% out$shown)
   expect_true(all(keys %in% out$shown))
-  # the key bold and its words dim; the RStudio dialog gets the fence and no SGR
+  # the key bold and its words dim; the RStudio dialog gets the code and no SGR
   withr::local_options(cli.num_colors = 256L)
   expect_identical(utils::tail(ui_permission_detail(req), 1L),
                    "    \033[1mCtrl-C\033[22m  \033[38;5;244mabort the run\033[39m")
@@ -235,7 +232,7 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
     TRUE
   }, .package = "rstudioapi")
   expect_identical(ui_rstudio_spec()$permission(req)$decision, "allow")
-  expect_match(shown, "```r\n  write.csv", fixed = TRUE)
+  expect_match(shown, "\n    write.csv(df, 'out.csv')\n", fixed = TRUE)
   expect_false(grepl("\033", shown, fixed = TRUE))
 })
 
@@ -296,7 +293,8 @@ test_that("the keys are a row under the question, a and p only with a rule (D-24
   expect_identical(ui_permission_lines(mcp)[1L],
                    console_call_line(list(name = mcp$tool, input = mcp$input), 78L))
   expect_identical(ui_permission_lines(ui_request("x = 1")),
-                   c("  \u001b[38;5;167m\u258e\u001b[39m \u001b[1mr\u001b[22m  x = 1",
+                   c(paste0("  \u001b[38;5;167m\u258e\u001b[39m \u001b[1mr\u001b[22m  x = ",
+                            "\u001b[38;5;67m1\u001b[39m"),
                      "  \033[38;5;67m?\033[39m \033[1mAllow r?\033[22m",
                      paste0("    \u001b[1my\u001b[22m\u001b[38;5;244m yes \u00b7 \u001b[39m",
                             "\u001b[1mn\u001b[22m\u001b[38;5;244m no \u00b7 \u001b[39m",

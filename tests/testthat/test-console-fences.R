@@ -246,29 +246,40 @@ test_that("a fence indented under a list item closes and shows its body unindent
   }
 })
 
-test_that("tool code shows on the tool line when it fits, else as a fence never cut", {
+test_that("tool code shows on the tool line when it fits, else under its name, never cut", {
   fence_test_format(width = 40L)
   line = function(x) cli::ansi_strip(console_tool_line(x, width = 40L))
   call = function(code) list(id = "c1", name = "r", input = list(code = code))
   long = paste0("x = c(", paste(seq_len(40L), collapse = ", "), ")")
   expect_identical(line(call("nrow(df)")), "  | r  nrow(df)")
-  expect_identical(line(call(long)), c("  | r", "```r", long, "```"))
-  expect_identical(line(call(c(long, "y = x"))),
-                   c("  | r", "```r", long, "y = x", "```"))
-  expect_identical(line(call("x = 1\n```{r}\ny")),
-                   c("  | r", "````r", "x = 1", "```{r}", "y", "````"))
-  # a cut fence says so inside the fence, where a copied block keeps it as an R comment
+  # the code rows at column 4, under the tool's name, with its results and keys: no fence lines
+  expect_identical(line(call(long)), c("  | r", paste0("    ", long)))
+  expect_identical(line(call(c(long, "y = x"))), c("  | r", paste0("    ", c(long, "y = x"))))
+  expect_identical(line(call("x = 1\n```{r}\ny")), c("  | r", "    x = 1", "    ```{r}", "    y"))
+  # a cut block says so in a last row that a copied block keeps as an R comment
   many = sprintf("x%d = %d", 1:25, 1:25)
   cut = line(call(many))
-  expect_identical(cut, c("  | r", "```r", many[1:20], "# ... +5 more lines", "```"))
-  expect_length(parse(text = cut[3:23]), 20L)
+  expect_identical(cut, c("  | r", paste0("    ", c(many[1:20], "# ... +5 more lines"))))
+  expect_length(parse(text = cut[-1L]), 20L)
   path = list(id = "c2", name = "write", input = list(path = strrep("a/", 30L)))
   expect_lte(nchar(line(path), type = "width"), 40L)
-  # the info string says r only for the r tool and its MCP form
   py = list(id = "c3", name = "py", input = list(code = "a = 1\nb = 2"))
-  expect_identical(line(py), c("  | py", "```", "a = 1", "b = 2", "```"))
-  mcp = list(id = "c4", name = "mcp__gptr__r", input = list(code = "a = 1\nb = 2"))
-  expect_identical(line(mcp)[2L], "```r")
+  expect_identical(line(py), c("  | py", "    a = 1", "    b = 2"))
+})
+
+test_that("R code in a call block is highlighted at any length; other code is plain (D-245)", {
+  withr::local_options(cli.num_colors = 256L, cli.width = 80L, cli.dynamic = FALSE)
+  local_mocked_bindings(is_utf8_output = function() FALSE, .package = "cli")
+  one = "  \033[38;5;167m|\033[39m \033[1mr\033[22m  x = \033[38;5;67m1\033[39m"
+  for (name in c("r", "mcp__gptr__r")) {
+    shown = console_tool_line(list(id = "c1", name = name, input = list(code = "x = 1")))
+    expect_identical(sub("gptr/r", "r", shown), one, info = name)
+    shown = console_tool_line(list(id = "c1", name = name, input = list(code = "x = 1\ny = 'a'")))
+    expect_identical(shown[-1L], c("    x = \033[38;5;67m1\033[39m",
+                                   "    y = \033[38;5;67m'a'\033[39m"), info = name)
+  }
+  py = console_tool_line(list(id = "c3", name = "py", input = list(code = "a = 1\nb = 2")))
+  expect_identical(py[-1L], c("    a = 1", "    b = 2"))
 })
 
 test_that("an r error result shows the error, not the first output line", {
