@@ -113,10 +113,11 @@ console_notice = function(..., .error = FALSE) {
 #' Chunk-invariant markdown stream renderer (contract 7.14)
 #'
 #' Returns an environment with `write(delta)` and `finish()`, writing to stdout.
-#' Styling (bold, italic within one token, inline code, dim link URLs, headings, bullets, dim
-#' quotes and rules, highlighted fenced code) is used when `cli::num_ansi_colors() > 1` at
-#' creation; without it the markdown characters are kept. Fenced code stays Markdown: fence lines
-#' as written (dim), the body unwrapped and de-indented by the opener's indentation (D-187).
+#' Styling (bold, italic within one token, inline code in the blue accent, dim link URLs,
+#' headings, bullets, dim quotes and rules, highlighted fenced code) is used when
+#' `cli::num_ansi_colors() > 1` at creation; without it the markdown characters are kept. Fenced
+#' code stays Markdown: fence lines as written (dim), the body unwrapped and de-indented by the
+#' opener's indentation (D-187).
 #' Where console_pad() gives a margin (D-186) lines get two columns on both sides, nested list
 #' indentation is kept, pipe tables are aligned, blank lines collapse to one between blocks (none
 #' before or after a reply); elsewhere the plain mode only wraps at `width` display columns. Rows
@@ -153,7 +154,9 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   st$cells = list()
   st$table_raw = FALSE
   st$space = FALSE
-  codes = c(h1 = "1;4", h = "1", bold = "1", italic = "3", code = "36", url = "2")
+  # inline code: the style table's blue accent (D-245), its SGR parameters
+  blue = sub("^\033\\[([0-9;]*)m.*$", "\\1", sym$blue("x"))
+  codes = c(h1 = "1;4", h = "1", bold = "1", italic = "3", code = blue, url = "2")
   st$on = logical(length(codes))
   names(st$on) = names(codes)
   sgr = function(code) if (style) paste0("\033[", code, "m") else ""

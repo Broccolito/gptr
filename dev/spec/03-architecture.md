@@ -1980,7 +1980,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   collapse; `NO_COLOR` removes colours and styles only. Rscript (verbosity 1), knitr, jsonl and
   tests (verbosity 0) and non-dynamic outputs (pipes, Jupyter) keep the plain layout (no margin,
   block gaps, table alignment or notice wrapping). Styling adds
-  italics within one token (`*x*`; an unmatched `*` prints), dim link URLs, quotes and rules, bold headings (H1 underlined); R
+  italics within one token (`*x*`; an unmatched `*` prints), inline code in the blue accent (D-245), dim link URLs,
+  quotes and rules, bold headings (H1 underlined); R
   that parses is highlighted by `cli::code_highlight()` in the user's `cli.code_theme`, else in the style table's
   R theme (reserved words red; strings, numbers and constants blue; calls bold; comments dim) [IC-82, D-245];
   other R and other languages are shown as written. The console UI itself clears waiting rows,

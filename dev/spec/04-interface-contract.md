@@ -5460,7 +5460,8 @@ its part in its own commit, and Task 27 finalises them.
     `cli.code_theme` wins. The style table's theme (`code`) is in the accents: reserved words and `function` red;
     strings, numbers and constants (`TRUE`, `NA`, `NULL`) blue; calls bold; comments dim; operators, brackets and
     symbols in ink. At 256 colours `function` is `38;5;167` and `"s"` `38;5;67`; at 16 colours `31` and `34`. R
-    that does not parse and every other language are shown as written, between dim fences.
+    that does not parse and every other language are shown as written, between dim fences. Inline code in an answer
+    takes the blue accent (review of Tasks 8-15; it was cli's cyan, `36`, the one accent outside the palette).
   - Whole rows (Task 10; review of Tasks 8-15): nothing of a streamed answer's held row is on screen, so other
     output goes between whole rows and the held row continues after it. `render_markdown_stream()` has no
     `reset_line()`. `console_before_message()` (a notice, a launch, a question, a sub-agent line) and the routing

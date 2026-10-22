@@ -3275,3 +3275,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     §2.2 (the `interpolated` class), §15.10 IC-82, 03 §4.1.4. Tests: test-console-render.R "the console's one grey
     is the style table's dim (D-245)" and the compaction and thinking-line cases; test-console-repl.R "an
     interpolated prompt is shown once, by the gateway's notice, at verbosity 2".
+  - Inline code in an answer takes the blue accent (`38;5;67` at 256 colours, `34` at 16, none at 1), from the style
+    table: it was cli's cyan (`36`), the one accent outside the logo palette left in the transcript. Contract-visible:
+    04 §15.10 IC-82, 03 §6.17. Tests: test-console-render.R "inline code in an answer takes the blue accent, not
+    cli's cyan (D-245)".

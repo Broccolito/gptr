@@ -440,6 +440,8 @@ Decisions:
 - Highlighting runs only when `cli::num_ansi_colors() > 1`. Code that does not parse is shown
   plain.
 - `code_light()` (Solarized) is deleted. Other languages are shown in ink with dim fences.
+- Inline code in an answer takes the blue accent, as strings do, not cli's cyan (amended in the review of
+  Tasks 8-15).
 
 Tests (`test-console-render.R`), RED first:
 - An r fence and an r tool call's fence at 256 colours hold `38;5;167` on `function` and `38;5;67`

@@ -498,6 +498,16 @@ test_that("no U+25CF dot and no Braille spinner anywhere in R/ (D-245)", {
   }
 })
 
+test_that("inline code in an answer takes the blue accent, not cli's cyan (D-245)", {
+  text = "Use `mtcars` here."
+  withr::local_options(cli.num_colors = 256L)
+  expect_identical(render_chunks(text, width = 80L), "Use \033[0;38;5;67mmtcars\033[0m here.")
+  withr::local_options(cli.num_colors = 16L)
+  expect_identical(render_chunks(text, width = 80L), "Use \033[0;34mmtcars\033[0m here.")
+  withr::local_options(cli.num_colors = 1L)
+  expect_identical(render_chunks(text, width = 80L), text)
+})
+
 test_that("the console's one grey is the style table's dim (D-245)", {
   dir = arch_source_dir()
   skip_if(is.null(dir), "the package sources under R/ were not found")
