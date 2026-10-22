@@ -120,6 +120,14 @@ ui_question = function(title, width) {
   paste0(lead[seq_along(rows)], cli::style_bold(rows))
 }
 
+#' The question of an approval (D-243): `Allow <tool>?`, or `<who>: allow <tool>?` for a sub-agent
+#' @noRd
+ui_permission_question = function(request) {
+  tool = console_tool_name(request$tool %||% "tool")
+  who = ui_who(request)
+  if (nzchar(who)) paste0(who, ": allow ", tool, "?") else paste0("Allow ", tool, "?")
+}
+
 #' Is the console's last printed call line this request's (its session and call ids, D-243)?
 #' @noRd
 ui_call_shown = function(request) {
@@ -153,7 +161,6 @@ ui_permission_lines = function(request) {
   fl = ui_flagged(request$risk)
   n = NROW(fl)
   why = request$reason
-  who = ui_who(request)
   can = is.null(ui_no_rule(request))
   keys = c("y", if (can) c("a", "p"), "n", "?")
   what = c("yes", if (can) c("always (session)", "always (project)"), "no", "more")
@@ -161,7 +168,6 @@ ui_permission_lines = function(request) {
   opts = paste0(cli::style_bold(keys), sym$dim(paste0(gsub(" ", "\u00a0", paste0(" ", what)),
                                                       c(rep(sym$sep, length(keys) - 1L), ""))),
                 collapse = "")
-  q = if (nzchar(who)) paste0(who, ": allow ", tool, "?") else paste0("Allow ", tool, "?")
   c(call,
     if (n) {
       k = seq_len(min(n, 5L))
@@ -174,7 +180,7 @@ ui_permission_lines = function(request) {
     if (identical(request$tier, "ask_human") && rlang::is_string(why) && nzchar(why)) {
       sym$dim(console_wrap(paste0("    asks in every mode: ", ui_escape(why)), width))
     },
-    paste0("  ", ui_question(q, width - 2L)),
+    paste0("  ", ui_question(ui_permission_question(request), width - 2L)),
     gsub("\u00a0", " ", console_wrap(paste0("    ", opts), width), fixed = TRUE))
 }
 
@@ -323,8 +329,9 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 #' chevron (D-243), `?` for the detail view; every console prompt first ends partial answer lines
 #' and clears waiting rows (D-186); a remembered answer adds a dim line naming the rule; an
 #' invalid answer is quoted (kept in the console history in an interactive session) above a hint
-#' with the question's keys, an empty one gets the hint alone, both wrapped at the prompt rows'
-#' width; five (`?` is none) end in a refusal whose feedback says so (D-188, D-243)
+#' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
+#' alone, both wrapped at the prompt rows' width; five (`?` is none) end in a refusal whose
+#' feedback says so (D-188, D-243)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -364,8 +371,8 @@ ui_console_permission = function(request, read = ui_console_read) {
       msg = c(if (nzchar(a)) {
         paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
                if (kept) " (kept in history)", ".")
-      }, paste0("  Type ", if (can) "y, a, p or n" else "y or n",
-                " (n <text> says what to do instead), or ?."))
+      }, paste0("  ", ui_permission_question(request), " Type ", if (can) "y, a, p or n" else
+        "y or n", " (n <text> says what to do instead), or ?."))
     }
     console_write(console_wrap(msg, ui_width()))
   }

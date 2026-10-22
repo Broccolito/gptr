@@ -5429,8 +5429,9 @@ its part in its own commit, and Task 27 finalises them.
     colours (`console_colors()`), as sub-agent lines do.
   - A remembered answer adds one dim line, `    allowed <suggested_rule> for this session` (or `project`). `a` or
     `p` where nothing can be remembered: `  a and p are not offered: <why>; answer y, n or ?.`; the invalid-answer
-    hint names the question's keys: `  Type y, a, p or n (n <text> says what to do instead), or ?.` (`y or n`
-    without a rule).
+    hint names the question and its keys, `  Allow r? Type y, a, p or n (n <text> says what to do instead), or ?.`
+    (`y or n` without a rule; a sub-agent's `sub-agent a: allow r?`), as the question may have scrolled away
+    (visual review: in RStudio and R.app a draft left on the input line turned `y` into an invalid answer).
   - A question and the tool block it is asked in are one block (`console_gap()`): no blank line between a call
     line, its ask and its result lines.
   - The `?` detail view (`ui_permission_detail()`) lists the keys as the question shows them,

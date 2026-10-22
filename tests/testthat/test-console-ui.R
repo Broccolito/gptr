@@ -535,8 +535,9 @@ test_that("invalid answers are explained and kept; five end in a refusal the mod
   out = console_try(function() ui_console_permission(req), rep("zz", 5L))
   expect_identical(out$result, list(decision = "deny", remember = NULL,
                                     feedback = "no valid answer was given at the approval prompt"))
-  # the hint names the prompt's own letters and how to deny with feedback
-  hint = "  Type y, a, p or n (n <text> says what to do instead), or ?."
+  # the hint names the question, as it may have scrolled away (visual review), the prompt's own
+  # letters and how to deny with feedback
+  hint = "  Allow r? Type y, a, p or n (n <text> says what to do instead), or ?."
   expect_identical(c(sum(out$shown == "  Not an answer: 'zz' (kept in history)."),
                      sum(out$shown == hint)), c(5L, 5L))
   expect_identical(out$kept, rep("zz", 5L))
@@ -548,8 +549,13 @@ test_that("invalid answers are explained and kept; five end in a refusal the mod
   expect_true("  Not an answer: 'maybe <U+001B>' (kept in history)." %in% out$shown)
   # an empty answer only gets the hint, and is not kept
   expect_false(any(grepl("Not an answer: ''", out$shown, fixed = TRUE)))
-  expect_identical(sum(out$shown == "  Type y or n (n <text> says what to do instead), or ?."), 2L)
+  hint = "  Allow r? Type y or n (n <text> says what to do instead), or ?."
+  expect_identical(sum(out$shown == hint), 2L)
   expect_identical(out$kept, "maybe \033")
+  sub = console_try(function() ui_console_permission(modifyList(req, list(agent = "a"))),
+                    c("zz", "y"))
+  expect_match(paste(sub$shown, collapse = " "), "  sub-agent a: allow r? Type y, a, p or n (n",
+               fixed = TRUE)
   # nothing is kept where there is no console history (a piped .stdin session)
   local_mocked_bindings(gptr_is_interactive = function() FALSE)
   out = console_try(function() ui_console_permission(req), c("zz", "y"))
@@ -581,7 +587,8 @@ test_that("a long invalid answer's notice wraps inside the approval's width (P28
   rows = out$shown[seq(grep("Not an answer", out$shown, fixed = TRUE), length.out = 4L)]
   expect_identical(rows, c("  Not an answer: 'please use base R graphics for this",
                            "  plot' (kept in history).",
-                           "  Type y, a, p or n (n <text> says what to do instead),", "  or ?."))
+                           "  Allow r? Type y, a, p or n (n <text> says what to do",
+                           "  instead), or ?."))
   expect_lte(max(nchar(out$shown)), 58L)
   expect_identical(out$kept, a)
 })

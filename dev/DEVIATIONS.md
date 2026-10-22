@@ -3211,6 +3211,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Tests: test-utils-options.R "an IDE's terminal tab is a terminal: inherited IDE variables count only without
     a tty"; test-console-interrupt.R "Positron's console is no terminal REPL and offers the pause menu (visual
     review)"; test-console-render.R "the interrupt key follows the front end".
+  - The invalid-answer hint of an approval names the question, `  Allow r? Type y, a, p or n (...), or ?.`
+    (`ui_permission_question()`, shared with the question row): in RStudio and R.app a draft left on the input line
+    when the approval appeared turned `y` into `and label the axesy`, and after a few notices the question had
+    scrolled away. Two parts of that finding are not taken: a guess that an answer ending in a key after other text
+    is a leftover draft (`okay`, `maybe` end in `y` too; the notice already quotes the line), and empty answers
+    leaving the 5 tries (they bound a question that reads nothing but empty lines). Contract-visible: 04 §15.10
+    IC-77. Tests: test-console-ui.R "invalid answers are explained and kept; five end in a refusal the model is
+    told", "a long invalid answer's notice wraps inside the approval's width (P28 B, E, F)".
 - Task 16: the composer's key machine, pure (`console_compose()` and `console_trigger()` in the new
   `console-input.R`; Tasks 18-21 feed it the keys). A read batch sends at most one message, so it returns one
   action, not a list. A newline in a batch ends what DEL, Ctrl-U and Ctrl-W reach, so keys typed after Enter within

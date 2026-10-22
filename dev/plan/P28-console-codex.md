@@ -246,6 +246,8 @@ Decisions:
     `Type y, a or n (n <text> says what to do instead), or ?.`; an empty answer gets the hint
     alone (amended in review: the hint named a `p` the prompt never shows and had dropped the
     feedback form). Both are wrapped through `console_wrap()` at the width of the prompt's rows.
+    The hint starts with the question, `Allow r? Type ...`, which may have scrolled away (amended in
+    the visual review).
     This fixes the mid-word hard wraps in pty runs B, E and F.
   - `A pasted block is not an answer (kept in history).`
 - No answer is ever guessed into a steer.
