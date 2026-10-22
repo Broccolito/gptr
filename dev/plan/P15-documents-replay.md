@@ -44,9 +44,7 @@ Quarto CLI optional (tests skip without it).
 11.9, 12; section 15: IC-33, IC-34, IC-39, IC-45..IC-53, IC-68, IC-71, IC-73),
 dev/spec/05-plan-decomposition.md (P15).
 
-**Depends on:** P08, P10 (and through them P01-P07, P09). The end-to-end tasks (17, 18) run on the
-M2 package (P11 and P13 exist when M3 starts) but need neither: they set
-`gptr.unsafe_no_permissions` and skip the plan-mode check without P11. **Milestone:** M3.
+**Depends on:** P08, P10 (and through them P01-P07, P09). The end-to-end tasks (17, 18) run on the M2 package (P11 and P13 exist when M3 starts) but need neither: they set `gptr.unsafe_no_permissions` and skip the plan-mode check without P11. **Milestone:** M3.
 
 ---
 

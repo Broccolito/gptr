@@ -40,8 +40,7 @@ processx in tests only (processx through P01's mock server).
 `request_params`, 12.2-12.4, 15: IC-33, IC-34, IC-35, IC-61, IC-62, IC-64, IC-67, IC-69, IC-71,
 IC-72), dev/spec/05-plan-decomposition.md (P12).
 
-**Depends on:** P05, P07 (and P01-P04 through them; the INFRA-25 run test also uses P06's
-`session_run()`, which P07 already requires). **Milestone:** M2.
+**Depends on:** P05, P07 (and P01-P04 through them; the INFRA-25 run test also uses P06's `session_run()`, which P07 already requires). **Milestone:** M2.
 
 ---
 

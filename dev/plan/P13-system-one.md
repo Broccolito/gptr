@@ -41,10 +41,7 @@ rows, 3.1 `gptr.s1_*`, 4.5-4.6 `decision` and `gptr.decision`, 5.2, 6.1.1 route 
 2, 4 and 31, 10.4 `decision`, 11.1, 11.5, 11.9, 12.1-12.2; section 15: IC-36, IC-47, IC-57, IC-61,
 IC-64, IC-66, IC-68, IC-69, IC-70, IC-71, IC-73), dev/spec/05-plan-decomposition.md (P13).
 
-**Depends on:** P08 (gateway, `gptr_call`, `call_value()`, `replay_mode()`, `replay_guard()`,
-`egress_check()`), P09 (`describe_binding()`, `gptr_describe()`), P12 (the System 2 adapters that
-honour `params$returns`, used by emulation); transitively P01-P07. **Milestone:** M2 (the last plan
-of M2: its acceptance runs the M2 exit check).
+**Depends on:** P08 (gateway, `gptr_call`, `call_value()`, `replay_mode()`, `replay_guard()`, `egress_check()`), P09 (`describe_binding()`, `gptr_describe()`), P12 (the System 2 adapters that honour `params$returns`, used by emulation); transitively P01-P07. **Milestone:** M2 (the last plan of M2: its acceptance runs the M2 exit check).
 
 ## Global Constraints
 

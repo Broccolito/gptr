@@ -43,8 +43,7 @@ rendering of `.opts$images` plots); testthat 3e, withr and processx in tests onl
 IC-36, IC-39..IC-45, IC-48, IC-52, IC-53, IC-55, IC-57, IC-61, IC-62, IC-66, IC-69, IC-71),
 dev/spec/05-plan-decomposition.md (P08).
 
-**Depends on:** P03, P07 (and through them P01, P02, P04, P05, P06). **Milestone:** M1 (P08 is the
-milestone's last plan: its acceptance includes the M1 exit check).
+**Depends on:** P03, P07 (and through them P01, P02, P04, P05, P06). **Milestone:** M1 (P08 is the milestone's last plan: its acceptance includes the M1 exit check).
 
 ---
 

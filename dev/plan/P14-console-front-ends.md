@@ -31,8 +31,7 @@ helpers, P11's `local_scripted_ui()`.
 10.4, 10.6, 10.7, 11.2, 11.5, 12.1-12.3; section 15: IC-33, IC-34, IC-43, IC-44, IC-49, IC-53,
 IC-55, IC-57, IC-59, IC-69, IC-71, IC-73), dev/spec/05-plan-decomposition.md (P14).
 
-**Depends on:** P08, P11 (and through them P01-P07, P09, P10). The INFRA-03 test of Task 7 also uses
-P12's `anthropic-messages` adapter, which is in the package by milestone M3. **Milestone:** M3.
+**Depends on:** P08, P11 (and through them P01-P07, P09, P10). The INFRA-03 test of Task 7 also uses P12's `anthropic-messages` adapter, which is in the package by milestone M3. **Milestone:** M3.
 
 ---
 

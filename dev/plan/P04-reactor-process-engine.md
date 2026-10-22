@@ -27,8 +27,7 @@ dev/spec/04-interface-contract.md (sections 1.1-1.2, 2.2, 3.1, 5.12-5.13, 6.5 `g
 7.4, 8.1-8.3, 10.4 `retry_start`/`retry_end`, 12.2, 15.5 IC-57, IC-59, IC-60, IC-64),
 dev/spec/05-plan-decomposition.md (P04).
 
-**Depends on:** P01 Foundation, P03 Secrets and redaction (and P02 through P03: `registry_get()`,
-`registry_diagnostic()`). **Milestone:** M0 (the last M0 plan: it runs the M0 exit check).
+**Depends on:** P01 Foundation, P03 Secrets and redaction (and P02 through P03: `registry_get()`, `registry_diagnostic()`). **Milestone:** M0 (the last M0 plan: it runs the M0 exit check).
 
 ## Global Constraints
 

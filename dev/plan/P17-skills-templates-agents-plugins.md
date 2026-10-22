@@ -35,8 +35,7 @@ section catalogue), 11.1-11.4, 12.2-12.3), dev/spec/04-interface-contract.md (se
 11.13, 12.2, 12.4; section 15: IC-33, IC-34, IC-36, IC-42, IC-52, IC-54, IC-63, IC-67, IC-68, IC-69,
 IC-71), dev/spec/05-plan-decomposition.md (P17).
 
-**Depends on:** P08, P10 (and through them P01-P07, P09). **Milestone:** M3 (the last plan of M3:
-its acceptance item 5 runs the M3 exit check once P14-P16 are complete).
+**Depends on:** P08, P10 (and through them P01-P07, P09). **Milestone:** M3 (the last plan of M3: its acceptance item 5 runs the M3 exit check once P14-P16 are complete).
 
 ---
 
