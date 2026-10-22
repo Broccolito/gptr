@@ -156,7 +156,11 @@ console_idle = function(rd, prompt) {
   if (!is.null(line)) return(line)
   draft = rd$compose$draft
   rd$compose = NULL
-  if (nzchar(draft %||% "")) console_keep(draft)
+  if (nzchar(draft %||% "")) {
+    console_keep(draft)
+    # the prompt keeps the blank row above it, as after every run
+    console_write("")
+  }
   NULL
 }
 

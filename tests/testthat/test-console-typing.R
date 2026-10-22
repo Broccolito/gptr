@@ -1182,7 +1182,8 @@ test_that("a terminal: a draft a run left continues at the prompt until sent (P2
   expect_true(pty$wait("peter[auto]> and plot"))
   pty$send("\003")
   expect_true(pty$wait(kept_line("and plot", utf8 = utf8)))
-  expect_true(pty$wait("peter[auto]> "))
+  # a blank row between the kept line and the prompt, as after every run
+  expect_true(pty$wait("\r\n\r\npeter[auto]> "))
   pty$send("\033[A\r")
   expect_true(pty$wait("REQ and plot END"))
   expect_true(pty$wait("peter[auto]> "))

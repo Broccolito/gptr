@@ -1084,7 +1084,8 @@ Decisions:
   prompt and the draft's tail, cut as the live row cuts it; it reads fd 0 with no time limit. Enter
   returns the line, and the reader echoes it as it echoes a follow-up, so the transcript keeps the whole
   line. Tab on any other word does nothing. Ctrl-C, or an end of input, lists the kept draft
-  (`console_keep()`), and that Ctrl-C is not the first of the two that leave. After an idle or max_turns
+  (`console_keep()`), then a blank row, as above every prompt after a run (amended in the review of Tasks
+  16-21), and that Ctrl-C is not the first of the two that leave. After an idle or max_turns
   end, `console_queue_left()` leaves the draft in the composer, so it waits through the follow-ups' runs.
   Until Task 25 bands readline's prompt, only the editor's row has the band.
 

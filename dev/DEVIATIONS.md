@@ -3442,6 +3442,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     call and showed none of the keys typed, which invited typing twice. Contract-visible: 04 §15.10 IC-82. Tests:
     test-console-input.R "while R code runs in this process the row has no clock and says keys wait (review)";
     test-console-wait.R "the live row replaces the old waiting text, at column 0 (D-243)".
+  - The idle editor's kept draft line, at Ctrl-C or an end of input, is followed by a blank row, so the prompt
+    keeps the blank row above it it has after every run (it sat right under `↳ kept in history ↑ · ...`).
+    Contract-visible: 04 §15.10 IC-76. Tests: test-console-input.R "an emptied draft hands over to readline at the
+    same prompt; Ctrl-C keeps it first"; the pty case I.
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
