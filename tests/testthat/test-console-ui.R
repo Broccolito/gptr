@@ -630,6 +630,22 @@ test_that("every question asks again in one style: dim rows at column 4 (review)
   expect_true(dim("    Not an answer: 'zz' (kept in history).") %in% out$shown)
 })
 
+test_that("in an IDE console an answer of several words names the draft left on the input line", {
+  root = local_project()
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  cause = "    Text typed during the run is still on the input line; clear it first."
+  local_live_console("L")
+  out = console_try(function() ui_console_permission(ui_request("zz = 1")),
+                    c("and label the axesy", "zz", "y"))
+  expect_identical(out$result$decision, "allow")
+  expect_identical(sum(out$shown == cause), 1L)
+  # a terminal's draft stays in the composer, never on the answer's line
+  local_live_console("T")
+  out = console_try(function() ui_console_permission(ui_request("zz = 1")),
+                    c("and label the axesy", "y"))
+  expect_false(cause %in% out$shown)
+})
+
 test_that("with gptr.history off nothing is kept and no notice says it was (D-243)", {
   root = local_project()
   local_mocked_bindings(gptr_is_interactive = function() TRUE)

@@ -249,7 +249,8 @@ Decisions:
     `Type y, a or n (n <text> says what to do instead), or ?.`; an empty answer gets the hint
     alone (amended in review: the hint named a `p` the prompt never shows and had dropped the
     feedback form). Both are wrapped through `console_wrap()` at the width of the prompt's rows.
-    (Amended in the review of Tasks 16-21: dim at column 4, `ui_hint()`, as every question's re-ask.)
+    (Amended in the review of Tasks 16-21: dim at column 4, `ui_hint()`, as every question's re-ask; in an
+    IDE console an answer of several words adds that a draft is still on the input line.)
     The hint starts with the question, `Allow r? Type ...`, which may have scrolled away (amended in
     the visual review).
     This fixes the mid-word hard wraps in pty runs B, E and F.

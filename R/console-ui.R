@@ -376,8 +376,9 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 #' returns (D-243); a remembered answer adds a dim line naming the rule; an
 #' invalid answer is quoted (kept in the console history in an interactive session) above a hint
 #' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
-#' alone, both dim at column 4 (ui_hint()); five (`?` is none) end in a refusal whose
-#' feedback says so (D-188, D-243)
+#' alone, both dim at column 4 (ui_hint()), and in an IDE console an answer of several words a row
+#' naming the likely cause, a draft left on the input line; five (`?` is none) end in a refusal
+#' whose feedback says so (D-188, D-243)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -420,7 +421,11 @@ ui_console_permission = function(request, read = ui_console_read) {
         paste0("Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
                if (kept) " (kept in history)", ".")
       }, paste0(ui_permission_question(request), " Type ", if (can) "y, a, p or n" else
-        "y or n", " (n <text> says what to do instead), or ?."))
+        "y or n", " (n <text> says what to do instead), or ?."),
+      # an IDE console keeps a draft typed during the run on its input line, before the answer
+      if (grepl("\\s", trimws(a)) && console_class() == "L") {
+        "Text typed during the run is still on the input line; clear it first."
+      })
     }
     console_write(ui_hint(msg))
   }
