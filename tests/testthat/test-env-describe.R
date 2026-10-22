@@ -196,7 +196,7 @@ test_that("ALTREP 1:1e9 is described without materialising", {
   t0 = proc.time()[["elapsed"]]
   d = gptr_describe(x)
   expect_lt(proc.time()[["elapsed"]] - t0, 5)
-  expect_match(d[1], "^<integer> length 1,000,000,000, [0-9]{2,3} B \\(compact sequence\\)$")
+  expect_match(d[1], "^<integer> length 1,000,000,000, [0-9]{2,3} B$")
 })
 
 test_that("a description's size leaves out the home it describes in, as the workspace's does", {

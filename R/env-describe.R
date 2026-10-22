@@ -149,8 +149,7 @@ dsc_leaf_core = function(x) {
   df = inherits(x, "data.frame")
   list(class = class(x), type = typeof(x), length = length(x), dim = attr(x, "dim"),
        df = df, nrow = if (df) .row_names_info(x, 2L) else NA_integer_, s4 = isS4(x),
-       env = env, fun = fun, atomic = is.atomic(x), compact = env_compact_seq(x),
-       size = env_snap_size(x))
+       env = env, fun = fun, atomic = is.atomic(x), size = env_snap_size(x))
 }
 
 #' Evenly spaced sample indices (at most 1e5; report 12 section 3.5)
@@ -342,8 +341,7 @@ dsc_header = function(f) {
   } else {
     paste("length", env_fmt_n(f$length))
   }
-  sprintf("<%s> %s%s%s", paste(f$class, collapse = "/"), shape, dsc_bytes(f$size),
-          if (isTRUE(f$compact)) " (compact sequence)" else "")
+  sprintf("<%s> %s%s", paste(f$class, collapse = "/"), shape, dsc_bytes(f$size))
 }
 
 #' ", <size>" for a header line
