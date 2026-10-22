@@ -128,7 +128,7 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   expect_true(all(cli::ansi_nchar(c(queued, shown), type = "width") <= 39L))
 })
 
-test_that("a line queued while an answer streams goes between its whole rows (D-245)", {
+test_that("a line queued while an answer streams waits for its block to end (visual review)", {
   skip_on_cran()
   local_console_test()
   local_gptr_options(verbose = 2L)
@@ -147,10 +147,28 @@ test_that("a line queued while an answer streams goes between its whole rows (D-
   first = grep("word01", rows, fixed = TRUE)
   last = grep("word40", rows, fixed = TRUE)
   q = which(rows == queue_line("steer", "use base R"))
-  expect_true(length(q) == 1L && first < q && q < last)
-  # the paragraph is not cut at the queue line, and no waiting row comes back inside it
-  expect_identical(rows[setdiff(first:last, q)], whole)
+  expect_length(q, 1L)
+  # the paragraph is whole, never split at the queue line, and no waiting row comes back inside
+  # it; the line follows the answer's block as a block of its own, before its delivery
+  expect_identical(rows[first:last], whole)
   expect_false(any(grepl("thinking", res$out[(first + 1L):last], fixed = TRUE)))
+  expect_identical(rows[last + 1:3],
+                   c("", queue_line("steer", "use base R"),
+                     paste0(console_style()$person, " use base R")))
+})
+
+test_that("a queue line is a block of its own: a blank row before the text after it", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 1L)
+  fake = slow_first()
+  local_typed(typed_once("use base R", function() length(fake_requests(fake)) == 1L))
+  res = typing_console(fake, c("go", "/exit"))
+  rows = sub(".*\r", "", res$out)
+  q = which(rows == queue_line("steer", "use base R"))
+  expect_length(q, 1L)
+  expect_identical(rows[q + 1:2], c("", "  first"))
 })
 
 test_that("on a CLI route the queue line says the steer is sent after the CLI's answer", {
@@ -715,8 +733,8 @@ test_that("a terminal: typed text shows when queued and delivered, never in the 
   # queue line: the streamed answer reads as the undisturbed one of the second prompt
   rows = strsplit(gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$all), "\n", fixed = TRUE)[[1L]]
   text = paste(sub("^.*\r", "", sub("\r$", "", rows)), collapse = " ")
-  text = gsub(queued, "", gsub("\\s+", " ", text), fixed = TRUE)
-  # the person's line follows the first answer, before the agent's next request
+  text = gsub("\\s+", " ", gsub(queued, "", gsub("\\s+", " ", text), fixed = TRUE))
+  # the queue line and the person's line follow the first answer, before the agent's next request
   expect_true(grepl(paste0("END ", shown, " "), text, fixed = TRUE))
   answers = gsub(" ", "", regmatches(text, gregexpr("BEGIN.*?END", text, perl = TRUE))[[1L]])
   expect_length(answers, 2L)

@@ -3390,3 +3390,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     test-console-typing.R "an abort sends nothing queued: it goes to the history, listed once (D-242)", "an abort's
     status line says aborted once; the kept list follows it, then a blank row" and the drain cases;
     test-console-interrupt.R "a steer typed in a tool and then aborted is kept in the history, never sent later".
+  - A queue line never splits an answer: while the answer's text block is open it waits in the run's record and is
+    written, as a block of the person's lines, when any other block starts (the waiting row, a tool call, the
+    delivered message, the status line). Between whole rows it had still cut a sentence (`Heavier cars should` /
+    `↳ steer · ...` / `use more fuel`) at a row that depended on when Enter was pressed, and written during the
+    waiting row it stuck to the answer that followed. Task 18 moves it to the live row only in T class, so D and L
+    consoles keep this. Contract-visible: 04 §15.10 IC-82. Tests: test-console-typing.R "a line queued while an
+    answer streams waits for its block to end (visual review)", "a queue line is a block of its own: a blank row
+    before the text after it", "a terminal: typed text shows when queued and delivered, never in the answer
+    (D-242)".

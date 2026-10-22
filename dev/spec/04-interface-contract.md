@@ -5503,9 +5503,13 @@ its part in its own commit, and Task 27 finalises them.
   - Whole rows (Task 10; review of Tasks 8-15): nothing of a streamed answer's held row is on screen, so other
     output goes between whole rows and the held row continues after it. `render_markdown_stream()` has no
     `reset_line()`. `console_before_message()` (a notice, a launch, a question, a sub-agent line) and the routing
-    of typed lines (`console_typed_route()`, whose queue lines and notices sit between the answer's rows) only
-    clear the foreground records' waiting rows, keeping their clock and task; nothing pauses or resumes the
-    rendering for them. This replaces "ends partial lines" in IC-76 (the notices and their
+    of typed lines (`console_typed_route()`) only clear the foreground records' waiting rows, keeping their clock
+    and task; nothing pauses or resumes the rendering for them. A queue line is a block of the person's lines
+    (`console_gap()` kind `"person"`, so a blank row separates it from the next block, and none from the question
+    whose read routed it); while the answer's text block is open it waits in the run's record (`rec$queued`) and
+    is written when any other block starts, so it never splits a sentence: between whole rows it still had,
+    wherever the person happened to press Enter, and TERM=dumb and the IDE consoles keep the line after Task 18
+    (visual review). This replaces "ends partial lines" in IC-76 (the notices and their
     `console_render_pause()`) and IC-77 item 1. The pause menu and an abort still end the stream
     (`console_render_pause()`).
   - Tool calls (Task 11): `console_tool_kind(name, spec)` gives `"read"` for a tool annotated read-only
