@@ -612,6 +612,15 @@ test_that("the ask tool's call line counts its questions in words (visual review
   expect_identical(console_preview(list(questions = list(q, q))), "2 questions")
 })
 
+test_that("a diff row wider than the console is cut, its spaces and sign kept (visual review)", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE)
+  row = "+     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"
+  diff = msg_tool_result("c5", "edit", "ok", details = list(diff = c("@@ -1 +1,2 @@", " a", row)))
+  out = console_tool_line(list(name = "edit"), diff, width = 40L)
+  expect_identical(out, c("    @@ -1 +1,2 @@", "     a",
+                          "    +     xlab = \"weight (1000 lb)\", ..."))
+})
+
 # ---------------------------------------------------------------- Task 2: renderer hooks
 
 # A real, idle session that never ran (its prompt waits in the queue): the hooks only read it

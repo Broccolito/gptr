@@ -880,8 +880,9 @@ console_call_line = function(call, width, kind = "act") {
 #' The default result lines of a tool call, indented 4 and dim (D-245): an error's message in red,
 #' wrapped to at most 6 rows, then the object changes of `r` (also after an error); nothing else
 #' for a read; the diff of `edit` without its file headers, which the call line names (`+` lines
-#' blue, `-` lines red, hunk headers dim), the project-relative path of `write`, else `done`; each
-#' with `<sep><elapsed>` when it took a second or more
+#' blue, `-` lines red, hunk headers dim; a row wider than `width` cut, never wrapped, so its code
+#' keeps its spaces), the project-relative path of `write`, else `done`; each with `<sep><elapsed>`
+#' when it took a second or more
 #' @noRd
 console_result_lines = function(call, result, width, kind = "act") {
   sym = console_style()
@@ -910,7 +911,8 @@ console_result_lines = function(call, result, width, kind = "act") {
   if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
     diff = d$diff[!grepl("^(--- a/|[+]{3} b/)", d$diff)]
     shown = utils::head(diff, 12L)
-    lines = paste0(pad, console_escape(shown, FALSE))
+    lines = cli::ansi_strtrim(paste0(pad, console_escape(shown, FALSE)), width,
+                              ellipsis = sym$ellipsis)
     sign = substr(shown, 1L, 1L)
     lines = ifelse(sign == "+", sym$blue(lines),
                    ifelse(sign == "-", sym$red(lines), sym$dim(lines)))

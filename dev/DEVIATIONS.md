@@ -3324,3 +3324,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     `c`) into a help hyperlink with a dotted underline, outside the palette and unlike every other console;
     `console_code()` sets `cli.hyperlink_help = FALSE` around it. Contract-visible: 04 §15.10 IC-82. Tests:
     test-console-render.R "highlighted R has no help links, as RStudio would add (visual review)".
+  - A diff row wider than the console is cut with `…`, never wrapped: the word wrap collapsed runs of spaces, so at
+    60 columns `+     xlab = "weight (1000 lb)", ylab = "miles per gallon")` showed as `+ xlab = ...` with
+    `gallon")` on a row of its own, blue but without its `+`. Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests:
+    test-console-render.R "a diff row wider than the console is cut, its spaces and sign kept (visual review)".

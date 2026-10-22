@@ -2003,7 +2003,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   no fence lines (R highlighted in both forms; visual review); result lines are indented four spaces, dim, and wrap
   at the width, also indented (a word wider than it is cut); an error shows its message in red in at most
   6 rows, then an ellipsis, an `r` error then its object changes; an edit's diff has `+` lines blue
-  and `-` lines red (its file headers left out, as the call line names the file; hunk headers dim), at
+  and `-` lines red (its file headers left out, as the call line names the file; hunk headers dim; a row
+  wider than the console cut, never wrapped), at
   most 12; `write` shows the path relative to the project and the byte count (D-223); a call of a second
   or more adds ` · 3.0 s`; an approval's call line (6.8.3) is cut to the console width before its
   `+N more lines`, and the `?` detail shows at most 40 code rows the same way, unless the call line just

@@ -5510,7 +5510,8 @@ its part in its own commit, and Task 27 finalises them.
     (review of Tasks 8-15). Result lines are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`: the time when
     the call took a second or more). An error is red, at most 6 rows. An edit's diff has `+` lines blue and `-` lines red (removals were
     plain before), at most 12; its file headers (`--- a/`, `+++ b/`) are left out, as the call line names the file,
-    and its other lines (hunk headers) are dim. A tool's `render()`
+    and its other lines (hunk headers) are dim; a diff row wider than the console is cut with `…`, never wrapped,
+    so its code keeps its spaces and every row its sign (visual review). A tool's `render()`
     (IC-69) still wins. At 256 colours the act strip is `38;5;167` and the block `38;5;67`; `NO_COLOR` keeps the
     glyphs; ASCII shows `|` and `#`. A sub-agent's lines are drawn inside the agent's `r` evaluation, whose options
     say 1 colour, so they take the colours of the console it started from: `eval_one()` holds

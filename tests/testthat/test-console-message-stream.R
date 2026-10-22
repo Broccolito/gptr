@@ -40,7 +40,7 @@ test_that("actual failure notices have an explicit stderr route", {
 test_that("an edit's diff is red and blue while a failed edit says error: (D-245)", {
   withr::local_options(cli.num_colors = 256L)
   result = list(is_error = FALSE, details = list(diff = c("-old", "+new")))
-  lines = console_result_lines(list(name = "edit"), result)
+  lines = console_result_lines(list(name = "edit"), result, 80L)
   expect_identical(lines, c("\033[38;5;167m    -old\033[39m", "\033[38;5;67m    +new\033[39m"))
   result$is_error = TRUE
   result$content = list(block_text("failed"))
