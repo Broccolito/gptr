@@ -107,13 +107,17 @@ ui_who = function(request) {
   if (!rlang::is_string(a) || identical(a, "main")) "" else paste0("sub-agent ", ui_escape(a))
 }
 
-#' The rows that open a console question (D-243): `?` (blue) and the title in bold, a title's
-#' further lines under its text; escaped
+#' The width of a console question's rows: the console's, less the margin (D-186)
 #' @noRd
-ui_question = function(title) {
-  lines = console_lines(title)
-  lead = c(paste0(console_style()$blue("?"), " "), rep("  ", length(lines)))
-  paste0(lead[seq_along(lines)], cli::style_bold(lines))
+ui_width = function() max(20L, cli::console_width() - nchar(console_pad()))
+
+#' The rows that open a console question (D-243): `?` (blue) and the title in bold, its lines
+#' word-wrapped to `width` columns with the later rows under its text; escaped
+#' @noRd
+ui_question = function(title, width) {
+  rows = console_wrap(console_lines(title), width - 2L)
+  lead = c(paste0(console_style()$blue("?"), " "), rep("  ", length(rows)))
+  paste0(lead[seq_along(rows)], cli::style_bold(rows))
 }
 
 #' The lines of an approval (D-243): the call line (`  | r  x = 1`, fitted to the console before
@@ -131,7 +135,7 @@ ui_permission_lines = function(request) {
   first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ", c(lines, "")[1L])
   shown = rlang::is_string(request$tool_call_id) &&
     identical(console_state()$last_call, c(request$session, request$tool_call_id))
-  width = max(20L, cli::console_width() - nchar(console_pad()))
+  width = ui_width()
   fl = ui_flagged(request$risk)
   n = NROW(fl)
   why = request$reason
@@ -156,7 +160,7 @@ ui_permission_lines = function(request) {
     if (identical(request$tier, "ask_human") && rlang::is_string(why) && nzchar(why)) {
       paste0("     asks in every mode: ", ui_escape(why))
     },
-    paste0("  ", ui_question(q)),
+    paste0("  ", ui_question(q, width - 2L)),
     gsub("\u00a0", " ", console_wrap(paste0("    ", opts), width), fixed = TRUE))
 }
 
@@ -244,7 +248,8 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 }
 
 #' Console select() (D-243): `? <title>`, its details dim under it, the numbered choices, a dim
-#' hint and the person's chevron at column 0; NA = cancelled; attr "other" = free text
+#' hint and the person's chevron at column 0, each word-wrapped under its own text; NA =
+#' cancelled; attr "other" = free text
 #' Title line feeds are intentional (also for ask questions); labels and details stay escaped.
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
@@ -258,11 +263,19 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
   hint = paste0("Choose ", paste(c(if (multiple) "numbers separated by commas" else "a number",
                                    if (allow_other) "or type your own answer"), collapse = ", "),
                 if (length(default)) paste0("; Enter = ", paste(labels[default], collapse = ", ")))
-  console_write(c(if (!run || !nzchar(pad)) "", paste0(pad, ui_question(title)),
-                  if (length(details)) paste0(pad, "  ", sym$dim(ui_escape(details))),
-                  paste0(pad, "  ", cli::style_bold(format(seq_along(labels))), "  ",
-                         ui_escape(labels)),
-                  paste0(pad, sym$dim(ui_escape(hint)))))
+  width = ui_width() - nchar(pad)
+  num = format(seq_along(labels))
+  choice = function(i) {
+    rows = console_wrap(ui_escape(labels[[i]]), width - 4L - nchar(num[[i]]))
+    paste0(c(cli::style_bold(num[[i]]), rep(strrep(" ", nchar(num[[i]])), length(rows) - 1L)),
+           "  ", rows)
+  }
+  console_write(c(if (!run || !nzchar(pad)) "", paste0(pad, c(
+    ui_question(title, width),
+    if (length(details)) paste0("  ", sym$dim(console_wrap(ui_escape(details), width - 2L))),
+    paste0("  ", unlist(lapply(seq_along(labels), choice))),
+    sym$dim(console_wrap(ui_escape(hint), width))
+  ))))
   for (attempt in seq_len(5L)) {
     ans = read(paste0(sym$person, " "))
     if (is.na(ans)) return(NA_integer_)
@@ -287,8 +300,9 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
   }
   pad = console_pad()
   sym = console_style()
-  hint = if (nzchar(default)) paste0(pad, sym$dim(ui_escape(paste0("Enter = ", default))))
-  console_write(c(paste0(pad, ui_question(prompt)), hint))
+  width = ui_width() - nchar(pad)
+  hint = if (nzchar(default)) sym$dim(console_wrap(ui_escape(paste0("Enter = ", default)), width))
+  console_write(paste0(pad, c(ui_question(prompt, width), hint)))
   ans = read(paste0(sym$person, " "), secret = isTRUE(secret))
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
@@ -338,7 +352,7 @@ ui_console_permission = function(request, read = ui_console_read) {
       }, paste0("  Type ", if (can) "y, a, p or n" else "y or n",
                 " (n <text> says what to do instead), or ?."))
     }
-    console_write(console_wrap(msg, max(20L, cli::console_width() - nchar(console_pad()))))
+    console_write(console_wrap(msg, ui_width()))
   }
   console_write("  No valid answer after 5 tries; refused.")
   ui_answer("deny", feedback = "no valid answer was given at the approval prompt")

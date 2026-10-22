@@ -575,7 +575,10 @@ Decisions:
   - the hint (dim): `Choose a number, or type your own answer; Enter = base`; an input's
     `Enter = <default>`;
   - the `› ` prompt.
-  The OAuth inputs drop the `: ` that ended their prompts (amended in Task 12).
+  The OAuth inputs drop the `: ` that ended their prompts (amended in Task 12). Each part word-wraps at
+  the approval rows' width under its own text: the title's later rows at column 4, a choice's under its
+  label (amended in the review of Tasks 8-15: agent questions are usually longer than a row, and the
+  terminal broke them mid-word at column 0).
 - Questions drawn inside an evaluation (a sub-agent's or a nested call's) take the console's
   colours, `rlang::local_options(cli.num_colors = console_colors())`, as Task 11's sub-agent lines
   do (amended in Task 12).

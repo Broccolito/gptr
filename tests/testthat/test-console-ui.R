@@ -91,6 +91,31 @@ test_that("questions share one frame: ? and the title, numbered choices, a dim h
                                "  \033[2mChoose a number\033[22m"))
 })
 
+test_that("a long title, choice, detail or hint wraps under its own text (D-243)", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  out = console_try(function() {
+    ui_console_select("Should I convert cyl, gear and carb to factors before modelling?",
+                      c("Yes, convert all three before fitting", "No"),
+                      details = "The data has 32 rows and 11 columns.", allow_other = TRUE)
+  }, "2")
+  expect_identical(out$shown, c("", "  ? Should I convert cyl, gear and",
+                                "    carb to factors before modelling?",
+                                "    The data has 32 rows and 11", "    columns.",
+                                "    1  Yes, convert all three before", "       fitting",
+                                "    2  No", "  Choose a number, or type your own", "  answer"))
+  out = console_try(function() {
+    ui_console_input("What should the output file be called, with its extension?",
+                     default = "results.csv")
+  }, "")
+  expect_identical(out$shown, c("  ? What should the output file be",
+                                "    called, with its extension?", "  Enter = results.csv"))
+  req = modifyList(ui_request("x = 1"), list(agent = "'Summarise the data by group' #12"))
+  expect_identical(utils::tail(ui_permission_lines(req), 3L)[1:2],
+                   c("  ? sub-agent 'Summarise the data by", "    group' #12: allow r?"))
+})
+
 test_that("the one-line prompt shows the first line, +N more lines and the flagged calls", {
   skip_on_cran()
   root = local_project()

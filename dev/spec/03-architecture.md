@@ -1506,8 +1506,9 @@ tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; 
 (`  ? sub-agent alpha: allow r?`; a nested `peter()` by its quoted prompt and number). Choices and inputs (the `ask`
 tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices
 (`    1  dplyr`, the number bold), a dim hint (`Choose a number, or type your own answer; Enter = base`; an input's
-`Enter = <default>`), then `› `. Every console prompt first clears the waiting row (an answer's held row continues after it, D-245), and its
-lines reach the console, in its colours, even from inside the parent's `r` evaluation (never its tool result). An
+`Enter = <default>`), then `› `; each part word-wraps at the console width less the margin, under its own text (a
+title's later rows at column 4, a choice's under its label). Every console prompt first clears the waiting row (an
+answer's held row continues after it, D-245), and its lines reach the console, in its colours, even from inside the parent's `r` evaluation (never its tool result). An
 invalid answer is explained (`a` or `p` where nothing can be remembered says why); five (`?` is none) end in a
 refusal whose feedback tells the model that no valid answer was given [IC-77; D-188].
 

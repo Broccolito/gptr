@@ -3175,6 +3175,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     characters or more and every sub-agent ask, leaving a dangling ` ·` and a bold `? more` under the blue `?`,
     which read as a second question. Contract-visible: 04 §15.10 IC-77, 03 §6.8.3 and NS-1 (§10.1). Tests:
     test-console-ui.R "the keys are a row under the question, a and p only with a rule (D-243)".
+  - Every part of a console question word-wraps under its own text at the approval rows' width (`ui_width()`):
+    the title's later rows at column 4, a choice's under its label, details at column 4, the hint at column 2.
+    Task 12 wrote the title and the choices whole, so the terminal broke an agent's question (usually longer than
+    a row) mid-word at column 80 and went on at column 0. Contract-visible: 04 §15.10 IC-77, 03 §6.8.3. Tests:
+    test-console-ui.R "a long title, choice, detail or hint wraps under its own text (D-243)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

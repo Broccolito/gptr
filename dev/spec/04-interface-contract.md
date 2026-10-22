@@ -5397,7 +5397,10 @@ its part in its own commit, and Task 27 finalises them.
     R's readline (echo on, Enter required); answers are unchanged. A choice shows `? <title>` (bold), its details
     dim under it, the choices `    1  dplyr` (numbers bold, right-aligned), then a dim hint
     (`Choose a number, or type your own answer; Enter = base`; `Choose numbers separated by commas` for several);
-    an input `? <prompt>` and a dim `Enter = <default>`. Questions drawn inside an evaluation take the console's
+    an input `? <prompt>` and a dim `Enter = <default>`. Each part word-wraps at the width of the approval's rows
+    (`ui_width()`, the console width less `console_pad()`), under its own text: the title's later rows at column
+    4, a choice's under its label, details at column 4, the hint at column 2; the approval's question too.
+    Questions drawn inside an evaluation take the console's
     colours (`console_colors()`), as sub-agent lines do.
   - A remembered answer adds one dim line, `    allowed <suggested_rule> for this session` (or `project`). `a` or
     `p` where nothing can be remembered: `  a and p are not offered: <why>; answer y, n or ?.`; the invalid-answer
