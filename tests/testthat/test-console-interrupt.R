@@ -124,6 +124,24 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
                      grepl("follow-up queued", err, fixed = TRUE)))
 })
 
+test_that("the pause menu leaves the answer's held row to continue after it (visual review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  rec = console_record(list(run = run$id))
+  local_menu_answers("c")
+  out = notices({
+    rec$md = render_markdown_stream(80L)
+    rec$md$write("The heaviest cars, so part of this")
+    with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call")
+    rec$md$write(" gap is the weight effect.\n")
+    rec$md$finish()
+  })
+  # the sentence is whole, one row after the menu, never cut at the menu
+  row = "The heaviest cars, so part of this gap is the weight effect."
+  expect_identical(utils::tail(out, 1L), row)
+  expect_true(which(grepl("[gptr] paused", out, fixed = TRUE)) < length(out))
+})
+
 test_that("in the console margin the menu's prompts keep it, as its notices do (D-186)", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)

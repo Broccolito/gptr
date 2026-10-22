@@ -3399,3 +3399,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     answer streams waits for its block to end (visual review)", "a queue line is a block of its own: a blank row
     before the text after it", "a terminal: typed text shows when queued and delivered, never in the answer
     (D-242)".
+  - The pause menu stops only the waiting rows: `policy_menu()` called `console_render_pause()`, which ended the
+    answer's held row as a short row, so the sentence was cut at the menu (`so part of this` / menu / `gap is the
+    weight effect ...` as a new paragraph) at a word that depended on timing, the main difference between otherwise
+    identical transcripts. The held row now continues after the menu, which goes between whole rows; an abort, and
+    the menu's [b], still end the stream. Contract-visible: 04 §15.10 IC-82. Tests: test-console-interrupt.R "the
+    pause menu leaves the answer's held row to continue after it (visual review)".

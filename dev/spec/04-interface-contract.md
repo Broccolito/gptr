@@ -5510,8 +5510,10 @@ its part in its own commit, and Task 27 finalises them.
     is written when any other block starts, so it never splits a sentence: between whole rows it still had,
     wherever the person happened to press Enter, and TERM=dumb and the IDE consoles keep the line after Task 18
     (visual review). This replaces "ends partial lines" in IC-76 (the notices and their
-    `console_render_pause()`) and IC-77 item 1. The pause menu and an abort still end the stream
-    (`console_render_pause()`).
+    `console_render_pause()`) and IC-77 item 1. An abort still ends the stream (`console_render_pause()`, also when
+    the pause menu's [b] sends the run to the background). The pause menu itself stops only the waiting rows: the
+    held row continues after it (visual review: the menu cut a sentence, `so part of this` / menu / `gap is ...`,
+    at a timing-dependent word, the main difference between otherwise identical transcripts).
   - Tool calls (Task 11): `console_tool_kind(name, spec)` gives `"read"` for a tool annotated read-only
     (`annotations$read_only`; a trusted MCP server's `readOnlyHint` arrives as it), `"agent"` for a sub-agent call
     (Codex's collab call, `codex_agent`; gptr's own sub-agents are `peter()` calls in `r`), else `"act"`. The

@@ -115,13 +115,18 @@ console_ask = function(prompt) {
 }
 
 #' The pause menu (calling handler for `interrupt`): resumes the interrupted computation, or
-#' returns to let the policy's exiting handler abort
+#' returns to let the policy's exiting handler abort. It stops the waiting rows only: an answer's
+#' held row stays in its stream and continues after the menu, which goes between whole rows (D-245)
 #' @noRd
 policy_menu = function(cnd, pol) {
   # nested policies drop their runs while the stack unwinds to the exiting handler
   pol$abort_runs = pol$runs
   if (is.null(findRestart("resume", cnd)) || !console_menu_available()) return(invisible(NULL))
-  console_render_pause()
+  for (rec in as.list(console_state()$active)) {
+    console_spinner_stop(rec)
+    rec$paused = TRUE
+    rec$last = "notice"
+  }
   target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
   s = target$session
   bg = !is.null(s) && identical(pol$mode, "call") && ext_service_has("bg.register") &&
@@ -152,6 +157,7 @@ policy_menu = function(cnd, pol) {
     if (bg && identical(key, "b")) {
       tryCatch({
         ext_service_get("bg.register")(s)
+        console_render_pause()
         console_notice("[gptr] running in the background; gptr_wait() brings it back")
         invokeRestart("resume")
       }, error = function(e) {
