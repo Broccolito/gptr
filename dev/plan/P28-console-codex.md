@@ -817,10 +817,14 @@ Decisions:
   - T: `\r` + band + row + `\033[K\033[0m`, cut to `console_width() - 1` by
     `cli::ansi_nchar(type = "width")`, with ambiguous widths counted as 2.
   - Redrawn on every key and once a second. The block is static (no blink, no spinner).
+  - The block is the agent's blue, the status words and hints dim; only the draft is ink (amended in the
+    visual review: the waiting row's ink block and ink sentence were the loudest row on screen).
 - Every `gptr_message_write()` first writes `\r\033[0m\033[K`, then its whole lines, then redraws
   the row.
-- L: status only, `\r` + text padded with spaces to width - 1, ending
-  `· esc stops` (RStudio, Positron, Rgui) or `· ctrl-c pauses`.
+- L: status only, `\r` + text + `\033[K` in RStudio, which honours it, padded with spaces to width - 1
+  only where it is unknown (R.app, Rgui), ending `· esc stops` (RStudio, R.app, Rgui) or
+  `· ctrl-c pauses` (Positron). (Amended in the visual review: the padding left about 57 trailing
+  spaces on each RStudio row that replaced the waiting row.)
 - P: nothing.
 
 Tests (`test-console-input.R`, `test-console-wait.R`, `test-console-spinner-*.R`), RED first:
@@ -915,18 +919,25 @@ Commit: `feat(console): a question waits for typing to pause and keeps the draft
 
 Decisions:
 - SIGINT flushes the kernel's unread input but never gptr's draft.
-- The pause menu keeps its letters (`[s]teer, [f]ollow-up, [c]ontinue, [a]bort, [b]ackground`).
-  It is read with readline at `› ` with the saved modes.
-- [s] and [f] read their text and queue it exactly as Enter and Tab do.
+- The pause menu is a console question in every class (amended in the visual review: it was the one
+  control outside the console's vocabulary, `[gptr] paused sf1a5079fab: [s]teer, ...` read at `  ? `):
+  `  ? Paused`, then under its text a keys row built as the approval's,
+  `    s steer · f follow-up · c continue · a abort · b background` (keys bold, words dim, wrapping
+  between the options); the session id only when more than one session is paused; no
+  `[gptr] continuing`; an invalid key gets a dim hint naming the keys.
+- It is read with readline at `› ` at column 0 (`console_ask()` without the margin) with the saved
+  modes.
+- [s] and [f] read their text at the same `› ` and queue it exactly as Enter and Tab do.
 - The draft is redrawn after the menu. After [a] it joins Task 15's kept list (`console_keep()`).
 
-Tests (`test-console-typing.R`), RED first: pty G, a partial draft then Ctrl-C [c], keeps the
-draft. Today it is lost.
+Tests (`test-console-typing.R`, `test-console-interrupt.R`), RED first: pty G, a partial draft then
+Ctrl-C [c], keeps the draft. Today it is lost. The menu's rows at 80 and 60 columns, at 256 colours
+and in ASCII.
 
 Spec: 03 §6.2 pause menu, IC-76.
 
 Files: `R/console-interrupt.R` (`policy_menu()`, `console_ask()`), `R/console-input.R`,
-`tests/testthat/test-console-typing.R`.
+`tests/testthat/test-console-typing.R`, `tests/testthat/test-console-interrupt.R`.
 
 Commit: `feat(console): a draft survives Ctrl-C and the pause menu`.
 
@@ -1102,6 +1113,9 @@ Decisions:
   - Instead of `done`: `aborted: <reason>` or `error: <reason>`.
   - The model is the run's last request's model.
   - The line wraps like any notice.
+  - A term whose value is unknown (`unknown tokens`, `unknown cost`), or a cost of 0 (a free or local
+    model), is left out: `aborted · 1 request` (amended in the visual review: `$0.0000`, and two unknown
+    terms after an abort, were noise). `format_cost()` stays as IC-74 has it for `/cost`.
 - `console_context_left()` computes `1 - (input + cache_read + cache_write)` of the last request
   divided by the limit:
   - the limit is `compact_threshold(window, max_output)` when finite, else the model's window;
@@ -1112,7 +1126,9 @@ Decisions:
   - `objects: <up to six>`
   - `/help lists commands · tab completes after @ ! / · ctrl-c twice leaves`
   The keys in the banner are bold. Ctrl-C does not pause at idle, so the banner does not say it
-  does.
+  does. The key is the console's own (`console_interrupt_key()`, lower case: `esc twice leaves` in
+  RStudio, R.app and Rgui), and no line promises a pause where the menu is not offered (amended in the
+  visual review: the banner said `Esc pauses an answer` where Esc stops the run).
 - The mode stays in the prompt (`peter[auto]>`). Shift-Tab is not added; readline cannot bind it
   portably.
 
@@ -1183,6 +1199,11 @@ Decisions:
   - S6, Ctrl-C [a] with a draft and a queued steer: both are listed and recalled with Up.
   - S7, a sub-agent ask while the composer holds a draft.
   - S8, degradations: NO_COLOR=1, TERM=dumb, LANG=C, 50 columns, an Rscript pipe.
+  - S10, Ctrl-C under load (amended in the visual review: at load average about 300, 5 of 22 runs of
+    0ee69a0 lost a Ctrl-C typed while an answer streamed; none at normal load): the visual scenario's
+    run C 30 times beside 2 x nproc busy processes; `paused` appears within 1 s of every ^C. Fix only
+    once this fails, with Task 18's fallback: `-isig` in character mode while no tool runs, the reactor
+    opening the menu on byte 0x03, isig back on around tools.
   - S9, the maintainer's manual checks:
     - RStudio console: the popup appears only on triggers; editor completion works while peter
       waits; a stale line is routed at a question; there is no band.
