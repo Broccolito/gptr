@@ -5480,7 +5480,8 @@ its part in its own commit, and Task 27 finalises them.
     else NA, and an unknown background has no band. Task 25 adds the terminal probe.
   - R code (Task 9): R in answer fences and in tool calls is highlighted by `console_code()` above 1 colour only,
     with `cli::code_highlight(code, getOption("cli.code_theme") %||% console_style()$code)`, so a user's
-    `cli.code_theme` wins. The style table's theme (`code`) is in the accents: reserved words and `function` red;
+    `cli.code_theme` wins, and with `cli.hyperlink_help = FALSE`: RStudio turned every call into a help link with a
+    dotted underline, a decoration no other console shows (visual review). The style table's theme (`code`) is in the accents: reserved words and `function` red;
     strings, numbers and constants (`TRUE`, `NA`, `NULL`) blue; calls bold; comments grey; operators, brackets and
     symbols in ink. At 256 colours `function` is `38;5;167` and `"s"` `38;5;67`; at 16 colours `31` and `34`. R
     that does not parse and every other language are shown as written, between dim fences. Inline code in an answer

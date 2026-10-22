@@ -3320,3 +3320,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     on the tool line when it fits, else under its name, never cut", "R code in a call block is highlighted at any
     length; other code is plain (D-245)"; test-console-ui.R "the detail view shows at most 40 code rows at column 4,
     as the call block (D-187)".
+  - Highlighted R has no help links: in RStudio `cli::code_highlight()` turned every call (`lm`, `plot`, `write.csv`,
+    `c`) into a help hyperlink with a dotted underline, outside the palette and unlike every other console;
+    `console_code()` sets `cli.hyperlink_help = FALSE` around it. Contract-visible: 04 §15.10 IC-82. Tests:
+    test-console-render.R "highlighted R has no help links, as RStudio would add (visual review)".

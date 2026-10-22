@@ -440,7 +440,8 @@ Decisions:
   `cli::code_highlight(code, code_theme = getOption("cli.code_theme") %||% console_style()$code)`,
   so a user's theme wins.
 - Highlighting runs only when `cli::num_ansi_colors() > 1`. Code that does not parse is shown
-  plain.
+  plain. It adds no help links (`cli.hyperlink_help = FALSE`; amended in the visual review: RStudio
+  underlined every call as a help link).
 - `code_light()` (Solarized) is deleted. Other languages are shown in ink with dim fences.
 - Inline code in an answer takes the blue accent, as strings do, not cli's cyan (amended in the review of
   Tasks 8-15).

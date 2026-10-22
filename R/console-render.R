@@ -447,10 +447,12 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
 }
 
 #' Code lines as shown: R highlighted where colours show, in the user's `cli.code_theme` or else
-#' the style table's (IC-82); R that does not parse and other languages as written
+#' the style table's (IC-82), without the help links RStudio would add to calls; R that does not
+#' parse and other languages as written
 #' @noRd
 console_code = function(lines, lang) {
   if (cli::num_ansi_colors() < 2L || !grepl("^\\{?[rR]([ ,}]|$)", lang)) return(lines)
+  rlang::local_options(cli.hyperlink_help = FALSE)
   theme = getOption("cli.code_theme") %||% console_style()$code
   tryCatch(as.character(cli::code_highlight(lines, theme)), error = function(e) lines)
 }

@@ -287,6 +287,12 @@ test_that("R code is highlighted in the logo palette and other code is plain (D-
                    "\033[38;5;46mfunction\033[39m(x) 's'")
 })
 
+test_that("highlighted R has no help links, as RStudio would add (visual review)", {
+  withr::local_options(cli.num_colors = 256L, cli.hyperlink = TRUE, cli.hyperlink_help = TRUE)
+  out = console_code("fit = lm(mpg ~ wt, data = fuel)", "r")
+  expect_identical(out, "fit = \033[1mlm\033[22m(mpg ~ wt, data = fuel)")
+})
+
 test_that("a fenced line is written once, whole and highlighted, at its line end (D-245)", {
   skip_on_cran()
   withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)
