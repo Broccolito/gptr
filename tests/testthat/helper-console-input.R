@@ -35,6 +35,49 @@ local_console_test = function(.env = parent.frame()) {
   local_no_fd0(.env = .env)
 }
 
+# A console where the live row draws on a dynamic output (P28 Task 17): console_class() gives
+# `cls` (an interactive R); when the test ends the row is forgotten, nothing written
+local_live_console = function(cls = "T", .env = parent.frame()) {
+  testthat::local_mocked_bindings(console_class = function() cls, .env = .env)
+  withr::defer({
+    if (!is.null(the$live_row)) reactor_cancel(the$live_row$task)
+    the$live_row = NULL
+  }, envir = .env)
+}
+
+# What `f()` writes to stdout, as one string
+written = function(f) {
+  con = rawConnection(raw(), "w")
+  on.exit(close(con))
+  sink(con)
+  tryCatch(f(), finally = sink())
+  rawToChar(rawConnectionValue(con))
+}
+
+# The rows a terminal shows for `bytes`: \r, \n and \033[K act, other escapes are dropped
+term_rows = function(bytes) {
+  keys = regmatches(bytes, gregexpr("\033\\[[0-9;]*[A-Za-z]|[\r\n]|[^\r\n\033]", bytes,
+                                    perl = TRUE))[[1L]]
+  rows = character()
+  row = character()
+  col = 1L
+  for (k in keys) {
+    if (k == "\n") {
+      rows = c(rows, paste(row, collapse = ""))
+      row = character()
+    }
+    if (k %in% c("\r", "\n")) {
+      col = 1L
+    } else if (k == "\033[K") {
+      row = row[seq_len(col - 1L)]
+    } else if (!startsWith(k, "\033")) {
+      row[[col]] = k
+      col = col + 1L
+    }
+  }
+  c(rows, paste(row, collapse = ""))
+}
+
 # The REPL's persistent stdin connection replaced by a text connection over `lines`
 local_console_stdin = function(lines, .env = parent.frame()) {
   testthat::local_mocked_bindings(console_stdin_open = function() textConnection(lines),

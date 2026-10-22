@@ -1,7 +1,7 @@
 # console-render.R -- the console's printing layer (P14, layer L5, area console; architecture
-# 6.17, contract 7.14). The markdown stream renderer and the spinner are report 18 Appendix A.6's
-# md_stream() and wait_indicator(); every delta is UTF-8 marked (display widths, verification
-# item 24), its line ends normalised and then escaped (IC-53 item 8). Untrusted text is written
+# 6.17, contract 7.14). The markdown stream renderer is report 18 Appendix A.6's md_stream(); every
+# delta is UTF-8 marked (display widths, verification item 24), its line ends normalised and then
+# escaped (IC-53 item 8); the live row is console-input.R's (D-243). Untrusted text is written
 # with cat() after console_escape(), never as a cli or glue format string (rule C1).
 
 #' The key that interrupts R in this front end (Esc in Rgui, R.app and RStudio's console; report
@@ -82,7 +82,7 @@ console_notice = function(..., .error = FALSE) {
 #' indentation is kept, pipe tables are aligned, blank lines collapse to one between blocks (none
 #' before or after a reply); elsewhere the plain mode only wraps at `width` display columns. Prose
 #' wraps at 100 columns at most, a readable measure however wide the console. Rows
-#' are written whole, each at its line end or its wrap, so no half row sits where the waiting row
+#' are written whole, each at its line end or its wrap, so no half row sits where the live row
 #' is drawn and other output goes between whole rows, the held row continuing after it (D-245).
 #' A word is held until the next blank or line end, so the output does not
 #' depend on how the text was chunked at a fixed width. When width is omitted, each write and
@@ -430,8 +430,8 @@ console_print_text = function(text, before_output = NULL) {
 #' Verbosity 2's view of a thinking block of a record on a CLI route: its first line without a
 #' bold title's markers, dim and cut with an ellipsis to the width within the margin (D-186,
 #' D-207), printed as a block once its line end comes or it passes the width, or by finish(),
-#' after clearing the waiting row, which keeps its clock; Codex's reasoning items so show as
-#' progress lines (D-192). Nothing is on screen before that.
+#' above the live row, which keeps its clock; Codex's reasoning items so show as progress lines
+#' (D-192). Nothing is on screen before that.
 #' @noRd
 console_think_line = function(rec, width = cli::console_width()) {
   width = width - nchar(console_pad())
@@ -441,7 +441,6 @@ console_think_line = function(rec, width = cli::console_width()) {
   st$finish = function() {
     if (st$open && nzchar(st$text)) {
       line = sub("^\\*\\*(.+)\\*\\*$", "\\1", console_lines(st$text)[[1L]])
-      if (!is.null(rec$spinner)) rec$spinner$clear()
       console_gap(rec, "think")
       console_write(console_style()$dim(cli::ansi_strtrim(paste0("  ", line), width)))
     }
@@ -457,52 +456,6 @@ console_think_line = function(rec, width = cli::console_width()) {
     invisible(NULL)
   }
   st
-}
-
-#' The waiting indicator (report 18 A.6 wait_indicator()), ticked by its caller: the agent's
-#' static block, the label and the seconds waited (D-245)
-#'
-#' Uses "\r" redraws inside the console margin; an ANSI terminal erases to the line end, so the
-#' cursor stays after the text, other consoles pad the row with spaces. `tick()` is a no-op when
-#' stdout is not a dynamic terminal, so tests, pipes and knitr never see it.
-#' @noRd
-console_spinner = function(label = "thinking") {
-  sym = console_style()
-  utf8 = isTRUE(l10n_info()[["UTF-8"]])
-  key = console_interrupt_key()
-  action = if (console_menu_available()) "steer or stop" else "stop"
-  sp = new.env(parent = emptyenv())
-  sp$dynamic = cli::is_dynamic_tty()
-  sp$ansi = cli::is_ansi_tty()
-  sp$pad = console_pad()
-  sp$t0 = as.numeric(Sys.time())
-  sp$shown = FALSE
-  sp$last = 0
-  sp$tick = function() {
-    if (!sp$dynamic) return(invisible())
-    now = as.numeric(Sys.time())
-    if (now - sp$last < 0.08) return(invisible())
-    sp$last = now
-    width = max(0L, as.integer(cli::console_width()) - 1L)
-    text = sprintf("%s%s %s (%.0fs, %s to %s)", sp$pad, sym$agent, label, now - sp$t0, key,
-                   action)
-    if (!utf8) text = enc2native(text)
-    text = if (width) cli::ansi_strtrim(text, width, ellipsis = sym$ellipsis) else ""
-    # Reserve the last column to avoid wrapping; padding erases the tail of a shorter frame.
-    padding = strrep(" ", max(0L, width - cli::ansi_nchar(text, type = "width")))
-    console_cat(paste0("\r", text, if (sp$ansi) "\033[K" else padding))
-    sp$shown = TRUE
-    invisible()
-  }
-  sp$clear = function() {
-    if (sp$shown) {
-      blank = strrep(" ", max(0L, cli::console_width() - 1L))
-      console_cat(if (sp$ansi) "\r\033[K" else paste0("\r", blank, "\r"))
-      sp$shown = FALSE
-    }
-    invisible()
-  }
-  sp
 }
 
 # ---- renderer hooks ---------------------------------------------------------------------------
@@ -525,11 +478,13 @@ console_state = function() {
 }
 
 #' Start tracking a run of a session: a record with its session, tool calls, entry count, usage
-#' row count and count of queue items dropped by aborts
+#' row count, count of queue items dropped by aborts, start time and state word (the live row's)
 #' @noRd
 console_track = function(run_id, session) {
   rec = new.env(parent = emptyenv())
   rec$session = session
+  rec$t0 = as.numeric(Sys.time())
+  rec$what = "thinking"
   rec$tools = new.env(parent = emptyenv())
   rec$n0 = length(session_data(session)$entries)
   rec$u0 = nrow(session_data(session)$usage)
@@ -547,13 +502,13 @@ console_record = function(event) {
   get0(event$run, envir = console_state()$active, inherits = FALSE)
 }
 
-#' Forget a run after stopping its spinner
+#' Forget a run after taking down its live row
 #' @noRd
 console_drop = function(run_id) {
   active = console_state()$active
   rec = get0(run_id, envir = active, inherits = FALSE)
   if (!is.null(rec)) {
-    console_spinner_stop(rec)
+    console_live_stop(rec)
     rm(list = run_id, envir = active)
   }
   invisible(NULL)
@@ -600,45 +555,17 @@ console_render_on = function(rec) {
   verbosity() >= 2L && console_foreground(rec)
 }
 
-#' Start the spinner of a record, ticked by a reactor task every 0.1 s (03 section 6.17)
-#' @noRd
-console_spinner_start = function(rec) {
-  if (!is.null(rec$task) || !cli::is_dynamic_tty()) return(invisible(NULL))
-  rec$spinner = console_spinner("thinking")
-  draw = function() {
-    if (!rec$spinner$shown) console_gap(rec, "wait")
-    rec$spinner$tick()
-  }
-  draw()
-  rec$task = reactor_task(function() {
-    if (is.null(rec$spinner)) return(FALSE)
-    if (console_render_on(rec)) draw()
-    0.1
-  })
-  invisible(NULL)
-}
-
-#' Stop the spinner of a record and clear its line
-#' @noRd
-console_spinner_stop = function(rec) {
-  if (!is.null(rec$spinner)) rec$spinner$clear()
-  if (!is.null(rec$task)) reactor_cancel(rec$task)
-  rec$spinner = NULL
-  rec$task = NULL
-  invisible(NULL)
-}
-
-#' Other output is about to appear: clear the waiting rows of the foreground records of `runs`
-#' (every tracked run when NULL), keeping the pending request's clock and task so waiting
-#' resumes by itself; the output opens a block of `kind` (none when NULL). A streamed answer has
-#' nothing on screen to end: its held row continues after the output (D-245). TRUE when a
-#' foreground record was found
+#' Other output is about to appear for the foreground records of `runs` (every tracked run when
+#' NULL): it opens a block of `kind` (none when NULL). The writes themselves clear the live row and
+#' redraw it after them (gptr_message_write()); a question (`kind = "prompt"`) or a launched
+#' process (`kind = NULL`), which writes to the terminal past gptr, first clears it, and the row's
+#' task draws it again once the run waits. A streamed answer has nothing on screen to end: its held
+#' row continues after the output (D-245). TRUE when a foreground record was found
 #'
 #' Called by the outer blocking policy without handling or changing the condition, by a launch
-#' boundary and a typed line's queue line (`kind = NULL`), and with `tools` by the console UI
-#' before it prompts and by the sub-agent lines, which also clear the row of a run whose tool
-#' executes (a sub-agent asking during the parent's `r` code; its writes never enter captured
-#' output, D-188).
+#' boundary (`kind = NULL`), and with `tools` by the console UI before it prompts and by the
+#' sub-agent lines, which also find a run whose tool executes (a sub-agent asking during the
+#' parent's `r` code; its writes never enter captured output, D-188).
 #' @noRd
 console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
   recs = if (is.null(runs)) {
@@ -646,24 +573,19 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
   } else {
     lapply(runs, function(run) console_record(list(run = run$id)))
   }
-  found = FALSE
-  for (rec in recs) {
-    if (is.null(rec) || !console_foreground(rec, tools)) next
-    found = TRUE
-    if (!is.null(rec$spinner)) rec$spinner$clear()
-    if (!is.null(kind)) console_gap(rec, kind)
-  }
-  invisible(found)
+  recs = Filter(function(rec) !is.null(rec) && console_foreground(rec, tools), recs)
+  if (length(recs) && !identical(kind, "notice") && !is.null(the$live_row)) the$live_row$clear()
+  if (!is.null(kind)) for (rec in recs) console_gap(rec, kind)
+  invisible(length(recs) > 0L)
 }
 
-#' One blank line between a run's blocks (text, tool, notice, prompt, the person's lines, waiting
-#' row, status) where lines keep the margin, written on a finished line; blocks of one kind group,
-#' except prompts, a question and the tool block it is asked in are one (it asks under the call it
-#' gates, D-243), and a block replacing a cleared waiting row needs none. A waiting row after a
-#' tool block takes none and leaves the tool block open, so the tool rows of consecutive requests
-#' group as those of one response and what else replaces it is spaced (D-245). Queue lines held
-#' while the answer's text block was open (`rec$queued`, console_queue_line()) are written first,
-#' as the person's block, when any other block starts
+#' One blank line between a run's blocks (text, tool, notice, prompt, the person's lines, status)
+#' where lines keep the margin, written on a finished line; blocks of one kind group, so the tool
+#' rows of consecutive requests group as those of one response (D-245), except prompts, and a
+#' question and the tool block it is asked in are one (it asks under the call it gates, D-243).
+#' The live row below them is no block. Queue lines held while the answer's text block was open
+#' (`rec$queued`, console_queue_line()) are written first, as the person's block, when any other
+#' block starts
 #' @noRd
 console_gap = function(rec, kind) {
   if (length(rec$queued) && !identical(kind, "text")) {
@@ -672,10 +594,9 @@ console_gap = function(rec, kind) {
     console_gap(rec, "person")
     console_write(rows)
   }
-  if (identical(kind, "wait") && identical(rec$last, "tool")) return(invisible(NULL))
   same = identical(rec$last, kind) && !identical(kind, "prompt")
   join = paste(rec$last, kind) %in% c("tool prompt", "prompt tool")
-  if (!same && !join && !identical(rec$last, "wait") && nzchar(console_pad())) console_cat("\n")
+  if (!same && !join && nzchar(console_pad())) console_cat("\n")
   rec$last = kind
   invisible(NULL)
 }
@@ -693,12 +614,12 @@ console_progress = function(text) {
   invisible(NULL)
 }
 
-#' Waiting feedback: a dynamic spinner for streamed consoles, else concise progress
+#' Waiting feedback: the live row on streamed dynamic consoles, else concise progress
 #' @noRd
 console_wait_start = function(rec) {
   if (verbosity() < 1L || !console_foreground(rec)) return(invisible(NULL))
   if (verbosity() >= 2L && cli::is_dynamic_tty()) {
-    console_spinner_start(rec)
+    console_live_start(rec)
   } else {
     console_progress("gptr: thinking")
   }
@@ -717,31 +638,29 @@ console_render_resume = function(runs) {
   invisible(NULL)
 }
 
-#' A record-only callback: a rendered row ends the waiting row and opens a text block
+#' A record-only callback: a rendered row opens a text block
 #' @noRd
 console_stream_output = function(rec) {
   force(rec)
   function(text) {
-    console_spinner_stop(rec)
     console_gap(rec, "text")
     invisible(NULL)
   }
 }
 
-#' End the partial lines of a record and stop its waiting row (before a tool line; `cut` when the
-#' answer is cut off)
+#' End the partial lines of a record (before a tool line; `cut` when the answer is cut off)
 #' @noRd
 console_pause_one = function(rec, cut = FALSE) {
-  console_spinner_stop(rec)
   if (!is.null(rec$think)) rec$think$finish()
   if (!is.null(rec$md)) rec$md$finish(cut)
   invisible(NULL)
 }
 
-#' End the partial lines of every tracked run, cut (an abort, the pause menu's [b]); the next block
-#' after it is separated like the first block after an input line
+#' End the partial lines of every tracked run, cut (an abort, the pause menu's [b]), and take the
+#' live row down; the next block after it is separated like the first block after an input line
 #' @noRd
 console_render_pause = function() {
+  console_live_stop()
   active = console_state()$active
   for (id in ls(active, all.names = TRUE)) {
     rec = get(id, envir = active)
@@ -983,7 +902,7 @@ console_on_before_request = function(event, ctx) {
 
 #' message_update: stream text deltas through the markdown renderer; thinking at verbosity 3; on a
 #' CLI route, whose one request runs a whole agent turn, the first line of each thinking block at
-#' verbosity 2, with the waiting row below it
+#' verbosity 2, with the live row below it
 #' @noRd
 console_on_message_update = function(event, ctx) {
   rec = console_record(event)
@@ -1013,7 +932,6 @@ console_on_message_update = function(event, ctx) {
     rec$md_index = event$index
     rec$md$write(delta)
   } else if (identical(kind, "thinking") && verbosity() >= 3L) {
-    console_spinner_stop(rec)
     if (is.null(rec$think)) {
       if (!is.null(rec$md)) rec$md$finish()
       console_gap(rec, "text")
@@ -1029,7 +947,7 @@ console_on_message_update = function(event, ctx) {
       rec$think_index = event$index
     }
     rec$think$write(delta)
-    if (!rec$think$open && isTRUE(rec$request_pending)) console_spinner_start(rec)
+    if (!rec$think$open && isTRUE(rec$request_pending)) console_live_start(rec)
   }
   NULL
 }
@@ -1055,7 +973,6 @@ console_on_message_end = function(event, ctx) {
   if (identical(msg$role, "assistant")) rec$request_pending = FALSE
   if (!console_render_on(rec)) return(NULL)
   if (identical(msg$role, "assistant")) {
-    console_spinner_stop(rec)
     if (!is.null(rec$think)) rec$think$finish()
     if (is.null(rec$md)) {
       console_print_text(console_msg_text(msg), console_stream_output(rec))
@@ -1074,8 +991,8 @@ console_on_message_end = function(event, ctx) {
   NULL
 }
 
-#' tool_execution_start: the call's lines (verbosity 2), whose ids its approval reads (D-243), or
-#' a progress message (verbosity 1)
+#' tool_execution_start: the call's lines (verbosity 2), whose ids its approval reads (D-243), with
+#' the tool's name as the live row's state word, or a progress message (verbosity 1)
 #' @noRd
 console_on_tool_start = function(event, ctx) {
   rec = console_record(event)
@@ -1087,6 +1004,7 @@ console_on_tool_start = function(event, ctx) {
                             console_escape(c(console_preview(call$input), "")[[1L]], FALSE)))
   } else if (v >= 2L) {
     assign(paste0("t", call$id), call, envir = rec$tools)
+    rec$what = console_tool_name(call$name)
     console_pause_one(rec)
     console_gap(rec, "tool")
     lines = console_tool_line(call, NULL, rec$session)
@@ -1101,7 +1019,7 @@ console_on_tool_start = function(event, ctx) {
 #' tool_execution_end: queue the pause-menu items and print the artifact lines held while tools
 #' ran, keep the elapsed time for the result line, report a failure at verbosity 1; the end of a
 #' call served in a live run carries its `content` and prints its result line (D-192); a CLI
-#' route's informational tool event leaves its request pending, so the waiting row comes back
+#' route's informational tool event leaves its request pending, so the live row says thinking
 #' @noRd
 console_on_tool_end = function(event, ctx) {
   policy_flush()
@@ -1122,7 +1040,7 @@ console_on_tool_end = function(event, ctx) {
     gptr_inform(paste0("gptr: ", console_escape(event$tool_name %||% "?", FALSE), " failed"),
                 "progress", .stream = "stderr")
   }
-  if (isTRUE(rec$request_pending) && console_render_on(rec)) console_spinner_start(rec)
+  if (isTRUE(rec$request_pending) && console_render_on(rec)) console_live_start(rec)
   NULL
 }
 
@@ -1155,11 +1073,12 @@ console_on_compact = function(event, ctx) {
   NULL
 }
 
-#' agent_end: close the streams, show custom entries and the status line, forget the run; queued
-#' artifact lines (an interrupted tool) print last, then what the person queued and the run did
-#' not take (console_queue_left()), then the blank row before the prompt; a shown sub-agent says
-#' how it ended, `(k/N)` counting the settled children of its scheduled group (D-188), a failure
-#' with the first line of its reason, else its status (D-224)
+#' agent_end: take the live row down, close the streams, show custom entries and the status line,
+#' forget the run; queued artifact lines (an interrupted tool) print last, then what the person
+#' queued and the run did not take (console_queue_left()), then the blank row before the prompt; a
+#' shown sub-agent, forgotten first so the live row no longer names it, says how it ended, `(k/N)`
+#' counting the settled children of its scheduled group (D-188), a failure with the first line of
+#' its reason, else its status (D-224)
 #' @noRd
 console_on_agent_end = function(event, ctx) {
   on.exit(console_artifact_flush(), add = TRUE)
@@ -1167,9 +1086,10 @@ console_on_agent_end = function(event, ctx) {
   if (is.null(rec)) return(NULL)
   on.exit(console_drop(event$run), add = TRUE)
   on.exit(console_queue_left(rec, event$status), add = TRUE)
-  console_spinner_stop(rec)
+  console_live_stop(rec)
   run = rec$child$run
   if (!is.null(run)) {
+    rm(list = event$run, envir = console_state()$active)
     g = run$group
     k = if (is.environment(g)) {
       sprintf(" (%d/%d)", sum(vapply(g$runs, function(r) isTRUE(r$settled), NA)), g$n)

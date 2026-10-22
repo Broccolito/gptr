@@ -164,3 +164,166 @@ test_that("Tab completes a trigger word and never queues it; other drafts go as 
     list("\t", "use @mtc", "use @mtcars", NULL)
   ), enter_kind = "follow_up")
 })
+
+# ---- Task 17: the live row ---------------------------------------------------------------------
+
+# The live row's text for each state at `width`, as a named list a difference names
+live_rows = function(states, width) {
+  stats::setNames(lapply(states, console_live_row, width = width), names(states))
+}
+
+live_states = list(
+  rstudio = list(what = "thinking", secs = 6, queued = 1, key = "Esc", pause = FALSE),
+  menu = list(what = "r", secs = 65, key = "Ctrl-C", pause = TRUE),
+  hint = list(what = "thinking", secs = 6, draft = ""),
+  follow = list(what = "thinking", secs = 6, draft = "", enter = "follow_up"),
+  queue = list(what = "thinking", secs = 6, queued = 2, draft = "",
+               newest = list(kind = "steer", text = "use log(mpg)\ninstead")),
+  draft = list(what = "thinking", secs = 6, queued = 1,
+               draft = "and plot the residuals against the fitted values please"),
+  question = list(what = "edit", secs = 11, question = TRUE, draft = "and plot the residu"),
+  complete = list(what = "thinking", secs = 3, candidates = c("@mtcars", "@mtcars_copy"),
+                  draft = "use @mtc")
+)
+
+test_that("the live row says what the run does, its queue and the person's draft (D-243)", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE)
+  expect_identical(live_rows(live_states, 80L), list(
+    rstudio = "▌ thinking 6s · 1 queued · esc stops",
+    menu = "▌ r 1m 05s · ctrl-c pauses",
+    hint = "▌ thinking 6s   enter steer · tab follow-up · ctrl-c pause",
+    follow = "▌ thinking 6s   enter follow-up · tab steer · ctrl-c pause",
+    queue = paste("▌ thinking 6s · 2 queued   ↳ steer · use log(mpg) instead",
+                  "· ↑ edit"),
+    draft = "▌ thinking 6s…   › and plot the residuals against the fitted values please",
+    question = "▌ edit 11s · question waiting   › and plot the residu",
+    complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
+  ))
+  # one collapse rule: the status is cut from the right, down to the time; the draft keeps its tail
+  expect_identical(live_rows(live_states, 40L), list(
+    rstudio = "▌ thinking 6s · 1 queued · esc stops",
+    menu = "▌ r 1m 05s · ctrl-c pauses",
+    hint = "▌ thinking 6s   enter steer · tab f…",
+    follow = "▌ thinking 6s   enter follow-up · t…",
+    queue = "▌ thinking 6s · 2 queued   ↳ steer…",
+    draft = "▌ 6s   › …t the fitted values please",
+    question = "▌ edit 11s…   › and plot the residu",
+    complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
+  ))
+  expect_identical(live_rows(live_states, 30L), list(
+    rstudio = "▌ thinking 6s · 1 queued…",
+    menu = "▌ r 1m 05s · ctrl-c pauses",
+    hint = "▌ thinking 6s   enter stee…",
+    follow = "▌ thinking 6s   enter foll…",
+    queue = "▌ thinking 6s · 2 queued…",
+    draft = "▌ 6s   › …ed values please",
+    question = "▌ 11s   › …plot the residu",
+    complete = "▌ @mtcars  @…   › use @mtc"
+  ))
+  # a character outside ASCII counts two columns, so the row never wraps where they are wide
+  wide = live_rows(list(a = list(secs = 0, draft = "数据 été αβ")), 20L)
+  expect_identical(wide$a, "▌ 0s   › …αβ")
+  expect_lte(live_fit(wide$a), 19L)
+  expect_identical(console_live_row(list(secs = 0), 5L), "")
+  withr::local_options(cli.unicode = FALSE)
+  expect_identical(live_rows(live_states[c("queue", "draft")], 80L), list(
+    queue = "# thinking 6s - 2 queued   -> steer - use log(mpg) instead - Up edit",
+    draft = "# thinking 6s...   >> and plot the residuals against the fitted values please"
+  ))
+})
+
+test_that("the live row's block is the agent's blue, its words dim and the draft ink (D-243)", {
+  withr::local_options(cli.num_colors = 256L, cli.unicode = TRUE)
+  expect_identical(console_live_row(live_states$question, 80L), paste0(
+    "\033[38;5;67m▌\033[39m \033[38;5;244medit 11s · question waiting\033[39m",
+    "   › and plot the residu"))
+  withr::local_options(cli.num_colors = 16L)
+  expect_identical(console_live_row(live_states$menu, 80L),
+                   "\033[34m▌\033[39m \033[2mr 1m 05s · ctrl-c pauses\033[22m")
+})
+
+test_that("the live row is drawn with \\r and erased to the line end, or padded (D-243)", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 40L)
+  state = live_states$menu
+  row = "▌ r 1m 05s · ctrl-c pauses"
+  draws = function(cls) {
+    lv = console_live(cls)
+    c(written(function() lv$draw(state)), written(lv$clear), written(lv$clear))
+  }
+  # a T console: on the input band where the background is known, then the reset
+  withr::local_options(cli.ansi = TRUE)
+  local_mocked_bindings(front_end = function() "terminal")
+  expect_identical(draws("T"), c(paste0("\r", row, "\033[K"), "\r\033[K", ""))
+  withr::local_options(cli.num_colors = 256L)
+  local_mocked_bindings(console_background = function() "dark")
+  expect_identical(draws("T")[[1L]], paste0("\r\033[48;5;237m",
+                                           console_live_row(state, 40L), "\033[K\033[0m"))
+  withr::local_options(cli.num_colors = 1L, cli.ansi = FALSE)
+  # RStudio honours \033[K: no padding stays in its transcript (visual review)
+  local_mocked_bindings(front_end = function() "rstudio")
+  expect_identical(draws("L"), c(paste0("\r", row, "\033[K"), "\r\033[K", ""))
+  # R.app, Rgui, TERM=dumb and Positron, whose console erases with spaces, pad to width - 1
+  for (fe in c("rgui", "terminal", "positron")) {
+    local_mocked_bindings(front_end = function() fe)
+    blank = strrep(" ", 39L)
+    expect_identical(draws("L"), c(paste0("\r", row, strrep(" ", 39L - nchar(row))),
+                                   paste0("\r", blank, "\r"), ""), info = fe)
+  }
+})
+
+test_that("a console write clears the live row and redraws it after its whole lines (D-243)", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 40L, cli.ansi = TRUE)
+  local_mocked_bindings(front_end = function() "terminal",
+                        console_live_state = function(rec) live_states$menu)
+  row = "\r▌ r 1m 05s · ctrl-c pauses\033[K"
+  writes = function(...) written(function() for (x in list(...)) gptr_message_write(x, "stdout"))
+  draw = function() written(function() the$live_row$draw())
+  withr::defer(assign("live_row", NULL, envir = the))
+  # the row is drawn and written at the sink written() opens
+  the$live_row = console_live("T")
+  the$live_row$sinks = sink.number() + 1L
+  expect_identical(writes("x\n"), "x\n")
+  expect_identical(draw(), row)
+  expect_identical(writes("  a notice\n"), paste0("\r\033[K", "  a notice\n", row))
+  expect_true(the$live_row$shown)
+  # a partial line leaves the row cleared until the run next waits
+  expect_identical(writes("partial"), "\r\033[Kpartial")
+  expect_false(the$live_row$shown)
+  expect_false(the$live_row$on)
+  expect_identical(writes("\n"), "\n")
+  # where the row is padded, the first write ends it: no spaces stay on the rows after it
+  local_mocked_bindings(front_end = function() "rgui")
+  withr::local_options(cli.ansi = FALSE)
+  the$live_row = console_live("L")
+  the$live_row$sinks = sink.number() + 1L
+  draw()
+  expect_identical(writes("  one\n", "  two\n"),
+                   paste0("\r", strrep(" ", 39L), "\r  one\n  two\n"))
+  expect_false(the$live_row$on)
+  # text written into another sink (a capture in the agent's code) leaves the row alone
+  the$live_row$on = TRUE
+  draw()
+  inner = NULL
+  expect_identical(utils::capture.output({
+    inner = writes("  captured\n")
+  }), character())
+  expect_identical(inner, "  captured\n")
+  expect_true(the$live_row$shown)
+})
+
+test_that("console_class() decides the console's class by capability (D-243)", {
+  local_mocked_bindings(gptr_is_interactive = function() TRUE, stdin_tty = function() TRUE,
+                        is_windows = function() FALSE, front_end = function() "terminal")
+  withr::local_envvar(RADIAN_VERSION = NA)
+  withr::local_options(cli.ansi = TRUE, cli.dynamic = TRUE)
+  expect_identical(console_class(), "T")
+  withr::local_options(cli.ansi = FALSE)
+  expect_identical(console_class(), "D")
+  withr::with_envvar(c(RADIAN_VERSION = "0.6"), expect_identical(console_class(), "L"))
+  local_mocked_bindings(front_end = function() "positron")
+  expect_identical(console_class(), "L")
+  local_mocked_bindings(front_end = function() "terminal", stdin_tty = function() FALSE)
+  expect_identical(console_class(), "L")
+  local_mocked_bindings(gptr_is_interactive = function() FALSE)
+  expect_identical(console_class(), "P")
+})

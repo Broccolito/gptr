@@ -2828,6 +2828,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 | `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
 | `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu (`[s]teer`, `[f]ollow-up`, `[c]ontinue`, `[a]bort`, `[b]ackground` for foreground calls when P21 is loaded) writes to stderr and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Rgui, IDE consoles) | P06, P08 |
 | `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)` and `finish(cut = FALSE)`; chunk-invariant; writes whole rows only, each at its line end or its wrap (prose wraps at 100 columns at most [D-245]; `finish()` ends the held partial row, `finish(cut = TRUE)` (an aborted, failed or truncated answer, the pause menu's [b], an unusual end) writes all it received and ends the held row with a dim `…` [D-245]; other output goes between whole rows and the held row continues after it; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
+| `console_live(cls)`, `console_live_row(state, width)` | `console-input.R` | the live row (IC-82 in §15.10): an environment with `draw(state)` and `clear()`, held in `the$live_row` while a foreground run works, so `gptr_message_write()` clears it before every console write and redraws it after; `console_live_row()` is its text, fitted to width - 1 | P28 |
 | `builtin_jsonl(gptr)`, `jsonl_sink(session, con)` | `console-jsonl.R` | the `frontend` `jsonl`: subscribes to the session's events and writes one redacted JSON object per line in the §4.5 JSON form (event names verbatim) | P19 (worker children), P24 |
 
 Example calls:
@@ -5141,7 +5142,7 @@ is the next prompt, as D-242 states now; the notices and the follow-up delivery 
   run's model has type `"cli"`: `; it is sent after the CLI's current response`, D-205) and
   `[gptr] follow-up queued: '<text>'; it is sent when the agent would stop`.
 - No echo (D-221): while the call runs the terminal does not echo, so typed text never lands in the answer or the
-  waiting row; a typed line shows once, in its notice, and a partial line at the next prompt. `console_send()`
+  live row; a typed line shows once, in its notice, and a partial line at the next prompt. `console_send()`
   saves the modes (`tty_modes()`: `stty -g` on fd 0; NULL when stty fails, which changes nothing), sets `-echo`
   (canonical mode stays) and restores the modes on exit, an error or interrupt included; `the$tty_modes` holds
   them meanwhile. R's readline shows a line only while the terminal echoes, so `gptr_readline()` (approvals,
@@ -5447,7 +5448,7 @@ its part in its own commit, and Task 27 finalises them.
     request's and showed its code whole (at most 20 lines); the RStudio dialog keeps them and gets the text without
     SGR.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
-- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Tasks 17 and 25 pending.
+- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Task 25 pending.
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
     every console glyph comes from it. The glyphs come from the logo's cursor shapes: the person's chevron, a tool
     call's thin strip, the agent's block. ASCII applies where `cli::is_utf8_output()` is FALSE, and in Windows
@@ -5458,14 +5459,14 @@ its part in its own commit, and Task 27 finalises them.
     |---|---|---|
     | person (`person`) | `›` (U+203A) | `>>` (doubled, so an answer never reads as R's prompt `> `; visual review) |
     | tool call (`tool`) | `▎` (U+258E) | `\|` |
-    | agent: the waiting row, sub-agents (`agent`) | `▌` (U+258C), static | `#` |
+    | agent: the live row, sub-agents (`agent`) | `▌` (U+258C), static | `#` |
     | queued message (`queued`) | `↳` (U+21B3) | `->` |
     | the Up key (`up`) | `↑` (U+2191) | `Up` (cli's `^` reads as Ctrl) |
     | bullets (`bullet`, `nested`) | `•`, `◦` | `-` |
     | separator (`sep`) | ` · ` | ` - ` |
     | ellipsis (`ellipsis`) | `…` | `...` |
 
-    A question is `?` in both. No U+25CF, Braille, box drawing, dingbats or emoji; the waiting row's glyph does not
+    A question is `?` in both. No U+25CF, Braille, box drawing, dingbats or emoji; the live row's glyph does not
     move.
   - The palette: the logo's red `#b85450` and `#557ea8`, the logo's blue `#6c8ebf` one step darker (cli's
     256-colour cell for `#6c8ebf`, 110, is 2.3:1 on white; cell 67 is above 3.7:1 on white and on `#1c1c1c`). Ink
@@ -5502,16 +5503,15 @@ its part in its own commit, and Task 27 finalises them.
     takes the blue accent (review of Tasks 8-15; it was cli's cyan, `36`, the one accent outside the palette).
   - Whole rows (Task 10; review of Tasks 8-15): nothing of a streamed answer's held row is on screen, so other
     output goes between whole rows and the held row continues after it. `render_markdown_stream()` has no
-    `reset_line()`. `console_before_message()` (a notice, a launch, a question, a sub-agent line) and the routing
-    of typed lines (`console_typed_route()`) only clear the foreground records' waiting rows, keeping their clock
-    and task; nothing pauses or resumes the rendering for them. A queue line is a block of the person's lines
+    `reset_line()`. Other output only clears the live row and redraws it after (Task 17); nothing pauses or resumes
+    the rendering for it. A queue line is a block of the person's lines
     (`console_gap()` kind `"person"`, so a blank row separates it from the next block, and none from the question
     whose read routed it); while the answer's text block is open it waits in the run's record (`rec$queued`) and
     is written when any other block starts, so it never splits a sentence: between whole rows it still had,
     wherever the person happened to press Enter, and TERM=dumb and the IDE consoles keep the line after Task 18
     (visual review). This replaces "ends partial lines" in IC-76 (the notices and their
     `console_render_pause()`) and IC-77 item 1. An abort still ends the stream (`console_render_pause()`, also when
-    the pause menu's [b] sends the run to the background). The pause menu itself stops only the waiting rows: the
+    the pause menu's [b] sends the run to the background). The pause menu itself clears only the live row: the
     held row continues after it (visual review: the menu cut a sentence, `so part of this` / menu / `gap is ...`,
     at a timing-dependent word, the main difference between otherwise identical transcripts).
   - Tool calls (Task 11): `console_tool_kind(name, spec)` gives `"read"` for a tool annotated read-only
@@ -5525,9 +5525,9 @@ its part in its own commit, and Task 27 finalises them.
     | act | `▎ r  zz = 1`, or the name over at most 20 code rows at column 4, under the name with the results (no fence lines; a cut block ends with `# … +N more lines`; a row wider than the console is cut with `…`, and `?` then shows the code whole); an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold, R code highlighted (also on the one line); an MCP call's arguments dim |
     | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started`, `▌ sub-agent a done (1/3) · 4 turns · 12 s` | block blue |
 
-    Tool blocks of consecutive requests group as those of one response: the waiting row between them takes no
-    blank line (`console_gap()`), and a block other than a tool block that replaces it opens with the blank it owes
-    (review of Tasks 8-15). Result lines are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`: the time when
+    Tool blocks of consecutive requests group as those of one response: the live row between them is no block
+    (`console_gap()`), so a tool block after a tool block takes no blank line (review of Tasks 8-15). Result
+    lines are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`: the time when
     the call took a second or more). So is what the code prints (`eval_r()` with `tee` where the margin applies:
     the capture's sink is not split; `eval_flush()` shows each new line at column 4, escaped, dim in the console's
     colours and cut to its width, through the writer below the evaluation, per top-level expression or before a
@@ -5542,3 +5542,41 @@ its part in its own commit, and Task 27 finalises them.
     say 1 colour, so they take the colours of the console it started from: `eval_one()` holds
     `.gptr_console_colors` beside `.gptr_console_pad`, and `console_colors()` reads it (else
     `cli::num_ansi_colors()`), as `console_pad()` reads the margin.
+  - The live row (Task 17; `console_live()` and `console_live_row()` in `console-input.R` replace
+    `console_spinner()`): while a foreground run works, one row at the bottom, at column 0 under the transcript's
+    last row. It is no block (`console_gap()` has no waiting kind), so it takes no blank line before it, and the
+    next block writes the blank it owes on the cleared row.
+    - Text: `▌ <state> <elapsed>[ · <n> queued][ · question waiting]`, then, where a composer reads keys (T,
+      Task 18), `   › <draft tail>`, or with an empty draft `   ↳ <kind> · <newest text> · ↑ edit` (a queue) or
+      `   enter steer · tab follow-up · ctrl-c pause` (swapped under `type_ahead = "follow_up"`); without a
+      composer ` · <key> pauses` where the pause menu is offered (`console_menu_available()`: terminals,
+      Positron) or ` · <key> stops` (RStudio, R.app, Rgui; the key from `console_interrupt_key()`, lower case).
+      `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
+      while a sub-agent it shows runs; `<elapsed>` the run's time, `0s`, `59s`, `1m 05s`; `<n> queued` the
+      person's messages waiting for the session (its user-source queue items, those the console holds, the
+      REPL's held lines). Completion candidates (Task 22) replace the status words. The block is the blue accent,
+      the words and hints dim, only the draft ink. ASCII: `# thinking 6s - ctrl-c pauses`.
+    - One collapse rule: the status part is cut from the right with `…`, down to `▌ <elapsed>`; the draft keeps
+      its tail. The row is fitted to width - 1, every character outside ASCII that R counts as one column counted
+      as two (East Asian ambiguous widths drawn wide), so it never wraps; it is empty where not even the block
+      and the time fit.
+    - Writing: where `\033[K` ends the line (an ANSI terminal; RStudio; visual review: a padded row left about 57
+      trailing spaces on each RStudio row that replaced it), `\r` + row + `\033[K`, on the band in a T console
+      where it is known, then `\033[0m`; elsewhere (R.app, Rgui, TERM=dumb, and Positron, whose console erases by
+      writing spaces, so a row redrawn there left them on 32 transcript rows) `\r` + the row padded with spaces to
+      width - 1. Static (no blink, no frames): drawn when a request
+      starts, after a CLI tool event while the request waits, and once a second by a reactor task while the run
+      renders (`console_render_on()`: none while a tool executes on the stack).
+    - Every console write (`gptr_message_write()`, at the sink the row was drawn at, `the$live_row$sinks`) first
+      clears the row (`\r\033[K`, or spaces and `\r`), then writes its text, then redraws the row once the text
+      ends a line, where the row erases cleanly; where it is padded, or after a partial line, the row stays
+      cleared until the run next waits, so no padding trails a transcript row. A question or a launched process
+      (`console_before_message()` kinds `"prompt"` and NULL) clears it and its task draws it again; notices,
+      queue lines and sub-agent lines are written with the row cleared and redrawn. The row is written as every
+      console control is, so from inside an evaluation it reaches the console, never the tool's output; text
+      written into another sink (a capture in the agent's code) leaves it alone. The run's end, an abort and the
+      pause menu's [b] take it down (`console_live_stop()`); the pause menu clears it.
+    - Classes (`console_class()`, `utils-options.R`): P outside an interactive R (Rscript, knitr, pipes) draws
+      none; L where R reads no terminal of its own (Windows, a stdin that is no tty, Positron, radian); T a
+      terminal whose output is a dynamic ANSI tty; else D (TERM=dumb, Emacs, ESS). `repl_terminal(rs)` is a T or
+      D console whose REPL is not piped. Verbosity 1 and a console that is not dynamic keep `gptr: thinking`.

@@ -81,7 +81,10 @@ gptr_message_stream = function(stream = NULL) {
 #' Display a condition or console control through a scoped evaluator writer when present
 #' The evaluator records conditions separately and excludes control text from tool output; a
 #' writer hands the text to the next one below frame `from` (D-188); a notice's own display
-#' (`margin`) keeps the console margin.
+#' (`margin`) keeps the console margin. Text written where the console's live row is shown (the
+#' sink it was drawn at, `the$live_row`, console_live()) clears the row first and, once it ends a
+#' line, redraws it where the row erases cleanly; where the row is padded with spaces it stays
+#' cleared until the run next waits (D-243).
 #' @noRd
 gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() - 1L) {
   k = from
@@ -91,8 +94,17 @@ gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() 
     k = k - 1L
   }
   if (margin) text = gptr_message_margin(text)
-  cat(text, file = if (stream == "stderr") stderr() else stdout(), sep = "")
-  utils::flush.console()
+  out = function(x, file = stdout()) {
+    cat(x, file = file, sep = "")
+    utils::flush.console()
+  }
+  row = the$live_row
+  shown = isTRUE(row$shown) && sink.number() == row$sinks
+  if (shown) row$clear(out)
+  out(text, if (stream == "stderr") stderr() else stdout())
+  if (shown) {
+    if (row$erase && endsWith(text, "\n")) row$draw(write = out) else row$on = FALSE
+  }
   invisible(NULL)
 }
 

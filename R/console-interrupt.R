@@ -115,15 +115,16 @@ console_ask = function(prompt) {
 }
 
 #' The pause menu (calling handler for `interrupt`): resumes the interrupted computation, or
-#' returns to let the policy's exiting handler abort. It stops the waiting rows only: an answer's
-#' held row stays in its stream and continues after the menu, which goes between whole rows (D-245)
+#' returns to let the policy's exiting handler abort. It clears the live row only, which its task
+#' draws again: an answer's held row stays in its stream and continues after the menu, which goes
+#' between whole rows (D-245)
 #' @noRd
 policy_menu = function(cnd, pol) {
   # nested policies drop their runs while the stack unwinds to the exiting handler
   pol$abort_runs = pol$runs
   if (is.null(findRestart("resume", cnd)) || !console_menu_available()) return(invisible(NULL))
+  if (!is.null(the$live_row)) the$live_row$clear()
   for (rec in as.list(console_state()$active)) {
-    console_spinner_stop(rec)
     rec$paused = TRUE
     rec$last = "notice"
   }

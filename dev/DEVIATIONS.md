@@ -3245,6 +3245,33 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   is held for 50 ms, then dropped", "Up on an empty draft takes back; only as a batch of its own", "Enter sends the
   draft; a batch holding newlines is one message (the paste rule)", "/ and ! drafts are follow-ups, whatever the
   key", "Tab completes a trigger word and never queues it; other drafts go as the other kind".
+- Task 17: one live row replaces the waiting row (`console_spinner()` and its `thinking (Ns, Ctrl-C to steer or
+  stop)`; D-186's waiting row). `console_live()` (in `console-input.R`) draws `▌ <state> <elapsed>[ · n queued][ ·
+  question waiting]` at column 0 under the transcript's last row, the block blue and the words dim, ending
+  `· ctrl-c pauses` where the pause menu is offered and `· esc stops` in RStudio, R.app and Rgui; Task 18's composer
+  adds the draft or the keys. It stays from a run's first request to its end, through the answer's rows: every
+  console write clears it and redraws it after a whole line (`gptr_message_write()`, which holds it in
+  `the$live_row`). The state word follows the run (thinking, the running tool's name, `sub-agent a`), the time is
+  the run's, and `n queued` counts the person's messages waiting. The row is no block, so `console_gap()` lost its
+  waiting kind: a block writes the blank it owes on the cleared row, and tool blocks of consecutive requests still
+  group. Where `\033[K` does not end the line (R.app, Rgui, TERM=dumb, and Positron, whose console erases by
+  writing spaces) the row is padded, and the first write ends it until the run next waits, so its spaces trail
+  only the row that replaces it; RStudio erases with `\033[K` (visual review: about 57 trailing spaces on each
+  RStudio row that replaced the waiting row; none now). Positron was first given `\033[K` too, and its
+  transcript then had 32 rows ending in spaces (7 before).
+  Questions and launched processes clear it (`console_before_message()`); notices, queue lines and sub-agent lines
+  no longer hide it. `console_class()` decides T, D, L and P by capability, and `repl_terminal()` is a T or D
+  console's REPL: radian, which owns its tty, is L there (the plan's class table), so typed lines are no longer
+  read from fd 0 under radian; they are radian's next input. Not interactive (P) draws no row. Contract-visible: 04
+  §7.14 and §15.10 IC-82, 03 §2.2 rule 5 and §6.17. Tests: test-console-input.R "the live row says what the run
+  does, its queue and the person's draft (D-243)", "the live row's block is the agent's blue, its words dim and the
+  draft ink (D-243)", "the live row is drawn with \r and erased to the line end, or padded (D-243)", "a console
+  write clears the live row and redraws it after its whole lines (D-243)", "console_class() decides the console's
+  class by capability (D-243)"; test-console-wait.R "the live row replaces the old waiting text, at column 0
+  (D-243)", "the live row is drawn at once and stays under the rows of an answer (D-243)", "where the live row is
+  padded, the first whole row ends it until the next wait (D-245)", "Rscript and other non-interactive R draw no
+  live row (class P)"; test-console-spinner-gui.R and test-console-spinner-width.R (the live row's bytes per front
+  end and width).
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

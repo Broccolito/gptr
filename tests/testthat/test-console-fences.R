@@ -109,7 +109,7 @@ test_that("ordinary inline backticks do not open a fence", {
   }
 })
 
-test_that("spinner clearing does not consume closing fences or tool transitions", {
+test_that("clearing the live row does not consume closing fences or tool transitions", {
   fence_test_format()
   fixture = fence_test_session()
   s = fixture$session
@@ -117,13 +117,16 @@ test_that("spinner clearing does not consume closing fences or tool transitions"
   before = serialize(session_data(s), NULL)
   count = new.env(parent = emptyenv())
   count$cleared = 0L
+  withr::defer(assign("live_row", NULL, envir = the))
   out = cli::ansi_strip(utils::capture.output({
     console_on_agent_start(fence_event("agent_start", s), ctx)
-    rec = console_record(list(run = "u0000f00d"))
-    rec$spinner = list(clear = function() {
+    # a padded live row, shown at this sink: the first write clears it and it stays off
+    the$live_row = list2env(list(shown = TRUE, sinks = sink.number(), erase = FALSE, on = TRUE))
+    the$live_row$clear = function(write) {
       count$cleared = count$cleared + 1L
-      cat("spinner-cleared\n")
-    })
+      the$live_row$shown = FALSE
+      write("row-cleared\n")
+    }
     console_on_message_update(fence_event("message_update", s, index = 1L,
       kind = "text", delta = "``"), ctx)
     expect_identical(count$cleared, 0L)
@@ -142,12 +145,12 @@ test_that("spinner clearing does not consume closing fences or tool transitions"
       message = msg_assistant("ignored", api = "fake", provider = "fake", model = "fake-1")), ctx)
     invisible(NULL)
   }))
-  expect_identical(out, c("spinner-cleared", "```r", "value", "  ```", "Heading",
+  expect_identical(out, c("row-cleared", "```r", "value", "  ```", "Heading",
     "  | r  1 + 1", "    + value", "After"))
   expect_identical(count$cleared, 1L)
+  expect_false(the$live_row$on)
   expect_identical(length(fixture$fake$log$requests), 0L)
   expect_identical(serialize(session_data(s), NULL), before)
-  expect_null(console_record(list(run = "u0000f00d"))$spinner)
 })
 
 test_that("a new text block does not inherit an earlier unfinished code fence", {

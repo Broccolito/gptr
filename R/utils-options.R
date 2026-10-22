@@ -80,6 +80,20 @@ stdin_tty = function() {
   isatty(stdin())
 }
 
+#' The console's class, decided by capability (P28, D-243): "P" outside an interactive R; "L" where
+#' R does not read a terminal of its own (RStudio, Positron, whose ark has a tty stdin, Windows,
+#' R.app, radian, which owns the tty); "T" a terminal whose output is a dynamic ANSI tty; else "D"
+#' (TERM=dumb, Emacs, ESS)
+#' @noRd
+console_class = function() {
+  if (!gptr_is_interactive()) return("P")
+  if (is_windows() || !stdin_tty() || front_end() == "positron" ||
+        nzchar(Sys.getenv("RADIAN_VERSION"))) {
+    return("L")
+  }
+  if (cli::is_ansi_tty() && cli::is_dynamic_tty()) "T" else "D"
+}
+
 #' Mockable: the modes of the terminal R reads (`stty -g`), or set `modes` (such as "-echo"); NULL
 #' when stty fails (IC-76)
 #' @noRd

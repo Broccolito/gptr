@@ -249,7 +249,8 @@ Rules that keep this honest:
    The console input layer also keeps the seconds its last `readline()` waited (`readline_secs`: process-level
    input timing, not run state [IC-75]) and the terminal modes a console call saved before it turned the echo off
    (`tty_modes`, cleared when the call ends [IC-76]); the console's style table reads the terminal's background
-   once (`background` [IC-82]).
+   once (`background` [IC-82]); the console's live row is held while a foreground run works (`live_row`, so every
+   console write clears and redraws it [IC-82]).
 
 ### 2.3 Execution model
 
@@ -1509,7 +1510,7 @@ tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; 
 tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices
 (`    1  dplyr`, the number bold), a dim hint (`Choose a number, or type your own answer; Enter = base`; an input's
 `Enter = <default>`), then `› `; each part word-wraps at the console width less the margin, under its own text (a
-title's later rows at column 4, a choice's under its label). Every console prompt first clears the waiting row (an
+title's later rows at column 4, a choice's under its label). Every console prompt first clears the live row (an
 answer's held row continues after it, D-245), and its lines reach the console, in its colours, even from inside the parent's `r` evaluation (never its tool result). An
 invalid answer is explained (`a` or `p` where nothing can be remembered says why); five (`?` is none) end in a
 refusal whose feedback tells the model that no valid answer was given [IC-77; D-188].
@@ -1956,25 +1957,26 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   response.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer, written in whole rows, each at its line
   end or its wrap, the partial row held [D-245]; colours only when
-  `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
+  `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; the live row redrawn by a reactor task; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.
   Glyphs and colours come from one style table, `console_style()` [IC-82, D-245]: the logo's cursor shapes (`›`
-  the person, `▎` a tool call, `▌` the agent, whose waiting row does not move, `↳` a queued message), ASCII where
+  the person, `▎` a tool call, `▌` the agent, whose live row's block does not move, `↳` a queued message), ASCII where
   the output is not UTF-8 and in Windows consoles outside Windows Terminal and RStudio; the logo's red and a
   darker logo blue (basic red and blue below 256 colours), dim, and an input band where `COLORFGBG` gives the
   background; no Braille or U+25CF.
   Where the renderer is active (verbosity 2 on a dynamic TTY; `capture.output()` of an
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
-  lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
+  lines, notices, prompts, the status line) keep a two-column margin and wrap at
   width - 4 (an answer's prose at 100 columns at most, a readable measure in a wide console [D-245]), while the person's lines (an answer, a queued or delivered message) start at column 0; one blank
   line separates text, tool, notice, prompt, the person's lines and status blocks (and two prompts, and two text
   blocks in a row [D-208], but not a question from the tool block it is asked in [D-243], nor the tool blocks of
-  consecutive requests: a waiting row after a tool block takes no blank line and leaves the tool block open, so
-  the tool rows group as those of one response [D-245]) and follows the input
-  and status lines. Separators are written on finished lines only, so a block overwrites
-  the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
-  row, R GUIs included; the pause-menu notice excepted, D-225, and the blank a block other than a tool block owes
-  after a tool block's waiting row, D-245); the margin is that of the console an
+  consecutive requests, which group as those of one response [D-245]) and follows the input
+  and status lines. Separators are written on finished lines only. The live row (`console_live()`, IC-82
+  [D-243]: `▌ thinking 6s · ctrl-c pauses`, the block blue and the words dim) is no block: at column 0 under the
+  transcript's last row, it is cleared before every console write (`\r\033[K` where that ends the line, an
+  ANSI terminal and RStudio; spaces in R.app, Rgui, TERM=dumb and Positron, whose console erases with spaces; no
+  LF follows a cleared row, R GUIs included) and redrawn after a whole line where `\033[K` erases it; where it is padded the first
+  write ends it until the run next waits, so its spaces never trail a transcript row; the margin is that of the console an
   evaluation started from, also for prompts and notices drawn inside it, and a sub-agent line or a
   question drawn there has that console's colours, though the evaluation's options say 1 colour (D-245). There nested lists keep their
   indentation, pipe tables are aligned
@@ -1990,8 +1992,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   quotes and rules, bold headings (H1 underlined); R
   that parses is highlighted by `cli::code_highlight()` in the user's `cli.code_theme`, else in the style table's
   R theme (reserved words red; strings, numbers and constants blue; calls bold; comments dim) [IC-82, D-245];
-  other R and other languages are shown as written. The console UI itself clears waiting rows,
-  keeping their task, before it prompts (D-186); a question, a notice or a queue line goes between
+  other R and other languages are shown as written. The console UI itself clears the live row,
+  keeping its task, before it prompts (D-186); a question, a notice or a queue line goes between
   an answer's whole rows and its held row continues after it, unsplit [D-245].
   Fenced code stays Markdown in every mode: fence lines as written (dim when styled), the body
   verbatim, unwrapped and de-indented by the opener's indentation (CommonMark: a fence indented
@@ -2016,8 +2018,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
   whatever `tee` is; in the margin what the evaluated code prints (the `r` tool, `!code`) is not teed as R
   prints it but shown as result rows, at column 4, escaped, dim and cut to the console width, per top-level
-  expression or before a notice (`eval_echo()`; the result keeps all of it) [D-245]; prompts and sub-agent lines first clear the waiting row, also while a tool
-  executes (conditions raised inside a tool leave the waiting row alone). Children never render;
+  expression or before a notice (`eval_echo()`; the result keeps all of it) [D-245]; prompts first clear the live row, also while a tool
+  executes, and every other write clears and redraws it, at the sink it was drawn at (a capture in the agent's code is left alone). Children never render;
   a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
   (`  ▌ sub-agent a (kid/kid-1) started`, `  ▌ sub-agent a done (1/2) · 2 turns · 12 s` or
   `failed (1/2): <first line of the reason>`, after the agent's blue block [D-245], cut to the console width; `(k/N)` for a team, fan-out or
@@ -2457,9 +2459,9 @@ item is a thinking block. Each whole block of a CLI route streams as one delta e
 shows its last word at once [D-208].
 The informational events run outside R, so IC-53 does not track them and the user's own control exports still work.
 On both CLI routes, whose one request runs a whole agent turn, the console shows each thinking block's first line dim
-(cut at the width with an ellipsis [D-207]) at verbosity 2 above the waiting row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
+(cut at the width with an ellipsis [D-207]) at verbosity 2 above the live row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
 carries no text deltas, so the answer arrives whole; token streaming needs the app-server driver (open item). Both
-routes probe their CLI when a run starts, before its waiting row [D-192]. Continuity: `codex exec resume <thread>` when supported
+routes probe their CLI when a run starts, before its live row [D-192]. Continuity: `codex exec resume <thread>` when supported
 (UNCERTAIN), else, and after a rewind or a compaction [D-203], a new thread with a synthetic history. The console states Codex's 19-38K extra input tokens
 per turn [08]. The Codex app-server driver (dynamic tools calling back into R, token streaming, steer, interrupt) and Sign in
 with ChatGPT (the native `openai` provider with `auth = "chatgpt"`, avoiding Codex's overhead) are v1.x plugins

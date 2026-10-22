@@ -331,7 +331,7 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 
 #' Console permission(): the approval of NS-1 under the call it gates, read after the person's
 #' chevron (D-243), `?` for the detail view; every console prompt first ends partial answer lines
-#' and clears waiting rows (D-186); a remembered answer adds a dim line naming the rule; an
+#' and clears the live row (D-186); a remembered answer adds a dim line naming the rule; an
 #' invalid answer is quoted (kept in the console history in an interactive session) above a hint
 #' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
 #' alone, both wrapped at the prompt rows' width; five (`?` is none) end in a refusal whose

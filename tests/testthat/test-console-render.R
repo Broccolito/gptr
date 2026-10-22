@@ -431,15 +431,6 @@ test_that("console_print_text() prints a whole reply and skips empty text", {
   expect_identical(utils::capture.output(console_print_text("")), character())
 })
 
-test_that("the spinner is silent when stdout is not a dynamic terminal", {
-  withr::local_options(cli.dynamic = FALSE)
-  sp = console_spinner()
-  expect_identical(utils::capture.output({
-    sp$tick()
-    sp$clear()
-  }), character())
-})
-
 test_that("the interrupt key follows the front end", {
   local_mocked_bindings(front_end = function() "rstudio")
   expect_identical(console_interrupt_key(), "Esc")
@@ -956,7 +947,7 @@ test_that("a thinking line cut at the width ends with an ellipsis", {
                           paste0("  ", strrep("y", 57L), "\u2026"), paste0("  ", full)))
 })
 
-test_that("on a CLI route the waiting row keeps its clock around each thinking line (D-192)", {
+test_that("on a CLI route the live row keeps its clock around each thinking line (D-192)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -965,6 +956,7 @@ test_that("on a CLI route the waiting row keeps its clock around each thinking l
   local_cli_run(s)
   ctx = session_live(s)$ctx
   withr::defer(console_drop("u0000test"))
+  local_live_console()
   think = function(index, delta) {
     utils::capture.output(invisible(console_on_message_update(
       hook_event("message_update", s, index = index, kind = "thinking", delta = delta), ctx)))
@@ -976,14 +968,18 @@ test_that("on a CLI route the waiting row keeps its clock around each thinking l
                                          tokens_est = 10), ctx)
   })
   rec = console_record(list(run = "u0000test"))
-  task = rec$task
-  t0 = rec$spinner$t0
+  task = the$live_row$task
+  t0 = rec$t0
   expect_identical(think(1L, "**Plan"), character())
-  expect_identical(think(1L, "ning**\n\nThe body"), paste0("\r", strrep(" ", 39L), "\r  Planning"))
+  # padded, the row ends at the line's block, and comes back under it as the request still waits
+  # (the session's queued prompt counts)
+  expect_identical(sub(" +$", "", think(1L, "ning**\n\nThe body")),
+                   c(paste0("\r", strrep(" ", 39L), "\r"), "  Planning",
+                     "\r# thinking 0s - 1 queued - ctrl-c stops"))
   think(1L, " goes on.")
   think(2L, "a first line far longer than forty columns")
-  expect_identical(rec$task, task)
-  expect_identical(rec$spinner$t0, t0)
+  expect_identical(the$live_row$task, task)
+  expect_identical(rec$t0, t0)
   # nothing of a held thinking line is on screen when a prompt ends partial lines
   think(3L, "held")
   expect_no_error(utils::capture.output(console_before_message(kind = "prompt", tools = TRUE)))
@@ -992,7 +988,7 @@ test_that("on a CLI route the waiting row keeps its clock around each thinking l
   utils::capture.output(console_on_tool_start(start, ctx))
   # a thinking line after a tool block opens its own block (D-186)
   expect_identical(think(4L, "after a tool line\n")[1:2], c("", "  after a tool line"))
-  expect_false(is.null(rec$task))
+  expect_false(is.null(the$live_row))
 })
 
 test_that("a tool's render() function replaces the default lines (IC-69)", {
@@ -1214,30 +1210,31 @@ test_that("custom entries of a run are shown through renderer records (IC-69)", 
   expect_identical(out[[1L]], "NOTE: kept <U+001B> safe")
 })
 
-test_that("the spinner runs as a reactor task until the first rendered row (D-245)", {
+test_that("the live row runs as a reactor task from a request to the run's end (D-243)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
-  withr::local_options(cli.dynamic = TRUE)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE)
   local_gptr_options(verbose = 2L)
   s = render_session()
+  local_live_console()
   ctx = session_live(s)$ctx
   console_on_agent_start(hook_event("agent_start", s), ctx)
-  rec = console_record(list(run = "u0000test"))
-  console_on_before_request(hook_event("before_request", s, provider = "fake",
-                                       model = "fake/fake-1", request_id = "q1",
-                                       tokens_est = 10), ctx)
-  expect_false(is.null(rec$task))
-  for (delta in c("x", " y")) {
+  utils::capture.output(console_on_before_request(
+    hook_event("before_request", s, provider = "fake", model = "fake/fake-1", request_id = "q1",
+               tokens_est = 10), ctx))
+  row = the$live_row
+  expect_true(exists(row$task, envir = reactor_get()$tasks, inherits = FALSE))
+  for (delta in c("x", " y", "\n")) {
     utils::capture.output(console_on_message_update(
       hook_event("message_update", s, index = 1L, kind = "text", delta = delta), ctx))
-    expect_false(is.null(rec$task))
-    expect_false(is.null(rec$spinner))
+    expect_identical(the$live_row, row)
+    expect_true(row$shown)
   }
-  utils::capture.output(console_on_message_update(
-    hook_event("message_update", s, index = 1L, kind = "text", delta = "\n"), ctx))
-  expect_null(rec$task)
-  expect_null(rec$spinner)
-  console_drop("u0000test")
+  utils::capture.output(console_on_agent_end(
+    hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
+               turns = 1L), ctx))
+  expect_null(the$live_row)
+  expect_false(exists(row$task, envir = reactor_get()$tasks, inherits = FALSE))
 })
 
 test_that("the console UI prompts between whole rows; the held row waits (D-186, D-245)", {
@@ -1290,17 +1287,17 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
   expect_identical(home$ans$decision, "allow")
   expect_false(grepl("HELDWORD|x = 1", text(res)))
   withr::local_options(cli.dynamic = TRUE)
+  local_live_console()
   rec = console_record(list(run = "u0000test"))
   bytes = paste(utils::capture.output({
-    rec$spinner = console_spinner()
-    rec$last = "wait"
-    rec$spinner$tick()
+    console_live_start(rec)
+    rec$last = "text"
     res = eval_r("tool(pause)", home, plots = "none", tee = FALSE)
   }), collapse = "\n")
   expect_match(bytes, "thinking", fixed = TRUE)
-  # the abort's pause ends the held row, the cut marked
+  # the abort's pause takes the live row down and ends the held row, the cut marked
   expect_match(bytes, "\r +\rFanning out HELDWORD\\.\\.\\.$")
-  expect_null(rec$spinner)
+  expect_null(the$live_row)
   expect_false(grepl("\r|HELDWORD", text(res)))
 })
 
@@ -1414,6 +1411,7 @@ test_that("a foreground run separates text, tool and status blocks once (D-186, 
   local_mocked_bindings(front_end = function() fe)
   s = render_session()
   withr::defer(console_drop("u0000test"))
+  local_live_console()
   hooks = console_hooks()
   types = vapply(hooks, function(h) h$event, "")
   request = function(id) {
@@ -1436,29 +1434,21 @@ test_that("a foreground run separates text, tool and status blocks once (D-186, 
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Second ending")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L))
-  # a launch boundary and a notice replacing a shown waiting row, which then resumes as the
-  # reactor task draws it
-  rec = function() console_record(list(run = "u0000test"))
-  tick = function() {
-    sp = rec()$spinner
-    sp$last = 0
-    sp$tick()
-  }
+  # a launch boundary clears the shown live row, which its reactor task draws again; a notice
+  # replaces it, and a padded row then waits for the next request
+  tick = function() get(the$live_row$task, envir = reactor_get()$tasks)$fn()
   waits = list(
     hook_event("agent_start", s), request("q1"), function() console_before_message(kind = NULL),
     tick, function() {
       console_before_message()
       console_notice("[gptr] a notice")
-    }, function() {
-      console_gap(rec(), "wait")
-      tick()
-    },
+    }, tick,
     hook_event("message_update", s, index = 1L, kind = "text", delta = "Answer\n\n"),
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Answer")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L))
-  # tool blocks of consecutive requests group as those of one response: the waiting row between
-  # them takes no blank line, and the text that replaces the last one is spaced (D-245)
+  # tool blocks of consecutive requests group as those of one response: the live row between them
+  # is no block, and the text after the last one is spaced (D-245)
   call = function(id, code) {
     list(hook_event("message_end", s, role = "assistant", message = assistant_msg("")),
          hook_event("tool_execution_start", s, tool_call_id = id, tool_name = "r",
@@ -1498,9 +1488,9 @@ test_that("a foreground run separates text, tool and status blocks once (D-186, 
       bytes = rawToChar(rawConnectionValue(con))
       close(con)
       expect_match(bytes, "thinking", fixed = TRUE)
-      # a block replaces the cleared row; only the text after a tool block's waiting row starts
-      # with the blank it owes there, as no blank came before that row
-      expect_identical(lengths(regmatches(bytes, gregexpr("\r +\r\n", bytes))), c(1L, 0L, 1L)[[i]])
+      # the live row takes no blank line before it, so a block that owes one writes it on the
+      # cleared row, and a tool block after a tool block none
+      expect_identical(lengths(regmatches(bytes, gregexpr("\r +\r\n", bytes))), c(2L, 1L, 2L)[[i]])
       expect_identical(screen_rows(bytes), rows[[i]], info = fe)
     }
   }

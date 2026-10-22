@@ -136,8 +136,8 @@ working directory restored. Plan-specific rules:
 | `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 26 |
 | `R/auth-oauth.R` (input prompts) | 12 |
 | `R/console-ui.R` | 2, 3, 8, 12, 19 |
-| `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 18, 21, 22, 24, 25, 26 |
-| `R/console-interrupt.R` | 3, 13, 14, 15, 20 |
+| `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 21, 22, 24, 25, 26 |
+| `R/console-interrupt.R` | 3, 13, 14, 15, 17, 20 |
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
@@ -145,7 +145,7 @@ working directory restored. Plan-specific rules:
 | `R/eval-core.R` (an evaluation holds the console's colours; printed output as result rows, visual review) | 11 |
 | `R/gptr-config.R` (`type_ahead` description) | 18 |
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
-| `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream,setup}.R`, `helper-console-input.R` | their tasks |
+| `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream,setup,notice,process-launch}.R`, `helper-console-input.R` | their tasks |
 | `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines), `fixtures/cli/claude-toolstream.ndjson` (rows) | 8, 10, 11, 12 |
 | `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11, 12 |
 | `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19 |
@@ -835,17 +835,33 @@ Decisions:
   draft keeps its tail.
 - Writing:
   - T: `\r` + band + row + `\033[K\033[0m`, cut to `console_width() - 1` by
-    `cli::ansi_nchar(type = "width")`, with ambiguous widths counted as 2.
+    `cli::ansi_nchar(type = "width")`, with ambiguous widths counted as 2 (amended in Task 17: every
+    character outside ASCII that R counts as one column counts two, `live_fit()`; R has no ambiguous-width
+    table, and a draft's Greek or accented letters are as likely to be drawn wide).
   - Redrawn on every key and once a second. The block is static (no blink, no spinner).
   - The block is the agent's blue, the status words and hints dim; only the draft is ink (amended in the
     visual review: the waiting row's ink block and ink sentence were the loudest row on screen).
-- Every `gptr_message_write()` first writes `\r\033[0m\033[K`, then its whole lines, then redraws
-  the row.
+  - At column 0, under the transcript's last row, from a run's first request to its end; no block, so
+    `console_gap()` loses its waiting kind and the next block writes its blank on the cleared row (amended in
+    Task 17).
+- Every `gptr_message_write()` first writes `\r\033[K` (amended in Task 17: not `\r\033[0m\033[K`; the row
+  ends its own band with `\033[0m`, and NO_COLOR writes no SGR), then its whole lines, then redraws the
+  row (`the$live_row`, at the sink the row was drawn at; 03 §2.2 rule 5). Where the row is padded, or after a
+  partial line, the first write ends it until the run next waits (amended in Task 17: a padded row redrawn
+  after every write left its spaces on every transcript row). A question or a launched process clears it
+  (`console_before_message()`); notices, queue lines and sub-agent lines are written with it cleared and
+  redrawn (amended in Task 17: they no longer hide it; `console_typed_route()` no longer clears it).
 - L: status only, `\r` + text + `\033[K` in RStudio, which honours it, padded with spaces to width - 1
   only where it is unknown (R.app, Rgui), ending `· esc stops` (RStudio, R.app, Rgui) or
   `· ctrl-c pauses` (Positron). (Amended in the visual review: the padding left about 57 trailing
-  spaces on each RStudio row that replaced the waiting row.)
+  spaces on each RStudio row that replaced the waiting row.) D (TERM=dumb) is padded too, and so is
+  Positron, whose console erases by writing spaces (amended in Task 17: given `\033[K`, its transcript had
+  32 rows ending in spaces). Until Task 18's composer reads keys, T is status only as well, ending
+  `· ctrl-c pauses` (amended in Task 17).
 - P: nothing.
+- `console_class()` takes no argument (amended in Task 17): P outside an interactive R; a piped REPL
+  (`.stdin`) stays out of `repl_terminal()`, which is now a T or D console's REPL not piped, so radian (L in
+  the class table) no longer has its typed lines read from fd 0.
 
 Tests (`test-console-input.R`, `test-console-wait.R`, `test-console-spinner-*.R`), RED first:
 - Exact rows per class and width (80, 40, 30).
@@ -858,7 +874,13 @@ Spec: IC-82 live-row format, 04 §7.14.
 Files: `R/console-input.R` (`console_live()`), `R/console-render.R` (`console_spinner()` deleted),
 `R/utils-options.R` (`console_class()`), `R/utils-conditions.R` (`gptr_message_write()`),
 `tests/testthat/test-console-input.R`, `tests/testthat/test-console-wait.R`,
-`tests/testthat/test-console-spinner-gui.R`, `tests/testthat/test-console-spinner-width.R`.
+`tests/testthat/test-console-spinner-gui.R`, `tests/testthat/test-console-spinner-width.R`. Amended in
+Task 17: also `R/console-repl.R` (`repl_terminal()`, `console_typed_route()`), `R/console-interrupt.R`
+(`policy_menu()` clears the row), the wording of `R/console-ui.R` and `R/cli-common.R`, the tests that
+held the waiting row (`test-console-{notice,process-launch,fences,render}.R`,
+`test-compaction-acceptance.R`), the helpers
+`local_live_console()`, `written()` and `term_rows()` in `helper-console-input.R`, 03 §2.2 rule 5 and
+§6.17, and 04 §7.14 (the row of `console_live()`).
 
 Commit: `feat(console): one live row at the bottom for status, queue and input`.
 

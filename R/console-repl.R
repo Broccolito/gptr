@@ -170,13 +170,12 @@ console_readline_tty = function() {
     isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty()
 }
 
-#' Does this REPL read a terminal, whose typed lines wait on fd 0 while an answer runs (IC-76)?
-#' Not on Windows: processx cannot poll a console handle; not in Positron's console, whose own
-#' input holds what is typed, though ark's stdin is a tty
+#' Does this REPL read a terminal, whose typed lines wait on fd 0 while an answer runs (IC-76)? A
+#' T or D console (console_class()), not a piped REPL. Not on Windows: processx cannot poll a
+#' console handle; not in Positron's console, whose own input holds what is typed
 #' @noRd
 repl_terminal = function(rs) {
-  !isTRUE(rs$stdin) && !is_windows() && gptr_is_interactive() && stdin_tty() &&
-    front_end() != "positron"
+  !isTRUE(rs$stdin) && console_class() %in% c("T", "D")
 }
 
 #' The lines typed or pasted on fd 0 that wait to be read, without blocking: one
@@ -596,8 +595,8 @@ console_typed = function(drain = FALSE) {
 #' for the next prompt, each entry (a !code line with its continuation) shown as a follow-up's
 #' queue line; the others become one message queued on `s` as the `type_ahead` setting says (a
 #' follow-up waits with the held lines, after those typed before its first line); a partial line
-#' `part` goes to the console history. Their lines go between the answer's whole rows: only the
-#' waiting row is cleared, keeping its clock (D-245)
+#' `part` goes to the console history. Their lines go between the answer's whole rows, above the
+#' live row (D-245)
 #' @noRd
 console_typed_route = function(rd, s, lines, part = "") {
   later = cont = logical(length(lines))
@@ -607,7 +606,6 @@ console_typed_route = function(rd, s, lines, part = "") {
   }
   text = paste(lines[!later], collapse = "\n")
   if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(invisible(NULL))
-  console_before_message(kind = NULL, tools = TRUE)
   hold = function(k) {
     for (x in split(lines[k], cumsum(!cont[k]))) {
       console_queue_line(s, paste(x, collapse = "\n"), "follow_up")

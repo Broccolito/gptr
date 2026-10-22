@@ -120,9 +120,10 @@ test_that("a delayed aborted checkpoint is charged without a late reply or histo
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
+  local_live_console()
   x = compaction_fixture(function(request) {
     reactor_timer(at = reactor_now() + 0.05, fn = function() {
-      seen$task = console_record(list(run = run$id))$task
+      seen$task = the$live_row$task
       run_abort(run, "user")
     })
     fake_text("late summary", delay = 1)
