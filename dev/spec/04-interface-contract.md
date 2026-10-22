@@ -5385,8 +5385,9 @@ its part in its own commit, and Task 27 finalises them.
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
     keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by
     `console_on_tool_start()`); `ui_permission_lines(request)` prints the call line (`  ▎ r  <first line>`, strip
-    red, name bold, cut before `(+N more lines)`) only when they are not the request's (`session`,
-    `tool_call_id`, §7.11): a background ask, a nested member call in `r` code, a sub-agent's call. The flagged
+    red, name bold, cut before `(+N more lines)`; the name as `console_tool_name()` gives it, an MCP tool as
+    `server/tool` with its arguments dim, in the question and the detail view too) only when they are not the
+    request's (`session`, `tool_call_id`, §7.11): a background ask, a nested member call in `r` code, a sub-agent's call. The flagged
     rows and `asks in every mode: <reason>` follow, dim at column 4 (later flagged rows under the first's text),
     then the question `  ? Allow r?` (`?` blue, the question bold)
     and, under its text, the keys row `    y yes · a always (session) · p always (project) · n no · ? more` (the

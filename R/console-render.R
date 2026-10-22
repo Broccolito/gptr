@@ -805,6 +805,13 @@ console_preview = function(input) {
   strsplit(text, "\n", fixed = TRUE)[[1L]]
 }
 
+#' A tool's name as the console shows it (D-245): an MCP tool `mcp__<server>__<tool>` as
+#' `server/tool`; escaped
+#' @noRd
+console_tool_name = function(name) {
+  console_escape(sub("^mcp__(.+?)__", "\\1/", name %||% "?", perl = TRUE), FALSE)
+}
+
 #' The kind of a tool call (IC-82, D-245): "read" for a tool annotated read-only (an MCP
 #' server's `readOnlyHint` arrives as `read_only`), "agent" for a sub-agent call (Codex's
 #' collab call; gptr's own sub-agents are `peter()` calls), else "act"
@@ -825,7 +832,7 @@ console_call_line = function(call, width, kind = "act") {
   lines = console_escape(console_preview(call$input), FALSE)
   sym = console_style()
   mcp = startsWith(call$name %||% "", "mcp__")
-  name = console_escape(sub("^mcp__(.+?)__", "\\1/", call$name %||% "?", perl = TRUE), FALSE)
+  name = console_tool_name(call$name)
   head = switch(kind, read = paste0(sym$tool, " ", name),
                 agent = paste0(sym$blue(sym$agent), " ", name),
                 paste0(sym$red(sym$tool), " ", cli::style_bold(name)))

@@ -284,8 +284,17 @@ test_that("the keys are a row under the question, a and p only with a rule (D-24
   expect_identical(utils::tail(ui_permission_lines(req), 3L),
                    c("  ? Allow r?", "    y yes \u00b7 a always (session) \u00b7",
                      "    p always (project) \u00b7 n no \u00b7 ? more"))
+  # an MCP tool reads as the console's call line names it: server/tool, its arguments dim
+  mcp = list(tool = "mcp__github__create_issue", input = list(title = "bug"),
+             summary = "{\"title\":\"bug\"}", risk = list(level = 2L))
+  lines = ui_permission_lines(mcp)
+  expect_identical(lines[1:2], c("  \u258e github/create_issue  {\"title\":\"bug\"}",
+                                 "  ? Allow github/create_issue?"))
+  expect_match(ui_permission_detail(mcp)[1L], "wants to use github/create_issue", fixed = TRUE)
   # ? blue, the question bold, the keys bold, what they do dim; the call's strip red
   withr::local_options(cli.num_colors = 256L)
+  expect_identical(ui_permission_lines(mcp)[1L],
+                   console_call_line(list(name = mcp$tool, input = mcp$input), 78L))
   expect_identical(ui_permission_lines(ui_request("x = 1")),
                    c("  \u001b[38;5;167m\u258e\u001b[39m \u001b[1mr\u001b[22m  x = 1",
                      "  \033[38;5;67m?\033[39m \033[1mAllow r?\033[22m",

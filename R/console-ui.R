@@ -127,8 +127,9 @@ ui_call_shown = function(request) {
     identical(console_state()$last_call, c(request$session, request$tool_call_id))
 }
 
-#' The lines of an approval (D-243): the call line (`  | r  x = 1`, fitted to the console before
-#' (+N more lines), D-187) unless the console printed it (ui_call_shown()), then dim at column 4
+#' The lines of an approval (D-243): the call line (`  | r  x = 1`, the tool named and an MCP call's
+#' arguments dim as the console's call line has them, fitted to the console before (+N more
+#' lines), D-187) unless the console printed it (ui_call_shown()), then dim at column 4
 #' the flagged calls one per line, fitted, at most 5 (D-222), and why an `ask_human` request asks
 #' in every mode, then the question, and under its text the keys (a and p only with a rule), a row
 #' that wraps between them
@@ -138,9 +139,11 @@ ui_permission_lines = function(request) {
   lines = ui_request_lines(request)
   lines = lines[nzchar(trimws(lines))]
   more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)") else ""
-  tool = ui_escape(request$tool %||% "tool")
+  tool = console_tool_name(request$tool %||% "tool")
+  arg = c(lines, "")[1L]
   width = ui_width()
-  first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ", c(lines, "")[1L])
+  first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ",
+                 if (startsWith(request$tool %||% "", "mcp__")) sym$dim(arg) else arg)
   call = if (!ui_call_shown(request)) {
     paste0(cli::ansi_strtrim(first, max(20L, width - nchar(more))), more)
   }
@@ -184,7 +187,7 @@ ui_permission_detail = function(request, code = TRUE) {
   fence = doc_rmd_fence("```", shown)
   who = ui_who(request)
   out = c(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
-                 ui_escape(request$tool %||% "a tool"),
+                 console_tool_name(request$tool %||% "a tool"),
                  if (!is.null(risk$level)) {
                    paste0(" (level ", risk$level,
                           if (rlang::is_string(risk$label)) paste0(": ", ui_escape(risk$label)),

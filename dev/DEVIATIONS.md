@@ -3188,6 +3188,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     of SGR. Contract-visible: 04 §15.10 IC-77, 03 §6.8.3 and §6.17. Tests: test-console-ui.R "the detail view's
     keys read as the question's; it skips a fence shown above (D-243)", "flagged calls fit one per line, highest
     level first, at most 5 (#33)".
+  - An approval names the tool as the console's call line does: one helper, `console_tool_name()`, gives an MCP
+    tool as `server/tool` in the call line, the question and the detail view, and an MCP call's arguments are dim
+    there too. The approval had its own copy of the call line, from the raw name, so gptr's MCP client tools read
+    `▎ github/create_issue  {...}` when the call started and `▎ mcp__github__create_issue  {...}` and
+    `? Allow mcp__github__create_issue?` when it was asked. Contract-visible: 04 §15.10 IC-77. Tests:
+    test-console-ui.R "the keys are a row under the question, a and p only with a rule (D-243)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

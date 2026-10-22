@@ -543,7 +543,9 @@ Decisions:
   - The console keeps the session and call ids of the last call line it printed
     (`console_state()$last_call`, set by `console_on_tool_start()`), so ids repeated across sessions
     never match. The call line it prints is `  ▎ r  <first line>  (+N more lines)`, as the console's
-    act line. Who asks moves to the question (amended in Task 12).
+    act line. Who asks moves to the question (amended in Task 12). The call line and the question name
+    the tool as the console's call line does (`console_tool_name()`: an MCP tool as `server/tool`,
+    its arguments dim; amended in the review of Tasks 8-15).
   - A question and the tool block it is asked in are one block (`console_gap()`): no blank line
     between a call line, its ask and its result lines (amended in Task 12).
 - Flagged rows (at most 5, then `(+N more; ? shows all)`) and the `asks in every mode:` reason
