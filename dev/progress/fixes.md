@@ -1721,6 +1721,61 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   that makes a replacement call copies the same way (R behaviour, not reported upstream);
   `d$s[1] = v` copies a data frame column whatever gptr does (`$<-.data.frame`).
 
+## Task CI-88 - The Windows stdin drain reads writer liveness before its acknowledgements (2026-10-21, #75)
+- PR #73 run 39701794227 (job 119572506456, ubuntu-latest release) failed "a cold writer names a
+  failed mailbox validation" (`test-proc-windows-backpressure.R:375`): `accepted_bytes` 0, not
+  65536, while the step (`validate_read`), status 18 and cause matched; the case's witness line
+  reads `"drain_elapsed":0.446,"accepted_bytes":0`. No other run failed it: since the test landed
+  (`3a05693`, 06:16Z) the failed-job logs of the 10 other R-CMD-check and Windows-check runs with
+  failed jobs fail for other causes, and about 280 jobs of the kinds that run it passed.
+- Cause (the product; the drain runs only on Windows): `proc_writer_drain()` read the
+  acknowledgements (`proc_writer_ack()`), then the child's and the writer's liveness, and reported
+  a writer seen exited with what it had read. Status 18 means the writer had published
+  `ack-000000000001-065536`: it reaches `validate_read` for the second chunk only after that. A
+  local probe saw that writer exit 39 to 68 ms (median 56, 30 runs) after its last acknowledgement
+  became visible, so the parent was paused at least that long between `list.files()` and
+  `is_alive()` (a full garbage collection late in the check's testthat process, or a descheduled
+  vCPU) and reported 0 of the 65536 bytes the pipe had taken. Only this test is exposed: its
+  injection refuses `in-000000000002` at the writer's first mailbox check for the second chunk,
+  before the parent publishes it; the siblings fail on that chunk, which the parent publishes only
+  after reading the first acknowledgement. The child-exit branch had the same order: a Windows
+  child that read all of its stdin and exited could be reported as "The child exited before stdin
+  was delivered." when its writer's last acknowledgement landed in that gap.
+- Fix: the drain reads the writer's, then the child's liveness before the acknowledgements, so a
+  writer seen exited has published all of its own, and a child whose exit ended the writer is seen
+  exited too.
+- Test: "a writer exiting right after its acknowledgement keeps the accepted bytes" makes the
+  interleaving certain: the writer acknowledges 0.1 s late, and the parent pauses after its first
+  read of the first chunk until the writer has exited. It uses the blocked child, which echoes
+  nothing (with the echo child a probe hung on macOS once the paused parent stopped reading its
+  output). The validation test and this one share `mailbox_refused`. A first version skipped that
+  read instead; 1 of 200 runs failed when the writer had exited before it, which a real read
+  would have seen. "a writer ended by its child's exit after full delivery is not a failure" pins
+  the order of the two liveness reads: the numeric child reads all four bytes and exits, which ends
+  its writer (status 17, `alive`), while the parent waits in a wrapped `isTRUE()` just before its
+  first liveness read with the chunk pending.
+- Measurements (macOS, 16 cores; the nine step-failure tests, 200 iterations each, one
+  `test_file(desc =)` per test): before, idle 0/1800; 8 busy loops, side by side with the fixed
+  tree, 0/1800; one busy loop per CPU plus two runners 22/1800, all `gptr_error_timeout` (nothing
+  accepted for 2 s; tests up to 165 s against a 1.6 s median), none with the CI signature; the
+  parent stopped by SIGSTOP for 30 or 120 ms at random, 0/40 and 0/100 of the exposed test. The
+  regression on main: 100/100 and 200/200 fail with `accepted_bytes` 0. After: idle 0/1800 and the
+  regression 0/500; 8 busy loops 0/1800 and the regression 0/200. Side by side under one busy loop
+  per CPU (stopped after 41 tests each, load average above 300), both trees failed the same two
+  tests at the same moments with timeouts. The child-exit test fails on main 120/120 (119 with
+  `b$pos` 0; once main read the child's exit and the acknowledgement before any writer liveness
+  read, so it never paused) and with the child's liveness read first 220/220 (4 of 4 bytes
+  accepted; 100 of them under 8 busy loops); both errors are "The owned stdin writer exited before
+  delivery settled.", step `alive`, status 17 (a probe, 10/10 each). After: idle 0/200, 8 busy
+  loops 0/100.
+- Red: `^proc-windows-backpressure$` on main FAIL 3 PASS 251 (`accepted_bytes` 0; the child-exit
+  test's error and `b$pos` 0), with the child's liveness read first FAIL 1 PASS 253. Green: PASS
+  254; `^proc-` PASS 2375 SKIP 11; `^(lint-rules|arch-layers)$` PASS 90. Lint clean.
+- Deviations: none (no bound changed). Open: not yet run on hosted runners; the startup branch
+  still reads `ready` before the writer's liveness, so a writer that exits right after publishing
+  `ready` is reported as a startup failure (no bytes are lost); the cold controls' 2 s stdin bound
+  fails under CPU saturation (above), which hosted runs have not shown.
+
 ## Task CI-89 - The six-stream wall nets out each end's garbage collection (2026-10-22, #74)
 - PR #72 run 39706834831 (attempt 1, job 119589000853, ubuntu-latest oldrel-1, R 4.5.3, two test
   processes) failed INFRA-01 "six streams of 1.00-2.25 s finish within 10% of the slowest"

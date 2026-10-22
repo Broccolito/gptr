@@ -370,16 +370,63 @@ test_that("a cold writer names a failed liveness check", {
   }), "alive"), 65536)
 })
 
+# The mailbox check refuses the second chunk's path, so the writer exits right after it
+# acknowledges the first chunk, before the parent publishes the second.
+mailbox_refused = quote({
+  meta$valid = local({
+    valid = meta$valid
+    function(dir, canonical, marker, paths = character()) {
+      !"in-000000000002" %in% basename(paths) && valid(dir, canonical, marker, paths)
+    }
+  })
+})
+
 test_that("a cold writer names a failed mailbox validation", {
   skip_on_cran()
-  expect_identical(writer_step_failure(quote({
-    meta$valid = local({
-      valid = meta$valid
-      function(dir, canonical, marker, paths = character()) {
-        !"in-000000000002" %in% basename(paths) && valid(dir, canonical, marker, paths)
-      }
-    })
-  }), "validate_read"), 65536)
+  expect_identical(writer_step_failure(mailbox_refused, "validate_read"), 65536)
+})
+
+# A parent paused between its acknowledgement read and its liveness check (a garbage collection
+# on a busy runner) finds the writer exited with its last acknowledgement unread. Here the writer
+# acknowledges 0.1 s late, and the parent pauses after its first read of the first chunk until
+# the writer has exited. The blocked child echoes nothing, so the paused parent reads no output.
+test_that("a writer exiting right after its acknowledgement keeps the accepted bytes", {
+  skip_on_cran()
+  ack = proc_writer_ack
+  paused = FALSE
+  error = writer_cold_control("blocked", inject = bquote({
+    .(mailbox_refused)
+    file.create = function(...) { # nolint: object_name_linter.
+      if (startsWith(basename(..1), "ack-")) Sys.sleep(0.1)
+      base::file.create(...)
+    }
+  }), parent = list(proc_writer_ack = function(st, b) {
+    first = !paused && !is.null(st$pending)
+    ack(st, b)
+    if (first) {
+      paused <<- TRUE
+      st$p$wait(5000)
+    }
+  }), outcome = "io")
+  expect_true(paused)
+  expect_identical(error$writer_step, "validate_read")
+  expect_identical(error$accepted_bytes, 65536)
+})
+
+# The child reads all four bytes and exits, which ends its writer. A parent paused before its
+# liveness reads must see both exits and the last acknowledgement, not a failed writer.
+test_that("a writer ended by its child's exit after full delivery is not a failure", {
+  skip_on_cran()
+  paused = FALSE
+  writer_cold_control("numeric", parent = list(isTRUE = function(x) {
+    st = get0("st", envir = parent.frame(), inherits = FALSE)
+    if (!paused && is.environment(st) && !is.null(st$pending)) {
+      paused <<- TRUE
+      st$p$wait(5000)
+    }
+    base::isTRUE(x)
+  }), outcome = "complete")
+  expect_true(paused)
 })
 
 test_that("a cold writer names a failed chunk size", {
