@@ -330,7 +330,7 @@ test_that("a steer typed in a tool and then aborted is kept in the history, neve
   })
   expect_identical(run$status, "aborted")
   expect_identical(kept, "use mpg")
-  expect_identical(sum(grepl("[gptr] kept in history (", err, fixed = TRUE)), 1L)
+  expect_identical(sum(grepl(kept_line("use mpg"), err, fixed = TRUE)), 1L)
   expect_length(session_data(s)$queue$steer, 0L)
   reqs = fake_requests(fake)
   expect_no_match(json_encode(reqs[[length(reqs)]]$messages), "use mpg", fixed = TRUE)

@@ -204,7 +204,8 @@ Decisions:
 - Complete lines are routed as today. A trailing partial line goes to `console_history_add()`,
   with `[gptr] kept in history (↑): '<line>'` (amended in review: the echo is off while a run
   streams, so the notice quotes what was kept, and it promises no position; Task 15 uses the
-  same form).
+  same form). Amended in the visual review: the line is the person's held text, dim at column 0
+  like a queue line, `↳ kept in history ↑ · <line>`.
 - In T class, Task 19 later replaces the history route with the composer draft. D class keeps it.
 - These pty cases must pass on the Linux NOT_CRAN lane before Task 19 builds on the drain. On
   Linux the release of a partial line on leaving ICANON is reasoned from n_tty, not yet run.
@@ -730,7 +731,8 @@ Decisions:
   - the user items the abort moved to `dropped` (steers and follow-ups);
   - user steers still in the FIFO, and the items held while a tool ran;
   - held follow-ups, with the held `/cmd` and `!code` lines (the REPL's `typed` lines).
-  They are listed once, `[gptr] kept in history (↑): '<a>', '<b>'`, and added to the history in that
+  They are listed once, `↳ kept in history ↑ · <a> · <b>` (Task 2's form, as amended in the visual
+  review), and added to the history in that
   order (`console_keep()`, which the partial-line notice also uses). Nothing is auto-sent after an
   abort. Follow-ups in the FIFO (outside the REPL) stay queued after an error.
 - The list follows the run's status line, then the blank row before the prompt; `[gptr] aborted; the

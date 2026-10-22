@@ -622,17 +622,19 @@ console_typed_route = function(rd, s, lines, part = "") {
 }
 
 #' Text the person typed that gptr will not send: added to the console history in order
-#' (console_history_add()) and listed in one notice, `[gptr] kept in history (<Up glyph>): '<a>',
-#' '<b>'`, or `[gptr] not kept (gptr.history is off): ...` (D-242, D-243)
+#' (console_history_add()) and listed once as the person's held text, dim at column 0 like a queue
+#' line, `<queued glyph> kept in history <Up glyph> · <a> · <b>` cut to three rows, or
+#' `... not kept (gptr.history is off) · ...`; inside an evaluation in the console's colours (D-242,
+#' D-243)
 #' @noRd
 console_keep = function(texts) {
   if (!length(texts)) return(invisible(NULL))
   kept = all(vapply(texts, console_history_add, NA))
-  console_notice(if (kept) {
-    paste0("[gptr] kept in history (", console_style()$up, "): ")
-  } else {
-    "[gptr] not kept (gptr.history is off): "
-  }, paste(console_escape(paste0("'", texts, "'"), FALSE), collapse = ", "))
+  rlang::local_options(cli.num_colors = console_colors())
+  sym = console_style()
+  what = if (kept) paste("kept in history", sym$up) else "not kept (gptr.history is off)"
+  console_write(sym$dim(console_person_rows(sym$queued, paste0(
+    what, sym$sep, paste(texts, collapse = sym$sep)), n = 3L)))
 }
 
 #' Is the last held `!code` line, with the held lines after it, incomplete R code? The next line

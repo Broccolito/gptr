@@ -42,14 +42,22 @@ local_console_stdin = function(lines, .env = parent.frame()) {
 }
 
 # The end of a question in a pty child (D-243): its last row, then the person's chevron as the
-# prompt, `>` where the child's output, in this process's locale, is not UTF-8
-pty_asked = function() paste0("\n", if (l10n_info()[["UTF-8"]]) "\u203a" else ">", " ")
+# prompt, `>>` where the child's output, in this process's locale, is not UTF-8
+pty_asked = function() paste0("\n", if (l10n_info()[["UTF-8"]]) "\u203a" else ">>", " ")
 
 # The first row of the line that shows a queued message (D-242), in console_style()'s glyphs;
 # `utf8 = l10n_info()[["UTF-8"]]` gives a pty child's
 queue_line = function(kind, text, utf8 = cli::is_utf8_output()) {
   sym = withr::with_options(list(cli.unicode = utf8), console_style())
   paste0(sym$queued, " ", kind, sym$sep, text)
+}
+
+# The line that lists the person's text gptr will not send (console_keep()): a queue line whose
+# kind says it was kept in the history (the Up key recalls it) or not kept
+kept_line = function(texts, kept = TRUE, utf8 = cli::is_utf8_output()) {
+  sym = withr::with_options(list(cli.unicode = utf8), console_style())
+  kind = if (kept) paste("kept in history", sym$up) else "not kept (gptr.history is off)"
+  queue_line(kind, paste(texts, collapse = sym$sep), utf8)
 }
 
 # Terminal R in a pty (80x24, TERM `term`, echo on as in a terminal unless `echo` is FALSE) that

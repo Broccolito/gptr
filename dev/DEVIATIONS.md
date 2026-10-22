@@ -3369,3 +3369,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Rscript) keeps the markdown characters. Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests:
     test-console-render.R "a console shows the same text at any colour depth; only SGR differs (visual review)",
     "blank lines collapse and nested lists keep their indentation (D-186)".
+  - Text gptr keeps in the history instead of sending is listed as the person's held text, dim at column 0 like a
+    queue line, `↳ kept in history ↑ · and label the axes` (`↳ not kept (gptr.history is off) · ...`), cut to three
+    rows: `[gptr] kept in history (↑): 'and label the axes'` was the one full-ink, bracketed line inside the tool
+    block it was printed in, and read as part of the approval. Contract-visible: 04 §15.10 IC-76. Tests:
+    test-console-typing.R "an abort sends nothing queued: it goes to the history, listed once (D-242)", "an abort's
+    status line says aborted once; the kept list follows it, then a blank row" and the drain cases;
+    test-console-interrupt.R "a steer typed in a tool and then aborted is kept in the history, never sent later".

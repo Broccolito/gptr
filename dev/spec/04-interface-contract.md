@@ -5337,9 +5337,10 @@ its part in its own commit, and Task 27 finalises them.
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
     the saved modes (on exit). Complete lines are routed as before. A trailing partial line (attr
     `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()` with
-    `[gptr] kept in history (↑): '<line>'` (`Up` where the output is not UTF-8), or, with `gptr.history`
-    off, `[gptr] not kept (gptr.history is off): '<line>'`: the echo is off while a run streams, so the
-    notice quotes it. The question's `readline()` therefore starts empty: typed-ahead text is never an
+    `↳ kept in history ↑ · <line>` (`-> kept in history Up - <line>` where the output is not UTF-8), or, with
+    `gptr.history` off, `↳ not kept (gptr.history is off) · <line>`: the echo is off while a run streams, so the
+    line quotes it. It is the person's held text, dim at column 0 and cut to three rows like a queue line
+    (`console_keep()`; visual review: it was a full-ink `[gptr]` notice inside the tool block). The question's `readline()` therefore starts empty: typed-ahead text is never an
     invalid answer, a denial (`no ...`) or an ask-tool answer. `gptr_confirm()` (L0, also asked during a
     run, e.g. by `egress_check()` for a nested call's provider) is not drained, so this holds for the
     console questions only; its stale lines go to the history (IC-75).
@@ -5378,8 +5379,8 @@ its part in its own commit, and Task 27 finalises them.
     session's next run, and `policy_flush()` never drops an item. After any other status (`aborted`, `error`,
     `blocked`, `budget`) nothing is sent: the user items the abort moved to `dropped`, the user steers still
     queued, the items held, and the REPL's held lines (follow-ups, `/commands`, `!code`), in that order, go to
-    the console history (`console_history_add()`) and are listed once, `[gptr] kept in history (↑): '<a>', '<b>'`
-    (`Up` where the output is not UTF-8; with `gptr.history` off `[gptr] not kept (gptr.history is off): ...`).
+    the console history (`console_history_add()`) and are listed once, `↳ kept in history ↑ · <a> · <b>`
+    (as above; with `gptr.history` off `↳ not kept (gptr.history is off) · ...`).
     These replace `[gptr] dropped typed lines: ...` and `[gptr] dropped queued messages: ...`. At verbosity 2 the
     list follows the run's status line, and the blank row before the prompt follows the list. `policy_abort()`
     prints `[gptr] aborted; the session is kept.` only when no status line said `aborted` (verbosity 0, or no run

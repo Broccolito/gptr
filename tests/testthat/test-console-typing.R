@@ -396,9 +396,8 @@ test_that("an abort sends nothing queued: it goes to the history, listed once (D
   expect_true(any(grepl("[gptr] aborted", res$out, fixed = TRUE)))
   # the prompt, the steer the abort dropped from the queue, the held lines, then the next input
   expect_identical(res$kept, c("go", "use base R", "/status", "!x = 1", "/exit"))
-  notice = paste0("[gptr] kept in history (", console_style()$up, "): 'use base R', '/status', ",
-                  "'!x = 1'")
-  expect_identical(sum(grepl(notice, res$out, fixed = TRUE)), 1L)
+  notice = kept_line(c("use base R", "/status", "!x = 1"))
+  expect_identical(sum(res$out == notice), 1L)
   expect_false(any(grepl("dropped", res$out, fixed = TRUE)))
   expect_length(fake_requests(fake), 1L)
   expect_null(e$x)
@@ -427,8 +426,8 @@ test_that("an abort's status line says aborted once; the kept list follows it, t
   sym = console_style()
   status = grep(paste0("^  aborted", sym$sep), rows)
   expect_length(status, 1L)
-  expect_identical(rows[status + 1:2],
-                   c(paste0("  [gptr] kept in history (", sym$up, "): 'use base R'"), ""))
+  # the person's text at column 0, dim, as the queue lines (visual review)
+  expect_identical(rows[status + 1:2], c(kept_line("use base R"), ""))
   expect_false(any(grepl("[gptr] aborted", rows, fixed = TRUE)))
 })
 
@@ -449,7 +448,7 @@ test_that("after an error the queued steer is kept in the history, not sent with
   expect_identical(msg_text(last_message(reqs[[2L]])), "next")
   expect_no_match(json_encode(reqs[[2L]]$messages), "use base R", fixed = TRUE)
   expect_identical(res$kept, c("go", "use base R", "next", "/exit"))
-  expect_true(any(grepl("[gptr] kept in history (", res$out, fixed = TRUE)))
+  expect_true(kept_line("use base R") %in% res$out)
 })
 
 test_that("Ctrl-C at an approval prompt aborts the run and keeps the held lines in the history", {
@@ -477,7 +476,7 @@ test_that("Ctrl-C at an approval prompt aborts the run and keeps the held lines 
   out = utils::capture.output(repl_main(rs))
   expect_true(queue_line("follow-up", "!x = 1") %in% out)
   expect_identical(kept, c("go", "!x = 1", "/exit"))
-  expect_true(any(grepl("[gptr] kept in history (", out, fixed = TRUE)))
+  expect_true(kept_line("!x = 1") %in% out)
   expect_null(e$x)
   expect_null(e$zz)
 })
@@ -745,8 +744,7 @@ test_that("a question drains fd 0 first: lines steer, a partial line is kept in 
     })
   # the notice quotes the line (typed with the echo off) and names the key (D-245 glyphs); with
   # gptr.history off it says the line was not kept
-  notice = c("[gptr] kept in history (Up): 'use base R'",
-             "[gptr] not kept (gptr.history is off): 'use base R'")
+  notice = c(kept_line("use base R"), kept_line("use base R", kept = FALSE))
   for (k in 1:2) {
     local_gptr_options(history = k == 1L)
     tty$log = character()
@@ -792,8 +790,8 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   pty$send("B\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
-  expect_true(pty$wait("[gptr] kept in history ("))
-  expect_true(pty$wait("): 'use base R'"))
+  expect_true(pty$wait("kept in history"))
+  expect_true(pty$wait("use base R"))
   expect_true(pty$wait("Allow r?"))
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
@@ -823,7 +821,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(c(pty$seen("[gptr] kept in history ("), pty$seen("Not an answer"),
+  expect_identical(c(pty$seen("kept in history"), pty$seen("Not an answer"),
                      pty$seen("Permission denied"), pty$seen("(typed)")), c(3L, 0L, 0L, 0L))
 })
 
