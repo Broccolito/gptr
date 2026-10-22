@@ -3359,6 +3359,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     themselves. Contract-visible: 04 §15.10 IC-76. Tests: test-console-ui.R "a terminal's question read that
     Ctrl-C or an end of input ends ends its line (review)"; test-console-interrupt.R "Ctrl-C at the pause menu's
     chevron ends the terminal's line (review)".
+  - The pause menu takes a key typed before its chevron showed (`console_ask(accept)`, `readline_answer()`'s
+    `accept`): under load the stty that readline waits for came after the person's `s`, which IC-75's stale rule
+    then queued as a steer for the agent, and the menu read `use the median` as an invalid key. Text read too
+    soon that is no key is kept in the history, never sent; [s] and [f] take their text whenever it was typed.
+    Every console question switches to the saved modes before its rows (`tty_question()`), so readline starts
+    as soon as the question shows. Contract-visible: 04 §7.1 and §15.10 IC-76. Tests: test-console-interrupt.R
+    "a key typed before the menu's chevron showed answers it; other text is kept (review)"; test-console-typing.R
+    "a terminal call's question reads in the saved modes from before its rows (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

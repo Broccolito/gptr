@@ -100,16 +100,18 @@ console_repl_find = function() {
 
 #' Read one menu answer at the person's chevron at column 0, as a console question reads (D-243):
 #' from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while waiting (no resume
-#' restart there) gives NA, and in a terminal ends the person's row, as ui_console_read() does
+#' restart there) gives NA, and in a terminal ends the person's row, as ui_console_read() does.
+#' With `accept` (readline_answer()) a line typed before the chevron showed answers when it is one
+#' of them, and another such line is kept in the history (console_keep()), never sent to the agent
 #' @noRd
-console_ask = function() {
+console_ask = function(accept = NULL) {
   prompt = paste0(console_style()$person, " ")
   rs = console_repl_find()
   x = tryCatch({
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
     } else {
-      readline_answer(prompt, console_typed_ahead)
+      readline_answer(prompt, if (is.null(accept)) console_typed_ahead else console_keep, accept)
     }
     if (length(x) != 1L || is.na(x)) NA_character_ else as_utf8(x)
   }, interrupt = function(e) NA_character_)
@@ -123,7 +125,9 @@ console_ask = function() {
 #' `a abort` and, for a foreground call, `b background`, read at the person's chevron
 #' (console_ask()). A key or its word answers, an empty answer continues, anything else gets a dim
 #' hint naming the keys. [s] and [f] read their text at the same chevron and queue it as Enter and
-#' Tab do (policy_enqueue()), their queue line right under it, as under any question. It resumes
+#' Tab do (policy_enqueue()), their queue line right under it, as under any question. A key, or for
+#' [s] and [f] any text, typed before the chevron showed answers (console_ask()); the question reads
+#' in the saved modes from before its rows (tty_question()). It resumes
 #' the interrupted computation, the next block a blank row below the menu and the live row with a
 #' T console's draft drawn again (console_asked()), or returns to let the policy's exiting handler
 #' abort. It clears the live row only: an answer's held row stays in its stream and continues after
@@ -149,6 +153,7 @@ policy_menu = function(cnd, pol) {
   ids = unique(vapply(targets, function(t) session_data(t$session)$id, ""))
   rlang::local_options(cli.num_colors = console_colors())
   title = paste(c("Paused", if (length(ids) > 1L) ids[[1L]]), collapse = " ")
+  tty_question(TRUE)
   console_write(c("", paste0("  ", ui_question(title, ui_width() - 2L)),
                   ui_keys(k, keys, ui_width())))
   go = function() {
@@ -158,12 +163,12 @@ policy_menu = function(cnd, pol) {
     invokeRestart("resume")
   }
   repeat {
-    ans = tolower(trimws(console_ask()))
+    ans = tolower(trimws(console_ask(c("", k, keys))))
     key = if (is.na(ans)) "a" else c("c", k, k)[match(ans, c("", k, keys))]
     if (identical(key, "c")) go()
     if (identical(key, "a")) return(invisible(NULL))
     if (key %in% c("s", "f")) {
-      text = console_ask()
+      text = console_ask(TRUE)
       if (is.na(text)) return(invisible(NULL))
       policy_enqueue(s, text, if (identical(key, "s")) "steer" else "follow_up")
       go()
@@ -171,6 +176,7 @@ policy_menu = function(cnd, pol) {
     if (identical(key, "b")) {
       tryCatch({
         ext_service_get("bg.register")(s)
+        tty_question(FALSE)
         console_render_pause()
         console_notice("[gptr] running in the background; gptr_wait() brings it back")
         invokeRestart("resume")

@@ -1017,7 +1017,11 @@ Decisions:
   letter was its key, so a steer typed at the new chevron (`add a legend`) aborted the run. The keys row is
   `ui_keys()` in `console-ui.R`, which the approval uses too; its separator ends a row, never starts one.
 - It is read with readline at `› ` at column 0 (`console_ask()` without the margin) with the saved
-  modes.
+  modes. (Amended in the review of Tasks 16-21: a key, or for [s] and
+  [f] any text, typed before the chevron showed answers, `console_ask(accept)`, as under load stty made readline
+  start after the person had typed `s`, which was sent to the agent as a steer; other text read too soon is
+  kept in the history, never sent; every console question switches to the saved modes before its rows,
+  `tty_question()`.)
 - [s] and [f] read their text at the same `› ` and queue it exactly as Enter and Tab do. (Amended in
   Task 20:) `policy_enqueue()` keeps the reader's `sent`, the kind queued last, which `console_keys()`
   kept, so Up takes back a menu message as a composer one; blank text queues nothing, without the

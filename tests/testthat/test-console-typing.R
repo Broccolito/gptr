@@ -652,6 +652,27 @@ test_that("a question during a terminal call reads with the saved modes, then th
   expect_identical(tty$log, "read peter> ")
 })
 
+test_that("a terminal call's question reads in the saved modes from before its rows (review)", {
+  local_console_test()
+  withr::defer(assign("tty", NULL, envir = the))
+  # stty and the rows in the order the terminal gets them
+  local_mocked_bindings(tty_modes = function(modes = "-g") cat("<stty", modes, ">\n"))
+  rl = local_readline("y")
+  the$tty = list2env(list(saved = "SAVED", set = char_mode, keys = TRUE))
+  ans = NULL
+  req = list(tool = "r", input = list(code = "zz = 1"), risk = list(level = 2L))
+  out = utils::capture.output({
+    ans = ui_console_permission(req)
+  })
+  expect_identical(ans$decision, "allow")
+  stty = grep("^<stty", out)
+  expect_identical(out[stty], c("<stty SAVED >", paste("<stty", paste(char_mode, collapse = " "),
+                                                      ">")))
+  # the saved modes come before the question's first row, the call's after its answer
+  expect_lt(stty[[1L]], min(grep("Allow r?", out, fixed = TRUE)))
+  expect_identical(stty[[2L]], length(out))
+})
+
 test_that("a T console's keys edit the draft on the live row; Enter steers (D-242, D-243)", {
   skip_on_cran()
   local_console_test()
@@ -1046,8 +1067,9 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
     # (visual review)
     at = grep("? Allow r?", out, fixed = TRUE)
     expect_identical(out[at + 2:3], c(queue_line("steer", "steer me"), notice[[k]]))
-    # the drain's modes are restored before the question reads
-    expect_identical(tty$log, c("-g", "-echo", "-g", drain, "SAVED", "SAVED"))
+    # the question reads in the saved modes from before its rows, the drain's restored before it
+    # reads; the call's after it
+    expect_identical(tty$log, c("-g", "-echo", "SAVED", "-g", drain, "SAVED", "-echo", "SAVED"))
   }
 })
 

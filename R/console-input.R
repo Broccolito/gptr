@@ -188,10 +188,12 @@ console_ask_wait = function() {
   invisible(NULL)
 }
 
-#' After a console question in a T console (D-243): the live row the question cleared is drawn
-#' again, the composer's draft unchanged, while the call it gated runs
+#' After a console question in a terminal call (D-243): the call's modes again (tty_question()),
+#' and in a T console the live row the question cleared is drawn again, the composer's draft
+#' unchanged, while the call it gated runs
 #' @noRd
 console_asked = function() {
+  tty_question(FALSE)
   row = the$live_row
   if (isTRUE(the$tty$keys) && isTRUE(row$on) && !row$shown) row$draw()
   invisible(NULL)

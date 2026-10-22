@@ -276,6 +276,22 @@ test_that("Ctrl-C at the pause menu's chevron ends the terminal's line (review)"
   expect_identical(out, "\n")
 })
 
+test_that("a key typed before the menu's chevron showed answers it; other text is kept (review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  local_menu_answers(character())
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  local_gptr_options(history = TRUE)
+  # every line read too soon (a slow stty under load): a text that is no key is kept, never sent to
+  # the agent; `s` answers; the steer's text is taken whenever it was typed
+  rl = local_readline(c("use the median", "s", "and log it"), secs = 0.01)
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  expect_identical(rl$kept, "use the median")
+  expect_true(kept_line("use the median") %in% err)
+  q = session_data(s)$queue$steer
+  expect_identical(vapply(q, function(i) i$text, ""), "and log it")
+})
+
 test_that("a line typed before the pause menu appeared never answers it (IC-75)", {
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   rl = local_readline(c("a", "c"), secs = c(0.01, 1))

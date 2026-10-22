@@ -159,6 +159,18 @@ tty_isig_off = function(tty) {
   invisible(NULL)
 }
 
+#' A console question of a terminal call reads in the saved modes from before its rows are written
+#' (`on` TRUE) until it returns (FALSE), so readline starts as soon as the person sees the question,
+#' never after a slow stty (D-243); gptr_readline() then switches nothing
+#' @noRd
+tty_question = function(on) {
+  tty = the$tty
+  if (is.null(tty$saved) || identical(isTRUE(tty$asking), on)) return(invisible(NULL))
+  tty$asking = on
+  tty_modes(if (on) tty$saved else tty$set)
+  invisible(NULL)
+}
+
 #' Mockable: let fd 0 be read as typed (`stty -icanon min 0 time 0`, the echo unchanged), so the
 #' partial line the terminal holds can be read; returns the modes to restore (`tty_modes()`), NULL
 #' when stty fails (IC-76)
@@ -183,9 +195,10 @@ gptr_readline = function(prompt = "", read = readline) {
     gptr_message_write(paste0(text, "\n"), "stdout", margin = TRUE)
     prompt = paste0(pad, "> ")
   }
-  # readline() edits and echoes in the modes a console call saved (tty_call()); the call's after
+  # readline() edits and echoes in the modes a console call saved (tty_call()); the call's after,
+  # unless a console question already reads in them (tty_question())
   tty = the$tty
-  if (!is.null(tty$saved)) {
+  if (!is.null(tty$saved) && !isTRUE(tty$asking)) {
     tty_modes(tty$saved)
     on.exit(tty_modes(tty$set), add = TRUE)
   }
@@ -199,13 +212,16 @@ gptr_readline = function(prompt = "", read = readline) {
 #' (answer_stale()) was typed or pasted before the question was shown, so it is asked again; at
 #' most 100 reads, as readline() returns at once at the end of a pipe. Each line read past that is
 #' not blank goes to `keep(line)`: the console history, a console question's
-#' console_typed_ahead(), or nowhere for NULL (a secret) (IC-75, D-243)
+#' console_typed_ahead(), or nowhere for NULL (a secret) (IC-75, D-243). A line that is one of
+#' `accept` (trimmed, lower case; TRUE: any) answers even when read too soon, as a key typed just
+#' after the pause menu's Ctrl-C is meant for the menu
 #' @noRd
-readline_answer = function(prompt, keep = console_history_add) {
+readline_answer = function(prompt, keep = console_history_add, accept = NULL) {
   for (i in seq_len(100L)) {
     the$readline_secs = NULL
     x = gptr_readline(prompt)
     if (i == 100L || !gptr_is_interactive() || !answer_stale(the$readline_secs)) break
+    if (rlang::is_string(x) && (isTRUE(accept) || tolower(trimws(x)) %in% accept)) break
     if (is.function(keep) && rlang::is_string(x) && nzchar(trimws(x))) keep(x)
   }
   x
