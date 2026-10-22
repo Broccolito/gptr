@@ -420,6 +420,10 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
   r = idle_read("and label both of the axes", "\r")
   expect_match(r$out, "\rpeter> …abel both of the axes\033[K", fixed = TRUE)
   expect_identical(r$rows, c("peter> and label both of the axes", ""))
+  # the draft is escaped as on the live row (rule C1): a bidi override shows as its code point
+  withr::local_options(cli.width = 80L)
+  r = idle_read("abc \u202efed", "\r")
+  expect_match(r$out, "\rpeter> abc <U+202E>fed\033[K", fixed = TRUE)
   # the row is on the input band where the background is known
   withr::local_options(cli.num_colors = 256L)
   local_mocked_bindings(console_background = function() "dark")

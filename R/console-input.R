@@ -133,8 +133,7 @@ console_idle = function(rd, prompt) {
       if (!nzchar(draft)) break
       room = cli::console_width() - 1L - live_fit(prompt)
       console_cat(paste0("\r", sym$band, prompt,
-                         live_fit(gsub("\t", " ", draft, fixed = TRUE), room, sym$ellipsis,
-                                  tail = TRUE),
+                         live_fit(live_text(draft), room, sym$ellipsis, tail = TRUE),
                          "\033[K", if (nzchar(sym$band)) "\033[0m"))
       keys = console_typed_chars(rd, -1L)
       if (!nzchar(keys)) break
@@ -248,7 +247,6 @@ console_newest = function(s, rd, take = FALSE) {
 #' @noRd
 console_live_row = function(state, width) {
   sym = console_style()
-  line = function(x) gsub("\t", " ", paste(console_lines(x), collapse = " "), fixed = TRUE)
   kind = function(k) if (identical(k, "follow_up")) "follow-up" else "steer"
   secs = as.integer(max(0, state$secs %||% 0))
   clock = if (secs < 60L) paste0(secs, "s") else sprintf("%dm %02ds", secs %/% 60L, secs %% 60L)
@@ -266,7 +264,7 @@ console_live_row = function(state, width) {
     c(paste("enter", kind(enter)), paste("tab", kind(setdiff(c("steer", "follow_up"), enter))),
       paste(key, "pause"))
   } else if (!nzchar(draft)) {
-    said = paste0(sym$queued, " ", kind(state$newest$kind), sym$sep, line(state$newest$text))
+    said = paste0(sym$queued, " ", kind(state$newest$kind), sym$sep, live_text(state$newest$text))
     c(said, paste(sym$up, "edit"))
   }
   hint = function(terms) {
@@ -275,12 +273,13 @@ console_live_row = function(state, width) {
   }
   lead = paste0(sym$agent, " ")
   gap = paste0("   ", sym$person, " ")
-  input = if (nzchar(draft %||% "")) line(draft)
+  input = if (nzchar(draft %||% "")) live_text(draft)
   room = width - 1L - live_fit(lead)
   if (room < live_fit(clock)) return("")
   fit = if (is.null(input)) room else max(live_fit(clock), room - live_fit(gap) - live_fit(input))
   if (length(state$candidates)) {
-    status = live_fit(paste(vapply(state$candidates, line, ""), collapse = "  "), fit, sym$ellipsis)
+    shown = paste(vapply(state$candidates, live_text, ""), collapse = "  ")
+    status = live_fit(shown, fit, sym$ellipsis)
   } else {
     # dropped whole, from the right: the hint's terms, then the queue and a waiting question;
     # then the queued message is cut, keeping its head; at least the block and the time
@@ -313,6 +312,11 @@ console_live_row = function(state, width) {
   }
   row
 }
+
+#' The person's text on one row of the live row or the idle editor: its lines escaped
+#' (console_lines(), rule C1) and joined by a blank, a tab a blank
+#' @noRd
+live_text = function(x) gsub("\t", " ", paste(console_lines(x), collapse = " "), fixed = TRUE)
 
 #' Plain text fitted to `n` columns as the live row counts them (in a CJK locale, whose terminals
 #' draw East Asian ambiguous widths wide, a character outside ASCII that R counts as one column

@@ -3426,6 +3426,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     ?peter no longer says Positron keeps typed lines for the next input. Contract-visible: 04 §15.10 IC-82,
     `?peter`. Tests: test-console-wait.R "an abort-only IDE console advertises its stop key without promising a
     pause".
+  - The idle editor's row escapes the draft as the live row does (`live_text()`, rule C1): a pasted bidi override
+    or zero-width character was written raw at the prompt while the live row showed `<U+202E>`. Tests:
+    test-console-input.R "a draft a run left is edited at the prompt; Enter returns it as readline would".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
