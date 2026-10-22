@@ -3069,6 +3069,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (D-242)", "after an error the queued steer is kept in the history, not sent with the next prompt", "Ctrl-C at an
   approval prompt aborts the run and keeps the held lines in the history"; test-console-interrupt.R "a steer typed
   in a tool and then aborted is kept in the history, never sent later".
+- Review fixes of Tasks 8-15 (2026-10-21):
+  - A held `/command` or `!code` line shows as a follow-up, `↳ follow-up · <line>`, in the order typed (a `!code`
+    line with the lines that continue it as one entry), in place of `[gptr] after this answer: '<line>'`. Typed, it
+    had kept the old notice while the same line from the pause menu, and a typed follow-up, showed the queue line,
+    though all wait in the same list for the next prompt. Contract-visible: 04 §15.10 IC-75 and IC-76, 03 §6.17.
+    Tests: test-console-typing.R "/commands and !code typed during a run run after the answer; text still steers",
+    "follow-ups wait with the /commands and !code typed around them, in order (D-242)", "a held !code line keeps
+    the lines that complete it, also from a later batch", "Ctrl-C at an approval prompt aborts the run and keeps
+    the held lines in the history"; test-console-ui.R "during a run a !code or /command line typed before a
+    question waits for the prompt".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

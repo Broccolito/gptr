@@ -345,8 +345,9 @@ test_that("during a run a !code or /command line typed before a question waits f
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   expect_false(any(grepl("zz2", vapply(reqs[[2L]]$messages, msg_text, ""), fixed = TRUE)))
-  expect_true("[gptr] after this answer: '!zz2 = 5'" %in% out)
+  expect_true(queue_line("follow-up", "!zz2 = 5") %in% out)
   expect_false(any(startsWith(out, queue_line("steer", ""))))
+  expect_false(any(grepl("after this answer", out, fixed = TRUE)))
 })
 
 test_that("a block pasted at the approval prompt never answers it nor steers (IC-75)", {

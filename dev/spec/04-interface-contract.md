@@ -5311,7 +5311,7 @@ its part in its own commit, and Task 27 finalises them.
     (`ui_console_read()`, the terminal branch of `console_ask()`) pass `console_typed_ahead()`: while a run of the
     call has a session (`policy_targets()`), the line is routed as `console_typed()` routes typed lines
     (`console_typed_route()`: a `/command` or `!code` line, or one continuing held code, waits in the REPL's reader
-    for the next prompt with `[gptr] after this answer: '<line>'`; other text is
+    for the next prompt, shown as a follow-up, `↳ follow-up · <line>`; other text is
     `policy_enqueue(session, text, <type_ahead>, source = "repl")`, also without a REPL reader), else
     `console_history_add()`. The question is then read again. `gptr_confirm()` keeps the line in the history and a
     secret input keeps nothing. Every add here obeys `gptr.history` (`console_history_add()` returns FALSE when it
@@ -5355,7 +5355,10 @@ its part in its own commit, and Task 27 finalises them.
     not `.stdin` or `jsonl`), `policy_enqueue()` holds a follow-up, and any text starting with `/` or `!` (the
     pause menu's [s] too), in the reader's `typed` lines after its queue line (`↳ follow-up · <text>`), not in
     the session's FIFO; `console_typed_route()` puts a batch's message after the held lines typed before its
-    first line. After the run's status line the REPL reads them first, in order: each is echoed at its prompt
+    first line. Held `/command` and `!code` lines show the same line, `↳ follow-up · <line>`, in the order typed,
+    a `!code` line with the lines that continue it as one entry; it replaces `[gptr] after this answer: ...`, so
+    everything waiting for the next prompt reads alike. After the run's status line the REPL reads them first,
+    in order: each is echoed at its prompt
     (`peter> <text>`; a message of several lines keeps its rows) and sent as its own run, a second prompt
     (source `pipe`), whose `input` event comes then; after an interrupt or abort they are kept, not sent
     (Task 15). Elsewhere (`peter("...")` paused with Ctrl-C, a question outside a REPL) a follow-up still goes to

@@ -1939,8 +1939,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
   stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
   session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`), or, with `"follow_up"`, are the next
-  prompt [D-242]; one batch (a paste) is one message; `/command` and `!code` lines wait for the next prompt, in the
-  order typed with the follow-ups; after an interrupt they go to the console history, unsent [D-242]. The
+  prompt [D-242]; one batch (a paste) is one message; `/command` and `!code` lines wait for the next prompt, shown
+  as follow-ups, in the order typed with them; after an interrupt they go to the console history, unsent [D-242]. The
   terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only on its
   dim queue line (`↳ steer · <text>`)
   and, when the run takes it, as the person's line `› <text>` at that step boundary [D-242]; console questions

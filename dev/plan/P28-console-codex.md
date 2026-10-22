@@ -657,7 +657,9 @@ Decisions:
 - "In the REPL" means while one of its prompts runs (`rs$sending`) and it is not piped (`.stdin`,
   `jsonl`). `policy_enqueue()` decides, so its callers (the typing task, a line a question reads
   past, the pause menu) are unchanged. A held message prints its queue line
-  (`console_queue_line()`, Task 13's line), and its `input` event comes when it is sent.
+  (`console_queue_line()`, Task 13's line), and its `input` event comes when it is sent. So do the
+  held `/cmd` and `!code` lines, as follow-ups (a `!code` line with the lines that continue it as one
+  entry), in place of `[gptr] after this answer: ...` (amended in the review of Tasks 8-15).
 - In one batch, `console_typed_route()` puts the message after the held lines typed before its
   first line.
 - After the run's status line, the REPL reads them first, echoes each as `peter> <text>` (a

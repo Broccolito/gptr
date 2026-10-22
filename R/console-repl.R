@@ -595,27 +595,31 @@ console_typed = function(drain = FALSE) {
 
 #' Route the lines typed for a run of session `s` (IC-76, D-242): /command and !code lines, and the
 #' lines that continue a held !code line still incomplete (typed_code_open()), wait in the reader
-#' for the next prompt; the others become one message queued on `s` as the `type_ahead` setting
-#' says (a follow-up waits with the held lines, after those typed before its first line); a
-#' partial line `part` goes to the console history. Their lines go between the answer's whole
-#' rows: only the waiting row is cleared, keeping its clock (D-245)
+#' for the next prompt, each entry (a !code line with its continuation) shown as a follow-up's
+#' queue line; the others become one message queued on `s` as the `type_ahead` setting says (a
+#' follow-up waits with the held lines, after those typed before its first line); a partial line
+#' `part` goes to the console history. Their lines go between the answer's whole rows: only the
+#' waiting row is cleared, keeping its clock (D-245)
 #' @noRd
 console_typed_route = function(rd, s, lines, part = "") {
-  later = logical(length(lines))
+  later = cont = logical(length(lines))
   for (i in seq_along(lines)) {
-    later[[i]] = grepl("^\\s*[/!]", lines[[i]]) || typed_code_open(c(rd$typed, lines[later]))
+    cont[[i]] = typed_code_open(c(rd$typed, lines[later]))
+    later[[i]] = cont[[i]] || grepl("^\\s*[/!]", lines[[i]])
   }
   text = paste(lines[!later], collapse = "\n")
   if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(invisible(NULL))
   console_before_message(kind = NULL, tools = TRUE)
-  if (any(later)) {
-    console_notice("[gptr] after this answer: ",
-                   paste(console_escape(paste0("'", lines[later], "'"), FALSE), collapse = ", "))
+  hold = function(k) {
+    for (x in split(lines[k], cumsum(!cont[k]))) {
+      console_queue_line(s, paste(x, collapse = "\n"), "follow_up")
+    }
+    rd$typed = c(rd$typed, lines[k])
   }
   before = cumsum(!later) == 0L
-  rd$typed = c(rd$typed, lines[before])
+  hold(before)
   if (nzchar(trimws(text))) policy_enqueue(s, text, setting_get("type_ahead", s), source = "repl")
-  rd$typed = c(rd$typed, lines[later & !before])
+  hold(later & !before)
   if (nzchar(trimws(part))) console_keep(part)
 }
 

@@ -207,6 +207,8 @@ test_that("follow-ups wait with the /commands and !code typed around them, in or
   expect_match(sent, "> x = 1", fixed = TRUE)
   expect_no_match(sent, "y = 2", fixed = TRUE)
   expect_identical(c(e$x, e$y), c(1, 2))
+  q = match(queue_line("follow-up", c("!x = 1", "use x", "!y = 2")), res$out)
+  expect_false(anyNA(q) || is.unsorted(q))
   at = match(paste0("peter[auto]> ", c("!x = 1", "use x", "!y = 2")), res$out)
   expect_false(anyNA(at) || is.unsorted(at))
 })
@@ -351,7 +353,11 @@ test_that("/commands and !code typed during a run run after the answer; text sti
   expect_length(reqs, 2L)
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("and steer"))
   expect_identical(e$x, 1)
-  expect_true(any(grepl("[gptr] after this answer: '/status', '!x = 1'", res$out, fixed = TRUE)))
+  # each held line shows as a follow-up, in the order typed, before the steer typed after them
+  q = match(c(queue_line("follow-up", "/status"), queue_line("follow-up", "!x = 1"),
+              queue_line("steer", "and steer")), res$out)
+  expect_false(anyNA(q) || is.unsorted(q))
+  expect_false(any(grepl("after this answer", res$out, fixed = TRUE)))
   expect_true(all(c("peter[auto]> /status", "peter[auto]> !x = 1") %in% res$out))
   expect_true(any(startsWith(res$out, "session   ")))
 })
@@ -437,7 +443,7 @@ test_that("Ctrl-C at an approval prompt aborts the run and keeps the held lines 
   rs$model = fake
   rs$mode = "manual"
   out = utils::capture.output(repl_main(rs))
-  expect_true(any(grepl("[gptr] after this answer: '!x = 1'", out, fixed = TRUE)))
+  expect_true(queue_line("follow-up", "!x = 1") %in% out)
   expect_identical(kept, "!x = 1")
   expect_true(any(grepl("[gptr] kept in history (", out, fixed = TRUE)))
   expect_null(e$x)
@@ -462,6 +468,10 @@ test_that("a held !code line keeps the lines that complete it, also from a later
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("and steer"))
   expect_identical(e$f(1), 2)
   expect_identical(e$g, 2)
+  # a held !code line and the lines that continue it are one entry, its later rows under the text
+  q = match(queue_line("follow-up", "!f = function(x) {"), res$out)
+  expect_identical(res$out[q + 1L],
+                   paste0(strrep(" ", nchar(console_style()$queued) + 1L), "  x + 1"))
 })
 
 test_that("no fd-0 reads outside a terminal REPL (.stdin, jsonl, peter() with a prompt)", {
