@@ -344,7 +344,8 @@ Tests (`test-cli-codex.R` rewritten argv and relay e2e without httpuv/later/open
 skips; fixture `inst/gptr/fixtures/fake_cli.R` spawns the relay from argv), RED first. Spec: 03
 sections 1.x line 140, 8.3 and the Suggests table; 04 sections 7.0, 8.5, 2888 row, IC-19, IC-58,
 IC-65, IC-79; P19 and P20 plan text.
-Commit: `feat(cli): codex reaches the session through a stdio relay; CLI routes serve the session's tools`.
+Commit:
+`feat(cli): codex reaches the session through a stdio relay; CLI routes serve the session's tools`.
 
 ### Task 10: Streaming and visibility on the CLI routes (#19, D-192)
 

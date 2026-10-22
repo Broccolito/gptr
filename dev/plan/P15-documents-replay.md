@@ -95,13 +95,15 @@ the specification:
   normalised template (trimws, CRLF -> LF, whitespace around newlines removed)"),
   `args_hash(interp)` ("8 hex of sha256 of the sorted interpolated `name=value` pairs, `NULL`
   without interpolation"), `s2_get(key)`, `s2_put(key, record)`.
-- The site of `doc_locate()` (04 section 7.15): "`list(kind = "srcref" | "source_frame" | "knitr" | "quarto" | "jupyter" |
+- The site of `doc_locate()` (04 section 7.15):
+  "`list(kind = "srcref" | "source_frame" | "knitr" | "quarto" | "jupyter" |
   "rscript" | "ide" | "console", path, format, stmt = int(2) | NULL, expr = call | NULL, occurrence = int(1),
   ordinal = int(1), backend = chr(1), top_level = lgl(1), in_block = chr(1) | NULL, ide_id = chr(1) | NULL, defer
-  = lgl(1))`", precedence "validated srcref (text must contain this prompt; reject `.active-rstudio-document`) >
-  `source()`/`sys.source()` frame (... read inside `tryCatch` with an off switch) > knitr/Quarto
-  (`QUARTO_DOCUMENT_PATH`) > IRkernel (`JPY_SESSION_NAME`, then content) > `Rscript --file=` > IDE (rstudioapi,
-  guarded) > console" (03 section 6.9.3); "Calls are matched by content and ordinal, never stale line numbers".
+  = lgl(1))`", precedence "validated srcref (text must contain this prompt; reject
+  `.active-rstudio-document`) > `source()`/`sys.source()` frame (... read inside `tryCatch` with an
+  off switch) > knitr/Quarto (`QUARTO_DOCUMENT_PATH`) > IRkernel (`JPY_SESSION_NAME`, then
+  content) > `Rscript --file=` > IDE (rstudioapi, guarded) > console" (03 section 6.9.3); "Calls are
+  matched by content and ordinal, never stale line numbers".
 - Block grammar (04 section 11.5), verbatim:
   `BLOCK_OPEN  = ^([ \t]*)# >>> gptr:([0-9a-z]{6,16})(?:[ \t]+(.*))?$`,
   `BLOCK_CLOSE = ^([ \t]*)# <<< gptr:([0-9a-z]{6,16})[ \t]*$`,
@@ -111,76 +113,96 @@ the specification:
   `plan`, `status` (`undone`), `args`, `kind` (`team` or `fanout`), `children`
   (`"<name>:<session id>,..."`, quoted); block ids from P01's `id_block()` (6 hex with a letter,
   grown on collision, RNG-free).
-- Block body (04 section 11.5, IC-48, IC-49): "the code of each successful `r` call with `record = TRUE`, verbatim except
-  that top-level `gptr_return()` calls and calls of `record = FALSE` members are dropped and top-level `<-` is
-  rewritten to `=` where safe"; "`## Steer: <text>` and `## Follow-up: <text>` lines ... (excluded from `prompt` and
-  `sha`)"; outputs "as `#> ` lines (at most `gptr.doc_output_lines` lines of 76 characters, then `#> ... (N more
-  lines)`), not in Rmd/qmd"; "`## Decision: <note>` lines"; bridge digests; artifact references (`#> [app] ...`,
-  `#> [plot] <path>`); "a block whose code needed a secret gets `# gptr: block needs secrets that are not
-  recorded`"; "Code passes `code_for_history()`"; "a plan-mode turn gives one `## Plan: <plans path>` line";
-  overlay forks "wrapped `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`"; team and fan-out
-  blocks: one `## Agent <name> (<model>): <first line>` per child, exported children wrapped
+- Block body (04 section 11.5, IC-48, IC-49): "the code of each successful `r` call with
+  `record = TRUE`, verbatim except that top-level `gptr_return()` calls and calls of
+  `record = FALSE` members are dropped and top-level `<-` is rewritten to `=` where safe";
+  "`## Steer: <text>` and `## Follow-up: <text>` lines ... (excluded from `prompt` and `sha`)";
+  outputs "as `#> ` lines (at most `gptr.doc_output_lines` lines of 76 characters, then
+  `#> ... (N more
+  lines)`), not in Rmd/qmd"; "`## Decision: <note>` lines"; bridge digests; artifact references
+  (`#> [app] ...`, `#> [plot] <path>`); "a block whose code needed a secret gets
+  `# gptr: block needs secrets that are not
+  recorded`"; "Code passes `code_for_history()`"; "a plan-mode turn gives one
+  `## Plan: <plans path>` line"; overlay forks "wrapped
+  `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`"; team and fan-out blocks: one
+  `## Agent <name> (<model>): <first line>` per child, exported children wrapped
   `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus
-  `<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>`. `record = FALSE` members: `out`, `plot`,
-  `help`, `search`, `describe`. Ownership: "the run of blocks starting at the first non-blank line after the
-  statement ...; the k-th call owns the block whose `prompt=` matches, else the one with `call=k` (then stale).
-  Only top-level calls own blocks (not inside `function`, `\(x)`, `for`, `while`, `repeat`, `if`, `{}`, or an agent
-  block)".
-- Formats (04 section 11.5): `.Rmd` "a separate chunk `` ```{r gptr-<id>} `` directly after the owning chunk (fence and
-  prefix copied), body with the markers, no `#>` lines"; `.qmd` "a chunk `` ```{r} `` whose first line is
-  `#| label: gptr-<id>`"; `.ipynb` "a code cell `{"cell_type": "code", "execution_count": null, "id": "gptr-<id>",
-  "metadata": {"gptr": {...}}, "outputs": [], "source": [...]}` after the calling cell; keys sorted; indentation
-  copied from the file (Jupyter: 1 space); floats in Python repr; only `source` and `metadata.gptr` change on
-  rewrite; never written while the notebook is open"; transcript `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`
-  with "a header comment (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, `# source() this
-  file to replay ...`), `library(gptr)`, then the first prompt as `s_<6 hex> = peter("...")` and later prompts as
-  `s_<6 hex> |> peter("...")`"; slash commands as comments (`# /model opus`); direct R lines under
-  `# direct R (no model)`. Undone blocks (G7 section 3.8): `status=undone`, body lines prefixed `#~ `, Rmd/qmd chunks get
-  `eval=FALSE` (`#| eval: false`), ipynb `metadata.gptr.status = "undone"`; System 1 one-line blocks
-  `#> gptr_decision: 14 TRUE / 6 FALSE (jev-1.13.0, 2026-09-29)` (`gptr_choice: liver 8, lung 5, other 2 (...)`,
-  `gptr_score: mean 1.4 (...)`).
-- Replay modes (03 section 6.9.3): "`auto` (default: a fresh recorded block is replayed, a missing or stale one runs),
-  `replay` (never call models; a missing block errors `gptr_error_not_recorded`), `live` (ask afresh and
-  regenerate), `record` (regenerate stale blocks)"; "under base `source()`/Rscript, `live` and stale regeneration
-  downgrade to replay with a warning"; G7 section 3.8 undone row: `auto` skip with one message, `replay` skip, `live` run
-  with no write, `record` regenerate. The mode is P08's `replay_mode(arg = NULL)`: "`arg` > `gptr.replay` >
-  `GPTR_REPLAY` > settings > `"auto"`; `"replay"` is forced when `check_running()` and `Sys.getenv("TESTTHAT") !=
-  "true"`". Freshness (IC-45): "A block is fresh only when `prompt=` and `args=` both match"; "A stale block under
-  `replay` errors `gptr_error_stale_block`".
-- Write consent (IC-45), checked only in `doc_upsert()`: "`gptr_doc(path)` in this process ..., `options(gptr.record =
-  "auto")`, user-scope setting `record = "auto"`, or an interactive yes (remembered per document in the user-level
-  project file, IC-52). `record` is a tighten-type setting, so a project can only turn it off". "Replay needs no
-  write consent."
-- The route (IC-39, IC-45): `document`, order 50; it "matches a **top-level** call located in a document ... that
-  **contains a block owned by this call** ... Without a block it sets `call$doc` when write consent exists and
-  passes"; replay of a fresh block (IC-46): the piped session through `session_replay_apply(s, block, header, text =
+  `<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>`. `record = FALSE`
+  members: `out`, `plot`, `help`, `search`, `describe`. Ownership: "the run of blocks starting at
+  the first non-blank line after the statement ...; the k-th call owns the block whose `prompt=`
+  matches, else the one with `call=k` (then stale). Only top-level calls own blocks (not inside
+  `function`, `\(x)`, `for`, `while`, `repeat`, `if`, `{}`, or an agent block)".
+- Formats (04 section 11.5): `.Rmd` "a separate chunk `` ```{r gptr-<id>} `` directly after the
+  owning chunk (fence and prefix copied), body with the markers, no `#>` lines"; `.qmd` "a chunk
+  `` ```{r} `` whose first line is `#| label: gptr-<id>`"; `.ipynb` "a code cell
+  `{"cell_type": "code", "execution_count": null, "id": "gptr-<id>",
+  "metadata": {"gptr": {...}}, "outputs": [], "source": [...]}` after the calling cell; keys sorted;
+  indentation copied from the file (Jupyter: 1 space); floats in Python repr; only `source` and
+  `metadata.gptr` change on rewrite; never written while the notebook is open"; transcript
+  `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R` with "a header comment
+  (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, `# source() this
+  file to replay ...`), `library(gptr)`, then the first prompt as `s_<6 hex> = peter("...")` and
+  later prompts as `s_<6 hex> |> peter("...")`"; slash commands as comments (`# /model opus`);
+  direct R lines under `# direct R (no model)`. Undone blocks (G7 section 3.8): `status=undone`,
+  body lines prefixed `#~ `, Rmd/qmd chunks get `eval=FALSE` (`#| eval: false`), ipynb
+  `metadata.gptr.status = "undone"`; System 1 one-line blocks
+  `#> gptr_decision: 14 TRUE / 6 FALSE (jev-1.13.0, 2026-09-29)`
+  (`gptr_choice: liver 8, lung 5, other 2 (...)`, `gptr_score: mean 1.4 (...)`).
+- Replay modes (03 section 6.9.3): "`auto` (default: a fresh recorded block is replayed, a missing
+  or stale one runs), `replay` (never call models; a missing block errors
+  `gptr_error_not_recorded`), `live` (ask afresh and regenerate), `record` (regenerate stale
+  blocks)"; "under base `source()`/Rscript, `live` and stale regeneration downgrade to replay with a
+  warning"; G7 section 3.8 undone row: `auto` skip with one message, `replay` skip, `live` run with
+  no write, `record` regenerate. The mode is P08's `replay_mode(arg = NULL)`: "`arg` >
+  `gptr.replay` > `GPTR_REPLAY` > settings > `"auto"`; `"replay"` is forced when `check_running()`
+  and `Sys.getenv("TESTTHAT") !=
+  "true"`". Freshness (IC-45): "A block is fresh only when `prompt=` and `args=` both match"; "A
+  stale block under `replay` errors `gptr_error_stale_block`".
+- Write consent (IC-45), checked only in `doc_upsert()`: "`gptr_doc(path)` in this process ...,
+  `options(gptr.record =
+  "auto")`, user-scope setting `record = "auto"`, or an interactive yes (remembered per document in
+  the user-level project file, IC-52). `record` is a tighten-type setting, so a project can only
+  turn it off". "Replay needs no write consent."
+- The route (IC-39, IC-45): `document`, order 50; it "matches a **top-level** call located in a
+  document ... that **contains a block owned by this call** ... Without a block it sets `call$doc`
+  when write consent exists and passes"; replay of a fresh block (IC-46): the piped session through
+  `session_replay_apply(s, block, header, text =
   NULL)`, otherwise `session_replay_new(block, header, envir, doc)`, fork blocks bound with
-  `session_replay_bind(block, s, child = NULL)`; block-nested calls replay from S2 "under `(doc, block,
-  "n<ordinal>")` in `auto` and `replay` (... a miss under `replay` errors `not_recorded`) and run live only in
-  `live`" (IC-47).
+  `session_replay_bind(block, s, child = NULL)`; block-nested calls replay from S2 "under
+  `(doc, block,
+  "n<ordinal>")` in `auto` and `replay` (... a miss under `replay` errors `not_recorded`) and run
+  live only in `live`" (IC-47).
 - The `documents` prompt section (04 section 9.3, IC-68): T0, order 500, budget 250, "a history
   document is bound (`ctx$input$document` non-NULL, from the `doc.site` service)", text of 03
   section 7.3 byte for byte (P07 replaces `{s1}`).
-- Services (04 section 7.0), owned by `builtin:documents` (IC-34): `doc.site` = `function(session) list(path, format) or
-  NULL`; `doc.edit` = `function(path, edits, session) <gptr_tool_result> or NULL` ("NULL: not a bound document");
-  `doc.s1_block` = `function(call, summary) invisible(NULL)`; `doc.replay` = `function(call) <session> or NULL`
-  ("the replayed team or fan-out session for a fresh block, else `NULL`").
-- Event (04 section 10.4): `document_write`, "block + patch, **error = block**", payload `path`, `format`, `kind`
-  (`block`, `transcript`, `inert`), `block_id`, `lines`; returns `list(block = TRUE, reason)` or `list(lines)`.
-  JSONL entry (04 section 4.6): `gptr.doc_block` = `{doc, format, block, action: "insert"|"replace"|"stale-regenerate"|
+- Services (04 section 7.0), owned by `builtin:documents` (IC-34): `doc.site` =
+  `function(session) list(path, format) or
+  NULL`; `doc.edit` = `function(path, edits, session) <gptr_tool_result> or NULL` ("NULL: not a
+  bound document"); `doc.s1_block` = `function(call, summary) invisible(NULL)`; `doc.replay` =
+  `function(call) <session> or NULL` ("the replayed team or fan-out session for a fresh block, else
+  `NULL`").
+- Event (04 section 10.4): `document_write`, "block + patch, **error = block**", payload `path`,
+  `format`, `kind` (`block`, `transcript`, `inert`), `block_id`, `lines`; returns
+  `list(block = TRUE, reason)` or `list(lines)`. JSONL entry (04 section 4.6): `gptr.doc_block` =
+  `{doc, format, block, action: "insert"|"replace"|"stale-regenerate"|
   "undone", prompt, sha, lines: [from, to], backend: "file"|"deferred"|"rstudio"|"positron"|"vscode"|"transcript"}`
   (P15 also writes `backend = "pending"` for Jupyter, IC-50).
-- Files (04 sections 11.1, 11.3, 11.9): document locks `<root>/locks/<sha1 of path_key>` (a `mkdir` lock with a `pid`
-  file holding pid and process creation time; stale when `pid_alive()` is `FALSE`); S2 answers
-  `<root>/cache/s2/<2hex>/<sha256>.json`, key `hash_sha256(canonical_json(list(schema = 2L, doc = <path relative to
+- Files (04 sections 11.1, 11.3, 11.9): document locks `<root>/locks/<sha1 of path_key>` (a `mkdir`
+  lock with a `pid` file holding pid and process creation time; stale when `pid_alive()` is
+  `FALSE`); S2 answers `<root>/cache/s2/<2hex>/<sha256>.json`, key
+  `hash_sha256(canonical_json(list(schema = 2L, doc = <path relative to
   root>, block = <id>, part = <"" | child name | "n<ordinal>">, prompt = <prompt hash>, args = <args hash or "">)))`,
-  value `{"block", "doc", "part", "prompt", "model", "answer" (redacted final text), "usage", "cost", "session",
-  "turn", "date"}`; deferred and pending writes `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.rds` =
-  `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)`, "never pruned
-  automatically"; the user-level project file `R_user_dir("gptr", "config")/projects/<first 16 hex of
-  sha256(path_key(project root))>.json` with `"transcript": {"target": ...}` and `"record": {"analysis.R":
-  "auto"}`, written through `settings_write("user_project", patch)` (P08). `<root>` is `workspace_root()` (`.gptr/`
-  or `tempdir()/gptr`).
+  value
+  `{"block", "doc", "part", "prompt", "model", "answer" (redacted final text), "usage", "cost", "session",
+  "turn", "date"}`; deferred and pending writes
+  `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.rds` =
+  `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)`, "never
+  pruned automatically"; the user-level project file
+  `R_user_dir("gptr", "config")/projects/<first 16 hex of
+  sha256(path_key(project root))>.json` with `"transcript": {"target": ...}` and
+  `"record": {"analysis.R":
+  "auto"}`, written through `settings_write("user_project", patch)` (P08). `<root>` is
+  `workspace_root()` (`.gptr/` or `tempdir()/gptr`).
 - Durable writes (IC-51): the sidecar "is flushed after each settled top-level call (so SIGTERM
   loses at most one call) and is applied at exit by the finalizer; the next `peter()`,
   `gptr_blocks()` or `gptr_doc()` touching that document in any process re-applies unapplied upserts
@@ -213,13 +235,16 @@ the specification:
   `the$doc_pending` ("deferred Rscript writes"); nothing else global. Copy safety (03 section 6.4,
   R1/R2): P15 keeps sites (lists of strings and integers), never a user frame; `call$envir` is
   passed straight to P06's replay functions.
-- Tests (04 section 12): P01's helpers with their exact names (`local_project(files = list(), gptr = TRUE, trust = FALSE,
-  .env = parent.frame())`, `local_gptr_options(..., .env = parent.frame())`, `local_fake_provider(script, name =
-  "fake", type = "chat", .env = parent.frame())`, `fake_text(text, ...)`, `fake_tool(name, ..., .text = NULL, .id =
-  NULL)`, `fake_requests(spec)`); child `Rscript` processes are started with `rscript_path()` and load gptr with the
-  line P01's `helper-tracemem.R` builds (`tracemem_loader()`), so `pkgload::load_all()` appears only inside generated
-  script text (IC-71); `setup.R` sets `GPTR_REPLAY=replay`, so tests that record pass `replay = "auto"` through
-  `local_gptr_options()`.
+- Tests (04 section 12): P01's helpers with their exact names
+  (`local_project(files = list(), gptr = TRUE, trust = FALSE,
+  .env = parent.frame())`, `local_gptr_options(..., .env = parent.frame())`,
+  `local_fake_provider(script, name =
+  "fake", type = "chat", .env = parent.frame())`, `fake_text(text, ...)`,
+  `fake_tool(name, ..., .text = NULL, .id =
+  NULL)`, `fake_requests(spec)`); child `Rscript` processes are started with `rscript_path()` and
+  load gptr with the line P01's `helper-tracemem.R` builds (`tracemem_loader()`), so
+  `pkgload::load_all()` appears only inside generated script text (IC-71); `setup.R` sets
+  `GPTR_REPLAY=replay`, so tests that record pass `replay = "auto"` through `local_gptr_options()`.
 
 ## File Structure
 
@@ -383,7 +408,8 @@ test_that("rendering indents body lines, keeps empty lines and splices in place"
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-blocks")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with ``Error in `doc_format_kv(x)`: could not find function "doc_format_kv"``.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with
+``Error in `doc_format_kv(x)`: could not find function "doc_format_kv"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -603,20 +629,24 @@ git commit -m "feat(doc): add the history-block grammar, prompt and args hashes 
 - Consumes: Task 1 (`doc_find_blocks()`, `prompt_hash()`, `doc_block_status()`, `doc_block_body()`);
   P01 `the`, `as_utf8()`, `hash_sha256()`; base `parse()`, `utils::getParseData()`,
   `utils::getParseText()`.
-- Produces: P15's process state `doc_state()` (04 section 7.0 `the$doc_pending`: `docs`, `held`, `finalizer`, `sources`,
-  `knitr_skip`, `knitr_hooked`, `counters`, `in_edit`, and the scanner memo `scan`/`scan_keys`), used by every later
-  task; `doc_scan_calls(lines, line_offset = 0L)` -> df(`line1`, `col1`, `line2`, `col2`, `stmt1`,
-  `stmt2`, `nested`, `prompt`, `n_in_stmt`, `text`) (a text that does not parse gives no calls and the attribute
-  `parse_error`); `doc_calls(lines, blocks = doc_find_blocks(lines))` adds `block` (the agent block holding the
-  call), `n_in_block` (ordinal among the block's direct calls), `ph` (prompt hash) and `th` (call-text hash);
-  `doc_calls_have(calls, ph, call0)`; the anchor of a call `list(ph, th, j, block, label)` from
-  `doc_anchor_of(calls, t)`, re-located by `doc_match_anchor(calls, anchor)`; `doc_blocks_after(lines, stmt_end,
-  blocks)`; `doc_run_owner(headers, ph, k = 1L, taken = integer())` -> `list(index, stale)` or `NULL` (the 04 section 11.5
-  ownership rule, shared by every format; `taken` = ordinals of the statement's other calls with the same prompt,
-  whose blocks are never matched by prompt alone); `doc_same_ordinals(calls, hit)`; `doc_owned_block(lines, hit, ph,
-  blocks, taken = integer())`; `doc_text_locate(text, site, calls)` -> the
-  `locate()` result of the marker formats: `list(stmt, blocks, hit, owned = list(id, header, status, start, end) |
-  NULL, insert_after, top_level, in_block, ordinal, indent)`; `doc_stmt_by_expr(lines, expr, k = 1L)`.
+- Produces: P15's process state `doc_state()` (04 section 7.0 `the$doc_pending`: `docs`, `held`,
+  `finalizer`, `sources`, `knitr_skip`, `knitr_hooked`, `counters`, `in_edit`, and the scanner memo
+  `scan`/`scan_keys`), used by every later task; `doc_scan_calls(lines, line_offset = 0L)` ->
+  df(`line1`, `col1`, `line2`, `col2`, `stmt1`, `stmt2`, `nested`, `prompt`, `n_in_stmt`, `text`) (a
+  text that does not parse gives no calls and the attribute `parse_error`);
+  `doc_calls(lines, blocks = doc_find_blocks(lines))` adds `block` (the agent block holding the
+  call), `n_in_block` (ordinal among the block's direct calls), `ph` (prompt hash) and `th`
+  (call-text hash); `doc_calls_have(calls, ph, call0)`; the anchor of a call
+  `list(ph, th, j, block, label)` from `doc_anchor_of(calls, t)`, re-located by
+  `doc_match_anchor(calls, anchor)`; `doc_blocks_after(lines, stmt_end,
+  blocks)`; `doc_run_owner(headers, ph, k = 1L, taken = integer())` -> `list(index, stale)` or
+  `NULL` (the 04 section 11.5 ownership rule, shared by every format; `taken` = ordinals of the
+  statement's other calls with the same prompt, whose blocks are never matched by prompt alone);
+  `doc_same_ordinals(calls, hit)`; `doc_owned_block(lines, hit, ph,
+  blocks, taken = integer())`; `doc_text_locate(text, site, calls)` -> the `locate()` result of the
+  marker formats: `list(stmt, blocks, hit, owned = list(id, header, status, start, end) |
+  NULL, insert_after, top_level, in_block, ordinal, indent)`;
+  `doc_stmt_by_expr(lines, expr, k = 1L)`.
 
 Calls are found by content, never by stale line numbers (report 14 section 1 items 2-4 and
 section 4.2): a call is the `SYMBOL_FUNCTION_CALL` `peter` of the parse data, nested when an
@@ -766,7 +796,8 @@ test_that("doc_stmt_by_expr() finds the k-th identical top-level expression", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-blocks")'`
 
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 44 ]`, the new tests failing with ``Error in `doc_scan_calls(lines)`: could not find function "doc_scan_calls"`` and the like.
+Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 44 ]`, the new tests failing with
+``Error in `doc_scan_calls(lines)`: could not find function "doc_scan_calls"`` and the like.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1134,42 +1165,54 @@ git commit -m "feat(doc): find peter() calls by content and resolve the blocks t
 - Test: `tests/testthat/test-doc-blocks.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-2; P01 `msg_text(msg)`, `as_utf8()`, `gptr_opt()`, `setting_get(key, session = NULL, default =
-  NULL)`; P02 `registry_get(kind, name, session = NULL)` (the `record` field of a member's tool spec, IC-48); P03
-  `code_for_history(code)` (chr(1) with attribute `needs`; it prefixes `# gptr: block needs secrets that are not
-  recorded` when a marker stays) and `redact(x, profile = "persist")`; P06 `session_data(s)` (read: `id`, `kind`,
-  `mode`, `model`, `entries`, `leaf`, `turns`, `children`, `fork_of`, `home_label`, `last_text`, `exports`,
-  `created`). Entry shapes (04 section 4.6, P06 `entry_message()`/`entry_custom()`): `list(type = "message", message,
-  gptr = list(turn))` (P06 stamps every user message with the turn it opened), `list(type = "custom_message",
-  custom_type = "gptr.operator", message = <operator msg>)` (a steer relay has `kind = "steer_relay"` and
-  `origin_text`), `list(type = "custom", custom_type, data)` (`gptr.value` `{turn, mode, name}`; `gptr.plan`
-  `{path, ...}`, P11); ids `id`/`parent_id`. The `r` tool result `details` (P09/P10): `code`, `status` (`"ok"`),
-  `outputs` (chr, or a list of printed output per top-level expression, 04 section 5.8), `record`, `note`, `value`, and the
-  optional `bridge` (digests) and `artifacts` (paths); the call's `arguments` hold `code`, `record`, `note`. A user
-  message's `plan` context block carries `attrs$from` (the session whose pending plan was consumed, P07/P11).
-- Produces (04 section 7.15): `doc_block_lines(session, turn, site, call_ordinal)` -> chr body lines (the block id inside
-  wrapped code is `doc_block_token`) with attributes `header` (the section 11.5 keys: `model`, `date`, `prompt`, `call`,
-  `tokens`, `cost`, `session`, `turn`, `value`, `fork`, `plan`, `args`; teams add `kind`, `children`), `session`
-  (the session), `answer` (the final text) and `children` (named list `list(text, session, model, turn, sent)` per
-  S2 part: `n<k>` for the child session that answered the k-th direct `peter()` call of the block body, with `sent`
-  the prompt hash of that child's first prompt; child names for team members, IC-47); helpers
-  `doc_code_clean(code)` (attribute `kept`), `doc_history_code(lines)`, `doc_output_lines(outputs, max_lines = NULL,
-  width = 76L)`, `doc_wrap_local(body, child = NULL)`, `doc_path_entries(session)`, `doc_turn_entries(session,
-  turn)`, `doc_turn_body(ents, with_out = TRUE, plan_mode = FALSE)`, `doc_turn_children(session, ents)`,
-  `doc_nested_parts(body, kids)`, `doc_session_code(session)`, `doc_team_block_lines(team, site, call_ordinal)`,
-  `doc_secret_flag`.
+- Consumes: Tasks 1-2; P01 `msg_text(msg)`, `as_utf8()`, `gptr_opt()`,
+  `setting_get(key, session = NULL, default =
+  NULL)`; P02 `registry_get(kind, name, session = NULL)` (the `record` field of a member's tool
+  spec, IC-48); P03 `code_for_history(code)` (chr(1) with attribute `needs`; it prefixes
+  `# gptr: block needs secrets that are not
+  recorded` when a marker stays) and `redact(x, profile = "persist")`; P06 `session_data(s)` (read:
+  `id`, `kind`, `mode`, `model`, `entries`, `leaf`, `turns`, `children`, `fork_of`, `home_label`,
+  `last_text`, `exports`, `created`). Entry shapes (04 section 4.6, P06
+  `entry_message()`/`entry_custom()`): `list(type = "message", message,
+  gptr = list(turn))` (P06 stamps every user message with the turn it opened),
+  `list(type = "custom_message",
+  custom_type = "gptr.operator", message = <operator msg>)` (a steer relay has
+  `kind = "steer_relay"` and `origin_text`), `list(type = "custom", custom_type, data)`
+  (`gptr.value` `{turn, mode, name}`; `gptr.plan` `{path, ...}`, P11); ids `id`/`parent_id`. The `r`
+  tool result `details` (P09/P10): `code`, `status` (`"ok"`), `outputs` (chr, or a list of printed
+  output per top-level expression, 04 section 5.8), `record`, `note`, `value`, and the optional
+  `bridge` (digests) and `artifacts` (paths); the call's `arguments` hold `code`, `record`, `note`.
+  A user message's `plan` context block carries `attrs$from` (the session whose pending plan was
+  consumed, P07/P11).
+- Produces (04 section 7.15): `doc_block_lines(session, turn, site, call_ordinal)` -> chr body lines
+  (the block id inside wrapped code is `doc_block_token`) with attributes `header` (the section 11.5
+  keys: `model`, `date`, `prompt`, `call`, `tokens`, `cost`, `session`, `turn`, `value`, `fork`,
+  `plan`, `args`; teams add `kind`, `children`), `session` (the session), `answer` (the final text)
+  and `children` (named list `list(text, session, model, turn, sent)` per S2 part: `n<k>` for the
+  child session that answered the k-th direct `peter()` call of the block body, with `sent` the
+  prompt hash of that child's first prompt; child names for team members, IC-47); helpers
+  `doc_code_clean(code)` (attribute `kept`), `doc_history_code(lines)`,
+  `doc_output_lines(outputs, max_lines = NULL,
+  width = 76L)`, `doc_wrap_local(body, child = NULL)`, `doc_path_entries(session)`,
+  `doc_turn_entries(session,
+  turn)`, `doc_turn_body(ents, with_out = TRUE, plan_mode = FALSE)`,
+  `doc_turn_children(session, ents)`, `doc_nested_parts(body, kids)`, `doc_session_code(session)`,
+  `doc_team_block_lines(team, site, call_ordinal)`, `doc_secret_flag`.
 
-The body follows 04 section 11.5 and IC-47..IC-49. `doc_code_clean()` drops, at top-level-expression granularity
-(`getParseData()`/srcrefs of each recorded chunk), `gptr_return()`/`gptr::gptr_return()` and calls of `record =
-FALSE` members (the tool spec's `record`, else `out`, `plot`, `help`, `search`, `describe`), cutting only the
-dropped bytes when a line holds several expressions, and rewrites a `LEFT_ASSIGN` that is a top-level expression or
-a direct child of a `{` list to `=` (never inside call arguments; the superassignment, the right arrow and pipes stay;
-IC-48). The output of a dropped expression is dropped with it when the outputs are per expression. Entries are
-redacted at ingress (P06), so recorded code holds secret markers: a literal that is exactly `"[secret:NAME]"`
-becomes `Sys.getenv("NAME")` and anything that stays a marker flags the block (G6 section 5.6, P03). Plan-mode turns give
-one `## Plan: <path>` line (IC-48); steers and follow-ups delivered during the turn give `## Steer:`/`## Follow-up:`
-lines (IC-49); an overlay fork's body is wrapped `local({ ... }, envir = gptr_resume(block = "<id>")$envir)` and
-its header gets `fork=<parent>:<turn>` (IC-46); team and fan-out sessions give one `## Agent` line per child in name
+The body follows 04 section 11.5 and IC-47..IC-49. `doc_code_clean()` drops, at top-level-expression
+granularity (`getParseData()`/srcrefs of each recorded chunk), `gptr_return()`/`gptr::gptr_return()`
+and calls of `record =
+FALSE` members (the tool spec's `record`, else `out`, `plot`, `help`, `search`, `describe`), cutting
+only the dropped bytes when a line holds several expressions, and rewrites a `LEFT_ASSIGN` that is a
+top-level expression or a direct child of a `{` list to `=` (never inside call arguments; the
+superassignment, the right arrow and pipes stay; IC-48). The output of a dropped expression is
+dropped with it when the outputs are per expression. Entries are redacted at ingress (P06), so
+recorded code holds secret markers: a literal that is exactly `"[secret:NAME]"` becomes
+`Sys.getenv("NAME")` and anything that stays a marker flags the block (G6 section 5.6, P03).
+Plan-mode turns give one `## Plan: <path>` line (IC-48); steers and follow-ups delivered during the
+turn give `## Steer:`/`## Follow-up:` lines (IC-49); an overlay fork's body is wrapped
+`local({ ... }, envir = gptr_resume(block = "<id>")$envir)` and its header gets
+`fork=<parent>:<turn>` (IC-46); team and fan-out sessions give one `## Agent` line per child in name
 order plus overlay code and export assignments for children with exports (IC-47).
 
 Two facts of the dependency plans shape the rest. P10's `r` tool flattens `details$outputs` into one
@@ -1423,7 +1466,9 @@ test_that("a team block has one line per child, child overlays and export assign
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-blocks")'`
 
-Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 90 ]`, the new tests failing with ``Error in `doc_code_clean(code)`: could not find function "doc_code_clean"`` and ``could not find function "doc_block_lines"``.
+Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 90 ]`, the new tests failing with
+``Error in `doc_code_clean(code)`: could not find function "doc_code_clean"`` and
+``could not find function "doc_block_lines"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1939,13 +1984,15 @@ git commit -m "feat(doc): render the recorded block of a session turn"
 - Test: `tests/testthat/test-doc-io.R` (create)
 
 **Interfaces:**
-- Consumes: Task 2 `doc_state()`; (P01, 04 section 7.1) `the`, `as_utf8()`, `utf8_mark(x)`, `read_utf8(path)` (`$text`), `write_atomic(path,
-  content)` (temp file + rename with retries and an md5-checked in-place fallback, IC-51), `path_norm()`,
-  `path_key()`, `path_rel(path, root = project_root())`, `project_root()`, `workspace_root(create = TRUE)`,
-  `gptr_user_dir(which, create = FALSE)`, `hash_sha256()`, `json_decode()`, `gptr_abort()`; P04 `pid_alive(pid,
-  create_time = NULL)` (`create_time` in seconds since the epoch); P08 (kernel SDK) `settings_write(scope, patch)`
-  with scope `"user_project"` (the user-level project file of IC-52, under P08's short lock); `cli::hash_sha1()`,
-  `ps::ps_create_time()`, `tools::md5sum()`.
+- Consumes: Task 2 `doc_state()`; (P01, 04 section 7.1) `the`, `as_utf8()`, `utf8_mark(x)`,
+  `read_utf8(path)` (`$text`), `write_atomic(path,
+  content)` (temp file + rename with retries and an md5-checked in-place fallback, IC-51),
+  `path_norm()`, `path_key()`, `path_rel(path, root = project_root())`, `project_root()`,
+  `workspace_root(create = TRUE)`, `gptr_user_dir(which, create = FALSE)`, `hash_sha256()`,
+  `json_decode()`, `gptr_abort()`; P04 `pid_alive(pid,
+  create_time = NULL)` (`create_time` in seconds since the epoch); P08 (kernel SDK)
+  `settings_write(scope, patch)` with scope `"user_project"` (the user-level project file of IC-52,
+  under P08's short lock); `cli::hash_sha1()`, `ps::ps_create_time()`, `tools::md5sum()`.
 - Produces: the `gptr_source()` frame stack `doc_source_push(path)`,
   `doc_source_pop(depth)`, `doc_source_log(path, block_id, action)`; paths `doc_root()` (the
   workspace root, never created by a read), `doc_rel(path)`, `doc_abs(path)`,
@@ -2108,7 +2155,8 @@ test_that("paths, formats and the root are derived without writing anything", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-io")'`
 
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with ``Error in `doc_read(f)`: could not find function "doc_read"``.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with
+``Error in `doc_read(f)`: could not find function "doc_read"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2405,18 +2453,21 @@ git commit -m "feat(doc): add byte-preserving document I/O, document locks and t
   `doc_block_status()`, `doc_block_body()`, `doc_text_locate()`, `doc_render_block()`,
   `doc_indent_lines()`, `doc_splice()`, `doc_parse_kv()`, `doc_str_literal()`, `doc_re_open`); Task
   4 (`doc_read()`, tests); P01 `as_utf8()`, `gptr_abort()`.
-- Produces: the `doc_format` functions of 04 section 10.2 row 18 for the marker formats: `locate(text, site)` ->
-  `doc_text_locate()`'s list, `render(block, site)` -> chr, `upsert(text, site, lines, block_id)` -> chr, `inert(lines)`
-  -> chr; namely `doc_r_locate()`, `doc_r_render()`, `doc_r_upsert()`, `doc_rmd_locate()`,
-  `doc_rmd_upsert_fn(style)` (`"rmd"` or `"qmd"`), `doc_transcript_locate()`, `doc_transcript_upsert()`,
-  `doc_marker_inert()`; helpers `doc_rmd_chunks(lines)` -> df(`start`, `end`, `engine`, `label`, `prefix`, `fence`,
-  `params`) (an unlabelled chunk gets knitr's default label `unnamed-chunk-<k>`, k counting the unlabelled chunks of
-  every engine, so the label `knitr::opts_current$get("label")` reports while the chunk runs locates it; verified
-  with knitr 1.51), `doc_rmd_calls(lines)`, `doc_rmd_append_chunk(text, code)`, `doc_rmd_chunk_eval(text, id, inert,
-  style)`, `doc_inert_marker_lines(seg, inert = TRUE)`, `doc_console_statement(text, site)` (`s_<6 hex> =
-  peter(...)`, then `s_<6 hex> |> peter(...)`, IC-49), `doc_transcript_header(text, site)`. A site handed to
-  `upsert()` carries `anchor`, `prompt_hash`, `args_hash`, `path`, and for console turns `console = TRUE`,
-  `session_id`, `session_file`, `template`, `context_labels`.
+- Produces: the `doc_format` functions of 04 section 10.2 row 18 for the marker formats:
+  `locate(text, site)` -> `doc_text_locate()`'s list, `render(block, site)` -> chr,
+  `upsert(text, site, lines, block_id)` -> chr, `inert(lines)` -> chr; namely `doc_r_locate()`,
+  `doc_r_render()`, `doc_r_upsert()`, `doc_rmd_locate()`, `doc_rmd_upsert_fn(style)` (`"rmd"` or
+  `"qmd"`), `doc_transcript_locate()`, `doc_transcript_upsert()`, `doc_marker_inert()`; helpers
+  `doc_rmd_chunks(lines)` -> df(`start`, `end`, `engine`, `label`, `prefix`, `fence`, `params`) (an
+  unlabelled chunk gets knitr's default label `unnamed-chunk-<k>`, k counting the unlabelled chunks
+  of every engine, so the label `knitr::opts_current$get("label")` reports while the chunk runs
+  locates it; verified with knitr 1.51), `doc_rmd_calls(lines)`, `doc_rmd_append_chunk(text, code)`,
+  `doc_rmd_chunk_eval(text, id, inert,
+  style)`, `doc_inert_marker_lines(seg, inert = TRUE)`, `doc_console_statement(text, site)`
+  (`s_<6 hex> =
+  peter(...)`, then `s_<6 hex> |> peter(...)`, IC-49), `doc_transcript_header(text, site)`. A site
+  handed to `upsert()` carries `anchor`, `prompt_hash`, `args_hash`, `path`, and for console turns
+  `console = TRUE`, `session_id`, `session_file`, `template`, `context_labels`.
 
 Adapted from report 14 section 5.0 (`proto/rmd.R`: chunk scanning with fence lengths, agent chunks
 after the owning chunk, the `{r gptr-<id>}` and `#| label: gptr-<id>` headers) and section 3.4
@@ -2597,7 +2648,8 @@ test_that("console transcripts record the first prompt as an assignment and late
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-formats")'`
 
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with ``Error in `doc_rmd_chunks(doc_read(doc_fixture("report.Rmd"))$lines)`: could not find function "doc_rmd_chunks"``.
+Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with
+``Error in `doc_rmd_chunks(doc_read(doc_fixture("report.Rmd"))$lines)`: could not find function "doc_rmd_chunks"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2971,27 +3023,32 @@ git commit -m "feat(doc): add the r, Rmd, qmd and transcript formats and inert b
   `3.0` double), `as_utf8()`, `gptr_abort()`; P02 `gptr_spec(kind, name, ...)` (kind `doc_format`:
   fields `ext`, `locate`, `render`, `upsert`, `inert`, 04 section 10.2 row 18), `registry_get()`,
   `registry_names()`.
-- Produces: `nb_json_escape(s)`, `nb_json_num(x)` (Python `repr()` of a double), `nb_json_write(x, indent, level)`,
-  `nb_parse(lines)` (attribute `indent`), `nb_serialize(nb)`, `nb_source_split(code)`, `nb_cell_lines(cell)`,
-  `nb_cell_ids(nb)`, `nb_find_call_cell(nb, ph, call0 = NULL, j = 1L)`, `nb_call_ordinal(nb, cell, ph, call0 =
-  NULL)`, `nb_meta(id, header)`, `nb_code_cell(code, id, meta)`, `nb_inert_text(text, ids, inert = TRUE)`; the `ipynb`
-  format functions `doc_ipynb_locate()` (the calling cell found by content: the `j`-th code cell calling `peter()` with
-  the anchor's prompt hash, or its `call0` for a computed prompt; the anchor's `cell` index is informational only),
-  `doc_ipynb_render()` (the body with the cell metadata as attribute `meta`),
-  `doc_ipynb_upsert()`, `doc_ipynb_inert()`; the registry `doc_formats_builtin()` (the five `doc_format` specs `r`,
-  `rmd`, `qmd`, `ipynb`, `transcript`), `doc_format_get(name)` (the registered spec, else the built-in before
-  `builtin:documents` is loaded, `NULL` when a registry exists without it), `doc_inert_text(lines, fmt, ids, inert =
+- Produces: `nb_json_escape(s)`, `nb_json_num(x)` (Python `repr()` of a double),
+  `nb_json_write(x, indent, level)`, `nb_parse(lines)` (attribute `indent`), `nb_serialize(nb)`,
+  `nb_source_split(code)`, `nb_cell_lines(cell)`, `nb_cell_ids(nb)`,
+  `nb_find_call_cell(nb, ph, call0 = NULL, j = 1L)`, `nb_call_ordinal(nb, cell, ph, call0 =
+  NULL)`, `nb_meta(id, header)`, `nb_code_cell(code, id, meta)`,
+  `nb_inert_text(text, ids, inert = TRUE)`; the `ipynb` format functions `doc_ipynb_locate()` (the
+  calling cell found by content: the `j`-th code cell calling `peter()` with the anchor's prompt
+  hash, or its `call0` for a computed prompt; the anchor's `cell` index is informational only),
+  `doc_ipynb_render()` (the body with the cell metadata as attribute `meta`), `doc_ipynb_upsert()`,
+  `doc_ipynb_inert()`; the registry `doc_formats_builtin()` (the five `doc_format` specs `r`, `rmd`,
+  `qmd`, `ipynb`, `transcript`), `doc_format_get(name)` (the registered spec, else the built-in
+  before `builtin:documents` is loaded, `NULL` when a registry exists without it),
+  `doc_inert_text(lines, fmt, ids, inert =
   TRUE, transcript = FALSE)`.
 
-Report 14 section 1 item 11 and section 5.3: a notebook round-trips byte for byte only with gptr's own serializer, because
-`jsonlite::toJSON()` escapes `</` and prints `3.0` as `3`; nbformat writes `json.dumps(indent=1, sort_keys=True,
-separators=(",", ": "), ensure_ascii=False)` plus a final newline. The verification log (item 23) replaced the
-first number formatter: `nb_json_num()` takes the shortest of `sprintf("%.<k>e")` that jsonlite parses back to the
-same double (jsonlite's parser is correctly rounded; base `as.numeric()` is not, item 22) and lays it out as Python
-does (`1e+16`, `1e-05`, `0.0001`, `3.0`). The fixture below was checked against Python 3: reading it with
-`json.loads()` and writing it with nbformat's arguments gives the same bytes, and so does the notebook after the
-upsert of this task's third test. Only `source` and `metadata.gptr` change on a rewrite; `outputs` and
-`execution_count` stay (04 section 11.5).
+Report 14 section 1 item 11 and section 5.3: a notebook round-trips byte for byte only with gptr's
+own serializer, because `jsonlite::toJSON()` escapes `</` and prints `3.0` as `3`; nbformat writes
+`json.dumps(indent=1, sort_keys=True,
+separators=(",", ": "), ensure_ascii=False)` plus a final newline. The verification log (item 23)
+replaced the first number formatter: `nb_json_num()` takes the shortest of `sprintf("%.<k>e")` that
+jsonlite parses back to the same double (jsonlite's parser is correctly rounded; base `as.numeric()`
+is not, item 22) and lays it out as Python does (`1e+16`, `1e-05`, `0.0001`, `3.0`). The fixture
+below was checked against Python 3: reading it with `json.loads()` and writing it with nbformat's
+arguments gives the same bytes, and so does the notebook after the upsert of this task's third test.
+Only `source` and `metadata.gptr` change on a rewrite; `outputs` and `execution_count` stay (04
+section 11.5).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3164,7 +3221,8 @@ test_that("doc_format_get() returns the registered specs, else the built-ins", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-formats")'`
 
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 39 ]`, the new tests failing with ``Error in `nb_json_num(cs[[1]])`: could not find function "nb_json_num"`` and the like.
+Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 39 ]`, the new tests failing with
+``Error in `nb_json_num(cs[[1]])`: could not find function "nb_json_num"`` and the like.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3514,19 +3572,23 @@ git commit -m "feat(doc): add the byte-exact notebook serializer and the format 
 - Test: `tests/testthat/test-doc-replay.R` (create)
 
 **Interfaces:**
-- Consumes: Task 4 (`doc_project_get()`, `doc_project_remember()`, `doc_rel()`, `doc_abs()`, `doc_root()`); P01
-  `the`, `path_key()`, `setting_get()`, `gptr_can_prompt()`, `gptr_confirm(question, default = FALSE)` (asks through
-  the mockable `gptr_readline()`), `hash_sha256()`, `canonical_json(x)`, `json_encode()`, `json_decode()`,
-  `read_utf8()`, `write_atomic()`, `workspace_root()`, `as_utf8()`, `gptr_abort()`; P03 `redact(x, profile =
-  "persist")`; P06 `run_current()` and the `gptr_run` fields `session` and `signal` (environment; P08 and P11 put a
-  one-shot approval token, the function name, in `signal$control`, IC-53).
-- Produces: `doc_consent(path, ask = TRUE)` -> lgl(1) (IC-45: the process binding `the$doc_binding`, `record =
-  "auto"` from the option or a settings layer, a remembered per-document answer or the remembered transcript target
-  in the user-level project file, else an interactive yes, remembered); `doc_consent_possible(path)` (consent exists
-  or could still be asked); `doc_control_guard(what)` (IC-53; signals `gptr_error_permission` with `action`, `tool =
-  "r"`, `risk = 4L`, `how_to_allow`, `session`); the S2 cache of 04 §11.9: `s2_key(doc, block, part = "", prompt =
-  "", args = "")`, `s2_path(key)`, `s2_get(key)` -> the record or `NULL`, `s2_put(key, record)` (the answer redacted
-  with the `persist` profile at ingress).
+- Consumes: Task 4 (`doc_project_get()`, `doc_project_remember()`, `doc_rel()`, `doc_abs()`,
+  `doc_root()`); P01 `the`, `path_key()`, `setting_get()`, `gptr_can_prompt()`,
+  `gptr_confirm(question, default = FALSE)` (asks through the mockable `gptr_readline()`),
+  `hash_sha256()`, `canonical_json(x)`, `json_encode()`, `json_decode()`, `read_utf8()`,
+  `write_atomic()`, `workspace_root()`, `as_utf8()`, `gptr_abort()`; P03 `redact(x, profile =
+  "persist")`; P06 `run_current()` and the `gptr_run` fields `session` and `signal` (environment;
+  P08 and P11 put a one-shot approval token, the function name, in `signal$control`, IC-53).
+- Produces: `doc_consent(path, ask = TRUE)` -> lgl(1) (IC-45: the process binding `the$doc_binding`,
+  `record =
+  "auto"` from the option or a settings layer, a remembered per-document answer or the remembered
+  transcript target in the user-level project file, else an interactive yes, remembered);
+  `doc_consent_possible(path)` (consent exists or could still be asked); `doc_control_guard(what)`
+  (IC-53; signals `gptr_error_permission` with `action`, `tool =
+  "r"`, `risk = 4L`, `how_to_allow`, `session`); the S2 cache of 04 section 11.9:
+  `s2_key(doc, block, part = "", prompt =
+  "", args = "")`, `s2_path(key)`, `s2_get(key)` -> the record or `NULL`, `s2_put(key, record)` (the
+  answer redacted with the `persist` profile at ingress).
 
 Consent is checked only when a block is written (IC-45): replay never asks. A `record` value of
 `"auto"` can only come from the option or the user layer, because P08's settings layers let a
@@ -3632,7 +3694,8 @@ test_that("S2 answers round-trip under keys that include the args hash and part"
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-replay")'`
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with ``Error in `doc_consent(f)`: could not find function "doc_consent"``.
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with
+``Error in `doc_consent(f)`: could not find function "doc_consent"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3775,17 +3838,20 @@ git commit -m "feat(doc): add write consent, the control guard and the S2 answer
   frame (with its srcref)"), `nframe`, and `top_level` ("set by P15's locator"); knitr
   (`current_input()`, `opts_current`) and rstudioapi (`isAvailable()`, `hasFun()`,
   `getSourceEditorContext()`, `documentId()`), both guarded.
-- Produces (04 section 7.15): `doc_locate(call)` -> the site `list(kind, path, format, stmt, expr, occurrence, ordinal,
+- Produces (04 section 7.15): `doc_locate(call)` -> the site
+  `list(kind, path, format, stmt, expr, occurrence, ordinal,
   backend, top_level, in_block, ide_id, defer, prompt_hash, args_hash, template, block, anchor, indent, label,
-  driver)` (a console site adds `console = TRUE`, `session_id`, `session_file`, `context_labels`), or `NULL`; it
-  assigns `call$top_level`. `block` is the owned block `list(id, header, status, start, end)` or `NULL`; `backend`
-  is `"file"`, `"deferred"` (Rscript), `"pending"` (Jupyter), `"rstudio"`, `"positron"`, `"vscode"` or
-  `"transcript"`; `driver` is `"gptr_source"`, `"knitr"`, `"ide"`, `"jupyter"`, `"console"` or `"base"` (base
+  driver)` (a console site adds `console = TRUE`, `session_id`, `session_file`, `context_labels`),
+  or `NULL`; it assigns `call$top_level`. `block` is the owned block
+  `list(id, header, status, start, end)` or `NULL`; `backend` is `"file"`, `"deferred"` (Rscript),
+  `"pending"` (Jupyter), `"rstudio"`, `"positron"`, `"vscode"` or `"transcript"`; `driver` is
+  `"gptr_source"`, `"knitr"`, `"ide"`, `"jupyter"`, `"console"` or `"base"` (base
   `source()`/Rscript, which cannot skip an old block). Also `doc_transcript_target(ask = FALSE)`,
   `doc_console_site(session_id = NULL, template = NULL, context_labels = character(), ask = FALSE, session_file =
   NULL)`, `doc_target_valid(path)`, `doc_driver(site)`, the finders `doc_site_srcref()`,
-  `doc_site_source_frame()`, `doc_site_knitr()`, `doc_site_jupyter()`, `doc_site_rscript()`, `doc_site_ide()`, and
-  in `doc-io.R` `doc_ide_available()`, `doc_ide_context()`, `doc_ide_console_focused()`, `doc_ide_backend()`.
+  `doc_site_source_frame()`, `doc_site_knitr()`, `doc_site_jupyter()`, `doc_site_rscript()`,
+  `doc_site_ide()`, and in `doc-io.R` `doc_ide_available()`, `doc_ide_context()`,
+  `doc_ide_console_focused()`, `doc_ide_backend()`.
 
 The precedence is architecture section 6.9.3 and report 14 section 4.2 (prototype `gptr_where()` of
 section 5.0). A srcref is accepted only when its statement text contains this call (pipelines force
@@ -3988,7 +4054,8 @@ test_that("an interactive console asks once where to record and remembers the an
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-locate")'`
 
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with ``Error in `doc_locate(call)`: could not find function "doc_locate"``.
+Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`, starting with
+``Error in `doc_locate(call)`: could not find function "doc_locate"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4448,16 +4515,22 @@ git commit -m "feat(doc): locate the calling statement in scripts, documents, no
   patch, error = block", returns `list(block, reason, lines)`),
   `registry_diagnostic(source, event, class, message)`; P06 `session_append(s, entry)`,
   `session_data()`.
-- Produces (04 section 7.15): `doc_upsert(site, block_lines, block_id = NULL)` -> `invisible(list(action, block_id, lines,
-  backend))` with `action` in `insert`, `replace`, `stale-regenerate`, `unchanged`, `user-edited`, `blocked`,
-  `not-found`, `locked`, `conflict`, `failed`, `none` (no consent or no site); helpers `doc_event(path, format, kind,
-  block_id, lines, session = NULL)`, `doc_existing_ids(format, text)`, `doc_existing_status(format, text, id)`,
-  `doc_block_range(format, text, id)`, `doc_prepare(fmt, site, up, text, taken = character())` -> `list(id, rendered,
-  action, sha, prompt)` or `list(skip, id)`, `doc_file_upsert(fmt, site, up)`, `doc_upsert_fallback(site, up,
-  backend)`, `doc_after_write(site, res, block_lines)`. Each written block appends `gptr.doc_block` `{doc, format,
-  block, action, prompt, sha, lines, backend}` to the session and caches the answer under part `""` and each child
-  text under its part in S2 (IC-47). A site with `regenerate = TRUE` and `block_id` replaces that block even when it
-  was edited by hand; otherwise a hand-edited block is kept (`user-edited`).
+- Produces (04 section 7.15): `doc_upsert(site, block_lines, block_id = NULL)` ->
+  `invisible(list(action, block_id, lines,
+  backend))` with `action` in `insert`, `replace`, `stale-regenerate`, `unchanged`, `user-edited`,
+  `blocked`, `not-found`, `locked`, `conflict`, `failed`, `none` (no consent or no site); helpers
+  `doc_event(path, format, kind,
+  block_id, lines, session = NULL)`, `doc_existing_ids(format, text)`,
+  `doc_existing_status(format, text, id)`, `doc_block_range(format, text, id)`,
+  `doc_prepare(fmt, site, up, text, taken = character())` -> `list(id, rendered,
+  action, sha, prompt)` or `list(skip, id)`, `doc_file_upsert(fmt, site, up)`,
+  `doc_upsert_fallback(site, up,
+  backend)`, `doc_after_write(site, res, block_lines)`. Each written block appends `gptr.doc_block`
+  `{doc, format,
+  block, action, prompt, sha, lines, backend}` to the session and caches the answer under part `""`
+  and each child text under its part in S2 (IC-47). A site with `regenerate = TRUE` and `block_id`
+  replaces that block even when it was edited by hand; otherwise a hand-edited block is kept
+  (`user-edited`).
 
 `doc_upsert()` checks consent first (IC-45; without it nothing is written and a once-per-document
 notice says how to enable recording), then dispatches by backend: `"file"` and `"transcript"` go
@@ -4620,7 +4693,8 @@ test_that("a format error writes nothing and falls back to the console transcrip
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-blocks")'`
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 138 ]`, the new tests failing with ``Error in `doc_upsert(site, lines)`: could not find function "doc_upsert"``.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 138 ]`, the new tests failing with
+``Error in `doc_upsert(site, lines)`: could not find function "doc_upsert"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4876,20 +4950,24 @@ git commit -m "feat(doc): write blocks idempotently with consent, events, locks 
 - Test: `tests/testthat/test-doc-io.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 4, 6, 9 (`doc_state()`, `doc_root()`, `doc_rel()`, `doc_read_or_new()`, `doc_write()`,
-  `doc_lock()`, `doc_unlock()`, `doc_lock_hold()`, `doc_lock_release_all()`, `doc_create_time()`,
-  `doc_format_get()`, `doc_format_of()`, `doc_prepare()`, `doc_existing_status()`); P01 `save_rds(object, file,
-  compress = FALSE)` (the one `saveRDS()`, `ascii = FALSE`), `msg_verbatim(x)`, `path_key()`, `gptr_inform()`,
-  `gptr_warn()`, `gptr_abort()`; P04 `pid_alive()`; P06 `session_data()`; `cli::hash_sha1()`.
-- Produces: `doc_sidecar_path(path)` (`<root>/cache/tmp/pending-<sha1(path_key(path))>.rds`, 04 section 11.9),
-  `doc_sidecar_read(path)`, `doc_sidecar_write(rec)` (removes the file when no upsert is left), `doc_sidecar_live(rec)`,
-  `doc_pending_new(path, kind, session_id = NULL)` -> `list(doc, base_md5, upserts = list(), session, pid,
-  create_time, time, kind)` (the IC-51 record plus `create_time` against pid reuse and `kind`: `"deferred"` or
-  `"pending"`), `doc_finalizer_ensure()`, `doc_pending_add(fmt, site, up, kind)` (called by `doc_upsert()` for
-  backends `"deferred"` and `"pending"`), `doc_apply_upserts(rec)` -> `list(applied, conflicts)` or `NULL` (locked),
-  `doc_keep_conflicts(rec, res)`, `doc_pending_flush_all()` (the exit finalizer), `doc_recover(path, defer = FALSE)`
-  (consumed by Tasks 13-15), `doc_notebook_attached(path)`, `doc_sync(path)` (consumed by `gptr_doc(sync = TRUE)`,
-  Task 14).
+- Consumes: Tasks 4, 6, 9 (`doc_state()`, `doc_root()`, `doc_rel()`, `doc_read_or_new()`,
+  `doc_write()`, `doc_lock()`, `doc_unlock()`, `doc_lock_hold()`, `doc_lock_release_all()`,
+  `doc_create_time()`, `doc_format_get()`, `doc_format_of()`, `doc_prepare()`,
+  `doc_existing_status()`); P01 `save_rds(object, file,
+  compress = FALSE)` (the one `saveRDS()`, `ascii = FALSE`), `msg_verbatim(x)`, `path_key()`,
+  `gptr_inform()`, `gptr_warn()`, `gptr_abort()`; P04 `pid_alive()`; P06 `session_data()`;
+  `cli::hash_sha1()`.
+- Produces: `doc_sidecar_path(path)` (`<root>/cache/tmp/pending-<sha1(path_key(path))>.rds`, 04
+  section 11.9), `doc_sidecar_read(path)`, `doc_sidecar_write(rec)` (removes the file when no upsert
+  is left), `doc_sidecar_live(rec)`, `doc_pending_new(path, kind, session_id = NULL)` ->
+  `list(doc, base_md5, upserts = list(), session, pid,
+  create_time, time, kind)` (the IC-51 record plus `create_time` against pid reuse and `kind`:
+  `"deferred"` or `"pending"`), `doc_finalizer_ensure()`, `doc_pending_add(fmt, site, up, kind)`
+  (called by `doc_upsert()` for backends `"deferred"` and `"pending"`), `doc_apply_upserts(rec)` ->
+  `list(applied, conflicts)` or `NULL` (locked), `doc_keep_conflicts(rec, res)`,
+  `doc_pending_flush_all()` (the exit finalizer), `doc_recover(path, defer = FALSE)` (consumed by
+  Tasks 13-15), `doc_notebook_attached(path)`, `doc_sync(path)` (consumed by
+  `gptr_doc(sync = TRUE)`, Task 14).
 
 Report 14 section 2.1.2 (verified, items 6 and 7): rewriting a script that `Rscript` is running
 corrupts the run, so an Rscript site queues its blocks and `reg.finalizer(onexit = TRUE)` writes
@@ -5074,7 +5152,10 @@ test_that("a deferred document locked by another live process records nothing", 
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-io")'`
 
-Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 45 ]`; the deferred upsert reaches the missing `doc_pending_add()`, falls back, and the first failure is ``Expected `res$action` to be identical to "insert"`` (`"failed"`), the other new tests fail on the missing `doc_sidecar_path()`, `doc_pending_new()` and `doc_sync()`.
+Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 45 ]`; the deferred upsert reaches the missing
+`doc_pending_add()`, falls back, and the first failure is
+``Expected `res$action` to be identical to "insert"`` (`"failed"`), the other new tests fail on the
+missing `doc_sidecar_path()`, `doc_pending_new()` and `doc_sync()`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5358,15 +5439,17 @@ git commit -m "feat(doc): defer Rscript writes to exit with a recoverable sideca
 - Test: `tests/testthat/test-doc-io.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 4, 7-9 (`doc_ide_context()`, `doc_read()`, `doc_read_or_new()`, `doc_write()`, `doc_lock()`,
-  `doc_unlock()`, `doc_rel()`, `doc_consent()`, `doc_event()`, `doc_prepare()`, `doc_file_upsert()`,
-  `doc_block_range()`, `doc_format_of()`); P01 `path_norm()`, `path_key()`, `as_utf8()`, `gptr_inform()`;
-  rstudioapi (Suggests; report 14 section 3.9 signatures: `document_range(start, end = NULL)`, `document_position(row,
+- Consumes: Tasks 4, 7-9 (`doc_ide_context()`, `doc_read()`, `doc_read_or_new()`, `doc_write()`,
+  `doc_lock()`, `doc_unlock()`, `doc_rel()`, `doc_consent()`, `doc_event()`, `doc_prepare()`,
+  `doc_file_upsert()`, `doc_block_range()`, `doc_format_of()`); P01 `path_norm()`, `path_key()`,
+  `as_utf8()`, `gptr_inform()`; rstudioapi (Suggests; report 14 section 3.9 signatures:
+  `document_range(start, end = NULL)`, `document_position(row,
   column)`, `modifyRange(location = NULL, text = NULL, id = NULL)`, `documentSave(id = NULL)`,
   `setCursorPosition(position, id = NULL)`, `hasFun(name, ...)`).
 - Produces: `doc_ide_edit_range(old, new)` -> `list(start = c(row, col), end = c(row, col), text)`,
-  `doc_ide_modify(edit, id)`, `doc_ide_save(id)`, `doc_ide_cursor(row, id)`, `doc_ide_upsert(fmt, site, up)` (called
-  by `doc_upsert()` for backends `"rstudio"`, `"positron"`, `"vscode"`), `doc_transcript_append(path, lines, session =
+  `doc_ide_modify(edit, id)`, `doc_ide_save(id)`, `doc_ide_cursor(row, id)`,
+  `doc_ide_upsert(fmt, site, up)` (called by `doc_upsert()` for backends `"rstudio"`, `"positron"`,
+  `"vscode"`), `doc_transcript_append(path, lines, session =
   NULL)` (consumed by Task 13's `session_tree` hook and console-channel handlers).
 
 Report 14 section 4.3: RStudio and VS Code (sess) edit a buffer by document id through
@@ -5534,7 +5617,8 @@ test_that("transcript appends need consent and pass the document_write event", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-io")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 77 ]`, starting with ``Error in `doc_ide_edit_range(cs[[1]], cs[[2]])`: could not find function "doc_ide_edit_range"``.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 77 ]`, starting with
+``Error in `doc_ide_edit_range(cs[[1]], cs[[2]])`: could not find function "doc_ide_edit_range"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5682,16 +5766,19 @@ git commit -m "feat(doc): write blocks through the RStudio, VS Code and Positron
 - Test: `tests/testthat/test-doc-replay.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-9 (`doc_block_status()`, `doc_rel()`, `doc_read()`, `doc_find_blocks()`, `doc_block_body()`,
-  `nb_parse()`, `nb_cell_ids()`, `nb_cell_lines()`, `doc_state()`, `doc_source_log()`, `s2_key()`, `s2_get()`); P01
-  `check_choice()`, `gptr_abort()`, `gptr_warn()`, `gptr_can_prompt()`, `gptr_confirm()`; P06 (kernel SDK,
-  IC-46): `session_replay_apply(s, block, header, text = NULL)` ("advances the piped session in place: `gptr.replay`
-  entry, `seen`, `turns`, the `value=` name, `last_text`; returns `s`"), `session_replay_new(block, header, envir,
-  doc)` ("the live session with the header's id, else a `replayed` session adopting the recorded id, from the JSONL
-  or reconstructed from the document"; `header` is the parsed block header plus `doc` and `mode`, `doc` is
-  `list(path, format, template, code, output, text)`), `session_replay_bind(block, s, child = NULL)`; P08 (kernel
-  SDK) `route_pass()`; the `gptr_call` bindings `session`, `envir`, `template`, `prompt`, `doc` (P08). Task 16's
-  `doc_knitr_skip(label)` is called by name for knitr drivers only (both files are area `doc`).
+- Consumes: Tasks 1-9 (`doc_block_status()`, `doc_rel()`, `doc_read()`, `doc_find_blocks()`,
+  `doc_block_body()`, `nb_parse()`, `nb_cell_ids()`, `nb_cell_lines()`, `doc_state()`,
+  `doc_source_log()`, `s2_key()`, `s2_get()`); P01 `check_choice()`, `gptr_abort()`, `gptr_warn()`,
+  `gptr_can_prompt()`, `gptr_confirm()`; P06 (kernel SDK, IC-46):
+  `session_replay_apply(s, block, header, text = NULL)` ("advances the piped session in place:
+  `gptr.replay` entry, `seen`, `turns`, the `value=` name, `last_text`; returns `s`"),
+  `session_replay_new(block, header, envir,
+  doc)` ("the live session with the header's id, else a `replayed` session adopting the recorded id,
+  from the JSONL or reconstructed from the document"; `header` is the parsed block header plus `doc`
+  and `mode`, `doc` is `list(path, format, template, code, output, text)`),
+  `session_replay_bind(block, s, child = NULL)`; P08 (kernel SDK) `route_pass()`; the `gptr_call`
+  bindings `session`, `envir`, `template`, `prompt`, `doc` (P08). Task 16's `doc_knitr_skip(label)`
+  is called by name for knitr drivers only (both files are area `doc`).
 - Produces (04 section 7.15): `doc_decide(site, prompt_hash, args_hash, mode)` -> `"replay"`,
   `"run"`, `"regenerate"` or `"skip"`, or signals `gptr_error_not_recorded` (`document`, `prompt`) /
   `gptr_error_stale_block` (`document`, `block`), with the warning `gptr_warning_replay_downgraded`
@@ -5898,7 +5985,9 @@ test_that("a team block replays its children from S2 into overlays, with zero re
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-replay")'`
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 26 ]`, the new tests failing with ``Error in `doc_decide(doc_decide_site(), prompt_hash("p"), NULL, "auto")`: could not find function "doc_decide"`` and the like.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 26 ]`, the new tests failing with
+``Error in `doc_decide(doc_decide_site(), prompt_hash("p"), NULL, "auto")`: could not find function "doc_decide"``
+and the like.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6142,34 +6231,43 @@ git commit -m "feat(doc): decide replay per mode and replay fresh blocks, forks,
 - Test: `tests/testthat/test-doc-replay.R` (append), `tests/testthat/test-doc-formats.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-12; P01 `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`,
-  `ext_service_has()`, `gptr_can_prompt()`, `redact()`; P02 `ext_declare_builtin(name, factory, after = character(),
-  replaceable = TRUE)`, the factory API object (`gptr$register(spec)`, `gptr$on(event, handler, matcher = NULL)`,
-  04 section 10.5), `gptr_spec("route", "document", order, match, run, description)` (kind `route`: "`order`; `match`
-  `function(call)` -> lgl(1); `run` `function(call)` -> value or `route_pass()`"), `gptr_prompt_section(name, text,
-  tier, order, budget, parent = NULL)`, `gptr_tool_result(text, ..., details, is_error)`, `registry_get("tool",
-  "edit")` (P10's edit tool, IC-37: `execute(input, ctx)`), `registry_diagnostic()`; P06 `session_live(s)` (`run`,
-  `ctx`), `session_append()`, `run_current()` (a `gptr_run`; its read-only `opts$doc` is the running call's site);
-  P08 `replay_mode(arg = NULL)`, `route_pass()`. Event payloads (04 section 10.4): `agent_end` `status`, `reason`, `usage`,
-  `doc` (the run's `opts$doc`, i.e. the site), `turns`; `session_tree` `from`, `to`, `report`. P14's notify channels
-  for transcript writers (04 section 10.4 `<plugin>:<topic>` channels; P14 Global Constraints "Events emitted", Task 6
-  `console_command()`, Task 5 `repl_passthrough()` and its ambiguities 3-4): `console:command` with `data =
-  list(text)` (a slash command line that passed the `input` event, source `repl`, unhandled and is still a command;
-  its text after any transform) and `console:direct` with `data = list(code, output, status, noted)` (a direct R
-  line `!expr` after it ran, `output` its printed lines). P14 dispatches the 04 section 10.4 `input` event (sources `repl`
-  and `passthrough`) before each of them; P15 does not record from `input` (ambiguity 11). The handler's
+- Consumes: Tasks 1-12; P01 `on_load(expr)`,
+  `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has()`,
+  `gptr_can_prompt()`, `redact()`; P02 `ext_declare_builtin(name, factory, after = character(),
+  replaceable = TRUE)`, the factory API object (`gptr$register(spec)`,
+  `gptr$on(event, handler, matcher = NULL)`, 04 section 10.5),
+  `gptr_spec("route", "document", order, match, run, description)` (kind `route`: "`order`; `match`
+  `function(call)` -> lgl(1); `run` `function(call)` -> value or `route_pass()`"),
+  `gptr_prompt_section(name, text,
+  tier, order, budget, parent = NULL)`, `gptr_tool_result(text, ..., details, is_error)`,
+  `registry_get("tool",
+  "edit")` (P10's edit tool, IC-37: `execute(input, ctx)`), `registry_diagnostic()`; P06
+  `session_live(s)` (`run`, `ctx`), `session_append()`, `run_current()` (a `gptr_run`; its read-only
+  `opts$doc` is the running call's site); P08 `replay_mode(arg = NULL)`, `route_pass()`. Event
+  payloads (04 section 10.4): `agent_end` `status`, `reason`, `usage`, `doc` (the run's `opts$doc`,
+  i.e. the site), `turns`; `session_tree` `from`, `to`, `report`. P14's notify channels for
+  transcript writers (04 section 10.4 `<plugin>:<topic>` channels; P14 Global Constraints "Events
+  emitted", Task 6 `console_command()`, Task 5 `repl_passthrough()` and its ambiguities 3-4):
+  `console:command` with `data =
+  list(text)` (a slash command line that passed the `input` event, source `repl`, unhandled and is
+  still a command; its text after any transform) and `console:direct` with
+  `data = list(code, output, status, noted)` (a direct R line `!expr` after it ran, `output` its
+  printed lines). P14 dispatches the 04 section 10.4 `input` event (sources `repl` and
+  `passthrough`) before each of them; P15 does not record from `input` (ambiguity 11). The handler's
   `ctx$session` is the session (P02).
-- Produces (04 sections 7.15, 7.0): `builtin_documents(gptr)` (formats, route `document` order 50, section `documents`,
-  hooks on `agent_end`, `session_tree`, `console:command`, `console:direct`), declared with
-  `on_load(ext_declare_builtin("documents", builtin_documents))`; the services `doc.site` =
-  `doc_site_service(session)`, `doc.edit` = `doc_edit_service(path, edits, session)`, `doc.s1_block` =
-  `doc_s1_block_service(call, summary)`, `doc.replay` = `doc_replay_service(call)`, each `ext_service_set(...,
+- Produces (04 sections 7.15, 7.0): `builtin_documents(gptr)` (formats, route `document` order 50,
+  section `documents`, hooks on `agent_end`, `session_tree`, `console:command`, `console:direct`),
+  declared with `on_load(ext_declare_builtin("documents", builtin_documents))`; the services
+  `doc.site` = `doc_site_service(session)`, `doc.edit` = `doc_edit_service(path, edits, session)`,
+  `doc.s1_block` = `doc_s1_block_service(call, summary)`, `doc.replay` = `doc_replay_service(call)`,
+  each `ext_service_set(...,
   provided_by = "P15", builtin = "documents")` (IC-34); the route functions `doc_route_match(call)`,
-  `doc_route_run(call)`; the hooks `doc_on_agent_end(event, ctx)`, `doc_on_session_tree(event, ctx)`,
-  `doc_on_console_command(event, ctx)`, `doc_on_console_direct(event, ctx)`; helpers `doc_console_append(lines,
-  session = NULL)`, `doc_edit_blocks()`, `doc_refresh_headers()`, `doc_s1_summary(x)`, `doc_ancestors()`,
-  `doc_set_inert(path, ids, inert = TRUE, session = NULL, transcript = NULL)`, `doc_section_body`,
-  `doc_section_text(ctx)`.
+  `doc_route_run(call)`; the hooks `doc_on_agent_end(event, ctx)`,
+  `doc_on_session_tree(event, ctx)`, `doc_on_console_command(event, ctx)`,
+  `doc_on_console_direct(event, ctx)`; helpers `doc_console_append(lines,
+  session = NULL)`, `doc_edit_blocks()`, `doc_refresh_headers()`, `doc_s1_summary(x)`,
+  `doc_ancestors()`, `doc_set_inert(path, ids, inert = TRUE, session = NULL, transcript = NULL)`,
+  `doc_section_body`, `doc_section_text(ctx)`.
 
 The route runs for every `peter()` call that reaches order 50 (IC-39). `match()` locates the call
 (never for calls made from model code, `run_current()` non-`NULL`), asks once per project where to
@@ -6602,7 +6700,9 @@ test_that("direct R lines and slash commands of the console enter the transcript
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-formats|doc-replay")'`
 
-Expected: `[ FAIL 29 | WARN 0 | SKIP 0 | PASS 179 ]` (the two files together), starting with ``Expected `registry_get("doc_format", nm)` to be an S3 object`` and ``could not find function "doc_route_match"``.
+Expected: `[ FAIL 29 | WARN 0 | SKIP 0 | PASS 179 ]` (the two files together), starting with
+``Expected `registry_get("doc_format", nm)` to be an S3 object`` and
+``could not find function "doc_route_match"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -7236,7 +7336,8 @@ test_that("gptr_cache() lists, prunes and clears, and never removes sidecars", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-replay")'`
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 130 ]`, the new tests failing with ``Error in `gptr_doc()`: could not find function "gptr_doc"`` and the like.
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 130 ]`, the new tests failing with
+``Error in `gptr_doc()`: could not find function "gptr_doc"`` and the like.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -7544,11 +7645,12 @@ git commit -m "feat(doc): add gptr_doc(), gptr_blocks() and gptr_cache()"
   `doc_skip_old()`, `doc_source_log()`); P01 `check_string()`, `check_choice()`, `check_env()`,
   `check_flag()`, `path_norm()`, `msg_verbatim()`, `gptr_abort()`; base `srcfilecopy()`,
   `parse(keep.source = TRUE, srcfile =)`.
-- Produces (04 section 6.4): the export `gptr_source(file, replay = getOption("gptr.replay", "auto"), envir =
-  parent.frame(), echo = FALSE)` -> `invisible(<gptr_blocks>)` with the extra column `action` (`replayed`,
-  `regenerated`, `ran`, `skipped`, or `NA`); conditions `invalid_argument` (a file that is not `.R`, a bad `replay`),
-  `not_recorded`, `stale_block` (replay mode) and whatever the sourced code signals. Copy safety [R1][R2]: it holds
-  `envir` only in its own frame and never stores it.
+- Produces (04 section 6.4): the export
+  `gptr_source(file, replay = getOption("gptr.replay", "auto"), envir =
+  parent.frame(), echo = FALSE)` -> `invisible(<gptr_blocks>)` with the extra column `action`
+  (`replayed`, `regenerated`, `ran`, `skipped`, or `NA`); conditions `invalid_argument` (a file that
+  is not `.R`, a bad `replay`), `not_recorded`, `stale_block` (replay mode) and whatever the sourced
+  code signals. Copy safety [R1][R2]: it holds `envir` only in its own frame and never stores it.
 
 Report 14 section 4.4.2: base `source()` has parsed the old block before `peter()` runs, so it
 cannot regenerate without running the old code; `gptr_source()` parses the file once (keeping
@@ -7670,7 +7772,8 @@ test_that("gptr_source() validates its arguments and runs plain scripts", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-replay")'`
 
-Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 174 ]`, the new tests failing with ``Error in `gptr_source(f, replay = "auto", envir = e)`: could not find function "gptr_source"``.
+Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 174 ]`, the new tests failing with
+``Error in `gptr_source(f, replay = "auto", envir = e)`: could not find function "gptr_source"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -7766,10 +7869,11 @@ git commit -m "feat(doc): add gptr_source() to regenerate stale blocks without r
   packages"); P06 `session_data()`, the session accessor `$text` (04 section 5.1: teams join their
   children's reports); knitr (Suggests): `knitr::asis_output()`, `knitr::opts_hooks`,
   `knitr::knit_hooks`.
-- Produces (IC-07: "`knit_print` methods (sessions, System 1 vectors) exist only in `doc-knitr.R` (P15)"):
-  `knit_print.gptr_session(x, ...)` and `knit_print.gptr_s1(x, ...)`, registered lazily with
-  `on_load(s3_register("knitr::knit_print", "<class>"))` (not exported, no `NAMESPACE` entry); `doc_knit_code(s)`;
-  `doc_knitr_skip(label)` (called by `doc_skip_old()` for the knitr driver) and `doc_knitr_unhook(old_label,
+- Produces (IC-07: "`knit_print` methods (sessions, System 1 vectors) exist only in `doc-knitr.R`
+  (P15)"): `knit_print.gptr_session(x, ...)` and `knit_print.gptr_s1(x, ...)`, registered lazily
+  with `on_load(s3_register("knitr::knit_print", "<class>"))` (not exported, no `NAMESPACE` entry);
+  `doc_knit_code(s)`; `doc_knitr_skip(label)` (called by `doc_skip_old()` for the knitr driver) and
+  `doc_knitr_unhook(old_label,
   old_doc)`.
 
 Report 14 sections 4.6 and 2.1.3 (verified, item 9): a `knit_print` method prints the answer as
@@ -7925,7 +8029,8 @@ test_that("a stale agent chunk is regenerated during the knit without running th
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-knitr")'`
 
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 2 ]`, starting with ``Error in `knit_print.gptr_session(s)`: could not find function "knit_print.gptr_session"``.
+Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 2 ]`, starting with
+``Error in `knit_print.gptr_session(s)`: could not find function "knit_print.gptr_session"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -8048,17 +8153,19 @@ git commit -m "feat(doc): add knit_print methods and the scoped knitr label hook
   zero model calls, `keep.source = FALSE`, `gptr_source(replay = "record")` regeneration without
   running the old block, `.Random.seed` unchanged), 3, 4, 5 and the in-process items of 6.
 
-Every recording uses the fake provider (offline, so `replay_guard()` lets it run when a test pins `replay =
-"auto"`), mode `auto` and `gptr.unsafe_no_permissions` (the r calls run whether or not P11's mode policies are
-loaded; IC-53 documents the switch for sandboxed runs). Calls that must look like console or Jupyter calls are built
-with `as.call()` and a pasted prompt, so no frame's srcref points into this test file with the same prompt (the
-locator would otherwise find the test file first, as it should for real scripts). The checks are those of 05 P15:
-the fresh-clone rows copy only the document (and the S2 cache where the row says so) into a new project without
-`sessions/`, release the recording session (`last_set(NULL)`, `gc()`), and assert that nothing is requested and no
-block runs twice; NS-3 is re-sourced twice with the main line and the fork's overlay compared each time (IC-46); the
-parameterised row knits one Rmd with two values of `{gene}` (IC-45); the console row binds a transcript with
-`gptr_doc(format = "transcript")`, steers turn two through `session_enqueue(source = "pause_menu")` and re-sources
-the transcript as one session (IC-49).
+Every recording uses the fake provider (offline, so `replay_guard()` lets it run when a test pins
+`replay =
+"auto"`), mode `auto` and `gptr.unsafe_no_permissions` (the r calls run whether or not P11's mode
+policies are loaded; IC-53 documents the switch for sandboxed runs). Calls that must look like
+console or Jupyter calls are built with `as.call()` and a pasted prompt, so no frame's srcref points
+into this test file with the same prompt (the locator would otherwise find the test file first, as
+it should for real scripts). The checks are those of 05 P15: the fresh-clone rows copy only the
+document (and the S2 cache where the row says so) into a new project without `sessions/`, release
+the recording session (`last_set(NULL)`, `gc()`), and assert that nothing is requested and no block
+runs twice; NS-3 is re-sourced twice with the main line and the fork's overlay compared each time
+(IC-46); the parameterised row knits one Rmd with two values of `{gene}` (IC-45); the console row
+binds a transcript with `gptr_doc(format = "transcript")`, steers turn two through
+`session_enqueue(source = "pause_menu")` and re-sources the transcript as one session (IC-49).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -8425,9 +8532,10 @@ replay: in `R/doc-replay.R`, temporarily add `return(route_pass())` as the first
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-replay")'`
 
-Expected: failures in most rows, starting with ``Expected `length(fake_requests(x$fake))` to be identical to 2L.``
-in "a recorded block replays under source() with zero model calls (acceptance 2)": every replay now asks the model
-again (and records a second block).
+Expected: failures in most rows, starting with
+``Expected `length(fake_requests(x$fake))` to be identical to 2L.`` in "a recorded block replays
+under source() with zero model calls (acceptance 2)": every replay now asks the model again (and
+records a second block).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -8678,9 +8786,10 @@ as its first line, then run:
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "doc-io|doc-knitr")'`
 
-Expected: failures in "an Rscript run writes its blocks only at exit and the next run replays them", such as
-``Expected `doc_find_blocks(readLines(f))$id` to have length 2`` (no finalizer, so nothing is written at exit) and
-the replay run's ``Expected `again$stdout` to match regexp "REQUESTS 0 N2 2"``.
+Expected: failures in "an Rscript run writes its blocks only at exit and the next run replays them",
+such as ``Expected `doc_find_blocks(readLines(f))$id` to have length 2`` (no finalizer, so nothing
+is written at exit) and the replay run's
+``Expected `again$stdout` to match regexp "REQUESTS 0 N2 2"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -8952,7 +9061,8 @@ assembled package.
 
 - Exports: `gptr_doc(path = NULL, format = NULL, sync = FALSE)`, `gptr_source(file, replay =
   getOption("gptr.replay", "auto"), envir = parent.frame(), echo = FALSE)`, `gptr_blocks(file)`,
-  `gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tmp"))` - exactly 04 section 6.4.
+  `gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tmp"))` - exactly
+  04 section 6.4.
 - Internal: `builtin_documents(gptr)`, `doc_locate(call)`,
   `doc_decide(site, prompt_hash, args_hash, mode)`,
   `doc_block_lines(session, turn, site, call_ordinal)`,
@@ -8965,19 +9075,23 @@ assembled package.
   `gptr.doc_block`; services `doc.site`, `doc.edit`, `doc.s1_block`, `doc.replay`; route `document`
   order 50; section `documents` T0/500/250; options `gptr.replay`, `gptr.record`,
   `gptr.doc_output_lines`, `gptr.doc_source_frames`, `gptr.spill_days`.
-- Consumed names were checked against the dependency plans: P01 (`write_atomic()`, `path_key()`, `id_block()`,
-  `json_decode()`, `canonical_json()`, `new_listing()`, `s3_register()`, `msg_verbatim()`, `gptr_inform(.once =)`,
-  `gptr_can_prompt()`, `gptr_confirm()`, `front_end()`, `check_running()`, `save_rds()`, the helpers of 04 section 12.2 and
-  `tracemem_loader()`), P02 (`gptr_spec()`, `ext_declare_builtin()`, `registry_get()`, `registry_names()`,
-  `ev_dispatch()`, `registry_diagnostic()`, the factory API's `register()`/`on()`), P03 (`redact()`,
-  `code_for_history()`), P04 (`pid_alive()`), P06 (`session_replay_apply()`, `session_replay_new(block, header,
-  envir, doc)` with `doc = list(path, format, template, code, output, text)`, `session_replay_bind()`,
-  `gptr_resume(block =, child =)`, `session_append()`, `session_live()$run`/`$ctx`, the entry shapes and the turn
-  stamp of `entry_prepare()`), P07 (`prompt_doc()` reads `doc.site`; `{s1}` substitution), P08 (`replay_mode()`,
-  `route_pass()`, `settings_write("user_project", patch)`, the `gptr_call` bindings, `run$opts$doc`), P10 (the flat
-  `details$outputs` of `r_doc_outputs()`; `peter$edit()` calls `doc.edit(path, edits, NULL)`, the direct `edit` tool
-  passes `ctx$session`), P11 (the `gptr.plan` entry and the plan block's `attrs$from`), P14 (the `console:command`
-  and `console:direct` notify channels, `ev_dispatch(<channel>, list(data = ...))`).
+- Consumed names were checked against the dependency plans: P01 (`write_atomic()`, `path_key()`,
+  `id_block()`, `json_decode()`, `canonical_json()`, `new_listing()`, `s3_register()`,
+  `msg_verbatim()`, `gptr_inform(.once =)`, `gptr_can_prompt()`, `gptr_confirm()`, `front_end()`,
+  `check_running()`, `save_rds()`, the helpers of 04 section 12.2 and `tracemem_loader()`), P02
+  (`gptr_spec()`, `ext_declare_builtin()`, `registry_get()`, `registry_names()`, `ev_dispatch()`,
+  `registry_diagnostic()`, the factory API's `register()`/`on()`), P03 (`redact()`,
+  `code_for_history()`), P04 (`pid_alive()`), P06 (`session_replay_apply()`,
+  `session_replay_new(block, header,
+  envir, doc)` with `doc = list(path, format, template, code, output, text)`,
+  `session_replay_bind()`, `gptr_resume(block =, child =)`, `session_append()`,
+  `session_live()$run`/`$ctx`, the entry shapes and the turn stamp of `entry_prepare()`), P07
+  (`prompt_doc()` reads `doc.site`; `{s1}` substitution), P08 (`replay_mode()`, `route_pass()`,
+  `settings_write("user_project", patch)`, the `gptr_call` bindings, `run$opts$doc`), P10 (the flat
+  `details$outputs` of `r_doc_outputs()`; `peter$edit()` calls `doc.edit(path, edits, NULL)`, the
+  direct `edit` tool passes `ctx$session`), P11 (the `gptr.plan` entry and the plan block's
+  `attrs$from`), P14 (the `console:command` and `console:direct` notify channels,
+  `ev_dispatch(<channel>, list(data = ...))`).
 
 ### Executed validation
 
@@ -9002,8 +9116,9 @@ testthat 3, knitr 1.51, jsonlite 2.0.0, cli 3.6.6):
   (with non-ASCII, quotes and `</b>` in the body) and the same notebook with the cell made inert all
   equal
   `json.dumps(json.loads(x), indent=1, sort_keys=True, ensure_ascii=False, separators=(",", ": ")) + "\n"`.
-- Every ```` ```r ```` block of this plan was extracted and parsed with `parse(file = <f>)`; the plan contains no
-  left-arrow assignment and no `%>%` in code; the R sources are ASCII-only and at most 100 characters per line.
+- Every ```` ```r ```` block of this plan was extracted and parsed with `parse(file = <f>)`; the
+  plan contains no left-arrow assignment and no `%>%` in code; the R sources are ASCII-only and at
+  most 100 characters per line.
 - Not executed here (they need the assembled package, a Quarto installation or rtiktoken): the
   end-to-end tests of Tasks 17-18 and the NS-7 baseline row of Task 19.
 

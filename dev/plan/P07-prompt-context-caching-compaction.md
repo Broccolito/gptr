@@ -2515,8 +2515,9 @@ prompt_register_sections = function(gptr) {
 
 Then, in `R/prompt-sections.R`, replace the block added at the end of Task 3 that starts with the
 roxygen line
-``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` and ends with the closing brace of `builtin_prompt = function(gptr) { ... }` (the `on_load(ext_declare_builtin("prompt", builtin_prompt))`
-line after it stays unchanged) with:
+``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` and ends with the closing
+brace of `builtin_prompt = function(gptr) { ... }` (the
+`on_load(ext_declare_builtin("prompt", builtin_prompt))` line after it stays unchanged) with:
 
 ```r
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
@@ -4288,7 +4289,8 @@ Expected: `Writing 'NAMESPACE'` and `Writing 'gptr_prompt.Rd'`; `NAMESPACE` gain
 Run: `Rscript --vanilla -e 'devtools::test(filter = "prompt-sections")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 177 ]`
 
-Run: `Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); v = gptr_prompt(preset = "minimal"); print(v$sections)'`
+Run:
+`Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); v = gptr_prompt(preset = "minimal"); print(v$sections)'`
 Expected: the example code runs offline without an error and prints the sections `preamble`,
 `tools`, `rules`, `modes`, `context` with their token estimates (before P10 registers the tools the
 array is `[]` and a `missing_tool` diagnostic is recorded).
@@ -4802,8 +4804,8 @@ prompt_register_cache = function(gptr) {
 
 Then, in `R/prompt-sections.R`, replace the `builtin_prompt()` block of Task 4 (from the roxygen
 line
-``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` to the closing brace of the function; the `on_load(ext_declare_builtin("prompt", builtin_prompt))`
-line stays) with:
+``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` to the closing brace of the
+function; the `on_load(ext_declare_builtin("prompt", builtin_prompt))` line stays) with:
 
 ```r
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
@@ -5050,8 +5052,8 @@ prompt_register_guard = function(gptr) {
 
 Then, in `R/prompt-sections.R`, replace the `builtin_prompt()` block of Task 10 (from the roxygen
 line
-``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` to the closing brace of the function; the `on_load(...)`
-line stays) with:
+``#' The built-in `prompt` extension (contract sections 7.7 and 10.3)`` to the closing brace of the
+function; the `on_load(...)` line stays) with:
 
 ```r
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
@@ -7304,7 +7306,8 @@ OK: 4 static prefixes and 2 golden transcripts within the baseline tolerances
 
 Check the ratchet fails on a regression (a baseline 10% lower than the result):
 
-Run: `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); source("dev/bench/tokens/run.R"); res = utils::read.csv("dev/bench/tokens/results.csv"); base = utils::read.csv("dev/bench/tokens/baseline.csv"); base$input_total = base$input_total * 0.9; tryCatch(bench_compare(res, base), gptr_error_token_regression = function(e) cat(class(e)[1], conditionMessage(e), sep = "\n"))'`
+Run:
+`Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); source("dev/bench/tokens/run.R"); res = utils::read.csv("dev/bench/tokens/results.csv"); base = utils::read.csv("dev/bench/tokens/baseline.csv"); base$input_total = base$input_total * 0.9; tryCatch(bench_compare(res, base), gptr_error_token_regression = function(e) cat(class(e)[1], conditionMessage(e), sep = "\n"))'`
 Expected:
 
 ```text
@@ -7316,7 +7319,8 @@ Token-efficiency regression:
 
 Check the static-prefix gate the same way (a minimal prefix 10% above its committed total):
 
-Run: `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); source("dev/bench/tokens/run.R"); pb = jsonlite::fromJSON("tests/testthat/fixtures/bench/prefix-baseline.json", simplifyVector = FALSE); tryCatch(bench_check_static(c(minimal = 1400), pb), gptr_error_token_regression = function(e) cat(class(e)[1], conditionMessage(e), e$fixture, sep = "\n"))'`
+Run:
+`Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); source("dev/bench/tokens/run.R"); pb = jsonlite::fromJSON("tests/testthat/fixtures/bench/prefix-baseline.json", simplifyVector = FALSE); tryCatch(bench_check_static(c(minimal = 1400), pb), gptr_error_token_regression = function(e) cat(class(e)[1], conditionMessage(e), e$fixture, sep = "\n"))'`
 Expected:
 
 ```text
@@ -7582,7 +7586,9 @@ runtime-dependent figures (elapsed seconds, the `est_*` columns of the runner) a
 
 ### Executed validation
 
-- Every ```r block of this plan (34) was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'` (0 errors); `getParseData()` finds no left-arrow assignment and no `%>%` in any of them.
+- Every ```r block of this plan (34) was extracted and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'` (0 errors); `getParseData()` finds no
+  left-arrow assignment and no `%>%` in any of them.
 - Review of 2026-10-01, against the real earlier plans instead of stand-ins: a scratch package was
   assembled from the R files of P01-P05 (as assembled and tested by the P05 review), P06's seven R
   files (as assembled by the P06 review) and the five P07 files, test files, fixtures and

@@ -236,7 +236,8 @@ The17:08 VM snapshot had about45.5GiB inactive, 25GiB file-backed and0.85GiB pur
 those categories overlap and must not be added as independent capacity. The
 memory_pressure query's percentage is not physical unused RAM. macOS uses cached
 memory and bases pressure on free memory, swap rate, wired memory and file caching.
-[Apple memory usage guide](https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/10.14/mac/15.0)
+[Apple memory usage
+guide](https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/10.14/mac/15.0)
 
 At the last sample RAM has headroom for one bounded serial 4GiB read-only fixture,
 without concurrent model/check work or disk serialization. This is a resource

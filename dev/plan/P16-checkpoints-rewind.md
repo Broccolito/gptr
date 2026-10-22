@@ -164,7 +164,13 @@ requirements, copied from the spec:
   `new_listing(df, class, footer = NULL)`, `block_text(text, signature = NULL)`, `msg_text(msg)`,
   `ev_new(type, ...)`, `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`,
   `ext_service_get(name)`, `ext_service_has(name)`,
-  `` `%||%` ``; tests: `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`, `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`, `fake_tool(name, ..., .text = NULL, .id = NULL)`, `fake_requests(spec)`, `local_gptr_options(..., .env = parent.frame())`, `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`, `rscript_path()`, `front_end()` (mocked).
+  `` `%||%` ``; tests:
+  `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`,
+  `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`,
+  `fake_tool(name, ..., .text = NULL, .id = NULL)`, `fake_requests(spec)`,
+  `local_gptr_options(..., .env = parent.frame())`,
+  `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`,
+  `rscript_path()`, `front_end()` (mocked).
 - P02: `gptr_spec(kind, name, ...)`,
   `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`,
   `gptr_command(name, handler, description = NULL, complete = NULL)`,
@@ -251,8 +257,8 @@ requirements, copied from the spec:
   `ckpt_capture_disk(store, envir, name)`,
   `ckpt_settle(store, envir, pending, frag = "", turn = NA_integer_)` -> df(`name`, `key`, `status`,
   `pre_address`, `post_address`),
-  `ckpt_restore(store, envir, name, key, expect = NULL, force = FALSE, frag = "", turn = NA_integer_)` ->
-  `list(ok, reason, redo, address)`,
+  `ckpt_restore(store, envir, name, key, expect = NULL, force = FALSE, frag = "", turn = NA_integer_)`
+  -> `list(ok, reason, redo, address)`,
   `ckpt_uncreate(store, envir, name, frag = "", turn = NA_integer_)`, `ckpt_leaf_children(x)`,
   `ckpt_defuse(store, key)`, `ckpt_spill(store, key)`, `ckpt_drop(store, keys)`,
   `ckpt_obj_sweep(store)`, `ckpt_unshared_bytes(store, key, envir, name, depth = 4L)`; the

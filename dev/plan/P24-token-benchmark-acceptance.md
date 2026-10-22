@@ -172,10 +172,10 @@ Run every command from the repository root. The development tests of `dev/bench`
 tests (`dev/` is excluded from the build); they run with
 `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "<name>")'`, and testthat
 sources `dev/bench/tests/helper-bench.R` before them. Before Task 2, check the development tools
-once: `Rscript --vanilla -e 'cat(vapply(c("rtiktoken", "pkgload"), requireNamespace, NA, quietly = TRUE), "\n")'`
-must print `TRUE TRUE`. If it prints a `FALSE`, stop and ask the maintainer to install the
-missing package (CRAN) into their library; a plan step never installs anything (conventions
-section 1).
+once:
+`Rscript --vanilla -e 'cat(vapply(c("rtiktoken", "pkgload"), requireNamespace, NA, quietly = TRUE), "\n")'`
+must print `TRUE TRUE`. If it prints a `FALSE`, stop and ask the maintainer to install the missing
+package (CRAN) into their library; a plan step never installs anything (conventions section 1).
 A P24 runner that finds a development tool missing exits with status 2 and the message "This step
 stops for the maintainer".
 
@@ -774,7 +774,8 @@ test_that("run.R --check exits 0 on the baseline and non-zero when a prefix grow
 The gates already exist in P07's runner, so the red run uses a copy whose prefix tolerance was
 loosened to 3% (written to the session's temporary directory, never into the repository):
 
-Run: `Rscript --vanilla -e 'f = file.path(tempdir(), "run-loose.R"); writeLines(sub("prefix = 0.02,", "prefix = 0.03,", readLines("dev/bench/tokens/run.R"), fixed = TRUE), f); Sys.setenv(GPTR_BENCH_RUNNER = f); testthat::test_dir("dev/bench/tests", filter = "token-gates")'`
+Run:
+`Rscript --vanilla -e 'f = file.path(tempdir(), "run-loose.R"); writeLines(sub("prefix = 0.02,", "prefix = 0.03,", readLines("dev/bench/tokens/run.R"), fixed = TRUE), f); Sys.setenv(GPTR_BENCH_RUNNER = f); testthat::test_dir("dev/bench/tests", filter = "token-gates")'`
 Expected: `FAILURE` in "P07's runner carries exactly the tolerances of architecture 12.7"
 (`r$bench_tolerance` not identical to `gate_tolerance`) and in "each gate passes at its tolerance
 and raises gptr_error_token_regression above it" (`cnd` is `TRUE`, not a
@@ -1394,7 +1395,8 @@ five lines `  ns01-console: no baseline row (run with --update ns01-console)` (a
 Record the rows (the runner writes them; nothing is edited by hand), after reading the printed
 table:
 
-Run: `env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R --update ns01-console ns02c-describers ns05-routing ns09-setup ns11-workflow`
+Run:
+`env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R --update ns01-console ns02c-describers ns05-routing ns09-setup ns11-workflow`
 Expected: the table shows `requests` 2 (`ns01-console`), 1 (`ns02c-describers`), 2 (`ns05-routing`),
 3 (`ns09-setup`) and 6 (`ns11-workflow`); `image_tokens` 0 for all five; `prefix` and `catalog` of
 `ns01-console`, `ns02c-describers` and `ns09-setup` equal to those of `ns02-mixed-model` (same
@@ -1408,13 +1410,13 @@ describers miss is reported to P09, never removed from the fixture) and `facts` 
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "golden-fixtures|token-gates")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", filter = "golden-fixtures|token-gates")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 335 ]` with the fourteen fixtures of P07, P10, P13,
 P15, P18, P19, P22, P23 and P24 (273 in `test-golden-fixtures.R`, 62 in `test-token-gates.R`; the
-first count grows with every further fixture).
-Run: `env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R --check`
-Expected: the last line is
-`OK: 4 static prefixes and 14 golden transcripts within the baseline tolerances`; exit status 0.
+first count grows with every further fixture). Run:
+`env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R --check` Expected: the last line
+is `OK: 4 static prefixes and 14 golden transcripts within the baseline tolerances`; exit status 0.
 
 - [ ] **Step 5: Commit**
 
@@ -2676,7 +2678,8 @@ Expected: an error while the test file is sourced:
 
 Copy G2's verified apps (R and shell are equivalent; this uses R so it runs on every OS):
 
-Run: `Rscript --vanilla -e 'to = "dev/bench/shiny-html"; src = "dev/research/assets/G2"; dir.create(to, recursive = TRUE, showWarnings = FALSE); m = c(apps = "a_apps", revised = "a_revised", mutants = "a_mutants"); for (k in names(m)) { stopifnot(file.copy(file.path(src, m[[k]]), to, recursive = TRUE), file.rename(file.path(to, m[[k]]), file.path(to, k))) }; print(length(list.files(to, recursive = TRUE)))'`
+Run:
+`Rscript --vanilla -e 'to = "dev/bench/shiny-html"; src = "dev/research/assets/G2"; dir.create(to, recursive = TRUE, showWarnings = FALSE); m = c(apps = "a_apps", revised = "a_revised", mutants = "a_mutants"); for (k in names(m)) { stopifnot(file.copy(file.path(src, m[[k]]), to, recursive = TRUE), file.rename(file.path(to, m[[k]]), file.path(to, k))) }; print(length(list.files(to, recursive = TRUE)))'`
 Expected: `[1] 52` (22 files in `apps/`, 20 in `revised/`, 10 in `mutants/`).
 
 Create `dev/bench/shiny-html/check.R` (G2 `a_check.R` ported):
@@ -3229,7 +3232,8 @@ Run: `Rscript --vanilla dev/bench/shiny-html/tokens.R`
 Expected: `html/shiny o200k ratio: 2.35 (G2: 2.35)`, the per-level ratios 2.26, 2.47, 2.86, 2.64 and
 1.62, and `rewrite/edit: shiny 3.0x, html 4.2x (G2: 3.9x, 6.1x)`; `dev/bench/shiny-html/results.csv`
 has 20 rows.
-Run: `Rscript --vanilla dev/bench/shiny-html/check.R --set=apps; Rscript --vanilla dev/bench/shiny-html/check.R --set=revised; Rscript --vanilla dev/bench/shiny-html/check.R --set=mutants`
+Run:
+`Rscript --vanilla dev/bench/shiny-html/check.R --set=apps; Rscript --vanilla dev/bench/shiny-html/check.R --set=revised; Rscript --vanilla dev/bench/shiny-html/check.R --set=mutants`
 Expected: one line per app (for example
 `L1 shiny_a  parse=ok http200=TRUE steps=1/1 js_err=0 out_err=0 log_err=0 => PASS (2.0s)`), ending
 with `PASS 20 of 20 apps (apps)`, `PASS 20 of 20 apps (revised)` and `PASS 0 of 10 apps (mutants)`;
@@ -3895,7 +3899,8 @@ test_that("an Rscript run with a bound document leaves no key in documents or si
 
 Mutation: redaction replaced by the identity for this process.
 
-Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); testthat::local_mocked_bindings(redact = function(x, profile = "persist") x, redact_tree = function(x, profile = "persist", structural = FALSE) x, .package = "gptr", .env = globalenv()); redactor_set(function(x, profile = "persist") x); testthat::test_file("tests/testthat/test-secrets-e2e.R")'`
+Run:
+`NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); testthat::local_mocked_bindings(redact = function(x, profile = "persist") x, redact_tree = function(x, profile = "persist", structural = FALSE) x, .package = "gptr", .env = globalenv()); redactor_set(function(x, profile = "persist") x); testthat::test_file("tests/testthat/test-secrets-e2e.R")'`
 Expected: `FAILURE` in "fake keys reach no in-process sink, and the canary reaches them (control)":
 `sum(sinks)` is not identical to `0L`, with an `info` naming the leaking sinks (for example
 `.../.gptr/sessions/<file>.jsonl, console`); the summary line shows `FAIL` of at least 1.
@@ -4340,7 +4345,8 @@ test_that("a worker's forwarded permission request is re-classified by the paren
 
 Mutation: untrusted text printed through a cli format string (the C-36 bug).
 
-Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); testthat::local_mocked_bindings(msg_verbatim = function(x, stream = "stdout") cli::cli_text(x), .package = "gptr", .env = globalenv()); testthat::test_file("tests/testthat/test-injection-e2e.R")'`
+Run:
+`NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); testthat::local_mocked_bindings(msg_verbatim = function(x, stream = "stdout") cli::cli_text(x), .package = "gptr", .env = globalenv()); testthat::test_file("tests/testthat/test-injection-e2e.R")'`
 Expected: failures in part 1 (`Sys.getenv(inj_flag)` is `"glue"` or `"cli"` instead of `""`, or an
 error `INJECTED`); the summary line shows `FAIL` of at least 1.
 
@@ -4941,7 +4947,8 @@ test_that("the composed standard prompt equals architecture 7.3 byte for byte (I
 
 Mutation: a permission kernel that denies every tool call.
 
-Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); testthat::local_mocked_bindings(perm_check = function(call, run) list(decision = "deny", reason = "mutated", input = call$input, risk = NULL, rule = NULL, how = NULL), .package = "gptr", .env = globalenv()); testthat::test_file("tests/testthat/test-northstar.R")'`
+Run:
+`NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); testthat::local_mocked_bindings(perm_check = function(call, run) list(decision = "deny", reason = "mutated", input = call$input, risk = NULL, rule = NULL, how = NULL), .package = "gptr", .env = globalenv()); testthat::test_file("tests/testthat/test-northstar.R")'`
 Expected: failures in NS-1 (`exists("markers", envir = e, inherits = FALSE)` is `FALSE`) and NS-2
 (`res$value` is `NULL`, not an `lm`), among others; the summary line shows `FAIL` of at least 2.
 
@@ -5507,7 +5514,8 @@ test_that("every registry kind was used at run time (IC-73)", {
 
 Mutation: a 39th kind that no record uses.
 
-Run: `NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); k = get("kind_names", envir = asNamespace("gptr")); testthat::local_mocked_bindings(kind_names = function() c(k(), "p24_unused_kind"), .package = "gptr", .env = globalenv()); testthat::test_file("tests/testthat/test-s11-conformance.R")'`
+Run:
+`NOT_CRAN=true Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); k = get("kind_names", envir = asNamespace("gptr")); testthat::local_mocked_bindings(kind_names = function() c(k(), "p24_unused_kind"), .package = "gptr", .env = globalenv()); testthat::test_file("tests/testthat/test-s11-conformance.R")'`
 Expected: `FAILURE` in the first test (`mine` lacks `p24_unused_kind`) and in the last (`kinds` has
 length 39, not 38; `ls(s11$used)` lacks `p24_unused_kind`); the summary line shows `FAIL` of at
 least 2.
@@ -5562,7 +5570,8 @@ the file is restored the same command is green (Step 4).
 
 Refresh the tracked outputs after the last change of this plan:
 
-Run: `env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R; Rscript --vanilla dev/bench/shiny-html/tokens.R`
+Run:
+`env -u TYPESAFE_API_KEY Rscript --vanilla dev/bench/tokens/run.R; Rscript --vanilla dev/bench/shiny-html/tokens.R`
 Expected: `14 golden transcripts in <s> s; wrote dev/bench/tokens/results.csv` and the ratio line
 `html/shiny o200k ratio: 2.35 (G2: 2.35)`. `git status --short dev/bench` shows no change to a
 committed file (`results.csv` of the tokens, polyglot and cache-sim suites is regenerated and not
@@ -5835,7 +5844,11 @@ P15, P18, P19, P22 and P23 extracted from their plans, and a stub `R/aaa-state.R
 the package tests and the gptr-dependent runners were parsed and checked against the dependency
 plans but not run):
 
-- Every ```r block of this plan was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. `getParseData()` finds no `<-` (`LEFT_ASSIGN` tokens are only `<<-` updating closure state), no file has `%>%`, every R source is ASCII and at most 100 characters per line (G2's copied app files are copied by command, not embedded).
+- Every ```r block of this plan was extracted and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. `getParseData()` finds no `<-`
+  (`LEFT_ASSIGN` tokens are only `<<-` updating closure state), no file has `%>%`, every R source is
+  ASCII and at most 100 characters per line (G2's copied app files are copied by command, not
+  embedded).
 - Development tests (rtiktoken 0.0.7 from a private library): `common`
   `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 26 ]`; `golden-fixtures` `[ ... PASS 273 ]` with the 14
   fixtures, and `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 143 ]` with P24's five removed (the red step);

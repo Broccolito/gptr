@@ -467,10 +467,11 @@ All final artifact/frontend/model/compaction/site/security/CRAN gates remain exp
 
 All three pre-retirement native hosts now pass source AND installed contexts:
 [Mac/Windows38211164788](https://github.com/Broccolito/gptr/actions/runs/38211164788)
-at3574 has1422P/1439P per context; [Linux38212625104](https://github.com/Broccolito/gptr/actions/runs/38212625104)
-at8f03 has1425P per context. Each207cases/0failures/test warnings/outer warnings/unexpected skips;
-existing named guards retained. Raw downloaded rows inspected. callr still imported; independently
-reviewed removal packet and CI rebase await application.
+at3574 has1422P/1439P per context;
+[Linux38212625104](https://github.com/Broccolito/gptr/actions/runs/38212625104) at8f03 has1425P per
+context. Each207cases/0failures/test warnings/outer warnings/unexpected skips; existing named guards
+retained. Raw downloaded rows inspected. callr still imported; independently reviewed removal packet
+and CI rebase await application.
 
 Observer phase-A Mac provisioned controls113P/0F/W/S and pure Python10controls pass.
 Canonical owned temp is necessary: shared Mac T ancestors exceed fixed4096entries;
@@ -556,10 +557,11 @@ security, documentation and exact-archive package checks follow alongside RPX01-
    callr use and unchanged remaining dependency/pure-R contracts. Rerun metadata/docs,
    affected native suites and exact-archive CRAN/release gates (RPX07).
 
-Detailed cases are [RPX01-07](../TESTING_PLAN.md#bounded-rscriptprocessx-replacement--accepted-2026-10-11).
-The narrow [architecture amendment](../spec/03-architecture.md#9-dependencies-d-20-d-21-d-23)
-and [IC-60](../spec/04-interface-contract.md) govern the launcher change. Numbered P19/P23
-examples remain baseline history. No new Import or compiled code is authorized.
+Detailed cases are
+[RPX01-07](../TESTING_PLAN.md#bounded-rscriptprocessx-replacement--accepted-2026-10-11). The narrow
+[architecture amendment](../spec/03-architecture.md#9-dependencies-d-20-d-21-d-23) and
+[IC-60](../spec/04-interface-contract.md) govern the launcher change. Numbered P19/P23 examples
+remain baseline history. No new Import or compiled code is authorized.
 
 ## Historical proof and current boundary
 

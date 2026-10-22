@@ -197,7 +197,26 @@ session-check tests of Task 6 skip (`SKIP 2`); without `capabilities("profmem")`
 
 ## Interfaces consumed (exact names; 04 is authoritative)
 
-- P01: `the`, `` `%||%` ``, `on_load(expr)`, `on_unload(fun)`, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_strings(x, arg, null = FALSE)`, `check_flag(x, arg, null = FALSE)`, `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`, `gptr_opt(name)`, `gptr_has_human()`, `supervise_default()`, `workspace_root(create = TRUE)`, `path_norm(path)`, `path_rel(path, root = project_root())`, `save_rds(object, file, compress = FALSE)` [R7][leaf], `port_candidates(n = 20L)`, `with_seed_preserved(expr)` [leaf], `hash_sha256(x)`, `as_utf8(x)`, `raw_to_utf8(x, fallback = "CP1252")`, `read_utf8(path)` (`$text`), `write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)`, `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `new_listing(df, class, footer = NULL)`, `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)` (`source = "screenshot"`), `ev_new(type, ...)`; tests: `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`, `local_gptr_options(..., .env = parent.frame())`, `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`, `fake_tool(name, ..., .text = NULL, .id = NULL)`, `fake_requests(spec)`, `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`, `rscript_path()`.
+- P01: `the`, `` `%||%` ``, `on_load(expr)`, `on_unload(fun)`,
+  `gptr_abort(message, class, ..., .data = NULL, call = NULL)`,
+  `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`,
+  `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_strings(x, arg, null = FALSE)`,
+  `check_flag(x, arg, null = FALSE)`,
+  `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`, `gptr_opt(name)`,
+  `gptr_has_human()`, `supervise_default()`, `workspace_root(create = TRUE)`, `path_norm(path)`,
+  `path_rel(path, root = project_root())`, `save_rds(object, file, compress = FALSE)` [R7][leaf],
+  `port_candidates(n = 20L)`, `with_seed_preserved(expr)` [leaf], `hash_sha256(x)`, `as_utf8(x)`,
+  `raw_to_utf8(x, fallback = "CP1252")`, `read_utf8(path)` (`$text`),
+  `write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)`,
+  `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `new_listing(df, class, footer = NULL)`,
+  `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)`
+  (`source = "screenshot"`), `ev_new(type, ...)`; tests:
+  `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`,
+  `local_gptr_options(..., .env = parent.frame())`,
+  `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`,
+  `fake_tool(name, ..., .text = NULL, .id = NULL)`, `fake_requests(spec)`,
+  `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`,
+  `rscript_path()`.
 - P02: `gptr_spec(kind, name, ...)`,
   `gptr_tool(name, description, parameters = NULL, execute = NULL, fun = NULL, exposure = c("direct", "r", "deferred", "hidden"), namespace = NULL, execution = c("sequential", "concurrent"), risk = NULL, snippet = NULL, guidelines = NULL, signature = NULL, output_tokens = NULL, record = TRUE, available = NULL, annotations = list())`,
   `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`,
@@ -292,8 +311,8 @@ session-check tests of Task 6 skip (`SKIP 2`); without `capabilities("profmem")`
   `artifact_checks(parse = NA, launch = NA, http = NA, session = NA, messages = character())`,
   `artifact_checks_json(checks)`, `artifact_checks_from_json(x)`, `artifact_file_sha(path)`,
   `artifact_dir_bytes(id)`,
-  `new_gptr_artifact(id, title, kind, version, url = NA_character_, path, status = "stopped", checks = artifact_checks(), screenshot = NULL, session = NULL)` ->
-  the 04 section 5.10 handle (fields in contract order); S3 methods `format.gptr_artifact()` (the
+  `new_gptr_artifact(id, title, kind, version, url = NA_character_, path, status = "stopped", checks = artifact_checks(), screenshot = NULL, session = NULL)`
+  -> the 04 section 5.10 handle (fields in contract order); S3 methods `format.gptr_artifact()` (the
   NS-8 line, then `checks: parse ok | launch ok | http ok | session skipped`, the messages and the
   screenshot path) and `print.gptr_artifact()`.
 
@@ -679,7 +698,9 @@ git commit -m "feat(artifact): add artifact ids, metadata and the gptr_artifact 
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1 (`path_rel()` messages through `artifact_dir()`); P01 `as_utf8()`, `read_utf8()`, `` `%||%` ``; P03 `secret_scan(code, tainted = character())` (`$findings`, a df with `rule` and `name`; rule `secret_file` is the G6 section 3.8 secret-file read, level 3).
+- Consumes: Task 1 (`path_rel()` messages through `artifact_dir()`); P01 `as_utf8()`, `read_utf8()`,
+  `` `%||%` ``; P03 `secret_scan(code, tainted = character())` (`$findings`, a df with `rule` and
+  `name`; rule `secret_file` is the G6 section 3.8 secret-file read, level 3).
 - Produces: `artifact_static_check(code)` ->
   `list(ok = lgl(1), stage = "parse" | "static" | "ok", messages = chr, packages = chr)` (never
   evaluates the code); the `check` functions of the two built-in `artifact_type` specs (04
@@ -1026,7 +1047,18 @@ git commit -m "feat(artifact): add the static checks of app.R"
   version directory) and `artifact_build_html()` (copies `page.html` and writes the wrapper
   `app.R`); `artifact_html_wrapper(names)`.
 
-Report 17 §5.1 `art_snapshot()` with the contract's numbering (IC-63: "Data snapshots are `data/001.rds`, `data/002.rds`, ... with the mapping in `artifact.json`; the loader reads the file listed for each name"), so a data object named `a/b` snapshots as `data/001.rds` and the loader binds it as `` `a/b` `` (05 P23 acceptance 5). Shiny sources `R/*.R` of the app directory before `app.R` (report 17 §2.2, verified for shiny 1.13.0 and 1.14.0 by its verification log item 3), so the objects exist under their names when `app.R` runs. User objects are read only through two leaves: `artifact_data_facts()` returns primitives (class, dim, `object.size()`) and `artifact_data_save()` hands the object straight to `save_rds()` (R4, R7); `envir` is never kept (R1, R2). The total size is checked against `gptr.artifact_max_bytes` before anything is written (NS-11: "`pbmc` exceeds `gptr.artifact_max_bytes`, so `peter$app()` errors with advice"). The `html` kind is report 17 §2.5 "A" (verified: iframe `srcdoc`, so the page's CSS and JS are isolated from Bootstrap), with the data as `window.GPTR_DATA.<name>` and `</` escaped inside the script.
+Report 17 section 5.1 `art_snapshot()` with the contract's numbering (IC-63: "Data snapshots are
+`data/001.rds`, `data/002.rds`, ... with the mapping in `artifact.json`; the loader reads the file
+listed for each name"), so a data object named `a/b` snapshots as `data/001.rds` and the loader
+binds it as `` `a/b` `` (05 P23 acceptance 5). Shiny sources `R/*.R` of the app directory before
+`app.R` (report 17 section 2.2, verified for shiny 1.13.0 and 1.14.0 by its verification log
+item 3), so the objects exist under their names when `app.R` runs. User objects are read only
+through two leaves: `artifact_data_facts()` returns primitives (class, dim, `object.size()`) and
+`artifact_data_save()` hands the object straight to `save_rds()` (R4, R7); `envir` is never kept
+(R1, R2). The total size is checked against `gptr.artifact_max_bytes` before anything is written
+(NS-11: "`pbmc` exceeds `gptr.artifact_max_bytes`, so `peter$app()` errors with advice"). The `html`
+kind is report 17 section 2.5 "A" (verified: iframe `srcdoc`, so the page's CSS and JS are isolated
+from Bootstrap), with the data as `window.GPTR_DATA.<name>` and `</` escaped inside the script.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1286,7 +1318,13 @@ git commit -m "feat(artifact): snapshot data into numbered files and build versi
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-3; P01 `port_candidates(n = 20L)`, `gptr_inform(message, class, ..., .once = NULL)` (class `notice`), `` `%||%` ``; P03 `child_env("artifact", set = c(...))`, `child_env_callr(env)`; Suggests openssl (`rand_bytes()`), and inside the child only: shiny (`shinyAppDir()`, `parseQueryString()`, `isolate()`, `runApp()`, `stopApp()`), httpuv (`startServer()`, `stopServer()`), later (`later()`), ps (`ps_handle()`, `ps_is_running()`); tests: callr `r_bg()`, P04 `kill_all(p, grace = 2)`, P01 `rscript_path()`, processx, curl.
+- Consumes: Tasks 1-3; P01 `port_candidates(n = 20L)`,
+  `gptr_inform(message, class, ..., .once = NULL)` (class `notice`), `` `%||%` ``; P03
+  `child_env("artifact", set = c(...))`, `child_env_callr(env)`; Suggests openssl (`rand_bytes()`),
+  and inside the child only: shiny (`shinyAppDir()`, `parseQueryString()`, `isolate()`, `runApp()`,
+  `stopApp()`), httpuv (`startServer()`, `stopServer()`), later (`later()`), ps (`ps_handle()`,
+  `ps_is_running()`); tests: callr `r_bg()`, P04 `kill_all(p, grace = 2)`, P01 `rscript_path()`,
+  processx, curl.
 - Produces: `artifact_serve(dir, port_file, parent_pid, token)` (04 section 7.23; the callr child's
   entry); `artifact_token()` -> chr(1) 32 lower-case hex digits, or `""` with a one-time
   `gptr_message_notice`; `artifact_has_openssl()`, `artifact_shiny_available()` (seams for tests);
@@ -2177,7 +2215,12 @@ git commit -m "feat(artifact): add the artifact process table, redacted logs and
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-5 (`artifact_log_sync()`, `artifact_log_new()` in tests); P01 `with_seed_preserved(expr)` [leaf], `json_decode()`, `read_utf8()`, `` `%||%` ``; P04 `reactor_now()`, `reactor_pump(until, slice_ms, timeout)` (the 100 ms pause between state polls, so the wait never blocks other runs' transfers); Suggests chromote (`find_chrome()`, `Chromote$new()`, sessions with `Runtime`, `Page`, `wait_for()`, `captureScreenshot()`), jsonlite (`base64_dec()`); tests: Task 4's `serve_child()`, `build_version()`, `http_status()`, `ok_app`.
+- Consumes: Tasks 1-5 (`artifact_log_sync()`, `artifact_log_new()` in tests); P01
+  `with_seed_preserved(expr)` [leaf], `json_decode()`, `read_utf8()`, `` `%||%` ``; P04
+  `reactor_now()`, `reactor_pump(until, slice_ms, timeout)` (the 100 ms pause between state polls,
+  so the wait never blocks other runs' transfers); Suggests chromote (`find_chrome()`,
+  `Chromote$new()`, sessions with `Runtime`, `Page`, `wait_for()`, `captureScreenshot()`), jsonlite
+  (`base64_dec()`); tests: Task 4's `serve_child()`, `build_version()`, `http_status()`, `ok_app`.
 - Produces: `artifact_session_check(rec, png, width = 1000L, height = 700L, timeout = 20)` ->
   `list(ok = TRUE | FALSE | NA, messages = chr, screenshot = <png path> | NULL)` (`NA` = the check
   could not run: an HTTP-only check, which the messages say); `artifact_chromote_missing()` ->
@@ -3287,8 +3330,8 @@ git commit -m "feat(artifact): add the artifacts checkpointer"
   (`peter$app`), P01 `expect_no_copy()`, `gptr_fake_provider()` (in the child script),
   `local_gptr_options()`.
 - Produces:
-  `artifact_app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = FALSE, envir = globalenv(), ctx = NULL)` ->
-  `gptr_artifact` (the body of `peter$app()`); the member `app` (04 section 9.4):
+  `artifact_app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = FALSE, envir = globalenv(), ctx = NULL)`
+  -> `gptr_artifact` (the body of `peter$app()`); the member `app` (04 section 9.4):
   `artifact_member_fun(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())`
   (the spec's `fun`, the signature of 04 section 9.4), `artifact_member_execute(input, ctx)` (the
   spec's `execute` for model code: appends the `gptr.artifact` entry

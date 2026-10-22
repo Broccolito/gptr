@@ -251,9 +251,11 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   (4 merged), codetools test out; F8 `rapply()`; F9/F13 P01 checkers; F10/F11 duplicate path, handle
   and rule checks gone; F12 one `guard()`; F14 option A; F15 `secret_marker_re` (R -95, tests -161).
 - Red: FAIL 2 (`auth-redact`: structural kept a handle display and a known marker). Green:
-  `auth-|eval-guard` PASS 1213 (1194 before: +17 D-010 table, +2 structural and rule, +1 provider key
-  name, -1 codetools). Lint clean. Neighbours: `catalog-models|doc-|mcp-client|proc-|provider-registry|
-  session-live|arch-layers|lint-rules|eval-|http-|copy-|cli-common|ext-check|gptr-config|agent-run` green.
+  `auth-|eval-guard` PASS 1213 (1194 before: +17 D-010 table, +2 structural and rule, +1 provider
+  key name, -1 codetools). Lint clean. Neighbours:
+  `catalog-models|doc-|mcp-client|proc-|provider-registry|
+  session-live|arch-layers|lint-rules|eval-|http-|copy-|cli-common|ext-check|gptr-config|agent-run`
+  green.
 - Reviews: R1 minor (provider key name no longer checked; fixed test-first, FAIL 1 then green), nit
   (counts, Open list; fixed).
 - Deviations: D-150. Open: F17/F18 specifics lost (shared decision 1 sites only);
@@ -266,9 +268,10 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   wrappers; S05 (D-151); S07 `template_expand_input()` in the test file; S12 `res_dir_specs()`,
   `res_md_files()`; S19 `plugin_from_dir(path, name, kind)`; S20 `res_group_fresh()`;
   `api_satisfies()`; is_string (R -237, tests -91; plan ~247).
-- Red: FAIL 17 (merged alias refusal, aliases within the cap accepted, `res_md_files` missing). Green:
-  PASS 871 (895 before: -8 plugin_api_ok, -15 duplicated, -2 fm_size_ok, +1 unparseable API); `LC_ALL=C`
-  skill-templates 166. Lint clean. Neighbours: `arch-layers|lint-rules|zzz|ext-|gptr-config`,
+- Red: FAIL 17 (merged alias refusal, aliases within the cap accepted, `res_md_files` missing).
+  Green: PASS 871 (895 before: -8 plugin_api_ok, -15 duplicated, -2 fm_size_ok, +1 unparseable API);
+  `LC_ALL=C` skill-templates 166. Lint clean. Neighbours:
+  `arch-layers|lint-rules|zzz|ext-|gptr-config`,
   `gptr-gateway|gptr-sdk|tool-read|tool-namespace|prompt-sections|session-add|agent-dispatch|s1-route|
   cli-codex|cli-claude|subagent` green.
 - Reviews: none yet.
@@ -280,7 +283,8 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   `local_r46_file_ext()` and the test-utils-paths comparison with tools (R-version dependent without
   them) gone; `local_name_locale()` kept.
 - Red: FAIL 1 (`lint-rules`: ext-specs.R:1311, gptr-gateway.R:695). Green: plan filter PASS 1391 (-2
-  tools-comparison expectations). Lint clean. Neighbours: `arch-layers|doc-replay|doc-formats|ext-api|
+  tools-comparison expectations). Lint clean. Neighbours:
+  `arch-layers|doc-replay|doc-formats|ext-api|
   ext-check|gptr-sdk|tool-namespace` green; cross-plan 0 errors.
 - Reviews: round 1 minor (a passed `tools::file_ext` escaped the call rule; now a token rule, red:
   f22's value reference uncaught) and nit (P11 Task 3 literal added to Open) fixed; nit (stage own
@@ -308,9 +312,10 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   `msg_failed()`, `msg_calls()`, `msg_final()`; F8 one emitter; F10 `run_compact()`,
   `run_apply_pending_model()`; F11 is_string; F13 `store_close()`, `store_pkg_version()` gone; F14
   `tool_call_hook()`; F15; F16; F17 two folds (R -150, tests -78; plan ~292).
-- Red: none (refactor). Green: `agent-|session-|copy-session` PASS 2167 incl. L01-L24, S-oracles (2142 own +
-  25 of cli-sub's new test-agent-background.R; 2198 before: -35 refusals, -16 re-checks, -5 folded). Lint
-  clean. Neighbours: `arch-layers|lint-rules|ext-|copy-|zzz|aaa-state`, `gptr-|prompt-|context-|doc-|s1-|
+- Red: none (refactor). Green: `agent-|session-|copy-session` PASS 2167 incl. L01-L24, S-oracles
+  (2142 own + 25 of cli-sub's new test-agent-background.R; 2198 before: -35 refusals, -16 re-checks,
+  -5 folded). Lint clean. Neighbours: `arch-layers|lint-rules|ext-|copy-|zzz|aaa-state`,
+  `gptr-|prompt-|context-|doc-|s1-|
   provider-usage|tool-|cli-common|bench-context` green.
 - Reviews: round 1 clear, 1 minor + 1 nit: `rebuild_mode()` uses `path_custom()`; D-154 Tests line
   names the retry refusal loop; gateway copies left to simp-gw (Open).
@@ -351,9 +356,10 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   site lookup; F11 one literal encoder, `doc_unquote()`; F13 switch default; wrappers, is_string;
   `helper-doc.R`, `doc_record()` with `call_new()`; F12/F17 merged tests (md5, IDE final newline,
   gptr_source files) (R -475, tests -262; plan ~657).
-- Red: none (refactor); the new notebook-number test fails on HEAD (`1.50` -> `1.5`). Green: `doc-` PASS 1808
-  (1832 before: Python repr, fax and duplicate expectations out), `LC_ALL=C` 1743; token bench `--check` OK.
-  Lint clean. Neighbours: `arch-layers|lint-rules|auth-redact|ext-check|ext-specs|tool-r|utils-options|
+- Red: none (refactor); the new notebook-number test fails on HEAD (`1.50` -> `1.5`). Green: `doc-`
+  PASS 1808 (1832 before: Python repr, fax and duplicate expectations out), `LC_ALL=C` 1743; token
+  bench `--check` OK. Lint clean. Neighbours:
+  `arch-layers|lint-rules|auth-redact|ext-check|ext-specs|tool-r|utils-options|
   utils-paths|s1-route|gptr-gateway|gptr-capture|prompt-sections|bench-context|zzz` PASS 2738.
 - Reviews: round 1 changes_required: F15 reverted (knitr labels `//| `/`%%| ` chunks, so `#| `-only
   shifted later R chunks' unnamed numbers; probe `{dot}` chunk back, red first); an unmarked
@@ -375,7 +381,8 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   `helper-p07.R` (`p07_session()`, `p07_project()`, `block_kinds()`, `wrap()`, the stand-ins,
   `compose_case()`); compaction's own session helper is `compact_session()`; three "(Task n:
   create)" headers gone (tests -192; plan ~155).
-- Red: none (refactor). Green: touched files PASS 7567 (7567 before). Lint clean. Neighbours: `env-snapshot|
+- Red: none (refactor). Green: touched files PASS 7567 (7567 before). Lint clean. Neighbours:
+  `env-snapshot|
   gptr-capture|copy-gateway|lint-rules|arch-layers|ext-|zzz|context-prefix|prompt-text|provider-(fake|message)`
   PASS 2724 (2724 before); token bench `--check` OK.
 - Reviews: round 1 changes_required: `test-s1-route.R`'s `local_router_service()` copy removed

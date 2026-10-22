@@ -95,7 +95,8 @@ passes do not close them or retag the earlier immutable895 archive.
 - `R/session-store.R`: `c480b32d28a61fc4dd50de6a127361e2b78ef1f4b7b001d880dc1f8ed8cee8e1`
 - `R/console-commands.R`: `2d4e049c81afde99371d652110730ca19fdb3001e65e76531472cd3a58c26fcd`
 - `R/mcp-server.R`: `77df52b702f66e74534ab1bafe48d7a5e6fff4b4ec33d95eb7d7788ae271de50`
-- `tests/testthat/test-compaction-acceptance.R`: `697d19755e3a6c1dd389bbc64ca4ac4ed3cbb75be222cf26b10af8f1c2e4f56d`
+- `tests/testthat/test-compaction-acceptance.R`:
+  `697d19755e3a6c1dd389bbc64ca4ac4ed3cbb75be222cf26b10af8f1c2e4f56d`
 
 The full diff, including the untracked new test file, is full-six-file-diff.patch. Each named test
 stage has .log, -tests.json, -resources.json/.csv and -controller.json siblings. Final lint has

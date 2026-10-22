@@ -6198,9 +6198,12 @@ Validation run during this review (in a scratch directory outside the repository
 
 Cross-plan consistency pass of 2026-10-01 against 04 (with section 15), 03, 05 and the related plans
 (P01, P07, P10, P12, P24).
-Every ```` ```r ```` block (now 25: Task 9 gained one for `test-s1-route.R`) was re-extracted and parsed with `Rscript --vanilla`: no parse error, no `LEFT_ASSIGN` token and no `%>%` in any block (the only `<-` characters are in the S3 replacement-method names `[<-.gptr_s1` and `[[<-.gptr_s1`, a test title and comments). The two changed test blocks and the new one were linted with P01's `.lintr` linters (`object_usage_linter`
-off for single files): 0 lints. Per-test expectation counts were recounted from the code: the four
-moved tests hold 29 expectations (5, 7, 9 and 8).
+Every ```` ```r ```` block (now 25: Task 9 gained one for `test-s1-route.R`) was re-extracted and
+parsed with `Rscript --vanilla`: no parse error, no `LEFT_ASSIGN` token and no `%>%` in any block
+(the only `<-` characters are in the S3 replacement-method names `[<-.gptr_s1` and `[[<-.gptr_s1`, a
+test title and comments). The two changed test blocks and the new one were linted with P01's
+`.lintr` linters (`object_usage_linter` off for single files): 0 lints. Per-test expectation counts
+were recounted from the code: the four moved tests hold 29 expectations (5, 7, 9 and 8).
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|

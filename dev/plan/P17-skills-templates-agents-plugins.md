@@ -178,7 +178,18 @@ Test commands follow conventions section 2. `devtools::test()` sets `NOT_CRAN=tr
 
 **Interfaces:**
 
-- Consumes (P01, 04 section 7.1): `the`, `` `%||%` ``, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `as_utf8(x)`, `read_utf8(path)` (-> `list(text, eol, bom, encoding, final_newline)`), `path_norm(path)`, `path_key(path)`, `project_root(path = getwd())`, `ext_service_has(name)`, `ext_service_get(name)`. (P02, 04 §7.2, §6.7): `gptr_spec(kind, name, ...)`, `gptr_command(name, handler, description = NULL, complete = NULL)`, `gptr_registry(kind = NULL, diagnostics = FALSE)`, `gptr_api()`, `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`, `registry_get(kind, name, session = NULL)`, `registry_generation()`, `registry_diagnostic(source, event, class, message)`. (P08, IC-33): the `trust.get` service `function(path = getwd()) lgl(1)`, fallback `FALSE`. Test helpers (P01, 04 §12.2): `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`.
+- Consumes (P01, 04 section 7.1): `the`, `` `%||%` ``,
+  `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `as_utf8(x)`, `read_utf8(path)` (->
+  `list(text, eol, bom, encoding, final_newline)`), `path_norm(path)`, `path_key(path)`,
+  `project_root(path = getwd())`, `ext_service_has(name)`, `ext_service_get(name)`. (P02, 04
+  sections 7.2, 6.7): `gptr_spec(kind, name, ...)`,
+  `gptr_command(name, handler, description = NULL, complete = NULL)`,
+  `gptr_registry(kind = NULL, diagnostics = FALSE)`, `gptr_api()`,
+  `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`,
+  `registry_get(kind, name, session = NULL)`, `registry_generation()`,
+  `registry_diagnostic(source, event, class, message)`. (P08, IC-33): the `trust.get` service
+  `function(path = getwd()) lgl(1)`, fallback `FALSE`. Test helpers (P01, 04 section 12.2):
+  `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`.
 - Produces (internal; used by Tasks 2-12, and `frontmatter_read()`/`fm_chr_list()` by P19's agent
   loading through `agent_file_parse()`): `res_state()` (P17's process state `the$resources`:
   `handlers`, `groups`, `parse`, `plugins`, `loaded`, `used`, `tick`, `sync_gen`, `discovered`);
@@ -3188,7 +3199,12 @@ git commit -m "feat(prompts): register templates as /name commands and ship /rev
 
 **Interfaces:**
 
-- Consumes: Task 1 (`frontmatter_read()`, `fm_chr_list()`, `res_spec()`, `res_cached()`); P01 `path_norm()`, `` `%||%` ``; P02 `gptr_spec("agent", ...)` and its validator (04 §10.2 row 21: `description` chr(1), `model`, `tools`, `skills`, `system` chr(1), `backend` chr(1) default `"auto"`, `preset` default `"minimal"`, `max_turns` int(1), `mode` in `plan`, `manual`, `edits`, `auto`, `returns` list, `file` chr(1); names equal to a session accessor are refused, IC-71), `registry_diagnostic()`, `gptr_registry()`.
+- Consumes: Task 1 (`frontmatter_read()`, `fm_chr_list()`, `res_spec()`, `res_cached()`); P01
+  `path_norm()`, `` `%||%` ``; P02 `gptr_spec("agent", ...)` and its validator (04 section 10.2
+  row 21: `description` chr(1), `model`, `tools`, `skills`, `system` chr(1), `backend` chr(1)
+  default `"auto"`, `preset` default `"minimal"`, `max_turns` int(1), `mode` in `plan`, `manual`,
+  `edits`, `auto`, `returns` list, `file` chr(1); names equal to a session accessor are refused,
+  IC-71), `registry_diagnostic()`, `gptr_registry()`.
 - Produces (04 section 7.17): `tool_name_map(names)` -> chr (unknown names dropped and listed in the
   attribute `unknown`); `agent_file_parse(path)` -> an `agent` spec (the `gptr_agent()` fields plus
   `source` and `trusted`) or `NULL` (no frontmatter or no `name`: documentation, no diagnostic;

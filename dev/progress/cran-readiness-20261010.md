@@ -186,7 +186,8 @@ but recorded five Chromium component-update URL-fetcher directories. Chromium on
 inherits TMPDIR; the existing suite-owned `child-temp` fix should cover this category too.
 Mac Chromium instead reads MAC_CHROMIUM_TMPDIR. That variable now joins the same existing
 test-only restoration scope and owned directory; shipping browser behavior is unchanged.
-[Chromium Mac source](https://chromium.googlesource.com/chromium/src/+/refs/tags/146.0.7680.180/base/files/file_util_apple.mm)
+[Chromium Mac
+source](https://chromium.googlesource.com/chromium/src/+/refs/tags/146.0.7680.180/base/files/file_util_apple.mm)
 
 The outside-sentinel regression failed one assertion before the change and passed all five
 afterward, with zero test failures/warnings and one honest Windows-only skip. Two-file lint

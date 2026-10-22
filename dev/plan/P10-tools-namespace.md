@@ -2987,7 +2987,12 @@ gate input of a nested `peter$edit()` call with an envelope: `edits = list()` pl
 schema).
 
 **Interfaces:**
-- Consumes (P01): `as_utf8()`, `utf8_mark()`, `project_root()`, checkers, `gptr_abort()`, `` `%||%` ``; Task 1: `ns_print_lines()`; Task 2: `fs_path()`, `resolve_tool_path(path, cwd)`; Task 3: `diff_lines()`, `diff_split()`, `diff_unified()`; Task 4: `split_lines_js()`, `split_lines_count()`, `detect_eol()`, `normalize_lf()`, `read_raw()`, `is_binary_raw()`, `sniff_bom()`, `decode_raw()`, `encode_text()`, `bom_bytes`, `replacement_sub`; Task 5: `resolve_link_target()`, `write_bytes_keep_mode()`.
+- Consumes (P01): `as_utf8()`, `utf8_mark()`, `project_root()`, checkers, `gptr_abort()`,
+  `` `%||%` ``; Task 1: `ns_print_lines()`; Task 2: `fs_path()`, `resolve_tool_path(path, cwd)`;
+  Task 3: `diff_lines()`, `diff_split()`, `diff_unified()`; Task 4: `split_lines_js()`,
+  `split_lines_count()`, `detect_eol()`, `normalize_lf()`, `read_raw()`, `is_binary_raw()`,
+  `sniff_bom()`, `decode_raw()`, `encode_text()`, `bom_bytes`, `replacement_sub`; Task 5:
+  `resolve_link_target()`, `write_bytes_keep_mode()`.
 - Produces (04 sections 7.10, 5.10): `edit_file(path, edits, replace_all = FALSE)` ->
   `list(message, diff = chr (at most 400 tokens), fuzzy = lgl(1), details = list(path, n_edits, fuzzy, diff (the full unified diff), document, deviated, reasons, encoding))`;
   `patch_apply(envelope, root = project_root())` -> `list(files, message, details)`;
@@ -3867,7 +3872,10 @@ UTF-8 BOM, UTF-16 and CP1252 files are decoded before matching; CRLF is matched 
 work.
 
 **Interfaces:**
-- Consumes (P01): `as_utf8()`, `utf8_mark()`, checkers, `gptr_abort()`, `` `%||%` ``; Task 1: `ns_print_lines()`, `budget_head()`, `member_budget()`; Task 2: `fs_path()`, `resolve_tool_path()`, `walk_files()`, `glob_to_regex()`; Task 4: `read_raw()`, `sniff_bom()`, `decode_raw()`, `split_lines_count()`, `truncate_lines_head()`, `format_size()`, `tool_max_bytes`.
+- Consumes (P01): `as_utf8()`, `utf8_mark()`, checkers, `gptr_abort()`, `` `%||%` ``; Task 1:
+  `ns_print_lines()`, `budget_head()`, `member_budget()`; Task 2: `fs_path()`,
+  `resolve_tool_path()`, `walk_files()`, `glob_to_regex()`; Task 4: `read_raw()`, `sniff_bom()`,
+  `decode_raw()`, `split_lines_count()`, `truncate_lines_head()`, `format_size()`, `tool_max_bytes`.
 - Produces (04 sections 7.10, 5.10):
   `search_grep(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE, context = 0L, limit = 100L, output = c("content", "files", "count"), sort = c("path", "count", "mtime"))`
   -> `gptr_matches` (`file`, `line` int, `text`; attributes `truncated`, `limit`, plus `context`
@@ -8240,7 +8248,10 @@ Contract readings recorded here (none changes an API of 04):
 
 **Validation executed while writing this plan** (scratch directory `work/plans/P10/v3/`):
 
-- Every ```` ```r ```` block of this plan was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'` (all parse); the `R/` and `tests/testthat/` files reassembled from the blocks are byte-identical to the verified scratch sources.
+- Every ```` ```r ```` block of this plan was extracted and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'` (all parse); the `R/` and
+  `tests/testthat/` files reassembled from the blocks are byte-identical to the verified scratch
+  sources.
 - No left-arrow assignment (checked through `getParseData()` `LEFT_ASSIGN` tokens), no `%>%`, no
   non-ASCII byte in any code block; `lintr::lint()` with the repository's `.lintr` linters
   (assignment `=`/`<<-`, line length 100, snake_case with the S3 regex) reports nothing for the

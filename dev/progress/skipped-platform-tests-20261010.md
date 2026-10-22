@@ -55,14 +55,15 @@ requires actual production execution before integration.
 | App browser/search integrations | DONE actual63a2454 | Linux506 and Windows502 assertions across search/app/cleanup,0 failures/warnings; one named Windows app OS guard. Mandatory actual-browser cases executed, no unhandled close promise |
 | Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
 
-Initial hosted baseline: [Windows run 38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473).
-It uses the unchanged legacy file runner to collect failures, not to certify warning/skip coverage.
-All three process cases reached the 30-second case bound in about 32 seconds; owned families
-settled, peak family RSS was 348-374 MB, output about 10 KB, and sampling errors were zero.
-Cancellation reached the queued phase before hanging, consistent with the native write inside
-the drain preventing later output/timer/timeout handling. Public processx pipe writes also use
-the blocking Windows write operation. An independently owned writer prototype is being reviewed;
-no speculative runtime fix has been applied.
+Initial hosted baseline: [Windows run
+38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473). It uses the unchanged
+legacy file runner to collect failures, not to certify warning/skip coverage. All three process
+cases reached the 30-second case bound in about 32 seconds; owned families settled, peak family RSS
+was 348-374 MB, output about 10 KB, and sampling errors were zero. Cancellation reached the queued
+phase before hanging, consistent with the native write inside the drain preventing later
+output/timer/timeout handling. Public processx pipe writes also use the blocking Windows write
+operation. An independently owned writer prototype is being reviewed; no speculative runtime fix has
+been applied.
 
 Six security cases stopped before link creation because positional `local_tempfile()` used its
 deprecated binding mode rather than returning a path. The two timestamp fixtures lost fractional
@@ -74,23 +75,23 @@ established by this scaffold run. The legacy numeric summary misses raw expectat
 the new strict runner counts raw error/failure/warning conditions independently.
 
 The plan-check diagnostic controller passed six stdlib regression tests after a tests-first RED.
-The subsequent strict [run `38113192422`](https://github.com/Broccolito/gptr/actions/runs/38113192422)
-executed all four actual plan stages successfully on Linux at exact `245de54`: index about
-90 seconds, extraction 0.3 seconds, parse 1 second and lint 53 seconds, with unchanged39-file
-source hashes. The25-plan index had0 error-level and90 historical warning-level findings;
-770 R blocks had0 parse/style problems and scoped plan lint had0 findings. Its retained
-Linux artifact SHA256 is75c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466.
-Integration setup failed separately: Python `3.12.12` has no Windows x64 archive,
-and `test_file()` changes into `dev/ci`, making the unit helper's root-relative source path
-invalid. The reviewed correction selects Python `3.12.10`, available for both hosts, and a
-helper path valid in either controlled working directory. Optional integration cases, their
-scoped R lint, and corrected Windows fixtures have not run yet. Source syntax and Python tests
-are preparation only. The corrected exact39f3248 hosted rerun38113687980 completed:
-dependency provisioning succeeded and both hosts passed9 Python tests plus21 R gate assertions,
-with0 failures/warnings/skips. Windows then reported launcher exit139 before R lint; Linux
-reported exactly two brace-linter findings in the runner and0 in the pure R gate file. No
-optional integration or corrected security/prototype case ran. The minimal follow-up uses
-Windows `subprocess.run(..., shell=False, env=owned_environment)` with exact exit propagation,
+The subsequent strict [run
+`38113192422`](https://github.com/Broccolito/gptr/actions/runs/38113192422) executed all four actual
+plan stages successfully on Linux at exact `245de54`: index about 90 seconds, extraction 0.3
+seconds, parse 1 second and lint 53 seconds, with unchanged39-file source hashes. The25-plan index
+had0 error-level and90 historical warning-level findings; 770 R blocks had0 parse/style problems and
+scoped plan lint had0 findings. Its retained Linux artifact SHA256
+is75c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466. Integration setup failed
+separately: Python `3.12.12` has no Windows x64 archive, and `test_file()` changes into `dev/ci`,
+making the unit helper's root-relative source path invalid. The reviewed correction selects Python
+`3.12.10`, available for both hosts, and a helper path valid in either controlled working directory.
+Optional integration cases, their scoped R lint, and corrected Windows fixtures have not run yet.
+Source syntax and Python tests are preparation only. The corrected exact39f3248 hosted
+rerun38113687980 completed: dependency provisioning succeeded and both hosts passed9 Python tests
+plus21 R gate assertions, with0 failures/warnings/skips. Windows then reported launcher exit139
+before R lint; Linux reported exactly two brace-linter findings in the runner and0 in the pure R
+gate file. No optional integration or corrected security/prototype case ran. The minimal follow-up
+uses Windows `subprocess.run(..., shell=False, env=owned_environment)` with exact exit propagation,
 preserves POSIX exec, and adds the two missing function braces without disabling lint rules.
 Its two mock launcher tests were RED before the correction and GREEN afterwards; that does
 not prove actual Windows R launch. All four Linux plan stages again passed39f3248 (index164s,
@@ -193,10 +194,11 @@ assertions. These older archives do not include this new packet or prove current
 Reviewed cache, native-tag fixture, owned-browser shutdown, short private Linux temp root,
 Windows search comparison and distinct-log/strict-gate corrections are pushed task by task
 through `38cc8dc023c2c2ec2fa22e6aaaee94d3ea5e3caa`. The six affected full files are running on
-actual Windows and Linux in [38116814583](https://github.com/Broccolito/gptr/actions/runs/38116814583);
-new cache/cleanup regressions and full existing configuration coverage are included. Scoped
-lintr and all four cross-plan checks remain required on that exact source. No result is
-claimed before evidence completes.
+actual Windows and Linux in
+[38116814583](https://github.com/Broccolito/gptr/actions/runs/38116814583); new cache/cleanup
+regressions and full existing configuration coverage are included. Scoped lintr and all four
+cross-plan checks remain required on that exact source. No result is claimed before evidence
+completes.
 
 Local child-only discovery at38cc8dc confirms the existing RStudio bundled Quarto is on
 the isolated child PATH, the existing private Python is selected, and the parent environment
@@ -1248,7 +1250,8 @@ controller warnings. Canonical source archive SHA256 is
 `9f407347f32fc2dbb9d57d40dd8e5b0798b73eed002e83ea5fbda1cdcedee6bb`.
 All four fresh Linux plan stages pass: 25 plans/1523 blocks/770 R blocks, zero parse/style
 problems or lints, 39 equal before/after hashes; retain 90 historical index warnings.
-Raw ZIPs, source manifests and summaries stay in ignored `dev/.validation/windows-security-20261010`.
+Raw ZIPs, source manifests and summaries stay in ignored
+`dev/.validation/windows-security-20261010`.
 
 The exact-self, unknown-self-identity and direct-self-cleanup regressions fail on BOTH hosts
 against unchanged production supervision. Malformed/foreign-record controls pass 32

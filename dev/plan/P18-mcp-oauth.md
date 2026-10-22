@@ -209,7 +209,27 @@ PASS + 1).
 Exactly as defined in 04 and in the dependency plans (internal helpers of a dependency plan are
 marked as such):
 
-- P01: `the`, `on_load(expr)`, `on_unload(fun)`, `` `%||%` ``, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`, `ext_service_has(name)`, `setting_get(key, session = NULL, default = NULL)`, `gptr_opt(name)`, `gptr_can_prompt()`, `gptr_has_human()`, `gptr_is_interactive()`, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `gptr_inform(message, class, ...)`, `msg_verbatim(x, stream = c("stdout", "stderr"))`, the §1.1 checkers (`check_string()`, `check_strings()`, `check_flag()`, `check_number()`, `check_choice()`, `check_env()`, `check_list()`, `check_class()`), `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `json_obj()`, `canonical_json(x)`, `hash_sha256(x)`, `id_new()`, `port_candidates(n = 20L)`, `with_seed_preserved(expr)`, `as_utf8(x)`, `raw_to_utf8(x, fallback = "CP1252")`, `read_utf8(path)`, `write_atomic(path, content)`, `user_home()`, `app_config_dir(app)`, `path_key(path)`, `path_norm(path)`, `project_root(path = getwd())`, `workspace_dir(path = getwd())`, `gptr_user_dir(which, create = FALSE)`, `rscript_path()`, `est_tokens(x, class)`, `truncate_output(text, budget_tokens, class = "r_output", head = 0.4)`, `new_listing(df, class, footer = NULL)`, `schema_validate(schema, input)`, `schema_signature(name, schema, description = NULL, prefix = "")`, `first_sentence(text)` (internal, `json-schema.R`), `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)` (source `"mcp"`); test helpers `local_fake_provider()`, `fake_tool()`, `fake_requests()`, `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`, `local_gptr_options(...)`.
+- P01: `the`, `on_load(expr)`, `on_unload(fun)`, `` `%||%` ``,
+  `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`,
+  `ext_service_has(name)`, `setting_get(key, session = NULL, default = NULL)`, `gptr_opt(name)`,
+  `gptr_can_prompt()`, `gptr_has_human()`, `gptr_is_interactive()`,
+  `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `gptr_inform(message, class, ...)`,
+  `msg_verbatim(x, stream = c("stdout", "stderr"))`, the section 1.1 checkers (`check_string()`,
+  `check_strings()`, `check_flag()`, `check_number()`, `check_choice()`, `check_env()`,
+  `check_list()`, `check_class()`), `json_encode(x, pretty = FALSE)`, `json_decode(text)`,
+  `json_obj()`, `canonical_json(x)`, `hash_sha256(x)`, `id_new()`, `port_candidates(n = 20L)`,
+  `with_seed_preserved(expr)`, `as_utf8(x)`, `raw_to_utf8(x, fallback = "CP1252")`,
+  `read_utf8(path)`, `write_atomic(path, content)`, `user_home()`, `app_config_dir(app)`,
+  `path_key(path)`, `path_norm(path)`, `project_root(path = getwd())`,
+  `workspace_dir(path = getwd())`, `gptr_user_dir(which, create = FALSE)`, `rscript_path()`,
+  `est_tokens(x, class)`, `truncate_output(text, budget_tokens, class = "r_output", head = 0.4)`,
+  `new_listing(df, class, footer = NULL)`, `schema_validate(schema, input)`,
+  `schema_signature(name, schema, description = NULL, prefix = "")`, `first_sentence(text)`
+  (internal, `json-schema.R`),
+  `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)` (source
+  `"mcp"`); test helpers `local_fake_provider()`, `fake_tool()`, `fake_requests()`,
+  `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`,
+  `local_gptr_options(...)`.
 - P02: `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`,
   `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)`,
   `registry_names(kind, session = NULL)`, `registry_diagnostic(source, event, class, message)`,
@@ -7816,7 +7836,9 @@ code; every function a task calls is defined in this plan or listed with its sig
   (3 `object_usage_linter` lints in `mcp_request()` before row F3). `roxygen2::roxygenise()` wrote
   `man/gptr_mcp_serve.Rd` with the `gptr_last()` link resolved and no warning from a P18 file on its
   second pass.
-- Every ` ```r ` block of this plan (27) was written to a file and parsed with `parse(file =)`: no error; `getParseData()` finds no `LEFT_ASSIGN` token `<-` and the text has no `%>%`; every line of the P18 R, test and fixture files is at most 100 characters; the R files are ASCII.
+- Every ` ```r ` block of this plan (27) was written to a file and parsed with `parse(file =)`: no
+  error; `getParseData()` finds no `LEFT_ASSIGN` token `<-` and the text has no `%>%`; every line of
+  the P18 R, test and fixture files is at most 100 characters; the R files are ASCII.
 - Found and fixed while validating: the loopback listener now strips the leading `?` that httpuv
   keeps in `QUERY_STRING`; the catalog trimmer re-estimates the joined text (per-line estimates
   overshot the budget); `mcp_test_post()` keeps caller-supplied era headers; credentials bound to

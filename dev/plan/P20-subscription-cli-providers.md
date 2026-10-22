@@ -419,7 +419,9 @@ test_that("a codex npm shim resolves to its vendored codex.exe", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors, with ``could not find function "pcli_cache_clear"``, ``could not find function "pcli_find"``, ``Can't find binding for `pcli_is_windows` `` and ``could not find function "pcli_codex_vendored"``.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors, with
+``could not find function "pcli_cache_clear"``, ``could not find function "pcli_find"``,
+``Can't find binding for `pcli_is_windows` `` and ``could not find function "pcli_codex_vendored"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1171,7 +1173,9 @@ test_that("each route prints its one-time notice through gptr_inform()", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 26 ]`; the four new tests error with ``could not find function "pcli_bare_state"``, ``could not find function "pcli_fake_command"`` (twice, from `local_fake_cli_path()`) and ``could not find function "pcli_notice"``.
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 26 ]`; the four new tests error with
+``could not find function "pcli_bare_state"``, ``could not find function "pcli_fake_command"``
+(twice, from `local_fake_cli_path()`) and ``could not find function "pcli_notice"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1504,7 +1508,9 @@ test_that("the plan routes list `default` and full ids; fake CLI records are off
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 59 ]`; the five new tests error with ``could not find function "pcli_status"``, ``could not find function "pcli_model_id"``, ``could not find function "pcli_plan_set"`` and ``could not find function "pcli_models"``.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 59 ]`; the five new tests error with
+``could not find function "pcli_status"``, ``could not find function "pcli_model_id"``,
+``could not find function "pcli_plan_set"`` and ``could not find function "pcli_models"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1946,7 +1952,10 @@ test_that("the wire log gets one redacted line per CLI turn start and terminal e
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 86 ]`; the eight new tests error with ``could not find function "pcli_split"``, ``could not find function "pcli_unseen"``, ``could not find function "pcli_params"``, ``could not find function "pcli_turn_new"``, ``could not find function "pcli_track"`` and ``could not find function "pcli_stop_child"``.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 86 ]`; the eight new tests error with
+``could not find function "pcli_split"``, ``could not find function "pcli_unseen"``,
+``could not find function "pcli_params"``, ``could not find function "pcli_turn_new"``,
+``could not find function "pcli_track"`` and ``could not find function "pcli_stop_child"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2578,7 +2587,9 @@ test_that("a restarted child resumes the CLI session; a fresh one gets the histo
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-claude")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the five tests error with ``could not find function "pcli_claude_args"``, ``could not find function "pcli_claude_content"`` and ``could not find function "pcli_claude_build"``.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the five tests error with
+``could not find function "pcli_claude_args"``, ``could not find function "pcli_claude_content"``
+and ``could not find function "pcli_claude_build"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3874,7 +3885,11 @@ test_that("a workspace-write exec that changes control files is reported after i
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-codex")'`
 
-Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 0 ]`; the thirteen tests error with ``could not find function "pcli_codex_args"``, ``could not find function "pcli_codex_sandbox"``, ``could not find function "pcli_codex_prompt"``, ``could not find function "pcli_codex_ensure"``, ``Can't find binding for `pcli_codex_mcp` ``, ``could not find function "pcli_codex_parse"`` and ``could not find function "pcli_control_hash"``.
+Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 0 ]`; the thirteen tests error with
+``could not find function "pcli_codex_args"``, ``could not find function "pcli_codex_sandbox"``,
+``could not find function "pcli_codex_prompt"``, ``could not find function "pcli_codex_ensure"``,
+``Can't find binding for `pcli_codex_mcp` ``, ``could not find function "pcli_codex_parse"`` and
+``could not find function "pcli_control_hash"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4702,7 +4717,9 @@ are `NULL`) and the two hook tests error with ``could not find function "pcli_ho
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-claude")'`
 
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 106 ]`; every `peter()` call ends with ``No adapter is registered for the api cli-claude.`` (seven tests error; the INFRA-19 test, whose sessions are started by `gptr_wait()`, records three failed expectations and passes its time bound).
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 106 ]`; every `peter()` call ends with
+``No adapter is registered for the api cli-claude.`` (seven tests error; the INFRA-19 test, whose
+sessions are started by `gptr_wait()`, records three failed expectations and passes its time bound).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4930,7 +4947,8 @@ test_that("an abort of three running CLI agents leaves no process tree (INFRA-19
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 162 ]`; ``could not find function "pcli_hook_end"`` and `c("agent_end", "session_shutdown") %in% cli_hook_events()` is not all `TRUE`.
+Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 162 ]`; ``could not find function "pcli_hook_end"`` and
+`c("agent_end", "session_shutdown") %in% cli_hook_events()` is not all `TRUE`.
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-claude")'`
 
@@ -5240,7 +5258,10 @@ and `gptr_providers()` has no `codex` row.
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-codex")'`
 
-Expected (the current gptr not installed): `[ FAIL 3 | WARN 0 | SKIP 1 | PASS 72 ]`; the `peter()` calls end with ``No adapter is registered for the api cli-codex.``; the auto-rule test already passes (the fake provider has `type = "cli"` since Task 3); the INFRA-16 test is skipped with "worker children need this version of gptr installed".
+Expected (the current gptr not installed): `[ FAIL 3 | WARN 0 | SKIP 1 | PASS 72 ]`; the `peter()`
+calls end with ``No adapter is registered for the api cli-codex.``; the auto-rule test already
+passes (the fake provider has `type = "cli"` since Task 3); the INFRA-16 test is skipped with
+"worker children need this version of gptr installed".
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5663,7 +5684,13 @@ kept as captured.
 
 ### Validation executed
 
-- Every ```` ```r ```` block of this plan (34) was extracted to the scratch directory and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'` (no errors); `getParseData()` finds no `LEFT_ASSIGN` token in the R files, tests, test support or fake CLI, no `<<-`, no `%>%` and no `:::`; every R block is ASCII and at most 100 characters per line. P01's own lint scanner (`lint_scan()` of `test-lint-rules.R`, extracted from the P01 plan) reports 0 hits on `R/cli-common.R`, `R/cli-claude.R` and `R/cli-codex.R` (231 `cli_literal` hits before the `pcli_` rename of the review).
+- Every ```` ```r ```` block of this plan (34) was extracted to the scratch directory and parsed
+  with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'` (no errors); `getParseData()` finds
+  no `LEFT_ASSIGN` token in the R files, tests, test support or fake CLI, no `<<-`, no `%>%` and no
+  `:::`; every R block is ASCII and at most 100 characters per line. P01's own lint scanner
+  (`lint_scan()` of `test-lint-rules.R`, extracted from the P01 plan) reports 0 hits on
+  `R/cli-common.R`, `R/cli-claude.R` and `R/cli-codex.R` (231 `cli_literal` hits before the `pcli_`
+  rename of the review).
 - A scratch package (`DESCRIPTION` `Package: gptr`) held the definitions extracted from the code of
   P01-P05 and P12 (the transitive closure of everything P20 and its tests call, with P01's `the`
   fields, P03's `on_load()` registrations and `.onLoad`) plus this plan's files, assembled from the
@@ -5732,9 +5759,9 @@ list, 8.5, IC-65), 00-conventions section 5 ("complete list of class names is ..
 (P20 acceptance 4, the M4 row of the milestone table), P18 (Plan acceptance note: "The M4 exit check
 ... is P20's acceptance 4, run once P18-P21 are complete"), P19 (NS-6 team tests, real-worker tests)
 and P21 (Plan acceptance command 5). After the changes
-every ```` ```r ```` block (34) was re-extracted and parsed with `Rscript --vanilla` (0 errors; no `<-` or `%>%` in any block, no `LEFT_ASSIGN`
-token, ASCII only, no line over 100 characters), and the Milestone gate step 3 command parses as
-well. No test, code block or expected count changed.
+every ```` ```r ```` block (34) was re-extracted and parsed with `Rscript --vanilla` (0 errors; no
+`<-` or `%>%` in any block, no `LEFT_ASSIGN` token, ASCII only, no line over 100 characters), and
+the Milestone gate step 3 command parses as well. No test, code block or expected count changed.
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|

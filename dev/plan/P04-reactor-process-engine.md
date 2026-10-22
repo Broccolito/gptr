@@ -683,7 +683,11 @@ git commit -m "feat(http): add byte-level SSE and NDJSON splitters"
   tests)
 
 **Interfaces:**
-- Consumes: `secret_value(handle, origin)` (P03 `auth-secrets.R`: `chr(1)`, `gptr_error_untrusted` for another origin; its only callers are this file and `auth-childenv.R`); `as_utf8(x)`, `gptr_opt(name)`, `` `%||%` `` (P01); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` (P03), `local_gptr_options(..., .env = parent.frame())` (P01 `helper-fake.R`).
+- Consumes: `secret_value(handle, origin)` (P03 `auth-secrets.R`: `chr(1)`, `gptr_error_untrusted`
+  for another origin; its only callers are this file and `auth-childenv.R`); `as_utf8(x)`,
+  `gptr_opt(name)`, `` `%||%` `` (P01); tests:
+  `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` (P03),
+  `local_gptr_options(..., .env = parent.frame())` (P01 `helper-fake.R`).
 - Produces (internal, used by the reactor; `url_origin()` also by later plans that compare origins):
   `url_origin(url)` -> `chr(1)` `scheme://host[:port]` lower-cased with default ports dropped, or
   `NA`; `url_for_log(url)` -> origin and path only; `http_headers(headers, origin)` -> named list of
@@ -2056,7 +2060,9 @@ git commit -m "feat(proc): add the job table and gptr_jobs()"
 - Test: `tests/testthat/test-http-reactor.R` (create; Tasks 8, 10 and 11 append)
 
 **Interfaces:**
-- Consumes: `the`, `on_load(expr)`, `on_unload(fun)`, `` `%||%` `` (P01 `aaa-state.R`); `check_number()`, `check_function()`, `check_strings()` (P01); `registry_diagnostic(source, event, class, message)` (P02 `ext-registry.R`).
+- Consumes: `the`, `on_load(expr)`, `on_unload(fun)`, `` `%||%` `` (P01 `aaa-state.R`);
+  `check_number()`, `check_function()`, `check_strings()` (P01);
+  `registry_diagnostic(source, event, class, message)` (P02 `ext-registry.R`).
 - Produces (04 section 8.2): `reactor_get()` -> the `gptr_reactor` environment; `reactor_now()` ->
   `num(1)` monotonic seconds; `reactor_timer(at, fn, run = NULL)` -> id;
   `reactor_task(fn, run = NULL)` -> id (`fn()` returning `FALSE` ends the task; a number delays the
@@ -2788,10 +2794,10 @@ git commit -m "feat(http): add the process reactor with timers, tasks, tool FIFO
   (Task 6); tests: `rscript_path()`, `read_utf8()`, `json_decode()` (P01), `proc_record()`,
   `proc_dir()`, `proc_tree()`, `proc_sweep()`, `pid_alive()` (Task 4).
 - Produces (04 section 7.4):
-  `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "|", stderr = "|", cleanup_tree = TRUE, supervise = supervise_default())` ->
-  `processx::process` (consumers P18, P19, P20, P22);
-  `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` ->
-  `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))`
+  `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "|", stderr = "|", cleanup_tree = TRUE, supervise = supervise_default())`
+  -> `processx::process` (consumers P18, P19, P20, P22);
+  `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)`
+  -> `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1), elapsed = num(1))`
   (P20, P22); `shell_resolve(cmd)` -> `list(command, args)` (P22);
   `line_reader(p, stream = "stdout", max_line = 16 * 1024^2)` -> environment with `read()`,
   `partial()` and `eof()` (P18, P19, P20). Internal: `proc_resolve(command, args)` ->
@@ -3025,7 +3031,10 @@ kill-on-close job ends the child with its parent; it also runs on Windows and re
 
 Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "proc-spawn")'`
 
-Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 4 ]` with `could not find function "proc_resolve"`, `"shell_resolve_os"`, `"proc_spawn"`, `"proc_run"` and `"line_reader"` (two tests) (the SIGTERM test adds two expectation failures, ``Expected `kids` to have length 2.`` and ``Expected `proc_sweep()` >= 2L.``, because its child script cannot find `proc_spawn`).
+Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 4 ]` with `could not find function "proc_resolve"`,
+`"shell_resolve_os"`, `"proc_spawn"`, `"proc_run"` and `"line_reader"` (two tests) (the SIGTERM test
+adds two expectation failures, ``Expected `kids` to have length 2.`` and
+``Expected `proc_sweep()` >= 2L.``, because its child script cannot find `proc_spawn`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4139,7 +4148,11 @@ git commit -m "feat(http): add the per-provider rate limiter fed by headers and 
 - Test: `tests/testthat/test-http-reactor.R` (append)
 
 **Interfaces:**
-- Consumes: `gptr_opt()`, `ws_path(..., create_parent = TRUE)`, `workspace_root(create = TRUE)`, `path_key(path)`, `as_utf8()`, `json_encode()`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `` `%||%` `` (P01); `redact(x, profile = "persist")` (P03); `url_for_log()` (Task 2); `reactor_now()` (Task 6); tests: `secret_register()` (P03), `json_decode()` (P01), `local_gptr_options()` (P01).
+- Consumes: `gptr_opt()`, `ws_path(..., create_parent = TRUE)`, `workspace_root(create = TRUE)`,
+  `path_key(path)`, `as_utf8()`, `json_encode()`,
+  `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `` `%||%` `` (P01);
+  `redact(x, profile = "persist")` (P03); `url_for_log()` (Task 2); `reactor_now()` (Task 6); tests:
+  `secret_register()` (P03), `json_decode()` (P01), `local_gptr_options()` (P01).
 - Produces (04 section 8.2 "Wire log", INFRA-28, IC-59, IC-65): internal `wire_log_path(session)` ->
   path or `NULL` (off); `wire_log(tr, event, status = NULL)` (one redacted JSON line with `ts`
   (seconds since the epoch, contract section 1.2), `request_id`, `provider`, `model`, `url`,
@@ -4316,8 +4329,8 @@ git commit -m "feat(http): add the opt-in per-session redacted wire log"
   and `redirect` (P01 `helper-mock-server.R`), `sse_splitter()` (Task 1), `proc_spawn()`,
   `reactor_proc()` (Tasks 7-8), `secret_register()` (P03), `local_gptr_options()` (P01).
 - Produces (04 section 8.2):
-  `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)` ->
-  transfer id. Callbacks: `on_headers(status, headers)` once per attempt that received a 2xx head
+  `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)`
+  -> transfer id. Callbacks: `on_headers(status, headers)` once per attempt that received a 2xx head
   (normally once; a second call follows an in-stream retry and means "start over"); `on_bytes(raw)`
   per body chunk of a 2xx response; `on_done(status, headers)` at the end; `on_fail(cnd)` with a
   classed, unsignalled condition (non-2xx bodies are read fully, redacted and classified by
@@ -5385,7 +5398,15 @@ test_that("INFRA-21: a 20-transfer fan-out never exceeds the advertised request 
 
 Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "http-retry")'`
 
-Expected: `[ FAIL 16 | WARN 0 | SKIP 0 | PASS 104 ]`. Four tests fail: "retry-after: 2" (three expectation failures, then ``Error in `expect_gte(gap, 1.8)`: Result of comparison must be `TRUE`, `FALSE`, or `NA` `` because the mock saw one request), "5xx is retried", "an overload before the first delta" and "an in-stream retry" (four expectation failures each, for example ``Expected `st$fail` to be NULL.``, ``Expected `nrow(lg)` to be identical to 2L.`` and ``Expected `st2$fail` to inherit from "gptr_error_overloaded".``; a normaliser's call to the missing `reactor_retry()` fails inside `on_bytes`, which the reactor turns into `gptr_error_internal`). The `retry-after: 3600`, spend-cap and INFRA-21 tests already pass: they need no retry.
+Expected: `[ FAIL 16 | WARN 0 | SKIP 0 | PASS 104 ]`. Four tests fail: "retry-after: 2" (three
+expectation failures, then
+``Error in `expect_gte(gap, 1.8)`: Result of comparison must be `TRUE`, `FALSE`, or `NA` `` because
+the mock saw one request), "5xx is retried", "an overload before the first delta" and "an in-stream
+retry" (four expectation failures each, for example ``Expected `st$fail` to be NULL.``,
+``Expected `nrow(lg)` to be identical to 2L.`` and
+``Expected `st2$fail` to inherit from "gptr_error_overloaded".``; a normaliser's call to the missing
+`reactor_retry()` fails inside `on_bytes`, which the reactor turns into `gptr_error_internal`). The
+`retry-after: 3600`, spend-cap and INFRA-21 tests already pass: they need no retry.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5578,7 +5599,18 @@ Every scope bullet, review amendment and acceptance check of 05 (P04) has a task
 
 ### Placeholder scan
 
-The plan was searched for "TBD", "TODO", "implement later", "fill in", "appropriate error handling", "handle edge cases", "similar to Task" and "write tests for the above": none occur. Every step that changes code shows the complete code (whole files, whole appended sections, or whole replacement functions); every command has its expected output. Every function the code calls is defined in this plan or listed for P01-P03 in 04: P01 `the`, `on_load()`, `on_unload()`, `` `%||%` ``, `gptr_abort()`, `gptr_inform()`, `check_string()`, `check_strings()`, `check_flag()`, `check_number()`, `check_choice()`, `check_function()`, `check_list()`, `gptr_opt()`, `check_running()`, `supervise_default()`, `as_utf8()`, `os_bytes()`, `raw_to_utf8()`, `read_utf8()`, `msg_verbatim()`, `id_new()`, `json_encode()`, `json_decode()`, `gptr_user_dir()`, `workspace_root()`, `ws_path()`, `path_key()`, `write_atomic()`, `new_listing()`, and the test helpers `rscript_path()`, `local_gptr_options()`, `local_mock_server()`; P02 `registry_get()`, `registry_diagnostic()`; P03 `secret_register()`, `secret_value()`, `redact()`.
+The plan was searched for "TBD", "TODO", "implement later", "fill in", "appropriate error handling",
+"handle edge cases", "similar to Task" and "write tests for the above": none occur. Every step that
+changes code shows the complete code (whole files, whole appended sections, or whole replacement
+functions); every command has its expected output. Every function the code calls is defined in this
+plan or listed for P01-P03 in 04: P01 `the`, `on_load()`, `on_unload()`, `` `%||%` ``,
+`gptr_abort()`, `gptr_inform()`, `check_string()`, `check_strings()`, `check_flag()`,
+`check_number()`, `check_choice()`, `check_function()`, `check_list()`, `gptr_opt()`,
+`check_running()`, `supervise_default()`, `as_utf8()`, `os_bytes()`, `raw_to_utf8()`, `read_utf8()`,
+`msg_verbatim()`, `id_new()`, `json_encode()`, `json_decode()`, `gptr_user_dir()`,
+`workspace_root()`, `ws_path()`, `path_key()`, `write_atomic()`, `new_listing()`, and the test
+helpers `rscript_path()`, `local_gptr_options()`, `local_mock_server()`; P02 `registry_get()`,
+`registry_diagnostic()`; P03 `secret_register()`, `secret_value()`, `redact()`.
 
 ### Names and types against 04
 

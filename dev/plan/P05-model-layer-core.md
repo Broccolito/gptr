@@ -608,8 +608,8 @@ test_that("base URLs come from settings, the record or an environment template",
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-registry")'`
 Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as
-``could not find function "provider_get"`` and ``could not find function "adapter_get"`` (the one pass is the plugin test's `expect_true(ok)`: P02's `ext_load()`
-already exists).
+``could not find function "provider_get"`` and ``could not find function "adapter_get"`` (the one
+pass is the plugin test's `expect_true(ok)`: P02's `ext_load()` already exists).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5171,7 +5171,10 @@ test_that("a replaced child's late output and exit never reach the next turn", {
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-registry")'`
 Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 147 ]`: the five new tests fail (nine failed
 expectations), for example
-``Expected `types[[1]]` to equal "start".`` (the stream ends at once with an `error` event whose `error_message` reads ``could not find function "stream_inprocess"``) (the stream's `error_message` reads ``could not find function "stream_inprocess"``) and ``Error in `pr$spawned[[1]]`: subscript out of bounds``.
+``Expected `types[[1]]` to equal "start".`` (the stream ends at once with an `error` event whose
+`error_message` reads ``could not find function "stream_inprocess"``) (the stream's `error_message`
+reads ``could not find function "stream_inprocess"``) and
+``Error in `pr$spawned[[1]]`: subscript out of bounds``.
 
 - [ ] **Step 3: Write the implementation**
 

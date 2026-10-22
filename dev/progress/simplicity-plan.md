@@ -71,8 +71,10 @@ Every package applies these; a package never introduces a second copy.
 12. **D-entries:** one short entry (section 7 format) per package that changes contract text or
     contract-visible behaviour; pure refactors need none. Next free id is D-138 (D-136/D-137 are
     uncommitted in the tree).
-13. **Commands:** `R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla -e 'devtools::test(filter =
-    "<regex>")'`, then `lintr::lint_package()`; every package ends with the full `devtools::test()` before commit.
+13. **Commands:**
+    `R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla -e 'devtools::test(filter =
+    "<regex>")'`, then `lintr::lint_package()`; every package ends with the full `devtools::test()`
+    before commit.
 
 ## 3. Findings dropped or changed during synthesis
 
@@ -224,11 +226,12 @@ create)/(Task 9: append)" markers. Green: `filter = "gptr-|copy-gateway"`.
 
 **P08-S Gateway duplication** (P08; ~308; low; F2, F3, F4, F6, F7, F8, F9, F10, F13).
 
-- F3 `session_control_check()` everywhere (neutral message in P06; delete test-gptr-config.R 1128-1141; move the
-  `gptr_permissions` case to P11's tests if absent). F4 `egress_check(provider_id, provider = provider_get(id),
-  safety = egress_safety())` and `replay_guard(model, what, mode = replay_mode())`; no more temporary
-  `options(gptr.replay)`; `s1_guards()` uses them (closes D-120 item 14; add one s1-route test for a call-level
-  LAN spec). Contract 04 section 7.8: optional trailing arguments (D-entry).
+- F3 `session_control_check()` everywhere (neutral message in P06; delete test-gptr-config.R
+  1128-1141; move the `gptr_permissions` case to P11's tests if absent). F4
+  `egress_check(provider_id, provider = provider_get(id),
+  safety = egress_safety())` and `replay_guard(model, what, mode = replay_mode())`; no more
+  temporary `options(gptr.replay)`; `s1_guards()` uses them (closes D-120 item 14; add one s1-route
+  test for a call-level LAN spec). Contract 04 section 7.8: optional trailing arguments (D-entry).
 - F2 four run accessors go; one `gateway_guards()`. F6 inline single-use wrappers (delete
   test-gptr-gateway.R 238; retarget test-gptr-capture.R 486). F7 `settings_file_update()`, one
   JSON-object predicate (reuse an existing P01 one if equivalent), merged `trust_read(strict)`. F8
@@ -259,8 +262,9 @@ create)/(Task 9: append)" markers. Green: `filter = "gptr-|copy-gateway"`.
   `gptr_trust()`, `proc_spawn()` directly (delete `local_project_trust()` and the exists() shims);
   reuse `tracemem_loader()` (name kept) in test-proc-spawn.R and test-session-store.R;
   `mock_records()`.
-- Green: `filter = "provider-fake|s1-client|s1-route|auth-childenv|proc-spawn|session-store|utils-hash"` then
-  the full suite (every `local_mock_server()` user).
+- Green:
+  `filter = "provider-fake|s1-client|s1-route|auth-childenv|proc-spawn|session-store|utils-hash"`
+  then the full suite (every `local_mock_server()` user).
 
 **P03-S Auth and redaction** (P03; ~244; low; F1, F3-F15 (F14 option A), F17, F18).
 
@@ -283,13 +287,15 @@ create)/(Task 9: append)" markers. Green: `filter = "gptr-|copy-gateway"`.
   (argument name `prefix` kept for P22). F19 inline stop-reason helpers.
 - Contract: 04 section 4.2 (`msg_validate`), 7.1 (`truncate_output` signature, `locale_utf8`,
   `spill_write` default-prefix mode), 2.2 (`locale` class). One D-entry.
-- Green: `filter = "provider-message|session-object|agent-dispatch|utils-encoding|utils-text|provider-fake"`.
+- Green:
+  `filter = "provider-message|session-object|agent-dispatch|utils-encoding|utils-text|provider-fake"`.
 
 **K-CLS Classifier conformance: one fixture format** (P12/P13; ~220; medium; P13 F3 + P05 S4).
-`adp_classifier_case()` reads the contract 12.4 `{request, status, headers?, response}` shape of `fixtures/jev`
-and `fixtures/ollama`; the classifier-only cases move there in that shape with their `.answers/.usage/.error`
-side files; `fixtures/classifier/*/` duplicates go; golden-check messages simplified (keep the words the tests
-match: file names, 'questions', 'status', 'no golden', class names). Green: `filter =
+`adp_classifier_case()` reads the contract 12.4 `{request, status, headers?, response}` shape of
+`fixtures/jev` and `fixtures/ollama`; the classifier-only cases move there in that shape with their
+`.answers/.usage/.error` side files; `fixtures/classifier/*/` duplicates go; golden-check messages
+simplified (keep the words the tests match: file names, 'questions', 'status', 'no golden', class
+names). Green: `filter =
 "provider-anthropic|s1-"`; `gptr_check()` adapter rows clean.
 
 **P01-S Duplication and two defect fixes** (P01; ~183; low, F8 medium; F4, F5, F8, F10, F13, F14,
@@ -321,21 +327,23 @@ contract's 30 s rule (a live writer holding a settings lock > 30 s could lose it
 longer breaks a fresh lock). Contract: one sentence in 04 section 11.8 / safe-17; D-entry. Plan
 files: P18 (`oauth_lock_with` -> `lock_with`). `doc-io.R` adopts it in P15-S.
 
-**URL One URL parser** (P03/P04/P18; ~28; low; shared decision 3). `R/auth-secrets.R`, `R/http-request.R`,
-`R/auth-oauth.R`, `R/mcp-client.R`, `R/catalog-models.R` (`catalog_header` -> L0 `hdr_value`). Behaviour: an OAuth
-redirect with a control character or backslash is refused as invalid URL rather than untrusted; the MCP HTTP
-cache key hashes curl's normalised path (one cache miss). Check that IPv6 hosts keep brackets. Green: `filter =
+**URL One URL parser** (P03/P04/P18; ~28; low; shared decision 3). `R/auth-secrets.R`,
+`R/http-request.R`, `R/auth-oauth.R`, `R/mcp-client.R`, `R/catalog-models.R` (`catalog_header` -> L0
+`hdr_value`). Behaviour: an OAuth redirect with a control character or backslash is refused as
+invalid URL rather than untrusted; the MCP HTTP cache key hashes curl's normalised path (one cache
+miss). Check that IPv6 hosts keep brackets. Green: `filter =
 "auth-secrets|auth-oauth|http-request|mcp-client|catalog-"`.
 
 **CI-1a CI tooling tests** (infra; ~69; low; TD-07, TD-12). Keep three connection-gate tests (pass,
 leak negative control, failures+leak); drop the duplicate key list in `dev/ci/isolated-check.R`.
 Green: the connections job's leak proof; `isolated-check.R test zzz`.
 
-**FIX5-LINT R 4.6 `file_ext` ban** (P01/P02/P08; ~33; low; P01 F7 + HANDOFF FIX-5). Replace the two remaining
-`tools::file_ext()` calls with `path_ext()`; add a `test-lint-rules.R` row forbidding `file_ext`/
-`file_path_sans_ext` in R/; delete `r46_*` and the `local_r46_file_ext()` calls (test-utils-paths, test-doc-io,
-test-tool-search, test-tool-read; keep `local_name_locale()`). Touches one line each in P10/P15 test files:
-coordinate with those lanes (no uncommitted hunks there today). Green: `filter =
+**FIX5-LINT R 4.6 `file_ext` ban** (P01/P02/P08; ~33; low; P01 F7 + HANDOFF FIX-5). Replace the two
+remaining `tools::file_ext()` calls with `path_ext()`; add a `test-lint-rules.R` row forbidding
+`file_ext`/ `file_path_sans_ext` in R/; delete `r46_*` and the `local_r46_file_ext()` calls
+(test-utils-paths, test-doc-io, test-tool-search, test-tool-read; keep `local_name_locale()`).
+Touches one line each in P10/P15 test files: coordinate with those lanes (no uncommitted hunks there
+today). Green: `filter =
 "lint-rules|utils-paths|doc-io|tool-search|tool-read|ext-specs|gptr-gateway"`.
 
 **P06-S1 Kernel duplication** (P06; ~292; low; F2, F3, F4, F6, F7, F8, F10, F11, F13-F17). Blocked:
@@ -358,13 +366,14 @@ architecture's 768x512). F9 `session_undo()`, `path_fields()`. Green:
 **P02-S Extension core** (P02; ~266; low, X-3/X-6/X-8 medium; P02X-1..15). Blocked: `R/ext-api.R`
 and `test-ext-api.R` carry CI-6 hunks (D-137).
 
-- X-1 `helper-ext.R`. X-2 comments. X-3 one transaction `tryCatch` in `ext_run_factory()`; interrupts now
-  propagate as interrupts (rollback via on.exit). X-4 `registry_enabled()`. X-5 one `kind_from_spec()` (plan
-  files: P22 `kind_stage`). X-6 `check_policy()` assigns synthetic members into its own ctx. X-7 drop the
-  stand-in test. X-8 precomputed outer extension id. X-9 drop unreachable re-checks. X-10 `spec_field_ok(rule =
-  NULL)`, one-expression `ext_policy_ok()`. X-11 `registry_drop_where()`. X-12 `registry_drops_guard()` only.
-  X-13 `ctx_ui_none()` one-liner. X-14/X-15 small items. Plus `ext_policy_decide()` no-opinion case (shared
-  decision 6) if P06-S1 has not added it.
+- X-1 `helper-ext.R`. X-2 comments. X-3 one transaction `tryCatch` in `ext_run_factory()`;
+  interrupts now propagate as interrupts (rollback via on.exit). X-4 `registry_enabled()`. X-5 one
+  `kind_from_spec()` (plan files: P22 `kind_stage`). X-6 `check_policy()` assigns synthetic members
+  into its own ctx. X-7 drop the stand-in test. X-8 precomputed outer extension id. X-9 drop
+  unreachable re-checks. X-10 `spec_field_ok(rule =
+  NULL)`, one-expression `ext_policy_ok()`. X-11 `registry_drop_where()`. X-12
+  `registry_drops_guard()` only. X-13 `ctx_ui_none()` one-liner. X-14/X-15 small items. Plus
+  `ext_policy_decide()` no-opinion case (shared decision 6) if P06-S1 has not added it.
 - Green: `filter = "ext-"` (IC-53 refusals, D-085, rollback), `copy-`.
 
 **P04-S Transport** (P04; ~206; low; S1-S6, S8-S11, S7 reduced to one URL parse). Blocked: S6/S10
@@ -394,12 +403,14 @@ sentence on a user object named `peter` hiding the gateway. Green: the inventory
 the full suite, `run.R --check`, `R CMD check --as-cran` (0 errors, 0 warnings; the formerly guarded
 examples run), lint.
 
-**REN-2 Rename in specs, plans and tooling** (docs; 0 lines; low). One commit `docs(spec,plan): use peter() for
-the entry point (D-135)`: rename.py over `dev/spec/0*.md`, `dev/plan`, `CLAUDE.md`, `HANDOFF.md`; the manual spec
-residue (architecture, contract 14.1 lines 4161/4173, decomposition, decision register), the 23 plan rewraps,
-`build_index.py` `DSL_HOSTS = {"peter"}`, CLAUDE.md:28, vision-brief:118, PROGRESS/HANDOFF, short D-135
-completion note. Leave `dev/research`, `dev/spec/proposals`, `dev/progress`, `DEVIATIONS` history untouched. Green:
-cross-plan checks (0 errors), the inventory's `git grep` residue checks.
+**REN-2 Rename in specs, plans and tooling** (docs; 0 lines; low). One commit
+`docs(spec,plan): use peter() for
+the entry point (D-135)`: rename.py over `dev/spec/0*.md`, `dev/plan`, `CLAUDE.md`, `HANDOFF.md`;
+the manual spec residue (architecture, contract 14.1 lines 4161/4173, decomposition, decision
+register), the 23 plan rewraps, `build_index.py` `DSL_HOSTS = {"peter"}`, CLAUDE.md:28,
+vision-brief:118, PROGRESS/HANDOFF, short D-135 completion note. Leave `dev/research`,
+`dev/spec/proposals`, `dev/progress`, `DEVIATIONS` history untouched. Green: cross-plan checks (0
+errors), the inventory's `git grep` residue checks.
 
 **DOC-1 Condense `DEVIATIONS.md`** (docs; ~8,200; low; TD-02, P11-S4 D-061 part). See section 7.
 Keep every D-id and every contract-visible statement; move D-001..D-005 and D-013 to HANDOFF;
@@ -478,9 +489,10 @@ conflict path; F17/F12 merged tests; `helper-doc.R` and `call_new()` in the stan
 `doc_control_guard` -> `session_control_check` (shared decision 7). After P15 Tasks 17-18 and
 acceptance. Green: `filter = "doc-"` (all six files), `run.R --check`.
 
-**P17-S Skills, templates, plugins** (P17; ~247; medium; S01, S02, S04, S05, S07, S12, S19, S20, plus
-`plugin_api_ok()` -> `api_satisfies()`). S05 drops `fm_size_ok()` (reverts part of D-074; the 4-reference text
-cap bounds expansion; new D-entry). After P17 Task 12 (S02's agent part applied in Task 8). Green: `filter =
+**P17-S Skills, templates, plugins** (P17; ~247; medium; S01, S02, S04, S05, S07, S12, S19, S20,
+plus `plugin_api_ok()` -> `api_satisfies()`). S05 drops `fm_size_ok()` (reverts part of D-074; the
+4-reference text cap bounds expansion; new D-entry). After P17 Task 12 (S02's agent part applied in
+Task 8). Green: `filter =
 "ext-plugins|skill-|subagent-"`.
 
 **P20-S CLI providers** (P20; ~153; low, S06/S11 medium; S03, S06, S09, S10, S11, S14-S18). S03
@@ -504,9 +516,9 @@ Progress log, one section per task, at most ~8 lines:
 - Deviations: D-xxx (or none). Open: <items or none>.
 ```
 
-Plan acceptance stays one table (row, command, actual, status). No "Built", "Precheck" or "Adaptations"
-narratives, no per-round counts, no `dev/.validation/` paths (gitignored, unreadable to anyone else), no copies of
-D-entry text, no CI cross-reference sections (one line in `infra.md`).
+Plan acceptance stays one table (row, command, actual, status). No "Built", "Precheck" or
+"Adaptations" narratives, no per-round counts, no `dev/.validation/` paths (gitignored, unreadable
+to anyone else), no copies of D-entry text, no CI cross-reference sections (one line in `infra.md`).
 
 Deviation entry, at most ~12 lines, edited in place when superseded (never appended per round):
 

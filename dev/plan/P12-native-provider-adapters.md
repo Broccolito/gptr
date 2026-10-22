@@ -2266,7 +2266,8 @@ test_that("end to end on the mock server: streaming, retry and abort (skip on CR
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-anthropic")'`
 Expected: `[ FAIL 20 | WARN 0 | SKIP 0 | PASS 99 ]`, with errors such as
-``could not find function "anthropic_build"`` and `No adapter is registered for the api anthropic-messages.`
+``could not find function "anthropic_build"`` and
+`No adapter is registered for the api anthropic-messages.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5405,7 +5406,8 @@ test_that("end to end on the mock server: a Responses stream (skip on CRAN)", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-openai-responses")'`
 Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 50 ]`, with errors such as
-``could not find function "responses_build"`` and `No adapter is registered for the api openai-responses.`
+``could not find function "responses_build"`` and
+`No adapter is registered for the api openai-responses.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6363,7 +6365,8 @@ test_that("end to end on the mock server: a Gemini stream (skip on CRAN)", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-google")'`
 Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 57 ]`, with errors such as
-``could not find function "google_build"`` and `No adapter is registered for the api google-generative-ai.`
+``could not find function "google_build"`` and
+`No adapter is registered for the api google-generative-ai.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6945,8 +6948,10 @@ it owns `fixtures/sse/`; each P12 test file sources it with
 All runs used `Rscript --vanilla` (R 4.4.3, macOS) in a scratch directory, never the repository; no
 model API was called.
 
-- **Code blocks.** Every ```` ```r ```` block of this plan (30) was extracted to its own file and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. `getParseData()` finds no `LEFT_ASSIGN` token in any block (no `<-` and no `<<-`); no block contains `%>%` or `:::`;
-  the plan file is ASCII only (non-ASCII test text is written as backslash-u escapes inside R
+- **Code blocks.** Every ```` ```r ```` block of this plan (30) was extracted to its own file and
+  parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. `getParseData()`
+  finds no `LEFT_ASSIGN` token in any block (no `<-` and no `<<-`); no block contains `%>%` or
+  `:::`; the plan file is ASCII only (non-ASCII test text is written as backslash-u escapes inside R
   strings).
 - **The plan builds and passes.** The R and test files were extracted mechanically from this plan's
   `Create`/`Append to` blocks into a scratch package together with the code of the P01-P07 plan

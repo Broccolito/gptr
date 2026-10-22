@@ -207,7 +207,9 @@ test the finished parts; 12 closes the plan.
 **Interfaces:**
 - Consumes: P01 `check_choice(x, choices, arg)`, `setting_get(key, session = NULL, default = NULL)`,
   `as_utf8(x)`,
-  `` `%||%` ``; P04 `proc_pool_cap(n)` ("the IC-60 cap of 2 under `check_running()`, for the CLI, MCP stdio, bridge and worker pools of P18-P22"); ps `ps_cpu_count()`. Tests: P01 `local_gptr_options(..., .env = parent.frame())`.
+  `` `%||%` ``; P04 `proc_pool_cap(n)` ("the IC-60 cap of 2 under `check_running()`, for the CLI,
+  MCP stdio, bridge and worker pools of P18-P22"); ps `ps_cpu_count()`. Tests: P01
+  `local_gptr_options(..., .env = parent.frame())`.
 - Produces (04 section 7.19): `subagent_backend(agent, model)` -> `chr(1)`. Internal, for Tasks 2-8:
   `subagent_modes`; `subagent_mode_tighten(inherited, requested = NULL)` -> chr(1) or NULL;
   `subagent_default_workers()` -> int(1); `subagent_limit(pool)` (pools `inline`, `worker`, `cli`,

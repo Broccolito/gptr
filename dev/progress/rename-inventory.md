@@ -59,9 +59,9 @@ kept.
 ## 2. Counts (HEAD, by occurrence class)
 
 `call` = `gptr(` (incl. `gptr::gptr(`); `ns` = gateway `gptr$x` / `gptr[[`; `extapi` = factory API
-`gptr$register*|on|state|require|has|name|dir` (kept); `qual` = `gptr::gptr`; `factory` = `function(gptr)`
-(kept); `strlit` = `"gptr"`/`` `gptr` `` (mostly package name, triaged below); `entry` = `$gptr$`/`[["gptr"]]`
-(stored field, kept).
+`gptr$register*|on|state|require|has|name|dir` (kept); `qual` = `gptr::gptr`; `factory` =
+`function(gptr)` (kept); `strlit` = `"gptr"`/`` `gptr` `` (mostly package name, triaged below);
+`entry` = `$gptr$`/`[["gptr"]]` (stored field, kept).
 
 | group | files | call | ns | extapi | qual | factory | strlit | entry |
 |---|---|---|---|---|---|---|---|---|

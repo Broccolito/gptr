@@ -503,7 +503,12 @@ git commit -m "feat(ext): add the event catalogue"
 - Test: `tests/testthat/test-ext-specs.R` (create)
 
 **Interfaces:**
-- Consumes: P01 `the`, `` `%||%` ``, `gptr_abort()`, `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_strings()`, `check_function(x, arg, null = FALSE, args = NULL)`, `check_flag()`, `check_choice(x, choices, arg)`, `json_obj()`, `truncate_output(text, budget_tokens, ...)`, `gptr_opt(name)`; Task 1 `ev_table`, `ev_is_channel()`, `ev_hint()`; `gptr_fake_provider()` in the test.
+- Consumes: P01 `the`, `` `%||%` ``, `gptr_abort()`,
+  `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_strings()`,
+  `check_function(x, arg, null = FALSE, args = NULL)`, `check_flag()`,
+  `check_choice(x, choices, arg)`, `json_obj()`, `truncate_output(text, budget_tokens, ...)`,
+  `gptr_opt(name)`; Task 1 `ev_table`, `ev_is_channel()`, `ev_hint()`; `gptr_fake_provider()` in the
+  test.
 - Produces (04 sections 5.4, 5.13, 7.2, 6.7): the registry environment of class `gptr_registry_env`
   (`registry_new()`, `registry_env()`, `registry_scratch()`, `registry_swap(reg)` -> the previous
   registry invisibly, `registry_bind(reg)`, which points `the$registry`, `the$kinds`, `the$hooks`
@@ -7824,7 +7829,14 @@ P01's architecture test maps them.
 **Executed validation (author 2026-09-30; re-run by the review 2026-10-01; R 4.4.3, macOS, testthat
 3.3.2, lintr 3.3.0.1).**
 
-- Every `r` block of this plan was extracted (26 blocks) and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse, all ASCII, no line over 100 characters. `getParseData()` finds no `LEFT_ASSIGN` token (no `<-` and no `<<-`) and no `%>%` in any block; the only arrow character sequences in code are the names of the replacement methods `` `$<-.gptr_ctx` ``, `` `[[<-.gptr_ctx` ``, `` `$<-.gptr_extension_api` `` and `` `[[<-.gptr_extension_api` `` that 04 §5.6 requires (IC-72 notes that a text regex flags such names, which is why P01's lint test reads tokens); the assignment operators that `gptr_check()` looks for in package code are written as `\u` escapes.
+- Every `r` block of this plan was extracted (26 blocks) and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse, all ASCII, no line over 100
+  characters. `getParseData()` finds no `LEFT_ASSIGN` token (no `<-` and no `<<-`) and no `%>%` in
+  any block; the only arrow character sequences in code are the names of the replacement methods
+  `` `$<-.gptr_ctx` ``, `` `[[<-.gptr_ctx` ``, `` `$<-.gptr_extension_api` `` and
+  `` `[[<-.gptr_extension_api` `` that 04 section 5.6 requires (IC-72 notes that a text regex flags
+  such names, which is why P01's lint test reads tokens); the assignment operators that
+  `gptr_check()` looks for in package code are written as `\u` escapes.
 - The review assembled a scratch package from the code blocks of `dev/plan/P01-foundation.md` (its
   `R/` files, `setup.R`, `helper-fake.R`, `helper-tracemem.R`, `helper-mock-server.R`) and this
   plan's blocks in task order. Each task was run red (its implementation blocks left out) and green

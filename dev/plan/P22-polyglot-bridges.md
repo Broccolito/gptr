@@ -1,6 +1,8 @@
 # P22 Polyglot Bridges Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make R the token-efficient glue for shell programs, scripts, background jobs, Python, SQL
 and knitr engines through the `peter$` members `sh`, `script`, `bg`, `jobs`, `py`, `sql` and `knit`,
@@ -185,7 +187,13 @@ never a `PATH` lookup (IC-60).
 
 **Interfaces:**
 
-- Consumes: `shell_resolve(cmd)` -> `list(command, args)` (P04 `proc-spawn.R`, 04 §7.4); `est_tokens(x, class)`, `gptr_opt(name)`, `redact_hook(x, profile)`, `rscript_path()`, `is_windows()`, `` `%||%` `` (P01, 04 §7.1); `est_tokens_each(x, class)` (P01 `utils-tokens.R`: the per-element costs whose sum bounds `est_tokens()` of the joined text) and `truncation_notice(omitted, id)` (P01 `utils-text.R`: `[... n lines omitted; all: peter$out("<id>")]`, the notice of `truncate_output()`); `run_current()` (P06, kernel SDK); test helper `local_gptr_options(..., .env)` (P01).
+- Consumes: `shell_resolve(cmd)` -> `list(command, args)` (P04 `proc-spawn.R`, 04 section 7.4);
+  `est_tokens(x, class)`, `gptr_opt(name)`, `redact_hook(x, profile)`, `rscript_path()`,
+  `is_windows()`, `` `%||%` `` (P01, 04 section 7.1); `est_tokens_each(x, class)` (P01
+  `utils-tokens.R`: the per-element costs whose sum bounds `est_tokens()` of the joined text) and
+  `truncation_notice(omitted, id)` (P01 `utils-text.R`:
+  `[... n lines omitted; all: peter$out("<id>")]`, the notice of `truncate_output()`);
+  `run_current()` (P06, kernel SDK); test helper `local_gptr_options(..., .env)` (P01).
 - Produces (internal to P22): `bridge_split(cmd)` -> chr or `NULL`; `bridge_program_word(word)`;
   `bridge_resolve(cmd)` -> `list(command, args, via = "argv" | "direct" | "shell")`;
   `bridge_chr(x)`; `bridge_notice(omitted, id = NULL, stream = "stdout")`;

@@ -7042,7 +7042,13 @@ Run the two exports' examples against the loaded sources:
 Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); for (t in c("gptr_risk", "format.gptr_risk", "gptr_permissions")) { f = tempfile(fileext = ".R"); tools::Rd2ex(file.path("man", paste0(t, ".Rd")), f); source(f, echo = TRUE) }'
 ```
 
-Expected: `gptr_risk("unlink('data', recursive = TRUE)")$level` prints `[1] 3`; `gptr_risk("summary(mtcars)")` prints `risk 0 (read-only)`; `print(r)` of the `format.gptr_risk` example prints `risk 3 (dangerous)`, the `unlink(...)` line and `  creates: x`; the `flagged` data frame shows ``overwrites `df` <data.frame, 744 B>`` at level 2 `object_write`; `gptr_permissions()` prints the `r(level<=1)` row (`allow`, `session`, `process`), `# 1 row` and the footer `Rules: gptr_permissions(allow =, ask =, deny =, remove =, scope =)`; nothing is written outside `tempdir()`.
+Expected: `gptr_risk("unlink('data', recursive = TRUE)")$level` prints `[1] 3`;
+`gptr_risk("summary(mtcars)")` prints `risk 0 (read-only)`; `print(r)` of the `format.gptr_risk`
+example prints `risk 3 (dangerous)`, the `unlink(...)` line and `  creates: x`; the `flagged` data
+frame shows ``overwrites `df` <data.frame, 744 B>`` at level 2 `object_write`; `gptr_permissions()`
+prints the `r(level<=1)` row (`allow`, `session`, `process`), `# 1 row` and the footer
+`Rules: gptr_permissions(allow =, ask =, deny =, remove =, scope =)`; nothing is written outside
+`tempdir()`.
 
 Lint the six files with the repository's `.lintr`:
 

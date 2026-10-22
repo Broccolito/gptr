@@ -7564,7 +7564,8 @@ test_that("each run touches its session's lock when it starts (heartbeat, IC-59)
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'devtools::test(filter = "^(agent-loop|agent-run|agent-dispatch|session-budget|session-store)$")'`
+Run:
+`Rscript --vanilla -e 'devtools::test(filter = "^(agent-loop|agent-run|agent-dispatch|session-budget|session-store)$")'`
 
 Expected: `[ FAIL 78 | WARN 0 | SKIP 0 | PASS 398 ]`, with errors such as
 ``Error in `session_run(s, msg_user(text), opts)`: could not find function "session_run"``.
@@ -8266,7 +8267,8 @@ run_heartbeat = function(run) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'devtools::test(filter = "^(agent-loop|agent-run|agent-dispatch|session-budget|session-store)$")'`
+Run:
+`Rscript --vanilla -e 'devtools::test(filter = "^(agent-loop|agent-run|agent-dispatch|session-budget|session-store)$")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 613 ]`.
 
@@ -9462,7 +9464,8 @@ test_that("gptr_resume(block =) returns the session replay bound to the block, n
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-(live|store)$")'`
 
 Expected: `[ FAIL 26 | WARN 0 | SKIP 0 | PASS 116 ]`, with errors such as
-``Error in `gptr_resume(copy)`: could not find function "gptr_resume"`` and ``Error in `store_read(s$file)`: could not find function "store_read"``.
+``Error in `gptr_resume(copy)`: could not find function "gptr_resume"`` and
+``Error in `store_read(s$file)`: could not find function "store_read"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -10615,7 +10618,8 @@ test_that("state() is one environment per session and plugin, persisted when JSO
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^agent-run$")'`
 
 Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 255 ]`, with errors such as
-``Error in `ctx_kernel()`: could not find function "ctx_kernel"`` and a failure because `ext_service_has("ctx.kernel")` is `FALSE`.
+``Error in `ctx_kernel()`: could not find function "ctx_kernel"`` and a failure because
+`ext_service_has("ctx.kernel")` is `FALSE`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -10822,8 +10826,8 @@ test_that("NAMESPACE exports the session API and registers the session methods",
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^session-object$")'`
 
 Expected: `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 189 ]`, with errors such as
-``Failure ('test-session-object.R'): NAMESPACE exports the session API and registers the session methods``: `setdiff(c(exports, methods), ns)`
-lists the 17 missing lines.
+``Failure ('test-session-object.R'): NAMESPACE exports the session API and registers the session methods``:
+`setdiff(c(exports, methods), ns)` lists the 17 missing lines.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -11083,7 +11087,13 @@ complete code or the exact replacement; the only generated files (`NAMESPACE`, `
 - `devtools::document()` on the scratch package produced exactly the `NAMESPACE` lines of Task 16
   and the eleven man pages with no roxygen warning; `devtools::run_examples()` ran every example of
   the five exports offline.
-- Every ```` ```r ```` block of this plan was extracted to its own file and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. A `getParseData()` scan of every block finds no `<-` assignment and no `%>%`: the only `LEFT_ASSIGN` tokens are the two `<<-` in `run_chain()` (Task 5), which update the closure state of its `add()` helper as conventions §4 allows, and the other `<-` characters in code are inside the S3 method names `` `$<-.gptr_session` `` / `` `[[<-.gptr_session` `` and the strings of the Task 16 test. All R code is ASCII and no line exceeds 100 characters.
+- Every ```` ```r ```` block of this plan was extracted to its own file and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. A `getParseData()` scan of
+  every block finds no `<-` assignment and no `%>%`: the only `LEFT_ASSIGN` tokens are the two `<<-`
+  in `run_chain()` (Task 5), which update the closure state of its `add()` helper as conventions
+  section 4 allows, and the other `<-` characters in code are inside the S3 method names
+  `` `$<-.gptr_session` `` / `` `[[<-.gptr_session` `` and the strings of the Task 16 test. All R
+  code is ASCII and no line exceeds 100 characters.
 - Two defects of the earlier draft were found and fixed by this validation: settlement did not
   cancel the run's reactor task, so an aborted run that no pump visited again kept its session alive
   (the finaliser and split-brain tests failed); and a test helper registered a tool closure created

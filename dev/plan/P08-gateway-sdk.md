@@ -6661,12 +6661,13 @@ git commit -m "test(gateway): add the gateway copy-safety suite"
 
 roxygen2 turns `@export` on the S3 methods into `S3method()` lines (no `export()`), `@exportS3Method
 utils::.DollarNames` into the delayed-free registration of the `utils` generic, and the explicit `@usage` of `peter`
-keeps the Rd usage identical to the formals although `peter` is built with `structure(function(...), class = ...)`
-(the pattern G5's toy package passed `R CMD check --as-cran` with, codoc included). Every example runs offline: the
-fake provider is local and `offline = TRUE`, so neither the egress acknowledgement nor the replay mode that
-`replay_mode()` forces while R CMD check runs examples (IC-45) stops it, sessions are stored under
-`tempdir()/gptr`, and `gptr_init()`/`gptr_trust()` only touch `tempfile()` directories and read the (redirected)
-user config.
+keeps the Rd usage identical to the formals although `peter` is built with
+`structure(function(...), class = ...)` (the pattern G5's toy package passed `R CMD check --as-cran`
+with, codoc included). Every example runs offline: the fake provider is local and `offline = TRUE`,
+so neither the egress acknowledgement nor the replay mode that `replay_mode()` forces while R CMD
+check runs examples (IC-45) stops it, sessions are stored under `tempdir()/gptr`, and
+`gptr_init()`/`gptr_trust()` only touch `tempfile()` directories and read the (redirected) user
+config.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6850,10 +6851,11 @@ session at once"), and the `gptr_gateway` methods (Task 8).
 
 ### Placeholder scan
 
-The plan was searched for `TBD`, `TODO`, `implement later`, `fill in`, `appropriate error handling`, `handle edge
-cases`, `similar to Task` and `NN`; none occurs in task text or code. Every function a code block calls is defined
-in this plan or listed in 04 for P01-P07 (and the late services of P10, P14, P17, P21 are reached only through
-`ext_service_get()`/`ext_service_has()`).
+The plan was searched for `TBD`, `TODO`, `implement later`, `fill in`, `appropriate error handling`,
+`handle edge
+cases`, `similar to Task` and `NN`; none occurs in task text or code. Every function a code block
+calls is defined in this plan or listed in 04 for P01-P07 (and the late services of P10, P14, P17,
+P21 are reached only through `ext_service_get()`/`ext_service_has()`).
 
 ### Type and name consistency with 04
 
@@ -6904,12 +6906,14 @@ in this plan or listed in 04 for P01-P07 (and the late services of P10, P14, P17
    failed assistant message).
 4. **`session_new(parent =)`.** The gateway passes the running session **object** (found by id
    through `live_all()`), not its id.
-5. **Queued input of `.run = FALSE`.** The rendered first message waits in the session's follow-up queue
+5. **Queued input of `.run = FALSE`.** The rendered first message waits in the session's follow-up
+   queue
    (`session_enqueue(s, prompt, as = "follow_up", source = "api_user", blocks = <context, skill and image
-   blocks>)`), so `run_start(s, NULL, opts)` of any plan starts it (04 §7.21's `bg.register` example, P19 after
-   `gateway_defer()`), read as "the input is the queued items" (04 section 7.6); the call's run options wait in P08's
-   pending store for `gptr_step()`/`gptr_wait()`. P06's IC-55 refusal of enqueues from model code must not apply
-   to this first input of a session that has never run (nested `.run = FALSE` calls made by model code).
+   blocks>)`), so `run_start(s, NULL, opts)` of any plan starts it (04 section 7.21's `bg.register`
+   example, P19 after `gateway_defer()`), read as "the input is the queued items" (04 section 7.6);
+   the call's run options wait in P08's pending store for `gptr_step()`/`gptr_wait()`. P06's IC-55
+   refusal of enqueues from model code must not apply to this first input of a session that has
+   never run (nested `.run = FALSE` calls made by model code).
 6. **Scope name of the user-level project file.** `settings_write()`/`settings_read()` call it
    `"user_project"` (04 names only session, project and user); P11's
    `gptr_permissions(scope = "project")` uses it.
@@ -7006,9 +7010,10 @@ in this plan or listed in 04 for P01-P07 (and the late services of P10, P14, P17
 
 ### Executed validation
 
-- Every ` ```r ` block of this plan was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file =
-  "<f>"))'`: all parse. A token check with `getParseData()` found no `LEFT_ASSIGN` (`<-`) and no `%>%` in any code
-  block.
+- Every ` ```r ` block of this plan was extracted and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file =
+  "<f>"))'`: all parse. A token check with `getParseData()` found no `LEFT_ASSIGN` (`<-`) and no
+  `%>%` in any code block.
 - First draft: the package code and tests of Tasks 1-10 were extracted and run with testthat 3e in a
   scratch harness (the P01 draft sources plus contract-shaped stand-ins of P02-P07, including a mini
   session kernel that plays fake-provider scripts): `test-gptr-config.R` 124 expectations and 1

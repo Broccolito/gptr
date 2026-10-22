@@ -172,7 +172,9 @@ next blocking gptr call pumps the reactor -> later::run_now(0) at depth 1 -> bg_
 - Create: `tests/testthat/test-agent-background.R`
 
 **Interfaces:**
-- Consumes: `the`, `` `%||%` `` (P01 `aaa-state.R`); `gptr_opt(name)` (P01); `as_utf8(x)` (P01); `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)` (P04, only compared by identity); test helper `local_gptr_options(..., .env = parent.frame())` (P01).
+- Consumes: `the`, `` `%||%` `` (P01 `aaa-state.R`); `gptr_opt(name)` (P01); `as_utf8(x)` (P01);
+  `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)` (P04,
+  only compared by identity); test helper `local_gptr_options(..., .env = parent.frame())` (P01).
 - Produces (internal, `@noRd`): `bg_state()` (creates `the$bg`: `sessions` env, `cancel`, `ticking`,
   `ticks`, `changed`), `bg_has_later()`, `bg_get(id)`, `bg_has(id)`, `bg_is_id(id)`, `bg_ids()`,
   `bg_count()`, `bg_ticking()`, `bg_once()`, `bg_tools_mode()`, `bg_reactor_busy()`, `bg_clean(x)`,
@@ -1996,7 +1998,11 @@ error.
 
 - [ ] **Step 3: Write the implementation**
 
-Insert this block into `R/agent-background.R` directly after the file's header comment (after its last line, ``# `waiting`, and the next blocking gptr call continues it, where the gate asks the user.``, and the blank line that follows it) and before `#' Seconds between two background ticks (04 section 7.21)`:
+Insert this block into `R/agent-background.R` directly after the file's header comment (after its
+last line,
+``# `waiting`, and the next blocking gptr call continues it, where the gate asks the user.``, and
+the blank line that follows it) and before
+`#' Seconds between two background ticks (04 section 7.21)`:
 
 ```r
 #' Background sessions (experimental)
@@ -2074,7 +2080,8 @@ Run: `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'`
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 158 ]` (with later installed and
 `capabilities("profmem")` TRUE; otherwise the copy row reports one SKIP).
 
-Run: `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); print(lintr::lint("R/agent-background.R")); print(lintr::lint("tests/testthat/test-agent-background.R"))'`
+Run:
+`Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); print(lintr::lint("R/agent-background.R")); print(lintr::lint("tests/testthat/test-agent-background.R"))'`
 
 Expected: `No lints found.` twice (the repository `.lintr` of conventions section 4; the namespace
 is loaded first because the `object_usage_linter` of `linters_with_defaults()` otherwise reports
