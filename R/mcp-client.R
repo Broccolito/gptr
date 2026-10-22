@@ -558,7 +558,9 @@ mcp_connect = function(spec) {
 
 #' The era handshake: a cached era skips the probe; otherwise `server/discover` with the modern
 #' _meta, and on any other answer or a timeout the legacy initialize and
-#' notifications/initialized (report 16 4.5 step 3)
+#' notifications/initialized (report 16 4.5 step 3). A server that refuses initialize after
+#' leaving the probe unanswered was still starting: it is probed again. A forced modern era has no
+#' fallback, so its probe waits as long as any request (D-165).
 #' @noRd
 mcp_handshake = function(conn, use_cache = TRUE) {
   spec = conn$spec
@@ -576,11 +578,12 @@ mcp_handshake = function(conn, use_cache = TRUE) {
     }
     want = "legacy"
   }
-  if (want %in% c("auto", "modern")) {
+  # the probe; FALSE when the server left it unanswered
+  discover = function() {
     probe = tryCatch(
-      mcp_request(conn, "server/discover", json_obj(), timeout = gptr_opt("mcp_probe_timeout"),
-                  modern = TRUE, raw = TRUE),
-      gptr_error_timeout = function(e) list(error = list(code = NA_integer_, message = "timeout")))
+      mcp_request(conn, "server/discover", json_obj(),
+                  timeout = if (auto) gptr_opt("mcp_probe_timeout"), modern = TRUE, raw = TRUE),
+      gptr_error_timeout = function(e) list(error = list(code = NA_integer_), timed_out = TRUE))
     sup = as.character(unlist(probe$result$supportedVersions %||% probe$error$data$supported))
     if (!is.null(probe$result) && v$modern %in% sup) {
       conn$era = "modern"
@@ -598,13 +601,23 @@ mcp_handshake = function(conn, use_cache = TRUE) {
       conn$era = "modern"
       conn$version = v$modern
     }
+    !isTRUE(probe$timed_out)
   }
+  silent = want %in% c("auto", "modern") && !discover()
   if (is.na(conn$era)) {
-    init = mcp_request(conn, "initialize",
-                       list(protocolVersion = v$legacy[1L], capabilities = mcp_client_caps(),
-                            clientInfo = mcp_client_info()), modern = FALSE)
+    init = tryCatch(
+      mcp_request(conn, "initialize",
+                  list(protocolVersion = v$legacy[1L], capabilities = mcp_client_caps(),
+                       clientInfo = mcp_client_info()), modern = FALSE),
+      gptr_error_mcp_protocol = function(e) {
+        if (silent) discover()
+        if (is.na(conn$era)) stop(e)
+        list()
+      })
     # NULL: the cached era was stale and mcp_request() completed a fresh handshake
     if (is.null(init)) return(invisible(conn))
+  }
+  if (is.na(conn$era)) {
     if (!isTRUE(init$protocolVersion %in% v$legacy)) {
       gptr_abort(paste0("MCP server ", conn$name, " chose protocol version ",
                         init$protocolVersion %||% "(none)", ", which gptr does not speak."),

@@ -1834,3 +1834,83 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the last iteration before the write, so a collection that ended within that iteration (at most
   a 100 ms poll) before the write is netted too. The per-delta test has the same exposure (macOS
   115073223120) and is not changed here.
+
+## Task CI-90 - A modern MCP server that answers the era probe late is probed again (2026-10-22, #76)
+- Main 717f9bc, Windows-check run 39734651356 (job 119678206014, windows-latest oldrel-4, R 4.2.3,
+  shard 2/4) failed "setting mcp.exposure = "direct" declares the tools of a server without
+  exposure" (`test-mcp-namespace.R:216`): the session's frozen tool names lacked
+  `mcp__fixture__echo` and `mcp__fixture__add`, with no error. The log says nothing else on MCP.
+- Rate: the logs of the 1,059 failed jobs (all attempts) of runs since 2026-10-04 hold this
+  signature three times, all on hosted Windows: 115336083629 (release, R 4.6.1, 2026-10-13, "a
+  modern stdio server is found by the probe ...") and 115749420627 (oldrel-4, R 4.2.3, 2026-10-14,
+  the progress test, which 35ca403 then gave a cached era) stopped with "MCP server fixture answered
+  initialize with error -32601: Method not found: initialize"; this job is the same error inside
+  builtin:mcp's session_start hook, which records it as a diagnostic. Since the client landed,
+  hosted Windows ran the suite about 520 times (412 finished unsharded windows-latest jobs, 434
+  finished shards), each starting about 25 modern stdio fixtures without a cached era: about 1 in
+  170 Windows suites, 1 in 4,000 cold connections. None in 1,614 finished Linux and macOS jobs. The
+  other MCP failures in those logs have other causes (a processx socket read error in
+  `test-mcp-server.R` twice, the HTTP era test, an interrupt's cancel, the progress test's 1 s
+  call).
+- Cause (the product; not a race): `run_freeze()` emits `session_start` and waits for its handlers
+  before `prompt.freeze`, and builtin:mcp's handler connects and lists the tools there, so the
+  freeze never precedes the server's answers; a failed connection is a diagnostic and the server
+  declares nothing. The connection failed in the era probe: `mcp_request()` opens the
+  `server/discover` window (`gptr.mcp_probe_timeout`, 5 s) before its first write, which on Windows
+  goes through the lazily started stdin writer (Rscript actor and PowerShell ACL verifier: cold
+  start p50 0.65 s, p99 1.97 s, max 5.24 s on hosted runners, D-246) while the fixture's own Rscript
+  starts. An unanswered probe was taken as legacy (report 16 4.5): `initialize` went out, the
+  modern-only server (the 2026-07-28 era removed it) answered the probe late, which was dropped as
+  cancelled, then refused `initialize` with -32601, and the connection failed. Any modern-only
+  server slower than the probe to answer its first request could never connect. A traced run on main
+  (probe 1 s, fixture asleep 2 s before serving): discover sent at 0, `initialize` at 1.05 s; the
+  server read discover, the cancel and `initialize` at 2.16-2.18 s; the freeze came at 2.37 s, after
+  the refusal, with that diagnostic.
+- Fix: `mcp_handshake()` probes a server that refuses `initialize` after leaving the probe
+  unanswered once more, in the probe window (it has just answered, so it is running); a modern
+  answer wins and is cached, anything else re-raises the refusal. With `protocol: "modern"` nothing
+  falls back, so its probe waits the request timeout; before, a slow modern-only server forced
+  modern failed the same way ("did not answer as a 2026-07-28 server"). An answered probe, a forced
+  or cached legacy era (D-165 item 1) and a legacy server that accepts `initialize` are unchanged.
+- Test: the stdio fixture takes `--delay=S` (`local_mcp_fixture(delay =)`): its first answer comes
+  S s after it reads the request, so a probe shorter than S times out whatever the write's delivery
+  took. "a modern server that answers the probe late is probed again after refusing initialize"
+  (probe 2 s, delay 4 s; the second probe must fit the window, and a ready Windows writer's first
+  ACK took at most 0.57 s, D-246): modern era, cached, five tools, and the server read discover,
+  the cancel, `initialize`, discover, `tools/list`. "a forced modern server's probe waits as long
+  as any request" (probe 0.5 s, delay 2 s): modern, five tools, and the server read discover,
+  `tools/list`. "a modern stdio server is found by the probe, ..." (115336083629) asserts that no
+  `initialize` is sent, which a start beyond the probe breaks: it probes for 30 s, the fixture's
+  request timeout and 5.7 times the 5.24 s cold start (D-246), instead of 5 s.
+- Measurements (macOS, 16 cores, load 4.8-12.6 from other agents; the real CI test through
+  `test_file(desc =)`, one process per loop): main 0/200 (each 0.50 s p50, 1.55 s max). Emulated
+  slow starts: gptr's first write to a server sleeping 1 s inside the window, as the Windows
+  writer's cold start does, with the probe at 0.5 s: main 200/200 fail with the CI signature; with
+  the probe at 1 s and that write delayed 0.6, 0.8, 0.9 or 0.95 s main passes 40/40, at 1.0, 1.05,
+  1.1, 1.2 or 1.5 s it fails 50/50: the tools go missing exactly when the first answer comes after
+  the window. The test's body with the fixture asleep 2 s before serving (probe 1 s): main 30/30
+  fail with the diagnostic. After (the first version): 0/200 plain, 0/200 with the delayed write,
+  90/90 across the sweep, 0/30 asleep (each server log: discover, cancel, `initialize`, discover,
+  `tools/list`); its test (probe 0.5 s, delay 2 s): main 50/50 fail, after 0/200 (2.37 s p50,
+  2.66 s max). Final code (load 3.5-10.3): the test 30/30 (4.29 s p50, 4.78 s max; main 5/5 fail
+  with -32601), the forced modern test 30/30 (2.28 s p50, 2.47 s max), the CI test's body with the
+  first write delayed 1 s and the probe at 0.5 s 30/30 (1.33 s p50, 2.35 s max).
+- Reviews: r1 3 findings, all applied. (1) The first version probed again with the request timeout
+  (60 s), so a server that ignores the probe and refuses `initialize` (a strict legacy server) held
+  every session start 60 s longer before the same diagnostic, and its era is never cached: with
+  defaults and exposure direct main 6.15 and 6.22 s (r1's runs), the first version 66.13 and
+  66.33 s, final 10.30-11.35 s (3 runs, load 4.3-10.3). (2) With `protocol: "modern"` an unanswered
+  probe aborted before the fallback: delay 2 s, probe 0.5 s, main 5/5 and the first version 10/10
+  "did not answer as a 2026-07-28 server", final 30/30 connect. (3) "a modern stdio server is found by the
+  probe, ..." with gptr's first discover write delayed 6 s connects through the second probe but
+  sends `initialize` 5/5 at the 5 s probe; at 30 s it is probe-only 5/5.
+- Red: `^mcp-client$` on main with the first version's test FAIL 1 PASS 176 ("MCP server fixture
+  answered initialize with error -32601"); on the first version with the forced modern test FAIL 1
+  PASS 179 ("did not answer as a 2026-07-28 server"). Green: `^mcp-client$` PASS 182 SKIP 1;
+  `^mcp-` PASS 810 SKIP 1 (45 s, load 8.7); `^(agent-|session-)` PASS 2619 (96 s, load 6.5);
+  `^(lint-rules|arch-layers)$` PASS 90; lint clean.
+- Deviations: D-165 item 5 (edited in place). Open: not yet run on hosted Windows. A slow start
+  costs the probe window plus two round trips (one more window when the server neither answers
+  the probe nor accepts `initialize`), and a dual-era server that starts slowly is still taken as
+  legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
+  timeout instead of 5 s.
