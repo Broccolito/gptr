@@ -395,7 +395,9 @@ Decisions:
     (measured).
   - At 1 colour: none.
 - `dim` is the console's one grey; no console line uses cli's `col_grey()` (SGR 90), and the REPL adds no
-  echo of an interpolated prompt to the gateway's notice (amended in the review of Tasks 8-15).
+  echo of an interpolated prompt to the gateway's notice (amended in the review of Tasks 8-15). At 256
+  colours or more it is `#878787`, halfway between the logo's ink and cream (cli's cell 244), else SGR 2:
+  RStudio and Positron draw SGR 2 in full ink (amended in the visual review).
 - The band is `\033[48;5;237m` on a dark background or `\033[48;5;254m` on a light one. It needs
   at least 256 colours and a known background, and is otherwise empty. These are raw grey-ramp
   cells, because cli maps greys into the colour cube.
@@ -429,7 +431,7 @@ Decisions:
   - reserved words and `function`: red;
   - strings, numbers and constants: blue;
   - calls: `"bold"`;
-  - comments: `"dim"`;
+  - comments: the grey (`dim`'s colour);
   - operators and brackets: ink.
   Red and blue are chosen by depth, as in Task 8. (Amended in Task 9: an entry of the style table,
   not a separate `gptr_code_theme()`. cli takes a theme as colour names, so a separate function

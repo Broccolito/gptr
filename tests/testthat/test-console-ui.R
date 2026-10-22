@@ -88,7 +88,7 @@ test_that("questions share one frame: ? and the title, numbered choices, a dim h
   out = utils::capture.output(ui_console_select("Pick", c("a", "b"), read = function(...) "1"))
   expect_identical(out[2:5], c("  \033[38;5;67m?\033[39m \033[1mPick\033[22m",
                                "    \033[1m1\033[22m  a", "    \033[1m2\033[22m  b",
-                               "  \033[2mChoose a number\033[22m"))
+                               "  \033[38;5;244mChoose a number\033[39m"))
 })
 
 test_that("a long title, choice, detail or hint wraps under its own text (D-243)", {
@@ -161,7 +161,7 @@ test_that("flagged calls fit one per line, highest level first, at most 5 (#33)"
   # dim, like the result rows
   withr::local_options(cli.num_colors = 256L)
   expect_true(all(startsWith(ui_permission_lines(ui_request(paste(code, collapse = "\n")))[2:7],
-                             "\033[2m    ")))
+                             "\033[38;5;244m    ")))
 })
 
 test_that("a path tool's prompt shows the path relative to the project; no empty label (#33)", {
@@ -226,7 +226,7 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   # the key bold and its words dim; the RStudio dialog gets the fence and no SGR
   withr::local_options(cli.num_colors = 256L)
   expect_identical(utils::tail(ui_permission_detail(req), 1L),
-                   "    \033[1mCtrl-C\033[22m  \033[2mabort the run\033[22m")
+                   "    \033[1mCtrl-C\033[22m  \033[38;5;244mabort the run\033[39m")
   skip_if_not_installed("rstudioapi")
   shown = NULL
   local_mocked_bindings(ui_rstudio = function() TRUE)
@@ -298,9 +298,9 @@ test_that("the keys are a row under the question, a and p only with a rule (D-24
   expect_identical(ui_permission_lines(ui_request("x = 1")),
                    c("  \u001b[38;5;167m\u258e\u001b[39m \u001b[1mr\u001b[22m  x = 1",
                      "  \033[38;5;67m?\033[39m \033[1mAllow r?\033[22m",
-                     paste0("    \u001b[1my\u001b[22m\u001b[2m yes \u00b7 \u001b[22m",
-                            "\u001b[1mn\u001b[22m\u001b[2m no \u00b7 \u001b[22m",
-                            "\u001b[1m?\u001b[22m\u001b[2m more\u001b[22m")))
+                     paste0("    \u001b[1my\u001b[22m\u001b[38;5;244m yes \u00b7 \u001b[39m",
+                            "\u001b[1mn\u001b[22m\u001b[38;5;244m no \u00b7 \u001b[39m",
+                            "\u001b[1m?\u001b[22m\u001b[38;5;244m more\u001b[39m")))
 })
 
 test_that("an approval asks under the call it gates; a call not shown is printed (D-243)", {
@@ -347,7 +347,7 @@ test_that("a remembered answer adds one dim line naming the rule and its scope (
   withr::local_options(cli.num_colors = 256L)
   out = console_try(function() ui_console_permission(req), "a")
   expect_identical(utils::tail(out$shown, 1L),
-                   "\033[2m    allowed r(fn:write.csv) for this session\033[22m")
+                   "\033[38;5;244m    allowed r(fn:write.csv) for this session\033[39m")
 })
 
 test_that("lines typed or pasted before the approval prompt never answer it (IC-75)", {

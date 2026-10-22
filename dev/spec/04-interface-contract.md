@@ -5456,15 +5456,18 @@ its part in its own commit, and Task 27 finalises them.
     move.
   - The palette: the logo's red `#b85450` and `#557ea8`, the logo's blue `#6c8ebf` one step darker (cli's
     256-colour cell for `#6c8ebf`, 110, is 2.3:1 on white; cell 67 is above 3.7:1 on white and on `#1c1c1c`). Ink
-    is never written: the terminal's own foreground is the ink. The one grey is `dim` (SGR 2): the status, thinking,
+    is never written: the terminal's own foreground is the ink. The one grey is `dim`: the status, thinking,
     request, retry and compaction lines and the paste notice use it, never cli's `col_grey()` (SGR 90, a second grey
-    on most terminals; review of Tasks 8-15).
+    on most terminals; review of Tasks 8-15). At 256 colours or more it is `#878787`, halfway between the logo's ink
+    `#1c1e22` and cream `#f3f1ec` (3.6:1 on white, 4.6:1 on the ink), else SGR 2: RStudio maps SGR 2 to
+    `brightness(0.75)`, which leaves black text black, and Positron draws it in full ink, so there the quiet rows
+    were as loud as the answer (visual review). Link URLs, quote marks, rules and fence lines take it too.
 
     | style | 256 colours or more | 8 or 16 colours | 1 colour (`NO_COLOR`) |
     |---|---|---|---|
     | `red` | `cli::make_ansi_style("#b85450")`: `38;5;167` (truecolor `38;2;184;84;80`) | cli's `"red"`, `31` | none |
     | `blue` | `cli::make_ansi_style("#557ea8")`: `38;5;67` (truecolor `38;2;85;126;168`) | cli's `"blue"`, `34` | none |
-    | `dim` | `cli::style_dim`, `2` | `2` | none |
+    | `dim` | `cli::make_ansi_style("#878787")`: `38;5;244` (truecolor `38;2;135;135;135`) | `2` | none |
     | `band`, dark background | `\033[48;5;237m` | `""` | `""` |
     | `band`, light background | `\033[48;5;254m` | `""` | `""` |
 
@@ -5476,7 +5479,7 @@ its part in its own commit, and Task 27 finalises them.
   - R code (Task 9): R in answer fences and in tool calls is highlighted by `console_code()` above 1 colour only,
     with `cli::code_highlight(code, getOption("cli.code_theme") %||% console_style()$code)`, so a user's
     `cli.code_theme` wins. The style table's theme (`code`) is in the accents: reserved words and `function` red;
-    strings, numbers and constants (`TRUE`, `NA`, `NULL`) blue; calls bold; comments dim; operators, brackets and
+    strings, numbers and constants (`TRUE`, `NA`, `NULL`) blue; calls bold; comments grey; operators, brackets and
     symbols in ink. At 256 colours `function` is `38;5;167` and `"s"` `38;5;67`; at 16 colours `31` and `34`. R
     that does not parse and every other language are shown as written, between dim fences. Inline code in an answer
     takes the blue accent (review of Tasks 8-15; it was cli's cyan, `36`, the one accent outside the palette).

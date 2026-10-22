@@ -230,8 +230,10 @@ test_that("italics, link URLs, quotes, rules and headings are styled only with c
   out = render_chunks(text, 80L)
   expect_identical(cli::ansi_strip(out), "An it and [d](http://x.y) a * b 2*3")
   expect_match(out, "An \033[0;3mit\033[0m and", fixed = TRUE)
-  expect_match(out, "[d]\033[0;2m(http://x.y)\033[0m a * b 2*3", fixed = TRUE)
-  expect_identical(render_chunks("> q"), "\033[2m> \033[22mq")
+  expect_match(out, "[d]\033[0;38;5;244m(http://x.y)\033[0m a * b 2*3", fixed = TRUE)
+  expect_identical(render_chunks("> q"), "\033[38;5;244m> \033[39mq")
+  expect_identical(render_chunks("a\n\n---\n\nb")[[3L]],
+                   paste0("\033[38;5;244m", strrep("-", 40L), "\033[39m"))
   expect_identical(cli::ansi_strip(render_chunks("a\n\n---\n\nb")),
                    c("a", "", strrep("-", 40L), "", "b"))
   expect_identical(render_chunks("# One\n## Two"),
@@ -251,15 +253,17 @@ test_that("R code is highlighted in the logo palette and other code is plain (D-
   withr::local_options(cli.dynamic = FALSE)
   code = c("f = function(x) if (x) \"s\" else NULL  # c", "y = mean(1L, na.rm = TRUE)")
   # reserved words red; strings, numbers and constants blue; calls bold; comments dim; the rest ink
-  lit = function(red, blue) {
+  lit = function(red, blue, grey) {
     r = function(x) paste0("\033[", red, "m", x, "\033[39m")
     b = function(x) paste0("\033[", blue, "m", x, "\033[39m")
     c(paste0("f = ", r("function"), "(x) ", r("if"), " (x) ", b("\"s\""), " ", r("else"), " ",
-             b("NULL"), "  \033[2m# c\033[22m"),
+             b("NULL"), "  ", grey),
       paste0("y = \033[1mmean\033[22m(", b("1L"), ", na.rm = ", b("TRUE"), ")"))
   }
-  want = list(`16777216` = lit("38;2;184;84;80", "38;2;85;126;168"),
-              `256` = lit("38;5;167", "38;5;67"), `16` = lit("31", "34"), `1` = code)
+  want = list(`16777216` = lit("38;2;184;84;80", "38;2;85;126;168",
+                               "\033[38;2;135;135;135m# c\033[39m"),
+              `256` = lit("38;5;167", "38;5;67", "\033[38;5;244m# c\033[39m"),
+              `16` = lit("31", "34", "\033[2m# c\033[22m"), `1` = code)
   for (n in names(want)) {
     withr::local_options(cli.num_colors = as.integer(n))
     for (lang in c("r", "R", "{r, echo=FALSE}", "r title")) {
@@ -274,8 +278,8 @@ test_that("R code is highlighted in the logo palette and other code is plain (D-
   expect_identical(render_chunks("```r\np = g('b',\n```", 80L)[[2L]], "p = g('b',")
   for (lang in c("python", "json", "text", "")) {
     expect_identical(render_chunks(paste0("```", lang, "\nx = 'a'  # c 1\n```"), 80L),
-                     c(paste0("\033[2m```", lang, "\033[22m"), "x = 'a'  # c 1",
-                       "\033[2m```\033[22m"), info = lang)
+                     c(paste0("\033[38;5;244m```", lang, "\033[39m"), "x = 'a'  # c 1",
+                       "\033[38;5;244m```\033[39m"), info = lang)
   }
   # a user's cli.code_theme wins
   withr::local_options(cli.code_theme = list(reserved = "#00ff00"))
@@ -447,10 +451,13 @@ test_that("console_style() gives the logo accents by depth and the band by backg
     `256` = c("\033[38;5;167mx\033[39m", "\033[38;5;67mx\033[39m"),
     `16` = c("\033[31mx\033[39m", "\033[34mx\033[39m"),
     `1` = c("x", "x"))
+  # the one grey: halfway between the logo's ink and cream where 256 colours show, else SGR 2
+  grey = c(`16777216` = "\033[38;2;135;135;135mx\033[39m", `256` = "\033[38;5;244mx\033[39m",
+           `16` = "\033[2mx\033[22m", `1` = "x")
   band = c(dark = "\033[48;5;237m", light = "\033[48;5;254m")
   for (n in names(want)) {
     withr::local_options(cli.num_colors = as.integer(n))
-    dim = if (n == "1") "x" else "\033[2mx\033[22m"
+    dim = grey[[n]]
     for (bg in c("dark", "light", NA)) {
       the$background = bg
       st = console_style()
@@ -566,7 +573,7 @@ test_that("tool calls are cursor strips tinted by kind (D-245)", {
          read = character(), failed = red("    error: no such file"))
   }
   sgr = function(on, off) function(x) paste0("\033[", on, "m", x, "\033[", off, "m")
-  at256 = list(red = sgr("38;5;167", 39), blue = sgr("38;5;67", 39), dim = sgr(2, 22),
+  at256 = list(red = sgr("38;5;167", 39), blue = sgr("38;5;67", 39), dim = sgr("38;5;244", 39),
                bold = sgr(1, 22))
   withr::local_options(cli.unicode = TRUE, cli.num_colors = 256L)
   expect_identical(shown(), do.call(want, c(list("\u258e", "\u258c", " \u00b7 "), at256)))
@@ -864,7 +871,7 @@ test_that("on a CLI route verbosity 2 shows each thinking block's first line, di
   withr::local_options(cli.num_colors = 256L)
   out = render_events(s, events)
   expect_identical(cli::ansi_strip(out), plain)
-  expect_true(all(startsWith(out[1:2], "\033[2m  ")))
+  expect_true(all(startsWith(out[1:2], "\033[38;5;244m  ")))
   local_gptr_options(verbose = 1L)
   expect_identical(render_events(s, events[1:5]), character())
 })

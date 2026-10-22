@@ -114,8 +114,8 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   q = which(startsWith(plain, queue_line("steer", "use")))
   expect_length(q, 1L)
   queued = res$out[q + 0:2]
-  expect_true(all(startsWith(queued, "\033[2m")))
-  expect_false(startsWith(res$out[[q + 3L]], "\033[2m"))
+  expect_true(all(startsWith(queued, "\033[38;5;244m")))
+  expect_false(startsWith(res$out[[q + 3L]], "\033[38;5;244m"))
   expect_true(endsWith(cli::ansi_strip(queued[[3L]]), sym$ellipsis))
   # the delivered message whole, every row on the band, the later rows under the text
   shown = res$out[startsWith(res$out, "\033[48;5;237m")]

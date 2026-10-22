@@ -6,10 +6,12 @@
 
 #' The console's style table (IC-82, D-245): the glyphs of the logo's cursor vocabulary (the
 #' person's chevron, a tool call's thin strip, the agent's block), the logo's red and a darker
-#' logo blue (basic red and blue below 256 colours; cli drops them at 1 colour, `NO_COLOR`), dim,
-#' the input band where the background is known and 256 colours show it, and the R code theme
-#' in those accents. ASCII where the output is not UTF-8 and in Windows consoles outside Windows
-#' Terminal and RStudio (Rgui among them), whose fonts lack U+258E and U+21B3 (WGL4).
+#' logo blue (basic red and blue below 256 colours; cli drops them at 1 colour, `NO_COLOR`), the
+#' one grey `dim` (halfway between the logo's ink and cream where 256 colours show, as consoles
+#' that ignore SGR 2 show it too; else SGR 2), the input band where the background is known and
+#' 256 colours show it, and the R code theme in those colours. ASCII where the output is not
+#' UTF-8 and in Windows consoles outside Windows Terminal and RStudio (Rgui among them), whose
+#' fonts lack U+258E and U+21B3 (WGL4).
 #' @noRd
 console_style = function() {
   ascii = !cli::is_utf8_output() ||
@@ -24,15 +26,16 @@ console_style = function() {
   deep = cli::num_ansi_colors() >= 256L
   red = if (deep) "#b85450" else "red"
   blue = if (deep) "#557ea8" else "blue"
+  grey = if (deep) "#878787" else "dim"
   bands = c(dark = "\033[48;5;237m", light = "\033[48;5;254m")
   bg = console_background()
   c(glyphs, list(
     red = cli::make_ansi_style(red),
     blue = cli::make_ansi_style(blue),
-    dim = cli::style_dim,
+    dim = cli::make_ansi_style(grey),
     band = if (deep && !is.na(bg)) bands[[bg]] else "",
     code = list(reserved = red, string = blue, number = blue, null = blue, call = "bold",
-                comment = "dim")
+                comment = grey)
   ))
 }
 
@@ -113,8 +116,8 @@ console_notice = function(..., .error = FALSE) {
 #' Chunk-invariant markdown stream renderer (contract 7.14)
 #'
 #' Returns an environment with `write(delta)` and `finish()`, writing to stdout.
-#' Styling (bold, italic within one token, inline code in the blue accent, dim link URLs,
-#' headings, bullets, dim quotes and rules, highlighted fenced code) is used when
+#' Styling (bold, italic within one token, inline code in the blue accent, link URLs, quotes,
+#' rules and fence lines in the grey, headings, bullets, highlighted fenced code) is used when
 #' `cli::num_ansi_colors() > 1` at creation; without it the markdown characters are kept. Fenced
 #' code stays Markdown: fence lines as written (dim), the body unwrapped and de-indented by the
 #' opener's indentation (D-187).
@@ -154,9 +157,10 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   st$cells = list()
   st$table_raw = FALSE
   st$space = FALSE
-  # inline code: the style table's blue accent (D-245), its SGR parameters
-  blue = sub("^\033\\[([0-9;]*)m.*$", "\\1", sym$blue("x"))
-  codes = c(h1 = "1;4", h = "1", bold = "1", italic = "3", code = blue, url = "2")
+  # inline code and link URLs: the style table's blue and grey (D-245), their SGR parameters
+  param = function(f) sub("^\033\\[([0-9;]*)m.*$", "\\1", f("x"))
+  codes = c(h1 = "1;4", h = "1", bold = "1", italic = "3", code = param(sym$blue),
+            url = param(sym$dim))
   st$on = logical(length(codes))
   names(st$on) = names(codes)
   sgr = function(code) if (style) paste0("\033[", code, "m") else ""
@@ -251,7 +255,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
                   width = if (style) 0L else nchar(tok) + 1L))
     }
     if (style && grepl("^(-{3,}|\\*{3,}|_{3,})$", tok) && !grepl("^[ \t]", after)) {
-      return(list(text = paste0(sgr("2"), strrep("-", st$width), sgr("22")), width = st$width))
+      return(list(text = sym$dim(strrep("-", st$width)), width = st$width))
     }
     if (tok %in% c("-", "*", "+")) {
       st$indent = n + 2L
@@ -264,8 +268,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     }
     if (identical(tok, ">")) {
       st$indent = n + 2L
-      return(list(text = paste0(lead, if (style) paste0(sgr("2"), "> ", sgr("22")) else "> "),
-                  width = st$indent))
+      return(list(text = paste0(lead, sym$dim("> ")), width = st$indent))
     }
     if (n > 0L) {
       st$indent = n
@@ -280,7 +283,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
       st$fence_lang = trimws(substring(line, st$fence_n + 1L))
       st$fence_indent = st$ws
     }
-    emit(paste0(sgr("2"), line, sgr("22"), "\n"))
+    emit(paste0(sym$dim(line), "\n"))
   }
   # A block of pipe-table rows is held while it can be aligned: a delimiter second row, one cell
   # count and a fitting width. From the row that rules this out the block prints verbatim as

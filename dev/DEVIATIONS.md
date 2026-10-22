@@ -3302,3 +3302,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   - An edit's diff leaves out its file headers (`--- a/`, `+++ b/`): the call line `▎ edit  notes.R` names the
     file, and the headers took 2 of the 12 rows; hunk headers stay dim. Contract-visible: 04 §15.10 IC-82, 03 §6.17.
     Tests: test-console-render.R "tool calls are cursor strips tinted by kind (D-245)".
+- Visual review fixes (2026-10-21; screenshots of 0ee69a0 in Terminal.app, tmux, VS Code, RStudio, Positron, R.app
+  and the degraded modes):
+  - The one grey is a colour where 256 colours show: `#878787`, halfway between the logo's ink and cream (cli's
+    cell 244), else SGR 2. RStudio maps SGR 2 to `brightness(0.75)`, which leaves black text black, and Positron
+    draws it in full ink, so the approval's key words, hints, fences, queue lines, read calls and the status line
+    were as loud as the answer there. Link URLs, quote marks, rules, fence lines and R comments take the same grey.
+    Contract-visible: 04 §15.10 IC-82. Tests: test-console-render.R "console_style() gives the logo accents by depth
+    and the band by background (D-245)" and the renderer's styling cases; the 256-colour cases of
+    test-console-ui.R and test-console-typing.R.
