@@ -133,7 +133,7 @@ working directory restored. Plan-specific rules:
 | `R/agent-run.R`, `R/agent-loop.R` (doc only) | 4, 5 |
 | `R/session-object.R`, `R/ext-events.R` | 5 |
 | `R/agent-dispatch.R` | 6 |
-| `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 18, 26 |
+| `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 18, 21, 26 |
 | `R/auth-oauth.R` (input prompts) | 12 |
 | `R/console-ui.R` | 2, 3, 8, 12, 19, 20 |
 | `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 20, 21, 22, 24, 25, 26 |
@@ -1047,15 +1047,27 @@ Decisions:
   - Ctrl-C adds the draft to the history, and readline takes over (Codex's rule).
 - Up and Ctrl-D do nothing. Tab completes trigger words.
 - The person is never cut off mid-word, and there is only one idle editor at a time.
+- (Amended in Task 21:) `console_idle(rd, prompt)` in `console-input.R` is the editor. Its row is the
+  prompt and the draft's tail, cut as the live row cuts it; it reads fd 0 with no time limit. Enter
+  returns the line, and the reader echoes it as it echoes a follow-up, so the transcript keeps the whole
+  line. Tab on any other word does nothing. Ctrl-C, or an end of input, lists the kept draft
+  (`console_keep()`), and that Ctrl-C is not the first of the two that leave. After an idle or max_turns
+  end, `console_queue_left()` leaves the draft in the composer, so it waits through the follow-ups' runs.
+  Until Task 25 bands readline's prompt, only the editor's row has the band.
 
 Tests (`test-console-input.R`, `test-console-typing.R`), RED first:
 - Pure reader cases for Enter, emptying the draft and Ctrl-C.
 - pty I: a draft typed during the run continues at the prompt and Enter sends it.
+- (Amended in Task 21:) pty I also has Ctrl-C keep the draft and Up recall it. Pty B, C and H find each
+  draft at the prompt, not `kept in history`, and Ctrl-U clears it. The macOS paste case in
+  `test-console-repl.R` finds `peter> half` at the prompt. The pure Task 18 case now sends its draft
+  from the prompt.
 
-Spec: IC-76.
+Spec: IC-76. (Amended in Task 21:) Also 03 §6.17 and D-243's Task 21 note.
 
 Files: `R/console-input.R`, `R/console-repl.R` (`console_reader()`),
-`tests/testthat/test-console-input.R`, `tests/testthat/test-console-typing.R`.
+`tests/testthat/test-console-input.R`, `tests/testthat/test-console-typing.R`. (Amended in Task 21:)
+Also `R/console-render.R` (`console_queue_left()`) and `tests/testthat/test-console-repl.R`.
 
 Commit: `feat(console): a draft left at the end of a run stays until sent`.
 

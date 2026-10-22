@@ -95,7 +95,8 @@ readline_limit = function() {
 #' the lines a paste left after a block's closer, which the terminal reader returns first,
 #' unechoed (the terminal showed them); `typed`, the /command and !code lines and the follow-ups
 #' typed during an answer, which it returns next, in order, echoed after the prompt (IC-76,
-#' D-242); `compose`, the state of a T console's composer (console_compose(): its draft), and
+#' D-242); `compose`, the state of a T console's composer (console_compose(): its draft), whose
+#' draft a run left it then edits at the prompt (console_idle()), the line sent echoed alike, and
 #' `sent`, the kind of message queued last (policy_enqueue()). With `echo` the stdin reader
 #' writes the prompt and the escaped line (never a `secret` one) on `stream`, so a piped session
 #' reads like a terminal session.
@@ -135,9 +136,14 @@ console_reader = function(stdin = FALSE, echo = stdin) {
         rd$held = rd$held[-1L]
         return(x)
       }
+      x = NULL
       if (length(rd$typed)) {
         x = rd$typed[[1L]]
         rd$typed = rd$typed[-1L]
+      } else if (nzchar(rd$compose$draft %||% "")) {
+        x = console_idle(rd, prompt)
+      }
+      if (!is.null(x)) {
         console_write(paste0(prompt, console_escape(x)))
         return(x)
       }

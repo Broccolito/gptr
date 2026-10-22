@@ -338,3 +338,80 @@ test_that("a question is asked once no key came for a second (D-243)", {
   expect_true(ask_ready(9, 10))
   expect_true(ask_ready(2, 10))
 })
+
+# ---- Task 21: a draft left at a run's end stays in the composer --------------------------------
+
+# The REPL reader's read at `peter> ` of the draft a run left (D-243): fd 0 gives `keys`, one batch
+# per read and nothing after the last (a function in place of a batch signals Ctrl-C), and
+# readline() answers `answers`: what the read returned and wrote, the prompts readline() showed,
+# what went to the history, what stty was told and the draft after
+idle_read = function(draft, keys, answers = character()) {
+  stty = character()
+  local_mocked_bindings(
+    tty_modes = function(modes = "-g") {
+      stty <<- c(stty, paste(modes, collapse = " "))
+      if (identical(modes, "-g")) "SAVED" else character()
+    },
+    console_typed_chars = function(rd, wait) {
+      if (!length(keys)) return("")
+      k = keys[[1L]]
+      keys <<- keys[-1L]
+      if (is.function(k)) k() else k
+    })
+  rl = local_readline(answers)
+  local_gptr_options(history = TRUE)
+  rd = console_reader()
+  rd$compose = list(draft = draft)
+  x = NULL
+  out = written(function() x <<- rd$read("peter> "))
+  list(x = x, out = out, rows = term_rows(out), prompts = rl$prompts, kept = rl$kept, stty = stty,
+       draft = rd$compose$draft)
+}
+
+keys_mode = "-icanon -echo -iexten min 1 time 0"
+
+ctrl_c = function() {
+  signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+}
+
+test_that("a draft a run left is edited at the prompt; Enter returns it as readline would", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 80L)
+  # Up, Ctrl-D and Tab on plain text do nothing; the row is drawn again after every key
+  r = idle_read("and label", list(" it", "\033[A", "\004", "\t", "x\177 the axes", "\r"))
+  expect_identical(r$x, "and label it the axes")
+  expect_identical(r$rows, c("peter> and label it the axes", ""))
+  expect_identical(lengths(regmatches(r$out, gregexpr("\rpeter> and label it\033[K", r$out,
+                                                      fixed = TRUE))), 4L)
+  expect_identical(r$prompts, character())
+  expect_identical(r$kept, character())
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED"))
+  expect_identical(r$draft, "")
+  # a draft wider than the row shows its tail; Enter writes the whole line
+  withr::local_options(cli.width = 30L)
+  r = idle_read("and label both of the axes", "\r")
+  expect_match(r$out, "\rpeter> …bel both of the axes\033[K", fixed = TRUE)
+  expect_identical(r$rows, c("peter> and label both of the axes", ""))
+  # the row is on the input band where the background is known
+  withr::local_options(cli.num_colors = 256L)
+  local_mocked_bindings(console_background = function() "dark")
+  r = idle_read("x", "\r")
+  expect_match(r$out, "\r\033[48;5;237mpeter> x\033[K\033[0m", fixed = TRUE)
+})
+
+test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C keeps it first", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 80L)
+  r = idle_read("ab", list("\177", "\025"), "/exit")
+  expect_identical(r$x, "/exit")
+  expect_identical(r$rows, "")
+  expect_identical(r$prompts, "peter> ")
+  expect_identical(r$kept, character())
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED"))
+  # Ctrl-C adds the draft to the history and lists it, as Codex clears its composer
+  r = idle_read("and plot", list(ctrl_c), "next")
+  expect_identical(r$x, "next")
+  expect_identical(r$rows, c(kept_line("and plot"), ""))
+  expect_identical(r$prompts, "peter> ")
+  expect_identical(r$kept, "and plot")
+  expect_null(r$draft)
+  expect_identical(r$stty, c("-g", keys_mode, "SAVED"))
+})

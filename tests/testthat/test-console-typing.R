@@ -722,19 +722,24 @@ test_that("Up takes back the newest message the person queued, of either kind (D
   })
 })
 
-test_that("a draft left as the REPL returns to its prompt is kept in the history (D-243)", {
+test_that("a draft a run left waits for the follow-ups, then continues at the prompt (D-243)", {
   skip_on_cran()
   local_console_test()
   local_gptr_options(history = TRUE)
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
-  # it waits through the follow-up's run, then is kept once nothing more is sent
-  fake = gptr_fake_provider(list(list(text = "first", delay = 0.6), "second"))
-  local_keys(keys_once(c("then plot", "\t", "and label it"),
-                       function() length(fake_requests(fake)) == 1L))
+  # it waits through the follow-up's run, then Enter at the prompt sends it, echoed there
+  fake = gptr_fake_provider(list(list(text = "first", delay = 0.6), "second", "third"))
+  run = keys_once(c("then plot", "\t", "and label it"),
+                  function() length(fake_requests(fake)) == 1L)
+  idle = keys_once("\r", function() length(fake_requests(fake)) == 2L)
+  local_keys(function() paste0(run(), if (is.null(console_repl_prompt())) idle()))
   res = typing_console(fake, c("go", "/exit"))
-  expect_length(fake_requests(fake), 2L)
+  last_user = vapply(fake_requests(fake), function(r) r$last_user, "")
+  expect_identical(last_user, c("go", "then plot", "and label it"))
   expect_identical(res$kept, c("go", "then plot", "and label it", "/exit"))
-  expect_identical(sum(res$out == kept_line("and label it")), 1L)
+  rows = term_rows(paste(res$out, collapse = "\n"))
+  expect_identical(sum(rows == "peter[auto]> and label it"), 1L)
+  expect_false(kept_line("and label it") %in% rows)
   # after an abort it joins the list of what was queued and not sent
   slow = gptr_fake_provider(list(list(text = "first", delay = 5)))
   looks = 0L
@@ -1034,8 +1039,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
   expect_true(pty$wait("peter> ", timeout = 120))
   # B: typed without Enter while the answer streams, it is the composer's draft: the approval
-  # row ends with its prompt, the draft is on the live row again while the call it gated runs,
-  # and the draft left at the run's end is kept in the history
+  # row ends with its prompt and the draft is on the live row again while the call it gated runs
   pty$send("B\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
@@ -1044,35 +1048,75 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   pty$send("y\r")
   expect_match(pty$pending(), paste0(person, " use base R"), fixed = TRUE)
   expect_true(pty$wait("REQ tool_result: "))
-  expect_true(pty$wait("kept in history"))
-  expect_true(pty$wait("use base R"))
-  expect_true(pty$wait("peter> "))
-  # the kept line is the newest history entry at the next prompt
-  pty$send("\033[A\r")
-  expect_true(pty$wait("REQ user: use base R END"))
-  expect_true(pty$wait("peter> "))
+  # each draft continues at the prompt after its run (P28 I); Ctrl-U clears it there
+  expect_true(pty$wait("peter> use base R"))
   # C: a partial line starting with "no" denies nothing
-  pty$send("C\r")
+  pty$send("\025C\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("no wait, plot it first")
   expect_true(pty$wait("Allow r?"))
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
   expect_true(pty$wait("REQ tool_result: "))
-  expect_true(pty$wait("peter> "))
+  expect_true(pty$wait("peter> no wait, plot it first"))
   # H: a partial line at the agent's question is not its answer
-  pty$send("H\r")
+  pty$send("\025H\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
   expect_true(pty$wait("Choose a number, or type your own answer"))
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("1\r")
   expect_true(pty$wait("REQ tool_result: The user answered: - q1: ggplot2 END"))
-  expect_true(pty$wait("peter> "))
-  pty$send("/exit\r")
+  expect_true(pty$wait("peter> use base R"))
+  pty$send("\025/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(c(pty$seen("kept in history"), pty$seen("Not an answer"),
-                     pty$seen("Permission denied"), pty$seen("(typed)")), c(3L, 0L, 0L, 0L))
+                     pty$seen("Permission denied"), pty$seen("(typed)")), c(0L, 0L, 0L, 0L))
+})
+
+test_that("a terminal: a draft a run left continues at the prompt until sent (P28 I, D-243)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = TRUE, cli.num_colors = 1L, cli.width = 60L)",
+    "long = paste(c('BEGIN', sprintf('w%02dabc', 1:40), 'END'), collapse = ' ')",
+    "fake = gptr_fake_provider(function(req) {",
+    "  if (req$last_user %in% c('ONE', 'TWO')) return(list(text = long, chunk = 8L, gap = 0.05))",
+    "  paste0('REQ ', req$last_user, ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "xterm")
+  utf8 = l10n_info()[["UTF-8"]]
+  person = if (utf8) "›" else ">>"
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("use base")
+  expect_true(pty$wait(paste0(person, " use base")))
+  # the run ends and the draft is at the prompt, edited with the composer's keys; Enter sends it
+  expect_true(pty$wait("peter[auto]> use base"))
+  pty$send("x")
+  expect_true(pty$wait("peter[auto]> use basex"))
+  pty$send("\177 R")
+  expect_true(pty$wait("peter[auto]> use base R"))
+  pty$send("\r")
+  expect_true(pty$wait("REQ use base R END"))
+  # Ctrl-C there adds the draft to the history and readline takes over: Up recalls it
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("TWO\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("and plot")
+  expect_true(pty$wait("peter[auto]> and plot"))
+  pty$send("\003")
+  expect_true(pty$wait(kept_line("and plot", utf8 = utf8)))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("\033[A\r")
+  expect_true(pty$wait("REQ and plot END"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(c(pty$seen("REQ "), pty$seen("again to leave")), c(2L, 0L))
 })
 
 test_that("a terminal: a question waits a second after the last key; `yes` is no answer (D-243)", {

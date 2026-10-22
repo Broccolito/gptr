@@ -793,14 +793,17 @@ test_that("a macOS terminal: a paste is one turn, a fence echoes once, Ctrl-D ne
   expect_true(pty$wait("GOT a/b/c END"))
   expect_identical(pty$seen("GOT "), 1L)
   # typed while the agent works: Enter steers the same run (IC-76), whose second answer follows
-  # the relay; Ctrl-D is no key of the composer, whose draft stays `half` (D-243)
+  # the relay; Ctrl-D is no key of the composer, whose draft stays `half` and continues at the
+  # prompt, where Ctrl-U clears it and readline takes over (D-243)
   expect_true(pty$wait("peter> "))
   pty$send("SLOW\r")
   Sys.sleep(1)
   pty$send("x\rhalf\004")
   expect_true(pty$wait("1 queued   >> half"))
-  expect_true(pty$wait("peter> "))
+  expect_true(pty$wait("peter> half"))
   expect_identical(pty$seen("GOT SLOW END"), 2L)
+  pty$send("\025")
+  expect_true(pty$wait("peter> "))
   # with echo on, as in a terminal, the tty echoes the rest of a paste once, when it is read; a
   # '... ' read would echo it again. The lines after the closer are one message.
   pty$send("!invisible(system('stty echo'))\r")

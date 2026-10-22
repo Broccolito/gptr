@@ -3325,6 +3325,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   chevron (D-243)", "in the console margin the menu's rows are an approval's, its prompt at column 0" and the
   menu's other cases; test-console-typing.R "a terminal: a draft survives Ctrl-C and the pause menu (P28 G,
   D-243)".
+- Task 21: a T console's draft a run left (idle or at max_turns) stays in the composer until sent. It waits through
+  the follow-ups' runs on the live row; then the reader's prompt read edits it at the prompt (`console_idle()`):
+  the prompt and the draft's tail as one row, on the band as the live row, in character mode, drawn again after
+  every key. Enter returns the line, echoed as a follow-up is, so the transcript keeps the whole line; `/`, `!`,
+  fences and continuation reads go on through readline. An emptied draft hands over to readline at the same
+  prompt; Ctrl-C keeps the draft in the history (`↳ kept in history ↑ · <draft>`) and hands over, and it is not
+  the first of the two Ctrl-Cs that leave. Up and Ctrl-D do nothing, nor does Tab off a trigger word. This replaces
+  Task 18's history entry for a draft left at the prompt; after an abort or an error the draft still joins the
+  kept list. Until Task 25 bands readline's prompt, only the editor's row has the band (where `COLORFGBG` gives
+  the background). Contract-visible: 04 §15.10 IC-76, 03 §6.17. Tests: test-console-input.R "a draft a run left is
+  edited at the prompt; Enter returns it as readline would", "an emptied draft hands over to readline at the same
+  prompt; Ctrl-C keeps it first"; test-console-typing.R "a draft a run left waits for the follow-ups, then
+  continues at the prompt (D-243)", "a terminal: a draft a run left continues at the prompt until sent (P28 I,
+  D-243)" and the pty cases B, C and H.
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

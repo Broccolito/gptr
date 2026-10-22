@@ -109,6 +109,48 @@ console_keys = function(rd, s, chars) {
   invisible(NULL)
 }
 
+#' The REPL reader `rd`'s read at `prompt` of a T console's draft a run left (D-243): the prompt
+#' and the draft's tail are one row (on the input band, as the live row), edited with the
+#' composer's keys in character mode (tty_call()) and drawn again after every key; the row is
+#' cleared when the read ends. Enter returns the line, which the reader echoes after the prompt
+#' as readline() leaves it; Up and Ctrl-D do nothing, nor does Tab but on a trigger word. Once the
+#' draft is empty, at Ctrl-C or when nothing is read, a draft left goes to the console history
+#' (console_keep()) and NULL is returned, so readline() reads at the same prompt
+#' @noRd
+console_idle = function(rd, prompt) {
+  sym = console_style()
+  line = NULL
+  on.exit(tty_restore(), add = TRUE)
+  tryCatch({
+    tty_call(TRUE)
+    repeat {
+      draft = rd$compose$draft %||% ""
+      if (!nzchar(draft)) break
+      room = cli::console_width() - 1L - live_fit(prompt)
+      console_cat(paste0("\r", sym$band, prompt,
+                         live_fit(gsub("\t", " ", draft, fixed = TRUE), room, sym$ellipsis,
+                                  tail = TRUE),
+                         "\033[K", if (nzchar(sym$band)) "\033[0m"))
+      keys = console_typed_chars(rd, -1L)
+      if (!nzchar(keys)) break
+      if (identical(keys, "\t") && is.null(console_trigger(draft))) next
+      res = console_compose(rd$compose, keys, reactor_now(), "steer",
+                            function(line, end) character())
+      rd$compose = res$state
+      if (identical(res$action$type, "send")) {
+        line = res$action$text
+        break
+      }
+    }
+  }, interrupt = function(e) NULL)
+  console_cat("\r\033[K")
+  if (!is.null(line)) return(line)
+  draft = rd$compose$draft
+  rd$compose = NULL
+  if (nzchar(draft %||% "")) console_keep(draft)
+  NULL
+}
+
 #' May a question be asked at time `now` (seconds)? Only once the last key the composer read
 #' (`last_key`, NULL when none) is a second old, so typing never runs into an answer (D-243)
 #' @noRd

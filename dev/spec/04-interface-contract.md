@@ -5333,7 +5333,7 @@ its part in its own commit, and Task 27 finalises them.
     `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
     empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
     word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
-- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Task 21 pending.
+- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21).
   - A question drains before it reads (Task 2). On a terminal REPL, while a run of the call has a session,
     `ui_console_read()` reads fd 0 with `console_typed(drain = TRUE)` just before its `readline_answer()`, so the
     queue and kept lines sit under the question's rows, right above `› ` (visual review: drained before the rows,
@@ -5425,9 +5425,8 @@ its part in its own commit, and Task 27 finalises them.
     "steer")`; when both kinds wait, the kind the composer sent last, `rd$sent`). Tab completes nothing until
     IC-81's completer (Task 22). The live row (IC-82) shows the draft, or the newest message waiting, or the
     keys, and is drawn again on every key. A question's drain gives what waits on fd 0 to the composer, so a
-    partial line stays the draft, never the history. A draft left when the REPL returns to its prompt (no
-    follow-up left to send) goes to the console history, listed `↳ kept in history ↑ · <draft>` after the
-    status line, until Task 21 continues it at the prompt; after any other end it joins the kept list above.
+    partial line stays the draft, never the history. A draft a run left after status `idle` or `max_turns` stays
+    in the composer for the next prompt (Task 21); after any other end it joins the kept list above.
   - A question waits for typing to pause (Task 19; T class). Before a console question draws its rows
     (`console_before_message(kind = "prompt")`), `console_ask_wait()` gives what waits on fd 0 to the composer
     (`console_typed()`) and, while the composer's last key (`rd$compose$t`) is under a second old
@@ -5458,6 +5457,21 @@ its part in its own commit, and Task 27 finalises them.
     a blank row. Continuing writes no notice (`[gptr] continuing` and `[gptr] nothing queued; continuing` are
     gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
     list (Task 18).
+  - A draft left at the end of a run stays until sent (Task 21; T class). The REPL reader's read
+    (`rd$read(prompt)`) returns its held and `typed` lines first; then, while the composer holds a draft,
+    `console_idle(rd, prompt)` edits it at the prompt: `\r`, the band (as the live row's), the prompt and the
+    draft's tail fitted to `width - 1` (`live_fit()`), `\033[K` (then `\033[0m` on the band), drawn again
+    after every key, in character mode (`tty_call(TRUE)`, the saved modes back on return, error and
+    interrupt), reading fd 0 without a time limit (`console_typed_chars(rd, -1L)`). The keys are the
+    composer's (`console_compose()`); Up and Ctrl-D do nothing, and Tab does nothing unless on a trigger word
+    (IC-81's completion, Task 22). The row is cleared when the read ends. Enter returns the line, which the
+    reader echoes as it echoes a follow-up (`peter> <line>`, escaped, as readline leaves it) and the REPL takes
+    as readline's: `/command`, `!code`, fences and continuation reads (`+ `, `... `) go on as usual, through
+    readline once the draft is sent. Once the draft is empty (DEL, Ctrl-U, Ctrl-W), at Ctrl-C, or when nothing
+    is read (an end of input), a draft left goes to the console history and is listed
+    (`console_keep()`: `↳ kept in history ↑ · <draft>`), and readline reads at the same prompt; Ctrl-C there
+    is not the first of the two that leave the console. The follow-ups waiting are sent first, the draft on the
+    live row through their runs.
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Task 26 pending.
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
     keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by

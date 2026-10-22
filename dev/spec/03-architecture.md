@@ -1962,8 +1962,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   typed going to the composer, whose draft stays and is on the live row again when the question has its answer
   [D-243]. A console question also drains fd 0 just before it reads, under its rows: in T into the composer; in D
   (`stty -icanon min 0 time 0`, the modes restored after) typed lines are routed as above and a partial line goes
-  to the console history, listed as the person's held text; so the question starts empty [D-243]. A draft left when the REPL returns to
-  its prompt is kept in the history [D-243]. IDE consoles, R.app and
+  to the console history, listed as the person's held text; so the question starts empty [D-243]. A draft a run
+  left (idle or at max_turns) continues at the REPL's next prompt, after the follow-ups: the prompt and the draft
+  are one row edited with the composer's keys until Enter sends it as the line readline would return; once the
+  draft is empty readline reads at the same prompt, and Ctrl-C there adds the draft to the history first [D-243].
+  IDE consoles, R.app and
   `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current
   response.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer, written in whole rows, each at its line
