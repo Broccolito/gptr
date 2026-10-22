@@ -156,10 +156,9 @@ test_that("a line queued while an answer streams waits for its block to end (vis
   withr::local_options(cli.dynamic = TRUE, cli.width = 40L, cli.num_colors = 1L)
   words = paste(sprintf("word%02d", 1:40), collapse = " ")
   fake = gptr_fake_provider(list(list(text = words, chunk = 8L, gap = 0.02), "second"))
-  looks = 0L
+  # typed once the answer's first row is written, while the rest of it streams
   local_typed(typed_once("use base R", function() {
-    looks <<- looks + 1L
-    looks >= 4L
+    any(vapply(as.list(console_state()$active), function(r) identical(r$last, "text"), NA))
   }))
   res = typing_console(fake, c("go", "/exit"))
   whole = utils::capture.output(console_print_text(words))
