@@ -3435,3 +3435,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     `console_colors()` and `console_pad()`: the evaluator's display of printed output (`eval_echo()`, `eval-core.R`,
     L4) calls it, and from `console-render.R` (L5) that was a layering violation the layering test caught. Contract-
     visible: 03 §3.2 (the file's row). Tests: test-arch-layers.R.
+  - Rows are cut one at a time (`console_cut()`, L0): cli 3.6.6's `ansi_strtrim()` of a vector keeps shortening every
+    row while any is too wide, so beside one cut row a row that fitted lost its last characters with no ellipsis
+    (a call's code row lost its trailing `,` at 60 columns). The person's rows, code and diff rows, result rows, the
+    flagged rows and printed output use it. Tests: test-console-render.R "a diff row wider than the console is cut,
+    its spaces and sign kept (visual review)".

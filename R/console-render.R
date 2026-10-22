@@ -46,7 +46,7 @@ console_person_rows = function(glyph, text, n = Inf) {
   if (is.finite(n)) {
     ell = console_style()$ellipsis
     more = length(rows) > n
-    rows = cli::ansi_strtrim(utils::head(rows, n), width, ellipsis = ell)
+    rows = console_cut(utils::head(rows, n), width, ell)
     if (more) {
       rows[[n]] = paste0(cli::ansi_strtrim(rows[[n]], width - nchar(ell), ellipsis = ""), ell)
     }
@@ -814,7 +814,7 @@ console_code_rows = function(lines, lang, n, width = NULL) {
   cut = if (more > 0L) sym$dim(paste0("# ", sym$ellipsis, " +", more, " more lines"))
   rows = paste0("    ", c(console_code(shown, lang), cut))
   if (is.null(width)) return(rows)
-  as.character(cli::ansi_strtrim(rows, width, ellipsis = sym$ellipsis))
+  console_cut(rows, width, sym$ellipsis)
 }
 
 #' The default start of a tool call, a cursor strip by its kind (D-245): `  | r  x = 1` with the
@@ -880,8 +880,7 @@ console_result_lines = function(call, result, width, kind = "act") {
   if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
     diff = d$diff[!grepl("^(--- a/|[+]{3} b/)", d$diff)]
     shown = utils::head(diff, 12L)
-    lines = cli::ansi_strtrim(paste0(pad, console_escape(shown, FALSE)), width,
-                              ellipsis = sym$ellipsis)
+    lines = console_cut(paste0(pad, console_escape(shown, FALSE)), width, sym$ellipsis)
     sign = substr(shown, 1L, 1L)
     lines = ifelse(sign == "+", sym$blue(lines),
                    ifelse(sign == "-", sym$red(lines), sym$dim(lines)))
@@ -911,7 +910,7 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
   if (!is.character(out) && is.null(result)) return(console_call_line(call, width, kind))
   out = if (is.character(out)) console_escape(out, FALSE) else
     console_result_lines(call, result, width, kind)
-  as.character(cli::ansi_strtrim(console_wrap(out, width), width))
+  console_cut(console_wrap(out, width), width)
 }
 
 #' The status line of a run's end: `  done | 2 requests | 1.2k tokens | $0.0042`, the run's own

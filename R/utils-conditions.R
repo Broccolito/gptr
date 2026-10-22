@@ -183,6 +183,14 @@ gptr_message_margin = function(text) {
   paste0(ifelse(nzchar(lines), pad, ""), lines, "\n", collapse = "")
 }
 
+#' Rows cut to `width` display columns, each cut one ending in `ellipsis`; one row at a time, as
+#' cli 3.6.6's ansi_strtrim() of a vector also shortens rows that fit when another is cut
+#' @noRd
+console_cut = function(rows, width, ellipsis = console_style()$ellipsis) {
+  vapply(as.character(rows), function(r) as.character(cli::ansi_strtrim(r, width, ellipsis)), "",
+         USE.NAMES = FALSE)
+}
+
 #' Lines wrapped at `width`, continuation rows indented like their line (a wider word stays whole)
 #' @noRd
 console_wrap = function(lines, width) {

@@ -173,7 +173,7 @@ ui_permission_lines = function(request) {
       k = seq_len(min(n, 5L))
       rows = paste0(c("    flagged: ", rep(strrep(" ", 13L), 4L))[k], "[", fl$level[k], " ",
                     fl$category[k], "] ", ui_escape(fl$call[k]))
-      sym$dim(cli::ansi_strtrim(c(rows, if (n > 5L) {
+      sym$dim(console_cut(c(rows, if (n > 5L) {
         paste0(strrep(" ", 13L), "(+", n - 5L, " more; ? shows all)")
       }), width))
     },

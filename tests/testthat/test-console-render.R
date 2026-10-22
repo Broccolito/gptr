@@ -653,6 +653,13 @@ test_that("a diff row wider than the console is cut, its spaces and sign kept (v
   out = console_tool_line(list(name = "edit"), diff, width = 40L)
   expect_identical(out, c("    @@ -1 +1,2 @@", "     a",
                           "    +     xlab = \"weight (1000 lb)\", ..."))
+  # a row that fits keeps its last character beside one that is cut (cli 3.6.6's vectorised
+  # ansi_strtrim() cut both)
+  fits = paste0("+", strrep("a", 35L))
+  diff = msg_tool_result("c6", "edit", "ok",
+                         details = list(diff = c(fits, paste0("+", strrep("b", 50L)))))
+  out = console_tool_line(list(name = "edit"), diff, width = 40L)
+  expect_identical(out, c(paste0("    ", fits), paste0("    +", strrep("b", 32L), "...")))
 })
 
 # ---------------------------------------------------------------- Task 2: renderer hooks
