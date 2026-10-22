@@ -112,6 +112,7 @@ test_that("the pause menu is a console question: its keys under it, read at the 
   expect_identical(m$out, c("", "  ? Paused", keys))
   expect_identical(m$prompts, ">> ")
   testthat::local_reproducible_output(width = 80, unicode = TRUE)
+  local_utf8_glyphs()
   m = menu()
   expect_identical(m$out[[3L]], gsub(" - ", " \u00b7 ", keys, fixed = TRUE))
   expect_identical(m$prompts, "\u203a ")

@@ -91,6 +91,7 @@ test_that("verbosity zero and background requests produce no waiting feedback", 
 
 test_that("the live row replaces the old waiting text, at column 0 (D-243)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  local_utf8_glyphs()
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   local_mocked_bindings(front_end = function() "terminal")

@@ -176,9 +176,10 @@ test_that("blank lines collapse and nested lists keep their indentation (D-186)"
   expect_identical(render_chunks(text), c("  T", "", "  - a", "    - b", "      - c",
                                           "  1. x", "     - y", "", "  end"))
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "symbols need a UTF-8 locale")
+  local_utf8_glyphs()
   # the same rows at every colour depth: without colour too the Markdown is read (visual review)
   for (colours in c(1L, 256L)) {
-    withr::local_options(cli.num_colors = colours, cli.unicode = TRUE)
+    withr::local_options(cli.num_colors = colours)
     expect_identical(cli::ansi_strip(render_chunks(text)),
                      c("  T", "", "  \u2022 a", "    \u25e6 b", "      \u25e6 c", "  1. x",
                        "     \u25e6 y", "", "  end"), info = paste(colours))

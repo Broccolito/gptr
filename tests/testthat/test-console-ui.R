@@ -55,6 +55,7 @@ test_that("a console select outside a run opens its own block in the margin (D-1
 test_that("questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", {
   # every row under the title is at column 4, under its text (visual review: the hint was at 2)
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  local_utf8_glyphs()
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   prompts = character()
@@ -271,6 +272,7 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
 test_that("the keys are a row under the question, a and p only with a rule (D-243)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  local_utf8_glyphs()
   root = local_project()
   req = ui_request("x = 1", rule = "r(level<=1)")
   q = function(r) utils::tail(ui_permission_lines(r), 2L)

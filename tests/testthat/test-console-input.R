@@ -187,7 +187,8 @@ live_states = list(
 )
 
 test_that("the live row says what the run does, its queue and the person's draft (D-243)", {
-  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE)
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L)
   expect_identical(live_rows(live_states, 80L), list(
     rstudio = "▌ thinking 6s · 1 queued · esc stops",
     menu = "▌ r 1m 05s · ctrl-c pauses",
@@ -233,7 +234,8 @@ test_that("the live row says what the run does, its queue and the person's draft
 })
 
 test_that("the live row's block is the agent's blue, its words dim and the draft ink (D-243)", {
-  withr::local_options(cli.num_colors = 256L, cli.unicode = TRUE)
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 256L)
   expect_identical(console_live_row(live_states$question, 80L), paste0(
     "\033[38;5;67m▌\033[39m \033[38;5;244medit 11s · question waiting\033[39m",
     "   › and plot the residu"))
@@ -243,7 +245,8 @@ test_that("the live row's block is the agent's blue, its words dim and the draft
 })
 
 test_that("the live row is drawn with \\r and erased to the line end, or padded (D-243)", {
-  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 40L)
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L, cli.width = 40L)
   state = live_states$menu
   row = "▌ r 1m 05s · ctrl-c pauses"
   draws = function(cls) {
@@ -272,7 +275,8 @@ test_that("the live row is drawn with \\r and erased to the line end, or padded 
 })
 
 test_that("a console write clears the live row and redraws it after its whole lines (D-243)", {
-  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 40L, cli.ansi = TRUE)
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)
   local_mocked_bindings(front_end = function() "terminal",
                         console_live_state = function(rec) live_states$menu)
   row = "\r▌ r 1m 05s · ctrl-c pauses\033[K"
@@ -375,7 +379,8 @@ ctrl_c = function() {
 }
 
 test_that("a draft a run left is edited at the prompt; Enter returns it as readline would", {
-  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 80L)
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
   # Up, Ctrl-D and Tab on plain text do nothing; the row is drawn again after every key
   r = idle_read("and label", list(" it", "\033[A", "\004", "\t", "x\177 the axes", "\r"))
   expect_identical(r$x, "and label it the axes")
@@ -399,7 +404,8 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
 })
 
 test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C keeps it first", {
-  withr::local_options(cli.num_colors = 1L, cli.unicode = TRUE, cli.width = 80L)
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
   r = idle_read("ab", list("\177", "\025"), "/exit")
   expect_identical(r$x, "/exit")
   expect_identical(r$rows, "")

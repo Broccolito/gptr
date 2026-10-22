@@ -28,6 +28,13 @@ local_no_fd0 = function(.env = parent.frame()) {
                                   tty_modes = function(modes = "-g") NULL, .env = .env)
 }
 
+# The style table's UTF-8 glyphs (D-245): cli's unicode output, and no Windows console, where
+# console_style() gives ASCII outside Windows Terminal and RStudio
+local_utf8_glyphs = function(.env = parent.frame()) {
+  withr::local_options(cli.unicode = TRUE, .local_envir = .env)
+  testthat::local_mocked_bindings(is_windows = function() FALSE, .env = .env)
+}
+
 # A console test: a temporary project, no history, no document recording questions, no fd 0
 local_console_test = function(.env = parent.frame()) {
   local_project(.env = .env)
