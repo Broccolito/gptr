@@ -19,7 +19,10 @@ wait_record = function(.env = parent.frame()) {
     live$run = NULL
   }, envir = .env)
   local_live_console(.env = .env)
-  list(s = s, live = live, ctx = ctx, run = run, rec = console_record(list(run = run$id)))
+  rec = console_record(list(run = run$id))
+  # the row's clock reads 0s on any runner, however slow
+  rec$t0 = Inf
+  list(s = s, live = live, ctx = ctx, run = run, rec = rec)
 }
 
 wait_request = function(w) {

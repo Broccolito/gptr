@@ -969,6 +969,8 @@ test_that("on a CLI route the live row keeps its clock around each thinking line
                                          tokens_est = 10), ctx)
   })
   rec = console_record(list(run = "u0000test"))
+  # the row's clock reads 0s on any runner, however slow
+  rec$t0 = Inf
   task = the$live_row$task
   t0 = rec$t0
   expect_identical(think(1L, "**Plan"), character())
