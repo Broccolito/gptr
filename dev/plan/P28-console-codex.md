@@ -1013,7 +1013,9 @@ Decisions:
   `  ? Paused`, then under its text a keys row built as the approval's,
   `    s steer · f follow-up · c continue · a abort · b background` (keys bold, words dim, wrapping
   between the options); the session id only when more than one session is paused; no
-  `[gptr] continuing`; an invalid key gets a dim hint naming the keys. (Amended in Task 20:) A key or its
+  `[gptr] continuing`; an invalid key gets a dim hint naming the keys; [b] says `running in the background ·
+  gptr_wait() brings it back` dim, then a blank row (amended in the review of Tasks 16-21: it kept the
+  `[gptr]` notice, on the prompt). (Amended in Task 20:) A key or its
   word answers, as an approval reads `y` or `yes`, and an empty answer continues. Before, any text's first
   letter was its key, so a steer typed at the new chevron (`add a legend`) aborted the run. The keys row is
   `ui_keys()` in `console-ui.R`, which the approval uses too; its separator ends a row, never starts one.

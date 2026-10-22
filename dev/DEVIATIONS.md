@@ -3373,6 +3373,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     `/tmp/fit.rds` names no command and stays an answer, the reason visual review finding 36 was not taken.
     Contract-visible: 04 §15.10 IC-77. Tests: test-console-ui.R "a console command typed as a free-text answer
     waits for the next prompt (review)".
+  - The pause menu's [b] speaks as the menu does: `  running in the background · gptr_wait() brings it back` dim,
+    then a blank row before the prompt, the service's one-time experimental notice dim too, or `  cannot run in
+    the background · <why>` in red; it was `[gptr] running in the background; gptr_wait() brings it back` in ink,
+    right on the next prompt. Contract-visible: 04 §15.10 IC-76. Tests: test-console-interrupt.R "[b]ackground
+    hands a foreground run to bg.register (P21) and resumes", "a [b]ackground refusal is a notice and the menu
+    asks again".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

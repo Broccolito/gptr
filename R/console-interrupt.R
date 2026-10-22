@@ -123,15 +123,15 @@ console_ask = function(accept = NULL) {
 #' (D-243): after a blank row, `? Paused` (the session's id added when more than one is paused)
 #' and under its text the keys as an approval's (ui_keys()): `s steer`, `f follow-up`, `c continue`,
 #' `a abort` and, for a foreground call, `b background`, read at the person's chevron
-#' (console_ask()). A key or its word answers, an empty answer continues, anything else gets a dim
-#' hint naming the keys. [s] and [f] read their text at the same chevron and queue it as Enter and
-#' Tab do (policy_enqueue()), their queue line right under it, as under any question. A key, or for
-#' [s] and [f] any text, typed before the chevron showed answers (console_ask()); the question reads
-#' in the saved modes from before its rows (tty_question()). It resumes
-#' the interrupted computation, the next block a blank row below the menu and the live row with a
-#' T console's draft drawn again (console_asked()), or returns to let the policy's exiting handler
-#' abort. It clears the live row only: an answer's held row stays in its stream and continues after
-#' the menu, which goes between whole rows (D-245)
+#' (console_ask()), in the saved modes from before its rows (tty_question()). A key or its word
+#' answers, also one typed before the chevron showed, an empty answer continues, anything else gets
+#' a dim hint naming the keys. [s] and [f] read their text at the same chevron and queue it as Enter
+#' and Tab do (policy_enqueue()), their queue line right under it, as under any question. [b] says
+#' in dim rows that the run went to the background (with the service's notices), or in red why not.
+#' It resumes the interrupted computation, the next block a blank row below the menu and the live
+#' row with a T console's draft drawn again (console_asked()), or returns to let the policy's
+#' exiting handler abort. It clears the live row only: an answer's held row stays in its stream and
+#' continues after the menu, which goes between whole rows (D-245)
 #' @noRd
 policy_menu = function(cnd, pol) {
   # nested policies drop their runs while the stack unwinds to the exiting handler
@@ -174,15 +174,24 @@ policy_menu = function(cnd, pol) {
       go()
     }
     if (identical(key, "b")) {
+      sym = console_style()
+      say = function(text, style = sym$dim) {
+        console_write(style(console_wrap(paste0("  ", text), ui_width())))
+      }
       tryCatch({
-        ext_service_get("bg.register")(s)
+        # the service's notices are the menu's dim rows
+        withCallingHandlers(ext_service_get("bg.register")(s), gptr_message = function(m) {
+          say(console_escape(text_lines(conditionMessage(m)), FALSE))
+          invokeRestart("muffleMessage")
+        })
         tty_question(FALSE)
         console_render_pause()
-        console_notice("[gptr] running in the background; gptr_wait() brings it back")
+        say(paste0("running in the background", sym$sep, "gptr_wait() brings it back"))
+        console_write("")
         invokeRestart("resume")
       }, error = function(e) {
-        console_notice("[gptr] cannot run in the background: ",
-                       console_escape(conditionMessage(e), FALSE), .error = TRUE)
+        say(paste0("cannot run in the background", sym$sep,
+                   console_escape(conditionMessage(e), FALSE)), sym$red)
       })
       next
     }

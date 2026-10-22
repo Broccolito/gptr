@@ -362,6 +362,21 @@ test_that("[b]ackground hands a foreground run to bg.register (P21) and resumes"
   expect_identical(res, "kept running")
   expect_identical(got$session, s)
   expect_true(any(grepl("b background", err, fixed = TRUE)))
+  # dim rows in the menu's words, the service's notice too, and the blank row before the prompt
+  ext_service_set("bg.register", function(session) {
+    gptr_inform("Background sessions are experimental.", "notice")
+    invisible(session)
+  }, provided_by = "test")
+  local_menu_answers("b")
+  local_gptr_options(quiet = FALSE)
+  withr::local_options(cli.num_colors = 256L)
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  dim = console_style()$dim
+  expect_identical(utils::tail(err, 3L), c(
+    dim("  Background sessions are experimental."),
+    dim("  running in the background - gptr_wait() brings it back"), ""))
+  expect_false(any(grepl("[gptr]", err, fixed = TRUE)))
+  withr::local_options(cli.num_colors = 1L)
   local_menu_answers(c("b", "c"))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "repl"))
   expect_false(any(grepl("b background", err, fixed = TRUE)))
@@ -494,8 +509,8 @@ test_that("a [b]ackground refusal is a notice and the menu asks again", {
     }, list(run), mode = "call")
   })
   expect_identical(res, "kept running")
-  expect_true(any(grepl("[gptr] cannot run in the background: Background sessions need",
-                        err, fixed = TRUE)))
+  expect_true(any(startsWith(err, "  cannot run in the background - Background sessions need")))
+  expect_false(any(grepl("[gptr]", err, fixed = TRUE)))
   expect_identical(log$prompts, c(">> ", ">> "))
 })
 
