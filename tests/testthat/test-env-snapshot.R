@@ -226,6 +226,22 @@ test_that("long lists and environments are sampled: shared parts once, the last 
   expect_lt(proc.time()[["elapsed"]] - t0, 30)
 })
 
+test_that("environments deeper than 100 levels count object.size(), so the snapshot lists them", {
+  e = new.env()
+  for (i in 1:2000) {
+    node = new.env(parent = emptyenv())
+    node$nxt = e$chain
+    e$chain = node
+  }
+  e$v = numeric(10)
+  s = env_snapshot(e)
+  expect_false(anyNA(s$bytes))
+  expect_gt(s$bytes[s$name == "chain"], 100 * 112)
+  f = function() 1
+  for (i in 1:2000) environment(f) = new.env(parent = environment(f))
+  expect_gt(env_snap_size(f), 100 * 56)
+})
+
 test_that("six objects cost at most 600 tokens and promises stay unforced", {
   e = new.env()
   e$a = mtcars

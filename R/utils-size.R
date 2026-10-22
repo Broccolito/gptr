@@ -117,14 +117,14 @@ env_size_walk = function(x, st) {
   seen = st$seen
   if (!is.null(seen[[a]])) return(0)
   seen[[a]] = TRUE
-  if (t == "environment") return(env_size_env(x, st))
   if (st$depth >= 100L || st$parts > 10 * env_size_budget) {
     return(as.numeric(utils::object.size(x)))
   }
-  an = env_size_attr_names(x)
+  an = if (t != "environment") env_size_attr_names(x)
   st$parts = st$parts + length(an)
   st$depth = st$depth + 1L
   b = switch(t,
+    environment = env_size_env(x, st),
     logical = , integer = , double = , complex = , raw = if (env_compact_seq(x)) {
       length(serialize_leaf(x))
     } else {
