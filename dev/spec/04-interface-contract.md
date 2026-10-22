@@ -5405,7 +5405,9 @@ its part in its own commit, and Task 27 finalises them.
     holding newlines sends the draft and its text up to the last newline as one message of the Enter kind
     (`enter_kind`, the `type_ahead` setting), newlines kept, and the rest is the draft; a newline ends what the
     edit keys reach. A message starting with `/` or `!` is always a follow-up, and a blank one is not sent. Two
-    keys act only as a batch of their own (elsewhere Tab is text and Up is dropped): Up (`ESC [ A`, `ESC O A`) on
+    keys act only as a batch of their own, or at the end of a batch without a newline, after its text (review of
+    Tasks 16-21: keys typed during an in-process tool arrive as one batch; elsewhere Tab is text and Up is
+    dropped): Up (`ESC [ A`, `ESC O A`) on
     an empty draft takes back the newest queued message; Tab on a trigger word completes and never sends, and on
     any other draft sends the other kind. `console_trigger(line)` gives the trigger word at the line's end, or
     NULL: the last word of a `!` or `!!` line, a word starting with `@` or `peter$`, or a first word starting

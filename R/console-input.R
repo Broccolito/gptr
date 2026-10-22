@@ -13,11 +13,11 @@
 #' newlines kept (IC-76's paste rule), and keeps the rest as the draft; a newline ends what the
 #' edit keys reach. A message goes as `enter_kind` (`"steer"` or `"follow_up"`), always as a
 #' follow-up when it starts with / or !, and not at all when blank. Two keys act only as a batch
-#' of their own (elsewhere Tab is text and Up is dropped): Up (`ESC [ A`, `ESC O A`) on an empty
-#' draft takes back the newest queued message; Tab on a trigger word (console_trigger())
-#' completes it and never sends: `complete(line, end)` returns full words, whose longest common
-#' prefix replaces the word when longer, else two or more are listed. On any other draft Tab
-#' sends the other kind.
+#' of their own or as the end of a batch without a newline (elsewhere Tab is text and Up is
+#' dropped): Up (`ESC [ A`, `ESC O A`) on an empty draft takes back the newest queued message;
+#' Tab on a trigger word (console_trigger()) completes it and never sends: `complete(line, end)`
+#' returns full words, whose longest common prefix replaces the word when longer, else two or more
+#' are listed. On any other draft Tab sends the other kind.
 #' @return list(state, action), the action NULL, list(type = "send", kind, text),
 #'   list(type = "take_back") or list(type = "complete", candidates)
 #' @noRd
@@ -31,6 +31,14 @@ console_compose = function(state, chars, now, enter_kind, complete) {
   send = function(text, kind) {
     if (grepl("^\\s*[/!]", text)) kind = "follow_up"
     if (nzchar(trimws(text))) list(type = "send", kind = kind, text = text)
+  }
+  # a Tab or Up that ends a batch without a newline is the key after the batch's text, as keys
+  # typed during an in-process tool arrive as one batch
+  key = regmatches(x, regexpr("(\t|\033\\[A|\033OA)$", x))
+  if (length(key) && nchar(key) < nchar(x) && !grepl("\n", x, fixed = TRUE)) {
+    text = console_compose(list(draft = draft), substr(x, 1L, nchar(x) - nchar(key)), now,
+                           enter_kind, complete)
+    return(console_compose(text$state, key, now, enter_kind, complete))
   }
   if (x %in% c("\033[A", "\033OA")) return(out(if (!nzchar(draft)) list(type = "take_back")))
   if (identical(x, "\t")) {
@@ -142,7 +150,12 @@ console_idle = function(rd, prompt) {
       # over after the keys before them
       hand = regexpr("\003|[\001\005]|\033(\\[([1478]~|[0-9;]*[CDHF])|O[CDHF])", keys, perl = TRUE)
       if (hand > 0L) keys = substr(keys, 1L, hand - 1L)
-      if (nzchar(keys) && (!identical(keys, "\t") || !is.null(console_trigger(draft)))) {
+      # Tab off a trigger word does nothing here (the composer would send the other kind)
+      tab = endsWith(keys, "\t") && !grepl("[\r\n]", keys)
+      if (tab && is.null(console_trigger(paste0(draft, sub("\t$", "", keys))))) {
+        keys = sub("\t$", "", keys)
+      }
+      if (nzchar(keys)) {
         res = console_compose(rd$compose, keys, reactor_now(), "steer",
                               function(line, end) character())
         rd$compose = res$state

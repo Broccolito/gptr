@@ -91,14 +91,17 @@ test_that("an escape sequence cut short is held for 50 ms, then dropped", {
   expect_identical(r$state, list(draft = "abcx", esc = "\033[", t = 1))
 })
 
-test_that("Up on an empty draft takes back; only as a batch of its own", {
+test_that("Up on an empty draft takes back; as a batch of its own or its end (review)", {
   back = list(type = "take_back")
   expect_keys(list(
     list("\033[A", "", "", back),
     list("\033OA", "", "", back),
     list("\033[A", "abc", "abc", NULL),
     list("\033[Ax", "", "x", NULL),
-    list("\033[A\033[A", "", "", NULL)
+    list("\033[A\033[A", "", "", back),
+    # keys read as one batch after an in-process tool: Ctrl-U, then Up
+    list("\025\033[A", "x", "", back),
+    list("x\n\033[A", "", "", sent("steer", "x"))
   ))
   r = compose("[A", state = compose("\033", now = 0)$state, now = 0.01)
   expect_identical(r$action, back)
@@ -157,7 +160,11 @@ test_that("Tab completes a trigger word and never queues it; other drafts go as 
     list("\t", "use $name", "", sent("follow_up", "use $name")),
     list("\t", "x$y", "", sent("follow_up", "x$y")),
     list("\t", "wow! x", "", sent("follow_up", "wow! x")),
-    list("\t", "", "", NULL)
+    list("\t", "", "", NULL),
+    # keys read as one batch after an in-process tool: a Tab at its end is the key, one inside text
+    list("then plot\t", "", "", sent("follow_up", "then plot")),
+    list("use @mtc\t", "", "use @mtcars", NULL),
+    list("a\tb", "", "a\tb", NULL)
   ))
   expect_keys(list(
     list("\t", "summarise the da", "", sent("steer", "summarise the da")),
@@ -478,6 +485,9 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
   expect_identical(r$kept, character())
   expect_identical(r$stty, c("-g", keys_mode, "SAVED"))
   expect_identical(r$draft, "")
+  # a Tab at a batch's end off a trigger word does nothing here either; Enter sends
+  r = idle_read("and label", list(" it\t", "\r"))
+  expect_identical(r$x, "and label it")
   # a draft wider than the row shows its tail; Enter writes the whole line
   withr::local_options(cli.width = 30L)
   r = idle_read("and label both of the axes", "\r")

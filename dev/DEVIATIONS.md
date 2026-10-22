@@ -3452,6 +3452,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     with carriage returns stays out of scope (Out of scope: cursor movement inside the composer). Contract-
     visible: 04 §15.10 IC-76. Tests: test-console-input.R "an emptied draft hands over to readline at the same
     prompt; Ctrl-C keeps it first".
+  - A Tab or Up that ends a key batch without a newline acts as the key after the batch's text
+    (`console_compose()`): keys typed during an in-process tool are read as one batch when it returns, so `then
+    plot` and Tab became a literal tab in the draft, and Ctrl-U then Up lost the Up. A Tab inside text stays
+    text; at the idle editor a Tab off a trigger word still does nothing. Contract-visible: 04 §15.10 IC-76.
+    Tests: test-console-input.R "Up on an empty draft takes back; as a batch of its own or its end (review)", "Tab
+    completes a trigger word and never queues it; other drafts go as the other kind", "a draft a run left is
+    edited at the prompt; Enter returns it as readline would".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

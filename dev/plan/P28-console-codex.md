@@ -802,7 +802,10 @@ Decisions:
 - Batch rule (IC-76's paste rule): in a read batch that holds a newline, the draft plus
   everything up to the last newline is one message of the Enter kind, with its newlines kept.
   The rest stays as the draft. A newline ends what DEL, Ctrl-U and Ctrl-W reach. Tab and Up act
-  only as a batch of their own: in any other batch Tab is text and Up is dropped.
+  only as a batch of their own: in any other batch Tab is text and Up is dropped. (Amended in the review of
+  Tasks 16-21: also at the end of a batch without a newline, as the key after the batch's text; keys typed
+  during an in-process tool arrive as one batch, so `then plot` and Tab gave a literal tab, never a
+  follow-up. A Tab inside text stays text.)
 - `/` and `!` drafts send as follow-ups.
 - No cursor movement: the draft is edited at its end, and Left, Right, Ctrl-A and Ctrl-E are
   dropped. Full editing is readline's, at the prompt.
