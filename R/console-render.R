@@ -11,13 +11,14 @@
 #' that ignore SGR 2 show it too; else SGR 2), the input band where the background is known and
 #' 256 colours show it, and the R code theme in those colours. ASCII where the output is not
 #' UTF-8 and in Windows consoles outside Windows Terminal and RStudio (Rgui among them), whose
-#' fonts lack U+258E and U+21B3 (WGL4).
+#' fonts lack U+258E and U+21B3 (WGL4); there the person's chevron is doubled, `>>`, so an answer
+#' never reads as R's own prompt.
 #' @noRd
 console_style = function() {
   ascii = !cli::is_utf8_output() ||
     (is_windows() && !nzchar(Sys.getenv("WT_SESSION")) && front_end() != "rstudio")
   glyphs = if (ascii) {
-    list(person = ">", tool = "|", agent = "#", queued = "->", up = "Up", bullet = "-",
+    list(person = ">>", tool = "|", agent = "#", queued = "->", up = "Up", bullet = "-",
          nested = "-", sep = " - ", ellipsis = "...")
   } else {
     list(person = "\u203a", tool = "\u258e", agent = "\u258c", queued = "\u21b3", up = "\u2191",
@@ -1332,7 +1333,7 @@ console_on_shutdown = function(event, ctx) {
 }
 
 #' queue_update: a user's message the loop takes (a steer at its step boundary) is the person's line
-#' at column 0, the person's glyph and the text (ASCII `> <text>`), on the band, before the next
+#' at column 0, the person's glyph and the text (ASCII `>> <text>`), on the band, before the next
 #' request's output (D-242)
 #' @noRd
 console_on_queue_update = function(event, ctx) {

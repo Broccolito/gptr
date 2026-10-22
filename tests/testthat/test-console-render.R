@@ -430,7 +430,8 @@ test_that("console_style() holds the logo's cursor glyphs, ASCII where they may 
   utf8 = list(person = "\u203a", tool = "\u258e", agent = "\u258c", queued = "\u21b3",
               up = "\u2191", bullet = "\u2022", nested = "\u25e6", sep = " \u00b7 ",
               ellipsis = "\u2026")
-  ascii = list(person = ">", tool = "|", agent = "#", queued = "->", up = "Up", bullet = "-",
+  # ASCII's chevron is doubled, so an answer never reads as R's own prompt `> ` (visual review)
+  ascii = list(person = ">>", tool = "|", agent = "#", queued = "->", up = "Up", bullet = "-",
                nested = "-", sep = " - ", ellipsis = "...")
   glyphs = function() console_style()[names(utf8)]
   local_mocked_bindings(is_windows = function() FALSE)
@@ -1238,7 +1239,7 @@ test_that("inside an evaluation the console margin follows the person's console 
   out = utils::capture.output(eval_r("p = pad(); k = pick()", home, plots = "none", tee = FALSE))
   expect_identical(home$p, "  ")
   expect_identical(home$k, 1L)
-  expect_identical(prompts, "> ")
+  expect_identical(prompts, ">> ")
   expect_true("  ? Which format?" %in% out)
 })
 

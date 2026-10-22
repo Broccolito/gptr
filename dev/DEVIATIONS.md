@@ -3335,3 +3335,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     60 columns `+     xlab = "weight (1000 lb)", ylab = "miles per gallon")` showed as `+ xlab = ...` with
     `gallon")` on a row of its own, blue but without its `+`. Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests:
     test-console-render.R "a diff row wider than the console is cut, its spaces and sign kept (visual review)".
+  - The person's ASCII chevron is doubled, `>>`: with `>` an answer (`> y`) and a delivered steer read as R's own
+    prompt and an evaluated line. Continuation rows take its width (`console_person_rows()`). Contract-visible: 04
+    §15.10 IC-76, IC-77 and IC-82, 03 §6.8.3. Tests: test-console-render.R "console_style() holds the logo's cursor
+    glyphs, ASCII where they may not show (D-245)" and the ASCII prompt cases of test-console-ui.R,
+    test-console-repl.R and test-console-typing.R.

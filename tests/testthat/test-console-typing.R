@@ -121,9 +121,10 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   shown = res$out[startsWith(res$out, "\033[48;5;237m")]
   expect_gt(length(shown), 3L)
   expect_true(all(endsWith(shown, "\033[K\033[0m")))
-  lead = substr(cli::ansi_strip(shown), 1L, 2L)
-  expect_identical(lead, c(paste0(sym$person, " "), rep("  ", length(shown) - 1L)))
-  expect_identical(paste(substring(cli::ansi_strip(shown), 3L), collapse = " "), long)
+  k = nchar(sym$person) + 1L
+  lead = substr(cli::ansi_strip(shown), 1L, k)
+  expect_identical(lead, c(paste0(sym$person, " "), rep(strrep(" ", k), length(shown) - 1L)))
+  expect_identical(paste(substring(cli::ansi_strip(shown), k + 1L), collapse = " "), long)
   expect_true(all(cli::ansi_nchar(c(queued, shown), type = "width") <= 39L))
 })
 
@@ -462,7 +463,7 @@ test_that("Ctrl-C at an approval prompt aborts the run and keeps the held lines 
   kept = character()
   local_mocked_bindings(readline_answer = function(prompt, ...) {
     asks <<- asks + 1L
-    if (identical(prompt, "> ")) {
+    if (identical(prompt, ">> ")) {
       signalCondition(structure(class = c("interrupt", "condition"),
                                 list(message = "", call = NULL)))
     }

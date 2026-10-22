@@ -1497,7 +1497,7 @@ request's `asks in every mode: <reason>`, then the question `  ? Allow r?` (`?` 
 keys, `    y yes · a always (session) · p always (project) · n no · ? more` (the keys bold, what they do dim; 68
 columns whatever the tool or who asks, wrapped between the options in a narrower console), with C0/C1 controls,
 bidi and zero-width characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after
-the person's chevron `› ` (ASCII `> `) at column 0, with R's readline, echo on and Enter required; no single key
+the person's chevron `› ` (ASCII `>> `) at column 0, with R's readline, echo on and Enter required; no single key
 answers. `a` adds a session rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`) and `p`
 the same rule for the project, both offered only when the request suggests one; a remembered answer adds one dim
 line, `    allowed r(fn:FindNeighbors,FindClusters) for this session` (or `project`). `?` opens the detail view (code,

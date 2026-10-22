@@ -373,7 +373,7 @@ Decisions:
 
 | role | UTF-8 | ASCII |
 |---|---|---|
-| person | `›` (U+203A) | `>` |
+| person | `›` (U+203A) | `>>` (amended in the visual review: `> y` read as R's own prompt) |
 | tool call | `▎` (U+258E) | `\|` |
 | agent (working row, sub-agents) | `▌` (U+258C) | `#` |
 | queued message | `↳` (U+21B3) | `->` |

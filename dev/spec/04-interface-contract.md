@@ -5347,7 +5347,7 @@ its part in its own commit, and Task 27 finalises them.
     under the text, and cut to three rows, the last ending in `…`; inside an evaluation the line has the
     console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
     `builtin_console` hooks `queue_update` (§7.14): an item from a user source (IC-55) that a foreground run
-    takes (`op = "take"`, verbosity 2) is the person's line `› <text>` at column 0 (ASCII `>`), escaped and
+    takes (`op = "take"`, verbosity 2) is the person's line `› <text>` at column 0 (ASCII `>>`), escaped and
     wrapped the same way but whole, printed at the step boundary, before the next request's output, as its own
     block (a blank line before and after where lines keep the margin). Each row is on the band
     (`console_style()$band`, row, `\033[K\033[0m`) where the band is known (IC-82). Task 18 stops the queue
@@ -5414,7 +5414,7 @@ its part in its own commit, and Task 27 finalises them.
     tool or who asks; in a narrower console it word-wraps at column 4, each key kept with its words (no-break
     spaces, written as spaces). Who asks: `  ? sub-agent <agent>: allow r?`.
   - Every console question (`ui_console_permission()`, `ui_console_select()`, `ui_console_input()`) reads its
-    answer after the person's chevron, `console_style()$person` and a space (`› `, ASCII `> `), at column 0, with
+    answer after the person's chevron, `console_style()$person` and a space (`› `, ASCII `>> `), at column 0, with
     R's readline (echo on, Enter required); answers are unchanged. A choice shows `? <title>` (bold), its details
     dim under it, the choices `    1  dplyr` (numbers bold, right-aligned), then a dim hint
     (`Choose a number, or type your own answer; Enter = base`; `Choose numbers separated by commas` for several);
@@ -5446,7 +5446,7 @@ its part in its own commit, and Task 27 finalises them.
 
     | role (`console_style()` name) | UTF-8 | ASCII |
     |---|---|---|
-    | person (`person`) | `›` (U+203A) | `>` |
+    | person (`person`) | `›` (U+203A) | `>>` (doubled, so an answer never reads as R's prompt `> `; visual review) |
     | tool call (`tool`) | `▎` (U+258E) | `\|` |
     | agent: the waiting row, sub-agents (`agent`) | `▌` (U+258C), static | `#` |
     | queued message (`queued`) | `↳` (U+21B3) | `->` |

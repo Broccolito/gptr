@@ -330,7 +330,7 @@ test_that("an approval asks under the call it gates; a call not shown is printed
   # prints it, and the question names who asks
   at = match("  | r  x = 1", out)
   expect_identical(out[at + 1:2], c("  ? sub-agent 'count' #1: allow r?", keys))
-  expect_identical(prompts, c("> ", "> "))
+  expect_identical(prompts, c(">> ", ">> "))
 })
 
 test_that("a remembered answer adds one dim line naming the rule and its scope (D-243)", {
@@ -389,7 +389,7 @@ test_that("during a run a line typed before the approval prompt is queued, then 
   out = utils::capture.output(repl_main(rs))
   expect_identical(e$zz, 2)
   expect_identical(queued, list(list(text = "use base R", as = "steer", source = "repl")))
-  expect_identical(sum(rl$prompts == "> "), 2L)
+  expect_identical(sum(rl$prompts == ">> "), 2L)
   expect_identical(rl$kept, character())
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
@@ -462,7 +462,7 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   rs$mode = "manual"
   out = utils::capture.output(repl_main(rs))
   expect_null(e$zz)
-  expect_identical(sum(fd0$prompts == "> "), 2L)
+  expect_identical(sum(fd0$prompts == ">> "), 2L)
   expect_identical(sum(out == "  A pasted block is not an answer (kept in history)."), 1L)
   expect_identical(kept, '"""\ny\npasted line two\npasted line three\n"""')
   expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
