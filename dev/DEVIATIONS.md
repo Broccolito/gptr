@@ -3225,6 +3225,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     right above `› `. Task 19 adds its T-class wait before the rows. Contract-visible: 04 §15.10 IC-76, 03 §6.17.
     Tests: test-console-typing.R "a question drains fd 0 before it reads: lines steer, a partial line is kept", "a
     line typed during a tool steers when the next call's question follows it", the pty case B.
+  - A line a question reads past (IC-75; in RStudio and R.app every line typed during a run) is shown once: the
+    console echoes it after the question's chevron, and its queue line says `↳ steer · not an answer` (the kind,
+    and that it was not taken as the answer) instead of repeating it; it shows again as the person's line when it
+    is delivered. RStudio showed it three times, the first directly under `? Allow r?`, where it read as the
+    answer. Re-printing the question under the queue line (the same finding's other proposal) is not taken: it
+    would double the question's rows for every such line, and the question stays two rows above. Contract-visible:
+    04 §15.10 IC-76. Tests: test-console-ui.R "during a run a line typed before the approval prompt is queued, then
+    it asks again", "during a run a !code or /command line typed before a question waits for the prompt".
 - Task 16: the composer's key machine, pure (`console_compose()` and `console_trigger()` in the new
   `console-input.R`; Tasks 18-21 feed it the keys). A read batch sends at most one message, so it returns one
   action, not a list. A newline in a batch ends what DEL, Ctrl-U and Ctrl-W reach, so keys typed after Enter within

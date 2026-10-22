@@ -205,14 +205,17 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 
 #' The dim line at column 0 that shows a message queued for session `s` (D-242): the queued
 #' glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`), cut to
-#' three rows; a steer on a CLI route adds `after the CLI's answer`. Inside an evaluation it has
-#' the console's colours.
+#' three rows; a steer on a CLI route adds `after the CLI's answer`. A line a question read past
+#' (`the$echoed`, console_typed_ahead()) is on screen already, after the question's chevron, so its
+#' line says `not an answer` in place of the text. Inside an evaluation it has the console's
+#' colours.
 #' @noRd
 console_queue_line = function(s, text, as) {
   rlang::local_options(cli.num_colors = console_colors())
   sym = console_style()
   steer = identical(as, "steer")
   on_cli = steer && identical(session_live(s)$run$model[["type"]], "cli")
+  if (isTRUE(the$echoed)) text = "not an answer"
   console_write(sym$dim(console_person_rows(sym$queued, paste0(
     if (steer) "steer" else "follow-up", sym$sep, text,
     if (on_cli) paste0(sym$sep, "after the CLI's answer")
@@ -222,11 +225,16 @@ console_queue_line = function(s, text, as) {
 #' A line typed before a console question (readline_answer()): routed as a line typed during the
 #' run of this call (console_typed_route(): /command and !code wait for the next prompt, the
 #' others are queued as `type_ahead` says), else added to the console history; never an answer
-#' (IC-75, D-243). Without a REPL reader it is queued.
+#' (IC-75, D-243). Without a REPL reader it is queued. The console echoed it after the question's
+#' chevron, so its queue line does not repeat it (`the$echoed`).
 #' @noRd
 console_typed_ahead = function(text) {
   target = Find(function(t) !is.null(t$session), policy_targets(policy_find()$runs))
   if (is.null(target)) return(console_history_add(text))
+  the$echoed = TRUE
+  on.exit({
+    the$echoed = NULL
+  }, add = TRUE)
   rd = console_repl_find()$reader
   if (is.null(rd)) {
     policy_enqueue(target$session, text, setting_get("type_ahead", target$session),

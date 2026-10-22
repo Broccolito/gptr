@@ -652,7 +652,8 @@ Decisions:
   width less one, later rows under the text. The queue line's cut also trims a row wider than that
   (one long word), so it never takes more than three rows.
 - These lines replace the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...`. The
-  pause menu's [s] and [f] use the same lines.
+  pause menu's [s] and [f] use the same lines. A line a question read past is on screen after the
+  question's chevron, so its line reads `↳ steer · not an answer` (amended in the visual review).
 - Task 18 stops printing the `↳` line in T class, where the live row shows the queue.
 
 Tests (`test-console-typing.R`, `test-console-interrupt.R`), RED first:

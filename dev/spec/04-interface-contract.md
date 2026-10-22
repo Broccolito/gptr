@@ -5352,6 +5352,9 @@ its part in its own commit, and Task 27 finalises them.
     ` · after the CLI's answer`. The text is escaped and wrapped inside the console width (width - 1), later rows
     under the text, and cut to three rows, the last ending in `…`; inside an evaluation the line has the
     console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
+    A line a question read past (IC-75, `console_typed_ahead()`) is on screen already, after the question's
+    chevron, so its queue line says `↳ steer · not an answer` (`follow-up` for its kind) in place of the text:
+    RStudio and R.app showed such a line three times (visual review).
     `builtin_console` hooks `queue_update` (§7.14): an item from a user source (IC-55) that a foreground run
     takes (`op = "take"`, verbosity 2) is the person's line `› <text>` at column 0 (ASCII `>>`), escaped and
     wrapped the same way but whole, printed at the step boundary, before the next request's output, as its own

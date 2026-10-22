@@ -397,6 +397,10 @@ test_that("during a run a line typed before the approval prompt is queued, then 
   expect_identical(msg_text(last),
                    "The user sent this message while you were working: use base R")
   expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
+  # the console echoed the line at the question, so its queue line does not repeat it: it says the
+  # line was queued, not taken as the answer (visual review)
+  expect_true(queue_line("steer", "not an answer") %in% out)
+  expect_false(queue_line("steer", "use base R") %in% out)
 })
 
 test_that("during a run a !code or /command line typed before a question waits for the prompt", {
@@ -416,7 +420,7 @@ test_that("during a run a !code or /command line typed before a question waits f
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   expect_false(any(grepl("zz2", vapply(reqs[[2L]]$messages, msg_text, ""), fixed = TRUE)))
-  expect_true(queue_line("follow-up", "!zz2 = 5") %in% out)
+  expect_true(queue_line("follow-up", "not an answer") %in% out)
   expect_false(any(startsWith(out, queue_line("steer", ""))))
   expect_false(any(grepl("after this answer", out, fixed = TRUE)))
 })
