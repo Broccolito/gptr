@@ -3308,6 +3308,23 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   §6.17. Tests: test-console-input.R "a question is asked once no key came for a second (D-243)";
   test-console-typing.R "a terminal: a question waits a second after the last key; `yes` is no answer (D-243)" and
   the pty case B (the draft on the live row again while the approved call runs).
+- Task 20: the pause menu is a console question in every console that offers it: `? Paused` and under its text
+  an approval's keys row, `s steer · f follow-up · c continue · a abort · b background`, read at `› ` at column
+  0 (visual review: `[gptr] paused <id>: [s]teer, ...` read at `  ? `, `[b]ackground` wrapped alone, `steer> ` and
+  `follow-up> `, `[gptr] continuing`). The session id shows only when more than one session is paused. A key or
+  its word answers and Enter alone continues. Before, any text's first letter was its key, so a steer typed at
+  the new chevron, `add a legend`, aborted the run; it now gets a dim hint naming the keys. [s] and [f] read at
+  the same chevron and queue as Enter and Tab do: `policy_enqueue()` now keeps the reader's `sent` (it was
+  `console_keys()`'s), and blank text queues nothing, silently; the queue line sits right under the menu's
+  chevron, as under an approval (the visual check showed it a blank row below, a block apart from the answer it
+  confirms). The keys row is `ui_keys()`, which the approval
+  uses too; its separator ends a row, so it never starts one. After [c], [s] or [f] the live row and a T
+  console's draft are drawn again at once (`console_asked()`). Since Task 18 the composer already kept the draft
+  through the menu (the plan's "today it is lost" was 0ee69a0's). Contract-visible: 04 §7.14 and §15.10 IC-76,
+  03 §6.2. Tests: test-console-interrupt.R "the pause menu is a console question: its keys under it, read at the
+  chevron (D-243)", "in the console margin the menu's rows are an approval's, its prompt at column 0" and the
+  menu's other cases; test-console-typing.R "a terminal: a draft survives Ctrl-C and the pause menu (P28 G,
+  D-243)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

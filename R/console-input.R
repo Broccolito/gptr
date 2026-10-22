@@ -101,7 +101,6 @@ console_keys = function(rd, s, chars) {
   rd$compose = res$state
   act = res$action
   if (identical(act$type, "send")) {
-    rd$sent = act$kind
     policy_enqueue(s, act$text, act$kind, source = "repl")
   } else if (identical(act$type, "take_back")) {
     rd$compose$draft = console_newest(s, rd, take = TRUE)$text %||% ""
@@ -149,8 +148,8 @@ console_asked = function() {
 #' The newest message the person queued for session `s` that no run has taken (D-242), as
 #' list(kind, text), or NULL; `take` takes it back. Follow-ups wait in the REPL reader `rd`'s
 #' `typed` lines, steers among the console's held items (policy_flush()), then in the session's
-#' queue (session_unqueue()); when both kinds wait, the newest is of the kind the composer sent
-#' last (`rd$sent`)
+#' queue (session_unqueue()); when both kinds wait, the newest is of the kind queued last
+#' (`rd$sent`, policy_enqueue())
 #' @noRd
 console_newest = function(s, rd, take = FALSE) {
   st = console_state()

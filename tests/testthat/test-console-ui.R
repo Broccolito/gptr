@@ -302,8 +302,8 @@ test_that("the keys are a row under the question, a and p only with a rule (D-24
                    c(paste0("  \u001b[38;5;167m\u258e\u001b[39m \u001b[1mr\u001b[22m  x = ",
                             "\u001b[38;5;67m1\u001b[39m"),
                      "  \033[38;5;67m?\033[39m \033[1mAllow r?\033[22m",
-                     paste0("    \u001b[1my\u001b[22m\u001b[38;5;244m yes \u00b7 \u001b[39m",
-                            "\u001b[1mn\u001b[22m\u001b[38;5;244m no \u00b7 \u001b[39m",
+                     paste0("    \u001b[1my\u001b[22m\u001b[38;5;244m yes \u00b7\u001b[39m ",
+                            "\u001b[1mn\u001b[22m\u001b[38;5;244m no \u00b7\u001b[39m ",
                             "\u001b[1m?\u001b[22m\u001b[38;5;244m more\u001b[39m")))
 })
 

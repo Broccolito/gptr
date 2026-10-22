@@ -96,9 +96,9 @@ readline_limit = function() {
 #' unechoed (the terminal showed them); `typed`, the /command and !code lines and the follow-ups
 #' typed during an answer, which it returns next, in order, echoed after the prompt (IC-76,
 #' D-242); `compose`, the state of a T console's composer (console_compose(): its draft), and
-#' `sent`, the kind it last sent (console_keys()). With `echo` the stdin reader writes the prompt
-#' and the escaped line (never a `secret` one) on `stream`, so a piped session reads like a
-#' terminal session.
+#' `sent`, the kind of message queued last (policy_enqueue()). With `echo` the stdin reader
+#' writes the prompt and the escaped line (never a `secret` one) on `stream`, so a piped session
+#' reads like a terminal session.
 #' @noRd
 console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())

@@ -1237,8 +1237,13 @@ each item added, taken or withdrawn emits one `queue_update` that names it. Ther
 
 **Interrupt policy** [18 §4.6, 02 §5.4, G3 (5)]. Runs execute inside
 `tryCatch(withCallingHandlers(<run>, interrupt = pause_menu), interrupt = abort_run)`. The pause menu uses R's
-`resume` restart: `[s]teer`, `[f]ollow-up`, `[c]ontinue`, `[a]bort`, and `[b]ackground` (foreground calls
-only, experimental); a second Ctrl-C aborts. Menu output goes to stdout through the console writer, which keeps
+`resume` restart. It is a console question in every console that offers it [D-243]: `? Paused` (with the
+session's id only when more than one session is paused) and under its text a keys row as an approval's,
+`s steer · f follow-up · c continue · a abort · b background` ([b] for foreground calls only, experimental),
+read at the person's chevron `› ` at column 0. A key or its word answers, Enter alone continues, and anything
+else gets a dim hint naming the keys; [s] and [f] read their text at the same chevron and queue it as a typed
+message is queued [D-242]. Continuing writes no notice, and a terminal console's draft survives the menu; a
+second Ctrl-C aborts. Menu output goes to stdout through the console writer, which keeps
 it out of a tool's captured output (the handler may run inside it), and tools record interruption with `on.exit()`,
 never with an exiting `tryCatch(interrupt =)` that would pre-empt the menu (G3 menu fixes). Where the resume
 restart is unavailable or unverified (Rgui,

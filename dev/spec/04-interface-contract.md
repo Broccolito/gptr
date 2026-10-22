@@ -2827,7 +2827,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 |---|---|---|---|
 | `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), a hook on `turn_end`, emitted just before the loop polls steers, that runs `console_typed()` (a terminal REPL reads what was typed and queues it), so a line sent before a step boundary reaches it (D-242), a hook on `queue_update` that prints a user's message the run takes as the person's line `› <text>` at that boundary (D-242), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
 | `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
-| `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu (`[s]teer`, `[f]ollow-up`, `[c]ontinue`, `[a]bort`, `[b]ackground` for foreground calls when P21 is loaded) writes to stderr and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Rgui, IDE consoles) | P06, P08 |
+| `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu, a console question (`? Paused` and the keys `s steer`, `f follow-up`, `c continue`, `a abort`, `b background` for foreground calls when P21 is loaded, read at `› `; IC-76 in §15.10), writes to stdout through the console writer and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Rgui, IDE consoles) | P06, P08 |
 | `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)` and `finish(cut = FALSE)`; chunk-invariant; writes whole rows only, each at its line end or its wrap (prose wraps at 100 columns at most [D-245]; `finish()` ends the held partial row, `finish(cut = TRUE)` (an aborted, failed or truncated answer, the pause menu's [b], an unusual end) writes all it received and ends the held row with a dim `…` [D-245]; other output goes between whole rows and the held row continues after it; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
 | `console_live(cls)`, `console_live_row(state, width)` | `console-input.R` | the live row (IC-82 in §15.10): an environment with `draw(state)` and `clear()`, held in `the$live_row` while a foreground run works, so `gptr_message_write()` clears it before every console write and redraws it after; `console_live_row()` is its text, fitted to width - 1 | P28 |
 | `builtin_jsonl(gptr)`, `jsonl_sink(session, con)` | `console-jsonl.R` | the `frontend` `jsonl`: subscribes to the session's events and writes one redacted JSON object per line in the §4.5 JSON form (event names verbatim) | P19 (worker children), P24 |
@@ -5333,7 +5333,7 @@ its part in its own commit, and Task 27 finalises them.
     `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
     empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
     word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
-- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 20 and 21 pending.
+- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Task 21 pending.
   - A question drains before it reads (Task 2). On a terminal REPL, while a run of the call has a session,
     `ui_console_read()` reads fd 0 with `console_typed(drain = TRUE)` just before its `readline_answer()`, so the
     queue and kept lines sit under the question's rows, right above `› ` (visual review: drained before the rows,
@@ -5440,6 +5440,24 @@ its part in its own commit, and Task 27 finalises them.
     draft unchanged, so it shows while the call the question gated runs. A sub-agent's question waits the same
     way, one at a time; what is typed goes to the session of the console call (the parent). D keeps the drain
     after the rows (Task 2); `gptr_confirm()` and the pause menu do not wait.
+  - A draft survives Ctrl-C and the pause menu (Task 20). SIGINT flushes what the terminal holds unread, never
+    the composer's draft. The pause menu (`policy_menu()`, wherever `console_menu_available()`) is a console
+    question in every class: after a blank row, `  ? Paused` (`? Paused <session id>` only when the call's runs
+    belong to more than one session) and under its text the keys row of an approval (`ui_keys()`, shared with
+    IC-77's question: keys bold, words dim, the separator ending a row, so it wraps only between options),
+    `    s steer · f follow-up · c continue · a abort · b background` (ASCII separator ` - `; [s] and [f] only
+    with a session, [b] for a foreground call when P21 is loaded). It reads at the person's chevron at column 0
+    (`console_ask()`: `› `, ASCII `>> `), with the saved modes in T (`gptr_readline()`). A key or its word
+    answers, as an approval reads `y` or `yes`, and an empty answer continues; anything else (a steer typed at
+    the chevron, `add a legend`, which the first-letter rule read as `a`) gets the dim hint
+    `  Paused. Type s, f, c, a or b.` and the menu reads again. [s] and [f] read their text at the same chevron
+    and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
+    `sent`, so Up then takes back the menu's message as the composer's; blank text queues nothing and the run
+    continues. While the menu is up its records' last block is a question's (`prompt`), so the queue line sits
+    right under its chevron as under an approval; when it resumes it is `notice`, so the next block opens with
+    a blank row. Continuing writes no notice (`[gptr] continuing` and `[gptr] nothing queued; continuing` are
+    gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
+    list (Task 18).
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Task 26 pending.
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
     keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by

@@ -98,11 +98,12 @@ console_repl_find = function() {
   NULL
 }
 
-#' Read one menu answer: from a `.stdin` REPL's connection, else readline_answer(); the prompt
-#' keeps the console margin (D-186); a Ctrl-C while waiting (no resume restart there) gives NA
+#' Read one menu answer at the person's chevron at column 0, as a console question reads (D-243):
+#' from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while waiting (no resume
+#' restart there) gives NA
 #' @noRd
-console_ask = function(prompt) {
-  prompt = paste0(console_pad(), prompt)
+console_ask = function() {
+  prompt = paste0(console_style()$person, " ")
   rs = console_repl_find()
   tryCatch({
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
@@ -114,48 +115,58 @@ console_ask = function(prompt) {
   }, interrupt = function(e) NA_character_)
 }
 
-#' The pause menu (calling handler for `interrupt`): resumes the interrupted computation, or
-#' returns to let the policy's exiting handler abort. It clears the live row only, which its task
-#' draws again: an answer's held row stays in its stream and continues after the menu, which goes
-#' between whole rows (D-245)
+#' The pause menu (calling handler for `interrupt`), a console question wherever it is offered
+#' (D-243): after a blank row, `? Paused` (the session's id added when more than one is paused)
+#' and under its text the keys as an approval's (ui_keys()): `s steer`, `f follow-up`, `c continue`,
+#' `a abort` and, for a foreground call, `b background`, read at the person's chevron
+#' (console_ask()). A key or its word answers, an empty answer continues, anything else gets a dim
+#' hint naming the keys. [s] and [f] read their text at the same chevron and queue it as Enter and
+#' Tab do (policy_enqueue()), their queue line right under it, as under any question. It resumes
+#' the interrupted computation, the next block a blank row below the menu and the live row with a
+#' T console's draft drawn again (console_asked()), or returns to let the policy's exiting handler
+#' abort. It clears the live row only: an answer's held row stays in its stream and continues after
+#' the menu, which goes between whole rows (D-245)
 #' @noRd
 policy_menu = function(cnd, pol) {
   # nested policies drop their runs while the stack unwinds to the exiting handler
   pol$abort_runs = pol$runs
   if (is.null(findRestart("resume", cnd)) || !console_menu_available()) return(invisible(NULL))
   if (!is.null(the$live_row)) the$live_row$clear()
-  for (rec in as.list(console_state()$active)) {
+  recs = as.list(console_state()$active)
+  for (rec in recs) {
     rec$paused = TRUE
-    rec$last = "notice"
+    rec$last = "prompt"
   }
-  target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
-  s = target$session
+  targets = Filter(function(t) !is.null(t$session), policy_targets(pol$runs))
+  s = if (length(targets)) targets[[1L]]$session
   bg = !is.null(s) && identical(pol$mode, "call") && ext_service_has("bg.register") &&
-    !isTRUE(target$run$opts$background)
-  choices = if (is.null(s)) {
-    "[c]ontinue, [a]bort"
-  } else {
-    paste0("[s]teer, [f]ollow-up, [c]ontinue, [a]bort", if (bg) ", [b]ackground")
+    !isTRUE(targets[[1L]]$run$opts$background)
+  keys = c(if (!is.null(s)) c(s = "steer", f = "follow-up"), c = "continue", a = "abort",
+           if (bg) c(b = "background"))
+  k = names(keys)
+  ids = unique(vapply(targets, function(t) session_data(t$session)$id, ""))
+  rlang::local_options(cli.num_colors = console_colors())
+  title = paste(c("Paused", if (length(ids) > 1L) ids[[1L]]), collapse = " ")
+  console_write(c("", paste0("  ", ui_question(title, ui_width() - 2L)),
+                  ui_keys(k, keys, ui_width())))
+  go = function() {
+    for (rec in recs) rec$last = "notice"
+    console_render_resume(pol$runs)
+    console_asked()
+    invokeRestart("resume")
   }
-  who = if (is.null(s)) "" else paste0(" ", session_data(s)$id)
   repeat {
-    console_notice("\n[gptr] paused", who, ": ", choices)
-    ans = console_ask("? ")
-    key = if (is.na(ans)) "a" else tolower(substr(trimws(ans), 1L, 1L))
-    if (key %in% c("", "c")) {
-      console_notice("[gptr] continuing")
-      console_render_resume(pol$runs)
-      invokeRestart("resume")
-    }
+    ans = tolower(trimws(console_ask()))
+    key = if (is.na(ans)) "a" else c("c", k, k)[match(ans, c("", k, keys))]
+    if (identical(key, "c")) go()
     if (identical(key, "a")) return(invisible(NULL))
-    if (!is.null(s) && key %in% c("s", "f")) {
-      text = console_ask(if (identical(key, "s")) "steer> " else "follow-up> ")
+    if (key %in% c("s", "f")) {
+      text = console_ask()
       if (is.na(text)) return(invisible(NULL))
       policy_enqueue(s, text, if (identical(key, "s")) "steer" else "follow_up")
-      console_render_resume(pol$runs)
-      invokeRestart("resume")
+      go()
     }
-    if (bg && identical(key, "b")) {
+    if (identical(key, "b")) {
       tryCatch({
         ext_service_get("bg.register")(s)
         console_render_pause()
@@ -167,7 +178,9 @@ policy_menu = function(cnd, pol) {
       })
       next
     }
-    console_notice("[gptr] please answer with one of the letters shown")
+    console_write(console_style()$dim(console_wrap(paste0(
+      "  Paused. Type ", paste(k[-length(k)], collapse = ", "), " or ", k[[length(k)]], "."
+    ), ui_width())))
   }
 }
 
@@ -180,22 +193,22 @@ console_repl_prompt = function() {
 }
 
 #' Queue pause-menu or typed text on the session (IC-49, IC-55: source "pause_menu" or "repl",
-#' IC-76) after the `input` event (source "steer"), with its queue line (console_queue_line()).
-#' While a REPL prompt runs (console_repl_prompt()), a follow-up, and text starting with / or !,
-#' is the next prompt instead (D-242): it waits in the reader's `typed` lines, and its `input`
-#' event comes when it is sent.
+#' IC-76) after the `input` event (source "steer"), with its queue line (console_queue_line());
+#' blank text queues nothing. While a REPL prompt runs (console_repl_prompt()), a follow-up, and
+#' text starting with / or !, is the next prompt instead (D-242): it waits in the reader's `typed`
+#' lines, and its `input` event comes when it is sent; the reader's `sent` is the kind queued last
+#' (console_newest()).
 #'
 #' P06 refuses an enqueue from the session's own tool frames, which are on the stack when the
 #' interrupt hit a tool; the item then waits in the console state for policy_flush().
 #' @noRd
 policy_enqueue = function(s, text, as, source = "pause_menu") {
   text = as_utf8(text)
-  if (!nzchar(trimws(text))) {
-    console_notice("[gptr] nothing queued; continuing")
-    return(invisible(FALSE))
-  }
+  if (!nzchar(trimws(text))) return(invisible(FALSE))
   rs = console_repl_prompt()
-  if (!is.null(rs) && (identical(as, "follow_up") || grepl("^\\s*[/!]", text))) {
+  later = identical(as, "follow_up") || grepl("^\\s*[/!]", text)
+  if (!is.null(rs)) rs$reader$sent = if (later) "follow_up" else "steer"
+  if (!is.null(rs) && later) {
     console_queue_line(s, text, "follow_up")
     rs$reader$typed = c(rs$reader$typed, text)
     return(invisible(TRUE))

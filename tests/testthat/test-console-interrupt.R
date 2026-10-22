@@ -93,8 +93,55 @@ test_that("continue resumes the interrupted computation", {
     }, list(), mode = "call")
   })
   expect_identical(res, "finished")
-  expect_true(any(grepl("[gptr] paused: [c]ontinue, [a]bort", err, fixed = TRUE)))
-  expect_true(any(grepl("[gptr] continuing", err, fixed = TRUE)))
+  # without a session only continue and abort; no notice says it continues
+  expect_identical(err, c("", "  ? Paused", "    c continue - a abort"))
+})
+
+test_that("the pause menu is a console question: its keys under it, read at the chevron (D-243)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  menu = function(answers = "c", runs = list(run), mode = "call") {
+    log = local_menu_answers(answers)
+    out = notices(with_interrupt_policy(function() fake_interrupt(), runs, mode = mode))
+    list(out = out, prompts = log$prompts)
+  }
+  # a blank row, `? Paused` and under its text the keys as an approval's, read at the person's
+  # chevron at column 0
+  keys = "    s steer - f follow-up - c continue - a abort - b background"
+  m = menu()
+  expect_identical(m$out, c("", "  ? Paused", keys))
+  expect_identical(m$prompts, ">> ")
+  testthat::local_reproducible_output(width = 80, unicode = TRUE)
+  m = menu()
+  expect_identical(m$out[[3L]], gsub(" - ", " \u00b7 ", keys, fixed = TRUE))
+  expect_identical(m$prompts, "\u203a ")
+  # at 60 columns the keys wrap between the options
+  testthat::local_reproducible_output(width = 60, unicode = FALSE)
+  expect_identical(menu()$out[-1L], c("  ? Paused",
+                                      "    s steer - f follow-up - c continue - a abort -",
+                                      "    b background"))
+  # at 256 colours ? is blue, the title and the keys bold, what they do dim
+  testthat::local_reproducible_output(width = 80, unicode = TRUE)
+  withr::local_options(cli.num_colors = 256L)
+  sym = console_style()
+  what = c(" steer \u00b7", " follow-up \u00b7", " continue \u00b7", " abort \u00b7", " background")
+  expect_identical(menu()$out[2:3], c(
+    paste0("  ", sym$blue("?"), " ", cli::style_bold("Paused")),
+    paste0("    ", paste0(cli::style_bold(c("s", "f", "c", "a", "b")), sym$dim(what),
+                          collapse = " "))
+  ))
+  # an answer other than a key or its word gets a dim hint naming the keys, and the menu reads
+  # again: text meant as a steer never aborts
+  local_abort_log()
+  m = menu(c("add a legend", "continue"), mode = "repl")
+  expect_identical(m$out[-(1:3)], as.character(sym$dim("  Paused. Type s, f, c or a.")))
+  expect_length(m$prompts, 2L)
+  withr::local_options(cli.num_colors = 1L)
+  # the session's id only when more than one session is paused
+  s2 = policy_session()
+  run2 = local_tracked(stand_in_run("u0000run2"), s2)
+  expect_identical(menu(runs = list(run, run2))$out[[2L]],
+                   paste0("  ? Paused ", session_data(s)$id))
 })
 
 test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
@@ -115,8 +162,9 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
   expect_identical(q$steer[[1L]]$source, "pause_menu")
   texts = vapply(q$follow_up, function(i) i$text, "")
   expect_true("then plot it" %in% texts)
-  expect_true(any(grepl("[s]teer, [f]ollow-up, [c]ontinue, [a]bort", err, fixed = TRUE)))
-  expect_identical(log$prompts, c("? ", "steer> ", "? ", "follow-up> "))
+  expect_true(any(grepl("s steer - f follow-up - c continue - a abort", err, fixed = TRUE)))
+  # [s] and [f] read their text at the same chevron
+  expect_identical(log$prompts, rep(">> ", 4L))
   # the queue lines of typed lines (D-242), not the old notices
   lines = c(queue_line("steer", "use only mpg"), queue_line("follow-up", "then plot it"))
   expect_true(all(lines %in% err))
@@ -139,20 +187,22 @@ test_that("the pause menu leaves the answer's held row to continue after it (vis
   # the sentence is whole, one row after the menu, never cut at the menu
   row = "The heaviest cars, so part of this gap is the weight effect."
   expect_identical(utils::tail(out, 1L), row)
-  expect_true(which(grepl("[gptr] paused", out, fixed = TRUE)) < length(out))
+  expect_true(which(out == "  ? Paused") < length(out))
 })
 
-test_that("in the console margin the menu's prompts keep it, as its notices do (D-186)", {
+test_that("in the console margin the menu's rows are an approval's, its prompt at column 0", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   log = local_menu_answers(c("s", "use only mpg"))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
-  # the notice starts on a line of its own (a terminal may have echoed ^C)
-  expect_identical(err[[1L]], "")
-  expect_true(startsWith(err[[2L]], "  [gptr] paused"))
-  expect_identical(log$prompts, c("  ? ", "  steer> "))
+  # the menu starts on a line of its own (a terminal may have echoed ^C); the queue line of its
+  # [s] is right under it, as under any question
+  expect_identical(err, c("", "  ? Paused",
+                          "    s steer - f follow-up - c continue - a abort - b background",
+                          queue_line("steer", "use only mpg")))
+  expect_identical(log$prompts, c(">> ", ">> "))
 })
 
 test_that("pause-menu text passes the input event with source steer", {
@@ -221,7 +271,7 @@ test_that("a second Ctrl-C while the menu waits aborts", {
 test_that("a line typed before the pause menu appeared never answers it (IC-75)", {
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   rl = local_readline(c("a", "c"), secs = c(0.01, 1))
-  expect_identical(console_ask("[c]ontinue, [a]bort: "), "c")
+  expect_identical(console_ask(), "c")
   expect_identical(rl$i, 2L)
 })
 
@@ -261,7 +311,7 @@ test_that("nested policies show one menu and the inner runs join the outer one",
   })
   expect_null(res)
   expect_identical(box$seen, c("u0000run1", "u0000run2"))
-  expect_identical(log$prompts, "? ")
+  expect_identical(log$prompts, ">> ")
   expect_setequal(aborted$aborted, c("u0000run1", "u0000run2"))
 })
 
@@ -287,10 +337,10 @@ test_that("[b]ackground hands a foreground run to bg.register (P21) and resumes"
   })
   expect_identical(res, "kept running")
   expect_identical(got$session, s)
-  expect_true(any(grepl("[b]ackground", err, fixed = TRUE)))
+  expect_true(any(grepl("b background", err, fixed = TRUE)))
   local_menu_answers(c("b", "c"))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "repl"))
-  expect_false(any(grepl("[b]ackground", err, fixed = TRUE)))
+  expect_false(any(grepl("b background", err, fixed = TRUE)))
 })
 
 test_that("a steer typed while a tool runs is queued once no tool is on the stack", {
@@ -422,7 +472,7 @@ test_that("a [b]ackground refusal is a notice and the menu asks again", {
   expect_identical(res, "kept running")
   expect_true(any(grepl("[gptr] cannot run in the background: Background sessions need",
                         err, fixed = TRUE)))
-  expect_identical(log$prompts, c("? ", "? "))
+  expect_identical(log$prompts, c(">> ", ">> "))
 })
 
 test_that("the policy is the console.interrupt_policy service of builtin:console", {
@@ -549,7 +599,7 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   while (!nrow(ttft$log()) && Sys.time() < deadline) Sys.sleep(0.05)
   expect_identical(nrow(ttft$log()), 1L)
   p$interrupt()
-  expect_true(drv$wait_for("paused"))
+  expect_true(drv$wait_for("Paused"))
   drv$send("c")
   expect_true(drv$wait_for("STATUS-TTFT idle"))
   expect_true(drv$has("tok04"))
@@ -559,9 +609,10 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   expect_true(drv$wait_for("Sys.sleep(3)"))
   Sys.sleep(0.5)
   p$interrupt()
-  expect_true(drv$wait_for("paused"))
+  expect_true(drv$wait_for("Paused"))
+  expect_true(drv$wait_for("\u203a "))
   drv$send("s")
-  expect_true(drv$wait_for("steer>"))
+  expect_true(drv$wait_for("\u203a "))
   drv$send("use base R only")
   expect_true(drv$wait_for("STEER-AFTER-TOOL TRUE"))
 
@@ -569,7 +620,7 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   drv$send("step_abort()")
   expect_true(drv$wait_for("tok03"))
   p$interrupt()
-  expect_true(drv$wait_for("paused"))
+  expect_true(drv$wait_for("Paused"))
   drv$send("a")
   expect_true(drv$wait_for("ABORT-DONE TRUE"))
   expect_true(drv$has("STOP aborted"))

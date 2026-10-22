@@ -927,6 +927,45 @@ test_that("a terminal: Tab queues a follow-up, a second run; Up takes back, Ctrl
   expect_identical(pty$seen("oops END"), 0L)
 })
 
+test_that("a terminal: a draft survives Ctrl-C and the pause menu (P28 G, D-243)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
+    "long = paste(c('BEGIN', sprintf('w%02dabc', 1:80), 'END'), collapse = ' ')",
+    "fake = gptr_fake_provider(function(req) {",
+    "  m = req$messages[[length(req$messages)]]",
+    "  if (identical(m$role, 'user')) return(list(text = long, chunk = 8L, gap = 0.05))",
+    "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "xterm")
+  person = if (l10n_info()[["UTF-8"]]) "›" else ">>"
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("use base R")
+  expect_true(pty$wait(paste0(person, " use base R")))
+  # Ctrl-C: the menu is a console question read at the person's chevron, its answer empty
+  pty$send("\003")
+  expect_true(pty$wait("? Paused"))
+  expect_true(pty$wait("c continue"))
+  expect_true(endsWith(pty$pending(), pty_asked()))
+  # [c]: the stream goes on and the draft is back on the live row; Enter steers with it
+  pty$send("c\r")
+  expect_true(pty$wait(paste0(person, " use base R")))
+  pty$send("\r")
+  expect_true(pty$wait("END"))
+  # the relay, wrapped at 60 columns
+  expect_true(pty$wait(paste("REQ operator:", substr(relay(""), 1L, 40L))))
+  expect_true(pty$wait("use base R END"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(pty$seen("continuing"), 0L)
+})
+
 test_that("console_typed_split() marks a last line without a line end as partial", {
   expect_identical(console_typed_split(""), character())
   expect_identical(console_typed_split("a\r\n\nb\r"), c("a", "", "b"))

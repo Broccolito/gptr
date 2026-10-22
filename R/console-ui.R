@@ -120,6 +120,18 @@ ui_question = function(title, width) {
   paste0(lead[seq_along(rows)], cli::style_bold(rows))
 }
 
+#' A question's keys (D-243): a row at column 4, under the question's text, of each key in bold
+#' and what it does dim, the separator after it; `width` wraps the row between the options only
+#' @noRd
+ui_keys = function(keys, what, width) {
+  sym = console_style()
+  sep = c(rep(trimws(sym$sep, "right"), length(keys) - 1L), "")
+  # no-break spaces keep a key with its words and the separator when the row wraps
+  opts = paste0(cli::style_bold(keys), sym$dim(gsub(" ", "\u00a0", paste0(" ", what, sep))),
+                collapse = " ")
+  gsub("\u00a0", " ", console_wrap(paste0("    ", opts), width), fixed = TRUE)
+}
+
 #' The question of an approval (D-243): `Allow <tool>?`, or `<who>: allow <tool>?` for a sub-agent
 #' @noRd
 ui_permission_question = function(request) {
@@ -140,8 +152,8 @@ ui_call_shown = function(request) {
 #' console before (+N more lines), D-187) unless the console printed it (ui_call_shown()), then dim
 #' at column 4
 #' the flagged calls one per line, fitted, at most 5 (D-222), and why an `ask_human` request asks
-#' in every mode, then the question, and under its text the keys (a and p only with a rule), a row
-#' that wraps between them
+#' in every mode, then the question, and under its text the keys (a and p only with a rule,
+#' ui_keys())
 #' @noRd
 ui_permission_lines = function(request) {
   sym = console_style()
@@ -164,10 +176,6 @@ ui_permission_lines = function(request) {
   can = is.null(ui_no_rule(request))
   keys = c("y", if (can) c("a", "p"), "n", "?")
   what = c("yes", if (can) c("always (session)", "always (project)"), "no", "more")
-  # no-break spaces keep a key with its words when the line wraps
-  opts = paste0(cli::style_bold(keys), sym$dim(paste0(gsub(" ", "\u00a0", paste0(" ", what)),
-                                                      c(rep(sym$sep, length(keys) - 1L), ""))),
-                collapse = "")
   c(call,
     if (n) {
       k = seq_len(min(n, 5L))
@@ -181,7 +189,7 @@ ui_permission_lines = function(request) {
       sym$dim(console_wrap(paste0("    asks in every mode: ", ui_escape(why)), width))
     },
     paste0("  ", ui_question(ui_permission_question(request), width - 2L)),
-    gsub("\u00a0", " ", console_wrap(paste0("    ", opts), width), fixed = TRUE))
+    ui_keys(keys, what, width))
 }
 
 #' The detail view shown for `?`: unless `code` is FALSE (it also feeds the RStudio dialog), at

@@ -135,8 +135,8 @@ working directory restored. Plan-specific rules:
 | `R/agent-dispatch.R` | 6 |
 | `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 18, 26 |
 | `R/auth-oauth.R` (input prompts) | 12 |
-| `R/console-ui.R` | 2, 3, 8, 12, 19 |
-| `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 21, 22, 24, 25, 26 |
+| `R/console-ui.R` | 2, 3, 8, 12, 19, 20 |
+| `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 20, 21, 22, 24, 25, 26 |
 | `R/console-interrupt.R` | 3, 13, 14, 15, 17, 18, 20 |
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
 | `R/console-complete.R` (new) | 22, 23 |
@@ -1004,21 +1004,34 @@ Decisions:
   `  ? Paused`, then under its text a keys row built as the approval's,
   `    s steer · f follow-up · c continue · a abort · b background` (keys bold, words dim, wrapping
   between the options); the session id only when more than one session is paused; no
-  `[gptr] continuing`; an invalid key gets a dim hint naming the keys.
+  `[gptr] continuing`; an invalid key gets a dim hint naming the keys. (Amended in Task 20:) A key or its
+  word answers, as an approval reads `y` or `yes`, and an empty answer continues. Before, any text's first
+  letter was its key, so a steer typed at the new chevron (`add a legend`) aborted the run. The keys row is
+  `ui_keys()` in `console-ui.R`, which the approval uses too; its separator ends a row, never starts one.
 - It is read with readline at `› ` at column 0 (`console_ask()` without the margin) with the saved
   modes.
-- [s] and [f] read their text at the same `› ` and queue it exactly as Enter and Tab do.
-- The draft is redrawn after the menu. After [a] it joins Task 15's kept list (`console_keep()`;
-  done in Task 18).
+- [s] and [f] read their text at the same `› ` and queue it exactly as Enter and Tab do. (Amended in
+  Task 20:) `policy_enqueue()` keeps the reader's `sent`, the kind queued last, which `console_keys()`
+  kept, so Up takes back a menu message as a composer one; blank text queues nothing, without the
+  `[gptr] nothing queued; continuing` notice. Its queue line sits right under the menu's chevron, as under
+  an approval: the records' last block is `prompt` while the menu is up and `notice` once it resumes.
+- The draft is redrawn after the menu (amended in Task 20: at once, by `console_asked()` after
+  `console_render_resume()`). After [a] it joins Task 15's kept list (`console_keep()`; done in Task 18).
 
 Tests (`test-console-typing.R`, `test-console-interrupt.R`), RED first: pty G, a partial draft then
 Ctrl-C [c], keeps the draft. Today it is lost. The menu's rows at 80 and 60 columns, at 256 colours
-and in ASCII.
+and in ASCII. (Amended in Task 20:) Since Task 18 the composer kept the draft through the menu, so pty G
+is red on the menu's rows and `[gptr] continuing`, and its draft then steers the run. The approval's
+keys row at 256 colours (`test-console-ui.R`) moves the separator's trailing space out of the dim span,
+and INFRA-03 waits for `Paused` and the chevron.
 
-Spec: 03 §6.2 pause menu, IC-76.
+Spec: 03 §6.2 pause menu, IC-76. (Amended in Task 20:) Also 04 §7.14 (`with_interrupt_policy()`'s
+menu) and D-243's Task 20 note.
 
 Files: `R/console-interrupt.R` (`policy_menu()`, `console_ask()`), `R/console-input.R`,
-`tests/testthat/test-console-typing.R`, `tests/testthat/test-console-interrupt.R`.
+`tests/testthat/test-console-typing.R`, `tests/testthat/test-console-interrupt.R`. (Amended in Task 20:)
+Also `R/console-ui.R` (`ui_keys()`), the reader's doc in `R/console-repl.R` and
+`tests/testthat/test-console-ui.R`.
 
 Commit: `feat(console): a draft survives Ctrl-C and the pause menu`.
 
@@ -1283,7 +1296,7 @@ Decisions:
   - S8, degradations: NO_COLOR=1, TERM=dumb, LANG=C, 50 columns, an Rscript pipe.
   - S10, Ctrl-C under load (amended in the visual review: at load average about 300, 5 of 22 runs of
     0ee69a0 lost a Ctrl-C typed while an answer streamed; none at normal load): the visual scenario's
-    run C 30 times beside 2 x nproc busy processes; `paused` appears within 1 s of every ^C. Fix only
+    run C 30 times beside 2 x nproc busy processes; `Paused` appears within 1 s of every ^C. Fix only
     once this fails, with Task 18's fallback: `-isig` in character mode while no tool runs, the reactor
     opening the menu on byte 0x03, isig back on around tools.
   - S9, the maintainer's manual checks:
