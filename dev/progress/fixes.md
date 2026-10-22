@@ -1720,3 +1720,62 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: none. Open: any compiled leaf whose `for` loop holds a user object and calls code
   that makes a replacement call copies the same way (R behaviour, not reported upstream);
   `d$s[1] = v` copies a data frame column whatever gptr does (`$<-.data.frame`).
+
+## Task CI-89 - The six-stream wall nets out each end's garbage collection (2026-10-22, #74)
+- PR #72 run 39706834831 (attempt 1, job 119589000853, ubuntu-latest oldrel-1, R 4.5.3, two test
+  processes) failed INFRA-01 "six streams of 1.00-2.25 s finish within 10% of the slowest"
+  (`test-http-reactor.R:717`): wall 2.684 s against 2.475 s. All six requests came at 0; gptr
+  delivered the short ends 1-2 ms after the mock wrote them and the long ends, written at 2.341,
+  2.375 and 2.383 s, all at 2.775 s (0.434, 0.400 and 0.392 s late).
+- Rate: the 442 failed job logs since 2026-10-12 (first attempts of re-run runs included), out of
+  about 1,650 hosted executions of the test, hold 7 failures of it. Four (114998072098,
+  115386981898, 117897245682, 119065496949) are CI-77's late heads, with every end within 16 ms;
+  114920821918 had heads 1.5 s apart (and a short end 0.281 s late); 118506033270 was a runner
+  pause (the mock 0.54-1.70 s late, two ends 0.464 and 0.888 s); 119589000853 is this one. The
+  per-delta test failed once the same way (macOS 115073223120: one delta 0.406 s late, the rest
+  within 12 ms). So the test process stopping for about 0.4 s fails roughly 3 in 1,650 executions,
+  on Linux 1 in about 1,000.
+- Cause (the measurement): the test's R process stopped; the reactor and the mock did not. The
+  pump polls curl's sockets and wakes at least every 100 ms (`slice_ms`): instrumented locally,
+  over 21,000 wake-ups at load 4-342 slept at most 0.116 s, and 520 runs delivered every end within
+  0.044 s. The mock wrote streams 5 and 6 34 and 42 ms after stream 4, so it ran during the stop,
+  while one pump iteration delivered all three ends: the test process ran nothing for about 0.4 s.
+  A full garbage collection is such a stop. After the 100 test files that sort before http-reactor,
+  run in one process as a worker runs them, the reactor holds nothing, no finalizer is pending, and
+  a full `gc()` takes 0.25-0.26 s here (5.2M cons cells, load 6-17), all of it collection; a hosted
+  vCPU is slower. A full collection forced at 2.3 s with a 1.26 GB heap gives the hosted shape:
+  collections of 0.36-0.43 s, the three long ends 0.21-0.38 s late together, the short ones within
+  6 ms, walls 2.480-2.626 s, FAIL 10 of 10 (load 4-7). Which stop hit the runner is inferred: a
+  collection fits, and a vCPU or scheduler stall fits the same numbers.
+- Fix (tests only): each pump iteration of the test notes the wall clock and R's collection total
+  (`gc.time(TRUE)`; off by default, used nowhere else, and off again when the test ends).
+  `infra01_gc()` gives each end the collection time from the last iteration before the mock wrote
+  it to the first one after gptr delivered it, and `infra01_six()` nets that out of that end only,
+  as it nets the mock's lateness: a collection outside an end's window cannot have delayed it. The
+  2.475 s bound and the latency check are unchanged; the message prints each end's netted time.
+- Red: the measurement test's new cases (the long ends 0.4 s late are on time when R collected for
+  0.4 s around their delivery and late when it collected only as the short ends came; a collection
+  before an end's write counts nothing for it) FAIL 1 on main (`infra01_six()` takes no `gc`) and
+  FAIL 1 on this task's first version, which netted the run's whole collection time; a mutant that
+  gives every end the whole-run time FAIL 1, one that ignores `gc` FAIL 1. Green: `^http-reactor$`
+  PASS 235 SKIP 2 (load 15-16); the six-stream test 200 of 200 (load 15-27); `^http-` PASS 808
+  SKIP 2 (load 17-18); `^(console-|agent-)` PASS 3046 SKIP 1 (load 18-186). Injected into the real
+  reactor and mock (1.24 GB heap, full `gc()` 0.30-0.33 s, 5 runs each, load 16-18, repeated from
+  load 28-49 with the same outcome), unnetted / whole-run netting / per-end netting: a full
+  collection at 2.3 s FAIL 4 / PASS 5 / PASS 5 (0.331-0.352 s netted for the long ends, 0 for the
+  short; net walls 2.087-2.223 s); a collection at 0.3 s and a 0.3 s stall that is not one at
+  2.3 s FAIL 4 / PASS 5 / FAIL 4 (nothing netted); no stop PASS 5 throughout; a 0.4 s stall that is
+  not a collection FAIL 5 throughout. 100 unstopped runs (load 14-18): walls at most 2.255 s raw
+  and net, a collection in 38 runs (at most 0.015 s), netted for an end in 10, delivery p50 1 ms,
+  p99 6 ms, max 11 ms. Delivery of the ends before (the code is unchanged): 120 runs at load
+  207-342 p50 1.8 ms, p99 24 ms, max 44 ms; 100 after the preceding files max 22 ms. Lint clean.
+- Reviews: r1 2 findings, both applied. The first version netted every collection of the run, so
+  an unrelated collection excused gptr's own stall (the injected early collection and end stall
+  above passed 5 of 5); D-063 item 2 did not state the measure (nor CI-77's anchor).
+- Deviations: none new (D-248 and D-249 are not taken); D-063 item 2 is edited in place to state
+  the measure (CI-77's `came` anchor, this task's per-end netting, the bound unchanged, the rates
+  above) and D-016 item 1's anchor with it. Open: a stop that is not a collection (a vCPU or
+  scheduler stall) still fails, by design, and the message says which. An end's window opens at
+  the last iteration before the write, so a collection that ended within that iteration (at most
+  a 100 ms poll) before the write is netted too. The per-delta test has the same exposure (macOS
+  115073223120) and is not changed here.
