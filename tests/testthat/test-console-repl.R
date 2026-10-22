@@ -884,16 +884,17 @@ test_that("the frontend comes from .opts$frontend or the setting frontend (IC-69
   expect_identical(peter(.stdin = TRUE), "probe ran")
 })
 
-test_that("the console echoes an interpolated prompt at verbosity 2", {
+test_that("an interpolated prompt is shown once, by the gateway's notice, at verbosity 2", {
   skip_on_cran()
   local_console_test()
   local_scripted_ui()
-  local_gptr_options(verbose = 2L)
+  local_gptr_options(verbose = 2L, quiet = FALSE)
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   e = new.env(parent = globalenv())
   e$cl = 4L
   local_console_stdin(c("describe cluster {cl}", "/exit"))
   out = utils::capture.output(peter(.stdin = TRUE, model = gptr_fake_provider(list("ok")),
                                    envir = e))
-  expect_true("> describe cluster 4" %in% out)
+  expect_identical(sum(grepl("describe cluster 4", out, fixed = TRUE)), 1L)
+  expect_true("Interpolated prompt: describe cluster 4" %in% out)
 })

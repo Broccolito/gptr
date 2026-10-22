@@ -394,6 +394,8 @@ Decisions:
   - At 8 or 16 colours: cli's `"red"` and `"blue"`. cli maps both blues to grey 90 there
     (measured).
   - At 1 colour: none.
+- `dim` is the console's one grey; no console line uses cli's `col_grey()` (SGR 90), and the REPL adds no
+  echo of an interpolated prompt to the gateway's notice (amended in the review of Tasks 8-15).
 - The band is `\033[48;5;237m` on a dark background or `\033[48;5;254m` on a light one. It needs
   at least 256 colours and a known background, and is otherwise empty. These are raw grey-ramp
   cells, because cli maps greys into the colour cube.

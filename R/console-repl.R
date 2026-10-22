@@ -218,7 +218,7 @@ repl_paste_more = function(rd, text) {
   more = c(rd$held, rd$waiting())
   rd$held = character()
   if (!length(more) || rd$flag) return(text)
-  console_notice(cli::col_grey("  (pasted: Enter sends it as one message)"))
+  console_notice(console_style()$dim("  (pasted: Enter sends it as one message)"))
   x = rd$read("... ")
   paste(c(text, more, if (!is.na(x) && nzchar(x)) x), collapse = "\n")
 }
@@ -513,7 +513,7 @@ console_abort_stray = function(s) {
 #' tools, plugins, extensions, skills and context objects). `.gptr_session` and `.gptr_env` are
 #' bound in the mask `rs$mask`, whose parent is the evaluation environment, so @objects reach
 #' the gateway as plain symbols (read by name, never forced, IC-41). The literal prompt gets
-#' `{identifier}` interpolation like a typed one; the console echoes the interpolated text at
+#' `{identifier}` interpolation like a typed one; the gateway shows the interpolated text at
 #' verbosity 2 (03 section 4.1.4).
 #' @noRd
 console_call = function(rs, text) {
@@ -547,10 +547,6 @@ console_call = function(rs, text) {
     rs$opts$images = NULL
   }
   if (length(skills)) args$skills = skills
-  if (verbosity() >= 2L && !isFALSE(opts$interpolate) && !isFALSE(gptr_opt("interpolate"))) {
-    shown = interpolate_prompt(text, env)$prompt
-    if (!identical(shown, text)) console_write(cli::col_grey(paste0("> ", console_escape(shown))))
-  }
   as.call(c(head, lapply(objs, as.name), args))
 }
 

@@ -637,8 +637,9 @@ quoted canonical ids [09 §4.9].
 Only literal prompts are interpolated, and only `{identifier}` where `identifier` is a syntactic name bound in
 `envir` to an atomic vector of 1-50 elements (joined with `", "`, cut at 1,000 characters). `{{`/`}}` are
 literal braces; code, JSON and unbound names are untouched; variables and `glue` objects are never
-re-interpolated; `.opts$interpolate = FALSE` or `options(gptr.interpolate = FALSE)` disables it. The console
-echoes the interpolated prompt; documents keep the template. Report 12 §2.D4 advised against automatic
+re-interpolated; `.opts$interpolate = FALSE` or `options(gptr.interpolate = FALSE)` disables it. At verbosity 2
+the gateway echoes the interpolated prompt (`Interpolated prompt: ...`), at the console too; documents keep the
+template. Report 12 §2.D4 advised against automatic
 interpolation; this narrow rule is the one all three proposals converged on. Token effect: about 10 tokens
 instead of 60-120 for attaching `cl` and `top` as context [P-C §4.1.4].
 

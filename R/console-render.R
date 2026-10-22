@@ -475,7 +475,7 @@ console_think_line = function(rec, width = cli::console_width()) {
       line = sub("^\\*\\*(.+)\\*\\*$", "\\1", console_lines(st$text)[[1L]])
       if (!is.null(rec$spinner)) rec$spinner$clear()
       console_gap(rec, "think")
-      console_write(cli::col_grey(cli::ansi_strtrim(paste0("  ", line), width)))
+      console_write(console_style()$dim(cli::ansi_strtrim(paste0("  ", line), width)))
     }
     st$open = FALSE
     invisible(NULL)
@@ -981,7 +981,7 @@ console_on_before_request = function(event, ctx) {
   if (verbosity() >= 3L) {
     console_pause_one(rec)
     console_gap(rec, "notice")
-    console_write(cli::col_grey(sprintf(
+    console_write(console_style()$dim(sprintf(
       "  request %s -> %s (~%.0f tokens)", console_escape(event$request_id %||% "", FALSE),
       console_escape(event$model %||% "", FALSE), as.numeric(event$tokens_est %||% 0))))
   }
@@ -1025,7 +1025,7 @@ console_on_message_update = function(event, ctx) {
     if (is.null(rec$think)) {
       if (!is.null(rec$md)) rec$md$finish()
       console_gap(rec, "text")
-      console_write(cli::col_grey("  (thinking)"))
+      console_write(console_style()$dim("  (thinking)"))
       rec$think = render_markdown_stream(before_output = console_stream_output(rec))
     }
     rec$think$write(delta)
@@ -1141,9 +1141,9 @@ console_on_retry = function(event, ctx) {
   if (is.null(rec) || !console_render_on(rec)) return(NULL)
   console_pause_one(rec)
   console_gap(rec, "notice")
-  console_write(cli::col_grey(sprintf("  retrying in %.1f s (%s)",
-                                      as.numeric(event$delay %||% 0),
-                                      console_escape(event$class %||% "error", FALSE))))
+  console_write(console_style()$dim(sprintf("  retrying in %.1f s (%s)",
+                                            as.numeric(event$delay %||% 0),
+                                            console_escape(event$class %||% "error", FALSE))))
   NULL
 }
 
@@ -1157,7 +1157,7 @@ console_on_compact = function(event, ctx) {
            right = TRUE)
   console_pause_one(rec)
   console_gap(rec, "notice")
-  console_write(cli::col_grey(paste0(
+  console_write(console_style()$dim(paste0(
     "  conversation compacted: ", format_count(e$tokens_before %||% NA_real_), " -> ",
     format_count(e$details$tokens_after %||% NA_real_), " tokens")))
   NULL
@@ -1212,7 +1212,7 @@ console_on_agent_end = function(event, ctx) {
   if (!is.null(rec$md)) rec$md$finish()
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
-  console_write(cli::col_grey(line))
+  console_write(console_style()$dim(line))
   on.exit(console_gap(rec, "prompt"), add = TRUE)
   NULL
 }

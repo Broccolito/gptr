@@ -287,7 +287,8 @@ Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), 
 session when a data frame is split into several states, naming `I(x)`),
 `billing_env` (P03/P20; names of removed billing variables), `notice`
 (one-time notices: experimental routes, Codex overhead, uncalibrated emulation), `value_rebound` (P06),
-`progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2).
+`progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2; the console
+adds no echo of its own, P28).
 
 Transport, adapter and System 1 failures are condition **objects** created (not signalled) by P04, P12 and P13
 with the classes above; they travel in `error` events and in the run. The gateway (P08) signals the stored object
@@ -2659,7 +2660,7 @@ Functions (P08):
 | `dot_facts(x)` [leaf] | `list(class, is_session, is_chr1, length, dim, bytes, text)` (`text` = a `paste0()` copy of character values up to 64 KiB, else `NULL`) | P08 |
 | `resolve_identifier(expr, arg, envir)` (service `identifier.resolve`) | §6.1.3; returns chr or a spec | P08, P17 (`agents` mask); P02 stores raw expressions and never calls it (IC-34) |
 | `identifier_known(name, arg)` | `lgl(1)`: catalog aliases, registered provider/model/router ids, modes, presets, skill/plugin/extension/agent names (by `arg`) | P08 |
-| `interpolate_prompt(template, envir)` [leaf per value] | §6.1.4 | P08, P14 (console echo) |
+| `interpolate_prompt(template, envir)` [leaf per value] | §6.1.4 | P08 |
 | `settings_get(key, session = NULL)` | the effective value through the layers of §11.2 | all |
 | `settings_effective()` | the `gptr_config` of §5.11 | P08, P14 |
 | `settings_write(scope, patch)` | merges a named list at top level into the scope's file (atomic) or the process layer | P08, P11, P14, P15 |
@@ -5437,7 +5438,9 @@ its part in its own commit, and Task 27 finalises them.
     move.
   - The palette: the logo's red `#b85450` and `#557ea8`, the logo's blue `#6c8ebf` one step darker (cli's
     256-colour cell for `#6c8ebf`, 110, is 2.3:1 on white; cell 67 is above 3.7:1 on white and on `#1c1c1c`). Ink
-    is never written: the terminal's own foreground is the ink.
+    is never written: the terminal's own foreground is the ink. The one grey is `dim` (SGR 2): the status, thinking,
+    request, retry and compaction lines and the paste notice use it, never cli's `col_grey()` (SGR 90, a second grey
+    on most terminals; review of Tasks 8-15).
 
     | style | 256 colours or more | 8 or 16 colours | 1 colour (`NO_COLOR`) |
     |---|---|---|---|

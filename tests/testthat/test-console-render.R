@@ -498,6 +498,16 @@ test_that("no U+25CF dot and no Braille spinner anywhere in R/ (D-245)", {
   }
 })
 
+test_that("the console's one grey is the style table's dim (D-245)", {
+  dir = arch_source_dir()
+  skip_if(is.null(dir), "the package sources under R/ were not found")
+  for (path in list.files(dir, pattern = "^console-.*[.][Rr]$", full.names = TRUE)) {
+    text = readLines(path, encoding = "UTF-8", warn = FALSE)
+    expect_false(any(grepl("col_grey|col_silver|make_ansi_style[(]\"grey", text)),
+                 info = basename(path))
+  }
+})
+
 # ---------------------------------------------------------------- P28 Task 11: tool kinds
 
 test_that("tool calls are cursor strips tinted by kind (D-245)", {
@@ -672,7 +682,7 @@ test_that("a compaction during a foreground run prints one dim notice with its c
   expect_identical(render_events(s, list(done(NULL))), character())
   testthat::local_reproducible_output(width = 80, crayon = TRUE, unicode = FALSE)
   expect_identical(render_events(s, list(done())),
-                   as.character(cli::col_grey("  conversation compacted: 98.2k -> 4.1k tokens")))
+                   "\033[2m  conversation compacted: 98.2k -> 4.1k tokens\033[22m")
 })
 
 test_that("an answer without deltas is printed whole at message_end", {
@@ -845,7 +855,7 @@ test_that("on a CLI route verbosity 2 shows each thinking block's first line, di
   withr::local_options(cli.num_colors = 256L)
   out = render_events(s, events)
   expect_identical(cli::ansi_strip(out), plain)
-  expect_true(all(grepl("\033[90m", out[1:2], fixed = TRUE)))
+  expect_true(all(startsWith(out[1:2], "\033[2m  ")))
   local_gptr_options(verbose = 1L)
   expect_identical(render_events(s, events[1:5]), character())
 })

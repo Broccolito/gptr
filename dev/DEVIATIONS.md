@@ -3267,3 +3267,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     goes between its whole rows (D-245)"; test-console-render.R "other output goes between whole rows; the held
     row continues, nesting kept (D-245)", "the console UI prompts between whole rows; the held row waits (D-186,
     D-245)".
+  - The console has one grey, the style table's `dim` (SGR 2): the status line, the CLI thinking line, the
+    verbosity-3 request and `(thinking)` lines, the retry and compaction lines and the paste notice used cli's
+    `col_grey()` (SGR 90), which most terminals draw differently from the dim results, read calls, fences and queue
+    lines. The REPL's own echo of an interpolated prompt, `> how many rows: 32` (a hard-coded ASCII `>`), is
+    deleted: the gateway's `Interpolated prompt: ...` notice already shows it at verbosity 2. Contract-visible: 04
+    §2.2 (the `interpolated` class), §15.10 IC-82, 03 §4.1.4. Tests: test-console-render.R "the console's one grey
+    is the style table's dim (D-245)" and the compaction and thinking-line cases; test-console-repl.R "an
+    interpolated prompt is shown once, by the gateway's notice, at verbosity 2".
