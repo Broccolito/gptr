@@ -67,6 +67,16 @@ test_that("Rscript and other non-interactive R draw no live row (class P)", {
   expect_null(the$live_row)
 })
 
+test_that("R.app draws no live row: a carriage return there restyles what follows (review)", {
+  local_gptr_options(verbose = 2L, quiet = FALSE)
+  withr::local_options(cli.dynamic = TRUE)
+  w = wait_record()
+  local_live_console("L")
+  local_mocked_bindings(platform_gui = function() "AQUA")
+  expect_identical(utils::capture.output(invisible(wait_request(w))), character())
+  expect_null(the$live_row)
+})
+
 test_that("verbosity zero and background requests produce no waiting feedback", {
   local_gptr_options(verbose = 0L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)

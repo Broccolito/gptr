@@ -1988,7 +1988,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   and status lines. Separators are written on finished lines only. The live row (`console_live()`, IC-82
   [D-243]: `▌ thinking 6s · ctrl-c pauses`, the block blue and the words dim) is no block: at column 0 under the
   transcript's last row, it is cleared before every console write (`\r\033[K` where that ends the line, an
-  ANSI terminal and RStudio; spaces in R.app, Rgui, TERM=dumb and Positron, whose console erases with spaces; no
+  ANSI terminal and RStudio; spaces in Rgui, TERM=dumb and Positron, whose console erases with spaces; none in R.app; no
   LF follows a cleared row, R GUIs included) and redrawn after a whole line where `\033[K` erases it; where it is padded the first
   write ends it until the run next waits, so its spaces never trail a transcript row; the margin is that of the console an
   evaluation started from, also for prompts and notices drawn inside it, and a sub-agent line or a

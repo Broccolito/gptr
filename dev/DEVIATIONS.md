@@ -3339,6 +3339,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   prompt; Ctrl-C keeps it first"; test-console-typing.R "a draft a run left waits for the follow-ups, then
   continues at the prompt (D-243)", "a terminal: a draft a run left continues at the prompt until sent (P28 I,
   D-243)" and the pty cases B, C and H.
+- Review fixes of Tasks 16-21 (2026-10-22):
+  - R.app draws no live row (`console_live_start()`): written as a run's first output, a row starting with `\r`
+    gave the whole transcript the input's colour there (blue since Task 17), and R.app's `\r` erases a line printed
+    just before it. Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests: test-console-wait.R "R.app draws no live
+    row: a carriage return there restyles what follows (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

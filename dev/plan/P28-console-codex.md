@@ -852,8 +852,10 @@ Decisions:
   (`console_before_message()`); notices, queue lines and sub-agent lines are written with it cleared and
   redrawn (amended in Task 17: they no longer hide it; `console_typed_route()` no longer clears it).
 - L: status only, `\r` + text + `\033[K` in RStudio, which honours it, padded with spaces to width - 1
-  only where it is unknown (R.app, Rgui), ending `· esc stops` (RStudio, R.app, Rgui) or
-  `· ctrl-c pauses` (Positron). (Amended in the visual review: the padding left about 57 trailing
+  only where it is unknown (Rgui), ending `· esc stops` (RStudio, Rgui) or
+  `· ctrl-c pauses` (Positron). (Amended in the review of Tasks 16-21: R.app draws no row. Written as a run's
+  first output, a row starting with `\r` gave the whole transcript the input's colour there, and its `\r` erases a
+  line printed just before it.) (Amended in the visual review: the padding left about 57 trailing
   spaces on each RStudio row that replaced the waiting row.) D (TERM=dumb) is padded too, and so is
   Positron, whose console erases by writing spaces (amended in Task 17: given `\033[K`, its transcript had
   32 rows ending in spaces). Until Task 18's composer reads keys, T is status only as well, ending

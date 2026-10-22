@@ -376,14 +376,17 @@ console_queued = function(s) {
 
 #' Show the live row for the record `rec` of a foreground run while it waits for its model
 #' (`what` thinking): drawn now and once a second by a reactor task while the record renders
-#' (console_render_on()), on a dynamic console of an interactive R (not class P)
+#' (console_render_on()), on a dynamic console of an interactive R (not class P), but not in
+#' R.app, whose console gives everything after a carriage return the input's colour
 #' @noRd
 console_live_start = function(rec) {
   rec$what = "thinking"
   row = the$live_row
   if (!identical(row$rec, rec)) {
     cls = console_class()
-    if (!cli::is_dynamic_tty() || cls == "P") return(invisible(NULL))
+    if (!cli::is_dynamic_tty() || cls == "P" || platform_gui() == "AQUA") {
+      return(invisible(NULL))
+    }
     console_live_stop()
     row = console_live(cls)
     row$rec = rec

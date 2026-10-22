@@ -5615,7 +5615,7 @@ its part in its own commit, and Task 27 finalises them.
       Task 18), `   › <draft tail>`, or with an empty draft `   ↳ <kind> · <newest text> · ↑ edit` (a queue) or
       `   enter steer · tab follow-up · ctrl-c pause` (swapped under `type_ahead = "follow_up"`); without a
       composer ` · <key> pauses` where the pause menu is offered (`console_menu_available()`: terminals,
-      Positron) or ` · <key> stops` (RStudio, R.app, Rgui; the key from `console_interrupt_key()`, lower case).
+      Positron) or ` · <key> stops` (RStudio, Rgui; the key from `console_interrupt_key()`, lower case).
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
       while a sub-agent it shows runs; `<elapsed>` the run's time, `0s`, `59s`, `1m 05s`; `<n> queued` the
       person's messages waiting for the session (its user-source queue items, those the console holds, the
@@ -5628,9 +5628,10 @@ its part in its own commit, and Task 27 finalises them.
       and the time fit.
     - Writing: where `\033[K` ends the line (an ANSI terminal; RStudio; visual review: a padded row left about 57
       trailing spaces on each RStudio row that replaced it), `\r` + row + `\033[K`, on the band in a T console
-      where it is known, then `\033[0m`; elsewhere (R.app, Rgui, TERM=dumb, and Positron, whose console erases by
+      where it is known, then `\033[0m`; elsewhere (Rgui, TERM=dumb, and Positron, whose console erases by
       writing spaces, so a row redrawn there left them on 32 transcript rows) `\r` + the row padded with spaces to
-      width - 1. Static (no blink, no frames): drawn when a request
+      width - 1. R.app draws none: a row starting with `\r` as a run's first output gave everything after it the
+      input's colour there (review of Tasks 16-21). Static (no blink, no frames): drawn when a request
       starts, after a CLI tool event while the request waits, and once a second by a reactor task while the run
       renders (`console_render_on()`: none while a tool executes on the stack).
     - Every console write (`gptr_message_write()`, at the sink the row was drawn at, `the$live_row$sinks`) first
