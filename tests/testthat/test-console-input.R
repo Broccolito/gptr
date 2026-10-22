@@ -516,4 +516,11 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
   r = idle_read("and plot", list(" it\003x"), "next")
   expect_identical(r$rows, c(kept_line("and plot it"), "", ""))
   expect_identical(r$kept, "and plot it")
+  # a cursor key, which only readline's editing has, hands the draft over the same way, before
+  # the keys after it reach the editor (review)
+  for (k in c("\033[D", "\033[C", "\033OH", "\033[4~", "\001", "\005")) {
+    r = idle_read("and colour by gear", list(paste0("x", k), "yz\r"), "next")
+    expect_identical(r$kept, "and colour by gearx", info = k)
+    expect_identical(r$x, "next", info = k)
+  }
 })

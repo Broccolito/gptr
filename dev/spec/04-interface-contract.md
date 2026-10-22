@@ -5475,7 +5475,8 @@ its part in its own commit, and Task 27 finalises them.
     after every key, in character mode (`tty_call(TRUE)`, the saved modes back on return, error and
     interrupt), reading fd 0 without a time limit (`console_typed_chars(rd, -1L)`). The keys are the
     composer's (`console_compose()`); Up and Ctrl-D do nothing, and Tab does nothing unless on a trigger word
-    (IC-81's completion, Task 22). The row is cleared when the read ends. Enter returns the line, which the
+    (IC-81's completion, Task 22); a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E) hands the draft over
+    as Ctrl-C does, so Up recalls it with readline's editing (review of Tasks 16-21: they were dropped). The row is cleared when the read ends. Enter returns the line, which the
     reader echoes as it echoes a follow-up (`peter> <line>`, escaped, as readline leaves it) and the REPL takes
     as readline's: `/command`, `!code`, fences and continuation reads (`+ `, `... `) go on as usual, through
     readline once the draft is sent. Once the draft is empty (DEL, Ctrl-U, Ctrl-W), at Ctrl-C, or when nothing

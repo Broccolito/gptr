@@ -1078,7 +1078,10 @@ Decisions:
     readline as usual.
   - The draft becomes empty, and readline takes over at the same prompt.
   - Ctrl-C adds the draft to the history, and readline takes over (Codex's rule).
-- Up and Ctrl-D do nothing. Tab completes trigger words.
+- Up and Ctrl-D do nothing. Tab completes trigger words. (Amended in the review of Tasks 16-21: a cursor
+  key, Left, Right, Home, End, Ctrl-A or Ctrl-E, hands the draft to readline as Ctrl-C does: it is kept in
+  the history and Up recalls it with readline's full editing. The editor dropped them, so a typo fixed
+  mid-line was typed at the end.)
 - The person is never cut off mid-word, and there is only one idle editor at a time.
 - (Amended in Task 21:) `console_idle(rd, prompt)` in `console-input.R` is the editor. Its row is the
   prompt and the draft's tail, cut as the live row cuts it; it reads fd 0 with no time limit. Enter

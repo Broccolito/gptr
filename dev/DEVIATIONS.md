@@ -3446,6 +3446,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     keeps the blank row above it it has after every run (it sat right under `↳ kept in history ↑ · ...`).
     Contract-visible: 04 §15.10 IC-76. Tests: test-console-input.R "an emptied draft hands over to readline at the
     same prompt; Ctrl-C keeps it first"; the pty case I.
+  - At the idle editor a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E) hands the draft to readline as
+    Ctrl-C does: kept in the history (`↳ kept in history ↑ · <draft>`) and recalled with Up and readline's full
+    editing. The editor dropped them silently, so three Lefts then `X` gave `...gearX`. A cursor index drawn
+    with carriage returns stays out of scope (Out of scope: cursor movement inside the composer). Contract-
+    visible: 04 §15.10 IC-76. Tests: test-console-input.R "an emptied draft hands over to readline at the same
+    prompt; Ctrl-C keeps it first".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

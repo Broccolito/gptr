@@ -119,8 +119,9 @@ console_keys = function(rd, s, chars) {
 #' composer's keys in character mode (tty_call()) and drawn again after every key; the row is
 #' cleared when the read ends. Enter returns the line, which the reader echoes after the prompt
 #' as readline() leaves it; Up and Ctrl-D do nothing, nor does Tab but on a trigger word. Once the
-#' draft is empty, at Ctrl-C or when nothing is read, a draft left goes to the console history
-#' (console_keep()) and NULL is returned, so readline() reads at the same prompt
+#' draft is empty, at Ctrl-C, at a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E: readline's
+#' editing, where Up recalls the draft) or when nothing is read, a draft left goes to the console
+#' history (console_keep()) and NULL is returned, so readline() reads at the same prompt
 #' @noRd
 console_idle = function(rd, prompt) {
   sym = console_style()
@@ -137,9 +138,10 @@ console_idle = function(rd, prompt) {
                          "\033[K", if (nzchar(sym$band)) "\033[0m"))
       keys = console_typed_chars(rd, -1L)
       if (!nzchar(keys)) break
-      # Ctrl-C is a key in character mode: the keys before it count
-      ctrl_c = regexpr("\003", keys, fixed = TRUE)
-      if (ctrl_c > 0L) keys = substr(keys, 1L, ctrl_c - 1L)
+      # Ctrl-C (a key in character mode), and a cursor key only readline edits with, hand the draft
+      # over after the keys before them
+      hand = regexpr("\003|[\001\005]|\033(\\[([1478]~|[0-9;]*[CDHF])|O[CDHF])", keys, perl = TRUE)
+      if (hand > 0L) keys = substr(keys, 1L, hand - 1L)
       if (nzchar(keys) && (!identical(keys, "\t") || !is.null(console_trigger(draft)))) {
         res = console_compose(rd$compose, keys, reactor_now(), "steer",
                               function(line, end) character())
@@ -149,7 +151,7 @@ console_idle = function(rd, prompt) {
           break
         }
       }
-      if (ctrl_c > 0L) break
+      if (hand > 0L) break
     }
   }, interrupt = function(e) NULL)
   console_cat("\r\033[K")
