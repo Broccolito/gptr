@@ -3279,3 +3279,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     table: it was cli's cyan (`36`), the one accent outside the logo palette left in the transcript. Contract-visible:
     04 §15.10 IC-82, 03 §6.17. Tests: test-console-render.R "inline code in an answer takes the blue accent, not
     cli's cyan (D-245)".
+  - Tool rows of consecutive requests group as those of one response. The waiting row between requests opened with
+    a blank line after a tool block, so a run of read calls was grouped or spaced by whether the model sent them in
+    one response, which the person cannot see. `console_gap()` now gives a waiting row after a tool block no blank
+    and keeps the tool block open: another tool block follows it directly, any other block opens with the blank it
+    owes, written on the cleared row (an LF after a cleared row, one blank as before). Contract-visible: 04 §15.10
+    IC-82, 03 §6.17. Tests: test-console-render.R "a foreground run separates text, tool and status blocks once
+    (D-186, D-245)".

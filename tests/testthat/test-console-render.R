@@ -1274,7 +1274,7 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
     session_live(s)$ctx))), "  # sub-agent c failed: aborted")
 })
 
-test_that("a foreground run separates text, tool and status blocks once (D-186)", {
+test_that("a foreground run separates text, tool and status blocks once (D-186, D-245)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
@@ -1326,17 +1326,37 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Answer")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L))
+  # tool blocks of consecutive requests group as those of one response: the waiting row between
+  # them takes no blank line, and the text that replaces the last one is spaced (D-245)
+  call = function(id, code) {
+    list(hook_event("message_end", s, role = "assistant", message = assistant_msg("")),
+         hook_event("tool_execution_start", s, tool_call_id = id, tool_name = "r",
+                    input = list(code = code)),
+         hook_event("tool_execution_end", s, tool_call_id = id, tool_name = "r", is_error = FALSE,
+                    elapsed = 0.1, details = list()),
+         hook_event("message_end", s, role = "tool_result",
+                    message = modifyList(result, list(tool_call_id = id))))
+  }
+  tools = c(list(hook_event("agent_start", s), request("q1")), call("c1", "1 + 1"),
+            list(request("q2")), call("c2", "2 + 2"),
+            list(request("q3"),
+                 hook_event("message_update", s, index = 1L, kind = "text", delta = "Done\n\n"),
+                 hook_event("message_end", s, role = "assistant", message = assistant_msg("Done")),
+                 hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL,
+                            doc = NULL, turns = 1L)))
   rows = list(c("", "  First tail", "", "  | r  1 + 1", "    + value", "", "  Second ending", "",
                 "  done - 0 requests - 0 tokens - $0.0000", ""),
               c("", "  [gptr] a notice", "", "  Answer", "",
+                "  done - 0 requests - 0 tokens - $0.0000", ""),
+              c("", "  | r  1 + 1", "    + value", "  | r  2 + 2", "    + value", "", "  Done", "",
                 "  done - 0 requests - 0 tokens - $0.0000", ""))
   # an R GUI spaces the blocks exactly as a terminal does
   for (fe in c("terminal", "rgui")) {
-    for (i in 1:2) {
+    for (i in 1:3) {
       con = rawConnection(raw(), "w")
       sink(con)
       tryCatch({
-        for (ev in list(events, waits)[[i]]) {
+        for (ev in list(events, waits, tools)[[i]]) {
           if (is.function(ev)) {
             ev()
           } else {
@@ -1347,7 +1367,9 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
       bytes = rawToChar(rawConnectionValue(con))
       close(con)
       expect_match(bytes, "thinking", fixed = TRUE)
-      expect_false(grepl("\r +\r\n", bytes))
+      # a block replaces the cleared row; only the text after a tool block's waiting row starts
+      # with the blank it owes there, as no blank came before that row
+      expect_identical(lengths(regmatches(bytes, gregexpr("\r +\r\n", bytes))), c(1L, 0L, 1L)[[i]])
       expect_identical(screen_rows(bytes), rows[[i]], info = fe)
     }
   }

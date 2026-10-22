@@ -5481,8 +5481,10 @@ its part in its own commit, and Task 27 finalises them.
     | act | `▎ r  zz = 1`, or the name over a fence of at most 20 lines; an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold; an MCP call's arguments dim |
     | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started`, `▌ sub-agent a done (1/3) · 4 turns · 12 s` | block blue |
 
-    Result lines are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`: the time when the call took a second or
-    more). An error is red, at most 6 rows. An edit's diff has `+` lines blue and `-` lines red (removals were
+    Tool blocks of consecutive requests group as those of one response: the waiting row between them takes no
+    blank line (`console_gap()`), and a block other than a tool block that replaces it opens with the blank it owes
+    (review of Tasks 8-15). Result lines are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`: the time when
+    the call took a second or more). An error is red, at most 6 rows. An edit's diff has `+` lines blue and `-` lines red (removals were
     plain before), at most 12; its file headers (`--- a/`, `+++ b/`) and other lines are dim. A tool's `render()`
     (IC-69) still wins. At 256 colours the act strip is `38;5;167` and the block `38;5;67`; `NO_COLOR` keeps the
     glyphs; ASCII shows `|` and `#`. A sub-agent's lines are drawn inside the agent's `r` evaluation, whose options

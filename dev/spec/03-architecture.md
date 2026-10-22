@@ -1967,10 +1967,13 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
   width - 4, while the person's lines (an answer, a queued or delivered message) start at column 0; one blank
   line separates text, tool, notice, prompt, the person's lines and status blocks (and two prompts, and two text
-  blocks in a row [D-208], but not a question from the tool block it is asked in [D-243]) and follows the input
+  blocks in a row [D-208], but not a question from the tool block it is asked in [D-243], nor the tool blocks of
+  consecutive requests: a waiting row after a tool block takes no blank line and leaves the tool block open, so
+  the tool rows group as those of one response [D-245]) and follows the input
   and status lines. Separators are written on finished lines only, so a block overwrites
   the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
-  row, R GUIs included; the pause-menu notice excepted, D-225); the margin is that of the console an
+  row, R GUIs included; the pause-menu notice excepted, D-225, and the blank a block other than a tool block owes
+  after a tool block's waiting row, D-245); the margin is that of the console an
   evaluation started from, also for prompts and notices drawn inside it, and a sub-agent line or a
   question drawn there has that console's colours, though the evaluation's options say 1 colour (D-245). There nested lists keep their
   indentation, pipe tables are aligned

@@ -516,6 +516,10 @@ Decisions:
 - An MCP call shows its arguments dim: `▎ github/search_issues  {"q":"bug"}`.
 - Results are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`; the time from a second, as
   before). Errors are red, at most 6 rows.
+- Tool rows of consecutive requests group as those of one response: a waiting row after a tool block
+  takes no blank line and keeps the tool block open, and what else replaces it opens with the blank
+  (amended in the review of Tasks 8-15: a run of reads was spaced or not by how the model batched
+  them, which the person cannot see).
 - Diffs: `+` lines blue and `-` lines red, at most 12; the file headers (`--- a/`, `+++ b/`) dim.
 - IC-69 `render()` still wins.
 - A sub-agent's lines are drawn inside the agent's `r` evaluation, whose options say 1 colour, so
