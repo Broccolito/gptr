@@ -109,7 +109,8 @@ test_that("the live row replaces the old waiting text, at column 0 (D-243)", {
   tool = ev_new("tool_execution_start", run = w$run$id, tool_call_id = "c1", tool_name = "r",
                 input = list(code = "zz = 1"))
   out = utils::capture.output(invisible(console_on_tool_start(tool, w$ctx)))
-  expect_identical(out[[length(out)]], paste0("\r\u258c r 0s \u00b7 ctrl-c stop", "\033[K"))
+  # the r tool evaluates in this process: no clock while it runs (review)
+  expect_identical(out[[length(out)]], paste0("\r\u258c r \u00b7 ctrl-c stop", "\033[K"))
   out = utils::capture.output(invisible(wait_request(w)))
   expect_identical(out, paste0("\r\u258c thinking 0s \u00b7 ctrl-c stop", "\033[K"))
 })

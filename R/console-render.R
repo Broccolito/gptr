@@ -997,7 +997,8 @@ console_on_message_end = function(event, ctx) {
 }
 
 #' tool_execution_start: the call's lines (verbosity 2), whose ids its approval reads (D-243), with
-#' the tool's name as the live row's state word, or a progress message (verbosity 1)
+#' the tool's name as the live row's state word (`frozen` for the r tool, which evaluates in this
+#' process), or a progress message (verbosity 1)
 #' @noRd
 console_on_tool_start = function(event, ctx) {
   rec = console_record(event)
@@ -1010,6 +1011,8 @@ console_on_tool_start = function(event, ctx) {
   } else if (v >= 2L) {
     assign(paste0("t", call$id), call, envir = rec$tools)
     rec$what = console_tool_name(call$name)
+    # the r tool evaluates in this process: the live row cannot tick or read keys until it returns
+    rec$frozen = identical(call$name, "r")
     console_pause_one(rec)
     console_gap(rec, "tool")
     lines = console_tool_line(call, NULL, rec$session)
@@ -1031,6 +1034,7 @@ console_on_tool_end = function(event, ctx) {
   console_artifact_flush()
   rec = console_record(event)
   if (is.null(rec)) return(NULL)
+  rec$frozen = NULL
   key = paste0("t", event$tool_call_id)
   call = get0(key, envir = rec$tools, inherits = FALSE)
   if (!is.null(call)) {

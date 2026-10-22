@@ -55,7 +55,8 @@ agent failures it did not cause. In manual mode each remaining call is still ask
 `n <text>` denies it with that text. Ctrl-C [a] stops everything.
 
 Typing during an in-process `r` tool:
-- Keys wait in the terminal buffer and are read when the tool returns.
+- Keys wait in the terminal buffer and are read when the tool returns. (Amended in the review of Tasks
+  16-21: the live row says so, `▌ r · keys show when r returns`, without a clock, which cannot tick then.)
 - The console reads typed input at `turn_end`, before the loop polls steers (Task 7). So a
   message sent before a boundary reaches that boundary.
 

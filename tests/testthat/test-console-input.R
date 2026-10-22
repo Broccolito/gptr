@@ -246,6 +246,16 @@ test_that("the live row says what the run does, its queue and the person's draft
   ))
 })
 
+test_that("while R code runs in this process the row has no clock and says keys wait (review)", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L)
+  r = list(what = "r", secs = 5, frozen = TRUE, key = "Ctrl-C", pause = TRUE)
+  states = list(keys = c(r, draft = ""), draft = c(r, draft = "and plot"), ide = r)
+  expect_identical(live_rows(states, 80L),
+                   list(keys = "▌ r · keys show when r returns", draft = "▌ r   › and plot",
+                        ide = "▌ r · ctrl-c pause"))
+})
+
 test_that("the draft keeps its column as the status changes; the status only widens (review)", {
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 1L)

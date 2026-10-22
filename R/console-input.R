@@ -235,7 +235,9 @@ console_newest = function(s, rd, take = FALSE) {
 #' shown in place of the status words), `draft` (the composer's text; NULL where no composer reads
 #' keys), `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt
 #' key), `pause` (TRUE where the key pauses, else it stops) and `steer` (TRUE where only the pause
-#' menu steers: Positron's console holds what is typed), `band` (TRUE on the input band, its words
+#' menu steers: Positron's console holds what is typed), `frozen` (TRUE while R code runs in this
+#' process: no clock, and with an empty draft `<sep>keys show when r returns`), `band` (TRUE on the
+#' input band, its words
 #' in the band's grey) and `status_w` (the widest status a row with a draft had this run: the
 #' status is padded to it, so the draft never moves left; attr "status_w" of the result is this
 #' row's). In the style table's glyphs:
@@ -253,7 +255,11 @@ console_live_row = function(state, width) {
   kind = function(k) if (identical(k, "follow_up")) "follow-up" else "steer"
   secs = as.integer(max(0, state$secs %||% 0))
   clock = if (secs < 60L) paste0(secs, "s") else sprintf("%dm %02ds", secs %/% 60L, secs %% 60L)
-  words = c(paste(state$what %||% "thinking", clock),
+  what = state$what %||% "thinking"
+  # R code runs in this process: no clock ticks and no key is read until it returns
+  frozen = isTRUE(state$frozen)
+  if (frozen) clock = what
+  words = c(if (frozen) what else paste(what, clock),
             if (isTRUE(state$queued > 0)) paste0(state$queued, " queued"),
             if (isTRUE(state$question)) "question waiting")
   key = tolower(state$key %||% "Ctrl-C")
@@ -263,6 +269,8 @@ console_live_row = function(state, width) {
   said = NULL
   terms = if (is.null(draft)) {
     paste(key, if (isTRUE(state$steer)) "steer" else if (isTRUE(state$pause)) "pause" else "stop")
+  } else if (!nzchar(draft) && frozen) {
+    paste("keys show when", what, "returns")
   } else if (!nzchar(draft) && is.null(state$newest)) {
     c(paste("enter", kind(enter)), paste("tab", kind(setdiff(c("steer", "follow_up"), enter))),
       paste(key, "pause"))
@@ -271,7 +279,7 @@ console_live_row = function(state, width) {
     c(said, paste(sym$up, "edit"))
   }
   hint = function(terms) {
-    if (!length(terms)) "" else if (is.null(draft)) paste0(sym$sep, terms) else
+    if (!length(terms)) "" else if (is.null(draft) || frozen) paste0(sym$sep, terms) else
       paste0("   ", paste(terms, collapse = sym$sep))
   }
   lead = paste0(sym$agent, " ")
@@ -413,7 +421,7 @@ console_live_state = function(rec) {
   rd = if (isTRUE(the$tty$keys)) console_repl_prompt()$reader
   list(what = if (length(labels)) paste("sub-agent", labels[[1L]]) else rec$what,
        secs = as.numeric(Sys.time()) - rec$t0, queued = console_queued(s),
-       question = isTRUE(rec$question),
+       question = isTRUE(rec$question), frozen = isTRUE(rec$frozen),
        key = console_interrupt_key(), pause = console_menu_available(),
        steer = console_menu_available() && front_end() == "positron",
        draft = if (!is.null(rd)) rd$compose$draft %||% "",
@@ -437,6 +445,7 @@ console_queued = function(s) {
 #' @noRd
 console_live_start = function(rec) {
   rec$what = "thinking"
+  rec$frozen = NULL
   row = the$live_row
   if (!identical(row$rec, rec)) {
     cls = console_class()
