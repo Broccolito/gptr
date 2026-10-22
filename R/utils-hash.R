@@ -148,7 +148,9 @@ port_candidates = function(n = 20L) {
 #'
 #' Hashes the type, length, the object's address, attribute and column addresses and up to 64
 #' sampled values, without copying the object, expanding compact row names or materialising
-#' ALTREP sequences. Returns one 64-hex string.
+#' ALTREP sequences. Returns one 64-hex string. Code called inside its loops makes no replacement
+#' call (`x[i] = v`): R's byte code would leave `x` referenced after return, so the user's next edit
+#' would copy it (FIX-14).
 #' @noRd
 fingerprint = function(x) {
   parts = c(typeof(x), length(x), rlang::obj_address(x))
@@ -181,7 +183,5 @@ fingerprint_sample = function(x) {
   n = length(x)
   if (!n) return(character())
   idx = if (n <= 64) seq_len(n) else unique(as.integer(round(seq(1, n, length.out = 64))))
-  values = .subset(x, idx)
-  if (is.character(values)) values = as_utf8(values)
-  paste(as.character(values), collapse = ",")
+  paste(as.character(.subset(x, idx)), collapse = ",")
 }

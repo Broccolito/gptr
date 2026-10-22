@@ -110,6 +110,28 @@ test_that("fingerprint() is stable, sensitive to sampled values and cheap on ALT
   expect_false(identical(fingerprint(df), fingerprint(transform(df, a = a + 1L))))
   expect_match(fingerprint(new.env()), "^[0-9a-f]{64}$")
 })
+
+test_that("fingerprint() leaves a list's character and numeric elements editable in place", {
+  x = list(s = paste0("s", 1:26), n = (1:26) / 2)
+  before = c(rlang::obj_address(x$s), rlang::obj_address(x$n))
+  expect_identical(fingerprint(x), fingerprint(x))
+  expect_identical(c(rlang::obj_address(x$s), rlang::obj_address(x$n)), before)
+  x$s[1] = "z"
+  x$n[1] = 0
+  expect_identical(c(rlang::obj_address(x$s), rlang::obj_address(x$n)), before)
+})
+
+test_that("fingerprint() reads latin1 and UTF-8 spellings of the same text alike", {
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "paste() makes latin1 text UTF-8 in a UTF-8 locale")
+  x = c("caf\u00e9", "b")
+  address = rlang::obj_address(x)
+  before = fingerprint(x)
+  x[1] = iconv(x[1], "UTF-8", "latin1")
+  expect_identical(Encoding(x[1]), "latin1")
+  expect_identical(rlang::obj_address(x), address)
+  expect_identical(fingerprint(x), before)
+})
+
 test_that("the copy-safety harness sees a retained alias as a copy and a plain edit as in place", {
   expect_no_copy(setup = "big = runif(5e6)", action = "invisible(NULL)", label = "baseline")
   expect_failure(expect_no_copy(setup = "big = runif(5e6)", action = "retained = big"))
@@ -120,6 +142,12 @@ test_that("the leaf functions fingerprint() and save_rds() leave `big` editable 
     setup = "big = runif(5e6)",
     action = "fp = get('fingerprint', envir = asNamespace('gptr'))(big)",
     label = "fingerprint(big)"
+  )
+  expect_no_copy(
+    setup = "big = list(s = letters, n = runif(5e6))",
+    action = "f = get('fingerprint', envir = asNamespace('gptr')); fp = c(f(big), f(big))",
+    edit = "big$n[1] = 0", object = "big$n",
+    label = "fingerprint() of a list, compiled by its first call"
   )
   expect_no_copy(
     setup = "big = runif(5e6)",
