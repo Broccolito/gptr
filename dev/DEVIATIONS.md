@@ -3367,6 +3367,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     as soon as the question shows. Contract-visible: 04 §7.1 and §15.10 IC-76. Tests: test-console-interrupt.R
     "a key typed before the menu's chevron showed answers it; other text is kept (review)"; test-console-typing.R
     "a terminal call's question reads in the saved modes from before its rows (review)".
+  - A free-text answer to a choice or an input whose first word names a console command (`/exit`, `/help mode`;
+    `ui_console_command()`) waits for the next prompt as a line typed during the run does, and the question reads
+    again: `/exit` typed at the ask tool's question went to the model as the answer. A path such as
+    `/tmp/fit.rds` names no command and stays an answer, the reason visual review finding 36 was not taken.
+    Contract-visible: 04 §15.10 IC-77. Tests: test-console-ui.R "a console command typed as a free-text answer
+    waits for the next prompt (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

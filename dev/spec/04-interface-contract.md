@@ -5492,7 +5492,10 @@ its part in its own commit, and Task 27 finalises them.
     spaces, written as spaces). Who asks: `  ? sub-agent <agent>: allow r?`.
   - Every console question (`ui_console_permission()`, `ui_console_select()`, `ui_console_input()`) reads its
     answer after the person's chevron, `console_style()$person` and a space (`› `, ASCII `>> `), at column 0, with
-    R's readline (echo on, Enter required); answers are unchanged. A choice shows `? <title>` (bold), its details
+    R's readline (echo on, Enter required); answers are unchanged, but a choice's or an input's free-text answer
+    whose first word names a console command (`/exit`, `/help mode`; `ui_console_command()`) waits for the next
+    prompt as a line typed during the run does (`console_typed_ahead()`) and the question reads again, while a
+    path such as `/tmp/fit.rds` stays an answer (review of Tasks 16-21). A choice shows `? <title>` (bold), its details
     dim under it, the choices `    1  dplyr` (numbers bold, right-aligned), then a dim hint
     (`Choose a number, or type your own answer; Enter = base`; `Choose numbers separated by commas` for several);
     an input `? <prompt>` and a dim `Enter = <default>`. Each part word-wraps at the width of the approval's rows

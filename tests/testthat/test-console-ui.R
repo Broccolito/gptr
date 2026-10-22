@@ -375,6 +375,33 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
   expect_identical(rl$kept, character())
 })
 
+test_that("a console command typed as a free-text answer waits for the next prompt (review)", {
+  local_console_test()
+  local_gptr_options(history = TRUE)
+  rl = local_readline(character())
+  answers = function(...) {
+    x = c(...)
+    function(...) {
+      a = x[[1L]]
+      x <<- x[-1L]
+      a
+    }
+  }
+  k = NULL
+  utils::capture.output({
+    k = ui_console_select("Which?", c("a", "b"), allow_other = TRUE,
+                          read = answers("/exit", "/tmp/fit.rds"))
+  })
+  # outside a run it goes to the console history; a path names no command and is the answer
+  expect_identical(attr(k, "other"), "/tmp/fit.rds")
+  expect_identical(rl$kept, "/exit")
+  utils::capture.output({
+    k = ui_console_input("Name?", read = answers("/help mode", "fit"))
+  })
+  expect_identical(k, "fit")
+  expect_identical(rl$kept, c("/exit", "/help mode"))
+})
+
 test_that("a terminal's question read that Ctrl-C or an end of input ends ends its line (review)", {
   local_console_test()
   local_readline(character())

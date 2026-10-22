@@ -607,7 +607,8 @@ Decisions:
   - the hint (dim, at column 4 under the title's text; amended in the visual review):
     `Choose a number, or type your own answer; Enter = base`; an input's
     `Enter = <default>`;
-  - the `› ` prompt.
+  - the `› ` prompt. (Amended in the review of Tasks 16-21: a free-text answer whose first word names a
+    console command waits for the next prompt, and the question reads again; a path stays an answer.)
   The OAuth inputs drop the `: ` that ended their prompts (amended in Task 12). Each part word-wraps at
   the approval rows' width under its own text: the title's later rows at column 4, a choice's under its
   label (amended in the review of Tasks 8-15: agent questions are usually longer than a row, and the

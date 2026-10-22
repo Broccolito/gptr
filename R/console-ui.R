@@ -267,6 +267,15 @@ ui_console_read = function(prompt, secret = FALSE) {
   }
 }
 
+#' Is a question's free-text answer a console command (`/exit`, `/help x`)? It waits for the next
+#' prompt (console_typed_ahead()), as one typed during the run does, and the question reads again;
+#' a path such as `/tmp/fit.rds` names no command and stays an answer (D-243)
+#' @noRd
+ui_console_command = function(ans) {
+  cmd = command_parse(trimws(ans))
+  !is.null(cmd) && !is.null(registry_get("command", cmd$name))
+}
+
 #' Parse a choice: numbers, or case-insensitive label prefixes (report 18 parse_choice()); NA
 #' when any part matches nothing
 #' @noRd
@@ -281,7 +290,7 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 
 #' Console select() (D-243): `? <title>`, then under its text its details dim, the numbered
 #' choices and a dim hint, then the person's chevron at column 0, each word-wrapped under its own
-#' text; NA = cancelled; attr "other" = free text
+#' text; NA = cancelled; attr "other" = free text, unless a console command (ui_console_command())
 #' Title line feeds are intentional (also for ask questions); labels and details stay escaped.
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
@@ -315,6 +324,10 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
     if (!nzchar(trimws(ans)) && length(default)) return(as.integer(default))
     idx = ui_parse_choice(ans, labels, multiple)
     if (!anyNA(idx)) return(idx)
+    if (allow_other && ui_console_command(ans)) {
+      console_typed_ahead(ans)
+      next
+    }
     if (allow_other && nzchar(trimws(ans))) return(structure(NA_integer_, other = trimws(ans)))
     console_write("  Please enter one of the numbers shown.")
   }
@@ -322,7 +335,8 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
 }
 
 #' Console input() (D-243): `? <prompt>`, a dim `Enter = <default>` under its text and the
-#' person's chevron; NA = cancelled; a secret is asked through RStudio's masked dialog there
+#' person's chevron; NA = cancelled; a secret is asked through RStudio's masked dialog there; a
+#' console command typed there waits for the next prompt (ui_console_command())
 #' @noRd
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -339,7 +353,11 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
     paste0("  ", sym$dim(console_wrap(ui_escape(paste0("Enter = ", default)), width - 2L)))
   }
   console_write(paste0(pad, c(ui_question(prompt, width), hint)))
-  ans = read(paste0(sym$person, " "), secret = isTRUE(secret))
+  repeat {
+    ans = read(paste0(sym$person, " "), secret = isTRUE(secret))
+    if (is.na(ans) || isTRUE(secret) || !ui_console_command(ans)) break
+    console_typed_ahead(ans)
+  }
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
 
