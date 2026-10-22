@@ -3429,6 +3429,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   - The idle editor's row escapes the draft as the live row does (`live_text()`, rule C1): a pasted bidi override
     or zero-width character was written raw at the prompt while the live row showed `<U+202E>`. Tests:
     test-console-input.R "a draft a run left is edited at the prompt; Enter returns it as readline would".
+  - The live row is drawn in the console's colours (`console_colors()`), also from inside an evaluation, whose
+    options say 1 colour: a redraw caused by a notice or a sub-agent line from the agent's `r` code wrote the
+    block and the words in full ink. Tests: test-console-input.R "the live row keeps the console's colours when
+    drawn inside an evaluation (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

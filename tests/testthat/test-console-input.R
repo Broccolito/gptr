@@ -298,6 +298,21 @@ test_that("the live row is drawn with \\r and erased to the line end, or padded 
   }
 })
 
+test_that("the live row keeps the console's colours when drawn inside an evaluation (review)", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)
+  local_mocked_bindings(front_end = function() "terminal", console_background = function() NA)
+  state = live_states$menu
+  coloured = withr::with_options(list(cli.num_colors = 256L), console_live_row(state, 40L))
+  # an evaluation's options say 1 colour; it holds the colours of the console it started from
+  inside = function() {
+    .gptr_console_colors = 256L
+    force(.gptr_console_colors)
+    written(function() console_live("T")$draw(state))
+  }
+  expect_identical(inside(), paste0("\r", coloured, "\033[K"))
+})
+
 test_that("a console write clears the live row and redraws it after its whole lines (D-243)", {
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)

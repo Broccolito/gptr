@@ -364,6 +364,8 @@ console_live = function(cls) {
   row$shown = FALSE
   row$on = TRUE
   row$draw = function(state = console_live_state(row$rec), write = console_cat) {
+    # in the console's colours, also when drawn inside an evaluation, whose options say 1 colour
+    rlang::local_options(cli.num_colors = console_colors())
     width = cli::console_width()
     text = console_live_row(state, width)
     row$shown = FALSE
