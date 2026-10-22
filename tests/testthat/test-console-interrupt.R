@@ -164,11 +164,16 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
   texts = vapply(q$follow_up, function(i) i$text, "")
   expect_true("then plot it" %in% texts)
   expect_true(any(grepl("s steer - f follow-up - c continue - a abort", err, fixed = TRUE)))
-  # [s] and [f] read their text at the same chevron
+  # [s] and [f] read their text at the chevron of their own question, whose queue line leaves the
+  # text out, as it shows right above it (review)
   expect_identical(log$prompts, rep(">> ", 4L))
-  # the queue lines of typed lines (D-242), not the old notices
-  lines = c(queue_line("steer", "use only mpg"), queue_line("follow-up", "then plot it"))
-  expect_true(all(lines %in% err))
+  sym = console_style()
+  steer = which(err == "  ? Steer")
+  follow = which(err == "  ? Follow-up")
+  expect_length(c(steer, follow), 2L)
+  expect_identical(err[steer + 1L], paste0(sym$queued, " steer"))
+  expect_identical(err[follow + 1L], paste0(sym$queued, " follow-up"))
+  expect_false(any(grepl("use only mpg", err, fixed = TRUE)))
   expect_false(any(grepl("[gptr] steering", err, fixed = TRUE) |
                      grepl("follow-up queued", err, fixed = TRUE)))
 })
@@ -198,11 +203,11 @@ test_that("in the console margin the menu's rows are an approval's, its prompt a
   withr::local_options(cli.dynamic = TRUE)
   log = local_menu_answers(c("s", "use only mpg"))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
-  # the menu starts on a line of its own (a terminal may have echoed ^C); the queue line of its
-  # [s] is right under it, as under any question
+  # the menu starts on a line of its own (a terminal may have echoed ^C); its [s] asks for the text
+  # under a title, and the queue line is right under that, as under any question
   expect_identical(err, c("", "  ? Paused",
                           "    s steer - f follow-up - c continue - a abort - b background",
-                          queue_line("steer", "use only mpg")))
+                          "  ? Steer", "-> steer"))
   expect_identical(log$prompts, c(">> ", ">> "))
 })
 

@@ -278,8 +278,8 @@ test_that("the pause menu's [f] in the REPL is the next prompt; a /, ! draft nev
   expect_identical(msg_text(last_message(reqs[[2L]])), "then plot it")
   expect_match(json_encode(last_message(reqs[[2L]])), "> zz = 5", fixed = TRUE)
   expect_identical(e$zz, 5)
-  expect_true(all(c(queue_line("follow-up", "!zz = 5"), queue_line("follow-up", "then plot it"))
-                  %in% res$out))
+  # each text under its question's title, its queue line without it
+  expect_identical(sum(res$out == "-> follow-up"), 2L)
   at = match(paste0("peter[auto]> ", c("!zz = 5", "then plot it")), res$out)
   expect_false(anyNA(at) || is.unsorted(at))
 })

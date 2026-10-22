@@ -1034,6 +1034,9 @@ Decisions:
   kept, so Up takes back a menu message as a composer one; blank text queues nothing, without the
   `[gptr] nothing queued; continuing` notice. Its queue line sits right under the menu's chevron, as under
   an approval: the records' last block is `prompt` while the menu is up and `notice` once it resumes.
+  (Amended in the review of Tasks 16-21: the text is read under its own title, `  ? Steer` or
+  `  ? Follow-up`, so a bare chevron never looks like the menu asking again, and its queue line leaves the
+  text out, `↳ steer`, as it is on the row above.)
 - The draft is redrawn after the menu (amended in Task 20: at once, by `console_asked()` after
   `console_render_resume()`). After [a] it joins Task 15's kept list (`console_keep()`; done in Task 18).
 

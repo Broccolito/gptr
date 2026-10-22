@@ -5454,11 +5454,13 @@ its part in its own commit, and Task 27 finalises them.
     all the same, and other text read too soon is kept in the history, never sent (review of Tasks 16-21). A key or its word
     answers, as an approval reads `y` or `yes`, and an empty answer continues; anything else (a steer typed at
     the chevron, `add a legend`, which the first-letter rule read as `a`) gets the dim hint
-    `    Paused. Type s, f, c, a or b.` (at column 4, `ui_hint()`) and the menu reads again. [s] and [f] read their text at the same chevron
-    and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
+    `    Paused. Type s, f, c, a or b.` (at column 4, `ui_hint()`) and the menu reads again. [s] and [f] read
+    their text at the chevron of their own question, `  ? Steer` or `  ? Follow-up` (review of Tasks 16-21: a
+    bare chevron read as the menu asking again), and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
     `sent`, so Up then takes back the menu's message as the composer's; blank text queues nothing and the run
     continues. While the menu is up its records' last block is a question's (`prompt`), so the queue line sits
-    right under its chevron as under an approval; when it resumes it is `notice`, so the next block opens with
+    right under its chevron as under an approval, without the text, which is on the row above (`↳ steer`,
+    `↳ follow-up`; `the$echoed`); when it resumes it is `notice`, so the next block opens with
     a blank row. Continuing writes no notice (`[gptr] continuing` and `[gptr] nothing queued; continuing` are
     gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
     list (Task 18). [b] writes `  running in the background · gptr_wait() brings it back` as a dim row and a

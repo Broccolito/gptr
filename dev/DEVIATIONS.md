@@ -3396,6 +3396,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     `stops`), so TERM=dumb, RStudio, Positron and the terminals read as one design. Contract-visible: 04 §15.10
     IC-82, 03 §6.17. Tests: the live-row rows of test-console-input.R, test-console-wait.R, test-console-notice.R,
     test-console-render.R and test-console-spinner-*.R.
+  - The pause menu's [s] and [f] read their text under their own title, `  ? Steer` or `  ? Follow-up`, so every
+    chevron hangs under a `?` title (after `› s` a bare `›` looked like the menu asking again after an invalid
+    key), and the queue line leaves the text out, `↳ steer`, as the text is on the row above (it showed three
+    times within 15 rows). `the$echoed` now holds the text such a line shows in place of the person's.
+    Contract-visible: 04 §15.10 IC-76. Tests: test-console-interrupt.R "steer and follow-up queue the text with
+    source pause_menu (IC-55)", "in the console margin the menu's rows are an approval's, its prompt at column 0";
+    test-console-typing.R "pause-menu text passes the input event with source steer".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

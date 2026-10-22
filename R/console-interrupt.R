@@ -125,8 +125,9 @@ console_ask = function(accept = NULL) {
 #' `a abort` and, for a foreground call, `b background`, read at the person's chevron
 #' (console_ask()), in the saved modes from before its rows (tty_question()). A key or its word
 #' answers, also one typed before the chevron showed, an empty answer continues, anything else gets
-#' a dim hint naming the keys. [s] and [f] read their text at the same chevron and queue it as Enter
-#' and Tab do (policy_enqueue()), their queue line right under it, as under any question. [b] says
+#' a dim hint naming the keys. [s] and [f] read their text at the chevron of their own question, `?
+#' Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their queue line,
+#' without the text it shows under, right under it, as under any question. [b] says
 #' in dim rows that the run went to the background (with the service's notices), or in red why not.
 #' It resumes the interrupted computation, the next block a blank row below the menu and the live
 #' row with a T console's draft drawn again (console_asked()), or returns to let the policy's
@@ -168,9 +169,19 @@ policy_menu = function(cnd, pol) {
     if (identical(key, "c")) go()
     if (identical(key, "a")) return(invisible(NULL))
     if (key %in% c("s", "f")) {
+      # the text's own question, so its chevron hangs under a title as every other does
+      console_write(paste0("  ", ui_question(c(s = "Steer", f = "Follow-up")[[key]],
+                                             ui_width() - 2L)))
       text = console_ask(TRUE)
       if (is.na(text)) return(invisible(NULL))
-      policy_enqueue(s, text, if (identical(key, "s")) "steer" else "follow_up")
+      enqueue = function() {
+        the$echoed = ""
+        on.exit({
+          the$echoed = NULL
+        }, add = TRUE)
+        policy_enqueue(s, text, if (identical(key, "s")) "steer" else "follow_up")
+      }
+      enqueue()
       go()
     }
     if (identical(key, "b")) {
@@ -241,9 +252,10 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 
 #' The dim line at column 0 that shows a message queued for session `s` (D-242): the queued
 #' glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`), cut to
-#' three rows; a steer on a CLI route adds `after the CLI's answer`. A line a question read past
-#' (`the$echoed`, console_typed_ahead()) is on screen already, after the question's chevron, so its
-#' line says `not an answer` in place of the text. Inside an evaluation it has the console's
+#' three rows; a steer on a CLI route adds `after the CLI's answer`. A line whose text is on screen
+#' already, right above it, says `the$echoed` in its place: `not an answer` for a line a question
+#' read past (console_typed_ahead()), nothing for the pause menu's [s] and [f] text, which their
+#' question's title names (policy_menu()). Inside an evaluation it has the console's
 #' colours. It is a block of the person's lines (console_gap()), except right under a question
 #' whose read routed it; while an answer of the session's foreground run streams, it waits in the
 #' run's record (`rec$queued`) for the answer's block to end, so it never splits a sentence (D-245).
@@ -255,9 +267,9 @@ console_queue_line = function(s, text, as) {
   sym = console_style()
   steer = identical(as, "steer")
   on_cli = steer && identical(session_live(s)$run$model[["type"]], "cli")
-  if (isTRUE(the$echoed)) text = "not an answer"
+  text = the$echoed %||% text
   rows = sym$dim(console_person_rows(sym$queued, paste0(
-    if (steer) "steer" else "follow-up", sym$sep, text,
+    if (steer) "steer" else "follow-up", if (nzchar(text)) paste0(sym$sep, text),
     if (on_cli) paste0(sym$sep, "after the CLI's answer")
   ), n = 3L))
   rec = Find(function(rec) identical(rec$session, s) && console_foreground(rec, tools = TRUE),
@@ -279,7 +291,7 @@ console_queue_line = function(s, text, as) {
 console_typed_ahead = function(text) {
   target = Find(function(t) !is.null(t$session), policy_targets(policy_find()$runs))
   if (is.null(target)) return(console_history_add(text))
-  the$echoed = TRUE
+  the$echoed = "not an answer"
   on.exit({
     the$echoed = NULL
   }, add = TRUE)
