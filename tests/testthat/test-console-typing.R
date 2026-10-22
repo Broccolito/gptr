@@ -1130,29 +1130,34 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
     "  if (!identical(m$role, 'user')) {",
     "    return(paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END'))",
     "  }",
-    # the answer's first row shows at once; its call, and the ask, come about 0.3 s later
-    "  list(text = 'BEGIN\\n\\nEND', chunk = 100L, gap = 0.1, tool = 'r',",
-    "       input = list(code = 'zz = 1'))",
+    # the answer streams for about a second, then comes its call, and the ask
+    "  long = paste(c('BEGIN', sprintf('w%02d', 1:30), 'END'), collapse = ' ')",
+    "  list(text = long, chunk = 8L, gap = 0.05, tool = 'r', input = list(code = 'zz = 1'))",
     "})",
     "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
   ))
   expect_true(pty$wait("peter> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
-  # typed key by key as the ask comes due: the live row says a question waits, Enter still
-  # queues, and the ask is drawn a second after the last key, its answer empty
-  for (k in c("y", "e", "s")) {
+  # typed key by key while the answer streams and the ask comes due, however slow the child:
+  # the live row says a question waits, Enter still queues, and the ask is drawn a second after
+  # the last key, its answer empty
+  typed = ""
+  for (k in rep(c("y", "e", "s"), 10L)) {
     pty$send(k)
-    Sys.sleep(0.3)
+    typed = paste0(typed, k)
+    if (pty$wait("question waiting", timeout = 0.3)) break
   }
+  expect_lt(nchar(typed), 30L)
   pty$send("\r")
   sent = Sys.time()
-  expect_true(pty$wait("question waiting"))
   expect_true(pty$wait("Allow r?"))
   expect_gte(as.numeric(difftime(Sys.time(), sent, units = "secs")), 1)
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
-  expect_true(pty$wait(paste0("REQ operator: ", relay("yes"), " END")))
+  # the relay, its typed word on the next row where the row is full
+  expect_true(pty$wait(paste0("REQ operator: ", trimws(relay("")))))
+  expect_true(pty$wait(paste0(typed, " END")))
   expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
