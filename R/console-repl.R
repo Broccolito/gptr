@@ -623,9 +623,9 @@ console_typed_route = function(rd, s, lines, part = "") {
 
 #' Text the person typed that gptr will not send: added to the console history in order
 #' (console_history_add()) and listed once as the person's held text, dim at column 0 like a queue
-#' line, `<queued glyph> kept in history <Up glyph> · <a> · <b>` cut to three rows, or
-#' `... not kept (gptr.history is off) · ...`; inside an evaluation in the console's colours (D-242,
-#' D-243)
+#' line, `<queued glyph> kept in history <Up glyph><sep><a><sep><b>` cut to three rows, or
+#' `... not kept (gptr.history is off)<sep>...`; inside an evaluation in the console's colours
+#' (D-242, D-243)
 #' @noRd
 console_keep = function(texts) {
   if (!length(texts)) return(invisible(NULL))
