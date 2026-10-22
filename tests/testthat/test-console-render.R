@@ -1383,6 +1383,28 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
     session_live(s)$ctx))), "  # sub-agent c failed: aborted")
 })
 
+test_that("a line routed at a question sits under it; a later person's line opens a block", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  local_mocked_bindings(front_end = function() "terminal")
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  render_events(s, list(hook_event("agent_start", s)))
+  rec = console_record(list(run = "u0000test"))
+  # a line the question's read routes sits right under its rows
+  rec$last = "prompt"
+  expect_identical(utils::capture.output(console_queue_line(s, "use base R", "steer")),
+                   queue_line("steer", "use base R"))
+  # the steer delivered after the call the question approved, which printed only output (no
+  # result line closed the block), opens its own block (visual review)
+  rec$last = "prompt"
+  took = render_events(s, list(hook_event("queue_update", s, op = "take", which = "steer",
+                                          text = "use base R", source = "repl")))
+  expect_identical(took, c("", ">> use base R"))
+})
+
 test_that("a foreground run separates text, tool and status blocks once (D-186, D-245)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)

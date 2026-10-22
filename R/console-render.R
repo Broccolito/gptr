@@ -659,12 +659,11 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
 #' One blank line between a run's blocks (text, tool, notice, prompt, the person's lines, waiting
 #' row, status) where lines keep the margin, written on a finished line; blocks of one kind group,
 #' except prompts, a question and the tool block it is asked in are one (it asks under the call it
-#' gates, D-243), as are a question and the person's lines read for it under its rows, and a block
-#' replacing a cleared waiting row needs none. A waiting row after a tool block takes none and
-#' leaves the tool block open, so the tool rows of consecutive requests group as those of one
-#' response and what else replaces it is spaced (D-245). Queue lines held while the answer's text
-#' block was open (`rec$queued`, console_queue_line()) are written first, as the person's block,
-#' when any other block starts
+#' gates, D-243), and a block replacing a cleared waiting row needs none. A waiting row after a
+#' tool block takes none and leaves the tool block open, so the tool rows of consecutive requests
+#' group as those of one response and what else replaces it is spaced (D-245). Queue lines held
+#' while the answer's text block was open (`rec$queued`, console_queue_line()) are written first,
+#' as the person's block, when any other block starts
 #' @noRd
 console_gap = function(rec, kind) {
   if (length(rec$queued) && !identical(kind, "text")) {
@@ -675,7 +674,7 @@ console_gap = function(rec, kind) {
   }
   if (identical(kind, "wait") && identical(rec$last, "tool")) return(invisible(NULL))
   same = identical(rec$last, kind) && !identical(kind, "prompt")
-  join = paste(rec$last, kind) %in% c("tool prompt", "prompt tool", "prompt person")
+  join = paste(rec$last, kind) %in% c("tool prompt", "prompt tool")
   if (!same && !join && !identical(rec$last, "wait") && nzchar(console_pad())) console_cat("\n")
   rec$last = kind
   invisible(NULL)

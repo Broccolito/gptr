@@ -214,9 +214,9 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 #' three rows; a steer on a CLI route adds `after the CLI's answer`. A line a question read past
 #' (`the$echoed`, console_typed_ahead()) is on screen already, after the question's chevron, so its
 #' line says `not an answer` in place of the text. Inside an evaluation it has the console's
-#' colours. It is a block of the person's lines (console_gap()); while an answer of the session's
-#' foreground run streams, it waits in the run's record (`rec$queued`) for the answer's block to
-#' end, so it never splits a sentence (D-245).
+#' colours. It is a block of the person's lines (console_gap()), except right under a question
+#' whose read routed it; while an answer of the session's foreground run streams, it waits in the
+#' run's record (`rec$queued`) for the answer's block to end, so it never splits a sentence (D-245).
 #' @noRd
 console_queue_line = function(s, text, as) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -234,7 +234,7 @@ console_queue_line = function(s, text, as) {
     rec$queued = c(rec$queued, rows)
     return(invisible(NULL))
   }
-  if (!is.null(rec)) console_gap(rec, "person")
+  if (!is.null(rec) && !identical(rec$last, "prompt")) console_gap(rec, "person")
   console_write(rows)
 }
 
