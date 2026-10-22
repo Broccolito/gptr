@@ -227,8 +227,9 @@ test_that("real R-tool capture contains no spinner clear bytes or altered warnin
       }, class = "gptr_warning_notice")
     }, type = "message")
   })
-  # the notice keeps the margin of the console the evaluation started from (D-186)
-  expect_identical(out, c("tool output", "  tool notice"))
+  # the notice keeps the margin of the console the evaluation started from (D-186), the printed
+  # output is a result row at column 4 (visual review)
+  expect_identical(out, c("    tool output", "  tool notice"))
   expect_identical(err, character())
   expect_false(result$is_error)
   expect_identical(result$details$warnings, "tool warning")

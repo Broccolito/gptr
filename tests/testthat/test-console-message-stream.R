@@ -94,6 +94,32 @@ test_that("teed R messages display once and retain one message event", {
                           function(e) e$text, ""), "hidden\n")
 })
 
+test_that("in the console margin what R code prints is dim rows at column 4, cut (visual review)", {
+  home = new.env()
+  local_mocked_bindings(console_pad = function() "  ")
+  withr::local_options(cli.width = 40L, cli.num_colors = 1L, cli.unicode = FALSE)
+  long = paste(rep("word", 12L), collapse = " ")
+  res = NULL
+  out = utils::capture.output({
+    res = eval_r(paste0('cat("a\\n\\nb\\033\\n"); print("', long, '"); x = 1'), home,
+                 plots = "none", tee = TRUE)
+  })
+  # escaped, at column 4 under the call like its result rows, never at the person's column 0
+  row = paste0("    [1] \"", long, "\"")
+  expect_identical(out, c("    a", "", "    b<U+001B>", paste0(substr(row, 1L, 35L), "...")))
+  # the result keeps all of it, as printed
+  text = paste(vapply(Filter(function(e) e$type == "output", res$events), function(e) e$text, ""),
+               collapse = "")
+  expect_identical(text, paste0("a\n\nb\033\n[1] \"", long, "\"\n"))
+  expect_identical(sink.number(), 0L)
+  # dim where colours show; without the margin the output is teed as R prints it
+  withr::local_options(cli.num_colors = 256L)
+  echo = function() utils::capture.output(invisible(eval_r('cat("a\\n")', home, tee = TRUE)))
+  expect_identical(echo(), "\033[38;5;244m    a\033[39m")
+  local_mocked_bindings(console_pad = function() "")
+  expect_identical(echo(), "a")
+})
+
 test_that("console controls stay out of R-tool results while normal prints remain", {
   home = new.env()
   home$notice = console_notice

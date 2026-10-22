@@ -2014,7 +2014,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   (D-207). Console output draws no box characters (D-187).
   Every renderer write and console control (prompts, notices, the pause menu) goes through
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
-  whatever `tee` is; prompts and sub-agent lines first clear the waiting row, also while a tool
+  whatever `tee` is; in the margin what the evaluated code prints (the `r` tool, `!code`) is not teed as R
+  prints it but shown as result rows, at column 4, escaped, dim and cut to the console width, per top-level
+  expression or before a notice (`eval_echo()`; the result keeps all of it) [D-245]; prompts and sub-agent lines first clear the waiting row, also while a tool
   executes (conditions raised inside a tool leave the waiting row alone). Children never render;
   a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
   (`  ▌ sub-agent a (kid/kid-1) started`, `  ▌ sub-agent a done (1/2) · 2 turns · 12 s` or

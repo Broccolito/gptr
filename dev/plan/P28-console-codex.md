@@ -142,7 +142,7 @@ working directory restored. Plan-specific rules:
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
 | `R/utils-conditions.R` (`console_colors()`; `gptr_message_write()` clears and redraws the live row) | 11, 17 |
-| `R/eval-core.R` (an evaluation holds the console's colours) | 11 |
+| `R/eval-core.R` (an evaluation holds the console's colours; printed output as result rows, visual review) | 11 |
 | `R/gptr-config.R` (`type_ahead` description) | 18 |
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
 | `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream,setup}.R`, `helper-console-input.R` | their tasks |
@@ -528,7 +528,8 @@ Decisions:
 - The tool name is always printed, so a kind never relies on colour alone.
 - An MCP call shows its arguments dim: `▎ github/search_issues  {"q":"bug"}`.
 - Results are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`; the time from a second, as
-  before). Errors are red, at most 6 rows.
+  before). Errors are red, at most 6 rows. In the margin what the code prints is shown the same way, per
+  top-level expression, not teed raw at column 0 (amended in the visual review).
 - Tool rows of consecutive requests group as those of one response: a waiting row after a tool block
   takes no blank line and keeps the tool block open, and what else replaces it opens with the blank
   (amended in the review of Tasks 8-15: a run of reads was spaced or not by how the model batched

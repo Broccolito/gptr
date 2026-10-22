@@ -194,7 +194,9 @@ eval_run = function(st) {
 }
 
 #' Harness options, the anonymous-file sink and plot capture (undone by eval_restore()); the
-#' message sink in use is noted, so one the code leaves open is undone
+#' message sink in use is noted, so one the code leaves open is undone. Teed output is split to the
+#' console as R prints it, except in the console margin, where eval_echo() shows it (D-245); the
+#' evaluation's frame (`st$frame`) is where that display looks for the writer below it
 #' @noRd
 eval_open = function(st) {
   force(st)
@@ -205,11 +207,15 @@ eval_open = function(st) {
   }
   st$pad = console_pad()
   st$colors = console_colors()
+  st$echo = st$tee && nzchar(st$pad)
+  st$split = st$tee && !st$echo
+  st$width = max(20L, cli::console_width() - nchar(st$pad))
+  st$frame = sys.nframe() - 1L
   st$old_opts = options(max.print = 1000L, width = 100L, rlang_interactive = FALSE,
                         cli.dynamic = FALSE, cli.num_colors = 1L, askYesNo = eval_no_ask)
   st$msg_sink = sink.number(type = "message")
   st$con = file("", "w+b")
-  sink(st$con, split = st$tee)
+  sink(st$con, split = st$split)
   st$sink_n = sink.number()
   st$old_try = options(try.outFile = st$con)
   st$ps = plot_begin(st$plots, st$human)
@@ -254,7 +260,7 @@ eval_read_sink = function(st) {
     options(try.outFile = st$con)
   }
   if (sink.number() < st$sink_n) {
-    sink(st$con, split = st$tee)
+    sink(st$con, split = st$split)
     st$sink_n = sink.number()
   }
   bytes = raw()
@@ -267,7 +273,8 @@ eval_read_sink = function(st) {
   raw_to_utf8(bytes[bytes != as.raw(0L)])
 }
 
-#' Move captured output into an `output` event (merged with a preceding output event)
+#' Move captured output into an `output` event (merged with a preceding output event), and show
+#' it in the console margin (eval_echo())
 #' @noRd
 eval_flush = function(st) {
   txt = eval_read_sink(st)
@@ -278,7 +285,24 @@ eval_flush = function(st) {
   } else {
     eval_push(st, "output", text = txt)
   }
+  if (isTRUE(st$echo)) eval_echo(st, txt)
   invisible()
+}
+
+#' Show printed output in the console margin as a tool's result rows are (D-245): each line at
+#' column 4, escaped, dim in the console's colours and cut to its width, written by the writer below
+#' this evaluation with its own sink lifted; a sink the code left on top keeps the output
+#' @noRd
+eval_echo = function(st, txt) {
+  if (sink.number() != st$sink_n) return(invisible())
+  sink()
+  on.exit(sink(st$con, split = st$split), add = TRUE)
+  rlang::local_options(cli.num_colors = st$colors)
+  sym = console_style()
+  lines = console_escape(strsplit(sub("\n$", "", txt), "\n", fixed = TRUE)[[1L]], FALSE)
+  rows = cli::ansi_strtrim(paste0(ifelse(nzchar(lines), "    ", ""), lines), st$width,
+                           ellipsis = sym$ellipsis)
+  gptr_message_write(paste0(sym$dim(rows), "\n", collapse = ""), "stdout", from = st$frame)
 }
 
 #' Evaluate the expressions in order; stop at the first failure
@@ -333,7 +357,7 @@ eval_one = function(st, expr, i, sref) {
     own = identical(stream, "stdout") && sink.number() == st$sink_n
     if (own) sink()
     on.exit({
-      if (own) sink(st$con, split = st$tee)
+      if (own) sink(st$con, split = st$split)
       tryCatch(eval_read_sink(st), error = function(e) invisible(NULL))
     }, add = TRUE)
     gptr_message_write(text, stream, margin, from = k - 1L)

@@ -5528,7 +5528,12 @@ its part in its own commit, and Task 27 finalises them.
     Tool blocks of consecutive requests group as those of one response: the waiting row between them takes no
     blank line (`console_gap()`), and a block other than a tool block that replaces it opens with the blank it owes
     (review of Tasks 8-15). Result lines are indented 4 and dim (`+ fit · 1.2 s`, `done · 3.0 s`: the time when
-    the call took a second or more). An error is red, at most 6 rows. An edit's diff has `+` lines blue and `-` lines red (removals were
+    the call took a second or more). So is what the code prints (`eval_r()` with `tee` where the margin applies:
+    the capture's sink is not split; `eval_flush()` shows each new line at column 4, escaped, dim in the console's
+    colours and cut to its width, through the writer below the evaluation, per top-level expression or before a
+    notice; the result keeps all of it). Without the margin (Rscript, knitr) the sink is split as before (visual
+    review: `head(fuel)` rows and `[1] "      33 fuel.csv"` sat at column 0 in ink, under `› y`, where they read as
+    R echoing the person's line). An error is red, at most 6 rows. An edit's diff has `+` lines blue and `-` lines red (removals were
     plain before), at most 12; its file headers (`--- a/`, `+++ b/`) are left out, as the call line names the file,
     and its other lines (hunk headers) are dim; a diff row wider than the console is cut with `…`, never wrapped,
     so its code keeps its spaces and every row its sign (visual review). A tool's `render()`

@@ -3412,3 +3412,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     test-console-render.R "a cut answer ends at its last whole word, the cut marked (visual review)", "a prompt or
     pause in a tool's evaluation ends partial lines on the console (D-188)"; test-console-abort-stream.R "abort
     labels a redactor tail received after a pause without printing it twice".
+  - What R code prints in the console margin (the `r` tool, `!code`) is shown as result rows: at column 4, escaped,
+    dim and cut to the console width. The capture's sink was split, so `head(fuel)` rows, `tapply()` values and
+    `[1] "      33 fuel.csv"` sat at column 0, the person's column, in ink (one tool block had rows at columns 0, 2 and
+    4), and the last read as R echoing the `› y` above it; R's width-100 output also wrapped hard to column 0. Now
+    the sink is not split there and `eval_flush()` shows each new line through the writer below the evaluation.
+    The cost: output shows per top-level expression (or before a notice), not per `cat()`; the model still gets
+    all of it. Without the margin (Rscript, knitr) the split sink stays. Contract-visible: 04 §15.10 IC-82, 03
+    §6.17. Tests: test-console-message-stream.R "in the console margin what R code prints is dim rows at column
+    4, cut (visual review)"; test-console-notice.R and test-console-process-launch.R (the r tool's output row).
