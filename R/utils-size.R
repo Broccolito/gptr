@@ -31,7 +31,6 @@ env_snap_size = function(x, home = NULL, shared = NULL) {
     i = i - 1L
     e = if (i > 0L) sys.frame(i)
   }
-  home = NULL
   keep = character()
   if (!is.null(shared)) {
     env_size_reset(st, TRUE)
@@ -219,9 +218,7 @@ env_size_env = function(e, st) {
   nms = ls(envir = e, all.names = TRUE, sorted = FALSE)
   b = 56 + 56 * length(nms)
   nms = nms[nms != "..."]
-  if (length(nms)) {
-    nms = nms[!(rlang::env_binding_are_lazy(e, nms) | rlang::env_binding_are_active(e, nms))]
-  }
+  nms = nms[!(rlang::env_binding_are_lazy(e, nms) | rlang::env_binding_are_active(e, nms))]
   b = b + env_size_items(e, nms, st)
   an = env_size_attr_names(e)
   i = 1L
