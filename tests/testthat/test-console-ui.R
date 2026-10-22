@@ -375,6 +375,20 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
   expect_identical(rl$kept, character())
 })
 
+test_that("a terminal's question read that Ctrl-C or an end of input ends ends its line (review)", {
+  local_console_test()
+  local_readline(character())
+  # a terminal leaves the person's row open: the next row starts on a line of its own
+  local_live_console("T")
+  out = written(function() expect_identical(ui_console_read("> "), NA_character_))
+  expect_identical(out, "\n")
+  local_live_console("D")
+  expect_identical(written(function() ui_console_read("> ")), "\n")
+  # an IDE console ends the input line itself
+  local_live_console("L")
+  expect_identical(written(function() ui_console_read("> ")), "")
+})
+
 test_that("during a run a line typed before the approval prompt is queued, then it asks again", {
   skip_on_cran()
   local_console_test()

@@ -5438,7 +5438,10 @@ its part in its own commit, and Task 27 finalises them.
     `ui_console_permission()`, `ui_console_select()` and `ui_console_input()`) the row is drawn again with the
     draft unchanged, so it shows while the call the question gated runs. A sub-agent's question waits the same
     way, one at a time; what is typed goes to the session of the console call (the parent). D keeps the drain
-    after the rows (Task 2); `gptr_confirm()` and the pause menu do not wait.
+    after the rows (Task 2); `gptr_confirm()` and the pause menu do not wait. A question's read that Ctrl-C or
+    an end of input ends (`ui_console_read()`, `console_ask()`) first ends the person's row in a terminal (T,
+    D), which readline leaves open, so the row stays as typed and what follows starts below it (review of
+    Tasks 16-21: the redrawn live row wrote over `› and colour`, and TERM=dumb glued the refusal to it).
   - A draft survives Ctrl-C and the pause menu (Task 20). SIGINT flushes what the terminal holds unread, never
     the composer's draft. The pause menu (`policy_menu()`, wherever `console_menu_available()`) is a console
     question in every class: after a blank row, `  ? Paused` (`? Paused <session id>` only when the call's runs

@@ -100,12 +100,12 @@ console_repl_find = function() {
 
 #' Read one menu answer at the person's chevron at column 0, as a console question reads (D-243):
 #' from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while waiting (no resume
-#' restart there) gives NA
+#' restart there) gives NA, and in a terminal ends the person's row, as ui_console_read() does
 #' @noRd
 console_ask = function() {
   prompt = paste0(console_style()$person, " ")
   rs = console_repl_find()
-  tryCatch({
+  x = tryCatch({
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
     } else {
@@ -113,6 +113,8 @@ console_ask = function() {
     }
     if (length(x) != 1L || is.na(x)) NA_character_ else as_utf8(x)
   }, interrupt = function(e) NA_character_)
+  if (is.na(x) && console_class() %in% c("T", "D")) console_cat("\n")
+  x
 }
 
 #' The pause menu (calling handler for `interrupt`), a console question wherever it is offered

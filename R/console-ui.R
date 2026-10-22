@@ -247,7 +247,8 @@ ui_undo_note = function(request) {
 #' rows, right above the chevron; then readline_answer(). When the REPL's reader finds lines
 #' waiting after the answer (a paste; a last line without a newline is not waiting), the answer and
 #' the lines go to the console history as one entry (a `secret` is dropped) and the question is
-#' asked again (IC-75); Ctrl-C or EOF gives NA (a terminal echoes even a `secret` itself)
+#' asked again (IC-75); Ctrl-C or EOF gives NA (a terminal echoes even a `secret` itself), and in a
+#' terminal ends the person's row, which readline() leaves open then
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
   rd = console_repl_find()$reader
@@ -255,7 +256,10 @@ ui_console_read = function(prompt, secret = FALSE) {
     console_typed(drain = TRUE)
     ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead),
                    interrupt = function(e) NA_character_)
-    if (!rlang::is_string(ans)) return(NA_character_)
+    if (!rlang::is_string(ans)) {
+      if (console_class() %in% c("T", "D")) console_cat("\n")
+      return(NA_character_)
+    }
     more = if (!is.null(rd)) rd$waiting()
     if (!length(more)) return(ans)
     kept = !secret && console_history_add(paste(c(ans, more), collapse = "\n"))

@@ -269,6 +269,13 @@ test_that("a second Ctrl-C while the menu waits aborts", {
   expect_identical(aborted$aborted, "u0000run1")
 })
 
+test_that("Ctrl-C at the pause menu's chevron ends the terminal's line (review)", {
+  local_readline(character())
+  local_live_console("T")
+  out = written(function() expect_identical(console_ask(), NA_character_))
+  expect_identical(out, "\n")
+})
+
 test_that("a line typed before the pause menu appeared never answers it (IC-75)", {
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   rl = local_readline(c("a", "c"), secs = c(0.01, 1))

@@ -968,7 +968,8 @@ Decisions:
   2. Keeps reading every 0.05 s while the last key is under 1 s old. The live row shows
      `question waiting`, and Enter and Tab still queue.
   3. Clears the row and prints the question.
-  4. Reads the answer with the saved modes.
+  4. Reads the answer with the saved modes. (Amended in the review of Tasks 16-21: a read that Ctrl-C or
+     an end of input ends first ends the person's row in a terminal, `ui_console_read()` and `console_ask()`.)
   5. Re-applies character mode and redraws the draft unchanged.
 - (Amended in Task 19:) `console_ask_wait()` in `console-input.R` does steps 1 and 2, the last key
   being the composer's `rd$compose$t` and the row's `question waiting` the record's `question`.

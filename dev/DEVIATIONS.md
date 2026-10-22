@@ -3353,6 +3353,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     it pauses after the keys before it (review)", "in-process R code runs with isig on, so Ctrl-C interrupts it
     (review)"; test-console-input.R "an emptied draft hands over to readline at the same prompt; Ctrl-C keeps it
     first"; the pty cases G and I.
+  - A console question's read that Ctrl-C or an end of input ends (`ui_console_read()`, the pause menu's
+    `console_ask()`) first ends the person's row in a T or D console, which readline leaves open: the live row
+    drawn on exit wrote over `› and colour`, and TERM=dumb glued the refusal to it. IDE consoles end the line
+    themselves. Contract-visible: 04 §15.10 IC-76. Tests: test-console-ui.R "a terminal's question read that
+    Ctrl-C or an end of input ends ends its line (review)"; test-console-interrupt.R "Ctrl-C at the pause menu's
+    chevron ends the terminal's line (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
