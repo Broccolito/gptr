@@ -1247,7 +1247,9 @@ Decisions:
   The keys in the banner are bold. Ctrl-C does not pause at idle, so the banner does not say it
   does. The key is the console's own (`console_interrupt_key()`, lower case: `esc twice leaves` in
   RStudio, R.app and Rgui), and no line promises a pause where the menu is not offered (amended in the
-  visual review: the banner said `Esc pauses an answer` where Esc stops the run).
+  visual review: the banner said `Esc pauses an answer` where Esc stops the run). (Amended in the review of
+  Tasks 16-21: until this task the old banner already says `<key> stops an answer` where no menu is offered,
+  as the live row contradicted it in RStudio and R.app.)
 - The mode stays in the prompt (`peter[auto]>`). Shift-Tab is not added; readline cannot bind it
   portably.
 

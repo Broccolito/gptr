@@ -719,7 +719,8 @@ console_send = function(rs, text) {
 # ---------------------------------------------------------------------------------------------
 
 #' The banner (architecture 6.17, NS-1): `gptr <version> | model ... | mode ... | .gptr/ found`,
-#' up to six objects of the evaluation environment, then the keys
+#' up to six objects of the evaluation environment, then the keys: the console's interrupt key
+#' pauses an answer where the pause menu is offered, else it stops it
 #' @noRd
 repl_banner = function(rs) {
   ws = if (is.null(workspace_dir())) "no .gptr/" else ".gptr/ found"
@@ -730,7 +731,8 @@ repl_banner = function(rs) {
     console_escape(paste0("  ", console_env_lines(repl_eval_env(rs), n = 6L), recycle0 = TRUE),
                    FALSE),
     paste0("/help lists commands; ", console_interrupt_key(),
-           " pauses an answer, twice at the prompt leaves.")))
+           if (console_menu_available()) " pauses" else " stops",
+           " an answer, twice at the prompt leaves.")))
   mode_notice(repl_mode(rs))
 }
 

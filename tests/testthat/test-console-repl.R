@@ -294,6 +294,18 @@ test_that("a console opened in yolo shows the yolo notice with its banner (IC-78
   expect_length(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 2L)
 })
 
+test_that("the banner names the console's key; no pause is promised where none is (review)", {
+  local_gptr_options(interactive = TRUE)
+  keys = function(fe) {
+    local_mocked_bindings(front_end = function() fe)
+    utils::tail(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 1L)
+  }
+  expect_identical(keys("terminal"),
+                   "/help lists commands; Ctrl-C pauses an answer, twice at the prompt leaves.")
+  expect_identical(keys("rstudio"),
+                   "/help lists commands; Esc stops an answer, twice at the prompt leaves.")
+})
+
 test_that("gptr.history decides whether console_history_add() adds; it never fails (D-243)", {
   added = character()
   local_mocked_bindings(timestamp = function(stamp, ...) added <<- c(added, stamp),

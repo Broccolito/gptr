@@ -3564,3 +3564,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     (a call's code row lost its trailing `,` at 60 columns). The person's rows, code and diff rows, result rows, the
     flagged rows and printed output use it. Tests: test-console-render.R "a diff row wider than the console is cut,
     its spaces and sign kept (visual review)".
+- Review fixes of Tasks 16-21 (2026-10-22):
+  - The banner names what the console's key does: `Esc stops an answer` where the pause menu is not offered
+    (RStudio, R.app, Rgui), `Ctrl-C pauses an answer` where it is; the live row said `esc stops` under a banner
+    promising a pause, and in R.app the `c` meant for the promised menu became a prompt. Task 26 rewrites the
+    banner. Tests: test-console-repl.R "the banner names the console's key; no pause is promised where none is
+    (review)".
