@@ -49,10 +49,11 @@ test_that("a console select outside a run opens its own block in the margin (D-1
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   out = console_try(function() ui_console_select("Rewind to", c("a", "b")), "1")
-  expect_identical(out$shown, c("", "  ? Rewind to", "    1  a", "    2  b", "  Choose a number"))
+  expect_identical(out$shown, c("", "  ? Rewind to", "    1  a", "    2  b", "    Choose a number"))
 })
 
 test_that("questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", {
+  # every row under the title is at column 4, under its text (visual review: the hint was at 2)
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
@@ -68,19 +69,19 @@ test_that("questions share one frame: ? and the title, numbered choices, a dim h
   })
   expect_identical(k, 2L)
   expect_identical(out, c("", "  ? Which package?", "    1  dplyr", "    2  base",
-                          "  Choose a number, or type your own answer; Enter = base"))
+                          "    Choose a number, or type your own answer; Enter = base"))
   # ten choices or more align their numbers; several answers are numbers separated by commas
   out = utils::capture.output({
     k = ui_console_select("Pick", letters[1:10], multiple = TRUE, read = function(...) "1, 10")
   })
   expect_identical(k, c(1L, 10L))
   expect_identical(out[c(3L, 12L, 13L)], c("     1  a", "    10  j",
-                                           "  Choose numbers separated by commas"))
+                                           "    Choose numbers separated by commas"))
   out = utils::capture.output({
     k = ui_console_input("Name?", default = "fit", read = read)
   })
   expect_identical(k, "fit")
-  expect_identical(out, c("  ? Name?", "  Enter = fit"))
+  expect_identical(out, c("  ? Name?", "    Enter = fit"))
   # the answer is read after the person's chevron at column 0 (D-245 glyphs)
   expect_identical(prompts, rep("\u203a ", 2L))
   # ? blue, the title bold, the numbers bold, the hint dim
@@ -88,7 +89,7 @@ test_that("questions share one frame: ? and the title, numbered choices, a dim h
   out = utils::capture.output(ui_console_select("Pick", c("a", "b"), read = function(...) "1"))
   expect_identical(out[2:5], c("  \033[38;5;67m?\033[39m \033[1mPick\033[22m",
                                "    \033[1m1\033[22m  a", "    \033[1m2\033[22m  b",
-                               "  \033[38;5;244mChoose a number\033[39m"))
+                               "    \033[38;5;244mChoose a number\033[39m"))
 })
 
 test_that("a long title, choice, detail or hint wraps under its own text (D-243)", {
@@ -104,13 +105,13 @@ test_that("a long title, choice, detail or hint wraps under its own text (D-243)
                                 "    carb to factors before modelling?",
                                 "    The data has 32 rows and 11", "    columns.",
                                 "    1  Yes, convert all three before", "       fitting",
-                                "    2  No", "  Choose a number, or type your own", "  answer"))
+                                "    2  No", "    Choose a number, or type your own", "    answer"))
   out = console_try(function() {
     ui_console_input("What should the output file be called, with its extension?",
                      default = "results.csv")
   }, "")
   expect_identical(out$shown, c("  ? What should the output file be",
-                                "    called, with its extension?", "  Enter = results.csv"))
+                                "    called, with its extension?", "    Enter = results.csv"))
   req = modifyList(ui_request("x = 1"), list(agent = "'Summarise the data by group' #12"))
   expect_identical(utils::tail(ui_permission_lines(req), 3L)[1:2],
                    c("  ? sub-agent 'Summarise the data by", "    group' #12: allow r?"))

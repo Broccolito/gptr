@@ -591,7 +591,8 @@ Decisions:
   - `? <title>` (bold);
   - details dim under it (they were `  | ` rows, and `|` is now the ASCII tool strip);
   - numbered choices `    1  dplyr` (number bold);
-  - the hint (dim): `Choose a number, or type your own answer; Enter = base`; an input's
+  - the hint (dim, at column 4 under the title's text; amended in the visual review):
+    `Choose a number, or type your own answer; Enter = base`; an input's
     `Enter = <default>`;
   - the `› ` prompt.
   The OAuth inputs drop the `: ` that ended their prompts (amended in Task 12). Each part word-wraps at

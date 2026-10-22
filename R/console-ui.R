@@ -257,9 +257,9 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
   if (length(idx) && !anyNA(idx)) unique(idx) else NA_integer_
 }
 
-#' Console select() (D-243): `? <title>`, its details dim under it, the numbered choices, a dim
-#' hint and the person's chevron at column 0, each word-wrapped under its own text; NA =
-#' cancelled; attr "other" = free text
+#' Console select() (D-243): `? <title>`, then under its text its details dim, the numbered
+#' choices and a dim hint, then the person's chevron at column 0, each word-wrapped under its own
+#' text; NA = cancelled; attr "other" = free text
 #' Title line feeds are intentional (also for ask questions); labels and details stay escaped.
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
@@ -284,7 +284,7 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
     ui_question(title, width),
     if (length(details)) paste0("  ", sym$dim(console_wrap(ui_escape(details), width - 2L))),
     paste0("  ", unlist(lapply(seq_along(labels), choice))),
-    sym$dim(console_wrap(ui_escape(hint), width))
+    paste0("  ", sym$dim(console_wrap(ui_escape(hint), width - 2L)))
   ))))
   for (attempt in seq_len(5L)) {
     ans = read(paste0(sym$person, " "))
@@ -298,8 +298,8 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
   NA_integer_
 }
 
-#' Console input() (D-243): `? <prompt>`, a dim `Enter = <default>` and the person's chevron;
-#' NA = cancelled; a secret is asked through RStudio's masked dialog there
+#' Console input() (D-243): `? <prompt>`, a dim `Enter = <default>` under its text and the
+#' person's chevron; NA = cancelled; a secret is asked through RStudio's masked dialog there
 #' @noRd
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -311,7 +311,9 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
   pad = console_pad()
   sym = console_style()
   width = ui_width() - nchar(pad)
-  hint = if (nzchar(default)) sym$dim(console_wrap(ui_escape(paste0("Enter = ", default)), width))
+  hint = if (nzchar(default)) {
+    paste0("  ", sym$dim(console_wrap(ui_escape(paste0("Enter = ", default)), width - 2L)))
+  }
   console_write(paste0(pad, c(ui_question(prompt, width), hint)))
   ans = read(paste0(sym$person, " "), secret = isTRUE(secret))
   if (!is.na(ans) && !nzchar(ans)) default else ans

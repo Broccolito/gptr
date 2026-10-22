@@ -5420,7 +5420,8 @@ its part in its own commit, and Task 27 finalises them.
     (`Choose a number, or type your own answer; Enter = base`; `Choose numbers separated by commas` for several);
     an input `? <prompt>` and a dim `Enter = <default>`. Each part word-wraps at the width of the approval's rows
     (`ui_width()`, the console width less `console_pad()`), under its own text: the title's later rows at column
-    4, a choice's under its label, details at column 4, the hint at column 2; the approval's question too.
+    4, a choice's under its label, details and the hint at column 4 (the hint was at column 2, under the `?`,
+    where it read as a new item; visual review); the approval's question too.
     Questions drawn inside an evaluation take the console's
     colours (`console_colors()`), as sub-agent lines do.
   - A remembered answer adds one dim line, `    allowed <suggested_rule> for this session` (or `project`). `a` or

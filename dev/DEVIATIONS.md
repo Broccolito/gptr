@@ -3195,6 +3195,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     `▎ github/create_issue  {...}` when the call started and `▎ mcp__github__create_issue  {...}` and
     `? Allow mcp__github__create_issue?` when it was asked. Contract-visible: 04 §15.10 IC-77. Tests:
     test-console-ui.R "the keys are a row under the question, a and p only with a rule (D-243)".
+- Visual review fixes (2026-10-21; screenshots of 0ee69a0 in Terminal.app, tmux, VS Code, RStudio, Positron, R.app
+  and the degraded modes):
+  - A question's hint (`Choose a number, ...`, an input's `Enter = <default>`) is at column 4 under the title's text,
+    with the details, choices and the approval's keys: at column 2, under the `?`, it read as a new item.
+    Contract-visible: 04 §15.10 IC-77. Tests: test-console-ui.R "questions share one frame: ? and the title,
+    numbered choices, a dim hint, the chevron", "a long title, choice, detail or hint wraps under its own text
+    (D-243)".
 - Task 16: the composer's key machine, pure (`console_compose()` and `console_trigger()` in the new
   `console-input.R`; Tasks 18-21 feed it the keys). A read batch sends at most one message, so it returns one
   action, not a list. A newline in a batch ends what DEL, Ctrl-U and Ctrl-W reach, so keys typed after Enter within
