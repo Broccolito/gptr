@@ -327,3 +327,14 @@ test_that("console_class() decides the console's class by capability (D-243)", {
   local_mocked_bindings(gptr_is_interactive = function() FALSE)
   expect_identical(console_class(), "P")
 })
+
+# ---- Task 19: a question waits for typing to pause ---------------------------------------------
+
+test_that("a question is asked once no key came for a second (D-243)", {
+  expect_true(ask_ready(NULL, 10))
+  expect_false(ask_ready(10, 10))
+  expect_false(ask_ready(9.5, 10))
+  expect_false(ask_ready(9.01, 10))
+  expect_true(ask_ready(9, 10))
+  expect_true(ask_ready(2, 10))
+})

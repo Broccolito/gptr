@@ -963,6 +963,12 @@ Decisions:
   3. Clears the row and prints the question.
   4. Reads the answer with the saved modes.
   5. Re-applies character mode and redraws the draft unchanged.
+- (Amended in Task 19:) `console_ask_wait()` in `console-input.R` does steps 1 and 2, the last key
+  being the composer's `rd$compose$t` and the row's `question waiting` the record's `question`.
+  `gptr_readline()` re-applies the modes (Task 18). `console_asked()`, on exit of
+  `ui_console_permission()`, `ui_console_select()` and `ui_console_input()`, redraws the row: after
+  each read, a question that asks again (an invalid answer, a paste) would draw and clear it
+  between its rows and its chevron.
 - The ask appears 1 s after the last key, or at once when no key came in the last second. The
   rule is the pure `ask_ready(last_key, now)`.
 - This replaces Task 2's history route in T.
@@ -974,11 +980,18 @@ Tests (`test-console-input.R`, `test-console-typing.R`), RED first:
 - pty B in T: the text stays the draft and the approval row ends `› `.
 - pty: `yes` typed 0.5 s before an ask does not answer it, and the ask is drawn at least 1 s
   after the last key.
+- (Amended in Task 19:) `yes` is typed key by key, 0.3 s apart, as the ask comes due, then Enter,
+  which queues it as a steer; the live row shows `question waiting`. The fake provider's call
+  deltas made a fixed lead time unreliable. Case B also finds the draft on the row while the
+  approved call runs.
 
-Spec: IC-76, IC-77.
+Spec: IC-76, IC-77. (Amended in Task 19:) Also IC-82 (`question waiting`), 03 §6.17 and D-243's
+Task 19 note.
 
 Files: `R/console-input.R` (`ask_ready()`), `R/console-render.R` (`console_before_message()`),
-`tests/testthat/test-console-input.R`, `tests/testthat/test-console-typing.R`.
+`tests/testthat/test-console-input.R`, `tests/testthat/test-console-typing.R`. (Amended in Task 19:)
+Also `R/console-ui.R` (`console_asked()` on exit of the three questions, and the doc of
+`ui_console_read()`).
 
 Commit: `feat(console): a question waits for typing to pause and keeps the draft`.
 

@@ -5333,7 +5333,7 @@ its part in its own commit, and Task 27 finalises them.
     `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
     empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
     word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
-- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 19-21 pending.
+- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 20 and 21 pending.
   - A question drains before it reads (Task 2). On a terminal REPL, while a run of the call has a session,
     `ui_console_read()` reads fd 0 with `console_typed(drain = TRUE)` just before its `readline_answer()`, so the
     queue and kept lines sit under the question's rows, right above `› ` (visual review: drained before the rows,
@@ -5428,7 +5428,19 @@ its part in its own commit, and Task 27 finalises them.
     partial line stays the draft, never the history. A draft left when the REPL returns to its prompt (no
     follow-up left to send) goes to the console history, listed `↳ kept in history ↑ · <draft>` after the
     status line, until Task 21 continues it at the prompt; after any other end it joins the kept list above.
-- IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Tasks 19 and 26 pending.
+  - A question waits for typing to pause (Task 19; T class). Before a console question draws its rows
+    (`console_before_message(kind = "prompt")`), `console_ask_wait()` gives what waits on fd 0 to the composer
+    (`console_typed()`) and, while the composer's last key (`rd$compose$t`) is under a second old
+    (`ask_ready(last_key, now)`: TRUE when `last_key` is NULL or `now - last_key >= 1`), reads the keys every
+    0.05 s, the live row saying `question waiting` (the record's `question`), so Enter and Tab still queue and Up
+    still takes back; then the row is cleared and the question drawn. The ask therefore comes a second after the
+    last key, or at once when none came in the last second, and keys typed as it comes due never reach its
+    answer. It reads with the saved modes (`gptr_readline()`), and when it returns (`console_asked()`, on exit of
+    `ui_console_permission()`, `ui_console_select()` and `ui_console_input()`) the row is drawn again with the
+    draft unchanged, so it shows while the call the question gated runs. A sub-agent's question waits the same
+    way, one at a time; what is typed goes to the session of the console call (the parent). D keeps the drain
+    after the rows (Task 2); `gptr_confirm()` and the pause menu do not wait.
+- IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Task 26 pending.
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
     keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by
     `console_on_tool_start()`); `ui_permission_lines(request)` prints the call line (`  ▎ r  <first line>`, strip
@@ -5459,6 +5471,9 @@ its part in its own commit, and Task 27 finalises them.
     (visual review: in RStudio and R.app a draft left on the input line turned `y` into an invalid answer).
   - A question and the tool block it is asked in are one block (`console_gap()`): no blank line between a call
     line, its ask and its result lines.
+  - In a T console a question is drawn once typing has paused for a second, the live row saying
+    `question waiting` meanwhile, and the live row with the person's draft comes back when the question has its
+    answer (Task 19; IC-76).
   - The `?` detail view (`ui_permission_detail()`) lists the keys as the question shows them,
     `    y  yes`, `    a  always in this session: <rule>`, ..., `    Ctrl-C  abort the run` (the key bold, its words
     dim). Its code is at most 40 rows at column 4, as the call block shows them (`console_code_rows()`, no fence
@@ -5572,8 +5587,9 @@ its part in its own commit, and Task 27 finalises them.
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
       while a sub-agent it shows runs; `<elapsed>` the run's time, `0s`, `59s`, `1m 05s`; `<n> queued` the
       person's messages waiting for the session (its user-source queue items, those the console holds, the
-      REPL's held lines). Completion candidates (Task 22) replace the status words. The block is the blue accent,
-      the words and hints dim, only the draft ink. ASCII: `# thinking 6s - ctrl-c pauses`.
+      REPL's held lines); `question waiting` while a question waits for typing to pause (IC-76, Task 19).
+      Completion candidates (Task 22) replace the status words. The block is the blue accent, the words and
+      hints dim, only the draft ink. ASCII: `# thinking 6s - ctrl-c pauses`.
     - One collapse rule: the status part is cut from the right with `…`, down to `▌ <elapsed>`; the draft keeps
       its tail. The row is fitted to width - 1, every character outside ASCII that R counts as one column counted
       as two (East Asian ambiguous widths drawn wide), so it never wraps; it is empty where not even the block
@@ -5589,7 +5605,8 @@ its part in its own commit, and Task 27 finalises them.
       clears the row (`\r\033[K`, or spaces and `\r`), then writes its text, then redraws the row once the text
       ends a line, where the row erases cleanly; where it is padded, or after a partial line, the row stays
       cleared until the run next waits, so no padding trails a transcript row. A question or a launched process
-      (`console_before_message()` kinds `"prompt"` and NULL) clears it and its task draws it again; notices,
+      (`console_before_message()` kinds `"prompt"` and NULL) clears it and its task draws it again (a T
+      console's question draws it when it returns, `console_asked()`, IC-76); notices,
       queue lines and sub-agent lines are written with the row cleared and redrawn. The row is written as every
       console control is, so from inside an evaluation it reaches the console, never the tool's output; text
       written into another sink (a capture in the agent's code) leaves it alone. The run's end, an abort and the

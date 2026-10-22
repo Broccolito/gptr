@@ -110,6 +110,42 @@ console_keys = function(rd, s, chars) {
   invisible(NULL)
 }
 
+#' May a question be asked at time `now` (seconds)? Only once the last key the composer read
+#' (`last_key`, NULL when none) is a second old, so typing never runs into an answer (D-243)
+#' @noRd
+ask_ready = function(last_key, now) is.null(last_key) || now - last_key >= 1
+
+#' Before a console question in a T console (D-243): what waits on fd 0 goes to the composer
+#' (console_typed()), and while its last key is under a second old (ask_ready()) the keys are read
+#' every 0.05 s, the live row saying `question waiting` (`rec$question` of its record), so Enter
+#' and Tab still queue
+#' @noRd
+console_ask_wait = function() {
+  rd = console_repl_find()$reader
+  if (!isTRUE(the$tty$keys) || is.null(rd)) return(invisible(NULL))
+  row = the$live_row
+  on.exit(if (!is.null(row)) row$rec$question = NULL, add = TRUE)
+  repeat {
+    console_typed()
+    if (ask_ready(rd$compose$t, reactor_now())) break
+    if (!is.null(row) && !isTRUE(row$rec$question)) {
+      row$rec$question = TRUE
+      if (row$shown) row$draw()
+    }
+    Sys.sleep(0.05)
+  }
+  invisible(NULL)
+}
+
+#' After a console question in a T console (D-243): the live row the question cleared is drawn
+#' again, the composer's draft unchanged, while the call it gated runs
+#' @noRd
+console_asked = function() {
+  row = the$live_row
+  if (isTRUE(the$tty$keys) && isTRUE(row$on) && !row$shown) row$draw()
+  invisible(NULL)
+}
+
 #' The newest message the person queued for session `s` that no run has taken (D-242), as
 #' list(kind, text), or NULL; `take` takes it back. Follow-ups wait in the REPL reader `rd`'s
 #' `typed` lines, steers among the console's held items (policy_flush()), then in the session's
@@ -270,9 +306,9 @@ console_live = function(cls) {
 
 #' The live row's state for the record `rec` of a foreground run (console_live_row()): the state
 #' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds, the
-#' person's messages waiting for its session, and the console's interrupt key; where a T console's
-#' composer reads keys (tty_call()), its draft, the newest message waiting (console_newest()) and
-#' the kind Enter sends
+#' person's messages waiting for its session, whether a question waits (`rec$question`,
+#' console_ask_wait()), and the console's interrupt key; where a T console's composer reads keys
+#' (tty_call()), its draft, the newest message waiting (console_newest()) and the kind Enter sends
 #' @noRd
 console_live_state = function(rec) {
   kids = Filter(function(r) !is.null(r$child), as.list(console_state()$active))
@@ -281,6 +317,7 @@ console_live_state = function(rec) {
   rd = if (isTRUE(the$tty$keys)) console_repl_prompt()$reader
   list(what = if (length(labels)) paste("sub-agent", labels[[1L]]) else rec$what,
        secs = as.numeric(Sys.time()) - rec$t0, queued = console_queued(s),
+       question = isTRUE(rec$question),
        key = console_interrupt_key(), pause = console_menu_available(),
        draft = if (!is.null(rd)) rd$compose$draft %||% "",
        newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))

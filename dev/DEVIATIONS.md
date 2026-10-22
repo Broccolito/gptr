@@ -3293,6 +3293,21 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the person queued, of either kind (D-242)", "a draft left as the REPL returns to its prompt is kept in the
   history (D-243)", and the pty cases "a terminal: the draft shows on the live row as text streams; Enter steers
   (D-243)", "a terminal: Tab queues a follow-up, a second run; Up takes back, Ctrl-U discards".
+- Task 19: in a T console a question waits for typing to pause. Before its rows (`console_before_message(kind =
+  "prompt")`), `console_ask_wait()` drains fd 0 into the composer and, while the last key the composer read is
+  under a second old (`ask_ready()`), keeps reading every 0.05 s, the live row saying `question waiting`; Enter, Tab
+  and Up keep working. The question is then drawn and read with the saved modes, and when it returns
+  (`console_asked()`) the row comes back with the draft unchanged, so the draft shows while the approved call runs
+  (it came back only at the next request). At 41452c3, `yes` typed key by key as an approval came due had the
+  approval drawn after `ye`: the `s` went to the composer, and the Enter meant to queue `yes` answered the approval
+  with an empty line (`Allow r? Type y, a, p or n ...`), so `yes` was never sent. A key counts from when the
+  composer read it, so keys read late (after an in-process tool) can hold a question back up to a second. The row
+  is drawn again when the question returns, not after each read: a question that asks again (an invalid answer, a
+  paste) would draw and clear it between its rows and its chevron. D keeps Task 2's drain after the rows;
+  `gptr_confirm()` and the pause menu (Task 20) do not wait. Contract-visible: 04 §15.10 IC-76, IC-77 and IC-82, 03
+  §6.17. Tests: test-console-input.R "a question is asked once no key came for a second (D-243)";
+  test-console-typing.R "a terminal: a question waits a second after the last key; `yes` is no answer (D-243)" and
+  the pty case B (the draft on the live row again while the approved call runs).
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

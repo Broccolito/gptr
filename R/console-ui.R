@@ -233,13 +233,13 @@ ui_undo_note = function(request) {
 }
 
 #' Read one console answer, never a line typed before the question: a terminal REPL first drains
-#' what was typed for the run (console_typed(drain = TRUE): its lines routed as console_typed()
-#' routes them, the partial line the question would take as its answer kept in the history,
-#' IC-76), so their lines sit under the question's rows, right above the chevron; then
-#' readline_answer(). When the REPL's reader finds lines waiting after the answer (a paste; a last
-#' line without a newline is not waiting), the answer and the lines go to the console history as
-#' one entry (a `secret` is dropped) and the question is asked again (IC-75); Ctrl-C or EOF gives
-#' NA (a terminal echoes even a `secret` itself)
+#' what was typed for the run (console_typed(drain = TRUE): a T console's keys go to its composer;
+#' a D console's lines are routed as console_typed() routes them, the partial line the question
+#' would take as its answer kept in the history, IC-76), so their lines sit under the question's
+#' rows, right above the chevron; then readline_answer(). When the REPL's reader finds lines
+#' waiting after the answer (a paste; a last line without a newline is not waiting), the answer and
+#' the lines go to the console history as one entry (a `secret` is dropped) and the question is
+#' asked again (IC-75); Ctrl-C or EOF gives NA (a terminal echoes even a `secret` itself)
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
   rd = console_repl_find()$reader
@@ -277,6 +277,7 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
   rlang::local_options(cli.num_colors = console_colors())
   # in a run in the console margin console_before_message() writes the block's separator
   run = console_before_message(kind = "prompt", tools = TRUE)
+  on.exit(console_asked(), add = TRUE)
   pad = console_pad()
   sym = console_style()
   labels = as.character(unlist(choices))
@@ -314,6 +315,7 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
   console_before_message(kind = "prompt", tools = TRUE)
+  on.exit(console_asked(), add = TRUE)
   if (isTRUE(secret) && ui_rstudio()) {
     ans = tryCatch(rstudioapi::askForPassword(prompt), error = function(e) NULL)
     return(if (rlang::is_string(ans)) as_utf8(ans) else NA_character_)
@@ -331,7 +333,8 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 
 #' Console permission(): the approval of NS-1 under the call it gates, read after the person's
 #' chevron (D-243), `?` for the detail view; every console prompt first ends partial answer lines
-#' and clears the live row (D-186); a remembered answer adds a dim line naming the rule; an
+#' and clears the live row (D-186), in a T console once typing pauses, and draws it again when it
+#' returns (D-243); a remembered answer adds a dim line naming the rule; an
 #' invalid answer is quoted (kept in the console history in an interactive session) above a hint
 #' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
 #' alone, both wrapped at the prompt rows' width; five (`?` is none) end in a refusal whose
@@ -340,6 +343,7 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 ui_console_permission = function(request, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
   console_before_message(kind = "prompt", tools = TRUE)
+  on.exit(console_asked(), add = TRUE)
   why = ui_no_rule(request)
   can = is.null(why)
   console_write(ui_permission_lines(request))

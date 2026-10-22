@@ -559,8 +559,10 @@ console_render_on = function(rec) {
 #' NULL): it opens a block of `kind` (none when NULL). The writes themselves clear the live row and
 #' redraw it after them (gptr_message_write()); a question (`kind = "prompt"`) or a launched
 #' process (`kind = NULL`), which writes to the terminal past gptr, first clears it, and the row's
-#' task draws it again once the run waits. A streamed answer has nothing on screen to end: its held
-#' row continues after the output (D-245). TRUE when a foreground record was found
+#' task draws it again once the run waits (a T console's question draws it when it has its answer,
+#' console_asked()). A question in a T console first waits for typing to pause
+#' (console_ask_wait()). A streamed answer has nothing on screen to end: its held row continues
+#' after the output (D-245). TRUE when a foreground record was found
 #'
 #' Called by the outer blocking policy without handling or changing the condition, by a launch
 #' boundary (`kind = NULL`), and with `tools` by the console UI before it prompts and by the
@@ -574,6 +576,7 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
     lapply(runs, function(run) console_record(list(run = run$id)))
   }
   recs = Filter(function(rec) !is.null(rec) && console_foreground(rec, tools), recs)
+  if (length(recs) && identical(kind, "prompt")) console_ask_wait()
   if (length(recs) && !identical(kind, "notice") && !is.null(the$live_row)) the$live_row$clear()
   if (!is.null(kind)) for (rec in recs) console_gap(rec, kind)
   invisible(length(recs) > 0L)

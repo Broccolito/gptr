@@ -981,7 +981,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
     "        gptr.history = TRUE)",
     "long = paste(c('BEGIN', sprintf('w%02d', 1:30), 'END'), collapse = ' ')",
     "q = list(list(id = 'q1', question = 'Which package?', options = list('ggplot2', 'base')))",
-    "calls = list(B = list(tool = 'r', input = list(code = 'zz = 1')),",
+    "calls = list(B = list(tool = 'r', input = list(code = 'Sys.sleep(1); zz = 1')),",
     "             C = list(tool = 'r', input = list(code = 'zz = 2')),",
     "             H = list(tool = 'ask', input = list(questions = q)))",
     "fake = gptr_fake_provider(function(req) {",
@@ -992,15 +992,18 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
     "})",
     "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
   ))
+  person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
   expect_true(pty$wait("peter> ", timeout = 120))
   # B: typed without Enter while the answer streams, it is the composer's draft: the approval
-  # row ends with its prompt, and the draft left at the run's end is kept in the history
+  # row ends with its prompt, the draft is on the live row again while the call it gated runs,
+  # and the draft left at the run's end is kept in the history
   pty$send("B\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
   expect_true(pty$wait("Allow r?"))
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
+  expect_match(pty$pending(), paste0(person, " use base R"), fixed = TRUE)
   expect_true(pty$wait("REQ tool_result: "))
   expect_true(pty$wait("kept in history"))
   expect_true(pty$wait("use base R"))
@@ -1031,6 +1034,46 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(c(pty$seen("kept in history"), pty$seen("Not an answer"),
                      pty$seen("Permission denied"), pty$seen("(typed)")), c(3L, 0L, 0L, 0L))
+})
+
+test_that("a terminal: a question waits a second after the last key; `yes` is no answer (D-243)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE)",
+    "fake = gptr_fake_provider(function(req) {",
+    "  m = req$messages[[length(req$messages)]]",
+    "  if (!identical(m$role, 'user')) {",
+    "    return(paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END'))",
+    "  }",
+    # the answer's first row shows at once; its call, and the ask, come about 0.3 s later
+    "  list(text = 'BEGIN\\n\\nEND', chunk = 100L, gap = 0.1, tool = 'r',",
+    "       input = list(code = 'zz = 1'))",
+    "})",
+    "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
+  ))
+  expect_true(pty$wait("peter> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  # typed key by key as the ask comes due: the live row says a question waits, Enter still
+  # queues, and the ask is drawn a second after the last key, its answer empty
+  for (k in c("y", "e", "s")) {
+    pty$send(k)
+    Sys.sleep(0.3)
+  }
+  pty$send("\r")
+  sent = Sys.time()
+  expect_true(pty$wait("question waiting"))
+  expect_true(pty$wait("Allow r?"))
+  expect_gte(as.numeric(difftime(Sys.time(), sent, units = "secs")), 1)
+  expect_true(endsWith(pty$pending(), pty_asked()))
+  pty$send("y\r")
+  expect_true(pty$wait(paste0("REQ operator: ", relay("yes"), " END")))
+  expect_true(pty$wait("peter> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(c(pty$seen("Not an answer"), pty$seen("Permission denied")), c(0L, 0L))
 })
 
 test_that("a terminal: a line arriving just as a question is drawn steers the run (P28 D)", {

@@ -1952,10 +1952,12 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   an interrupt they go to the console history, unsent [D-242]. The terminal does not echo during the call (modes
   restored after it, at `q()` too), so typed text shows on the live row (T) or on its dim queue line
   (`↳ steer · <text>`, D) and, when the run takes it, as the person's line `› <text>` at that step boundary
-  [D-242]; console questions read with the saved modes, which echo (D-221). A console question drains fd 0 before
-  it reads, under its rows: in T into the composer, whose draft stays [D-243]; in D (`stty -icanon min 0 time 0`,
-  the modes restored after) typed lines are routed as above and a partial line goes to the console history,
-  listed as the person's held text; so the question starts empty [D-243]. A draft left when the REPL returns to
+  [D-242]; console questions read with the saved modes, which echo (D-221). In T a console question is drawn once
+  no key has come for a second (the live row says `question waiting`, and Enter and Tab still queue), what was
+  typed going to the composer, whose draft stays and is on the live row again when the question has its answer
+  [D-243]. A console question also drains fd 0 just before it reads, under its rows: in T into the composer; in D
+  (`stty -icanon min 0 time 0`, the modes restored after) typed lines are routed as above and a partial line goes
+  to the console history, listed as the person's held text; so the question starts empty [D-243]. A draft left when the REPL returns to
   its prompt is kept in the history [D-243]. IDE consoles, R.app and
   `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current
   response.
