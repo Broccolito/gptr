@@ -1,5 +1,6 @@
 # console-input.R -- the composer of a terminal console (P28, layer L5, area console; IC-76,
-# D-243): the pure key machine that edits the draft typed while the agent works.
+# D-243): the key machine that edits the draft typed while the agent works, the keys it reads
+# and the live row at the bottom.
 
 #' The composer's key machine (IC-76, D-243): the read batch `chars` (decoded text) applied at
 #' time `now` (seconds) to `state`, list(draft, esc, t) (list() to start)
@@ -85,6 +86,56 @@ console_trigger = function(line) {
         grepl("^\\s*/\\S*$", line, perl = TRUE)) {
     word
   }
+}
+
+#' Apply one read batch `chars` of a T console (IC-76, D-243) to the composer of the REPL reader
+#' `rd` (`rd$compose`, console_compose()) for session `s`: a message is queued as its kind says
+#' (policy_enqueue(): a steer for the next step boundary, a follow-up in `rd$typed` for the next
+#' prompt) and Up takes back the newest one (console_newest()); the live row is drawn again where
+#' it shows. Tab completes nothing yet
+#' @noRd
+console_keys = function(rd, s, chars) {
+  if (!nzchar(chars)) return(invisible(NULL))
+  res = console_compose(rd$compose, chars, reactor_now(), setting_get("type_ahead", s),
+                        function(line, end) character())
+  rd$compose = res$state
+  act = res$action
+  if (identical(act$type, "send")) {
+    rd$sent = act$kind
+    policy_enqueue(s, act$text, act$kind, source = "repl")
+  } else if (identical(act$type, "take_back")) {
+    rd$compose$draft = console_newest(s, rd, take = TRUE)$text %||% ""
+  }
+  if (isTRUE(the$live_row$shown)) the$live_row$draw()
+  invisible(NULL)
+}
+
+#' The newest message the person queued for session `s` that no run has taken (D-242), as
+#' list(kind, text), or NULL; `take` takes it back. Follow-ups wait in the REPL reader `rd`'s
+#' `typed` lines, steers among the console's held items (policy_flush()), then in the session's
+#' queue (session_unqueue()); when both kinds wait, the newest is of the kind the composer sent
+#' last (`rd$sent`)
+#' @noRd
+console_newest = function(s, rd, take = FALSE) {
+  st = console_state()
+  held = which(vapply(st$pending, function(it) identical(it$s, s), NA))
+  q = session_data(s)$queue$steer
+  user = which(vapply(q, function(it) it$source %in% queue_user_sources, NA))
+  steer = if (length(held)) {
+    st$pending[[held[[length(held)]]]]$text
+  } else if (length(user)) {
+    q[[user[[length(user)]]]]$text
+  }
+  n = length(rd$typed)
+  if (n && (is.null(steer) || identical(rd$sent, "follow_up"))) {
+    text = rd$typed[[n]]
+    if (take) rd$typed = rd$typed[-n]
+    return(list(kind = "follow_up", text = text))
+  }
+  if (is.null(steer)) return(NULL)
+  if (take && length(held)) st$pending = st$pending[-held[[length(held)]]]
+  if (take && !length(held)) session_unqueue(s, "steer")
+  list(kind = "steer", text = steer)
 }
 
 #' The live row's text (IC-82, D-243): what the run does and how long it has run, its queue and a
@@ -219,14 +270,20 @@ console_live = function(cls) {
 
 #' The live row's state for the record `rec` of a foreground run (console_live_row()): the state
 #' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds, the
-#' person's messages waiting for its session, and the console's interrupt key
+#' person's messages waiting for its session, and the console's interrupt key; where a T console's
+#' composer reads keys (tty_call()), its draft, the newest message waiting (console_newest()) and
+#' the kind Enter sends
 #' @noRd
 console_live_state = function(rec) {
   kids = Filter(function(r) !is.null(r$child), as.list(console_state()$active))
   labels = sort(vapply(kids, function(r) r$child$label, ""))
+  s = rec$session
+  rd = if (isTRUE(the$tty$keys)) console_repl_prompt()$reader
   list(what = if (length(labels)) paste("sub-agent", labels[[1L]]) else rec$what,
-       secs = as.numeric(Sys.time()) - rec$t0, queued = console_queued(rec$session),
-       key = console_interrupt_key(), pause = console_menu_available())
+       secs = as.numeric(Sys.time()) - rec$t0, queued = console_queued(s),
+       key = console_interrupt_key(), pause = console_menu_available(),
+       draft = if (!is.null(rd)) rd$compose$draft %||% "",
+       newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))
 }
 
 #' The person's messages waiting for session `s`: its queued items from user sources, the items

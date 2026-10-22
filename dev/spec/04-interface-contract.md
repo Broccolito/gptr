@@ -2225,7 +2225,8 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_opt(name)` | the option value or the §3.1 default (`NULL` for settings-backed options) | all |
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
-| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with `the$tty_modes` while a console call holds the echo off (IC-76) | P11, P14, P26 |
+| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`), then sets the call's again (IC-76) | P11, P14, P26 |
+| `tty_call(keys)`, `tty_restore(tty = the$tty)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten min 1 time 0` for a T console's composer (`keys`; isig and opost stay on, `min 1` keeps a tool reading stdin waiting, never at an end of input) or `-echo` for a D console; `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails | P28 |
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
 | `readline_answer(prompt, keep = console_history_add)`, `answer_stale(secs)`, `console_history_add(x)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer is stale (`answer_stale(the$readline_secs)`: under 0.1 s, so typed or pasted before the question), at most 100 reads, then the last answer; each line read past that is not blank goes to the upper layer's callback `keep(line)` (03 §2.2; NULL keeps nothing): `console_history_add()` (`utils::timestamp()` when `gptr.history` is on, TRUE when added; never fails; text of several lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it back as one input, D-243) by default, `console_typed_ahead()` for the console questions (IC-75 in §15.10); used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26, P28 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
@@ -3750,7 +3751,7 @@ snapshotted per run (IC-53).
 | `cache_commit` | `{s1: lgl, s2: lgl}` | `{s1: true, s2: false}` (C-31) | | P13/P15 |
 | `ui` | chr\|null | `null` | | P11 |
 | `frontend` | chr\|null | `null` (`console`) | | P14 |
-| `type_ahead` | chr | `"steer"` (`"follow_up"`): what a line typed in a terminal console while an answer runs becomes (IC-76) | | P26 |
+| `type_ahead` | chr | `"steer"` (`"follow_up"`): what Enter does with a message typed in a terminal console while the agent works (Tab does the other); in other consoles, what a typed line does (IC-76) | | P26, P28 |
 | `store`, `evaluator` | chr | `"jsonl"`, `"r"` (registered `store` and `evaluator` records, IC-69) | | P06, P09 |
 | `providers` | `{<id>: {base_url, models, headers, enabled}}` | `{}` (a project `base_url` needs trust and a one-time confirmation) | | P05 |
 | `egress` | `{<provider>: "ack"}` | `{}` (user file only) | | P05 |
@@ -5332,7 +5333,7 @@ its part in its own commit, and Task 27 finalises them.
     `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
     empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
     word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
-- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 18-21 pending.
+- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 19-21 pending.
   - A question drains before it reads (Task 2). On a terminal REPL, while a run of the call has a session,
     `ui_console_read()` reads fd 0 with `console_typed(drain = TRUE)` just before its `readline_answer()`, so the
     queue and kept lines sit under the question's rows, right above `› ` (visual review: drained before the rows,
@@ -5360,8 +5361,8 @@ its part in its own commit, and Task 27 finalises them.
     takes (`op = "take"`, verbosity 2) is the person's line `› <text>` at column 0 (ASCII `>>`), escaped and
     wrapped the same way but whole, printed at the step boundary, before the next request's output, as its own
     block (a blank line before and after where lines keep the margin). Each row is on the band
-    (`console_style()$band`, row, `\033[K\033[0m`) where the band is known (IC-82). Task 18 stops the queue
-    line in T class, where the live row shows the queue.
+    (`console_style()$band`, row, `\033[K\033[0m`) where the band is known (IC-82). In T class the live
+    row shows the queue: while it is up no queue line is printed (Task 18).
   - A follow-up is the next prompt (Task 14). While a prompt of a REPL that is not piped runs (`rs$sending`,
     not `.stdin` or `jsonl`), `policy_enqueue()` holds a follow-up, and any text starting with `/` or `!` (the
     pause menu's [s] too), in the reader's `typed` lines after its queue line (`↳ follow-up · <text>`), not in
@@ -5390,7 +5391,7 @@ its part in its own commit, and Task 27 finalises them.
     These replace `[gptr] dropped typed lines: ...` and `[gptr] dropped queued messages: ...`. At verbosity 2 the
     list follows the run's status line, and the blank row before the prompt follows the list. `policy_abort()`
     prints `[gptr] aborted; the session is kept.` only when no status line said `aborted` (verbosity 0, or no run
-    in the foreground). The draft joins this list once the composer holds it (Task 20). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
+    in the foreground). The composer's draft joins this list (Task 18). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
     layering test (12.2).
   - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys typed while
     the agent works). `console_compose(state, chars, now, enter_kind, complete)` applies one read batch (the text
@@ -5410,6 +5411,23 @@ its part in its own commit, and Task 27 finalises them.
     with `/`; a word ends at whitespace and readline's break characters, `!` among them (IC-81's completer takes
     its word from it). `complete(draft, nchar(draft))` returns full words: their longest common prefix replaces
     the word when it is longer, else two or more are listed (`complete(candidates)`); none does nothing.
+  - Typing while the agent works (Task 18; T class). A T console's prompt call puts the terminal in character
+    mode (`tty_call()`, §7.1: `-icanon -echo -iexten min 1 time 0`, the saved modes back on return, error,
+    interrupt and, by a finalizer, `q()`; only a kill or a crash leaves `stty sane` to the person); a D console
+    keeps `-echo` and its lines (D-221), and radian, an L console, gets neither. `gptr_readline()` reads with the
+    saved modes and sets the call's again after. `console_typed()` runs every 0.05 s; in T it reads fd 0
+    (`console_typed_chars()`, the text `console_typed_lines()` splits into lines) into the composer,
+    `console_keys(rd, session, chars)`, whose state is the REPL reader's `compose` (`rd$compose$draft` the
+    draft): a message is queued with `policy_enqueue(session, text, kind, source = "repl")` (a steer for the
+    next step boundary, a follow-up in the reader's `typed` lines for the next prompt), and Up on an empty draft
+    takes back into the draft the newest message waiting (`console_newest(session, rd, take = TRUE)`: the last
+    of the reader's `typed` lines, else the newest item the console holds, else `session_unqueue(session,
+    "steer")`; when both kinds wait, the kind the composer sent last, `rd$sent`). Tab completes nothing until
+    IC-81's completer (Task 22). The live row (IC-82) shows the draft, or the newest message waiting, or the
+    keys, and is drawn again on every key. A question's drain gives what waits on fd 0 to the composer, so a
+    partial line stays the draft, never the history. A draft left when the REPL returns to its prompt (no
+    follow-up left to send) goes to the console history, listed `↳ kept in history ↑ · <draft>` after the
+    status line, until Task 21 continues it at the prompt; after any other end it joins the kept list above.
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Tasks 19 and 26 pending.
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
     keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by

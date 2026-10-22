@@ -103,6 +103,36 @@ tty_modes = function(modes = "-g") {
   if (is.null(attr(out, "status"))) out
 }
 
+#' Set the terminal modes of a console call (IC-76, D-243), the saved ones (`stty -g`) kept: a T
+#' console's composer reads keys as typed, `-icanon -echo -iexten min 1 time 0` (isig and opost stay
+#' on, and `min 1` keeps a tool that reads stdin waiting, never at an end of input); a D console
+#' only turns the echo off (`keys` FALSE). `the$tty` holds `saved`, `set` and `keys` until
+#' tty_restore(), which also runs at q() (a finalizer, onexit); nothing is set when stty fails
+#' @noRd
+tty_call = function(keys) {
+  saved = tty_modes()
+  if (length(saved) != 1L) return(invisible(NULL))
+  tty = new.env(parent = emptyenv())
+  tty$saved = saved
+  tty$keys = keys
+  tty$set = if (keys) c("-icanon", "-echo", "-iexten", "min", "1", "time", "0") else "-echo"
+  reg.finalizer(tty, tty_restore, onexit = TRUE)
+  the$tty = tty
+  tty_modes(tty$set)
+  invisible(tty)
+}
+
+#' Restore the modes a console call saved (tty_call()), once
+#' @noRd
+tty_restore = function(tty = the$tty) {
+  if (identical(the$tty, tty)) the$tty = NULL
+  saved = tty$saved
+  if (is.null(saved)) return(invisible(NULL))
+  tty$saved = NULL
+  tty_modes(saved)
+  invisible(NULL)
+}
+
 #' Mockable: let fd 0 be read as typed (`stty -icanon min 0 time 0`, the echo unchanged), so the
 #' partial line the terminal holds can be read; returns the modes to restore (`tty_modes()`), NULL
 #' when stty fails (IC-76)
@@ -127,10 +157,11 @@ gptr_readline = function(prompt = "", read = readline) {
     gptr_message_write(paste0(text, "\n"), "stdout", margin = TRUE)
     prompt = paste0(pad, "> ")
   }
-  # readline() shows what is typed only while the terminal echoes, which a console call turned off
-  if (!is.null(the$tty_modes)) {
-    tty_modes(the$tty_modes)
-    on.exit(tty_modes("-echo"), add = TRUE)
+  # readline() edits and echoes in the modes a console call saved (tty_call()); the call's after
+  tty = the$tty
+  if (!is.null(tty$saved)) {
+    tty_modes(tty$saved)
+    on.exit(tty_modes(tty$set), add = TRUE)
   }
   start = proc.time()[["elapsed"]]
   x = as_utf8(read(prompt))

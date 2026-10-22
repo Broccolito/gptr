@@ -95,8 +95,10 @@ readline_limit = function() {
 #' the lines a paste left after a block's closer, which the terminal reader returns first,
 #' unechoed (the terminal showed them); `typed`, the /command and !code lines and the follow-ups
 #' typed during an answer, which it returns next, in order, echoed after the prompt (IC-76,
-#' D-242). With `echo` the stdin reader writes the prompt and the escaped line (never a `secret`
-#' one) on `stream`, so a piped session reads like a terminal session.
+#' D-242); `compose`, the state of a T console's composer (console_compose(): its draft), and
+#' `sent`, the kind it last sent (console_keys()). With `echo` the stdin reader writes the prompt
+#' and the escaped line (never a `secret` one) on `stream`, so a piped session reads like a
+#' terminal session.
 #' @noRd
 console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())
@@ -178,14 +180,14 @@ repl_terminal = function(rs) {
   !isTRUE(rs$stdin) && console_class() %in% c("T", "D")
 }
 
-#' The lines typed or pasted on fd 0 that wait to be read, without blocking: one
+#' The text typed or pasted on fd 0 that waits to be read, without blocking: one
 #' conn_read_chars() per ready poll (the first waits `wait` ms, later ones 50 ms), as a line read
 #' waits for a newline a partial line never sends. `rd$fd` is reopened after an end of input and
 #' dropped, never closed: closing it closes fd 0 (IC-75). An error reads nothing, as it would end
 #' the REPL.
 #' @noRd
-console_typed_lines = function(rd, wait = 50L) {
-  txt = tryCatch({
+console_typed_chars = function(rd, wait = 50L) {
+  tryCatch({
     if (is.null(rd$fd) || !processx::conn_is_incomplete(rd$fd)) {
       rd$fd = processx::conn_create_fd(0L, close = FALSE)
     }
@@ -198,7 +200,12 @@ console_typed_lines = function(rd, wait = 50L) {
     }
     txt
   }, error = function(e) "")
-  console_typed_split(txt)
+}
+
+#' The lines typed or pasted on fd 0 that wait to be read (console_typed_chars())
+#' @noRd
+console_typed_lines = function(rd, wait = 50L) {
+  console_typed_split(console_typed_chars(rd, wait))
 }
 
 #' The lines of text read from fd 0 (`\r\n`, `\r` or `\n` ends one); attr "partial" (TRUE) marks
@@ -565,11 +572,12 @@ console_call_release = function(rs) {
   invisible(NULL)
 }
 
-#' The reactor task of a terminal prompt (IC-76): every 0.1 s, the lines typed while a session
-#' of this call runs, routed by console_typed_route(). Nothing is read outside a terminal REPL or
-#' while no session runs (the next prompt reads it). With `drain` (before a question) fd 0 is read
-#' in tty_drain_mode(), so the partial line the question would take as its answer is read too; it
-#' goes to the console history.
+#' The reactor task of a terminal prompt (IC-76): every 0.05 s, what was typed while a session of
+#' this call runs. A T console's call reads keys (tty_call()), which the composer takes
+#' (console_keys()); a D console's lines are routed by console_typed_route(). Nothing is read
+#' outside a terminal REPL or while no session runs (the next prompt reads it). With `drain` (before
+#' a question) a D console reads fd 0 in tty_drain_mode(), so the partial line the question would
+#' take as its answer is read too; it goes to the console history.
 #' @noRd
 console_typed = function(drain = FALSE) {
   rs = console_repl_find()
@@ -577,7 +585,11 @@ console_typed = function(drain = FALSE) {
   if (is.null(rd) || !repl_terminal(rs)) return(FALSE)
   pol = policy_find()
   target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
-  if (is.null(target)) return(0.1)
+  if (is.null(target)) return(0.05)
+  if (isTRUE(the$tty$keys)) {
+    console_keys(rd, target$session, console_typed_chars(rd, 0L))
+    return(0.05)
+  }
   modes = if (drain) tty_drain_mode()
   if (length(modes) == 1L) on.exit(tty_modes(modes), add = TRUE)
   lines = console_typed_lines(rd, 0L)
@@ -587,7 +599,7 @@ console_typed = function(drain = FALSE) {
     lines = lines[-length(lines)]
   }
   console_typed_route(rd, target$session, lines, part)
-  0.1
+  0.05
 }
 
 #' Route the lines typed for a run of session `s` (IC-76, D-242): /command and !code lines, and the
@@ -656,8 +668,9 @@ typed_code_open = function(held) {
 #' `.gptr_interrupt_barrier`, so the policy of this call's run is the outermost one and its
 #' re-signalled interrupt ends here. A failed call keeps its session (the condition's `$session`,
 #' else a new gptr_last()); a stray run left by an early interrupt is aborted. On a terminal the
-#' call's console_typed() task reads typed lines, with the echo off until the call ends (IC-76);
-#' the end of its run settles the lines it held (console_queue_left()).
+#' call's console_typed() task reads what is typed, in the call's modes until it ends (tty_call():
+#' a T console's keys, a D console's lines without echo; IC-76, D-243); the end of its run settles
+#' what it held (console_queue_left()).
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
 console_send = function(rs, text) {
@@ -668,15 +681,10 @@ console_send = function(rs, text) {
   on.exit(console_call_release(rs), add = TRUE)
   task = if (repl_terminal(rs)) reactor_task(console_typed)
   on.exit(if (!is.null(task)) reactor_cancel(task), add = TRUE)
-  # the terminal does not echo type-ahead into the answer; gptr_readline() echoes its reads
-  modes = if (!is.null(task)) tty_modes()
-  if (length(modes) == 1L) {
-    the$tty_modes = modes
-    on.exit({
-      the$tty_modes = NULL
-      tty_modes(modes)
-    }, add = TRUE)
-    tty_modes("-echo")
+  # the terminal never echoes type-ahead into the answer; gptr_readline() echoes its reads
+  if (!is.null(task)) {
+    on.exit(tty_restore(), add = TRUE)
+    tty_call(console_class() == "T")
   }
   cl = console_call(rs, text)
   rs$sending = cl

@@ -247,8 +247,8 @@ Rules that keep this honest:
    shell holds no frames or user objects [IC-71]) and the replay-block table [IC-46]. Usage, queues, abort flags,
    the `peter$out()` store and every in-flight cache live in sessions and runs; `gptr_usage()` aggregates [G3 (2)].
    The console input layer also keeps the seconds its last `readline()` waited (`readline_secs`: process-level
-   input timing, not run state [IC-75]) and the terminal modes a console call saved before it turned the echo off
-   (`tty_modes`, cleared when the call ends [IC-76]); the console's style table reads the terminal's background
+   input timing, not run state [IC-75]) and the terminal modes a console call saved before it set its own
+   (`tty`: the saved and set modes, cleared when the call ends; a finalizer restores them at `q()` [IC-76]); the console's style table reads the terminal's background
    once (`background` [IC-82]); the console's live row is held while a foreground run works (`live_row`, so every
    console write clears and redraws it [IC-82]).
 
@@ -1943,16 +1943,20 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   approval answer [D-243]. A fence runs as R only for an `r`, `R`, `{r...}` or empty info string; other fences are
   prompt text; the body loses the opener's indentation and closes on a fence at least as long (CommonMark).
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
-  stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
-  session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`), or, with `"follow_up"`, are the next
-  prompt [D-242]; one batch (a paste) is one message; `/command` and `!code` lines wait for the next prompt, shown
-  as follow-ups, in the order typed with them; after an interrupt they go to the console history, unsent [D-242]. The
-  terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only on its
-  dim queue line (`↳ steer · <text>`)
-  and, when the run takes it, as the person's line `› <text>` at that step boundary [D-242]; console questions
-  read with the echo restored (D-221). A console question drains fd 0 before it reads, under its rows
-  (`stty -icanon min 0 time 0`, the modes restored after): typed lines are routed as above and a partial line
-  goes to the console history, listed as the person's held text, so the question starts empty [D-243]. IDE consoles, R.app and
+  stdin; any front end), a reactor task of each prompt call reads what is typed while the call's session runs,
+  every 0.05 s: in a T console, in character mode (`stty -icanon -echo -iexten min 1 time 0`), the keys go to the
+  composer, whose draft the live row shows (Up on an empty draft takes back the newest message waiting) [D-243];
+  in a D console (TERM=dumb, Emacs) the complete lines. Enter steers (setting `type_ahead`: `"steer"`), or, with
+  `"follow_up"`, makes the next prompt, and Tab does the other [D-242]; one batch (a paste) is one message;
+  `/command` and `!code` lines wait for the next prompt, shown as follow-ups, in the order typed with them; after
+  an interrupt they go to the console history, unsent [D-242]. The terminal does not echo during the call (modes
+  restored after it, at `q()` too), so typed text shows on the live row (T) or on its dim queue line
+  (`↳ steer · <text>`, D) and, when the run takes it, as the person's line `› <text>` at that step boundary
+  [D-242]; console questions read with the saved modes, which echo (D-221). A console question drains fd 0 before
+  it reads, under its rows: in T into the composer, whose draft stays [D-243]; in D (`stty -icanon min 0 time 0`,
+  the modes restored after) typed lines are routed as above and a partial line goes to the console history,
+  listed as the person's held text; so the question starts empty [D-243]. A draft left when the REPL returns to
+  its prompt is kept in the history [D-243]. IDE consoles, R.app and
   `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current
   response.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer, written in whole rows, each at its line

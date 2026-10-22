@@ -24,7 +24,7 @@ local_readline = function(answers, secs = 1, .env = parent.frame()) {
 # No lines wait on fd 0 and stty finds no terminal there: a test that drives the console never
 # reads the developer's own keystrokes or changes their terminal when the tests run in one (P26)
 local_no_fd0 = function(.env = parent.frame()) {
-  testthat::local_mocked_bindings(console_typed_lines = function(rd, ...) character(),
+  testthat::local_mocked_bindings(console_typed_chars = function(rd, ...) "",
                                   tty_modes = function(modes = "-g") NULL, .env = .env)
 }
 

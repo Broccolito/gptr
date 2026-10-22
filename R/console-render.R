@@ -1135,27 +1135,31 @@ console_on_agent_end = function(event, ctx) {
 #' tool ran are the next prompts of the REPL whose prompt runs, after its held lines; elsewhere
 #' they stay queued for the session's next run. After any other end nothing is sent: the person's
 #' items its abort dropped, the steers still queued, the items held and the REPL's held lines go
-#' to the console history, listed once (console_keep())
+#' to the console history, listed once (console_keep()). The composer's draft (a T console, D-243)
+#' waits while the REPL has more to send, else joins them; after an idle end it is listed alone
 #' @noRd
 console_queue_left = function(rec, status) {
   if (!gptr_is_interactive()) return(invisible(NULL))
   s = rec$session
   rs = console_repl_prompt()
+  rd = rs$reader
   ended = status %in% c("idle", "max_turns")
   if (!console_foreground(rec, tools = TRUE) || (ended && is.null(rs))) return(invisible(NULL))
   st = console_state()
   mine = vapply(st$pending, function(it) identical(it$s, s), NA)
   left = c(console_unqueue(s), vapply(st$pending[mine], function(it) it$text, ""))
   st$pending = st$pending[!mine]
-  if (ended) {
-    rs$reader$typed = c(rs$reader$typed, left)
-    return(invisible(NULL))
-  }
+  if (ended) rd$typed = c(rd$typed, left)
+  if (ended && length(rd$typed)) return(invisible(NULL))
+  draft = rd$compose$draft
+  draft = draft[nzchar(draft)]
+  if (!is.null(rd)) rd$compose = NULL
+  if (ended) return(console_keep(draft))
   d = session_data(s)
   dropped = Filter(function(it) it$source %in% queue_user_sources,
                    d$dropped[seq_along(d$dropped) > rec$d0])
-  texts = c(vapply(dropped, function(it) it$text, ""), left, rs$reader$typed)
-  if (!is.null(rs)) rs$reader$typed = character()
+  texts = c(vapply(dropped, function(it) it$text, ""), left, rd$typed, draft)
+  if (!is.null(rd)) rd$typed = character()
   console_keep(texts)
 }
 

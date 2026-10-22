@@ -3272,6 +3272,27 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   padded, the first whole row ends it until the next wait (D-245)", "Rscript and other non-interactive R draw no
   live row (class P)"; test-console-spinner-gui.R and test-console-spinner-width.R (the live row's bytes per front
   end and width).
+- Task 18: in a T console the person types while the agent works. A prompt call sets character mode (`tty_call()`:
+  `stty -icanon -echo -iexten min 1 time 0`, isig and opost on), restored on return, error and interrupt and, by a
+  finalizer, at `q()`; questions read with the saved modes. Every 0.05 s the keys go to the composer
+  (`console_keys()`), whose draft is on the live row: Enter queues it as `type_ahead` says, Tab as the other kind,
+  and Up on an empty draft takes back the newest message waiting. Across the two kinds the newest is of the kind the
+  composer sent last, as the reader's lines, where follow-ups wait, keep no send time: the message just sent is
+  always the one taken, and only a further Up after a mixed sequence may take an older message first. While the row shows,
+  no `↳` queue line is printed (the row is the queue view), so a CLI route's ` · after the CLI's answer` shows only
+  where the row is not up. A question's drain gives what waits to the composer: a partial line typed before an
+  approval stays the draft, where Task 2 kept it in the history. A draft left when the REPL returns to its prompt
+  goes to the history, listed after the status line (Task 21 continues it at the prompt), and after an abort it
+  joins the kept list, which the plan had left to Task 20. D consoles keep D-221 (`-echo`, whole lines).
+  Contract-visible: 04 §7.1 (`tty_call()`, `tty_restore()`, `gptr_readline()`), §11.2 (`type_ahead`) and §15.10
+  IC-76, 03 §6.17. Tests: test-console-typing.R "a T console's call reads keys in character mode; its modes return
+  after it (D-243)", "a terminal call's modes return after an interrupt, also one while stty sets them", "no
+  character mode under radian, which owns its tty (D-243)", "a question during a terminal call reads with the saved
+  modes, then the call's", "a T console's keys edit the draft on the live row; Enter steers (D-242, D-243)", "Tab
+  sends a follow-up, the next prompt; Up takes it back and Ctrl-U discards it", "Up takes back the newest message
+  the person queued, of either kind (D-242)", "a draft left as the REPL returns to its prompt is kept in the
+  history (D-243)", and the pty cases "a terminal: the draft shows on the live row as text streams; Enter steers
+  (D-243)", "a terminal: Tab queues a follow-up, a second run; Up takes back, Ctrl-U discards".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

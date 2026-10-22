@@ -792,13 +792,13 @@ test_that("a macOS terminal: a paste is one turn, a fence echoes once, Ctrl-D ne
   pty$send("\r")
   expect_true(pty$wait("GOT a/b/c END"))
   expect_identical(pty$seen("GOT "), 1L)
-  # typed while the agent works, the last line ended by Ctrl-D instead of Enter: it steers the
-  # same run (IC-76), whose second answer follows the relay
+  # typed while the agent works: Enter steers the same run (IC-76), whose second answer follows
+  # the relay; Ctrl-D is no key of the composer, whose draft stays `half` (D-243)
   expect_true(pty$wait("peter> "))
   pty$send("SLOW\r")
   Sys.sleep(1)
   pty$send("x\rhalf\004")
-  expect_true(pty$wait(queue_line("steer", "x", utf8 = FALSE)))
+  expect_true(pty$wait("1 queued   >> half"))
   expect_true(pty$wait("peter> "))
   expect_identical(pty$seen("GOT SLOW END"), 2L)
   # with echo on, as in a terminal, the tty echoes the rest of a paste once, when it is read; a

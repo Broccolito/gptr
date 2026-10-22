@@ -133,11 +133,11 @@ working directory restored. Plan-specific rules:
 | `R/agent-run.R`, `R/agent-loop.R` (doc only) | 4, 5 |
 | `R/session-object.R`, `R/ext-events.R` | 5 |
 | `R/agent-dispatch.R` | 6 |
-| `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 26 |
+| `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 18, 26 |
 | `R/auth-oauth.R` (input prompts) | 12 |
 | `R/console-ui.R` | 2, 3, 8, 12, 19 |
 | `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 21, 22, 24, 25, 26 |
-| `R/console-interrupt.R` | 3, 13, 14, 15, 17, 20 |
+| `R/console-interrupt.R` | 3, 13, 14, 15, 17, 18, 20 |
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
@@ -897,13 +897,29 @@ Decisions:
   - `reg.finalizer(<state env>, onexit = TRUE)` also restores them at `q()`. Only a kill or a
     crash leaves `stty sane` to the person (`?peter`).
   - Character mode is never set when `RADIAN_VERSION` is set.
+  - (Amended in Task 18:) `tty_call(keys)` in `R/utils-options.R` saves and sets the modes, and
+    `tty_restore()` restores them once. `the$tty` (an environment with `saved`, `set` and `keys`)
+    replaces `the$tty_modes`. Each call's `the$tty` is new and carries the finalizer, which does
+    nothing once its modes are restored.
 - `console_typed()` runs every 0.05 s. It reads `conn_read_chars()` from the existing fd-0
   connection, feeds `console_compose()` and carries out the actions:
   - a steer goes through `policy_enqueue()`;
   - a follow-up goes to `rd$typed`;
   - `take_back` takes the newest undelivered message from `rd$typed`, the console's held items,
     or `session_unqueue()`.
-- In T the `↳` queue line is not printed; the live row is the queue view.
+  - (Amended in Task 18:) `console_typed_chars()` is the read that `console_typed_lines()` splits.
+    `console_keys(rd, s, chars)` in `console-input.R` carries out the actions, and
+    `console_newest(s, rd, take)` finds the newest message. Across the two kinds, the newest is of
+    the kind the composer sent last (`rd$sent`), because `rd$typed` keeps no send time. Tab
+    completes nothing until Task 22.
+- In T the `↳` queue line is not printed; the live row is the queue view. (Amended in Task 18:)
+  This applies while the row is up. Where the row is cleared, as under a question, the line is
+  printed.
+- (Amended in Task 18:) A question's drain in T gives what waits on fd 0 to the composer. A partial
+  line therefore stays the draft, where Task 2 kept it in the history.
+- (Amended in Task 18:) A draft left when the REPL returns to its prompt (no follow-up left to send)
+  goes to the console history. It is listed after the status line (`console_queue_left()`) until
+  Task 21 continues it at the prompt. After an abort it joins the kept list, which was Task 20's.
 - `gptr_readline()` reads with the saved modes and re-applies character mode afterwards.
 - The `type_ahead` description in `R/gptr-config.R` and 04 §11.2 becomes: "What Enter does with
   a message typed in a terminal console while the agent works (Tab does the other); in other
@@ -919,12 +935,20 @@ Tests (`test-console-typing.R`), RED first:
 - pty: Tab gives a second run.
 - pty: Up takes back and Ctrl-U discards.
 - 'a terminal: typed text shows once, in its notice; ...' is rewritten for the live row.
+- (Amended in Task 18:) The pty Enter, Tab and Up cases share two children. Case B now finds its
+  text kept after the run, not under the question. Pure cases cover Up's order and a draft kept at
+  the prompt and after an abort.
 
-Spec: IC-76, D-221 (kept for D class), 04 §7.1 and §11.2.
+Spec: IC-76, D-221 (kept for D class), 04 §7.1 and §11.2. (Amended in Task 18:) Also 03 §6.17 and
+D-243's Task 18 note.
 
 Files: `R/console-input.R`, `R/console-repl.R` (`console_send()`, `console_typed()`),
 `R/utils-options.R` (`gptr_readline()`, tty wrappers), `R/gptr-config.R`,
-`vignettes/configuration.Rmd` (`type_ahead` row), `tests/testthat/test-console-typing.R`.
+`vignettes/configuration.Rmd` (`type_ahead` row), `tests/testthat/test-console-typing.R`. (Amended
+in Task 18:) Also `R/console-interrupt.R` (`console_queue_line()`), `R/console-render.R`
+(`console_queue_left()`), `tests/testthat/helper-console-input.R` (`local_no_fd0()` mocks
+`console_typed_chars()`) and the macOS paste case in `tests/testthat/test-console-repl.R`, whose
+steer now shows on the live row and whose Ctrl-D is no composer key.
 
 Commit: `feat(console): type, steer and queue while the agent works`.
 
@@ -971,7 +995,8 @@ Decisions:
 - It is read with readline at `› ` at column 0 (`console_ask()` without the margin) with the saved
   modes.
 - [s] and [f] read their text at the same `› ` and queue it exactly as Enter and Tab do.
-- The draft is redrawn after the menu. After [a] it joins Task 15's kept list (`console_keep()`).
+- The draft is redrawn after the menu. After [a] it joins Task 15's kept list (`console_keep()`;
+  done in Task 18).
 
 Tests (`test-console-typing.R`, `test-console-interrupt.R`), RED first: pty G, a partial draft then
 Ctrl-C [c], keeps the draft. Today it is lost. The menu's rows at 80 and 60 columns, at 256 colours
@@ -988,7 +1013,8 @@ Commit: `feat(console): a draft survives Ctrl-C and the pause menu`.
 
 Decisions:
 - When a draft is left, `rd$read(prompt)` draws the prompt (with the band) and the draft, then
-  edits it with the composer keys in character mode until one of these:
+  edits it with the composer keys in character mode until one of these (this replaces Task 18's
+  history entry for a draft left after an idle end):
   - Enter returns the line as readline would. `/`, `!`, fences and continuation reads go through
     readline as usual.
   - The draft becomes empty, and readline takes over at the same prompt.
