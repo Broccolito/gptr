@@ -3413,7 +3413,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     tail after an abort among it, and missed RStudio's abort, which `message_end` ends first.) Contract-visible: 04 §7.14 (`render_markdown_stream()`'s row). Tests:
     test-console-render.R "a cut answer keeps what it received, the cut marked (visual review)", "a prompt or
     pause in a tool's evaluation ends partial lines on the console (D-188)"; test-console-abort-stream.R "abort
-    labels a redactor tail received after a pause without printing it twice".
+    labels a redactor tail received after a pause without printing it twice"; test-stream-order.R "cancelling a
+    streamed answer displays the complete safe partial tail", "cancellation flushes a held synthetic secret safely
+    and only once".
   - What R code prints in the console margin (the `r` tool, `!code`) is shown as result rows: at column 4, escaped,
     dim and cut to the console width. The capture's sink was split, so `head(fuel)` rows, `tapply()` values and
     `[1] "      33 fuel.csv"` sat at column 0, the person's column, in ink (one tool block had rows at columns 0, 2 and
