@@ -339,7 +339,7 @@ tool_result_message = function(result, call) {
   }))
   if (!is.null(result$value)) {
     details$value_ref = list(class = class(result$value)[1L],
-                             bytes = as.numeric(utils::object.size(result$value)))
+                             bytes = env_snap_size(result$value))
   }
   if (!is.null(result$out_id)) details$out_id = result$out_id
   msg_tool_result(call$id, call$name, content, is_error = isTRUE(result$is_error),

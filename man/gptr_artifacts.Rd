@@ -53,8 +53,9 @@ out of git.
 
 \section{Options}{
 
-\code{gptr.artifact_max_bytes} (default \code{5e8}): the largest total \code{object.size()} of the objects
-one version may snapshot; above it \code{peter$app()} signals \code{gptr_error_artifact_too_large}.
+\code{gptr.artifact_max_bytes} (default \code{5e8}): the largest total size of the objects one version
+may snapshot (each part counted once, as in the workspace); above it \code{peter$app()} signals
+\code{gptr_error_artifact_too_large}.
 }
 
 \examples{
