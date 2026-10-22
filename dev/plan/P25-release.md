@@ -9,15 +9,29 @@
 > reconcile the affected steps before implementation. No implementation has
 > been performed as part of this design update.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship gptr 1.0.0 to CRAN with a reviewed manual for all 63 exports, examples that run offline, five precomputed vignettes, the README, NEWS, cran-comments and pkgdown files, and a recorded live calibration.
+**Goal:** Ship gptr 1.0.0 to CRAN with a reviewed manual for all 63 exports, examples that run
+offline, five precomputed vignettes, the README, NEWS, cran-comments and pkgdown files, and a
+recorded live calibration.
 
-**Architecture:** P25 adds no package code. It adds release tooling under `dev/release/` (excluded from the build by P01's `^dev$`): one library of pure problem finders (`lib.R`) with offline self-tests on toy packages, thin scripts that apply them to the repository, and `test-gptr-*.R` files that assert the finished state of gptr's own files. The release content (three help topics, the roxygen review, the vignettes, README, NEWS, cran-comments, `_pkgdown.yml`, `inst/WORDLIST`) is then written against those checks, task by task, and the plan ends with the CRAN acceptance runs.
+**Architecture:** P25 adds no package code. It adds release tooling under `dev/release/` (excluded
+from the build by P01's `^dev$`): one library of pure problem finders (`lib.R`) with offline
+self-tests on toy packages, thin scripts that apply them to the repository, and `test-gptr-*.R`
+files that assert the finished state of gptr's own files. The release content (three help topics,
+the roxygen review, the vignettes, README, NEWS, cran-comments, `_pkgdown.yml`, `inst/WORDLIST`) is
+then written against those checks, task by task, and the plan ends with the CRAN acceptance runs.
 
-**Tech Stack:** R (>= 4.2.0; developed on 4.4.3), roxygen2 7.3.3, testthat 3e, knitr and rmarkdown (with pandoc), processx and ps (gptr Imports), yaml (gptr Import), and the development tools devtools, pkgdown, urlchecker and spelling (never dependencies).
+**Tech Stack:** R (>= 4.2.0; developed on 4.4.3), roxygen2 7.3.3, testthat 3e, knitr and rmarkdown
+(with pandoc), processx and ps (gptr Imports), yaml (gptr Import), and the development tools
+devtools, pkgdown, urlchecker and spelling (never dependencies).
 
-**Spec:** dev/spec/03-architecture.md (sections 3.5, 4.4, 6.8, 6.9, 6.10, 8.4, 12, 13), dev/spec/04-interface-contract.md (sections 0.3, 2.2, 3.1, 3.2, 5.1, 5.11, 5.12, 6, 9.4, 11.12, 12.1, 14.1, and 15: IC-45, IC-53, IC-60, IC-63, IC-70, IC-72, IC-73), dev/spec/05-plan-decomposition.md (P25).
+**Spec:** dev/spec/03-architecture.md (sections 3.5, 4.4, 6.8, 6.9, 6.10, 8.4, 12, 13),
+dev/spec/04-interface-contract.md (sections 0.3, 2.2, 3.1, 3.2, 5.1, 5.11, 5.12, 6, 9.4, 11.12,
+12.1, 14.1, and 15: IC-45, IC-53, IC-60, IC-63, IC-70, IC-72, IC-73),
+dev/spec/05-plan-decomposition.md (P25).
 
 **Depends on:** P24 (and through it P01-P23). **Milestone:** M5.
 
@@ -25,36 +39,115 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow), the native `|>` (never the magrittr pipe), ASCII-only sources, lines of at most 100 characters, testthat 3e, no network or real keys in tests, every command run from `/Users/wanjun/Desktop/gptr` with `Rscript --vanilla`, one commit per task ending with the attribution line the harness specifies. Plan-specific requirements, with the exact values of the spec:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow), the native
+`|>` (never the magrittr pipe), ASCII-only sources, lines of at most 100 characters, testthat 3e, no
+network or real keys in tests, every command run from `/Users/wanjun/Desktop/gptr` with
+`Rscript --vanilla`, one commit per task ending with the attribution line the harness specifies.
+Plan-specific requirements, with the exact values of the spec:
 
-- **DESCRIPTION** (05 P25, IC-72): P25 changes exactly two fields: `VignetteBuilder: knitr` (added together with the first vignette, Task 5; "a named exception to 'Version is the only DESCRIPTION field P25 may change'") and `Version: 1.0.0` (Task 13; P01 wrote `Version: 0.99.0.9000`). Every other field is P01's and is only checked: `Title: Language Model Agents Inside the Live 'R' Session`, `Depends: R (>= 4.2.0)`, knitr and rmarkdown in Suggests, none of httr2, R6, S7, evaluate, digest, glue, promises, coro, mirai, fs, magrittr or an R LLM package in Imports or Suggests (conventions section 8).
-- **Exports** (03 section 4.4, IC-01, IC-36): 63 names, `peter` plus 62 `gptr_*` names, in eight groups: The gateway (1), Setup and status (10), Discovery and MCP (7), Documents and artifacts (5), Session SDK (14), Agent-side and introspection (7), Extension API (8), Spec constructors (11).
-- **Shared Rd pages** (04 section 6: "Related exports share Rd pages with `@rdname` (P25 groups them as in section 4.4 of `03`)"): the five multi-name headings of 04 section 6 each have one page named after the first member: `gptr_login` (`gptr_login`, `gptr_logout`), `gptr_skills` (`gptr_skills`, `gptr_agents`), `gptr_mcp_add` (`gptr_mcp_add`, `gptr_mcp_remove`), `gptr_sessions` (`gptr_sessions`, `gptr_resume`, `gptr_last`), `gptr_rewind` (`gptr_rewind`, `gptr_checkpoints`).
-- **Every export** has `@param`, `@return` and examples (conventions section 4; 04 section 6: "an `@examples` block that runs offline on CRAN: examples use `gptr_fake_provider()`, `envir = new.env()`, `tempfile()` directories and never keys, network, processes or servers").
+- **DESCRIPTION** (05 P25, IC-72): P25 changes exactly two fields: `VignetteBuilder: knitr` (added
+  together with the first vignette, Task 5; "a named exception to 'Version is the only DESCRIPTION
+  field P25 may change'") and `Version: 1.0.0` (Task 13; P01 wrote `Version: 0.99.0.9000`). Every
+  other field is P01's and is only checked:
+  `Title: Language Model Agents Inside the Live 'R' Session`, `Depends: R (>= 4.2.0)`, knitr and
+  rmarkdown in Suggests, none of httr2, R6, S7, evaluate, digest, glue, promises, coro, mirai, fs,
+  magrittr or an R LLM package in Imports or Suggests (conventions section 8).
+- **Exports** (03 section 4.4, IC-01, IC-36): 63 names, `peter` plus 62 `gptr_*` names, in eight
+  groups: The gateway (1), Setup and status (10), Discovery and MCP (7), Documents and artifacts
+  (5), Session SDK (14), Agent-side and introspection (7), Extension API (8), Spec constructors
+  (11).
+- **Shared Rd pages** (04 section 6: "Related exports share Rd pages with `@rdname` (P25 groups them
+  as in section 4.4 of `03`)"): the five multi-name headings of 04 section 6 each have one page
+  named after the first member: `gptr_login` (`gptr_login`, `gptr_logout`), `gptr_skills`
+  (`gptr_skills`, `gptr_agents`), `gptr_mcp_add` (`gptr_mcp_add`, `gptr_mcp_remove`),
+  `gptr_sessions` (`gptr_sessions`, `gptr_resume`, `gptr_last`), `gptr_rewind` (`gptr_rewind`,
+  `gptr_checkpoints`).
+- **Every export** has `@param`, `@return` and examples (conventions section 4; 04 section 6: "an
+  `@examples` block that runs offline on CRAN: examples use `gptr_fake_provider()`,
+  `envir = new.env()`, `tempfile()` directories and never keys, network, processes or servers").
 - **Examples policy (decided by this plan).**
-  1. Every export's page has at least one example that runs unconditionally, offline and without keys, through `gptr_fake_provider()`, `envir = new.env()` and `tempfile()` paths.
-  2. Code that needs a person at the console, a key, the network or a server is wrapped in `@examplesIf <predicate>`. A predicate is built only from `interactive()`, `nzchar(Sys.getenv("<VARIABLE>"))`, `requireNamespace("<pkg>", quietly = TRUE)` and `rlang::is_installed(<character literal>)`, joined with `&&` (conventions section 4 and IC-72: "`@examplesIf` predicates use the fake provider or `nzchar(Sys.getenv("ANTHROPIC_API_KEY"))` (there is no `gptr_has_key()`)").
+  1. Every export's page has at least one example that runs unconditionally, offline and without
+     keys, through `gptr_fake_provider()`, `envir = new.env()` and `tempfile()` paths.
+  2. Code that needs a person at the console, a key, the network or a server is wrapped in
+     `@examplesIf <predicate>`. A predicate is built only from `interactive()`,
+     `nzchar(Sys.getenv("<VARIABLE>"))`, `requireNamespace("<pkg>", quietly = TRUE)` and
+     `rlang::is_installed(<character literal>)`, joined with `&&` (conventions section 4 and IC-72:
+     "`@examplesIf` predicates use the fake provider or `nzchar(Sys.getenv("ANTHROPIC_API_KEY"))`
+     (there is no `gptr_has_key()`)").
   3. No `\dontrun{}` and no `\donttest{}` anywhere in the manual.
-  4. Exactly two pages have only conditional examples: `gptr_login` (a person must type a key or finish an OAuth sign-in) and `gptr_mcp_serve` (it starts a loopback server, which 04 section 6 forbids in examples). `cran-comments.md` explains both.
-  5. This replaces the three "roxygen wraps it in `\dontrun{}`" comments of 04 sections 6.2-6.3: `gptr_login()` keeps `@examplesIf interactive()`, `gptr_mcp_add()` gets an offline example in a temporary project, and `gptr_mcp_serve()` gets `@examplesIf interactive() && rlang::is_installed(c("httpuv", "later", "openssl"))`.
-- **Help topics written by P25**: `?gptr_options` (every option of 04 section 3.1, 90 names, and the variables of section 3.2; 04 section 3.1: "P25 assembles the page"), `?gptr_security` (the "Security considerations" page of 03 section 13; it covers PHI in committed caches, IC-70: "The Security considerations page mentions PHI", and the worker backend that "is documented as not an isolation boundary", IC-53) and `?gptr_egress` (data egress, 03 section 6.10). The `?peter` page links all three.
-- **Roxygen-only edits outside the owned files.** The roxygen review of 05 P25 edits the roxygen of other plans' files. The only changed lines in `R/` are `#'` lines, added `NULL` lines and blank lines; Tasks 2 and 3 verify this with a `git diff` guard before committing. No function, default or behavior changes.
-- **roxygen2 7.3.3** (P01's `RoxygenNote: 7.3.3`). `devtools::document()` with another roxygen2 version rewrites `RoxygenNote`, a DESCRIPTION field P25 may not change (IC-72); the guards of Tasks 2 and 3 check that `DESCRIPTION` is unchanged, and if it is not, the step stops for the maintainer (conventions section 1: nothing is installed from a plan step).
-- **Vignettes**: `getting-started`, `system-one`, `script-as-history`, `extending-gptr`, `token-efficiency`. Sources are `vignettes/<name>.Rmd.orig` (excluded from the build by P01's `.Rbuildignore` line `^vignettes/.*\.Rmd\.orig$`); the shipped `vignettes/<name>.Rmd` is static Markdown with no executable chunk, produced by `dev/release/precompute.R` with the package installed in a temporary library, no keys, home and user directories redirected and every proxy pointed at a closed local port. Knitting all five takes under 60 s (05 P25 acceptance 4). Every gptr call in a vignette uses `gptr_fake_provider()`; code that needs a real model is an `{r, eval = FALSE}` chunk, never a bare code fence (the staleness check compares chunk code with knitted code blocks).
-- **Prose** is US English (`Language: en-US`, P01), checked by `spelling::spell_check_package()` against `inst/WORDLIST`.
-- **NEWS.md** starts with `# gptr 1.0.0` and has a `## Breaking changes` section naming `get_response()` and `dataframe_to_text()` (S-7: "Old API is gone; no deprecation shims"; REQ-04).
-- **cran-comments.md** cites the consent design and the precedents 'btw' 1.5.0, 'aisdk' 1.4.12, 'ellmer' 0.5.0 and 'mcptools' 1.0.3 (03 section 13; research 13 section 2.3) and records `tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on submission day (IC-72).
+  4. Exactly two pages have only conditional examples: `gptr_login` (a person must type a key or
+     finish an OAuth sign-in) and `gptr_mcp_serve` (it starts a loopback server, which 04 section 6
+     forbids in examples). `cran-comments.md` explains both.
+  5. This replaces the three "roxygen wraps it in `\dontrun{}`" comments of 04 sections 6.2-6.3:
+     `gptr_login()` keeps `@examplesIf interactive()`, `gptr_mcp_add()` gets an offline example in a
+     temporary project, and `gptr_mcp_serve()` gets
+     `@examplesIf interactive() && rlang::is_installed(c("httpuv", "later", "openssl"))`.
+- **Help topics written by P25**: `?gptr_options` (every option of 04 section 3.1, 90 names, and the
+  variables of section 3.2; 04 section 3.1: "P25 assembles the page"), `?gptr_security` (the
+  "Security considerations" page of 03 section 13; it covers PHI in committed caches, IC-70: "The
+  Security considerations page mentions PHI", and the worker backend that "is documented as not an
+  isolation boundary", IC-53) and `?gptr_egress` (data egress, 03 section 6.10). The `?peter` page
+  links all three.
+- **Roxygen-only edits outside the owned files.** The roxygen review of 05 P25 edits the roxygen of
+  other plans' files. The only changed lines in `R/` are `#'` lines, added `NULL` lines and blank
+  lines; Tasks 2 and 3 verify this with a `git diff` guard before committing. No function, default
+  or behavior changes.
+- **roxygen2 7.3.3** (P01's `RoxygenNote: 7.3.3`). `devtools::document()` with another roxygen2
+  version rewrites `RoxygenNote`, a DESCRIPTION field P25 may not change (IC-72); the guards of
+  Tasks 2 and 3 check that `DESCRIPTION` is unchanged, and if it is not, the step stops for the
+  maintainer (conventions section 1: nothing is installed from a plan step).
+- **Vignettes**: `getting-started`, `system-one`, `script-as-history`, `extending-gptr`,
+  `token-efficiency`. Sources are `vignettes/<name>.Rmd.orig` (excluded from the build by P01's
+  `.Rbuildignore` line `^vignettes/.*\.Rmd\.orig$`); the shipped `vignettes/<name>.Rmd` is static
+  Markdown with no executable chunk, produced by `dev/release/precompute.R` with the package
+  installed in a temporary library, no keys, home and user directories redirected and every proxy
+  pointed at a closed local port. Knitting all five takes under 60 s (05 P25 acceptance 4). Every
+  gptr call in a vignette uses `gptr_fake_provider()`; code that needs a real model is an
+  `{r, eval = FALSE}` chunk, never a bare code fence (the staleness check compares chunk code with
+  knitted code blocks).
+- **Prose** is US English (`Language: en-US`, P01), checked by `spelling::spell_check_package()`
+  against `inst/WORDLIST`.
+- **NEWS.md** starts with `# gptr 1.0.0` and has a `## Breaking changes` section naming
+  `get_response()` and `dataframe_to_text()` (S-7: "Old API is gone; no deprecation shims"; REQ-04).
+- **cran-comments.md** cites the consent design and the precedents 'btw' 1.5.0, 'aisdk' 1.4.12,
+  'ellmer' 0.5.0 and 'mcptools' 1.0.3 (03 section 13; research 13 section 2.3) and records
+  `tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on submission day
+  (IC-72).
 - **Maintainer** (CRAN's address on file; research 13 C-04): `Wanjun Gu <wanjun.gu@ucsf.edu>`.
-- **Full check** (05 P25 acceptance 1): `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'` gives 0 errors, 0 warnings and no NOTE apart from the incoming-feasibility NOTE naming the maintainer (gptr 0.7.0 is on CRAN, so 1.0.0 is an update; IC-72) on the CI matrix: macOS, Windows, Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C`. This check is the final gate of the whole package and, as P25 is the last plan of M5, the M5 exit test of 05's milestone table (Task 15 Step 4, "The final gate"): it runs last, on the final tree, after P24's end-to-end suites and token gate are run again, and nothing that reaches the tarball changes after it.
-- **Live calibration** (IC-73; 03 section 12.7): `GPTR_LIVE_TESTS=true` only; NS-1..NS-11 against one Anthropic and one OpenAI model, the defaults of 03 section 8.4, `anthropic/claude-sonnet-5-5` and `openai/gpt-6-sol`; request counts within +2 and input tokens within 20% of the golden transcripts; recorded in `dev/bench/tokens/live-<YYYY-MM-DD>.csv`. These are paid requests: the maintainer runs them with their own keys (Task 14).
-- **Development tools** used only here (conventions section 8): devtools, pkgdown, urlchecker, spelling. If one is not installed, the step stops for the maintainer (conventions section 1); nothing is installed into the user library from a plan step.
-- **Child processes** of the release tooling start `R` and `Rscript` from `R.home("bin")`, never from `PATH` (IC-60), with provider keys and `GPTR_*` variables removed from their environment and `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `XDG_*`, `R_USER_*_DIR`, `TMPDIR` and `GPTR_PROJECT_ROOT` pointed at fresh temporary directories (IC-63).
-- **Tests of this plan** live in `dev/release/tests/` (development tooling, not package tests) and run with `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "<regex>")'`. The self-tests use toy packages in `tempdir()` and touch no network; the `test-gptr-*.R` files read gptr's own `man/`, `vignettes/`, `DESCRIPTION` and release files and skip outside the gptr repository. Network is used only by the maintainer steps of Task 15 (reverse dependencies, URL check, CI, win-builder, submission) and the paid live run of Task 14.
-- **Expected PASS counts** of the self-tests below were measured with the code of this plan on R 4.4.3, testthat 3.3.2, knitr 1.51, rmarkdown 2.31 and pandoc 3.x.
+- **Full check** (05 P25 acceptance 1):
+  `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'`
+  gives 0 errors, 0 warnings and no NOTE apart from the incoming-feasibility NOTE naming the
+  maintainer (gptr 0.7.0 is on CRAN, so 1.0.0 is an update; IC-72) on the CI matrix: macOS, Windows,
+  Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C`. This check is the final gate of
+  the whole package and, as P25 is the last plan of M5, the M5 exit test of 05's milestone table
+  (Task 15 Step 4, "The final gate"): it runs last, on the final tree, after P24's end-to-end suites
+  and token gate are run again, and nothing that reaches the tarball changes after it.
+- **Live calibration** (IC-73; 03 section 12.7): `GPTR_LIVE_TESTS=true` only; NS-1..NS-11 against
+  one Anthropic and one OpenAI model, the defaults of 03 section 8.4, `anthropic/claude-sonnet-5-5`
+  and `openai/gpt-6-sol`; request counts within +2 and input tokens within 20% of the golden
+  transcripts; recorded in `dev/bench/tokens/live-<YYYY-MM-DD>.csv`. These are paid requests: the
+  maintainer runs them with their own keys (Task 14).
+- **Development tools** used only here (conventions section 8): devtools, pkgdown, urlchecker,
+  spelling. If one is not installed, the step stops for the maintainer (conventions section 1);
+  nothing is installed into the user library from a plan step.
+- **Child processes** of the release tooling start `R` and `Rscript` from `R.home("bin")`, never
+  from `PATH` (IC-60), with provider keys and `GPTR_*` variables removed from their environment and
+  `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `XDG_*`, `R_USER_*_DIR`, `TMPDIR` and
+  `GPTR_PROJECT_ROOT` pointed at fresh temporary directories (IC-63).
+- **Tests of this plan** live in `dev/release/tests/` (development tooling, not package tests) and
+  run with `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "<regex>")'`. The
+  self-tests use toy packages in `tempdir()` and touch no network; the `test-gptr-*.R` files read
+  gptr's own `man/`, `vignettes/`, `DESCRIPTION` and release files and skip outside the gptr
+  repository. Network is used only by the maintainer steps of Task 15 (reverse dependencies, URL
+  check, CI, win-builder, submission) and the paid live run of Task 14.
+- **Expected PASS counts** of the self-tests below were measured with the code of this plan on R
+  4.4.3, testthat 3.3.2, knitr 1.51, rmarkdown 2.31 and pandoc 3.x.
 
 ## File Structure
 
-Files P25 owns (05 P25: `README.Rmd`, `README.md`, `NEWS.md`, `cran-comments.md`, `_pkgdown.yml`, `vignettes/`), the two DESCRIPTION fields of IC-72, the generated files, and the exceptions this plan names (the release tooling in `dev/release/`, `inst/WORDLIST`, and the roxygen of the review):
+Files P25 owns (05 P25: `README.Rmd`, `README.md`, `NEWS.md`, `cran-comments.md`, `_pkgdown.yml`,
+`vignettes/`), the two DESCRIPTION fields of IC-72, the generated files, and the exceptions this
+plan names (the release tooling in `dev/release/`, `inst/WORDLIST`, and the roxygen of the review):
 
 | Path | Status | Responsibility | Task |
 |---|---|---|---|
@@ -87,7 +180,10 @@ Files P25 owns (05 P25: `README.Rmd`, `README.md`, `NEWS.md`, `cran-comments.md`
 | `inst/WORDLIST` | create | words the spelling check accepts (exception: it feeds only the development tool spelling) | 15 |
 | `CRAN-SUBMISSION` | create (written by `devtools::submit_cran()`) | submission record (ignored by P01's `.Rbuildignore`) | 15 |
 
-`dev/` is excluded from the build (`^dev$`), and `README.Rmd`, `cran-comments.md`, `_pkgdown.yml`, `CRAN-SUBMISSION`, `docs/` and `vignettes/*.Rmd.orig` are all in P01's `.Rbuildignore`, so none of the tooling reaches the tarball. P25 adds no file to `tests/testthat/` and no R function to the package.
+`dev/` is excluded from the build (`^dev$`), and `README.Rmd`, `cran-comments.md`, `_pkgdown.yml`,
+`CRAN-SUBMISSION`, `docs/` and `vignettes/*.Rmd.orig` are all in P01's `.Rbuildignore`, so none of
+the tooling reaches the tarball. P25 adds no file to `tests/testthat/` and no R function to the
+package.
 
 ## Tasks
 
@@ -1161,7 +1257,8 @@ Expected: no `Writing` line and no warning.
 
 Guard that only documentation changed in `R/`:
 
-Run: `git diff -U0 -- R/ | grep -E '^[+-]' | grep -vE '^(\+\+\+|---) ' | grep -vE "^[+-]#'" | grep -vE '^\+NULL$' | grep -vE '^[+-][[:space:]]*$'`
+Run:
+`git diff -U0 -- R/ | grep -E '^[+-]' | grep -vE '^(\+\+\+|---) ' | grep -vE "^[+-]#'" | grep -vE '^\+NULL$' | grep -vE '^[+-][[:space:]]*$'`
 
 Expected: no output.
 
@@ -1175,7 +1272,8 @@ Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^g
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1 ]`
 
-Run: `Rscript --vanilla -e 'tools::checkRd("man/gptr_security.Rd"); tools::checkRd("man/gptr_egress.Rd"); tools::checkRd("man/gptr_options.Rd")'`
+Run:
+`Rscript --vanilla -e 'tools::checkRd("man/gptr_security.Rd"); tools::checkRd("man/gptr_egress.Rd"); tools::checkRd("man/gptr_options.Rd")'`
 
 Expected: no output (no Rd problems).
 
@@ -1692,7 +1790,8 @@ Run: `Rscript --vanilla -e 'devtools::document()'`
 
 Expected: no `Writing` line and no warning.
 
-Run: `git diff -U0 -- R/ | grep -E '^[+-]' | grep -vE '^(\+\+\+|---) ' | grep -vE "^[+-]#'" | grep -vE '^\+NULL$' | grep -vE '^[+-][[:space:]]*$'`
+Run:
+`git diff -U0 -- R/ | grep -E '^[+-]' | grep -vE '^(\+\+\+|---) ' | grep -vE "^[+-]#'" | grep -vE '^\+NULL$' | grep -vE '^[+-][[:space:]]*$'`
 
 Expected: no output (only roxygen lines changed).
 
@@ -1714,7 +1813,8 @@ Run: `Rscript --vanilla -e 'devtools::test(filter = "^(arch-layers|lint-rules)$"
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 16 ]`, as in Task 2.
 
-Run: `Rscript --vanilla -e 'devtools::test(filter = "^(session-(object|budget|store|live)|ckpt-rewind|mcp-(config|server))$")'`
+Run:
+`Rscript --vanilla -e 'devtools::test(filter = "^(session-(object|budget|store|live)|ckpt-rewind|mcp-(config|server))$")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP n | PASS m ]` with the counts and skips the owner plans P06,
 P16 and P18 state for these files (roxygen comments change no behavior).
@@ -2168,7 +2268,8 @@ test_that("the getting-started vignette is precomputed and current (Task 5)", {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(precompute|description|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(precompute|description|gptr-release)$")'`
 
 Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]` with `could not find function` errors for
 `rel_code_lines`, `vig_precompute`, `description_problems`, `files_description` and
@@ -2418,7 +2519,8 @@ rel_finish(paste("check-files", args[1L]), fun(root, args[-1L]))
 Add `VignetteBuilder: knitr` to `DESCRIPTION`, directly above `Config/testthat/edition: 3` (the
 only DESCRIPTION change of this task):
 
-Run: `Rscript --vanilla -e 'd = readLines("DESCRIPTION"); if (!any(grepl("^VignetteBuilder:", d))) d = append(d, "VignetteBuilder: knitr", after = grep("^Config/testthat/edition:", d) - 1L); writeLines(d, "DESCRIPTION")'`
+Run:
+`Rscript --vanilla -e 'd = readLines("DESCRIPTION"); if (!any(grepl("^VignetteBuilder:", d))) d = append(d, "VignetteBuilder: knitr", after = grep("^Config/testthat/edition:", d) - 1L); writeLines(d, "DESCRIPTION")'`
 
 Run: `git diff -U0 DESCRIPTION`
 
@@ -2607,7 +2709,8 @@ again.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(precompute|description|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(precompute|description|gptr-release)$")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 22 ]` (14 + 6 + 2).
 
@@ -2644,14 +2747,26 @@ git commit -m "docs(vignettes): precompute vignettes offline; add getting-starte
 
 ### Task 6: The system-one vignette
 
-NS-4 and NS-5 of `02-north-star-examples.md`: System 1 decisions returned as typed vectors that drop into `if`, `for` and `while`, choices and scores, the uncertain band, System 1 routing System 2, and judging a session. A scripted classifier (`gptr_fake_provider(type = "classifier")`, 04 section 12.1: `function(state, question)` returning `P(yes)`, a named probability vector over the choices, or level probabilities; `question$type` is `"noul"`, `"choice"` or `"score"`, and `state` is the named list that P13's `s1_states()` builds, one element holding the input text or, for a piped session, `as_state()`'s answer text) answers by the input text, so the vignette runs offline.
+NS-4 and NS-5 of `02-north-star-examples.md`: System 1 decisions returned as typed vectors that drop
+into `if`, `for` and `while`, choices and scores, the uncertain band, System 1 routing System 2, and
+judging a session. A scripted classifier (`gptr_fake_provider(type = "classifier")`, 04
+section 12.1: `function(state, question)` returning `P(yes)`, a named probability vector over the
+choices, or level probabilities; `question$type` is `"noul"`, `"choice"` or `"score"`, and `state`
+is the named list that P13's `s1_states()` builds, one element holding the input text or, for a
+piped session, `as_state()`'s answer text) answers by the input text, so the vignette runs offline.
 
 **Files:**
 - Create: `vignettes/system-one.Rmd.orig`; generated: `vignettes/system-one.Rmd`
 - Test: `dev/release/tests/test-gptr-release.R` (append)
 
 **Interfaces:**
-- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `peter()` with `choices`, `levels`, `min_confidence` (04 section 6.1), `gptr_prob(x, what = c("prob", "confidence", "probabilities"))` (04 section 6.6), `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` called with `type = "classifier"` (04 section 12.1), the System 1 vectors of 04 section 5.2, and the piped-session route (`classifier`, 04 section 6.1.1: "a piped session becomes the state through `as_state()`, no turn").
+- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `peter()` with
+  `choices`, `levels`, `min_confidence` (04 section 6.1),
+  `gptr_prob(x, what = c("prob", "confidence", "probabilities"))` (04 section 6.6),
+  `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` called with
+  `type = "classifier"` (04 section 12.1), the System 1 vectors of 04 section 5.2, and the
+  piped-session route (`classifier`, 04 section 6.1.1: "a piped session becomes the state through
+  `as_state()`, no turn").
 - Produces: the shipped vignette `vignettes/system-one.Rmd` (listed in `_pkgdown.yml` by Task 12).
 
 - [ ] **Step 1: Write the failing test**
@@ -2850,9 +2965,13 @@ Knit it:
 Run: `Rscript --vanilla dev/release/precompute.R system-one`
 
 Expected: `precompute: 1 vignette(s) knitted in <s> s` and `precompute: 0 problems`. Read
-`vignettes/system-one.Rmd`: `is_rct` prints `TRUE FALSE TRUE` for `trial`, `cohort`, `pilot`; `included` is `c("trial", "pilot")`; the call with `min_confidence = 0.8` gives `TRUE FALSE NA`; `tissue` is `lung`, `liver`, `brain`; the routing loop prints the fast model's answer for the rename task and the strong model's for the second task (the judge says 0.94 only for texts matching `mixed model`); the piped judgement is `TRUE` and `analysis$turns` stays 1. A knitting failure prints the tail of the child's output; fix
-the vignette (or, when the output shows a deviation of the package from 04, the owning plan's
-code) and knit again.
+`vignettes/system-one.Rmd`: `is_rct` prints `TRUE FALSE TRUE` for `trial`, `cohort`, `pilot`;
+`included` is `c("trial", "pilot")`; the call with `min_confidence = 0.8` gives `TRUE FALSE NA`;
+`tissue` is `lung`, `liver`, `brain`; the routing loop prints the fast model's answer for the rename
+task and the strong model's for the second task (the judge says 0.94 only for texts matching
+`mixed model`); the piped judgement is `TRUE` and `analysis$turns` stays 1. A knitting failure
+prints the tail of the child's output; fix the vignette (or, when the output shows a deviation of
+the package from 04, the owning plan's code) and knit again.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -2862,7 +2981,8 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 3 ]`
 
 Run: `Rscript --vanilla dev/release/precompute.R --check getting-started system-one`
 
-Expected: `precompute: 2 vignette(s) knitted in <s> s` with s under 60, then `precompute: 0 problems`.
+Expected: `precompute: 2 vignette(s) knitted in <s> s` with s under 60, then
+`precompute: 0 problems`.
 
 - [ ] **Step 5: Commit**
 
@@ -2875,15 +2995,25 @@ git commit -m "docs(vignettes): add the system-one vignette"
 
 ### Task 7: The script-as-history vignette
 
-NS-7 and NS-11: the script is the history. A temporary script is bound with `gptr_doc()` (explicit write consent, IC-45), sourced with `gptr_source()` so the agent's code is recorded below the prompt, sourced again with `replay = "replay"` (zero model calls), and edited to show a stale block. `gptr_doc()` accepts a document outside the project root (P15's reading of 04's own `tempfile()` example). The binding is removed before the vignette ends, so no later call records anything.
+NS-7 and NS-11: the script is the history. A temporary script is bound with `gptr_doc()` (explicit
+write consent, IC-45), sourced with `gptr_source()` so the agent's code is recorded below the
+prompt, sourced again with `replay = "replay"` (zero model calls), and edited to show a stale block.
+`gptr_doc()` accepts a document outside the project root (P15's reading of 04's own `tempfile()`
+example). The binding is removed before the vignette ends, so no later call records anything.
 
 **Files:**
 - Create: `vignettes/script-as-history.Rmd.orig`; generated: `vignettes/script-as-history.Rmd`
 - Test: `dev/release/tests/test-gptr-release.R` (append)
 
 **Interfaces:**
-- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `gptr_doc(path = NULL, format = NULL, sync = FALSE)`, `gptr_source(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(), echo = FALSE)`, `gptr_blocks(file)` (04 section 6.4; columns of 04 section 5.12), the block grammar of 04 section 11.5 and the `note` argument of the `r` tool (04 section 4.4: written as `## Decision:`), the fake provider's request log `fake$log$requests` (04 section 12.1).
-- Produces: the shipped vignette `vignettes/script-as-history.Rmd` (listed in `_pkgdown.yml` by Task 12).
+- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package:
+  `gptr_doc(path = NULL, format = NULL, sync = FALSE)`,
+  `gptr_source(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(), echo = FALSE)`,
+  `gptr_blocks(file)` (04 section 6.4; columns of 04 section 5.12), the block grammar of 04
+  section 11.5 and the `note` argument of the `r` tool (04 section 4.4: written as `## Decision:`),
+  the fake provider's request log `fake$log$requests` (04 section 12.1).
+- Produces: the shipped vignette `vignettes/script-as-history.Rmd` (listed in `_pkgdown.yml` by
+  Task 12).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3071,9 +3201,13 @@ Knit it:
 Run: `Rscript --vanilla dev/release/precompute.R script-as-history`
 
 Expected: `precompute: 1 vignette(s) knitted in <s> s` and `precompute: 0 problems`. Read
-`vignettes/script-as-history.Rmd`: the first `gptr_source()` returns one row with action `ran`; the script then holds a block `# >>> gptr:<id> model=fake/fake-1 date=<date> prompt=<hash> ...`, the line `top = head(...)`, `## Decision: ranked by mpg; ties keep the order of the data` and `# <<< gptr:<id>`; the replay adds 0 requests and `gptr_blocks()` shows status `fresh`; after the prompt edit the status is `stale`. A knitting failure prints the tail of the child's output; fix
-the vignette (or, when the output shows a deviation of the package from 04, the owning plan's
-code) and knit again.
+`vignettes/script-as-history.Rmd`: the first `gptr_source()` returns one row with action `ran`; the
+script then holds a block `# >>> gptr:<id> model=fake/fake-1 date=<date> prompt=<hash> ...`, the
+line `top = head(...)`, `## Decision: ranked by mpg; ties keep the order of the data` and
+`# <<< gptr:<id>`; the replay adds 0 requests and `gptr_blocks()` shows status `fresh`; after the
+prompt edit the status is `stale`. A knitting failure prints the tail of the child's output; fix the
+vignette (or, when the output shows a deviation of the package from 04, the owning plan's code) and
+knit again.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -3081,9 +3215,11 @@ Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^g
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 4 ]`
 
-Run: `Rscript --vanilla dev/release/precompute.R --check getting-started system-one script-as-history`
+Run:
+`Rscript --vanilla dev/release/precompute.R --check getting-started system-one script-as-history`
 
-Expected: `precompute: 3 vignette(s) knitted in <s> s` with s under 60, then `precompute: 0 problems`.
+Expected: `precompute: 3 vignette(s) knitted in <s> s` with s under 60, then
+`precompute: 0 problems`.
 
 - [ ] **Step 5: Commit**
 
@@ -3096,15 +3232,24 @@ git commit -m "docs(vignettes): add the script-as-history vignette"
 
 ### Task 8: The extending-gptr vignette
 
-NS-10 and S-11 ("everything a plugin"): a tool reached as `peter$demo$add()` (an `r` member with a namespace, 04 section 9.4), a permission policy that denies a call even in `auto` mode, a session hook, prompt sections, context blocks and commands, `gptr_spec()` for the other kinds, and the plugin manifest of 04 section 11.12.
+NS-10 and S-11 ("everything a plugin"): a tool reached as `peter$demo$add()` (an `r` member with a
+namespace, 04 section 9.4), a permission policy that denies a call even in `auto` mode, a session
+hook, prompt sections, context blocks and commands, `gptr_spec()` for the other kinds, and the
+plugin manifest of 04 section 11.12.
 
 **Files:**
 - Create: `vignettes/extending-gptr.Rmd.orig`; generated: `vignettes/extending-gptr.Rmd`
 - Test: `dev/release/tests/test-gptr-release.R` (append)
 
 **Interfaces:**
-- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `gptr_api()`, `gptr_check()`, `gptr_register()`, `gptr_registry()`, `gptr_spec()` and the constructors `gptr_tool()`, `gptr_policy()`, `gptr_prompt_section()`, `gptr_context_block()`, `gptr_command()`, `gptr_provider()` (04 sections 6.7-6.8), `gptr_on()`, `gptr_step()` (04 section 6.5), the tool-result message field `is_error` (04 section 4.2) and the request field `last_results` of the fake provider (04 section 12.1).
-- Produces: the shipped vignette `vignettes/extending-gptr.Rmd` (listed in `_pkgdown.yml` by Task 12).
+- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `gptr_api()`,
+  `gptr_check()`, `gptr_register()`, `gptr_registry()`, `gptr_spec()` and the constructors
+  `gptr_tool()`, `gptr_policy()`, `gptr_prompt_section()`, `gptr_context_block()`, `gptr_command()`,
+  `gptr_provider()` (04 sections 6.7-6.8), `gptr_on()`, `gptr_step()` (04 section 6.5), the
+  tool-result message field `is_error` (04 section 4.2) and the request field `last_results` of the
+  fake provider (04 section 12.1).
+- Produces: the shipped vignette `vignettes/extending-gptr.Rmd` (listed in `_pkgdown.yml` by
+  Task 12).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3321,9 +3466,12 @@ Knit it:
 Run: `Rscript --vanilla dev/release/precompute.R extending-gptr`
 
 Expected: `precompute: 1 vignette(s) knitted in <s> s` and `precompute: 0 problems`. Read
-`vignettes/extending-gptr.Rmd`: `peter$demo$add(2, 3)` is 5 and the model's call answers "The sum is 42."; the policy's denial gives `result$is_error` `TRUE` and nothing is installed; the hook collects the roles of the messages the run ended (at least `"assistant"`); the registry rows show the three records with source `user`. A knitting failure prints the tail of the child's output; fix
-the vignette (or, when the output shows a deviation of the package from 04, the owning plan's
-code) and knit again.
+`vignettes/extending-gptr.Rmd`: `peter$demo$add(2, 3)` is 5 and the model's call answers "The sum is
+42."; the policy's denial gives `result$is_error` `TRUE` and nothing is installed; the hook collects
+the roles of the messages the run ended (at least `"assistant"`); the registry rows show the three
+records with source `user`. A knitting failure prints the tail of the child's output; fix the
+vignette (or, when the output shows a deviation of the package from 04, the owning plan's code) and
+knit again.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -3331,9 +3479,11 @@ Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^g
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 5 ]`
 
-Run: `Rscript --vanilla dev/release/precompute.R --check getting-started system-one script-as-history extending-gptr`
+Run:
+`Rscript --vanilla dev/release/precompute.R --check getting-started system-one script-as-history extending-gptr`
 
-Expected: `precompute: 4 vignette(s) knitted in <s> s` with s under 60, then `precompute: 0 problems`.
+Expected: `precompute: 4 vignette(s) knitted in <s> s` with s under 60, then
+`precompute: 0 problems`.
 
 - [ ] **Step 5: Commit**
 
@@ -3346,15 +3496,28 @@ git commit -m "docs(vignettes): add the extending-gptr vignette"
 
 ### Task 9: The token-efficiency vignette
 
-S-12 and REQ-42 (architecture section 12): the frozen prefix (`gptr_prompt()`), budgeted object descriptions (`gptr_describe()`), the usage table and the per-component ledger (`gptr_usage()`), budgets that stop a run before a request (P06's `budget_check()` adds the estimate of the next request, so a 500-token budget stops before the first one), and the benchmark. The figures quoted are the measured o200k totals of 03 section 12.1 (1,262 / 2,335 / 2,813 / 2,956) and the System 1 comparison of 03 section 12.3.
+S-12 and REQ-42 (architecture section 12): the frozen prefix (`gptr_prompt()`), budgeted object
+descriptions (`gptr_describe()`), the usage table and the per-component ledger (`gptr_usage()`),
+budgets that stop a run before a request (P06's `budget_check()` adds the estimate of the next
+request, so a 500-token budget stops before the first one), and the benchmark. The figures quoted
+are the measured o200k totals of 03 section 12.1 (1,262 / 2,335 / 2,813 / 2,956) and the System 1
+comparison of 03 section 12.3.
 
 **Files:**
 - Create: `vignettes/token-efficiency.Rmd.orig`; generated: `vignettes/token-efficiency.Rmd`
 - Test: `dev/release/tests/test-gptr-release.R` (append)
 
 **Interfaces:**
-- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)` (04 section 6.6; the `gptr_prompt_view` fields `sections`, `total_tokens` and attribute `tool_names`, 04 section 5.11), `gptr_describe(x, budget = 150L, ...)`, `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)` (the ledger columns `request_id`, `component`, `tokens`, `cached`, 04 section 4.3), `peter(..., budget = list(tokens =))` and the condition class `gptr_error_budget` with its child `gptr_error_budget_tokens` (04 section 2.2).
-- Produces: the shipped vignette `vignettes/token-efficiency.Rmd` (listed in `_pkgdown.yml` by Task 12).
+- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package:
+  `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)` (04 section 6.6; the `gptr_prompt_view`
+  fields `sections`, `total_tokens` and attribute `tool_names`, 04 section 5.11),
+  `gptr_describe(x, budget = 150L, ...)`,
+  `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)` (the ledger
+  columns `request_id`, `component`, `tokens`, `cached`, 04 section 4.3),
+  `peter(..., budget = list(tokens =))` and the condition class `gptr_error_budget` with its child
+  `gptr_error_budget_tokens` (04 section 2.2).
+- Produces: the shipped vignette `vignettes/token-efficiency.Rmd` (listed in `_pkgdown.yml` by
+  Task 12).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3519,9 +3682,11 @@ Knit it:
 Run: `Rscript --vanilla dev/release/precompute.R token-efficiency`
 
 Expected: `precompute: 1 vignette(s) knitted in <s> s` and `precompute: 0 problems`. Read
-`vignettes/token-efficiency.Rmd`: `attr(view, "tool_names")` lists the minimal preset's tools; `view$sections` is a data frame of sections with token estimates; the ledger aggregate has one row per component; the budget call ends with `"gptr_error_budget_tokens"` and status `"budget"`. A knitting failure prints the tail of the child's output; fix
-the vignette (or, when the output shows a deviation of the package from 04, the owning plan's
-code) and knit again.
+`vignettes/token-efficiency.Rmd`: `attr(view, "tool_names")` lists the minimal preset's tools;
+`view$sections` is a data frame of sections with token estimates; the ledger aggregate has one row
+per component; the budget call ends with `"gptr_error_budget_tokens"` and status `"budget"`. A
+knitting failure prints the tail of the child's output; fix the vignette (or, when the output shows
+a deviation of the package from 04, the owning plan's code) and knit again.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -3529,9 +3694,11 @@ Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^g
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 6 ]`
 
-Run: `Rscript --vanilla dev/release/precompute.R --check getting-started system-one script-as-history extending-gptr token-efficiency`
+Run:
+`Rscript --vanilla dev/release/precompute.R --check getting-started system-one script-as-history extending-gptr token-efficiency`
 
-Expected: `precompute: 5 vignette(s) knitted in <s> s` with s under 60, then `precompute: 0 problems`.
+Expected: `precompute: 5 vignette(s) knitted in <s> s` with s under 60, then
+`precompute: 0 problems`.
 
 - [ ] **Step 5: Commit**
 
@@ -3597,7 +3764,8 @@ test_that("README.md is rendered from README.Rmd (Task 10)", {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(readme|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(readme|gptr-release)$")'`
 
 Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 6 ]` with `could not find function
 "readme_problems"` and `could not find function "files_readme"`.
@@ -3771,7 +3939,8 @@ Expected: `precompute: 0 vignette(s) knitted in 0.0 s` and `precompute: 0 proble
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(readme|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(readme|gptr-release)$")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 11 ]` (4 + 7).
 
@@ -3838,7 +4007,8 @@ test_that("NEWS.md records the breaking changes (Task 11)", {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(news|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(news|gptr-release)$")'`
 
 Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 7 ]` with `could not find function
 "news_problems"` and `could not find function "files_news"`.
@@ -3970,11 +4140,13 @@ Nothing from the 0.x API is kept.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(news|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(news|gptr-release)$")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 14 ]` (6 + 8).
 
-Run: `Rscript --vanilla -e 'db = tools:::.build_news_db_from_package_NEWS_md("NEWS.md"); print(unique(db[, "Version"]))'`
+Run:
+`Rscript --vanilla -e 'db = tools:::.build_news_db_from_package_NEWS_md("NEWS.md"); print(unique(db[, "Version"]))'`
 
 Expected: `[1] "1.0.0" "0.7.0"` (R's own NEWS.md parser, as used by `R CMD check`; this `:::`
 call is development tooling run by hand, never package code).
@@ -4056,7 +4228,8 @@ test_that("_pkgdown.yml indexes every page (Task 12)", {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(pkgdown|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(pkgdown|gptr-release)$")'`
 
 Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 8 ]` with `could not find function` errors for
 `pkgdown_yaml`, `pkgdown_extra` and `files_pkgdown`.
@@ -4282,7 +4455,8 @@ articles and the changelog (`NEWS.md`).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(pkgdown|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(pkgdown|gptr-release)$")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 17 ]` (8 + 9).
 
@@ -4378,7 +4552,8 @@ test_that("cran-comments.md and DESCRIPTION are ready for submission (Task 13)",
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(cran-comments|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(cran-comments|gptr-release)$")'`
 
 Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 9 ]` with `could not find function` errors for
 `cran_comments_set_revdeps`, `cran_comments_problems` and `files_cran_comments`.
@@ -4529,7 +4704,8 @@ No package depends on, imports, links to or suggests gptr.
 
 Set the version (the only DESCRIPTION change of this task):
 
-Run: `Rscript --vanilla -e 'd = readLines("DESCRIPTION"); d = sub("^Version: .*$", "Version: 1.0.0", d); writeLines(d, "DESCRIPTION")'`
+Run:
+`Rscript --vanilla -e 'd = readLines("DESCRIPTION"); d = sub("^Version: .*$", "Version: 1.0.0", d); writeLines(d, "DESCRIPTION")'`
 
 Run: `git diff -U0 DESCRIPTION`
 
@@ -4537,7 +4713,8 @@ Expected: exactly `-Version: 0.99.0.9000` and `+Version: 1.0.0`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(cran-comments|gptr-release)$")'`
+Run:
+`Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^(cran-comments|gptr-release)$")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 23 ]` (12 + 11).
 
@@ -4570,7 +4747,8 @@ verdict, and the maintainer's run itself.
 **Files:**
 - Modify: `dev/release/lib.R` (append)
 - Create: `dev/release/check-live.R`
-- Create (written by P24's `live.R` in the maintainer's run): `dev/bench/tokens/live-<YYYY-MM-DD>.csv`
+- Create (written by P24's `live.R` in the maintainer's run):
+  `dev/bench/tokens/live-<YYYY-MM-DD>.csv`
 - Test: `dev/release/tests/test-live.R`
 
 **Interfaces:**
@@ -4754,7 +4932,8 @@ Expected: `14 golden transcripts in <s> s; wrote dev/bench/tokens/results.csv` (
 offline; rtiktoken is a development tool; if it is missing the runner stops for the
 maintainer).
 
-Run: `env -u TYPESAFE_API_KEY GPTR_LIVE_TESTS=true GPTR_BENCH_ANTHROPIC=anthropic/claude-sonnet-5-5 GPTR_BENCH_OPENAI=openai/gpt-6-sol Rscript --vanilla dev/bench/tokens/live.R`
+Run:
+`env -u TYPESAFE_API_KEY GPTR_LIVE_TESTS=true GPTR_BENCH_ANTHROPIC=anthropic/claude-sonnet-5-5 GPTR_BENCH_OPENAI=openai/gpt-6-sol Rscript --vanilla dev/bench/tokens/live.R`
 
 Expected: a table with one row per provider and golden transcript (28 rows: 14 golden
 transcripts, two models), `[bench] wrote .../dev/bench/tokens/live-<YYYY-MM-DD>.csv` and exit
@@ -4833,8 +5012,8 @@ Run: `Rscript --vanilla -e 'testthat::test_dir("dev/release/tests", filter = "^g
 
 Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 11 ]`: both expectations of the new test list the
 unknown words, the first as `<word> (<file>:<line>, ...)` for the package, the second as
-`cran-comments.md: <word>` (for example `cran-comments.md: OAuth`). If the result is `SKIP 1` instead, the development tool spelling is not
-installed: stop and ask the maintainer to install it.
+`cran-comments.md: <word>` (for example `cran-comments.md: OAuth`). If the result is `SKIP 1`
+instead, the development tool spelling is not installed: stop and ask the maintainer to install it.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4904,7 +5083,8 @@ as `JSONL`, `PKCE`, `callr`, `checkpointer`, and possibly British spellings such
 Then add the remaining terms to the word list (this keeps every existing entry, so the words
 cran-comments needs are never removed):
 
-Run: `Rscript --vanilla -e 'w = spelling::spell_check_package()$word; old = readLines("inst/WORDLIST"); writeLines(sort(unique(c(old, w)), method = "radix"), "inst/WORDLIST")'`
+Run:
+`Rscript --vanilla -e 'w = spelling::spell_check_package()$word; old = readLines("inst/WORDLIST"); writeLines(sort(unique(c(old, w)), method = "radix"), "inst/WORDLIST")'`
 
 Run: `Rscript --vanilla -e 'print(spelling::spell_check_package())'`
 
@@ -4918,7 +5098,8 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 136 ]` (docs 45, examples 16, preco
 description 6, readme 4, news 6, pkgdown 8, cran-comments 12, live 10, gptr-man 2,
 gptr-release 13).
 
-Run: `Rscript --vanilla dev/release/check-docs.R && Rscript --vanilla dev/release/check-examples.R && Rscript --vanilla dev/release/check-files.R all && Rscript --vanilla dev/release/check-live.R "$(ls dev/bench/tokens/live-*.csv | tail -n 1)"`
+Run:
+`Rscript --vanilla dev/release/check-docs.R && Rscript --vanilla dev/release/check-examples.R && Rscript --vanilla dev/release/check-files.R all && Rscript --vanilla dev/release/check-live.R "$(ls dev/bench/tokens/live-*.csv | tail -n 1)"`
 (the last argument is the newest calibration record, committed in Task 14)
 
 Expected: `check-docs: 0 problems`, `check-examples: 0 problems`, `check-files all: 0
@@ -4956,14 +5137,15 @@ The final gate. The next command is the last check of the whole package (P01-P25
 CI matrix and win-builder runs of Step 6, the M5 exit test of 05 (P25 is the last plan of M5,
 whose exit test lists NS-8, NS-11, the committed token baselines, secrets and injection end to
 end, and the CRAN submission check: `devtools::test()` and `run.R --check` above cover the first
-four, and this check is the last). It runs on the final tree: the files of every plan plus this plan's Version,
-`VignetteBuilder`, vignettes, README, NEWS, word list and roxygen review, after every command
-above that could still change a file. Nothing that reaches the tarball changes after it: Step 5
-commits exactly the tree it checked, and Step 6 rewrites only `cran-comments.md` and adds
+four, and this check is the last). It runs on the final tree: the files of every plan plus this
+plan's Version, `VignetteBuilder`, vignettes, README, NEWS, word list and roxygen review, after
+every command above that could still change a file. Nothing that reaches the tarball changes after
+it: Step 5 commits exactly the tree it checked, and Step 6 rewrites only `cran-comments.md` and adds
 `CRAN-SUBMISSION`, both in P01's `.Rbuildignore`. If any file of the build changes later (a fix
 found by CI, win-builder or CRAN), run this Step 4 again from its first command.
 
-Run: `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'`
+Run:
+`Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'`
 
 Expected (05 P25 acceptance 1, IC-72): `0 errors | 0 warnings | 1 note`, the note being
 `checking CRAN incoming feasibility ... NOTE` with `Maintainer: 'Wanjun Gu
@@ -4988,13 +5170,14 @@ These steps act outside this machine (CI, win-builder, CRAN); **an implementing 
 maintainer before each of them**:
 
 1. Push the release branch and wait for the workflows `R-CMD-check` and `Windows-check` to
-   finish. Run: `gh run list --workflow R-CMD-check.yaml --limit 1 --json headSha,status,conclusion`,
-   the same command with `--workflow Windows-check.yaml`, and `git rev-parse HEAD`. Expected: each
-   latest run has `status` `completed` and `conclusion` `success`, which a matrix run has only when
-   every job passed (macOS, Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C` and
-   P01's `bench` job; the four shards each of Windows release and oldrel-4 and their two gates,
-   D-239; 05 P25 acceptance 1), and its `headSha` equals `git rev-parse HEAD`, the commit of Step 5
-   that passed the final gate of Step 4.
+   finish. Run:
+   `gh run list --workflow R-CMD-check.yaml --limit 1 --json headSha,status,conclusion`, the same
+   command with `--workflow Windows-check.yaml`, and `git rev-parse HEAD`. Expected: each latest run
+   has `status` `completed` and `conclusion` `success`, which a matrix run has only when every job
+   passed (macOS, Ubuntu release/devel/oldrel-1, oldrel-4, no-suggests, `LC_ALL=C` and P01's `bench`
+   job; the four shards each of Windows release and oldrel-4 and their two gates, D-239; 05 P25
+   acceptance 1), and its `headSha` equals `git rev-parse HEAD`, the commit of Step 5 that passed
+   the final gate of Step 4.
 2. Run: `Rscript --vanilla -e 'devtools::check_win_devel()'`. Expected (by email to the
    maintainer, about 30 minutes later; 05 P25 acceptance 2): `Status: 1 NOTE`, the note being
    the incoming-feasibility NOTE naming the maintainer.
@@ -5218,8 +5401,8 @@ explicit fix.
   roxygen2 7.3.3 in a toy package: `docs_problems()` found every required phrase and
   `tools::checkRd()` was clean. `spelling::spell_check_files()` (spelling 2.3.2, `en_US`) with
   the 41-word `inst/WORDLIST` found no unknown word in the three rendered topics, `NEWS.md`,
-  `cran-comments.md` and `README.Rmd`. All 62 `r` blocks parse with `Rscript --vanilla`, have no left
-  arrow, no magrittr pipe, no non-ASCII byte and no line over 100 characters, and give 0 lints
+  `cran-comments.md` and `README.Rmd`. All 62 `r` blocks parse with `Rscript --vanilla`, have no
+  left arrow, no magrittr pipe, no non-ASCII byte and no line over 100 characters, and give 0 lints
   with P01's linters (`indentation_linter = NULL`; `object_usage_linter = NULL` for standalone
   blocks); the 50 `{r}` chunks of the vignettes and README also give 0 lints. Every call of a
   gptr export in those chunks and in the roxygen examples of Tasks 2-3 matches the final P01-P23

@@ -6,43 +6,140 @@
 > and adapter validation must match the amended contract. Older literal code
 > and PASS counts require reconciliation before implementation.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn the repository into a buildable, lint-clean, CRAN-checkable gptr 1.0 skeleton that holds every L0 utility, the JSON layer, the provider-neutral message and event model, the fake provider and the shared test infrastructure, on a CI matrix that mirrors CRAN's.
+**Goal:** Turn the repository into a buildable, lint-clean, CRAN-checkable gptr 1.0 skeleton that
+holds every L0 utility, the JSON layer, the provider-neutral message and event model, the fake
+provider and the shared test infrastructure, on a CI matrix that mirrors CRAN's.
 
-**Architecture:** Fifteen R files form layer L0 (`aaa-state.R`, `utils-*.R`, `json-*.R`) and the first L1 files (`provider-message.R`, `provider-events.R`, `provider-fake.R`) plus `zzz.R`; `aaa-state.R` collates first so that every later file may call `on_load()` at top level, and later plans reach each other only through P01's service table. Records are unclassed named lists built by P01's constructors, and all model behaviour in every plan's tests comes from P01's scripted fake provider, mock SSE server, copy-safety harness, layering test and lint rules.
+**Architecture:** Fifteen R files form layer L0 (`aaa-state.R`, `utils-*.R`, `json-*.R`) and the
+first L1 files (`provider-message.R`, `provider-events.R`, `provider-fake.R`) plus `zzz.R`;
+`aaa-state.R` collates first so that every later file may call `on_load()` at top level, and later
+plans reach each other only through P01's service table. Records are unclassed named lists built by
+P01's constructors, and all model behaviour in every plan's tests comes from P01's scripted fake
+provider, mock SSE server, copy-safety harness, layering test and lint rules.
 
-**Tech Stack:** R (>= 4.2.0); Imports jsonlite, cli, rlang, curl, processx, callr, ps, yaml and the base packages; tests with testthat 3e, withr, codetools and (optionally) httpuv; development tools devtools, roxygen2 7.3.3, lintr 3.3.0.1, styler 1.11.0.
+**Tech Stack:** R (>= 4.2.0); Imports jsonlite, cli, rlang, curl, processx, callr, ps, yaml and the
+base packages; tests with testthat 3e, withr, codetools and (optionally) httpuv; development tools
+devtools, roxygen2 7.3.3, lintr 3.3.0.1, styler 1.11.0.
 
-**Spec:** dev/spec/03-architecture.md (§2.2, §3.2, §3.4, §5.2-5.4, §6.3, §6.4, §6.6, §9, §12.5), dev/spec/04-interface-contract.md (§1, §2, §3, §4, §6.7, §7.0, §7.1, §8.1, §10.2-10.5, §11.1, §11.8, §12, §15: IC-32, IC-33, IC-34, IC-35, IC-41, IC-43, IC-45, IC-51, IC-54, IC-59, IC-60, IC-61, IC-62, IC-63, IC-64, IC-71, IC-72, IC-73), dev/spec/05-plan-decomposition.md (P01).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2, 3.4, 5.2-5.4, 6.3, 6.4, 6.6, 9, 12.5),
+dev/spec/04-interface-contract.md (sections 1, 2, 3, 4, 6.7, 7.0, 7.1, 8.1, 10.2-10.5, 11.1, 11.8,
+12, 15: IC-32, IC-33, IC-34, IC-35, IC-41, IC-43, IC-45, IC-51, IC-54, IC-59, IC-60, IC-61, IC-62,
+IC-63, IC-64, IC-71, IC-72, IC-73), dev/spec/05-plan-decomposition.md (P01).
 
 **Depends on:** none (P01 is the first plan). **Milestone:** M0.
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full (house style `=` and `|>`, ASCII-only R sources, `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()`, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`). Plan-specific requirements, with the exact values of the spec:
+`dev/plan/00-conventions.md` applies in full (house style `=` and `|>`, ASCII-only R sources,
+`pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()`, testthat 3e, no network in tests,
+`Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`). Plan-specific
+requirements, with the exact values of the spec:
 
-- DESCRIPTION (05 P01, IC-72): `Package: gptr`; `Version: 0.99.0.9000`; `Title: Language Model Agents Inside the Live 'R' Session`; `Depends: R (>= 4.2.0)`; `License: Apache License (== 2.0)` (no `LICENSE` file; full text in `LICENSE.md`); `Copyright: file inst/COPYRIGHTS`; `URL: https://github.com/Broccolito/gptr`; `BugReports: https://github.com/Broccolito/gptr/issues`; `Language: en-US`; `Encoding: UTF-8`; `Config/testthat/edition: 3`; `Roxygen: list(markdown = TRUE)`; `NeedsCompilation: no`; no `VignetteBuilder` (P25 adds it) and no `Collate` field (IC-32).
-- `Authors@R`: the maintainer `person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"), comment = c(ORCID = "0000-0002-7342-7000"))` plus `person("Mario", "Zechner", role = c("ctb", "cph"), comment = "Author of 'pi' (MIT), from which tool texts and templates are derived")`.
-- Imports (final, written once; no later plan adds one): jsonlite, curl, processx, callr, rlang, cli, yaml, ps, methods, stats, tools, utils, grDevices, graphics. Suggests: testthat (>= 3.2.0), withr, knitr, rmarkdown, later, httpuv, openssl, shiny, bslib, chromote, ragg, rstudioapi, reticulate, DBI, duckdb, RSQLite, data.table, vctrs, stringi, magick, keyring, codetools. Never: httr2, R6, S7, evaluate, digest, glue, promises, coro, mirai, fs, magrittr or any R LLM package.
-- `.lintr`: `assignment_linter(operator = c("=", "<<-"))`, `indentation_linter = NULL` (conventions §4: aligned hanging indents are allowed; the two-space block indent still applies), `line_length_linter(100)`, `object_name_linter(styles = "snake_case", regexes = c(s3 = "^(\\.DollarNames|knit_print|vec_[a-z0-9_]+)\\.[a-z0-9_]+$"))`; every other default linter stays on; `exclusions: list("tests/testthat/fixtures/docs")` (the P15 document fixtures of 04 §12.4 carry CRLF, BOM and missing final newlines on purpose).
-- Lint the development tree only after loading it (conventions §4): `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`.
-- `.Rbuildignore` holds at least `^dev$`, `^\.github$`, `^\.lintr$`, `^cran-comments\.md$`, `^CRAN-SUBMISSION$`, `^_pkgdown\.yml$`, `^vignettes/.*\.Rmd\.orig$`, `^\.gptr$`, `^README\.Rmd$`, `^LICENSE\.md$`, `^CLAUDE\.md$`, `^AGENTS\.md$`, `^\.claude$` and the Rproj entries.
-- Exactly one export: `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` (04 §6.7, §12.1, IC-21, IC-35). Everything else is internal (`@noRd`).
-- Conditions (04 §2): `gptr_abort(message, class, ..., .data = NULL, call = NULL)` gives class `c(paste0("gptr_error_", class), "gptr_error", "error", "condition")`; `gptr_warn()` gives `c("gptr_warning_<cls>", "gptr_warning", "warning", "condition")`; `gptr_inform()` gives `c("gptr_message_<cls>", "gptr_message", "message", "condition")` and is silent under `options(gptr.quiet = TRUE)`. Messages are pasted with `paste(message, collapse = "\n")`, never interpolated, and pass `redact_hook(x, profile = "persist")`. Checkers signal `gptr_error_invalid_argument` with fields `arg` and `expected` and never print the value. `ext_service_get()` signals `gptr_error_not_available` with fields `member` and `provided_by`. Warning classes owned here: `locale`, `deprecated`.
-- Options owned by P01 (04 §3.1): `gptr.quiet` (`FALSE`), `gptr.interactive` (`NULL`), `gptr.project_root` (`NULL`), `gptr.verbose` (`NULL`; 0 under knitr/testthat, 1 without a human, 2 with one), `gptr.out_keep` (`20L`). `gptr_opt(name)` returns `getOption(paste0("gptr.", name), <default>)` for every option of §3.1 (`NULL` for settings-backed options).
-- Environment read by P01: `GPTR_PROJECT_ROOT` (`project_root()`), `_R_CHECK_PACKAGE_NAME_` (`check_running()`), `TESTTHAT`, the option `jupyter.in_kernel`, `QUARTO_DOCUMENT_PATH`, `QUARTO_DOCUMENT_FILE`, `JPY_SESSION_NAME`, `RSTUDIO`, `POSITRON`, `TERM_PROGRAM` (`front_end()`).
-- Identifiers (IC-20, IC-61): `id_new(prefix, n)` = `substr(cli::hash_sha256(paste(<time with microseconds>, Sys.getpid(), <process counter>, <salt>)), 1, n)`; session ids `s` + 10 hex, entry ids 8 hex, block ids 6-16 hex with at least one letter, request ids `q` + 12 hex, `peter$out()` ids `o` + 6 hex. Nothing touches `.Random.seed` except `with_seed_preserved()`; ports come from `port_candidates()` in 49152-65535.
-- Paths (04 §7.1, §11.1, IC-51, IC-54, IC-60, IC-63): `project_root()` honours `options(gptr.project_root)`, then `GPTR_PROJECT_ROOT`, then the nearest ancestor holding `.gptr/`, `DESCRIPTION`, `.git`, `*.Rproj` or `_quarto.yml`; the workspace root is `.gptr/` when it exists, else `file.path(tempdir(), "gptr")`; spill files live in `<workspace root>/cache/tmp/`; `gptr_user_dir(which)` = `tools::R_user_dir("gptr", which)`; `rscript_path()` = `file.path(R.home("bin"), "Rscript")` (`Rscript.exe` on Windows); `write_atomic()` retries `file.rename()` 3 times with 100 ms sleeps, then writes in place after an md5 re-check; `save_rds()`/`serialize_leaf()` always pass `ascii = FALSE` (rule R7).
-- Estimator (03 §12.5, G2): characters per o200k token prose 4.36, code 3.24, r_output 2.13, str 2.01, csv 1.57, json 2.90, error 2.98, describe 2.39; CJK 0.848 tokens per character, other non-ASCII 0.35; EWMA of the log ratio with alpha 0.5, ratio clamped to 0.5-3, updated only when the estimate is at least 150 tokens; `est_tokens()` median absolute error at most 15% on `fixtures/tokens/`.
-- Truncation (03 §6.12, G5 fact-check 13-15, IC-71): keep the first 40% and the last 60% of the lines that fit the budget, with the notice `[... <n> lines omitted; all: peter$out("<id>")]`; the store keeps the last `gptr.out_keep` entries per session (the process store when `session = NULL`).
-- Fake provider (04 §12.1): class `c("gptr_provider", "gptr_spec")`, `id = name`, `api` `"fake"` or `"fake-classifier"`, one model `"<name>/<name>-1"` (chat) or `"<name>/<name>-s1"` (classifier) with context 200000, max_output 8192, reasoning `TRUE`, input `c("text", "image")`, tool_call `TRUE`, zero prices; `local = TRUE`, `offline = TRUE`, `api_version = "1.0"`, a shared `log` environment with `requests`; classifier `model_version = "<name>-s1-1.0"`, engine `"fake"`, `calibrated = TRUE`.
-- Records (04 §4, IC-10): unclassed named lists, every field present (`NULL` when unset); JSON uses Pi v3 names at top level, the §4.8 mapping table, gptr-only fields in a `gptr` object, `NULL` fields omitted.
-- Test environment (04 §3.2, §12.2, IC-63): `tests/testthat/setup.R` redirects `R_USER_CONFIG_DIR`, `R_USER_DATA_DIR`, `R_USER_CACHE_DIR`, `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `XDG_CONFIG_HOME` to temporary directories, sets `GPTR_PROJECT_ROOT` to a temporary project, blanks every provider key unless `GPTR_LIVE_TESTS=true`, sets `GPTR_REPLAY=replay`, `OMP_THREAD_LIMIT=2` and `options(gptr.interactive = FALSE, gptr.quiet = TRUE)`. `R_TESTS` needs no entry: `R CMD check` sets it to the relative path `startup.Rs`, which R's base profile sources in every R process, but testthat's `test_dir()`/`test_check()` set it to `""` for the whole run (testthat >= 2.0.0, `local_test_directory()`), so `Rscript` children started by tests and helpers never source it; the Task 1 environment test asserts `Sys.getenv("R_TESTS") == ""` so that a change in testthat would show at once.
-- The 39 services of 04 §7.0 are named in `service_plans` (`aaa-state.R`); `helper-arch.R` maps literal `ext_service_get("<name>")` calls to them (IC-33). `arch_kernel_sdk()` is exactly IC-33's list; `arch_contract_edges()` admits only the three cross-area calls 04 names outside it, each from its named area: `ckpt-*.R` -> `code_targets()` (IC-31, §7.11, §7.16), `subagent-*.R` -> `session_new()` (§7.6) and `mcp-*.R` -> `session_new()` (§6.3, the dedicated session of `gptr_mcp_serve()`).
-- Process-spawning tests call `skip_on_cran()`, start children with `rscript_path()` and clean them up with `withr::defer()`; the mock server provider record is `offline = TRUE` (IC-45).
-- Every task ends with one commit (conventions §10). End each commit message with the attribution line your harness specifies, if it specifies one.
-- Red-phase commands (every Step 2) start with `testthat::set_max_fails(Inf)`: testthat's progress reporter otherwise stops after 10 failures with "Maximum number of failures exceeded; quitting." and prints no summary line.
+- DESCRIPTION (05 P01, IC-72): `Package: gptr`; `Version: 0.99.0.9000`;
+  `Title: Language Model Agents Inside the Live 'R' Session`; `Depends: R (>= 4.2.0)`;
+  `License: Apache License (== 2.0)` (no `LICENSE` file; full text in `LICENSE.md`);
+  `Copyright: file inst/COPYRIGHTS`; `URL: https://github.com/Broccolito/gptr`;
+  `BugReports: https://github.com/Broccolito/gptr/issues`; `Language: en-US`; `Encoding: UTF-8`;
+  `Config/testthat/edition: 3`; `Roxygen: list(markdown = TRUE)`; `NeedsCompilation: no`; no
+  `VignetteBuilder` (P25 adds it) and no `Collate` field (IC-32).
+- `Authors@R`: the maintainer
+  `person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"), comment = c(ORCID = "0000-0002-7342-7000"))`
+  plus
+  `person("Mario", "Zechner", role = c("ctb", "cph"), comment = "Author of 'pi' (MIT), from which tool texts and templates are derived")`.
+- Imports (final, written once; no later plan adds one): jsonlite, curl, processx, callr, rlang,
+  cli, yaml, ps, methods, stats, tools, utils, grDevices, graphics. Suggests: testthat (>= 3.2.0),
+  withr, knitr, rmarkdown, later, httpuv, openssl, shiny, bslib, chromote, ragg, rstudioapi,
+  reticulate, DBI, duckdb, RSQLite, data.table, vctrs, stringi, magick, keyring, codetools. Never:
+  httr2, R6, S7, evaluate, digest, glue, promises, coro, mirai, fs, magrittr or any R LLM package.
+- `.lintr`: `assignment_linter(operator = c("=", "<<-"))`, `indentation_linter = NULL` (conventions
+  section 4: aligned hanging indents are allowed; the two-space block indent still applies),
+  `line_length_linter(100)`,
+  `object_name_linter(styles = "snake_case", regexes = c(s3 = "^(\\.DollarNames|knit_print|vec_[a-z0-9_]+)\\.[a-z0-9_]+$"))`;
+  every other default linter stays on; `exclusions: list("tests/testthat/fixtures/docs")` (the P15
+  document fixtures of 04 section 12.4 carry CRLF, BOM and missing final newlines on purpose).
+- Lint the development tree only after loading it (conventions section 4):
+  `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`.
+- `.Rbuildignore` holds at least `^dev$`, `^\.github$`, `^\.lintr$`, `^cran-comments\.md$`,
+  `^CRAN-SUBMISSION$`, `^_pkgdown\.yml$`, `^vignettes/.*\.Rmd\.orig$`, `^\.gptr$`, `^README\.Rmd$`,
+  `^LICENSE\.md$`, `^CLAUDE\.md$`, `^AGENTS\.md$`, `^\.claude$` and the Rproj entries.
+- Exactly one export: `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))`
+  (04 sections 6.7, 12.1, IC-21, IC-35). Everything else is internal (`@noRd`).
+- Conditions (04 section 2): `gptr_abort(message, class, ..., .data = NULL, call = NULL)` gives
+  class `c(paste0("gptr_error_", class), "gptr_error", "error", "condition")`; `gptr_warn()` gives
+  `c("gptr_warning_<cls>", "gptr_warning", "warning", "condition")`; `gptr_inform()` gives
+  `c("gptr_message_<cls>", "gptr_message", "message", "condition")` and is silent under
+  `options(gptr.quiet = TRUE)`. Messages are pasted with `paste(message, collapse = "\n")`, never
+  interpolated, and pass `redact_hook(x, profile = "persist")`. Checkers signal
+  `gptr_error_invalid_argument` with fields `arg` and `expected` and never print the value.
+  `ext_service_get()` signals `gptr_error_not_available` with fields `member` and `provided_by`.
+  Warning classes owned here: `locale`, `deprecated`.
+- Options owned by P01 (04 section 3.1): `gptr.quiet` (`FALSE`), `gptr.interactive` (`NULL`),
+  `gptr.project_root` (`NULL`), `gptr.verbose` (`NULL`; 0 under knitr/testthat, 1 without a human, 2
+  with one), `gptr.out_keep` (`20L`). `gptr_opt(name)` returns
+  `getOption(paste0("gptr.", name), <default>)` for every option of section 3.1 (`NULL` for
+  settings-backed options).
+- Environment read by P01: `GPTR_PROJECT_ROOT` (`project_root()`), `_R_CHECK_PACKAGE_NAME_`
+  (`check_running()`), `TESTTHAT`, the option `jupyter.in_kernel`, `QUARTO_DOCUMENT_PATH`,
+  `QUARTO_DOCUMENT_FILE`, `JPY_SESSION_NAME`, `RSTUDIO`, `POSITRON`, `TERM_PROGRAM` (`front_end()`).
+- Identifiers (IC-20, IC-61): `id_new(prefix, n)` =
+  `substr(cli::hash_sha256(paste(<time with microseconds>, Sys.getpid(), <process counter>, <salt>)), 1, n)`;
+  session ids `s` + 10 hex, entry ids 8 hex, block ids 6-16 hex with at least one letter, request
+  ids `q` + 12 hex, `peter$out()` ids `o` + 6 hex. Nothing touches `.Random.seed` except
+  `with_seed_preserved()`; ports come from `port_candidates()` in 49152-65535.
+- Paths (04 sections 7.1, 11.1, IC-51, IC-54, IC-60, IC-63): `project_root()` honours
+  `options(gptr.project_root)`, then `GPTR_PROJECT_ROOT`, then the nearest ancestor holding
+  `.gptr/`, `DESCRIPTION`, `.git`, `*.Rproj` or `_quarto.yml`; the workspace root is `.gptr/` when
+  it exists, else `file.path(tempdir(), "gptr")`; spill files live in `<workspace root>/cache/tmp/`;
+  `gptr_user_dir(which)` = `tools::R_user_dir("gptr", which)`; `rscript_path()` =
+  `file.path(R.home("bin"), "Rscript")` (`Rscript.exe` on Windows); `write_atomic()` retries
+  `file.rename()` 3 times with 100 ms sleeps, then writes in place after an md5 re-check;
+  `save_rds()`/`serialize_leaf()` always pass `ascii = FALSE` (rule R7).
+- Estimator (03 section 12.5, G2): characters per o200k token prose 4.36, code 3.24, r_output 2.13,
+  str 2.01, csv 1.57, json 2.90, error 2.98, describe 2.39; CJK 0.848 tokens per character, other
+  non-ASCII 0.35; EWMA of the log ratio with alpha 0.5, ratio clamped to 0.5-3, updated only when
+  the estimate is at least 150 tokens; `est_tokens()` median absolute error at most 15% on
+  `fixtures/tokens/`.
+- Truncation (03 section 6.12, G5 fact-check 13-15, IC-71): keep the first 40% and the last 60% of
+  the lines that fit the budget, with the notice `[... <n> lines omitted; all: peter$out("<id>")]`;
+  the store keeps the last `gptr.out_keep` entries per session (the process store when
+  `session = NULL`).
+- Fake provider (04 section 12.1): class `c("gptr_provider", "gptr_spec")`, `id = name`, `api`
+  `"fake"` or `"fake-classifier"`, one model `"<name>/<name>-1"` (chat) or `"<name>/<name>-s1"`
+  (classifier) with context 200000, max_output 8192, reasoning `TRUE`, input `c("text", "image")`,
+  tool_call `TRUE`, zero prices; `local = TRUE`, `offline = TRUE`, `api_version = "1.0"`, a shared
+  `log` environment with `requests`; classifier `model_version = "<name>-s1-1.0"`, engine `"fake"`,
+  `calibrated = TRUE`.
+- Records (04 section 4, IC-10): unclassed named lists, every field present (`NULL` when unset);
+  JSON uses Pi v3 names at top level, the section 4.8 mapping table, gptr-only fields in a `gptr`
+  object, `NULL` fields omitted.
+- Test environment (04 sections 3.2, 12.2, IC-63): `tests/testthat/setup.R` redirects
+  `R_USER_CONFIG_DIR`, `R_USER_DATA_DIR`, `R_USER_CACHE_DIR`, `HOME`, `USERPROFILE`, `APPDATA`,
+  `LOCALAPPDATA`, `XDG_CONFIG_HOME` to temporary directories, sets `GPTR_PROJECT_ROOT` to a
+  temporary project, blanks every provider key unless `GPTR_LIVE_TESTS=true`, sets
+  `GPTR_REPLAY=replay`, `OMP_THREAD_LIMIT=2` and
+  `options(gptr.interactive = FALSE, gptr.quiet = TRUE)`. `R_TESTS` needs no entry: `R CMD check`
+  sets it to the relative path `startup.Rs`, which R's base profile sources in every R process, but
+  testthat's `test_dir()`/`test_check()` set it to `""` for the whole run (testthat >= 2.0.0,
+  `local_test_directory()`), so `Rscript` children started by tests and helpers never source it; the
+  Task 1 environment test asserts `Sys.getenv("R_TESTS") == ""` so that a change in testthat would
+  show at once.
+- The 39 services of 04 section 7.0 are named in `service_plans` (`aaa-state.R`); `helper-arch.R`
+  maps literal `ext_service_get("<name>")` calls to them (IC-33). `arch_kernel_sdk()` is exactly
+  IC-33's list; `arch_contract_edges()` admits only the three cross-area calls 04 names outside it,
+  each from its named area: `ckpt-*.R` -> `code_targets()` (IC-31, sections 7.11, 7.16),
+  `subagent-*.R` -> `session_new()` (section 7.6) and `mcp-*.R` -> `session_new()` (section 6.3, the
+  dedicated session of `gptr_mcp_serve()`).
+- Process-spawning tests call `skip_on_cran()`, start children with `rscript_path()` and clean them
+  up with `withr::defer()`; the mock server provider record is `offline = TRUE` (IC-45).
+- Every task ends with one commit (conventions section 10). End each commit message with the
+  attribution line your harness specifies, if it specifies one.
+- Red-phase commands (every Step 2) start with `testthat::set_max_fails(Inf)`: testthat's progress
+  reporter otherwise stops after 10 failures with "Maximum number of failures exceeded; quitting."
+  and prints no summary line.
 
 ## File Structure
 
@@ -51,7 +148,7 @@
 | `DESCRIPTION` | package metadata, final Imports and Suggests (rewritten) | 1 |
 | `LICENSE`, `LICENSE.md` | `LICENSE` deleted (a standard license takes no license file); Apache License 2.0 full text in `LICENSE.md` | 1 |
 | `.Rbuildignore`, `.gitignore` | build and VCS exclusions | 1 |
-| `.lintr` | lintr configuration of conventions §4 | 1 |
+| `.lintr` | lintr configuration of conventions section 4 | 1 |
 | `.Rprofile` | deleted (it sources a missing `renv/activate.R`) | 1 |
 | `dev/style.R` | `gptr_style()`: styler without the assignment rewrite (not in the package) | 1 |
 | `inst/COPYRIGHTS` | third-party notices (pi, models.dev, gitleaks) | 1 |
@@ -82,7 +179,11 @@
 | `tests/testthat/test-lint-rules.R`, `tests/testthat/fixtures/lint/s3-methods.R` | package lint rules over `R/` | 20 |
 | `.github/workflows/R-CMD-check.yaml` | CI matrix and the extra jobs | 21 |
 
-Tasks ("Create `f`" means write a new file with exactly the block shown; "Append to `f`" means add the block at the end of the existing file, separated from the previous content by one blank line; "Replace the contents of `f`" overwrites an existing file; Task 20 Step 3 inserts one block at the position it names; every block is complete code, and the file after the last task of this plan is the concatenation of its blocks in task order):
+Tasks ("Create `f`" means write a new file with exactly the block shown; "Append to `f`" means add
+the block at the end of the existing file, separated from the previous content by one blank line;
+"Replace the contents of `f`" overwrites an existing file; Task 20 Step 3 inserts one block at the
+position it names; every block is complete code, and the file after the last task of this plan is
+the concatenation of its blocks in task order):
 
 1. Package skeleton, metadata and the test environment
 2. Package state, conditions, UTF-8 ingress, option defaults and load hooks
@@ -108,11 +209,23 @@ Tasks ("Create `f`" means write a new file with exactly the block shown; "Append
 
 ### Task 1: Package skeleton, metadata and the test environment
 
-**Files:** Create: `.lintr`, `dev/style.R`, `inst/COPYRIGHTS`; Modify: `DESCRIPTION`, `LICENSE.md`, `.Rbuildignore`, `.gitignore`; Delete: `LICENSE`, `.Rprofile` (and commit the deletion of the old API files); Test: `tests/testthat.R`, `tests/testthat/setup.R`, `tests/testthat/test-zzz.R` (create).
+**Files:** Create: `.lintr`, `dev/style.R`, `inst/COPYRIGHTS`; Modify: `DESCRIPTION`, `LICENSE.md`,
+`.Rbuildignore`, `.gitignore`; Delete: `LICENSE`, `.Rprofile` (and commit the deletion of the old
+API files); Test: `tests/testthat.R`, `tests/testthat/setup.R`, `tests/testthat/test-zzz.R`
+(create).
 
-Rewrite the package metadata once, with the final dependency lists, and install the test environment every later test runs in. The old API files (`R/get_response.R`, `R/dataframe_to_text.R` and their `man/` pages) are already deleted in the working tree (S-7); this task commits their removal. `man/img/logo.png` stays. The DESCRIPTION text is report 13 section 3.1(a) (validated by `R CMD check --as-cran` there) with the IC-72 fields and the final Imports/Suggests of architecture section 9.
+Rewrite the package metadata once, with the final dependency lists, and install the test environment
+every later test runs in. The old API files (`R/get_response.R`, `R/dataframe_to_text.R` and their
+`man/` pages) are already deleted in the working tree (S-7); this task commits their removal.
+`man/img/logo.png` stays. The DESCRIPTION text is report 13 section 3.1(a) (validated by
+`R CMD check --as-cran` there) with the IC-72 fields and the final Imports/Suggests of architecture
+section 9.
 
-**Interfaces:** Consumes: none (first task). Produces: the test environment of 04 section 3.2 and section 12.2 (`tests/testthat/setup.R`); `gptr_style(...)` in `dev/style.R` (conventions section 4); the DESCRIPTION, `.lintr` and `.Rbuildignore` every later plan relies on. `tests/testthat/test-zzz.R` defines the test helpers `desc_fields()`, `desc_packages(field)` and `source_file(name)` used again by Task 21.
+**Interfaces:** Consumes: none (first task). Produces: the test environment of 04 section 3.2 and
+section 12.2 (`tests/testthat/setup.R`); `gptr_style(...)` in `dev/style.R` (conventions section 4);
+the DESCRIPTION, `.lintr` and `.Rbuildignore` every later plan relies on.
+`tests/testthat/test-zzz.R` defines the test helpers `desc_fields()`, `desc_packages(field)` and
+`source_file(name)` used again by Task 21.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -307,7 +420,12 @@ test_that("tests run with redirected homes, a temporary project and no keys (IC-
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "zzz")'
 ```
 
-Expected: the summary line `[ FAIL 6 | WARN 0 | SKIP 1 | PASS 19 ]`. The `.lintr` test is skipped because `.lintr` does not exist yet. The six failures come from the DESCRIPTION, `Authors@R` and Imports/Suggests tests: the old Title differs from "Language Model Agents Inside the Live 'R' Session", the old DESCRIPTION has no `Copyright`, `URL` or `Language` field, `Authors@R` has no Zechner entry (`attempt to select less than one element in get1index`) and there is no `Suggests` field (`subscript out of bounds`). The environment test already passes because `setup.R` exists.
+Expected: the summary line `[ FAIL 6 | WARN 0 | SKIP 1 | PASS 19 ]`. The `.lintr` test is skipped
+because `.lintr` does not exist yet. The six failures come from the DESCRIPTION, `Authors@R` and
+Imports/Suggests tests: the old Title differs from "Language Model Agents Inside the Live 'R'
+Session", the old DESCRIPTION has no `Copyright`, `URL` or `Language` field, `Authors@R` has no
+Zechner entry (`attempt to select less than one element in get1index`) and there is no `Suggests`
+field (`subscript out of bounds`). The environment test already passes because `setup.R` exists.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -398,10 +516,10 @@ SystemRequirements: Optional external programs: 'claude' (Claude Code)
     documents, and a 'Chrome'-family browser for app screenshots.
 ```
 
-Delete `LICENSE` (Step 3 removes it): `Apache License (== 2.0)` is a standard license, so the package has no
-license file. Replace the contents of `LICENSE.md` with the full Apache License 2.0 text in the Markdown form
-that `usethis::use_apache_license(version = 2, include_future = FALSE)` writes
-(https://www.apache.org/licenses/LICENSE-2.0).
+Delete `LICENSE` (Step 3 removes it): `Apache License (== 2.0)` is a standard license, so the
+package has no license file. Replace the contents of `LICENSE.md` with the full Apache License 2.0
+text in the Markdown form that `usethis::use_apache_license(version = 2, include_future = FALSE)`
+writes (https://www.apache.org/licenses/LICENSE-2.0).
 
 Replace the contents of `.Rbuildignore`:
 
@@ -454,7 +572,13 @@ gptr_*.tar.gz
 /docs/
 ```
 
-Create `.lintr`. `indentation_linter = NULL` turns off only lintr's indentation linter (conventions section 4): argument lines aligned under an opening parenthesis (`switch(x,`, `list(`) are allowed, the two-space block indent of the house style still applies, and every other default linter stays on. The document fixtures of 04 section 12.4 (`tests/testthat/fixtures/docs/`, P15: CRLF, BOM, missing final newline) are data, not package R code, so lintr skips them; `lintr::lint_package()` lints `tests/` recursively and would otherwise report a parse error the owning plan cannot fix. `tests/testthat/fixtures/lint/` stays linted (acceptance 7d):
+Create `.lintr`. `indentation_linter = NULL` turns off only lintr's indentation linter (conventions
+section 4): argument lines aligned under an opening parenthesis (`switch(x,`, `list(`) are allowed,
+the two-space block indent of the house style still applies, and every other default linter stays
+on. The document fixtures of 04 section 12.4 (`tests/testthat/fixtures/docs/`, P15: CRLF, BOM,
+missing final newline) are data, not package R code, so lintr skips them; `lintr::lint_package()`
+lints `tests/` recursively and would otherwise report a parse error the owning plan cannot fix.
+`tests/testthat/fixtures/lint/` stays linted (acceptance 7d):
 
 ```text
 linters: lintr::linters_with_defaults(
@@ -590,11 +714,39 @@ git commit -m "chore(pkg): rewrite the package skeleton, metadata and test envir
 
 ### Task 2: Package state, conditions, UTF-8 ingress, option defaults and load hooks
 
-**Files:** Create: `R/aaa-state.R`, `R/utils-conditions.R`, `R/utils-encoding.R`, `R/utils-options.R`, `R/zzz.R`; Test: `tests/testthat/test-aaa-state.R`, `tests/testthat/test-utils-conditions.R`, `tests/testthat/test-utils-encoding.R`, `tests/testthat/test-utils-options.R` (create); `tests/testthat/test-zzz.R` (append).
+**Files:** Create: `R/aaa-state.R`, `R/utils-conditions.R`, `R/utils-encoding.R`,
+`R/utils-options.R`, `R/zzz.R`; Test: `tests/testthat/test-aaa-state.R`,
+`tests/testthat/test-utils-conditions.R`, `tests/testthat/test-utils-encoding.R`,
+`tests/testthat/test-utils-options.R` (create); `tests/testthat/test-zzz.R` (append).
 
-The smallest self-consistent core: `the` and the load-time registry (IC-32), the redaction hook (IC-34), the condition constructors and argument checkers (04 sections 1.1 and 2.1, rule C1), the ingress normaliser `as_utf8()` (IC-62: `enc2utf8()` rewrites unmarked UTF-8 to `<c3><a9>` in a C locale, verified) and the option defaults of 04 section 3.1. `aaa-state.R` collates first, so every later file may call `on_load()` at top level; the last test of `test-aaa-state.R` proves it by running `R CMD INSTALL` on a copy that adds a later-collating file calling `on_load()` (it needs `NAMESPACE`, which exists since Task 1). `zzz.R` also holds `imports_used()`, which names one function of every Imports package so that `R CMD check` does not report unused Imports before the plans that call them exist.
+The smallest self-consistent core: `the` and the load-time registry (IC-32), the redaction hook
+(IC-34), the condition constructors and argument checkers (04 sections 1.1 and 2.1, rule C1), the
+ingress normaliser `as_utf8()` (IC-62: `enc2utf8()` rewrites unmarked UTF-8 to `<c3><a9>` in a C
+locale, verified) and the option defaults of 04 section 3.1. `aaa-state.R` collates first, so every
+later file may call `on_load()` at top level; the last test of `test-aaa-state.R` proves it by
+running `R CMD INSTALL` on a copy that adds a later-collating file calling `on_load()` (it needs
+`NAMESPACE`, which exists since Task 1). `zzz.R` also holds `imports_used()`, which names one
+function of every Imports package so that `R CMD check` does not report unused Imports before the
+plans that call them exist.
 
-**Interfaces:** Consumes: none. Produces: `the` (fields `on_load`, `on_unload`, `once`, `out`, `services`, `redactor`, plus the private `load_errors`); `` `%||%` ``; `on_load(expr)`; `on_unload(fun)`; `redactor_set(fun)`; `redact_hook(x, profile = "persist")`; `gptr_abort(message, class, ..., .data = NULL, call = NULL)`; `gptr_warn(message, class, ..., .data = NULL, .once = NULL)`; `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`; `msg_verbatim(x, stream = c("stdout", "stderr"))`; `gptr_deprecated(what, since, instead = NULL)`; the checkers `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_strings(x, arg, null = FALSE)`, `check_flag(x, arg, null = FALSE)`, `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`, `check_choice(x, choices, arg)`, `check_function(x, arg, null = FALSE, args = NULL)`, `check_env(x, arg, null = FALSE)`, `check_list(x, arg, named = FALSE, null = FALSE)`, `check_class(x, class, arg, null = FALSE)`; `as_utf8(x)`; `utf8_mark(x)`; `gptr_opt(name)`; `.onLoad(libname, pkgname)` (runs `the$on_load`, then `ext_load_builtins()` when P02 defines it); `.onUnload(libpath)`. Private helpers other plans may reuse: `gptr_condition(message, class, kind = "error", fields = list(), call = NULL)` (an unsignalled condition object), `arg_abort(x, arg, expected)`, `ns_fun(name)` (a namespace function by name, or `NULL`).
+**Interfaces:** Consumes: none. Produces: `the` (fields `on_load`, `on_unload`, `once`, `out`,
+`services`, `redactor`, plus the private `load_errors`); `` `%||%` ``; `on_load(expr)`;
+`on_unload(fun)`; `redactor_set(fun)`; `redact_hook(x, profile = "persist")`;
+`gptr_abort(message, class, ..., .data = NULL, call = NULL)`;
+`gptr_warn(message, class, ..., .data = NULL, .once = NULL)`;
+`gptr_inform(message, class, ..., .data = NULL, .once = NULL)`;
+`msg_verbatim(x, stream = c("stdout", "stderr"))`; `gptr_deprecated(what, since, instead = NULL)`;
+the checkers `check_string(x, arg, null = FALSE, empty = FALSE)`,
+`check_strings(x, arg, null = FALSE)`, `check_flag(x, arg, null = FALSE)`,
+`check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`,
+`check_choice(x, choices, arg)`, `check_function(x, arg, null = FALSE, args = NULL)`,
+`check_env(x, arg, null = FALSE)`, `check_list(x, arg, named = FALSE, null = FALSE)`,
+`check_class(x, class, arg, null = FALSE)`; `as_utf8(x)`; `utf8_mark(x)`; `gptr_opt(name)`;
+`.onLoad(libname, pkgname)` (runs `the$on_load`, then `ext_load_builtins()` when P02 defines it);
+`.onUnload(libpath)`. Private helpers other plans may reuse:
+`gptr_condition(message, class, kind = "error", fields = list(), call = NULL)` (an unsignalled
+condition object), `arg_abort(x, arg, expected)`, `ns_fun(name)` (a namespace function by name, or
+`NULL`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -981,7 +1133,10 @@ test_that("imports_used() references every Imports package", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "aaa-state|utils-conditions|utils-encoding|utils-options|zzz")'
 ```
 
-Expected: the summary line `[ FAIL 36 | WARN 2 | SKIP 0 | PASS 45 ]`. The new tests error with `object 'the' not found`, `object 'gptr_option_defaults' not found` or `could not find function` for `gptr_abort`, `redactor_set`, `as_utf8`, `utf8_mark`, `on_load`, `on_unload` and `imports_used`; most of the 45 passes are Task 1's metadata tests.
+Expected: the summary line `[ FAIL 36 | WARN 2 | SKIP 0 | PASS 45 ]`. The new tests error with
+`object 'the' not found`, `object 'gptr_option_defaults' not found` or `could not find function` for
+`gptr_abort`, `redactor_set`, `as_utf8`, `utf8_mark`, `on_load`, `on_unload` and `imports_used`;
+most of the 45 passes are Task 1's metadata tests.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1433,7 +1588,8 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "aaa-state|utils-conditions|utils-encoding|utils-options|zzz")'
 ```
 
-Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 150 ]`. On a machine that cannot switch `LC_CTYPE` to `C` the C-locale test skips.
+Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 150 ]`.
+On a machine that cannot switch `LC_CTYPE` to `C` the C-locale test skips.
 
 - [ ] **Step 5: Commit**
 
@@ -1444,11 +1600,28 @@ git commit -m "feat(utils): add package state, conditions, UTF-8 ingress, option
 
 ### Task 3: The bootstrap service table and `setting_get()`
 
-**Files:** Modify: `R/aaa-state.R`, `R/utils-options.R`; Test: `tests/testthat/test-aaa-state.R`, `tests/testthat/test-utils-options.R` (append).
+**Files:** Modify: `R/aaa-state.R`, `R/utils-options.R`; Test: `tests/testthat/test-aaa-state.R`,
+`tests/testthat/test-utils-options.R` (append).
 
-Earlier plans reach functions of later plans only through named services (IC-09, IC-34, 04 section 7.0). A service is registered by its provider in an `on_load()` expression and owned by a built-in; `ext_service_get()` consults a P02 `service` registry record first (`registry_get("service", name)`), then the bootstrap table, and treats a service whose built-in is filtered out as unavailable. P02 does not exist yet, so its functions (`registry_get()`, `gptr_registry()`, `registry_diagnostic()`) are looked up by name with `ns_fun()`; a built-in counts as filtered out when `gptr_registry()` lists records but none of source `builtin:<name>` in a state other than `disabled`. `setting_get()` is the only settings reader of every plan.
+Earlier plans reach functions of later plans only through named services (IC-09, IC-34, 04
+section 7.0). A service is registered by its provider in an `on_load()` expression and owned by a
+built-in; `ext_service_get()` consults a P02 `service` registry record first
+(`registry_get("service", name)`), then the bootstrap table, and treats a service whose built-in is
+filtered out as unavailable. P02 does not exist yet, so its functions (`registry_get()`,
+`gptr_registry()`, `registry_diagnostic()`) are looked up by name with `ns_fun()`; a built-in counts
+as filtered out when `gptr_registry()` lists records but none of source `builtin:<name>` in a state
+other than `disabled`. `setting_get()` is the only settings reader of every plan.
 
-**Interfaces:** Consumes: Task 2 (`the`, `ns_fun()`, `check_*`, `gptr_abort()`, `gptr_opt()`, `%||%`); late-bound P02 functions of 04 section 7.2 and section 6.7: `registry_get(kind, name, session = NULL)`, `gptr_registry(kind = NULL, diagnostics = FALSE)` (columns `kind`, `name`, `source`, `rank`, `state`), `registry_diagnostic(source, event, class, message)`. Produces: `ext_service_set(name, fun, provided_by, builtin = NULL)`; `ext_service_get(name)` (signals `gptr_error_not_available` with `member` and `provided_by`); `ext_service_has(name)`; `setting_get(key, session = NULL, default = NULL)` (the `settings.get` service of P08 when registered, else `gptr_opt(key)`, then `default`); `service_plans` (the 39 services of 04 section 7.0 and their plans; `helper-arch.R` reads it); private `service_lookup(name)`.
+**Interfaces:** Consumes: Task 2 (`the`, `ns_fun()`, `check_*`, `gptr_abort()`, `gptr_opt()`,
+`%||%`); late-bound P02 functions of 04 section 7.2 and section 6.7:
+`registry_get(kind, name, session = NULL)`, `gptr_registry(kind = NULL, diagnostics = FALSE)`
+(columns `kind`, `name`, `source`, `rank`, `state`),
+`registry_diagnostic(source, event, class, message)`. Produces:
+`ext_service_set(name, fun, provided_by, builtin = NULL)`; `ext_service_get(name)` (signals
+`gptr_error_not_available` with `member` and `provided_by`); `ext_service_has(name)`;
+`setting_get(key, session = NULL, default = NULL)` (the `settings.get` service of P08 when
+registered, else `gptr_opt(key)`, then `default`); `service_plans` (the 39 services of 04
+section 7.0 and their plans; `helper-arch.R` reads it); private `service_lookup(name)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1548,7 +1721,9 @@ test_that("setting_get() uses the settings.get service when it is registered", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "aaa-state|utils-options")'
 ```
 
-Expected: the summary line `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 32 ]`. The new tests fail with `could not find function "ext_service_has"` (and `ext_service_set`, `setting_get`, `service_builtin_active`) and `object 'service_plans' not found`.
+Expected: the summary line `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 32 ]`. The new tests fail with
+`could not find function "ext_service_has"` (and `ext_service_set`, `setting_get`,
+`service_builtin_active`) and `object 'service_plans' not found`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1704,9 +1879,24 @@ git commit -m "feat(utils): add the bootstrap service table and setting_get()"
 
 **Files:** Modify: `R/utils-options.R`; Test: `tests/testthat/test-utils-options.R` (append).
 
-IC-43 separates the two human predicates: `gptr_has_human()` decides streaming and verbosity, `gptr_can_prompt()` decides every question (it also accepts IRkernel, where `readline()` works). Both honour `options(gptr.interactive)` and are `FALSE` under knitr, testthat and `R CMD check`. `supervise_default()` implements IC-60 (supervisor fifos are fatal in checked examples, report 13). `front_end()` uses the signals of report 14 section 3.9; `.Platform$GUI` (through the mockable `platform_gui()`) identifies an IDE's own R process, while `RSTUDIO`, `POSITRON` and `TERM_PROGRAM`, which every child process of the IDE inherits, count only in an interactive session, so an Rscript started from an IDE terminal is `rscript`. `s3_register()` registers methods of Suggests generics lazily (vctrs' pattern), for P13 and P15.
+IC-43 separates the two human predicates: `gptr_has_human()` decides streaming and verbosity,
+`gptr_can_prompt()` decides every question (it also accepts IRkernel, where `readline()` works).
+Both honour `options(gptr.interactive)` and are `FALSE` under knitr, testthat and `R CMD check`.
+`supervise_default()` implements IC-60 (supervisor fifos are fatal in checked examples, report 13).
+`front_end()` uses the signals of report 14 section 3.9; `.Platform$GUI` (through the mockable
+`platform_gui()`) identifies an IDE's own R process, while `RSTUDIO`, `POSITRON` and `TERM_PROGRAM`,
+which every child process of the IDE inherits, count only in an interactive session, so an Rscript
+started from an IDE terminal is `rscript`. `s3_register()` registers methods of Suggests generics
+lazily (vctrs' pattern), for P13 and P15.
 
-**Interfaces:** Consumes: Task 2 (`check_*`, `arg_abort()`, `as_utf8()`, `%||%`). Produces: `gptr_is_interactive()`, `gptr_readline(prompt = "")` (mockable wrappers; the answer passes `as_utf8()`); `gptr_has_human()`; `gptr_can_prompt()`; `gptr_confirm(question, default = FALSE)`; `front_end()` (one of `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; the IDE environment variables count only in an interactive session because child processes inherit them); `verbosity()` (0-3); `check_running()`; `supervise_default()`; `s3_register(generic, class, method = NULL)`; private `platform_gui()` (mockable `.Platform$GUI`).
+**Interfaces:** Consumes: Task 2 (`check_*`, `arg_abort()`, `as_utf8()`, `%||%`). Produces:
+`gptr_is_interactive()`, `gptr_readline(prompt = "")` (mockable wrappers; the answer passes
+`as_utf8()`); `gptr_has_human()`; `gptr_can_prompt()`; `gptr_confirm(question, default = FALSE)`;
+`front_end()` (one of `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`,
+`terminal`, `rgui`, `unknown`; the IDE environment variables count only in an interactive session
+because child processes inherit them); `verbosity()` (0-3); `check_running()`;
+`supervise_default()`; `s3_register(generic, class, method = NULL)`; private `platform_gui()`
+(mockable `.Platform$GUI`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1846,7 +2036,9 @@ test_that("s3_register() waits for a package that is not loaded yet", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "utils-options")'
 ```
 
-Expected: the summary line `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 12 ]`. The new tests fail with `could not find function "gptr_has_human"` and the same error for `gptr_can_prompt`, `check_running`, `gptr_confirm`, `front_end`, `verbosity`, `supervise_default` and `s3_register`.
+Expected: the summary line `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 12 ]`. The new tests fail with
+`could not find function "gptr_has_human"` and the same error for `gptr_can_prompt`,
+`check_running`, `gptr_confirm`, `front_end`, `verbosity`, `supervise_default` and `s3_register`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2015,11 +2207,21 @@ git commit -m "feat(utils): add human predicates, front-end detection, verbosity
 
 ### Task 5: Byte-exact text I/O and atomic writes
 
-**Files:** Create: `R/utils-paths.R`; Modify: `R/utils-encoding.R`; Test: `tests/testthat/test-utils-paths.R` (create); `tests/testthat/test-utils-encoding.R` (append).
+**Files:** Create: `R/utils-paths.R`; Modify: `R/utils-encoding.R`; Test:
+`tests/testthat/test-utils-paths.R` (create); `tests/testthat/test-utils-encoding.R` (append).
 
-Files are read and written as bytes so that CRLF, BOM and a missing final newline survive a round trip, and everything written is UTF-8 (conventions section 6). `os_bytes()` follows report G5: processx translates UTF-8-marked strings to the native encoding, which in a C locale becomes `<U+00E9>`, so argv, environment values and working directories are passed as unmarked UTF-8 bytes. `write_atomic()` implements IC-51 (rename, 3 retries, then an in-place write after an md5 re-check).
+Files are read and written as bytes so that CRLF, BOM and a missing final newline survive a round
+trip, and everything written is UTF-8 (conventions section 6). `os_bytes()` follows report G5:
+processx translates UTF-8-marked strings to the native encoding, which in a C locale becomes
+`<U+00E9>`, so argv, environment values and working directories are passed as unmarked UTF-8 bytes.
+`write_atomic()` implements IC-51 (rename, 3 retries, then an in-place write after an md5 re-check).
 
-**Interfaces:** Consumes: Task 2 (`as_utf8()`, `check_*`, `arg_abort()`, `gptr_abort()`, `gptr_warn()`). Produces: `os_bytes(x)`; `raw_to_utf8(x, fallback = "CP1252")`; `read_utf8(path)` -> `list(text, eol, bom, encoding, final_newline)`; `write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)`; `locale_utf8()` (warns class `locale` once); `write_atomic(path, content)` (character lines written UTF-8 with LF, or raw bytes); private `write_bytes(path, bytes)`, `file_rename(from, to)`.
+**Interfaces:** Consumes: Task 2 (`as_utf8()`, `check_*`, `arg_abort()`, `gptr_abort()`,
+`gptr_warn()`). Produces: `os_bytes(x)`; `raw_to_utf8(x, fallback = "CP1252")`; `read_utf8(path)` ->
+`list(text, eol, bom, encoding, final_newline)`;
+`write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)`; `locale_utf8()` (warns
+class `locale` once); `write_atomic(path, content)` (character lines written UTF-8 with LF, or raw
+bytes); private `write_bytes(path, bytes)`, `file_rename(from, to)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2132,7 +2334,9 @@ test_that("write_atomic() keeps the permission bits of the file it replaces", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "utils-encoding|utils-paths")'
 ```
 
-Expected: the summary line `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 9 ]`. The new tests fail with `could not find function "os_bytes"` (and `raw_to_utf8`, `read_utf8`, `write_utf8`, `locale_utf8`, `write_atomic`).
+Expected: the summary line `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 9 ]`. The new tests fail with
+`could not find function "os_bytes"` (and `raw_to_utf8`, `read_utf8`, `write_utf8`, `locale_utf8`,
+`write_atomic`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2330,9 +2534,23 @@ git commit -m "feat(utils): add byte-exact UTF-8 file I/O and atomic writes"
 
 **Files:** Modify: `R/utils-paths.R`; Test: `tests/testthat/test-utils-paths.R` (append).
 
-Every path gptr computes is absolute and uses `/`. `path_norm()` resolves the deepest existing ancestor, because `normalizePath(mustWork = FALSE)` of a missing path under macOS `/var` does not resolve to `/private/var` (report 18 section 3.8, verified). `project_root()`, `user_home()` and `app_config_dir()` implement IC-63, `path_key()` IC-51, `rscript_path()` IC-60, `path_class()` report 18 section 3.8 with IC-54's `control` and `instructions` classes, and `save_rds()`/`serialize_leaf()` copy-safety rule R7.
+Every path gptr computes is absolute and uses `/`. `path_norm()` resolves the deepest existing
+ancestor, because `normalizePath(mustWork = FALSE)` of a missing path under macOS `/var` does not
+resolve to `/private/var` (report 18 section 3.8, verified). `project_root()`, `user_home()` and
+`app_config_dir()` implement IC-63, `path_key()` IC-51, `rscript_path()` IC-60, `path_class()`
+report 18 section 3.8 with IC-54's `control` and `instructions` classes, and
+`save_rds()`/`serialize_leaf()` copy-safety rule R7.
 
-**Interfaces:** Consumes: Task 2 (`check_*`, `check_choice()`, `arg_abort()`). Produces: `rscript_path()`; `user_home()`; `app_config_dir(app)`; `gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)`; `path_norm(path)`; `path_key(path)`; `path_rel(path, root = project_root())`; `project_root(path = getwd())`; `workspace_dir(path = getwd())`; `workspace_root(create = TRUE)`; `ws_path(..., create_parent = TRUE)`; `save_rds(object, file, compress = FALSE)`; `serialize_leaf(object, xdr = TRUE)`; `path_class(path, root = project_root())` (one of `url`, `wildcard`, `control`, `critical`, `protected`, `instructions`, `workspace`, `temp`, `outside`, `unknown`); `reserved_name(x)` (Windows device names, IC-63); private `is_windows()`, `is_macos()`, `path_inside(path, root)`.
+**Interfaces:** Consumes: Task 2 (`check_*`, `check_choice()`, `arg_abort()`). Produces:
+`rscript_path()`; `user_home()`; `app_config_dir(app)`;
+`gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)`; `path_norm(path)`;
+`path_key(path)`; `path_rel(path, root = project_root())`; `project_root(path = getwd())`;
+`workspace_dir(path = getwd())`; `workspace_root(create = TRUE)`;
+`ws_path(..., create_parent = TRUE)`; `save_rds(object, file, compress = FALSE)`;
+`serialize_leaf(object, xdr = TRUE)`; `path_class(path, root = project_root())` (one of `url`,
+`wildcard`, `control`, `critical`, `protected`, `instructions`, `workspace`, `temp`, `outside`,
+`unknown`); `reserved_name(x)` (Windows device names, IC-63); private `is_windows()`, `is_macos()`,
+`path_inside(path, root)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2493,7 +2711,10 @@ test_that("path_class() assigns the classes of report 18 and IC-54", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "utils-paths")'
 ```
 
-Expected: the summary line `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 10 ]`. The new tests fail with `could not find function "project_root"` (and `user_home`, `app_config_dir`, `rscript_path`, `gptr_user_dir`, `path_norm`, `path_key`, `workspace_dir`, `save_rds`, `path_rel`, `reserved_name`, `path_class`).
+Expected: the summary line `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 10 ]`. The new tests fail with
+`could not find function "project_root"` (and `user_home`, `app_config_dir`, `rscript_path`,
+`gptr_user_dir`, `path_norm`, `path_key`, `workspace_dir`, `save_rds`, `path_rel`, `reserved_name`,
+`path_class`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2798,9 +3019,17 @@ git commit -m "feat(utils): add project, workspace and home paths, serialisation
 
 **Files:** Create: `R/json-encode.R`; Test: `tests/testthat/test-json-encode.R` (create).
 
-One serialiser with the conventions section 6 settings (`auto_unbox = TRUE, null = "null", digits = NA`), UTF-8 marking before serialisation, and `json_verbatim()` pieces embedded unchanged so that entries and frozen tool arrays are serialised once (report 19 section 2.2). `json_decode()` uses `jsonlite::parse_json(text, simplifyVector = FALSE)`, the same parser and result as `fromJSON(x, simplifyVector = FALSE)`, but it never treats a string as a file name or URL.
+One serialiser with the conventions section 6 settings
+(`auto_unbox = TRUE, null = "null", digits = NA`), UTF-8 marking before serialisation, and
+`json_verbatim()` pieces embedded unchanged so that entries and frozen tool arrays are serialised
+once (report 19 section 2.2). `json_decode()` uses
+`jsonlite::parse_json(text, simplifyVector = FALSE)`, the same parser and result as
+`fromJSON(x, simplifyVector = FALSE)`, but it never treats a string as a file name or URL.
 
-**Interfaces:** Consumes: Task 2 (`as_utf8()`, `check_*`). Produces: `json_encode(x, pretty = FALSE)` -> `chr(1)` marked UTF-8; `json_decode(text)`; `json_verbatim(text)` -> `structure(text, class = "json")`; `json_obj()` -> `structure(list(), names = character())`.
+**Interfaces:** Consumes: Task 2 (`as_utf8()`, `check_*`). Produces:
+`json_encode(x, pretty = FALSE)` -> `chr(1)` marked UTF-8; `json_decode(text)`;
+`json_verbatim(text)` -> `structure(text, class = "json")`; `json_obj()` ->
+`structure(list(), names = character())`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2863,7 +3092,8 @@ test_that("json_encode() and json_decode() round-trip nested records", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "json-encode")'
 ```
 
-Expected: the summary line `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`. All five tests fail with `could not find function "json_encode"` (or `json_verbatim`, `json_decode`).
+Expected: the summary line `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`. All five tests fail with
+`could not find function "json_encode"` (or `json_verbatim`, `json_decode`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2942,9 +3172,18 @@ git commit -m "feat(json): add json_encode(), json_decode() and verbatim pieces"
 
 **Files:** Create: `R/utils-hash.R`; Test: `tests/testthat/test-utils-hash.R` (create).
 
-Hashes use cli (sha256) and rlang (xxh128). `canonical_json()` sorts object keys with `order(method = "radix")`, so its bytes do not depend on the collation locale. Ids hash the time with microseconds, the pid, a process counter and a salt and never touch `.Random.seed` (IC-20, IC-61); `with_seed_preserved()` is one of the two functions allowed to assign `.Random.seed`. `fingerprint()` is a leaf (rule R4): it samples at most 64 values and reads addresses, so it never copies an object, expands compact row names or materialises an ALTREP sequence.
+Hashes use cli (sha256) and rlang (xxh128). `canonical_json()` sorts object keys with
+`order(method = "radix")`, so its bytes do not depend on the collation locale. Ids hash the time
+with microseconds, the pid, a process counter and a salt and never touch `.Random.seed` (IC-20,
+IC-61); `with_seed_preserved()` is one of the two functions allowed to assign `.Random.seed`.
+`fingerprint()` is a leaf (rule R4): it samples at most 64 values and reads addresses, so it never
+copies an object, expands compact row names or materialises an ALTREP sequence.
 
-**Interfaces:** Consumes: Tasks 2 and 7 (`as_utf8()`, `check_*`; `json_obj()` in the tests). Produces: `hash_sha256(x)`; `hash_xxh128(x)`; `hash_file(path)`; `canonical_json(x)`; `id_new(prefix = "", n = 10L)`; `id_entry(taken = NULL)`; `id_block(taken = character())`; `with_seed_preserved(expr)`; `port_candidates(n = 20L)`; `fingerprint(x)`; `the$id_count`, `the$id_salt` (private).
+**Interfaces:** Consumes: Tasks 2 and 7 (`as_utf8()`, `check_*`; `json_obj()` in the tests).
+Produces: `hash_sha256(x)`; `hash_xxh128(x)`; `hash_file(path)`; `canonical_json(x)`;
+`id_new(prefix = "", n = 10L)`; `id_entry(taken = NULL)`; `id_block(taken = character())`;
+`with_seed_preserved(expr)`; `port_candidates(n = 20L)`; `fingerprint(x)`; `the$id_count`,
+`the$id_salt` (private).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3069,7 +3308,9 @@ test_that("fingerprint() is stable, sensitive to sampled values and cheap on ALT
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "utils-hash")'
 ```
 
-Expected: the summary line `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 0 ]`. All ten tests fail with `could not find function "hash_sha256"` (and `hash_xxh128`, `canonical_json`, `id_new`, `with_seed_preserved`, `port_candidates`, `fingerprint`).
+Expected: the summary line `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 0 ]`. All ten tests fail with
+`could not find function "hash_sha256"` (and `hash_xxh128`, `canonical_json`, `id_new`,
+`with_seed_preserved`, `port_candidates`, `fingerprint`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3256,7 +3497,8 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "utils-hash")'
 ```
 
-Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 32 ]`. On a machine without the `C` or `en_US.UTF-8` locale or without httpuv the matching test skips.
+Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 32 ]`.
+On a machine without the `C` or `en_US.UTF-8` locale or without httpuv the matching test skips.
 
 - [ ] **Step 5: Commit**
 
@@ -3267,11 +3509,22 @@ git commit -m "feat(utils): add hashes, canonical JSON, RNG-free ids, seed prese
 
 ### Task 9: The calibrated token estimator and its fixture
 
-**Files:** Create: `R/utils-tokens.R`; Test: `tests/testthat/fixtures/tokens/counts.json`, `tests/testthat/test-utils-tokens.R` (create).
+**Files:** Create: `R/utils-tokens.R`; Test: `tests/testthat/fixtures/tokens/counts.json`,
+`tests/testthat/test-utils-tokens.R` (create).
 
-Constants of architecture section 12.5 and report G2 part (f) (median error 11.4% against 43% for chars/4). The image formulas follow G2 section 3.1 and its plot-size prototype (Anthropic: long edge scaled to at most 1568 px, then shrunk in 1% steps until `ceil(w/28) * ceil(h/28) <= 1568`; 768x512 gives 532 and 1400x1000 gives 1551, the values of G2's table). The fixture holds one sample of each of G2's 12 corpus classes with its o200k count, measured with rtiktoken (a development tool, never a dependency); the text is ASCII with `\uXXXX` escapes.
+Constants of architecture section 12.5 and report G2 part (f) (median error 11.4% against 43% for
+chars/4). The image formulas follow G2 section 3.1 and its plot-size prototype (Anthropic: long edge
+scaled to at most 1568 px, then shrunk in 1% steps until `ceil(w/28) * ceil(h/28) <= 1568`; 768x512
+gives 532 and 1400x1000 gives 1551, the values of G2's table). The fixture holds one sample of each
+of G2's 12 corpus classes with its o200k count, measured with rtiktoken (a development tool, never a
+dependency); the text is ASCII with `\uXXXX` escapes.
 
-**Interfaces:** Consumes: Tasks 2 and 7 (`as_utf8()`, `check_*`; `json_decode()` in the tests). Produces: `est_tokens(x, class = c("prose", "code", "r_output", "str", "csv", "json", "error", "describe"))` -> `num(1)`; `est_image_tokens(width, height, api = "anthropic")` -> `num(1)`; `est_multiplier(state, estimated, reported, prior)` -> `list(m, n)`; `token_cpt` (the class constants); private `est_tokens_each(x, class)` (per-element estimates, used by Task 10).
+**Interfaces:** Consumes: Tasks 2 and 7 (`as_utf8()`, `check_*`; `json_decode()` in the tests).
+Produces:
+`est_tokens(x, class = c("prose", "code", "r_output", "str", "csv", "json", "error", "describe"))`
+-> `num(1)`; `est_image_tokens(width, height, api = "anthropic")` -> `num(1)`;
+`est_multiplier(state, estimated, reported, prior)` -> `list(m, n)`; `token_cpt` (the class
+constants); private `est_tokens_each(x, class)` (per-element estimates, used by Task 10).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3418,7 +3671,9 @@ test_that("est_multiplier() updates by EWMA only for large enough estimates", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "utils-tokens")'
 ```
 
-Expected: the summary line `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 1 ]`. Five tests fail with `could not find function "est_tokens"` (and `est_image_tokens`, `est_multiplier`); the fixture-length expectation passes.
+Expected: the summary line `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 1 ]`. Five tests fail with
+`could not find function "est_tokens"` (and `est_image_tokens`, `est_multiplier`); the
+fixture-length expectation passes.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3524,11 +3779,28 @@ git commit -m "feat(utils): add the calibrated token estimator and its fixture"
 
 ### Task 10: Output budgets: truncation, the out store, spill files, terminal cleanup and listings
 
-**Files:** Create: `R/utils-text.R`; Generated: `NAMESPACE` (by `devtools::document()`); Test: `tests/testthat/test-utils-text.R` (create).
+**Files:** Create: `R/utils-text.R`; Generated: `NAMESPACE` (by `devtools::document()`); Test:
+`tests/testthat/test-utils-text.R` (create).
 
-Above a budget, output keeps the first 40% and the last 60% of the lines that fit, with the notice of G5 fact-check 13 (about 26 tokens, against 64 with a temporary path). The full text goes to the out store (per session, IC-71) and to a redacted spill file under `cache/tmp/`. `out_store()` accepts `NULL` (the process store `the$out`), an out store, or a session's live record: an environment with an `out` binding that P06 creates. `new_listing()` builds the listing classes of 04 section 5.12 and their shared print method (the only `@export` in this task: it registers the S3 method).
+Above a budget, output keeps the first 40% and the last 60% of the lines that fit, with the notice
+of G5 fact-check 13 (about 26 tokens, against 64 with a temporary path). The full text goes to the
+out store (per session, IC-71) and to a redacted spill file under `cache/tmp/`. `out_store()`
+accepts `NULL` (the process store `the$out`), an out store, or a session's live record: an
+environment with an `out` binding that P06 creates. `new_listing()` builds the listing classes of 04
+section 5.12 and their shared print method (the only `@export` in this task: it registers the S3
+method).
 
-**Interfaces:** Consumes: Tasks 2, 5, 6, 8, 9 (`as_utf8()`, `check_*`, `arg_abort()`, `gptr_abort()`, `gptr_opt()`, `redact_hook()`, `read_utf8()`, `write_atomic()`, `ws_path()`, `workspace_root()`, `id_new()`, `est_tokens_each()`, `token_cpt`). Produces: `truncate_output(text, budget_tokens, class = "r_output", head = 0.4, id_prefix = "o")` -> `list(text, truncated, omitted, total_lines, out_id, spill)`; `out_put(text, stream = "stdout", meta = list(), session = NULL)` -> id `o` + 6 hex; `out_get(id, stream = c("stdout", "stderr"), lines = NULL, session = NULL)`; `spill_write(text, prefix = "gptr-output-")`; `clean_terminal(x)`; `new_listing(df, class, footer = NULL)` and `print.gptr_listing()`; private `out_store(session = NULL)`, `out_store_new(keep)`, `text_lines(text)`, `cap_lines(lines, max_chars = 400L)`, `truncation_notice(omitted, id)`.
+**Interfaces:** Consumes: Tasks 2, 5, 6, 8, 9 (`as_utf8()`, `check_*`, `arg_abort()`,
+`gptr_abort()`, `gptr_opt()`, `redact_hook()`, `read_utf8()`, `write_atomic()`, `ws_path()`,
+`workspace_root()`, `id_new()`, `est_tokens_each()`, `token_cpt`). Produces:
+`truncate_output(text, budget_tokens, class = "r_output", head = 0.4, id_prefix = "o")` ->
+`list(text, truncated, omitted, total_lines, out_id, spill)`;
+`out_put(text, stream = "stdout", meta = list(), session = NULL)` -> id `o` + 6 hex;
+`out_get(id, stream = c("stdout", "stderr"), lines = NULL, session = NULL)`;
+`spill_write(text, prefix = "gptr-output-")`; `clean_terminal(x)`;
+`new_listing(df, class, footer = NULL)` and `print.gptr_listing()`; private
+`out_store(session = NULL)`, `out_store_new(keep)`, `text_lines(text)`,
+`cap_lines(lines, max_chars = 400L)`, `truncation_notice(omitted, id)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3658,7 +3930,9 @@ test_that("listings print at most 20 rows, a count line and the footer", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "utils-text")'
 ```
 
-Expected: the summary line `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`. All eight tests fail with `could not find function "truncate_output"` (and `out_put`, `spill_write`, `clean_terminal`, `new_listing`).
+Expected: the summary line `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`. All eight tests fail with
+`could not find function "truncate_output"` (and `out_put`, `spill_write`, `clean_terminal`,
+`new_listing`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3924,7 +4198,8 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "utils-text")'
 ```
 
-Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 40 ]`. `devtools::document()` now writes `S3method(print,gptr_listing)` into `NAMESPACE`.
+Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 40 ]`.
+`devtools::document()` now writes `S3method(print,gptr_listing)` into `NAMESPACE`.
 
 - [ ] **Step 5: Commit**
 
@@ -3937,9 +4212,20 @@ git commit -m "feat(utils): add output truncation, the out store, spill files an
 
 **Files:** Create: `R/json-partial.R`; Test: `tests/testthat/test-json-partial.R` (create).
 
-Adapted from the verified prototype of report 03 section 5.2 (`R/partial_json.R`), which follows the npm package partial-json with `Allow.ALL`, as Pi uses it; `pj_repair()` ports Pi's `repairJson()`. Each byte is inspected once and only structural bytes reach the R loop, so 20,000 small deltas scan in linear time (INFRA-23); parsing is delegated to jsonlite. A raw delta may end inside a multi-byte UTF-8 character; `pj_trim_partial_utf8()` leaves those bytes out until the next delta, and `value()` catches every error, because a stream normaliser calls it between deltas and must never signal an R condition after `start` (INFRA-02; a fuzz run of 400 random documents split at random bytes found the prototype's `value()` failing with "input string 1 is invalid UTF-8").
+Adapted from the verified prototype of report 03 section 5.2 (`R/partial_json.R`), which follows the
+npm package partial-json with `Allow.ALL`, as Pi uses it; `pj_repair()` ports Pi's `repairJson()`.
+Each byte is inspected once and only structural bytes reach the R loop, so 20,000 small deltas scan
+in linear time (INFRA-23); parsing is delegated to jsonlite. A raw delta may end inside a multi-byte
+UTF-8 character; `pj_trim_partial_utf8()` leaves those bytes out until the next delta, and `value()`
+catches every error, because a stream normaliser calls it between deltas and must never signal an R
+condition after `start` (INFRA-02; a fuzz run of 400 random documents split at random bytes found
+the prototype's `value()` failing with "input string 1 is invalid UTF-8").
 
-**Interfaces:** Consumes: Tasks 2 and 7 (`as_utf8()`, `%||%`, `json_decode()`, `json_obj()`). Produces: `partial_json()` -> an environment (class `gptr_partial_json`) with `push(delta)` (character or raw), `value()` (best-effort named list, `NULL` before any input; never an error), `text()`, `complete()` and `preview(min_interval = 0.1)` (throttled `value()` for tool-call previews); private `pj_trim_partial_utf8(bytes)`.
+**Interfaces:** Consumes: Tasks 2 and 7 (`as_utf8()`, `%||%`, `json_decode()`, `json_obj()`).
+Produces: `partial_json()` -> an environment (class `gptr_partial_json`) with `push(delta)`
+(character or raw), `value()` (best-effort named list, `NULL` before any input; never an error),
+`text()`, `complete()` and `preview(min_interval = 0.1)` (throttled `value()` for tool-call
+previews); private `pj_trim_partial_utf8(bytes)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4079,7 +4365,8 @@ test_that("20,000 small deltas are scanned in linear time", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "json-partial")'
 ```
 
-Expected: the summary line `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`. All seven tests fail with `could not find function "partial_json"`.
+Expected: the summary line `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`. All seven tests fail with
+`could not find function "partial_json"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4432,9 +4719,17 @@ git commit -m "feat(json): add the streaming partial-JSON scanner"
 
 **Files:** Create: `R/json-schema.R`; Test: `tests/testthat/test-json-schema.R` (create).
 
-Tool arguments are validated with explicit coercion only (INFRA-09, report 10a section 14): integer-valued numbers become integers where the schema says `integer`, and a scalar becomes a length-1 array where the schema says `array` of scalars. The supported subset is what tool definitions use: `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`.
+Tool arguments are validated with explicit coercion only (INFRA-09, report 10a section 14):
+integer-valued numbers become integers where the schema says `integer`, and a scalar becomes a
+length-1 array where the schema says `array` of scalars. The supported subset is what tool
+definitions use: `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`.
 
-**Interfaces:** Consumes: Tasks 2 and 7 (`check_*`, `as_utf8()`, `%||%`, `json_obj()`). Produces: `schema_validate(schema, input)` -> `list(ok, input, errors)`; `schema_signature(name, schema, description = NULL, prefix = "")` -> `name(a: string, b?: number)  # <first sentence>`; `schema_problems(schema)` -> chr (empty when valid); private `schema_problems_at(schema, path)`, `schema_check(schema, value, path)`, `first_sentence(text)`.
+**Interfaces:** Consumes: Tasks 2 and 7 (`check_*`, `as_utf8()`, `%||%`, `json_obj()`). Produces:
+`schema_validate(schema, input)` -> `list(ok, input, errors)`;
+`schema_signature(name, schema, description = NULL, prefix = "")` ->
+`name(a: string, b?: number)  # <first sentence>`; `schema_problems(schema)` -> chr (empty when
+valid); private `schema_problems_at(schema, path)`, `schema_check(schema, value, path)`,
+`first_sentence(text)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4536,7 +4831,8 @@ test_that("schema_problems() finds structural mistakes", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "json-schema")'
 ```
 
-Expected: the summary line `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`. All seven tests fail with `could not find function "schema_validate"` (and `schema_signature`, `schema_problems`).
+Expected: the summary line `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`. All seven tests fail with
+`could not find function "schema_validate"` (and `schema_signature`, `schema_problems`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4775,9 +5071,25 @@ git commit -m "feat(json): add JSON Schema validation and one-line signatures"
 
 **Files:** Create: `R/provider-message.R`; Test: `tests/testthat/test-provider-message.R` (create).
 
-The provider-neutral message model of report 03 section 4.2 and 04 sections 4.1-4.3 and 4.8: unclassed named lists with every field present, JSON in Pi v3 names with gptr-only fields under `gptr`, and opaque provider data stored byte for byte (INFRA-07). `json_rename()` applies the section 4.8 table to session entries (P06).
+The provider-neutral message model of report 03 section 4.2 and 04 sections 4.1-4.3 and 4.8:
+unclassed named lists with every field present, JSON in Pi v3 names with gptr-only fields under
+`gptr`, and opaque provider data stored byte for byte (INFRA-07). `json_rename()` applies the
+section 4.8 table to session entries (P06).
 
-**Interfaces:** Consumes: Tasks 2 and 7 (`check_*`, `as_utf8()`, `gptr_abort()`, `%||%`, `json_obj()`). Produces: `block_text(text, signature = NULL)`; `block_thinking(thinking, signature = NULL, redacted = FALSE, data = NULL, origin = NULL)`; `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)`; `block_tool_call(id, name, arguments, raw_arguments = NULL, thought_signature = NULL)`; `block_opaque(provider, api, model, json)`; `block_context(kind, text, attrs = list(), anchor = FALSE)`; `msg_user(content, source = "prompt", timestamp = NULL)`; `msg_assistant(content, api, provider, model, usage = NULL, stop_reason = "stop", response_id = NULL, response_model = NULL, error_message = NULL, raw_stop_reason = NULL, thinking_level = NULL, route = "api", request_id = NULL, timestamp = NULL)`; `msg_tool_result(tool_call_id, tool_name, content, is_error = FALSE, details = NULL, usage = NULL, timestamp = NULL)`; `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`; `msg_validate(msg)`; `msg_to_json(msg)`; `msg_from_json(x)` (unknown fields kept under `extra`); `msg_text(msg)`; `json_rename(x, to = c("json", "r"))`; `json_field_map`; `usage_to_json(usage)`, `usage_from_json(x)`; `now_ms()`.
+**Interfaces:** Consumes: Tasks 2 and 7 (`check_*`, `as_utf8()`, `gptr_abort()`, `%||%`,
+`json_obj()`). Produces: `block_text(text, signature = NULL)`;
+`block_thinking(thinking, signature = NULL, redacted = FALSE, data = NULL, origin = NULL)`;
+`block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)`;
+`block_tool_call(id, name, arguments, raw_arguments = NULL, thought_signature = NULL)`;
+`block_opaque(provider, api, model, json)`;
+`block_context(kind, text, attrs = list(), anchor = FALSE)`;
+`msg_user(content, source = "prompt", timestamp = NULL)`;
+`msg_assistant(content, api, provider, model, usage = NULL, stop_reason = "stop", response_id = NULL, response_model = NULL, error_message = NULL, raw_stop_reason = NULL, thinking_level = NULL, route = "api", request_id = NULL, timestamp = NULL)`;
+`msg_tool_result(tool_call_id, tool_name, content, is_error = FALSE, details = NULL, usage = NULL, timestamp = NULL)`;
+`msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`;
+`msg_validate(msg)`; `msg_to_json(msg)`; `msg_from_json(x)` (unknown fields kept under `extra`);
+`msg_text(msg)`; `json_rename(x, to = c("json", "r"))`; `json_field_map`; `usage_to_json(usage)`,
+`usage_from_json(x)`; `now_ms()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4940,7 +5252,8 @@ test_that("json_rename() applies the section 4.8 table in both directions", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "provider-message")'
 ```
 
-Expected: the summary line `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`. All nine tests fail with `could not find function "block_text"` (and the other constructors).
+Expected: the summary line `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 0 ]`. All nine tests fail with
+`could not find function "block_text"` (and the other constructors).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5500,9 +5813,19 @@ git commit -m "feat(provider): add content blocks, messages and the JSON field m
 
 **Files:** Create: `R/provider-events.R`; Test: `tests/testthat/test-provider-events.R` (create).
 
-INFRA-02 events are delta-only (report 02 sections 2.4 and 4.4): no event carries the cumulative partial message, which would be quadratic in R. The accumulator keeps per-block buffers that double and are joined once, so deltas accumulate in linear time (INFRA-23); `push()` takes the buffer list out of its environment and clears the binding before setting an element, because setting an element of a list still bound in an environment duplicates the list on every delta (measured: 20,000 deltas 1.7 s instead of 0.01 s, 100,000 deltas about 40 s instead of under 1 s). The timing test pushes 100,000 deltas against the 5 s bound of conventions section 7, which only linear accumulation meets. Its `message()` is the terminal event's message once `done` or `error` arrived.
+INFRA-02 events are delta-only (report 02 sections 2.4 and 4.4): no event carries the cumulative
+partial message, which would be quadratic in R. The accumulator keeps per-block buffers that double
+and are joined once, so deltas accumulate in linear time (INFRA-23); `push()` takes the buffer list
+out of its environment and clears the binding before setting an element, because setting an element
+of a list still bound in an environment duplicates the list on every delta (measured: 20,000 deltas
+1.7 s instead of 0.01 s, 100,000 deltas about 40 s instead of under 1 s). The timing test pushes
+100,000 deltas against the 5 s bound of conventions section 7, which only linear accumulation meets.
+Its `message()` is the terminal event's message once `done` or `error` arrived.
 
-**Interfaces:** Consumes: Tasks 2, 11, 13 (`check_string()`, `arg_abort()`, `%||%`, `partial_json()`, `json_obj()`, `block_*()`, `msg_assistant()`). Produces: `ev_new(type, ...)` -> `list(type, session = NULL, run = NULL, agent = "main", turn = NULL, ts, ...)`; `acc_new()` -> an environment (class `gptr_accumulator`) with `push(ev)` and `message(stop_reason = "stop")`.
+**Interfaces:** Consumes: Tasks 2, 11, 13 (`check_string()`, `arg_abort()`, `%||%`,
+`partial_json()`, `json_obj()`, `block_*()`, `msg_assistant()`). Produces: `ev_new(type, ...)` ->
+`list(type, session = NULL, run = NULL, agent = "main", turn = NULL, ts, ...)`; `acc_new()` -> an
+environment (class `gptr_accumulator`) with `push(ev)` and `message(stop_reason = "stop")`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5580,7 +5903,8 @@ test_that("100,000 deltas accumulate in linear time (INFRA-23)", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "provider-events")'
 ```
 
-Expected: the summary line `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`. All four tests fail with `could not find function "ev_new"` (and `acc_new`).
+Expected: the summary line `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`. All four tests fail with
+`could not find function "ev_new"` (and `acc_new`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5730,11 +6054,29 @@ git commit -m "feat(provider): add INFRA-02 events and the linear-time accumulat
 
 ### Task 15: The fake provider
 
-**Files:** Create: `R/provider-fake.R`; Generated: `NAMESPACE`, `man/gptr_fake_provider.Rd` (by `devtools::document()`); Test: `tests/testthat/test-provider-fake.R` (create).
+**Files:** Create: `R/provider-fake.R`; Generated: `NAMESPACE`, `man/gptr_fake_provider.Rd` (by
+`devtools::document()`); Test: `tests/testthat/test-provider-fake.R` (create).
 
-The script grammar of 04 section 12.1 (IC-21) played by an `inprocess` generator with the contract of 04 section 8.1 (IC-16): each call returns `list(events, wait)` or `NULL`, checks `opts$signal$aborted` before every step and never signals an R condition after `start`. The provider's `log` environment is shared by copies of the spec. The model record also carries the log as `fake` so the generator finds its script; when a resolved model lost that field, `fake_engine()` falls back to `opts$provider$log`, then to a weak reference to the newest fake provider of that name. `builtin_fake()` is declared by P05 (IC-08) and uses only the factory API object: `gptr$register_adapter(...)` is `gptr$register(gptr_spec("adapter", ...))` (04 section 10.5; adapters resolve by name = api). The export's roxygen example runs offline.
+The script grammar of 04 section 12.1 (IC-21) played by an `inprocess` generator with the contract
+of 04 section 8.1 (IC-16): each call returns `list(events, wait)` or `NULL`, checks
+`opts$signal$aborted` before every step and never signals an R condition after `start`. The
+provider's `log` environment is shared by copies of the spec. The model record also carries the log
+as `fake` so the generator finds its script; when a resolved model lost that field, `fake_engine()`
+falls back to `opts$provider$log`, then to a weak reference to the newest fake provider of that
+name. `builtin_fake()` is declared by P05 (IC-08) and uses only the factory API object:
+`gptr$register_adapter(...)` is `gptr$register(gptr_spec("adapter", ...))` (04 section 10.5;
+adapters resolve by name = api). The export's roxygen example runs offline.
 
-**Interfaces:** Consumes: Tasks 2, 7, 8, 9, 11, 13, 14 (`check_*`, `arg_abort()`, `gptr_condition()`, `%||%`, `json_encode()`, `json_decode()`, `json_obj()`, `id_new()`, `est_tokens()`, `partial_json()`, `block_*()`, `msg_*()`, `ev_new()`, `acc_new()`); at P05's load time the factory API object of P02 (`gptr$register_adapter(name, ...)`). Produces: `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` (export); `fake_stream(model, context, opts)` (the `inprocess` stream of adapter `fake`); `fake_classifier_stream(model, context, opts)`; `fake_classify(model, state, questions, opts)` -> `list(answers, usage, model_version, engine, calibrated)` or an unsignalled `gptr_error_s1_*` condition; `builtin_fake(gptr)` (registers adapters `fake` and `fake-classifier`); `the$fakes` (private).
+**Interfaces:** Consumes: Tasks 2, 7, 8, 9, 11, 13, 14 (`check_*`, `arg_abort()`,
+`gptr_condition()`, `%||%`, `json_encode()`, `json_decode()`, `json_obj()`, `id_new()`,
+`est_tokens()`, `partial_json()`, `block_*()`, `msg_*()`, `ev_new()`, `acc_new()`); at P05's load
+time the factory API object of P02 (`gptr$register_adapter(name, ...)`). Produces:
+`gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` (export);
+`fake_stream(model, context, opts)` (the `inprocess` stream of adapter `fake`);
+`fake_classifier_stream(model, context, opts)`; `fake_classify(model, state, questions, opts)` ->
+`list(answers, usage, model_version, engine, calibrated)` or an unsignalled `gptr_error_s1_*`
+condition; `builtin_fake(gptr)` (registers adapters `fake` and `fake-classifier`); `the$fakes`
+(private).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6031,7 +6373,9 @@ test_that("builtin_fake() registers the two adapters through the API object only
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "provider-fake")'
 ```
 
-Expected: the summary line `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 0 ]`. All fifteen tests fail with `could not find function "gptr_fake_provider"` (the classifier and `builtin_fake()` tests with `fake_classify`, `fake_classifier_stream`, `builtin_fake`).
+Expected: the summary line `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 0 ]`. All fifteen tests fail with
+`could not find function "gptr_fake_provider"` (the classifier and `builtin_fake()` tests with
+`fake_classify`, `fake_classifier_stream`, `builtin_fake`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6586,7 +6930,9 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "provider-fake")'
 ```
 
-Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 72 ]`. `devtools::document()` now writes `export(gptr_fake_provider)` into `NAMESPACE` and creates `man/gptr_fake_provider.Rd`.
+Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 72 ]`.
+`devtools::document()` now writes `export(gptr_fake_provider)` into `NAMESPACE` and creates
+`man/gptr_fake_provider.Rd`.
 
 - [ ] **Step 5: Commit**
 
@@ -6597,11 +6943,26 @@ git commit -m "feat(provider): add the scripted fake provider"
 
 ### Task 16: Shared fake-provider test helpers
 
-**Files:** Create: `tests/testthat/helper-fake.R`; Test: `tests/testthat/test-provider-fake.R` (append).
+**Files:** Create: `tests/testthat/helper-fake.R`; Test: `tests/testthat/test-provider-fake.R`
+(append).
 
-The helper names and signatures of 04 section 12.2 that every later plan's tests use. `local_fake_provider()` registers the spec with `gptr_register()` once P02 exists (until then it returns the spec unregistered). `local_project()` creates a temporary project with a `.gptr/` skeleton directly (no dependency on `gptr_init()`), makes it the working directory and the project root; `trust = TRUE` calls `gptr_trust(root, trust = TRUE)` once P08 exists and otherwise writes the 04 section 11.8 `trust.json` shape into the redirected user config. The tests reuse `play_fake()` from Task 15's test file.
+The helper names and signatures of 04 section 12.2 that every later plan's tests use.
+`local_fake_provider()` registers the spec with `gptr_register()` once P02 exists (until then it
+returns the spec unregistered). `local_project()` creates a temporary project with a `.gptr/`
+skeleton directly (no dependency on `gptr_init()`), makes it the working directory and the project
+root; `trust = TRUE` calls `gptr_trust(root, trust = TRUE)` once P08 exists and otherwise writes the
+04 section 11.8 `trust.json` shape into the redirected user config. The tests reuse `play_fake()`
+from Task 15's test file.
 
-**Interfaces:** Consumes: Tasks 5, 6, 7, 15 (`write_atomic()`, `path_norm()`, `path_key()`, `gptr_user_dir()`, `json_encode()`, `json_decode()`, `json_obj()`, `gptr_fake_provider()`); later: `gptr_register(spec)` (P02), `gptr_trust(path = ".", trust = NULL)` (P08). Produces: `fake_text(text, ...)`; `fake_tool(name, ..., .text = NULL, .id = NULL)`; `fake_tools(...)`; `fake_error(message = "overloaded", status = 529L, after = 0L)`; `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`; `fake_requests(spec)`; `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`; `local_gptr_options(..., .env = parent.frame())`.
+**Interfaces:** Consumes: Tasks 5, 6, 7, 15 (`write_atomic()`, `path_norm()`, `path_key()`,
+`gptr_user_dir()`, `json_encode()`, `json_decode()`, `json_obj()`, `gptr_fake_provider()`); later:
+`gptr_register(spec)` (P02), `gptr_trust(path = ".", trust = NULL)` (P08). Produces:
+`fake_text(text, ...)`; `fake_tool(name, ..., .text = NULL, .id = NULL)`; `fake_tools(...)`;
+`fake_error(message = "overloaded", status = 529L, after = 0L)`;
+`local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`;
+`fake_requests(spec)`;
+`local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`;
+`local_gptr_options(..., .env = parent.frame())`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6676,7 +7037,9 @@ test_that("local_gptr_options() prefixes names and restores them", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "provider-fake")'
 ```
 
-Expected: the summary line `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 72 ]`. The four new tests fail with `could not find function "fake_text"` (and `local_project`, `local_gptr_options`); the 72 passes are Task 15's.
+Expected: the summary line `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 72 ]`. The four new tests fail with
+`could not find function "fake_text"` (and `local_project`, `local_gptr_options`); the 72 passes are
+Task 15's.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6802,11 +7165,22 @@ git commit -m "test(infra): add the shared fake-provider helpers"
 
 ### Task 17: The copy-safety harness `expect_no_copy()`
 
-**Files:** Create: `tests/testthat/helper-tracemem.R`; Test: `tests/testthat/test-utils-hash.R` (append).
+**Files:** Create: `tests/testthat/helper-tracemem.R`; Test: `tests/testthat/test-utils-hash.R`
+(append).
 
-Copy-safety (architecture section 6.4) is proved in a fresh process (report 12 section 5.4 and the G3 fact-check): a generated script loads gptr, creates `object`, starts `tracemem()`, runs the action and then the user's next in-place edit; a `tracemem[` line after the action means something still references the object. The child is started with `rscript_path()` (IC-60); `pkgload::load_all()` appears only inside the generated script text (IC-71); `in_run_edit = TRUE` counts copies made by an edit inside the action (IC-41). The self-test (05 P01 acceptance 5) sits in `test-utils-hash.R` next to the leaf functions it checks.
+Copy-safety (architecture section 6.4) is proved in a fresh process (report 12 section 5.4 and the
+G3 fact-check): a generated script loads gptr, creates `object`, starts `tracemem()`, runs the
+action and then the user's next in-place edit; a `tracemem[` line after the action means something
+still references the object. The child is started with `rscript_path()` (IC-60);
+`pkgload::load_all()` appears only inside the generated script text (IC-71); `in_run_edit = TRUE`
+counts copies made by an edit inside the action (IC-41). The self-test (05 P01 acceptance 5) sits in
+`test-utils-hash.R` next to the leaf functions it checks.
 
-**Interfaces:** Consumes: Tasks 6, 8, 15 (`rscript_path()`, `fingerprint()`, `save_rds()`, `gptr_fake_provider()` inside the child). Produces: `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)` (returns the copy count invisibly; skips on CRAN and without `capabilities("profmem")`); private `tracemem_loader()`, `tracemem_script(setup, action, edit, object, in_run_edit)`.
+**Interfaces:** Consumes: Tasks 6, 8, 15 (`rscript_path()`, `fingerprint()`, `save_rds()`,
+`gptr_fake_provider()` inside the child). Produces:
+`expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`
+(returns the copy count invisibly; skips on CRAN and without `capabilities("profmem")`); private
+`tracemem_loader()`, `tracemem_script(setup, action, edit, object, in_run_edit)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6848,7 +7222,8 @@ test_that("in_run_edit counts copies made by the edit inside the action (IC-41)"
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "utils-hash")'
 ```
 
-Expected: the summary line `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 32 ]`. The three new tests fail with `could not find function "expect_no_copy"` (and `tracemem_script`).
+Expected: the summary line `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 32 ]`. The three new tests fail with
+`could not find function "expect_no_copy"` (and `tracemem_script`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6935,7 +7310,8 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "utils-hash")'
 ```
 
-Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 39 ]`. Without `capabilities("profmem")` the three copy tests skip.
+Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 39 ]`.
+Without `capabilities("profmem")` the three copy tests skip.
 
 - [ ] **Step 5: Commit**
 
@@ -6946,11 +7322,30 @@ git commit -m "test(infra): add the copy-safety harness expect_no_copy()"
 
 ### Task 18: The base-R mock SSE server
 
-**Files:** Create: `tests/testthat/fixtures/mock_server.R`, `tests/testthat/helper-mock-server.R`; Test: `tests/testthat/test-provider-fake.R` (append).
+**Files:** Create: `tests/testthat/fixtures/mock_server.R`, `tests/testthat/helper-mock-server.R`;
+Test: `tests/testthat/test-provider-fake.R` (append).
 
-Adapted from the verified prototypes of report 15 section 5.1 (`mock_sse_base.R`: `serverSocket()` and `socketSelect()`, every client multiplexed in one process; 20 concurrent streams with correct timing) and report 10a appendix A.1 (`mock_anthropic.R` scenario plans). The server listens on every interface (base R has no host argument), so it answers only paths that start with a per-run token and lives for one test (IC-71); the provider record it returns is `offline = TRUE` (IC-45); the `redirect` scenario points at a second origin that logs every header byte it receives, unredacted, so a key carried across origins is visible (IC-64; the first origin redacts sensitive header values). The end of each request is logged just after its last byte is written, so a test that asserts `disconnected` polls `log()` first. The child runs `fixtures/mock_server.R` with `rscript_path()` and exits when the parent dies (ps) or after 15 minutes.
+Adapted from the verified prototypes of report 15 section 5.1 (`mock_sse_base.R`: `serverSocket()`
+and `socketSelect()`, every client multiplexed in one process; 20 concurrent streams with correct
+timing) and report 10a appendix A.1 (`mock_anthropic.R` scenario plans). The server listens on every
+interface (base R has no host argument), so it answers only paths that start with a per-run token
+and lives for one test (IC-71); the provider record it returns is `offline = TRUE` (IC-45); the
+`redirect` scenario points at a second origin that logs every header byte it receives, unredacted,
+so a key carried across origins is visible (IC-64; the first origin redacts sensitive header
+values). The end of each request is logged just after its last byte is written, so a test that
+asserts `disconnected` polls `log()` first. The child runs `fixtures/mock_server.R` with
+`rscript_path()` and exits when the parent dies (ps) or after 15 minutes.
 
-**Interfaces:** Consumes: Tasks 6, 7, 8 (`rscript_path()`, `json_decode()`, `json_encode()`, `id_new()`, `port_candidates()`); curl, processx and ps in the tests and the child. Produces: `local_mock_server(scenario, ..., .env = parent.frame())` -> `list(url, port, log = function() df(time, method, path, headers, body, disconnected), stop = function(), provider)` with the scenarios `stream`, `slow`, `ttft`, `hold_headers`, `stall`, `bytes_per_10s`, `overload`, `status`, `spend_cap`, `truncated`, `parallel_tools`, `openai_responses`, `chat_completions`, `gemini`, `systemone`, `json`, `redirect`; `log()$headers` is redacted at the first origin and raw at the second origin of `redirect`; `mock_scenarios`; private `mock_api(scenario)`, `mock_provider(scenario, url)`, `mock_log(file)`; test-local `mock_fetch()`, `mock_handle()`, `count_events()`.
+**Interfaces:** Consumes: Tasks 6, 7, 8 (`rscript_path()`, `json_decode()`, `json_encode()`,
+`id_new()`, `port_candidates()`); curl, processx and ps in the tests and the child. Produces:
+`local_mock_server(scenario, ..., .env = parent.frame())` ->
+`list(url, port, log = function() df(time, method, path, headers, body, disconnected), stop = function(), provider)`
+with the scenarios `stream`, `slow`, `ttft`, `hold_headers`, `stall`, `bytes_per_10s`, `overload`,
+`status`, `spend_cap`, `truncated`, `parallel_tools`, `openai_responses`, `chat_completions`,
+`gemini`, `systemone`, `json`, `redirect`; `log()$headers` is redacted at the first origin and raw
+at the second origin of `redirect`; `mock_scenarios`; private `mock_api(scenario)`,
+`mock_provider(scenario, url)`, `mock_log(file)`; test-local `mock_fetch()`, `mock_handle()`,
+`count_events()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -7135,7 +7530,8 @@ test_that("concurrent streams are served in parallel, not one after another", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "provider-fake")'
 ```
 
-Expected: the summary line `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 97 ]`. The eight new tests fail with `could not find function "local_mock_server"`; the 97 passes are Tasks 15 and 16.
+Expected: the summary line `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 97 ]`. The eight new tests fail with
+`could not find function "local_mock_server"`; the 97 passes are Tasks 15 and 16.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -7860,13 +8256,32 @@ git commit -m "test(infra): add the base-R mock SSE server"
 
 ### Task 19: The architecture layering test
 
-**Files:** Create: `tests/testthat/helper-arch.R`; Test: `tests/testthat/test-arch-layers.R` (create).
+**Files:** Create: `tests/testthat/helper-arch.R`; Test: `tests/testthat/test-arch-layers.R`
+(create).
 
-Architecture section 2.2 rule 4, IC-33 and proposal P-B section 2.4: every namespace function is walked with `codetools::findGlobals()`, each internal callee is mapped to its file by parsing the files under `R/` (installed packages carry no srcrefs), and calls that cross a boundary not allowed by the layer table and the kernel SDK allowlist fail. The layer table is architecture section 3.2 (118 files); literal `ext_service_get("<name>")` names must be declared services. The codetools tests skip without codetools; the whole file skips with a message when the sources cannot be found.
+Architecture section 2.2 rule 4, IC-33 and proposal P-B section 2.4: every namespace function is
+walked with `codetools::findGlobals()`, each internal callee is mapped to its file by parsing the
+files under `R/` (installed packages carry no srcrefs), and calls that cross a boundary not allowed
+by the layer table and the kernel SDK allowlist fail. The layer table is architecture section 3.2
+(118 files); literal `ext_service_get("<name>")` names must be declared services. The codetools
+tests skip without codetools; the whole file skips with a message when the sources cannot be found.
 
-`arch_kernel_sdk()` is exactly IC-33's list (04 section 12.2). Three cross-area calls are required by the contract but missing from that list, and `arch_contract_edges()` admits them for the named caller area only: P16's `ckpt_predict()` (`ckpt-objects.R`) wraps P11's `code_targets()` (`perm-classify.R`) (IC-31, 04 sections 7.11 and 7.16); P19's sub-agents (`subagent-*.R`, a section 7.6 consumer of `session_new()`) and the dedicated session of P18's `gptr_mcp_serve()` (`mcp-*.R`, 04 section 6.3) create sessions with P06's `session_new()`. Without these entries `test-arch-layers.R` turns red when P16 and P19 land. Any other file calling `session_new()` or `code_targets()` is still a violation (the negative controls show both).
+`arch_kernel_sdk()` is exactly IC-33's list (04 section 12.2). Three cross-area calls are required
+by the contract but missing from that list, and `arch_contract_edges()` admits them for the named
+caller area only: P16's `ckpt_predict()` (`ckpt-objects.R`) wraps P11's `code_targets()`
+(`perm-classify.R`) (IC-31, 04 sections 7.11 and 7.16); P19's sub-agents (`subagent-*.R`, a
+section 7.6 consumer of `session_new()`) and the dedicated session of P18's `gptr_mcp_serve()`
+(`mcp-*.R`, 04 section 6.3) create sessions with P06's `session_new()`. Without these entries
+`test-arch-layers.R` turns red when P16 and P19 land. Any other file calling `session_new()` or
+`code_targets()` is still a violation (the negative controls show both).
 
-**Interfaces:** Consumes: Task 3 (`service_plans`); codetools (Suggests). Produces: `arch_layer_table()` -> df(`file`, `layer`, `service`, `plan`); `arch_fun_map(dir = arch_source_dir())` -> df(`fun`, `file`); `arch_allowed()`; `arch_kernel_sdk()`; `arch_contract_edges()` -> df(`caller_area`, `callee`); `arch_contract_ok(caller_file, callee)` (vectorised); `arch_services()`; `arch_source_dir()`; `arch_edges()`; `arch_check(edges)`; `arch_edge_ok()`; `pd_calls(path)`; `arch_service_calls()`; `arch_area(file)`; `arch_record_files`; `arch_arrow` (the left-arrow symbol, used by Task 20).
+**Interfaces:** Consumes: Task 3 (`service_plans`); codetools (Suggests). Produces:
+`arch_layer_table()` -> df(`file`, `layer`, `service`, `plan`);
+`arch_fun_map(dir = arch_source_dir())` -> df(`fun`, `file`); `arch_allowed()`; `arch_kernel_sdk()`;
+`arch_contract_edges()` -> df(`caller_area`, `callee`); `arch_contract_ok(caller_file, callee)`
+(vectorised); `arch_services()`; `arch_source_dir()`; `arch_edges()`; `arch_check(edges)`;
+`arch_edge_ok()`; `pd_calls(path)`; `arch_service_calls()`; `arch_area(file)`; `arch_record_files`;
+`arch_arrow` (the left-arrow symbol, used by Task 20).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -7961,7 +8376,8 @@ test_that("arch_check() flags calls that cross a boundary (negative controls)", 
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "arch")'
 ```
 
-Expected: the summary line `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`. All six tests fail with `could not find function "arch_layer_table"` (and `arch_source_dir`, `arch_check`).
+Expected: the summary line `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`. All six tests fail with
+`could not find function "arch_layer_table"` (and `arch_source_dir`, `arch_check`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -8295,7 +8711,8 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "arch")'
 ```
 
-Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 11 ]`. Without codetools the two codetools tests skip.
+Expected: `devtools::document()` exits 0; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 11 ]`.
+Without codetools the two codetools tests skip.
 
 - [ ] **Step 5: Commit**
 
@@ -8306,11 +8723,18 @@ git commit -m "test(arch): add the layer table and the layering test"
 
 ### Task 20: The package lint rules
 
-**Files:** Test: `tests/testthat/fixtures/lint/s3-methods.R`, `tests/testthat/test-lint-rules.R` (create).
+**Files:** Test: `tests/testthat/fixtures/lint/s3-methods.R`, `tests/testthat/test-lint-rules.R`
+(create).
 
-04 section 12.3 and IC-72: rules that need the parse tree (lintr checks style through `.lintr`). The left-arrow rule reads `LEFT_ASSIGN` tokens from `getParseData()`, never a text regex, which would flag replacement-method names. Step 1 writes the tests and the S3 fixture; Step 3 inserts the scanner functions between the header comment and the first `test_that()`. The negative controls spell the forbidden operators with `paste0()` so that no source file contains them literally.
+04 section 12.3 and IC-72: rules that need the parse tree (lintr checks style through `.lintr`). The
+left-arrow rule reads `LEFT_ASSIGN` tokens from `getParseData()`, never a text regex, which would
+flag replacement-method names. Step 1 writes the tests and the S3 fixture; Step 3 inserts the
+scanner functions between the header comment and the first `test_that()`. The negative controls
+spell the forbidden operators with `paste0()` so that no source file contains them literally.
 
-**Interfaces:** Consumes: Task 19 (`pd_calls()`, `arch_source_dir()`, `arch_arrow`). Produces: `lint_scan(paths)` -> df(`file`, `line`, `rule`, `text`); private `lint_hit()`, `lint_call_rule()`, `lint_target()`, `lint_mentions_seed()`, `lint_local_names()`, `lint_scopes()`.
+**Interfaces:** Consumes: Task 19 (`pd_calls()`, `arch_source_dir()`, `arch_arrow`). Produces:
+`lint_scan(paths)` -> df(`file`, `line`, `rule`, `text`); private `lint_hit()`, `lint_call_rule()`,
+`lint_target()`, `lint_mentions_seed()`, `lint_local_names()`, `lint_scopes()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -8439,11 +8863,14 @@ test_that("S3 methods of Suggests generics and closure state pass (IC-72, accept
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "lint")'
 ```
 
-Expected: the summary line `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`. All four tests fail with `could not find function "lint_scan"`.
+Expected: the summary line `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`. All four tests fail with
+`could not find function "lint_scan"`.
 
 - [ ] **Step 3: Write the implementation**
 
-Insert the scanner between the header comment and the first `test_that()` of `tests/testthat/test-lint-rules.R` (the file then reads: header comment, the functions below, the tests of Step 1):
+Insert the scanner between the header comment and the first `test_that()` of
+`tests/testthat/test-lint-rules.R` (the file then reads: header comment, the functions below, the
+tests of Step 1):
 
 ```r
 lint_hit = function(file, line, rule, text) {
@@ -8617,9 +9044,16 @@ git commit -m "test(lint): add the package lint rules"
 
 **Files:** Create: `.github/workflows/R-CMD-check.yaml`; Test: `tests/testthat/test-zzz.R` (append).
 
-Report 13 section 3.8 (r-lib/actions v2 `check-standard`, verified: `actions/checkout@v6`, `setup-r@v2`, `setup-r-dependencies@v2`, `check-r-package@v2`) plus oldrel-4 (proves `R (>= 4.2.0)`), a job without Suggests, an `LC_ALL=C` job, the copy-safety suites on release and devel, a `devtools::test()` run with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true` (IC-59) and the token-benchmark job that runs once P07 adds `dev/bench/tokens/run.R` (IC-73). A test parses the workflow so a later edit cannot silently drop a job.
+Report 13 section 3.8 (r-lib/actions v2 `check-standard`, verified: `actions/checkout@v6`,
+`setup-r@v2`, `setup-r-dependencies@v2`, `check-r-package@v2`) plus oldrel-4 (proves
+`R (>= 4.2.0)`), a job without Suggests, an `LC_ALL=C` job, the copy-safety suites on release and
+devel, a `devtools::test()` run with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true` (IC-59) and the
+token-benchmark job that runs once P07 adds `dev/bench/tokens/run.R` (IC-73). A test parses the
+workflow so a later edit cannot silently drop a job.
 
-**Interfaces:** Consumes: Task 1 (`source_file()` in `test-zzz.R`); yaml (Imports). Produces: `.github/workflows/R-CMD-check.yaml` with the jobs `R-CMD-check`, `no-suggests`, `c-locale`, `copy-safety`, `connections`, `bench`.
+**Interfaces:** Consumes: Task 1 (`source_file()` in `test-zzz.R`); yaml (Imports). Produces:
+`.github/workflows/R-CMD-check.yaml` with the jobs `R-CMD-check`, `no-suggests`, `c-locale`,
+`copy-safety`, `connections`, `bench`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -8660,7 +9094,9 @@ test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "zzz")'
 ```
 
-Expected: the summary line `[ FAIL 2 | WARN 1 | SKIP 0 | PASS 53 ]`. The new test fails with ``Expected `file.exists(path)` to be TRUE.`` (and an error from `yaml::read_yaml()` on the missing file).
+Expected: the summary line `[ FAIL 2 | WARN 1 | SKIP 0 | PASS 53 ]`. The new test fails with
+``Expected `file.exists(path)` to be TRUE.`` (and an error from `yaml::read_yaml()` on the missing
+file).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -8851,7 +9287,8 @@ git commit -m "ci: add the CRAN-like check matrix and the extra jobs"
 
 ## Plan acceptance
 
-Run every command from the repository root after Task 21. The checks are those of 05 P01 (items 1-6) and its review additions (item 7).
+Run every command from the repository root after Task 21. The checks are those of 05 P01 (items 1-6)
+and its review additions (item 7).
 
 | # | Acceptance check (05 P01) | Proved by | Command (below) | Expected |
 |---|---|---|---|---|
@@ -8914,7 +9351,12 @@ Rscript --vanilla -e 'devtools::test(filter = "lint")'
 Rscript --vanilla -e 'devtools::test(filter = "utils-paths")'
 ```
 
-Note on A3: lintr's `object_usage_linter` resolves internal functions through `getNamespace("gptr")`. For a development tree that is not installed that lookup fails, and lintr then reports every call to an internal helper as "no visible global function definition", so the namespace is loaded first. An installed copy would also satisfy the lookup, but it can be older than the tree being linted, so every lint command of this plan (and of conventions section 4) runs `pkgload::load_all(quiet = TRUE)` before `lintr::lint_package()`.
+Note on A3: lintr's `object_usage_linter` resolves internal functions through
+`getNamespace("gptr")`. For a development tree that is not installed that lookup fails, and lintr
+then reports every call to an internal helper as "no visible global function definition", so the
+namespace is loaded first. An installed copy would also satisfy the lookup, but it can be older than
+the tree being linted, so every lint command of this plan (and of conventions section 4) runs
+`pkgload::load_all(quiet = TRUE)` before `lintr::lint_package()`.
 
 ## Self-review
 
@@ -8922,7 +9364,7 @@ Note on A3: lintr's `object_usage_linter` resolves internal functions through `g
 
 | 05 P01 scope item or owned file | Task |
 |---|---|
-| DESCRIPTION rewrite (Package, Version, Title, Description per report 13 §3.1, `Authors@R` with `cph` and Mario Zechner, `Copyright`, `URL`, `BugReports`, `Language`, `License: Apache License (== 2.0)` + `LICENSE.md` full text (no `LICENSE`), `Depends: R (>= 4.2.0)`, final Imports incl. `ps`, Suggests, `SystemRequirements`, `Config/testthat/edition: 3`, `Encoding`, `Roxygen`; no `VignetteBuilder` until P25 adds `knitr` with the vignettes, IC-72) | 1 |
+| DESCRIPTION rewrite (Package, Version, Title, Description per report 13 section 3.1, `Authors@R` with `cph` and Mario Zechner, `Copyright`, `URL`, `BugReports`, `Language`, `License: Apache License (== 2.0)` + `LICENSE.md` full text (no `LICENSE`), `Depends: R (>= 4.2.0)`, final Imports incl. `ps`, Suggests, `SystemRequirements`, `Config/testthat/edition: 3`, `Encoding`, `Roxygen`; no `VignetteBuilder` until P25 adds `knitr` with the vignettes, IC-72) | 1 |
 | delete `.Rprofile`; keep `man/img/`; old API files gone (S-7) | 1 |
 | `.lintr`, `.Rbuildignore` (all 13 required entries plus Rproj entries), `.gitignore`, `dev/style.R` | 1 |
 | `.github/workflows/R-CMD-check.yaml` (check-standard matrix, oldrel-4, no-suggests, `LC_ALL=C`, copy-safety on release and devel, connections-left-open, bench) | 21 |
@@ -8951,14 +9393,14 @@ Note on A3: lintr's `object_usage_linter` resolves internal functions through `g
 | `setup.R` redirects `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `XDG_CONFIG_HOME`, sets `GPTR_PROJECT_ROOT` | 1 |
 | `expect_no_copy(in_run_edit =)` (IC-41) | 17 |
 | `local_mock_server()` returns an `offline = TRUE` provider, answers only token paths, has a `redirect` scenario (IC-45, IC-64, IC-71) | 18 |
-| `helper-arch.R` parses `R/` and holds the kernel SDK allowlist (IC-33) and the three contract edges outside it (`arch_contract_edges()`: IC-31, 04 §7.6, §6.3) | 19 |
+| `helper-arch.R` parses `R/` and holds the kernel SDK allowlist (IC-33) and the three contract edges outside it (`arch_contract_edges()`: IC-31, 04 sections 7.6, 6.3) | 19 |
 | `test-lint-rules.R` with the IC-72 rules and `getParseData()` detection of the left arrow | 20 |
 | `save_rds()`/`serialize_leaf()` leaves (`ascii = FALSE`, rule R7) | 6 (lint rule in 20) |
 | `inst/COPYRIGHTS` | 1 |
 | `tests/testthat.R`, `setup.R` | 1 |
 | `helper-fake.R` (`fake_text()`, `fake_tool()`, `fake_tools()`, `fake_error()`, `local_fake_provider()`, `fake_requests()`, `local_project()`, `local_gptr_options()`) | 16 |
 | `helper-tracemem.R` | 17 |
-| `helper-mock-server.R` + `fixtures/mock_server.R` (all 17 scenarios of 04 §12.2) | 18 |
+| `helper-mock-server.R` + `fixtures/mock_server.R` (all 17 scenarios of 04 section 12.2) | 18 |
 | `helper-arch.R` + `test-arch-layers.R` | 19 |
 | `fixtures/tokens/` (12 classes, o200k counts) | 9 |
 | one test file per owned R file (15 files) | 1-15 |
@@ -8967,47 +9409,174 @@ Every acceptance check of 05 P01 maps to a task and a test in the "Plan acceptan
 
 ### Placeholder scan
 
-The generated plan was searched, case-insensitively, for the placeholder phrases the plan format forbids (to-be-determined and to-do markers, deferred-implementation and fill-in requests, generic error-handling and edge-case instructions, back-references to a similar task, and test requests without code): nothing matches outside this sentence. Every step that changes a file shows the complete block; every function a block calls is defined in this plan, in base R or an Imports/Suggests package, or is a P02/P08 function of 04 that the code reaches only by name at run time (`ns_fun("registry_get")`, `ns_fun("gptr_registry")`, `ns_fun("registry_diagnostic")`, `ns_fun("ext_load_builtins")`, `get0("gptr_register")`, `get0("gptr_trust")`) or through the factory API object (`gptr$register_adapter()`), so `R CMD check` sees no undefined global.
+The generated plan was searched, case-insensitively, for the placeholder phrases the plan format
+forbids (to-be-determined and to-do markers, deferred-implementation and fill-in requests, generic
+error-handling and edge-case instructions, back-references to a similar task, and test requests
+without code): nothing matches outside this sentence. Every step that changes a file shows the
+complete block; every function a block calls is defined in this plan, in base R or an
+Imports/Suggests package, or is a P02/P08 function of 04 that the code reaches only by name at run
+time (`ns_fun("registry_get")`, `ns_fun("gptr_registry")`, `ns_fun("registry_diagnostic")`,
+`ns_fun("ext_load_builtins")`, `get0("gptr_register")`, `get0("gptr_trust")`) or through the factory
+API object (`gptr$register_adapter()`), so `R CMD check` sees no undefined global.
 
 ### Type and name consistency with 04
 
-A script loaded the assembled package with `pkgload::load_all()`, sourced the four helper files and compared `formals()` of 119 functions with the signatures of 04 §1.1, §2.1, §4.1-4.5, §7.1, §12.1-12.2 and IC-71 (every checker, condition constructor, option and path helper, hash and id function, encoding helper, text and token helper, JSON function, block and message constructor, `ev_new()`, `acc_new()`, `gptr_fake_provider()`, `fake_stream()`, `fake_classify()`, `builtin_fake()`, `.onLoad`, `.onUnload`, the eight `helper-fake.R` helpers, `expect_no_copy()`, `local_mock_server()` and the `helper-arch.R` accessors): 0 differences. Class names (`gptr_provider`/`gptr_spec`, `gptr_listing`, `gptr_error_*`, `gptr_warning_*`, `gptr_message_*`), record fields (§4.1-4.5), option names and defaults (§3.1; a test compares the default table with the documented list), event names (`start`, `text_*`, `thinking_*`, `toolcall_*`, `done`, `error`) and the 39 service names (§7.0) are the contract's.
+A script loaded the assembled package with `pkgload::load_all()`, sourced the four helper files and
+compared `formals()` of 119 functions with the signatures of 04 sections 1.1, 2.1, 4.1-4.5, 7.1,
+12.1-12.2 and IC-71 (every checker, condition constructor, option and path helper, hash and id
+function, encoding helper, text and token helper, JSON function, block and message constructor,
+`ev_new()`, `acc_new()`, `gptr_fake_provider()`, `fake_stream()`, `fake_classify()`,
+`builtin_fake()`, `.onLoad`, `.onUnload`, the eight `helper-fake.R` helpers, `expect_no_copy()`,
+`local_mock_server()` and the `helper-arch.R` accessors): 0 differences. Class names
+(`gptr_provider`/`gptr_spec`, `gptr_listing`, `gptr_error_*`, `gptr_warning_*`, `gptr_message_*`),
+record fields (sections 4.1-4.5), option names and defaults (section 3.1; a test compares the
+default table with the documented list), event names (`start`, `text_*`, `thinking_*`, `toolcall_*`,
+`done`, `error`) and the 39 service names (section 7.0) are the contract's.
 
-Decisions where 04 is silent or inconsistent (followed the reading most consistent with 04 §15 and 03):
+Decisions where 04 is silent or inconsistent (followed the reading most consistent with 04
+section 15 and 03):
 
-1. IC-32 places `ext_service_set()`, `ext_service_get()` and `ext_service_has()` in `aaa-state.R`, while IC-09 and §7.0 still say `utils-options.R`; the plan follows IC-32 (§15 wins) and keeps `setting_get()` in `utils-options.R`.
-2. IC-34 says a service is unavailable when its owning built-in is filtered out, but no P02 function reports filter state. P01 reads `gptr_registry()` (by name, once P02 exists): a built-in counts as filtered out when the registry lists records but none of source `builtin:<name>` is in a state other than `disabled`; before P02, or while the registry is empty, every built-in counts as active. A `service` registry record always wins (`registry_get("service", name)`). P02 should keep `gptr_registry()` cheap, since `setting_get()` passes through this check.
-3. Conventions §6 says parse with `jsonlite::fromJSON(x, simplifyVector = FALSE)`; `json_decode()` uses `jsonlite::parse_json(text, simplifyVector = FALSE)`, which is the same parser with the same result but never treats its input as a file name or URL.
-4. 04 writes the truncation notice as `peter$out(<id>)`; the plan quotes the id (`peter$out("o1a2b3c")`) so the notice is a valid R call.
-5. 05 acceptance 3 is written as a bare `lintr::lint_package()`; for an uninstalled package lintr cannot see internal functions, so the plan loads the namespace first (item 3 above).
-6. 04 §7.1 says OpenAI and Gemini image formulas come "from the catalog", which P05 builds later; `est_image_tokens()` selects G2 §3.1's formulas by `api`, with G2's Anthropic resize-and-cap prototype.
-7. `the` gets P01-private fields beyond §7.0's list: `load_errors`, `id_count`, `id_salt`, `fakes`. The fake model record carries an extra `fake` field (its log environment), and `fake_classify()` returns `engine` and `calibrated` next to `answers`, `usage` and `model_version`.
-8. `check_running()` reads only `_R_CHECK_PACKAGE_NAME_` (§7.1), although §3.2 also lists `_R_CHECK_LIMIT_CORES_` under it.
-9. 05 names no test file for `helper-tracemem.R`, `helper-fake.R` and `helper-mock-server.R`; their self-tests live in `test-utils-hash.R` and `test-provider-fake.R` so that the acceptance filter runs them.
-10. `imports_used()` (in `zzz.R`) references one function of every Imports package so that `R CMD check` reports no unused Imports before P04, P09, P16, P17 and P19 use them.
-11. 04 §7.1 gives `truncate_output()` no `session` argument, while IC-71 keeps `peter$out()` results per session. The plan keeps the 04 signature (P02, P06 and P09 call it): truncated output is stored in the process store and in the spill file, and `out_get(id, session = <live record>)` finds it there because it searches the session store, then the process store, then the spill file (IC-71). Callers that need the session store call `out_put(..., session = )` directly.
-12. 04 §12.2 asks for a `redirect` second origin "that logs any key bytes", and the same row asks for a redacted request log. The plan redacts sensitive header values at the first origin and logs them raw at the second origin, which stands for a foreign server: a key a client carried across origins is then visible to the test (IC-64).
-13. The red-phase commands add `testthat::set_max_fails(Inf)` to the command of conventions §2: without it testthat's progress reporter stops after 10 failures and prints no summary line, so the red summaries of Tasks 2, 4, 6, 8 and 15 would never appear.
-14. IC-33's kernel SDK omits two calls that 04 itself prescribes: P16's `ckpt_predict()` wraps P11's `code_targets()` (IC-31, §7.11, §7.16), and P19's sub-agents (a §7.6 consumer of `session_new()`) and the dedicated session of P18's `gptr_mcp_serve()` (§6.3) create sessions with `session_new()`; both cross an L4 area boundary that `arch_edge_ok()` otherwise refuses. 04 §12.2 says `arch_kernel_sdk()` returns the IC-33 allowlist, so that function stays exactly IC-33's list, and `arch_contract_edges()` admits the three edges for the named caller area only (`ckpt`, `subagent`, `mcp`); the negative controls show `session_new()` and `code_targets()` still refused from any other area. Adding the two names to the SDK itself would also have let every L3-L6 file call them.
-15. `R_TESTS` gets no entry in `setup.R` or `expect_no_copy()`: testthat (>= 2.0.0) sets it to `""` for the whole `test_dir()`/`test_check()` run (`local_test_directory()`), so children of tests never source `startup.Rs` (verified: under `R_TESTS=startup.Rs`, `testthat::test_dir()` saw `""` and an `Rscript` child started from the test exited cleanly). The Task 1 environment test asserts the blank value.
-16. The `VignetteBuilder` expectation (IC-72) is tied to the vignettes: in the source tree the field must be absent while `vignettes/` holds no `.Rmd` and exactly `knitr` once it does (P25 Task 5 adds both in one commit); under `R CMD check`, where only the installed DESCRIPTION is visible, it must be absent or `knitr`. P25 adds no test file, so P01's test must stay green after P25.
-17. 04 (IC-72) and 05 P01 list three linter settings for `.lintr`; the plan also sets `indentation_linter = NULL`, the conventions section 4 decision of 2026-10-01, so that argument lines aligned under an opening parenthesis in later plans' code are not lint errors. The three settings 04 and 05 require are unchanged, every other default linter stays on, and P01's own code lints clean with and without the indentation linter. Every lint command loads the development tree first (decision 5).
+1. IC-32 places `ext_service_set()`, `ext_service_get()` and `ext_service_has()` in `aaa-state.R`,
+   while IC-09 and section 7.0 still say `utils-options.R`; the plan follows IC-32 (section 15 wins)
+   and keeps `setting_get()` in `utils-options.R`.
+2. IC-34 says a service is unavailable when its owning built-in is filtered out, but no P02 function
+   reports filter state. P01 reads `gptr_registry()` (by name, once P02 exists): a built-in counts
+   as filtered out when the registry lists records but none of source `builtin:<name>` is in a state
+   other than `disabled`; before P02, or while the registry is empty, every built-in counts as
+   active. A `service` registry record always wins (`registry_get("service", name)`). P02 should
+   keep `gptr_registry()` cheap, since `setting_get()` passes through this check.
+3. Conventions section 6 says parse with `jsonlite::fromJSON(x, simplifyVector = FALSE)`;
+   `json_decode()` uses `jsonlite::parse_json(text, simplifyVector = FALSE)`, which is the same
+   parser with the same result but never treats its input as a file name or URL.
+4. 04 writes the truncation notice as `peter$out(<id>)`; the plan quotes the id
+   (`peter$out("o1a2b3c")`) so the notice is a valid R call.
+5. 05 acceptance 3 is written as a bare `lintr::lint_package()`; for an uninstalled package lintr
+   cannot see internal functions, so the plan loads the namespace first (item 3 above).
+6. 04 section 7.1 says OpenAI and Gemini image formulas come "from the catalog", which P05 builds
+   later; `est_image_tokens()` selects G2 section 3.1's formulas by `api`, with G2's Anthropic
+   resize-and-cap prototype.
+7. `the` gets P01-private fields beyond section 7.0's list: `load_errors`, `id_count`, `id_salt`,
+   `fakes`. The fake model record carries an extra `fake` field (its log environment), and
+   `fake_classify()` returns `engine` and `calibrated` next to `answers`, `usage` and
+   `model_version`.
+8. `check_running()` reads only `_R_CHECK_PACKAGE_NAME_` (section 7.1), although section 3.2 also
+   lists `_R_CHECK_LIMIT_CORES_` under it.
+9. 05 names no test file for `helper-tracemem.R`, `helper-fake.R` and `helper-mock-server.R`; their
+   self-tests live in `test-utils-hash.R` and `test-provider-fake.R` so that the acceptance filter
+   runs them.
+10. `imports_used()` (in `zzz.R`) references one function of every Imports package so that
+    `R CMD check` reports no unused Imports before P04, P09, P16, P17 and P19 use them.
+11. 04 section 7.1 gives `truncate_output()` no `session` argument, while IC-71 keeps `peter$out()`
+    results per session. The plan keeps the 04 signature (P02, P06 and P09 call it): truncated
+    output is stored in the process store and in the spill file, and
+    `out_get(id, session = <live record>)` finds it there because it searches the session store,
+    then the process store, then the spill file (IC-71). Callers that need the session store call
+    `out_put(..., session = )` directly.
+12. 04 section 12.2 asks for a `redirect` second origin "that logs any key bytes", and the same row
+    asks for a redacted request log. The plan redacts sensitive header values at the first origin
+    and logs them raw at the second origin, which stands for a foreign server: a key a client
+    carried across origins is then visible to the test (IC-64).
+13. The red-phase commands add `testthat::set_max_fails(Inf)` to the command of conventions
+    section 2: without it testthat's progress reporter stops after 10 failures and prints no summary
+    line, so the red summaries of Tasks 2, 4, 6, 8 and 15 would never appear.
+14. IC-33's kernel SDK omits two calls that 04 itself prescribes: P16's `ckpt_predict()` wraps P11's
+    `code_targets()` (IC-31, sections 7.11, 7.16), and P19's sub-agents (a section 7.6 consumer of
+    `session_new()`) and the dedicated session of P18's `gptr_mcp_serve()` (section 6.3) create
+    sessions with `session_new()`; both cross an L4 area boundary that `arch_edge_ok()` otherwise
+    refuses. 04 section 12.2 says `arch_kernel_sdk()` returns the IC-33 allowlist, so that function
+    stays exactly IC-33's list, and `arch_contract_edges()` admits the three edges for the named
+    caller area only (`ckpt`, `subagent`, `mcp`); the negative controls show `session_new()` and
+    `code_targets()` still refused from any other area. Adding the two names to the SDK itself would
+    also have let every L3-L6 file call them.
+15. `R_TESTS` gets no entry in `setup.R` or `expect_no_copy()`: testthat (>= 2.0.0) sets it to `""`
+    for the whole `test_dir()`/`test_check()` run (`local_test_directory()`), so children of tests
+    never source `startup.Rs` (verified: under `R_TESTS=startup.Rs`, `testthat::test_dir()` saw `""`
+    and an `Rscript` child started from the test exited cleanly). The Task 1 environment test
+    asserts the blank value.
+16. The `VignetteBuilder` expectation (IC-72) is tied to the vignettes: in the source tree the field
+    must be absent while `vignettes/` holds no `.Rmd` and exactly `knitr` once it does (P25 Task 5
+    adds both in one commit); under `R CMD check`, where only the installed DESCRIPTION is visible,
+    it must be absent or `knitr`. P25 adds no test file, so P01's test must stay green after P25.
+17. 04 (IC-72) and 05 P01 list three linter settings for `.lintr`; the plan also sets
+    `indentation_linter = NULL`, the conventions section 4 decision of 2026-10-01, so that argument
+    lines aligned under an opening parenthesis in later plans' code are not lint errors. The three
+    settings 04 and 05 require are unchanged, every other default linter stays on, and P01's own
+    code lints clean with and without the indentation linter. Every lint command loads the
+    development tree first (decision 5).
 
 ### Executed validation
 
-- Every code block of this plan came from files that were assembled into a scratch package (the repository's `README.md`, `gptr.Rproj` and `man/img/logo.png` plus the blocks of Tasks 1-21 in order) and tested there with the commands of each task: for every task, the state before its implementation (earlier tasks plus the task's tests) gave the red summary quoted in its Step 2, and the state after it gave the green summary quoted in its Step 4, with `devtools::document()` run first (21 of 21 tasks).
-- The complete package: `devtools::test()` gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1310 ]` (the acceptance filter covers every test file); `pkgload::load_all(); lintr::lint_package()` gave 0 lints, including `tests/` and the lint fixture; `NAMESPACE` held `S3method(print,gptr_listing)` and `export(gptr_fake_provider)`; the signature comparison above gave 0 differences.
-- Each of the 57 R code blocks of this file was extracted to its own file and parsed with `parse(file = <block>)` (57 of 57 parse); all blocks were also re-assembled into a package by the "Create"/"Replace"/"Append to"/"Insert" rules and compared byte for byte with the tested package (50 files, 0 differences).
-- The plan contains no left-arrow assignment and no magrittr pipe (the lint negative controls spell them with `paste0()`), and no non-ASCII byte in any R block.
-- Tasks 12 and 15 were re-run through the red and green states after their final edit (the `schema_problems(schema)` and `fake_classify(model, state, questions, opts)` signatures of 04); the complete-package run above used the final code of every task.
+- Every code block of this plan came from files that were assembled into a scratch package (the
+  repository's `README.md`, `gptr.Rproj` and `man/img/logo.png` plus the blocks of Tasks 1-21 in
+  order) and tested there with the commands of each task: for every task, the state before its
+  implementation (earlier tasks plus the task's tests) gave the red summary quoted in its Step 2,
+  and the state after it gave the green summary quoted in its Step 4, with `devtools::document()`
+  run first (21 of 21 tasks).
+- The complete package: `devtools::test()` gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1310 ]` (the
+  acceptance filter covers every test file); `pkgload::load_all(); lintr::lint_package()` gave 0
+  lints, including `tests/` and the lint fixture; `NAMESPACE` held `S3method(print,gptr_listing)`
+  and `export(gptr_fake_provider)`; the signature comparison above gave 0 differences.
+- Each of the 57 R code blocks of this file was extracted to its own file and parsed with
+  `parse(file = <block>)` (57 of 57 parse); all blocks were also re-assembled into a package by the
+  "Create"/"Replace"/"Append to"/"Insert" rules and compared byte for byte with the tested package
+  (50 files, 0 differences).
+- The plan contains no left-arrow assignment and no magrittr pipe (the lint negative controls spell
+  them with `paste0()`), and no non-ASCII byte in any R block.
+- Tasks 12 and 15 were re-run through the red and green states after their final edit (the
+  `schema_problems(schema)` and `fake_classify(model, state, questions, opts)` signatures of 04);
+  the complete-package run above used the final code of every task.
 - Not run here (validation budget): `R CMD check --as-cran` and the CI matrix (acceptance item 6).
-- Review pass (2026-10-01, after the fixes of the review log below), macOS, R 4.4.3, testthat 3.3.2, roxygen2 7.3.3, lintr 3.3.0.1: the plan was re-assembled with its "Create"/"Replace"/"Append to"/"Insert" rules, and for each of the 21 tasks the red state (earlier tasks plus the task's test files) and the green state were run with the task's exact Step 2 and Step 4 commands; every summary line quoted in Steps 2 and 4 is the one printed (21 of 21 tasks). The complete package gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1310 ]` on the A2 filter, 0 lints (A3; a deliberate left arrow appended to `fixtures/lint/s3-methods.R` was reported, so A3 does cover the fixture), and the six affected test files passed under `LC_ALL=C` (888 expectations); `test-provider-fake.R` passed three runs in a row; a fuzz run of `partial_json()` (400 random documents, each split at random bytes, `value()` read after every push) gave 0 errors and 0 mismatches. The 57 R blocks parse, contain no left arrow, no magrittr pipe and no non-ASCII character. A `formals()` comparison of every P01 function named with arguments in 04 found no difference beyond item 11's reading and the IC-71 `fake_classify(model, state, questions, opts)` signature, and a scan of the R blocks of every other plan in `dev/plan/` found no call to a P01 function with an argument name or count that P01 does not accept (2,790 calls).
-- Cross-plan consolidation pass (2026-10-01, same toolchain; see the consolidation log at the end): the plan was re-assembled and the red and green states of Tasks 1, 2, 14, 19 and 21 (the tasks it changed) gave exactly the summaries quoted in their Steps 2 and 4; the complete package gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1312 ]` on the A2 filter and 0 lints (A3). Probes: a scratch copy with stand-in `ckpt-objects.R`, `subagent-*.R`, `session-object.R` and `perm-classify.R` files (the five edges of P16 and P19) passed the layering test, and adding `tool-read.R -> session_new` and `doc-replay.R -> code_targets` made it fail with exactly those two edges; a BOM, CRLF and unterminated `tests/testthat/fixtures/docs/crlf-bom.R` gave 0 lints (2 without the `exclusions` line); the `VignetteBuilder` test passed with `VignetteBuilder: knitr` plus `vignettes/*.Rmd`, failed with the field but no `.Rmd`, and passed against the installed DESCRIPTION from a detached test directory (the `R CMD check` situation); under `R_TESTS=startup.Rs`, `testthat::test_dir()` saw `R_TESTS == ""` and an `Rscript` child started from a test exited 0; the accumulator took 0.6 s for 100,000 deltas on a loaded machine (the old in-environment update: 1.6 s for 20,000 and 26 s for 80,000). The 57 R blocks parse, with no left arrow, no magrittr pipe and no non-ASCII byte.
-- Finalize pass (2026-10-01, same toolchain; rows F1-F4 of the consolidation log): the plan was re-assembled with its "Create"/"Replace"/"Append to"/"Insert" rules and the red and green states of Tasks 1, 2 and 21 (the tasks whose counts the change touches) gave exactly the summaries quoted in their Steps 2 and 4 (Task 1 `FAIL 6 | WARN 0 | SKIP 1 | PASS 19` and `PASS 42`; Task 2 `FAIL 36 | WARN 2 | SKIP 0 | PASS 45` and `PASS 150`; Task 21 `FAIL 2 | WARN 1 | SKIP 0 | PASS 53` and `PASS 62`); the complete package gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1313 ]` on the A2 filter, `PASS 62` on A13 and 0 lints on A3 with the new `.lintr` (also 0 with the previous `.lintr`). Probes: the `.lintr` `linters` field evaluates to 25 linters, exactly `names(lintr::linters_with_defaults())` without `indentation_linter`; a scratch `R/` file with `switch(x,` and `list(` argument lines indented one column off the parenthesis gave 0 lints (2 `indentation_linter` lints with the indentation linter put back), and appending a left-arrow assignment and a 101-character line gave `assignment_linter` and `line_length_linter` lints. The 57 R blocks parse, with no left arrow, no magrittr pipe, no non-ASCII byte and no line over 100 characters.
+- Review pass (2026-10-01, after the fixes of the review log below), macOS, R 4.4.3, testthat 3.3.2,
+  roxygen2 7.3.3, lintr 3.3.0.1: the plan was re-assembled with its "Create"/"Replace"/"Append
+  to"/"Insert" rules, and for each of the 21 tasks the red state (earlier tasks plus the task's test
+  files) and the green state were run with the task's exact Step 2 and Step 4 commands; every
+  summary line quoted in Steps 2 and 4 is the one printed (21 of 21 tasks). The complete package
+  gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1310 ]` on the A2 filter, 0 lints (A3; a deliberate left
+  arrow appended to `fixtures/lint/s3-methods.R` was reported, so A3 does cover the fixture), and
+  the six affected test files passed under `LC_ALL=C` (888 expectations); `test-provider-fake.R`
+  passed three runs in a row; a fuzz run of `partial_json()` (400 random documents, each split at
+  random bytes, `value()` read after every push) gave 0 errors and 0 mismatches. The 57 R blocks
+  parse, contain no left arrow, no magrittr pipe and no non-ASCII character. A `formals()`
+  comparison of every P01 function named with arguments in 04 found no difference beyond item 11's
+  reading and the IC-71 `fake_classify(model, state, questions, opts)` signature, and a scan of the
+  R blocks of every other plan in `dev/plan/` found no call to a P01 function with an argument name
+  or count that P01 does not accept (2,790 calls).
+- Cross-plan consolidation pass (2026-10-01, same toolchain; see the consolidation log at the end):
+  the plan was re-assembled and the red and green states of Tasks 1, 2, 14, 19 and 21 (the tasks it
+  changed) gave exactly the summaries quoted in their Steps 2 and 4; the complete package gave
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1312 ]` on the A2 filter and 0 lints (A3). Probes: a scratch
+  copy with stand-in `ckpt-objects.R`, `subagent-*.R`, `session-object.R` and `perm-classify.R`
+  files (the five edges of P16 and P19) passed the layering test, and adding
+  `tool-read.R -> session_new` and `doc-replay.R -> code_targets` made it fail with exactly those
+  two edges; a BOM, CRLF and unterminated `tests/testthat/fixtures/docs/crlf-bom.R` gave 0 lints (2
+  without the `exclusions` line); the `VignetteBuilder` test passed with `VignetteBuilder: knitr`
+  plus `vignettes/*.Rmd`, failed with the field but no `.Rmd`, and passed against the installed
+  DESCRIPTION from a detached test directory (the `R CMD check` situation); under
+  `R_TESTS=startup.Rs`, `testthat::test_dir()` saw `R_TESTS == ""` and an `Rscript` child started
+  from a test exited 0; the accumulator took 0.6 s for 100,000 deltas on a loaded machine (the old
+  in-environment update: 1.6 s for 20,000 and 26 s for 80,000). The 57 R blocks parse, with no left
+  arrow, no magrittr pipe and no non-ASCII byte.
+- Finalize pass (2026-10-01, same toolchain; rows F1-F4 of the consolidation log): the plan was
+  re-assembled with its "Create"/"Replace"/"Append to"/"Insert" rules and the red and green states
+  of Tasks 1, 2 and 21 (the tasks whose counts the change touches) gave exactly the summaries quoted
+  in their Steps 2 and 4 (Task 1 `FAIL 6 | WARN 0 | SKIP 1 | PASS 19` and `PASS 42`; Task 2
+  `FAIL 36 | WARN 2 | SKIP 0 | PASS 45` and `PASS 150`; Task 21 `FAIL 2 | WARN 1 | SKIP 0 | PASS 53`
+  and `PASS 62`); the complete package gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1313 ]` on the A2
+  filter, `PASS 62` on A13 and 0 lints on A3 with the new `.lintr` (also 0 with the previous
+  `.lintr`). Probes: the `.lintr` `linters` field evaluates to 25 linters, exactly
+  `names(lintr::linters_with_defaults())` without `indentation_linter`; a scratch `R/` file with
+  `switch(x,` and `list(` argument lines indented one column off the parenthesis gave 0 lints (2
+  `indentation_linter` lints with the indentation linter put back), and appending a left-arrow
+  assignment and a 101-character line gave `assignment_linter` and `line_length_linter` lints. The
+  57 R blocks parse, with no left arrow, no magrittr pipe, no non-ASCII byte and no line over 100
+  characters.
 
 ## Plan review log
 
-Adversarial review of this plan against 00-conventions, 04 (with §15), 05 P01, 03 and the plans already in `dev/plan/` (P02-P11, P14, P21), 2026-10-01. Findings R1-R5 were applied in a first pass of the same review; R6-R13 in the second pass. Each applied fix was re-verified by the red/green re-run and the complete-package run described under "Executed validation".
+Adversarial review of this plan against 00-conventions, 04 (with section 15), 05 P01, 03 and the
+plans already in `dev/plan/` (P02-P11, P14, P21), 2026-10-01. Findings R1-R5 were applied in a first
+pass of the same review; R6-R13 in the second pass. Each applied fix was re-verified by the
+red/green re-run and the complete-package run described under "Executed validation".
 
 | # | Severity | Location | Finding | Verdict | What changed, or why rejected |
 |---|---|---|---|---|---|
@@ -9019,26 +9588,33 @@ Adversarial review of this plan against 00-conventions, 04 (with §15), 05 P01, 
 | R6 | major | Task 11, `partial_json()` | when a raw delta ended inside a multi-byte UTF-8 character, `value()` signalled "input string 1 is invalid UTF-8" (outside its `tryCatch()`) and `text()` returned invalid UTF-8; a stream normaliser calls `value()` between deltas and must never signal an R condition after `start` (INFRA-02). A fuzz run of 400 documents split at random bytes gave 51 errors | applied | new private `pj_trim_partial_utf8()` drops a trailing incomplete character from a string value and from `text()`; the escape check uses `useBytes = TRUE`; `value()` wraps all its work in `tryCatch()`; new test "a raw delta that ends inside a multi-byte character never makes value() fail" (61 expectations); the fuzz run now gives 0 errors; task text, roxygen and Interfaces updated |
 | R7 | major | Task 18 test "the mock streams Anthropic SSE on token paths only and logs redacted requests" | it asserted `log$disconnected == c(FALSE, FALSE)` right after the second request, but the server writes a request's `end` log line just after the response's last byte, so the client can read the log first; observed failure `FALSE <NA>` in a full run | applied | the test polls `log()` until no `disconnected` is `NA` (10 s deadline); `mock_log()` skips a line the server is still writing; the behaviour is documented in `mock_log()` and the task text |
 | R8 | major | Step 2 of Tasks 2, 4, 6, 8 and 15 | with `devtools::test(filter = ...)` testthat's progress reporter stops after 10 failures ("Maximum number of failures exceeded; quitting.") and prints no summary line, so the quoted red summaries (`FAIL 36`, `10`, `13`, `10`, `15`) never appear (reproduced on Task 8) | applied | every Step 2 command now starts with `testthat::set_max_fails(Inf);` (21 commands); a Global Constraints line and self-review decision 13 explain it |
-| R9 | minor | Task 18, `redirect` scenario | the second origin redacted sensitive header values, so it could not "log any key bytes" (04 §12.2, IC-64): a key carried across origins would have been invisible in its log row | applied | `log_headers(redact = !second)` logs raw header values at the second origin only; the test (renamed "... logs any key bytes it receives (IC-64)") shows a carried test key at the second origin and `[redacted]` at the first; self-review decision 12 |
+| R9 | minor | Task 18, `redirect` scenario | the second origin redacted sensitive header values, so it could not "log any key bytes" (04 section 12.2, IC-64): a key carried across origins would have been invisible in its log row | applied | `log_headers(redact = !second)` logs raw header values at the second origin only; the test (renamed "... logs any key bytes it receives (IC-64)") shows a carried test key at the second origin and `[redacted]` at the first; self-review decision 12 |
 | R10 | minor | expected summaries of Tasks 4, 5, 6, 11 and 18, acceptance A2, A8, A10, A16, self-review | counts were stale after R1-R5 (Task 4 green 45, Task 5 red `FAIL 7` and green 39, Task 6 red `PASS 9` and green 70) and after R6 and R9 (Task 11 565, Task 18 153, total 1240) | applied | recomputed from the re-run: Task 4 green 48; Task 5 red `FAIL 8 \| ... \| PASS 9`, green 40; Task 6 red `FAIL 13 \| ... \| PASS 10`, green 73; Task 11 red `FAIL 7` ("All seven tests"), green 626; Task 18 green 156; A2 1310 |
-| R11 | minor | Task 10 test "listings print at most 20 rows, a count line and the footer" | conventions §7 say printed output is tested with `expect_snapshot()`; the test uses `capture.output()` with exact-line expectations | rejected | snapshot files under `tests/testthat/_snaps/` are not among P01's owned files (05); a first run records "Adding new snapshot" warnings that contradict the `WARN 0` summaries; the exact-line checks run inside `local_reproducible_output(width = 80)` and are deterministic (P02's review rejected the same point for the same reasons) |
+| R11 | minor | Task 10 test "listings print at most 20 rows, a count line and the footer" | conventions section 7 say printed output is tested with `expect_snapshot()`; the test uses `capture.output()` with exact-line expectations | rejected | snapshot files under `tests/testthat/_snaps/` are not among P01's owned files (05); a first run records "Adding new snapshot" warnings that contradict the `WARN 0` summaries; the exact-line checks run inside `local_reproducible_output(width = 80)` and are deterministic (P02's review rejected the same point for the same reasons) |
 | R12 | minor | Task 10, `truncate_output()` | IC-71 keeps `peter$out()` results per session, but the 04 signature has no `session` argument, so truncated tool output lands in the process store | rejected | changing the 04 signature would break the callers in P02, P06 and P09 that use it as written; `out_get(id, session = )` searches the session store, then the process store, then the spill file (IC-71), so the output stays reachable; recorded as self-review decision 11 |
 | R13 | minor | Task 2 test "as_utf8() keeps valid UTF-8 bytes under LC_ALL=C where enc2utf8() does not (IC-62)" | the `enc2utf8()` contrast is verified on macOS and Linux only; Windows' C locale was not tried | rejected | any re-encoding of the bytes (ASCII or a code page) differs from the input, which is all the expectation asserts; the acceptance item is the `as_utf8()` byte check, and the Windows CI job runs the test |
 
 ## Cross-plan consolidation log
 
-Cross-plan checkers (lenses: ownership, interfaces, shared-names, obligations, trace) compared this plan with P02-P23, 2026-10-01. Each issue was verified against 04 (with §15), 05, 03 and the related plans' text. Issues 4, 5, 8 and 9 report the same defect as issue 1, and one fix covers all five. Verification is under "Executed validation", last bullet. Rows F1-F4 (lens `finalize`) come from the finalization pass of 2026-10-01, which applied the conventions section 4 update (`indentation_linter = NULL`; lint only after `pkgload::load_all()`); their verification is the "Finalize pass" bullet of "Executed validation". Row F5 comes from the final gate over P01-P25 (all R blocks of all plans linted with the final `.lintr` linters).
+Cross-plan checkers (lenses: ownership, interfaces, shared-names, obligations, trace) compared this
+plan with P02-P23, 2026-10-01. Each issue was verified against 04 (with section 15), 05, 03 and the
+related plans' text. Issues 4, 5, 8 and 9 report the same defect as issue 1, and one fix covers all
+five. Verification is under "Executed validation", last bullet. Rows F1-F4 (lens `finalize`) come
+from the finalization pass of 2026-10-01, which applied the conventions section 4 update
+(`indentation_linter = NULL`; lint only after `pkgload::load_all()`); their verification is the
+"Finalize pass" bullet of "Executed validation". Row F5 comes from the final gate over P01-P25 (all
+R blocks of all plans linted with the final `.lintr` linters).
 
 | # | Lens | Severity | Location | Verdict | Change, or reason |
 |---|---|---|---|---|---|
-| 1 | ownership | major | Task 19, `helper-arch.R` (`arch_kernel_sdk()`, `arch_edge_ok()`) and the negative-control test | applied | New `arch_contract_edges()` lists, by caller area, the cross-area calls 04 names outside IC-33: `ckpt` -> `code_targets` (IC-31, §7.11, §7.16), `subagent` -> `session_new` (§7.6) and `mcp` -> `session_new` (§6.3, the dedicated session of `gptr_mcp_serve()`; P18 ambiguity 1 dropped it only for lack of this edge). New `arch_contract_ok(caller_file, callee)` (vectorised) is consulted by `arch_edge_ok()` right after the SDK check and by the built-in-factory test. `arch_kernel_sdk()` stays exactly IC-33's list. The negative control grows to 15 rows: rows 11-13 are admitted; rows 14-15 (`tool-read.R` -> `session_new`, `doc-replay.R` -> `code_targets`) are still flagged. It now compares `paste(caller_file, callee)`. Task text, Interfaces, Global Constraints and self-review (coverage row, decision 14) updated. Task 19 counts are unchanged (red `FAIL 6`, green `PASS 11`). |
+| 1 | ownership | major | Task 19, `helper-arch.R` (`arch_kernel_sdk()`, `arch_edge_ok()`) and the negative-control test | applied | New `arch_contract_edges()` lists, by caller area, the cross-area calls 04 names outside IC-33: `ckpt` -> `code_targets` (IC-31, sections 7.11, 7.16), `subagent` -> `session_new` (section 7.6) and `mcp` -> `session_new` (section 6.3, the dedicated session of `gptr_mcp_serve()`; P18 ambiguity 1 dropped it only for lack of this edge). New `arch_contract_ok(caller_file, callee)` (vectorised) is consulted by `arch_edge_ok()` right after the SDK check and by the built-in-factory test. `arch_kernel_sdk()` stays exactly IC-33's list. The negative control grows to 15 rows: rows 11-13 are admitted; rows 14-15 (`tool-read.R` -> `session_new`, `doc-replay.R` -> `code_targets`) are still flagged. It now compares `paste(caller_file, callee)`. Task text, Interfaces, Global Constraints and self-review (coverage row, decision 14) updated. Task 19 counts are unchanged (red `FAIL 6`, green `PASS 11`). |
 | 2 | ownership | major | Task 1, `test-zzz.R` DESCRIPTION test (`VignetteBuilder`); acceptance 7b | applied | The expectation is now tied to the vignettes. In the source tree the field must be absent while `vignettes/` holds no `.Rmd`, and exactly `knitr` once it does; P25 Task 5 adds both in one commit. With only the installed DESCRIPTION (`R CMD check`) the field must be absent or `knitr`. This is still one expectation, so the count is unchanged. Acceptance 7b now reads "no `VignetteBuilder` other than `knitr`", and A13 adds `grep -c '^VignetteBuilder' DESCRIPTION` -> `0` at P01 time. Global Constraints and self-review (coverage row, decision 16) updated. |
 | 3 | ownership | minor | Task 1 Step 3, `.lintr` | applied | Added `exclusions: list("tests/testthat/fixtures/docs")`, with the reason in the task text and Global Constraints. `tests/testthat/fixtures/lint/` stays linted (acceptance 7d). The `.lintr` test in `test-zzz.R` gained one `expect_match()` on the line. Counts: Task 1 green 39 -> 40 (before issue 7), Task 2 green 147 -> 148, Task 21 red 50 -> 51 and green 59 -> 60, A2 1310 -> 1311. |
-| 4 | interfaces | major | Task 19, `arch_kernel_sdk()` | applied (by issue 1's mechanism) | The defect is fixed by `arch_contract_edges()`, not by appending `code_targets` and `session_new` to `arch_kernel_sdk()`. 04 §12.2 defines `arch_kernel_sdk()` as "the IC-33 allowlist", and putting the two names in the SDK would let every L3-L6 file call them. The narrow edge list honours IC-31 and §7.6 without widening IC-33. |
+| 4 | interfaces | major | Task 19, `arch_kernel_sdk()` | applied (by issue 1's mechanism) | The defect is fixed by `arch_contract_edges()`, not by appending `code_targets` and `session_new` to `arch_kernel_sdk()`. 04 section 12.2 defines `arch_kernel_sdk()` as "the IC-33 allowlist", and putting the two names in the SDK would let every L3-L6 file call them. The narrow edge list honours IC-31 and section 7.6 without widening IC-33. |
 | 5 | shared-names | blocker | Task 19, `arch_kernel_sdk()` | applied (by issue 1's mechanism) | As issue 4. The negative control still refuses `session_new()` from L0 `utils-text.R` and from any area other than `subagent` or `mcp`. |
 | 6 | obligations | major | Task 14, `acc_new()` delta branch | applied | `push()` takes `buffer$parts` out, clears the binding, grows and sets the local list, then stores it back, so R modifies it in place: linear time (INFRA-23). The timing test now pushes 100,000 deltas against the 5 s bound and checks the joined length (600,000 characters); only linear accumulation meets it (the old update needed 26 s for 80,000 deltas). Roxygen and task text explain the pattern. Task 14 counts are unchanged (red `FAIL 4`, green `PASS 15`). |
 | 7 | obligations | major | Task 1, `setup.R`; Task 17, `expect_no_copy()` | rejected (invariant test added) | The premise is false. testthat (>= 2.0.0; Suggests requires >= 3.2.0) sets `R_TESTS = ""` for the whole `test_dir()`/`test_check()`/`test_file()` run in `local_test_directory()`. `setup.R` and helpers are sourced after that, and every `Rscript` child of a test inherits the blank value. Verified: with `R_TESTS=startup.Rs`, `testthat::test_dir()` saw `""` and an `Rscript --vanilla` child started from the test exited 0. P23's reproduction ran `Rscript` outside testthat. No `R_TESTS` entry was added. The Task 1 environment test now asserts `Sys.getenv("R_TESTS") == ""`, so a change in testthat would surface at once. Counts: Task 1 red `PASS 18` -> 19 and green 40 -> 41; Task 2 red 43 -> 44 and green 148 -> 149; Task 21 red 51 -> 52 and green 60 -> 61; A13 60 -> 61; A2 1311 -> 1312. The Global Constraints note and self-review decision 15 record the reading. |
-| 8 | obligations | major | Task 19, `arch_kernel_sdk()` (incl. P18's dedicated session) | applied (by issue 1's mechanism) | The `mcp` -> `session_new` edge covers P18's §6.3 dedicated session. Task 19's text and self-review decision 14 note the three additions, as the issue asks. |
+| 8 | obligations | major | Task 19, `arch_kernel_sdk()` (incl. P18's dedicated session) | applied (by issue 1's mechanism) | The `mcp` -> `session_new` edge covers P18's section 6.3 dedicated session. Task 19's text and self-review decision 14 note the three additions, as the issue asks. |
 | 9 | trace | blocker | Task 19, `arch_kernel_sdk()` | applied (by issue 1's mechanism) | After P16 and P19 land, `test-arch-layers.R` stays at `FAIL 0`. A probe with stand-in P16/P19 files showed this. |
 | F1 | finalize | minor | Task 1 Step 3, `.lintr` and the task text before it; Global Constraints (`.lintr` line) | applied | `.lintr` now sets `indentation_linter = NULL` inside `lintr::linters_with_defaults()` (conventions section 4, 2026-10-01): argument lines aligned under an opening parenthesis pass, the two-space block indent still applies, and every other default linter stays on. `linters_with_defaults()`, `assignment_linter(operator = c("=", "<<-"))`, `line_length_linter(100L)`, the `object_name_linter` with the S3 regexes, `encoding` and `exclusions` are unchanged. The task text and the Global Constraints line say so. |
 | F2 | finalize | minor | Task 1 Step 1, `test-zzz.R` test ".Rbuildignore and .lintr hold the entries of IC-72 (source tree only)"; expected summaries of Tasks 1, 2 and 21, acceptance A2 and A13 (7b) | applied | One `expect_match(config, "indentation_linter = NULL", fixed = TRUE)` added. Counts: Task 1 red unchanged (`FAIL 6 \| WARN 0 \| SKIP 1 \| PASS 19`; the test skips without `.lintr`), green 41 -> 42; Task 2 red `PASS 44` -> 45 (and "most of the 45 passes"), green 149 -> 150; Task 21 red `PASS 52` -> 53, green 61 -> 62; A13 61 -> 62; A2 1312 -> 1313. |
@@ -9047,13 +9623,23 @@ Cross-plan checkers (lenses: ownership, interfaces, shared-names, obligations, t
 | F5 | finalize | minor | Task 1 Step 3, `dev/style.R` header comment | applied | The final gate's lint of every plan R block with the final `.lintr` linters reported two `commented_code_linter` lints on the usage lines `source("dev/style.R")` and `styler::style_pkg(transformers = gptr_style())`. The two lines are now one prose sentence ("source dev/style.R, then pass transformers = gptr_style() to styler::style_pkg().") that does not parse as R, and the block lints clean. `lintr::lint_package()` (A3) does not lint `dev/`, so no count or acceptance result changes; `gptr_style()` itself is unchanged. |
 
 Notes for the related plans (not edited here):
-- P16 (L1747 cross-plan note, ambiguity 1, review row 4) and P19 (Task 12 Step 3 expected output, ambiguity 1, item 23a, review row 11) can drop "until P01's `arch_kernel_sdk()` lists ...". The edges are admitted by `arch_contract_edges()`, and the layering test is expected to report no violation.
-- P18 (ambiguity 1) may now create the §6.3 dedicated session with `session_new()` from `mcp-*.R`.
-- P23 (ambiguity 16, review row 14): `expect_no_copy()` children start cleanly under `R CMD check`, because testthat blanks `R_TESTS`.
-- P25 Task 5 may add `VignetteBuilder: knitr` together with `vignettes/*.Rmd`, and P01's DESCRIPTION test stays green.
+- P16 (L1747 cross-plan note, ambiguity 1, review row 4) and P19 (Task 12 Step 3 expected output,
+  ambiguity 1, item 23a, review row 11) can drop "until P01's `arch_kernel_sdk()` lists ...". The
+  edges are admitted by `arch_contract_edges()`, and the layering test is expected to report no
+  violation.
+- P18 (ambiguity 1) may now create the section 6.3 dedicated session with `session_new()` from
+  `mcp-*.R`.
+- P23 (ambiguity 16, review row 14): `expect_no_copy()` children start cleanly under `R CMD check`,
+  because testthat blanks `R_TESTS`.
+- P25 Task 5 may add `VignetteBuilder: knitr` together with `vignettes/*.Rmd`, and P01's DESCRIPTION
+  test stays green.
 - P15's `tests/testthat/fixtures/docs/` documents are excluded from lintr.
 
 
-## Live validation amendment, 2026-10-10: concise ordinary display
+## Live validation amendment (2026-10-10): concise ordinary display
 
-Ordinary informational conditions and literal print output use stdout. Conditions retain calling handlers, standard message suppression, quiet/once behavior and redaction; actual failures can select stderr. JSONL reserves stdout through a private call-frame marker. Literal display uses cat(), never cli message output or format interpolation. This supersedes older stderr/cli_verbatim display sketches for the latest user requirement.
+Ordinary informational conditions and literal print output use stdout. Conditions retain calling
+handlers, standard message suppression, quiet/once behavior and redaction; actual failures can
+select stderr. JSONL reserves stdout through a private call-frame marker. Literal display uses
+cat(), never cli message output or format interpolation. This supersedes older stderr/cli_verbatim
+display sketches for the latest user requirement.
