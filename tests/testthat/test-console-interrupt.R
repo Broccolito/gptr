@@ -298,6 +298,7 @@ test_that("a steer typed while a tool runs reaches the request after the tool re
 test_that("a steer typed in a tool and then aborted is kept in the history, never sent later", {
   local_project()
   local_gptr_options(unsafe_no_permissions = TRUE, history = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
   kept = character()
   local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
                         .package = "utils")
@@ -321,6 +322,25 @@ test_that("a steer typed in a tool and then aborted is kept in the history, neve
   expect_length(session_data(s)$queue$steer, 0L)
   reqs = fake_requests(fake)
   expect_no_match(json_encode(reqs[[length(reqs)]]$messages), "use mpg", fixed = TRUE)
+})
+
+test_that("outside an interactive R a steer the run did not take stays queued, unlisted (D-242)", {
+  local_project()
+  local_gptr_options(history = TRUE)
+  kept = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
+  fake = local_fake_provider(list(list(error = "bad request", status = 400L, delay = 0.3)))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  run = local_tracked(run_start(s, msg_user("go")), s)
+  reactor_timer(at = reactor_now() + 0.1, fn = function() gptr_steer(s, "please also check units"))
+  err = notices(run_wait(run))
+  expect_identical(run$status, "error")
+  # Rscript, knitr and API users have no history: the steer waits for the session's next run
+  expect_identical(vapply(session_data(s)$queue$steer, function(it) it$text, ""),
+                   "please also check units")
+  expect_identical(kept, character())
+  expect_false(any(grepl("kept in history", err, fixed = TRUE)))
 })
 
 test_that("a steer typed in a tool that pumps the reactor reaches the next request", {

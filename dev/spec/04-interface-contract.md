@@ -5364,7 +5364,10 @@ its part in its own commit, and Task 27 finalises them.
     (Task 15). Elsewhere (`peter("...")` paused with Ctrl-C, a question outside a REPL) a follow-up still goes to
     the session's FIFO, taken when the agent would otherwise stop.
   - Nothing queued is lost (Task 15). `builtin_console`'s `agent_end` hook (`console_queue_left()`) settles what
-    the person queued for a foreground run (depth 0, not background) that the run did not take. After status
+    the person queued for a foreground run (depth 0, not background) that the run did not take, in an interactive
+    R (`gptr_is_interactive()`): Rscript, knitr and other non-interactive R have no console history
+    (`utils::timestamp()` does nothing there) and no next prompt, so there it settles nothing and the queue stays
+    as the run left it, an `api_user` steer queued by `gptr_steer()` too. After status
     `idle` or `max_turns` (it ended first or hit the cap), the user steers still queued (taken with
     `session_unqueue()`) and those `policy_flush()` still holds for the session are the next prompts of the REPL
     whose prompt runs (not piped), appended to the reader's `typed` lines; elsewhere they stay queued for the

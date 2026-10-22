@@ -689,6 +689,8 @@ Commit: `feat(console): a follow-up is sent as the next prompt`.
 ### Task 15: Nothing queued is lost (D-242)
 
 Decisions:
+- In an interactive R only (amended in the review of Tasks 8-15): elsewhere (Rscript, knitr) there is no history
+  and no next prompt, so `console_queue_left()` returns at once and the queue stays as the run left it.
 - At `agent_end` of a foreground run (`console_queue_left()`) with status idle or `max_turns`, user
   steers still queued are taken with `session_unqueue()` and, with the steers `policy_flush()` still
   holds for the session, become follow-ups for the next prompt: in the REPL whose prompt runs (not

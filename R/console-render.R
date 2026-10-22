@@ -1210,14 +1210,16 @@ console_on_agent_end = function(event, ctx) {
   NULL
 }
 
-#' What the person queued for a foreground run that ended and the run did not take (D-242). After
-#' a run that ended idle or at max_turns, its steers still queued and those held while a tool ran
-#' are the next prompts of the REPL whose prompt runs, after its held lines; elsewhere they stay
-#' queued for the session's next run. After any other end nothing is sent: the person's items its
-#' abort dropped, the steers still queued, the items held and the REPL's held lines go to the
-#' console history, listed once (console_keep())
+#' What the person queued for a foreground run that ended and the run did not take, in an
+#' interactive R (D-242); elsewhere (Rscript, knitr: no history, no next prompt) it stays queued.
+#' After a run that ended idle or at max_turns, its steers still queued and those held while a
+#' tool ran are the next prompts of the REPL whose prompt runs, after its held lines; elsewhere
+#' they stay queued for the session's next run. After any other end nothing is sent: the person's
+#' items its abort dropped, the steers still queued, the items held and the REPL's held lines go
+#' to the console history, listed once (console_keep())
 #' @noRd
 console_queue_left = function(rec, status) {
+  if (!gptr_is_interactive()) return(invisible(NULL))
   s = rec$session
   rs = console_repl_prompt()
   ended = status %in% c("idle", "max_turns")

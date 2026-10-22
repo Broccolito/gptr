@@ -249,6 +249,7 @@ test_that("a steer a run at max_turns did not take is the next prompt, run 2's u
   skip_on_cran()
   local_console_test()
   local_gptr_options(max_turns_console = 1L)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
   fake = gptr_fake_provider(list(c(fake_tool("r", code = "zz = 1"), list(delay = 0.3)), "second"))
   local_typed(typed_once("use base R", function() length(fake_requests(fake)) == 1L))
   res = NULL
@@ -377,6 +378,7 @@ test_that("an abort sends nothing queued: it goes to the history, listed once (D
   skip_on_cran()
   local_console_test()
   local_gptr_options(history = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
   e = new.env()
   fake = gptr_fake_provider(list(list(text = "first", delay = 5)))
   held = FALSE
@@ -391,8 +393,8 @@ test_that("an abort sends nothing queued: it goes to the history, listed once (D
   })
   res = typing_console(fake, c("go", "/exit"), envir = e)
   expect_true(any(grepl("[gptr] aborted", res$out, fixed = TRUE)))
-  # the steer the abort dropped from the queue, then the held lines
-  expect_identical(res$kept, c("use base R", "/status", "!x = 1"))
+  # the prompt, the steer the abort dropped from the queue, the held lines, then the next input
+  expect_identical(res$kept, c("go", "use base R", "/status", "!x = 1", "/exit"))
   notice = paste0("[gptr] kept in history (", console_style()$up, "): 'use base R', '/status', ",
                   "'!x = 1'")
   expect_identical(sum(grepl(notice, res$out, fixed = TRUE)), 1L)
@@ -406,6 +408,7 @@ test_that("after an error the queued steer is kept in the history, not sent with
   skip_on_cran()
   local_console_test()
   local_gptr_options(history = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
   fake = gptr_fake_provider(list(list(error = "bad request", status = 400L, delay = 0.3), "second"))
   local_typed(typed_once("use base R", function() length(fake_requests(fake)) == 1L))
   res = NULL
@@ -417,13 +420,14 @@ test_that("after an error the queued steer is kept in the history, not sent with
   expect_length(reqs, 2L)
   expect_identical(msg_text(last_message(reqs[[2L]])), "next")
   expect_no_match(json_encode(reqs[[2L]]$messages), "use base R", fixed = TRUE)
-  expect_identical(res$kept, "use base R")
+  expect_identical(res$kept, c("go", "use base R", "next", "/exit"))
   expect_true(any(grepl("[gptr] kept in history (", res$out, fixed = TRUE)))
 })
 
 test_that("Ctrl-C at an approval prompt aborts the run and keeps the held lines in the history", {
   local_console_test()
   local_gptr_options(interactive = TRUE, history = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
   e = new.env()
   fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2", .text = "hmm")))
   local_typed(typed_once("!x = 1", function() length(fake_requests(fake)) == 1L))
@@ -444,7 +448,7 @@ test_that("Ctrl-C at an approval prompt aborts the run and keeps the held lines 
   rs$mode = "manual"
   out = utils::capture.output(repl_main(rs))
   expect_true(queue_line("follow-up", "!x = 1") %in% out)
-  expect_identical(kept, "!x = 1")
+  expect_identical(kept, c("go", "!x = 1", "/exit"))
   expect_true(any(grepl("[gptr] kept in history (", out, fixed = TRUE)))
   expect_null(e$x)
   expect_null(e$zz)

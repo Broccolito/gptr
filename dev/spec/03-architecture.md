@@ -1225,7 +1225,9 @@ is the next prompt, its own run; outside it (`peter("...")`, `.stdin`, `jsonl`) 
 moves the queue to `dropped`. Nothing the person queued is lost [D-242]: at the end of a foreground run that ended
 idle or at `max_turns`, the console makes its user steers still queued (or held while a tool ran) the REPL's next
 prompts; after any other end (an abort, an error) it sends none of it and adds the user items the abort dropped,
-the steers still queued, the items held and the REPL's held lines to the console history, listed once.
+the steers still queued, the items held and the REPL's held lines to the console history, listed once. This holds
+in an interactive R; under Rscript, knitr or any other R without a console history the console settles nothing, so
+the queue stays as the run left it, for the session's next run.
 Enqueueing returns immediately. `session_unqueue()` takes back the newest user item (the console's Up) [D-242];
 each item added, taken or withdrawn emits one `queue_update` that names it. There is no file-inbox channel in core
 (J-cran K-16); a front end that needs one is a plugin calling `gptr_steer()`.

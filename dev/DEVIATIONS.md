@@ -3079,6 +3079,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     the lines that complete it, also from a later batch", "Ctrl-C at an approval prompt aborts the run and keeps
     the held lines in the history"; test-console-ui.R "during a run a !code or /command line typed before a
     question waits for the prompt".
+  - Task 15's settling applies in an interactive R only. `console_queue_left()` ran at the end of every
+    foreground run, also under Rscript: after an error it took an `api_user` steer (`gptr_steer()` from a timer)
+    off the queue and printed `[gptr] kept in history (↑): ...`, though `utils::timestamp()` does nothing there,
+    so the steer was lost while the notice said it was kept, and an abort listed its dropped items the same way.
+    Now it returns at once outside an interactive R (`gptr_is_interactive()`), and the queue stays as the run left
+    it, for the session's next run. Contract-visible: 04 §15.10 IC-76, 03 §6.2. Tests: test-console-interrupt.R
+    "outside an interactive R a steer the run did not take stays queued, unlisted (D-242)"; the Task 15 tests now
+    run in a mocked interactive R.
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue
