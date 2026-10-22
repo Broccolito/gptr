@@ -1306,7 +1306,12 @@ Decisions:
   - the front-end table;
   - the CLI-route and L-console limits;
   - `insert_matching`;
-  - `stty sane`.
+  - `stty sane`;
+  - (amended in the review of Tasks 16-21) rewrite the two paragraphs Tasks 18-21 left stale: "The
+    terminal does not echo while an answer runs: a line shows once you press Enter ..." becomes the live
+    row's draft, Enter steers, Tab sends a follow-up, Up takes one back, and the draft kept through
+    questions, Ctrl-C and to the next prompt; the menu's `[s]teer`, `[f]ollow-up`, `[c]ontinue`,
+    `[a]bort`, `[b]ackground` becomes `s steer · f follow-up · c continue · a abort · b background`.
 - Update `/help`, the interactive-console vignette and the README console section.
 - Finalise D-242..D-245, §15.10 and the amended IC-75..IC-77.
 - Re-run the cross-plan checks.
