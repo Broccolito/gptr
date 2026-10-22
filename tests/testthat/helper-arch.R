@@ -14,6 +14,7 @@ arch_layer_table = function() {
     "utils-paths.R", "L0", "P01",
     "utils-text.R", "L0", "P01",
     "utils-tokens.R", "L0", "P01",
+    "utils-size.R", "L0", "P09",
     "json-encode.R", "L0", "P01",
     "json-partial.R", "L0", "P01",
     "json-schema.R", "L0", "P01",

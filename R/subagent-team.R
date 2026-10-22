@@ -530,7 +530,7 @@ subagent_fanout_spec = function(call, fan, agent, target, i, key, backend) {
   ctx = list(list(label = paste0(".x[[", encodeString(key, quote = "\""), "]]"),
                   kind = "value", name = NULL, slot = ".e1", address = NULL,
                   facts = list(class = class(el), dim = dim(el), length = length(el),
-                               bytes = as.numeric(utils::object.size(el)),
+                               bytes = env_snap_size(el),
                                is_chr1 = is.character(el) && length(el) == 1L && !is.na(el))))
   for (it in call$context[-target$index]) {
     if (!is.null(it$slot)) assign(it$slot, get(it$slot, envir = call$values), envir = values)

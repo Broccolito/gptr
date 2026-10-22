@@ -30,17 +30,6 @@ env_text = function(x) {
   x
 }
 
-#' Is x a compact-looking integer sequence (ALTREP 1:n)? (a leaf)
-#' Reads three elements through .subset(), which never materialises a compact sequence.
-#' @noRd
-env_compact_seq = function(x) {
-  if (!is.integer(x) || !is.null(attributes(x))) return(FALSE)
-  n = length(x)
-  if (n < 1e6) return(FALSE)
-  e = .subset(x, c(1L, 2L, n))
-  !anyNA(e) && e[2L] - e[1L] == 1L && as.numeric(e[3L]) - e[1L] == n - 1
-}
-
 #' Facts of a Seurat object through attributes only (a leaf; not in Suggests, IC-71)
 #' Handles v5 Assay5 (a `features` LogMap) and v3 Assay (a `data` dgCMatrix).
 #' @noRd
@@ -85,9 +74,7 @@ env_shape = function(x) {
   }
   if (is.function(x)) return("")
   if (is.environment(x)) return(paste(env_fmt_n(length(x)), "bindings"))
-  s = paste("length", env_fmt_n(length(x)))
-  if (env_compact_seq(x)) s = paste(s, "(sequence)")
-  s
+  paste("length", env_fmt_n(length(x)))
 }
 
 #' Snapshot facts of one binding value, without its size (a leaf)
@@ -130,19 +117,7 @@ env_snap_facts = function(box, name) {
            error = function(e) env_snap_bare(get(name, envir = box$envir, inherits = FALSE)))
 }
 
-#' Size in bytes of one binding value; NA for environments, functions, external pointers,
-#' compact sequences and S7 objects (object.size() overstates them; it counts an S7 object's class
-#' object in full) (a leaf)
-#' @noRd
-env_snap_size = function(x) {
-  if (is.environment(x) || is.function(x) || typeof(x) == "externalptr" || env_compact_seq(x) ||
-      inherits(x, "S7_object")) {
-    return(NA_real_)
-  }
-  as.numeric(utils::object.size(x))
-}
-
-#' Snapshot rows; `sizes = FALSE` skips object.size() (the evaluator needs no sizes)
+#' Snapshot rows; `sizes = FALSE` skips env_snap_size() (the evaluator needs no sizes)
 #' `envir` is held only in a box binding reset on exit: a loop in a frame binding a function-frame
 #' home left it referenced (tracemem), so the loop is in env_snap_rows().
 #' @noRd
@@ -188,11 +163,12 @@ env_snap_rows = function(box, previous, sizes) {
     if (!sizes || is.na(f$address)) next
     j = prev[i]
     reuse = !is.na(j) && identical(previous$address[j], f$address) &&
-      identical(previous$class[j], f$class) && identical(previous$shape[j], f$shape)
+      identical(previous$class[j], f$class) && identical(previous$shape[j], f$shape) &&
+      identical(previous$fp[j], f$fp)
     bytes[i] = if (reuse) {
       previous$bytes[j]
     } else {
-      env_snap_size(get(nms[i], envir = box$envir, inherits = FALSE))
+      env_snap_size(get(nms[i], envir = box$envir, inherits = FALSE), box$envir)
     }
   }
   data.frame(name = nms, kind = kind, address = address, class = cls, bytes = bytes,
@@ -201,7 +177,8 @@ env_snap_rows = function(box, previous, sizes) {
 
 #' Copy-safe snapshot of an environment, forcing no promise and calling no active binding (R4)
 #' One row per binding: name, kind (value, promise, active), address, class, bytes (reused from
-#' `previous` while address, class and shape hold), shape, fp; missing arguments are `<missing>`.
+#' `previous` while address, class, shape and fp hold), shape, fp; missing arguments are
+#' `<missing>`.
 #' @noRd
 env_snapshot = function(envir, previous = NULL) {
   check_env(envir, "envir")
@@ -253,18 +230,14 @@ env_align = function(name, cls, shape, size) {
 
 #' Lines of the `<workspace>` block within `budget` estimated tokens
 #' At most 12 lines `name  class  shape  size`, largest first, then `(+ n smaller objects: use
-#' ls())`; promises and active bindings show as `<promise>` and `<active>`. A value of unknown
-#' size other than a function or environment (an S7 plot) ranks at the median known size, so it is
-#' not always cut; the rest rank last.
+#' ls())`; promises and active bindings show as `<promise>` and `<active>` and, having no size,
+#' rank last.
 #' @noRd
 workspace_lines = function(snapshot, budget = 600L) {
   check_number(budget, "budget", min = 20)
   n = nrow(snapshot)
   if (!n) return(character())
   size = snapshot$bytes
-  lift = is.na(size) & snapshot$kind == "value" &
-    !snapshot$class %in% c("function", "environment")
-  size[lift] = stats::median(size, na.rm = TRUE)
   size[is.na(size)] = -1
   s = snapshot[order(-size, snapshot$name, method = "radix"), , drop = FALSE]
   value = s$kind == "value"

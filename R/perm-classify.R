@@ -1834,10 +1834,9 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #'   existing bindings (of `envir` itself for a plain assignment evaluated in `envir`; for
 #'   `<<-`, `assign()`, replacement calls and an assignment inside `local()`, `with()` or
 #'   `within()` also of its enclosing environments up to the global environment) are
-#'   reported as overwrites with their size (`object.size()` in a leaf,
-#'   unknown where it overstates, as for functions and S7 objects; promises and active bindings
-#'   are never forced) and user-defined functions called by the
-#'   code are classified through their bodies.
+#'   reported as overwrites with their size (the workspace's size rule in a leaf: each part
+#'   once, without code or shared environments; promises and active bindings are never forced)
+#'   and user-defined functions called by the code are classified through their bodies.
 #' @param root The project root used for path classes; `NULL` means the current project root.
 #' @return A `gptr_risk` object: a list with `level` (integer 0-4), `label`, `categories`,
 #'   `flagged` (a data frame with columns `call`, `fn`, `level`, `category`, `path`,
@@ -2077,7 +2076,7 @@ risk_binding_info = function(name, envir, inherits) {
       if (isTRUE(rlang::env_binding_are_lazy(e, name))) {
         return(list(class = "<promise>", bytes = NA_real_))
       }
-      return(risk_binding_leaf(get(name, envir = e, inherits = FALSE)))
+      return(risk_binding_leaf(get(name, envir = e, inherits = FALSE), e))
     }
     if (!inherits || identical(e, globalenv())) break
     e = parent.env(e)
@@ -2087,8 +2086,8 @@ risk_binding_info = function(name, envir, inherits) {
 
 #' Class and bytes of an object (the closure-free leaf; the workspace's size rule)
 #' @noRd
-risk_binding_leaf = function(obj) {
-  list(class = class(obj)[1L], bytes = env_snap_size(obj))
+risk_binding_leaf = function(obj, home) {
+  list(class = class(obj)[1L], bytes = env_snap_size(obj, home))
 }
 
 #' risk_binding_info() with errors caught one frame up

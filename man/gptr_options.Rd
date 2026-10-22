@@ -51,7 +51,7 @@ documents: \code{"auto"}, \code{"ask"} or \code{"off"}.
 \item \code{gptr.max_turns} (integer, \code{50}): turns per programmatic run.
 \item \code{gptr.max_turns_console} (integer, \code{200}): turns per console prompt.
 \item \code{gptr.max_nested_calls} (integer, \code{20}): \code{\link[=peter]{peter()}} calls per evaluation of model code.
-\item \code{gptr.value_copy_max} (bytes, \code{1048576}): designated result values below this size are
+\item \code{gptr.value_copy_max} (bytes, \code{2097152}): designated result values below this size are
 copied; larger ones are kept by name.
 \item \code{gptr.values_max_bytes} (bytes, \code{67108864}): value copies held per session.
 \item \code{gptr.background_tools} (character, \code{"idle"}): \code{"idle"} or \code{"wait"} for experimental

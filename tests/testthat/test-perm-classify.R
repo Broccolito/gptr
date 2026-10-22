@@ -681,17 +681,20 @@ test_that("an overwrite above gptr.protect_size is level 3 and reports the size"
   expect_identical(gptr_risk("new_obj = 1", envir = e, root = root)$assigned, "new_obj")
 })
 
-test_that("an S7 object's size is unknown, so overwriting it never trips protect_size (D-189)", {
+test_that("protect_size compares the size a list of S7 objects holds, not object.size() (D-247)", {
+  # object.size() counts the class copy once per element: 20 x 1.6 MB here
   root = local_project()
   e = new.env()
-  e$plt = structure(list(), class = c("pkg::plot", "S7_object"),
-                    S7_class = structure(function() NULL, pad = numeric(2e5)))
-  local_gptr_options(protect_size = 1e6)
-  r = gptr_risk("plt = 1", envir = e, root = root)
+  cls = structure(function() NULL, pad = numeric(2e5), name = "plot", package = "pkg")
+  e$plt = structure(list(), class = c("pkg::plot", "S7_object"), S7_class = cls)
+  e$plts = rep(list(e$plt), 20)
+  local_gptr_options(protect_size = 4e6)
+  r = gptr_risk("plts = 1", envir = e, root = root)
   expect_identical(r$level, 2L)
-  expect_true(is.na(r$sizes[["plt"]]))
-  expect_match(r$flagged$call, "overwrites `plt` <pkg::plot, size unknown>", fixed = TRUE,
-               all = FALSE)
+  expect_lt(abs(r$sizes[["plts"]] - 1.6e6), 4000)
+  expect_match(r$flagged$call, "overwrites `plts` <list, 1.5 MB>", fixed = TRUE, all = FALSE)
+  local_gptr_options(protect_size = 1e6)
+  expect_identical(gptr_risk("plt = 1", envir = e, root = root)$level, 3L)
 })
 
 test_that("a plain assignment binds in envir itself, not in an enclosing environment (#32)", {

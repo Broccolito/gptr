@@ -635,8 +635,10 @@ str.gptr_session = function(object, ...) {
 # ---------------------------------------------------------------------------- the value policy
 
 #' Designate a value of the session (the section 5.1 value policy of 03)
-#' A name bound in the kept home (or globalenv) is deep-copied below `gptr.value_copy_max`, else
-#' held by name and address; anything else is boxed. The entry holds metadata only (rule R1).
+#' A name bound in the kept home (or globalenv) is deep-copied when its size (env_snap_size()) is
+#' below `gptr.value_copy_max` and its object.size() below `gptr.values_max_bytes`, and the copy is
+#' kept when it is a new object holding below `gptr.value_copy_max` of its own; else the value is
+#' held by name and address. Anything else is boxed. The entry holds metadata only (rule R1).
 #' @noRd
 session_value_set = function(s, label, value, name = NULL, forced_home = NULL) {
   check_string(label, "label")
@@ -648,9 +650,19 @@ session_value_set = function(s, label, value, name = NULL, forced_home = NULL) {
   bound = !is.null(name) && !is.null(where) &&
     (identical(where, globalenv()) || identical(where, kept)) &&
     exists(name, envir = where, inherits = FALSE)
-  facts = value_facts(value)
-  mode = if (!bound) "box" else if (facts$bytes < gptr_opt("value_copy_max")) "copy" else "name"
+  facts = value_facts(value, where)
+  limit = gptr_opt("value_copy_max")
+  # object.size() bounds what duplicate() allocates (each list path, compact sequences expanded)
+  copy = bound && facts$bytes < limit &&
+    as.numeric(utils::object.size(value)) < gptr_opt("values_max_bytes")
+  mode = if (!bound) "box" else if (copy) "copy" else "name"
   held = switch(mode, copy = rlang::duplicate(value, shallow = FALSE), name = NULL, box = value)
+  # no copy (an environment, an R6 object, an external pointer) or a copy that outgrew the value
+  if (mode == "copy" && (identical(rlang::obj_address(held), facts$address) ||
+                         env_snap_size(held, where, value) >= limit)) {
+    held = NULL
+    mode = "name"
+  }
   rec = list(turn = d$turns, mode = mode, name = name %||% label,
              address = if (identical(mode, "name")) facts$address else NA_character_,
              class = facts$class, bytes = facts$bytes, value = held)
@@ -667,8 +679,8 @@ session_value_set = function(s, label, value, name = NULL, forced_home = NULL) {
 
 #' Facts of a value through one leaf (rule R4)
 #' @noRd
-value_facts = function(x) {
-  list(class = class(x)[1L], bytes = as.numeric(utils::object.size(x)),
+value_facts = function(x, home = NULL) {
+  list(class = class(x)[1L], bytes = env_snap_size(x, home),
        address = rlang::obj_address(x))
 }
 

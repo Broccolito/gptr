@@ -379,14 +379,14 @@ test_that("a fan-out child that succeeds keeps only its values held by name (D-1
   skip_on_cran()
   local_team_fake(function(request) {
     if (length(request$last_results)) return("ok")
-    fake_tool("r", code = "scratch = numeric(1e5)\nbig = numeric(2e5)\ngptr::gptr_return(big)")
+    fake_tool("r", code = "scratch = numeric(1e5)\nbig = numeric(3e5)\ngptr::gptr_return(big)")
   })
   e = new.env()
   e$cohorts = list(A = 1, B = 2)
   fan = gptr_map(team_call("x", parallel = 2L, envir = e,
                            context = list(sym_item("cohorts", e$cohorts))))
   expect_identical(names(fan$A$envir), "big")
-  expect_identical(fan$value$A, numeric(2e5))
+  expect_identical(fan$value$A, numeric(3e5))
 })
 
 test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks says (IC-39)", {

@@ -1621,6 +1621,77 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   variable of the host that setup.R does not blank (here Claude Code's
   `CLAUDE_CODE_MESSAGING_TOKEN`, first at `:988`) and leave it in the vault.
 
+## Task FIX-13 - One honest size for every object (2026-10-21, #73)
+- The maintainer's rule: an object the agent creates is the console's, at the same size, and gptr's size
+  reports are honest for every kind of object. The fidelity harness (37 cases, each built at the console and
+  through `peter()`; truth `lobstr::obj_size()` and the bytes not shared with namespaces) found the objects
+  identical but 134 dishonest size rows on main (ggplot2 4.0.3, S7 0.2.2, R 4.6.1): no size for S7 plots,
+  functions, environments and compact sequences (D-189); `object.size()` in lists of plots (seven themed plots
+  111 MB against 9 MB: undo skipped, overwrite level 3), values and dot facts; checkpoint images sized leaf by
+  leaf (a themed plot's image 15.8 MB against 840 B; pinfsc50's `@fix` edit 8.7 MB against 1.3 MB); shared
+  elements counted per path; a formula's environment uncounted; R6 objects and environments "copied" by a
+  `duplicate()` that returned them; a changed `1:1e6` called a sequence. The branch's first fix (S7 leaves
+  through D-189's rule, unknown sizes copied at 0 bytes) left lists overstated and copied every plot unbounded.
+- Fix: D-247 (amended): `env_snap_size()` in `utils-size.R` counts each part once by address and each string
+  once by content, leaves out code, top-level environments, the home and running frames, walks an S7 class copy
+  once per class, samples lists and environments of more than 64 items past 10,000 parts, and with `shared`
+  sizes a checkpoint image against the current value; every size surface calls it (`env_snap_rows()`,
+  `dsc_leaf_core()` and the describe headers, `risk_binding_leaf()`, `value_facts()`, `dot_facts()`,
+  `tool_result_message()`, `subagent_fanout_spec()`, `artifact_data_facts()`, `ckpt_unshared_bytes()`), and
+  `describe_binding()` describes with its home on the call stack. The value policy copies below
+  `gptr.value_copy_max`, now 2 MiB, when `object.size()` is below `gptr.values_max_bytes` and keeps a copy that
+  is a new object under the limit. Snapshot sizes are reused only while the fingerprint holds too.
+  Review fixes: an environment takes the 100-level cap (a chain of 700 overflowed the node stack, so the snapshot
+  failed: no `<workspace>` block, no checkpoint of the turn, "describe failed"); a vector counts its stored
+  length through `object.size()` (`length()` dispatched: survival's `Surv` counted half, `bit::bit(1e8)` 381 MB
+  for 12.5 MB); a closure's srcref is code (each of a sourced 748-line file's 53 functions was 589 KB); the
+  describe header drops "(compact sequence)", whose check serialized a sequence-like vector a second time;
+  `held_mb` and `disk_mb` count 2^20 bytes; a dead `home = NULL` and a redundant guard go.
+  Deleted: D-189's NA rule and median rank, `ckpt_addr_collect()` and `ckpt_unshared_walk()`, the old
+  three-element `env_compact_seq()`, the "(sequence)" shape and the describe headers' NA branches; the first
+  fix's NA-means-copy rule and long-sequence exception are not kept.
+- Red: on main (ba77f68) the new and changed expectations fail: FAIL 60 in 28 tests (env-snapshot 11,
+  env-describe 8, ckpt-objects 2, session-object 2; arch-layers, copy-eval, gptr-capture, perm-classify and
+  utils-options 1 each); on the size commit the 2 MiB default's check fails (`^(session-object|utils-options)$`
+  FAIL 1). Review fixes, each before its commit: env-snapshot ERROR (node stack overflow) and FAIL 1 (a classed
+  vector 232 B against 800,224 B), srcref FAIL 3 (env-snapshot 2, env-describe 1), env-describe FAIL 1 (the
+  header), ckpt-rewind FAIL 1 (`held_mb` 1.049 against 1).
+- Green: `^(env-snapshot|env-describe|ckpt-objects|perm-classify|gptr-capture|session-object|arch-layers|
+  utils-options|copy-eval|copy-tools|tool-namespace|console-commands|s1-route|lint-rules|prompt-text|
+  artifact-app)$` PASS 3954, SKIP 0 (the ggplot2 guard ran), WARN 0. The whole suite (NOT_CRAN) failed once in
+  subagent-team, whose value held by name (1.6 MB) is copied at 2 MiB; it now returns 2.4 MB, and the suite
+  passes: PASS 35225, SKIP 64 (Windows, live and Python-runtime blocks), WARN 0. Lint clean; `devtools::document()`
+  leaves no diff; the plan checks pass. After the review fixes: `^(env-|ckpt|session|gptr-capture|perm-classify|
+  copy-|arch|zzz|utils-options|subagent-team|listing-print)` PASS 4644, SKIP 1 (the C-locale display witness),
+  WARN 0; the six changed files lint clean; `devtools::document()` leaves no diff.
+- Harness (the review-fixed build at the 2 MiB default; the harness now judges the value mode at the build's
+  `gptr.value_copy_max`, not a fixed 1 MiB, which had flagged `df_big` and the data frame of plots): defect rows
+  134 on main, 15 with this rule (5 lobstr's ALTREP-wrapper undercount, 3 srcref, 5 "serializes differently", now
+  also `df_big` and the data frame of plots, whose copies write out a compact `id` column, and 2 environments held
+  by name); the two themed plots just over 1 MiB are copied (922 and 914 KB held) and survive the edit; against the
+  build before the review fixes only `closure_factory` (784 to 782 KB) and `r6` (785 to 782 KB) changed, by their
+  functions' srcrefs. Every surface shows one number per case; the judges' stress objects (sizes and images
+  unchanged by the review fixes) within 0.6x to 1.2x of `lobstr::obj_size()` in at most 0.3 s (checkpoint forms
+  0.6 s). Copy safety: 64 tracemem/address probes (list, nested, attribute, S4 slot, data frame column,
+  environment, closure environment, character elements, lists past the budget walked and unwalked, the checkpoint
+  form, plot data and labels, a list of 200 plots) match a run without sizing, rerun on the final `utils-size.R`. A
+  1,000-node environment chain in the workspace keeps the `<workspace>` block and the turn's checkpoint (1/1
+  objects).
+- Reviews: three designs (minimal, sharing, purpose) judged twice; the minimal walk won, with the judges' grafts:
+  strings once by content, the `object.size()` bound before a copy, no extrapolation from a first item that
+  reaches a shared frame (now: the first, the last and the budget-spending item are not samples), 56 bytes a
+  binding.
+- Decisions: `gptr.value_copy_max` 2 MiB; `dot_facts()$bytes`, `value_ref$bytes` and the fan-out facts' bytes
+  kept and sized by this rule; `describe_binding()`'s home on the call stack, the dropped "(sequence)" shape,
+  the sampling budget and environment sizes that stay until the shape changes accepted; after review, the
+  describe header's "(compact sequence)" dropped too and `held_mb` counted in 2^20 bytes.
+- Deviations: D-247 (amended). Open: `fingerprint_sample()`'s `as_utf8()` makes the next in-place edit of a list
+  with a character element copy after a snapshot (a main defect; fixed on its own branch). Found in review, main
+  defects for their own branches: `/exit` sends `session_shutdown`, which releases the returned console session's
+  undo images (`gptr_rewind()` then restores no object); `gptr_source()` rebuilds an object that captures a call
+  with the document's srcref, as `source(keep.source = TRUE)` does; `gptr_export()` refuses a console transcript,
+  whose later turns continue `s_<id> |> peter()`.
+
 ## Task FIX-14 - fingerprint() leaves a list's elements editable in place (2026-10-21, #72)
 - Red: FAIL 2 in `^utils-hash$` (PASS 55): after `fingerprint()` of a list with a character
   element, the next in-place edit copied the character and the numeric element (a new CRAN-run

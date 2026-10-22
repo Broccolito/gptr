@@ -352,8 +352,9 @@ artifact_list = function() {
 #' objects named in `data`; the `.gptr/.gitignore` that `gptr_init()` writes keeps it and `run/`
 #' out of git.
 #' @section Options:
-#' `gptr.artifact_max_bytes` (default `5e8`): the largest total `object.size()` of the objects
-#' one version may snapshot; above it `peter$app()` signals `gptr_error_artifact_too_large`.
+#' `gptr.artifact_max_bytes` (default `5e8`): the largest total size of the objects one version
+#' may snapshot (each part counted once, as in the workspace); above it `peter$app()` signals
+#' `gptr_error_artifact_too_large`.
 #' @seealso `vignette("tools-and-artifacts", package = "gptr")` for working files, data
 #'   snapshots, checks and lifecycle examples.
 #' @examples
