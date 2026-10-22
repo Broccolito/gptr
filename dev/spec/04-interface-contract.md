@@ -5387,10 +5387,11 @@ its part in its own commit, and Task 27 finalises them.
     `console_on_tool_start()`); `ui_permission_lines(request)` prints the call line (`  ▎ r  <first line>`, strip
     red, name bold, cut before `(+N more lines)`) only when they are not the request's (`session`,
     `tool_call_id`, §7.11): a background ask, a nested member call in `r` code, a sub-agent's call. The flagged
-    rows and `asks in every mode: <reason>` follow, then the question line
-    `  ? Allow r?  y yes · a always (session) · p always (project) · n no · ? more` (`?` blue, the question and the
-    keys bold, what they do dim; `a` and `p` only with a `suggested_rule`), word-wrapped at the approval rows'
-    width with each key kept with its words. Who asks: `  ? sub-agent <agent>: allow r?`.
+    rows and `asks in every mode: <reason>` follow, then the question `  ? Allow r?` (`?` blue, the question bold)
+    and, under its text, the keys row `    y yes · a always (session) · p always (project) · n no · ? more` (the
+    keys bold, what they do dim; `a` and `p` only with a `suggested_rule`). The keys row is 68 columns whatever the
+    tool or who asks; in a narrower console it word-wraps at column 4, each key kept with its words (no-break
+    spaces, written as spaces). Who asks: `  ? sub-agent <agent>: allow r?`.
   - Every console question (`ui_console_permission()`, `ui_console_select()`, `ui_console_input()`) reads its
     answer after the person's chevron, `console_style()$person` and a space (`› `, ASCII `> `), at column 0, with
     R's readline (echo on, Enter required); answers are unchanged. A choice shows `? <title>` (bold), its details

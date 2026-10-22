@@ -1491,10 +1491,10 @@ last printed call line is not the request's (its session and `tool_call_id`, §7
 member call inside `r` code, a sub-agent's call; a question and the tool block it is asked in are one block (no
 blank line between the call, its ask and its result lines). Then come the flagged calls one per line (highest level
 first, each cut to the width, at most 5, then `(+N more; ? shows all)`), an `ask_human` request's
-`asks in every mode: <reason>`, and the question line
-`  ? Allow r?  y yes · a always (session) · p always (project) · n no · ? more` (`?` blue, the question and the keys
-bold, what they do dim; wrapped between the options at the width), with C0/C1 controls, bidi and zero-width
-characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after
+`asks in every mode: <reason>`, the question `  ? Allow r?` (`?` blue, the question bold), and under its text the
+keys, `    y yes · a always (session) · p always (project) · n no · ? more` (the keys bold, what they do dim; 68
+columns whatever the tool or who asks, wrapped between the options in a narrower console), with C0/C1 controls,
+bidi and zero-width characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after
 the person's chevron `› ` (ASCII `> `) at column 0, with R's readline, echo on and Enter required; no single key
 answers. `a` adds a session rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`) and `p`
 the same rule for the project, both offered only when the request suggests one; a remembered answer adds one dim
@@ -2562,7 +2562,7 @@ Prices: Sonnet 5.5 at $2 input / $10 output per million tokens, 1-hour cache wri
    "resolution 0.8 because 0.4 merged the two monocyte groups"`.
 5. Dispatcher: validation; `gptr_risk()` sees `pbmc` overwritten above `gptr.protect_size` -> level 3;
    `manual` -> ask; under the call line `▎ r  pbmc = FindNeighbors(pbmc, dims = 1:30)` the console asks
-   `? Allow r?  y yes · a always (session) · p always (project) · n no · ? more`; `?` would say "cannot be undone:
+   `? Allow r?` over `y yes · a always (session) · p always (project) · n no · ? more`; `?` would say "cannot be undone:
    pbmc 5.1 GB exceeds gptr.undo_spill_max" (no pre-image, so no copy). `y` at `› `.
 6. FIFO -> `eval_r()` in `globalenv()`, teed to the console; Seurat mutates `pbmc` in memory with no gptr
    copy (the copy-safety suite pins this). Ctrl-C would open the pause menu; a steer typed there is delivered

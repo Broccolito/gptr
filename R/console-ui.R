@@ -119,7 +119,8 @@ ui_question = function(title) {
 #' The lines of an approval (D-243): the call line (`  | r  x = 1`, fitted to the console before
 #' (+N more lines), D-187) unless the console's last printed call line is this request's, the
 #' flagged calls one per line, fitted, at most 5 (D-222), why an `ask_human` request asks in
-#' every mode, and the question with its keys (a and p only with a rule), wrapped between them
+#' every mode, the question, and under its text the keys (a and p only with a rule), a row that
+#' wraps between them
 #' @noRd
 ui_permission_lines = function(request) {
   sym = console_style()
@@ -143,7 +144,6 @@ ui_permission_lines = function(request) {
                                                       c(rep(sym$sep, length(keys) - 1L), ""))),
                 collapse = "")
   q = if (nzchar(who)) paste0(who, ": allow ", tool, "?") else paste0("Allow ", tool, "?")
-  ask = paste0("  ", ui_question(q), "\u00a0\u00a0", opts)
   c(if (!shown) paste0(cli::ansi_strtrim(first, max(20L, width - nchar(more))), more),
     if (n) {
       k = seq_len(min(n, 5L))
@@ -156,7 +156,8 @@ ui_permission_lines = function(request) {
     if (identical(request$tier, "ask_human") && rlang::is_string(why) && nzchar(why)) {
       paste0("     asks in every mode: ", ui_escape(why))
     },
-    gsub("\u00a0", " ", console_wrap(ask, width), fixed = TRUE))
+    paste0("  ", ui_question(q)),
+    gsub("\u00a0", " ", console_wrap(paste0("    ", opts), width), fixed = TRUE))
 }
 
 #' The detail view shown for `?`: the code as a plain fence (it also feeds the RStudio dialog),

@@ -548,11 +548,13 @@ Decisions:
     between a call line, its ask and its result lines (amended in Task 12).
 - Flagged rows (at most 5, then `(+N more; ? shows all)`) and the `asks in every mode:` reason
   stay.
-- The question line is at column 2:
-  `? Allow <tool>?  y yes · a always (session) · p always (project) · n no · ? more`
+- The question is at column 2, `? Allow <tool>?`, and the keys are a row of their own under its text, at
+  column 4: `y yes · a always (session) · p always (project) · n no · ? more` (amended in the review of
+  Tasks 8-15: on the question's row they wrapped at 80 columns for any tool name of 4 characters or more,
+  and the wrapped `? more` read as a second question).
   - `?` is blue, the question bold, key letters bold and descriptions dim.
-  - The line wraps between the options: no-break spaces keep a key with its words, and are
-    written as spaces.
+  - The keys row is 68 columns whatever the tool or who asks. In a narrower console it wraps between the
+    options at column 4: no-break spaces keep a key with its words, and are written as spaces.
   - a and p are omitted when no rule is offered; typed anyway, they get
     `a and p are not offered: <why>; answer y, n or ?.`.
   - Who asks: `? sub-agent a: allow r?`.

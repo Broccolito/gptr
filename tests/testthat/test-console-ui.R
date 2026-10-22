@@ -108,8 +108,8 @@ test_that("the one-line prompt shows the first line, +N more lines and the flagg
   expect_false(any(grepl("\u001b", detail, fixed = TRUE)))
   expect_true(any(grepl("[3] file_delete", detail, fixed = TRUE)))
   w = list(tool = "write", input = list(path = "notes.md"), risk = list(level = 2L))
-  expect_identical(ui_permission_lines(w), c("  | write  notes.md",
-                                             "  ? Allow write?  y yes - n no - ? more"))
+  expect_identical(ui_permission_lines(w), c("  | write  notes.md", "  ? Allow write?",
+                                             "    y yes - n no - ? more"))
 })
 
 test_that("the prompt's first line fits the console, keeping +N more lines (D-187)", {
@@ -128,7 +128,7 @@ test_that("flagged calls fit one per line, highest level first, at most 5 (#33)"
   root = local_project()
   code = c(sprintf("writeLines('%s', 'f%d.txt')", strrep("x", 30L), 1:7), "unlink('data')")
   lines = ui_permission_lines(ui_request(paste(code, collapse = "\n")))
-  expect_length(lines, 8L)
+  expect_length(lines, 9L)
   expect_true(all(nchar(lines) <= 40L))
   expect_identical(lines[2L], "     flagged: [3 file_delete] unlink(...")
   expect_identical(lines[3L], "              [2 file_write] writeLin...")
@@ -204,29 +204,33 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
   expect_identical(out$asked, 2L)
 })
 
-test_that("the question line names the keys, a and p only with a rule, and wraps (D-243)", {
+test_that("the keys are a row under the question, a and p only with a rule (D-243)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
   root = local_project()
   req = ui_request("x = 1", rule = "r(level<=1)")
-  q = function(r) utils::tail(ui_permission_lines(r), 1L)
-  expect_identical(q(req), paste0("  ? Allow r?  y yes \u00b7 a always (session) \u00b7 ",
-                                  "p always (project) \u00b7 n no \u00b7 ? more"))
-  expect_identical(q(ui_request("x = 1")), "  ? Allow r?  y yes \u00b7 n no \u00b7 ? more")
-  # a key never leaves its words: the line wraps between the options, inside the margin
+  q = function(r) utils::tail(ui_permission_lines(r), 2L)
+  keys = paste0("    y yes \u00b7 a always (session) \u00b7 p always (project) \u00b7 n no ",
+                "\u00b7 ? more")
+  expect_identical(q(req), c("  ? Allow r?", keys))
+  expect_identical(q(ui_request("x = 1"))[[2L]], "    y yes \u00b7 n no \u00b7 ? more")
+  # the keys row is 68 columns whatever the tool and whoever asks: it fits 80 columns
+  long = modifyList(req, list(tool = "edit", agent = "'Summarise the data' #12"))
+  expect_identical(q(long), c("  ? sub-agent 'Summarise the data' #12: allow edit?", keys))
+  # narrower, it wraps under its first key, a key never apart from its words
   testthat::local_reproducible_output(width = 50, crayon = FALSE, unicode = TRUE)
   local_mocked_bindings(console_pad = function() "  ")
-  expect_identical(utils::tail(ui_permission_lines(req), 2L),
-                   c("  ? Allow r?  y yes \u00b7 a always (session) \u00b7",
-                     "  p always (project) \u00b7 n no \u00b7 ? more"))
+  expect_identical(utils::tail(ui_permission_lines(req), 3L),
+                   c("  ? Allow r?", "    y yes \u00b7 a always (session) \u00b7",
+                     "    p always (project) \u00b7 n no \u00b7 ? more"))
   # ? blue, the question bold, the keys bold, what they do dim; the call's strip red
   withr::local_options(cli.num_colors = 256L)
   expect_identical(ui_permission_lines(ui_request("x = 1")),
                    c("  \u001b[38;5;167m\u258e\u001b[39m \u001b[1mr\u001b[22m  x = 1",
-                     paste0("  \033[38;5;67m?\033[39m \033[1mAllow r?\033[22m  \033[1my\033[22m",
-                            "\u001b[2m yes \u00b7 \u001b[22m\u001b[1mn\u001b[22m",
-                            "\u001b[2m no \u00b7 \u001b[22m",
-                            "\033[1m?\033[22m\033[2m more\033[22m")))
+                     "  \033[38;5;67m?\033[39m \033[1mAllow r?\033[22m",
+                     paste0("    \u001b[1my\u001b[22m\u001b[2m yes \u00b7 \u001b[22m",
+                            "\u001b[1mn\u001b[22m\u001b[2m no \u00b7 \u001b[22m",
+                            "\u001b[1m?\u001b[22m\u001b[2m more\u001b[22m")))
 })
 
 test_that("an approval asks under the call it gates; a call not shown is printed (D-243)", {
@@ -248,17 +252,15 @@ test_that("an approval asks under the call it gates; a call not shown is printed
   e = new.env()
   e$sub = sub
   out = utils::capture.output(peter("go", model = fake, envir = e))
-  opts = "  y yes - a always (session) - p always (project) - n no - ? more"
+  keys = "    y yes - a always (session) - p always (project) - n no - ? more"
   # the parent's call line, printed at its start, is not repeated: its ask follows it
   at = grep("res = peter(", out, fixed = TRUE)
   expect_identical(out[at], "  | r  res = peter('count', model = sub)")
-  expect_identical(out[at + 2L], paste0("  ? Allow r?", opts))
+  expect_identical(out[at + 2:3], c("  ? Allow r?", keys))
   # the sub-agent's call runs in the parent's r code, where no call line is shown: its ask
-  # prints it, and the question names who asks (wrapped at 80 columns)
+  # prints it, and the question names who asks
   at = match("  | r  x = 1", out)
-  expect_identical(out[at + 1:2],
-                   c("  ? sub-agent 'count' #1: allow r?  y yes - a always (session) -",
-                     "  p always (project) - n no - ? more"))
+  expect_identical(out[at + 1:2], c("  ? sub-agent 'count' #1: allow r?", keys))
   expect_identical(prompts, c("> ", "> "))
 })
 
@@ -406,19 +408,18 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
   skip_on_cran()
   root = local_project()
   req = ui_request("x = 1")
-  q = function(r) utils::tail(ui_permission_lines(r), 1L)
-  expect_identical(ui_permission_lines(req),
-                   c("  | r  x = 1", "  ? Allow r?  y yes - n no - ? more"))
-  expect_identical(q(c(req, agent = "main")), "  ? Allow r?  y yes - n no - ? more")
+  q = function(r) utils::tail(ui_permission_lines(r), 2L)[[1L]]
+  keys = "    y yes - n no - ? more"
+  expect_identical(ui_permission_lines(req), c("  | r  x = 1", "  ? Allow r?", keys))
+  expect_identical(q(c(req, agent = "main")), "  ? Allow r?")
   expect_identical(ui_permission_lines(c(req, agent = "alpha")),
-                   c("  | r  x = 1", "  ? sub-agent alpha: allow r?  y yes - n no - ? more"))
-  expect_identical(q(c(req, agent = "'Sum\033...'")),
-                   "  ? sub-agent 'Sum<U+001B>...': allow r?  y yes - n no - ? more")
+                   c("  | r  x = 1", "  ? sub-agent alpha: allow r?", keys))
+  expect_identical(q(c(req, agent = "'Sum\033...'")), "  ? sub-agent 'Sum<U+001B>...': allow r?")
   expect_match(ui_permission_detail(c(req, agent = "alpha"))[1L],
                "^  sub-agent alpha wants to use r \\(level")
   expect_match(ui_permission_detail(req)[1L], "^  gptr wants to use r")
   crit = ui_request("q('no')", tier = "ask_human")
-  expect_identical(utils::tail(ui_permission_lines(crit), 2L)[1L],
+  expect_identical(utils::tail(ui_permission_lines(crit), 3L)[1L],
                    paste0("     asks in every mode: ", crit$reason))
   expect_false(any(grepl("every mode", ui_permission_lines(req), fixed = TRUE)))
 })

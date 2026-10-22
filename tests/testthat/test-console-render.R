@@ -1126,7 +1126,7 @@ test_that("the console UI prompts between whole rows; the held row waits (D-186,
                                          delta = "partial "), ctx)
     ans = ui_console_permission(req, read = function(...) "y")
   })
-  expect_identical(out, c("  | r  x = 1", "  ? Allow r?  y yes - n no - ? more"))
+  expect_identical(out, c("  | r  x = 1", "  ? Allow r?", "    y yes - n no - ? more"))
   expect_identical(ans$decision, "allow")
   expect_false("permission_request" %in% vapply(console_hooks(), function(h) h$event, ""))
 })
@@ -1158,7 +1158,7 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
     res = eval_r("ans = tool(ask)", home, plots = "none", tee = FALSE)
   })
   # the held row continues after the prompt (D-186, D-245), never in the tool result
-  expect_identical(out, c("  | r  x = 1", "  ? sub-agent a: allow r?  y yes - n no - ? more"))
+  expect_identical(out, c("  | r  x = 1", "  ? sub-agent a: allow r?", "    y yes - n no - ? more"))
   expect_identical(home$ans$decision, "allow")
   expect_false(grepl("HELDWORD|x = 1", text(res)))
   withr::local_options(cli.dynamic = TRUE)

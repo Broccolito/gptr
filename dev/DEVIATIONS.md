@@ -3168,6 +3168,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     terminal between the drain and the question's `readline()`, `/exit` or `!rm(x)` went to the agent as an
     instruction. Tests: test-console-ui.R "during a run a !code or /command line typed before a question waits for
     the prompt".
+- Review fixes of Tasks 8-15 (2026-10-21):
+  - The approval's keys are a row of their own under the question's text: `  ? Allow edit?`, then
+    `    y yes · a always (session) · p always (project) · n no · ? more` (68 columns whatever the tool or who
+    asks). On the question's row they took 80 columns for `edit` and wrapped at 80 columns for every tool name of 4
+    characters or more and every sub-agent ask, leaving a dangling ` ·` and a bold `? more` under the blue `?`,
+    which read as a second question. Contract-visible: 04 §15.10 IC-77, 03 §6.8.3 and NS-1 (§10.1). Tests:
+    test-console-ui.R "the keys are a row under the question, a and p only with a rule (D-243)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
