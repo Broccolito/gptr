@@ -3202,6 +3202,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Contract-visible: 04 §15.10 IC-77. Tests: test-console-ui.R "questions share one frame: ? and the title,
     numbered choices, a dim hint, the chevron", "a long title, choice, detail or hint wraps under its own text
     (D-243)".
+  - Positron's console is an L console with the pause menu: under ark `.Platform$GUI` is `X11` and stdin is a tty,
+    so `front_end()` said `vscode` and the console got the terminal class (an fd-0 typing task, stty on ark's tty,
+    terminal hints), while what the person typed during a run piled up in Positron's own input and ran as R code
+    after `peter()` returned. `front_end()` now knows ark by its `tools:positron` environment, `repl_terminal()` is
+    FALSE there, the pause menu is offered (it resumes there) and the key named is Ctrl-C, which reaches R.
+    Contract-visible: 04 §5 (`front_end()`) and IC-76's scope; `?peter` and the interactive-console vignette.
+    Tests: test-utils-options.R "an IDE's terminal tab is a terminal: inherited IDE variables count only without
+    a tty"; test-console-interrupt.R "Positron's console is no terminal REPL and offers the pause menu (visual
+    review)"; test-console-render.R "the interrupt key follows the front end".
 - Task 16: the composer's key machine, pure (`console_compose()` and `console_trigger()` in the new
   `console-input.R`; Tasks 18-21 feed it the keys). A read batch sends at most one message, so it returns one
   action, not a list. A newline in a batch ends what DEL, Ctrl-U and Ctrl-W reach, so keys typed after Enter within

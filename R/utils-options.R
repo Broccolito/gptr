@@ -214,7 +214,8 @@ platform_gui = function() {
 #' `POSITRON`, `TERM_PROGRAM`) are inherited by every child process started from the IDE, so they
 #' count only in an interactive session; a non-interactive child (an Rscript started from the
 #' IDE's terminal, an Rscript worker) is "rscript", and R reading a tty (the IDE's terminal tab)
-#' is "terminal" ("vscode" with `TERM_PROGRAM=vscode`).
+#' is "terminal" ("vscode" with `TERM_PROGRAM=vscode`). Positron's console runs R in ark, whose
+#' stdin is a tty too; ark attaches `tools:positron`.
 #' @noRd
 front_end = function() {
   env = function(name) Sys.getenv(name, unset = "")
@@ -228,7 +229,8 @@ front_end = function() {
   gui = platform_gui()
   human = gptr_is_interactive()
   ide = human && !stdin_tty()
-  if (identical(gui, "Positron") || (ide && identical(env("POSITRON"), "1"))) {
+  if (identical(gui, "Positron") || "tools:positron" %in% search() ||
+      (ide && identical(env("POSITRON"), "1"))) {
     return("positron")
   }
   if (identical(gui, "RStudio") || (ide && identical(env("RSTUDIO"), "1"))) return("rstudio")

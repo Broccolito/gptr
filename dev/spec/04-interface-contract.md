@@ -2229,7 +2229,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
 | `readline_answer(prompt, keep = console_history_add)`, `answer_stale(secs)`, `console_history_add(x)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer is stale (`answer_stale(the$readline_secs)`: under 0.1 s, so typed or pasted before the question), at most 100 reads, then the last answer; each line read past that is not blank goes to the upper layer's callback `keep(line)` (03 §2.2; NULL keeps nothing): `console_history_add()` (`utils::timestamp()` when `gptr.history` is on, TRUE when added; never fails; text of several lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it back as one input, D-243) by default, `console_typed_ahead()` for the console questions (IC-75 in §15.10); used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26, P28 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
-| `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183) | P07, P14, P15 |
+| `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183); ark's `tools:positron` on the search path is `positron` (Positron's console, whose stdin is a tty; P28 visual review) | P07, P14, P15 |
 | `verbosity()` | `int(1)` 0-3 (§3.1 `gptr.verbose`) | P14, P06 |
 | `check_running()` | `lgl(1)`: `_R_CHECK_PACKAGE_NAME_` is set | P04, P15, P19 |
 | `on_load(expr)` (`aaa-state.R`, IC-32) | stores `substitute(expr)` and `parent.frame()`; `.onLoad` evaluates them in registration order after the namespace is loaded | all built-in declarations |
@@ -5117,8 +5117,11 @@ and pastes are kept in the console history.
 P28 amends this item in §15.10 (pending; D-242, D-243): a steer reaches the first step boundary and a follow-up
 is the next prompt, as D-242 states now; the notices and the follow-up delivery below are replaced.
 - Scope: `repl_terminal(rs)`: not `.stdin`, not Windows (processx cannot poll a console handle),
-  `gptr_is_interactive()` and `stdin_tty()`; no `front_end()` term, so an IDE's Terminal tab qualifies while IDE
-  consoles, R.app, RGui and Jupyter (no tty) do not. `console_send()` registers the package function
+  `gptr_is_interactive()` and `stdin_tty()`, so an IDE's Terminal tab qualifies while IDE consoles, R.app, RGui
+  and Jupyter (no tty) do not; and not Positron's console (`front_end() != "positron"`, P28 visual review): ark's
+  stdin is a tty, but what the person types goes to Positron's own input, which runs it as R code once
+  `peter()` returns. There the pause menu is offered and Ctrl-C reaches R (`console_menu_available()`,
+  `console_interrupt_key()`). `console_send()` registers the package function
   `console_typed()` as a reactor task of the prompt call (rule R3) and cancels it on exit; plain `peter("...")`,
   `.stdin` and the jsonl frontend never read fd 0.
 - `console_typed()` reads only while a run of the call has a session (`policy_targets()`; otherwise the lines stay

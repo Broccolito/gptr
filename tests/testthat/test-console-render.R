@@ -443,6 +443,9 @@ test_that("the spinner is silent when stdout is not a dynamic terminal", {
 test_that("the interrupt key follows the front end", {
   local_mocked_bindings(front_end = function() "rstudio")
   expect_identical(console_interrupt_key(), "Esc")
+  # Ctrl-C reaches R in Positron's console (visual review)
+  local_mocked_bindings(front_end = function() "positron")
+  expect_identical(console_interrupt_key(), "Ctrl-C")
   local_mocked_bindings(front_end = function() "terminal")
   expect_identical(console_interrupt_key(), "Ctrl-C")
 })

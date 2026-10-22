@@ -51,11 +51,11 @@ console_background = function() {
   the$background
 }
 
-#' The key that interrupts R in this front end (Esc in Rgui, R.app and the IDE consoles; report
-#' 18 section 6)
+#' The key that interrupts R in this front end (Esc in Rgui, R.app and RStudio's console; report
+#' 18 section 6; Ctrl-C in Positron's console, as the visual review found)
 #' @noRd
 console_interrupt_key = function() {
-  if (front_end() %in% c("rgui", "rstudio", "positron")) "Esc" else "Ctrl-C"
+  if (front_end() %in% c("rgui", "rstudio")) "Esc" else "Ctrl-C"
 }
 
 #' Lines of untrusted text for one-line displays: split on CRLF, CR and LF, then escaped

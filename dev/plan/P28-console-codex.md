@@ -110,7 +110,7 @@ working directory restored. Plan-specific rules:
 |---|---|---|
 | T | `repl_terminal(rs) && cli::is_ansi_tty() && cli::is_dynamic_tty()`, `RADIAN_VERSION` unset | terminal R on macOS/Linux, IDE terminal tabs, tmux |
 | D | `repl_terminal(rs)`, not T | TERM=dumb, Emacs shell, ESS |
-| L | interactive, not `repl_terminal()` | RStudio and Positron consoles, Windows Rterm/Rgui, R.app, radian |
+| L | interactive, not `repl_terminal()` | RStudio and Positron consoles (`repl_terminal()` excludes Positron, whose ark has a tty stdin; amended in the visual review), Windows Rterm/Rgui, R.app, radian |
 | P | not interactive | Rscript, pipes, knitr, jsonl, `.stdin = TRUE` |
 
 - Column rule: the person at column 0 (prompt, composer, delivered messages, answers), gptr at

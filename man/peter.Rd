@@ -155,7 +155,7 @@ Tab completes R names and file paths after \code{!} in terminal R, R in an IDE's
 included; RStudio's console completes R code at the prompt too; radian and Positron's console
 offer no completion there.
 
-Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
+Ctrl-C while an answer runs opens a pause menu in supported terminal front ends and Positron:
 \verb{[s]teer} (delivered after the current tool results), \verb{[f]ollow-up} (in the chat, the next
 prompt, as is a \verb{/command} or \code{!code} line typed at either; in a \code{peter("...")} call, sent
 when the agent would otherwise stop), \verb{[c]ontinue}, \verb{[a]bort} and, for a foreground call
@@ -166,8 +166,8 @@ does not guarantee progress while the chat waits for input. Under Rscript, backg
 advance only inside blocking gptr calls.
 Front ends that cannot resume use an abort fallback. \verb{/exit}, two consecutive interrupts at
 the prompt or the end of piped input return the session invisibly, so \code{session = peter()}
-keeps the conversation. Use Ctrl-C in a terminal, an IDE's Terminal tab included; the RStudio,
-R.app, RGui and Positron consoles use Esc.
+keeps the conversation. Use Ctrl-C in a terminal, an IDE's Terminal tab included, and in
+Positron's console; the RStudio, R.app and RGui consoles use Esc.
 
 Options: \code{gptr.verbose} (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}

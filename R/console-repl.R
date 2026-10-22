@@ -171,10 +171,12 @@ console_readline_tty = function() {
 }
 
 #' Does this REPL read a terminal, whose typed lines wait on fd 0 while an answer runs (IC-76)?
-#' Not on Windows: processx cannot poll a console handle
+#' Not on Windows: processx cannot poll a console handle; not in Positron's console, whose own
+#' input holds what is typed, though ark's stdin is a tty
 #' @noRd
 repl_terminal = function(rs) {
-  !isTRUE(rs$stdin) && !is_windows() && gptr_is_interactive() && stdin_tty()
+  !isTRUE(rs$stdin) && !is_windows() && gptr_is_interactive() && stdin_tty() &&
+    front_end() != "positron"
 }
 
 #' The lines typed or pasted on fd 0 that wait to be read, without blocking: one
@@ -1027,7 +1029,7 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' included; RStudio's console completes R code at the prompt too; radian and Positron's console
 #' offer no completion there.
 #'
-#' Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
+#' Ctrl-C while an answer runs opens a pause menu in supported terminal front ends and Positron:
 #' `[s]teer` (delivered after the current tool results), `[f]ollow-up` (in the chat, the next
 #' prompt, as is a `/command` or `!code` line typed at either; in a `peter("...")` call, sent
 #' when the agent would otherwise stop), `[c]ontinue`, `[a]bort` and, for a foreground call
@@ -1038,8 +1040,8 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' advance only inside blocking gptr calls.
 #' Front ends that cannot resume use an abort fallback. `/exit`, two consecutive interrupts at
 #' the prompt or the end of piped input return the session invisibly, so `session = peter()`
-#' keeps the conversation. Use Ctrl-C in a terminal, an IDE's Terminal tab included; the RStudio,
-#' R.app, RGui and Positron consoles use Esc.
+#' keeps the conversation. Use Ctrl-C in a terminal, an IDE's Terminal tab included, and in
+#' Positron's console; the RStudio, R.app and RGui consoles use Esc.
 #'
 #' Options: `gptr.verbose` (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 #' knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`

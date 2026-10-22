@@ -72,6 +72,17 @@ notices = function(expr) {
   c(out, err)
 }
 
+test_that("Positron's console is no terminal REPL and offers the pause menu (visual review)", {
+  local_mocked_bindings(gptr_is_interactive = function() TRUE, stdin_tty = function() TRUE,
+                        is_windows = function() FALSE, gptr_can_prompt = function() TRUE,
+                        front_end = function() "positron")
+  # what the person types there goes to Positron's own input, never to R's fd 0
+  expect_false(repl_terminal(repl_state(NULL, new.env())))
+  expect_true(console_menu_available())
+  local_mocked_bindings(front_end = function() "terminal")
+  expect_true(repl_terminal(repl_state(NULL, new.env())))
+})
+
 test_that("continue resumes the interrupted computation", {
   log = local_menu_answers("c")
   res = NULL
