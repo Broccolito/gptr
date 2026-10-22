@@ -120,11 +120,18 @@ ui_question = function(title, width) {
   paste0(lead[seq_along(rows)], cli::style_bold(rows))
 }
 
+#' Is the console's last printed call line this request's (its session and call ids, D-243)?
+#' @noRd
+ui_call_shown = function(request) {
+  rlang::is_string(request$tool_call_id) &&
+    identical(console_state()$last_call, c(request$session, request$tool_call_id))
+}
+
 #' The lines of an approval (D-243): the call line (`  | r  x = 1`, fitted to the console before
-#' (+N more lines), D-187) unless the console's last printed call line is this request's, the
-#' flagged calls one per line, fitted, at most 5 (D-222), why an `ask_human` request asks in
-#' every mode, the question, and under its text the keys (a and p only with a rule), a row that
-#' wraps between them
+#' (+N more lines), D-187) unless the console printed it (ui_call_shown()), then dim at column 4
+#' the flagged calls one per line, fitted, at most 5 (D-222), and why an `ask_human` request asks
+#' in every mode, then the question, and under its text the keys (a and p only with a rule), a row
+#' that wraps between them
 #' @noRd
 ui_permission_lines = function(request) {
   sym = console_style()
@@ -132,10 +139,11 @@ ui_permission_lines = function(request) {
   lines = lines[nzchar(trimws(lines))]
   more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)") else ""
   tool = ui_escape(request$tool %||% "tool")
-  first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ", c(lines, "")[1L])
-  shown = rlang::is_string(request$tool_call_id) &&
-    identical(console_state()$last_call, c(request$session, request$tool_call_id))
   width = ui_width()
+  first = paste0("  ", sym$red(sym$tool), " ", cli::style_bold(tool), "  ", c(lines, "")[1L])
+  call = if (!ui_call_shown(request)) {
+    paste0(cli::ansi_strtrim(first, max(20L, width - nchar(more))), more)
+  }
   fl = ui_flagged(request$risk)
   n = NROW(fl)
   why = request$reason
@@ -148,27 +156,29 @@ ui_permission_lines = function(request) {
                                                       c(rep(sym$sep, length(keys) - 1L), ""))),
                 collapse = "")
   q = if (nzchar(who)) paste0(who, ": allow ", tool, "?") else paste0("Allow ", tool, "?")
-  c(if (!shown) paste0(cli::ansi_strtrim(first, max(20L, width - nchar(more))), more),
+  c(call,
     if (n) {
       k = seq_len(min(n, 5L))
-      rows = paste0(c("     flagged: ", rep(strrep(" ", 14L), 4L))[k], "[", fl$level[k], " ",
+      rows = paste0(c("    flagged: ", rep(strrep(" ", 13L), 4L))[k], "[", fl$level[k], " ",
                     fl$category[k], "] ", ui_escape(fl$call[k]))
-      cli::ansi_strtrim(c(rows, if (n > 5L) {
-        paste0(strrep(" ", 14L), "(+", n - 5L, " more; ? shows all)")
-      }), width)
+      sym$dim(cli::ansi_strtrim(c(rows, if (n > 5L) {
+        paste0(strrep(" ", 13L), "(+", n - 5L, " more; ? shows all)")
+      }), width))
     },
     if (identical(request$tier, "ask_human") && rlang::is_string(why) && nzchar(why)) {
-      paste0("     asks in every mode: ", ui_escape(why))
+      sym$dim(console_wrap(paste0("    asks in every mode: ", ui_escape(why)), width))
     },
     paste0("  ", ui_question(q, width - 2L)),
     gsub("\u00a0", " ", console_wrap(paste0("    ", opts), width), fixed = TRUE))
 }
 
-#' The detail view shown for `?`: the code as a plain fence (it also feeds the RStudio dialog),
-#' a cut one ending in a `# ... +N more lines` line inside the fence (D-207)
+#' The detail view shown for `?`: the code as a plain fence unless `code` is FALSE (it also feeds
+#' the RStudio dialog), a cut one ending in a `# ... +N more lines` line inside the fence (D-207);
+#' the keys as the question shows them, bold, and what they do, dim (D-243)
 #' @noRd
-ui_permission_detail = function(request) {
+ui_permission_detail = function(request, code = TRUE) {
   risk = request$risk
+  sym = console_style()
   lines = ui_request_lines(request)
   shown = utils::head(lines, 40L)
   fence = doc_rmd_fence("```", shown)
@@ -184,12 +194,13 @@ ui_permission_detail = function(request) {
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
             paste0("  reason: ", ui_escape(request$reason))
           },
-          paste0("  ", c(paste0(fence, if (grepl("(^|__)r$", request$tool %||% "")) "r"), shown,
-                         if (length(lines) > 40L) {
-                           paste0("# ", console_style()$ellipsis, " +", length(lines) - 40L,
-                                  " more lines")
-                         },
-                         fence)))
+          if (code) {
+            paste0("  ", c(paste0(fence, if (grepl("(^|__)r$", request$tool %||% "")) "r"), shown,
+                           if (length(lines) > 40L) {
+                             paste0("# ", sym$ellipsis, " +", length(lines) - 40L, " more lines")
+                           },
+                           fence))
+          })
   fl = ui_flagged(risk)
   if (NROW(fl)) {
     where = ifelse(is.na(fl$path), "",
@@ -199,12 +210,13 @@ ui_permission_detail = function(request) {
   }
   note = request$undo_note %||% ui_undo_note(request)
   if (rlang::is_string(note) && nzchar(note)) out = c(out, paste0("  ", ui_escape(note)))
-  c(out, "  [y] yes",
-    if (is.null(ui_no_rule(request))) {
-      paste0(c("  [a] always in this session: ", "  [p] always in this project: "),
-             ui_escape(request$suggested_rule))
-    },
-    "  [n] no (type n <what to do instead> to tell gptr)", "  Ctrl-C: abort the run")
+  can = is.null(ui_no_rule(request))
+  keys = c("y", if (can) c("a", "p"), "n", "Ctrl-C")
+  what = c("yes", if (can) {
+    paste0(c("always in this session: ", "always in this project: "),
+           ui_escape(request$suggested_rule))
+  }, "no (type n <what to do instead> to tell gptr)", "abort the run")
+  c(out, paste0("    ", cli::style_bold(keys), "  ", sym$dim(what)))
 }
 
 #' The "cannot be undone" note of the checkpoint.note service (P16) for a request without one
@@ -338,7 +350,10 @@ ui_console_permission = function(request, read = ui_console_read) {
       return(ui_answer("deny", feedback = if (nzchar(fb)) fb))
     }
     if (low == "?") {
-      console_write(ui_permission_detail(request))
+      # the call line above showed the code whole (D-243)
+      whole = ui_call_shown(request) && is.character(request$input$code) &&
+        length(ui_request_lines(request)) <= 20L
+      console_write(ui_permission_detail(request, code = !whole))
       next
     }
     bad = bad + 1L
@@ -514,9 +529,9 @@ ui_rstudio_spec = function() {
             },
             permission = function(request) {
               if (!ui_rstudio()) return(ui_answer("deny"))
+              detail = cli::ansi_strip(ui_permission_detail(request))
               ok = tryCatch(rstudioapi::showQuestion("gptr permission",
-                                                     paste(ui_permission_detail(request),
-                                                           collapse = "\n"),
+                                                     paste(detail, collapse = "\n"),
                                                      ok = "Allow", cancel = "Deny"),
                             error = function(e) NULL)
               ui_answer(if (isTRUE(ok)) "allow" else "deny")

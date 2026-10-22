@@ -547,7 +547,10 @@ Decisions:
   - A question and the tool block it is asked in are one block (`console_gap()`): no blank line
     between a call line, its ask and its result lines (amended in Task 12).
 - Flagged rows (at most 5, then `(+N more; ? shows all)`) and the `asks in every mode:` reason
-  stay.
+  stay, dim at column 4 like the result rows, later flagged rows under the first's text. The `?`
+  detail view lists the keys as the question does (`    y  yes`, the key bold, its words dim) and
+  leaves out its fence when the call line just above showed the code whole (amended in the review of
+  Tasks 8-15; the RStudio dialog keeps it, without SGR).
 - The question is at column 2, `? Allow <tool>?`, and the keys are a row of their own under its text, at
   column 4: `y yes · a always (session) · p always (project) · n no · ? more` (amended in the review of
   Tasks 8-15: on the question's row they wrapped at 80 columns for any tool name of 4 characters or more,

@@ -1489,9 +1489,9 @@ An approval asks under the call it gates (NS-1) [D-243]. The call line (`  ▎ r
 name bold, cut to the console width less the margin before `(+N more lines)`) is printed only when the console's
 last printed call line is not the request's (its session and `tool_call_id`, §7.11): a background ask, a nested
 member call inside `r` code, a sub-agent's call; a question and the tool block it is asked in are one block (no
-blank line between the call, its ask and its result lines). Then come the flagged calls one per line (highest level
-first, each cut to the width, at most 5, then `(+N more; ? shows all)`), an `ask_human` request's
-`asks in every mode: <reason>`, the question `  ? Allow r?` (`?` blue, the question bold), and under its text the
+blank line between the call, its ask and its result lines). Then come, dim at column 4, the flagged calls one per
+line (highest level first, each cut to the width, at most 5, then `(+N more; ? shows all)`) and an `ask_human`
+request's `asks in every mode: <reason>`, then the question `  ? Allow r?` (`?` blue, the question bold), and under its text the
 keys, `    y yes · a always (session) · p always (project) · n no · ? more` (the keys bold, what they do dim; 68
 columns whatever the tool or who asks, wrapped between the options in a narrower console), with C0/C1 controls,
 bidi and zero-width characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after
@@ -2000,7 +2000,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   and `-` lines red (file headers dim), at most 12; `write` shows the path relative
   to the project and the byte count (D-223); a call of a second or more adds ` · 3.0 s`; an approval's call line (6.8.3) is cut to the
   console width before its `+N more lines`, and the `?` detail shows the code as a plain fence of
-  at most 40 lines. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied
+  at most 40 lines, unless the call line just above showed it whole. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied
   block shows the cut (D-207). Console output draws no box characters (D-187).
   Every renderer write and console control (prompts, notices, the pause menu) goes through
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,

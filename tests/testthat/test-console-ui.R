@@ -125,8 +125,8 @@ test_that("the one-line prompt shows the first line, +N more lines and the flagg
                           "# \u001b[2J clear\nunlink('data', recursive = TRUE)"))
   lines = ui_permission_lines(req)
   expect_identical(lines[1L], "  | r  note = 1 # <U+001B>[2J<U+202E>  (+3 more lines)")
-  expect_identical(lines[2:3], c("     flagged: [3 file_delete] unlink(\"data\", recursive = TRUE)",
-                                 "              [2 file_write] write.csv(df, \"out.csv\")"))
+  expect_identical(lines[2:3], c("    flagged: [3 file_delete] unlink(\"data\", recursive = TRUE)",
+                                 "             [2 file_write] write.csv(df, \"out.csv\")"))
   expect_false(any(grepl("[\u0001-\u0008\u000b-\u001f\u007f\u202e]", lines, perl = TRUE)))
   detail = ui_permission_detail(req)
   expect_true(any(grepl("<U+001B>[2J clear", detail, fixed = TRUE)))
@@ -155,9 +155,13 @@ test_that("flagged calls fit one per line, highest level first, at most 5 (#33)"
   lines = ui_permission_lines(ui_request(paste(code, collapse = "\n")))
   expect_length(lines, 9L)
   expect_true(all(nchar(lines) <= 40L))
-  expect_identical(lines[2L], "     flagged: [3 file_delete] unlink(...")
-  expect_identical(lines[3L], "              [2 file_write] writeLin...")
-  expect_identical(lines[7L], "              (+3 more; ? shows all)")
+  expect_identical(lines[2L], "    flagged: [3 file_delete] unlink(\"...")
+  expect_identical(lines[3L], "             [2 file_write] writeLine...")
+  expect_identical(lines[7L], "             (+3 more; ? shows all)")
+  # dim, like the result rows
+  withr::local_options(cli.num_colors = 256L)
+  expect_true(all(startsWith(ui_permission_lines(ui_request(paste(code, collapse = "\n")))[2:7],
+                             "\033[2m    ")))
 })
 
 test_that("a path tool's prompt shows the path relative to the project; no empty label (#33)", {
@@ -203,6 +207,38 @@ test_that("the detail view shows the code as a plain fence of at most 40 lines (
   expect_identical(ui_permission_detail(py)[2:4], c("  ```", "  a = 1", "  ```"))
 })
 
+test_that("the detail view's keys read as the question's; it skips a fence shown above (D-243)", {
+  skip_on_cran()
+  root = local_project()
+  req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
+  keys = c("    y  yes", "    a  always in this session: r(fn:write.csv)",
+           "    p  always in this project: r(fn:write.csv)",
+           "    n  no (type n <what to do instead> to tell gptr)", "    Ctrl-C  abort the run")
+  expect_identical(utils::tail(ui_permission_detail(req), 5L), keys)
+  # the console printed this call's line with its code: ? leaves the fence out
+  req$tool_call_id = "t1"
+  old = console_state()$last_call
+  withr::defer(assign("last_call", old, envir = console_state()))
+  assign("last_call", c(req$session, "t1"), envir = console_state())
+  out = console_try(function() ui_console_permission(req), c("?", "y"))
+  expect_false(any(grepl("^  `{3,}", out$shown)))
+  expect_true(all(keys %in% out$shown))
+  # the key bold and its words dim; the RStudio dialog gets the fence and no SGR
+  withr::local_options(cli.num_colors = 256L)
+  expect_identical(utils::tail(ui_permission_detail(req), 1L),
+                   "    \033[1mCtrl-C\033[22m  \033[2mabort the run\033[22m")
+  skip_if_not_installed("rstudioapi")
+  shown = NULL
+  local_mocked_bindings(ui_rstudio = function() TRUE)
+  local_mocked_bindings(showQuestion = function(title, message, ...) {
+    shown <<- message
+    TRUE
+  }, .package = "rstudioapi")
+  expect_identical(ui_rstudio_spec()$permission(req)$decision, "allow")
+  expect_match(shown, "```r\n  write.csv", fixed = TRUE)
+  expect_false(grepl("\033", shown, fixed = TRUE))
+})
+
 test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3)", {
   skip_on_cran()
   root = local_project()
@@ -220,7 +256,7 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
   expect_identical(fb$feedback, "use write_csv instead")
   out = console_try(function() ui_console_permission(req), c("?", "y"))
   expect_identical(out$result$decision, "allow")
-  expect_true(any(grepl("[a] always in this session: r(fn:write.csv)", out$shown, fixed = TRUE)))
+  expect_true("    a  always in this session: r(fn:write.csv)" %in% out$shown)
   expect_identical(console_try(function() ui_console_permission(req), character())$result$decision,
                    "abort")
   crit = ui_request("q('no')", tier = "ask_human")
@@ -445,7 +481,7 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
   expect_match(ui_permission_detail(req)[1L], "^  gptr wants to use r")
   crit = ui_request("q('no')", tier = "ask_human")
   expect_identical(utils::tail(ui_permission_lines(crit), 3L)[1L],
-                   paste0("     asks in every mode: ", crit$reason))
+                   paste0("    asks in every mode: ", crit$reason))
   expect_false(any(grepl("every mode", ui_permission_lines(req), fixed = TRUE)))
 })
 

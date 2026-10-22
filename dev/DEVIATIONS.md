@@ -3180,6 +3180,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Task 12 wrote the title and the choices whole, so the terminal broke an agent's question (usually longer than
     a row) mid-word at column 80 and went on at column 0. Contract-visible: 04 §15.10 IC-77, 03 §6.8.3. Tests:
     test-console-ui.R "a long title, choice, detail or hint wraps under its own text (D-243)".
+  - The rest of the approval block takes the same style: the flagged rows and `asks in every mode:` are dim at
+    column 4 (they were ink at column 5, later flagged rows at column 14), and the `?` detail view lists the keys
+    as the question does, `    y  yes` with the key bold and its words dim, in place of `  [y] yes`, a second
+    notation for the same keys. It leaves out its code fence when the call line just above showed the code whole
+    (the fence repeated, unhighlighted, what was highlighted above); the RStudio dialog keeps it, its text stripped
+    of SGR. Contract-visible: 04 §15.10 IC-77, 03 §6.8.3 and §6.17. Tests: test-console-ui.R "the detail view's
+    keys read as the question's; it skips a fence shown above (D-243)", "flagged calls fit one per line, highest
+    level first, at most 5 (#33)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

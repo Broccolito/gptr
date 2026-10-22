@@ -5387,7 +5387,8 @@ its part in its own commit, and Task 27 finalises them.
     `console_on_tool_start()`); `ui_permission_lines(request)` prints the call line (`  ▎ r  <first line>`, strip
     red, name bold, cut before `(+N more lines)`) only when they are not the request's (`session`,
     `tool_call_id`, §7.11): a background ask, a nested member call in `r` code, a sub-agent's call. The flagged
-    rows and `asks in every mode: <reason>` follow, then the question `  ? Allow r?` (`?` blue, the question bold)
+    rows and `asks in every mode: <reason>` follow, dim at column 4 (later flagged rows under the first's text),
+    then the question `  ? Allow r?` (`?` blue, the question bold)
     and, under its text, the keys row `    y yes · a always (session) · p always (project) · n no · ? more` (the
     keys bold, what they do dim; `a` and `p` only with a `suggested_rule`). The keys row is 68 columns whatever the
     tool or who asks; in a narrower console it word-wraps at column 4, each key kept with its words (no-break
@@ -5408,6 +5409,10 @@ its part in its own commit, and Task 27 finalises them.
     without a rule).
   - A question and the tool block it is asked in are one block (`console_gap()`): no blank line between a call
     line, its ask and its result lines.
+  - The `?` detail view (`ui_permission_detail()`) lists the keys as the question shows them,
+    `    y  yes`, `    a  always in this session: <rule>`, ..., `    Ctrl-C  abort the run` (the key bold, its words
+    dim). The console leaves out its code fence (`code = FALSE`) when the call line just above is this request's
+    and showed its code whole (at most 20 lines); the RStudio dialog keeps the fence and gets the text without SGR.
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
 - **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Tasks 17 and 25 pending.
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
