@@ -181,11 +181,12 @@ test_that("an abort-only IDE console advertises its stop key without promising a
   # RStudio honours \033[K, so no padding stays in its transcript (visual review)
   expect_identical(utils::capture.output(invisible(wait_request(w))),
                    "\r# thinking 0s - esc stop\033[K")
-  # Positron's console erases by writing spaces, so its row is padded as R.app's
+  # Positron's console erases by writing spaces, so its row is padded; it holds what is typed
+  # there, so Ctrl-C and the pause menu are how to steer (review)
   testthat::local_mocked_bindings(front_end = function() "positron")
   utils::capture.output(console_live_stop())
   expect_identical(sub(" +$", "", utils::capture.output(invisible(wait_request(w)))),
-                   "\r# thinking 0s - ctrl-c pause")
+                   "\r# thinking 0s - ctrl-c steer")
 })
 
 test_that("continue and queued pause messages restore a pending request's live row", {

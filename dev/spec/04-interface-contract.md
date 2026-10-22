@@ -5639,7 +5639,9 @@ its part in its own commit, and Task 27 finalises them.
       `   enter steer · tab follow-up · ctrl-c pause` (swapped under `type_ahead = "follow_up"`); without a
       composer ` · <key> pause` where the pause menu is offered (`console_menu_available()`: terminals,
       Positron) or ` · <key> stop` (RStudio, Rgui; the key from `console_interrupt_key()`, lower case): the
-      key and its verb, as the composer's keys read (review of Tasks 16-21: `pauses`, `stops`).
+      key and its verb, as the composer's keys read (review of Tasks 16-21: `pauses`, `stops`); in Positron
+      ` · ctrl-c steer`, as its console holds what is typed while R is busy and clears it at Ctrl-C, so the
+      pause menu is the way to steer there.
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
       while a sub-agent it shows runs; `<elapsed>` the run's time, `0s`, `59s`, `1m 05s`; `<n> queued` the
       person's messages waiting for the session (its user-source queue items, those the console holds, the

@@ -148,8 +148,9 @@ prompt, sent once the answer ends. \verb{/command} and \code{!code} lines typed 
 next prompt, in the order typed. A steer the answer did not take is the next prompt too; after
 an interrupt or an error nothing queued is sent: it goes to the console history (Up recalls
 it). On the CLI routes a steer reaches the model after the CLI's current response. The
-RStudio, Positron and R.app consoles, and type-ahead at R's own prompt during \code{peter("...")},
-keep typed lines for the next input.
+RStudio and R.app consoles, and type-ahead at R's own prompt during \code{peter("...")}, keep typed
+lines for the next input. Positron's console holds what is typed while peter works and clears it
+at Ctrl-C, so steer there with Ctrl-C, then \code{s} or \code{f}.
 
 Tab completes R names and file paths after \code{!} in terminal R, R in an IDE's Terminal tab
 included; RStudio's console completes R code at the prompt too; radian and Positron's console

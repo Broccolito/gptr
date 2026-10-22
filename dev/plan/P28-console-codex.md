@@ -864,7 +864,8 @@ Decisions:
   `· ctrl-c pauses` (Positron). (Amended in the review of Tasks 16-21: R.app draws no row. Written as a run's
   first output, a row starting with `\r` gave the whole transcript the input's colour there, and its `\r` erases a
   line printed just before it. Also: the key and its verb as the composer's keys read, `· esc stop` and
-  `· ctrl-c pause`, so the consoles share one grammar.) (Amended in the visual review: the padding left about 57 trailing
+  `· ctrl-c pause`, so the consoles share one grammar; in Positron `· ctrl-c steer`, as its console holds
+  what is typed while R is busy and clears it at Ctrl-C, so the menu's s and f are the way to steer.) (Amended in the visual review: the padding left about 57 trailing
   spaces on each RStudio row that replaced the waiting row.) D (TERM=dumb) is padded too, and so is
   Positron, whose console erases by writing spaces (amended in Task 17: given `\033[K`, its transcript had
   32 rows ending in spaces). Until Task 18's composer reads keys, T is status only as well, ending
@@ -1264,7 +1265,8 @@ Decisions:
   RStudio, R.app and Rgui), and no line promises a pause where the menu is not offered (amended in the
   visual review: the banner said `Esc pauses an answer` where Esc stops the run). (Amended in the review of
   Tasks 16-21: until this task the old banner already says `<key> stops an answer` where no menu is offered,
-  as the live row contradicted it in RStudio and R.app.)
+  as the live row contradicted it in RStudio and R.app. In Positron the banner says Ctrl-C steers, as its
+  live row does: its console holds what is typed while peter works.)
 - The mode stays in the prompt (`peter[auto]>`). Shift-Tab is not added; readline cannot bind it
   portably.
 

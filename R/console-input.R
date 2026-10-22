@@ -235,7 +235,8 @@ console_newest = function(s, rd, take = FALSE) {
 #' question waits), `newest` (list(kind, text): the newest of them), `candidates` (completions,
 #' shown in place of the status words), `draft` (the composer's text; NULL where no composer reads
 #' keys), `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt
-#' key) and `pause` (TRUE where the key pauses, else it stops). In the style table's glyphs:
+#' key), `pause` (TRUE where the key pauses, else it stops) and `steer` (TRUE where only the pause
+#' menu steers: Positron's console holds what is typed). In the style table's glyphs:
 #' without a composer the status ends with the key and its verb, as the composer's keys read,
 #' `<sep>esc stop`; with an empty draft the newest message follows, `<queued> steer<sep><text><sep>
 #' <up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person>
@@ -260,7 +261,7 @@ console_live_row = function(state, width) {
   # the hint's terms; a queued message (`said`) is the one text cut, the others are dropped whole
   said = NULL
   terms = if (is.null(draft)) {
-    paste(key, if (isTRUE(state$pause)) "pause" else "stop")
+    paste(key, if (isTRUE(state$steer)) "steer" else if (isTRUE(state$pause)) "pause" else "stop")
   } else if (!nzchar(draft) && is.null(state$newest)) {
     c(paste("enter", kind(enter)), paste("tab", kind(setdiff(c("steer", "follow_up"), enter))),
       paste(key, "pause"))
@@ -384,8 +385,9 @@ console_live = function(cls) {
 #' The live row's state for the record `rec` of a foreground run (console_live_row()): the state
 #' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds, the
 #' person's messages waiting for its session, whether a question waits (`rec$question`,
-#' console_ask_wait()), and the console's interrupt key; where a T console's composer reads keys
-#' (tty_call()), its draft, the newest message waiting (console_newest()) and the kind Enter sends
+#' console_ask_wait()), and the console's interrupt key and what it does; where a T console's
+#' composer reads keys (tty_call()), its draft, the newest message waiting (console_newest()) and
+#' the kind Enter sends
 #' @noRd
 console_live_state = function(rec) {
   kids = Filter(function(r) !is.null(r$child), as.list(console_state()$active))
@@ -396,6 +398,7 @@ console_live_state = function(rec) {
        secs = as.numeric(Sys.time()) - rec$t0, queued = console_queued(s),
        question = isTRUE(rec$question),
        key = console_interrupt_key(), pause = console_menu_available(),
+       steer = console_menu_available() && front_end() == "positron",
        draft = if (!is.null(rd)) rd$compose$draft %||% "",
        newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))
 }

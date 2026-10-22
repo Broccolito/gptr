@@ -3420,6 +3420,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     up too: the row is the queue view there, so the plan's caveat was never shown and a terminal user was not
     told the steer waits for the CLI's whole answer. Contract-visible: 04 §15.10 IC-76. Tests:
     test-console-typing.R "a T console's steer on a CLI route still says it waits for the CLI's answer (review)".
+  - In Positron's console the live row says `· ctrl-c steer`: Positron holds what is typed while peter works
+    (steers, drafts and follow-ups stayed as pending input through the approval, the question and peter's own
+    prompts, never delivered) and clears it at Ctrl-C, so the menu's s and f are the only way to steer there;
+    ?peter no longer says Positron keeps typed lines for the next input. Contract-visible: 04 §15.10 IC-82,
+    `?peter`. Tests: test-console-wait.R "an abort-only IDE console advertises its stop key without promising a
+    pause".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
