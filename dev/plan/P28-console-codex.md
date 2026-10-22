@@ -464,7 +464,8 @@ Commit: `feat(console): R code highlighted in the logo palette`.
 
 Decisions:
 - `render_markdown_stream()` commits a row only at its newline or at its wrap (width - 4 in the
-  margin) and holds the partial row. This is Codex's newline-gated `markdown_stream`.
+  margin, 100 columns at most; amended in the visual review: a maximised VS Code panel ran prose to 127
+  characters) and holds the partial row. This is Codex's newline-gated `markdown_stream`.
 - The `\r` redraw of fenced lines goes away.
 - One mode everywhere, so no half line ever sits where the live row is drawn.
 - Other output (a queue line, a notice, a question) goes between whole rows, and the held row continues after

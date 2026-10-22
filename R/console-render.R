@@ -124,7 +124,8 @@ console_notice = function(..., .error = FALSE) {
 #' opener's indentation (D-187).
 #' Where console_pad() gives a margin (D-186) lines get two columns on both sides, nested list
 #' indentation is kept, pipe tables are aligned, blank lines collapse to one between blocks (none
-#' before or after a reply); elsewhere the plain mode only wraps at `width` display columns. Rows
+#' before or after a reply); elsewhere the plain mode only wraps at `width` display columns. Prose
+#' wraps at 100 columns at most, a readable measure however wide the console. Rows
 #' are written whole, each at its line end or its wrap, so no half row sits where the waiting row
 #' is drawn and other output goes between whole rows, the held row continuing after it (D-245).
 #' A word is held until the next blank or line end, so the output does not
@@ -138,7 +139,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   lay = nzchar(pad)
   sym = console_style()
   st = new.env(parent = emptyenv())
-  set_width = function(w) st$width = max(20L, as.integer(w) - 2L * nchar(pad))
+  set_width = function(w) st$width = max(20L, min(as.integer(w) - 2L * nchar(pad), 100L))
   set_width(width)
   st$buf = ""
   st$cr = ""

@@ -3340,3 +3340,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     §15.10 IC-76, IC-77 and IC-82, 03 §6.8.3. Tests: test-console-render.R "console_style() holds the logo's cursor
     glyphs, ASCII where they may not show (D-245)" and the ASCII prompt cases of test-console-ui.R,
     test-console-repl.R and test-console-typing.R.
+  - An answer's prose wraps at 100 columns at most (`render_markdown_stream()`), however wide the console: in a
+    maximised VS Code panel (131 columns) it ran to 127 characters a row, far wider than the code and tool blocks
+    around it. Code rows are not wrapped by the stream, and a table wider than 100 columns prints verbatim as one too
+    wide for the console does. Contract-visible: 04 §7.14, 03 §6.17. Tests: test-console-render.R "prose wraps at
+    100 columns at most, however wide the console (visual review)".

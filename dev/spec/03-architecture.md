@@ -1966,7 +1966,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   Where the renderer is active (verbosity 2 on a dynamic TTY; `capture.output()` of an
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
   lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
-  width - 4, while the person's lines (an answer, a queued or delivered message) start at column 0; one blank
+  width - 4 (an answer's prose at 100 columns at most, a readable measure in a wide console [D-245]), while the person's lines (an answer, a queued or delivered message) start at column 0; one blank
   line separates text, tool, notice, prompt, the person's lines and status blocks (and two prompts, and two text
   blocks in a row [D-208], but not a question from the tool block it is asked in [D-243], nor the tool blocks of
   consecutive requests: a waiting row after a tool block takes no blank line and leaves the tool block open, so

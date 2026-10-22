@@ -113,6 +113,17 @@ test_that("the transcript is written in whole rows, each at its line end or its 
                      "  delta epsilon\n"))
 })
 
+test_that("prose wraps at 100 columns at most, however wide the console (visual review)", {
+  words = sprintf("word%02d", 1:40)
+  for (dynamic in c(TRUE, FALSE)) {
+    withr::local_options(cli.num_colors = 1L, cli.dynamic = dynamic, gptr.verbose = 2L)
+    pad = if (dynamic) "  " else ""
+    out = render_chunks(paste(words, collapse = " "), width = 140L)
+    expect_identical(out[[1L]], paste0(pad, paste(words[1:14], collapse = " ")), info = pad)
+    expect_true(all(nchar(out) <= 100L + nchar(pad)))
+  }
+})
+
 test_that("plain contexts print exactly what they printed before the console layout (D-186)", {
   skip_on_cran()
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "display widths need a UTF-8 locale (report 18)")
