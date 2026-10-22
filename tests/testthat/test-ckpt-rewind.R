@@ -20,6 +20,7 @@ test_that("builtin:checkpoints registers three checkpointers, the block and chec
 })
 
 test_that("a mutating r call appends one gptr.checkpoint entry that never holds values", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "x = 'SENTINEL-7f3a'; writeLines('a', 'a.txt')"),
                            "done"))
@@ -39,6 +40,7 @@ test_that("a mutating r call appends one gptr.checkpoint entry that never holds 
 })
 
 test_that("the checkpointer specs undo and redo a recorded call", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "x = 1; writeLines('a', 'a.txt')"), "done"))
   e = new.env()
@@ -62,6 +64,7 @@ test_that("the checkpointer specs undo and redo a recorded call", {
 })
 
 test_that("an object changed without an undo copy adds a notice to the tool result (G7 3.9)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(undo_capture_max = 10, undo_max_bytes = 10, undo_spill_max = 10)
   fake = local_fake_provider(list(fake_tool("r", code = "big[1] = 0"), "ok"))
@@ -73,6 +76,7 @@ test_that("an object changed without an undo copy adds a notice to the tool resu
 })
 
 test_that("the checkpoint event reports counts (contract 10.4)", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "x = 1; writeLines('a', 'a.txt')"), "done"))
   seen = new.env()
@@ -89,6 +93,7 @@ test_that("the checkpoint event reports counts (contract 10.4)", {
 })
 
 test_that("checkpoint = 'off' records nothing, 'files' records files only, plan mode nothing", {
+  skip_on_cran()
   local_project()
   step = list(fake_tool("r", code = "y = 2; writeLines('b', 'b.txt')"), "ok")
   local_fake_provider(c(step, step, step))
@@ -106,6 +111,7 @@ test_that("checkpoint = 'off' records nothing, 'files' records files only, plan 
 })
 
 test_that("only pure reads skip the checkpointers; a level-0 creation is checkpointed", {
+  skip_on_cran()
   local_project()
   read = list(name = "r", input = list(code = "length(letters)"), risk = list(level = 0L))
   expect_true(ckpt_pure_read(read))
@@ -128,6 +134,7 @@ test_that("only pure reads skip the checkpointers; a level-0 creation is checkpo
 })
 
 test_that("a session's state is found by its shell and released at session_shutdown", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list("hello"))
   st = new.env(parent = emptyenv())
@@ -152,6 +159,7 @@ test_that("a session's state is found by its shell and released at session_shutd
 })
 
 test_that("on a CLI route the files the child changes during a turn are checkpointed (IC-65)", {
+  skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
   local_fake_provider(function(request) {
@@ -202,6 +210,7 @@ three_turns = function(...) {
 }
 
 test_that("rewind targets: kept turns, relative turns, entry ids and range errors", {
+  skip_on_cran()
   tr = three_turns()
   t1 = ckpt_rewind_target(tr, 1L, NULL)
   expect_identical(t1$target, "a1")
@@ -219,6 +228,7 @@ test_that("rewind targets: kept turns, relative turns, entry ids and range error
 })
 
 test_that("applied records follow the rewinds in file order; redo targets abandoned records", {
+  skip_on_cran()
   tr = three_turns(e_rw("r1", "a1", from = "a3", undone = c("c3", "c2")),
                    e_user("u4", "r1", "four", 2), e_cp("c4", "u4"), e_asst("a4", "c4"))
   expect_identical(ckpt_applied(tr, c("c1", "c2", "c3", "c4")),
@@ -270,6 +280,7 @@ test_that("report lines become the rewind block lines", {
 })
 
 test_that("gptr_rewind(s, 1) after three mutating turns restores objects and files (acc. 3)", {
+  skip_on_cran()
   proj = local_project(files = list("R/clean.R" = "clean = function(d) d[complete.cases(d), ]"))
   fake = local_fake_provider(list(
     fake_tool("r", code = "counts = log1p(counts); writeLines('normalised', 'log.txt')"),
@@ -318,6 +329,7 @@ test_that("gptr_rewind(s, 1) after three mutating turns restores objects and fil
 })
 
 test_that("a user edit made after the turn survives the 3-way restore; the rewind warns", {
+  skip_on_cran()
   proj = local_project()
   fake = local_fake_provider(list(
     fake_tool("r", code = "x = 1"), "one",
@@ -344,6 +356,7 @@ test_that("a user edit made after the turn survives the 3-way restore; the rewin
 })
 
 test_that("each rewind replaces the note: a later full rewind tells the model nothing", {
+  skip_on_cran()
   local_project()
   fake = local_fake_provider(list(fake_tool("r", code = "x = 1"), "one",
                                   fake_tool("r", code = "x = 2"), "two",
@@ -363,6 +376,7 @@ test_that("each rewind replaces the note: a later full rewind tells the model no
 })
 
 test_that("after an undo the next request does not report the undone turn's objects", {
+  skip_on_cran()
   local_project()
   fake = local_fake_provider(list("hi", fake_tool("r", code = "probe = 1:5"), "made", "next",
                                   fake_tool("r", code = "probe = 1"), "made", "after"))
@@ -386,6 +400,7 @@ test_that("after an undo the next request does not report the undone turn's obje
 })
 
 test_that("gptr_rewind() refuses a running session and bad arguments", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list("hello", fake_tool("r", code = "z = 1"), "done"))
   e = new.env()
@@ -405,6 +420,7 @@ test_that("gptr_rewind() refuses a running session and bad arguments", {
 })
 
 test_that("the IC-53 guard: rewinding another session from model code needs the one-shot token", {
+  skip_on_cran()
   sig = new.env(parent = emptyenv())
   sig$control = character()
   local_mocked_bindings(run_current = function() list(session = "s9999999999", signal = sig))
@@ -421,6 +437,7 @@ test_that("the IC-53 guard: rewinding another session from model code needs the 
 })
 
 test_that("model code cannot rewind another session during a run (IC-53)", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "x = 1"), "made x",
                            fake_tool("r", code = "gptr_rewind(other)"), "tried"))
@@ -434,6 +451,7 @@ test_that("model code cannot rewind another session during a run (IC-53)", {
 })
 
 test_that("gptr_rewind(to =) redoes an abandoned branch", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "x = 1"), "one",
                            fake_tool("r", code = "x = 2; y = 1"), "two",
@@ -455,6 +473,7 @@ test_that("gptr_rewind(to =) redoes an abandoned branch", {
 })
 
 test_that("restore = 'conversation' keeps the workspace; 'workspace' keeps the conversation", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "x = 1"), "one",
                            fake_tool("r", code = "x = 2"), "two"))
@@ -472,6 +491,7 @@ test_that("restore = 'conversation' keeps the workspace; 'workspace' keeps the c
 })
 
 test_that("preview returns the plan and changes nothing; a session_before_tree handler cancels", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "x = 1"), "one",
                            fake_tool("r", code = "x = 2"), "two"))
@@ -491,6 +511,7 @@ test_that("preview returns the plan and changes nothing; a session_before_tree h
 })
 
 test_that("a fork never undoes the records it copied from its source", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "x = 1"), "one"))
   e = new.env()
@@ -502,6 +523,7 @@ test_that("a fork never undoes the records it copied from its source", {
 })
 
 test_that("a CLI child's file edit is undone by gptr_rewind() (IC-65)", {
+  skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
   local_fake_provider(function(request) {
@@ -515,6 +537,7 @@ test_that("a CLI child's file edit is undone by gptr_rewind() (IC-65)", {
 })
 
 test_that("a CLI child's file edit in an aborted turn is undone too (IC-65)", {
+  skip_on_cran()
   proj = local_project(files = list("R/a.R" = "a = 1"))
   local_mocked_bindings(ckpt_cli_session = function(s) TRUE)
   st = new.env()
@@ -565,10 +588,12 @@ expect_bound_rewind = function() {
 }
 
 test_that("undone blocks in a bound document become inert; re-sourcing reproduces the rewind", {
+  skip_on_cran()
   expect_bound_rewind()
 })
 
 test_that("a turn's file scan never records gptr's own block writes (per-turn mode, CLI route)", {
+  skip_on_cran()
   local_gptr_options(checkpoint_scan_budget = -1)
   expect_bound_rewind()
   local_gptr_options(checkpoint_scan_budget = Inf)
@@ -584,6 +609,7 @@ two_turn_session = function(e, .env = parent.frame()) {
 }
 
 test_that("gptr_checkpoints() lists the turns of the active path (contract 5.12)", {
+  skip_on_cran()
   local_project()
   e = new.env()
   s = two_turn_session(e)
@@ -603,7 +629,15 @@ test_that("gptr_checkpoints() lists the turns of the active path (contract 5.12)
   expect_output(print(cp), "Rewind with gptr_rewind")
 })
 
+test_that("held_mb and disk_mb count 2^20 bytes a megabyte, as the other size reports do", {
+  cps = list(list(data = list(fragments = list(objects = list(id = "f1", objects = list())))))
+  ck = list(obj = list(index = data.frame(frag = "f1", bytes = c(2^20, 2^21),
+                                          where = c("memory", "disk"))))
+  expect_equal(ckpt_turn_counts(cps, ck)[c("held_mb", "disk_mb")], list(held_mb = 1, disk_mb = 2))
+})
+
 test_that("gptr_checkpoints(all = TRUE) adds abandoned branches", {
+  skip_on_cran()
   local_project()
   e = new.env()
   s = two_turn_session(e)
@@ -616,6 +650,7 @@ test_that("gptr_checkpoints(all = TRUE) adds abandoned branches", {
 })
 
 test_that("/undo, /redo, /rewind k and /checkpoints drive gptr_rewind()", {
+  skip_on_cran()
   local_project()
   e = new.env()
   s = two_turn_session(e)
@@ -639,6 +674,7 @@ test_that("/undo, /redo, /rewind k and /checkpoints drive gptr_rewind()", {
 })
 
 test_that("/undo asks first when the preview finds items it cannot restore", {
+  skip_on_cran()
   local_project()
   e = new.env()
   s = two_turn_session(e)
@@ -652,6 +688,7 @@ test_that("/undo asks first when the preview finds items it cannot restore", {
 })
 
 test_that("/undo lists each item once, by its outcome after the whole undo (#37)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(checkpoint_scan_budget = Inf)
   local_fake_provider(list(fake_tool("r", code = "e = new.env(); writeLines('a', 'a.txt')"),
@@ -674,6 +711,7 @@ test_that("/undo lists each item once, by its outcome after the whole undo (#37)
 })
 
 test_that("a file is one /undo item when slow walks switch to one scan per turn (#37)", {
+  skip_on_cran()
   local_project()
   local_gptr_options(checkpoint_scan_budget = -1)
   local_fake_provider(list(fake_tool("r", code = "writeLines('a', 'a.txt')"),
@@ -692,6 +730,7 @@ test_that("a file is one /undo item when slow walks switch to one scan per turn 
 })
 
 test_that("report lines are keyed by the plan's items, so names holding ': ' stay apart (#37)", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "`k: a` = 1; `k: b` = 1"), "done"))
   w = new.env()
@@ -707,6 +746,7 @@ test_that("report lines are keyed by the plan's items, so names holding ': ' sta
 })
 
 test_that("an item name that is not valid UTF-8 does not stop the rewind partway (#37)", {
+  skip_on_cran()
   local_project()
   local_fake_provider(list(fake_tool("r", code = "assign(rawToChar(as.raw(c(0x6b, 0xe9))), 1)"),
                            "done"))
@@ -719,6 +759,7 @@ test_that("an item name that is not valid UTF-8 does not stop the rewind partway
 })
 
 test_that("/rewind without a turn offers a menu through the UI", {
+  skip_on_cran()
   local_project()
   e = new.env()
   s = two_turn_session(e)

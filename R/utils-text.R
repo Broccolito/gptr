@@ -10,6 +10,14 @@ text_lines = function(text) {
   strsplit(paste(x, collapse = "\n"), "\n", fixed = TRUE)[[1L]]
 }
 
+#' deparse() of code gptr did not build, with the `backtick` base R's default would compute.
+#' That default calls mode(), which deparses a call's head with the same default: R recursion
+#' once per head of a chain such as f(1)(1)...(1), up to the C stack or expressions limit (CI-82).
+#' @noRd
+deparse_code = function(expr, ...) {
+  deparse(expr, backtick = is.call(expr) || is.expression(expr) || is.function(expr), ...)
+}
+
 #' Who a run is to the person (D-188): "main", a sub-agent's name, or for a nested peter() call
 #' the first line of its prompt, quoted and cut to 30 characters, then ` #k`, its place among the
 #' children of the parent run, so loop iterations differ (D-224)

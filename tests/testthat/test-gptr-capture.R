@@ -2,6 +2,7 @@
 # interpolation and the gptr_call record (plan P08).
 
 test_that("dot_facts() reads class, shape, size and small text only [leaf]", {
+  skip_on_cran()
   f = dot_facts(mtcars)
   expect_identical(f$class, "data.frame")
   expect_identical(f$dim, c(32L, 11L))
@@ -12,6 +13,9 @@ test_that("dot_facts() reads class, shape, size and small text only [leaf]", {
   expect_identical(g$text, "hello")
   expect_false(dot_facts(NA_character_)$is_chr1)
   expect_null(dot_facts(strrep("a", 70000))$text)
+  expect_identical(f$bytes, env_snap_size(mtcars))
+  plt = structure(1L, class = c("pkg::plot", "S7_object"), S7_class = function() NULL)
+  expect_identical(dot_facts(plt)$bytes, env_snap_size(plt))
 })
 
 test_that("dot_sites() marks call-site symbols and leaves forwarded dots to ...elt() (IC-41)", {
@@ -24,6 +28,7 @@ test_that("dot_sites() marks call-site symbols and leaves forwarded dots to ...e
 })
 
 test_that("select_prompt() picks the target session, the prompt and the context", {
+  skip_on_cran()
   s = structure(new.env(), class = "gptr_session")
   sel = select_prompt(c("", "", ""), list(dot_facts(s), dot_facts("go"), dot_facts(mtcars)),
                       c("value", "literal", "symbol"), FALSE)
@@ -79,6 +84,7 @@ test_that("gateway_interpolate() honours .opts$interpolate and the option", {
 })
 
 test_that("call_new(), call_value() and call_release() follow contract 7.8", {
+  skip_on_cran()
   e = new.env()
   e$big = 1:10
   v = new.env(parent = emptyenv())
@@ -121,6 +127,7 @@ test_that("unmask_env() replaces a magrittr mask by its parent", {
 })
 
 test_that("gateway_args() validates the value arguments of peter()", {
+  skip_on_cran()
   a = gateway_args(NULL, c("x", "y"), NULL, 0.5, NULL, NA, FALSE, list(cost = 1), "live",
                    list(max_turns = 3), TRUE, FALSE)
   expect_identical(a$replay, "live")
@@ -139,6 +146,7 @@ test_that("gateway_args() validates the value arguments of peter()", {
 })
 
 test_that("gateway_opts() validates the core switches and plugin namespaces (IC-44)", {
+  skip_on_cran()
   expect_identical(gateway_opts(list()), list())
   expect_identical(gateway_opts(list(context = "names"))$context, "names")
   expect_error(gateway_opts(list(context = "all")), class = "gptr_error_invalid_argument")
@@ -160,6 +168,7 @@ test_that("gateway_opts() validates the core switches and plugin namespaces (IC-
 # ---- adaptations (dev/progress/P08.md, Task 5)
 
 test_that("the capture leaves read call-site symbols by name and label each dot", {
+  skip_on_cran()
   e = new.env()
   e$big = 1:10
   expect_identical(dot_get("big", e), 1:10)
@@ -182,6 +191,13 @@ test_that("the capture leaves read call-site symbols by name and label each dot"
   expect_identical(dot_labels(list(), character()), character())
 })
 
+test_that("the labels of a long call chain are deparsed (CI-82)", {
+  chain = str2lang(paste0("f", strrep("(1)", 500L)))
+  withr::local_options(expressions = 1000L)
+  expect_match(dot_labels(list(chain), ""), "^[(f1)]{57}[.]{3}$")
+  expect_match(ident_label(chain), "^[(f1)]+$")
+})
+
 test_that("dot_sites() skips peter()'s own formals; the leaves tolerate an empty argument", {
   sc = quote(peter(big, prompt = p, model = m, envir = e, small, k = y))
   expect_identical(dot_sites(sc, 3L), c("big", "small", "y"))
@@ -195,6 +211,7 @@ test_that("dot_sites() skips peter()'s own formals; the leaves tolerate an empty
 })
 
 test_that("gateway_context_items() builds the context items of contract 7.8 from facts", {
+  skip_on_cran()
   facts = list(dot_facts("go"), dot_facts(1:10), dot_facts(mtcars), dot_facts("lit"))
   items = gateway_context_items(c(2L, 3L, 4L), c("literal", "symbol", "value", "literal"),
                                 c(NA, "big", NA, NA), c("\"go\"", "big", "head(x)", "\"lit\""),
@@ -214,6 +231,7 @@ test_that("gateway_context_items() builds the context items of contract 7.8 from
 })
 
 test_that("select_prompt() gives an explicit prompt the win and handles no dots", {
+  skip_on_cran()
   s = structure(new.env(), class = "gptr_session")
   sel = select_prompt(c("", "", ""), list(dot_facts(s), dot_facts("a"), dot_facts("b")),
                       c("symbol", "literal", "literal"), TRUE)
@@ -243,6 +261,7 @@ test_that("call_value() checks its index and refuses value items once released",
 })
 
 test_that("gateway_args() reads described choices by their labels and wants single strings", {
+  skip_on_cran()
   ok = function(...) {
     a = list(NULL, NULL, NULL, 0.5, NULL, NULL, FALSE, NULL, NULL, list(), TRUE, FALSE)
     b = list(...)
@@ -269,6 +288,7 @@ test_that("gateway_args() reads described choices by their labels and wants sing
 })
 
 test_that("gateway_opts() wants one string per choice switch and checks every core entry", {
+  skip_on_cran()
   expect_error(gateway_opts(list(context = c("summary", "names", "none"))),
                class = "gptr_error_invalid_argument")
   expect_error(gateway_opts(list(thinking = catalog_thinking_levels)),
@@ -308,6 +328,7 @@ test_that(".opts$images takes paths, plots and character vectors, never a direct
 })
 
 test_that(".opts$system1_images takes raw PNG, JPEG or WebP records only (IC-74)", {
+  skip_on_cran()
   png = list(data = as.raw(c(0x89, 0x50, 0x4E, 0x47)), mime = "image/png")
   jpg = list(mime = "image/jpeg", data = as.raw(c(0xFF, 0xD8, 0xFF)))
   webp = list(data = charToRaw("RIFF0000WEBP"), mime = "image/webp")
@@ -334,6 +355,7 @@ test_that(".opts$system1_images takes raw PNG, JPEG or WebP records only (IC-74)
 })
 
 test_that("per-call options never reach the protected settings or safety record (IC-74)", {
+  skip_on_cran()
   expect_error(gateway_opts(list(providers = list(ollama = list(local_only = FALSE)))),
                class = "gptr_error_invalid_argument")
   off1 = gptr_register(gptr_spec("setting", "providers.extra", default = 1L,
@@ -364,6 +386,7 @@ test_that("per-call options never reach the protected settings or safety record 
 # ------------------------------------------------------------------ identifiers (Task 6)
 
 test_that("resolve_identifier() follows the table of contract 6.1.3", {
+  skip_on_cran()
   e = new.env()
   e$m = "haiku"
   e$hard = TRUE
@@ -385,6 +408,7 @@ test_that("resolve_identifier() follows the table of contract 6.1.3", {
 })
 
 test_that("an alias shadowed by a character variable wins, with a message (contract 6.1.3)", {
+  skip_on_cran()
   # the notice is once per process: forget an earlier one so the test can rerun in one process
   key = "message:alias_shadowed:model:sonnet"
   rm(list = intersect(key, names(the$once)), envir = the$once)
@@ -421,6 +445,7 @@ test_that("an ambiguous normalised match lists the candidates", {
 })
 
 test_that("agents take their list names; model and skills resolve as identifiers (IC-34, IC-71)", {
+  skip_on_cran()
   e = new.env()
   # the north-star form: no name and no description inside agent() (02 NS-6)
   a = resolve_agents(quote(list(stats = agent(model = opus, skills = statistics),
@@ -442,6 +467,7 @@ test_that("agents take their list names; model and skills resolve as identifiers
 # ---- Task 6 adaptation tests (contract 1.1, 6.1, 6.1.3, IC-42, IC-71, IC-74, rule R3)
 
 test_that("agents written with gptr_agent() or gptr::gptr_agent() take their list names (IC-42)", {
+  skip_on_cran()
   e = new.env()
   a = resolve_agents(quote(list(stats = gptr_agent(model = opus),
                                 lit = gptr::gptr_agent(description = "Literature",
@@ -476,6 +502,7 @@ test_that("agents written with gptr_agent() or gptr::gptr_agent() take their lis
 })
 
 test_that("P02 refuses each of P06's session accessors as an agent name (IC-71)", {
+  skip_on_cran()
   nms = session_accessors
   expect_true(all(c("text", "value", "usage", "children", "editor_text") %in% nms))
   for (nm in nms) {
@@ -484,6 +511,7 @@ test_that("P02 refuses each of P06's session accessors as an agent name (IC-71)"
 })
 
 test_that("an invalid mode is refused without echoing its value (contract 1.1)", {
+  skip_on_cran()
   e = new.env()
   e$x = "mode-from-a-variable"
   bang = quote(!!x)
@@ -521,6 +549,7 @@ test_that("a decimal-looking model name is taken literally and echoed once (cont
 })
 
 test_that("bound values must be character or a spec of the right kind (contract 6.1.3)", {
+  skip_on_cran()
   e = new.env()
   e$tl = gptr_tool("t_one", description = "Tool one", execute = function(input, ctx) "x",
                    parameters = list(type = "object", properties = list()))
@@ -539,6 +568,7 @@ test_that("bound values must be character or a spec of the right kind (contract 
 })
 
 test_that("ident_force_needed() and ident_value() force unknown bound symbols and I() (G3 t2b)", {
+  skip_on_cran()
   e = new.env()
   e$m = "haiku"
   expect_true(ident_force_needed(quote(m), "model", e))
@@ -556,6 +586,7 @@ test_that("ident_force_needed() and ident_value() force unknown bound symbols an
 })
 
 test_that("the alias and agent masks are detached from the caller afterwards (rule R3)", {
+  skip_on_cran()
   e = new.env()
   e$hard = FALSE
   e$grab = function() {
@@ -605,6 +636,7 @@ test_that("the alias and agent masks are detached from the caller afterwards (ru
 })
 
 test_that("a function written inline keeps its scope; the mask is detached otherwise (R3)", {
+  skip_on_cran()
   e = new.env()
   e$k = 10
   # contract 6.1: `extensions` accepts function(gptr) factories, `tools` lists of <spec:tool>
@@ -655,6 +687,7 @@ test_that("a function written inline keeps its scope; the mask is detached other
 })
 
 test_that("a factory's lazy argument keeps the mask; a kept mask binds no alias (D-105)", {
+  skip_on_cran()
   e = new.env()
   e$k = 10
   e$make_tool = function(v) {
@@ -712,6 +745,7 @@ test_that("a factory's lazy argument keeps the mask; a kept mask binds no alias 
 })
 
 test_that("an unsupplied formal's default never keeps the mask (R3, D-105)", {
+  skip_on_cran()
   e = new.env()
   e$k = 10
   # R evaluates a default in the factory's own frame, never in the mask: the mask is detached
@@ -757,6 +791,7 @@ test_that("an unsupplied formal's default never keeps the mask (R3, D-105)", {
 })
 
 test_that("an empty or missing alias never enters the identifier pool", {
+  skip_on_cran()
   local_mocked_bindings(identifier_provider_aliases = function() c("", NA, "zz_alias"))
   e = new.env()
   expect_true(identifier_known("zz_alias", "model"))
@@ -766,6 +801,7 @@ test_that("an empty or missing alias never enters the identifier pool", {
 })
 
 test_that("identifier resolution never discovers or prepares a model (IC-74, 07 section 2.1)", {
+  skip_on_cran()
   local_mocked_bindings(
     catalog_discover = function(...) stop("catalog_discover() must not run"),
     catalog_ollama_discover = function(...) stop("catalog_ollama_discover() must not run"),

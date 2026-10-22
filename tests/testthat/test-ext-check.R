@@ -11,6 +11,7 @@ test_that("tool conformance distinguishes handler errors from malformed results"
 })
 
 test_that("factory checks count only the current invocation's records", {
+  skip_on_cran()
   local_registry()
   registry_add(gptr_command("borrowed", function(args, ctx) "x"), "plugin:gptr-check", 5L)
   result = gptr_check(function(gptr) NULL)
@@ -24,6 +25,7 @@ test_that("factory checks count only the current invocation's records", {
 })
 
 test_that("nested factories cannot satisfy the checked outer factory's declarations", {
+  skip_on_cran()
   local_registry()
   nested = function(gptr) {
     ext_load(function(inner) {
@@ -69,6 +71,7 @@ test_that("unavailable process observation cannot pass conformance", {
 })
 
 test_that("package manifests cannot omit or malform a declared factory", {
+  skip_on_cran()
   local_registry()
   root = withr::local_tempdir()
   dir.create(file.path(root, "gptr"))
@@ -85,6 +88,7 @@ test_that("package manifests cannot omit or malform a declared factory", {
 })
 
 test_that("package entries resolve the declared exported function exactly", {
+  skip_on_cran()
   local_registry()
   root = withr::local_tempdir()
   dir.create(file.path(root, "gptr"))
@@ -114,6 +118,7 @@ test_that("package entries resolve the declared exported function exactly", {
 })
 
 test_that("conformance permits current captured API reads while keeping writes stale", {
+  skip_on_cran()
   reg = local_registry()
   api = ext_api_new("plugin:reads")
   policy = gptr_policy("reads", function(call, ctx) {
@@ -138,6 +143,7 @@ test_that("conformance permits current captured API reads while keeping writes s
 })
 
 test_that("gptr_api() reports version 1.0 and the kind, event and named features", {
+  skip_on_cran()
   local_registry()
   api = gptr_api()
   expect_s3_class(api, "gptr_api")
@@ -235,6 +241,7 @@ valid_specs = function() {
 }
 
 test_that("gptr_check() passes a valid spec of every kind (acceptance 3)", {
+  skip_on_cran()
   local_registry()
   specs = valid_specs()
   expect_setequal(vapply(specs, function(s) s$kind, ""), kind_names())
@@ -249,6 +256,7 @@ test_that("gptr_check() passes a valid spec of every kind (acceptance 3)", {
 })
 
 test_that("an invalid spec fails and names the failing field; error = TRUE signals", {
+  skip_on_cran()
   local_registry()
   s = gptr_command("hello", function(args, ctx) "hi")
   s$handler = "not a function"
@@ -266,6 +274,7 @@ test_that("an invalid spec fails and names the failing field; error = TRUE signa
 })
 
 test_that("a direct tool description over 400 tokens fails (acceptance 3)", {
+  skip_on_cran()
   local_registry()
   long = gptr_tool("long", paste(rep("word", 600), collapse = " "),
                    execute = function(input, ctx) "x")
@@ -279,6 +288,7 @@ test_that("a direct tool description over 400 tokens fails (acceptance 3)", {
 })
 
 test_that("tools: schema problems and empty-input handling are checked", {
+  skip_on_cran()
   local_registry()
   bad_schema = gptr_tool("bad", "Bad schema",
                          parameters = list(type = "object",
@@ -305,6 +315,7 @@ test_that("prompt sections must fit their budget", {
 })
 
 test_that("policies are run over the modes x report 18 matrix", {
+  skip_on_cran()
   local_registry()
   plan_guard = gptr_policy("plan_guard", function(call, ctx) {
     if (ctx$mode() == "plan" && call$risk$level > 0) list(decision = "deny", reason = "plan")
@@ -364,6 +375,7 @@ test_that("adapters are replayed through the check.adapter service when it exist
 })
 
 test_that("factories: load, register, no action at load, and every registered spec passes", {
+  skip_on_cran()
   local_registry()
   res = gptr_check(function(gptr) {
     gptr$register(gptr_command("panel", function(args, ctx) "ok"))
@@ -396,6 +408,7 @@ test_that("factories: load, register, no action at load, and every registered sp
 })
 
 test_that("installed plugin packages: manifest, API, provides and bare identifiers (IC-42)", {
+  skip_on_cran()
   local_registry()
   root = withr::local_tempdir()
   dir.create(file.path(root, "gptr"))
@@ -478,6 +491,7 @@ test_that("the contract 6.7 example passes", {
 })
 
 test_that("checks see the live registry's records and services but never change them", {
+  skip_on_cran()
   reg = local_registry()
   old = the$services
   withr::defer(assign("services", old, envir = the))
@@ -506,6 +520,7 @@ test_that("checks see the live registry's records and services but never change 
 })
 
 test_that("a session finalized during a check keeps its deferred shutdown (D-085)", {
+  skip_on_cran()
   reg = local_registry()
   seen = new.env(parent = emptyenv())
   seen$reasons = character()

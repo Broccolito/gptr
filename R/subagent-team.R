@@ -486,11 +486,11 @@ subagent_shape = function(x) {
 }
 
 #' The one list-like context item of a fan-out call: its index and shape; any other number of
-#' list-like items, or `.opts$context = "none"` (which would drop each child's element), is
+#' list-like items, or the context mode "none" (which would drop each child's element), is
 #' `gptr_error_invalid_argument`
 #' @noRd
 subagent_fanout_item = function(call) {
-  if (identical(call$args$opts$context, "none")) {
+  if (identical(context_mode(call$args$opts), "none")) {
     gptr_abort(paste0("parallel = sends each child its element as attached context; use ",
                       ".opts = list(context = \"names\")."),
                "invalid_argument", arg = ".opts",
@@ -530,7 +530,7 @@ subagent_fanout_spec = function(call, fan, agent, target, i, key, backend) {
   ctx = list(list(label = paste0(".x[[", encodeString(key, quote = "\""), "]]"),
                   kind = "value", name = NULL, slot = ".e1", address = NULL,
                   facts = list(class = class(el), dim = dim(el), length = length(el),
-                               bytes = as.numeric(utils::object.size(el)),
+                               bytes = env_snap_size(el),
                                is_chr1 = is.character(el) && length(el) == 1L && !is.na(el))))
   for (it in call$context[-target$index]) {
     if (!is.null(it$slot)) assign(it$slot, get(it$slot, envir = call$values), envir = values)

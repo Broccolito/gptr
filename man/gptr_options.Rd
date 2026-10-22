@@ -51,7 +51,7 @@ documents: \code{"auto"}, \code{"ask"} or \code{"off"}.
 \item \code{gptr.max_turns} (integer, \code{50}): turns per programmatic run.
 \item \code{gptr.max_turns_console} (integer, \code{200}): turns per console prompt.
 \item \code{gptr.max_nested_calls} (integer, \code{20}): \code{\link[=peter]{peter()}} calls per evaluation of model code.
-\item \code{gptr.value_copy_max} (bytes, \code{1048576}): designated result values below this size are
+\item \code{gptr.value_copy_max} (bytes, \code{2097152}): designated result values below this size are
 copied; larger ones are kept by name.
 \item \code{gptr.values_max_bytes} (bytes, \code{67108864}): value copies held per session.
 \item \code{gptr.background_tools} (character, \code{"idle"}): \code{"idle"} or \code{"wait"} for experimental
@@ -209,10 +209,14 @@ that a script makes no model calls.
 \item \code{GPTR_PROJECT_ROOT}: overrides the project root, like \code{gptr.project_root}.
 \item \code{ANTHROPIC_API_KEY}, \code{OPENAI_API_KEY}, \code{GEMINI_API_KEY}, \code{TYPESAFE_API_KEY} and the other
 provider keys: read at the first use of a provider; see \code{\link[=gptr_env]{gptr_env()}} for \code{.env} files.
-\item \code{GPTR_WORKER} and \code{GPTR_SUBAGENT_DEPTH}: set by gptr in its own child processes only.
+\item \code{GPTR_WORKER}, \code{GPTR_SUBAGENT_DEPTH}, \code{GPTR_ARTIFACT_PORTS}, \code{GPTR_SHELL_CMD} and the tree
+markers \verb{GPTR_PROC_<id>}: set by gptr in its own child processes only.
+\item \code{GPTR_MCP_TOKEN}: the variable through which the Codex snippet of \code{\link[=gptr_mcp_serve]{gptr_mcp_serve()}} passes
+the server's bearer token to the client; gptr itself never reads it.
 \item \code{GPTR_LIVE_TESTS}: \code{"true"} enables the package's live tests; not used at run time.
-\item \verb{_R_CHECK_PACKAGE_NAME_}: set by \verb{R CMD check}; outside the package's own tests gptr then
-replays recorded document blocks only and caps each child-process pool at two.
+\item \verb{_R_CHECK_PACKAGE_NAME_}: set by \verb{R CMD check}; outside the package's own tests a model call
+without its own \code{replay} argument then runs in replay mode (recorded answers or an offline
+provider, never a model server), and each child-process pool is capped at two.
 }
 }
 

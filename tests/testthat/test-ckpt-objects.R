@@ -20,6 +20,7 @@ test_that("gptr_preimage() keeps value objects by reference and refuses referenc
 })
 
 test_that("the data.table method copies only predicted := and set() targets within budget", {
+  skip_on_cran()
   skip_if_not_installed("data.table")
   dt = data.table::data.table(a = 1:3)
   ctx = list(predicted = "modify", bytes = 100, budget = 1e9)
@@ -36,6 +37,7 @@ test_that("the data.table method copies only predicted := and set() targets with
 })
 
 test_that("capture, settle and restore swap values by reference", {
+  skip_on_cran()
   e = new.env()
   e$x = c(1, 2, 3)
   e$y = "unchanged"
@@ -57,6 +59,7 @@ test_that("capture, settle and restore swap values by reference", {
 })
 
 test_that("removed bindings come back and created ones are unbound into redo images", {
+  skip_on_cran()
   e = new.env()
   e$a = 1
   st = ckpt_obj_store()
@@ -74,6 +77,7 @@ test_that("removed bindings come back and created ones are unbound into redo ima
 })
 
 test_that("spilled images restore from disk; drop deletes images and defuses lists", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   e = new.env()
   e$x = seq(1, 10, by = 0.5)
@@ -109,6 +113,34 @@ test_that("the unshared-bytes walk visits a classed list's components, not its l
   agent_eval("tm = as.POSIXlt(as.POSIXct(tm) + 60)", e)
   r = ckpt_settle(st, e, p, frag = "f1")
   expect_gt(ckpt_unshared_bytes(st, r$key, e, "tm"), 800)
+})
+
+test_that("an image counts what the current value does not share, its S7 class copy too (D-247)", {
+  # object.size() counts an S7 object's class object in full (a themed ggplot2 4.x plot: 16 MB);
+  # here the class copy holds 800 KB that only this object holds
+  e = new.env()
+  e$plt = structure(1L, class = c("pkg::plot", "S7_object"),
+                    S7_class = structure(function() NULL, pad = numeric(1e5)), data = numeric(1e5))
+  st = ckpt_obj_store()
+  p = ckpt_capture(st, e, "plt")
+  agent_eval("attr(plt, 'labels') = 'mpg'", e)
+  r = ckpt_settle(st, e, p, frag = "f1")
+  expect_lt(ckpt_unshared_bytes(st, r$key, e, "plt"), 1000)
+  agent_eval("plt = 2L", e)
+  expect_lt(abs(ckpt_unshared_bytes(st, r$key, e, "plt") - 1.6e6), 2000)
+})
+
+test_that("an image counts the strings the current value shares once, not again (D-247)", {
+  # a vcfR @fix-style edit: main counted every string of the image (1.4 MB here)
+  e = new.env()
+  e$m = matrix(sprintf("id%06d", 1:2e4), ncol = 2)
+  st = ckpt_obj_store()
+  p = ckpt_capture(st, e, "m")
+  agent_eval("m[1, 1] = 'x'", e)
+  r = ckpt_settle(st, e, p, frag = "f1")
+  held = ckpt_unshared_bytes(st, r$key, e, "m")
+  expect_gt(held, 160048)
+  expect_lt(held, 161000)
 })
 
 test_that("defusing a data frame image leaves the user's data frame intact", {
@@ -150,6 +182,7 @@ test_that("the sweep releases captures that no index row owns", {
 })
 
 test_that("a collected checkpoint state releases its images (finalizer, G7 c06b)", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000008")
   e = new.env()
   e$x = seq(0, 1, length.out = 10)
@@ -168,6 +201,7 @@ rows_by_name = function(frag) {
 }
 
 test_that("ckpt_predict() reduces code_targets() to the checkpointers' fields (IC-31)", {
+  skip_on_cran()
   tg = ckpt_predict("x[1] = 0; y = f(y); write.csv(d, 'out.csv'); rm(z)")
   expect_named(tg, c("assign", "modify", "byref", "remove", "super", "files", "unknown",
                      "process"))
@@ -194,6 +228,7 @@ test_that("the capture plan follows G7's budget rules", {
 })
 
 test_that("before/after record changed, removed and created bindings; undo and redo swap them", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000001")
   e = new.env()
   e$x = c(1, 2, 3)
@@ -228,6 +263,7 @@ test_that("before/after record changed, removed and created bindings; undo and r
 })
 
 test_that("undo keeps a binding changed after the turn (3-way) unless forced", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000002")
   e = new.env()
   e$x = c(1, 2, 3)
@@ -248,6 +284,7 @@ test_that("undo keeps a binding changed after the turn (3-way) unless forced", {
 })
 
 test_that("reference objects and objects over the budget are reported with a model notice", {
+  skip_on_cran()
   local_gptr_options(undo_capture_max = 100, undo_max_bytes = 200, undo_spill_max = 150)
   ck = ckpt_ck_new("s0000000003")
   e = new.env()
@@ -275,6 +312,7 @@ test_that("reference objects and objects over the budget are reported with a mod
 })
 
 test_that("a predicted data.table set() gets a deep copy and is restorable", {
+  skip_on_cran()
   skip_if_not_installed("data.table")
   ck = ckpt_ck_new("s0000000004")
   e = new.env()
@@ -295,6 +333,7 @@ test_that("a predicted data.table set() gets a deep copy and is restorable", {
 })
 
 test_that("a predicted by-reference edit without a copy is reported, not held by reference", {
+  skip_on_cran()
   skip_if_not_installed("data.table")
   ck = ckpt_ck_new("s0000000012")
   e = new.env()
@@ -328,6 +367,7 @@ test_that("promises are never forced; a predicted rebinding of one is reported",
 })
 
 test_that("the turn-end budget spills the largest image and drops images older than undo_turns", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   local_gptr_options(undo_max_bytes = 1000, undo_spill_max = 1e6, undo_turns = 2L)
   ck = ckpt_ck_new("s0000000006", dir)
@@ -364,6 +404,7 @@ test_that("an image that cannot be spilled is dropped instead", {
 })
 
 test_that("an image spilled at a turn end is found again by a new R process (force)", {
+  skip_on_cran()
   dir = withr::local_tempdir()
   local_gptr_options(undo_max_bytes = 10)
   ck = ckpt_ck_new("s0000000009", dir)
@@ -385,6 +426,7 @@ test_that("an image spilled at a turn end is found again by a new R process (for
 })
 
 test_that("a redo image spilled at a turn end is redone from disk and undone again", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000013", withr::local_tempdir())
   e = new.env()
   e$x = as.numeric(1:50)
@@ -413,6 +455,7 @@ agent_steps = function(ck, e, codes) {
 }
 
 test_that("a rewind of several fragments of one object follows values restored from disk", {
+  skip_on_cran()
   local_gptr_options(undo_capture_max = 1000, undo_spill_max = 1e7)
   ck = ckpt_ck_new("s0000000014", withr::local_tempdir())
   e = new.env()
@@ -425,6 +468,7 @@ test_that("a rewind of several fragments of one object follows values restored f
 })
 
 test_that("images spilled at turn ends keep a rewind of several fragments consistent", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000015", withr::local_tempdir())
   e = new.env()
   frags = agent_steps(ck, e, c("x = as.numeric(1:50)", "x = x * 2"))
@@ -440,6 +484,7 @@ test_that("images spilled at turn ends keep a rewind of several fragments consis
 })
 
 test_that("a budget that cannot spill drops the oldest image and keeps the newest undo", {
+  skip_on_cran()
   local_gptr_options(undo_max_bytes = 1e6)
   ck = ckpt_ck_new("s0000000016")
   e = new.env()
@@ -453,6 +498,7 @@ test_that("a budget that cannot spill drops the oldest image and keeps the newes
 })
 
 test_that("spilling an image the binding holds again raises no false conflict", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000017", withr::local_tempdir())
   e = new.env()
   e$x = as.numeric(1:50)
@@ -465,6 +511,7 @@ test_that("spilling an image the binding holds again raises no false conflict", 
 })
 
 test_that("a predicted in-place edit keeps its disk image although the fingerprint misses it", {
+  skip_on_cran()
   local_gptr_options(undo_capture_max = 1000, undo_max_bytes = 2000, undo_spill_max = 1e7)
   ck = ckpt_ck_new("s0000000010", withr::local_tempdir())
   e = new.env()
@@ -497,6 +544,7 @@ test_that("an image key from a fragment never leaves the spill directory", {
 })
 
 test_that("checkpoint.note names what cannot be undone", {
+  skip_on_cran()
   local_gptr_options(undo_capture_max = 100, undo_max_bytes = 200, undo_spill_max = 150)
   e = new.env()
   e$cfg = new.env()
@@ -525,6 +573,7 @@ test_that("checkpoint.note names what cannot be undone", {
 })
 
 test_that("the state checkpointer restores options and the working directory (3-way)", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000011")
   withr::local_options(ckpttest.opt = "before")
   old_wd = getwd()
@@ -560,6 +609,7 @@ test_that("the state checkpointer restores options and the working directory (3-
 })
 
 test_that("environment variables and the RNG state are reported, never set", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000012")
   withr::local_envvar(CKPT_TEST_VAR = "a")
   withr::local_preserve_seed()
@@ -578,6 +628,7 @@ test_that("environment variables and the RNG state are reported, never set", {
 })
 
 test_that("packages attached by the turn are detached; nothing is recorded when nothing changed", {
+  skip_on_cran()
   skip_if("package:tools" %in% search())
   ck = ckpt_ck_new("s0000000013")
   withr::defer(if ("package:tools" %in% search()) detach("package:tools", character.only = TRUE))
@@ -607,6 +658,7 @@ test_that("connections the turn opened are closed on undo", {
 })
 
 test_that("undo closes only the connection the turn opened, in this R process", {
+  skip_on_cran()
   ck = ckpt_ck_new("s0000000016")
   local_gptr_options(checkpoint_close_devices = TRUE)
   call = list(id = "c6", name = "r", input = list(code = "con = file(tempfile(), 'w')"))
@@ -628,6 +680,7 @@ test_that("undo closes only the connection the turn opened, in this R process", 
 })
 
 test_that("options created while namespaces load stay; a failed restore does not stop the undo", {
+  skip_on_cran()
   skip_if("splines" %in% loadedNamespaces())
   ck = ckpt_ck_new("s0000000018")
   withr::local_options(ckpttest.new = NULL)

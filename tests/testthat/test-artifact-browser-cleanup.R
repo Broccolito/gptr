@@ -57,7 +57,8 @@ test_that("artifact browser cleanup leaves a remote browser process alone", {
 test_that("the private Linux test temp root fits Chromium's Unix socket limit", {
   path = Sys.getenv("TMPDIR")
   expect_true(dir.exists(path))
-  if (identical(Sys.info()[["sysname"]], "Linux")) {
+  # setup.R's rule: the short root is used on Linux only when NOT_CRAN is "true"
+  if (identical(Sys.info()[["sysname"]], "Linux") && identical(Sys.getenv("NOT_CRAN"), "true")) {
     expect_true(startsWith(path, "/tmp/"))
     socket = file.path(path, "org.chromium.Chromium.XXXXXX", "SingletonSocket")
     expect_lte(nchar(socket, type = "bytes"), 107L)

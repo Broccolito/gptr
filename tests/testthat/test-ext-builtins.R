@@ -9,6 +9,7 @@ test_that("built-in identifiers reject newline suffixes", {
 })
 
 test_that("failed built-ins are omitted and attempted once per registry", {
+  skip_on_cran()
   local_registry()
   local_builtins()
   calls = new.env(parent = emptyenv())
@@ -31,6 +32,7 @@ test_that("failed built-ins are omitted and attempted once per registry", {
 })
 
 test_that("ext_declare_builtin() records declarations; a second declaration replaces the first", {
+  skip_on_cran()
   local_builtins()
   f = function(gptr) NULL
   expect_equal(ext_declare_builtin("demo", f), "demo")
@@ -45,6 +47,7 @@ test_that("ext_declare_builtin() records declarations; a second declaration repl
 })
 
 test_that("built-ins load in dependency order given by `after`", {
+  skip_on_cran()
   local_registry()
   local_builtins()
   log = new.env()

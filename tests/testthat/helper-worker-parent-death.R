@@ -215,6 +215,8 @@ wpd_child_case = function(case, root, failure) {
   }
   elapsed = fun("reactor_now")() - killed_at
   before_cleanup = dead && elapsed <= 10
+  # The worker's exit starts inside the parent's, which ps can list for a moment after it
+  fun("proc_wait_exit")(list(parent_handle))
   parent_dead = isFALSE(fun("proc_handle_alive")(parent_handle))
   if (before_cleanup) phase("worker-dead-before-cleanup")
   # The contract observation has ended. Only now may owned cleanup signal descendants.

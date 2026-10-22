@@ -1,7 +1,7 @@
 # Every gate of architecture 12.7 on P07's golden-transcript runner (plan P24; IC-73; 05 P24
 # acceptance 1 and 4). P07's dev/bench/tokens/run.R owns the gates; these tests prove that each
 # one trips just above its tolerance and passes at it, that the committed baseline covers every
-# fixture, that the replay is fast and independent of the machine's <r_env>, and that
+# fixture, that the replay is fast and independent of the machine's <r_env> and skills, and that
 # `run.R --check` exits non-zero on a regression.
 
 tokens_dir = file.path(bench_root(), "dev", "bench", "tokens")
@@ -128,6 +128,18 @@ test_that("a golden transcript's prefix does not depend on the machine's <r_env>
   here = rp$r$bench_case(fx, rp$standins, char_tok)
   local_mocked_bindings(r_env_probe = function() "R 4.6.1, x86_64-pc-linux-gnu; 4 cores",
                         .package = "gptr")
+  expect_identical(rp$r$bench_case(fx, rp$standins, char_tok)$prefix, here$prefix)
+})
+
+test_that("a golden transcript's prefix does not depend on the machine's skill folders", {
+  bench_test_load_gptr()
+  rp = local_replay()
+  fx = rp$fixture("ns02-mixed-model")
+  here = rp$r$bench_case(fx, rp$standins, char_tok)
+  dir = file.path(tools::R_user_dir("gptr", "config"), "skills", "local-notes")
+  dir.create(dir, recursive = TRUE)
+  writeLines(c("---", "name: local-notes", "description: A skill only this machine has.", "---",
+               "Notes."), file.path(dir, "SKILL.md"))
   expect_identical(rp$r$bench_case(fx, rp$standins, char_tok)$prefix, here$prefix)
 })
 

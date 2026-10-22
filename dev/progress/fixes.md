@@ -855,9 +855,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   encoder serves the knit powershell engine and the stdin ACL verifier (bootstrap 9133 and 9117
   bytes on macOS, limit 9998). `3942e0b` (tests) runs the shadowed line under Windows PowerShell 5.1
   too.
-- Red: hosted status 0 where 4 was expected. The Windows test now prepends a temporary directory with
-  an extensionless `cmd` to PATH, which reproduces the shadow on any runner, and asserts status 4 (pwsh
-  and 5.1), status 6 and stdout `6\n` for this R after `cmd /d /c exit 5`, 0 for `cmd /c exit 4;
+- Red: hosted status 0 where 4 was expected. The Windows test now prepends a temporary directory
+  with an extensionless `cmd` to PATH, which reproduces the shadow on any runner, and asserts status
+  4 (pwsh and 5.1), status 6 and stdout `6\n` for this R after `cmd /d /c exit 5`, 0 for
+  `cmd /c exit 4;
   Write-Output ok`, 1 for `cmd /c exit 0; Write-Error no`, and stdout `ok\n` with status 1 for an
   extensionless-only `gptr-none`. Green: on macOS `proc-spawn`, `bridge-sh`, `bridge-lang` and
   `proc-writer-runtime` PASS 1293 SKIP 14 (Windows-only). Lint clean.
@@ -921,9 +922,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   Suggests)` (run 39255504135, job 118076803865) failed `test-bridge-sh.R:569` with 0 of 2 for the
   whole 10 s. Cause: on Linux processx 3.9.0 stamps a child from `CLOCK_REALTIME - CLOCK_MONOTONIC`
   read at the spawn, ps 1.9.3 times every process from the boot time it read once, and
-  `ps_children()` keeps a descendant only when the parent's stamp is not later than its creation time;
-  a shell forks its background jobs in its first 10 ms tick, so whenever processx's estimate was the
-  larger, `ps_children(p$as_ps_handle())` listed none of them, at every look. `kill_all()`'s
+  `ps_children()` keeps a descendant only when the parent's stamp is not later than its creation
+  time; a shell forks its background jobs in its first 10 ms tick, so whenever processx's estimate
+  was the larger, `ps_children(p$as_ps_handle())` listed none of them, at every look. `kill_all()`'s
   parent-link record (`proc_children()`) used the same lookup. Fix (`d480ee5`): `proc_children()`
   lists from `ps::ps_handle(pid)` and keeps the list only while processx still reads the child alive
   (no pid reuse); the bridge tests read the tree with `proc_children()`; `85e5883`'s re-look is
@@ -1115,3 +1116,836 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   query (retried) all give that reason, and one green run cannot tell a fix from a race that did not
   recur, so judge native-01 over several runs. No claim about the native-06 and native-07 failures
   (CI-23, CI-70).
+
+## Task CI-74 - A new-session preview syncs skills; the token benchmark pins the catalog (2026-10-20)
+- Cause: skills are discovered by `skill_sync()` in builtin:skills' `session_start` hook, which
+  fires at a session's first run. `gptr_prompt()` composes without that event, so in a fresh R
+  session its preview had no `skills` section, unlike the prompt the first run freezes; the IC-68
+  test in test-northstar.R passed only because an earlier block had run a session. `bench_case()`
+  also freezes without `session_start`, so the token baseline measured no skills catalog either.
+- Fix: `skills_section_text()` syncs the skills of a top-level session before listing them
+  (idempotent; a real first run's frozen T0 and T1 are byte-identical before and after). The
+  benchmark pins the `skills` stand-in (the built-in catalog, the same text a fresh session lists)
+  for the fixtures that name it, like `r_env` (CI-18), so the developer's own skill folders never
+  enter the prefix.
+- Red: test-skill-discover.R's preview test FAIL 2. Green:
+  `skill-|northstar|prompt-|subagent-|arch-layers` PASS; in CRAN mode `northstar|skill-discover`
+  PASS 106. New `test-token-gates.R` test (a machine skill leaves ns02's prefix unchanged) fails
+  without the pin.
+- Baseline (`run.R --update`): the 12 standard cases' prefix and catalog +143 (catalog 399 -> 542,
+  the value recorded before the drift noted in D-135 item 6), input totals +143 per request; the two
+  minimal cases unchanged. `run.R --check` OK; polyglot within 10%; `dev/bench/tests` PASS.
+
+## Task CI-75 - The Windows stdin writer reads a refused chunk again (2026-10-21, #61)
+- In the 123 hosted Windows jobs since `2654a21` that ran native-04 (R-CMD-check and Windows-check
+  shard 1), its first case, duplex (`test-proc-windows-backpressure.R:3`), failed twice with the
+  same witness (run 38874952436, job 116887641964, release, `3a8315f`; run 39532643181, job
+  119001917749, oldrel-4, `1b0d3bd`): an io error at stage `delivery`, "Could not deliver queued
+  bytes through the stdin writer.", with `accepted_bytes` 3604480 and 3080192, exact multiples of
+  64 KB. Every failing writer step quit with status 1 and the drain replaced the inner cause, so the
+  witness could not name the check. `3a05693` names it: each writer step exits with status 10 plus
+  its index in `proc_writer_steps`, the writer turns warnings into errors, each parent-side publish
+  and acknowledgement check has its own fixed message, and the stdin failure condition and the
+  backpressure witness gain the writer's step, status, cause and, for the steps that take the
+  chunk, the published chunk's size (D-241 item 2).
+- `claude/native04-loop` (never merged) repeated the duplex case on hosted Windows, R 4.6.1 and
+  R 4.2.3, in runs 39560105451 (300 iterations, before taking a chunk was split into size, read and
+  length) and 39565526323 (600): 896 complete, 4 failed, 2 per R version. Every failure is stage
+  `delivery`, step `read` (status 19), after 42, 30, 58 and 43 full chunks (`accepted_bytes`
+  2752512, 1966080, 3801088 and 2818048). In the second run that step is
+  `readBin(path, "raw", n = 65537L)` alone, after `file.size()` had admitted the chunk, and
+  `writer_chunk_bytes` is 65536: the parent measured the chunk file `in-<index>` at its full size
+  after the writer exited (only the writer deletes it). `observer_retries` and `sampling_errors`
+  were 0 and no deadline fired; the unlink, create, rename, validation and alive steps never failed.
+- Cause (inferred, not observed): `readBin()` of a chunk that the size step had admitted, and that
+  the parent measured at 65536 bytes after the writer exited, failed. The witness keeps no OS reason
+  (`cause` is the parent's "The owned stdin writer exited before delivery settled."). A transient
+  open refusal fits this, but whether a re-read succeeds is untested until `claude/native04-loop`
+  runs on the fix. The writer treated the failure as fatal.
+- Fix: `proc_writer_main()`'s read step muffles the `readBin()` warning and catches its error. A
+  failed read sleeps 0.05 s and returns to the writer's poll for the same chunk, which checks that
+  the parent and target still run (step `alive`, status 17), validates the mailbox for that chunk
+  (`safe("read", ...)`, fail-closed, status 18) and takes the size again, so `length` compares the
+  bytes with the size taken right before that read. No new bound: the parent's no-progress deadline
+  (`gptr.stdin_timeout`) still ends a read that never succeeds as the typed `gptr_error_timeout`
+  and stops the writer. Nothing else retries. `read` keeps its index, so every status is unchanged;
+  it can no longer exit, so the parent records `writer_chunk_bytes` for a size or length step only.
+  The warning is muffled, not turned into an error: under `warn = 2`, R 4.2's `file()` leaks the
+  connection of a refused open whose warning became an error (R 4.3's connections.c cleans it up,
+  PR#18491), so about 125 refusals would fill R's 128 connections and fail the next validation
+  (status 18) before the deadline. Muffled, the open fails and `file()` destroys the connection
+  before it raises "cannot open the connection". On R 4.6.1 (macOS) 1,500 refused opens through
+  the muffled read leave the connection table unchanged; the R 4.2 leak is read from the 4.2 and
+  4.3 branch sources, not run. The trusted bootstrap grows by 52 to 56 bytes at a fixed mailbox
+  path (long path 9,429 to 9,485). The production witness, whose size follows the session tempdir
+  and `.libPaths()`, measured 9,513 in four runs after the fix, 485 bytes under the 9,998-byte
+  Rscript limit.
+- Tests: the cold control in `test-proc-windows-backpressure.R` takes the expected `outcome`
+  (complete, io or timeout). "a cold writer names a failed chunk read" becomes "a cold writer reads
+  a refused chunk again and delivers every byte" (the second chunk's `readBin()` warns, then errors,
+  once: the echoed lines are identical, the target exits 0 and stdin has no error) and "a chunk read
+  that keeps failing ends at the delivery deadline" (`gptr_error_timeout` after 2 s while the writer
+  runs, `writer_step` and `writer_status` NULL, `accepted_bytes` 65536). While the read keeps
+  failing, "a refused chunk is not read again once the mailbox fails validation" (step
+  validate_read, status 18) and "... once the parent or target is gone" (step alive, status 17)
+  each fail one retry check, with `accepted_bytes` 65536; the injection's `refused` counter lives in
+  the actor body, so the other injection sees it. The step tests for alive, validate_read, size,
+  length, unlink, create and rename are unchanged. In `test-proc-writer-runtime.R` the chunk-size
+  test takes size in place of read ("a writer failed in its size or length step reports that
+  chunk's size").
+- Red: on `3a05693` merged with main (`7e0238b`), `^proc-windows-backpressure$` FAIL 9 PASS 225:
+  the refused-once test ends in the io failure with the transfer short, the other three as step
+  read, status 19. A mutant that reads again without the poll's checks (an inner `repeat`) fails
+  the two retry-check tests with the stdin timeout (FAIL 6 PASS 228). Green:
+  `^proc-windows-backpressure$` PASS 234;
+  `^(proc-windows-backpressure|proc-writer-runtime)$` PASS 934 SKIP 8;
+  `^(proc-writer|proc-windows-backpressure|proc-spawn|http-reactor|proc-)` PASS 2653 SKIP 13
+  (PASS 2622 SKIP 13 after the merge, before the fix); `^zzz$` PASS 145. Lint clean.
+- Reviews: R1 and R2, applied here: the read's warning muffled, so a refused open leaks no
+  connection on R 4.2 (R1-1, R2-1); a failed read returns to the writer's poll, so the liveness and
+  mailbox checks run right before the next read (R1-3, R2-3); tests for those two checks after a
+  refused read (R1-2); `read` dropped from the chunk-size steps (R1-4, R2-7); the cause marked
+  inferred and "intact" replaced by the measured size (R2-2); the bootstrap growth measured at
+  fixed paths (R2-4); the census cited by job (R2-5); the loop's header and body corrected and its
+  summary given a class column (R2-6).
+- Deviations: D-241. Open: hosted Windows has not run the fix; `claude/native04-loop`, rebased onto
+  it, repeats the duplex case in 16 jobs (1,200 iterations). A refusal that outlasts the stdin
+  deadline, or a chunk that vanishes after a failed read, now ends as the delivery
+  `gptr_error_timeout` with no writer step; the loop summary's class column shows it. The follow-up
+  card "stdin-writer delivery timeout" (a startup-time `gptr_error_timeout` with `accepted_bytes` 0
+  under the 2 s budget) is a different class and stays open; INFRA-01 is unrelated.
+
+## Task CI-76 - The parent-death witness waits until ps stops listing the killed parent (2026-10-21, #62)
+- Windows-check.yaml `windows-latest (release, shard 1/4)` on c80b703 (PR #56; run 39552770163,
+  attempt 1, job 119065497023, R 4.6.1) failed native-10 "a Windows worker exits within 10 s after
+  its acknowledged parent dies (IC-60)" at `test-subagent-worker.R:715`:
+  `parent_dead_before_cleanup` FALSE. Everything else in the witness passed: it completed in
+  5.96 s, all 20 pre-kill checks held, the worker was gone 0.10 s after the kill and cleanup
+  settled. It is 1 of 247 executions that reached that check since 2026-10-12 (release 1/145,
+  oldrel-4 0/102), and attempt 2 on the same sha passed.
+- Cause (inferred, not observed): `wpd_child_case()` kills the parent with `ps::ps_kill()`
+  (`TerminateProcess()`, which returns before the process has exited), polls until the worker reads
+  as gone, then reads the parent once. The worker's exit starts inside the parent's own exit: either
+  the processx job object closes with the parent's handles or the worker reads EPIPE while they are
+  torn down. So the worker can be gone while ps still lists the parent for a moment (as for CI-45),
+  and that single read then gives alive.
+- Fix (tests only): just before that read the helper calls `proc_wait_exit(list(parent_handle))`
+  with its default bound and poll (2 s, 20 ms), the wait `kill_all()` makes after its signals
+  (D-180 item 1, unchanged). `worker_exit_elapsed` is still measured before the wait, so the 10 s
+  bound and every expectation stay as they were; a parent still listed after 2 s fails as before.
+  No product code changed.
+- Red: the new test "the Windows witness reads its killed parent once ps no longer lists it (IC-60)"
+  runs on any OS. It evaluates the helper's own statements from `killed_at` through `parent_dead`
+  with `proc_handle_alive()` mocked (each process reads as running once, then gone), `ps_kill()`
+  stubbed and a virtual clock. On 221f4a8 it gives FAIL 1 (`parent_dead` FALSE). Green: it passes,
+  and `^subagent-worker$` gives FAIL 0 SKIP 1 PASS 161 (the Windows witness skips on macOS). The
+  block takes 42 ms in CRAN mode, so it starts with `skip_on_cran()` (D-240). Lint clean.
+- Reviews: skeptic: the worker's death may also come from EPIPE as the parent's handles are torn
+  down, so the cause is said to start inside the parent's exit rather than to be the job's kill.
+- Deviations: none. Open: hosted Windows has not run the fix yet, and at about 0.4% per execution
+  one green run proves nothing. The new test pins the order of the reads, not Windows' timing. A
+  parent that ps lists for more than 2 s, or a `proc_handle_alive()` NA (an unrecognised ps error),
+  still fails the check.
+
+## Task CI-77 - The six-stream wall starts when the requests came, not at the heads (2026-10-21, #62)
+- Windows-check.yaml `windows-latest (release, shard 3/4)` on c80b703 (PR #56; run 39552770163,
+  attempt 1, job 119065496949, R 4.6.1) failed INFRA-01 "six streams of 1.00-2.25 s finish within
+  10% of the slowest" (`test-http-reactor.R:674`) with a wall of 2.532 s against 2.475 s. The heads
+  were at 0, 0.227, 0.228 | 0.007, 0.275, 0.276 s, written 0.107, 0.223, 0.005 | 0.112, 0.265,
+  0.006 s after the mock read each request, and gptr delivered every end within 16 ms. Since
+  2026-10-12 the test failed in 7 of 257 hosted Windows executions, 6 of them on timing (one was a
+  ready.json open error), at about the same rate without and with CI-62's `92a2944` (4 of 174 and
+  2 of 83 timing failures).
+- Cause (inferred): the mock is single-threaded. It logged the second request of each mock and
+  then took about 0.2 s before scheduling its head, while the third waited. The test measured the
+  wall from the heads the mock wrote, so it charged the mock's own stall to gptr. What stalled is
+  not known: GC in the mock is not ruled out on Windows (locally its log, plan and schedule take
+  under 0.04 s with no GC time), and a forward wall-clock step between the read and the head write
+  fits the same numbers just as well.
+- Fix (tests only): the mock first polls its sockets without waiting and waits only when nothing is
+  ready, stamping `srv$idle` as each wait ends. Each request record gains `came`: the end of the
+  wait that saw the request or, if the request came while the mock was working, of the last wait
+  before it. It is never later than the request's arrival plus the select's wake-up, and never after
+  `time` (when the mock read it, unchanged); `mock_log()` returns it. `infra01_six()` (`:589-593` on
+  c80b703, `:605-609` on 221f4a8) anchors each stream at its request's `came` instead of its head
+  write: the wall runs from the first `came` to the latest `came` plus scheduled length plus gptr's
+  delivery latency. So the mock's lateness in writing a head is netted out, like its lateness in
+  writing a last piece, and a clock step after the requests came cancels out as well. The 2.475 s
+  bound and the latency check are unchanged; the failure message now gives each request's offset and
+  each head's delay after its request.
+- The proposed diff stamped `time` itself. test-s1-client.R's IC-64 rate check reads `time` as a
+  lower bound of when each request started, and on macOS with that diff a 0.2 s stall injected at
+  request 60 failed the check in 3 of 3 runs (least margin -0.03 s, against +0.14 s with read
+  stamps). So `came` is a field of its own, and `time` keeps its meaning for the other tests.
+- Red: the new test "INFRA-01: a request that comes while the mock works is logged at its last wait"
+  holds the mock in its first request's plan until a gate file exists while a second request comes,
+  then sends a third once the mock has waited again: the second must be stamped before the release
+  and the third after it. Run on its own, on 221f4a8 it gives FAIL 2 (`came` is not logged there),
+  and reading `time`, the only stamp there, FAIL 1 (the second request 0.041 s after the release;
+  3 of 3 runs). A mutant that takes `came` at the read gives FAIL 1 (0.028 s after the release) and
+  one that never renews `srv$idle` after a wait FAIL 1 (the third stamped 0.76 s before the
+  release), 5 of 5 runs each. Green: it passes 5 of 5; `^http-reactor$` FAIL 0 SKIP 2 PASS 231; the
+  17 files that start the mock server FAIL 0 SKIP 3 PASS 4607. In the investigation, a 0.35 s and
+  0.27 s stall injected before the first two heads failed the old measure (walls 2.527 and 2.537 s)
+  and passed the new one (2.251 and 2.252 s), while late requests (2.535 and 2.526 s) and serialised
+  streams (3.324 s) still failed. Stalls injected here (in the plan or after the schedule; 0.35 and
+  0.27 s, or 0.2 s each) did not give the hosted shape: each mock read its three requests in one
+  iteration, so the old measure passed too, and the new wall was 2.251 s in all four. Lint clean.
+- Reviews: skeptic corrections, kept here. Line numbers had drifted (`infra01_six()` is at
+  `:589-593` on c80b703). The stall exceeds the head spread that the bound allows
+  (2.475 - 2.25 = 0.225 s) only for the long mock (0.265 s; the short mock's 0.223 s does not), and
+  only the long streams set the wall. A wall-clock step is an equally possible cause, and the fix
+  neutralises it too. GC is not ruled out on Windows. A client's lateness in sending a request
+  inside a busy window is not counted, and the old measure hid it too. r1 4 findings, all applied: a
+  mutant that never renews `srv$idle` passed the gate test, which now requires the third request
+  (medium); the Open note below separates the runner pause from the late-head shape (low); `came`
+  was called a strict lower bound of the arrival, which holds only inside a busy window (low); the
+  measurement unit test still named its anchors `heads` (low).
+- Deviations: none new. The new anchor amends the INFRA-01 measurement of D-016 item 1 and D-063
+  item 2: the wall runs from the first request's `came`, not from the first head write, and each
+  stream ends at its request's `came` plus its scheduled length plus gptr's latency. The bound is
+  unchanged. Tests only, so the amendment is recorded here. Open: hosted Windows has not run the
+  fix. Of the 6 timing failures, 5 have stream 1 of each mock starting at once and streams 2 and 3
+  starting together 0.23 to 1.5 s later, with gptr's delivery within 16 ms (0.28 s once): heads
+  written late after their requests, which the new anchor nets out (inferred). The sixth, job
+  118506033270 (run 39386048610, wall 3.183 s), is a runner pause in which gptr delivered two long
+  streams' ends 0.46 and 0.89 s late, and it still fails, by design. So about 1 in 256 executions
+  may still fail, and the fix is judged by whether the late-head shape comes back over several
+  shard 3/4 runs, not by the overall 2.3%. The wall still counts gptr sending a request late while
+  the mock waits, and gptr's delivery; a request sent late while the mock is busy is stamped early,
+  so that lateness is not counted.
+
+## Task CI-78 - The sampler retries an observer walk that meets a directory being removed (2026-10-21, #61)
+- The native-04 loop on CI-75 (run 39574684025, 16 jobs, 1,200 duplex iterations on hosted Windows,
+  R 4.6.1 and R 4.2.3) had no delivery failure and one `resource_observation` (job 119137147326,
+  `native04-loop-oldrel-4-1`, R 4.2.3, iteration 6): the transfer completed (phases spawn, ready,
+  writing, complete; 20 samples), then a snapshot raised `observer-parent-enumeration-unavailable`
+  at `directory-identity` (entries 378, directories 15, max_depth 4, disappeared 0, bytes 17724,
+  0.016 s) with `observer_retries` 0, since `bp_observe()` did not retry that reason. R-CMD-check
+  run 39505627064 (job 118913688321, #56, oldrel-4) had failed native-04's duplex case at the same
+  phase as `observer-directory-unreadable` at `directory-enumeration` (entries 539, directories 17,
+  max_depth 5).
+- Cause (inferred; the witness keeps no Win32 code): on Windows the reason comes only from
+  `_windows_entry()` (`bp-disk-observer.py:135`), when `FindFirstFileW` on `<dir>\<name>` fails with
+  an error other than 2 or 3 (`:274` rewraps an `OSError`; `:289` is the POSIX branch).
+  `directory-identity` is `direct()`, whose `_listed()` looks the directory up component by
+  component from the volume root; each lookup opens the parent of the component it names, which the
+  same call lstat'ed just before, so only a directory that holds a subdirectory is opened. Opening a
+  directory whose deletion is pending fails with `STATUS_DELETE_PENDING`, which Win32 reports as
+  `ERROR_ACCESS_DENIED` (5), the denial the note at `:85` describes; once the removal completes the
+  lookup gives 3, which the walk treats as absence. In this tree the only removed directories that
+  hold a subdirectory are the case process's session tempdir and the `gptr` in it
+  (`tmp/Rtmp*/gptr/childenv`, `child_env()`'s empty startup files), which R deletes when that
+  process exits after phase complete. The witness fits: the loop's final snapshots that still hold
+  that tempdir show 15 directories, 421 to 434 entries and depth 4, so every directory had been
+  entered and the walk was in its last stretch, under `tmp`, which sorts last; and bytes 17724
+  charge every file but `result.rds` (such snapshots charge 17,712 to 17,725 bytes without it and
+  17,904 to 17,918 with it), so the root listing preceded the case's last write and its exit fell
+  inside this 16 ms snapshot. The writer's mailbox (`cache/R/gptr/procs/<marker>.stdin`, the depth-5
+  directory of the last good snapshot) was already gone (max_depth 4) and holds no subdirectory, so
+  its chunk and ack deletes and renames cannot raise this reason. `observer-directory-unreadable` is
+  the same removal met by `names()`' `scandir()` of the directory itself after its identity check
+  (denied while pending, absent after).
+- Fix (tests only): `bp_observe()` adds `observer-parent-enumeration-unavailable` and
+  `observer-directory-unreadable` to the reasons it retries every 100 ms until 1 s has passed since
+  the first failure (CI-70); a fresh snapshot after the removal no longer lists the directory. A
+  real denial outlasts the 1 s and stays one fatal sampling error with the last condition, as does
+  every other reason. The observer, its 1 s, entry, depth and byte limits, the RSS caps and the 30 s
+  and 45/60 s deadlines are unchanged. An observer-side check (a lookup denied under an exactly
+  delete-pending parent counted as absent) was rejected: that parent is still listed, so the walk's
+  next step raises `observer-metadata-invalid` or `-entry-disappearance-uncertain`, which R retries
+  anyway. In the same 1,200 iterations one `observer-metadata-invalid` and six snapshot deadlines
+  cleared at their first retry.
+- Red: `^proc-backpressure-sampling$` FAIL 13 PASS 556 with the old helper (the unit test's
+  transient set gains the two reasons; each fails its five checks, and the run of every transient in
+  a row fails three). Green: PASS 569;
+  `^(proc-backpressure-sampling|bp-declared-observer|bp-disk-observer)$` PASS 696 SKIP 6;
+  `^(proc-|bp-)` PASS 2482 SKIP 17; `dev/ci/test-optional-integrations.R` PASS 3823. Lint clean.
+- Reviews: none recorded.
+- Deviations: none. Open: hosted Windows has not run the fix, and the reason occurred once in 1,200
+  iterations, so one green run proves little. The Win32 code and the removed directory are inferred;
+  a real Windows control (a directory held delete-pending, like CI-73's file) would observe code 5
+  but is not added. The census's observer construction error is not examined here.
+
+## Task CI-79 - The Windows writer-runtime cases give a lazy writer cold start the duplex budget (2026-10-21, #63)
+- Windows-check `windows-latest (release, shard 1/4)` on 176a3a2 (PR #61, run 39580403671, job
+  119156456410) failed native-09 "Windows reactor shutdown settles an idle production writer": a
+  `gptr_error_timeout` at stage delivery with accepted_bytes 0. The lazily started writer was alive
+  and ready 1.93 s after the write was queued (PowerShell's protected CreateDirectory took 0.64 to
+  1.81 s), leaving under 0.07 s of the 2 s window for the first ACK; the file's other cases started
+  in 0.62 to 0.81 s. Same class: bc13aba binary (job 116726253175, 1.93 s, which led to 35536d4),
+  fa64ef2 shutdown (windows-by-file job 118304278433, 1.41 s), c5a2b8e shutdown and orphan (job
+  116082432978, 2.09 and 1.97 s, at stage startup). In R CMD check, this class is 3 of 202 native-09
+  runs since 2026-10-14 (c5a2b8e, bc13aba and 176a3a2); fa64ef2 was a windows-by-file run outside
+  that count.
+- Cause (the limit, not the code): IC-60's no-progress window opens when the write is queued, before
+  the lazy `proc_writer_start()`, and only an ACK moves it ("Windows writer startup progress cannot
+  extend the stdin deadline" pins this), so each case's 2 s covered writer cold start (Rscript actor
+  and PowerShell ACL verifier) plus the first ACK. Hosted cold starts: 437 witnesses, p50 0.65 s,
+  p99 1.97 s, max 5.24 s; readiness to first ACK: 166 base-only controls, p50 0.05 s, max 0.57 s.
+- Fix (tests only, D-246): `rw_child_case()` sets `gptr.stdin_timeout = 20`, the duplex budget
+  (2654a21), and the binary-only 2 s writer admission (35536d4) goes. Product code, IC-60 and the
+  60 s default are unchanged; the no-reader timeout cases and the base-only controls keep 2 s.
+- Red: a scratch replay of the largest cold start plus the largest readiness-to-ACK (write queued at
+  0, ready at 5.24 s, ACK drained at 5.81 s) through the real `reactor_drain_child()`, with each
+  case's budget read from `rw_child_case()`: FAIL 6 (`gptr_error_timeout`) on the old helper. Green:
+  the replay PASS 12; `^(proc-writer-runtime|proc-windows-backpressure|proc-backpressure.*)$` PASS
+  1357 SKIP 8 (the real cases skip off Windows). Lint clean. The replay is not committed: it only
+  restates the budget.
+- Deviations: D-246. Open: not yet run on hosted Windows. PR #61's writer adds a silent read retry,
+  so a retrying writer would leave the same witness; the 0.07 s margin explains 176a3a2, and bc13aba
+  and fa64ef2 failed without the retry. fa64ef2 had no ACK 0.59 s after readiness, past the
+  controls' 0.57 s, so a host stall also occurs and 5.81 s (two maxima from different samples) is
+  not a bound. Still at risk: the no-reader timeout cases (native-04, native-09) need readiness
+  within 2 s (none failed at stage startup since 2654a21, in about 300 runs), and the acl case's
+  PowerShell readback has 5 s (a 3.20 s PowerShell start and a 5.00 s ACL step were witnessed in a
+  duplex case at 3a8315f).
+
+## Task CI-80 - The many-hunks diff bound counts CPU time, not wall time (2026-10-21, #63)
+- The CI-79 job (176a3a2, PR #61, run 39580403671, job 119156456410) also failed "many hunks render
+  in linear time" (`test-tool-diff.R:182`): 11.4 s >= 5. It is the only failure in 205 hosted
+  Windows runs since 2026-10-14 (none in 624 Ubuntu, 100 Ubuntu serial and 101 macOS runs). Hosted
+  Windows otherwise took 1.27 to 1.86 s (11 windows-by-file runs, a fresh R per file); in the failed
+  run the file's other 5 s bounds passed seconds later, the job's step times were normal, and the
+  rerun (job 119173100470) passed.
+- Cause: a runner stall caught by an absolute wall-clock bound. `diff_lines()` is linear (1.97 to
+  2.14 times the time and 2.00 times the allocated bytes per doubling, 25k to 400k lines locally),
+  single-threaded and without children; in-suite and fresh-session times match (0.63 and 0.66 s).
+- Fix (tests only): the bound stays at 5 s but counts the call's CPU time (`user.self + sys.self`),
+  which a stalled runner does not add and superlinear work does; the failure message also names the
+  elapsed time. An allocation-ratio bound was rejected: Rprofmem misses superlinear work without
+  large allocations (a stack pop that scans the whole match vector took 3.25 times as long per
+  doubling at the same 2.00 byte ratio). D-246 records the change from the plan's wall-clock bound.
+- Red: a scratch check mocks a 6 s `Sys.sleep()` (stall) or a 6 s busy loop (slow code) into
+  `diff_ops()`; with the wall-clock bound the stall fails ("Expected elapsed time (CPU 0.83 s) <
+  5"). Green: the stall passes, the busy loop fails ("Expected CPU time (elapsed 6.67 s) < 5"), and
+  the unmocked block passes; `^tool-diff$` PASS 570. Lint clean.
+- Deviations: D-246 (second rule). Open: on Windows a hypervisor pause may still be charged to the
+  process as CPU time; the file's other 5 s wall bounds (`:83`, `:260`, `:268`) had no failures.
+
+## Task CI-81 - Only the re-send to the silent server gets a short first-byte timeout (2026-10-21, #64)
+- PR #61 run 39605697535 (job 119241185802, R 4.2.3, oldrel-4 shard 1/4) failed "a failed re-send
+  closes the retry before on_fail; cancelling from retry_end stops it" (`test-http-retry.R:759`):
+  the exhausted path expected `gptr_error_overloaded` and got `gptr_error_timeout_first_byte`. No
+  earlier failure of this test is in the saved Windows census logs (968 jobs to 2026-10-21T10:20Z).
+- Cause: every path ran with `first_byte_timeout = 1`, which only the first_byte path needs (its
+  re-send goes to a server that never answers). The reactor takes a transfer's timeouts once
+  (`R/http-reactor.R:818`), so the first attempt's 503 from the mock also had to start within 1 s;
+  on a loaded runner it did not, and a first-byte timeout is not retried, so the path failed early.
+- Fix (tests only): exhausted and start use the default first-byte timeout; the first_byte path
+  keeps a short one at 3 s, enough for a slow 503 and still short for the silent re-send. The mock
+  server already skips on CRAN.
+- Red: a scratch copy whose mock sends every reply's head after 1.2 s; the old block fails 14
+  expectations (exhausted and start end as `timeout_first_byte`). Green: the same copy passes all;
+  `^http-retry$` PASS 337. Lint clean.
+- Deviations: none (tests only; no product bound changed).
+
+## Task CI-82 - Deparsed user and model code passes `backtick`, so a call chain cannot recurse (2026-10-21, #66)
+- Windows-check on main `412cf2c` (run 39605492452 attempt 1, job 119240498955, oldrel-4 shard 3/4,
+  R 4.2.3) aborted R with "evaluation nested too deeply" and then an `Rcpp::exception` from
+  `sys.nframe()`: 1 abort in 499 hosted Windows runs. The log names no test; a local profile of
+  shard 3 places its only recursion that deep in `test-env-history.R:184-194`, which logs a
+  3,000-head chain `f(1)(1)...(1)` through `user_log_callback()`, whose `user_log_line()` called
+  `deparse(expr, width.cutoff = 500L, nlines = 120L)` with `backtick` defaulted.
+- Cause: base `deparse()`'s default `backtick = mode(expr) %in% c("call", "expression", "(",
+  "function")` calls `mode()`, which for a call returns `switch(deparse(x[[1L]])[1L], ...)`, so
+  `deparse()`, `%in%` and `mode()` recurse once per head (an estimated 2,900 R frames there; R 4.2.3
+  and 4.6.1 define both alike). On an 8 MB C stack this ends at the C stack check; on Windows' 64 MB
+  Rterm stack at `options(expressions)`, which `user_log_text()` catches. When the later package's
+  Windows `WM_TIMER` handler (armed once later, httpuv or chromote has run) fires at that depth, its
+  `at_top_level()` evaluates `sys.nframe()` through `R_tryEval()`, which fails, and `Rcpp::stop()`
+  escapes `DispatchMessage()`, so `std::terminate()` aborts R (from the job log and later's source).
+  A user's Windows session with later loaded can abort the same way.
+- Fix: `deparse_code()` (`R/utils-text.R`) calls `deparse()` with `backtick = is.call(expr) ||
+  is.expression(expr) || is.function(expr)`, the value the default computes, so the text is the same
+  and `mode()` is never called. Every `deparse()` of language gptr did not build goes through it (15
+  sites): `user_log_line()`, `eval_call_text()`, `eval_format_calls()`, `risk_code_text()`,
+  `risk_scan()`'s labels, `dot_labels()`, `ident_label()`, `gptr_describe()`'s function, default,
+  formula and model-formula text, `ns_formals_text()`, `ns_collect_input()`, `home_label()` and the
+  sidecar's call identity in `doc_sidecar_data()`. Left as they are: `artifact-app.R` (a name that
+  already passes `backtick = TRUE`, and data names as strings) and `proc-spawn.R` (gptr's own
+  functions). `user_log_text()`'s note drops long call chains: 20,000 heads now deparse in 0.16 s
+  on an 8 MB stack.
+- Tests: under `options(expressions = 1000)`, a 500-head chain is deparsed at each site family, one
+  new test each in eval-core, perm-classify (`risk_code_text()`), gptr-capture, env-describe,
+  tool-namespace and session-live; the env-history test now expects the cut 3,000-head text, not the
+  "cannot be deparsed" note. The default reaches that limit at 197 heads (about 5 evaluation levels
+  per head). `risk_scan()`'s labels and the sidecar's call identity rest on the rule and the
+  identity check instead: without the JIT, `risk_scan()`'s own walk nests about as deep per head as
+  the default (4 against 5 evaluation levels), and the sidecar's 64-level bound keeps it far below
+  any limit.
+- Identity: old and new outputs are `identical()` on an 81-item corpus (non-syntactic names,
+  operators, `%op%`, formulas, `\(x)`, closures, builtins, specials, symbols, expressions, the empty
+  symbol, atomic values) under each argument set the sites pass: 651 `deparse()` comparisons and 816
+  site outputs, including 11 errors the old code raised on odd inputs.
+- Red: the new tests on main `7cfd543`: FAIL 7 PASS 2261 (six "evaluation nested too deeply"
+  errors; the env-history log holds the note). Green: the same files PASS 2271;
+  `^(env-history|eval-|perm-|risk|gptr-capture|doc-|console-render)` PASS 4901 SKIP 2;
+  `^(env-describe|tool-namespace|session-live|session-object|gptr-gateway|agent-run|env-snapshot|`
+  `prompt-compact|s1-route|arch-layers|lint-rules)$` PASS 3059. Lint clean.
+- Deviations: none (output unchanged). Open: hosted Windows has not run the fix. Other R recursion
+  that reaches `options(expressions)` on Windows with later loaded, such as `risk_scan()`'s walk on
+  deeply nested code (caught by `risk_classify_r()`), still meets later's timer handler. Past about
+  60,000 heads on an 8 MB stack (about 8 times that on Windows' 64 MB), `deparse_code()` overflows
+  R's unchecked C deparser instead of failing catchably in `mode()`; `user_log` caps chains at 5,000
+  heads, and `gptr_risk()` already overflows on such code on main.
+
+## Task CI-83 - The observer retry test's mixed sequence stays inside the retry deadline (2026-10-21, #65)
+- main 7cfd543 (PR #61 merged) failed macos-latest (release) in run 39617294607:
+  "backpressure observation retries fixed transient observer reasons for one deadline"
+  (`test-proc-backpressure-sampling.R:686-688`) ended its eighth transient as the error, with 8
+  calls and 7 retries instead of 9 and 8.
+- Cause: CI-78 added two reasons to the "repeated transients in any order" case, so it chained 8
+  failures. `bp_observe()` sleeps 0.1 s per retry and stops retrying 1 s after the first failure;
+  eight in a row need at least 0.7 s of sleep plus each call's time, and a slow runner crossed 1 s.
+  The code is right; the test needed the margin.
+- Fix (tests only): the mixed sequence uses four reasons in a new order (8, 1, 7, 2); each of the
+  eight reasons is still retried and checked on its own above it. No bound changes.
+- Red: a scratch copy whose fake observer takes 50 ms per call; the old block fails 3 expectations
+  exactly as on macOS, the new one none. Green: `^proc-backpressure-sampling$` PASS 569. Lint clean.
+- Deviations: none.
+
+## Task CI-84 - Reactor tasks end with their worker or codex exec, not at their next poll (2026-10-21, #67)
+- PR #64 run 39617443293 (attempt 1, job 119282269044, oldrel-4, R 4.2.3, two parallel test
+  processes) failed 10 of 18 blocks of `test-compaction-wait.R` with `cp_wait_clock()`:
+  `!length(ls(r$tasks)) is not TRUE` (`:42`, every block starts on an idle reactor). Main 7cfd543
+  passed oldrel-4 (run 39617294607); no other of the 33 failed R-CMD-check jobs since 2026-10-19 has
+  it.
+- Leaker: `test-cli-codex.R` "a fake CLI joins two inline agents and two workers on one reactor
+  (INFRA-16)", the file's last test that pumps the reactor (the log's last lines before the failures
+  are from cli-codex and cli-claude). It left one worker's abort guard (`worker_spawn()`) and
+  nothing else: no transfer, watcher, run or timer. Nothing in compaction-wait pumps before that
+  check, so every block failed. The guard polled every 0.1 s and ended only at its first poll after
+  the exit; the proxy request's generator polls every 0.05 s, so the run settles and the team's pump
+  returns a few ms after the exit is handled. Whether the guard polled in between depends on how
+  long that handling takes: here `kill_all()` of an exited child walks 1259 processes in 33 to 63 ms
+  per child.
+- Evidence: per-test snapshots of the 38 earlier files in one session, and three concurrent copies
+  of the cli and compaction files under 20 busy loops, ended every file idle. INFRA-16 alone left a
+  task in 0 of 6 runs; with an exited child's `kill_all()` returning at once, as on a small runner,
+  and the task calls traced, 2 of 6 left the second worker's guard (`t22`, `t86`); fixed, 0 of 5.
+- The codex relay task (`pcli_codex_relay()`) ended the same way, at its first 0.02 s poll after the
+  turn; INFRA-16 leaves it, one task and nothing else, if its codex agent settles last. The log
+  cannot tell the two apart.
+- Fix: `worker_cleanup()`, which both ends (`worker_on_exit()`, `worker_kill()`) call, cancels the
+  guard first; the guard no longer checks `st$exited`. `pcli_codex_end()`, every end of a codex
+  exec, cancels the relay and removes its mailbox before the terminal event; the relay no longer
+  checks `s$done` (a finished turn is never current). `cp_wait_clock()` names each task an earlier
+  test left by the start of its body instead of the bare `stopifnot()`.
+- Red: the new "a worker's exit ends its abort guard before the guard polls again" (a mocked
+  `proc_rscript()` starts a 0 s Rscript; the guard's registration is read as the exit is handled)
+  failed 3 of 3 and left `t2`; "the relay mailbox is answered in order" now checks the mailbox and
+  task are gone as `turn.completed` returns, and failed both and left `t2`. Each run before
+  `test-compaction-wait.R` in one process failed 10 of 18 blocks, now naming the task: "an earlier
+  test left reactor tasks:" `{ if (isTRUE(st$exited)) return(FALSE) ...` and
+  `{ if (s$done || !pcli_turn_current(s)) ...`. Green: both pass, and 0 of 18.
+  `^(cli-|subagent-|compaction-|auth-|console-setup$|provider-registry$|arch)` PASS 5094 SKIP 4;
+  `^(agent-|reactor|http-|proc-|team|tool-)` PASS 6158 SKIP 13; the whole suite with two parallel
+  workers (`TESTTHAT_PARALLEL=true`) PASS 35153 SKIP 64. Lint clean.
+- Deviations: none (no contract or user-visible change). Open: a codex exec P05 lets go of without
+  its normaliser (`stream_abort()`, `stream_detach()`) still ends its relay at the next poll.
+
+## Task CI-85 - The idle Windows writer cases give a retirement and cold start the duplex budget (2026-10-21, #68)
+- Windows-check run 39617294666 on `7cfd543` failed `windows-latest (oldrel-4, shard 1/4)` in
+  attempts 2 and 4 (1, 3 and 5 passed): native-08 "idle Windows writer retirement preserves target
+  stdin and later FIFO EOF" (job 119296531347, `test-proc-writer-retirement.R:501-525`) and
+  native-06 "two acknowledged idle Windows writers do not starve a third reading target" (job
+  119328715831, `test-proc-writer-idle-slots.R:114-116`). Each third write ended in
+  `gptr_error_timeout` (2 s) after 2.50 and 2.58 s, with accepted_bytes 0 and the third writer
+  alive (step, status and cause NULL): native-06 at stage startup, its writer started 1.08 to
+  1.66 s after the write was queued (the retirement plus start preparation); native-08 at stage
+  delivery, its writer ready 1.00 s after its start. These are the only failures among 74
+  complete hosted witnesses of the two cases since 2026-10-12; the 72 delivered third writes took
+  0.65 to 1.28 s (median 0.89 s).
+- Cause (the limit, not the code): with two idle writers at the cap, `proc_writer_start()` first
+  retires one (`proc_writer_stop()`, `kill_all()` with taskkill) and then cold-starts the third
+  writer, and IC-60's window opened when the write was queued (CI-79). So 2 s covered the
+  retirement and start preparation (1.08 to 1.66 s in native-06), a cold start (p99 1.97 s, max
+  5.24 s) and the first ACK. native-06's writer never became ready, so CI-75's read retry (PR #61)
+  cannot be involved there; native-08's witness cannot exclude it (a retried read keeps the writer
+  alive with no step or status), though its timeline fits the budget alone. Both failures came
+  from the 28 native-real jobs carrying #61's code (none in the 209 before).
+- A side-by-side hosted loop settles that: run 39643195277 (never-merged branch
+  `claude/writer-loop`, 8 jobs, R 4.6.1 and R 4.2.3) ran both cases 40 times per job with main's
+  writer (carrying #61) and with the writer of `412cf2c` (before #61) on the same runners. main's
+  writer failed 0 of 320 case runs, the older writer 1 (an `idle-restart` restart write,
+  `gptr_error_timeout`, R 4.2.3), and the third writes took the same time (median about 1.0 s, max
+  1.47 s against 1.59 s). So #61 does not raise the rate; the census split reflects one slow run.
+- Fix (tests only; D-246 amended to one rule): `idle_child_case()` and `idle_restart_child_case()`
+  set `gptr.stdin_timeout = 20`, the duplex budget, and `warm_idle_child_case()` (native-05) sets
+  it for its third write, whose title becomes "... a third write" (also in
+  `dev/ci/optional-integrations.R` and its test). native-08 drops `expect_lte(third_elapsed, 2)`
+  and `all(again_elapsed <= 2)`, since a later write retires and cold-starts too, and keeps
+  `expect_length(again_elapsed, 2L)`. Product code, IC-60 and the 60 s default are unchanged.
+  Starvation, the property under test, still fails: a write that never gets a writer times out at
+  20 s, inside the 30 s case deadline.
+- Red: a scratch replay through the real `reactor_drain_child()` (write queued at 0, writer started
+  at 1.08 s, ready at 2.08 s, ACK at 2.14 s), with each case's third-write budget read from
+  its last `gptr.stdin_timeout` setting: FAIL 3 (`gptr_error_timeout` for native-05, -06 and -08 at
+  2 s). Green: the replay PASS 6, and a write that gets no writer slot is pending at 19.99 s and
+  times out at 20 s (PASS 4); `^proc-writer-` PASS 930 SKIP 11 and `^proc-windows-backpressure$`
+  PASS 234 (the real cases skip off Windows); `dev/ci/test-optional-integrations.R` PASS 3823
+  (FAIL 1 on the renamed title before its registry entries changed). Lint clean. The replay is not
+  committed: it only restates the budget.
+- Deviations: D-246. Open: not yet run on hosted Windows; native-05 has not failed and changes only
+  to keep one rule; if native-08 recurs at stage delivery, suspect CI-75's read retry first.
+
+## Task CI-86 - Linux CI installs its system libraries without pak's Chromium PPA (2026-10-21, #69)
+- Since about 14:30Z on 2026-10-21 Ubuntu jobs failed in `setup-r-dependencies`: pak maps chromote's
+  and gptr's own SystemRequirements (a Chrome-family browser) to `chromium`, so it runs
+  `add-apt-repository -y ppa:xtradeb/apps` and `apt-get install chromium`, and
+  ppa.launchpadcontent.net answered 503 ("E: Failed to fetch .../chromium_155.0.8059.79-...deb 503
+  Service Unavailable", then "System command 'sudo' failed"). Run 39617294607 (main) lost 4 Linux
+  jobs this way, run 39638712528 (PR #67) 6; the rest passed only while the PPA answered. pkgdown
+  (run 39617294897) and the dispatch workflows add the same PPA.
+- Fix: `.github/actions/system-libraries` holds Plan-gates' apt list and dpkg verification. Every
+  Linux job that installs R dependencies, except rhub.yaml's, runs it before `setup-r-dependencies`,
+  which gets `PKG_SYSREQS: 'false'`: R-CMD-check (Ubuntu rows, no-suggests, c-locale, cran-mode,
+  copy-safety, connections, bench), Plan-gates, pkgdown, Optional-integrations, rscript-native,
+  callr-native-environment, windows-by-file's optional Linux row and Exact-tarball's producer,
+  Ubuntu check rows and dependency-profiles (from the controller checkout, sparse in the first two,
+  since the nominated source may predate the action). On macOS and Windows rows the action is
+  skipped and `PKG_SYSREQS` is inert (pak's sysreqs support Linux only); job names are unchanged;
+  jobs with smaller profiles (no-suggests, pkgdown) now install the whole list. chromote searches
+  `google-chrome` first, which the ubuntu-latest image provides, so CHROMOTE_CHROME stays unset.
+- Coverage: every pak install list in the failing runs and the latest Linux runs of the dispatch
+  workflows is in the list except `chromium` and `libfreetype6-dev` (transitional to the listed
+  `libfreetype-dev`); devtools jobs also asked for `git` (preinstalled) and `libx11-dev` (installed
+  with `libmagick++-dev`, Plan-gates run 39371724850).
+- Checks: every workflow and action parses with `yaml::read_yaml`; `^zzz$` PASS 145;
+  `dev/ci/test-optional-dependencies.py` OK; the action's script passes `bash -n`.
+- Deviations: none. Open: not yet run on hosted runners; a new dependency's library must be added to
+  the list (Plan-gates' `pak::sysreqs_check_installed()` reports it for its profile); rhub.yaml
+  (r-hub/actions/setup-deps in its Ubuntu containers and on the `linux` VM platform) still adds
+  ppa:xtradeb/apps, as in run 39566663196, and the action (sudo, noble package names) cannot run in
+  r-hub's root containers; the source_sha nominated to Plan-gates, Optional-integrations,
+  rscript-native, callr-native-environment and windows-by-file (optional) must contain
+  `.github/actions/system-libraries` (this commit or later), as Optional-integrations and
+  windows-by-file already need for `optional-dependencies`; Exact-tarball takes the action from its
+  controller checkout.
+
+## Task CI-87 - The codex turn test keeps its fake keys out of the process vault (2026-10-21, #71)
+- `dev/ci/isolated-check.R test '^(cli-codex|perm-classify)$'` failed "secret rules come from P03's
+  secret_scan()" (`test-perm-classify.R:723`): `gptr_risk("k = Sys.getenv('OPENAI_API_KEY')")`
+  had `secret_guard` TRUE. Each file alone passed.
+- Cause (the test, not the code): "a codex turn: exact argv, ..." (`test-cli-codex.R:942`) sets fake
+  `OPENAI_API_KEY` and `CODEX_API_KEY` with `withr::local_envvar()` and runs `peter()`.
+  `session_new()` registers secret-looking environment variables (`secret_discover_env()`,
+  `R/session-object.R:94`, as contract 04's `session_new` row requires), and the vault belongs to
+  the process, so both names stayed registered after the variables were restored, and the
+  classifier read `OPENAI_API_KEY` as a registered (guarded) secret. A testthat state inspector over
+  `secrets_state()$reg` showed this block, and no other, adding the two names. The codex CLI is the
+  fake one, so an installed Codex CLI plays no part. The whole suite hid the leak: files between the
+  two (console-render, mcp-client, ...) reset the vault with `local_vault()`. CRAN skips the block.
+- Fix (tests only): the block calls `local_vault()`, and a new block after it checks that neither
+  fake key is registered. Ambient discovery at session start is unchanged.
+- Red: `^cli-codex$` FAIL 1 PASS 511 (the new check); `^(cli-codex|perm-classify)$` FAIL 2 PASS
+  1400. Green: `^cli-codex$` PASS 512; `^(cli-codex|perm-classify)$` PASS 1402;
+  `^(cli-|perm-|auth-)` PASS 3856 SKIP 3. Lint clean.
+- Deviations: none. Open: the file's later `peter()` blocks still register any secret-looking
+  variable of the host that setup.R does not blank (here Claude Code's
+  `CLAUDE_CODE_MESSAGING_TOKEN`, first at `:988`) and leave it in the vault.
+
+## FIX-13 - One honest size for every object (2026-10-21, #73)
+- The maintainer's rule: an object the agent creates is the console's, at the same size, and gptr's
+  size reports are honest for every kind of object. The fidelity harness (37 cases, each built at
+  the console and through `peter()`; truth `lobstr::obj_size()` and the bytes not shared with
+  namespaces) found the objects identical but 134 dishonest size rows on main (ggplot2 4.0.3, S7
+  0.2.2, R 4.6.1): no size for S7 plots, functions, environments and compact sequences (D-189);
+  `object.size()` in lists of plots (seven themed plots 111 MB against 9 MB: undo skipped, overwrite
+  level 3), values and dot facts; checkpoint images sized leaf by leaf (a themed plot's image 15.8
+  MB against 840 B; pinfsc50's `@fix` edit 8.7 MB against 1.3 MB); shared elements counted per path;
+  a formula's environment uncounted; R6 objects and environments "copied" by a `duplicate()` that
+  returned them; a changed `1:1e6` called a sequence. The branch's first fix (S7 leaves through
+  D-189's rule, unknown sizes copied at 0 bytes) left lists overstated and copied every plot
+  unbounded.
+- Fix: D-247 (amended): `env_snap_size()` in `utils-size.R` counts each part once by address and
+  each string once by content, leaves out code, top-level environments, the home and running frames,
+  walks an S7 class copy once per class, samples lists and environments of more than 64 items past
+  10,000 parts, and with `shared` sizes a checkpoint image against the current value; every size
+  surface calls it (`env_snap_rows()`, `dsc_leaf_core()` and the describe headers,
+  `risk_binding_leaf()`, `value_facts()`, `dot_facts()`, `tool_result_message()`,
+  `subagent_fanout_spec()`, `artifact_data_facts()`, `ckpt_unshared_bytes()`), and
+  `describe_binding()` describes with its home on the call stack. The value policy copies below
+  `gptr.value_copy_max`, now 2 MiB, when `object.size()` is below `gptr.values_max_bytes` and keeps
+  a copy that is a new object under the limit. Snapshot sizes are reused only while the fingerprint
+  holds too. Review fixes: an environment takes the 100-level cap (a chain of 700 overflowed the
+  node stack, so the snapshot failed: no `<workspace>` block, no checkpoint of the turn, "describe
+  failed"); a vector counts its stored length through `object.size()` (`length()` dispatched:
+  survival's `Surv` counted half, `bit::bit(1e8)` 381 MB for 12.5 MB); a closure's srcref is code
+  (each of a sourced 748-line file's 53 functions was 589 KB); the describe header drops "(compact
+  sequence)", whose check serialized a sequence-like vector a second time; `held_mb` and `disk_mb`
+  count 2^20 bytes; a dead `home = NULL` and a redundant guard go. Deleted: D-189's NA rule and
+  median rank, `ckpt_addr_collect()` and `ckpt_unshared_walk()`, the old three-element
+  `env_compact_seq()`, the "(sequence)" shape and the describe headers' NA branches; the first fix's
+  NA-means-copy rule and long-sequence exception are not kept.
+- Red: on main (ba77f68) the new and changed expectations fail: FAIL 60 in 28 tests (env-snapshot
+  11, env-describe 8, ckpt-objects 2, session-object 2; arch-layers, copy-eval, gptr-capture,
+  perm-classify and utils-options 1 each); on the size commit the 2 MiB default's check fails
+  (`^(session-object|utils-options)$` FAIL 1). Review fixes, each before its commit: env-snapshot
+  ERROR (node stack overflow) and FAIL 1 (a classed vector 232 B against 800,224 B), srcref FAIL 3
+  (env-snapshot 2, env-describe 1), env-describe FAIL 1 (the header), ckpt-rewind FAIL 1 (`held_mb`
+  1.049 against 1).
+- Green:
+  `^(env-snapshot|env-describe|ckpt-objects|perm-classify|gptr-capture|session-object|arch-layers|
+  utils-options|copy-eval|copy-tools|tool-namespace|console-commands|s1-route|lint-rules|prompt-text|
+  artifact-app)$` PASS 3954, SKIP 0 (the ggplot2 guard ran), WARN 0. The whole suite (NOT_CRAN)
+  failed once in subagent-team, whose value held by name (1.6 MB) is copied at 2 MiB; it now returns
+  2.4 MB, and the suite passes: PASS 35225, SKIP 64 (Windows, live and Python-runtime blocks),
+  WARN 0. Lint clean; `devtools::document()` leaves no diff; the plan checks pass. After the review
+  fixes: `^(env-|ckpt|session|gptr-capture|perm-classify|
+  copy-|arch|zzz|utils-options|subagent-team|listing-print)` PASS 4644, SKIP 1 (the C-locale display
+  witness), WARN 0; the six changed files lint clean; `devtools::document()` leaves no diff.
+- Harness (the review-fixed build at the 2 MiB default; the harness now judges the value mode at the
+  build's `gptr.value_copy_max`, not a fixed 1 MiB, which had flagged `df_big` and the data frame of
+  plots): defect rows 134 on main, 15 with this rule (5 lobstr's ALTREP-wrapper undercount, 3
+  srcref, 5 "serializes differently", now also `df_big` and the data frame of plots, whose copies
+  write out a compact `id` column, and 2 environments held by name); the two themed plots just over
+  1 MiB are copied (922 and 914 KB held) and survive the edit; against the build before the review
+  fixes only `closure_factory` (784 to 782 KB) and `r6` (785 to 782 KB) changed, by their functions'
+  srcrefs. Every surface shows one number per case; the judges' stress objects (sizes and images
+  unchanged by the review fixes) within 0.6x to 1.2x of `lobstr::obj_size()` in at most 0.3 s
+  (checkpoint forms 0.6 s). Copy safety: 64 tracemem/address probes (list, nested, attribute, S4
+  slot, data frame column, environment, closure environment, character elements, lists past the
+  budget walked and unwalked, the checkpoint form, plot data and labels, a list of 200 plots) match
+  a run without sizing, rerun on the final `utils-size.R`. A 1,000-node environment chain in the
+  workspace keeps the `<workspace>` block and the turn's checkpoint (1/1 objects).
+- Reviews: three designs (minimal, sharing, purpose) judged twice; the minimal walk won, with the
+  judges' grafts: strings once by content, the `object.size()` bound before a copy, no extrapolation
+  from a first item that reaches a shared frame (now: the first, the last and the budget-spending
+  item are not samples), 56 bytes a binding.
+- Decisions: `gptr.value_copy_max` 2 MiB; `dot_facts()$bytes`, `value_ref$bytes` and the fan-out
+  facts' bytes kept and sized by this rule; `describe_binding()`'s home on the call stack, the
+  dropped "(sequence)" shape, the sampling budget and environment sizes that stay until the shape
+  changes accepted; after review, the describe header's "(compact sequence)" dropped too and
+  `held_mb` counted in 2^20 bytes.
+- Deviations: D-247 (amended). Open: `fingerprint_sample()`'s `as_utf8()` makes the next in-place
+  edit of a list with a character element copy after a snapshot (a main defect; fixed on its own
+  branch). Found in review, main defects for their own branches: `/exit` sends `session_shutdown`,
+  which releases the returned console session's undo images (`gptr_rewind()` then restores no
+  object); `gptr_source()` rebuilds an object that captures a call with the document's srcref, as
+  `source(keep.source = TRUE)` does; `gptr_export()` refuses a console transcript, whose later turns
+  continue `s_<id> |> peter()`.
+
+## FIX-14 - fingerprint() leaves a list's elements editable in place (2026-10-21, #72)
+- Red: FAIL 2 in `^utils-hash$` (PASS 55): after `fingerprint()` of a list with a character
+  element, the next in-place edit copied the character and the numeric element (a new CRAN-run
+  `obj_address()` test, and a new tracemem row tracing a 40 MB numeric element). Installed builds:
+  main FAIL 1 with NOT_CRAN unset, FAIL 2 with it set. `env_snapshot()` fingerprints every binding.
+- Cause: `fingerprint_sample()`, called inside `fingerprint()`'s element loop, called `as_utf8()`.
+  Its replacement calls (`Encoding(y) = ...`, `x[mark] = y`) run R's `INCLNK_stack_commit()`, which
+  also links the loop variable's binding cell on the byte-code stack; the inline call's return
+  restores `R_BCProtCommitted` (`restore_bcEval_globals()`, in the R 4.4.3, 4.5.0, 4.6.1 and trunk
+  sources), so that link is never dropped, `R_CleanupEnvir()` stops at the cell when
+  `fingerprint()` returns, and its argument promise keeps the list referenced. Byte-compiled code
+  only: an installed package, or a JIT-compiled `as_utf8()` from its second call. A pure-R
+  reproduction needs a compiled `for` loop in the function that holds the object and a replacement
+  call in a callee (a `while` loop does not leak).
+- Fix: `fingerprint_sample()` pastes the sampled values without `as_utf8()`; `fingerprint()`'s doc
+  states the rule.
+- Encoding: `cli::hash_sha256()` hashes the bytes as given; `paste()` turns latin1 text into UTF-8
+  in a UTF-8 locale, so there fingerprints are unchanged and a latin1 and a UTF-8 spelling of a
+  text fingerprint alike (new test). In a non-UTF-8 locale `paste()` gives native text
+  (`caf<e9>` under LC_ALL=C), so the two spellings now differ there (the test skips).
+- Green: `^utils-hash$` PASS 57, LC_ALL=C PASS 54 SKIP 1; installed fix FAIL 0 (NOT_CRAN unset and
+  set); `^(utils-hash|env-snapshot|copy-)` PASS 354; `^(arch-layers|lint-rules|utils-encoding)$`
+  PASS 123. Lint clean.
+- Review: the orchestrator read the diff and tests; full suite (NOT_CRAN=true) FAIL 0, WARN 0,
+  SKIP 64, PASS 35170.
+- Deviations: none. Open: any compiled leaf whose `for` loop holds a user object and calls code
+  that makes a replacement call copies the same way (R behaviour, not reported upstream);
+  `d$s[1] = v` copies a data frame column whatever gptr does (`$<-.data.frame`).
+
+## Task CI-88 - The Windows stdin drain reads writer liveness before its acknowledgements (2026-10-21, #75)
+- PR #73 run 39701794227 (job 119572506456, ubuntu-latest release) failed "a cold writer names a
+  failed mailbox validation" (`test-proc-windows-backpressure.R:375`): `accepted_bytes` 0, not
+  65536, while the step (`validate_read`), status 18 and cause matched; the case's witness line
+  reads `"drain_elapsed":0.446,"accepted_bytes":0`. No other run failed it: since the test landed
+  (`3a05693`, 06:16Z) the failed-job logs of the 10 other R-CMD-check and Windows-check runs with
+  failed jobs fail for other causes, and about 280 jobs of the kinds that run it passed.
+- Cause (the product; the drain runs only on Windows): `proc_writer_drain()` read the
+  acknowledgements (`proc_writer_ack()`), then the child's and the writer's liveness, and reported
+  a writer seen exited with what it had read. Status 18 means the writer had published
+  `ack-000000000001-065536`: it reaches `validate_read` for the second chunk only after that. A
+  local probe saw that writer exit 39 to 68 ms (median 56, 30 runs) after its last acknowledgement
+  became visible, so the parent was paused at least that long between `list.files()` and
+  `is_alive()` (a full garbage collection late in the check's testthat process, or a descheduled
+  vCPU) and reported 0 of the 65536 bytes the pipe had taken. Only this test is exposed: its
+  injection refuses `in-000000000002` at the writer's first mailbox check for the second chunk,
+  before the parent publishes it; the siblings fail on that chunk, which the parent publishes only
+  after reading the first acknowledgement. The child-exit branch had the same order: a Windows
+  child that read all of its stdin and exited could be reported as "The child exited before stdin
+  was delivered." when its writer's last acknowledgement landed in that gap.
+- Fix: the drain reads the writer's, then the child's liveness before the acknowledgements, so a
+  writer seen exited has published all of its own, and a child whose exit ended the writer is seen
+  exited too.
+- Test: "a writer exiting right after its acknowledgement keeps the accepted bytes" makes the
+  interleaving certain: the writer acknowledges 0.1 s late, and the parent pauses after its first
+  read of the first chunk until the writer has exited. It uses the blocked child, which echoes
+  nothing (with the echo child a probe hung on macOS once the paused parent stopped reading its
+  output). The validation test and this one share `mailbox_refused`. A first version skipped that
+  read instead; 1 of 200 runs failed when the writer had exited before it, which a real read
+  would have seen. "a writer ended by its child's exit after full delivery is not a failure" pins
+  the order of the two liveness reads: the numeric child reads all four bytes and exits, which ends
+  its writer (status 17, `alive`), while the parent waits in a wrapped `isTRUE()` just before its
+  first liveness read with the chunk pending.
+- Measurements (macOS, 16 cores; the nine step-failure tests, 200 iterations each, one
+  `test_file(desc =)` per test): before, idle 0/1800; 8 busy loops, side by side with the fixed
+  tree, 0/1800; one busy loop per CPU plus two runners 22/1800, all `gptr_error_timeout` (nothing
+  accepted for 2 s; tests up to 165 s against a 1.6 s median), none with the CI signature; the
+  parent stopped by SIGSTOP for 30 or 120 ms at random, 0/40 and 0/100 of the exposed test. The
+  regression on main: 100/100 and 200/200 fail with `accepted_bytes` 0. After: idle 0/1800 and the
+  regression 0/500; 8 busy loops 0/1800 and the regression 0/200. Side by side under one busy loop
+  per CPU (stopped after 41 tests each, load average above 300), both trees failed the same two
+  tests at the same moments with timeouts. The child-exit test fails on main 120/120 (119 with
+  `b$pos` 0; once main read the child's exit and the acknowledgement before any writer liveness
+  read, so it never paused) and with the child's liveness read first 220/220 (4 of 4 bytes
+  accepted; 100 of them under 8 busy loops); both errors are "The owned stdin writer exited before
+  delivery settled.", step `alive`, status 17 (a probe, 10/10 each). After: idle 0/200, 8 busy
+  loops 0/100.
+- Red: `^proc-windows-backpressure$` on main FAIL 3 PASS 251 (`accepted_bytes` 0; the child-exit
+  test's error and `b$pos` 0), with the child's liveness read first FAIL 1 PASS 253. Green: PASS
+  254; `^proc-` PASS 2375 SKIP 11; `^(lint-rules|arch-layers)$` PASS 90. Lint clean.
+- Deviations: none (no bound changed). Open: not yet run on hosted runners; the startup branch
+  still reads `ready` before the writer's liveness, so a writer that exits right after publishing
+  `ready` is reported as a startup failure (no bytes are lost); the cold controls' 2 s stdin bound
+  fails under CPU saturation (above), which hosted runs have not shown.
+
+## Task CI-89 - The six-stream wall nets out each end's garbage collection (2026-10-22, #74)
+- PR #72 run 39706834831 (attempt 1, job 119589000853, ubuntu-latest oldrel-1, R 4.5.3, two test
+  processes) failed INFRA-01 "six streams of 1.00-2.25 s finish within 10% of the slowest"
+  (`test-http-reactor.R:717`): wall 2.684 s against 2.475 s. All six requests came at 0; gptr
+  delivered the short ends 1-2 ms after the mock wrote them and the long ends, written at 2.341,
+  2.375 and 2.383 s, all at 2.775 s (0.434, 0.400 and 0.392 s late).
+- Rate: the 442 failed job logs since 2026-10-12 (first attempts of re-run runs included), out of
+  about 1,650 hosted executions of the test, hold 7 failures of it. Four (114998072098,
+  115386981898, 117897245682, 119065496949) are CI-77's late heads, with every end within 16 ms;
+  114920821918 had heads 1.5 s apart (and a short end 0.281 s late); 118506033270 was a runner
+  pause (the mock 0.54-1.70 s late, two ends 0.464 and 0.888 s); 119589000853 is this one. The
+  per-delta test failed once the same way (macOS 115073223120: one delta 0.406 s late, the rest
+  within 12 ms). So the test process stopping for about 0.4 s fails roughly 3 in 1,650 executions,
+  on Linux 1 in about 1,000.
+- Cause (the measurement): the test's R process stopped; the reactor and the mock did not. The
+  pump polls curl's sockets and wakes at least every 100 ms (`slice_ms`): instrumented locally,
+  over 21,000 wake-ups at load 4-342 slept at most 0.116 s, and 520 runs delivered every end within
+  0.044 s. The mock wrote streams 5 and 6 34 and 42 ms after stream 4, so it ran during the stop,
+  while one pump iteration delivered all three ends: the test process ran nothing for about 0.4 s.
+  A full garbage collection is such a stop. After the 100 test files that sort before http-reactor,
+  run in one process as a worker runs them, the reactor holds nothing, no finalizer is pending, and
+  a full `gc()` takes 0.25-0.26 s here (5.2M cons cells, load 6-17), all of it collection; a hosted
+  vCPU is slower. A full collection forced at 2.3 s with a 1.26 GB heap gives the hosted shape:
+  collections of 0.36-0.43 s, the three long ends 0.21-0.38 s late together, the short ones within
+  6 ms, walls 2.480-2.626 s, FAIL 10 of 10 (load 4-7). Which stop hit the runner is inferred: a
+  collection fits, and a vCPU or scheduler stall fits the same numbers.
+- Fix (tests only): each pump iteration of the test notes the wall clock and R's collection total
+  (`gc.time(TRUE)`; off by default, used nowhere else, and off again when the test ends).
+  `infra01_gc()` gives each end the collection time from the last iteration before the mock wrote
+  it to the first one after gptr delivered it, and `infra01_six()` nets that out of that end only,
+  as it nets the mock's lateness: a collection outside an end's window cannot have delayed it. The
+  2.475 s bound and the latency check are unchanged; the message prints each end's netted time.
+- Red: the measurement test's new cases (the long ends 0.4 s late are on time when R collected for
+  0.4 s around their delivery and late when it collected only as the short ends came; a collection
+  before an end's write counts nothing for it) FAIL 1 on main (`infra01_six()` takes no `gc`) and
+  FAIL 1 on this task's first version, which netted the run's whole collection time; a mutant that
+  gives every end the whole-run time FAIL 1, one that ignores `gc` FAIL 1. Green: `^http-reactor$`
+  PASS 235 SKIP 2 (load 15-16); the six-stream test 200 of 200 (load 15-27); `^http-` PASS 808
+  SKIP 2 (load 17-18); `^(console-|agent-)` PASS 3046 SKIP 1 (load 18-186). Injected into the real
+  reactor and mock (1.24 GB heap, full `gc()` 0.30-0.33 s, 5 runs each, load 16-18, repeated from
+  load 28-49 with the same outcome), unnetted / whole-run netting / per-end netting: a full
+  collection at 2.3 s FAIL 4 / PASS 5 / PASS 5 (0.331-0.352 s netted for the long ends, 0 for the
+  short; net walls 2.087-2.223 s); a collection at 0.3 s and a 0.3 s stall that is not one at
+  2.3 s FAIL 4 / PASS 5 / FAIL 4 (nothing netted); no stop PASS 5 throughout; a 0.4 s stall that is
+  not a collection FAIL 5 throughout. 100 unstopped runs (load 14-18): walls at most 2.255 s raw
+  and net, a collection in 38 runs (at most 0.015 s), netted for an end in 10, delivery p50 1 ms,
+  p99 6 ms, max 11 ms. Delivery of the ends before (the code is unchanged): 120 runs at load
+  207-342 p50 1.8 ms, p99 24 ms, max 44 ms; 100 after the preceding files max 22 ms. Lint clean.
+- Reviews: r1 2 findings, both applied. The first version netted every collection of the run, so
+  an unrelated collection excused gptr's own stall (the injected early collection and end stall
+  above passed 5 of 5); D-063 item 2 did not state the measure (nor CI-77's anchor).
+- Deviations: none new (D-248 and D-249 are not taken); D-063 item 2 is edited in place to state
+  the measure (CI-77's `came` anchor, this task's per-end netting, the bound unchanged, the rates
+  above) and D-016 item 1's anchor with it. Open: a stop that is not a collection (a vCPU or
+  scheduler stall) still fails, by design, and the message says which. An end's window opens at
+  the last iteration before the write, so a collection that ended within that iteration (at most
+  a 100 ms poll) before the write is netted too. The per-delta test has the same exposure (macOS
+  115073223120) and is not changed here.
+
+## Task CI-90 - A modern MCP server that answers the era probe late is probed again (2026-10-22, #76)
+- Main 717f9bc, Windows-check run 39734651356 (job 119678206014, windows-latest oldrel-4, R 4.2.3,
+  shard 2/4) failed "setting mcp.exposure = "direct" declares the tools of a server without
+  exposure" (`test-mcp-namespace.R:216`): the session's frozen tool names lacked
+  `mcp__fixture__echo` and `mcp__fixture__add`, with no error. The log says nothing else on MCP.
+- Rate: the logs of the 1,059 failed jobs (all attempts) of runs since 2026-10-04 hold this
+  signature three times, all on hosted Windows: 115336083629 (release, R 4.6.1, 2026-10-13, "a
+  modern stdio server is found by the probe ...") and 115749420627 (oldrel-4, R 4.2.3, 2026-10-14,
+  the progress test, which 35ca403 then gave a cached era) stopped with "MCP server fixture answered
+  initialize with error -32601: Method not found: initialize"; this job is the same error inside
+  builtin:mcp's session_start hook, which records it as a diagnostic. Since the client landed,
+  hosted Windows ran the suite about 520 times (412 finished unsharded windows-latest jobs, 434
+  finished shards), each starting about 25 modern stdio fixtures without a cached era: about 1 in
+  170 Windows suites, 1 in 4,000 cold connections. None in 1,614 finished Linux and macOS jobs. The
+  other MCP failures in those logs have other causes (a processx socket read error in
+  `test-mcp-server.R` twice, the HTTP era test, an interrupt's cancel, the progress test's 1 s
+  call).
+- Cause (the product; not a race): `run_freeze()` emits `session_start` and waits for its handlers
+  before `prompt.freeze`, and builtin:mcp's handler connects and lists the tools there, so the
+  freeze never precedes the server's answers; a failed connection is a diagnostic and the server
+  declares nothing. The connection failed in the era probe: `mcp_request()` opens the
+  `server/discover` window (`gptr.mcp_probe_timeout`, 5 s) before its first write, which on Windows
+  goes through the lazily started stdin writer (Rscript actor and PowerShell ACL verifier: cold
+  start p50 0.65 s, p99 1.97 s, max 5.24 s on hosted runners, D-246) while the fixture's own Rscript
+  starts. An unanswered probe was taken as legacy (report 16 4.5): `initialize` went out, the
+  modern-only server (the 2026-07-28 era removed it) answered the probe late, which was dropped as
+  cancelled, then refused `initialize` with -32601, and the connection failed. Any modern-only
+  server slower than the probe to answer its first request could never connect. A traced run on main
+  (probe 1 s, fixture asleep 2 s before serving): discover sent at 0, `initialize` at 1.05 s; the
+  server read discover, the cancel and `initialize` at 2.16-2.18 s; the freeze came at 2.37 s, after
+  the refusal, with that diagnostic.
+- Fix: `mcp_handshake()` probes a server that refuses `initialize` after leaving the probe
+  unanswered once more, in the probe window (it has just answered, so it is running); a modern
+  answer wins and is cached, anything else re-raises the refusal. With `protocol: "modern"` nothing
+  falls back, so its probe waits the request timeout; before, a slow modern-only server forced
+  modern failed the same way ("did not answer as a 2026-07-28 server"). An answered probe, a forced
+  or cached legacy era (D-165 item 1) and a legacy server that accepts `initialize` are unchanged.
+- Test: the stdio fixture takes `--delay=S` (`local_mcp_fixture(delay =)`): its first answer comes
+  S s after it reads the request, so a probe shorter than S times out whatever the write's delivery
+  took. "a modern server that answers the probe late is probed again after refusing initialize"
+  (probe 2 s, delay 4 s; the second probe must fit the window, and a ready Windows writer's first
+  ACK took at most 0.57 s, D-246): modern era, cached, five tools, and the server read discover,
+  the cancel, `initialize`, discover, `tools/list`. "a forced modern server's probe waits as long
+  as any request" (probe 0.5 s, delay 2 s): modern, five tools, and the server read discover,
+  `tools/list`. "a modern stdio server is found by the probe, ..." (115336083629) asserts that no
+  `initialize` is sent, which a start beyond the probe breaks: it probes for 30 s, the fixture's
+  request timeout and 5.7 times the 5.24 s cold start (D-246), instead of 5 s.
+- Measurements (macOS, 16 cores, load 4.8-12.6 from other agents; the real CI test through
+  `test_file(desc =)`, one process per loop): main 0/200 (each 0.50 s p50, 1.55 s max). Emulated
+  slow starts: gptr's first write to a server sleeping 1 s inside the window, as the Windows
+  writer's cold start does, with the probe at 0.5 s: main 200/200 fail with the CI signature; with
+  the probe at 1 s and that write delayed 0.6, 0.8, 0.9 or 0.95 s main passes 40/40, at 1.0, 1.05,
+  1.1, 1.2 or 1.5 s it fails 50/50: the tools go missing exactly when the first answer comes after
+  the window. The test's body with the fixture asleep 2 s before serving (probe 1 s): main 30/30
+  fail with the diagnostic. After (the first version): 0/200 plain, 0/200 with the delayed write,
+  90/90 across the sweep, 0/30 asleep (each server log: discover, cancel, `initialize`, discover,
+  `tools/list`); its test (probe 0.5 s, delay 2 s): main 50/50 fail, after 0/200 (2.37 s p50,
+  2.66 s max). Final code (load 3.5-10.3): the test 30/30 (4.29 s p50, 4.78 s max; main 5/5 fail
+  with -32601), the forced modern test 30/30 (2.28 s p50, 2.47 s max), the CI test's body with the
+  first write delayed 1 s and the probe at 0.5 s 30/30 (1.33 s p50, 2.35 s max).
+- Reviews: r1 3 findings, all applied. (1) The first version probed again with the request timeout
+  (60 s), so a server that ignores the probe and refuses `initialize` (a strict legacy server) held
+  every session start 60 s longer before the same diagnostic, and its era is never cached: with
+  defaults and exposure direct main 6.15 and 6.22 s (r1's runs), the first version 66.13 and
+  66.33 s, final 10.30-11.35 s (3 runs, load 4.3-10.3). (2) With `protocol: "modern"` an unanswered
+  probe aborted before the fallback: delay 2 s, probe 0.5 s, main 5/5 and the first version 10/10
+  "did not answer as a 2026-07-28 server", final 30/30 connect. (3) "a modern stdio server is found
+  by the probe, ..." with gptr's first discover write delayed 6 s connects through the second probe
+  but sends `initialize` 5/5 at the 5 s probe; at 30 s it is probe-only 5/5.
+- Red: `^mcp-client$` on main with the first version's test FAIL 1 PASS 176 ("MCP server fixture
+  answered initialize with error -32601"); on the first version with the forced modern test FAIL 1
+  PASS 179 ("did not answer as a 2026-07-28 server"). Green: `^mcp-client$` PASS 182 SKIP 1;
+  `^mcp-` PASS 810 SKIP 1 (45 s, load 8.7); `^(agent-|session-)` PASS 2619 (96 s, load 6.5);
+  `^(lint-rules|arch-layers)$` PASS 90; lint clean.
+- Deviations: D-165 item 5 (edited in place). Open: not yet run on hosted Windows. A slow start
+  costs the probe window plus two round trips (one more window when the server neither answers
+  the probe nor accepts `initialize`), and a dual-era server that starts slowly is still taken as
+  legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
+  timeout instead of 5 s.

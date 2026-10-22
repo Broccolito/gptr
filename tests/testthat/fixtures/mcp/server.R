@@ -2,7 +2,7 @@
 # 127.0.0.1. Adapted from dev/research/16-mcp-skills-plugins.md 5.2 (mcp_server_stdio.R) and
 # 5.9 (mcp_session_server()): only JSON-RPC on stdout, logs on stderr, ASCII JSON, exit on EOF.
 # Usage: Rscript --vanilla server.R --transport=stdio|http --era=modern|legacy
-#        --tools=echo,add,slow,fail,elicit --extra=N --log=<path> [--port=N]
+#        --tools=echo,add,slow,fail,elicit --extra=N --log=<path> [--port=N] [--delay=S]
 args = commandArgs(trailingOnly = TRUE)
 arg = function(name, default = NULL) {
   hit = grep(paste0("^--", name, "="), args, value = TRUE)
@@ -233,6 +233,8 @@ handle = function(msg, ctx) {
 
 serve_stdio = function() {
   con = file("stdin", open = "r")
+  # --delay=S: the first answer comes S seconds after its request, as from a server still starting
+  delay = as.numeric(arg("delay", "0"))
   send = function(msg) {
     cat(to_json(msg), "\n", sep = "", file = stdout())
     flush(stdout())
@@ -263,6 +265,8 @@ serve_stdio = function() {
   repeat {
     msg = read_msg()
     if (is.null(msg)) break
+    Sys.sleep(delay)
+    delay = 0
     resp = tryCatch(handle(msg, list(send = send, ask = ask)), error = function(e) {
       rpc_error(msg$id, -32603L, conditionMessage(e))
     })

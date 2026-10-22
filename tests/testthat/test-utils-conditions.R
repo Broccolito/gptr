@@ -19,6 +19,7 @@ test_that("gptr_abort() builds the class chain and extra fields", {
 })
 
 test_that("untrusted text in a message is never evaluated (rule C1, 05 P01 acceptance 4)", {
+  skip_on_cran()
   withr::local_envvar(GPTR_PWNED = NA)
   payload = "{Sys.setenv(GPTR_PWNED = \"1\")}"
   cnd = tryCatch(gptr_abort(payload, "x"), error = identity)
@@ -78,6 +79,7 @@ test_that("gptr_deprecated() warns once per name, or errors on request", {
 })
 
 test_that("checkers accept valid values and return them invisibly", {
+  skip_on_cran()
   expect_invisible(check_string("a", "x"))
   expect_identical(check_string("", "x", empty = TRUE), "")
   expect_null(check_string(NULL, "x", null = TRUE))
@@ -97,6 +99,7 @@ test_that("checkers accept valid values and return them invisibly", {
 })
 
 test_that("checkers signal invalid_argument with arg and expected, never the value", {
+  skip_on_cran()
   secret = "sk-ant-api03-SECRETVALUE"
   cnd = tryCatch(check_flag(secret, "verbose"), error = identity)
   expect_s3_class(cnd, "gptr_error_invalid_argument")

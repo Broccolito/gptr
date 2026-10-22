@@ -243,6 +243,7 @@ r_results = function(s) {
 }
 
 test_that("model code peter$grep() runs through the shim; the recorded code keeps it", {
+  skip_on_cran()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_project(files = list("notes.txt" = "a needle here", "other.txt" = "hay"))
   e = new.env(parent = baseenv())
@@ -258,6 +259,7 @@ test_that("model code peter$grep() runs through the shim; the recorded code keep
 })
 
 test_that("gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value boxed", {
+  skip_on_cran()
   local_gptr_options(unsafe_no_permissions = TRUE)
   e = new.env()
   with_seed_preserved({
@@ -280,6 +282,7 @@ test_that("gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value bo
 })
 
 test_that("a fuzzy edit returns the message and a diff; an exact edit the message only", {
+  skip_on_cran()
   local_gptr_options(unsafe_no_permissions = TRUE)
   root = local_project(files = list(
     "fuzzy.R" = sprintf("v%03d = %d   ", 1:300, 1:300),

@@ -87,7 +87,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 
 ## D-016 - CI Hosted CI corrections: INFRA-01 clock, service test isolation, old Windows R (2026-10-03)
 - Rule: CI Task CI-1; every contract, architecture and decomposition target and threshold stays, no product change:
-  1. INFRA-01 is measured on the mock's clock: `fixtures/mock_server.R` with `log_writes = TRUE` logs each piece's write time and SSE event, returned by `local_mock_server()` as `writes()`; every delta's latency (arrival minus write) < 0.35 s; every gap `0.25 + diff(latency)` < 0.35 s; six streams end within 1.10 * 9 * 0.25 = 2.475 s of the first head write (wall measure extended by D-063 item 2); a latency below -0.05 s fails.
+  1. INFRA-01 is measured on the mock's clock: `fixtures/mock_server.R` with `log_writes = TRUE` logs each piece's write time and SSE event, returned by `local_mock_server()` as `writes()`; every delta's latency (arrival minus write) < 0.35 s; every gap `0.25 + diff(latency)` < 0.35 s; six streams end within 1.10 * 9 * 0.25 = 2.475 s of the first request (wall measure in D-063 item 2); a latency below -0.05 s fails.
   2. P01's "ext_service_set() registers and replaces services" (test-aaa-state.R) mocks `service_builtin_active()` to `TRUE`; the product rule stays the plan's (contract 7.0 assigns `the$builtins` to P02).
   3. Windows R before 4.5.0 (oldrel-4) runs R CMD check with `_R_CHECK_THINGS_IN_OTHER_DIRS_ = false` (no `file.info()` owner columns); every check job fails without a `Status:` line in `00check.log`; every job has a time limit (R-devel 120 min); the connection gate runs the whole suite, then fails on failed tests and any leak (D-006).
 - Contract-visible: `local_mock_server()` returns `writes()` beyond contract 12.2's member list (test helper); no section amended.
@@ -686,11 +686,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 ## D-063 - CI hosted fixes: as_utf8() keeps non-UTF-8 bytes in a UTF-8 locale; six-stream wall on the mock's clock (2026-10-04)
 - Rule: fixes beyond test portability for hosted runs 37213342336 (`b40b4d1`) and 37210924368 (`51ba767`), where every R CMD check job failed (P01, P04):
   1. `as_utf8()` (`R/utils-encoding.R`; IC-62): in a UTF-8 locale an unknown-encoded string that is not valid UTF-8 keeps its bytes and is marked UTF-8 on every R version (R 4.2.3's `enc2utf8()` wrote `<xx>` text, so such code ran instead of D-055 item 4's `parse_error`); `enc2utf8()`, now inside `native_to_utf8()`, runs only for latin1 strings and, in other locales, native strings that are not valid UTF-8; non-UTF-8 locales are unchanged.
-  2. The INFRA-01 six-stream wall (`test-http-reactor.R`; extends D-016 item 1) is measured on the mock's clock: each stream ends at its head's write + its scheduled length (`n * 0.25` s) + gptr's delivery latency (callback wall clock minus the mock's write of its last piece); the bound stays 1.10 * 9 * 0.25 = 2.475 s; a latency below -0.05 s fails (mismatched writes); the message prints each stream's mock lateness and gptr latency. A late mock no longer fails; late delivery by gptr still does.
+  2. The INFRA-01 six-stream wall (`test-http-reactor.R`; extends D-016 item 1) is measured on the mock's clock: each stream ends at its request's `came` (the end of the mock's wait that saw it; CI-77) + its scheduled length (`n * 0.25` s) + gptr's delivery latency (callback wall clock minus the mock's write of its last piece), less R's garbage collection between the pump iterations around that write and that delivery (`infra01_gc()`, `gc.time()`; CI-89); the bound stays 1.10 * 9 * 0.25 = 2.475 s; a latency below -0.05 s fails (mismatched writes); the message prints each stream's mock lateness, gptr latency and netted collection. A late mock no longer fails; late delivery by gptr, and any stop of the test process that is not a collection, still does. Hosted, 0.4 s stops failed about 3 of 1,650 executions (2026-10-12 to 2026-10-22); locally a full `gc()` after the preceding test files takes 0.25 s, and a full collection forced as the long streams end fails the unnetted wall 10 of 10 (2.480-2.626 s).
 - Contract-visible: none.
 - Tests: test-utils-encoding.R: "as_utf8() keeps bytes that are not UTF-8 in a UTF-8 locale, on every R version" (mocks
   `native_to_utf8()` with R 4.2.3's conversion); test-http-reactor.R: "INFRA-01 measurements catch late, stalled, batched and
-  serialised delivery", "INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest". Evidence: progress/infra.md Task CI-4.
+  serialised delivery", "INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest". Evidence: progress/infra.md Task CI-4; progress/fixes.md Tasks CI-77, CI-89.
 
 ## D-064 - P15 call scanner: UTF-8 parsing, parse data kept, exact ownership, computed prompts, pipe identity (2026-10-04)
 - Rule: scanner and ownership functions (`R/doc-blocks.R`); interfaces and the contract 11.5 ownership rule are unchanged; the internal call table gains column `ident` (item 6):
@@ -2024,10 +2024,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
      interrupt the pause menu resumes keeps the call (03 interrupt policy, G3), and `notifications/cancelled`
      is written once the pump has unwound (inside an outer pump P04 queues it for that pump).
   4. `mcp_ui()` is inlined in `mcp_elicit()` (the HTTP branches Task 4 deferred landed with Task 5, D-171).
+  5. (2026-10-22) A probe left unanswered is not proof of the legacy era: its window opens before the first write,
+     so it also holds the server's own start and, on Windows, the stdin writer's cold start (up to 5.24 s on
+     hosted runners, D-246). A server that then refuses `initialize` has started, so it is probed once more in the
+     probe window; the plan took the timeout as legacy, so a modern-only server that started slowly never
+     connected. With `protocol: "modern"` nothing falls back, so its probe waits the request timeout.
 - Contract-visible: none.
 - Tests: test-mcp-client.R "a stale cached era is probed again once, in both directions, ..." (+6), "time spent
   answering a legacy server request does not time the call out" (+1), "an interrupt can be resumed (G3); ..."
-  (+1, and waits for the cancel without pumping). Evidence: progress/P18.md Task 4.
+  (+1, and waits for the cancel without pumping), "a modern server that answers the probe late is probed again
+  after refusing initialize" (+3; its second probe has 2 s, and a ready writer's first ACK took at most 0.57 s,
+  D-246) and "a forced modern server's probe waits as long as any request" (+3). "a modern stdio server is found
+  by the probe, ..." asserts that no `initialize` is sent, so it probes for 30 s, the fixture's request timeout
+  and 5.7 times the 5.24 s cold start, instead of 5 s. Evidence: progress/P18.md Task 4; progress/fixes.md Task
+  CI-90.
 
 ## D-166 - P19 gptr_parallel(): the contract example's member name `plan` is an accessor (IC-71) (2026-10-06)
 - Rule: member names equal to a session accessor are refused (IC-71); `plan` is one (04 section 5.1), so 04
@@ -2912,8 +2922,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: `Authors@R` lists the maintainer and the contributors Tianlu Zhu (UI/UX polishing and CI/CD) and
   Gianmarco Bellucci (testing). Mario Zechner, whose pi agent inspired gptr and whose MIT-licensed text
   gptr's tool descriptions and templates derive from, is credited in `inst/COPYRIGHTS` (through
-  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are), in the README acknowledgements
-  and on the site's Authors page, instead of as `ctb, cph` (amends cran-4 in spec 06).
+  `Copyright: file inst/COPYRIGHTS`, as models.dev and gitleaks already are) and in the README
+  acknowledgements on the site's home page, instead of as `ctb, cph` (amends cran-4 in spec 06). The site's
+  Authors page lists only these three people, each linked to the email in `Authors@R`; Gianmarco Bellucci's
+  entry carries his ORCID (2026-10-20).
 - Tests: test-zzz.R (IC-72), dev/release/tests/test-pkgdown.R.
 
 ## D-237 - License: the Apache License 2.0 replaces MIT (2026-10-20)
@@ -2926,3 +2938,182 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (2026-10-20). inst/COPYRIGHTS also gains the MIT notice of typesafe-ai/system-one-adapter-python, whose
   prompt and schema `R/s1-emulate.R` follows.
 - Tests: test-zzz.R (IC-72), dev/release/tests (site-stage, examples, precompute), dev/ci/test-exact-source.py.
+
+## D-238 - P11 unresolved read paths, process output files and background processes ask first (2026-10-20)
+- Rule: a read whose path the classifier cannot resolve (`unknown`, `wildcard`) is level 1, as `outside` is;
+  `file()`, `gzfile()`, `bzfile()` and `xzfile()` fold to their description path, and an unknown SQL or Python
+  string literal stays 0. A `stdout` or `stderr` file of a process call (system2, processx::run, callr) is a
+  `file_write` row classified by its path. `wait` other than TRUE, or a lone shell `&`, adds a level-2 `process`
+  row; so does `&>`, which dash and POSIX sh read as `&` then `>` (stricter than bash). system2()'s `stdout` or
+  `stderr` "|" or "2>&1" is a file name. md5sum, dir.exists, file.access and file_test read their path argument,
+  and `tools::Rd2txt(out =)` is a file_write. A `file://` word is its local path, `path_norm()` resolves `~name`
+  to that user's home, and a `git -C` directory is read. A function passed to aggregate() or reorder() is walked
+  as each of their S3 methods matches the call, as are the `ties` of approx, approxfun, spline, splinefun and
+  stepfun and the `fn` and `gr` of optim and optimHess (both now listed read-only, as stepfun is). The
+  CRAN-readiness audit found that manual mode ran these at level 0 without asking.
+- Level changes: computed read paths (`read.csv(here::here(...))`, `readLines(system.file(...))`), `$VAR`
+  operands and option values, and paths the locale cannot translate now ask; plan mode refuses `peter$read()` of
+  a computed path; `command -v git &>/dev/null` 0 -> 2; md5sum, dir.exists, file.access and file_test outside
+  the project 0 -> 1; `Rd2txt("x.Rd", "keep.txt")` and `aggregate(len ~ supp, data = d, file.create)` 0 -> 2.
+  Reported to the maintainer 2026-10-20.
+- Tests: test-perm-classify.R (new blocks; three D-061 cases move from 0 to 1), test-auth-secrets.R.
+
+## D-239 - CI: Windows R CMD check runs as four shards per R version behind per-version gates (2026-10-20)
+- Rule: the Windows rows of `R-CMD-check.yaml` (release, oldrel-4) move to `.github/workflows/Windows-check.yaml`,
+  where each runs as four serial `R CMD check --as-cran` shards `windows-latest (<r>, shard <n>/4)` with the
+  rows' environment, Python provisioning and Status-line guard (one job per version took 36 to 56 minutes in
+  October 2026; the slowest shard takes about 23). `GPTR_CI_TEST_SHARD=<n>/4`
+  (`tests/testthat/ci-shard.R`) makes `tests/testthat.R` run every fourth ordinary test file, sorted, from the
+  n-th, and fail unless each of those files recorded a test result (so a test file skips inside `test_that()`,
+  not at file level); the native entries `tests/native-*.R` run in shard 1 only. Unset, a check is shard 1/1, the
+  whole suite, as before.
+- Rule: the required contexts `windows-latest (release)` and `windows-latest (oldrel-4)` are Ubuntu gate jobs
+  that always run after the shards (a skipped required check would count as passing) and pass only when the
+  latest attempt of each of their version's four shards recorded `success` in its `windows-status-<r>-<n>`
+  artifact. Every attempt records its job status, so a failed re-run replaces an earlier pass, and "Re-run failed
+  jobs" keeps the passed shards' records.
+- Contract-visible: none. Amends architecture section 3.5, spec 05 P01, 00-index section 5.1, P25 Task 15 and
+  P27 A1-A2: both workflows must pass.
+- Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "Windows CI shards run
+  each ordinary test file once ...", "each required Windows context gates ...", "the hosted jobs have time for
+  the whole suite (CI-19)".
+
+## D-240 - Tests: CRAN runs a fixed list of fast tests (2026-10-20)
+- Rule: with `NOT_CRAN` not `"true"`, `tests/testthat.R` runs only a fixed list of 65 test files: the `perm-*`,
+  `auth-redact` and `auth-secrets` files and those keeping more than five running blocks under the block rule. In
+  those files a `test_that()` block starts with `skip_on_cran()` when it took 25 ms or more in a local CRAN-mode run
+  or 50 ms or more on GitHub's windows-latest (R-devel or R-release), except the file's fastest block; in the
+  security files only blocks of 500 ms or more on Windows skip. GitHub Actions runs the whole suite. win-builder
+  needed 13 to 29 minutes for the CRAN-mode tests before this rule and 3.3 with the block rule alone, which left the
+  whole check at CRAN's 10-minute budget, because skipped blocks and sourced files still cost time.
+- Tests: tests/testthat.R (the list); 1,183 block skips in the listed files.
+
+## D-241 - P04 the Windows stdin writer retries a refused chunk read until the delivery deadline (2026-10-21)
+- Rule (IC-60, D-019 item 5; P04 `R/proc-spawn.R`, `R/http-reactor.R`):
+  1. When the owned Windows stdin writer's `readBin()` of a published chunk fails (on hosted Windows it failed for
+     full-size, 65536-byte chunks; a transient open refusal is inferred, not observed), the writer returns to its
+     poll for that chunk after 0.05 s: it checks that the parent and target still run, validates the mailbox for
+     that chunk, takes the size again and reads. The read's warning is muffled and its error caught, because under
+     `warn = 2` R 4.2's `file()` leaks the connection of a refused open whose warning became an error (R 4.3
+     cleans it up, PR#18491). There is no new bound: the parent's no-progress deadline (`gptr.stdin_timeout`)
+     still ends a read that never succeeds as the typed `gptr_error_timeout` (`what = "stdin"`) and stops the
+     writer. Every other writer step fails at once.
+  2. Diagnostics (`3a05693`): a failed writer step exits with status 10 plus its index in `proc_writer_steps`
+     (startup, validate_startup, validate_create, create, validate_rename, rename, alive, validate_read, read,
+     validate_write, write, unlink, size, length), clear of R's statuses 1 and 2 and Windows' abort status 3, and
+     the writer turns warnings into errors. A Windows stdin failure carries `writer_status` (NULL while the writer
+     runs), `writer_step` decoded from it, `writer_cause` (the inner gptr message, kept only as fixed text) and,
+     for a size or length step, `writer_chunk_bytes` (the published chunk's size, NA when absent). Each
+     parent-side publish and acknowledgement check has its own fixed message; the backpressure witness records
+     step, status, cause and chunk_bytes.
+- Contract-visible: a Windows stdin failure condition gains the writer fields; no section amended.
+- Tests: test-proc-windows-backpressure.R ("a cold writer reads a refused chunk again and delivers every byte", "a
+  chunk read that keeps failing ends at the delivery deadline", "a refused chunk is not read again once the mailbox
+  fails validation", "... once the parent or target is gone", the cold writer step controls);
+  test-proc-writer-runtime.R (the decoded step and chunk size, the fixed causes, the bootstrap size). Evidence:
+  progress/fixes.md Task CI-75.
+
+## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
+- Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,
+  the budget of the Windows duplex and cancellation cases (helper-proc-backpressure.R, 2654a21), instead of 2:
+  `rw_child_case()` (helper-proc-writer-runtime.R; native-09 cases ordered, failed, shutdown, orphan, binary, acl),
+  whose binary case no longer admits the writer first under its own 2 s (35536d4), and the idle-writer cases, whose
+  write past the two-writer cap first retires an idle writer: `warm_idle_child_case()` (native-05, its third
+  write), `idle_child_case()` (native-06) and `idle_restart_child_case()` (native-08, without its 2 s bounds on the
+  third and later writes). Only the no-reader timeout cases (native-04, native-09), the base-only cold controls and
+  the deterministic IC-60 tests keep 2 s. IC-60's window opens when the write is queued, before the lazy writer
+  starts, so each case needed any retirement (`kill_all()`, taskkill included), writer cold start (Rscript actor
+  and PowerShell ACL verifier) and the first ACK within 2 s. On hosted windows-latest (2026-10-12 to 2026-10-21) a
+  production writer cold start took p50 0.65 s, p99 1.97 s and at most 5.24 s (437 witnesses, 7 of them cut off
+  before readiness by a 2 s window), and readiness to the first ACK p50 0.05 s, at most 0.57 s (166 base-only
+  controls). Five cases in four jobs timed out with accepted_bytes 0 after startups of 1.41 to 2.09 s with the
+  writer alive (c5a2b8e, bc13aba, fa64ef2, 176a3a2 in PR #61 run 39580403671), and on 7cfd543 (Windows-check run
+  39617294666) native-06 and native-08 did so after a retirement: native-06's writer started 1.08 to 1.66 s after
+  the write was queued (the retirement plus start preparation); the 72 delivered idle-case third writes took 0.65
+  to 1.28 s. 20 s is about 3.4 times 5.81 s, the largest cold start (5.24 s) plus the largest readiness-to-ACK
+  (0.57 s), 2.7 to 2.9 times with that interval added, and leaves a stall inside the 30 s case deadline, within
+  which a starved write still fails; the writer's own ACL wait follows the same limit.
+- Rule: "many hunks render in linear time" (test-tool-diff.R, P10 Task 3) bounds the diff's CPU time
+  (`user.self + sys.self`) at 5 s instead of its wall time: a stalled hosted runner took 11.4 s once in 205
+  Windows runs while the code needs 1.3 to 1.9 s there and is linear (2.0 times per doubling); CPU time still
+  fails superlinear work.
+- Contract-visible: none (IC-60 and the 60 s `gptr.stdin_timeout` default unchanged).
+- Tests: helper-proc-writer-runtime.R `rw_child_case()`; test-proc-writer-idle-boundary.R (now "... a third
+  write", also in dev/ci/optional-integrations.R), test-proc-writer-idle-slots.R and test-proc-writer-retirement.R;
+  test-tool-diff.R "many hunks render in linear time". Evidence: progress/fixes.md Tasks CI-79, CI-80 and CI-85.
+
+## D-247 - P26 One honest size for every object (2026-10-21)
+- Rule: `env_snap_size(x, home, shared)` (new L0 file `utils-size.R`) is the one size: the workspace snapshot and
+  its `<workspace>` and changes lines, `gptr_describe()` headers (now also of environments, R6 objects, functions,
+  formulas, lm/glm, ggplot and patchwork), the overwrite note and `gptr.protect_size`, `$values`, the value policy
+  and `gptr.values_max_bytes`, `dot_facts()`, `value_ref`, fan-out facts, the `gptr.artifact_max_bytes` gate, and
+  checkpoint images (held bytes, `gptr.undo_max_bytes`; `gptr_checkpoints()` `held_mb` and `disk_mb` count 2^20
+  bytes a megabyte, as the other surfaces, not 1e6; capture plans read the snapshot's sizes against
+  `gptr.undo_capture_max`). It walks attributes (S4 slots, S7 properties), list elements, closure environments and
+  environment bindings (no promise forced, no active binding called) and counts R's allocation of each part once by
+  address and each string once by content: a vector its header and elements at its stored length (`object.size()`;
+  `length()` dispatches: survival's `Surv` reports its rows, `bit::bit()` its bits; a compact sequence its
+  serialized state), an environment 56 bytes a binding, an attribute 56. Not counted: code (a closure's formals,
+  body and srcref, whose srcfile holds a sourced file's lines and parse data; calls and formulas count
+  `object.size()`), top-level environments, the home, the frames of running calls and their enclosures, and the
+  environments of an S7 class copy (`duplicate()` never copies one). S7 stores a deep duplicate of its class in
+  every object (`sys.function()`), so each copy counts; the first copy of a class is walked, later ones count as
+  much. With `shared` (the current value) an image counts only the parts and strings the current value does not
+  reach. A list or environment of more than 64 items walks its first and last items, then the others until they
+  cost 10,000 parts and it has 8 samples (not the item that spent the budget); the rest count as the samples' mean
+  bytes plus their distinct strings over their number; when walking `shared`, the unwalked items are marked seen.
+  Past 100 levels or 100,000 parts a part counts `object.size()`, an environment too, so a chain of thousands of
+  environments cannot overflow the node stack. Replaces D-189's NA sizes (environments, functions, external
+  pointers, compact sequences, S7 objects) and the median rank of unsized values, and the depth-4 `object.size()`
+  checkpoint walk. NA remains only for promises, active bindings and missing arguments.
+- Rule: `env_compact_seq()` (moved to `utils-size.R`) reads nine elements and confirms with `serialize()` (only an
+  unexpanded compact sequence writes its state): `x = 1:1e6; x[5e5] = 0L` was a "(sequence)" with a wrong
+  minimum. The workspace shape drops "(sequence)" and the `gptr_describe()` header "(compact sequence)"; the size
+  (133 B) says it, and the header's check serialized a sequence-like vector a second time.
+- Rule: a bound value is deep-copied when its size is below `gptr.value_copy_max` and its `object.size()` (what
+  `duplicate()` can allocate: every list path, compact sequences written out) below `gptr.values_max_bytes`; the
+  copy is kept when it is a new object holding below `gptr.value_copy_max` of its own (`env_snap_size(copy, home,
+  value)`), else the value is held by name. So an environment, R6 object or external pointer is held by name
+  (formerly "copy", though `duplicate()` returned it as is and the harness found it changed after an edit), as are
+  `seq_len(2e6)` (a copy writes 7.6 MB) and `rep(list(x), 3)`, and `rep(list(x), 1e3)` is never duplicated. The
+  fix branch's rule that a value of unknown size is copied and counts 0 bytes, and its long-sequence exception,
+  are gone; `gptr.value` entries always carry `bytes`.
+- Rule: `gptr.value_copy_max` defaults to 2 MiB (2097152; was 1 MiB). A themed plot with labels, facets or
+  closure scales is 1.00 to 1.02 MB, about 50 KB of it ggplot2's ggproto objects, and its copy 914 to 922 KB, so
+  it is copied like other plots.
+- Rule: snapshot sizes are reused only while the fingerprint holds too, so a list edited in place is re-sized.
+  `describe_binding()` describes with its home on the call stack, so its sizes leave the home out as the
+  snapshot's do (holding the home in package state instead pinned the object: tracemem).
+- Measured (R 4.6.1, ggplot2 4.0.3, S7 0.2.2; fidelity harness, 37 cases at the console and through `peter()`;
+  truth: `lobstr::obj_size()` and the bytes not shared with namespaces; the value mode judged at the build's
+  `gptr.value_copy_max`): defect rows 134 on main, 15 on this branch at the 2 MiB default: 5 are lobstr's own
+  undercount of an ALTREP wrapper's attributes (`vcfR::extract.gt()`; `object.size()` agrees with this rule), 3
+  srcref rows and 5 "serializes differently" rows unrelated to sizes (held deep copies `identical()` to the value:
+  a tibble, two Seurat objects, and `df_big` and a data frame of plots, whose compact `id` column the copy writes
+  out), and 2 environments held by name (this rule). The two themed plots just over 1 MiB (1.02 and 1.00 MB), held
+  by name at 1 MiB, are copied (922 and 914 KB) and survive the edit. A themed plot is 998 KB (unshared 928 KB;
+  `object.size()` 15.8 MB) and is copied; seven themed plots 6.2 MB (6.1 MB; 111 MB), so their edit is undoable
+  again and their overwrite level 2, not 3; every checkpoint image within 1 KB of the truth but a formula's (896 B
+  against 280 B) and a patchwork's (2.5 KB against 0 B); pinfsc50's `@fix` edit 1.3 MB (was 8.7 MB). The judges'
+  stress objects (lists of 7 to 200 plots, plots made in a function whose frame holds 3e4 records, records, JSON,
+  `strsplit()`, `split()`, 2,000 model fits, `rep(list(x), 6e4)`, a long list ending in a 76 MB vector, an
+  environment of 1e5 bindings, a 3,000-deep list) size within 0.6x to 1.2x of `lobstr::obj_size()`
+  (`object.size()`: up to 8,000x) in at most 0.3 s, their checkpoint images within 1.3x in at most 0.6 s; a
+  deferred string vector (`as.character(1:1e6)`, an lm's names) is materialised by sizing, as by `object.size()`,
+  and then counted in full.
+- Measured per call: a themed plot 25 ms, seven 28 ms, pinfsc50 17 ms, the pbmc_small pipeline 2 ms, a 1e6-row
+  data frame 5 ms, a 1e7 double 0 ms, a 1e5-element list 38 to 46 ms (its checkpoint form 320 ms), a 1e6-element
+  named vector 0.2 s (`object.size()` reads its names twice); a workspace of these six: first snapshot 107 ms,
+  later ones 7 ms.
+- Left as is: sizes are per object (strings and environments two bindings share count in both); package objects a
+  user object reaches directly count (ggproto objects: about 50 KB a plot); code is not counted; memory behind
+  external pointers is not seen; a deferred string vector is materialised when sized, as by `object.size()`; past
+  the budget a list's tail is an estimate, and past 100 levels an environment counts 56 bytes; a bare
+  `gptr_describe(x)` outside a run counts a non-global home its closures reach; an environment changed in place
+  keeps its size until its shape changes; a held copy can exceed the value's size where `duplicate()` writes out a
+  compact sequence (`df_big`: 1.9 MB held for 1.5 MB), up to `gptr.value_copy_max`.
+- Contract-visible: 03 §3.2 (`utils-size.R`), §5.1 value policy (2 MiB), §6.4 R4, §7.5; 04 §3.1
+  `gptr.value_copy_max` (`2097152`), §6.6 `gptr_return()` and `gptr_risk()`, §7.8 `dot_facts()`, §7.9
+  `env_snapshot()` and `workspace_lines()`; `?gptr_options`, `?gptr_risk`, `?gptr_artifacts`, `?gptr_rewind`.
+- Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture, session-object (a
+  ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence: progress/fixes.md Task FIX-13.

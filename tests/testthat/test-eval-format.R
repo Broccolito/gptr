@@ -73,6 +73,7 @@ test_that("blocked and empty results have short texts", {
 })
 
 test_that("long output keeps head and tail with a peter$out() notice", {
+  skip_on_cran()
   res = eval_r("invisible(lapply(1:5000, function(i) cat('line', i, '\\n')))", new.env())
   out = format_eval_result(res, 400L)
   expect_true(out$truncated)
@@ -85,6 +86,7 @@ test_that("long output keeps head and tail with a peter$out() notice", {
 })
 
 test_that("image tokens count against the budget", {
+  skip_on_cran()
   img = list(type = "image", mime = "image/png", data = "x", source = "plot", width = 768L,
              height = 512L)
   lines = paste(rep("0123456789 abcdefghij", 100), collapse = "\n")
@@ -110,6 +112,7 @@ test_that("format_eval_result validates its arguments", {
 })
 
 test_that("a 50-plot evaluation lists 3 attached plots and the stored rest", {
+  skip_on_cran()
   skip_if_not(isTRUE(capabilities("png")) || requireNamespace("ragg", quietly = TRUE))
   res = eval_r("for (i in 1:50) plot(i)", new.env())
   out = format_eval_result(res, 4000L)
@@ -135,6 +138,7 @@ usage_fake = function(session, input, output = 0, cache_read = 0) {
 }
 
 test_that("context pressure asks compact.should with twice the session's last request", {
+  skip_on_cran()
   seen = new.env()
   seen$tokens = numeric()
   seen$threshold = 3000

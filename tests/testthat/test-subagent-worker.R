@@ -20,6 +20,7 @@ local_worker_io = function(.env = parent.frame()) {
 }
 
 test_that("a permission request goes to the parent and its answer comes back", {
+  skip_on_cran()
   w = local_worker_io()
   w$write(list(type = "permission", id = "p1", decision = "allow"))
   ans = worker_ui_permission(w$io, list(tool = "r", input = list(code = "x = 1"),
@@ -38,6 +39,7 @@ test_that("a permission request goes to the parent and its answer comes back", {
 })
 
 test_that("questions, select and input are forwarded as ask lines", {
+  skip_on_cran()
   w = local_worker_io()
   w$write(list(type = "answer", id = "q1", answers = list(choice = "B")))
   expect_identical(worker_ui_select(w$io, "Which?", c("A", "B")), 2L)
@@ -89,6 +91,7 @@ test_that("a partial line on a blocking stdin waits for its end without blocking
 })
 
 test_that("stdin on Windows is an R connection, read only while a request waits (WIN-1)", {
+  skip_on_cran()
   tc = textConnection("out", "w", local = TRUE)
   withr::defer(close(tc))
   replies = vapply(list(list(type = "permission", id = "p1", decision = "allow"),
@@ -138,6 +141,7 @@ test_that("exports are saved by name only on success", {
 })
 
 test_that("the registry of the parent is re-registered, a fake provider made again (IC-69)", {
+  skip_on_cran()
   local_project()
   s = session_new("wfake/wfake-1", "auto", home = new.env())
   sid = session_data(s)$id
@@ -165,6 +169,7 @@ test_that("bare filters, as IC-69 writes them, count as session filters", {
 })
 
 test_that("parent plugins are re-enabled by package name, else by path (IC-69)", {
+  skip_on_cran()
   local_project()
   s = session_new("fake/fake-1", "auto", home = new.env())
   sid = session_data(s)$id
@@ -192,6 +197,7 @@ test_that("parent plugins are re-enabled by package name, else by path (IC-69)",
 })
 
 test_that("the result line of a worker session carries status, text, usage and turns", {
+  skip_on_cran()
   local_project()
   s = session_new("fake/fake-1", "auto", home = new.env())
   out = worker_outcome(s)
@@ -265,6 +271,7 @@ stub_worker_state = function(gate = function(call) list(decision = "allow", reas
 }
 
 test_that("worker requests are re-classified by the parent's gate and answered (IC-53)", {
+  skip_on_cran()
   seen = new.env()
   st = stub_worker_state(gate = function(call) {
     seen$call = call
@@ -310,6 +317,7 @@ test_that("worker requests are re-classified by the parent's gate and answered (
 })
 
 test_that("questions from a worker without a human are answered as cancelled", {
+  skip_on_cran()
   st = stub_worker_state()
   local_mocked_bindings(worker_reply = function(st, obj) {
     st$replies[[length(st$replies) + 1L]] = obj
@@ -323,6 +331,7 @@ test_that("questions from a worker without a human are answered as cancelled", {
 })
 
 test_that("a finished worker ends the request with its text and imports its exports", {
+  skip_on_cran()
   st = stub_worker_state()
   st$home = new.env()
   dir = withr::local_tempdir()
@@ -383,7 +392,32 @@ test_that("a stopped worker ends its open request as aborted, never error (IC-60
   expect_identical(c(ev$reason, ev$message$stop_reason, ev$error$class), rep("aborted", 3L))
 })
 
+test_that("a worker's exit ends its abort guard before the guard polls again", {
+  skip_on_cran()
+  st = stub_worker_state()
+  st$home = new.env()
+  st$spec = list(name = "w", depth = 1L, settings = list(project_root = getwd()))
+  local_mocked_bindings(proc_rscript = function(...) {
+    processx::process$new(rscript_path(), c("--vanilla", "-e", "0"), stdout = "|",
+                          stderr = "|")
+  })
+  r = reactor_get()
+  before = ls(r$tasks)
+  worker_spawn(st)
+  guard = setdiff(ls(r$tasks), before)
+  expect_length(guard, 1L)
+  # a peter() call can return right after the exit, before the 0.1 s guard polls again
+  on_exit = worker_on_exit
+  local_mocked_bindings(worker_on_exit = function(st, status) {
+    on_exit(st, status)
+    st$guarded = exists(guard, envir = r$tasks, inherits = FALSE)
+  })
+  expect_true(reactor_pump(until = function() isTRUE(st$exited), timeout = 30))
+  expect_false(st$guarded)
+})
+
 test_that("the user's abort of a forwarded request aborts the proxy run", {
+  skip_on_cran()
   local_team_fake(list("never"))
   local_scripted_ui(list("abort"))
   local_mocked_bindings(worker_spawn = function(st) {
@@ -401,6 +435,20 @@ test_that("the user's abort of a forwarded request aborts the proxy run", {
   expect_identical(h$session$status, "aborted")
 })
 
+test_that("a worker is shipped the parent's context mode, which it cannot read itself", {
+  skip_on_cran()
+  local_team_fake(list("never"))
+  local_gptr_options(context = "none")
+  local_mocked_bindings(worker_spawn = function(st) stop("not spawned"))
+  parent = session_new("fake/fake-1", "auto", home = new.env(), kind = "team")
+  h = subagent_start(list(agent = gptr_agent("w", description = "worker", model = "fake/fake-1",
+                                             backend = "worker"),
+                          prompt = "go", parent = parent, base = new.env()), NULL)
+  spec = session_live(h$session)$adapter$worker_spec
+  expect_identical(spec$settings$opts$context, "none")
+  expect_true(run_wait(list(h$run), timeout = 10))
+})
+
 test_that("a proxy session without a worker spec fails its request", {
   gen = worker_stream(list(api = "subagent-worker"), list(messages = list()),
                       list(state = new.env(), signal = new.env()))
@@ -411,6 +459,7 @@ test_that("a proxy session without a worker spec fails its request", {
 })
 
 test_that("specs that cannot be serialised are found; others are not (IC-69)", {
+  skip_on_cran()
   expect_false(worker_unserialisable(list(a = 1, f = function(x) x + 1)))
   con = file(tempfile(), "w")
   withr::defer(close(con))
@@ -496,6 +545,7 @@ test_that("the worker registry ships the filters of each scope by name (IC-69)",
 })
 
 test_that("an explicit worker for a remote model is refused in replay mode before it starts", {
+  skip_on_cran()
   local_project()
   local_gptr_options(mode = "auto", replay = "replay")
   off = gptr_register(gptr_provider("wremote", api = "openai-completions",
@@ -728,8 +778,35 @@ test_that(
   expect_true(x$result$seed_unchanged)
 })
 
+# The worker can go before ps stops listing its killed parent: each reads as running once, then
+# as gone, on a virtual clock
+test_that("the Windows witness reads its killed parent once ps no longer lists it (IC-60)", {
+  skip_on_cran()
+  steps = as.list(body(wpd_child_case))
+  text = vapply(steps, function(e) paste(deparse(e), collapse = " "), "")
+  at = seq(which(startsWith(text, "killed_at = ")), which(startsWith(text, "parent_dead = ")))
+  reads = c(worker = 0L, parent = 0L)
+  local_mocked_bindings(proc_handle_alive = function(handle) {
+    reads[[handle]] <<- reads[[handle]] + 1L
+    reads[[handle]] == 1L
+  })
+  local_mocked_bindings(ps_kill = function(p) invisible(NULL), .package = "ps")
+  clock = 0
+  e = new.env()
+  e$fun = function(name) {
+    if (name == "reactor_now") function() clock else get(name, asNamespace("gptr"))
+  }
+  e$Sys.sleep = function(s) clock <<- clock + s
+  e$worker_handle = "worker"
+  e$parent_handle = "parent"
+  for (step in steps[at]) eval(step, e)
+  expect_true(e$before_cleanup)
+  expect_true(e$parent_dead)
+})
+
 
 test_that("unknown worker cost stays unknown through the result wire without warnings", {
+  skip_on_cran()
   local_project()
   session = session_new("fake/fake-1", "auto", home = new.env())
   data = session_data(session)
@@ -768,6 +845,7 @@ test_that("unknown worker cost stays unknown through the result wire without war
 })
 
 test_that("unknown worker counters preserve known zeros and cost through the result wire", {
+  skip_on_cran()
   local_project()
   session = session_new("fake/fake-1", "auto", home = new.env())
   data = session_data(session)

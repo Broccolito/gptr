@@ -60,9 +60,12 @@ mock_records = function(file) {
   Filter(Negate(is.null), records)
 }
 
-# The request log as a data frame: one row per request, `disconnected` NA while it is open (the
-# end of a request is logged just after its last byte, so poll before asserting it). Header
-# values are redacted except at the second origin of `redirect` (IC-64).
+# The request log as a data frame: one row per request, `time` when the mock read it, `came`
+# (wall-clock seconds) the end of the wait that saw the request or, if the request came while the
+# mock was working, of the last wait before it: never later than the request's arrival plus the
+# select's wake-up, and never after `time`. `disconnected` is NA while it is open (the end of a
+# request is logged just after its last byte, so poll before asserting it). Header values are
+# redacted except at the second origin of `redirect` (IC-64).
 mock_log = function(file) {
   records = mock_records(file)
   kinds = vapply(records, function(r) r$kind, "")
@@ -70,7 +73,7 @@ mock_log = function(file) {
   if (!length(requests)) {
     return(data.frame(
       time = with_calendar_preserved(as.POSIXct(numeric(), origin = "1970-01-01")),
-      method = character(),
+      came = numeric(), method = character(),
       path = character(), headers = character(), body = character(), disconnected = logical()
     ))
   }
@@ -79,6 +82,7 @@ mock_log = function(file) {
   out = data.frame(
     time = with_calendar_preserved(as.POSIXct(
       vapply(requests, function(r) r$time, numeric(1)), origin = "1970-01-01")),
+    came = vapply(requests, function(r) r$came, numeric(1)),
     method = vapply(requests, function(r) r$method, ""),
     path = vapply(requests, function(r) r$path, ""),
     headers = vapply(requests, function(r) r$headers, ""),

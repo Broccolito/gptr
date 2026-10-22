@@ -10,7 +10,7 @@ gptr_option_defaults = list(
   quiet = FALSE, interactive = NULL, project_root = NULL, unsafe_no_permissions = FALSE,
   verbose = NULL, ui = NULL, model = NULL, mode = NULL, preset = NULL, system1 = NULL,
   small_model = NULL, replay = NULL, record = NULL, interpolate = TRUE,
-  value_copy_max = 1048576, values_max_bytes = 67108864, max_turns = 50L,
+  value_copy_max = 2097152, values_max_bytes = 67108864, max_turns = 50L,
   max_turns_console = 200L, max_active = 8L, subagents.max_active = 8L,
   subagents.max_cli = 4L, subagents.max_workers = NULL, subagents.max_tasks = 8L,
   subagents.max_depth = 1L, max_nested_calls = 20L, connect_timeout = 20,
@@ -51,6 +51,10 @@ setting_get = function(key, session = NULL, default = NULL) {
   value = if (is.null(fun)) gptr_opt(key) else fun(key, session = session)
   value %||% default
 }
+
+#' The context mode of a call's `.opts`, else the `context` setting
+#' @noRd
+context_mode = function(opts) opts$context %||% setting_get("context", default = "summary")
 
 #' Say once per R process what yolo still asks for (IC-78)
 #' @noRd
@@ -301,7 +305,7 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.max_turns` (integer, `50`): turns per programmatic run.
 #' - `gptr.max_turns_console` (integer, `200`): turns per console prompt.
 #' - `gptr.max_nested_calls` (integer, `20`): [peter()] calls per evaluation of model code.
-#' - `gptr.value_copy_max` (bytes, `1048576`): designated result values below this size are
+#' - `gptr.value_copy_max` (bytes, `2097152`): designated result values below this size are
 #'   copied; larger ones are kept by name.
 #' - `gptr.values_max_bytes` (bytes, `67108864`): value copies held per session.
 #' - `gptr.background_tools` (character, `"idle"`): `"idle"` or `"wait"` for experimental
@@ -419,10 +423,14 @@ s3_register = function(generic, class, method = NULL) {
 #' - `GPTR_PROJECT_ROOT`: overrides the project root, like `gptr.project_root`.
 #' - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `TYPESAFE_API_KEY` and the other
 #'   provider keys: read at the first use of a provider; see [gptr_env()] for `.env` files.
-#' - `GPTR_WORKER` and `GPTR_SUBAGENT_DEPTH`: set by gptr in its own child processes only.
+#' - `GPTR_WORKER`, `GPTR_SUBAGENT_DEPTH`, `GPTR_ARTIFACT_PORTS`, `GPTR_SHELL_CMD` and the tree
+#'   markers `GPTR_PROC_<id>`: set by gptr in its own child processes only.
+#' - `GPTR_MCP_TOKEN`: the variable through which the Codex snippet of [gptr_mcp_serve()] passes
+#'   the server's bearer token to the client; gptr itself never reads it.
 #' - `GPTR_LIVE_TESTS`: `"true"` enables the package's live tests; not used at run time.
-#' - `_R_CHECK_PACKAGE_NAME_`: set by `R CMD check`; outside the package's own tests gptr then
-#'   replays recorded document blocks only and caps each child-process pool at two.
+#' - `_R_CHECK_PACKAGE_NAME_`: set by `R CMD check`; outside the package's own tests a model call
+#'   without its own `replay` argument then runs in replay mode (recorded answers or an offline
+#'   provider, never a model server), and each child-process pool is capped at two.
 #'
 #' @seealso [gptr_config()] for settings stored in files, [gptr_security] and [gptr_egress];
 #'   `vignette("configuration", package = "gptr")` for scope, precedence and grouped examples.

@@ -40,6 +40,7 @@ digests = function(reply) {
 }
 
 test_that("gptr_fake_provider() returns an offline provider spec (contract section 12.1)", {
+  skip_on_cran()
   spec = gptr_fake_provider(list("hi"))
   expect_s3_class(spec, c("gptr_provider", "gptr_spec"))
   expect_identical(spec$id, "fake")
@@ -63,6 +64,7 @@ test_that("gptr_fake_provider() returns an offline provider spec (contract secti
 })
 
 test_that("golden events: text", {
+  skip_on_cran()
   expect_identical(digests(list(text = "Hello there", chunk = 6L)), c(
     r"(start fake fake fake-1)",
     r"(text_start 1)",
@@ -131,6 +133,7 @@ test_that("golden events: a truncated tool call stops with length", {
 })
 
 test_that("the done message matches the accumulated events", {
+  skip_on_cran()
   spec = gptr_fake_provider(list(
     list(text = "Checking.", tool = "r", input = list(code = "nrow(d)"))
   ))
@@ -147,6 +150,7 @@ test_that("the done message matches the accumulated events", {
 })
 
 test_that("scripts see the request, requests are logged and the last reply repeats", {
+  skip_on_cran()
   seen = new.env()
   spec = gptr_fake_provider(function(request) {
     seen$request = request
@@ -170,6 +174,7 @@ test_that("scripts see the request, requests are logged and the last reply repea
 })
 
 test_that("json, overflow, missing scripts and failing script functions end cleanly", {
+  skip_on_cran()
   events = play_fake(gptr_fake_provider(list(list(json = list(n = 3L)))))
   expect_identical(msg_text(events[[length(events)]]$message), "{\"n\":3}")
   events = play_fake(gptr_fake_provider(list(list(overflow = TRUE))))
@@ -189,6 +194,7 @@ test_that("json, overflow, missing scripts and failing script functions end clea
 })
 
 test_that("a model record without `fake` finds its live provider by name only", {
+  skip_on_cran()
   spec = gptr_fake_provider(list("found by name"), name = "byname")
   model = spec$models[[1]]
   model$fake = NULL
@@ -214,6 +220,7 @@ test_that("delay and gap become waits between generator steps", {
 })
 
 test_that("a hanging reply runs until the signal aborts it", {
+  skip_on_cran()
   signal = new.env()
   signal$aborted = FALSE
   spec = gptr_fake_provider(list(list(hang = TRUE)))
@@ -231,6 +238,7 @@ test_that("a hanging reply runs until the signal aborts it", {
 })
 
 test_that("the classifier fake returns canonical decisions (IC-74)", {
+  skip_on_cran()
   spec = gptr_fake_provider(list(0.93, c(dog = 0.8, cat = 0.2), c(0.1, 0.2, 0.7)),
                             name = "judge", type = "classifier")
   questions = list(
@@ -267,6 +275,7 @@ test_that("a chat request to the classifier adapter ends with one error event", 
 })
 
 test_that("builtin_fake() registers the two adapters through the API object only", {
+  skip_on_cran()
   api = new.env()
   api$specs = list()
   api$register_adapter = function(name, ...) {
@@ -291,6 +300,7 @@ test_that("undescribed choices keep the request order, including ties (D-077)", 
 })
 
 test_that("invalid classifier probabilities are returned as typed errors", {
+  skip_on_cran()
   noul = list(ok = list(type = "noul"))
   choice = list(pick = list(type = "choice", criteria = list(a = "a", b = "b")))
   score = list(level = list(type = "score", criteria = list("low", "high")))
@@ -334,6 +344,7 @@ test_that("aborting during the initial delay still emits exactly one start", {
   expect_null(gen())
 })
 test_that("the reply helpers build replies the fake provider plays (contract section 12.2)", {
+  skip_on_cran()
   expect_identical(fake_text("hi", chunk = 1L), list(text = "hi", chunk = 1L))
   expect_identical(
     fake_tool("r", code = "1 + 1", .text = "Let me check."),
@@ -360,6 +371,7 @@ test_that("the reply helpers build replies the fake provider plays (contract sec
 })
 
 test_that("local_project() makes a temporary project the working directory and root", {
+  skip_on_cran()
   outer = getwd()
   local({
     root = local_project(files = list("R/analysis.R" = c("x = 1", "y = 2")))
@@ -379,6 +391,7 @@ test_that("local_project() makes a temporary project the working directory and r
 })
 
 test_that("local_project(trust = TRUE) records trust in the redirected user config", {
+  skip_on_cran()
   root = local_project(trust = TRUE)
   file = file.path(tools::R_user_dir("gptr", "config"), "trust.json")
   expect_match(file, "gptr-tests-", fixed = TRUE)
@@ -387,6 +400,7 @@ test_that("local_project(trust = TRUE) records trust in the redirected user conf
 })
 
 test_that("local_gptr_options() prefixes names and restores them", {
+  skip_on_cran()
   local({
     local_gptr_options(out_keep = 3L, gptr.quiet = FALSE)
     expect_identical(getOption("gptr.out_keep"), 3L)
@@ -588,6 +602,7 @@ test_that("mock requests bypass configured proxies for loopback only", {
 })
 
 test_that("loopback collision setup retries an unavailable first candidate", {
+  skip_on_cran()
   seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
   ports = c(49152L, 49153L)
   attempts = integer()

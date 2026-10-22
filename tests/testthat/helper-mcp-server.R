@@ -126,9 +126,10 @@ mcp_fixture_log = function(path) {
 
 # The MCP fixture server (contract 12.2): list(spec, log = function() df, stop = function()).
 # The spec is a plain list in the shape of a `mcp_server` spec, connectable with mcp_connect().
+# A stdio server answers its first request `delay` seconds late, as one still starting does.
 local_mcp_fixture = function(era = c("modern", "legacy"), transport = c("stdio", "http"),
                              tools = c("echo", "add", "slow", "fail", "elicit"), n_extra = 0L,
-                             .env = parent.frame()) {
+                             delay = 0, .env = parent.frame()) {
   era = era[1L]
   transport = transport[1L]
   stopifnot(era %in% c("modern", "legacy"), transport %in% c("stdio", "http"))
@@ -136,7 +137,7 @@ local_mcp_fixture = function(era = c("modern", "legacy"), transport = c("stdio",
   log = withr::local_tempfile(fileext = ".jsonl", .local_envir = .env)
   script = file.path(mcp_fixture_dir, "server.R")
   args = c(paste0("--era=", era), paste0("--tools=", paste(tools, collapse = ",")),
-           paste0("--extra=", n_extra), paste0("--log=", log))
+           paste0("--extra=", n_extra), paste0("--log=", log), paste0("--delay=", delay))
   spec = if (identical(transport, "stdio")) {
     list(name = "fixture", transport = "stdio", command = rscript_path(),
          args = c("--vanilla", script, args, "--transport=stdio"),

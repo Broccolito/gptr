@@ -44,6 +44,7 @@ marker_tree_is = function(marker, pid) {
 }
 
 test_that("wait_until() returns once its condition holds and reads it once per poll", {
+  skip_on_cran()
   seen = new.env(parent = emptyenv())
   seen$calls = 0L
   # TRUE then FALSE, as the macOS exec chain hides a marker tree: a second read reports FALSE
@@ -56,6 +57,7 @@ test_that("wait_until() returns once its condition holds and reads it once per p
 })
 
 test_that("R children must come from rscript_path(), never a PATH lookup", {
+  skip_on_cran()
   expect_error(proc_resolve("Rscript", "--version"), class = "gptr_error_invalid_argument")
   expect_error(proc_resolve("R"), class = "gptr_error_invalid_argument")
   expect_error(proc_resolve("gptr-no-such-program-xyz"), class = "gptr_error_spawn")
@@ -65,6 +67,7 @@ test_that("R children must come from rscript_path(), never a PATH lookup", {
 })
 
 test_that("a .cmd argument containing & is refused on every OS", {
+  skip_on_cran()
   shim = file.path(withr::local_tempdir(), "tool.cmd")
   writeLines("@echo off", shim)
   expect_error(proc_resolve(shim, c("ok", "a&b")), class = "gptr_error_invalid_argument")
@@ -77,6 +80,7 @@ test_that("a .cmd argument containing & is refused on every OS", {
 })
 
 test_that("shell_resolve() uses /bin/sh on Unix and Git Bash, PowerShell or cmd on Windows", {
+  skip_on_cran()
   none = function(x) ""
   unix = shell_resolve_os("ls | wc -l", windows = FALSE, which = none, getenv = none,
                           exists = function(x) FALSE)
@@ -242,6 +246,7 @@ test_that("a killed parent leaves a grandchild that the next load's sweep remove
 })
 
 test_that("spawn validates arguments and complete environments before creating a process", {
+  skip_on_cran()
   for (bad in list(1, list("x"), c("x", NA_character_))) {
     expect_error(proc_spawn(rscript_path(), args = bad), class = "gptr_error_invalid_argument")
   }
@@ -282,6 +287,7 @@ test_that("failed child registration cleans up the exact newly created process",
 })
 
 test_that("line readers bound chunks and preserve partial stderr and empty lines", {
+  skip_on_cran()
   chunks = c("a\r", "\n\nb", "", "c", "")
   i = 0L
   done = FALSE
@@ -349,6 +355,7 @@ test_that("proc_run echo redacts registered values spanning output polls", {
 })
 
 test_that("proc_run echo ends lines at CRLF, so a Windows child's output is redacted as LF", {
+  skip_on_cran()
   local_vault()
   secret_register("FAKEfirstLine\nFAKEsecondLine", "SPLIT_TEST_TOKEN")
   emitted = character()
@@ -374,6 +381,7 @@ test_that("proc_run echo ends lines at CRLF, so a Windows child's output is reda
 })
 
 test_that("proc_run echo redacts a registered CRLF value however the child wrote its line end", {
+  skip_on_cran()
   local_vault()
   secret_register("FAKEfirstLine\r\nFAKEsecondLine", "CRLF_TEST_TOKEN")
   # the value written verbatim (a Unix child, or a binary-mode Windows child) and through
@@ -583,6 +591,7 @@ test_that("stdin boundary: buffers remain bound to the exact process object", {
 })
 
 test_that("stdin boundary: malformed data never enters the queue", {
+  skip_on_cran()
   r = local_pipe_state()
   r$depth = 1L
   p = fake_stdin_child()
@@ -614,6 +623,7 @@ test_that("stdin boundary: cancellation clears only the owned child buffer", {
 })
 
 test_that("stdin boundary: invalid timeout options do not create pending work", {
+  skip_on_cran()
   r = local_pipe_state()
   r$depth = 1L
   p = fake_stdin_child()
@@ -726,6 +736,7 @@ local_self_marker = function(.env = parent.frame()) {
 }
 
 test_that("an exact self marker survives the orphan sweep without process operations", {
+  skip_on_cran()
   fixture = local_self_marker()
   rec = fixture$rec
   path = fixture$path
@@ -751,6 +762,7 @@ test_that("an exact self marker survives the orphan sweep without process operat
 })
 
 test_that("unverifiable self creation time retains recovery without authorizing cleanup", {
+  skip_on_cran()
   fixture = local_self_marker()
   rec = fixture$rec
   path = fixture$path
@@ -777,6 +789,7 @@ test_that("unverifiable self creation time retains recovery without authorizing 
 })
 
 test_that("self marker rejection preserves corrupt-record and foreign-parent policy", {
+  skip_on_cran()
   fixture = local_self_marker()
   path = fixture$path
   state = new.env(parent = emptyenv())
@@ -823,6 +836,7 @@ test_that("self marker rejection preserves corrupt-record and foreign-parent pol
 })
 
 test_that("orphan cleanup refuses current-PID records before any process operation", {
+  skip_on_cran()
   fixture = local_self_marker()
   path = fixture$path
   local_mocked_bindings(

@@ -404,12 +404,14 @@ worker_key_provider = function(ref) {
 
 #' `start()` of the `worker` backend: a proxy child session whose overlay receives the exports.
 #' Its spec (contract 11.11) waits in the session's adapter state (contract 8.1 `opts$state`)
-#' with the object names only, so no user object is kept (rules R1, R2). The egress acknowledgment,
-#' the replay guard (for the real model, which the worker never checks) and the objects are
-#' checked before any process starts.
+#' with the object names only, so no user object is kept (rules R1, R2), and the parent's context
+#' mode, which the worker cannot read from its own options and settings. The egress
+#' acknowledgment, the replay guard (for the real model, which the worker never checks) and the
+#' objects are checked before any process starts.
 #' @noRd
 backend_worker_start = function(spec, ctx) {
   child = subagent_child_new(spec, "worker/worker")
+  spec$opts$context = context_mode(spec$opts)
   subagent_guards(child, spec$opts, spec$info$ref)
   worker_ship_objects(spec$objects, spec$home)
   opts = subagent_run_opts(spec, child)
@@ -528,9 +530,11 @@ worker_on_exit = function(st, status) {
   worker_cleanup(st)
 }
 
-#' Remove the worker's job row and temporary files only after its tree has settled
+#' End the worker's abort guard at once, so no reactor task outlives the worker; remove its job
+#' row and temporary files only after its tree has settled
 #' @noRd
 worker_cleanup = function(st) {
+  if (!is.null(st$guard)) reactor_cancel(st$guard)
   if (isTRUE(st$cleaned)) return(invisible(TRUE))
   settled = tryCatch(isTRUE(kill_all(st$p, grace = 0)),
                     error = function(e) FALSE, interrupt = function(e) FALSE)
@@ -599,8 +603,7 @@ worker_spawn = function(st) {
   st$job = id_new("w", 8L)
   job_add("worker", st$job, name = w$name, pid = st$p$get_pid(),
           stop = function() worker_kill(st))
-  reactor_task(function() {
-    if (isTRUE(st$exited)) return(FALSE)
+  st$guard = reactor_task(function() {
     if (!isTRUE(st$opts$signal$aborted)) return(0.1)
     worker_kill(st)
     FALSE

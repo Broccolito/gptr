@@ -506,6 +506,7 @@ test_that("a multi-byte character split across chunks is held, not mangled", {
 })
 
 test_that("stream overflow fails closed, emits no prefix and stays failed (D-010)", {
+  skip_on_cran()
   local_vault()
   limit = 4096L
   token = paste0("FAKE_LONG_PRIVATE_", strrep("x", limit + 32L))

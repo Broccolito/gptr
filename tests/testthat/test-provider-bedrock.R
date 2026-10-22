@@ -167,6 +167,7 @@ test_that("bedrock_crc32() is the IEEE CRC-32 and frames match AWS's empty-messa
 })
 
 test_that("the recorded ConverseStream fixtures pass check_adapter() and gptr_check()", {
+  skip_on_cran()
   a = adapter_get(api)
   res = check_adapter(a, fixtures = sse_dir(api))
   expect_true(all(res$ok), label = paste(res$check[!res$ok], res$message[!res$ok], collapse = "; "))
@@ -183,6 +184,7 @@ test_that("the recorded ConverseStream fixtures pass check_adapter() and gptr_ch
 })
 
 test_that("the decoder gives the same frames for every split of the bytes (exception included)", {
+  skip_on_cran()
   bytes = c(converse_tool(), es_exception("throttlingException", "Too many requests"))
   whole = bedrock_decoder()(bytes)
   expect_length(whole, 10L)

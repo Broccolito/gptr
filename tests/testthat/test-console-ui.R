@@ -50,6 +50,7 @@ test_that("a console select outside a run opens its own block in the margin (D-1
 })
 
 test_that("the one-line prompt shows the first line, +N more lines and the flagged calls", {
+  skip_on_cran()
   root = local_project()
   # R's parser refuses bidi controls inside string literals in UTF-8 locales, so the payload
   # sits in comments, where it parses everywhere
@@ -79,6 +80,7 @@ test_that("the prompt's first line fits the console, keeping +N more lines (D-18
 })
 
 test_that("flagged calls fit one per line, highest level first, at most 5 (#33)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   root = local_project()
   code = c(sprintf("writeLines('%s', 'f%d.txt')", strrep("x", 30L), 1:7), "unlink('data')")
@@ -91,6 +93,7 @@ test_that("flagged calls fit one per line, highest level first, at most 5 (#33)"
 })
 
 test_that("a path tool's prompt shows the path relative to the project; no empty label (#33)", {
+  skip_on_cran()
   root = local_project()
   # a tool's own risk record, as the dispatcher passes it: no label
   w = list(tool = "write", input = list(path = file.path(root, "R", "io.R")),
@@ -103,6 +106,7 @@ test_that("a path tool's prompt shows the path relative to the project; no empty
 })
 
 test_that("[a]lways is offered only with a suggested rule; a and p say why not (#33)", {
+  skip_on_cran()
   root = local_project()
   e = new.env()
   e$x = 1
@@ -118,6 +122,7 @@ test_that("[a]lways is offered only with a suggested rule; a and p say why not (
 })
 
 test_that("the detail view shows the code as a plain fence of at most 40 lines (D-187)", {
+  skip_on_cran()
   root = local_project()
   code = sprintf("x%d = %d", 1:45, 1:45)
   detail = ui_permission_detail(ui_request(paste(code, collapse = "\n")))
@@ -131,6 +136,7 @@ test_that("the detail view shows the code as a plain fence of at most 40 lines (
 })
 
 test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3)", {
+  skip_on_cran()
   root = local_project()
   req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
   out = console_try(function() ui_console_permission(req), "y")
@@ -168,6 +174,7 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
 })
 
 test_that("a block pasted at the approval prompt never answers it nor steers (IC-75)", {
+  skip_on_cran()
   local_console_test()
   local_gptr_options(interactive = TRUE)
   # fd 0 as one buffer: the rest of a paste whose first line answers the question waits there
@@ -215,6 +222,7 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
 })
 
 test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-188)", {
+  skip_on_cran()
   root = local_project()
   req = ui_request("x = 1")
   expect_identical(ui_permission_lines(req)[1L], "  r  x = 1")
@@ -232,6 +240,7 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
 })
 
 test_that("nested calls with the same prompt are told apart by their number (#36)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_project()
   sub = local_fake_provider(function(request) {
@@ -259,6 +268,7 @@ test_that("nested calls with the same prompt are told apart by their number (#36
 })
 
 test_that("invalid answers are explained; five end in a refusal the model is told (D-188)", {
+  skip_on_cran()
   root = local_project()
   crit = ui_request("q('no')", tier = "ask_human")
   out = console_try(function() ui_console_permission(crit), c("a", "p", "y"))
@@ -291,6 +301,7 @@ test_that("the detail view shows the checkpoint.note service's undo note", {
 })
 
 test_that("ui.get resolves the snapshot of gptr.ui, else console or none (IC-43, IC-53)", {
+  skip_on_cran()
   root = local_project()
   get_ui = ext_service_get("ui.get")
   expect_identical(get_ui()$name, "none")
@@ -318,6 +329,7 @@ test_that("ui.get resolves the snapshot of gptr.ui, else console or none (IC-43,
 })
 
 test_that("a failing or empty dialog is never an approval (10.2 row 22)", {
+  skip_on_cran()
   broken = gptr_spec("ui", "broken", has_ui = function() TRUE,
                      select = function(title, choices, ...) stop("dialog crashed"),
                      permission = function(request) stop("dialog crashed"))
@@ -343,6 +355,7 @@ test_that("the rstudio UI has no UI outside RStudio and then denies", {
 })
 
 test_that("the scripted UI answers in order, logs and fails closed when empty (12.2)", {
+  skip_on_cran()
   root = local_project()
   local_permission_rules()
   st = local_scripted_ui(list("y", list(decision = "deny", feedback = "use a temp file"), 2L,
@@ -363,6 +376,7 @@ test_that("the scripted UI answers in order, logs and fails closed when empty (1
 })
 
 test_that("answering [a]lways adds a session rule covering exactly the flagged calls", {
+  skip_on_cran()
   root = local_project()
   local_permission_rules()
   st = local_scripted_ui(list("a", "p", "a"))
@@ -383,6 +397,7 @@ test_that("answering [a]lways adds a session rule covering exactly the flagged c
 })
 
 test_that("[a]lways in a run covers the same calls in the next run (05 P11 acceptance 5)", {
+  skip_on_cran()
   root = local_project()
   local_permission_rules()
   st = local_scripted_ui(list("a"))

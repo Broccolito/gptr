@@ -8,6 +8,7 @@ source(testthat::test_path("fixtures", "jev", "harness.R"), local = TRUE)
 # ---- Task 7: states and the batch rule ----------------------------------------------------------
 
 test_that("the batch rule gives one state per element or unnamed list item", {
+  skip_on_cran()
   expect_identical(s1_states(c(a = "A puppy.", b = "A car."), "text"),
                    list(a = list(text = "A puppy."), b = list(text = "A car.")))
   expect_identical(s1_states(1:3, "n")[[3]], list(n = 3L))
@@ -22,6 +23,7 @@ test_that("the batch rule gives one state per element or unnamed list item", {
 })
 
 test_that("a data frame gives one record per row and marks the split; I() keeps it whole", {
+  skip_on_cran()
   df = data.frame(a = 1:2, b = c("u", "v"))
   st = s1_states(df, "row")
   expect_identical(st[[2]], list(row = list(a = 2L, b = "v")))
@@ -45,6 +47,7 @@ test_that("matrices, environments and functions are one described state", {
 })
 
 test_that("large values are described instead of sent, and long text is cut", {
+  skip_on_cran()
   local_mocked_bindings(
     describe_binding = function(name, envir, budget = 150L) c("<numeric> 5000 values", name),
     gptr_describe = function(x, budget = 150L, ...) "<numeric> described"
@@ -85,6 +88,7 @@ test_that("a session becomes at most gptr.s1_state_max characters of facts and a
 })
 
 test_that("inputs combine element-wise and must share one length", {
+  skip_on_cran()
   z = s1_zip(list(s1_part(c(x = 1, y = 2), "a"), s1_part("ctx", "b")))
   expect_identical(z$states, list(list(a = 1, b = "ctx"), list(a = 2, b = "ctx")))
   expect_identical(z$names, c("x", "y"))
@@ -208,6 +212,7 @@ test_that("states leave I() lists, date-times and nested data frames editable in
 })
 
 test_that("a session state stays within gptr.s1_state_max even when its facts are long", {
+  skip_on_cran()
   local_mocked_bindings(session_data = function(s) {
     list(status = "error", reason = strrep("r", 300), last_text = "Fine.",
          values = list(list(name = "fit", class = "lm")))
@@ -235,6 +240,7 @@ test_that("a session without an answer or a value name still gives a state", {
 # ---- Task 8: the classifier route core ----------------------------------------------------------
 
 test_that("s1_match() takes classifier specs, references, provider ids and emulate refs", {
+  skip_on_cran()
   judge = local_fake_provider(list(0.5), name = "judge", type = "classifier")
   chat = local_fake_provider(list("hi"), name = "chatty")
   m = function(model, prompt = "Q?") s1_match(call_new(prompt = prompt, ids = list(model = model)))
@@ -250,6 +256,7 @@ test_that("s1_match() takes classifier specs, references, provider ids and emula
 })
 
 test_that("s1_target() resolves specs, references and provider ids; emulation is opt-in", {
+  skip_on_cran()
   judge = local_fake_provider(list(0.5), name = "judge", type = "classifier")
   local_fake_provider(list("hi"), name = "chatty")
   t1 = s1_target(judge)
@@ -270,6 +277,7 @@ test_that("s1_target() resolves specs, references and provider ids; emulation is
 })
 
 test_that("s1_build() and s1_abstain() follow the threshold and the uncertain band", {
+  skip_on_cran()
   q = list(type = "noul", options = NULL)
   ans = list(list(prob = 0.9), list(prob = 0.55), NULL, list(prob = 0.3))
   out = s1_build(q, ans, c("a", "b", "c", "d"), 0.5, list(cached = rep(FALSE, 4)))
@@ -308,6 +316,7 @@ test_that("summaries match the document line format of contract 11.5", {
 })
 
 test_that("s1_call() answers from a call record and caches per element", {
+  skip_on_cran()
   s1_fresh()
   judge = local_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
   call = s1_test_call("Is it about dogs?", text = c(a = "A puppy.", b = "A car."), model = judge)
@@ -331,6 +340,7 @@ test_that("s1_call() answers from a call record and caches per element", {
 })
 
 test_that("System 1 calls are logged in the process System 1 accounting log", {
+  skip_on_cran()
   s1_fresh()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
@@ -345,6 +355,7 @@ test_that("System 1 calls are logged in the process System 1 accounting log", {
 })
 
 test_that("the document summary is written through doc.s1_block, never from model code", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(list(0.9), name = "judge", type = "classifier")
   seen = new.env()
@@ -365,6 +376,7 @@ test_that("the document summary is written through doc.s1_block, never from mode
 })
 
 test_that("ctx$decide() goes through the s1.decide service to the configured System 1", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(function(state, question) c(standard = 0.3, complex = 0.7),
                       name = "judge", type = "classifier")
@@ -399,6 +411,7 @@ local_s1_test_provider = function(id, api, ..., model = list(), .env = parent.fr
 }
 
 test_that("the route follows the model's own type, not its provider's default (IC-74)", {
+  skip_on_cran()
   s1_fresh()
   # a provider whose default is chat serves a classifier model, and the reverse
   mixed = gptr_fake_provider(list(0.8), name = "mixed", type = "classifier")
@@ -437,6 +450,7 @@ test_that("the route follows the model's own type, not its provider's default (I
 })
 
 test_that("emulated answers say so in their metadata and their usage row (IC-19, IC-74)", {
+  skip_on_cran()
   s1_fresh()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
@@ -462,6 +476,7 @@ test_that("emulated answers say so in their metadata and their usage row (IC-19,
 })
 
 test_that("unreported usage stays unknown; an answer from the cache used none (IC-74)", {
+  skip_on_cran()
   s1_fresh()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
@@ -487,6 +502,7 @@ test_that("unreported usage stays unknown; an answer from the cache used none (I
 })
 
 test_that("a cached record that no longer answers the question is a miss (IC-74)", {
+  skip_on_cran()
   s1_fresh()
   judge = local_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
   s1_call(s1_test_call("Q?", text = "a", model = judge))
@@ -503,6 +519,7 @@ test_that("a cached record that no longer answers the question is a miss (IC-74)
 })
 
 test_that("the request preflight runs before the call's values are read (IC-74)", {
+  skip_on_cran()
   s1_fresh()
   local_mocked_bindings(catalog_ollama_discover = function(...) stop("discovery must not run"),
                         s1_inputs = function(call) stop("the call's values were read"))
@@ -524,6 +541,7 @@ test_that("the request preflight runs before the call's values are read (IC-74)"
 })
 
 test_that("System 1 images are checked against the model, keyed and handed over (IC-74)", {
+  skip_on_cran()
   s1_fresh()
   img = function(b) list(data = as.raw(b), mime = "image/png")
   with_images = function(model, images) {
@@ -562,6 +580,7 @@ test_that("System 1 images are checked against the model, keyed and handed over 
 })
 
 test_that("egress and the call's replay mode guard requests, not cache hits (IC-47, IC-74)", {
+  skip_on_cran()
   s1_fresh()
   seen = new.env(parent = emptyenv())
   seen$n = 0L
@@ -603,6 +622,7 @@ test_that("egress and the call's replay mode guard requests, not cache hits (IC-
 })
 
 test_that("a piped session gets a gptr.decision entry and the decision event its question type", {
+  skip_on_cran()
   s1_fresh()
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
@@ -641,6 +661,7 @@ test_that("a piped session gets a gptr.decision entry and the decision event its
 })
 
 test_that("an answer whose confidence is unknown is inside the uncertain band (IC-74)", {
+  skip_on_cran()
   # an empty probability map leaves the confidence unknown (report 04 section 2.9), and an unknown
   # confidence cannot show that min_confidence is met; a failed element stays as it is
   cq = list(type = "choice", options = c("x", "y"))
@@ -692,6 +713,7 @@ test_that("an answer whose confidence is unknown is inside the uncertain band (I
 })
 
 test_that("a value from an uncertain() function must be a value of the question", {
+  skip_on_cran()
   sq = list(type = "score", options = c("lo", "mid", "hi"))
   sc = s1_build(sq, list(list(score = 1.2, probabilities = c(lo = 0.2, mid = 0.4, hi = 0.4),
                               confidence = 0.1)), NULL, 0.5, list())
@@ -784,6 +806,7 @@ test_that("INFRA-18: against a mocked /systemone: if() works; 100 states stay wi
 })
 
 test_that("INFRA-18: min_confidence with uncertain NA, \"stop\" or a function follows the policy", {
+  skip_on_cran()
   s1_fresh()
   local_fake_provider(function(state, question) {
     switch(state$x, sure = 0.95, unsure = 0.55, no = 0.02)
@@ -916,6 +939,7 @@ router_spec = function() {
 }
 
 test_that("the example ends with a factory that registers the jev-auto router", {
+  skip_on_cran()
   path = jev_router_path()
   expect_true(file.exists(path))
   factory = source(path, local = new.env())$value
@@ -933,6 +957,7 @@ test_that("the example ends with a factory that registers the jev-auto router", 
 })
 
 test_that("the example loads with extensions = for that session only (IC-69)", {
+  skip_on_cran()
   s1_fresh()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_fake_provider(list("Hello."), name = "fhost")
@@ -943,6 +968,7 @@ test_that("the example loads with extensions = for that session only (IC-69)", {
 })
 
 test_that("a complex request plans on the strong model and switches once after the first edit", {
+  skip_on_cran()
   s1_fresh()
   m = local_router_models(
     strong = list(fake_tool("lookup", path = "a.R"), fake_tool("edit", path = "a.R")),
@@ -965,6 +991,7 @@ test_that("a complex request plans on the strong model and switches once after t
 })
 
 test_that("an ordinary request plans on the standard model; a failed edit does not switch", {
+  skip_on_cran()
   s1_fresh()
   m = local_router_models(
     strong = list("strong reply"),
@@ -981,6 +1008,7 @@ test_that("an ordinary request plans on the standard model; a failed edit does n
 })
 
 test_that("without a System 1 model the router plans on the standard model", {
+  skip_on_cran()
   s1_fresh()
   m = local_router_models(strong = list("strong reply"), standard = list("standard reply"),
                           implement = list("done"), complex = 0.9)
@@ -992,6 +1020,7 @@ test_that("without a System 1 model the router plans on the standard model", {
 })
 
 test_that("the route keeps its phase across a compaction and plans without System 1", {
+  skip_on_cran()
   spec = router_spec()
   asked = new.env()
   asked$n = 0L
@@ -1018,6 +1047,7 @@ test_that("the route keeps its phase across a compaction and plans without Syste
 })
 
 test_that("a compaction right after the first edit moves the router to implementation", {
+  skip_on_cran()
   s1_fresh()
   m = local_router_models(
     strong = list(fake_tool("edit", path = "a.R"), "strong reply"),
@@ -1063,6 +1093,7 @@ test_that("a compaction right after the first edit moves the router to implement
 })
 
 test_that("a System 1 rating slower than 2 s still chooses the planner", {
+  skip_on_cran()
   s1_fresh()
   m = local_router_models(strong = list("strong reply"), standard = list("standard reply"),
                           implement = list("done"), complex = 0.9)

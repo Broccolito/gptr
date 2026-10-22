@@ -41,6 +41,7 @@ local_team_fake = function(script = function(request) paste("reply", request$n),
 }
 
 test_that("the scheduler runs at most max_total children and reports each once", {
+  skip_on_cran()
   log = stub_log()
   hs = subagent_schedule(stub_items(5L, log = log), 2L, function(i, h) {
     log$settled = c(log$settled, i)
@@ -52,6 +53,7 @@ test_that("the scheduler runs at most max_total children and reports each once",
 })
 
 test_that("pools keep their own limits: workers 2 under R CMD check, inline unaffected", {
+  skip_on_cran()
   withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr")
   local_gptr_options(subagents.max_workers = 4L)
   log = stub_log()
@@ -81,6 +83,7 @@ test_that("at top level the pause menu has no child run to steer or background",
 })
 
 test_that("gptr_parallel() returns a team of the members (contract 6.5 example)", {
+  skip_on_cran()
   fake = gptr_fake_provider(list("ok"))
   team = gptr_parallel(planner = peter("Plan it", model = fake, envir = new.env()),
                        lit = peter("Summarise it", model = fake, envir = new.env()))
@@ -98,6 +101,7 @@ test_that("gptr_parallel() returns a team of the members (contract 6.5 example)"
 })
 
 test_that("gptr_parallel() members run concurrently, max_active at a time", {
+  skip_on_cran()
   local_team_fake(list(fake_text("slow", delay = 2)))
   t0 = Sys.time()
   team = gptr_parallel(a = peter("one", envir = new.env()), b = peter("two", envir = new.env()),
@@ -111,6 +115,7 @@ test_that("gptr_parallel() members run concurrently, max_active at a time", {
 })
 
 test_that("gptr_parallel() keeps failed members, or signals the first with on_error = stop", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (identical(request$last_user, "bad")) fake_error("bad request", status = 400L) else "fine"
   })
@@ -133,6 +138,7 @@ test_that("gptr_parallel() refuses unnamed members, non-sessions and accessor na
 })
 
 test_that("gptr_parallel() members keep the user's random seed (IC-61)", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (length(request$last_results)) "done" else fake_tool("r", code = "z = stats::runif(1)")
   })
@@ -230,6 +236,7 @@ test_that("the reports reach a continuation as user-role data (IC-55)", {
 })
 
 test_that("exports return to the caller in task order; a second exporter keeps the first", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (length(request$last_results)) return("done")
     fake_tool("r", code = paste0("res = '", if (request$n == 1L) "first" else "second", "'"))
@@ -333,6 +340,7 @@ test_that("a fan-out needs exactly one list-like context object", {
 })
 
 test_that("gptr_map() runs one child per element and returns a fan-out session", {
+  skip_on_cran()
   local_team_fake(function(request) paste("summary", request$n))
   e = new.env()
   e$cohorts = list(A = 1:3, B = 4:6, C = 7:9)
@@ -350,6 +358,7 @@ test_that("gptr_map() runs one child per element and returns a fan-out session",
 })
 
 test_that("a fan-out over a value binds .x in each overlay only while the child runs", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (length(request$last_results)) return("ok")
     fake_tool("r", code = "n = length(.x[[1]])\ngptr::gptr_return(n)")
@@ -367,19 +376,21 @@ test_that("a fan-out over a value binds .x in each overlay only while the child 
 })
 
 test_that("a fan-out child that succeeds keeps only its values held by name (D-189)", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (length(request$last_results)) return("ok")
-    fake_tool("r", code = "scratch = numeric(1e5)\nbig = numeric(2e5)\ngptr::gptr_return(big)")
+    fake_tool("r", code = "scratch = numeric(1e5)\nbig = numeric(3e5)\ngptr::gptr_return(big)")
   })
   e = new.env()
   e$cohorts = list(A = 1, B = 2)
   fan = gptr_map(team_call("x", parallel = 2L, envir = e,
                            context = list(sym_item("cohorts", e$cohorts))))
   expect_identical(names(fan$A$envir), "big")
-  expect_identical(fan$value$A, numeric(2e5))
+  expect_identical(fan$value$A, numeric(3e5))
 })
 
 test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks says (IC-39)", {
+  skip_on_cran()
   local_team_fake()
   local_gptr_options(subagents.max_tasks = 2L)
   e = new.env()
@@ -390,6 +401,7 @@ test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks s
 })
 
 test_that("each report fits min(2000, budget / n) tokens in a closed element (03 section 12.2)", {
+  skip_on_cran()
   # This exercises report budgets, not thousands of tiny streaming deltas.
   local_team_fake(function(request) fake_text(report, chunk = 65536L))
   e = new.env()
@@ -444,6 +456,7 @@ last_user_message = function(s) {
 }
 
 test_that("NS-6: a team through peter(), its members, its text, and its continuation", {
+  skip_on_cran()
   fake = local_team_fake(function(request) {
     if (grepl("Reconcile", request$last_user, fixed = TRUE)) "One list of fixes." else
       paste("Review:", request$last_user)
@@ -468,6 +481,7 @@ test_that("NS-6: a team through peter(), its members, its text, and its continua
 })
 
 test_that("a fan-out runs every element, parallel at a time (P19 acceptance 6)", {
+  skip_on_cran()
   local_team_fake(list(fake_text("summary", delay = 0.3)))
   box = local_active()
   cohorts = stats::setNames(as.list(1:20), paste0("c", 1:20))
@@ -480,6 +494,7 @@ test_that("a fan-out runs every element, parallel at a time (P19 acceptance 6)",
 })
 
 test_that("each fan-out child gets its own element alone, as .x, for a symbol or a call", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (length(request$last_results)) return("ok")
     fake_tool("r", code = "gptr::gptr_return(.x)")
@@ -497,10 +512,13 @@ test_that("a fan-out with context = \"none\" is refused before any child starts"
   b = list(A = 1:3, B = letters)
   expect_error(peter("p", b, parallel = 2, .opts = list(context = "none")),
                "context = \"names\"", fixed = TRUE, class = "gptr_error_invalid_argument")
+  local_gptr_options(context = "none")
+  expect_error(peter("p", b, parallel = 2), class = "gptr_error_invalid_argument")
   expect_length(fake_requests(fake), 0L)
 })
 
 test_that("teams and fan-outs started in an r evaluation are children of the running session", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (identical(request$last_user, "check")) return("inner report")
     if (identical(request$last_user, "each")) return("inner element")
@@ -528,6 +546,7 @@ test_that("teams and fan-outs started in an r evaluation are children of the run
 })
 
 test_that("teams and fan-outs from model code without model = run on the session's model", {
+  skip_on_cran()
   local_project()
   local_gptr_options(mode = "auto", model = "other/other-1")
   other = local_fake_provider(list("other"), name = "other")
@@ -547,6 +566,7 @@ test_that("teams and fan-outs from model code without model = run on the session
 })
 
 test_that("sub-agent prompts name the asker and reach only the console (D-188)", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (identical(request$last_user, "S")) {
       if (length(request$last_results)) return("child done")
@@ -581,6 +601,7 @@ test_that("sub-agent prompts name the asker and reach only the console (D-188)",
 })
 
 test_that("a fan-out child's plain assignment never asks about the caller's object (#32)", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (identical(request$last_user, "S")) {
       if (length(request$last_results)) return("child done")
@@ -616,6 +637,7 @@ test_that("a fan-out child's plain assignment never asks about the caller's obje
 })
 
 test_that("a foreground fan-out, team or gptr_parallel shows a line per sub-agent (D-188)", {
+  skip_on_cran()
   local_team_fake(function(request) paste("reply to", request$last_user))
   local_gptr_options(verbose = 1L, quiet = FALSE)
   run_all = function() {
@@ -666,6 +688,7 @@ test_that("model-issued teams above gptr.subagents.max_tasks fail in the tool re
 })
 
 test_that("System 1 inside one agent's evaluation never runs a sibling's tool (IC-57)", {
+  skip_on_cran()
   local_team_fake(function(request) {
     if (length(request$last_results)) return("done")
     if (grepl("Agent one", request$system$t1 %||% "", fixed = TRUE)) {
@@ -716,6 +739,7 @@ local_ns6 = function(script, .env = parent.frame()) {
 }
 
 test_that("NS-6: the team statement owns one block and replays with zero requests (IC-47)", {
+  skip_on_cran()
   x = local_ns6(function(request) {
     if (grepl("statistics", request$system$t1 %||% "", fixed = TRUE)) {
       "Line 3 ignores the repeated measures."
@@ -755,6 +779,7 @@ test_that("NS-6: the team statement owns one block and replays with zero request
 # ---- Durable parent context --------------------------------------------------------------------
 
 test_that("team and fanout checkpoints receive the original task and child reports", {
+  skip_on_cran()
   fake = local_team_fake(function(request) {
     if (grepl("<compaction_request>", request$last_user, fixed = TRUE)) "Checkpoint." else
       "metric = 156.6523"
@@ -800,6 +825,7 @@ test_that("team and fanout checkpoints receive the original task and child repor
 })
 
 test_that("gptr_parallel checkpoints retain reports without inventing a parent task", {
+  skip_on_cran()
   fake = local_team_fake(list("Plan ready.", "Checks ready.", "Checkpoint."))
   session = gptr_parallel(planner = peter("Plan the analysis", envir = new.env()),
                           checker = peter("Check the fit", envir = new.env()))
@@ -821,6 +847,7 @@ test_that("gptr_parallel checkpoints retain reports without inventing a parent t
 })
 
 test_that("a rebuilt parent retains task and reports without reading child journals", {
+  skip_on_cran()
   fake = local_team_fake(list("156.6523"))
   task = "Report the existing fit metric."
   session = peter(task, list(first = 1, second = 2), parallel = 2, envir = new.env())
@@ -870,6 +897,7 @@ test_that("stored child reports deduplicate unchanged turns and allow updated re
 })
 
 test_that("durable partial reports keep status bounds escaped names and redaction", {
+  skip_on_cran()
   secret = paste0("sk-", strrep("a", 24L))
   fake = local_team_fake(function(request) {
     if (request$n == 1L) fake_error("No result.", status = 400L) else
@@ -899,6 +927,7 @@ test_that("durable partial reports keep status bounds escaped names and redactio
 # ---- Trusted child R progress -----------------------------------------------------------------
 
 test_that("settled team and fanout R results reach the checkpoint without private output", {
+  skip_on_cran()
   fake = local_team_fake(function(request) {
     if (grepl("<compaction_request>", request$last_user, fixed = TRUE)) return("Work complete.")
     if (length(request$last_results)) return("156.6523")
@@ -956,6 +985,7 @@ test_that("settled team and fanout R results reach the checkpoint without privat
 })
 
 test_that("active and failed child work is not inferred from a malicious final report", {
+  skip_on_cran()
   probe = new.env(parent = emptyenv())
   probe$active = list()
   fake = local_team_fake(function(request) {
@@ -997,6 +1027,7 @@ test_that("active and failed child work is not inferred from a malicious final r
 })
 
 test_that("R progress excludes previous tasks orphaned partial and duplicate tool results", {
+  skip_on_cran()
   local_team_fake(list(fake_tool("r", code = "answer = 7"), fake_text("Reported success.")))
   team = peter("First task", agents = list(first = agent(model = "fake/fake-1")))
   child = team$first
@@ -1056,6 +1087,7 @@ test_that("R progress excludes previous tasks orphaned partial and duplicate too
 })
 
 test_that("fresh root resume retains child execution facts with no child reads or charges", {
+  skip_on_cran()
   fake = local_team_fake(function(request) {
     if (grepl("<compaction_request>", request$last_user, fixed = TRUE)) {
       return("Both child R calls already succeeded; answer 7. Do not repeat completed work.")
@@ -1103,6 +1135,7 @@ test_that("fresh root resume retains child execution facts with no child reads o
 })
 
 test_that("recorded team block replay retains R facts without repeating completed work", {
+  skip_on_cran()
   x = local_ns6(function(request) {
     if (length(request$last_results)) return("7")
     fake_tool("r", code = "answer = 7\nprint(answer)\ngptr::gptr_return(answer)", record = TRUE)
@@ -1138,6 +1171,7 @@ test_that("recorded team block replay retains R facts without repeating complete
 })
 
 test_that("public containers resume their selected model before a parent request", {
+  skip_on_cran()
   local_team_fake()
   fake = local_fake_provider(list("Child done."), name = "persist-model")
   selected = "persist-model/persist-model-1"

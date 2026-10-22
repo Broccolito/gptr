@@ -319,7 +319,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `gptr.replay` | `chr(1) \| NULL` | settings (`"auto"`) | P08 (resolution), P15 | `"auto"`, `"replay"`, `"live"`, `"record"`; overridden by the call's `replay =` |
 | `gptr.record` | `chr(1) \| NULL` | settings (`"ask"`) | P15 | `"auto"`, `"ask"`, `"off"`: may gptr write into documents (write consent, IC-45) |
 | `gptr.interpolate` | `lgl(1)` | `TRUE` | P08 | `{identifier}` prompt interpolation (§6.1.4) |
-| `gptr.value_copy_max` | `num(1)` | `1048576` | P06 | bytes; designated values below this are deep-copied |
+| `gptr.value_copy_max` | `num(1)` | `2097152` | P06 | bytes; designated values below this are deep-copied (D-247) |
 | `gptr.values_max_bytes` | `num(1)` | `67108864` | P06 | bytes of held value copies and boxes per session |
 | `gptr.max_turns` | `int(1)` | `50L` | P06 | turns per programmatic run |
 | `gptr.max_turns_console` | `int(1)` | `200L` | P14 | turns per console prompt |
@@ -1802,9 +1802,10 @@ gptr_return(x)
 
 Called by model-written (or user) R code during a run to designate the run's result. Captures `substitute(x)`
 and forces `x` in a leaf; the session stores it under the §5.1 value policy of `03` (symbol bound in a kept home and
-below `gptr.value_copy_max`: deep copy; larger: name + address; anonymous or bound in a function-frame home: boxed),
-capped by `gptr.values_max_bytes`, and appends a `gptr.value` entry. Returns `invisible(NULL)`. Outside a run it
-returns `invisible(x)` and does nothing else (a once-per-session `notice`, silent while a document is replayed), so
+below `gptr.value_copy_max` by `env_snap_size()`: deep copy, unless `duplicate()` returns the value itself or the
+copy holds as much of its own; otherwise name + address; anonymous or bound in a function-frame home: boxed;
+D-247), capped by `gptr.values_max_bytes`, and appends a `gptr.value` entry. Returns `invisible(NULL)`. Outside a run
+it returns `invisible(x)` and does nothing else (a once-per-session `notice`, silent while a document is replayed), so
 recorded code that still contains the call re-sources cleanly (IC-48). Copy-safety: [R1][leaf] (`test-copy-tools.R`
 rows for the three cases).
 
@@ -1857,7 +1858,7 @@ gptr_risk(code, envir = NULL, root = NULL)
 
 The advisory static classifier (not a security boundary). `code`: chr (R code) or a call/expression; `envir`:
 optional environment the code would run in (enables overwrite-size detection of bound names by `env_snapshot()`'s
-size rule, D-189: a plain assignment evaluated in `envir` is looked up there only; a `<<-`, `assign()` or replacement
+size rule, D-247: a plain assignment evaluated in `envir` is looked up there only; a `<<-`, `assign()` or replacement
 target, or one inside `local()`, `with()` or `within()`, also in the enclosing environments up to the global one,
 D-213; read-only lookups, never forcing promises); `root`: project root (default `project_root()`). Never evaluates
 `code`. Returns a `gptr_risk` (§5.11). Commands passed to `peter$sh()` are classified with the command table,
@@ -2654,7 +2655,7 @@ Functions (P08):
 | `route_pass()` | the sentinel a route's `run()` returns to continue routing | P13, P14, P15, P19 |
 | `gateway_defer(expr_fun)` | evaluates `expr_fun()` with deferral on: every `peter()` call made meanwhile behaves as `.run = FALSE` and returns its unstarted session | P19 (`gptr_parallel()` forces its `...` promises inside it) |
 | `gateway_run(call, s = NULL)` | the default System 2 runner used by the `continue`/`new` routes and by other routes: creates the session when `s` is `NULL` (`session_new()` with the resolved model, mode and home; a router model is stored as `router:<name>`, IC-69; without `model =` inside a run, the running session's model; inside a run the model is resolved as the running session sees it and that session's own spec of it is registered for the child, D-210), chooses the evaluation environment by the IC-40 precedence and checks that context symbols are visible there, applies model/mode changes and `session_add_tools()` for `tools =`/`plugins =`/`extensions =` on a continuation, tightens the mode to the running one when `run_current()` is non-NULL (IC-53), runs `egress_check()`, calls `replay_guard()`, builds the input (first message or turn blocks, the prompt, `skills =` preloads, the pending plan once), then `session_run()`/`run_start()`/queue per `.run` and `background`; writes nothing to documents itself | P13 (escalation), P14, P15, P19 |
-| `dot_facts(x)` [leaf] | `list(class, is_session, is_chr1, length, dim, bytes, text)` (`text` = a `paste0()` copy of character values up to 64 KiB, else `NULL`) | P08 |
+| `dot_facts(x)` [leaf] | `list(class, is_session, is_chr1, length, dim, bytes, text)` (`bytes` by `env_snapshot()`'s size rule, D-247; `text` = a `paste0()` copy of character values up to 64 KiB, else `NULL`) | P08 |
 | `resolve_identifier(expr, arg, envir)` (service `identifier.resolve`) | §6.1.3; returns chr or a spec | P08, P17 (`agents` mask); P02 stores raw expressions and never calls it (IC-34) |
 | `identifier_known(name, arg)` | `lgl(1)`: catalog aliases, registered provider/model/router ids, modes, presets, skill/plugin/extension/agent names (by `arg`) | P08 |
 | `interpolate_prompt(template, envir)` [leaf per value] | §6.1.4 | P08, P14 (console echo) |
@@ -2688,9 +2689,9 @@ v = call_value(call, 1L)
 | `eval_guard(exprs)` | `eval-guard.R` | `list(blocked = chr, reason = chr(1) \| NULL)` for `q`, `quit`, `readline`, `menu`, `browser`, ... [12 §3.6]; the symbols `q` and `quit` are flagged in any position (a value, a `FUN` argument, `match.fun`, `get`, `do.call`, `base::`; IC-67); a literal `[secret:` marker is blocked with the `Sys.getenv()` hint | P09, P18 |
 | `gptr_shim(exprs, envir)` | `eval-guard.R` | rewrites calls headed by `peter`, `gptr_return` to `gptr::` when the symbol `peter` is not visible from `envir`, without binding anything; the recorded code keeps the original text | P09 |
 | `plot_png(recorded, width = gptr.plot_width, height = gptr.plot_height, res = gptr.plot_res)` | `eval-plots.R` | an image block (ragg when installed, else `grDevices::png()`) | P09, P10 (`peter$plot()`) |
-| `env_snapshot(envir, previous = NULL)` [R4] | `env-snapshot.R` | df `name`, `kind` (`value`, `promise`, `active`), `address`, `class`, `bytes` (address-keyed `object.size()` cache; `NA` for environments, functions, external pointers, compact sequences and S7 objects, whose class objects `object.size()` counts in full; D-189), `shape`, `fp` (`fingerprint()`); never forces promises or calls active bindings; `.Random.seed` and `.Last.value` excluded | P09, P16 |
+| `env_snapshot(envir, previous = NULL)` [R4] | `env-snapshot.R` | df `name`, `kind` (`value`, `promise`, `active`), `address`, `class`, `bytes` (`env_snap_size(x, envir)`, reused while address, class, shape and `fp` hold; `NA` only for promises, active bindings and missing arguments; D-247), `shape`, `fp` (`fingerprint()`); never forces promises or calls active bindings; `.Random.seed` and `.Last.value` excluded | P09, P16 |
 | `env_diff(old, new, assigned = character())` | `env-snapshot.R` | `list(added, modified, removed)` (chr each): address, kind or fingerprint changed, or a static assignment target | P09, P16 |
-| `workspace_lines(snapshot, budget = 600L)` | `env-snapshot.R` | chr: at most 12 lines `name  class  shape  size`, largest first (a value of unknown size other than a function or environment ranks at the median known size, ties by name; D-189), then `(+ n smaller objects: use ls())` | P09 (block), P14 (banner) |
+| `workspace_lines(snapshot, budget = 600L)` | `env-snapshot.R` | chr: at most 12 lines `name  class  shape  size`, largest first, ties by name (promises and active bindings last; D-247), then `(+ n smaller objects: use ls())` | P09 (block), P14 (banner) |
 | `changes_lines(diff, snapshot, user_ran, budget = 300L)` | `env-snapshot.R` | chr lines `+ name class shape size`, `~ name`, `- name`, `user ran: <expr>` | P09, P16 |
 | `describe_binding(name, envir, budget = 150L)` [R4] | `env-describe.R` | `gptr_describe()` of a binding looked up in a leaf, never forcing promises (`<promise>`/`<active>`), errors caught (default method) | P09, P14 (`@object`), P13 (state labels) |
 | `user_expr_log(since = NULL, n = 20L)` | `env-history.R` | chr of top-level expressions the user evaluated since `since` (task callback registered while a session with a kept home is live), deparsed and cut to 120 characters | P09 |

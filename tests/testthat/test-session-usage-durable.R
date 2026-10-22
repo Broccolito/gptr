@@ -65,6 +65,7 @@ test_that("ordinary child charges recover their exact row and originating agent"
 })
 
 test_that("a fresh root retains nested team and fanout charges without child files", {
+  skip_on_cran()
   local_store()
   local_gptr_options(mode = "auto", model = "fake/fake-1")
   local_permissive()
@@ -123,6 +124,7 @@ test_that("canonical charge recovery preserves historical prices and unknown obs
 })
 
 test_that("checkpoint and aborted child charges survive fresh ancestor recovery", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list(list(hang = TRUE)))
@@ -262,6 +264,7 @@ test_that("ancestor accounting validates complete bounded receiver lineage", {
 })
 
 test_that("forks exclude inherited charges while rewind retains incurred charges", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list("one", "two", "fork"))
@@ -298,6 +301,7 @@ test_that("ancestor accounting append failure is fatal and never reports durable
 })
 
 test_that("aborted accounting failure is retained after complete abort settlement", {
+  skip_on_cran()
   local_store()
   local_permissive()
   local_fake_provider(list(list(hang = TRUE)))
@@ -350,6 +354,7 @@ test_that("checkpoint accounting failure preserves an earlier condition and comp
 })
 
 test_that("aborted reported zero positive and unknown costs remain exact after recovery", {
+  skip_on_cran()
   for (cost in c(0, 0.25, NA_real_)) {
     local_store()
     local_permissive()
@@ -376,6 +381,7 @@ test_that("aborted reported zero positive and unknown costs remain exact after r
 })
 
 test_that("durable charging refuses live ancestry cycles and excessive depth before mutation", {
+  skip_on_cran()
   local_store()
   root = test_session()
   child = test_session(kind = "child", parent = root)

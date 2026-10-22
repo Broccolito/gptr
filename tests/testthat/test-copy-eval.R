@@ -19,6 +19,24 @@ test_that("snapshots of globalenv and of a function frame leave the object in pl
   )
 })
 
+test_that("sizing leaves list elements, environment bindings and long lists in place (D-247)", {
+  size = ns_get("env_snap_size")
+  expect_no_copy(paste("L = list(a = runif(1e6), b = list(c = runif(10)))", size, sep = "; "),
+                 "invisible(env_snap_size(L))", "L$a[1] = 0", "L$a",
+                 label = "a list element after env_snap_size()")
+  expect_no_copy(paste("e = new.env(); e$v = runif(1e6)", size, sep = "; "),
+                 "invisible(env_snap_size(e))", "e$v[1] = 0", "e$v",
+                 label = "an environment binding after env_snap_size()")
+  expect_no_copy(paste("L = lapply(1:1e5, function(i) runif(3)); L[[9e4]] = runif(1e6)", size,
+                       sep = "; "),
+                 "invisible(env_snap_size(L))", "L[[9e4]][1] = 0", "L[[9e4]]",
+                 label = "an item of a long list the walk sampled past")
+  expect_no_copy(paste("pre = lapply(1:1e5, function(i) runif(3)); L = pre",
+                       "L[[9e4]] = runif(1e6)", size, sep = "; "),
+                 "invisible(env_snap_size(pre, shared = L))", "L[[9e4]][1] = 0", "L[[9e4]]",
+                 label = "the current value after a checkpoint image is sized against it")
+})
+
 test_that("a function-frame home with an unsupplied argument and empty dots stays in place", {
   expect_no_copy(
     paste("big = runif(5e6)", ns_get("env_snapshot"), ns_get("workspace_lines"), sep = "; "),

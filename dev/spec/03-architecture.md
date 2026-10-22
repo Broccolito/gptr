@@ -297,7 +297,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (122 files after the Rscript launcher amendment and P26's Bedrock adapter)
+### 3.2 `R/` files (123 files after the Rscript launcher amendment, P26's Bedrock adapter and D-247's `utils-size.R`)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -312,6 +312,7 @@ declares, if any.
 | `utils-paths.R` | L0 | project root (with the `gptr.project_root` override), `gptr_user_dir(which)` = `tools::R_user_dir("gptr", which)`, `user_home()`, `app_config_dir()` [IC-63], `path_key()`, `rscript_path()` [IC-60], workspace root (`.gptr` or `tempdir()/gptr`), atomic write (temp + `file.rename` with retries and an in-place fallback), the leaf `save_rds()`/`serialize_leaf()` wrappers that always pass `ascii = FALSE` (R7), path classes (incl. `control`, `instructions` [IC-54]), Windows reserved names | - | P01 |
 | `utils-text.R` | L0 | head 40% / tail 60% truncation to a token budget, spill files, the `out(id)` store (per session, last 20 results each [IC-71]), ANSI/OSC and carriage-return cleanup, 400-char line caps | - | P01 |
 | `utils-tokens.R` | L0 | class-aware estimator `est_tokens(x, class)` (G2 constants), image-token formulas, per-session EWMA multiplier | - | P01 |
+| `utils-size.R` | L0 | `env_snap_size(x, home, shared)`, the one size rule (each part and string once; code, top-level environments, the home and running frames 0; long lists and environments sampled) and `env_compact_seq()` [D-247] | - | P09 |
 | `json-encode.R` | L0 | `json_encode()`, once-serialised entries (`json_verbatim`), bodies assembled by concatenation | - | P01 |
 | `json-partial.R` | L0 | incremental partial-JSON scanner for streamed tool arguments (throttled previews) | - | P01 |
 | `json-schema.R` | L0 | argument validation and explicit coercion (INFRA-09); one-line R-signature rendering of schemas | - | P01 |
@@ -492,7 +493,8 @@ redacted, encrypted reasoning, parallel tools, overload, truncation), `fixtures/
 | Path | Content | Plan |
 |---|---|---|
 | `DESCRIPTION`, `NAMESPACE` (roxygen), `.lintr`, `.Rbuildignore`, `.gitignore`, `LICENSE.md` (Apache License 2.0 text) | package skeleton; `.Rprofile` and `LICENSE` deleted | P01 |
-| `.github/workflows/R-CMD-check.yaml` | r-lib check-standard (macOS, Windows, Ubuntu release/devel/oldrel-1) + oldrel-4 + no-suggests + `LC_ALL=C` job + copy-safety job on R-release and R-devel + a job with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true` [IC-59] + a `bench` job running the token ratchet with rtiktoken [IC-73] | P01 |
+| `.github/workflows/R-CMD-check.yaml` | r-lib check-standard (macOS, Ubuntu release/devel/oldrel-1) + oldrel-4 + no-suggests + `LC_ALL=C` job + copy-safety job on R-release and R-devel + a job with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true` [IC-59] + a `bench` job running the token ratchet with rtiktoken [IC-73] | P01 |
+| `.github/workflows/Windows-check.yaml` | check-standard's Windows release and oldrel-4 rows, four serial shards each, behind the required gates `windows-latest (release)` and `windows-latest (oldrel-4)` (D-239) | P01 |
 | `dev/style.R` | `gptr_style()` styler helper (conventions §4) | P01 |
 | `dev/catalog/build_models.R` | builds `inst/extdata/models.json.gz` from models.dev | P05 |
 | `dev/bench/tokens/run.R` and the NS-2/NS-3 golden transcripts | the token ratchet runner, from M1 [IC-73] | P07 (fixtures added by P10, P13, P15, P18, P19, P22, P23) |
@@ -948,8 +950,8 @@ is registered lazily. `$<-` and `[[<-` are refused with `gptr_error_readonly`: s
 
 | Case | Held as | `$value` |
 |---|---|---|
-| symbol bound in a kept home, object below `gptr.value_copy_max` (1 MiB) | deep copy (faithful history) | the copy |
-| symbol bound in a kept home, larger | **name + address** (no reference) | `get0(name, home, inherits = FALSE)`, a live view; a message if the name was re-bound |
+| symbol bound in a kept home, size (`env_snap_size()`) below `gptr.value_copy_max` (2 MiB) and `object.size()` below `gptr.values_max_bytes` [D-247] | deep copy (faithful history), kept when it is a new object holding below `gptr.value_copy_max` of its own | the copy |
+| symbol bound in a kept home, otherwise (larger; an environment, R6 object or external pointer, which `duplicate()` returns as is; a copy that outgrows the limit, as of a compact sequence or repeated elements) [D-247] | **name + address** (no reference) | `get0(name, home, inherits = FALSE)`, a live view; a message if the name was re-bound |
 | anonymous expression, or symbol in a function-frame home that will vanish | boxed value | the box |
 
 Held copies and boxes are capped by `gptr.values_max_bytes` (64 MiB; oldest released first, the latest always
@@ -1284,7 +1286,7 @@ frame makes the user's next in-place edit copy the whole object. Rules:
 | R1 | Never hold a user object in a list, closure, attribute or environment gptr keeps. Designated values follow the value policy of §5.1 (large bound objects by name). | judge check `session_holds_value` -> COPY, `session_holds_name` -> in place |
 | R2 | Never hold a user function frame beyond the active run, and never in a list, closure, attribute or weak reference (key or value). The home frame lives only in an environment binding of the run environment, reset to `NULL` at settlement before the run is dropped. Keep address strings, not frames (e.g. the pending-plan key). | [final/frame_hold_check.R]: weakref key COPY, list-then-drop COPY, address string and reset binding in place; G3 p2 and fact-check adv4/adv5 |
 | R3 | Gateway capture is base R: no rlang quosures in any frame that sees user frames; a plain-symbol dot is read by name through a `get0()` leaf and its promise is never forced (a forced promise keeps the value referenced by the gateway frame for the whole run, so an in-run edit copies [IC-41]); other dots reach only leaf functions through `...elt(i)` in `while` loops; no closures, `tryCatch`, `withCallingHandlers` or `match.arg` in a frame that holds `...` or the home; never assign to a formal (use new locals); helpers force their arguments on entry; adapters are called through `do.call()` with forced values; frames walked with `sys.frame(k)`, never `sys.frames()`; alias masks get `parent.env<-` `emptyenv()` after use. | [final/capture_check.R]: `enquos` COPY, `...elt` leaf in place; G3 p5b, p5i, p5n, p5o |
-| R4 | Introspection through leaf functions returning primitives only (class, dim, length, typeof, address, `object.size()` cached by address; no size for environments, functions, external pointers, compact sequences and S7 objects, which it overstates [D-189]); gptr never calls `str()` on user objects (sticky [12 §2.C]) and no shipped prompt or skill tells the model to (a P07 test checks the texts [IC-67]); describers follow the same discipline. | 12 §2.C, §3.9; `str(big)` re-verified to copy on the next edit |
+| R4 | Introspection through leaf functions returning primitives only (class, dim, length, typeof, address, `env_snap_size()` reused while address, class, shape and fingerprint hold: the memory reached, each part and string once [D-247]); gptr never calls `str()` on user objects (sticky [12 §2.C]) and no shipped prompt or skill tells the model to (a P07 test checks the texts [IC-67]); describers follow the same discipline. | 12 §2.C, §3.9; `str(big)` re-verified to copy on the next edit |
 | R5 | No binding locks anywhere (`lockBinding()`/`unlockBinding()` makes the next edit copy). | judge `lock` case, PB-E1, P-A exp |
 | R6 | No `mget()` or list snapshots of user objects. Checkpoint pre-images are bindings in a private environment released with `rm()`; list and S4 pre-images are defused before dropping; a finalizer does the same for dropped sessions. | G7 §1.1 (c03) |
 | R7 | Every `serialize()`/`saveRDS()` of user data passes `ascii = FALSE` explicitly (the default path leaves a sticky reference) through one leaf wrapper. | G7 §1.5 |
@@ -2266,7 +2268,7 @@ anchor. The compaction request and checkpoint block are G4 §3.6's verbatim text
   datasets, DBI connections (tables), Seurat (cells, features, assays, reductions, meta.data columns),
   SingleCellExperiment (methods for classes of packages outside Suggests use only base generics, `slot()`,
   `attr()` and `dim()` guarded by `isNamespaceLoaded()`, never `pkg::fun()` [IC-71]); ALTREP compact sequences are
-  reported without materialising and without a size [D-189].
+  reported without materialising, at the size of their state [D-247].
   Packages add methods with delayed `S3method(gptr::gptr_describe, cls)`.
 - `<r_env>`: installed fast packages by category, packages that are installed but not loadable, and missing
   recommended packages, probed without loading [19 §3.2].
