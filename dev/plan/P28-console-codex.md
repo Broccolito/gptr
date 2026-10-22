@@ -196,7 +196,9 @@ Root cause, from the audit:
 
 Decisions:
 - `console_before_message(kind = "prompt")` drains fd 0 before drawing a question, on a terminal
-  REPL (today's IC-76 scope):
+  REPL (today's IC-76 scope). Amended in the visual review: `ui_console_read()` drains just before its
+  `readline()`, after the question's rows, so the lines it prints sit above `› ` instead of between a
+  call's code and the flagged rows of its ask:
   1. Apply `stty -icanon min 0 time 0` (echo stays off).
   2. Read with `console_typed_lines(rd, 0L)` until nothing is left.
   3. Restore the saved modes.
@@ -900,7 +902,8 @@ Commit: `feat(console): type, steer and queue while the agent works`.
 ### Task 19: A question waits for typing to pause and keeps the draft (T class; D-243)
 
 Decisions:
-- In T, `console_before_message(kind = "prompt")` does the following:
+- In T, before the question's rows are drawn (`console_before_message(kind = "prompt")`; D keeps
+  Task 2's drain in `ui_console_read()`, after the rows, as amended in the visual review):
   1. Drains fd 0 into the composer.
   2. Keeps reading every 0.05 s while the last key is under 1 s old. The live row shows
      `question waiting`, and Enter and Tab still queue.

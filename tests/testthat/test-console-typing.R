@@ -338,9 +338,9 @@ test_that("a line typed during a tool steers when the next call's question follo
   expect_length(reqs, 2L)
   expect_identical(e$zz, 2)
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("use base R instead"))
-  # routed before the question is drawn
-  expect_lt(match(queue_line("steer", "use base R instead"), out),
-            grep("? Allow r?", out, fixed = TRUE))
+  # routed before the question reads, its line under the question and keys (visual review)
+  expect_identical(match(queue_line("steer", "use base R instead"), out),
+                   grep("? Allow r?", out, fixed = TRUE) + 2L)
 })
 
 test_that("/commands and !code typed during a run run after the answer; text still steers", {
@@ -730,7 +730,7 @@ test_that("console_typed_split() marks a last line without a line end as partial
                    structure(c("steer me", "use base R"), partial = TRUE))
 })
 
-test_that("a question drains fd 0 first: lines steer, a partial line is kept in the history", {
+test_that("a question drains fd 0 before it reads: lines steer, a partial line is kept", {
   local_console_test()
   local_gptr_options(interactive = TRUE)
   tty = local_stty()
@@ -760,7 +760,10 @@ test_that("a question drains fd 0 first: lines steer, a partial line is kept in 
     reqs = fake_requests(fake)
     expect_length(reqs, 2L)
     expect_identical(msg_text(last_message(reqs[[2L]])), relay("steer me"))
-    expect_lt(grep(notice[[k]], out, fixed = TRUE), grep("? Allow r?", out, fixed = TRUE))
+    # under the question and its keys, right above the chevron, never inside the call's block
+    # (visual review)
+    at = grep("? Allow r?", out, fixed = TRUE)
+    expect_identical(out[at + 2:3], c(queue_line("steer", "steer me"), notice[[k]]))
     # the drain's modes are restored before the question reads
     expect_identical(tty$log, c("-g", "-echo", "-g", drain, "SAVED", "SAVED"))
   }
@@ -790,9 +793,9 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   pty$send("B\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
+  expect_true(pty$wait("Allow r?"))
   expect_true(pty$wait("kept in history"))
   expect_true(pty$wait("use base R"))
-  expect_true(pty$wait("Allow r?"))
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
   expect_true(pty$wait("REQ tool_result: "))

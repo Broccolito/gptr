@@ -1949,9 +1949,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only on its
   dim queue line (`↳ steer · <text>`)
   and, when the run takes it, as the person's line `› <text>` at that step boundary [D-242]; console questions
-  read with the echo restored (D-221). A console question first drains fd 0
+  read with the echo restored (D-221). A console question drains fd 0 before it reads, under its rows
   (`stty -icanon min 0 time 0`, the modes restored after): typed lines are routed as above and a partial line
-  goes to the console history with a notice, so the question starts empty [D-243]. IDE consoles, R.app and
+  goes to the console history, listed as the person's held text, so the question starts empty [D-243]. IDE consoles, R.app and
   `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current
   response.
 - **Rendering**: chunk-invariant, width-aware markdown stream renderer, written in whole rows, each at its line

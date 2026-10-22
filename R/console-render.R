@@ -682,13 +682,9 @@ console_spinner_stop = function(rec) {
 #' boundary and a typed line's queue line (`kind = NULL`), and with `tools` by the console UI
 #' before it prompts and by the sub-agent lines, which also clear the row of a run whose tool
 #' executes (a sub-agent asking during the parent's `r` code; its writes never enter captured
-#' output, D-188). Before a prompt
-#' a terminal REPL first drains what was typed for the run (console_typed(drain = TRUE)): the
-#' lines typed for the run (routed as console_typed() routes them) and the partial line the
-#' question would take as its answer (IC-76).
+#' output, D-188).
 #' @noRd
 console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
-  if (identical(kind, "prompt")) console_typed(drain = TRUE)
   recs = if (is.null(runs)) {
     as.list(console_state()$active)
   } else {

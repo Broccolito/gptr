@@ -3219,6 +3219,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     leaving the 5 tries (they bound a question that reads nothing but empty lines). Contract-visible: 04 §15.10
     IC-77. Tests: test-console-ui.R "invalid answers are explained and kept; five end in a refusal the model is
     told", "a long invalid answer's notice wraps inside the approval's width (P28 B, E, F)".
+  - A console question drains fd 0 just before it reads (`ui_console_read()`), after its rows: drained before them
+    (`console_before_message(kind = "prompt")`), the queue lines and the kept line sat between a call's code and the
+    flagged rows of its ask, splitting the block Task 12 made one. They now sit under the question and its keys,
+    right above `› `. Task 19 adds its T-class wait before the rows. Contract-visible: 04 §15.10 IC-76, 03 §6.17.
+    Tests: test-console-typing.R "a question drains fd 0 before it reads: lines steer, a partial line is kept", "a
+    line typed during a tool steers when the next call's question follows it", the pty case B.
 - Task 16: the composer's key machine, pure (`console_compose()` and `console_trigger()` in the new
   `console-input.R`; Tasks 18-21 feed it the keys). A read batch sends at most one message, so it returns one
   action, not a list. A newline in a batch ends what DEL, Ctrl-U and Ctrl-W reach, so keys typed after Enter within

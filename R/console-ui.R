@@ -232,15 +232,19 @@ ui_undo_note = function(request) {
   tryCatch(ext_service_get("checkpoint.note")(call, NULL), error = function(e) NULL)
 }
 
-#' Read one console answer, never a line typed before the question (readline_answer()); when the
-#' REPL's reader finds lines waiting after the answer (a paste; a last line without a newline is
-#' not waiting), the answer and the lines go to the console history as one entry (a `secret` is
-#' dropped) and the question is asked again (IC-75); Ctrl-C or EOF gives NA (a terminal echoes
-#' even a `secret` itself)
+#' Read one console answer, never a line typed before the question: a terminal REPL first drains
+#' what was typed for the run (console_typed(drain = TRUE): its lines routed as console_typed()
+#' routes them, the partial line the question would take as its answer kept in the history,
+#' IC-76), so their lines sit under the question's rows, right above the chevron; then
+#' readline_answer(). When the REPL's reader finds lines waiting after the answer (a paste; a last
+#' line without a newline is not waiting), the answer and the lines go to the console history as
+#' one entry (a `secret` is dropped) and the question is asked again (IC-75); Ctrl-C or EOF gives
+#' NA (a terminal echoes even a `secret` itself)
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
   rd = console_repl_find()$reader
   repeat {
+    console_typed(drain = TRUE)
     ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead),
                    interrupt = function(e) NA_character_)
     if (!rlang::is_string(ans)) return(NA_character_)

@@ -5332,8 +5332,10 @@ its part in its own commit, and Task 27 finalises them.
     empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
     word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
 - IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 18-21 pending.
-  - A question drains first (Task 2). On a terminal REPL, while a run of the call has a session,
-    `console_before_message(kind = "prompt")` reads fd 0 with `console_typed(drain = TRUE)`:
+  - A question drains before it reads (Task 2). On a terminal REPL, while a run of the call has a session,
+    `ui_console_read()` reads fd 0 with `console_typed(drain = TRUE)` just before its `readline_answer()`, so the
+    queue and kept lines sit under the question's rows, right above `› ` (visual review: drained before the rows,
+    they split a call's code from the flagged rows of its ask):
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
     the saved modes (on exit). Complete lines are routed as before. A trailing partial line (attr
     `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()` with
