@@ -5328,7 +5328,7 @@ its part in its own commit, and Task 27 finalises them.
     `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
     empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
     word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
-- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 16 and 18-21 pending.
+- IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21); Tasks 18-21 pending.
   - A question drains first (Task 2). On a terminal REPL, while a run of the call has a session,
     `console_before_message(kind = "prompt")` reads fd 0 with `console_typed(drain = TRUE)`:
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
@@ -5382,6 +5382,24 @@ its part in its own commit, and Task 27 finalises them.
     prints `[gptr] aborted; the session is kept.` only when no status line said `aborted` (verbosity 0, or no run
     in the foreground). The draft joins this list once the composer holds it (Task 20). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
     layering test (12.2).
+  - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys typed while
+    the agent works). `console_compose(state, chars, now, enter_kind, complete)` applies one read batch (the text
+    `conn_read_chars()` decodes) at time `now` to `state` (`list(draft, esc, t)`) and returns the new state and
+    at most one action: NULL, `list(type = "send", kind, text)`, `list(type = "take_back")` or
+    `list(type = "complete", candidates)`. Text is added at the draft's end; DEL and BS delete its last
+    character, Ctrl-U clears it and Ctrl-W deletes its last word; other control bytes and escape sequences (up
+    to their final byte, 0x40-0x7e) are dropped, so nothing moves a cursor. A sequence the batch ends in is held
+    until `now` passes its start by 50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`: a batch
+    holding newlines sends the draft and its text up to the last newline as one message of the Enter kind
+    (`enter_kind`, the `type_ahead` setting), newlines kept, and the rest is the draft; a newline ends what the
+    edit keys reach. A message starting with `/` or `!` is always a follow-up, and a blank one is not sent. Two
+    keys act only as a batch of their own (elsewhere Tab is text and Up is dropped): Up (`ESC [ A`, `ESC O A`) on
+    an empty draft takes back the newest queued message; Tab on a trigger word completes and never sends, and on
+    any other draft sends the other kind. `console_trigger(line)` gives the trigger word at the line's end, or
+    NULL: the last word of a `!` or `!!` line, a word starting with `@` or `peter$`, or a first word starting
+    with `/`; a word ends at whitespace and readline's break characters, `!` among them (IC-81's completer takes
+    its word from it). `complete(draft, nchar(draft))` returns full words: their longest common prefix replaces
+    the word when it is longer, else two or more are listed (`complete(candidates)`); none does nothing.
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Tasks 19 and 26 pending.
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
     keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by

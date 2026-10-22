@@ -150,7 +150,7 @@ working directory restored. Plan-specific rules:
 | `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11, 12 |
 | `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
-| `tests/testthat/helper-arch.R` (the console's contract edges) | 15 |
+| `tests/testthat/helper-arch.R` (the console's contract edges; new files' layer rows), `test-arch-layers.R` | 15, 16, 22 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
 | `dev/spec/03-architecture.md`, `dev/spec/04-interface-contract.md`, `dev/spec/05-plan-decomposition.md`, `dev/DEVIATIONS.md`, `?peter`, vignettes, README | 1, then each task's own sections, 27 |
 | `dev/dogfood/p28-console.R` (new), `dev/progress/P28.md` | 1, 28, every task |
@@ -754,23 +754,31 @@ Commit: `fix(console): queued messages are never dropped`.
 ### Task 16: The composer's key machine (pure; D-243)
 
 Decisions:
-- `console_compose(state, chars, now, enter_kind, complete)` returns the new state and a list of
-  actions: `send(kind, text)`, `take_back`, `complete`.
+- `console_compose(state, chars, now, enter_kind, complete)` returns the new state
+  (`list(draft, esc, t)`) and at most one action, as a batch sends at most one message: NULL,
+  `send(kind, text)`, `take_back` or `complete(candidates)`.
 - Keys:
   - printable characters append to the draft;
   - DEL and BS delete the last character;
   - Ctrl-U clears the draft;
   - Ctrl-W deletes the last word;
-  - `\r` or `\n` sends.
+  - `\r` or `\n` sends (`\r\n` and `\r` read as `\n`); a blank message is not sent.
 - Tab, arriving as a batch of its own:
   - on a trigger word (Task 22), completes and never queues; nothing happens without a match;
   - otherwise, sends the other kind.
+- `console_trigger(line)` gives the trigger word at the draft's end, or NULL: the last word of a
+  `!` or `!!` line, a word starting with `@` or `peter$`, or a first word starting with `/`. A word
+  ends at whitespace and readline's break characters, `!` among them. Task 22's
+  `console_complete()` takes its word from it. `complete(draft, nchar(draft))` returns full
+  words; their longest common prefix replaces the word when it is longer, else two or more give
+  `complete(candidates)`.
 - Up (`ESC [ A` or `ESC O A`, a batch of its own) on an empty draft takes back.
 - Other escape sequences are dropped up to their final byte (0x40-0x7e). An incomplete sequence
   is held until `now` passes 50 ms, and a lone ESC is then dropped.
 - Batch rule (IC-76's paste rule): in a read batch that holds a newline, the draft plus
   everything up to the last newline is one message of the Enter kind, with its newlines kept.
-  The rest stays as the draft, and Tab inside such a batch is text.
+  The rest stays as the draft. A newline ends what DEL, Ctrl-U and Ctrl-W reach. Tab and Up act
+  only as a batch of their own: in any other batch Tab is text and Up is dropped.
 - `/` and `!` drafts send as follow-ups.
 - No cursor movement: the draft is edited at its end, and Left, Right, Ctrl-A and Ctrl-E are
   dropped. Full editing is readline's, at the prompt.
@@ -783,9 +791,10 @@ table of byte strings with the expected draft and actions covers:
 - Tab on trigger and non-trigger words;
 - `/` and `!` drafts.
 
-Spec: IC-76.
+Spec: IC-76, 03 §3.2 (the new file's row).
 
-Files: `R/console-input.R` (new), `tests/testthat/test-console-input.R` (new), `tests/testthat.R`.
+Files: `R/console-input.R` (new), `tests/testthat/test-console-input.R` (new), `tests/testthat.R`,
+`tests/testthat/helper-arch.R` and `tests/testthat/test-arch-layers.R` (the layer row, 123 files).
 
 Commit: `feat(console): the composer's key machine`.
 
@@ -948,7 +957,8 @@ Commit: `feat(console): a draft left at the end of a run stays until sent`.
 
 Decisions:
 - `console_complete(line, end)` finds the word holding the cursor: whitespace-delimited, also
-  split at readline's break characters. It returns full words:
+  split at readline's break characters (Task 16's `console_trigger()` on the text before the
+  cursor, which also says whether it is a trigger word). It returns full words:
 
 | line or word | candidates |
 |---|---|
@@ -984,10 +994,11 @@ Tests (`test-console-completion.R`), RED first:
 - The caller-owned completer.
 - pty: `summarise the da` + Tab leaves the line unchanged; `@mtc`, `/mo` and `!summ` complete.
 
-Spec: IC-81, 03 §6.17 completion bullet (amends D-183).
+Spec: IC-81, 03 §6.17 completion bullet (amends D-183), 03 §3.2 (the new file's row).
 
 Files: `R/console-complete.R` (new), `R/console-repl.R` (`repl_main()`, `console_reader()`),
-`tests/testthat/test-console-completion.R`.
+`tests/testthat/test-console-completion.R`, `tests/testthat/helper-arch.R` and
+`tests/testthat/test-arch-layers.R` (the layer row).
 
 Commit: `feat(console): completion only after @, !, / and peter$`.
 

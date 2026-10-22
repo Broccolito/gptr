@@ -298,7 +298,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (122 files after the Rscript launcher amendment and P26's Bedrock adapter)
+### 3.2 `R/` files (123 files after the Rscript launcher amendment, P26's Bedrock adapter and P28's composer)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -397,6 +397,7 @@ declares, if any.
 | `console-interrupt.R` | L5 | interrupt policy: pause menu (steer, follow-up, continue, abort) via the `resume` restart | - | P14 |
 | `console-commands.R` | L5 | built-in slash commands | - | P14 |
 | `console-jsonl.R` | L5 | JSONL event-sink front end (Pi-named events, redacted) | jsonl | P14 |
+| `console-input.R` | L5 | the terminal composer: its key machine and trigger words [IC-76] | - | P28 |
 | `doc-locate.R` | L4 | locate the calling statement (srcref, source frame, knitr, Quarto, IRkernel, Rscript, IDE, console) | - | P15 |
 | `doc-blocks.R` | L4 | block grammar, ownership, idempotent upsert, stale and user-edited detection | - | P15 |
 | `doc-io.R` | L4 | atomic raw I/O (EOL/BOM), md5 conflict checks, deferred Rscript writes, IDE backends | - | P15 |
