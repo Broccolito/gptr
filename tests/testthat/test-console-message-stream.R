@@ -114,10 +114,11 @@ test_that("in the console margin what R code prints is dim rows at column 4, cut
   expect_identical(sink.number(), 0L)
   # dim where colours show; without the margin the output is teed as R prints it
   withr::local_options(cli.num_colors = 256L)
-  echo = function() utils::capture.output(invisible(eval_r('cat("a\\n")', home, tee = TRUE)))
-  expect_identical(echo(), "\033[38;5;244m    a\033[39m")
+  echo = function() utils::capture.output(invisible(eval_r('cat("a\\n\\nb\\n")', home, tee = TRUE)))
+  # a blank line is an empty row, with no SGR
+  expect_identical(echo(), c("\033[38;5;244m    a\033[39m", "", "\033[38;5;244m    b\033[39m"))
   local_mocked_bindings(console_pad = function() "")
-  expect_identical(echo(), "a")
+  expect_identical(echo(), c("a", "", "b"))
 })
 
 test_that("console controls stay out of R-tool results while normal prints remain", {

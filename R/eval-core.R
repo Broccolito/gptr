@@ -300,9 +300,9 @@ eval_echo = function(st, txt) {
   rlang::local_options(cli.num_colors = st$colors)
   sym = console_style()
   lines = console_escape(strsplit(sub("\n$", "", txt), "\n", fixed = TRUE)[[1L]], FALSE)
-  rows = cli::ansi_strtrim(paste0(ifelse(nzchar(lines), "    ", ""), lines), st$width,
-                           ellipsis = sym$ellipsis)
-  gptr_message_write(paste0(sym$dim(rows), "\n", collapse = ""), "stdout", from = st$frame)
+  rows = cli::ansi_strtrim(paste0("    ", lines), st$width, ellipsis = sym$ellipsis)
+  rows = ifelse(nzchar(lines), sym$dim(rows), "")
+  gptr_message_write(paste0(rows, "\n", collapse = ""), "stdout", from = st$frame)
 }
 
 #' Evaluate the expressions in order; stop at the first failure

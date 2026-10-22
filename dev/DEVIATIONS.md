@@ -3426,3 +3426,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     (found re-capturing the fixes above). Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests:
     test-console-fences.R "tool code shows on the tool line when it fits, else under its name, cut to the width";
     test-console-ui.R "the detail view's keys read as the question's; it skips a fence shown above (D-243)".
+  - A blank line of printed output is an empty row: `eval_echo()` styled every row, so at 256 colours an empty line
+    carried an empty grey SGR pair. Tests: test-console-message-stream.R "in the console margin what R code prints is
+    dim rows at column 4, cut (visual review)".
