@@ -704,6 +704,9 @@ Decisions:
   They are listed once, `[gptr] kept in history (↑): '<a>', '<b>'`, and added to the history in that
   order (`console_keep()`, which the partial-line notice also uses). Nothing is auto-sent after an
   abort. Follow-ups in the FIFO (outside the REPL) stay queued after an error.
+- The list follows the run's status line, then the blank row before the prompt; `[gptr] aborted; the
+  session is kept.` is printed only where no status line said `aborted` (amended in the review of
+  Tasks 8-15: it repeated the status line, after the list).
 - The draft joins this list once the composer holds it (Task 20). Until then gptr holds no draft: a
   partial line stays in the terminal.
 - The notices `dropped typed lines` and `dropped queued messages` are deleted.

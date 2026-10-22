@@ -1158,9 +1158,9 @@ console_on_compact = function(event, ctx) {
 
 #' agent_end: close the streams, show custom entries and the status line, forget the run; queued
 #' artifact lines (an interrupted tool) print last, then what the person queued and the run did
-#' not take (console_queue_left()); a shown sub-agent says how it ended, `(k/N)` counting the
-#' settled children of its scheduled group (D-188), a failure with the first line of its reason,
-#' else its status (D-224)
+#' not take (console_queue_left()), then the blank row before the prompt; a shown sub-agent says
+#' how it ended, `(k/N)` counting the settled children of its scheduled group (D-188), a failure
+#' with the first line of its reason, else its status (D-224)
 #' @noRd
 console_on_agent_end = function(event, ctx) {
   on.exit(console_artifact_flush(), add = TRUE)
@@ -1206,7 +1206,7 @@ console_on_agent_end = function(event, ctx) {
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
   console_write(cli::col_grey(line))
-  console_gap(rec, "prompt")
+  on.exit(console_gap(rec, "prompt"), add = TRUE)
   NULL
 }
 

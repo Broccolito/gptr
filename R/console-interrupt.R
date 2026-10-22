@@ -257,15 +257,20 @@ policy_flush = function() {
 
 #' Abort (exiting handler for `interrupt`): abort the runs present at the interrupt and, in mode
 #' "call", re-signal the interrupt; what the person queued goes to the history at each run's end
-#' (console_queue_left())
+#' (console_queue_left()); a notice says so unless a run's status line (a foreground run at
+#' verbosity 1+) already did
 #' @noRd
 policy_abort = function(cnd, pol) {
   targets = policy_targets(pol$abort_runs %||% pol$runs)
+  said = verbosity() >= 1L && any(vapply(targets, function(t) {
+    rec = console_record(list(run = t$run$id))
+    !is.null(rec) && console_foreground(rec)
+  }, NA))
   suspendInterrupts({
     for (t in rev(targets)) if (policy_active(t$run)) run_abort(t$run, reason = "user")
   })
   console_render_pause()
-  console_notice("[gptr] aborted; the session is kept.")
+  if (!said) console_notice("[gptr] aborted; the session is kept.")
   if (identical(pol$mode, "call")) policy_resignal(cnd)
   invisible(NULL)
 }

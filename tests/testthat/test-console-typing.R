@@ -404,6 +404,33 @@ test_that("an abort sends nothing queued: it goes to the history, listed once (D
   expect_false("peter[auto]> /status" %in% res$out)
 })
 
+test_that("an abort's status line says aborted once; the kept list follows it, then a blank row", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(history = TRUE, verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  fake = gptr_fake_provider(list(list(text = "first", delay = 5)))
+  held = FALSE
+  local_typed(function() {
+    if (!length(fake_requests(fake))) return(character())
+    if (!held) {
+      held <<- TRUE
+      return("use base R")
+    }
+    signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+    character()
+  })
+  res = typing_console(fake, c("go", "/exit"))
+  rows = sub(".*\r", "", res$out)
+  sym = console_style()
+  status = grep(paste0("^  aborted", sym$sep), rows)
+  expect_length(status, 1L)
+  expect_identical(rows[status + 1:2],
+                   c(paste0("  [gptr] kept in history (", sym$up, "): 'use base R'"), ""))
+  expect_false(any(grepl("[gptr] aborted", rows, fixed = TRUE)))
+})
+
 test_that("after an error the queued steer is kept in the history, not sent with the next prompt", {
   skip_on_cran()
   local_console_test()

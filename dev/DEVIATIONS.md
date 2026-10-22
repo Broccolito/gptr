@@ -3087,6 +3087,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     it, for the session's next run. Contract-visible: 04 §15.10 IC-76, 03 §6.2. Tests: test-console-interrupt.R
     "outside an interactive R a steer the run did not take stays queued, unlisted (D-242)"; the Task 15 tests now
     run in a mocked interactive R.
+  - After an abort the status line says `aborted` once: `policy_abort()`'s `[gptr] aborted; the session is kept.`
+    is printed only where no status line said it (verbosity 0, or no run in the foreground), and the kept list
+    follows the status line, before the blank row that precedes the prompt (the run's `agent_end` writes that gap
+    last). Before, the kept list sat between the status line and the notice, directly over the prompt.
+    Contract-visible: 04 §15.10 IC-76. Tests: test-console-typing.R "an abort's status line says aborted once; the
+    kept list follows it, then a blank row".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

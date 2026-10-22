@@ -5376,8 +5376,10 @@ its part in its own commit, and Task 27 finalises them.
     queued, the items held, and the REPL's held lines (follow-ups, `/commands`, `!code`), in that order, go to
     the console history (`console_history_add()`) and are listed once, `[gptr] kept in history (↑): '<a>', '<b>'`
     (`Up` where the output is not UTF-8; with `gptr.history` off `[gptr] not kept (gptr.history is off): ...`).
-    These replace `[gptr] dropped typed lines: ...` and `[gptr] dropped queued messages: ...`. The draft joins this
-    list once the composer holds it (Task 20). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
+    These replace `[gptr] dropped typed lines: ...` and `[gptr] dropped queued messages: ...`. At verbosity 2 the
+    list follows the run's status line, and the blank row before the prompt follows the list. `policy_abort()`
+    prints `[gptr] aborted; the session is kept.` only when no status line said `aborted` (verbosity 0, or no run
+    in the foreground). The draft joins this list once the composer holds it (Task 20). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
     layering test (12.2).
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Tasks 19 and 26 pending.
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
