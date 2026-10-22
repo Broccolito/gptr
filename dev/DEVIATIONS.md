@@ -3286,3 +3286,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     owes, written on the cleared row (an LF after a cleared row, one blank as before). Contract-visible: 04 §15.10
     IC-82, 03 §6.17. Tests: test-console-render.R "a foreground run separates text, tool and status blocks once
     (D-186, D-245)".
+  - An edit's diff leaves out its file headers (`--- a/`, `+++ b/`): the call line `▎ edit  notes.R` names the
+    file, and the headers took 2 of the 12 rows; hunk headers stay dim. Contract-visible: 04 §15.10 IC-82, 03 §6.17.
+    Tests: test-console-render.R "tool calls are cursor strips tinted by kind (D-245)".

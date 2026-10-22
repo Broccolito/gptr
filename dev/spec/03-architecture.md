@@ -2002,11 +2002,12 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   20 lines (info string `r` only for the r tool); result lines are indented four spaces, dim, and wrap
   at the width, also indented (a word wider than it is cut); an error shows its message in red in at most
   6 rows, then an ellipsis, an `r` error then its object changes; an edit's diff has `+` lines blue
-  and `-` lines red (file headers dim), at most 12; `write` shows the path relative
-  to the project and the byte count (D-223); a call of a second or more adds ` · 3.0 s`; an approval's call line (6.8.3) is cut to the
-  console width before its `+N more lines`, and the `?` detail shows the code as a plain fence of
-  at most 40 lines, unless the call line just above showed it whole. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied
-  block shows the cut (D-207). Console output draws no box characters (D-187).
+  and `-` lines red (its file headers left out, as the call line names the file; hunk headers dim), at
+  most 12; `write` shows the path relative to the project and the byte count (D-223); a call of a second
+  or more adds ` · 3.0 s`; an approval's call line (6.8.3) is cut to the console width before its
+  `+N more lines`, and the `?` detail shows the code as a plain fence of at most 40 lines, unless the
+  call line just above showed it whole. A cut fence ends with a `# … +N more lines` line inside the
+  fence, so a copied block shows the cut (D-207). Console output draws no box characters (D-187).
   Every renderer write and console control (prompts, notices, the pause menu) goes through
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
   whatever `tee` is; prompts and sub-agent lines first clear the waiting row, also while a tool

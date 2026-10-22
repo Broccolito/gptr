@@ -562,8 +562,7 @@ test_that("tool calls are cursor strips tinted by kind (D-245)", {
                           dim("{\"q\":\"bug\"}")),
                    paste0("  ", blue(agent), " codex_agent")),
          results = c(dim(paste0("    + fit", sep, "1.2 s")), dim(paste0("    done", sep, "3.0 s")),
-                     dim(c("    --- a/x.R", "    +++ b/x.R", "    @@ -1 +1 @@")), red("    -a"),
-                     blue("    +b")),
+                     dim("    @@ -1 +1 @@"), red("    -a"), blue("    +b")),
          read = character(), failed = red("    error: no such file"))
   }
   sgr = function(on, off) function(x) paste0("\033[", on, "m", x, "\033[", off, "m")

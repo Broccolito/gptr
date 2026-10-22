@@ -520,7 +520,9 @@ Decisions:
   takes no blank line and keeps the tool block open, and what else replaces it opens with the blank
   (amended in the review of Tasks 8-15: a run of reads was spaced or not by how the model batched
   them, which the person cannot see).
-- Diffs: `+` lines blue and `-` lines red, at most 12; the file headers (`--- a/`, `+++ b/`) dim.
+- Diffs: `+` lines blue and `-` lines red, at most 12; the file headers (`--- a/`, `+++ b/`) are left out,
+  as the call line names the file, and hunk headers are dim (amended in the review of Tasks 8-15: Task 11
+  showed the headers dim, two of the 12 rows).
 - IC-69 `render()` still wins.
 - A sub-agent's lines are drawn inside the agent's `r` evaluation, whose options say 1 colour, so
   the evaluation holds the console's colours beside its margin (`.gptr_console_colors`, read by
