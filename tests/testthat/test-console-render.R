@@ -1095,6 +1095,32 @@ test_that("verbosity 1 reports tool calls and the end as progress messages", {
     "gptr: done - 0 requests", fixed = TRUE)
 })
 
+test_that("a cut answer ends at its last whole word, the cut marked (visual review)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  cut = function(text, cut = TRUE) {
+    utils::capture.output({
+      r = render_markdown_stream(80L)
+      r$write(text)
+      r$finish(cut = cut)
+    })
+  }
+  expect_identical(cut("Heavy cars are also the heaviest, so par"),
+                   "Heavy cars are also the heaviest, so...")
+  expect_identical(cut("Heavy cars, so par", cut = FALSE), "Heavy cars, so par")
+  expect_identical(cut("Heavy cars.\n"), "Heavy cars.")
+  # an aborted run's answer ends so, an idle one whole
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  ended = function(status) {
+    render_events(s, list(hook_event("agent_start", s),
+                          hook_event("message_update", s, index = 1L, kind = "text",
+                                     delta = "Heavy cars, so par"),
+                          hook_event("agent_end", s, status = status, usage = NULL)))[[1L]]
+  }
+  expect_identical(c(ended("aborted"), ended("idle")), c("Heavy cars, so...", "Heavy cars, so par"))
+})
+
 test_that("the status line names an unusual end and sums the usage rows", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   usage = data.frame(input = c(1000, 200), output = c(50, 10), cache_read = c(0, 900),
@@ -1251,7 +1277,8 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
     res = eval_r("tool(pause)", home, plots = "none", tee = FALSE)
   }), collapse = "\n")
   expect_match(bytes, "thinking", fixed = TRUE)
-  expect_match(bytes, "\r +\rFanning out HELDWORD$")
+  # the abort's pause ends the held row at its last whole word, the cut marked
+  expect_match(bytes, "\r +\rFanning out\\.\\.\\.$")
   expect_null(rec$spinner)
   expect_false(grepl("\r|HELDWORD", text(res)))
 })

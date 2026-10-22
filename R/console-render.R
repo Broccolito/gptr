@@ -116,7 +116,9 @@ console_notice = function(..., .error = FALSE) {
 
 #' Chunk-invariant markdown stream renderer (contract 7.14)
 #'
-#' Returns an environment with `write(delta)` and `finish()`, writing to stdout.
+#' Returns an environment with `write(delta)` and `finish(cut = FALSE)`, writing to stdout; a cut
+#' (an abort, an unusual end) drops the word still held and marks the held row with a dim ellipsis,
+#' so it ends at its last whole word.
 #' Styling (bold, italic within one token, inline code in the blue accent, link URLs, quotes,
 #' rules and fence lines in the grey, headings, bullets, highlighted fenced code) is used when
 #' `cli::num_ansi_colors() > 1` at creation. The Markdown is read in the console margin at every
@@ -439,9 +441,11 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     utils::flush.console()
     invisible()
   }
-  r$finish = function() {
+  r$finish = function(cut = FALSE) {
     refresh_width()
+    if (cut && !st$fence && !length(st$table)) st$buf = ""
     ingest("", final = TRUE)
+    if (cut && !st$line_start) emit(sym$dim(sym$ellipsis))
     end_block()
     flush(stdout())
     utils::flush.console()
@@ -773,23 +777,24 @@ console_stream_output = function(rec) {
   }
 }
 
-#' End the partial lines of a record and stop its waiting row (before a tool line or the menu)
+#' End the partial lines of a record and stop its waiting row (before a tool line; `cut` when the
+#' answer is cut off)
 #' @noRd
-console_pause_one = function(rec) {
+console_pause_one = function(rec, cut = FALSE) {
   console_spinner_stop(rec)
   if (!is.null(rec$think)) rec$think$finish()
-  if (!is.null(rec$md)) rec$md$finish()
+  if (!is.null(rec$md)) rec$md$finish(cut)
   invisible(NULL)
 }
 
-#' End the partial lines of every tracked run (the pause menu, an abort); the next block after
-#' the menu's answer line is separated like the first block after an input line
+#' End the partial lines of every tracked run, cut (an abort, the pause menu's [b]); the next block
+#' after it is separated like the first block after an input line
 #' @noRd
 console_render_pause = function() {
   active = console_state()$active
   for (id in ls(active, all.names = TRUE)) {
     rec = get(id, envir = active)
-    console_pause_one(rec)
+    console_pause_one(rec, cut = TRUE)
     rec$paused = TRUE
     rec$last = NULL
   }
@@ -1243,7 +1248,7 @@ console_on_agent_end = function(event, ctx) {
   }
   if (v < 2L) return(NULL)
   if (!is.null(rec$think)) rec$think$finish()
-  if (!is.null(rec$md)) rec$md$finish()
+  if (!is.null(rec$md)) rec$md$finish(cut = !identical(event$status, "idle"))
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
   console_write(console_style()$dim(line))

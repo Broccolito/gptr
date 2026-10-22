@@ -3405,3 +3405,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     identical transcripts. The held row now continues after the menu, which goes between whole rows; an abort, and
     the menu's [b], still end the stream. Contract-visible: 04 §15.10 IC-82. Tests: test-console-interrupt.R "the
     pause menu leaves the answer's held row to continue after it (visual review)".
+  - A cut answer ends at its last whole word, marked: an abort (`console_render_pause()`), the pause menu's [b] and a
+    run that ends other than idle finish the stream with `cut`, which drops the word still held and ends the row
+    with a dim `…`. An abort had flushed the held row as it was, `...cars are also the heaviest, so par`, which
+    read as a garbled answer. Contract-visible: 04 §7.14 (`render_markdown_stream()`'s row). Tests:
+    test-console-render.R "a cut answer ends at its last whole word, the cut marked (visual review)", "a prompt or
+    pause in a tool's evaluation ends partial lines on the console (D-188)"; test-console-abort-stream.R "abort
+    labels a redactor tail received after a pause without printing it twice".
